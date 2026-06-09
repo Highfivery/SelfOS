@@ -1,6 +1,6 @@
 # 02 — App shell
 
-> **Status:** Draft · _last updated 2026-06-09_
+> **Status:** Approved · _last updated 2026-06-09_
 >
 > The skeleton every feature plugs into: the Electron window, the first-run vault-selection flow, the
 > boot sequence, navigation + routing, the global state stores, the theme layer, and the layout
@@ -190,15 +190,21 @@ change, Esc closes overlays, and the window respects OS text-size/reduced-motion
 - **E2E (Playwright + Electron):** launch with no vault → complete onboarding into a temp vault →
   land on Home; relaunch → resumes; simulate a missing vault → recovery. Claude is not involved.
 
-## 11. Open questions
+## 11. Resolved decisions
 
-1. **Onboarding depth** — keep first-run to **vault selection only** (recommended), with appearance +
-   Claude API key handled later in Settings? Or a short multi-step wizard up front?
-2. **Router** — hash router (recommended for `file://` robustness) vs memory router?
-3. **Single window** — confirm one main window for v1 (multi-window later)?
-4. **macOS titlebar** — `hiddenInset` custom-chrome look (recommended) vs default chrome?
-5. **Resume behavior** — reopen to the **last route** (recommended) or always to Home?
+Confirmed with the user (2026-06-09):
+
+1. **Onboarding depth** — vault selection only; appearance + Claude API key are configured later in
+   Settings via gentle, non-blocking nudges.
+2. **Router** — hash router (robust under `file://`).
+3. **Window** — a single main window for v1 (multi-window later).
+4. **macOS titlebar** — `hiddenInset` custom-chrome look.
+5. **Resume behavior** — reopen to the last route.
+
+_No open questions remain. New questions that arise during implementation are appended here._
 
 ## 12. Changelog
 
 - 2026-06-09 — created (draft) per the approved foundation plan.
+- 2026-06-09 — resolved open questions (vault-only onboarding, hash router, single window, hiddenInset
+  titlebar, resume to last route) after review; marked Approved.

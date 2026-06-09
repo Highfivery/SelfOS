@@ -1,6 +1,6 @@
 # 01 — Design system
 
-> **Status:** Draft · _last updated 2026-06-09_
+> **Status:** Approved · _last updated 2026-06-09_
 >
 > The calm-and-warm visual foundation for SelfOS: design tokens (color, type, space, radius,
 > elevation, motion), light/dark theming, the accessibility bar, and the primitive component
@@ -158,8 +158,7 @@ this is the v1 inventory:
 - **Surfaces:** `Card`, `Panel`, `Modal`/`Dialog`, `Popover`, `Tooltip`, `Toast`.
 - **Navigation:** `Tabs`, `Menu`, `SidebarItem`, `Breadcrumb`.
 - **Feedback / status:** `Badge`, `Avatar`, `Spinner`, `Skeleton`, `EmptyState`, `Banner`.
-- **Icons:** a single outline icon set via React (proposed: **`lucide-react`** — calm, consistent,
-  tree-shakeable). See Open questions.
+- **Icons:** **`lucide-react`** — a single outline icon set (calm, consistent, tree-shakeable).
 
 ## 6. IPC / API contracts
 
@@ -208,14 +207,21 @@ The bar for the entire app:
 - **Visual review:** a Storybook-style gallery route (dev-only) to eyeball primitives in both themes;
   Playwright can screenshot it for regression later.
 
-## 11. Open questions
+## 11. Resolved decisions
 
-1. **Icon set** — `lucide-react` (proposed) vs Phosphor/Tabler? Affects look and bundle.
-2. **Exact accent ramp** — fine-tune the dusty-blue stops during build for perfect AA + feel?
-3. **Density default** — Comfortable (proposed) vs Compact as the out-of-box default.
-4. **Dev gallery** — build a small in-app design-system gallery route now (recommended for review), or
-   defer?
+Confirmed with the user (2026-06-09):
+
+1. **Icon set** — `lucide-react`.
+2. **Dev gallery** — yes; build a dev-only in-app design-system gallery route showing every primitive
+   in both themes (aids review and supports visual-regression tests).
+3. **Density default** — Comfortable.
+4. **Accent ramp** — dusty-blue stops as specified in §5.3; fine-tune exact values during build for AA
+   - feel (a build detail, not a blocker).
+
+_No open questions remain. New questions that arise during implementation are appended here._
 
 ## 12. Changelog
 
 - 2026-06-09 — created (draft). Direction confirmed: warm neutrals, dusty-blue accent, Mulish + Lora.
+- 2026-06-09 — resolved open questions (lucide-react icons, build the dev gallery, Comfortable density
+  default) after review; marked Approved.

@@ -1,0 +1,5 @@
+.inline {
+  display: flex;
+  flex-direction: row;
+  min-width: 0;
+}

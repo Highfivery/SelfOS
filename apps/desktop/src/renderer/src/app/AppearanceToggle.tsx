@@ -1,32 +1,23 @@
-import { Monitor, Moon, Sun, type LucideIcon } from 'lucide-react';
+import { Monitor, Moon, Sun } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
+import { SegmentedControl, type SegmentOption } from '../design-system/components';
 import type { Appearance } from '../design-system/theme';
-import styles from './AppearanceToggle.module.css';
 
-const OPTIONS: ReadonlyArray<{ value: Appearance; label: string; Icon: LucideIcon }> = [
-  { value: 'system', label: 'System', Icon: Monitor },
-  { value: 'light', label: 'Light', Icon: Sun },
-  { value: 'dark', label: 'Dark', Icon: Moon },
+const OPTIONS: ReadonlyArray<SegmentOption<Appearance>> = [
+  { value: 'system', label: 'System', icon: Monitor },
+  { value: 'light', label: 'Light', icon: Sun },
+  { value: 'dark', label: 'Dark', icon: Moon },
 ];
 
 export function AppearanceToggle(): JSX.Element {
   const { appearance, setAppearance } = useTheme();
-
   return (
-    <div className={styles.group} role="group" aria-label="Appearance">
-      {OPTIONS.map(({ value, label, Icon }) => (
-        <button
-          key={value}
-          type="button"
-          className={value === appearance ? `${styles.button} ${styles.active}` : styles.button}
-          aria-pressed={value === appearance}
-          aria-label={label}
-          title={label}
-          onClick={() => setAppearance(value)}
-        >
-          <Icon size={16} aria-hidden="true" />
-        </button>
-      ))}
-    </div>
+    <SegmentedControl
+      options={OPTIONS}
+      value={appearance}
+      onChange={setAppearance}
+      aria-label="Appearance"
+      iconOnly
+    />
   );
 }

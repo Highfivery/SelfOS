@@ -1,8 +1,12 @@
-import { Outlet } from 'react-router-dom';
-import { House } from 'lucide-react';
+import { NavLink, Outlet } from 'react-router-dom';
+import { House, Shapes } from 'lucide-react';
 import { AppearanceToggle } from './AppearanceToggle';
 import { useBootState } from './useBootState';
 import styles from './AppShell.module.css';
+
+function navClass({ isActive }: { isActive: boolean }): string {
+  return isActive ? `${styles.navItem} ${styles.navItemActive}` : (styles.navItem ?? '');
+}
 
 export function AppShell(): JSX.Element {
   const boot = useBootState();
@@ -15,14 +19,16 @@ export function AppShell(): JSX.Element {
         </header>
 
         <nav className={styles.nav} aria-label="Primary">
-          <button
-            type="button"
-            className={`${styles.navItem} ${styles.navItemActive}`}
-            aria-current="page"
-          >
+          <NavLink to="/" end className={navClass}>
             <House size={18} aria-hidden="true" />
             <span>Home</span>
-          </button>
+          </NavLink>
+          {import.meta.env.DEV ? (
+            <NavLink to="/gallery" className={navClass}>
+              <Shapes size={18} aria-hidden="true" />
+              <span>Gallery</span>
+            </NavLink>
+          ) : null}
         </nav>
 
         <div className={styles.spacer} />

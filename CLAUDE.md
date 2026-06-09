@@ -196,3 +196,6 @@ A running log of durable decisions and feedback captured into the project config
 - 2026-06-09 — Build slice 1 landed: electron-vite app scaffold (secure window, design tokens, themed
   shell, typed IPC). Tests are now per-package (jsdom for the renderer); lint-staged runs lint+format
   only (tests run on pre-push/CI); Playwright-Electron E2E harness added.
+- 2026-06-09 — Build slice 2: design-system primitives (Stack, Inline, Heading, Text, Button,
+  IconButton, Card, Field, TextInput, Select, Switch, Slider, SegmentedControl) on tokens + CSS
+  Modules, plus a dev-only `/gallery` route. AppearanceToggle refactored onto SegmentedControl.

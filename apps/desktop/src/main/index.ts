@@ -1,13 +1,12 @@
-import { app, BrowserWindow, screen, session } from 'electron';
-import { IpcChannels } from '../shared/channels';
+import { app, BrowserWindow, Menu, screen, session } from 'electron';
 import { createMainWindow } from './window';
 import { registerIpcHandlers } from './ipc';
 import { computeBootState } from './boot';
 import { readDeviceState, writeDeviceState } from './state/deviceStore';
 import { clampBoundsToDisplays } from './window/windowState';
-import { watchVault, type VaultWatcher } from './vault/watcher';
+import { startVaultWatcher, stopVaultWatcher } from './vaultWatcherManager';
+import { buildAppMenu } from './menu';
 
-let watcher: VaultWatcher | undefined;
 let saveTimer: NodeJS.Timeout | undefined;
 
 function userDataDir(): string {
@@ -67,9 +66,7 @@ function trackWindowState(win: BrowserWindow): void {
 async function startWatcherIfReady(win: BrowserWindow): Promise<void> {
   const boot = await computeBootState(userDataDir());
   if (boot.phase !== 'ready' || !boot.vaultPath) return;
-  watcher = watchVault(boot.vaultPath, () => {
-    if (!win.isDestroyed()) win.webContents.send(IpcChannels.vaultChanged);
-  });
+  startVaultWatcher(boot.vaultPath, win.webContents);
 }
 
 if (!app.requestSingleInstanceLock()) {
@@ -80,6 +77,7 @@ if (!app.requestSingleInstanceLock()) {
   void app.whenReady().then(async () => {
     applyProductionCsp();
     registerIpcHandlers();
+    Menu.setApplicationMenu(buildAppMenu());
 
     const win = createMainWindow(await restoreBounds());
     trackWindowState(win);
@@ -91,7 +89,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.on('before-quit', () => {
-    void watcher?.close();
+    void stopVaultWatcher();
   });
 
   app.on('window-all-closed', () => {

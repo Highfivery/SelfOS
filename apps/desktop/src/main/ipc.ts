@@ -6,6 +6,7 @@ import { computeBootState } from './boot';
 import { initializeVault } from './vault/vault';
 import { findConflicts } from './vault/conflicts';
 import { readDeviceState, writeDeviceState } from './state/deviceStore';
+import { startVaultWatcher } from './vaultWatcherManager';
 
 function userDataDir(): string {
   return app.getPath('userData');
@@ -29,11 +30,13 @@ export function registerIpcHandlers(): void {
     return result.filePaths[0] ?? null;
   });
 
-  ipcMain.handle(IpcChannels.useVault, async (_event, rawPath: unknown): Promise<BootState> => {
+  ipcMain.handle(IpcChannels.useVault, async (event, rawPath: unknown): Promise<BootState> => {
     const vaultPath = z.string().min(1).parse(rawPath);
     await initializeVault(vaultPath);
     const state = await readDeviceState(userDataDir());
     await writeDeviceState(userDataDir(), { ...state, vaultPath });
+    // Begin watching the freshly-activated vault for this session (not just on next launch).
+    startVaultWatcher(vaultPath, event.sender);
     return currentBootState();
   });
 

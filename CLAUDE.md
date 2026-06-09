@@ -208,3 +208,6 @@ A running log of durable decisions and feedback captured into the project config
   IPC + warning Banner), and file-watching (chokidar v3, echo-suppression, `vault:changed`). Note:
   the watcher currently starts only when the app boots already-ready; starting it after onboarding
   and the native menu remain follow-ups.
+- 2026-06-09 — Polish: centralized the vault-watcher lifecycle so it (re)starts right after
+  onboarding (not only on a ready boot), and added a native application menu (standard roles + Open
+  Vault Folder). Resolves the slice-3b follow-ups.

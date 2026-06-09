@@ -24,5 +24,8 @@ test-results/
 *.log
 *.local
 
+# Claude Code — personal/local overrides (project settings.json IS committed)
+.claude/settings.local.json
+
 # Electron packaging artifacts
 release/

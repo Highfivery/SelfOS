@@ -69,6 +69,11 @@ async function startWatcherIfReady(win: BrowserWindow): Promise<void> {
   startVaultWatcher(boot.vaultPath, win.webContents);
 }
 
+// Set an explicit app name BEFORE the single-instance lock / any userData access. In dev, Electron
+// would otherwise derive userData from the package name (`@selfos/desktop`), which can collide with
+// other scaffolded apps and cause a silent single-instance quit.
+app.setName('SelfOS');
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {

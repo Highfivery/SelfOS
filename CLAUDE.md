@@ -211,3 +211,6 @@ A running log of durable decisions and feedback captured into the project config
 - 2026-06-09 — Polish: centralized the vault-watcher lifecycle so it (re)starts right after
   onboarding (not only on a ready boot), and added a native application menu (standard roles + Open
   Vault Folder). Resolves the slice-3b follow-ups.
+- 2026-06-09 — Dev ergonomics: added root `dev`/`build` scripts (so `pnpm dev` runs the desktop app)
+  and set an explicit Electron app name (`app.setName('SelfOS')`) so dev `userData` is `SelfOS`,
+  avoiding a single-instance-lock collision with other scaffolded `@selfos/desktop` apps.

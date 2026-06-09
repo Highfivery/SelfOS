@@ -9,6 +9,8 @@
     "node": ">=20"
   },
   "scripts": {
+    "dev": "pnpm --filter @selfos/desktop dev",
+    "build": "pnpm --filter @selfos/desktop build",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

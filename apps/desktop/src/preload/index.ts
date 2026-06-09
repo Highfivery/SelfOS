@@ -7,9 +7,17 @@ import { IpcChannels, type SelfosBridge } from '../shared/channels';
  */
 const bridge: SelfosBridge = {
   getBootState: () => ipcRenderer.invoke(IpcChannels.getBootState),
+  refreshBootState: () => ipcRenderer.invoke(IpcChannels.refreshBootState),
   selectVaultFolder: () => ipcRenderer.invoke(IpcChannels.selectVaultFolder),
   useVault: (path) => ipcRenderer.invoke(IpcChannels.useVault, path),
-  refreshBootState: () => ipcRenderer.invoke(IpcChannels.refreshBootState),
+  getConflicts: () => ipcRenderer.invoke(IpcChannels.getConflicts),
+  onVaultChanged: (listener) => {
+    const handler = (): void => listener();
+    ipcRenderer.on(IpcChannels.vaultChanged, handler);
+    return () => {
+      ipcRenderer.removeListener(IpcChannels.vaultChanged, handler);
+    };
+  },
 };
 
 contextBridge.exposeInMainWorld('selfos', bridge);

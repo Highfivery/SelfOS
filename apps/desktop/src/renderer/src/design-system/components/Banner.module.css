@@ -1,0 +1,42 @@
+.banner {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-left-width: 3px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-alt);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.body {
+  min-width: 0;
+}
+
+.info {
+  border-left-color: var(--color-info);
+}
+.info .icon {
+  color: var(--color-info);
+}
+
+.warning {
+  border-left-color: var(--color-warning);
+}
+.warning .icon {
+  color: var(--color-warning);
+}
+
+.danger {
+  border-left-color: var(--color-danger);
+}
+.danger .icon {
+  color: var(--color-danger);
+}

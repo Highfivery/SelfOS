@@ -11,6 +11,8 @@ function bridge(overrides: Partial<NonNullable<typeof window.selfos>>): void {
     selectVaultFolder: () => Promise.resolve(null),
     useVault: () => Promise.resolve(READY),
     refreshBootState: () => Promise.resolve(ONBOARDING),
+    getConflicts: () => Promise.resolve([]),
+    onVaultChanged: () => () => {},
     ...overrides,
   };
 }

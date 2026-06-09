@@ -1,6 +1,8 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { House, Shapes } from 'lucide-react';
 import { AppearanceToggle } from './AppearanceToggle';
+import { useVaultConflicts } from './useVaultConflicts';
+import { Banner } from '../design-system/components';
 import styles from './AppShell.module.css';
 
 function navClass({ isActive }: { isActive: boolean }): string {
@@ -8,6 +10,8 @@ function navClass({ isActive }: { isActive: boolean }): string {
 }
 
 export function AppShell(): JSX.Element {
+  const conflicts = useVaultConflicts();
+
   return (
     <div className={styles.shell}>
       <aside className={styles.sidebar}>
@@ -36,6 +40,16 @@ export function AppShell(): JSX.Element {
       </aside>
 
       <main className={styles.content}>
+        {conflicts.length > 0 ? (
+          <div className={styles.banner}>
+            <Banner tone="warning">
+              {conflicts.length === 1
+                ? 'A sync conflict copy was found in your vault.'
+                : `${conflicts.length} sync conflict copies were found in your vault.`}{' '}
+              Open the vault folder to resolve them — SelfOS won’t touch them.
+            </Banner>
+          </div>
+        ) : null}
         <Outlet />
       </main>
     </div>

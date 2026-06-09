@@ -1,5 +1,6 @@
 import { access, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { notifyWrite } from './writeObserver';
 
 /** Read and JSON-parse a file (throws if missing or invalid JSON). */
 export async function readJson(filePath: string): Promise<unknown> {
@@ -16,6 +17,7 @@ export async function writeJsonAtomic(filePath: string, data: unknown): Promise<
   const tmpPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
   await writeFile(tmpPath, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
   await rename(tmpPath, filePath);
+  notifyWrite(filePath);
 }
 
 export async function pathExists(targetPath: string): Promise<boolean> {

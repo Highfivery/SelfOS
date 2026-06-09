@@ -25,9 +25,19 @@ export const VaultMetaSchema = z.object({
 });
 export type VaultMeta = z.infer<typeof VaultMetaSchema>;
 
-/** Device-local state (in userData, never synced) — which vault is active. */
+/** Saved main-window geometry (device-local). */
+export const WindowBoundsSchema = z.object({
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  x: z.number().int().optional(),
+  y: z.number().int().optional(),
+});
+export type WindowBounds = z.infer<typeof WindowBoundsSchema>;
+
+/** Device-local state (in userData, never synced) — active vault + window geometry. */
 export const DeviceStateSchema = z.object({
   schemaVersion: z.number().int().positive(),
   vaultPath: z.string().nullable(),
+  window: WindowBoundsSchema.optional(),
 });
 export type DeviceState = z.infer<typeof DeviceStateSchema>;

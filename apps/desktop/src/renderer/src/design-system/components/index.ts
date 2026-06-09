@@ -5,6 +5,7 @@ export { Text } from './Text';
 export { Button } from './Button';
 export { IconButton } from './IconButton';
 export { Card } from './Card';
+export { Banner } from './Banner';
 export { Field } from './Field';
 export { TextInput } from './TextInput';
 export { Select } from './Select';

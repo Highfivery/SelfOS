@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { VaultMetaSchema, type VaultMeta } from '../../shared/schemas';
 import { pathExists, readJson, writeJsonAtomic } from './atomic';
+import { migrate, type MigrationSet } from './migrations';
 
 /** Where things live inside a vault folder (00-architecture §4.1). */
 export const VAULT_LAYOUT = {
@@ -10,6 +11,13 @@ export const VAULT_LAYOUT = {
 } as const;
 
 const CURRENT_META_VERSION = 1;
+
+/** Migrations for `.selfos/meta.json` (none yet — everything is v1). */
+export const VAULT_META_MIGRATIONS: MigrationSet = { latest: CURRENT_META_VERSION, steps: {} };
+
+async function readMeta(metaPath: string): Promise<VaultMeta> {
+  return VaultMetaSchema.parse(migrate(await readJson(metaPath), VAULT_META_MIGRATIONS));
+}
 
 export type VaultStatus =
   | { ok: true; meta: VaultMeta }
@@ -25,7 +33,7 @@ export async function initializeVault(vaultDir: string): Promise<VaultMeta> {
 
   let meta: VaultMeta;
   if (await pathExists(metaPath)) {
-    meta = VaultMetaSchema.parse(await readJson(metaPath));
+    meta = await readMeta(metaPath);
   } else {
     const now = new Date().toISOString();
     meta = {
@@ -50,7 +58,7 @@ export async function getVaultStatus(vaultDir: string): Promise<VaultStatus> {
   const metaPath = join(vaultDir, VAULT_LAYOUT.metaFile);
   if (!(await pathExists(metaPath))) return { ok: false, reason: 'invalid' };
   try {
-    return { ok: true, meta: VaultMetaSchema.parse(await readJson(metaPath)) };
+    return { ok: true, meta: await readMeta(metaPath) };
   } catch {
     return { ok: false, reason: 'invalid' };
   }

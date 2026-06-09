@@ -203,3 +203,8 @@ A running log of durable decisions and feedback captured into the project config
   state store, real boot-state computation + IPC, and the boot gate (Splash / Onboarding /
   VaultError / Ready). Deferred to a follow-up: file-watching, sync-conflict detection, migrations,
   window-state persistence, native menu.
+- 2026-06-09 — Build slice 3b (vault hardening): schema-migration runner + registries (wired into
+  reads), window-state persistence (clamp to a visible display), sync-conflict detection (detector +
+  IPC + warning Banner), and file-watching (chokidar v3, echo-suppression, `vault:changed`). Note:
+  the watcher currently starts only when the app boots already-ready; starting it after onboarding
+  and the native menu remain follow-ups.

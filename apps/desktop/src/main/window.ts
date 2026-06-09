@@ -1,19 +1,25 @@
 import { join } from 'node:path';
 import { BrowserWindow, nativeTheme, shell } from 'electron';
 import { BACKGROUND_COLORS } from '../shared/appearance';
+import type { WindowBounds } from '../shared/schemas';
 
 /**
  * Creates the single main window with the security baseline from 00-architecture §3:
- * contextIsolation + sandbox on, nodeIntegration off, external links to the OS browser.
+ * contextIsolation + sandbox on, nodeIntegration off, external links to the OS browser. Restores
+ * saved geometry when provided (already clamped to a visible display by the caller).
  */
-export function createMainWindow(): BrowserWindow {
+export function createMainWindow(bounds?: WindowBounds): BrowserWindow {
   const backgroundColor = nativeTheme.shouldUseDarkColors
     ? BACKGROUND_COLORS.dark
     : BACKGROUND_COLORS.light;
 
+  const position =
+    bounds?.x !== undefined && bounds.y !== undefined ? { x: bounds.x, y: bounds.y } : {};
+
   const win = new BrowserWindow({
-    width: 1100,
-    height: 760,
+    width: bounds?.width ?? 1100,
+    height: bounds?.height ?? 760,
+    ...position,
     minWidth: 720,
     minHeight: 480,
     show: false,

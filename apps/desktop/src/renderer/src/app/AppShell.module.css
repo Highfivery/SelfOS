@@ -76,3 +76,7 @@
   overflow: auto;
   padding: var(--space-12);
 }
+
+.banner {
+  margin-bottom: var(--space-6);
+}

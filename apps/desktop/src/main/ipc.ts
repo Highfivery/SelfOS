@@ -4,6 +4,7 @@ import { IpcChannels } from '../shared/channels';
 import { BootStateSchema, type BootState } from '../shared/schemas';
 import { computeBootState } from './boot';
 import { initializeVault } from './vault/vault';
+import { findConflicts } from './vault/conflicts';
 import { readDeviceState, writeDeviceState } from './state/deviceStore';
 
 function userDataDir(): string {
@@ -34,5 +35,10 @@ export function registerIpcHandlers(): void {
     const state = await readDeviceState(userDataDir());
     await writeDeviceState(userDataDir(), { ...state, vaultPath });
     return currentBootState();
+  });
+
+  ipcMain.handle(IpcChannels.getConflicts, async (): Promise<string[]> => {
+    const { vaultPath } = await readDeviceState(userDataDir());
+    return vaultPath ? findConflicts(vaultPath) : [];
   });
 }

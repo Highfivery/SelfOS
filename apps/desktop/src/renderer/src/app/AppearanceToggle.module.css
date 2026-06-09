@@ -1,0 +1,36 @@
+.group {
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-tertiary);
+  transition:
+    background var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
+}
+
+.button:hover {
+  color: var(--color-text-primary);
+}
+
+.active,
+.active:hover {
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+}

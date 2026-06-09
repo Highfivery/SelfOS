@@ -11,9 +11,11 @@ Claude API.
 
 ## Status
 
-**Foundation phase.** No application code yet — we are deliberately building the skeleton,
-design system, and a schema-driven settings system first, perfecting each slice before moving
-on. See [`docs/specs/`](docs/specs) for the specifications.
+**Build phase — slice 1 landed.** All four foundation specs are approved (see
+[`docs/specs/`](docs/specs)), and the first build slice is in: a secure Electron window that boots a
+calm, themed (light/dark) shell with the design tokens and a working preload → IPC pipeline. We build
+slice by slice, perfecting each before the next; the app-shell, design-system primitives, and the
+settings registry come in subsequent slices.
 
 ## Tech stack
 
@@ -44,7 +46,12 @@ pnpm install        # install dependencies and set up git hooks
 pnpm lint           # ESLint across the monorepo
 pnpm format         # Prettier write
 pnpm typecheck      # TypeScript (per-package, --if-present)
-pnpm test           # Vitest unit/component tests
+pnpm test           # Vitest unit/component tests (per-package)
+
+# Desktop app (apps/desktop)
+pnpm --filter @selfos/desktop dev     # run the app with electron-vite + HMR
+pnpm --filter @selfos/desktop build   # build main/preload/renderer to out/
+pnpm --filter @selfos/desktop e2e     # build, then Playwright-Electron E2E
 ```
 
 ### Workflow

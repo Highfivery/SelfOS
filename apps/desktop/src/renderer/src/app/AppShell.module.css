@@ -1,0 +1,93 @@
+.shell {
+  display: flex;
+  height: 100%;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 240px;
+  flex-shrink: 0;
+  padding: var(--space-4) var(--space-3);
+  background: var(--color-surface-alt);
+  border-right: 1px solid var(--color-border);
+}
+
+.brand {
+  -webkit-app-region: drag;
+  padding: var(--space-3) var(--space-2) var(--space-6);
+}
+
+.mark {
+  font-weight: 600;
+  font-size: var(--text-md);
+  letter-spacing: 0.01em;
+  color: var(--color-text-primary);
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.navItem {
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  text-align: left;
+  transition:
+    background var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
+}
+
+.navItem:hover {
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+}
+
+.navItemActive,
+.navItemActive:hover {
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+}
+
+.statusDot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-pill);
+  background: var(--color-success);
+}
+
+.content {
+  flex: 1;
+  overflow: auto;
+  padding: var(--space-12);
+}

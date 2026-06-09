@@ -1,0 +1,15 @@
+appId: com.selfos.app
+productName: SelfOS
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**/*
+  - package.json
+mac:
+  category: public.app-category.healthcare-fitness
+  target: dmg
+win:
+  target: nsis
+linux:
+  target: AppImage

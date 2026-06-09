@@ -162,12 +162,18 @@ pnpm lint:fix       # ESLint --fix
 pnpm format         # Prettier write
 pnpm format:check   # Prettier check
 pnpm typecheck      # TypeScript per-package (--if-present)
-pnpm test           # Vitest unit/component
+pnpm test           # Vitest unit/component (delegates to each package)
 pnpm test:watch     # Vitest watch
+
+# Desktop app (apps/desktop)
+pnpm --filter @selfos/desktop dev     # electron-vite dev (HMR)
+pnpm --filter @selfos/desktop build   # build main/preload/renderer to out/
+pnpm --filter @selfos/desktop e2e     # build, then Playwright-Electron E2E
 ```
 
-Application/build commands (electron-vite, electron-builder, Playwright) are added when the desktop
-app is scaffolded, after the foundation specs are approved.
+Tests are **per-package** (`pnpm -r test`): the desktop app runs Vitest with a jsdom environment for
+component tests. E2E (Playwright + Electron) runs on demand / in CI, not on every push (it builds the
+app first).
 
 ---
 
@@ -187,3 +193,6 @@ A running log of durable decisions and feedback captured into the project config
 
 - 2026-06-09 — Initial CLAUDE.md established. Stack, architecture principles, Definition of Done,
   living-docs loops, and git standards set per the approved foundation plan.
+- 2026-06-09 — Build slice 1 landed: electron-vite app scaffold (secure window, design tokens, themed
+  shell, typed IPC). Tests are now per-package (jsdom for the renderer); lint-staged runs lint+format
+  only (tests run on pre-push/CI); Playwright-Electron E2E harness added.

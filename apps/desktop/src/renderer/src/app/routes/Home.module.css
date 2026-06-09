@@ -1,0 +1,38 @@
+.home {
+  max-width: 560px;
+}
+
+.eyebrow {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-accent-text);
+}
+
+.heading {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--color-text-primary);
+}
+
+.lede {
+  margin: 0 0 var(--space-8);
+  font-size: var(--text-md);
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+
+.quote {
+  margin: 0;
+  padding-left: var(--space-4);
+  border-left: 2px solid var(--color-border-strong);
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: var(--text-md);
+  line-height: 1.7;
+  color: var(--color-text-secondary);
+}

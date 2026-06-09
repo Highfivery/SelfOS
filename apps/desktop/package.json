@@ -2,6 +2,41 @@
   "name": "@selfos/desktop",
   "version": "0.0.0",
   "private": true,
-  "type": "module",
-  "description": "SelfOS desktop app (Electron + React + TypeScript). Scaffolding only — app code begins after the foundation specs are approved."
+  "description": "SelfOS desktop app (Electron + React + TypeScript).",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "electron-vite build && playwright test"
+  },
+  "dependencies": {
+    "@fontsource/lora": "^5.1.0",
+    "@fontsource-variable/mulish": "^5.1.0",
+    "lucide-react": "^0.469.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0",
+    "zod": "^3.24.1",
+    "zustand": "^5.0.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.1",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
+    "@testing-library/user-event": "^14.5.2",
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^3.0.0",
+    "jsdom": "^25.0.1",
+    "vite": "^6.0.7",
+    "vitest": "^3.0.0"
+  }
 }

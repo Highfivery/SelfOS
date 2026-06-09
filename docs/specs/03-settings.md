@@ -1,6 +1,6 @@
 # 03 — Settings
 
-> **Status:** Draft · _last updated 2026-06-09_
+> **Status:** Approved · _last updated 2026-06-09_
 >
 > The v1 centerpiece: a **schema-driven settings system**. Every setting is one declarative,
 > Zod-backed definition; the Settings UI, persistence, validation, and typed access are all derived
@@ -124,7 +124,7 @@ against it.
 - It builds a runtime map `key → definition` and a derived **master Zod schema** (`z.object` over all
   keys) used to validate the whole settings object.
 - **End-to-end type safety:** features extend a declaration-merged `interface SettingsTypeMap { 'appearance.theme': Theme; … }` (via module augmentation). `SettingsValues = SettingsTypeMap`, so
-  `useSetting(key)` infers the exact value type by key. (See Open questions for the chosen mechanism.)
+  `useSetting(key)` infers the exact value type by key.
 
 ### 5.2 Typed access
 
@@ -203,16 +203,19 @@ primitive; sections are navigable landmarks; search is reachable; errors are ann
 - **E2E (Playwright):** open Settings, change appearance (see it apply), set/clear a (fake) API key,
   toggle a conditional setting, relaunch and confirm persistence.
 
-## 11. Open questions
+## 11. Resolved decisions
 
-1. **Type-safety mechanism** — adopt the declaration-merged `SettingsTypeMap` (recommended,
-   end-to-end inference) vs a simpler runtime-typed accessor (less ceremony, weaker inference)?
-2. **Unknown-key handling** — preserve untouched (recommended) vs drop on save.
-3. **Settings layout** — sectioned list + content pane (recommended) vs a single long scroll with
-   anchors.
-4. **Import/export settings** — defer to a later version (recommended) or include a basic JSON
-   export/import now?
+Confirmed with the user (2026-06-09):
+
+1. **Type-safety mechanism** — declaration-merged `SettingsTypeMap` (end-to-end inference).
+2. **Unknown-key handling** — preserve untouched on save (forward-compatible).
+3. **Settings layout** — sectioned list + content pane.
+4. **Import/export** — deferred to a later version.
+
+_No open questions remain. New questions that arise during implementation are appended here._
 
 ## 12. Changelog
 
 - 2026-06-09 — created (draft) per the approved foundation plan.
+- 2026-06-09 — resolved open questions (SettingsTypeMap typing, preserve unknown keys, sectioned
+  layout, defer import/export) after review; marked Approved.

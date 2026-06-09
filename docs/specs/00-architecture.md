@@ -1,6 +1,6 @@
 # 00 — Architecture
 
-> **Status:** Draft · _last updated 2026-06-09_
+> **Status:** Approved · _last updated 2026-06-09_
 >
 > The cross-cutting technical foundation for SelfOS: the plain-file vault storage model, the
 > Electron process/security boundaries and typed IPC, the Claude API integration, the
@@ -103,7 +103,7 @@ and other device-bound state are **not** in the vault (it may sync to the cloud)
 ### 4.2 File formats
 
 - **Markdown content** — YAML **frontmatter** (`id`, `schemaVersion`, `type`, `createdAt`,
-  `updatedAt`, …) + Markdown body. Parsed/serialized via a small wrapper (proposed: `gray-matter`).
+  `updatedAt`, …) + Markdown body. Parsed/serialized via **`gray-matter`**.
 - **JSON state/config** — an object with a top-level `schemaVersion` plus data.
 - Every persisted format is defined by a **Zod schema** (the single source of truth); TS types are
   `z.infer`red. Validate on read and before write.
@@ -204,8 +204,10 @@ This contract is defined here and exercised first by the **Settings** feature in
 - Main exposes IPC such as `claude:sendMessage` that proxies to the Anthropic API (official SDK),
   with **streaming** delivered to the renderer as push events. The renderer passes message content;
   the key and HTTP live in main only.
-- **Model** is a user setting (see 03-settings) with a sensible default Claude model. Token limits,
-  rate limits, network failures, and timeouts produce typed, user-friendly errors and a retry path.
+- **Model** is a user setting (see 03-settings), defaulting to **`claude-sonnet-4-6`** (fast,
+  cost-effective, strong for conversation) with **`claude-opus-4-8`** selectable for more depth. Token
+  limits, rate limits, network failures, and timeouts produce typed, user-friendly errors and a retry
+  path.
 - **Consent & minimization:** the user explicitly enables AI; we send only what a feature needs.
 
 ## 7. States & edge cases (cross-cutting)
@@ -244,7 +246,7 @@ The shell and all primitives must meet those standards; no architectural blocker
 - A typed **`AppError`** with a `code` enum (e.g. `VAULT_NOT_FOUND`, `FILE_CORRUPT`,
   `SCHEMA_INVALID`, `CLAUDE_UNAVAILABLE`, `IPC_INVALID_PAYLOAD`) and an optional `cause`.
 - **Expected, recoverable** outcomes (missing file, conflict) are modeled as **`Result<T, AppError>`**
-  returns; **unexpected** failures throw. (Confirm this split — see Open questions.)
+  returns; **unexpected** failures (programmer errors) throw and are caught at the boundary.
 - **Logger** in main writes leveled logs to `userData/logs` (rotated), with redaction. Renderer logs
   route through IPC in production; dev console only otherwise.
 
@@ -261,20 +263,22 @@ The shell and all primitives must meet those standards; no architectural blocker
 - The Claude client is an **interface** with a real and a fake implementation, selected by
   environment, so tests never hit the network.
 
-## 12. Open questions
+## 12. Resolved decisions
 
-1. **Vault layout & sync split** — OK to put **portable preferences** (`config/settings.json`) in the
-   synced vault while keeping the **API key + window state device-local**? And is the proposed folder
-   layout (`config/`, `.selfos/`, content folders per feature) right?
-2. **Default Claude model** — default to **Sonnet** (`claude-sonnet-4-6`, faster/cheaper, good for
-   conversation) with the option to choose **Opus** (`claude-opus-4-8`) in settings? Or default Opus?
-3. **Error model** — adopt `Result<T, AppError>` for expected/recoverable vault outcomes (vs
-   exceptions everywhere)? This shapes a lot of code.
-4. **API key storage** — confirm **device-local + `safeStorage`** (recommended) rather than storing
-   the key in the vault.
-5. **Markdown frontmatter lib** — `gray-matter` acceptable, or prefer a hand-rolled minimal parser to
-   avoid the dependency?
+Confirmed with the user (2026-06-09):
+
+1. **Storage split** — portable preferences (`config/settings.json`) live in the synced vault; the
+   **API key + window state stay device-local** (encrypted via `safeStorage`, never synced). Proposed
+   folder layout (`config/`, `.selfos/`, per-feature content folders) accepted.
+2. **Default Claude model** — `claude-sonnet-4-6` by default; `claude-opus-4-8` selectable in Settings.
+3. **Error model** — `Result<T, AppError>` for expected/recoverable outcomes; throw for unexpected
+   (programmer) errors.
+4. **Markdown frontmatter** — use `gray-matter`.
+
+_No open questions remain. New questions that arise during implementation are appended here._
 
 ## 13. Changelog
 
 - 2026-06-09 — created (draft) per the approved foundation plan.
+- 2026-06-09 — resolved all open questions (storage split, default model, error model, frontmatter
+  lib) after review; folded decisions into the spec.

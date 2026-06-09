@@ -1,0 +1,7 @@
+{
+  "name": "@selfos/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "SelfOS desktop app (Electron + React + TypeScript). Scaffolding only — app code begins after the foundation specs are approved."
+}

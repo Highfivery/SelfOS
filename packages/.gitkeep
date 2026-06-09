@@ -1,0 +1,2 @@
+# Shared packages live here (design-system, core, vault, …).
+# Extracted from apps/desktop as shared needs emerge. Placeholder to keep the dir tracked.

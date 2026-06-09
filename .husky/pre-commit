@@ -1,0 +1,7 @@
+#!/usr/bin/env sh
+# Fast, staged-scoped gate: lint + format + related unit tests, then a full typecheck.
+pnpm exec lint-staged
+pnpm run typecheck
+
+# Non-blocking: warn if a feature module changed without touching its spec.
+sh scripts/check-doc-drift.sh || true

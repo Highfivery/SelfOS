@@ -1,16 +1,38 @@
-import { ipcMain } from 'electron';
+import { app, dialog, ipcMain } from 'electron';
+import { z } from 'zod';
 import { IpcChannels } from '../shared/channels';
 import { BootStateSchema, type BootState } from '../shared/schemas';
+import { computeBootState } from './boot';
+import { initializeVault } from './vault/vault';
+import { readDeviceState, writeDeviceState } from './state/deviceStore';
 
-/**
- * Registers main-process IPC handlers. Slice 1 has no vault yet, so boot state is a stub that lets
- * the shell render; the real boot/vault flow arrives with the app-shell and vault slices.
- *
- * The stub is validated through the schema so every handler follows the "validate on both sides"
- * rule (00-architecture §6.1) — the renderer validates again on receipt.
- */
+function userDataDir(): string {
+  return app.getPath('userData');
+}
+
+async function currentBootState(): Promise<BootState> {
+  return BootStateSchema.parse(await computeBootState(userDataDir()));
+}
+
+/** Registers main-process IPC handlers for the boot/vault flow (02-app-shell §6). */
 export function registerIpcHandlers(): void {
-  ipcMain.handle(IpcChannels.getBootState, (): BootState => {
-    return BootStateSchema.parse({ phase: 'ready', vaultPath: null, hasSettings: false });
+  ipcMain.handle(IpcChannels.getBootState, currentBootState);
+  ipcMain.handle(IpcChannels.refreshBootState, currentBootState);
+
+  ipcMain.handle(IpcChannels.selectVaultFolder, async (): Promise<string | null> => {
+    const result = await dialog.showOpenDialog({
+      title: 'Choose your SelfOS vault folder',
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (result.canceled) return null;
+    return result.filePaths[0] ?? null;
+  });
+
+  ipcMain.handle(IpcChannels.useVault, async (_event, rawPath: unknown): Promise<BootState> => {
+    const vaultPath = z.string().min(1).parse(rawPath);
+    await initializeVault(vaultPath);
+    const state = await readDeviceState(userDataDir());
+    await writeDeviceState(userDataDir(), { ...state, vaultPath });
+    return currentBootState();
   });
 }

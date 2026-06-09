@@ -11,11 +11,12 @@ Claude API.
 
 ## Status
 
-**Build phase — slice 1 landed.** All four foundation specs are approved (see
-[`docs/specs/`](docs/specs)), and the first build slice is in: a secure Electron window that boots a
-calm, themed (light/dark) shell with the design tokens and a working preload → IPC pipeline. We build
-slice by slice, perfecting each before the next; the app-shell, design-system primitives, and the
-settings registry come in subsequent slices.
+**Build phase — slices 1–3 landed.** All four foundation specs are approved (see
+[`docs/specs/`](docs/specs)). In so far: a secure Electron window with the calm, themed (light/dark)
+design tokens (1); the design-system primitive components + a dev gallery (2); and the vault service
+with first-run vault selection and the boot flow — onboarding, vault-error recovery, and the ready
+shell (3). We build slice by slice, perfecting each before the next; the schema-driven settings
+registry (the v1 centerpiece) and AI are the next slices.
 
 ## Tech stack
 

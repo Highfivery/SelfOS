@@ -1,7 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { House, Shapes } from 'lucide-react';
 import { AppearanceToggle } from './AppearanceToggle';
-import { useBootState } from './useBootState';
 import styles from './AppShell.module.css';
 
 function navClass({ isActive }: { isActive: boolean }): string {
@@ -9,8 +8,6 @@ function navClass({ isActive }: { isActive: boolean }): string {
 }
 
 export function AppShell(): JSX.Element {
-  const boot = useBootState();
-
   return (
     <div className={styles.shell}>
       <aside className={styles.sidebar}>
@@ -35,12 +32,6 @@ export function AppShell(): JSX.Element {
 
         <footer className={styles.footer}>
           <AppearanceToggle />
-          {boot ? (
-            <p className={styles.status} data-testid="boot-status">
-              <span className={styles.statusDot} aria-hidden="true" />
-              {boot.phase === 'ready' ? 'Ready' : boot.phase}
-            </p>
-          ) : null}
         </footer>
       </aside>
 

@@ -7,6 +7,9 @@ import { IpcChannels, type SelfosBridge } from '../shared/channels';
  */
 const bridge: SelfosBridge = {
   getBootState: () => ipcRenderer.invoke(IpcChannels.getBootState),
+  selectVaultFolder: () => ipcRenderer.invoke(IpcChannels.selectVaultFolder),
+  useVault: (path) => ipcRenderer.invoke(IpcChannels.useVault, path),
+  refreshBootState: () => ipcRenderer.invoke(IpcChannels.refreshBootState),
 };
 
 contextBridge.exposeInMainWorld('selfos', bridge);

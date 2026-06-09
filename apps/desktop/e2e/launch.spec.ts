@@ -1,29 +1,56 @@
-import { join } from 'node:path';
-import { _electron as electron, expect, test } from '@playwright/test';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { _electron as electron, expect, test, type ElectronApplication } from '@playwright/test';
 
-/**
- * Launches the built Electron app and verifies the themed shell renders. Requires `electron-vite
- * build` to have produced `out/` first (the `e2e` script handles that).
- */
-test('app launches and shows the calm home screen', async () => {
-  const app = await electron.launch({
-    args: [join(__dirname, '..', 'out', 'main', 'index.js')],
-  });
+const MAIN = join(__dirname, '..', 'out', 'main', 'index.js');
 
+// Each test uses an isolated --user-data-dir so device-local state is deterministic.
+function launch(userDataDir: string): Promise<ElectronApplication> {
+  return electron.launch({ args: [`--user-data-dir=${userDataDir}`, MAIN] });
+}
+
+async function writeJson(file: string, data: unknown): Promise<void> {
+  await mkdir(dirname(file), { recursive: true });
+  await writeFile(file, JSON.stringify(data, null, 2), 'utf8');
+}
+
+test('first run shows onboarding when no vault is configured', async () => {
+  const userData = await mkdtemp(join(tmpdir(), 'selfos-e2e-ud-'));
+  const app = await launch(userData);
   try {
-    const window = await app.firstWindow();
-    await expect(window.getByRole('heading', { name: /a calm space for yourself/i })).toBeVisible();
-    // The sidebar brand (the aside has the implicit "complementary" role).
-    await expect(
-      window.getByRole('complementary').getByText('SelfOS', { exact: true }),
-    ).toBeVisible();
-
-    const theme = await window.locator('html').getAttribute('data-theme');
-    expect(theme === 'light' || theme === 'dark').toBe(true);
-
-    // Proves the preload → IPC → Zod-validation pipeline resolved end-to-end.
-    await expect(window.getByTestId('boot-status')).toHaveText(/ready/i);
+    const w = await app.firstWindow();
+    await expect(w.getByRole('button', { name: /choose a folder/i })).toBeVisible();
+    // No sidebar shell before a vault is chosen.
+    await expect(w.getByRole('complementary')).toHaveCount(0);
   } finally {
     await app.close();
+    await rm(userData, { recursive: true, force: true });
+  }
+});
+
+test('boots straight to the shell when a valid vault is configured', async () => {
+  const userData = await mkdtemp(join(tmpdir(), 'selfos-e2e-ud-'));
+  const vault = await mkdtemp(join(tmpdir(), 'selfos-e2e-vault-'));
+  const now = new Date().toISOString();
+  await writeJson(join(vault, '.selfos', 'meta.json'), {
+    schemaVersion: 1,
+    vaultId: 'e2e',
+    createdAt: now,
+    updatedAt: now,
+  });
+  await writeJson(join(vault, 'config', 'settings.json'), { schemaVersion: 1, values: {} });
+  await writeJson(join(userData, 'state.json'), { schemaVersion: 1, vaultPath: vault });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await expect(w.getByRole('complementary').getByText('SelfOS', { exact: true })).toBeVisible();
+    await expect(w.getByRole('link', { name: 'Home' })).toBeVisible();
+    await expect(w.getByRole('button', { name: /choose a folder/i })).toHaveCount(0);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
   }
 });

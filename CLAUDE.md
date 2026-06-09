@@ -199,3 +199,7 @@ A running log of durable decisions and feedback captured into the project config
 - 2026-06-09 — Build slice 2: design-system primitives (Stack, Inline, Heading, Text, Button,
   IconButton, Card, Field, TextInput, Select, Switch, Slider, SegmentedControl) on tokens + CSS
   Modules, plus a dev-only `/gallery` route. AppearanceToggle refactored onto SegmentedControl.
+- 2026-06-09 — Build slice 3: vault service (initialize/status + atomic JSON writes), device-local
+  state store, real boot-state computation + IPC, and the boot gate (Splash / Onboarding /
+  VaultError / Ready). Deferred to a follow-up: file-watching, sync-conflict detection, migrations,
+  window-state persistence, native menu.

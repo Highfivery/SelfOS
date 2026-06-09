@@ -7,10 +7,20 @@ import type { BootState } from './schemas';
 
 export const IpcChannels = {
   getBootState: 'app:getBootState',
+  selectVaultFolder: 'vault:selectFolder',
+  useVault: 'vault:use',
+  refreshBootState: 'app:refreshBootState',
 } as const;
 
 export interface SelfosBridge {
+  /** Current boot state (computed from device-local state + vault status). */
   getBootState(): Promise<BootState>;
+  /** Open the native folder picker; resolves to the chosen path or null if cancelled. */
+  selectVaultFolder(): Promise<string | null>;
+  /** Initialize + activate the vault at `path`, then return the recomputed boot state. */
+  useVault(path: string): Promise<BootState>;
+  /** Recompute the boot state (e.g. after a vault-error retry). */
+  refreshBootState(): Promise<BootState>;
 }
 
 export type { BootState };

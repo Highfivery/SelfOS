@@ -21,6 +21,11 @@ const summary: UsageSummary = {
   byModel: { 'claude-sonnet-4-6': { costUsd: 1.23, count: 4 } },
 };
 
+/** `can()` returns true for everything in super-admin mode — the simplest way to test the admin view. */
+function setAdmin(isAdmin: boolean): void {
+  useSessionStore.setState({ superAdmin: isAdmin });
+}
+
 afterEach(() => {
   clearMockBridge();
   useUsageStore.setState({
@@ -41,22 +46,37 @@ afterEach(() => {
 });
 
 describe('Usage', () => {
-  it('renders totals and breakdowns', async () => {
+  it('shows cost, breakdowns, and budgets for an admin', async () => {
     installMockBridge({ usageSummary: () => Promise.resolve(summary) });
+    setAdmin(true);
     render(<Usage />);
     expect(await screen.findByRole('heading', { name: '$1.23' })).toBeInTheDocument(); // total
     expect(screen.getByText('Coaching session')).toBeInTheDocument(); // by type label
     expect(screen.getByText('claude-sonnet-4-6')).toBeInTheDocument(); // by model
-    expect(screen.getByText('$0.05')).toBeInTheDocument(); // cache savings
+    expect(screen.getByText('$0.05')).toBeInTheDocument(); // cache savings ($)
+    expect(screen.getAllByRole('button', { name: 'Save' }).length).toBeGreaterThan(0); // budget editor
   });
 
-  it('saves a personal budget', async () => {
+  it('hides cost and budgets for a normal user, showing only their usage', async () => {
+    installMockBridge({ usageSummary: () => Promise.resolve(summary) });
+    setAdmin(false);
+    render(<Usage />);
+    expect(await screen.findByText('Input tokens')).toBeInTheDocument();
+    expect(screen.getByText('Sessions')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '$1.23' })).not.toBeInTheDocument(); // no cost
+    expect(screen.queryByText('Cache savings')).not.toBeInTheDocument(); // no $ savings
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument(); // no budgets
+    expect(screen.queryByRole('group', { name: 'Whose usage' })).not.toBeInTheDocument(); // no Everyone scope
+  });
+
+  it('saves a budget as an admin', async () => {
     const budgetSetPerson = vi.fn(() => Promise.resolve());
     installMockBridge({ usageSummary: () => Promise.resolve(summary), budgetSetPerson });
+    setAdmin(true);
     render(<Usage />);
     await screen.findByRole('heading', { name: '$1.23' });
-    await userEvent.type(screen.getByLabelText('My budget limit (USD)'), '10');
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await userEvent.type(screen.getByLabelText('Active person limit (USD)'), '10');
+    await userEvent.click(screen.getAllByRole('button', { name: 'Save' })[0]!);
     expect(budgetSetPerson).toHaveBeenCalledWith({ limitUsd: 10, period: 'month', warnRatio: 0.8 });
   });
 });

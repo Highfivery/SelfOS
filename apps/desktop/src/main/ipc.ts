@@ -38,6 +38,7 @@ import { householdStatus, setupHousehold } from './people/household';
 import { getActivePersonId, setActivePersonId } from './people/session';
 import { verifySuperAdminPassphrase } from './people/superAdmin';
 import {
+  getAccessConfig,
   getAccessView,
   removeAccount,
   saveRole,
@@ -54,11 +55,13 @@ import { loadMasterKey } from './crypto/masterKey';
 import { queryUsage, summarize } from './usage/usageStore';
 import {
   checkBudget,
+  effectivePersonBudget,
   getBudgets,
   setAppBudget,
   setPersonBudget,
   periodStart,
 } from './usage/budgetService';
+import { roleAllows, type CapabilityKey } from '../shared/capabilities';
 import { runChatTurn } from './conversations/chatService';
 import {
   deleteConversation,
@@ -124,6 +127,20 @@ async function vaultAndKey(): Promise<{ vaultDir: string; key: Buffer } | null> 
   if (!vaultDir) return null;
   const key = await loadMasterKey(userDataDir(), encryptor);
   return key ? { vaultDir, key } : null;
+}
+
+/** Whether the active person's role grants a capability (enforces admin-only actions in main). */
+async function activePersonCan(
+  vaultDir: string,
+  key: Buffer,
+  capability: CapabilityKey,
+): Promise<boolean> {
+  const personId = await getActivePersonId(userDataDir());
+  if (!personId) return false;
+  const access = await getAccessConfig(vaultDir, key);
+  const account = access.accounts.find((candidate) => candidate.personId === personId);
+  const role = access.roles.find((candidate) => candidate.id === account?.roleId);
+  return roleAllows(role, capability);
 }
 
 async function currentBootState(): Promise<BootState> {
@@ -322,12 +339,14 @@ export function registerIpcHandlers(): void {
     const now = new Date();
     const from = periodStart(now, period);
     const to = now.toISOString();
-    if (scope === 'person') {
-      const personId = await getActivePersonId(userDataDir());
-      if (!personId) return summarize([]);
-      return summarize(await queryUsage(ctx.vaultDir, ctx.key, { from, to, personId }));
+    // Only an admin may see the whole household ("Everyone"); everyone else sees only their own.
+    const canManage = await activePersonCan(ctx.vaultDir, ctx.key, 'budgets.manage');
+    if (scope === 'app' && canManage) {
+      return summarize(await queryUsage(ctx.vaultDir, ctx.key, { from, to }));
     }
-    return summarize(await queryUsage(ctx.vaultDir, ctx.key, { from, to }));
+    const personId = await getActivePersonId(userDataDir());
+    if (!personId) return summarize([]);
+    return summarize(await queryUsage(ctx.vaultDir, ctx.key, { from, to, personId }));
   });
 
   ipcMain.handle(
@@ -339,20 +358,20 @@ export function registerIpcHandlers(): void {
       const personId = await getActivePersonId(userDataDir());
       return {
         app: budgets.app ?? null,
-        person: (personId ? budgets.perPerson[personId] : undefined) ?? null,
+        person: personId ? await effectivePersonBudget(ctx.vaultDir, ctx.key, personId) : null,
       };
     },
   );
 
   ipcMain.handle(IpcChannels.budgetSetApp, async (_event, raw: unknown): Promise<void> => {
     const ctx = await vaultAndKey();
-    if (!ctx) return;
+    if (!ctx || !(await activePersonCan(ctx.vaultDir, ctx.key, 'budgets.manage'))) return;
     await setAppBudget(ctx.vaultDir, ctx.key, raw === null ? null : BudgetSchema.parse(raw));
   });
 
   ipcMain.handle(IpcChannels.budgetSetPerson, async (_event, raw: unknown): Promise<void> => {
     const ctx = await vaultAndKey();
-    if (!ctx) return;
+    if (!ctx || !(await activePersonCan(ctx.vaultDir, ctx.key, 'budgets.manage'))) return;
     const personId = await getActivePersonId(userDataDir());
     if (!personId) return;
     await setPersonBudget(

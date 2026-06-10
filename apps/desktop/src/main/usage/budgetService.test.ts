@@ -48,10 +48,15 @@ function spend(id: string, personId: string, at: string, costUsd: number): Usage
 }
 
 describe('budgetService', () => {
-  it('reports none when no budget is set', async () => {
-    expect((await checkBudget(vault, key, { scope: 'person', personId: 'p1', now })).state).toBe(
-      'none',
-    );
+  it('falls back to the $10/week default for a person with no explicit budget', async () => {
+    const state = await checkBudget(vault, key, { scope: 'person', personId: 'p1', now });
+    expect(state.state).toBe('ok');
+    expect(state.limitUsd).toBe(10);
+    expect(state.period).toBe('week');
+  });
+
+  it('reports none for an unset app budget', async () => {
+    expect((await checkBudget(vault, key, { scope: 'app', now })).state).toBe('none');
   });
 
   it('moves ok → warn → over with spend, and an override downgrades over → warn', async () => {

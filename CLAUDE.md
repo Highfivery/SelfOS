@@ -104,7 +104,11 @@ For every slice:
 4. Run the **`ship-slice`** skill: `quality-gate` → `code-reviewer` agent → `sync-docs` → commit.
 5. Confirm Definition of Done, then merge to `main` (locally for now) and move on.
 
-When in doubt, **ask** — never assume or guess. (The user has asked for this explicitly.)
+**ALWAYS ask — NEVER assume or guess.** Before implementing anything with an unstated product, UX,
+visibility, permission, or behavior decision (defaults, who-sees-what, scope, placement, period),
+**stop and ask detailed clarifying questions** (`AskUserQuestion`). Do not fill gaps with your own
+defaults. The user has stated this forcefully and repeatedly; guessing has produced rework. Only
+proceed without asking when the choice is genuinely unambiguous from the request or already answered.
 
 ---
 
@@ -240,6 +244,14 @@ A running log of durable decisions and feedback captured into the project config
   `<progress>` bars. IPC: `usage:summary`, `budget:get`/`setApp`/`setPerson`/`status` (computed in
   main; `UsageSummary`/`BudgetState` moved to shared). Tests + an E2E (seeded usage → dashboard +
   budget save + no-overflow guard). v1 limit: app-scope is UI-gated, not IPC-enforced.
+- 2026-06-10 — Build Metering-3 (admin-only budgets + a usage header + cost hidden from users — user
+  correction to [06](docs/specs/06-ai-usage-and-budgets.md)): a `budgets.manage` capability (Owner by
+  default) gates budget editing, cost ($) display, and the "Everyone" scope; budget _writes_ and the
+  Everyone scope are enforced in main. A **$10/week default budget** applies to anyone unset. **Cost is
+  removed from Sessions**; a **global header bar** shows the active person's usage as a percentage of
+  their budget (no $). The Usage view is role-aware — users see only their own usage with no dollar
+  amounts; admins keep cost, the Everyone scope, and the budget editors. **Lesson: ask, don't assume** —
+  these visibility rules were originally guessed.
 - 2026-06-10 — Rename the chat surface to **"Sessions"** across the UI (user request): nav, the
   `/sessions` route, the `Sessions` component + `routes/sessions/` folder, and visible copy ("This
   session", "New session", "Session title", "begin a session"). Internal names (the `conversation*`

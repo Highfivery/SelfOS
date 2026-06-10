@@ -25,7 +25,10 @@ function Stat({ label, value }: { label: string; value: string }): JSX.Element {
   );
 }
 
-/** AI usage dashboard (06-ai-usage-and-budgets): totals, breakdowns, cache savings, budgets. */
+/**
+ * AI usage dashboard (06-ai-usage-and-budgets). Cost ($), the "Everyone" scope, and budget editors
+ * are admin-only (`budgets.manage`); everyone else sees only their own usage with no dollar amounts.
+ */
 export function Usage(): JSX.Element {
   const scope = useUsageStore((s) => s.scope);
   const period = useUsageStore((s) => s.period);
@@ -37,7 +40,7 @@ export function Usage(): JSX.Element {
   const setPeriod = useUsageStore((s) => s.setPeriod);
   const savePersonBudget = useUsageStore((s) => s.savePersonBudget);
   const saveAppBudget = useUsageStore((s) => s.saveAppBudget);
-  const canApp = useSessionStore((s) => s.can('settings.manage'));
+  const canManage = useSessionStore((s) => s.can('budgets.manage'));
 
   useEffect(() => {
     void load();
@@ -47,11 +50,15 @@ export function Usage(): JSX.Element {
     <Stack gap={5}>
       <Stack gap={1}>
         <Heading level={2}>Usage</Heading>
-        <Text tone="secondary">Estimated cost — your Anthropic bill is the source of truth.</Text>
+        <Text tone="secondary">
+          {canManage
+            ? 'Estimated cost — your Anthropic bill is the source of truth.'
+            : 'Your AI usage this period.'}
+        </Text>
       </Stack>
 
       <Inline gap={3} wrap>
-        {canApp ? (
+        {canManage ? (
           <SegmentedControl
             aria-label="Whose usage"
             value={scope}
@@ -78,18 +85,24 @@ export function Usage(): JSX.Element {
           <Card>
             <Stack gap={3}>
               <Text size="sm" tone="secondary">
-                Total ({scope === 'app' ? 'everyone' : 'you'}, this {period})
+                {scope === 'app' ? 'Everyone' : 'You'}, this {period}
               </Text>
-              <Heading level={1}>{formatUsd(summary.totalCostUsd)}</Heading>
+              {canManage ? <Heading level={1}>{formatUsd(summary.totalCostUsd)}</Heading> : null}
               <div className={styles.stats}>
                 <Stat label="Sessions" value={String(summary.sessionCount)} />
-                <Stat label="Avg / session" value={formatUsd(summary.avgCostPerSession)} />
-                <Stat label="Avg / type" value={formatUsd(summary.avgCostPerType)} />
+                {canManage ? (
+                  <Stat label="Avg / session" value={formatUsd(summary.avgCostPerSession)} />
+                ) : null}
+                {canManage ? (
+                  <Stat label="Avg / type" value={formatUsd(summary.avgCostPerType)} />
+                ) : null}
                 <Stat label="Input tokens" value={formatTokens(summary.inputTokens)} />
                 <Stat label="Output tokens" value={formatTokens(summary.outputTokens)} />
                 <Stat label="Cache read" value={formatTokens(summary.cacheReadTokens)} />
                 <Stat label="Cache write" value={formatTokens(summary.cacheWriteTokens)} />
-                <Stat label="Cache savings" value={formatUsd(summary.cacheSavingsUsd)} />
+                {canManage ? (
+                  <Stat label="Cache savings" value={formatUsd(summary.cacheSavingsUsd)} />
+                ) : null}
               </div>
             </Stack>
           </Card>
@@ -107,7 +120,8 @@ export function Usage(): JSX.Element {
                     <Inline key={type} gap={2} justify="between">
                       <Text size="sm">{usageTypeLabel(type)}</Text>
                       <Text size="sm" tone="secondary">
-                        {formatUsd(row.costUsd)} · {row.count}
+                        {canManage ? `${formatUsd(row.costUsd)} · ` : ''}
+                        {row.count}
                       </Text>
                     </Inline>
                   ))
@@ -126,7 +140,8 @@ export function Usage(): JSX.Element {
                     <Inline key={model} gap={2} justify="between">
                       <Text size="sm">{model}</Text>
                       <Text size="sm" tone="secondary">
-                        {formatUsd(row.costUsd)} · {row.count}
+                        {canManage ? `${formatUsd(row.costUsd)} · ` : ''}
+                        {row.count}
                       </Text>
                     </Inline>
                   ))
@@ -137,24 +152,22 @@ export function Usage(): JSX.Element {
         </>
       ) : null}
 
-      {budget && status ? (
+      {canManage && budget && status ? (
         <Card>
           <Stack gap={4}>
             <Heading level={3}>Budgets</Heading>
             <BudgetEditor
-              label="My budget"
+              label="Active person"
               budget={budget.person}
               status={status.person}
               onSave={(next) => void savePersonBudget(next)}
             />
-            {canApp ? (
-              <BudgetEditor
-                label="Everyone (app)"
-                budget={budget.app}
-                status={status.app}
-                onSave={(next) => void saveAppBudget(next)}
-              />
-            ) : null}
+            <BudgetEditor
+              label="Everyone (app)"
+              budget={budget.app}
+              status={status.app}
+              onSave={(next) => void saveAppBudget(next)}
+            />
           </Stack>
         </Card>
       ) : null}

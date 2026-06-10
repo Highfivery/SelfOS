@@ -277,18 +277,19 @@ test('super-admin: a hidden long-press on the version unlocks inspect mode', asy
   }
 });
 
-test('sessions: send a message, stream a reply, and show cost + crisis footer', async () => {
+test('sessions: send a message, stream a reply, and show the usage header + crisis footer', async () => {
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
   await setSecret(userData, passthrough, 'anthropic.apiKey', 'sk-ant-e2e');
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
+    await expect(w.getByText(/AI usage/)).toBeVisible(); // global usage header (no cost shown)
     await w.getByRole('link', { name: 'Sessions' }).click();
     await w.getByLabel('Message').fill('I had a hard day');
     await w.getByRole('button', { name: 'Send' }).click();
 
     await expect(w.getByText(/hear you/i)).toBeVisible(); // offline fake reply
-    await expect(w.getByText(/This session:/)).toBeVisible(); // cost-in-chat
+    await expect(w.getByText(/This session:/)).toHaveCount(0); // no cost in sessions
     await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible(); // crisis footer
 
     // Rename the conversation.
@@ -332,13 +333,16 @@ test('usage: the dashboard shows recorded usage and accepts a budget, without ov
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
+    // The global usage header shows for everyone (default $10/week budget), with no dollar amount.
+    await expect(w.getByText(/AI usage/)).toBeVisible();
+
     await w.getByRole('link', { name: 'Usage' }).click();
     await expect(w.getByRole('heading', { name: 'Usage' })).toBeVisible();
     await expect(w.getByText('Coaching session')).toBeVisible(); // by-type breakdown
 
-    await w.getByLabel('My budget limit (USD)').fill('5');
+    await w.getByLabel('Active person limit (USD)').fill('5');
     await w.getByRole('button', { name: 'Save' }).first().click();
-    await expect(w.getByText(/\$5\.00/)).toBeVisible(); // budget progress reflects the limit
+    await expect(w.getByText(/\$5\.00/)).toBeVisible(); // budget progress reflects the limit (admin sees $)
 
     const overflow = await w.evaluate(() => {
       const main = document.querySelector('main');

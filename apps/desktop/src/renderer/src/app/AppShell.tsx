@@ -14,6 +14,7 @@ import { useVaultConflicts } from './useVaultConflicts';
 import { useSessionStore } from '../stores/sessionStore';
 import { Switcher } from './Switcher';
 import { SuperAdminUnlock } from './SuperAdminUnlock';
+import { UsageHeader } from './UsageHeader';
 import { Banner } from '../design-system/components';
 import styles from './AppShell.module.css';
 
@@ -102,17 +103,20 @@ export function AppShell(): JSX.Element {
       </aside>
 
       <main className={styles.content}>
-        {conflicts.length > 0 ? (
-          <div className={styles.banner}>
-            <Banner tone="warning">
-              {conflicts.length === 1
-                ? 'A sync conflict copy was found in your vault.'
-                : `${conflicts.length} sync conflict copies were found in your vault.`}{' '}
-              Open the vault folder to resolve them — SelfOS won’t touch them.
-            </Banner>
-          </div>
-        ) : null}
-        <Outlet />
+        <UsageHeader />
+        <div className={styles.contentInner}>
+          {conflicts.length > 0 ? (
+            <div className={styles.banner}>
+              <Banner tone="warning">
+                {conflicts.length === 1
+                  ? 'A sync conflict copy was found in your vault.'
+                  : `${conflicts.length} sync conflict copies were found in your vault.`}{' '}
+                Open the vault folder to resolve them — SelfOS won’t touch them.
+              </Banner>
+            </div>
+          ) : null}
+          <Outlet />
+        </div>
       </main>
 
       {switching ? <Switcher onClose={() => setSwitching(false)} /> : null}

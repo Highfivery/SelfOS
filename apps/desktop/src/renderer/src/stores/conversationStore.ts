@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { ChatMessage } from '@shared/schemas';
 import type { BudgetState, ConversationMeta } from '@shared/channels';
+import { useBudgetStore } from './budgetStore';
 
 interface ConversationState {
   conversations: ConversationMeta[];
@@ -72,6 +73,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
         runningCostUsd: state.runningCostUsd + result.usage.costUsd,
       }));
       await get().load();
+      await useBudgetStore.getState().refresh(); // update the global usage header
     } else {
       set({ sending: false, streaming: '', error: result?.message ?? 'Something went wrong.' });
     }

@@ -8,8 +8,20 @@ function budgetsPath(vaultDir: string): string {
   return join(vaultDir, 'config', 'budgets.enc');
 }
 
+/** Everyone has a budget: this default applies to a person the admin hasn't configured (06 §12). */
+export const DEFAULT_BUDGET: Budget = { limitUsd: 10, period: 'week', warnRatio: 0.8 };
+
 function defaults(): BudgetsConfig {
   return { schemaVersion: 1, perPerson: {} };
+}
+
+/** A person's effective budget: their override, or the $10/week default. */
+export async function effectivePersonBudget(
+  vaultDir: string,
+  key: Buffer,
+  personId: string,
+): Promise<Budget> {
+  return (await getBudgets(vaultDir, key)).perPerson[personId] ?? DEFAULT_BUDGET;
 }
 
 export async function getBudgets(vaultDir: string, key: Buffer): Promise<BudgetsConfig> {
@@ -74,11 +86,12 @@ export async function checkBudget(
   },
 ): Promise<BudgetState> {
   const budgets = await getBudgets(vaultDir, key);
+  // Person scope always has a budget (override or the $10/week default); app scope may be unset.
   const budget =
     options.scope === 'app'
       ? budgets.app
       : options.personId
-        ? budgets.perPerson[options.personId]
+        ? (budgets.perPerson[options.personId] ?? DEFAULT_BUDGET)
         : undefined;
   if (!budget) return { state: 'none', spentUsd: 0, limitUsd: null, period: null };
 

@@ -13,12 +13,11 @@ import {
   Text,
   TextInput,
 } from '../../../design-system/components';
-import { formatUsd } from '../usage/format';
 import { Composer } from './Composer';
 import { CrisisFooter } from './CrisisFooter';
 import styles from './Sessions.module.css';
 
-/** The coaching Sessions surface (05-conversations): session list + streaming thread + cost + crisis footer. */
+/** The coaching Sessions surface (05-conversations): session list + streaming thread + crisis footer. */
 export function Sessions(): JSX.Element {
   const [aiEnabled] = useSetting('ai.enabled');
   const [hasKey, setHasKey] = useState(false);
@@ -28,8 +27,6 @@ export function Sessions(): JSX.Element {
   const messages = useConversationStore((s) => s.messages);
   const streaming = useConversationStore((s) => s.streaming);
   const sending = useConversationStore((s) => s.sending);
-  const runningCostUsd = useConversationStore((s) => s.runningCostUsd);
-  const budget = useConversationStore((s) => s.budget);
   const error = useConversationStore((s) => s.error);
   const load = useConversationStore((s) => s.load);
   const newConversation = useConversationStore((s) => s.newConversation);
@@ -57,7 +54,6 @@ export function Sessions(): JSX.Element {
   }, [messages, streaming]);
 
   const configured = aiEnabled && hasKey;
-  const personBudget = budget?.person.state;
 
   return (
     <div className={styles.layout}>
@@ -156,17 +152,6 @@ export function Sessions(): JSX.Element {
             </div>
 
             {error ? <Banner tone="warning">{error}</Banner> : null}
-
-            <div className={styles.costRow}>
-              <Text size="xs" tone="tertiary">
-                This session: {formatUsd(runningCostUsd)} (estimated)
-              </Text>
-              {personBudget === 'warn' || personBudget === 'over' ? (
-                <Text size="xs" tone="accent">
-                  Budget {personBudget === 'over' ? 'reached' : 'almost reached'}
-                </Text>
-              ) : null}
-            </div>
 
             <Composer disabled={sending} onSend={(text) => void send(text)} />
           </>

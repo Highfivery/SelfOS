@@ -12,6 +12,20 @@ Builds on [`03-settings.md`](03-settings.md) (AI settings), [`04-people-roles.md
 (active person, encryption, capabilities), and [`05-conversations.md`](05-conversations.md) (the first
 emitter). The Anthropic billing model + caching mechanics come from the project's claude-api skill.
 
+> **Visibility & budget rules (revised 2026-06-10, supersedes earlier drafts):**
+>
+> - **Budgets are managed by an admin only** — gated by the `budgets.manage` capability (the Owner has
+>   it by default). Normal users (Member/Guest) cannot see or configure budgets. Budget _writes_ are
+>   enforced in the main process, not just hidden in the UI.
+> - **Cost ($) is never shown to normal users** — not in Sessions, not in their Usage view. Only
+>   `budgets.manage` holders see dollar amounts and the **"Everyone"** (app-wide) usage scope.
+> - **Each person's budget is a single period** — week _or_ month.
+> - **Default budget = $10 / week** for any person without an explicit budget, so a budget always exists.
+> - **No cost in Sessions.** A **global header bar** shows the active person's usage as a **percentage**
+>   of their budget for the period (never a dollar figure).
+> - **A user's Usage view shows only their own data and no cost** (sessions + token counts + breakdown
+>   counts). The admin's Usage view adds cost, the Everyone scope, and the budget editors.
+
 ---
 
 ## 1. Overview

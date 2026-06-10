@@ -278,6 +278,10 @@ A running log of durable decisions and feedback captured into the project config
   `<progress>` bars. IPC: `usage:summary`, `budget:get`/`setApp`/`setPerson`/`status` (computed in
   main; `UsageSummary`/`BudgetState` moved to shared). Tests + an E2E (seeded usage → dashboard +
   budget save + no-overflow guard). v1 limit: app-scope is UI-gated, not IPC-enforced.
+- 2026-06-10 — Fix (Roles matrix display): the role × capability matrix now renders each toggle via
+  `roleAllows` instead of the raw stored map, so the **Owner column shows all-on** — including
+  capabilities added after the vault was created (e.g. `budgets.manage`). Pairs with the owner
+  full-access fix below; a test covers a stale stored owner map rendering all-on.
 - 2026-06-10 — Fix (Owner full access — the real bug): `roleAllows` now grants the **Owner every
   capability**, not just those in its stored map. Setup persists the owner role's capability map frozen
   at that moment, so a vault created before a capability existed (e.g. `budgets.manage`, added in

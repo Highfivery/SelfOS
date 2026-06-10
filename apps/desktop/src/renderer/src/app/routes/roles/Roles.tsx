@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useSessionStore } from '../../../stores/sessionStore';
-import { CAPABILITIES, CAPABILITY_LABELS } from '@shared/capabilities';
+import { CAPABILITIES, CAPABILITY_LABELS, roleAllows } from '@shared/capabilities';
 import { Heading, Stack, Switch, Text } from '../../../design-system/components';
 import type { Role } from '@shared/channels';
 import styles from './Roles.module.css';
@@ -58,7 +58,7 @@ export function Roles(): JSX.Element {
                 {roles.map((role) => (
                   <td key={role.id} className={styles.cell}>
                     <Switch
-                      checked={role.capabilities[capability] === true}
+                      checked={roleAllows(role, capability)}
                       disabled={role.id === 'owner'}
                       aria-label={`${role.name}: ${CAPABILITY_LABELS[capability]}`}
                       onChange={() => void toggle(role, capability)}

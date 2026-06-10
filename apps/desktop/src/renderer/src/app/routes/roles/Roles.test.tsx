@@ -28,4 +28,23 @@ describe('Roles', () => {
     await userEvent.click(memberManage);
     expect(accessSaveRole).toHaveBeenCalled();
   });
+
+  it('shows the owner column all-on even when a capability is missing from a stale stored map', () => {
+    // A vault persisted before `budgets.manage` existed: the stored owner map lacks it.
+    const staleRoles = [
+      { id: 'owner', name: 'Owner', builtin: true, capabilities: { 'people.manage': true } },
+      { id: 'member', name: 'Member', builtin: true, capabilities: { 'sessions.own': true } },
+    ];
+    installMockBridge({ accessGet: () => Promise.resolve({ roles: staleRoles, accounts: [] }) });
+    useSessionStore.setState({ access: { roles: staleRoles, accounts: [] } });
+    render(<Roles />);
+
+    const ownerBudgets = screen.getByRole('switch', { name: 'Owner: Manage budgets & view cost' });
+    expect(ownerBudgets).toBeChecked();
+    expect(ownerBudgets).toBeDisabled();
+    // Non-owner roles still reflect their stored map.
+    expect(
+      screen.getByRole('switch', { name: 'Member: Manage budgets & view cost' }),
+    ).not.toBeChecked();
+  });
 });

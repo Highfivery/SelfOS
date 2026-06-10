@@ -128,6 +128,11 @@ A slice is **not** done until **all** of these pass:
 - [ ] Accessibility check for any UI
 - [ ] **Responsive** — every UI works and looks intentional from ~360px (phone) to desktop; include a
       mobile-width layout guard (see §12)
+- [ ] **Visual QA pass (not just functional)** — screenshot every touched/new surface and look
+      critically: alignment (buttons bottom-aligned with the inputs beside them, not floating
+      mid-height), even spacing/rhythm, nothing clipped, and each element looks intentional and
+      cohesive with its neighbours. Fix bad-looking UI before it ships — don't rely on "the test
+      passed" (see §12).
 - [ ] **`/gallery` updated** when a design-system primitive is added or changed (it must showcase all of them)
 - [ ] **Admin-only UI is marked** — any control/section visible only to an Owner / super-admin carries a
       consistent "admin only" indicator (see §12)
@@ -219,12 +224,31 @@ placing anything. Specifically:
   added or changed (DoD item).
 - **No scaffolding for unbuilt features.** Don't pre-create capabilities/schemas/settings/routes for
   features that aren't specced and built (see the "never assume" rule in §6).
+- **Visual QA is part of testing.** When testing a change, scrutinize the rendered UI for alignment,
+  spacing, vertical rhythm, and polish — not only "does it work." Screenshot every touched surface and
+  look critically (e.g. buttons must bottom-align with the labelled fields beside them, not float
+  mid-height). Catch bad-looking UI before the user does. (DoD §7.)
+- **"Improve" means redesign, not relocate.** When asked to improve or move a component, actually
+  redesign it for its new context — fit, density, space-conservation, cohesion with neighbours — don't
+  just move the existing component. (E.g. the appearance control became a compact icon→popover in the
+  TopBar, not the old wide segmented control; the brand mark sits in an app-icon tile, not a loose glyph.)
 
 ---
 
 ## Changelog
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
+
+- 2026-06-10 — UI polish + feedback (user flagged three shipped-but-unpolished things): (1) **buttons
+  in rows of labelled fields now bottom-align** with the inputs (`Inline align="end"` in the budget
+  editors) instead of floating mid-height; (2) the **appearance toggle was redesigned** for the
+  TopBar — a compact single theme-icon button opening a System/Light/Dark popover (matching the
+  usage-ring/account menus, conserving horizontal space), replacing the relocated 3-segment control;
+  (3) the **sidebar brand was redesigned** — the sprout sits in a soft accent app-icon tile + a tighter
+  wordmark, so it reads as intentional, not an afterthought. New standing rules: **visual QA is part of
+  testing** (DoD §7 + §12) and **"improve" means redesign, not relocate** (§12). **Lesson: my earlier
+  "move the toggle" / "add an icon" did the minimum; screenshot-and-scrutinize alignment + polish every
+  time, and treat "improve X" as a redesign brief.**
 
 - 2026-06-10 — Build (Slice D — responsive pass): SelfOS is now **one responsive codebase**
   (~360px→desktop). Breakpoint tokens (480/768/1024/1280) in `tokens.css`; below 768px the sidebar

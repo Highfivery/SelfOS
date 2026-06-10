@@ -1,13 +1,9 @@
 import styles from './Brand.module.css';
 
-/** The sprout mark: a stem with two leaves (growth/wellness), tuned to the dusty-blue accent. */
-function SproutMark({ titled }: { titled: boolean }): JSX.Element {
+/** The sprout mark: a stem with two leaves (growth/wellness), in the dusty-blue accent. */
+function SproutMark(): JSX.Element {
   return (
-    <svg
-      className={styles.mark}
-      viewBox="0 0 28 28"
-      {...(titled ? { role: 'img', 'aria-label': 'SelfOS' } : { 'aria-hidden': true })}
-    >
+    <svg className={styles.mark} viewBox="0 0 28 28" aria-hidden="true">
       <path
         className={styles.leafBack}
         d="M14 17 C 9.5 17.5 6 14 5.5 8 C 11 8.5 13.5 12.5 14 17 Z"
@@ -22,14 +18,16 @@ function SproutMark({ titled }: { titled: boolean }): JSX.Element {
 }
 
 /**
- * SelfOS brand lockup for the sidebar header: the sprout mark + wordmark, collapsing to mark-only on
- * the icon rail. When the wordmark shows it carries the accessible name (the mark is decorative);
- * when collapsed the mark itself is labelled.
+ * SelfOS brand lockup for the sidebar header: the sprout mark in a soft accent tile + the wordmark,
+ * collapsing to tile-only on the icon rail. When the wordmark shows it carries the accessible name
+ * (the tile is decorative); when collapsed the tile itself is labelled.
  */
 export function Brand({ collapsed = false }: { collapsed?: boolean }): JSX.Element {
   return (
     <span className={styles.brand}>
-      <SproutMark titled={collapsed} />
+      <span className={styles.tile} {...(collapsed ? { role: 'img', 'aria-label': 'SelfOS' } : {})}>
+        <SproutMark />
+      </span>
       {collapsed ? null : <span className={styles.word}>SelfOS</span>}
     </span>
   );

@@ -58,7 +58,7 @@ export function PersonBudgetEditor({ person }: { person: Person }): JSX.Element 
       <Text size="sm" tone="secondary">
         How much {person.displayName} can spend on AI per period. Defaults to $10 / week.
       </Text>
-      <Inline gap={2} wrap>
+      <Inline gap={2} wrap align="end">
         <Field label="Limit (USD)">
           {(props) => (
             <TextInput

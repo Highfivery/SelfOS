@@ -12,7 +12,7 @@ import {
   ShieldCheck,
   Users,
 } from 'lucide-react';
-import { AppearanceToggle } from './AppearanceToggle';
+import { AppearanceMenu } from './AppearanceMenu';
 import { Brand } from './Brand';
 import { useVaultConflicts } from './useVaultConflicts';
 import { useNavStore } from '../stores/navStore';
@@ -226,7 +226,7 @@ export function AppShell(): JSX.Element {
             </button>
           }
         >
-          <AppearanceToggle />
+          <AppearanceMenu />
           <UsageRing />
           <AccountMenu onSwitch={() => setSwitching(true)} />
         </TopBar>

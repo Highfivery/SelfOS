@@ -58,7 +58,7 @@ export function BudgetEditor({
           aria-label={`${label} budget used`}
         />
       ) : null}
-      <Inline gap={2} wrap>
+      <Inline gap={2} wrap align="end">
         <Field label={`${label} limit (USD)`}>
           {(props) => (
             <TextInput

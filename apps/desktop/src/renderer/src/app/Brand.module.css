@@ -4,10 +4,21 @@
   gap: var(--space-2);
 }
 
-.mark {
+/* The mark sits in a soft accent tile so it reads as a deliberate app icon, not a loose glyph. */
+.tile {
   flex: none;
-  width: 26px;
-  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-md);
+  background: var(--color-accent-subtle-bg);
+}
+
+.mark {
+  width: 20px;
+  height: 20px;
   display: block;
 }
 
@@ -20,18 +31,18 @@
 }
 
 .leafBack {
-  fill: var(--color-accent);
-  opacity: 0.55;
+  fill: var(--color-accent-solid);
+  opacity: 0.5;
 }
 
 .leafFront {
-  fill: var(--color-accent);
+  fill: var(--color-accent-solid);
 }
 
 .word {
   font-weight: 600;
   font-size: var(--text-md);
-  letter-spacing: 0.01em;
+  letter-spacing: -0.01em;
   color: var(--color-text-primary);
   white-space: nowrap;
 }

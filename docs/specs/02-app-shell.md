@@ -86,7 +86,8 @@ Clear, non-destructive screen: explain the vault can't be reached; offer **Retry
 
 The **TopBar** is a slot-based header holding global, feature-agnostic controls (not per-route):
 
-- the **appearance** (System/Light/Dark) toggle,
+- the **appearance menu** — a compact icon button (the active theme) opening a System/Light/Dark
+  popover (designed to match the ring/account menus and conserve horizontal space),
 - the AI-usage **ring** (06; admin-only $ in its popover), and
 - an **account menu** — the active person (avatar + name) opening: **Switch person** (the "Who's
   here?" picker), **Lock** (logout — see §3.6), and, only while the concealed super-admin is active,

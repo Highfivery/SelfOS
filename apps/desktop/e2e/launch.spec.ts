@@ -658,8 +658,9 @@ test('settings: changing the theme applies it and persists to the vault', async 
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Home' }).waitFor();
-    // The top-bar appearance toggle (only the toggle's "Dark" exists on the Home route).
-    await w.getByRole('button', { name: 'Dark' }).click();
+    // Open the compact top-bar appearance menu and pick Dark.
+    await w.getByRole('button', { name: /Appearance/ }).click();
+    await w.getByRole('menuitemradio', { name: 'Dark' }).click();
     await expect(w.locator('html')).toHaveAttribute('data-theme', 'dark');
 
     const settingsFile = join(vault, 'config', 'settings.json');

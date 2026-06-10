@@ -9,6 +9,7 @@ import { setAccount } from '../src/main/people/accessService';
 import { hashPin } from '../src/main/people/pin';
 import { recordUsage } from '../src/main/usage/usageStore';
 import { setSecret } from '../src/main/secrets/secretStore';
+import { writeEncryptedJson } from '../src/main/crypto/encryptedStore';
 
 const MAIN = join(__dirname, '..', 'out', 'main', 'index.js');
 
@@ -384,6 +385,100 @@ test('super-admin: inspect mode unlocks full budget/usage access for a non-admin
     await expect(w.getByRole('heading', { name: '$3.00' })).toBeVisible();
     await expect(w.getByRole('heading', { name: 'By person' })).toBeVisible();
     await expect(w.getByRole('option', { name: 'Alex' })).toBeAttached();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('owner: a vault persisted before newer capabilities still grants full budget/usage access', async () => {
+  // Reproduces a real vault created before `budgets.manage` existed: access.enc has an Owner role
+  // whose stored capability map lacks it. The Owner must still get full access (roleAllows owner rule).
+  const userData = await mkdtemp(join(tmpdir(), 'selfos-e2e-ud-'));
+  const vault = await mkdtemp(join(tmpdir(), 'selfos-e2e-vault-'));
+  const now = new Date().toISOString();
+  await writeJson(join(vault, '.selfos', 'meta.json'), {
+    schemaVersion: 1,
+    vaultId: 'e2e',
+    createdAt: now,
+    updatedAt: now,
+  });
+  await writeJson(join(vault, 'config', 'settings.json'), { schemaVersion: 1, values: {} });
+  await createMasterKey(userData, passthrough, vault);
+  const key = await loadMasterKey(userData, passthrough);
+  if (!key) throw new Error('owner e2e: master key missing');
+  await savePerson(vault, key, {
+    id: 'owner-1',
+    schemaVersion: 1,
+    displayName: 'Alex',
+    isSubject: true,
+    tags: [],
+    createdAt: now,
+    updatedAt: now,
+  });
+  // Stale Owner role — note: NO budgets.manage (and no questionnaires.*), as a pre-Metering-3 vault.
+  await writeEncryptedJson(
+    join(vault, 'config', 'access.enc'),
+    {
+      schemaVersion: 1,
+      roles: [
+        {
+          id: 'owner',
+          name: 'Owner',
+          builtin: true,
+          capabilities: {
+            'people.manage': true,
+            'people.viewOthers': true,
+            'relationships.manage': true,
+            'settings.manage': true,
+            'users.manage': true,
+            'roles.manage': true,
+            'sessions.own': true,
+          },
+        },
+      ],
+      accounts: [{ personId: 'owner-1', roleId: 'owner' }],
+    },
+    key,
+  );
+  await recordUsage(vault, key, {
+    id: 'u1',
+    schemaVersion: 1,
+    type: 'chat',
+    personId: 'owner-1',
+    sessionId: 'c1',
+    model: 'claude-sonnet-4-6',
+    at: now,
+    inputTokens: 1000,
+    outputTokens: 500,
+    cacheWriteTokens: 0,
+    cacheReadTokens: 0,
+    costUsd: 2,
+  });
+  await writeJson(join(userData, 'state.json'), {
+    schemaVersion: 1,
+    vaultPath: vault,
+    activePersonId: 'owner-1',
+    superAdminPassphraseHash: hashPin('superpass'),
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    // Full usage access: the admin picker, the cost figure, and the by-person breakdown.
+    await w.getByRole('link', { name: 'Usage' }).click();
+    await expect(w.getByLabel('Whose usage')).toBeVisible();
+    await expect(w.getByRole('heading', { name: '$2.00' })).toBeVisible();
+    await expect(w.getByRole('heading', { name: 'By person' })).toBeVisible();
+
+    // Full budget-config access: set the owner's budget on the person page.
+    await w.getByRole('link', { name: 'People' }).click();
+    await w.getByRole('button', { name: 'Alex Subject' }).click();
+    await w.getByRole('button', { name: 'Budget', exact: true }).click();
+    await w.getByLabel('Limit (USD)').fill('15');
+    await w.getByRole('button', { name: 'Save budget' }).click();
+    await expect(w.getByText('Saved.')).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

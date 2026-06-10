@@ -278,6 +278,15 @@ A running log of durable decisions and feedback captured into the project config
   `<progress>` bars. IPC: `usage:summary`, `budget:get`/`setApp`/`setPerson`/`status` (computed in
   main; `UsageSummary`/`BudgetState` moved to shared). Tests + an E2E (seeded usage → dashboard +
   budget save + no-overflow guard). v1 limit: app-scope is UI-gated, not IPC-enforced.
+- 2026-06-10 — Fix (Owner full access — the real bug): `roleAllows` now grants the **Owner every
+  capability**, not just those in its stored map. Setup persists the owner role's capability map frozen
+  at that moment, so a vault created before a capability existed (e.g. `budgets.manage`, added in
+  Metering-3) left the Owner without it — denying budget/usage/cost/config. Now the Owner has full
+  access regardless of when the vault was made or what capabilities are added later. Unit tests for the
+  stale-map case + an E2E that boots a pre-`budgets.manage` vault and confirms the Owner sees cost + the
+  person picker + by-person and can set a budget. **Lesson: my earlier "fix" + E2E only seeded FRESH
+  vaults (which pick up current capabilities), so they never exercised a real persisted vault and the
+  bug survived three reports — verify against the actual persisted state, not an idealized seed.**
 - 2026-06-10 — Fix (super-admin parity): the concealed super-admin's inspect mode now bypasses
   capability gating in the **main** process, not just the renderer. Main tracks super-admin active
   state (set on `superadmin:unlock`, cleared by a new `superadmin:lock`), so `activePersonCan` returns

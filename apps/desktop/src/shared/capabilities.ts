@@ -63,7 +63,13 @@ export const DEFAULT_ROLES: Role[] = [
 
 export const OWNER_ROLE_ID = 'owner';
 
-/** Whether a role grants a capability (missing key = denied). */
+/**
+ * Whether a role grants a capability. The **Owner always has every capability** — including ones
+ * added after the role was persisted (a stored owner map can be stale, e.g. a vault created before
+ * `budgets.manage` existed). For all other roles, a missing key means denied.
+ */
 export function roleAllows(role: Role | undefined, capability: CapabilityKey): boolean {
-  return role?.capabilities[capability] === true;
+  if (!role) return false;
+  if (role.id === OWNER_ROLE_ID) return true;
+  return role.capabilities[capability] === true;
 }

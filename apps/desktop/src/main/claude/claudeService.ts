@@ -1,52 +1,12 @@
+import type { ClaudeClient } from '@selfos/core/host';
 import type { ClaudeErrorCode, ClaudeTestResult } from '../../shared/channels';
 
 /**
- * The Claude proxy boundary (00-architecture §6.2). The client is an interface with a real
- * `@anthropic-ai/sdk` implementation and a fake for tests, so the proxy logic is unit-testable
- * without network or a key. The API key stays in the main process — it is passed to `send` here and
- * never reaches the renderer.
+ * The Claude proxy boundary (00-architecture §6.2). The `ClaudeClient` host interface lives in
+ * `@selfos/core/host`; here are the platform-agnostic proxy helpers (error mapping + the connection
+ * test) over an injected client, unit-testable without network or a key. The API key stays in the main
+ * process — it is passed to `send`/`stream` and never reaches the renderer.
  */
-export interface ClaudeMessage {
-  role: 'user' | 'assistant';
-  content: string;
-}
-
-export interface ClaudeSendOptions {
-  apiKey: string;
-  model: string;
-  system?: string;
-  messages: ClaudeMessage[];
-  maxTokens: number;
-}
-
-export interface ClaudeUsage {
-  inputTokens: number;
-  outputTokens: number;
-  cacheWriteTokens: number;
-  cacheReadTokens: number;
-}
-
-export interface ClaudeStreamOptions {
-  apiKey: string;
-  model: string;
-  system: string;
-  messages: ClaudeMessage[];
-  maxTokens: number;
-}
-
-export interface ClaudeStreamResult {
-  text: string;
-  usage: ClaudeUsage;
-}
-
-export interface ClaudeClient {
-  send(options: ClaudeSendOptions): Promise<string>;
-  /** Stream a reply, invoking `onDelta` per text chunk; resolves with the full text + token usage. */
-  stream(
-    options: ClaudeStreamOptions,
-    onDelta: (text: string) => void,
-  ): Promise<ClaudeStreamResult>;
-}
 
 function statusOf(error: unknown): number | undefined {
   if (typeof error === 'object' && error !== null && 'status' in error) {

@@ -1,5 +1,17 @@
 import { safeStorage } from 'electron';
-import type { Encryptor } from './secretStore';
+
+/**
+ * Encrypts/decrypts secret strings for the device-local secret store. The real implementation wraps
+ * Electron's `safeStorage` (OS keychain); tests inject a passthrough. This is an internal detail of the
+ * Electron `SecretStore` host (07-mobile-platform §5.3) — the iOS host uses the Keychain directly and
+ * needs no Encryptor. Secrets live device-local in `userData/secrets.json` and never enter the synced
+ * vault or reach the renderer in plaintext (00-architecture §6.2).
+ */
+export interface Encryptor {
+  isAvailable(): boolean;
+  encrypt(plain: string): string; // → base64 ciphertext
+  decrypt(ciphertext: string): string;
+}
 
 /** Real encryptor backed by the OS keychain via Electron `safeStorage`. */
 export function realEncryptor(): Encryptor {

@@ -239,6 +239,23 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-10 — Build (Capacitor track **slice (ii-c): SecretStore + ClaudeClient host interfaces** —
+  [07-mobile-platform](docs/specs/07-mobile-platform.md) §5.1/§5.3): added the last two platform host
+  interfaces to **`@selfos/core/host`** — **`SecretStore`** (`get`/`set`/`has`/`clear`) and
+  **`ClaudeClient`** (moved verbatim out of the app's `claudeService`) — and rewired the remaining
+  node/electron-coupled business logic onto them (structural DI, **no behavior change**). The Electron
+  **`createNodeSecretStore(userDataDir, encryptor)`** (app `main/host/`) is the old `secrets/secretStore`
+  logic (secrets.json + `safeStorage` encryptor) moved verbatim; the `Encryptor` interface now lives in
+  `secrets/encryptor.ts`. **`masterKey`** now takes `(secrets: SecretStore[, fs: FileSystem])` and reads/
+  writes `config/recovery.enc` via `fs` → it is **fully node/electron-free** (only `@selfos/core` + zod).
+  `ipc.ts` got a `secretStore()` helper; household builds `secrets`+`fs` internally. **recovery.enc and
+  secrets.json on-disk formats are byte-identical** (existing vaults still restore + decrypt — verified
+  by the reviewer + 23 E2E that seed/read through the new path). masterKey.test now uses an in-memory
+  `SecretStore` fake. Gates green: typecheck/lint/format, **189 unit** (22 core + 167 desktop), 23 E2E.
+  Next: a **relocation slice** — physically move the now-platform-agnostic service files (people / usage /
+  conversation / buildContext / encryptedStore / masterKey) into `@selfos/core` (+ `Buffer`→`Uint8Array`,
+  portable uuid, mem-fake tests). That completes the desktop-verifiable extraction; then (iii) the
+  Capacitor iOS shell + (iv) build/signing need a Mac/Xcode.
 - 2026-06-10 — Build (Capacitor track **slice (ii-b): FileSystem host + the encrypted vault-data layer**
   — [07-mobile-platform](docs/specs/07-mobile-platform.md) §5.1/§5.3): introduced the **`FileSystem`
   host interface** (`@selfos/core/host`: `read`/`writeAtomic`/`list`/`remove`, **vault-relative** POSIX

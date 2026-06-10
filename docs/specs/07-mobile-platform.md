@@ -253,6 +253,16 @@ reduced-motion honored (already global).
   code. The crypto layer is now async (awaits rippled to callers/tests/e2e). `Buffer`,
   portable-base64, and the `randomUUID` call sites are intentionally deferred to **slice (ii)** (the
   `@selfos/core` extraction, "no `node:*`"). Gates green: typecheck/lint/format, 183 unit, 23 E2E.
+- 2026-06-10 — **slice (ii-c) landed (§5.1/§5.3):** added the **`SecretStore`** (get/set/has/clear) and
+  **`ClaudeClient`** (moved out of the app's `claudeService`) host interfaces to `@selfos/core/host`, and
+  rewired the remaining node/electron-coupled logic onto them (DI, no behavior change). The Electron
+  `createNodeSecretStore(userDataDir, encryptor)` is the old `secretStore` logic moved verbatim; the
+  `Encryptor` interface moved to `secrets/encryptor.ts`. `masterKey` now takes
+  `(secrets: SecretStore[, fs: FileSystem])` (recovery.enc via `fs`) → fully node/electron-free.
+  recovery.enc + secrets.json formats are byte-identical (existing vaults still restore/decrypt). All
+  three host interfaces (FileSystem / SecretStore / ClaudeClient) now exist; the platform-agnostic service
+  files still physically live in `apps/desktop` and **relocate into core in the next (mechanical) slice**.
+  Gates green: 189 unit, 23 E2E.
 - 2026-06-10 — **slice (ii-b) landed (§5.1/§5.3):** introduced the **`FileSystem`** host interface
   (`@selfos/core/host` — `read`/`writeAtomic`/`list`/`remove`, vault-relative paths) and refactored the
   encrypted vault-data layer (`encryptedStore` + people/relationship/access/usage/budget/conversation

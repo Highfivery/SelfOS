@@ -3,13 +3,13 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { _electron as electron, expect, test, type ElectronApplication } from '@playwright/test';
 import { createMasterKey, loadMasterKey } from '../src/main/crypto/masterKey';
-import type { Encryptor } from '../src/main/secrets/secretStore';
+import type { Encryptor } from '../src/main/secrets/encryptor';
 import { createNodeFileSystem } from '../src/main/host/nodeFileSystem';
+import { createNodeSecretStore } from '../src/main/host/nodeSecretStore';
 import { savePerson } from '../src/main/people/peopleService';
 import { setAccount } from '../src/main/people/accessService';
 import { hashPin } from '@selfos/core/crypto';
 import { recordUsage } from '../src/main/usage/usageStore';
-import { setSecret } from '../src/main/secrets/secretStore';
 import { writeEncryptedJson } from '../src/main/crypto/encryptedStore';
 
 const MAIN = join(__dirname, '..', 'out', 'main', 'index.js');
@@ -27,10 +27,11 @@ async function seedHousehold(
   vault: string,
   ownerName = 'Tester',
 ): Promise<string> {
-  await createMasterKey(userData, passthrough, vault);
-  const key = await loadMasterKey(userData, passthrough);
-  if (!key) throw new Error('seedHousehold: master key missing');
+  const secrets = createNodeSecretStore(userData, passthrough);
   const fs = createNodeFileSystem(vault);
+  await createMasterKey(secrets, fs);
+  const key = await loadMasterKey(secrets);
+  if (!key) throw new Error('seedHousehold: master key missing');
   const ownerId = 'owner-1';
   const now = new Date().toISOString();
   await savePerson(fs, key, {
@@ -321,10 +322,11 @@ test('super-admin: inspect mode unlocks full budget/usage access for a non-admin
     updatedAt: now,
   });
   await writeJson(join(vault, 'config', 'settings.json'), { schemaVersion: 1, values: {} });
-  await createMasterKey(userData, passthrough, vault);
-  const key = await loadMasterKey(userData, passthrough);
-  if (!key) throw new Error('super-admin e2e: master key missing');
+  const secrets = createNodeSecretStore(userData, passthrough);
   const fs = createNodeFileSystem(vault);
+  await createMasterKey(secrets, fs);
+  const key = await loadMasterKey(secrets);
+  if (!key) throw new Error('super-admin e2e: master key missing');
   await savePerson(fs, key, {
     id: 'owner-1',
     schemaVersion: 1,
@@ -412,10 +414,11 @@ test('owner: a vault persisted before newer capabilities still grants full budge
     updatedAt: now,
   });
   await writeJson(join(vault, 'config', 'settings.json'), { schemaVersion: 1, values: {} });
-  await createMasterKey(userData, passthrough, vault);
-  const key = await loadMasterKey(userData, passthrough);
-  if (!key) throw new Error('owner e2e: master key missing');
+  const secrets = createNodeSecretStore(userData, passthrough);
   const fs = createNodeFileSystem(vault);
+  await createMasterKey(secrets, fs);
+  const key = await loadMasterKey(secrets);
+  if (!key) throw new Error('owner e2e: master key missing');
   await savePerson(fs, key, {
     id: 'owner-1',
     schemaVersion: 1,
@@ -497,7 +500,7 @@ test('owner: a vault persisted before newer capabilities still grants full budge
 
 test('sessions: send a message, stream a reply, and show the usage header + crisis footer', async () => {
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
-  await setSecret(userData, passthrough, 'anthropic.apiKey', 'sk-ant-e2e');
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
@@ -531,7 +534,7 @@ test('sessions: send a message, stream a reply, and show the usage header + cris
 
 test('usage: the dashboard shows recorded usage and accepts a budget, without overflow', async () => {
   const { userData, vault } = await seedReadyVault();
-  const key = await loadMasterKey(userData, passthrough);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
   if (!key) throw new Error('usage e2e: master key missing');
   await recordUsage(createNodeFileSystem(vault), key, {
     id: 'u1',

@@ -3,7 +3,8 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { clearSecret, type Encryptor } from '../secrets/secretStore';
+import type { SecretStore } from '@selfos/core/host';
+import { createNodeFileSystem } from '../host/nodeFileSystem';
 import {
   MASTER_KEY_ID,
   createMasterKey,
@@ -12,48 +13,60 @@ import {
   restoreFromRecoveryPhrase,
 } from './masterKey';
 
-const encryptor: Encryptor = {
-  isAvailable: () => true,
-  encrypt: (plain) => Buffer.from(plain, 'utf8').toString('base64'),
-  decrypt: (ciphertext) => Buffer.from(ciphertext, 'base64').toString('utf8'),
-};
+/** In-memory SecretStore fake — stands in for the iOS Keychain / Electron safeStorage. */
+function memSecretStore(): SecretStore {
+  const map = new Map<string, string>();
+  return {
+    get: (id) => Promise.resolve(map.get(id) ?? null),
+    set: (id, value) => {
+      map.set(id, value);
+      return Promise.resolve();
+    },
+    has: (id) => Promise.resolve(map.has(id)),
+    clear: (id) => {
+      map.delete(id);
+      return Promise.resolve();
+    },
+  };
+}
 
-let ud: string;
 let vault: string;
 beforeEach(async () => {
-  ud = await mkdtemp(join(tmpdir(), 'selfos-mk-ud-'));
   vault = await mkdtemp(join(tmpdir(), 'selfos-mk-vault-'));
 });
 afterEach(async () => {
-  await rm(ud, { recursive: true, force: true });
   await rm(vault, { recursive: true, force: true });
 });
 
 describe('masterKey', () => {
   it('creates and loads a master key', async () => {
-    expect(await hasMasterKey(ud, encryptor)).toBe(false);
-    await createMasterKey(ud, encryptor, vault);
-    expect(await hasMasterKey(ud, encryptor)).toBe(true);
-    expect((await loadMasterKey(ud, encryptor))?.length).toBe(32);
+    const secrets = memSecretStore();
+    const fs = createNodeFileSystem(vault);
+    expect(await hasMasterKey(secrets)).toBe(false);
+    await createMasterKey(secrets, fs);
+    expect(await hasMasterKey(secrets)).toBe(true);
+    expect((await loadMasterKey(secrets))?.length).toBe(32);
   });
 
-  it('restores the same key from the recovery phrase after keychain loss', async () => {
-    const { recoveryPhrase } = await createMasterKey(ud, encryptor, vault);
-    const original = await loadMasterKey(ud, encryptor);
+  it('restores the same key from the recovery phrase after secret-store loss', async () => {
+    const secrets = memSecretStore();
+    const fs = createNodeFileSystem(vault);
+    const { recoveryPhrase } = await createMasterKey(secrets, fs);
+    const original = await loadMasterKey(secrets);
 
-    await clearSecret(ud, MASTER_KEY_ID); // simulate keychain loss / new device
-    expect(await loadMasterKey(ud, encryptor)).toBeNull();
+    await secrets.clear(MASTER_KEY_ID); // simulate keychain loss / new device
+    expect(await loadMasterKey(secrets)).toBeNull();
 
-    expect(await restoreFromRecoveryPhrase(ud, encryptor, vault, recoveryPhrase)).toBe(true);
-    expect((await loadMasterKey(ud, encryptor))?.equals(original!)).toBe(true);
+    expect(await restoreFromRecoveryPhrase(secrets, fs, recoveryPhrase)).toBe(true);
+    expect((await loadMasterKey(secrets))?.toString('base64')).toBe(original?.toString('base64'));
   });
 
   it('rejects a wrong recovery phrase', async () => {
-    await createMasterKey(ud, encryptor, vault);
-    await clearSecret(ud, MASTER_KEY_ID);
-    expect(await restoreFromRecoveryPhrase(ud, encryptor, vault, 'WRON-GPHR-ASE0-0000')).toBe(
-      false,
-    );
-    expect(await hasMasterKey(ud, encryptor)).toBe(false);
+    const secrets = memSecretStore();
+    const fs = createNodeFileSystem(vault);
+    await createMasterKey(secrets, fs);
+    await secrets.clear(MASTER_KEY_ID);
+    expect(await restoreFromRecoveryPhrase(secrets, fs, 'WRON-GPHR-ASE0-0000')).toBe(false);
+    expect(await hasMasterKey(secrets)).toBe(false);
   });
 });

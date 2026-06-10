@@ -30,7 +30,7 @@ import { initializeVault } from './vault/vault';
 import { findConflicts } from './vault/conflicts';
 import { readDeviceState, writeDeviceState } from './state/deviceStore';
 import { readAllSettings, resetSettingValue, writeSettingValue } from './settings/settingsStore';
-import { clearSecret, getSecret, hasSecret, setSecret } from './secrets/secretStore';
+import { createNodeSecretStore } from './host/nodeSecretStore';
 import { defaultEncryptor } from './secrets/encryptor';
 import { runConnectionTest } from './claude/claudeService';
 import { defaultClaudeClient } from './claude/anthropicClient';
@@ -56,7 +56,7 @@ import {
   upsertRelationship,
 } from './people/relationshipService';
 import { loadMasterKey } from './crypto/masterKey';
-import type { FileSystem } from '@selfos/core/host';
+import type { FileSystem, SecretStore } from '@selfos/core/host';
 import { createNodeFileSystem } from './host/nodeFileSystem';
 import { queryUsage, summarize } from './usage/usageStore';
 import {
@@ -129,11 +129,16 @@ function userDataDir(): string {
   return app.getPath('userData');
 }
 
+/** The device-local secret store (API key, master key) backed by `safeStorage` + `userData`. */
+function secretStore(): SecretStore {
+  return createNodeSecretStore(userDataDir(), encryptor);
+}
+
 /** The active vault's FileSystem host + decrypted master key, or null when the household isn't set up. */
 async function vaultAndKey(): Promise<{ fs: FileSystem; key: Buffer } | null> {
   const vaultDir = await activeVaultPath();
   if (!vaultDir) return null;
-  const key = await loadMasterKey(userDataDir(), encryptor);
+  const key = await loadMasterKey(secretStore());
   return key ? { fs: createNodeFileSystem(vaultDir), key } : null;
 }
 
@@ -214,21 +219,21 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(IpcChannels.secretSet, async (_event, raw: unknown): Promise<void> => {
     const { id, value } = SecretSetSchema.parse(raw);
-    await setSecret(userDataDir(), encryptor, id, value);
+    await secretStore().set(id, value);
   });
 
   ipcMain.handle(IpcChannels.secretHas, async (_event, raw: unknown): Promise<boolean> => {
     const { id } = SecretIdSchema.parse(raw);
-    return hasSecret(userDataDir(), id);
+    return secretStore().has(id);
   });
 
   ipcMain.handle(IpcChannels.secretClear, async (_event, raw: unknown): Promise<void> => {
     const { id } = SecretIdSchema.parse(raw);
-    await clearSecret(userDataDir(), id);
+    await secretStore().clear(id);
   });
 
   ipcMain.handle(IpcChannels.claudeTest, async (): Promise<ClaudeTestResult> => {
-    const apiKey = await getSecret(userDataDir(), encryptor, ANTHROPIC_API_KEY_ID);
+    const apiKey = await secretStore().get(ANTHROPIC_API_KEY_ID);
     return runConnectionTest(claudeClient, apiKey, await activeModel());
   });
 
@@ -480,7 +485,7 @@ export function registerIpcHandlers(): void {
     if (!ctx || !personId) {
       return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
     }
-    const apiKey = await getSecret(userDataDir(), encryptor, ANTHROPIC_API_KEY_ID);
+    const apiKey = await secretStore().get(ANTHROPIC_API_KEY_ID);
     return runChatTurn({
       fs: ctx.fs,
       key: ctx.key,

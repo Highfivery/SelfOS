@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { ClaudeClient, ClaudeStreamResult } from './claudeService';
+import type { ClaudeClient, ClaudeStreamResult } from '@selfos/core/host';
 
 /** Real Claude client backed by the official Anthropic SDK. */
 export function anthropicClient(): ClaudeClient {

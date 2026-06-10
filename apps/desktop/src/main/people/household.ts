@@ -4,7 +4,8 @@ import type { HouseholdStatus } from '../../shared/channels';
 import type { Person } from '../../shared/schemas';
 import { createMasterKey, loadMasterKey } from '../crypto/masterKey';
 import { createNodeFileSystem } from '../host/nodeFileSystem';
-import type { Encryptor } from '../secrets/secretStore';
+import { createNodeSecretStore } from '../host/nodeSecretStore';
+import type { Encryptor } from '../secrets/encryptor';
 import { getAccessConfig, setAccount } from './accessService';
 import { savePerson } from './peopleService';
 import { getActivePersonId, setActivePersonId } from './session';
@@ -16,7 +17,7 @@ export async function householdStatus(
   encryptor: Encryptor,
   vaultDir: string | null,
 ): Promise<HouseholdStatus> {
-  const key = await loadMasterKey(userDataDir, encryptor);
+  const key = await loadMasterKey(createNodeSecretStore(userDataDir, encryptor));
   if (!key || !vaultDir) {
     return { hasMasterKey: key !== null, hasOwner: false, activePersonId: null };
   }
@@ -35,11 +36,12 @@ export async function setupHousehold(
   vaultDir: string,
   input: { ownerName: string; passphrase: string },
 ): Promise<{ recoveryPhrase: string; ownerId: string }> {
-  const { recoveryPhrase } = await createMasterKey(userDataDir, encryptor, vaultDir);
-  const key = await loadMasterKey(userDataDir, encryptor);
+  const secrets = createNodeSecretStore(userDataDir, encryptor);
+  const fs = createNodeFileSystem(vaultDir);
+  const { recoveryPhrase } = await createMasterKey(secrets, fs);
+  const key = await loadMasterKey(secrets);
   if (!key) throw new Error('Master key creation failed');
 
-  const fs = createNodeFileSystem(vaultDir);
   const now = new Date().toISOString();
   const owner: Person = {
     id: randomUUID(),

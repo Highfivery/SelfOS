@@ -1,8 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import type { FileSystem } from '@selfos/core/host';
+import type { ClaudeClient, FileSystem } from '@selfos/core/host';
 import type { ChatTurnResult } from '../../shared/channels';
 import type { Conversation, UsageEvent } from '../../shared/schemas';
-import type { ClaudeClient } from '../claude/claudeService';
 import { checkBudget } from '../usage/budgetService';
 import { costOf } from '../usage/pricing';
 import { recordUsage } from '../usage/usageStore';

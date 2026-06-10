@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { runConnectionTest, type ClaudeClient } from './claudeService';
+import type { ClaudeClient } from '@selfos/core/host';
+import { runConnectionTest } from './claudeService';
 
 const noopStream: ClaudeClient['stream'] = () =>
   Promise.resolve({

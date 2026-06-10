@@ -47,6 +47,17 @@ const bridge: SelfosBridge = {
   budgetSetApp: (budget) => ipcRenderer.invoke(IpcChannels.budgetSetApp, budget),
   budgetSetPerson: (budget) => ipcRenderer.invoke(IpcChannels.budgetSetPerson, budget),
   budgetStatus: () => ipcRenderer.invoke(IpcChannels.budgetStatus),
+  chatStream: (input) => ipcRenderer.invoke(IpcChannels.chatStream, input),
+  onChatChunk: (listener) => {
+    const handler = (_event: unknown, delta: string): void => listener(delta);
+    ipcRenderer.on(IpcChannels.chatChunk, handler);
+    return () => {
+      ipcRenderer.removeListener(IpcChannels.chatChunk, handler);
+    };
+  },
+  conversationsList: () => ipcRenderer.invoke(IpcChannels.conversationsList),
+  conversationsGet: (id) => ipcRenderer.invoke(IpcChannels.conversationsGet, id),
+  conversationsDelete: (id) => ipcRenderer.invoke(IpcChannels.conversationsDelete, id),
 };
 
 contextBridge.exposeInMainWorld('selfos', bridge);

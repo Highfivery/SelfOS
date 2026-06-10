@@ -94,6 +94,39 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         person: { state: 'none', spentUsd: 0, limitUsd: null, period: null },
         app: { state: 'none', spentUsd: 0, limitUsd: null, period: null },
       }),
+    chatStream: (input) =>
+      Promise.resolve({
+        ok: true,
+        conversation: {
+          id: input.conversationId,
+          schemaVersion: 1,
+          personId: 'owner-1',
+          title: input.userText,
+          createdAt: 'now',
+          updatedAt: 'now',
+          messages: [
+            { role: 'user', content: input.userText, ts: 'now' },
+            { role: 'assistant', content: 'I hear you.', ts: 'now' },
+          ],
+        },
+        usage: {
+          id: 'u',
+          schemaVersion: 1,
+          type: 'chat',
+          personId: 'owner-1',
+          model: 'claude-sonnet-4-6',
+          at: 'now',
+          inputTokens: 100,
+          outputTokens: 10,
+          cacheWriteTokens: 0,
+          cacheReadTokens: 0,
+          costUsd: 0.001,
+        },
+      }),
+    onChatChunk: () => () => {},
+    conversationsList: () => Promise.resolve([]),
+    conversationsGet: () => Promise.resolve(null),
+    conversationsDelete: () => Promise.resolve(),
     ...overrides,
   };
   window.selfos = bridge;

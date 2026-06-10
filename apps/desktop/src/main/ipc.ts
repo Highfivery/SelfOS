@@ -5,7 +5,9 @@ import {
   IpcChannels,
   type AccessView,
   type BudgetState,
+  type ChatTurnResult,
   type ClaudeTestResult,
+  type ConversationMeta,
   type HouseholdStatus,
   type SetActiveResult,
   type SettingsValues,
@@ -19,6 +21,7 @@ import {
   RoleSchema,
   type BootState,
   type Budget,
+  type Conversation,
   type Person,
   type Relationship,
 } from '../shared/schemas';
@@ -56,6 +59,12 @@ import {
   setPersonBudget,
   periodStart,
 } from './usage/budgetService';
+import { runChatTurn } from './conversations/chatService';
+import {
+  deleteConversation,
+  getConversation,
+  listConversations,
+} from './conversations/conversationService';
 import { startVaultWatcher } from './vaultWatcherManager';
 
 const ScopeSchema = z.enum(['vault', 'device']);
@@ -83,6 +92,10 @@ const SetActiveSchema = z.object({
 const UsageSummarySchema = z.object({
   scope: z.enum(['person', 'app']),
   period: z.enum(['week', 'month']),
+});
+const ChatStreamSchema = z.object({
+  conversationId: z.string().min(1),
+  userText: z.string().min(1),
 });
 
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
@@ -364,4 +377,54 @@ export function registerIpcHandlers(): void {
       return { person, app };
     },
   );
+
+  ipcMain.handle(IpcChannels.conversationsList, async (): Promise<ConversationMeta[]> => {
+    const ctx = await vaultAndKey();
+    const personId = ctx ? await getActivePersonId(userDataDir()) : null;
+    if (!ctx || !personId) return [];
+    return (await listConversations(ctx.vaultDir, ctx.key, personId)).map((c) => ({
+      id: c.id,
+      title: c.title,
+      updatedAt: c.updatedAt,
+    }));
+  });
+
+  ipcMain.handle(
+    IpcChannels.conversationsGet,
+    async (_event, raw): Promise<Conversation | null> => {
+      const ctx = await vaultAndKey();
+      const personId = ctx ? await getActivePersonId(userDataDir()) : null;
+      if (!ctx || !personId) return null;
+      return getConversation(ctx.vaultDir, ctx.key, personId, z.string().min(1).parse(raw));
+    },
+  );
+
+  ipcMain.handle(IpcChannels.conversationsDelete, async (_event, raw): Promise<void> => {
+    const ctx = await vaultAndKey();
+    const personId = ctx ? await getActivePersonId(userDataDir()) : null;
+    if (!ctx || !personId) return;
+    await deleteConversation(ctx.vaultDir, personId, z.string().min(1).parse(raw));
+  });
+
+  ipcMain.handle(IpcChannels.chatStream, async (event, raw): Promise<ChatTurnResult> => {
+    const { conversationId, userText } = ChatStreamSchema.parse(raw);
+    const ctx = await vaultAndKey();
+    const personId = ctx ? await getActivePersonId(userDataDir()) : null;
+    if (!ctx || !personId) {
+      return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+    }
+    const apiKey = await getSecret(userDataDir(), encryptor, ANTHROPIC_API_KEY_ID);
+    return runChatTurn({
+      vaultDir: ctx.vaultDir,
+      key: ctx.key,
+      client: claudeClient,
+      apiKey,
+      model: await activeModel(),
+      personId,
+      conversationId,
+      userText,
+      onDelta: (text) => event.sender.send(IpcChannels.chatChunk, text),
+      now: new Date(),
+    });
+  });
 }

@@ -240,6 +240,14 @@ A running log of durable decisions and feedback captured into the project config
   `<progress>` bars. IPC: `usage:summary`, `budget:get`/`setApp`/`setPerson`/`status` (computed in
   main; `UsageSummary`/`BudgetState` moved to shared). Tests + an E2E (seeded usage → dashboard +
   budget save + no-overflow guard). v1 limit: app-scope is UI-gated, not IPC-enforced.
+- 2026-06-10 — Build Chat-6b (the chat UI for [05-conversations](docs/specs/05-conversations.md)):
+  a **Chat** screen (nav gated by `sessions.own`) with a conversation list (new/open/delete), a
+  streaming message thread, a composer (Enter sends / Shift+Enter newline), a running **cost-in-chat**
+  - budget warn/over chip, an always-present crisis **"Get help now"** footer, and a not-configured
+    state pointing to Settings → AI. Streaming IPC: `chat:stream` invoke + `chat:chunk` events +
+    `onChatChunk` subscribe; `conversations:list/get/delete` (scoped to the active person); the key
+    stays in main. Tests + an E2E (send → streamed reply → cost + crisis, no overflow). **SelfOS can
+    now hold a conversation.**
 - 2026-06-10 — Build Chat-6a (streaming chat backend for
   [05-conversations](docs/specs/05-conversations.md)): `conversationService` (encrypted per-person
   transcript CRUD); `promptBuilder` (PERSONA + SAFETY + `buildContext` → system prompt); a streaming

@@ -1,11 +1,13 @@
 import type {
   BootState,
   Budget,
+  Conversation,
   Person,
   PersonInput,
   Relationship,
   RelationshipInput,
   Role,
+  UsageEvent,
 } from './schemas';
 
 /**
@@ -49,6 +51,11 @@ export const IpcChannels = {
   budgetSetApp: 'budget:setApp',
   budgetSetPerson: 'budget:setPerson',
   budgetStatus: 'budget:status',
+  chatStream: 'chat:stream',
+  chatChunk: 'chat:chunk', // main → renderer event
+  conversationsList: 'conversations:list',
+  conversationsGet: 'conversations:get',
+  conversationsDelete: 'conversations:delete',
 } as const;
 
 export type SettingScope = 'vault' | 'device';
@@ -108,6 +115,17 @@ export interface BudgetState {
 
 export type UsageScope = 'person' | 'app';
 export type UsagePeriod = 'week' | 'month';
+
+/** Lightweight conversation list item (05-conversations). */
+export interface ConversationMeta {
+  id: string;
+  title: string;
+  updatedAt: string;
+}
+
+export type ChatTurnResult =
+  | { ok: true; conversation: Conversation; usage: UsageEvent }
+  | { ok: false; reason: 'NO_KEY' | 'BUDGET' | 'ERROR'; message: string };
 
 export interface SelfosBridge {
   /** Current boot state (computed from device-local state + vault status). */
@@ -187,6 +205,26 @@ export interface SelfosBridge {
   budgetSetPerson(budget: Budget | null): Promise<void>;
   /** Current budget state for the active person + the app (drives progress + chat warnings). */
   budgetStatus(): Promise<{ person: BudgetState; app: BudgetState }>;
+  /** Send a chat message: streams reply chunks via `onChatChunk`, resolves with the final turn. */
+  chatStream(input: { conversationId: string; userText: string }): Promise<ChatTurnResult>;
+  /** Subscribe to streamed reply chunks; returns an unsubscribe function. */
+  onChatChunk(listener: (delta: string) => void): () => void;
+  /** The active person's conversations (newest first), metadata only. */
+  conversationsList(): Promise<ConversationMeta[]>;
+  /** Load a full conversation transcript. */
+  conversationsGet(id: string): Promise<Conversation | null>;
+  /** Delete a conversation. */
+  conversationsDelete(id: string): Promise<void>;
 }
 
-export type { BootState, Budget, Person, PersonInput, Relationship, RelationshipInput, Role };
+export type {
+  BootState,
+  Budget,
+  Conversation,
+  Person,
+  PersonInput,
+  Relationship,
+  RelationshipInput,
+  Role,
+  UsageEvent,
+};

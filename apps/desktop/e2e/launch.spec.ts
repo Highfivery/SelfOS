@@ -8,6 +8,7 @@ import { savePerson } from '../src/main/people/peopleService';
 import { setAccount } from '../src/main/people/accessService';
 import { hashPin } from '../src/main/people/pin';
 import { recordUsage } from '../src/main/usage/usageStore';
+import { setSecret } from '../src/main/secrets/secretStore';
 
 const MAIN = join(__dirname, '..', 'out', 'main', 'index.js');
 
@@ -269,6 +270,32 @@ test('super-admin: a hidden long-press on the version unlocks inspect mode', asy
 
     // Inspect mode is active — the (only-now-visible) super-admin badge appears.
     await expect(w.getByRole('button', { name: /super-admin/i })).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('chat: send a message, stream a reply, and show cost + crisis footer', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await setSecret(userData, passthrough, 'anthropic.apiKey', 'sk-ant-e2e');
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Chat' }).click();
+    await w.getByLabel('Message').fill('I had a hard day');
+    await w.getByRole('button', { name: 'Send' }).click();
+
+    await expect(w.getByText(/hear you/i)).toBeVisible(); // offline fake reply
+    await expect(w.getByText(/This chat:/)).toBeVisible(); // cost-in-chat
+    await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible(); // crisis footer
+
+    const overflow = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      return main ? main.scrollWidth - main.clientWidth : 0;
+    });
+    expect(overflow).toBeLessThanOrEqual(1);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

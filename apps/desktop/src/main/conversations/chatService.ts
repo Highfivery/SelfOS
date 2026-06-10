@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { ChatTurnResult } from '../../shared/channels';
 import type { Conversation, UsageEvent } from '../../shared/schemas';
 import type { ClaudeClient } from '../claude/claudeService';
 import { checkBudget } from '../usage/budgetService';
@@ -7,9 +8,7 @@ import { recordUsage } from '../usage/usageStore';
 import { getConversation, saveConversation } from './conversationService';
 import { buildSystemPrompt } from './promptBuilder';
 
-export type ChatTurnResult =
-  | { ok: true; conversation: Conversation; usage: UsageEvent }
-  | { ok: false; reason: 'NO_KEY' | 'BUDGET' | 'ERROR'; message: string };
+export type { ChatTurnResult };
 
 export interface ChatTurnDeps {
   vaultDir: string;

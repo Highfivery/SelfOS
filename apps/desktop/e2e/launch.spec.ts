@@ -228,6 +228,39 @@ test('access: grant a login, switch person, and gate the People nav', async () =
   }
 });
 
+test('design: a Switch never shrinks in a flex row and its thumb stays on-track', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'People' }).click();
+    // The seeded owner is a subject, so its Subject toggle renders in the "on" position.
+    await w.getByRole('button', { name: 'Tester Subject' }).click();
+    const toggle = w.getByRole('switch', { name: 'Has their own SelfOS experience' });
+    await expect(toggle).toBeVisible();
+
+    const geom = await toggle.evaluate((el) => {
+      const track = el.getBoundingClientRect();
+      const thumb = el.querySelector('span')!.getBoundingClientRect();
+      return {
+        flexShrink: getComputedStyle(el).flexShrink,
+        trackWidth: track.width,
+        leftGap: thumb.left - track.left,
+        rightGap: track.right - thumb.right,
+      };
+    });
+
+    expect(geom.flexShrink).toBe('0'); // the fix: fixed-size control must not shrink
+    expect(geom.trackWidth).toBeGreaterThanOrEqual(38);
+    expect(geom.leftGap).toBeGreaterThanOrEqual(2); // thumb not flush against either edge
+    expect(geom.rightGap).toBeGreaterThanOrEqual(2);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 async function seedReadyVault(
   settingsValues: Record<string, unknown> = {},
 ): Promise<{ userData: string; vault: string }> {

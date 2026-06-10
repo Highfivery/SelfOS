@@ -116,7 +116,9 @@ A slice is **not** done until **all** of these pass:
 - [ ] `pnpm lint` clean (ESLint) and Prettier-formatted
 - [ ] Unit/component tests for new logic (Vitest); meaningful, not trivial
 - [ ] E2E tests for **every** new user-facing surface/section, not just the happy path (Playwright);
-      include a no-horizontal-overflow / layout guard for content-heavy screens
+      include a no-horizontal-overflow / layout guard for content-heavy screens, and a geometry guard
+      for fixed-size controls (e.g. a toggle must not shrink in a flex row — assert computed
+      `flex-shrink` / thumb position)
 - [ ] **Docs in lockstep** — relevant spec / `CLAUDE.md` / skills updated (`sync-docs`)
 - [ ] **Self code-review** passed (`code-reviewer` agent); findings fixed or explicitly accepted
 - [ ] Accessibility check for any UI
@@ -230,6 +232,11 @@ A running log of durable decisions and feedback captured into the project config
   switch, nav gated). Known v1 limits: only the nav (not the route) is gated, and a PIN-less owner is
   switchable by anyone on the device — the super-admin passphrase is the real gate. The roles×capability
   matrix editor, the concealed super-admin unlock, and shareable context are People-3.
+- 2026-06-09 — Fix: the `Switch` thumb was pushed flush against the right edge when on, because the
+  fixed-size control had no `flex-shrink: 0` and got compressed inside content-tight flex rows (e.g.
+  the Subject toggle in the person editor). Added `flex: none` to `.switch`; added an E2E geometry
+  guard (computed `flex-shrink === '0'` + thumb gaps ≥ 2px) verified to fail without the fix; added a
+  DoD rule for control-geometry guards.
 - 2026-06-09 — Build People-2b (people + relationship management UI): a **People** screen (list of
   subjects/contacts) with add/edit/delete and a relationship editor (typed links between people),
   backed by people/relationship CRUD IPC (`upsert` owns id + timestamps in main) + a `peopleStore`,

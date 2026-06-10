@@ -1,5 +1,6 @@
 .switch {
   position: relative;
+  flex: none; /* fixed-size control — never shrink in a flex row, or the thumb is pushed off-track */
   width: 40px;
   height: 24px;
   padding: 0;

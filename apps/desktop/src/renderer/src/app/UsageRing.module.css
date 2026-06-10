@@ -1,0 +1,92 @@
+.wrap {
+  position: relative;
+}
+
+.ringButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border: none;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.ringButton:hover {
+  background: var(--color-surface-alt);
+}
+
+.ringButton:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 1px;
+}
+
+.ring {
+  width: 26px;
+  height: 26px;
+  transform: rotate(-90deg);
+}
+
+.track {
+  fill: none;
+  stroke: var(--color-surface-alt);
+  stroke-width: 4;
+}
+
+.arc {
+  fill: none;
+  stroke-width: 4;
+  stroke-linecap: round;
+  transition: stroke-dasharray var(--motion-base) var(--ease-standard);
+}
+
+.ok {
+  stroke: var(--color-accent-solid);
+}
+
+.warn {
+  stroke: var(--color-warning);
+}
+
+.over {
+  stroke: var(--color-danger);
+}
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  border: none;
+  background: transparent;
+}
+
+.popover {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 50;
+  margin-top: var(--space-1);
+  min-width: 220px;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-overlay);
+}
+
+.link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-accent-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.link:hover {
+  text-decoration: underline;
+}

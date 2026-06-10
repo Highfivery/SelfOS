@@ -38,6 +38,9 @@
   --radius-xl: 16px;
   --radius-pill: 999px;
 
+  /* Elevation — used sparingly, only for floating surfaces (popovers, menus). */
+  --shadow-overlay: 0 8px 24px rgb(0 0 0 / 0.1);
+
   /* Motion */
   --motion-fast: 120ms;
   --motion-base: 200ms;

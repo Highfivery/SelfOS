@@ -14,7 +14,8 @@ import { useVaultConflicts } from './useVaultConflicts';
 import { useSessionStore } from '../stores/sessionStore';
 import { Switcher } from './Switcher';
 import { SuperAdminUnlock } from './SuperAdminUnlock';
-import { UsageHeader } from './UsageHeader';
+import { TopBar } from './TopBar';
+import { UsageRing } from './UsageRing';
 import { Banner } from '../design-system/components';
 import styles from './AppShell.module.css';
 
@@ -103,7 +104,9 @@ export function AppShell(): JSX.Element {
       </aside>
 
       <main className={styles.content}>
-        <UsageHeader />
+        <TopBar>
+          <UsageRing />
+        </TopBar>
         <div className={styles.contentInner}>
           {conflicts.length > 0 ? (
             <div className={styles.banner}>

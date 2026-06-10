@@ -310,7 +310,7 @@ test('sessions: send a message, stream a reply, and show the usage header + cris
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    await expect(w.getByText(/AI usage/)).toBeVisible(); // global usage header (no cost shown)
+    await expect(w.getByRole('button', { name: /AI usage/i })).toBeVisible(); // global usage ring (no cost shown)
     await w.getByRole('link', { name: 'Sessions' }).click();
     await w.getByLabel('Message').fill('I had a hard day');
     await w.getByRole('button', { name: 'Send' }).click();
@@ -360,10 +360,10 @@ test('usage: the dashboard shows recorded usage and accepts a budget, without ov
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    // The global usage header shows for everyone (default $10/week budget), with no dollar amount.
-    await expect(w.getByText(/AI usage/)).toBeVisible();
-
-    await w.getByRole('link', { name: 'Usage' }).click();
+    // The usage ring shows for everyone (default $10/week budget); open its popover and follow the link.
+    await w.getByRole('button', { name: /AI usage/i }).click();
+    await expect(w.getByText(/% of your allowance/)).toBeVisible();
+    await w.getByRole('button', { name: 'View usage details →' }).click();
     await expect(w.getByRole('heading', { name: 'Usage' })).toBeVisible();
     await expect(w.getByText('Coaching session')).toBeVisible(); // by-type breakdown
 
@@ -506,7 +506,7 @@ test('AI: enabling reveals key + model, saving a key and testing connects', asyn
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Settings' }).click();
-    await w.getByRole('button', { name: 'AI' }).click();
+    await w.getByRole('button', { name: 'AI', exact: true }).click();
 
     // Model + key controls are visible because AI is enabled.
     await expect(w.getByLabel('Claude API key')).toBeVisible();

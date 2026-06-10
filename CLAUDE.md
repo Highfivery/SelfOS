@@ -244,6 +244,12 @@ A running log of durable decisions and feedback captured into the project config
   `<progress>` bars. IPC: `usage:summary`, `budget:get`/`setApp`/`setPerson`/`status` (computed in
   main; `UsageSummary`/`BudgetState` moved to shared). Tests + an E2E (seeded usage → dashboard +
   budget save + no-overflow guard). v1 limit: app-scope is UI-gated, not IPC-enforced.
+- 2026-06-10 — Build Slice B (compact top-bar usage ring): replaced the full-width usage header with a
+  small circular **usage ring** (SVG donut that recolors at warn/over) inside a new **slot-based
+  `TopBar`** (ready for more items as the app grows). Clicking opens a popover with quick stats —
+  period, % of allowance, sessions; **$ for admins only** — and a "View usage details" link to
+  `/usage`. Added a `--shadow-overlay` token (first elevation in the otherwise-flat design). Tests +
+  E2E (ring → popover → link).
 - 2026-06-10 — Build Slice A (per-person budgets on a tabbed, scalable person page): `PersonEditor`
   rebuilt into **tabs** (Profile / Notes / Relationships / Access / Budget) so person-scoped settings
   grow without one long page; shared + private notes are now **textareas** (new `Textarea` primitive);

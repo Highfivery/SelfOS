@@ -75,7 +75,7 @@ import {
   getConversation,
   listConversations,
   saveConversation,
-} from './conversations/conversationService';
+} from '@selfos/core/conversations';
 import { startVaultWatcher } from './vaultWatcherManager';
 
 const ScopeSchema = z.enum(['vault', 'device']);

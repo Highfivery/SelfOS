@@ -253,6 +253,14 @@ reduced-motion honored (already global).
   code. The crypto layer is now async (awaits rippled to callers/tests/e2e). `Buffer`,
   portable-base64, and the `randomUUID` call sites are intentionally deferred to **slice (ii)** (the
   `@selfos/core` extraction, "no `node:*`"). Gates green: typecheck/lint/format, 183 unit, 23 E2E.
+- 2026-06-10 — **relocation slice 1 landed (§5.2):** began physically moving the platform-agnostic
+  services into core — this slice relocates **`encryptedStore` → `@selfos/core/vault`** and
+  **`conversationService` → `@selfos/core/conversations`** (verbatim; no behavior change). The moved files
+  type keys as `Uint8Array` (core is Buffer-free); the app keeps threading `Buffer` (assignable) with
+  `masterKey` as the bridge. Added a core `memFileSystem` test fake + exports `./vault`/`./conversations`.
+  Format/paths byte-identical (23 E2E). Remaining relocations: people/access (peopleService/relationship/
+  access/buildContext + AccessView) then usage/budgets/chat (usageStore/budget/chat/pricing/promptBuilder
+  - UsageSummary/BudgetState/ChatTurnResult), each switching `Buffer`→`Uint8Array` + portable `uuid()`.
 - 2026-06-10 — **slice (ii-c) landed (§5.1/§5.3):** added the **`SecretStore`** (get/set/has/clear) and
   **`ClaudeClient`** (moved out of the app's `claudeService`) host interfaces to `@selfos/core/host`, and
   rewired the remaining node/electron-coupled logic onto them (DI, no behavior change). The Electron

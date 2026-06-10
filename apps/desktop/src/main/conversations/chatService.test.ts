@@ -10,7 +10,7 @@ import type { Person } from '../../shared/schemas';
 import { savePerson } from '../people/peopleService';
 import { setPersonBudget } from '../usage/budgetService';
 import { recordUsage } from '../usage/usageStore';
-import { getConversation, listConversations } from './conversationService';
+import { getConversation, listConversations } from '@selfos/core/conversations';
 import { runChatTurn } from './chatService';
 
 const key = Buffer.from(generateMasterKey());

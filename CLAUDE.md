@@ -239,6 +239,21 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-10 — Build (Capacitor track **relocation slice 1: move the vault-data I/O into `@selfos/core`**
+  — [07-mobile-platform](docs/specs/07-mobile-platform.md) §5.2): began physically moving the
+  now-platform-agnostic service files (abstracted behind host interfaces in ii-b/ii-c) into core. This
+  slice relocates **`encryptedStore` → `@selfos/core/vault`** and **`conversationService` →
+  `@selfos/core/conversations`** (verbatim moves; **no behavior change**). Core can't use `Buffer`, so the
+  moved files type keys as **`Uint8Array`**; the app still threads `Buffer` (a `Uint8Array` subclass —
+  assignable), so `masterKey` stays the app's `Buffer` bridge and the 5 staying app services
+  (people/relationship/access/usage/budget) pass `Buffer` into core's `Uint8Array` params unchanged. Added
+  a core **`memFileSystem`** in-memory test fake (the moved conversation test + a new `encryptedStore`
+  round-trip test run with no node/disk) and new package exports `./vault` + `./conversations`. On-disk
+  format/paths byte-identical (23 E2E seed+read through the relocated core). Gates green: typecheck/lint/
+  format, **193 unit** (28 core + 165 desktop), 23 E2E. Next relocation slices: the **people/access**
+  domain (peopleService/relationshipService/accessService/buildContext + the `AccessView` view type), then
+  **usage/budgets/chat** (usageStore/budgetService/chatService/pricing/promptBuilder + UsageSummary/
+  BudgetState/ChatTurnResult); each moved service switches `Buffer`→`Uint8Array` + portable `uuid()`.
 - 2026-06-10 — Build (Capacitor track **slice (ii-c): SecretStore + ClaudeClient host interfaces** —
   [07-mobile-platform](docs/specs/07-mobile-platform.md) §5.1/§5.3): added the last two platform host
   interfaces to **`@selfos/core/host`** — **`SecretStore`** (`get`/`set`/`has`/`clear`) and

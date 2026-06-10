@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { FileSystem } from '@selfos/core/host';
 import { PersonSchema, type Person, type PersonInput } from '../../shared/schemas';
-import { readEncryptedJson, writeEncryptedJson } from '../crypto/encryptedStore';
+import { readEncryptedJson, writeEncryptedJson } from '@selfos/core/vault';
 
 const PEOPLE_DIR = 'people';
 

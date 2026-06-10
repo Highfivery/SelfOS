@@ -5,7 +5,7 @@ import {
   type Relationship,
   type RelationshipInput,
 } from '../../shared/schemas';
-import { readEncryptedJson, writeEncryptedJson } from '../crypto/encryptedStore';
+import { readEncryptedJson, writeEncryptedJson } from '@selfos/core/vault';
 
 const RELATIONSHIPS_DIR = 'relationships';
 

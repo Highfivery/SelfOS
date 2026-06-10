@@ -5,7 +5,7 @@ import type { Conversation, UsageEvent } from '../../shared/schemas';
 import { checkBudget } from '../usage/budgetService';
 import { costOf } from '../usage/pricing';
 import { recordUsage } from '../usage/usageStore';
-import { getConversation, saveConversation } from './conversationService';
+import { getConversation, saveConversation } from '@selfos/core/conversations';
 import { buildSystemPrompt } from './promptBuilder';
 
 export type { ChatTurnResult };

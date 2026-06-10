@@ -10,7 +10,7 @@ import { savePerson } from '../src/main/people/peopleService';
 import { setAccount } from '../src/main/people/accessService';
 import { hashPin } from '@selfos/core/crypto';
 import { recordUsage } from '../src/main/usage/usageStore';
-import { writeEncryptedJson } from '../src/main/crypto/encryptedStore';
+import { writeEncryptedJson } from '@selfos/core/vault';
 
 const MAIN = join(__dirname, '..', 'out', 'main', 'index.js');
 

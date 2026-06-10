@@ -2,7 +2,7 @@ import type { FileSystem } from '@selfos/core/host';
 import { z } from 'zod';
 import type { UsageSummary } from '../../shared/channels';
 import { UsageEventSchema, type UsageEvent } from '../../shared/schemas';
-import { readEncryptedJson, writeEncryptedJson } from '../crypto/encryptedStore';
+import { readEncryptedJson, writeEncryptedJson } from '@selfos/core/vault';
 import { listPeople } from '../people/peopleService';
 import { cacheSavingsOf } from './pricing';
 

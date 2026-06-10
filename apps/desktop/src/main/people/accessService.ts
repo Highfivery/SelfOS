@@ -8,7 +8,7 @@ import {
   type Account,
   type Role,
 } from '../../shared/schemas';
-import { readEncryptedJson, writeEncryptedJson } from '../crypto/encryptedStore';
+import { readEncryptedJson, writeEncryptedJson } from '@selfos/core/vault';
 
 const ACCESS_PATH = 'config/access.enc';
 

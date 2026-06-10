@@ -1,7 +1,7 @@
 import type { FileSystem } from '@selfos/core/host';
 import type { BudgetState, BudgetStateKind } from '../../shared/channels';
 import { BudgetsConfigSchema, type Budget, type BudgetsConfig } from '../../shared/schemas';
-import { readEncryptedJson, writeEncryptedJson } from '../crypto/encryptedStore';
+import { readEncryptedJson, writeEncryptedJson } from '@selfos/core/vault';
 import { queryUsage } from './usageStore';
 
 const BUDGETS_PATH = 'config/budgets.enc';

@@ -1,6 +1,6 @@
-import type { FileSystem } from '@selfos/core/host';
-import { ConversationSchema, type Conversation } from '../../shared/schemas';
-import { readEncryptedJson, writeEncryptedJson } from '../crypto/encryptedStore';
+import type { FileSystem } from '../host';
+import { ConversationSchema, type Conversation } from '../schemas';
+import { readEncryptedJson, writeEncryptedJson } from '../vault';
 
 function conversationsDir(personId: string): string {
   return `people/${personId}/conversations`;
@@ -12,7 +12,7 @@ function conversationPath(personId: string, id: string): string {
 
 export async function getConversation(
   fs: FileSystem,
-  key: Buffer,
+  key: Uint8Array,
   personId: string,
   id: string,
 ): Promise<Conversation | null> {
@@ -22,7 +22,7 @@ export async function getConversation(
 
 export async function saveConversation(
   fs: FileSystem,
-  key: Buffer,
+  key: Uint8Array,
   conversation: Conversation,
 ): Promise<void> {
   await writeEncryptedJson(
@@ -36,7 +36,7 @@ export async function saveConversation(
 /** A person's conversations, newest first. */
 export async function listConversations(
   fs: FileSystem,
-  key: Buffer,
+  key: Uint8Array,
   personId: string,
 ): Promise<Conversation[]> {
   const conversations: Conversation[] = [];

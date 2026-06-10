@@ -232,6 +232,14 @@ A running log of durable decisions and feedback captured into the project config
   switch, nav gated). Known v1 limits: only the nav (not the route) is gated, and a PIN-less owner is
   switchable by anyone on the device — the super-admin passphrase is the real gate. The roles×capability
   matrix editor, the concealed super-admin unlock, and shareable context are People-3.
+- 2026-06-10 — Build Metering-1 (usage/pricing/budget core for
+  [06-ai-usage-and-budgets](docs/specs/06-ai-usage-and-budgets.md)): a maintained per-model pricing
+  table + `costOf`/`cacheSavingsOf`; an encrypted per-person `usageStore` (record → monthly `.enc`
+  shards; query by range/person/type; pure `summarize` → totals, by-type, by-model, avg-per-session,
+  cache savings); a `budgetService` (per-person + app budgets, `checkBudget` warn→over with an owner
+  override, calendar week/month windows); `UsageEvent`/`Budget` schemas + usage-type labels. Backend
+  only — the dashboard + budget UI (Metering-2) and the chat consumer come next. Cost is always an
+  estimate; events carry token counts only (no message content).
 - 2026-06-09 — Build People-3c (shareable-vs-private context) — **completes the People feature
   ([04-people-roles](docs/specs/04-people-roles.md))**: the person editor splits notes into **Shared**
   (`publicNotes`, may feed others' AI) and **Private** (`privateNotes`, never shared); a main-process

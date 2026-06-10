@@ -147,3 +147,34 @@ export const RelationshipInputSchema = z.object({
   privateNotes: z.string().optional(),
 });
 export type RelationshipInput = z.infer<typeof RelationshipInputSchema>;
+
+/** AI usage accounting (06-ai-usage-and-budgets). One event per AI call, stored encrypted per person. */
+export const UsageEventSchema = z.object({
+  id: z.string().min(1),
+  schemaVersion: z.number().int().positive(),
+  type: z.string().min(1),
+  personId: z.string().min(1),
+  sessionId: z.string().optional(),
+  model: z.string().min(1),
+  at: z.string(),
+  inputTokens: z.number().int().nonnegative(),
+  outputTokens: z.number().int().nonnegative(),
+  cacheWriteTokens: z.number().int().nonnegative(),
+  cacheReadTokens: z.number().int().nonnegative(),
+  costUsd: z.number().nonnegative(),
+});
+export type UsageEvent = z.infer<typeof UsageEventSchema>;
+
+export const BudgetSchema = z.object({
+  limitUsd: z.number().nonnegative(),
+  period: z.enum(['week', 'month']),
+  warnRatio: z.number().min(0).max(1),
+});
+export type Budget = z.infer<typeof BudgetSchema>;
+
+export const BudgetsConfigSchema = z.object({
+  schemaVersion: z.number().int().positive(),
+  app: BudgetSchema.optional(),
+  perPerson: z.record(z.string(), BudgetSchema),
+});
+export type BudgetsConfig = z.infer<typeof BudgetsConfigSchema>;

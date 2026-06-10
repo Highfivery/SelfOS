@@ -105,6 +105,7 @@ export interface UsageSummary {
   avgCostPerType: number;
   byType: Record<string, { costUsd: number; count: number }>;
   byModel: Record<string, { costUsd: number; count: number }>;
+  byPerson: Record<string, { costUsd: number; count: number }>;
 }
 
 export type BudgetStateKind = 'none' | 'ok' | 'warn' | 'over';
@@ -197,8 +198,15 @@ export interface SelfosBridge {
   sessionSetActive(input: { personId: string; pin?: string }): Promise<SetActiveResult>;
   /** Verify the concealed super-admin passphrase. Returns true on a match. */
   superadminUnlock(input: { passphrase: string }): Promise<boolean>;
-  /** Rolled-up usage for the active person or the whole app, over the given period. */
-  usageSummary(input: { scope: UsageScope; period: UsagePeriod }): Promise<UsageSummary>;
+  /**
+   * Rolled-up usage. Non-admins always get their own. Admins (`budgets.manage`) get the whole app
+   * (`scope: 'app'`) or, with `personId`, a single chosen person.
+   */
+  usageSummary(input: {
+    scope: UsageScope;
+    period: UsagePeriod;
+    personId?: string;
+  }): Promise<UsageSummary>;
   /** The active person's effective budget + the app cap. */
   budgetGet(): Promise<{ app: Budget | null; person: Budget | null }>;
   /** A specific person's effective budget (override or the default). Admin-only. */

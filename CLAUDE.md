@@ -244,6 +244,11 @@ A running log of durable decisions and feedback captured into the project config
   `<progress>` bars. IPC: `usage:summary`, `budget:get`/`setApp`/`setPerson`/`status` (computed in
   main; `UsageSummary`/`BudgetState` moved to shared). Tests + an E2E (seeded usage → dashboard +
   budget save + no-overflow guard). v1 limit: app-scope is UI-gated, not IPC-enforced.
+- 2026-06-10 — Build Slice C (admin usage by person): `usage:summary` now accepts an arbitrary
+  `personId` (admin-only, enforced in main) and the summary gained a **`byPerson`** breakdown. The
+  Usage dashboard replaces the Mine/Everyone toggle with a **person picker** (Everyone + each person)
+  and adds a **"By person"** card in the Everyone view (names resolved via `peopleList`). Tests + E2E
+  (pick a person; by-person card).
 - 2026-06-10 — Build Slice B (compact top-bar usage ring): replaced the full-width usage header with a
   small circular **usage ring** (SVG donut that recolors at warn/over) inside a new **slot-based
   `TopBar`** (ready for more items as the app grows). Clicking opens a popover with quick stats —

@@ -97,6 +97,7 @@ const SetActiveSchema = z.object({
 const UsageSummarySchema = z.object({
   scope: z.enum(['person', 'app']),
   period: z.enum(['week', 'month']),
+  personId: z.string().min(1).optional(),
 });
 const ChatStreamSchema = z.object({
   conversationId: z.string().min(1),
@@ -334,20 +335,22 @@ export function registerIpcHandlers(): void {
   });
 
   ipcMain.handle(IpcChannels.usageSummary, async (_event, raw: unknown): Promise<UsageSummary> => {
-    const { scope, period } = UsageSummarySchema.parse(raw);
+    const { scope, period, personId } = UsageSummarySchema.parse(raw);
     const ctx = await vaultAndKey();
     if (!ctx) return summarize([]);
     const now = new Date();
     const from = periodStart(now, period);
     const to = now.toISOString();
-    // Only an admin may see the whole household ("Everyone"); everyone else sees only their own.
+    // Only an admin may see the whole household or another person; everyone else sees only their own.
     const canManage = await activePersonCan(ctx.vaultDir, ctx.key, 'budgets.manage');
-    if (scope === 'app' && canManage) {
-      return summarize(await queryUsage(ctx.vaultDir, ctx.key, { from, to }));
+    if (canManage) {
+      if (personId)
+        return summarize(await queryUsage(ctx.vaultDir, ctx.key, { from, to, personId }));
+      if (scope === 'app') return summarize(await queryUsage(ctx.vaultDir, ctx.key, { from, to }));
     }
-    const personId = await getActivePersonId(userDataDir());
-    if (!personId) return summarize([]);
-    return summarize(await queryUsage(ctx.vaultDir, ctx.key, { from, to, personId }));
+    const self = await getActivePersonId(userDataDir());
+    if (!self) return summarize([]);
+    return summarize(await queryUsage(ctx.vaultDir, ctx.key, { from, to, personId: self }));
   });
 
   ipcMain.handle(

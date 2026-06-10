@@ -1,36 +1,47 @@
 import { create } from 'zustand';
 import type { Budget } from '@shared/schemas';
-import type { BudgetState, UsagePeriod, UsageScope, UsageSummary } from '@shared/channels';
+import type { BudgetState, UsagePeriod, UsageSummary } from '@shared/channels';
 
 interface UsageState {
-  scope: UsageScope;
+  /** null = everyone (admin) or self (non-admin); otherwise the chosen person's id (admin only). */
+  selectedPersonId: string | null;
   period: UsagePeriod;
   summary: UsageSummary | null;
   budget: { app: Budget | null; person: Budget | null } | null;
   status: { person: BudgetState; app: BudgetState } | null;
+  people: { id: string; displayName: string }[];
   loaded: boolean;
   load: () => Promise<void>;
-  setScope: (scope: UsageScope) => Promise<void>;
+  loadPeople: () => Promise<void>;
+  setSelectedPerson: (personId: string | null) => Promise<void>;
   setPeriod: (period: UsagePeriod) => Promise<void>;
   saveAppBudget: (budget: Budget | null) => Promise<void>;
 }
 
 export const useUsageStore = create<UsageState>((set, get) => ({
-  scope: 'person',
+  selectedPersonId: null,
   period: 'month',
   summary: null,
   budget: null,
   status: null,
+  people: [],
   loaded: false,
   load: async () => {
-    const { scope, period } = get();
-    const summary = (await window.selfos?.usageSummary({ scope, period })) ?? null;
+    const { selectedPersonId, period } = get();
+    const input = selectedPersonId
+      ? { scope: 'person' as const, period, personId: selectedPersonId }
+      : { scope: 'app' as const, period };
+    const summary = (await window.selfos?.usageSummary(input)) ?? null;
     const budget = (await window.selfos?.budgetGet()) ?? null;
     const status = (await window.selfos?.budgetStatus()) ?? null;
     set({ summary, budget, status, loaded: true });
   },
-  setScope: async (scope) => {
-    set({ scope });
+  loadPeople: async () => {
+    const people = (await window.selfos?.peopleList()) ?? [];
+    set({ people: people.map((person) => ({ id: person.id, displayName: person.displayName })) });
+  },
+  setSelectedPerson: async (selectedPersonId) => {
+    set({ selectedPersonId });
     await get().load();
   },
   setPeriod: async (period) => {

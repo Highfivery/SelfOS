@@ -85,6 +85,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         avgCostPerType: 0,
         byType: {},
         byModel: {},
+        byPerson: {},
       }),
     budgetGet: () => Promise.resolve({ app: null, person: null }),
     budgetGetPerson: () =>

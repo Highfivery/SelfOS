@@ -7,6 +7,7 @@ import {
   Heading,
   Inline,
   SegmentedControl,
+  Select,
   Stack,
   Text,
 } from '../../../design-system/components';
@@ -26,17 +27,20 @@ function Stat({ label, value }: { label: string; value: string }): JSX.Element {
 }
 
 /**
- * AI usage dashboard (06-ai-usage-and-budgets). Cost ($), the "Everyone" scope, and budget editors
- * are admin-only (`budgets.manage`); everyone else sees only their own usage with no dollar amounts.
+ * AI usage dashboard (06-ai-usage-and-budgets). Cost ($), the "Everyone" + per-person picker, the
+ * by-person breakdown, and the overall-cap editor are admin-only (`budgets.manage`); everyone else
+ * sees only their own usage with no dollar amounts.
  */
 export function Usage(): JSX.Element {
-  const scope = useUsageStore((s) => s.scope);
+  const selectedPersonId = useUsageStore((s) => s.selectedPersonId);
   const period = useUsageStore((s) => s.period);
   const summary = useUsageStore((s) => s.summary);
   const budget = useUsageStore((s) => s.budget);
   const status = useUsageStore((s) => s.status);
+  const people = useUsageStore((s) => s.people);
   const load = useUsageStore((s) => s.load);
-  const setScope = useUsageStore((s) => s.setScope);
+  const loadPeople = useUsageStore((s) => s.loadPeople);
+  const setSelectedPerson = useUsageStore((s) => s.setSelectedPerson);
   const setPeriod = useUsageStore((s) => s.setPeriod);
   const saveAppBudget = useUsageStore((s) => s.saveAppBudget);
   const canManage = useSessionStore((s) => s.can('budgets.manage'));
@@ -44,6 +48,17 @@ export function Usage(): JSX.Element {
   useEffect(() => {
     void load();
   }, [load]);
+  useEffect(() => {
+    if (canManage) void loadPeople();
+  }, [canManage, loadPeople]);
+
+  const nameOf = (personId: string): string =>
+    people.find((person) => person.id === personId)?.displayName ?? 'Person';
+  const scopeLabel = !canManage
+    ? 'You'
+    : selectedPersonId === null
+      ? 'Everyone'
+      : nameOf(selectedPersonId);
 
   return (
     <Stack gap={5}>
@@ -58,15 +73,20 @@ export function Usage(): JSX.Element {
 
       <Inline gap={3} wrap>
         {canManage ? (
-          <SegmentedControl
+          <Select
             aria-label="Whose usage"
-            value={scope}
-            onChange={(value) => void setScope(value)}
-            options={[
-              { value: 'person', label: 'Mine' },
-              { value: 'app', label: 'Everyone' },
-            ]}
-          />
+            value={selectedPersonId ?? 'app'}
+            onChange={(event) =>
+              void setSelectedPerson(event.target.value === 'app' ? null : event.target.value)
+            }
+          >
+            <option value="app">Everyone</option>
+            {people.map((person) => (
+              <option key={person.id} value={person.id}>
+                {person.displayName}
+              </option>
+            ))}
+          </Select>
         ) : null}
         <SegmentedControl
           aria-label="Period"
@@ -84,7 +104,7 @@ export function Usage(): JSX.Element {
           <Card>
             <Stack gap={3}>
               <Text size="sm" tone="secondary">
-                {scope === 'app' ? 'Everyone' : 'You'}, this {period}
+                {scopeLabel}, this {period}
               </Text>
               {canManage ? <Heading level={1}>{formatUsd(summary.totalCostUsd)}</Heading> : null}
               <div className={styles.stats}>
@@ -148,6 +168,22 @@ export function Usage(): JSX.Element {
               </Stack>
             </Card>
           </div>
+
+          {canManage && selectedPersonId === null && Object.keys(summary.byPerson).length > 0 ? (
+            <Card>
+              <Stack gap={2}>
+                <Heading level={3}>By person</Heading>
+                {Object.entries(summary.byPerson).map(([personId, row]) => (
+                  <Inline key={personId} gap={2} justify="between">
+                    <Text size="sm">{nameOf(personId)}</Text>
+                    <Text size="sm" tone="secondary">
+                      {formatUsd(row.costUsd)} · {row.count}
+                    </Text>
+                  </Inline>
+                ))}
+              </Stack>
+            </Card>
+          ) : null}
         </>
       ) : null}
 

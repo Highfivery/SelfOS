@@ -366,6 +366,11 @@ test('usage: the dashboard shows recorded usage and accepts a budget, without ov
     await w.getByRole('button', { name: 'View usage details →' }).click();
     await expect(w.getByRole('heading', { name: 'Usage' })).toBeVisible();
     await expect(w.getByText('Coaching session')).toBeVisible(); // by-type breakdown
+    await expect(w.getByRole('heading', { name: 'By person' })).toBeVisible(); // by-person (Everyone)
+
+    // Drill into a single person via the picker.
+    await w.getByLabel('Whose usage').selectOption('owner-1');
+    await expect(w.getByText('Tester, this month')).toBeVisible();
 
     await w.getByLabel('Everyone (app) limit (USD)').fill('5');
     await w.getByRole('button', { name: 'Save' }).first().click();

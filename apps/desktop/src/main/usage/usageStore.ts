@@ -76,6 +76,7 @@ export async function queryUsage(
 export function summarize(events: UsageEvent[]): UsageSummary {
   const byType: Record<string, { costUsd: number; count: number }> = {};
   const byModel: Record<string, { costUsd: number; count: number }> = {};
+  const byPerson: Record<string, { costUsd: number; count: number }> = {};
   const sessions = new Set<string>();
   let totalCostUsd = 0;
   let inputTokens = 0;
@@ -96,6 +97,8 @@ export function summarize(events: UsageEvent[]): UsageSummary {
     byType[event.type]!.count += 1;
     (byModel[event.model] ??= { costUsd: 0, count: 0 }).costUsd += event.costUsd;
     byModel[event.model]!.count += 1;
+    (byPerson[event.personId] ??= { costUsd: 0, count: 0 }).costUsd += event.costUsd;
+    byPerson[event.personId]!.count += 1;
   }
 
   const sessionCount = sessions.size;
@@ -112,5 +115,6 @@ export function summarize(events: UsageEvent[]): UsageSummary {
     avgCostPerType: typeCount ? totalCostUsd / typeCount : 0,
     byType,
     byModel,
+    byPerson,
   };
 }

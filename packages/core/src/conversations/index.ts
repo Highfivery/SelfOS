@@ -1,2 +1,5 @@
-// @selfos/core/conversations — encrypted per-person chat transcripts (host/main-only).
+// @selfos/core/conversations — transcripts, the system-prompt builder, and the chat-turn orchestrator
+// (host/main-only).
 export * from './conversationService';
+export * from './promptBuilder';
+export * from './chatService';

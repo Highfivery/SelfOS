@@ -253,6 +253,16 @@ reduced-motion honored (already global).
   code. The crypto layer is now async (awaits rippled to callers/tests/e2e). `Buffer`,
   portable-base64, and the `randomUUID` call sites are intentionally deferred to **slice (ii)** (the
   `@selfos/core` extraction, "no `node:*`"). Gates green: typecheck/lint/format, 183 unit, 23 E2E.
+- 2026-06-10 — **relocation slice 3 landed — `@selfos/core` extraction COMPLETE (§5.2):** moved
+  `pricing`/`usageStore`/`budgetService` → `@selfos/core/usage` and `promptBuilder`/`chatService` →
+  `@selfos/core/conversations` (verbatim; `Uint8Array` keys; portable `uuid()`). The `UsageSummary`/
+  `BudgetState`/`BudgetStateKind`/`ChatTurnResult` view types moved into core `schemas.ts` (crypto-free,
+  re-exported by `channels.ts`). **All platform-agnostic business logic now lives in `@selfos/core`**
+  behind the FileSystem/SecretStore/ClaudeClient host interfaces; the app's `main/` is just the Electron
+  host impls + `claudeService` proxy + `masterKey` (Buffer bridge) + device-local state + vault
+  bootstrap/watcher + ipc + renderer. Gates: 193 unit, 23 E2E. **Remaining work is iOS-only: §5.4 the
+  Capacitor shell + plugins + binding (iii), then build/signing (iv) — needs a Mac/Xcode + the user's
+  Apple Developer team + bundle id.**
 - 2026-06-10 — **relocation slice 2 landed (§5.2):** moved the people/access domain
   (`peopleService`/`relationshipService`/`accessService`/`buildContext` + tests) into `@selfos/core/people`
   — verbatim, `Uint8Array` keys, portable `uuid()` (no `node:crypto`). `AccessView` moved into core

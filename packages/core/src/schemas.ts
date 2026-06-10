@@ -205,3 +205,38 @@ export const ConversationSchema = z.object({
   messages: z.array(ChatMessageSchema),
 });
 export type Conversation = z.infer<typeof ConversationSchema>;
+
+/**
+ * Derived "view" types produced by the core services and surfaced over IPC. They live here (a
+ * crypto-free module) rather than alongside their services so `channels.ts` can import them from the
+ * schemas shim without dragging `@selfos/core/crypto` into the renderer/web tsconfig (07-mobile-platform
+ * §5.2). Not Zod-parsed — they are computed results, not file shapes.
+ */
+
+/** Rolled-up AI usage for the dashboard (06-ai-usage-and-budgets). */
+export interface UsageSummary {
+  totalCostUsd: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheWriteTokens: number;
+  cacheReadTokens: number;
+  cacheSavingsUsd: number;
+  sessionCount: number;
+  avgCostPerSession: number;
+  avgCostPerType: number;
+  byType: Record<string, { costUsd: number; count: number }>;
+  byModel: Record<string, { costUsd: number; count: number }>;
+  byPerson: Record<string, { costUsd: number; count: number }>;
+}
+
+export type BudgetStateKind = 'none' | 'ok' | 'warn' | 'over';
+export interface BudgetState {
+  state: BudgetStateKind;
+  spentUsd: number;
+  limitUsd: number | null;
+  period: 'week' | 'month' | null;
+}
+
+export type ChatTurnResult =
+  | { ok: true; conversation: Conversation; usage: UsageEvent }
+  | { ok: false; reason: 'NO_KEY' | 'BUDGET' | 'ERROR'; message: string };

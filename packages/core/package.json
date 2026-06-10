@@ -14,6 +14,7 @@
     "./host": "./src/host/index.ts",
     "./vault": "./src/vault/index.ts",
     "./people": "./src/people/index.ts",
+    "./usage": "./src/usage/index.ts",
     "./conversations": "./src/conversations/index.ts"
   },
   "scripts": {

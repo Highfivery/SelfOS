@@ -1,28 +1,18 @@
-// @vitest-environment node
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { generateMasterKey } from '@selfos/core/crypto';
-import type { ClaudeClient, FileSystem } from '@selfos/core/host';
-import { createNodeFileSystem } from '../host/nodeFileSystem';
-import type { Person } from '../../shared/schemas';
-import { savePerson } from '@selfos/core/people';
-import { setPersonBudget } from '../usage/budgetService';
-import { recordUsage } from '../usage/usageStore';
-import { getConversation, listConversations } from '@selfos/core/conversations';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { generateMasterKey } from '../crypto';
+import type { ClaudeClient } from '../host';
+import { memFileSystem } from '../host/memFileSystem';
+import type { Person } from '../schemas';
+import { savePerson } from '../people';
+import { recordUsage, setPersonBudget } from '../usage';
+import { getConversation, listConversations } from './conversationService';
 import { runChatTurn } from './chatService';
 
-const key = Buffer.from(generateMasterKey());
+const key = generateMasterKey();
 const now = new Date('2026-06-15T12:00:00.000Z');
-let vault: string;
-let fs: FileSystem;
-beforeEach(async () => {
-  vault = await mkdtemp(join(tmpdir(), 'selfos-chat-'));
-  fs = createNodeFileSystem(vault);
-});
-afterEach(async () => {
-  await rm(vault, { recursive: true, force: true });
+let fs: ReturnType<typeof memFileSystem>;
+beforeEach(() => {
+  fs = memFileSystem();
 });
 
 const fakeClient: ClaudeClient = {

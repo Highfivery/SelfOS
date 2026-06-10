@@ -2,6 +2,8 @@ import type {
   AccessView,
   BootState,
   Budget,
+  BudgetState,
+  ChatTurnResult,
   Conversation,
   Person,
   PersonInput,
@@ -9,6 +11,7 @@ import type {
   RelationshipInput,
   Role,
   UsageEvent,
+  UsageSummary,
 } from './schemas';
 
 /**
@@ -90,30 +93,6 @@ export type SetActiveResult =
   | { ok: true; person: Person }
   | { ok: false; reason: 'WRONG_PIN' | 'NO_ACCOUNT' };
 
-/** Rolled-up AI usage for the dashboard (06-ai-usage-and-budgets). */
-export interface UsageSummary {
-  totalCostUsd: number;
-  inputTokens: number;
-  outputTokens: number;
-  cacheWriteTokens: number;
-  cacheReadTokens: number;
-  cacheSavingsUsd: number;
-  sessionCount: number;
-  avgCostPerSession: number;
-  avgCostPerType: number;
-  byType: Record<string, { costUsd: number; count: number }>;
-  byModel: Record<string, { costUsd: number; count: number }>;
-  byPerson: Record<string, { costUsd: number; count: number }>;
-}
-
-export type BudgetStateKind = 'none' | 'ok' | 'warn' | 'over';
-export interface BudgetState {
-  state: BudgetStateKind;
-  spentUsd: number;
-  limitUsd: number | null;
-  period: 'week' | 'month' | null;
-}
-
 export type UsageScope = 'person' | 'app';
 export type UsagePeriod = 'week' | 'month';
 
@@ -123,10 +102,6 @@ export interface ConversationMeta {
   title: string;
   updatedAt: string;
 }
-
-export type ChatTurnResult =
-  | { ok: true; conversation: Conversation; usage: UsageEvent }
-  | { ok: false; reason: 'NO_KEY' | 'BUDGET' | 'ERROR'; message: string };
 
 export interface SelfosBridge {
   /** Current boot state (computed from device-local state + vault status). */
@@ -239,6 +214,8 @@ export type {
   AccessView,
   BootState,
   Budget,
+  BudgetState,
+  ChatTurnResult,
   Conversation,
   Person,
   PersonInput,
@@ -246,4 +223,5 @@ export type {
   RelationshipInput,
   Role,
   UsageEvent,
+  UsageSummary,
 };

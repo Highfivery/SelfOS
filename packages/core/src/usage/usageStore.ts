@@ -1,9 +1,8 @@
-import type { FileSystem } from '@selfos/core/host';
 import { z } from 'zod';
-import type { UsageSummary } from '../../shared/channels';
-import { UsageEventSchema, type UsageEvent } from '../../shared/schemas';
-import { readEncryptedJson, writeEncryptedJson } from '@selfos/core/vault';
-import { listPeople } from '@selfos/core/people';
+import type { FileSystem } from '../host';
+import { UsageEventSchema, type UsageEvent, type UsageSummary } from '../schemas';
+import { readEncryptedJson, writeEncryptedJson } from '../vault';
+import { listPeople } from '../people';
 import { cacheSavingsOf } from './pricing';
 
 const UsageShardSchema = z.object({
@@ -24,7 +23,11 @@ function monthOf(iso: string): string {
 }
 
 /** Append a usage event to the person's encrypted monthly shard. */
-export async function recordUsage(fs: FileSystem, key: Buffer, event: UsageEvent): Promise<void> {
+export async function recordUsage(
+  fs: FileSystem,
+  key: Uint8Array,
+  event: UsageEvent,
+): Promise<void> {
   const path = shardPath(event.personId, monthOf(event.at));
   const existing = await readEncryptedJson(fs, path, key);
   const events = existing ? UsageShardSchema.parse(existing).events : [];
@@ -34,7 +37,7 @@ export async function recordUsage(fs: FileSystem, key: Buffer, event: UsageEvent
 
 async function readPersonEvents(
   fs: FileSystem,
-  key: Buffer,
+  key: Uint8Array,
   personId: string,
 ): Promise<UsageEvent[]> {
   const events: UsageEvent[] = [];
@@ -49,7 +52,7 @@ async function readPersonEvents(
 /** Query usage events in [from, to] (inclusive ISO), optionally scoped to one person/type. */
 export async function queryUsage(
   fs: FileSystem,
-  key: Buffer,
+  key: Uint8Array,
   filter: { from: string; to: string; personId?: string; type?: string },
 ): Promise<UsageEvent[]> {
   const ids = filter.personId

@@ -8,7 +8,7 @@ import { createNodeFileSystem } from '../src/main/host/nodeFileSystem';
 import { createNodeSecretStore } from '../src/main/host/nodeSecretStore';
 import { savePerson, setAccount } from '@selfos/core/people';
 import { hashPin } from '@selfos/core/crypto';
-import { recordUsage } from '../src/main/usage/usageStore';
+import { recordUsage } from '@selfos/core/usage';
 import { writeEncryptedJson } from '@selfos/core/vault';
 
 const MAIN = join(__dirname, '..', 'out', 'main', 'index.js');
@@ -508,7 +508,9 @@ test('sessions: send a message, stream a reply, and show the usage header + cris
     await w.getByLabel('Message').fill('I had a hard day');
     await w.getByRole('button', { name: 'Send' }).click();
 
-    await expect(w.getByText(/hear you/i)).toBeVisible(); // offline fake reply
+    // `.first()` tolerates the brief stream→persist handoff where the streaming bubble and the saved
+    // message both match.
+    await expect(w.getByText(/hear you/i).first()).toBeVisible(); // offline fake reply
     await expect(w.getByText(/This session:/)).toHaveCount(0); // no cost in sessions
     await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible(); // crisis footer
 

@@ -1,26 +1,16 @@
-// @vitest-environment node
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { generateMasterKey } from '@selfos/core/crypto';
-import type { FileSystem } from '@selfos/core/host';
-import { createNodeFileSystem } from '../host/nodeFileSystem';
-import { savePerson } from '@selfos/core/people';
-import type { Person, UsageEvent } from '../../shared/schemas';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { generateMasterKey } from '../crypto';
+import { memFileSystem } from '../host/memFileSystem';
+import { savePerson } from '../people';
+import type { Person, UsageEvent } from '../schemas';
 import { recordUsage } from './usageStore';
 import { checkBudget, setAppBudget, setPersonBudget } from './budgetService';
 
-const key = Buffer.from(generateMasterKey());
+const key = generateMasterKey();
 const now = new Date('2026-06-15T12:00:00.000Z');
-let vault: string;
-let fs: FileSystem;
-beforeEach(async () => {
-  vault = await mkdtemp(join(tmpdir(), 'selfos-budget-'));
-  fs = createNodeFileSystem(vault);
-});
-afterEach(async () => {
-  await rm(vault, { recursive: true, force: true });
+let fs: ReturnType<typeof memFileSystem>;
+beforeEach(() => {
+  fs = memFileSystem();
 });
 
 function person(id: string, name: string): Person {

@@ -1,24 +1,14 @@
-// @vitest-environment node
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { generateMasterKey } from '@selfos/core/crypto';
-import type { FileSystem } from '@selfos/core/host';
-import { createNodeFileSystem } from '../host/nodeFileSystem';
-import { savePerson } from '@selfos/core/people';
-import type { Person, UsageEvent } from '../../shared/schemas';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { generateMasterKey } from '../crypto';
+import { memFileSystem } from '../host/memFileSystem';
+import { savePerson } from '../people';
+import type { Person, UsageEvent } from '../schemas';
 import { queryUsage, recordUsage, summarize } from './usageStore';
 
-const key = Buffer.from(generateMasterKey());
-let vault: string;
-let fs: FileSystem;
-beforeEach(async () => {
-  vault = await mkdtemp(join(tmpdir(), 'selfos-usage-'));
-  fs = createNodeFileSystem(vault);
-});
-afterEach(async () => {
-  await rm(vault, { recursive: true, force: true });
+const key = generateMasterKey();
+let fs: ReturnType<typeof memFileSystem>;
+beforeEach(() => {
+  fs = memFileSystem();
 });
 
 function person(id: string, name: string): Person {
@@ -80,7 +70,8 @@ describe('usageStore', () => {
   it('stores usage encrypted at rest', async () => {
     await savePerson(fs, key, person('p1', 'Alex'));
     await recordUsage(fs, key, ev({ id: 'e1', model: 'claude-opus-4-8' }));
-    const raw = await readFile(join(vault, 'people', 'p1', 'usage', '2026-06.enc'), 'utf8');
+    const bytes = await fs.read('people/p1/usage/2026-06.enc');
+    const raw = bytes && new TextDecoder().decode(bytes);
     expect(raw).toContain('aes-256-gcm');
     expect(raw).not.toContain('claude-opus-4-8');
   });

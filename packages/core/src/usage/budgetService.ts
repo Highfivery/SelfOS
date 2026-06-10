@@ -1,7 +1,12 @@
-import type { FileSystem } from '@selfos/core/host';
-import type { BudgetState, BudgetStateKind } from '../../shared/channels';
-import { BudgetsConfigSchema, type Budget, type BudgetsConfig } from '../../shared/schemas';
-import { readEncryptedJson, writeEncryptedJson } from '@selfos/core/vault';
+import type { FileSystem } from '../host';
+import {
+  BudgetsConfigSchema,
+  type Budget,
+  type BudgetState,
+  type BudgetStateKind,
+  type BudgetsConfig,
+} from '../schemas';
+import { readEncryptedJson, writeEncryptedJson } from '../vault';
 import { queryUsage } from './usageStore';
 
 const BUDGETS_PATH = 'config/budgets.enc';
@@ -16,25 +21,29 @@ function defaults(): BudgetsConfig {
 /** A person's effective budget: their override, or the $10/week default. */
 export async function effectivePersonBudget(
   fs: FileSystem,
-  key: Buffer,
+  key: Uint8Array,
   personId: string,
 ): Promise<Budget> {
   return (await getBudgets(fs, key)).perPerson[personId] ?? DEFAULT_BUDGET;
 }
 
-export async function getBudgets(fs: FileSystem, key: Buffer): Promise<BudgetsConfig> {
+export async function getBudgets(fs: FileSystem, key: Uint8Array): Promise<BudgetsConfig> {
   const raw = await readEncryptedJson(fs, BUDGETS_PATH, key);
   return raw === null ? defaults() : BudgetsConfigSchema.parse(raw);
 }
 
-async function write(fs: FileSystem, key: Buffer, config: BudgetsConfig): Promise<BudgetsConfig> {
+async function write(
+  fs: FileSystem,
+  key: Uint8Array,
+  config: BudgetsConfig,
+): Promise<BudgetsConfig> {
   await writeEncryptedJson(fs, BUDGETS_PATH, config, key);
   return config;
 }
 
 export async function setAppBudget(
   fs: FileSystem,
-  key: Buffer,
+  key: Uint8Array,
   budget: Budget | null,
 ): Promise<BudgetsConfig> {
   const config = await getBudgets(fs, key);
@@ -46,7 +55,7 @@ export async function setAppBudget(
 
 export async function setPersonBudget(
   fs: FileSystem,
-  key: Buffer,
+  key: Uint8Array,
   personId: string,
   budget: Budget | null,
 ): Promise<BudgetsConfig> {
@@ -75,7 +84,7 @@ export function periodStart(now: Date, period: 'week' | 'month'): string {
  */
 export async function checkBudget(
   fs: FileSystem,
-  key: Buffer,
+  key: Uint8Array,
   options: {
     scope: 'app' | 'person';
     personId?: string | undefined;

@@ -239,6 +239,23 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-10 — Build (Capacitor track **relocation slice 3 (final): move usage/budgets/chat into core**
+  — [07-mobile-platform](docs/specs/07-mobile-platform.md) §5.2): relocated `pricing`/`usageStore`/
+  `budgetService` → **`@selfos/core/usage`** and `promptBuilder`/`chatService` → **`@selfos/core/conversations`**
+  (+ tests) — verbatim, **no behavior change**. Moved files take `key: Uint8Array`; chatService's
+  `node:crypto randomUUID` → core `uuid()`. The 4 IPC view types (`UsageSummary`/`BudgetState`/
+  `BudgetStateKind`/`ChatTurnResult`) moved into core **`schemas.ts`** (same crypto-free rule as
+  `AccessView`) so `channels.ts` imports them from the schemas shim and the renderer/web tsconfig never
+  pulls `core/crypto`. New export `./usage`. Moved tests use the `memFileSystem` fake. **This completes
+  the `@selfos/core` extraction** — ALL platform-agnostic business logic (crypto, vault I/O, people/access,
+  conversations, usage/budgets, prompt builder, pricing) now lives in core behind the host interfaces; the
+  app's `main/` is just host impls (`nodeFileSystem`/`nodeSecretStore`/`anthropicClient`/`encryptor`), the
+  `claudeService` proxy, **`masterKey`** (the app's `Buffer` bridge), device-local state (`deviceStore`/
+  `session`/`superAdmin`/`settings`), `vault` bootstrap/watcher/conflicts, `ipc`, and the renderer. Fixed a
+  latent Playwright strict-mode flake in the chat e2e (`.first()` — the streaming bubble + persisted message
+  both match during the stream→save handoff). Gates green: typecheck/lint/format, **193 unit** (58 core +
+  135 desktop), 23 E2E. **NEXT: the iOS-only work — (iii) Capacitor shell + iOS plugins + binding, (iv)
+  build/signing — needs a Mac/Xcode + the user's Apple Developer team + bundle id (ASK).**
 - 2026-06-10 — Build (Capacitor track **relocation slice 2: move the people/access domain into
   `@selfos/core/people`** — [07-mobile-platform](docs/specs/07-mobile-platform.md) §5.2): relocated
   `peopleService`/`relationshipService`/`accessService`/`buildContext` (+ tests) into core — verbatim,

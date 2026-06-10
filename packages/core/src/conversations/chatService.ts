@@ -1,18 +1,15 @@
-import { randomUUID } from 'node:crypto';
-import type { ClaudeClient, FileSystem } from '@selfos/core/host';
-import type { ChatTurnResult } from '../../shared/channels';
-import type { Conversation, UsageEvent } from '../../shared/schemas';
-import { checkBudget } from '../usage/budgetService';
-import { costOf } from '../usage/pricing';
-import { recordUsage } from '../usage/usageStore';
-import { getConversation, saveConversation } from '@selfos/core/conversations';
+import type { ClaudeClient, FileSystem } from '../host';
+import { uuid } from '../id';
+import type { ChatTurnResult, Conversation, UsageEvent } from '../schemas';
+import { checkBudget, costOf, recordUsage } from '../usage';
+import { getConversation, saveConversation } from './conversationService';
 import { buildSystemPrompt } from './promptBuilder';
 
 export type { ChatTurnResult };
 
 export interface ChatTurnDeps {
   fs: FileSystem;
-  key: Buffer;
+  key: Uint8Array;
   client: ClaudeClient;
   apiKey: string | null;
   model: string;
@@ -90,7 +87,7 @@ export async function runChatTurn(deps: ChatTurnDeps): Promise<ChatTurnResult> {
   await saveConversation(fs, key, conversation);
 
   const usage: UsageEvent = {
-    id: randomUUID(),
+    id: uuid(),
     schemaVersion: 1,
     type: 'chat',
     personId,

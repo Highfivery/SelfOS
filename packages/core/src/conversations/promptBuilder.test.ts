@@ -1,24 +1,14 @@
-// @vitest-environment node
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { generateMasterKey } from '@selfos/core/crypto';
-import type { FileSystem } from '@selfos/core/host';
-import { createNodeFileSystem } from '../host/nodeFileSystem';
-import { savePerson } from '@selfos/core/people';
-import type { Person } from '../../shared/schemas';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { generateMasterKey } from '../crypto';
+import { memFileSystem } from '../host/memFileSystem';
+import { savePerson } from '../people';
+import type { Person } from '../schemas';
 import { buildSystemPrompt } from './promptBuilder';
 
-const key = Buffer.from(generateMasterKey());
-let vault: string;
-let fs: FileSystem;
-beforeEach(async () => {
-  vault = await mkdtemp(join(tmpdir(), 'selfos-prompt-'));
-  fs = createNodeFileSystem(vault);
-});
-afterEach(async () => {
-  await rm(vault, { recursive: true, force: true });
+const key = generateMasterKey();
+let fs: ReturnType<typeof memFileSystem>;
+beforeEach(() => {
+  fs = memFileSystem();
 });
 
 function person(id: string, name: string, extra: Partial<Person> = {}): Person {

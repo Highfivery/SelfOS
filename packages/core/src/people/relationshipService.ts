@@ -1,11 +1,7 @@
-import { randomUUID } from 'node:crypto';
-import type { FileSystem } from '@selfos/core/host';
-import {
-  RelationshipSchema,
-  type Relationship,
-  type RelationshipInput,
-} from '../../shared/schemas';
-import { readEncryptedJson, writeEncryptedJson } from '@selfos/core/vault';
+import type { FileSystem } from '../host';
+import { uuid } from '../id';
+import { RelationshipSchema, type Relationship, type RelationshipInput } from '../schemas';
+import { readEncryptedJson, writeEncryptedJson } from '../vault';
 
 const RELATIONSHIPS_DIR = 'relationships';
 
@@ -15,13 +11,13 @@ function relationshipPath(id: string): string {
 
 export async function saveRelationship(
   fs: FileSystem,
-  key: Buffer,
+  key: Uint8Array,
   relationship: Relationship,
 ): Promise<void> {
   await writeEncryptedJson(fs, relationshipPath(relationship.id), relationship, key);
 }
 
-export async function listRelationships(fs: FileSystem, key: Buffer): Promise<Relationship[]> {
+export async function listRelationships(fs: FileSystem, key: Uint8Array): Promise<Relationship[]> {
   const relationships: Relationship[] = [];
   for (const name of await fs.list(RELATIONSHIPS_DIR)) {
     if (!name.endsWith('.enc')) continue;
@@ -34,7 +30,7 @@ export async function listRelationships(fs: FileSystem, key: Buffer): Promise<Re
 /** Create or update a relationship from renderer input; the main process owns id + timestamps. */
 export async function upsertRelationship(
   fs: FileSystem,
-  key: Buffer,
+  key: Uint8Array,
   input: RelationshipInput,
 ): Promise<Relationship> {
   const now = new Date().toISOString();
@@ -44,7 +40,7 @@ export async function upsertRelationship(
     if (existing) createdAt = existing.createdAt;
   }
   const relationship: Relationship = {
-    id: input.id ?? randomUUID(),
+    id: input.id ?? uuid(),
     schemaVersion: 1,
     fromPersonId: input.fromPersonId,
     toPersonId: input.toPersonId,

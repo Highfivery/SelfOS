@@ -253,6 +253,12 @@ reduced-motion honored (already global).
   code. The crypto layer is now async (awaits rippled to callers/tests/e2e). `Buffer`,
   portable-base64, and the `randomUUID` call sites are intentionally deferred to **slice (ii)** (the
   `@selfos/core` extraction, "no `node:*`"). Gates green: typecheck/lint/format, 183 unit, 23 E2E.
+- 2026-06-10 — **relocation slice 2 landed (§5.2):** moved the people/access domain
+  (`peopleService`/`relationshipService`/`accessService`/`buildContext` + tests) into `@selfos/core/people`
+  — verbatim, `Uint8Array` keys, portable `uuid()` (no `node:crypto`). `AccessView` moved into core
+  `schemas.ts` so `channels.ts` imports it from the crypto-free schemas shim (keeps `core/crypto` out of
+  the renderer/web tsconfig). Moved tests use the `memFileSystem` fake; new export `./people`. The app's
+  `people/` is now just household/session/superAdmin. No behavior/contract change. Gates: 193 unit, 23 E2E.
 - 2026-06-10 — **relocation slice 1 landed (§5.2):** began physically moving the platform-agnostic
   services into core — this slice relocates **`encryptedStore` → `@selfos/core/vault`** and
   **`conversationService` → `@selfos/core/conversations`** (verbatim; no behavior change). The moved files

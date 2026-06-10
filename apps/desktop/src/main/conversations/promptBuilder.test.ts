@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { generateMasterKey } from '@selfos/core/crypto';
 import type { FileSystem } from '@selfos/core/host';
 import { createNodeFileSystem } from '../host/nodeFileSystem';
-import { savePerson } from '../people/peopleService';
+import { savePerson } from '@selfos/core/people';
 import type { Person } from '../../shared/schemas';
 import { buildSystemPrompt } from './promptBuilder';
 

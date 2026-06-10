@@ -7,7 +7,7 @@ import { generateMasterKey } from '@selfos/core/crypto';
 import type { ClaudeClient, FileSystem } from '@selfos/core/host';
 import { createNodeFileSystem } from '../host/nodeFileSystem';
 import type { Person } from '../../shared/schemas';
-import { savePerson } from '../people/peopleService';
+import { savePerson } from '@selfos/core/people';
 import { setPersonBudget } from '../usage/budgetService';
 import { recordUsage } from '../usage/usageStore';
 import { getConversation, listConversations } from '@selfos/core/conversations';

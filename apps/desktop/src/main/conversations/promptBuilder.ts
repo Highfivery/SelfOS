@@ -1,5 +1,5 @@
 import type { FileSystem } from '@selfos/core/host';
-import { buildContext } from '../people/buildContext';
+import { buildContext } from '@selfos/core/people';
 
 /** The fixed v1 coach voice (05-conversations §11.5). Warm, reflective, non-clinical. */
 export const PERSONA = `You are SelfOS — a warm, reflective wellness companion and life coach. \

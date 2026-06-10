@@ -124,6 +124,12 @@ export const AccessConfigSchema = z.object({
 });
 export type AccessConfig = z.infer<typeof AccessConfigSchema>;
 
+/** Roles + accounts with PIN hashes stripped — safe to expose to the renderer (the IPC `AccessView`). */
+export interface AccessView {
+  roles: Role[];
+  accounts: { personId: string; roleId: string; hasPin: boolean }[];
+}
+
 /** Renderer-supplied person fields; the main process owns `id`, `schemaVersion`, and timestamps. */
 export const PersonInputSchema = z.object({
   id: z.string().optional(),

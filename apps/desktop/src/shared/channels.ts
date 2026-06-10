@@ -1,4 +1,5 @@
 import type {
+  AccessView,
   BootState,
   Budget,
   Conversation,
@@ -83,12 +84,6 @@ export interface HouseholdStatus {
   hasMasterKey: boolean;
   hasOwner: boolean;
   activePersonId: string | null;
-}
-
-/** Roles + accounts with PIN hashes stripped — safe to expose to the renderer. */
-export interface AccessView {
-  roles: Role[];
-  accounts: { personId: string; roleId: string; hasPin: boolean }[];
 }
 
 export type SetActiveResult =
@@ -241,6 +236,7 @@ export interface SelfosBridge {
 }
 
 export type {
+  AccessView,
   BootState,
   Budget,
   Conversation,

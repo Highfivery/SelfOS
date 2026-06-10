@@ -239,6 +239,21 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-10 — Build (Capacitor track **relocation slice 2: move the people/access domain into
+  `@selfos/core/people`** — [07-mobile-platform](docs/specs/07-mobile-platform.md) §5.2): relocated
+  `peopleService`/`relationshipService`/`accessService`/`buildContext` (+ tests) into core — verbatim,
+  **no behavior change**. Moved files take `key: Uint8Array` (app passes `Buffer`, assignable) and use a
+  new portable **`uuid()`** (`globalThis.crypto.randomUUID`, core `id.ts`) instead of `node:crypto`. The
+  **`AccessView`** view type moved into core **`schemas.ts`** (not accessService) on purpose: `channels.ts`
+  keeps importing it from the crypto-free schemas shim, so the renderer/web tsconfig never pulls
+  `core/crypto` (importing it via `@selfos/core/people` would drag crypto under the DOM lib and trip a
+  TS5.7 `BufferSource` error). The IPC `SelfosBridge` contract is unchanged. Moved tests use the core
+  **`memFileSystem`** fake (the host-level `ENOTDIR` case stays covered by `nodeFileSystem.test`). New
+  export `./people`. The app's `people/` is now just `household`/`session`/`superAdmin` (device-local
+  orchestration; household keeps `randomUUID` as an app-host detail). Gates green: typecheck/lint/format,
+  **193 unit** (41 core + 152 desktop), 23 E2E. Next relocation: **usage/budgets/chat** (usageStore/
+  budgetService/pricing/promptBuilder/chatService + the UsageSummary/BudgetState/ChatTurnResult view
+  types), then decide whether masterKey moves (full `Uint8Array`) or stays the app Buffer bridge.
 - 2026-06-10 — Build (Capacitor track **relocation slice 1: move the vault-data I/O into `@selfos/core`**
   — [07-mobile-platform](docs/specs/07-mobile-platform.md) §5.2): began physically moving the
   now-platform-agnostic service files (abstracted behind host interfaces in ii-b/ii-c) into core. This

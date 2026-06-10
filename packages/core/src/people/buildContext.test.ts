@@ -1,26 +1,12 @@
-// @vitest-environment node
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { generateMasterKey } from '@selfos/core/crypto';
-import type { FileSystem } from '@selfos/core/host';
-import { createNodeFileSystem } from '../host/nodeFileSystem';
-import type { Person, Relationship } from '../../shared/schemas';
+import { describe, expect, it } from 'vitest';
+import { generateMasterKey } from '../crypto';
+import { memFileSystem } from '../host/memFileSystem';
+import type { Person, Relationship } from '../schemas';
 import { savePerson } from './peopleService';
 import { saveRelationship } from './relationshipService';
 import { buildContext } from './buildContext';
 
-const key = Buffer.from(generateMasterKey());
-let vault: string;
-let fs: FileSystem;
-beforeEach(async () => {
-  vault = await mkdtemp(join(tmpdir(), 'selfos-ctx-'));
-  fs = createNodeFileSystem(vault);
-});
-afterEach(async () => {
-  await rm(vault, { recursive: true, force: true });
-});
+const key = generateMasterKey();
 
 function person(id: string, displayName: string, extra: Partial<Person> = {}): Person {
   return {
@@ -37,6 +23,7 @@ function person(id: string, displayName: string, extra: Partial<Person> = {}): P
 
 describe('buildContext', () => {
   it("includes own notes and others' shareable notes, but never others' private notes", async () => {
+    const fs = memFileSystem();
     await savePerson(
       fs,
       key,
@@ -68,6 +55,6 @@ describe('buildContext', () => {
   });
 
   it('returns empty for an unknown person', async () => {
-    expect(await buildContext(fs, key, 'nope')).toBe('');
+    expect(await buildContext(memFileSystem(), key, 'nope')).toBe('');
   });
 });

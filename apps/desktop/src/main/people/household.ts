@@ -6,8 +6,7 @@ import { createMasterKey, loadMasterKey } from '../crypto/masterKey';
 import { createNodeFileSystem } from '../host/nodeFileSystem';
 import { createNodeSecretStore } from '../host/nodeSecretStore';
 import type { Encryptor } from '../secrets/encryptor';
-import { getAccessConfig, setAccount } from './accessService';
-import { savePerson } from './peopleService';
+import { getAccessConfig, savePerson, setAccount } from '@selfos/core/people';
 import { getActivePersonId, setActivePersonId } from './session';
 import { setSuperAdminPassphrase } from './superAdmin';
 

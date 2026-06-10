@@ -42,19 +42,20 @@ import {
   verifySuperAdminPassphrase,
 } from './people/superAdmin';
 import {
+  deletePerson,
+  deleteRelationship,
   getAccessConfig,
   getAccessView,
+  getPerson,
+  listPeople,
+  listRelationships,
   removeAccount,
   saveRole,
   setAccount,
-  verifyAccountPin,
-} from './people/accessService';
-import { deletePerson, getPerson, listPeople, upsertPerson } from './people/peopleService';
-import {
-  deleteRelationship,
-  listRelationships,
+  upsertPerson,
   upsertRelationship,
-} from './people/relationshipService';
+  verifyAccountPin,
+} from '@selfos/core/people';
 import { loadMasterKey } from './crypto/masterKey';
 import type { FileSystem, SecretStore } from '@selfos/core/host';
 import { createNodeFileSystem } from './host/nodeFileSystem';

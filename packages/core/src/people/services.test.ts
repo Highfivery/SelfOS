@@ -1,12 +1,7 @@
-// @vitest-environment node
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { generateMasterKey } from '@selfos/core/crypto';
-import type { FileSystem } from '@selfos/core/host';
-import { createNodeFileSystem } from '../host/nodeFileSystem';
-import type { Person, Relationship } from '../../shared/schemas';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { generateMasterKey } from '../crypto';
+import { memFileSystem } from '../host/memFileSystem';
+import type { Person, Relationship } from '../schemas';
 import { deletePerson, getPerson, listPeople, savePerson, upsertPerson } from './peopleService';
 import {
   deleteRelationship,
@@ -16,15 +11,10 @@ import {
 } from './relationshipService';
 import { getAccessConfig, getAccessView, setAccount, verifyAccountPin } from './accessService';
 
-const key = Buffer.from(generateMasterKey());
-let vault: string;
-let fs: FileSystem;
-beforeEach(async () => {
-  vault = await mkdtemp(join(tmpdir(), 'selfos-people-'));
-  fs = createNodeFileSystem(vault);
-});
-afterEach(async () => {
-  await rm(vault, { recursive: true, force: true });
+const key = generateMasterKey();
+let fs: ReturnType<typeof memFileSystem>;
+beforeEach(() => {
+  fs = memFileSystem();
 });
 
 function person(id: string, displayName: string, isSubject = false): Person {
@@ -51,20 +41,21 @@ describe('peopleService', () => {
 
   it('stores profiles encrypted at rest (no plaintext name on disk)', async () => {
     await savePerson(fs, key, person('p1', 'SecretName'));
-    const raw = await readFile(join(vault, 'people', 'p1', 'profile.enc'), 'utf8');
+    const bytes = await fs.read('people/p1/profile.enc');
+    const raw = bytes && new TextDecoder().decode(bytes);
     expect(raw).not.toContain('SecretName');
     expect(raw).toContain('aes-256-gcm');
   });
 
   it('cannot be read with the wrong master key', async () => {
     await savePerson(fs, key, person('p1', 'Bea'));
-    await expect(getPerson(fs, Buffer.from(generateMasterKey()), 'p1')).rejects.toThrow();
+    await expect(getPerson(fs, generateMasterKey(), 'p1')).rejects.toThrow();
   });
 
   it('ignores a stray non-directory entry in people/ (e.g. a synced .DS_Store)', async () => {
     await savePerson(fs, key, person('p1', 'Bea'));
-    // Cloud providers drop files like `.DS_Store` into browsed folders; the old listing skipped them.
-    await writeFile(join(vault, 'people', '.DS_Store'), 'junk');
+    // Cloud providers drop files like `.DS_Store` into browsed folders; listing must skip them.
+    await fs.writeAtomic('people/.DS_Store', new TextEncoder().encode('junk'));
     expect((await listPeople(fs, key)).map((p) => p.displayName)).toEqual(['Bea']);
   });
 });

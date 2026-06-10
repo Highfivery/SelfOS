@@ -1,6 +1,6 @@
 # 04 — People, relationships, roles & encryption
 
-> **Status:** Draft · _last updated 2026-06-09_
+> **Status:** Approved · _last updated 2026-06-09_
 >
 > The household model: SelfOS serves a graph of **people** — some are **subjects** with their own
 > coaching experience, all are connected by **relationships** that are themselves data-bearing.
@@ -43,7 +43,8 @@ rest**.
 
 **Non-goals (deferred)**
 
-- Multi-device sync of encrypted data (needs a recovery-key flow) — v1 is single-device.
+- Live multi-device sync of encrypted data — v1 is single-device, but a **recovery phrase** is built
+  now (§5) so the master key can be restored after keychain loss or on a future device.
 - Zero-knowledge privacy from the owner/app (incompatible with the required super-admin — see §8).
 - Questionnaires and per-person/relationship chat surfaces (separate later specs that build on this).
 - Remote/per-device person access (post-sync concern).
@@ -177,6 +178,12 @@ hash**, and the **active person** + session lock.
   config (settings, theme) — preserves some inspectability.
 - The vault service routes encrypted formats through the crypto service transparently; the renderer
   never sees ciphertext or the key.
+- **Recovery phrase (built now).** At setup a human-readable **recovery phrase** is generated and
+  shown once. A key-encryption key derived from it (scrypt) **wraps** the master key; the wrapped
+  master key is stored in the vault (`config/recovery.enc`, syncable). If the keychain key is lost (or
+  on a future device), entering the phrase unwraps and restores the master key; the phrase can also
+  reset the super-admin passphrase. The phrase itself is never stored — losing both the keychain key
+  and the phrase means the data is unrecoverable.
 - **Consequence:** browsing the vault folder, other household members, and cloud providers see only
   ciphertext. It is **not** zero-knowledge — the app (and the super-admin) hold the master key and
   can decrypt (§8). Encrypted data is no longer human-readable.
@@ -258,19 +265,27 @@ is reachable but unobtrusive.
 
 (Questionnaires and per-person/relationship chat are later specs that consume this foundation.)
 
-## 12. Open questions
+## 12. Resolved decisions
 
-1. **Default capabilities for Member/Guest** — confirm the exact matrix (who can see other people's
-   profiles vs only their own relationships?).
-2. **Avatars** — store images in the vault unencrypted (just a photo) or encrypt them too?
-3. **Recovery** — what happens if the super-admin passphrase or a person's PIN is forgotten? (Owner
-   reset via super-admin; master-key loss = data loss until a recovery-key flow exists.)
-4. **First-run** — does onboarding now also create the first person (the owner/self) + set the
-   super-admin passphrase, or is that a separate setup step after the vault?
-5. **"Self" representation** — is the owner just `Person #1` with the Owner account, or a
-   distinguished record? (Proposed: a normal Person with the Owner account.)
+Confirmed with the user (2026-06-09):
+
+1. **First-run** — onboarding becomes: choose vault → create the **owner** (Person #1, Owner account)
+   → set the **super-admin passphrase** → show the **recovery phrase** (write it down). One guided
+   flow (extends 02-app-shell onboarding).
+2. **Default capability matrix** — **Owner** = all capabilities; **Member** = manage their own
+   profile + their own relationships + answer questionnaires (no access to others' private data, no
+   household management); **Guest** = answer assigned questionnaires only.
+3. **Recovery** — build a **recovery phrase** now (§5): the super-admin can reset any person's PIN;
+   the recovery phrase restores the master key and can reset the super-admin passphrase; losing both
+   the keychain key and the phrase = unrecoverable data.
+4. **Avatars** — stored as a plain image file in the vault (not encrypted) for v1; revisit if image
+   privacy becomes a concern.
+5. **"Self"** — a normal `Person` (Person #1) holding the Owner account; no distinguished record type.
 
 ## 13. Changelog
 
 - 2026-06-09 — created (draft) after a design brainstorm: household model, relationship graph,
   capability roles + concealed super-admin, master-key encryption at rest.
+- 2026-06-09 — resolved open questions (first-run owner+passphrase+recovery-phrase, capability
+  defaults, recovery phrase in scope, plain avatars, self = Person #1) and added the recovery-phrase
+  design to §5; marked Approved.

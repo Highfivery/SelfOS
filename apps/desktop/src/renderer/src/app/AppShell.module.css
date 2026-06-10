@@ -11,18 +11,26 @@
   padding: var(--space-4) var(--space-3);
   background: var(--color-surface-alt);
   border-right: 1px solid var(--color-border);
+  transition: width var(--motion-base) var(--ease-standard);
+}
+
+.collapsed {
+  width: 68px;
+  padding-left: var(--space-2);
+  padding-right: var(--space-2);
 }
 
 .brand {
   -webkit-app-region: drag;
+  display: flex;
+  align-items: center;
   padding: var(--space-3) var(--space-2) var(--space-6);
 }
 
-.mark {
-  font-weight: 600;
-  font-size: var(--text-md);
-  letter-spacing: 0.01em;
-  color: var(--color-text-primary);
+.collapsed .brand {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .nav {
@@ -31,7 +39,8 @@
   gap: var(--space-1);
 }
 
-.navItem {
+.navItem,
+.collapseToggle {
   -webkit-app-region: no-drag;
   display: flex;
   align-items: center;
@@ -50,15 +59,38 @@
     color var(--motion-fast) var(--ease-standard);
 }
 
-.navItem:hover {
+.navItem:hover,
+.collapseToggle:hover {
   background: var(--color-surface);
   color: var(--color-text-primary);
+}
+
+.navItem:focus-visible,
+.collapseToggle:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 1px;
 }
 
 .navItemActive,
 .navItemActive:hover {
   background: var(--color-accent-subtle-bg);
   color: var(--color-accent-text);
+}
+
+.collapsed .navItem,
+.collapsed .collapseToggle {
+  justify-content: center;
+  gap: 0;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.label {
+  white-space: nowrap;
+}
+
+.collapsed .label {
+  display: none;
 }
 
 .spacer {
@@ -68,35 +100,7 @@
 .footer {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-}
-
-.switchButton {
-  align-self: flex-start;
-  padding: var(--space-1) var(--space-2);
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text-secondary);
-  font-size: 0.8125rem;
-  cursor: pointer;
-  transition: background var(--motion-fast);
-}
-
-.switchButton:hover {
-  background: var(--color-surface-alt);
-  color: var(--color-text-primary);
-}
-
-.superAdminBadge {
-  align-self: flex-start;
-  padding: var(--space-1) var(--space-2);
-  border: 1px solid var(--color-accent);
-  border-radius: var(--radius-sm);
-  background: var(--color-accent-subtle-bg);
-  color: var(--color-accent-text);
-  font-size: 0.75rem;
-  cursor: pointer;
+  gap: var(--space-1);
 }
 
 .content {
@@ -105,6 +109,7 @@
   flex-direction: column;
   overflow: hidden;
   min-height: 0;
+  min-width: 0;
 }
 
 .contentInner {

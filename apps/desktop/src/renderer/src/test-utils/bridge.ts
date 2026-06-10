@@ -132,6 +132,8 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     conversationsGet: () => Promise.resolve(null),
     conversationsRename: () => Promise.resolve(),
     conversationsDelete: () => Promise.resolve(),
+    getSidebarCollapsed: () => Promise.resolve(false),
+    setSidebarCollapsed: () => Promise.resolve(),
     ...overrides,
   };
   window.selfos = bridge;

@@ -168,7 +168,7 @@ test('first-time setup creates the owner and enters the app', async () => {
     await expect(w.getByRole('heading', { name: 'Write this down' })).toBeVisible();
     await w.getByRole('button', { name: /saved it/i }).click();
     await expect(w.getByRole('link', { name: 'Home' })).toBeVisible();
-    await expect(w.getByText('Signed in as Alex')).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Signed in as Alex' })).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -265,8 +265,9 @@ test('access: grant a login, switch person, and gate the People nav', async () =
     await w.getByRole('button', { name: 'Grant access' }).click();
     await expect(w.getByText(/can sign in/i)).toBeVisible();
 
-    // Switch to Jordan via the "Who's here?" switcher.
+    // Switch to Jordan via the TopBar account menu → "Switch person".
     await w.getByRole('button', { name: /signed in as/i }).click();
+    await w.getByRole('menuitem', { name: 'Switch person' }).click();
     const dialog = w.getByRole('dialog', { name: /who.s here/i });
     await expect(dialog).toBeVisible();
     await dialog.getByText('Jordan').click();
@@ -296,8 +297,8 @@ test('super-admin: a hidden long-press on the version unlocks inspect mode', asy
     await dialog.getByLabel('Passphrase').fill('superpass');
     await dialog.getByRole('button', { name: 'Unlock' }).click();
 
-    // Inspect mode is active — the (only-now-visible) super-admin badge appears.
-    await expect(w.getByRole('button', { name: /super-admin/i })).toBeVisible();
+    // Inspect mode is active — the (only-now-visible) super-admin badge appears in the account area.
+    await expect(w.getByText('Super-admin')).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -377,7 +378,7 @@ test('super-admin: inspect mode unlocks full budget/usage access for a non-admin
     const dialog = w.getByRole('dialog', { name: 'Unlock' });
     await dialog.getByLabel('Passphrase').fill('superpass');
     await dialog.getByRole('button', { name: 'Unlock' }).click();
-    await expect(w.getByRole('button', { name: /super-admin/i })).toBeVisible();
+    await expect(w.getByText('Super-admin')).toBeVisible();
 
     // Now main grants full access: cost is shown and the owner's usage appears (app scope allowed).
     await w.getByRole('link', { name: 'Usage' }).click();
@@ -654,7 +655,7 @@ test('settings: changing the theme applies it and persists to the vault', async 
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Home' }).waitFor();
-    // The sidebar appearance toggle (only the toggle's "Dark" exists on the Home route).
+    // The top-bar appearance toggle (only the toggle's "Dark" exists on the Home route).
     await w.getByRole('button', { name: 'Dark' }).click();
     await expect(w.locator('html')).toHaveAttribute('data-theme', 'dark');
 
@@ -753,6 +754,67 @@ test('settings: every section renders content without horizontal overflow', asyn
       version: string;
     };
     await expect(w.getByText(pkg.version, { exact: false })).toBeVisible(); // app version, not Electron's
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('shell: locking from the account menu gates the app, and resuming returns to it', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await expect(w.getByRole('link', { name: 'Home' })).toBeVisible();
+
+    // Lock from the TopBar account menu.
+    await w.getByRole('button', { name: /signed in as/i }).click();
+    await w.getByRole('menuitem', { name: 'Lock' }).click();
+
+    // The full-screen lock gate covers the app.
+    const lock = w.getByRole('dialog', { name: 'Locked' });
+    await expect(lock).toBeVisible();
+    await expect(w.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
+
+    // Resume as the PIN-less owner → back in the app.
+    await lock.getByText('Tester').click();
+    await expect(w.getByRole('dialog', { name: 'Locked' })).toHaveCount(0);
+    await expect(w.getByRole('link', { name: 'Home' })).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('shell: collapsing the sidebar to a rail persists across relaunch', async () => {
+  const { userData, vault } = await seedReadyVault();
+
+  let app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await expect(w.getByRole('link', { name: 'Home' })).toBeVisible();
+    expect((await w.locator('aside').boundingBox())?.width ?? 0).toBeGreaterThan(180);
+
+    await w.getByRole('button', { name: 'Collapse sidebar' }).click();
+    await expect(w.getByRole('button', { name: 'Expand sidebar' })).toBeVisible();
+    // Poll past the width transition until it settles to the icon rail.
+    await expect
+      .poll(async () => (await w.locator('aside').boundingBox())?.width ?? 999)
+      .toBeLessThan(120);
+    await w.waitForTimeout(250); // let the device-local write flush before relaunch
+  } finally {
+    await app.close();
+  }
+
+  app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await expect(w.getByRole('button', { name: 'Expand sidebar' })).toBeVisible();
+    await expect
+      .poll(async () => (await w.locator('aside').boundingBox())?.width ?? 999)
+      .toBeLessThan(120); // still collapsed on next launch
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

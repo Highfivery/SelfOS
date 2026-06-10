@@ -347,6 +347,16 @@ export function registerIpcHandlers(): void {
     setSuperAdminActive(false);
   });
 
+  ipcMain.handle(IpcChannels.getSidebarCollapsed, async (): Promise<boolean> => {
+    return (await readDeviceState(userDataDir())).sidebarCollapsed ?? false;
+  });
+
+  ipcMain.handle(IpcChannels.setSidebarCollapsed, async (_event, raw: unknown): Promise<void> => {
+    const collapsed = z.boolean().parse(raw);
+    const state = await readDeviceState(userDataDir());
+    await writeDeviceState(userDataDir(), { ...state, sidebarCollapsed: collapsed });
+  });
+
   ipcMain.handle(IpcChannels.usageSummary, async (_event, raw: unknown): Promise<UsageSummary> => {
     const { scope, period, personId } = UsageSummarySchema.parse(raw);
     const ctx = await vaultAndKey();

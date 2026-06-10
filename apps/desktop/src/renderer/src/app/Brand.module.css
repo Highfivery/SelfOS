@@ -1,0 +1,37 @@
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.mark {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: block;
+}
+
+.stem {
+  fill: none;
+  stroke: var(--color-accent-solid);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.leafBack {
+  fill: var(--color-accent);
+  opacity: 0.55;
+}
+
+.leafFront {
+  fill: var(--color-accent);
+}
+
+.word {
+  font-weight: 600;
+  font-size: var(--text-md);
+  letter-spacing: 0.01em;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}

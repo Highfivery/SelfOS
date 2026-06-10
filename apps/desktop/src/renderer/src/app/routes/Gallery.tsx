@@ -13,6 +13,7 @@ import {
   Stack,
   Switch,
   Text,
+  Textarea,
   TextInput,
   type SegmentOption,
 } from '../../design-system/components';
@@ -37,7 +38,7 @@ function Section({ title, children }: { title: string; children: ReactNode }): J
 
 /**
  * Dev-only design-system gallery — every primitive in the current theme. Toggle the appearance in
- * the sidebar to review light/dark. Reached at /gallery (only registered in dev builds).
+ * the top bar to review light/dark. Reached at /gallery (only registered in dev builds).
  */
 export function Gallery(): JSX.Element {
   const [toggle, setToggle] = useState(true);
@@ -102,6 +103,9 @@ export function Gallery(): JSX.Element {
                   <option value="weekly">Weekly</option>
                 </Select>
               )}
+            </Field>
+            <Field label="Notes" help="Multi-line input (used for shared & private notes).">
+              {(props) => <Textarea placeholder="A few words you'd like to remember…" {...props} />}
             </Field>
           </Stack>
         </Section>

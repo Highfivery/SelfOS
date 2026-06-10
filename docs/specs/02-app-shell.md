@@ -70,10 +70,35 @@ Clear, non-destructive screen: explain the vault can't be reached; offer **Retry
 
 ### 3.4 Navigation
 
-- A persistent **left sidebar**: app wordmark (draggable region on macOS), the primary nav items
-  (from each module's `nav`, sorted by `order`), a spacer, then a footer with **Settings** and a
-  quick **appearance** toggle. Collapsible (state persisted device-local).
+- A persistent **left sidebar**: the **brand lockup** (the SelfOS sprout mark + wordmark; a draggable
+  region on macOS), the primary nav items (from each module's `nav`, sorted by `order`), a spacer,
+  then a footer with **Settings** and a **collapse toggle**.
+- **Collapsible to an icon rail** on desktop: the toggle hides the labels (and the wordmark), leaving
+  a narrow rail of icons with tooltips/`aria-label`s; the collapsed state is persisted device-local.
+  Below the `md` (768px) breakpoint the sidebar instead becomes an off-canvas drawer (the responsive
+  pass — Slice D; see [`01-design-system.md`](01-design-system.md) breakpoints).
 - Selecting a nav item routes to that module's primary route; the active item is highlighted.
+
+### 3.5 Global controls & session (the TopBar)
+
+The **TopBar** is a slot-based header holding global, feature-agnostic controls (not per-route):
+
+- the **appearance** (System/Light/Dark) toggle,
+- the AI-usage **ring** (06; admin-only $ in its popover), and
+- an **account menu** — the active person (avatar + name) opening: **Switch person** (the "Who's
+  here?" picker), **Lock** (logout — see §3.6), and, only while the concealed super-admin is active,
+  **Lock inspect mode** plus a visible "Super-admin" badge.
+
+New global items drop into the slot without reworking the shell. Admin-only controls carry the
+"Admin only" marker (CLAUDE.md §12).
+
+### 3.6 Lock / logout
+
+**Logout locks the app to a full-screen person picker** (the lock screen): the active person is
+cleared from view and the user must re-pick someone — entering their PIN if they have one (PIN-less
+people resume immediately) — to continue. This is a **UI reveal-gate**, not data re-encryption: the
+master key stays in the keychain (mirroring the concealed super-admin lock, 04-people-roles §8).
+Locking also drops any super-admin elevation.
 
 ## 4. Data model (vault & device-local)
 
@@ -151,8 +176,13 @@ New typed channels (declared in `src/shared`, validated both sides):
 - `vault:selectFolder` → opens the native dialog; returns `{ path }` or cancel.
 - `vault:initialize(path)` → creates structure; returns `meta` or a typed error.
 - `vault:setActive(path)` / `vault:getStatus` → `Result`-typed.
-- `window:getState` / `window:setState` (bounds, sidebar) — device-local.
+- `window:getState` / `window:setState` (bounds) — device-local.
+- `ui:getSidebarCollapsed` / `ui:setSidebarCollapsed(boolean)` — the sidebar rail state, device-local.
 - Events: `vault:changed` (from the watcher), `os:appearanceChanged`.
+
+Lock/logout and person-switching reuse the session channels in
+[`04-people-roles.md`](04-people-roles.md) (`session:setActive`, `superadmin:lock`); locking is a
+renderer-side state with no new channel.
 
 No Claude API usage in the shell itself.
 
@@ -201,6 +231,17 @@ Confirmed with the user (2026-06-09):
 4. **macOS titlebar** — `hiddenInset` custom-chrome look.
 5. **Resume behavior** — reopen to the last route.
 
+Confirmed with the user (2026-06-10) for the shell-chrome modernization:
+
+6. **Branding** — a **sprout** mark (dusty-blue) + "SelfOS" wordmark as the sidebar lockup (and the
+   future app/dock icon).
+7. **Sidebar collapse** — desktop collapses to an **icon rail** (labels hidden, tooltips); persisted
+   device-local. The mobile off-canvas drawer is the responsive pass (Slice D).
+8. **Logout** — **lock to a full-screen person picker**; PIN-less people resume immediately. A UI
+   reveal-gate, not data re-encryption.
+9. **Global controls in the TopBar** — appearance toggle + usage ring + a single **account menu**
+   (Switch person / Lock / super-admin Lock-inspect). Removed from the sidebar footer.
+
 _No open questions remain. New questions that arise during implementation are appended here._
 
 ## 12. Changelog
@@ -208,3 +249,7 @@ _No open questions remain. New questions that arise during implementation are ap
 - 2026-06-09 — created (draft) per the approved foundation plan.
 - 2026-06-09 — resolved open questions (vault-only onboarding, hash router, single window, hiddenInset
   titlebar, resume to last route) after review; marked Approved.
+- 2026-06-10 — Shell-chrome modernization: sprout brand lockup; the appearance toggle, usage ring, and
+  a new account menu moved into the slot-based **TopBar**; the sidebar footer reduced to Settings + a
+  **collapse toggle** (desktop icon rail, persisted device-local via `ui:get/setSidebarCollapsed`); and
+  **logout = lock to a full-screen person picker** (§3.6). Updated §3.4–3.6, §4, §6, and §11.

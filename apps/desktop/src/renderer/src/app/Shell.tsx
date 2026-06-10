@@ -9,11 +9,13 @@ import { Roles } from './routes/roles/Roles';
 import { Usage } from './routes/usage/Usage';
 import { SettingsScreen } from '../settings/SettingsScreen';
 import { useSettingsStore } from '../settings/settingsStore';
+import { useNavStore } from '../stores/navStore';
 
 /** The main app (rendered once the vault is ready): router + sidebar layout. */
 export function Shell(): JSX.Element {
   useEffect(() => {
     void useSettingsStore.getState().load();
+    void useNavStore.getState().load();
   }, []);
 
   return (

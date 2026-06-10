@@ -59,6 +59,8 @@ export const IpcChannels = {
   conversationsGet: 'conversations:get',
   conversationsRename: 'conversations:rename',
   conversationsDelete: 'conversations:delete',
+  getSidebarCollapsed: 'ui:getSidebarCollapsed',
+  setSidebarCollapsed: 'ui:setSidebarCollapsed',
 } as const;
 
 export type SettingScope = 'vault' | 'device';
@@ -232,6 +234,10 @@ export interface SelfosBridge {
   conversationsRename(input: { id: string; title: string }): Promise<void>;
   /** Delete a conversation. */
   conversationsDelete(id: string): Promise<void>;
+  /** Whether the desktop sidebar is collapsed to an icon rail (device-local). */
+  getSidebarCollapsed(): Promise<boolean>;
+  /** Persist the sidebar collapsed/expanded state (device-local). */
+  setSidebarCollapsed(collapsed: boolean): Promise<void>;
 }
 
 export type {

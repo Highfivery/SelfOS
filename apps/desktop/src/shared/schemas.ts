@@ -48,6 +48,8 @@ export const DeviceStateSchema = z.object({
   window: WindowBoundsSchema.optional(),
   activePersonId: z.string().nullable().optional(),
   superAdminPassphraseHash: z.string().optional(),
+  /** Whether the desktop sidebar is collapsed to an icon rail (device-local UI preference). */
+  sidebarCollapsed: z.boolean().optional(),
 });
 export type DeviceState = z.infer<typeof DeviceStateSchema>;
 

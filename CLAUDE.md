@@ -226,6 +226,19 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-10 — Correction landed: **removed the `questionnaires.answer` / `questionnaires.assign`
+  capabilities** (unbuilt-feature scaffolding flagged in the prior entry). Stripped from
+  `shared/capabilities.ts` (CAPABILITIES, labels, default Member/Guest roles) and synced
+  [04-people-roles](docs/specs/04-people-roles.md). **Member** now defaults to own relationships + own
+  sessions; **Guest** now has **no capabilities** (a login slot until a Guest purpose is specced).
+  Questionnaires stays on the roadmap; its capabilities return when specced.
+- 2026-06-10 — **Session decisions confirmed (ask-first) for the app-shell modernization + responsive
+  pass:** brand mark = a **Sprout** (dusty-blue, with a "SelfOS" wordmark → sidebar lockup + app icon);
+  **Logout = lock to a full-screen person picker** (PIN-less people resume immediately; a UI
+  reveal-gate like the super-admin lock); **desktop sidebar collapse = icon rail** (drawer below
+  768px); **admin-only marker = a "lock + 'Admin only'" pill** primitive (section-level by default);
+  **breakpoint tokens = 480 / 768 / 1024 / 1280** (mobile-width E2E guard at 390px). TopBar gains the
+  appearance toggle + logout (out of the sidebar footer) and the mobile hamburger.
 - 2026-06-10 — Captured UI/UX conventions (new §12) + DoD items from user feedback: the app must be
   **fully responsive** (one codebase, ~360px→desktop); **admin-only UI must be visibly marked**;
   **global controls (usage ring, appearance toggle, logout) live in the TopBar**; **`/gallery` must

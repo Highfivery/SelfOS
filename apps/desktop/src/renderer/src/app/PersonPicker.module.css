@@ -1,0 +1,43 @@
+.choice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 44px;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--motion-fast);
+}
+
+.choice:hover {
+  background: var(--color-surface-alt);
+}
+
+.choice:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 1px;
+}
+
+.choiceActive {
+  border-color: var(--color-accent);
+  background: var(--color-surface-alt);
+}
+
+.name {
+  font-weight: 500;
+}
+
+.role {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+
+.pinRow {
+  margin-top: var(--space-2);
+}

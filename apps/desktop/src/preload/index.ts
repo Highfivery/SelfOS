@@ -61,6 +61,9 @@ const bridge: SelfosBridge = {
   conversationsGet: (id) => ipcRenderer.invoke(IpcChannels.conversationsGet, id),
   conversationsRename: (input) => ipcRenderer.invoke(IpcChannels.conversationsRename, input),
   conversationsDelete: (id) => ipcRenderer.invoke(IpcChannels.conversationsDelete, id),
+  getSidebarCollapsed: () => ipcRenderer.invoke(IpcChannels.getSidebarCollapsed),
+  setSidebarCollapsed: (collapsed) =>
+    ipcRenderer.invoke(IpcChannels.setSidebarCollapsed, collapsed),
 };
 
 contextBridge.exposeInMainWorld('selfos', bridge);

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { useSessionStore } from './sessionStore';
+import { clearMockBridge, installMockBridge } from '../test-utils/bridge';
 import { DEFAULT_ROLES } from '@shared/capabilities';
 import type { Person } from '@shared/channels';
 
@@ -13,15 +14,17 @@ const owner: Person = {
   updatedAt: 'now',
 };
 
-afterEach(() =>
+afterEach(() => {
+  clearMockBridge();
   useSessionStore.setState({
     status: null,
     activePerson: null,
     access: null,
     loaded: false,
     superAdmin: false,
-  }),
-);
+    locked: false,
+  });
+});
 
 describe('sessionStore.can', () => {
   it('denies when there is no active person', () => {
@@ -56,5 +59,22 @@ describe('sessionStore.can', () => {
     useSessionStore.setState({ superAdmin: true });
     expect(useSessionStore.getState().can('people.manage')).toBe(true);
     expect(useSessionStore.getState().can('roles.manage')).toBe(true);
+  });
+});
+
+describe('sessionStore.lock', () => {
+  it('locks to the picker and drops super-admin elevation', () => {
+    useSessionStore.setState({ superAdmin: true, locked: false });
+    useSessionStore.getState().lock();
+    expect(useSessionStore.getState().locked).toBe(true);
+    expect(useSessionStore.getState().superAdmin).toBe(false);
+  });
+
+  it('switching a person clears the locked state on success', async () => {
+    installMockBridge();
+    useSessionStore.setState({ locked: true });
+    const result = await useSessionStore.getState().switchTo('owner-1');
+    expect(result.ok).toBe(true);
+    expect(useSessionStore.getState().locked).toBe(false);
   });
 });

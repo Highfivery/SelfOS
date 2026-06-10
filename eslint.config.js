@@ -16,7 +16,9 @@ export default tseslint.config(
     ignores: [
       '**/node_modules/**',
       '**/dist/**',
+      '**/dist-web/**',
       '**/out/**',
+      '**/ios/**',
       '**/build/**',
       '**/coverage/**',
       '**/.husky/_/**',

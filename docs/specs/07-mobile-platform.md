@@ -230,13 +230,17 @@ reduced-motion honored (already global).
 6. **Custom native FS plugin** — confirmed: build a small **Swift Capacitor plugin** for
    security-scoped iCloud access + coordinated FS (required to share the _same_ iCloud folder as
    desktop; the app-sandbox iCloud _container_ would be a different folder and break the shared vault).
+7. **Project specifics (resolved 2026-06-10 for slice iii):** **bundle id `com.highfivery.selfos`**;
+   **minimum iOS 18**; the user has a **Mac**. **Distribution: free personal signing first** (install on
+   the user's own iPhone via Xcode + a free Apple ID; 7-day re-sign), **migrating to the Apple Developer
+   Program + TestFlight** when ready for the wife's phone / public beta — that migration is **only a
+   Signing-Team switch in Xcode + Archive→upload**, no code/project changes, so building now doesn't lock
+   anything in.
 
-**Open (deferred to the iOS-shell slices (iii)/(iv) — they don't block (i)/(ii)):**
+**Open (deferred to the iOS-shell slices (iii)/(iv)):**
 
-7. **iCloud download-on-demand UX** — how much to build for not-yet-downloaded files: a simple
+8. **iCloud download-on-demand UX** — how much to build for not-yet-downloaded files: a simple
    blocking "downloading…" state vs. a richer affordance.
-8. **Project specifics** — minimum **iOS version** (e.g. iOS 16+?) and the **bundle id / Apple
-   Developer team** for `capacitor.config` + signing (the user provides these when we reach slice iii).
 
 ## 12. Changelog
 
@@ -253,6 +257,13 @@ reduced-motion honored (already global).
   code. The crypto layer is now async (awaits rippled to callers/tests/e2e). `Buffer`,
   portable-base64, and the `randomUUID` call sites are intentionally deferred to **slice (ii)** (the
   `@selfos/core` extraction, "no `node:*`"). Gates green: typecheck/lint/format, 183 unit, 23 E2E.
+- 2026-06-10 — **slice (iii-a) landed (§5.3/§5.4):** first iOS step — a standalone **web build** of the
+  renderer (`vite.web.config.ts` → `dist-web/`; `index.html`→`main.web.tsx`) + **Capacitor** scaffold
+  (`@capacitor/core`+`ios`+`cli`, `capacitor.config.ts`: `com.highfivery.selfos`, webDir `dist-web`). A
+  **temporary stub `window.selfos`** (`host/stubBridge.ts`) renders the UI in the WKWebView to validate
+  the Capacitor→Xcode→device toolchain before the real native hosts (iii-b/c/d); it's throwaway. Verified:
+  the full shell renders at 375px; Electron untouched (23 E2E); 193 unit green. The user runs `pnpm
+build:web` then `cap add ios` + Xcode on their Mac (free signing first; §11.7). Next: iii-b VaultFs.
 - 2026-06-10 — **`masterKey` relocated into `@selfos/core/crypto` (§5.1/§5.2):** the master-key
   generate/store/recover flow now lives in core (returns `Uint8Array` via the core base64 helpers),
   closing the last `Buffer` bridge — the app threads `Uint8Array` for the master key end-to-end. recovery.enc

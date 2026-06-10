@@ -1,0 +1,21 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "selfos-web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@selfos/desktop",
+        "exec",
+        "vite",
+        "preview",
+        "--config",
+        "vite.web.config.ts",
+        "--port",
+        "4319"
+      ],
+      "port": 4319
+    }
+  ]
+}

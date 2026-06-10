@@ -4,10 +4,16 @@ node_modules/
 
 # Build output
 dist/
+dist-web/
 out/
 build/
 .vite/
 *.tsbuildinfo
+
+# Capacitor / iOS build artifacts (the ios/ project itself is committed; these are generated)
+apps/desktop/ios/App/App/public/
+apps/desktop/ios/App/Pods/
+apps/desktop/ios/DerivedData/
 
 # Test / coverage
 coverage/

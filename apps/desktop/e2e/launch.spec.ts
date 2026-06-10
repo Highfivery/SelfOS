@@ -198,6 +198,28 @@ test('people: add a person and link a relationship', async () => {
   }
 });
 
+test('people: shared and private notes persist', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'People' }).click();
+    await w.getByRole('button', { name: 'Tester Subject' }).click();
+    await w.getByLabel('Shared notes').fill('enjoys cycling');
+    await w.getByLabel('Private notes').fill('processing a tough week');
+    await w.getByRole('button', { name: 'Save' }).click();
+
+    // Reopen and confirm both fields round-tripped through encryption.
+    await w.getByRole('button', { name: 'Tester Subject' }).click();
+    await expect(w.getByLabel('Shared notes')).toHaveValue('enjoys cycling');
+    await expect(w.getByLabel('Private notes')).toHaveValue('processing a tough week');
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('access: grant a login, switch person, and gate the People nav', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);

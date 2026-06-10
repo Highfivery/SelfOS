@@ -31,7 +31,8 @@ export function PersonEditor({
   const [displayName, setDisplayName] = useState(person?.displayName ?? '');
   const [isSubject, setIsSubject] = useState(person?.isSubject ?? false);
   const [pronouns, setPronouns] = useState(person?.pronouns ?? '');
-  const [notes, setNotes] = useState(person?.publicNotes ?? '');
+  const [sharedNotes, setSharedNotes] = useState(person?.publicNotes ?? '');
+  const [privateNotes, setPrivateNotes] = useState(person?.privateNotes ?? '');
   const [busy, setBusy] = useState(false);
 
   const save = async (): Promise<void> => {
@@ -44,7 +45,8 @@ export function PersonEditor({
         isSubject,
         tags: person?.tags ?? [],
         ...(pronouns.trim() ? { pronouns: pronouns.trim() } : {}),
-        ...(notes.trim() ? { publicNotes: notes.trim() } : {}),
+        ...(sharedNotes.trim() ? { publicNotes: sharedNotes.trim() } : {}),
+        ...(privateNotes.trim() ? { privateNotes: privateNotes.trim() } : {}),
       });
       onDone();
     } finally {
@@ -103,13 +105,23 @@ export function PersonEditor({
               />
             )}
           </Field>
-          <Field label="Notes">
+          <Field label="Shared notes" help="Context others' AI may use — keep it shareable.">
             {(props) => (
               <TextInput
                 {...props}
-                value={notes}
-                placeholder="Anything helpful for context"
-                onChange={(event) => setNotes(event.target.value)}
+                value={sharedNotes}
+                placeholder="e.g. loves hiking; works in nursing"
+                onChange={(event) => setSharedNotes(event.target.value)}
+              />
+            )}
+          </Field>
+          <Field label="Private notes" help="Never shared with anyone else's AI.">
+            {(props) => (
+              <TextInput
+                {...props}
+                value={privateNotes}
+                placeholder="Just for this person's own sessions"
+                onChange={(event) => setPrivateNotes(event.target.value)}
               />
             )}
           </Field>

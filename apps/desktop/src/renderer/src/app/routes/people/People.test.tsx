@@ -55,4 +55,28 @@ describe('People', () => {
     expect(peopleSave).toHaveBeenCalled();
     expect(peopleSave.mock.calls[0]?.[0]).toMatchObject({ displayName: 'Sam', isSubject: false });
   });
+
+  it('saves shared and private notes separately', async () => {
+    const peopleSave = vi.fn((input: { displayName: string }) =>
+      Promise.resolve({
+        id: 'new',
+        schemaVersion: 1,
+        displayName: input.displayName,
+        isSubject: false,
+        tags: [],
+        createdAt: 'now',
+        updatedAt: 'now',
+      }),
+    );
+    installMockBridge({ peopleSave });
+    render(<People />);
+    await userEvent.click(screen.getByRole('button', { name: 'Add person' }));
+    await userEvent.type(screen.getByLabelText('Name'), 'Sam');
+    await userEvent.type(screen.getByLabelText('Shared notes'), 'a nurse');
+    await userEvent.type(screen.getByLabelText('Private notes'), 'secret');
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    expect(peopleSave).toHaveBeenCalledWith(
+      expect.objectContaining({ publicNotes: 'a nurse', privateNotes: 'secret' }),
+    );
+  });
 });

@@ -232,6 +232,13 @@ A running log of durable decisions and feedback captured into the project config
   switch, nav gated). Known v1 limits: only the nav (not the route) is gated, and a PIN-less owner is
   switchable by anyone on the device — the super-admin passphrase is the real gate. The roles×capability
   matrix editor, the concealed super-admin unlock, and shareable context are People-3.
+- 2026-06-09 — Build People-3c (shareable-vs-private context) — **completes the People feature
+  ([04-people-roles](docs/specs/04-people-roles.md))**: the person editor splits notes into **Shared**
+  (`publicNotes`, may feed others' AI) and **Private** (`privateNotes`, never shared); a main-process
+  `buildContext(personId)` assembles a session context block — the person's own full profile + the
+  shareable facts about the people they relate to (others' `publicNotes` + relationship `publicNotes`),
+  **excluding other people's private notes**. Tests prove the exclusion + that both notes persist
+  encrypted. `buildContext` is consumed by the AI chat slice (next).
 - 2026-06-09 — Build People-3b (concealed super-admin unlock): a hidden long-press on the version in
   About opens a deliberately generic passphrase prompt; the super-admin passphrase (set at setup) is
   verified in main (scrypt, `superadmin:unlock`) and, on success, enters an in-memory inspect-all mode

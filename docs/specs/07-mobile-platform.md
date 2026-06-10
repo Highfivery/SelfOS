@@ -1,6 +1,6 @@
 # 07 — Mobile platform (Capacitor + iCloud-Drive vault)
 
-> **Status:** Draft · _last updated 2026-06-10_
+> **Status:** Approved · _last updated 2026-06-10_
 >
 > Bring SelfOS to iPhone as **one codebase**: the same responsive React UI runs inside a native iOS
 > shell via **Capacitor**, reading and writing the **same shared vault** as desktop — on **iCloud
@@ -211,32 +211,38 @@ reduced-motion honored (already global).
   in headless CI** (and not in this build environment); the iOS build/signing/run is verified by the
   user locally. CI stays lint/typecheck/unit and gains the `@selfos/core` test project.
 
-## 11. Open questions
+## 11. Resolved decisions & open questions
 
-1. **Claude streaming on iOS** — (a) Anthropic SDK in **browser mode** (`dangerouslyAllowBrowser`,
-   fetch + SSE) — simplest, reuses the SDK, but relies on `WKWebView` CORS/SSE to `api.anthropic.com`;
-   (b) a **native HTTP plugin** (no CORS) — but SSE streaming over the Capacitor bridge needs a
-   streaming-capable plugin. _Proposed: try (a); fall back to (b)._ Your call.
-2. **Crypto unification** — OK to rewrite `cryptoService`/`masterKey`/`pin` off `node:crypto` to
-   **WebCrypto + `scrypt-js`** (one impl, both platforms, existing vaults stay readable — proven by
-   fixtures)? It's load-bearing, so it gets its own slice + thorough tests.
-3. **Code organization** — extract to **`packages/@selfos/core`** and **reuse the existing
-   `apps/desktop` renderer** for the iOS build, vs. a separate `apps/mobile`. \_Proposed: `@selfos/core`
-   - one shared renderer.\_
-4. **Custom native FS plugin** — confirm building a small **Swift Capacitor plugin** for
-   security-scoped iCloud access + coordinated FS. (Required to share the _same_ iCloud folder as
-   desktop; the app-sandbox iCloud _container_ would be a different folder and break the shared vault.)
-5. **iCloud download-on-demand UX** — how much to build now for not-yet-downloaded files: a simple
-   blocking "downloading…" state, or a richer affordance?
-6. **Project specifics** — minimum **iOS version** (e.g. iOS 16+?) and the **bundle id / Apple
-   Developer team** for `capacitor.config` + signing (you provide).
-7. **Sequencing** — this is several slices, and only the first two are verifiable in this environment:
-   (i) **crypto unification**; (ii) **extract `@selfos/core` + re-wire Electron through the host
-   interfaces** (no behavior change, fully testable on desktop — and it cleans up the seams now);
-   (iii) **Capacitor shell + iOS plugins + binding**; (iv) **iOS build/signing** (you, in Xcode).
-   _Proposed: land (i)+(ii) first; they stand on their own even before any iOS work._
+**Resolved with the user (2026-06-10):**
+
+1. **Sequencing** — land the two desktop-verifiable refactors first, in order: **(i) crypto
+   unification**, then **(ii) extract `@selfos/core` + re-wire Electron through the host interfaces**
+   (no behavior change, fully tested on desktop). Then the iOS-only work: **(iii) Capacitor shell +
+   iOS plugins + binding**, **(iv) iOS build/signing** (the user, in Xcode).
+2. **Crypto** — **unify on WebCrypto + `scrypt-js`** (one implementation on both platforms; existing
+   desktop vaults stay byte-for-byte readable — proven by fixtures). Not a per-platform interface.
+3. **Claude streaming on iOS** — try the **Anthropic SDK in browser mode** (`dangerouslyAllowBrowser`,
+   fetch + SSE) first; **fall back to a native HTTP plugin** if `WKWebView` blocks CORS/SSE.
+4. **Code organization** — extract services to **`packages/@selfos/core`** and **reuse the existing
+   `apps/desktop` renderer** for the iOS build (one UI, one place). No separate `apps/mobile`.
+5. **Platform direction** — **iOS only** for now (Android designed-for, not built); **code-ready**
+   build (the user runs Xcode build + signing with their Apple Developer account).
+6. **Custom native FS plugin** — confirmed: build a small **Swift Capacitor plugin** for
+   security-scoped iCloud access + coordinated FS (required to share the _same_ iCloud folder as
+   desktop; the app-sandbox iCloud _container_ would be a different folder and break the shared vault).
+
+**Open (deferred to the iOS-shell slices (iii)/(iv) — they don't block (i)/(ii)):**
+
+7. **iCloud download-on-demand UX** — how much to build for not-yet-downloaded files: a simple
+   blocking "downloading…" state vs. a richer affordance.
+8. **Project specifics** — minimum **iOS version** (e.g. iOS 16+?) and the **bundle id / Apple
+   Developer team** for `capacitor.config` + signing (the user provides these when we reach slice iii).
 
 ## 12. Changelog
 
 - 2026-06-10 — created (draft) per the confirmed iPhone direction (Capacitor, iCloud-Drive vault,
-  platform-adapter behind the existing seams, iOS-only, code-ready build). Open questions in §11.
+  platform-adapter behind the existing seams, iOS-only, code-ready build).
+- 2026-06-10 — resolved §11 (sequencing = crypto → core → iOS shell → build; crypto unified on
+  WebCrypto + scrypt-js; iOS Claude = browser-mode SDK with a native-HTTP fallback; code org =
+  `@selfos/core` + one renderer; custom Swift FS plugin confirmed) after review; marked **Approved**.
+  iCloud download-on-demand UX and the iOS bundle-id/version remain open for the iOS-shell slices.

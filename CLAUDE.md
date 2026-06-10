@@ -239,6 +239,16 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-10 — Spec approved: **[07-mobile-platform](docs/specs/07-mobile-platform.md)** (Capacitor +
+  iCloud-Drive vault). SelfOS comes to iPhone as one codebase: the same responsive renderer in a
+  WKWebView, sharing the same iCloud-Drive vault as desktop, via a **platform-adapter** (FileSystem /
+  SecretStore / ClaudeClient host interfaces) so the Electron-main business logic runs on both hosts.
+  Resolved: sequencing = **(i) crypto unification → (ii) extract `@selfos/core` + re-wire Electron →
+  (iii) Capacitor shell + iOS plugins → (iv) user builds/signs**; crypto **unified on WebCrypto +
+  scrypt-js** (one impl, existing vaults stay readable); iOS Claude = **browser-mode SDK with a
+  native-HTTP fallback**; **iOS-only**, **code-ready** build. Slices (i)+(ii) are desktop-verifiable
+  here; (iii)+(iv) need a Mac/Xcode. GitHub: repo live at `Highfivery/SelfOS`, CI (lint/typecheck/unit)
+  green; E2E stays local (needs a display).
 - 2026-06-10 — Fix (TopBar alignment + usage-ring visibility — user flagged): the appearance toggle,
   usage ring, and account control now share a fixed **32px height** and align to the same top edge
   (the ring's wrapper was `display:block`, a line-box gap that floated it ~2px high; now `inline-flex`

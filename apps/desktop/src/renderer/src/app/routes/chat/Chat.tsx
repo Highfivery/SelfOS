@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { MessageCircle, Plus, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { MessageCircle, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useConversationStore } from '../../../stores/conversationStore';
 import { useSetting } from '../../../settings/useSetting';
 import { ANTHROPIC_API_KEY_ID } from '@shared/channels';
@@ -10,6 +11,7 @@ import {
   IconButton,
   Stack,
   Text,
+  TextInput,
 } from '../../../design-system/components';
 import { formatUsd } from '../usage/format';
 import { Composer } from './Composer';
@@ -34,9 +36,12 @@ export function Chat(): JSX.Element {
   const open = useConversationStore((s) => s.open);
   const send = useConversationStore((s) => s.send);
   const remove = useConversationStore((s) => s.remove);
+  const rename = useConversationStore((s) => s.rename);
   const appendChunk = useConversationStore((s) => s.appendChunk);
 
+  const navigate = useNavigate();
   const threadRef = useRef<HTMLDivElement>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
 
   useEffect(() => {
     void load();
@@ -69,20 +74,44 @@ export function Chat(): JSX.Element {
                 conversation.id === activeId ? `${styles.conv} ${styles.convActive}` : styles.conv
               }
             >
-              <button
-                type="button"
-                className={styles.convOpen}
-                onClick={() => void open(conversation.id)}
-              >
-                <MessageCircle size={14} aria-hidden="true" />
-                <span className={styles.convTitle}>{conversation.title}</span>
-              </button>
-              <IconButton
-                aria-label={`Delete ${conversation.title}`}
-                onClick={() => void remove(conversation.id)}
-              >
-                <Trash2 size={14} aria-hidden="true" />
-              </IconButton>
+              {renamingId === conversation.id ? (
+                <TextInput
+                  aria-label="Conversation title"
+                  defaultValue={conversation.title}
+                  autoFocus
+                  onBlur={(event) => {
+                    void rename(conversation.id, event.target.value);
+                    setRenamingId(null);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') event.currentTarget.blur();
+                    if (event.key === 'Escape') setRenamingId(null);
+                  }}
+                />
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className={styles.convOpen}
+                    onClick={() => void open(conversation.id)}
+                  >
+                    <MessageCircle size={14} aria-hidden="true" />
+                    <span className={styles.convTitle}>{conversation.title}</span>
+                  </button>
+                  <IconButton
+                    aria-label={`Rename ${conversation.title}`}
+                    onClick={() => setRenamingId(conversation.id)}
+                  >
+                    <Pencil size={14} aria-hidden="true" />
+                  </IconButton>
+                  <IconButton
+                    aria-label={`Delete ${conversation.title}`}
+                    onClick={() => void remove(conversation.id)}
+                  >
+                    <Trash2 size={14} aria-hidden="true" />
+                  </IconButton>
+                </>
+              )}
             </div>
           ))}
         </Stack>
@@ -91,17 +120,18 @@ export function Chat(): JSX.Element {
       <section className={styles.main}>
         {!configured ? (
           <div className={styles.empty}>
-            <Stack gap={2} align="center">
+            <Stack gap={3} align="center">
               <Heading level={3}>Connect Claude to start</Heading>
-              <Text tone="secondary">
-                Enable AI and add your key in Settings → AI to begin a conversation.
-              </Text>
+              <Text tone="secondary">Enable AI and add your key to begin a conversation.</Text>
+              <Button variant="primary" onClick={() => navigate('/settings')}>
+                Open Settings
+              </Button>
             </Stack>
           </div>
         ) : (
           <>
-            <div className={styles.thread} ref={threadRef} aria-live="polite">
-              {messages.length === 0 && !streaming ? (
+            <div className={styles.thread} ref={threadRef} aria-live="polite" aria-busy={sending}>
+              {messages.length === 0 && !streaming && !sending ? (
                 <div className={styles.empty}>
                   <Text tone="secondary">What’s on your mind?</Text>
                 </div>
@@ -116,6 +146,11 @@ export function Chat(): JSX.Element {
                     </div>
                   ))}
                   {streaming ? <div className={styles.coachMsg}>{streaming}</div> : null}
+                  {sending && !streaming ? (
+                    <div className={`${styles.coachMsg} ${styles.thinking}`}>
+                      Coach is thinking…
+                    </div>
+                  ) : null}
                 </Stack>
               )}
             </div>

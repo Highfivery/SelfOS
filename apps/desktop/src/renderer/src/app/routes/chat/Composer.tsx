@@ -35,6 +35,7 @@ export function Composer({
         placeholder="Write a message…"
         value={text}
         rows={2}
+        autoFocus
         disabled={disabled}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={onKeyDown}

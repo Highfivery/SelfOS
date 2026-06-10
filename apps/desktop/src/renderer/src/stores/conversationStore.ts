@@ -15,6 +15,7 @@ interface ConversationState {
   newConversation: () => void;
   open: (id: string) => Promise<void>;
   send: (text: string) => Promise<void>;
+  rename: (id: string, title: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
   appendChunk: (delta: string) => void;
 }
@@ -74,6 +75,12 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     } else {
       set({ sending: false, streaming: '', error: result?.message ?? 'Something went wrong.' });
     }
+  },
+  rename: async (id, title) => {
+    const trimmed = title.trim();
+    if (!trimmed) return;
+    await window.selfos?.conversationsRename({ id, title: trimmed });
+    await get().load();
   },
   remove: async (id) => {
     await window.selfos?.conversationsDelete(id);

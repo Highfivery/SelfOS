@@ -94,6 +94,11 @@
   color: var(--color-text-primary);
 }
 
+.thinking {
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
 .costRow {
   display: flex;
   align-items: center;

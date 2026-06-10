@@ -240,6 +240,10 @@ A running log of durable decisions and feedback captured into the project config
   `<progress>` bars. IPC: `usage:summary`, `budget:get`/`setApp`/`setPerson`/`status` (computed in
   main; `UsageSummary`/`BudgetState` moved to shared). Tests + an E2E (seeded usage → dashboard +
   budget save + no-overflow guard). v1 limit: app-scope is UI-gated, not IPC-enforced.
+- 2026-06-10 — Build Chat-6c (chat polish): conversation **rename** (inline edit; `conversations:rename`
+  IPC), a "Coach is thinking…" indicator while awaiting the first chunk, an **Open Settings** shortcut
+  in the not-configured state, and an accessibility pass (`aria-busy` on the thread, composer
+  autofocus). Tests + an E2E that renames a conversation. Completes the chat surface.
 - 2026-06-10 — Build Chat-6b (the chat UI for [05-conversations](docs/specs/05-conversations.md)):
   a **Chat** screen (nav gated by `sessions.own`) with a conversation list (new/open/delete), a
   streaming message thread, a composer (Enter sends / Shift+Enter newline), a running **cost-in-chat**

@@ -57,6 +57,7 @@ const bridge: SelfosBridge = {
   },
   conversationsList: () => ipcRenderer.invoke(IpcChannels.conversationsList),
   conversationsGet: (id) => ipcRenderer.invoke(IpcChannels.conversationsGet, id),
+  conversationsRename: (input) => ipcRenderer.invoke(IpcChannels.conversationsRename, input),
   conversationsDelete: (id) => ipcRenderer.invoke(IpcChannels.conversationsDelete, id),
 };
 

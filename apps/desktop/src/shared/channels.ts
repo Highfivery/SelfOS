@@ -55,6 +55,7 @@ export const IpcChannels = {
   chatChunk: 'chat:chunk', // main → renderer event
   conversationsList: 'conversations:list',
   conversationsGet: 'conversations:get',
+  conversationsRename: 'conversations:rename',
   conversationsDelete: 'conversations:delete',
 } as const;
 
@@ -213,6 +214,8 @@ export interface SelfosBridge {
   conversationsList(): Promise<ConversationMeta[]>;
   /** Load a full conversation transcript. */
   conversationsGet(id: string): Promise<Conversation | null>;
+  /** Rename a conversation. */
+  conversationsRename(input: { id: string; title: string }): Promise<void>;
   /** Delete a conversation. */
   conversationsDelete(id: string): Promise<void>;
 }

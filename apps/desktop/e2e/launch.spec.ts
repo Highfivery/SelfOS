@@ -291,6 +291,13 @@ test('chat: send a message, stream a reply, and show cost + crisis footer', asyn
     await expect(w.getByText(/This chat:/)).toBeVisible(); // cost-in-chat
     await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible(); // crisis footer
 
+    // Rename the conversation.
+    await w.getByRole('button', { name: /^Rename / }).click();
+    const titleInput = w.getByLabel('Conversation title');
+    await titleInput.fill('My week');
+    await titleInput.press('Enter');
+    await expect(w.getByText('My week')).toBeVisible();
+
     const overflow = await w.evaluate(() => {
       const main = document.querySelector('main');
       return main ? main.scrollWidth - main.clientWidth : 0;

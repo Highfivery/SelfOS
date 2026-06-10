@@ -126,6 +126,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     onChatChunk: () => () => {},
     conversationsList: () => Promise.resolve([]),
     conversationsGet: () => Promise.resolve(null),
+    conversationsRename: () => Promise.resolve(),
     conversationsDelete: () => Promise.resolve(),
     ...overrides,
   };

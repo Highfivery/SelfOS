@@ -64,6 +64,7 @@ import {
   deleteConversation,
   getConversation,
   listConversations,
+  saveConversation,
 } from './conversations/conversationService';
 import { startVaultWatcher } from './vaultWatcherManager';
 
@@ -398,6 +399,20 @@ export function registerIpcHandlers(): void {
       return getConversation(ctx.vaultDir, ctx.key, personId, z.string().min(1).parse(raw));
     },
   );
+
+  ipcMain.handle(IpcChannels.conversationsRename, async (_event, raw): Promise<void> => {
+    const ctx = await vaultAndKey();
+    const personId = ctx ? await getActivePersonId(userDataDir()) : null;
+    if (!ctx || !personId) return;
+    const { id, title } = z.object({ id: z.string().min(1), title: z.string().min(1) }).parse(raw);
+    const conversation = await getConversation(ctx.vaultDir, ctx.key, personId, id);
+    if (!conversation) return;
+    await saveConversation(ctx.vaultDir, ctx.key, {
+      ...conversation,
+      title,
+      updatedAt: new Date().toISOString(),
+    });
+  });
 
   ipcMain.handle(IpcChannels.conversationsDelete, async (_event, raw): Promise<void> => {
     const ctx = await vaultAndKey();

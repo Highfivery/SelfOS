@@ -2,6 +2,10 @@
    Light is the :root default; [data-theme='dark'] overrides the semantic color tokens. */
 
 :root {
+  /* Configurable scales (driven by appearance settings) */
+  --type-scale: 1;
+  --space-scale: 1;
+
   /* Typography */
   --font-sans: 'Mulish Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-serif: 'Lora', Georgia, 'Times New Roman', serif;
@@ -15,17 +19,17 @@
   --text-xl: 1.5rem;
   --text-2xl: 1.875rem;
 
-  /* Spacing (4px base) */
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
-  --space-8: 32px;
-  --space-10: 40px;
-  --space-12: 48px;
-  --space-16: 64px;
+  /* Spacing (4px base, scaled by density via --space-scale) */
+  --space-1: calc(4px * var(--space-scale));
+  --space-2: calc(8px * var(--space-scale));
+  --space-3: calc(12px * var(--space-scale));
+  --space-4: calc(16px * var(--space-scale));
+  --space-5: calc(20px * var(--space-scale));
+  --space-6: calc(24px * var(--space-scale));
+  --space-8: calc(32px * var(--space-scale));
+  --space-10: calc(40px * var(--space-scale));
+  --space-12: calc(48px * var(--space-scale));
+  --space-16: calc(64px * var(--space-scale));
 
   /* Radius */
   --radius-sm: 6px;
@@ -88,6 +92,16 @@
   --color-info: #94b2c6;
 }
 
+/* Text size: scaling the root font-size scales every rem-based token. */
+html {
+  font-size: calc(16px * var(--type-scale));
+}
+
+/* Density: compact tightens the spacing scale. */
+[data-density='compact'] {
+  --space-scale: 0.86;
+}
+
 :focus-visible {
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
@@ -100,4 +114,11 @@
     animation-duration: 0.001ms !important;
     transition-duration: 0.001ms !important;
   }
+}
+
+[data-reduce-motion='true'] *,
+[data-reduce-motion='true'] *::before,
+[data-reduce-motion='true'] *::after {
+  animation-duration: 0.001ms !important;
+  transition-duration: 0.001ms !important;
 }

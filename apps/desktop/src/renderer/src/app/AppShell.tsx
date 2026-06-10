@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom';
-import { House, Shapes } from 'lucide-react';
+import { House, Settings, Shapes } from 'lucide-react';
 import { AppearanceToggle } from './AppearanceToggle';
 import { useVaultConflicts } from './useVaultConflicts';
 import { Banner } from '../design-system/components';
@@ -35,6 +35,10 @@ export function AppShell(): JSX.Element {
         <div className={styles.spacer} />
 
         <footer className={styles.footer}>
+          <NavLink to="/settings" className={navClass}>
+            <Settings size={18} aria-hidden="true" />
+            <span>Settings</span>
+          </NavLink>
           <AppearanceToggle />
         </footer>
       </aside>

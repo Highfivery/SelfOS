@@ -34,6 +34,13 @@ export const WindowBoundsSchema = z.object({
 });
 export type WindowBounds = z.infer<typeof WindowBoundsSchema>;
 
+/** A settings file (`config/settings.json` in the vault, or the device-local equivalent). */
+export const SettingsFileSchema = z.object({
+  schemaVersion: z.number().int().positive(),
+  values: z.record(z.string(), z.unknown()),
+});
+export type SettingsFile = z.infer<typeof SettingsFileSchema>;
+
 /** Device-local state (in userData, never synced) — active vault + window geometry. */
 export const DeviceStateSchema = z.object({
   schemaVersion: z.number().int().positive(),

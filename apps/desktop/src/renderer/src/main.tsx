@@ -1,5 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+// Register built-in settings before any store reads defaults.
+import './settings/builtins';
 import '@fontsource-variable/mulish';
 import '@fontsource/lora/400.css';
 import '@fontsource/lora/400-italic.css';

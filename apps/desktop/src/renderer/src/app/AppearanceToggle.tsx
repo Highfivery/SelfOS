@@ -1,6 +1,6 @@
 import { Monitor, Moon, Sun } from 'lucide-react';
-import { useTheme } from './ThemeProvider';
 import { SegmentedControl, type SegmentOption } from '../design-system/components';
+import { useSetting } from '../settings/useSetting';
 import type { Appearance } from '../design-system/theme';
 
 const OPTIONS: ReadonlyArray<SegmentOption<Appearance>> = [
@@ -10,12 +10,12 @@ const OPTIONS: ReadonlyArray<SegmentOption<Appearance>> = [
 ];
 
 export function AppearanceToggle(): JSX.Element {
-  const { appearance, setAppearance } = useTheme();
+  const [theme, setTheme] = useSetting('appearance.theme');
   return (
     <SegmentedControl
       options={OPTIONS}
-      value={appearance}
-      onChange={setAppearance}
+      value={theme}
+      onChange={setTheme}
       aria-label="Appearance"
       iconOnly
     />

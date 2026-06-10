@@ -214,3 +214,10 @@ A running log of durable decisions and feedback captured into the project config
 - 2026-06-09 — Dev ergonomics: added root `dev`/`build` scripts (so `pnpm dev` runs the desktop app)
   and set an explicit Electron app name (`app.setName('SelfOS')`) so dev `userData` is `SelfOS`,
   avoiding a single-instance-lock collision with other scaffolded `@selfos/desktop` apps.
+- 2026-06-09 — Build slice 4 (v1 centerpiece): the schema-driven settings system. Registry +
+  control registry + typed `useSetting` (declaration-merged `SettingsTypeMap`), vault-scoped
+  persistence + IPC, and an auto-generated Settings UI (sections, search, per-setting reset). Working
+  Appearance settings (theme/density/text-size/reduce-motion) applied via tokens; Vault + About
+  sections. `ThemeProvider` now reads from settings. Added a shared mock-bridge test helper. Deferred:
+  accent options, high-contrast, the AI/secret settings + keychain (slice 5), and the broader
+  feature-module registry abstraction.

@@ -1,12 +1,25 @@
-import { app, dialog, ipcMain } from 'electron';
+import { app, dialog, ipcMain, shell } from 'electron';
 import { z } from 'zod';
-import { IpcChannels } from '../shared/channels';
+import { IpcChannels, type SettingsValues } from '../shared/channels';
 import { BootStateSchema, type BootState } from '../shared/schemas';
 import { computeBootState } from './boot';
 import { initializeVault } from './vault/vault';
 import { findConflicts } from './vault/conflicts';
 import { readDeviceState, writeDeviceState } from './state/deviceStore';
+import { readAllSettings, resetSettingValue, writeSettingValue } from './settings/settingsStore';
 import { startVaultWatcher } from './vaultWatcherManager';
+
+const ScopeSchema = z.enum(['vault', 'device']);
+const SetSettingSchema = z.object({
+  key: z.string().min(1),
+  value: z.unknown(),
+  scope: ScopeSchema,
+});
+const ResetSettingSchema = z.object({ key: z.string().min(1), scope: ScopeSchema });
+
+async function activeVaultPath(): Promise<string | null> {
+  return (await readDeviceState(userDataDir())).vaultPath;
+}
 
 function userDataDir(): string {
   return app.getPath('userData');
@@ -41,7 +54,32 @@ export function registerIpcHandlers(): void {
   });
 
   ipcMain.handle(IpcChannels.getConflicts, async (): Promise<string[]> => {
-    const { vaultPath } = await readDeviceState(userDataDir());
+    const vaultPath = await activeVaultPath();
     return vaultPath ? findConflicts(vaultPath) : [];
+  });
+
+  ipcMain.handle(IpcChannels.revealVault, async (): Promise<void> => {
+    const vaultPath = await activeVaultPath();
+    if (vaultPath) await shell.openPath(vaultPath);
+  });
+
+  ipcMain.handle(IpcChannels.getAppVersion, (): string => app.getVersion());
+
+  ipcMain.handle(IpcChannels.getSettings, async (): Promise<SettingsValues> => {
+    const vaultPath = await activeVaultPath();
+    if (!vaultPath) return { vault: {}, device: {} };
+    return readAllSettings(vaultPath, userDataDir());
+  });
+
+  ipcMain.handle(IpcChannels.setSetting, async (_event, raw: unknown): Promise<void> => {
+    const { key, value, scope } = SetSettingSchema.parse(raw);
+    const vaultPath = await activeVaultPath();
+    if (vaultPath) await writeSettingValue(scope, key, value, vaultPath, userDataDir());
+  });
+
+  ipcMain.handle(IpcChannels.resetSetting, async (_event, raw: unknown): Promise<void> => {
+    const { key, scope } = ResetSettingSchema.parse(raw);
+    const vaultPath = await activeVaultPath();
+    if (vaultPath) await resetSettingValue(scope, key, vaultPath, userDataDir());
   });
 }

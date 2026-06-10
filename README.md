@@ -11,12 +11,14 @@ Claude API.
 
 ## Status
 
-**Build phase — slices 1–3 landed.** All four foundation specs are approved (see
+**Build phase — slices 1–4 landed.** All four foundation specs are approved (see
 [`docs/specs/`](docs/specs)). In so far: a secure Electron window with the calm, themed (light/dark)
-design tokens (1); the design-system primitive components + a dev gallery (2); and the vault service
-with first-run vault selection and the boot flow — onboarding, vault-error recovery, and the ready
-shell (3). We build slice by slice, perfecting each before the next; the schema-driven settings
-registry (the v1 centerpiece) and AI are the next slices.
+design tokens (1); the design-system primitive components + a dev gallery (2); the vault service with
+first-run vault selection and the boot flow — onboarding, vault-error recovery, and the ready shell
+(3, hardened in 3b with migrations, file-watching, sync-conflict detection, and window-state); and
+the **schema-driven settings system** — registry, typed access, auto-generated Settings UI, and
+working appearance settings persisted to the vault (4). We build slice by slice; AI (keychain + Claude
+proxy) is next.
 
 ## Tech stack
 

@@ -11,6 +11,7 @@ const bridge: SelfosBridge = {
   selectVaultFolder: () => ipcRenderer.invoke(IpcChannels.selectVaultFolder),
   useVault: (path) => ipcRenderer.invoke(IpcChannels.useVault, path),
   getConflicts: () => ipcRenderer.invoke(IpcChannels.getConflicts),
+  revealVault: () => ipcRenderer.invoke(IpcChannels.revealVault),
   onVaultChanged: (listener) => {
     const handler = (): void => listener();
     ipcRenderer.on(IpcChannels.vaultChanged, handler);
@@ -18,6 +19,10 @@ const bridge: SelfosBridge = {
       ipcRenderer.removeListener(IpcChannels.vaultChanged, handler);
     };
   },
+  getAppVersion: () => ipcRenderer.invoke(IpcChannels.getAppVersion),
+  getSettings: () => ipcRenderer.invoke(IpcChannels.getSettings),
+  setSetting: (input) => ipcRenderer.invoke(IpcChannels.setSetting, input),
+  resetSetting: (input) => ipcRenderer.invoke(IpcChannels.resetSetting, input),
 };
 
 contextBridge.exposeInMainWorld('selfos', bridge);

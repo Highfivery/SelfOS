@@ -1,62 +1,33 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
-import {
-  APPEARANCE_STORAGE_KEY,
-  isAppearance,
-  resolveTheme,
-  type Appearance,
-} from '../design-system/theme';
-
-interface ThemeContextValue {
-  appearance: Appearance;
-  setAppearance: (appearance: Appearance) => void;
-}
-
-const ThemeContext = createContext<ThemeContextValue | null>(null);
-
-function readStoredAppearance(): Appearance {
-  try {
-    const stored = localStorage.getItem(APPEARANCE_STORAGE_KEY);
-    return isAppearance(stored) ? stored : 'system';
-  } catch {
-    return 'system';
-  }
-}
+import { useEffect, type ReactNode } from 'react';
+import { useSettingsStore } from '../settings/settingsStore';
+import { resolveTheme, type Appearance } from '../design-system/theme';
 
 /**
- * Applies the resolved theme to `<html data-theme>` and keeps it in sync with the OS when the
- * appearance is `system`. Appearance is persisted locally; the real settings-backed version arrives
- * with the settings slice (spec 03).
+ * Applies the appearance settings to `<html>` (theme, density, text scale, reduced motion) and keeps
+ * the theme in sync with the OS when set to "system". The settings store is the source of truth;
+ * before it loads, defaults apply (system theme), so there's no jarring flash.
  */
 export function ThemeProvider({ children }: { children: ReactNode }): JSX.Element {
-  const [appearance, setAppearanceState] = useState<Appearance>(readStoredAppearance);
+  const theme = useSettingsStore((s) => s.values['appearance.theme'] as Appearance | undefined);
+  const density = useSettingsStore((s) => s.values['appearance.density'] as string | undefined);
+  const textScale = useSettingsStore((s) => s.values['appearance.textScale'] as number | undefined);
+  const reduceMotion = useSettingsStore(
+    (s) => s.values['appearance.reduceMotion'] as boolean | undefined,
+  );
 
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)');
     const apply = (): void => {
-      const theme = resolveTheme(appearance, media.matches);
-      document.documentElement.setAttribute('data-theme', theme);
+      const root = document.documentElement;
+      root.setAttribute('data-theme', resolveTheme(theme ?? 'system', media.matches));
+      root.setAttribute('data-density', density ?? 'comfortable');
+      root.style.setProperty('--type-scale', String(textScale ?? 1));
+      root.setAttribute('data-reduce-motion', reduceMotion ? 'true' : 'false');
     };
     apply();
     media.addEventListener('change', apply);
     return () => media.removeEventListener('change', apply);
-  }, [appearance]);
+  }, [theme, density, textScale, reduceMotion]);
 
-  const setAppearance = useCallback((next: Appearance) => {
-    try {
-      localStorage.setItem(APPEARANCE_STORAGE_KEY, next);
-    } catch {
-      // Ignore storage failures; the in-memory preference still applies for this session.
-    }
-    setAppearanceState(next);
-  }, []);
-
-  return (
-    <ThemeContext.Provider value={{ appearance, setAppearance }}>{children}</ThemeContext.Provider>
-  );
-}
-
-export function useTheme(): ThemeContextValue {
-  const context = useContext(ThemeContext);
-  if (!context) throw new Error('useTheme must be used within a ThemeProvider');
-  return context;
+  return <>{children}</>;
 }

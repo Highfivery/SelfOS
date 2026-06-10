@@ -8,8 +8,10 @@
 > **encrypted** in the vault. This is where SelfOS finally _talks_.
 
 Builds on [`00-architecture.md`](00-architecture.md), [`01-design-system.md`](01-design-system.md),
-[`03-settings.md`](03-settings.md) (the AI settings — enable + model + key), and
-[`04-people-roles.md`](04-people-roles.md) (active person, `buildContext`, encryption).
+[`03-settings.md`](03-settings.md) (the AI settings — enable + model + key),
+[`04-people-roles.md`](04-people-roles.md) (active person, `buildContext`, encryption), and
+[`06-ai-usage-and-budgets.md`](06-ai-usage-and-budgets.md) (built **first**: the chat emits a usage
+event per turn, enables prompt caching on the system prefix, enforces budgets, and shows cost live).
 
 ---
 

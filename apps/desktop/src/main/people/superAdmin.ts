@@ -9,7 +9,7 @@ export async function setSuperAdminPassphrase(
   userDataDir: string,
   passphrase: string,
 ): Promise<void> {
-  await updateDeviceState(userDataDir, { superAdminPassphraseHash: hashPin(passphrase) });
+  await updateDeviceState(userDataDir, { superAdminPassphraseHash: await hashPin(passphrase) });
 }
 
 export async function hasSuperAdminPassphrase(userDataDir: string): Promise<boolean> {
@@ -21,7 +21,7 @@ export async function verifySuperAdminPassphrase(
   passphrase: string,
 ): Promise<boolean> {
   const hash = (await readDeviceState(userDataDir)).superAdminPassphraseHash;
-  return hash !== undefined && verifyPin(passphrase, hash);
+  return hash !== undefined && (await verifyPin(passphrase, hash));
 }
 
 /**

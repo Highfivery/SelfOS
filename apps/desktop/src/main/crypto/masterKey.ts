@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { getSecret, setSecret, type Encryptor } from '../secrets/secretStore';
@@ -7,6 +6,7 @@ import {
   deriveKeyFromPhrase,
   generateMasterKey,
   generateRecoveryPhrase,
+  randomBytes,
   unwrapKey,
   wrapKey,
 } from './cryptoService';
@@ -65,7 +65,7 @@ export async function createMasterKey(
 
   const recoveryPhrase = generateRecoveryPhrase();
   const salt = randomBytes(16);
-  const wrapped = wrapKey(masterKey, deriveKeyFromPhrase(recoveryPhrase, salt));
+  const wrapped = await wrapKey(masterKey, await deriveKeyFromPhrase(recoveryPhrase, salt));
   await writeJsonAtomic(recoveryPath(vaultDir), {
     schemaVersion: 1,
     salt: salt.toString('base64'),
@@ -86,8 +86,8 @@ export async function restoreFromRecoveryPhrase(
   if (!(await pathExists(path))) return false;
   try {
     const bundle = RecoveryBundleSchema.parse(await readJson(path));
-    const kek = deriveKeyFromPhrase(phrase, Buffer.from(bundle.salt, 'base64'));
-    const masterKey = unwrapKey(bundle.wrapped, kek);
+    const kek = await deriveKeyFromPhrase(phrase, Buffer.from(bundle.salt, 'base64'));
+    const masterKey = await unwrapKey(bundle.wrapped, kek);
     await storeMasterKey(userDataDir, encryptor, masterKey);
     return true;
   } catch {

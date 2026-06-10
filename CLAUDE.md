@@ -239,6 +239,19 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-10 — Build (Capacitor track **slice (i): crypto unification** —
+  [07-mobile-platform](docs/specs/07-mobile-platform.md) §5.1): the at-rest crypto is rewritten **off
+  `node:crypto` onto WebCrypto (`globalThis.crypto.subtle`, AES-256-GCM) + `scrypt-js`** so one
+  implementation runs on both Electron (Node ≥20) and the future iOS WKWebView. `cryptoService`,
+  `masterKey`, and `pin` no longer touch `node:crypto`; the scrypt KDF is one shared `deriveScrypt`
+  (params `N=16384,r=8,p=1`), PIN compare is a hand-rolled constant-time check. **The on-disk envelope
+  `{v:1,alg,iv,tag,data}` and all params are unchanged** — WebCrypto's appended 16-byte GCM tag is split
+  back out — so **existing vaults stay byte-for-byte readable**. WebCrypto/scrypt are async, so `await`
+  rippled through `encryptedStore`/`accessService`/`superAdmin`/`masterKey` + tests + the e2e seeds.
+  Proof: a new **`cryptoCompat.test`** asserts the new code decrypts/derives/verifies **real fixtures
+  captured from the old `node:crypto` code** (not a self round-trip); 183 unit + 23 E2E green (the e2e
+  seeds _and_ boots an encrypted vault). Decision: **`Buffer` stays** this slice; the `Buffer→Uint8Array`
+  - portable-base64 + `randomUUID` migration is slice (ii) ("extract `@selfos/core`, no `node:*`").
 - 2026-06-10 — Spec approved: **[07-mobile-platform](docs/specs/07-mobile-platform.md)** (Capacitor +
   iCloud-Drive vault). SelfOS comes to iPhone as one codebase: the same responsive renderer in a
   WKWebView, sharing the same iCloud-Drive vault as desktop, via a **platform-adapter** (FileSystem /

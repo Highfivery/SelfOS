@@ -360,7 +360,7 @@ test('super-admin: inspect mode unlocks full budget/usage access for a non-admin
     schemaVersion: 1,
     vaultPath: vault,
     activePersonId: 'member-1',
-    superAdminPassphraseHash: hashPin('superpass'),
+    superAdminPassphraseHash: await hashPin('superpass'),
   });
 
   const app = await launch(userData);
@@ -464,7 +464,7 @@ test('owner: a vault persisted before newer capabilities still grants full budge
     schemaVersion: 1,
     vaultPath: vault,
     activePersonId: 'owner-1',
-    superAdminPassphraseHash: hashPin('superpass'),
+    superAdminPassphraseHash: await hashPin('superpass'),
   });
 
   const app = await launch(userData);
@@ -647,7 +647,7 @@ async function seedReadyVault(
     schemaVersion: 1,
     vaultPath: vault,
     activePersonId: ownerId,
-    superAdminPassphraseHash: hashPin('superpass'),
+    superAdminPassphraseHash: await hashPin('superpass'),
   });
   return { userData, vault };
 }

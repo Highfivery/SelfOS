@@ -70,7 +70,7 @@ export async function setAccount(
       ? existing?.pinHash
       : input.pin === null
         ? undefined
-        : hashPin(input.pin);
+        : await hashPin(input.pin);
   const account: Account = {
     personId: input.personId,
     roleId: input.roleId,

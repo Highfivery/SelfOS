@@ -246,3 +246,10 @@ reduced-motion honored (already global).
   WebCrypto + scrypt-js; iOS Claude = browser-mode SDK with a native-HTTP fallback; code org =
   `@selfos/core` + one renderer; custom Swift FS plugin confirmed) after review; marked **Approved**.
   iCloud download-on-demand UX and the iOS bundle-id/version remain open for the iOS-shell slices.
+- 2026-06-10 — **slice (i) landed (§5.1):** `cryptoService`/`masterKey`/`pin` rewritten off
+  `node:crypto` onto WebCrypto (AES-256-GCM) + `scrypt-js` (`N=16384,r=8,p=1`), one shared `deriveScrypt`
+  KDF. On-disk envelope + params unchanged (the appended GCM tag is split back to `{iv,tag,data}`);
+  byte-for-byte compatibility proven by `cryptoCompat.test` against fixtures captured from the legacy
+  code. The crypto layer is now async (awaits rippled to callers/tests/e2e). `Buffer`,
+  portable-base64, and the `randomUUID` call sites are intentionally deferred to **slice (ii)** (the
+  `@selfos/core` extraction, "no `node:*`"). Gates green: typecheck/lint/format, 183 unit, 23 E2E.

@@ -1,5 +1,4 @@
 // @vitest-environment node
-import { randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
   decrypt,
@@ -7,6 +6,7 @@ import {
   encrypt,
   generateMasterKey,
   generateRecoveryPhrase,
+  randomBytes,
   unwrapKey,
   wrapKey,
 } from './cryptoService';
@@ -14,26 +14,26 @@ import {
 const key = generateMasterKey();
 
 describe('encrypt/decrypt', () => {
-  it('round-trips utf-8 text', () => {
-    const env = encrypt('a private journal entry 🌿', key);
+  it('round-trips utf-8 text', async () => {
+    const env = await encrypt('a private journal entry 🌿', key);
     expect(env.alg).toBe('aes-256-gcm');
-    expect(decrypt(env, key)).toBe('a private journal entry 🌿');
+    expect(await decrypt(env, key)).toBe('a private journal entry 🌿');
   });
 
-  it('produces a fresh IV each time (ciphertext differs)', () => {
-    expect(encrypt('same', key).data).not.toBe(encrypt('same', key).data);
+  it('produces a fresh IV each time (ciphertext differs)', async () => {
+    expect((await encrypt('same', key)).data).not.toBe((await encrypt('same', key)).data);
   });
 
-  it('fails to decrypt with the wrong key', () => {
-    const env = encrypt('secret', key);
-    expect(() => decrypt(env, generateMasterKey())).toThrow();
+  it('fails to decrypt with the wrong key', async () => {
+    const env = await encrypt('secret', key);
+    await expect(decrypt(env, generateMasterKey())).rejects.toThrow();
   });
 
-  it('fails to decrypt if the ciphertext is tampered with', () => {
-    const env = encrypt('secret', key);
-    expect(() =>
+  it('fails to decrypt if the ciphertext is tampered with', async () => {
+    const env = await encrypt('secret', key);
+    await expect(
       decrypt({ ...env, data: Buffer.from('tampered').toString('base64') }, key),
-    ).toThrow();
+    ).rejects.toThrow();
   });
 });
 
@@ -42,24 +42,26 @@ describe('recovery phrase', () => {
     expect(generateRecoveryPhrase()).toMatch(/^[0-9A-Z]{4}(-[0-9A-Z]{1,4})+$/);
   });
 
-  it('derives the same key from the same phrase + salt, ignoring formatting', () => {
+  it('derives the same key from the same phrase + salt, ignoring formatting', async () => {
     const salt = randomBytes(16);
-    const a = deriveKeyFromPhrase('a1b2-c3d4', salt);
-    const b = deriveKeyFromPhrase('A1B2C3D4', salt);
+    const a = await deriveKeyFromPhrase('a1b2-c3d4', salt);
+    const b = await deriveKeyFromPhrase('A1B2C3D4', salt);
     expect(a.equals(b)).toBe(true);
   });
 
-  it('wraps and unwraps the master key with the recovery key', () => {
+  it('wraps and unwraps the master key with the recovery key', async () => {
     const salt = randomBytes(16);
     const phrase = generateRecoveryPhrase();
-    const kek = deriveKeyFromPhrase(phrase, salt);
-    const wrapped = wrapKey(key, kek);
-    expect(unwrapKey(wrapped, kek).equals(key)).toBe(true);
+    const kek = await deriveKeyFromPhrase(phrase, salt);
+    const wrapped = await wrapKey(key, kek);
+    expect((await unwrapKey(wrapped, kek)).equals(key)).toBe(true);
   });
 
-  it('cannot unwrap with the wrong phrase', () => {
+  it('cannot unwrap with the wrong phrase', async () => {
     const salt = randomBytes(16);
-    const wrapped = wrapKey(key, deriveKeyFromPhrase(generateRecoveryPhrase(), salt));
-    expect(() => unwrapKey(wrapped, deriveKeyFromPhrase(generateRecoveryPhrase(), salt))).toThrow();
+    const wrapped = await wrapKey(key, await deriveKeyFromPhrase(generateRecoveryPhrase(), salt));
+    await expect(
+      unwrapKey(wrapped, await deriveKeyFromPhrase(generateRecoveryPhrase(), salt)),
+    ).rejects.toThrow();
   });
 });

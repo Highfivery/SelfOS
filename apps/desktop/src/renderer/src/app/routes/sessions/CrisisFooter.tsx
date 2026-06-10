@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { LifeBuoy } from 'lucide-react';
 import { Button, Stack, Text } from '../../../design-system/components';
-import styles from './Chat.module.css';
+import styles from './Sessions.module.css';
 
 /** Always-present crisis affordance (05-conversations §7). Never dismissable. */
 export function CrisisFooter(): JSX.Element {

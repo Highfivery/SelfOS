@@ -277,23 +277,23 @@ test('super-admin: a hidden long-press on the version unlocks inspect mode', asy
   }
 });
 
-test('chat: send a message, stream a reply, and show cost + crisis footer', async () => {
+test('sessions: send a message, stream a reply, and show cost + crisis footer', async () => {
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
   await setSecret(userData, passthrough, 'anthropic.apiKey', 'sk-ant-e2e');
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'Chat' }).click();
+    await w.getByRole('link', { name: 'Sessions' }).click();
     await w.getByLabel('Message').fill('I had a hard day');
     await w.getByRole('button', { name: 'Send' }).click();
 
     await expect(w.getByText(/hear you/i)).toBeVisible(); // offline fake reply
-    await expect(w.getByText(/This chat:/)).toBeVisible(); // cost-in-chat
+    await expect(w.getByText(/This session:/)).toBeVisible(); // cost-in-chat
     await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible(); // crisis footer
 
     // Rename the conversation.
     await w.getByRole('button', { name: /^Rename / }).click();
-    const titleInput = w.getByLabel('Conversation title');
+    const titleInput = w.getByLabel('Session title');
     await titleInput.fill('My week');
     await titleInput.press('Enter');
     await expect(w.getByText('My week')).toBeVisible();

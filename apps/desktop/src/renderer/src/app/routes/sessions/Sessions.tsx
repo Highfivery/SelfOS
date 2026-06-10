@@ -16,10 +16,10 @@ import {
 import { formatUsd } from '../usage/format';
 import { Composer } from './Composer';
 import { CrisisFooter } from './CrisisFooter';
-import styles from './Chat.module.css';
+import styles from './Sessions.module.css';
 
-/** The coaching chat (05-conversations): conversation list + streaming thread + cost + crisis footer. */
-export function Chat(): JSX.Element {
+/** The coaching Sessions surface (05-conversations): session list + streaming thread + cost + crisis footer. */
+export function Sessions(): JSX.Element {
   const [aiEnabled] = useSetting('ai.enabled');
   const [hasKey, setHasKey] = useState(false);
 
@@ -64,7 +64,7 @@ export function Chat(): JSX.Element {
       <aside className={styles.sidebar} aria-label="Conversations">
         <Button variant="secondary" onClick={newConversation}>
           <Plus size={16} aria-hidden="true" />
-          New
+          New session
         </Button>
         <Stack gap={1}>
           {conversations.map((conversation) => (
@@ -76,7 +76,7 @@ export function Chat(): JSX.Element {
             >
               {renamingId === conversation.id ? (
                 <TextInput
-                  aria-label="Conversation title"
+                  aria-label="Session title"
                   defaultValue={conversation.title}
                   autoFocus
                   onBlur={(event) => {
@@ -122,7 +122,7 @@ export function Chat(): JSX.Element {
           <div className={styles.empty}>
             <Stack gap={3} align="center">
               <Heading level={3}>Connect Claude to start</Heading>
-              <Text tone="secondary">Enable AI and add your key to begin a conversation.</Text>
+              <Text tone="secondary">Enable AI and add your key to begin a session.</Text>
               <Button variant="primary" onClick={() => navigate('/settings')}>
                 Open Settings
               </Button>
@@ -159,7 +159,7 @@ export function Chat(): JSX.Element {
 
             <div className={styles.costRow}>
               <Text size="xs" tone="tertiary">
-                This chat: {formatUsd(runningCostUsd)} (estimated)
+                This session: {formatUsd(runningCostUsd)} (estimated)
               </Text>
               {personBudget === 'warn' || personBudget === 'over' ? (
                 <Text size="xs" tone="accent">

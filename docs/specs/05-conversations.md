@@ -6,6 +6,10 @@
 > system prompt is assembled from the coach **persona**, the **wellness/not-medical/crisis safety**
 > boundary, and the person's consented **context** (`buildContext`). Transcripts are stored
 > **encrypted** in the vault. This is where SelfOS finally _talks_.
+>
+> **UI terminology:** the surface is labeled **"Sessions"** in the app (nav, route `/sessions`, a
+> "session" = one conversation — consistent with the metering's avg-per-session). The internal
+> conversation/chat domain names are unchanged.
 
 Builds on [`00-architecture.md`](00-architecture.md), [`01-design-system.md`](01-design-system.md),
 [`03-settings.md`](03-settings.md) (the AI settings — enable + model + key),

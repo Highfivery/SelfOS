@@ -3,7 +3,7 @@ import { HashRouter, Route, Routes } from 'react-router-dom';
 import { AppShell } from './AppShell';
 import { Home } from './routes/Home';
 import { Gallery } from './routes/Gallery';
-import { Chat } from './routes/chat/Chat';
+import { Sessions } from './routes/sessions/Sessions';
 import { People } from './routes/people/People';
 import { Roles } from './routes/roles/Roles';
 import { Usage } from './routes/usage/Usage';
@@ -21,7 +21,7 @@ export function Shell(): JSX.Element {
       <Routes>
         <Route element={<AppShell />}>
           <Route index element={<Home />} />
-          <Route path="chat" element={<Chat />} />
+          <Route path="sessions" element={<Sessions />} />
           <Route path="people" element={<People />} />
           <Route path="roles" element={<Roles />} />
           <Route path="usage" element={<Usage />} />

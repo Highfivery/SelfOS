@@ -240,6 +240,11 @@ A running log of durable decisions and feedback captured into the project config
   `<progress>` bars. IPC: `usage:summary`, `budget:get`/`setApp`/`setPerson`/`status` (computed in
   main; `UsageSummary`/`BudgetState` moved to shared). Tests + an E2E (seeded usage → dashboard +
   budget save + no-overflow guard). v1 limit: app-scope is UI-gated, not IPC-enforced.
+- 2026-06-10 — Rename the chat surface to **"Sessions"** across the UI (user request): nav, the
+  `/sessions` route, the `Sessions` component + `routes/sessions/` folder, and visible copy ("This
+  session", "New session", "Session title", "begin a session"). Internal names (the `conversation*`
+  services/store, `chat:*` IPC channels, `chatService.runChatTurn`) are unchanged — a "session" is one
+  conversation, matching the metering's avg-per-session.
 - 2026-06-10 — Build Chat-6c (chat polish): conversation **rename** (inline edit; `conversations:rename`
   IPC), a "Coach is thinking…" indicator while awaiting the first chunk, an **Open Settings** shortcut
   in the not-configured state, and an accessibility pass (`aria-busy` on the thread, composer

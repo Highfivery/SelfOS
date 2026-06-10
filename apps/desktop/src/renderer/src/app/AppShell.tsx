@@ -45,9 +45,9 @@ export function AppShell(): JSX.Element {
             <span>Home</span>
           </NavLink>
           {hasSessions ? (
-            <NavLink to="/chat" className={navClass}>
+            <NavLink to="/sessions" className={navClass}>
               <MessageCircle size={18} aria-hidden="true" />
-              <span>Chat</span>
+              <span>Sessions</span>
             </NavLink>
           ) : null}
           {canManagePeople ? (

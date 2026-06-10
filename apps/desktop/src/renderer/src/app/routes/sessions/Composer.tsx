@@ -1,7 +1,7 @@
 import { useState, type KeyboardEvent } from 'react';
 import { SendHorizontal } from 'lucide-react';
 import { Button } from '../../../design-system/components';
-import styles from './Chat.module.css';
+import styles from './Sessions.module.css';
 
 /** The message composer. Enter sends; Shift+Enter inserts a newline. */
 export function Composer({

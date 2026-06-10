@@ -14,6 +14,7 @@ import {
   TextInput,
 } from '../../../design-system/components';
 import { RelationshipsEditor } from './RelationshipsEditor';
+import { AccessSection } from './AccessSection';
 import type { Person } from '@shared/channels';
 
 /** Create or edit a person. Relationships are shown only once the person exists. */
@@ -137,6 +138,7 @@ export function PersonEditor({
         </Stack>
       </Card>
       {person ? <RelationshipsEditor person={person} /> : null}
+      {person ? <AccessSection person={person} /> : null}
     </Stack>
   );
 }

@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { DEFAULT_ROLES } from '../../shared/capabilities';
+import type { AccessView } from '../../shared/channels';
 import {
   AccessConfigSchema,
   type AccessConfig,
@@ -21,6 +22,19 @@ function defaults(): AccessConfig {
 export async function getAccessConfig(vaultDir: string, key: Buffer): Promise<AccessConfig> {
   const raw = await readEncryptedJson(accessPath(vaultDir), key);
   return raw === null ? defaults() : AccessConfigSchema.parse(raw);
+}
+
+/** Renderer-safe view: roles + accounts with PIN hashes stripped to a boolean. */
+export async function getAccessView(vaultDir: string, key: Buffer): Promise<AccessView> {
+  const config = await getAccessConfig(vaultDir, key);
+  return {
+    roles: config.roles,
+    accounts: config.accounts.map((account) => ({
+      personId: account.personId,
+      roleId: account.roleId,
+      hasPin: account.pinHash !== undefined,
+    })),
+  };
 }
 
 async function write(vaultDir: string, key: Buffer, config: AccessConfig): Promise<AccessConfig> {
@@ -45,7 +59,7 @@ export async function saveRole(vaultDir: string, key: Buffer, role: Role): Promi
 export async function setAccount(
   vaultDir: string,
   key: Buffer,
-  input: { personId: string; roleId: string; pin?: string | null },
+  input: { personId: string; roleId: string; pin?: string | null | undefined },
 ): Promise<AccessConfig> {
   const config = await getAccessConfig(vaultDir, key);
   const existing = config.accounts.find((account) => account.personId === input.personId);

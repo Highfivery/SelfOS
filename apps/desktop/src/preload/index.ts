@@ -36,6 +36,10 @@ const bridge: SelfosBridge = {
   relationshipsList: () => ipcRenderer.invoke(IpcChannels.relationshipsList),
   relationshipsSave: (input) => ipcRenderer.invoke(IpcChannels.relationshipsSave, input),
   relationshipsDelete: (id) => ipcRenderer.invoke(IpcChannels.relationshipsDelete, id),
+  accessGet: () => ipcRenderer.invoke(IpcChannels.accessGet),
+  accessSetAccount: (input) => ipcRenderer.invoke(IpcChannels.accessSetAccount, input),
+  accessRemoveAccount: (personId) => ipcRenderer.invoke(IpcChannels.accessRemoveAccount, personId),
+  sessionSetActive: (input) => ipcRenderer.invoke(IpcChannels.sessionSetActive, input),
 };
 
 contextBridge.exposeInMainWorld('selfos', bridge);

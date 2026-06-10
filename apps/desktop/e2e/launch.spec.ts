@@ -197,6 +197,37 @@ test('people: add a person and link a relationship', async () => {
   }
 });
 
+test('access: grant a login, switch person, and gate the People nav', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'People' }).click();
+
+    // Add Jordan and grant them a member login (no PIN).
+    await w.getByRole('button', { name: 'Add person' }).click();
+    await w.getByLabel('Name').fill('Jordan');
+    await w.getByRole('button', { name: 'Create' }).click();
+    await w.getByText('Jordan').click();
+    await w.getByRole('button', { name: 'Grant access' }).click();
+    await expect(w.getByText(/can sign in/i)).toBeVisible();
+
+    // Switch to Jordan via the "Who's here?" switcher.
+    await w.getByRole('button', { name: /signed in as/i }).click();
+    const dialog = w.getByRole('dialog', { name: /who.s here/i });
+    await expect(dialog).toBeVisible();
+    await dialog.getByText('Jordan').click();
+
+    // Now signed in as Jordan (a member) → the People nav is gated away.
+    await expect(w.getByRole('button', { name: 'Signed in as Jordan' })).toBeVisible();
+    await expect(w.getByRole('link', { name: 'People' })).toHaveCount(0);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 async function seedReadyVault(
   settingsValues: Record<string, unknown> = {},
 ): Promise<{ userData: string; vault: string }> {

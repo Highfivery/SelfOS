@@ -1,5 +1,6 @@
 import type { SelfosBridge } from '@shared/channels';
 import type { BootState } from '@shared/schemas';
+import { DEFAULT_ROLES } from '@shared/capabilities';
 
 const READY: BootState = { phase: 'ready', vaultPath: '/vault', hasSettings: true };
 
@@ -49,6 +50,26 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         updatedAt: 'now',
       }),
     relationshipsDelete: () => Promise.resolve(),
+    accessGet: () =>
+      Promise.resolve({
+        roles: DEFAULT_ROLES,
+        accounts: [{ personId: 'owner-1', roleId: 'owner', hasPin: false }],
+      }),
+    accessSetAccount: () => Promise.resolve({ roles: DEFAULT_ROLES, accounts: [] }),
+    accessRemoveAccount: () => Promise.resolve({ roles: DEFAULT_ROLES, accounts: [] }),
+    sessionSetActive: (input) =>
+      Promise.resolve({
+        ok: true,
+        person: {
+          id: input.personId,
+          schemaVersion: 1,
+          displayName: 'Someone',
+          isSubject: true,
+          tags: [],
+          createdAt: 'now',
+          updatedAt: 'now',
+        },
+      }),
     ...overrides,
   };
   window.selfos = bridge;

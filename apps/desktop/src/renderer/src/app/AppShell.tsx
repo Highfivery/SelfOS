@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { House, Settings, Shapes, Users } from 'lucide-react';
 import { AppearanceToggle } from './AppearanceToggle';
 import { useVaultConflicts } from './useVaultConflicts';
 import { useSessionStore } from '../stores/sessionStore';
-import { Banner, Text } from '../design-system/components';
+import { Switcher } from './Switcher';
+import { Banner } from '../design-system/components';
 import styles from './AppShell.module.css';
 
 function navClass({ isActive }: { isActive: boolean }): string {
@@ -13,6 +15,8 @@ function navClass({ isActive }: { isActive: boolean }): string {
 export function AppShell(): JSX.Element {
   const conflicts = useVaultConflicts();
   const activePerson = useSessionStore((s) => s.activePerson);
+  const canManagePeople = useSessionStore((s) => s.can('people.manage'));
+  const [switching, setSwitching] = useState(false);
 
   return (
     <div className={styles.shell}>
@@ -26,10 +30,12 @@ export function AppShell(): JSX.Element {
             <House size={18} aria-hidden="true" />
             <span>Home</span>
           </NavLink>
-          <NavLink to="/people" className={navClass}>
-            <Users size={18} aria-hidden="true" />
-            <span>People</span>
-          </NavLink>
+          {canManagePeople ? (
+            <NavLink to="/people" className={navClass}>
+              <Users size={18} aria-hidden="true" />
+              <span>People</span>
+            </NavLink>
+          ) : null}
           {import.meta.env.DEV ? (
             <NavLink to="/gallery" className={navClass}>
               <Shapes size={18} aria-hidden="true" />
@@ -42,9 +48,13 @@ export function AppShell(): JSX.Element {
 
         <footer className={styles.footer}>
           {activePerson ? (
-            <Text size="xs" tone="secondary">
+            <button
+              type="button"
+              className={styles.switchButton}
+              onClick={() => setSwitching(true)}
+            >
               Signed in as {activePerson.displayName}
-            </Text>
+            </button>
           ) : null}
           <NavLink to="/settings" className={navClass}>
             <Settings size={18} aria-hidden="true" />
@@ -67,6 +77,8 @@ export function AppShell(): JSX.Element {
         ) : null}
         <Outlet />
       </main>
+
+      {switching ? <Switcher onClose={() => setSwitching(false)} /> : null}
     </div>
   );
 }

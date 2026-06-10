@@ -71,6 +71,23 @@
   gap: var(--space-3);
 }
 
+.switchButton {
+  align-self: flex-start;
+  padding: var(--space-1) var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: background var(--motion-fast);
+}
+
+.switchButton:hover {
+  background: var(--color-surface-alt);
+  color: var(--color-text-primary);
+}
+
 .content {
   flex: 1;
   overflow: auto;

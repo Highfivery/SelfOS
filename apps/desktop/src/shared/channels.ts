@@ -1,4 +1,11 @@
-import type { BootState, Person, PersonInput, Relationship, RelationshipInput } from './schemas';
+import type {
+  BootState,
+  Person,
+  PersonInput,
+  Relationship,
+  RelationshipInput,
+  Role,
+} from './schemas';
 
 /**
  * IPC channel names + the renderer-facing bridge type. This module is zod-free so it is safe to
@@ -30,6 +37,10 @@ export const IpcChannels = {
   relationshipsList: 'relationships:list',
   relationshipsSave: 'relationships:save',
   relationshipsDelete: 'relationships:delete',
+  accessGet: 'access:get',
+  accessSetAccount: 'access:setAccount',
+  accessRemoveAccount: 'access:removeAccount',
+  sessionSetActive: 'session:setActive',
 } as const;
 
 export type SettingScope = 'vault' | 'device';
@@ -53,6 +64,16 @@ export interface HouseholdStatus {
   hasOwner: boolean;
   activePersonId: string | null;
 }
+
+/** Roles + accounts with PIN hashes stripped — safe to expose to the renderer. */
+export interface AccessView {
+  roles: Role[];
+  accounts: { personId: string; roleId: string; hasPin: boolean }[];
+}
+
+export type SetActiveResult =
+  | { ok: true; person: Person }
+  | { ok: false; reason: 'WRONG_PIN' | 'NO_ACCOUNT' };
 
 export interface SelfosBridge {
   /** Current boot state (computed from device-local state + vault status). */
@@ -106,6 +127,18 @@ export interface SelfosBridge {
   relationshipsSave(input: RelationshipInput): Promise<Relationship>;
   /** Delete a relationship. */
   relationshipsDelete(id: string): Promise<void>;
+  /** Roles + accounts (PIN hashes stripped). */
+  accessGet(): Promise<AccessView>;
+  /** Grant or update a person's account (role + optional PIN); returns the refreshed view. */
+  accessSetAccount(input: {
+    personId: string;
+    roleId: string;
+    pin?: string | null;
+  }): Promise<AccessView>;
+  /** Revoke a person's account. */
+  accessRemoveAccount(personId: string): Promise<AccessView>;
+  /** Switch the active person, verifying their PIN if set. */
+  sessionSetActive(input: { personId: string; pin?: string }): Promise<SetActiveResult>;
 }
 
-export type { BootState, Person, PersonInput, Relationship, RelationshipInput };
+export type { BootState, Person, PersonInput, Relationship, RelationshipInput, Role };

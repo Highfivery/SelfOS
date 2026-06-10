@@ -222,6 +222,14 @@ A running log of durable decisions and feedback captured into the project config
   sections. `ThemeProvider` now reads from settings. Added a shared mock-bridge test helper. Deferred:
   accent options, high-contrast, the AI/secret settings + keychain (slice 5), and the broader
   feature-module registry abstraction.
+- 2026-06-09 — Build People-2c (switcher + access + capability gating): grant/update/revoke a
+  person's login (role + optional PIN) in the person editor; a "Who's here?" switcher (from the shell
+  footer) changes the active person with PIN verification; `sessionStore` gains `capabilities` +
+  `can()`, and the People nav is gated by `people.manage`. IPC: `access:get` (redacted — no PIN
+  hashes), `access:setAccount`, `access:removeAccount`, `session:setActive`. Tests + an E2E (grant,
+  switch, nav gated). Known v1 limits: only the nav (not the route) is gated, and a PIN-less owner is
+  switchable by anyone on the device — the super-admin passphrase is the real gate. The roles×capability
+  matrix editor, the concealed super-admin unlock, and shareable context are People-3.
 - 2026-06-09 — Build People-2b (people + relationship management UI): a **People** screen (list of
   subjects/contacts) with add/edit/delete and a relationship editor (typed links between people),
   backed by people/relationship CRUD IPC (`upsert` owns id + timestamps in main) + a `peopleStore`,

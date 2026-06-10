@@ -12,7 +12,7 @@ import {
   saveRelationship,
   upsertRelationship,
 } from './relationshipService';
-import { getAccessConfig, setAccount, verifyAccountPin } from './accessService';
+import { getAccessConfig, getAccessView, setAccount, verifyAccountPin } from './accessService';
 
 const key = generateMasterKey();
 let vault: string;
@@ -129,5 +129,14 @@ describe('accessService', () => {
     expect(await verifyAccountPin(vault, key, 'p2', 'anything')).toBe(false);
     await setAccount(vault, key, { personId: 'p2', roleId: 'member', pin: null });
     expect(await verifyAccountPin(vault, key, 'p2', 'anything')).toBe(true);
+  });
+
+  it('exposes a redacted view without pin hashes', async () => {
+    await setAccount(vault, key, { personId: 'p1', roleId: 'owner', pin: '4321' });
+    const view = await getAccessView(vault, key);
+    const account = view.accounts.find((candidate) => candidate.personId === 'p1');
+    expect(account?.hasPin).toBe(true);
+    expect(account).not.toHaveProperty('pinHash');
+    expect(view.roles.map((role) => role.id)).toContain('owner');
   });
 });

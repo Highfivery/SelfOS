@@ -3,8 +3,10 @@ import { z } from 'zod';
 import {
   ANTHROPIC_API_KEY_ID,
   IpcChannels,
+  type AccessView,
   type ClaudeTestResult,
   type HouseholdStatus,
+  type SetActiveResult,
   type SettingsValues,
 } from '../shared/channels';
 import {
@@ -25,7 +27,8 @@ import { defaultEncryptor } from './secrets/encryptor';
 import { runConnectionTest } from './claude/claudeService';
 import { defaultClaudeClient } from './claude/anthropicClient';
 import { householdStatus, setupHousehold } from './people/household';
-import { getActivePersonId } from './people/session';
+import { getActivePersonId, setActivePersonId } from './people/session';
+import { getAccessView, removeAccount, setAccount, verifyAccountPin } from './people/accessService';
 import { deletePerson, getPerson, listPeople, upsertPerson } from './people/peopleService';
 import {
   deleteRelationship,
@@ -47,6 +50,15 @@ const SecretIdSchema = z.object({ id: z.string().min(1) });
 const HouseholdSetupSchema = z.object({
   ownerName: z.string().min(1),
   passphrase: z.string().min(6),
+});
+const SetAccountSchema = z.object({
+  personId: z.string().min(1),
+  roleId: z.string().min(1),
+  pin: z.string().nullable().optional(),
+});
+const SetActiveSchema = z.object({
+  personId: z.string().min(1),
+  pin: z.string().optional(),
 });
 
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
@@ -211,4 +223,45 @@ export function registerIpcHandlers(): void {
     if (!ctx) return;
     await deleteRelationship(ctx.vaultDir, z.string().min(1).parse(raw));
   });
+
+  ipcMain.handle(IpcChannels.accessGet, async (): Promise<AccessView> => {
+    const ctx = await vaultAndKey();
+    return ctx ? getAccessView(ctx.vaultDir, ctx.key) : { roles: [], accounts: [] };
+  });
+
+  ipcMain.handle(
+    IpcChannels.accessSetAccount,
+    async (_event, raw: unknown): Promise<AccessView> => {
+      const ctx = await vaultAndKey();
+      if (!ctx) throw new Error('Household is not set up');
+      await setAccount(ctx.vaultDir, ctx.key, SetAccountSchema.parse(raw));
+      return getAccessView(ctx.vaultDir, ctx.key);
+    },
+  );
+
+  ipcMain.handle(
+    IpcChannels.accessRemoveAccount,
+    async (_event, raw: unknown): Promise<AccessView> => {
+      const ctx = await vaultAndKey();
+      if (!ctx) throw new Error('Household is not set up');
+      await removeAccount(ctx.vaultDir, ctx.key, z.string().min(1).parse(raw));
+      return getAccessView(ctx.vaultDir, ctx.key);
+    },
+  );
+
+  ipcMain.handle(
+    IpcChannels.sessionSetActive,
+    async (_event, raw: unknown): Promise<SetActiveResult> => {
+      const ctx = await vaultAndKey();
+      if (!ctx) return { ok: false, reason: 'NO_ACCOUNT' };
+      const { personId, pin } = SetActiveSchema.parse(raw);
+      const person = await getPerson(ctx.vaultDir, ctx.key, personId);
+      if (!person) return { ok: false, reason: 'NO_ACCOUNT' };
+      if (!(await verifyAccountPin(ctx.vaultDir, ctx.key, personId, pin ?? ''))) {
+        return { ok: false, reason: 'WRONG_PIN' };
+      }
+      await setActivePersonId(userDataDir(), personId);
+      return { ok: true, person };
+    },
+  );
 }

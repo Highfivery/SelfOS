@@ -239,6 +239,16 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-10 — Fix (red CI build — user flagged): `apps/desktop/src/main/host/nodeSecretStore.test.ts`
+  value-imported `passthroughEncryptor` from `secrets/encryptor.ts`, which **top-level-imports
+  `electron`** (`safeStorage`). CI runs the Vitest unit tests **without the Electron binary**, so loading
+  `electron` threw `Electron failed to install correctly`. Fixed by injecting an **inline fake `Encryptor`**
+  in the test (the established pattern — the old secret-store test + the e2e both do this) and importing
+  `Encryptor` as a **type-only** import (erased at build → no `electron` load). **Lesson: unit tests must
+  not transitively import `electron`; my local `pnpm test` masked it because electron IS installed locally
+  but CI's isn't. When a unit test needs a host dependency that pulls electron (`encryptor`, ipc, window,
+  menu, …), inject a fake and `import type` only — never value-import the electron-pulling module.** (This
+  test was introduced in ii-c; it had been failing CI since then.)
 - 2026-06-10 — Build (Capacitor track **relocation slice 3 (final): move usage/budgets/chat into core**
   — [07-mobile-platform](docs/specs/07-mobile-platform.md) §5.2): relocated `pricing`/`usageStore`/
   `budgetService` → **`@selfos/core/usage`** and `promptBuilder`/`chatService` → **`@selfos/core/conversations`**

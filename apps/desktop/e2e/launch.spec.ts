@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { _electron as electron, expect, test, type ElectronApplication } from '@playwright/test';
 import { createMasterKey, loadMasterKey } from '../src/main/crypto/masterKey';
 import type { Encryptor } from '../src/main/secrets/secretStore';
+import { createNodeFileSystem } from '../src/main/host/nodeFileSystem';
 import { savePerson } from '../src/main/people/peopleService';
 import { setAccount } from '../src/main/people/accessService';
 import { hashPin } from '@selfos/core/crypto';
@@ -29,9 +30,10 @@ async function seedHousehold(
   await createMasterKey(userData, passthrough, vault);
   const key = await loadMasterKey(userData, passthrough);
   if (!key) throw new Error('seedHousehold: master key missing');
+  const fs = createNodeFileSystem(vault);
   const ownerId = 'owner-1';
   const now = new Date().toISOString();
-  await savePerson(vault, key, {
+  await savePerson(fs, key, {
     id: ownerId,
     schemaVersion: 1,
     displayName: ownerName,
@@ -40,7 +42,7 @@ async function seedHousehold(
     createdAt: now,
     updatedAt: now,
   });
-  await setAccount(vault, key, { personId: ownerId, roleId: 'owner' });
+  await setAccount(fs, key, { personId: ownerId, roleId: 'owner' });
   return ownerId;
 }
 
@@ -322,7 +324,8 @@ test('super-admin: inspect mode unlocks full budget/usage access for a non-admin
   await createMasterKey(userData, passthrough, vault);
   const key = await loadMasterKey(userData, passthrough);
   if (!key) throw new Error('super-admin e2e: master key missing');
-  await savePerson(vault, key, {
+  const fs = createNodeFileSystem(vault);
+  await savePerson(fs, key, {
     id: 'owner-1',
     schemaVersion: 1,
     displayName: 'Alex',
@@ -331,7 +334,7 @@ test('super-admin: inspect mode unlocks full budget/usage access for a non-admin
     createdAt: now,
     updatedAt: now,
   });
-  await savePerson(vault, key, {
+  await savePerson(fs, key, {
     id: 'member-1',
     schemaVersion: 1,
     displayName: 'Sam',
@@ -340,9 +343,9 @@ test('super-admin: inspect mode unlocks full budget/usage access for a non-admin
     createdAt: now,
     updatedAt: now,
   });
-  await setAccount(vault, key, { personId: 'owner-1', roleId: 'owner' });
-  await setAccount(vault, key, { personId: 'member-1', roleId: 'member' });
-  await recordUsage(vault, key, {
+  await setAccount(fs, key, { personId: 'owner-1', roleId: 'owner' });
+  await setAccount(fs, key, { personId: 'member-1', roleId: 'member' });
+  await recordUsage(fs, key, {
     id: 'u1',
     schemaVersion: 1,
     type: 'chat',
@@ -412,7 +415,8 @@ test('owner: a vault persisted before newer capabilities still grants full budge
   await createMasterKey(userData, passthrough, vault);
   const key = await loadMasterKey(userData, passthrough);
   if (!key) throw new Error('owner e2e: master key missing');
-  await savePerson(vault, key, {
+  const fs = createNodeFileSystem(vault);
+  await savePerson(fs, key, {
     id: 'owner-1',
     schemaVersion: 1,
     displayName: 'Alex',
@@ -423,7 +427,8 @@ test('owner: a vault persisted before newer capabilities still grants full budge
   });
   // Stale Owner role — note: NO budgets.manage, as a pre-Metering-3 vault.
   await writeEncryptedJson(
-    join(vault, 'config', 'access.enc'),
+    fs,
+    'config/access.enc',
     {
       schemaVersion: 1,
       roles: [
@@ -446,7 +451,7 @@ test('owner: a vault persisted before newer capabilities still grants full budge
     },
     key,
   );
-  await recordUsage(vault, key, {
+  await recordUsage(fs, key, {
     id: 'u1',
     schemaVersion: 1,
     type: 'chat',
@@ -528,7 +533,7 @@ test('usage: the dashboard shows recorded usage and accepts a budget, without ov
   const { userData, vault } = await seedReadyVault();
   const key = await loadMasterKey(userData, passthrough);
   if (!key) throw new Error('usage e2e: master key missing');
-  await recordUsage(vault, key, {
+  await recordUsage(createNodeFileSystem(vault), key, {
     id: 'u1',
     schemaVersion: 1,
     type: 'chat',

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { FileSystem } from '@selfos/core/host';
 import type { ChatTurnResult } from '../../shared/channels';
 import type { Conversation, UsageEvent } from '../../shared/schemas';
 import type { ClaudeClient } from '../claude/claudeService';
@@ -11,7 +12,7 @@ import { buildSystemPrompt } from './promptBuilder';
 export type { ChatTurnResult };
 
 export interface ChatTurnDeps {
-  vaultDir: string;
+  fs: FileSystem;
   key: Buffer;
   client: ClaudeClient;
   apiKey: string | null;
@@ -34,16 +35,16 @@ function deriveTitle(text: string): string {
  * transcript, and record a usage event. The API key never leaves the main process.
  */
 export async function runChatTurn(deps: ChatTurnDeps): Promise<ChatTurnResult> {
-  const { vaultDir, key, client, apiKey, model, personId, conversationId, userText, now } = deps;
+  const { fs, key, client, apiKey, model, personId, conversationId, userText, now } = deps;
   if (!apiKey) return { ok: false, reason: 'NO_KEY', message: 'Add your Claude API key first.' };
 
-  const personBudget = await checkBudget(vaultDir, key, {
+  const personBudget = await checkBudget(fs, key, {
     scope: 'person',
     personId,
     now,
     override: deps.override,
   });
-  const appBudget = await checkBudget(vaultDir, key, {
+  const appBudget = await checkBudget(fs, key, {
     scope: 'app',
     now,
     override: deps.override,
@@ -53,7 +54,7 @@ export async function runChatTurn(deps: ChatTurnDeps): Promise<ChatTurnResult> {
   }
 
   const at = now.toISOString();
-  const existing = await getConversation(vaultDir, key, personId, conversationId);
+  const existing = await getConversation(fs, key, personId, conversationId);
   const conversation: Conversation = existing ?? {
     id: conversationId,
     schemaVersion: 1,
@@ -65,7 +66,7 @@ export async function runChatTurn(deps: ChatTurnDeps): Promise<ChatTurnResult> {
   };
   conversation.messages.push({ role: 'user', content: userText, ts: at });
 
-  const system = await buildSystemPrompt(vaultDir, key, personId);
+  const system = await buildSystemPrompt(fs, key, personId);
   let result;
   try {
     result = await client.stream(
@@ -87,7 +88,7 @@ export async function runChatTurn(deps: ChatTurnDeps): Promise<ChatTurnResult> {
 
   conversation.messages.push({ role: 'assistant', content: result.text, ts: at });
   conversation.updatedAt = at;
-  await saveConversation(vaultDir, key, conversation);
+  await saveConversation(fs, key, conversation);
 
   const usage: UsageEvent = {
     id: randomUUID(),
@@ -108,7 +109,7 @@ export async function runChatTurn(deps: ChatTurnDeps): Promise<ChatTurnResult> {
       cacheReadTokens: result.usage.cacheReadTokens,
     }),
   };
-  await recordUsage(vaultDir, key, usage);
+  await recordUsage(fs, key, usage);
 
   return { ok: true, conversation, usage };
 }

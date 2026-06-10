@@ -1,39 +1,31 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readdir, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import type { FileSystem } from '@selfos/core/host';
 import {
   RelationshipSchema,
   type Relationship,
   type RelationshipInput,
 } from '../../shared/schemas';
-import { pathExists } from '../vault/atomic';
 import { readEncryptedJson, writeEncryptedJson } from '../crypto/encryptedStore';
 
-function relationshipsDir(vaultDir: string): string {
-  return join(vaultDir, 'relationships');
-}
+const RELATIONSHIPS_DIR = 'relationships';
 
-function relationshipPath(vaultDir: string, id: string): string {
-  return join(relationshipsDir(vaultDir), `${id}.enc`);
+function relationshipPath(id: string): string {
+  return `${RELATIONSHIPS_DIR}/${id}.enc`;
 }
 
 export async function saveRelationship(
-  vaultDir: string,
+  fs: FileSystem,
   key: Buffer,
   relationship: Relationship,
 ): Promise<void> {
-  await mkdir(relationshipsDir(vaultDir), { recursive: true });
-  await writeEncryptedJson(relationshipPath(vaultDir, relationship.id), relationship, key);
+  await writeEncryptedJson(fs, relationshipPath(relationship.id), relationship, key);
 }
 
-export async function listRelationships(vaultDir: string, key: Buffer): Promise<Relationship[]> {
-  const dir = relationshipsDir(vaultDir);
-  if (!(await pathExists(dir))) return [];
-  const entries = await readdir(dir, { withFileTypes: true });
+export async function listRelationships(fs: FileSystem, key: Buffer): Promise<Relationship[]> {
   const relationships: Relationship[] = [];
-  for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith('.enc')) continue;
-    const raw = await readEncryptedJson(join(dir, entry.name), key);
+  for (const name of await fs.list(RELATIONSHIPS_DIR)) {
+    if (!name.endsWith('.enc')) continue;
+    const raw = await readEncryptedJson(fs, `${RELATIONSHIPS_DIR}/${name}`, key);
     if (raw !== null) relationships.push(RelationshipSchema.parse(raw));
   }
   return relationships;
@@ -41,14 +33,14 @@ export async function listRelationships(vaultDir: string, key: Buffer): Promise<
 
 /** Create or update a relationship from renderer input; the main process owns id + timestamps. */
 export async function upsertRelationship(
-  vaultDir: string,
+  fs: FileSystem,
   key: Buffer,
   input: RelationshipInput,
 ): Promise<Relationship> {
   const now = new Date().toISOString();
   let createdAt = now;
   if (input.id) {
-    const existing = (await listRelationships(vaultDir, key)).find((r) => r.id === input.id);
+    const existing = (await listRelationships(fs, key)).find((r) => r.id === input.id);
     if (existing) createdAt = existing.createdAt;
   }
   const relationship: Relationship = {
@@ -65,10 +57,10 @@ export async function upsertRelationship(
     ...(input.publicNotes !== undefined ? { publicNotes: input.publicNotes } : {}),
     ...(input.privateNotes !== undefined ? { privateNotes: input.privateNotes } : {}),
   };
-  await saveRelationship(vaultDir, key, relationship);
+  await saveRelationship(fs, key, relationship);
   return relationship;
 }
 
-export async function deleteRelationship(vaultDir: string, id: string): Promise<void> {
-  await rm(relationshipPath(vaultDir, id), { force: true });
+export async function deleteRelationship(fs: FileSystem, id: string): Promise<void> {
+  await fs.remove(relationshipPath(id));
 }

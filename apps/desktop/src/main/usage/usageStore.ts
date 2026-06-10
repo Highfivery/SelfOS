@@ -1,9 +1,7 @@
-import { mkdir, readdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import type { FileSystem } from '@selfos/core/host';
 import { z } from 'zod';
 import type { UsageSummary } from '../../shared/channels';
 import { UsageEventSchema, type UsageEvent } from '../../shared/schemas';
-import { pathExists } from '../vault/atomic';
 import { readEncryptedJson, writeEncryptedJson } from '../crypto/encryptedStore';
 import { listPeople } from '../people/peopleService';
 import { cacheSavingsOf } from './pricing';
@@ -13,12 +11,12 @@ const UsageShardSchema = z.object({
   events: z.array(UsageEventSchema),
 });
 
-function usageDir(vaultDir: string, personId: string): string {
-  return join(vaultDir, 'people', personId, 'usage');
+function usageDir(personId: string): string {
+  return `people/${personId}/usage`;
 }
 
-function shardPath(vaultDir: string, personId: string, month: string): string {
-  return join(usageDir(vaultDir, personId), `${month}.enc`);
+function shardPath(personId: string, month: string): string {
+  return `${usageDir(personId)}/${month}.enc`;
 }
 
 function monthOf(iso: string): string {
@@ -26,27 +24,23 @@ function monthOf(iso: string): string {
 }
 
 /** Append a usage event to the person's encrypted monthly shard. */
-export async function recordUsage(vaultDir: string, key: Buffer, event: UsageEvent): Promise<void> {
-  await mkdir(usageDir(vaultDir, event.personId), { recursive: true });
-  const path = shardPath(vaultDir, event.personId, monthOf(event.at));
-  const existing = await readEncryptedJson(path, key);
+export async function recordUsage(fs: FileSystem, key: Buffer, event: UsageEvent): Promise<void> {
+  const path = shardPath(event.personId, monthOf(event.at));
+  const existing = await readEncryptedJson(fs, path, key);
   const events = existing ? UsageShardSchema.parse(existing).events : [];
   events.push(event);
-  await writeEncryptedJson(path, { schemaVersion: 1, events }, key);
+  await writeEncryptedJson(fs, path, { schemaVersion: 1, events }, key);
 }
 
 async function readPersonEvents(
-  vaultDir: string,
+  fs: FileSystem,
   key: Buffer,
   personId: string,
 ): Promise<UsageEvent[]> {
-  const dir = usageDir(vaultDir, personId);
-  if (!(await pathExists(dir))) return [];
-  const entries = await readdir(dir, { withFileTypes: true });
   const events: UsageEvent[] = [];
-  for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith('.enc')) continue;
-    const raw = await readEncryptedJson(join(dir, entry.name), key);
+  for (const name of await fs.list(usageDir(personId))) {
+    if (!name.endsWith('.enc')) continue;
+    const raw = await readEncryptedJson(fs, `${usageDir(personId)}/${name}`, key);
     if (raw) events.push(...UsageShardSchema.parse(raw).events);
   }
   return events;
@@ -54,16 +48,16 @@ async function readPersonEvents(
 
 /** Query usage events in [from, to] (inclusive ISO), optionally scoped to one person/type. */
 export async function queryUsage(
-  vaultDir: string,
+  fs: FileSystem,
   key: Buffer,
   filter: { from: string; to: string; personId?: string; type?: string },
 ): Promise<UsageEvent[]> {
   const ids = filter.personId
     ? [filter.personId]
-    : (await listPeople(vaultDir, key)).map((person) => person.id);
+    : (await listPeople(fs, key)).map((person) => person.id);
   const out: UsageEvent[] = [];
   for (const id of ids) {
-    for (const event of await readPersonEvents(vaultDir, key, id)) {
+    for (const event of await readPersonEvents(fs, key, id)) {
       if (event.at < filter.from || event.at > filter.to) continue;
       if (filter.type && event.type !== filter.type) continue;
       out.push(event);

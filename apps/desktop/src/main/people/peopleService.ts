@@ -1,36 +1,27 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readdir, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import type { FileSystem } from '@selfos/core/host';
 import { PersonSchema, type Person, type PersonInput } from '../../shared/schemas';
-import { pathExists } from '../vault/atomic';
 import { readEncryptedJson, writeEncryptedJson } from '../crypto/encryptedStore';
 
-function peopleDir(vaultDir: string): string {
-  return join(vaultDir, 'people');
+const PEOPLE_DIR = 'people';
+
+function profilePath(id: string): string {
+  return `${PEOPLE_DIR}/${id}/profile.enc`;
 }
 
-function profilePath(vaultDir: string, id: string): string {
-  return join(peopleDir(vaultDir), id, 'profile.enc');
-}
-
-export async function getPerson(vaultDir: string, key: Buffer, id: string): Promise<Person | null> {
-  const raw = await readEncryptedJson(profilePath(vaultDir, id), key);
+export async function getPerson(fs: FileSystem, key: Buffer, id: string): Promise<Person | null> {
+  const raw = await readEncryptedJson(fs, profilePath(id), key);
   return raw === null ? null : PersonSchema.parse(raw);
 }
 
-export async function savePerson(vaultDir: string, key: Buffer, person: Person): Promise<void> {
-  await mkdir(join(peopleDir(vaultDir), person.id), { recursive: true });
-  await writeEncryptedJson(profilePath(vaultDir, person.id), person, key);
+export async function savePerson(fs: FileSystem, key: Buffer, person: Person): Promise<void> {
+  await writeEncryptedJson(fs, profilePath(person.id), person, key);
 }
 
-export async function listPeople(vaultDir: string, key: Buffer): Promise<Person[]> {
-  const dir = peopleDir(vaultDir);
-  if (!(await pathExists(dir))) return [];
-  const entries = await readdir(dir, { withFileTypes: true });
+export async function listPeople(fs: FileSystem, key: Buffer): Promise<Person[]> {
   const people: Person[] = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const person = await getPerson(vaultDir, key, entry.name);
+  for (const name of await fs.list(PEOPLE_DIR)) {
+    const person = await getPerson(fs, key, name);
     if (person) people.push(person);
   }
   return people.sort((a, b) => a.displayName.localeCompare(b.displayName));
@@ -38,11 +29,11 @@ export async function listPeople(vaultDir: string, key: Buffer): Promise<Person[
 
 /** Create or update a person from renderer input; the main process owns id + timestamps. */
 export async function upsertPerson(
-  vaultDir: string,
+  fs: FileSystem,
   key: Buffer,
   input: PersonInput,
 ): Promise<Person> {
-  const existing = input.id ? await getPerson(vaultDir, key, input.id) : null;
+  const existing = input.id ? await getPerson(fs, key, input.id) : null;
   const now = new Date().toISOString();
   const person: Person = {
     id: existing?.id ?? input.id ?? randomUUID(),
@@ -58,11 +49,11 @@ export async function upsertPerson(
     ...(input.publicNotes !== undefined ? { publicNotes: input.publicNotes } : {}),
     ...(input.privateNotes !== undefined ? { privateNotes: input.privateNotes } : {}),
   };
-  await savePerson(vaultDir, key, person);
+  await savePerson(fs, key, person);
   return person;
 }
 
 /** Remove a person and their data folder. */
-export async function deletePerson(vaultDir: string, id: string): Promise<void> {
-  await rm(join(peopleDir(vaultDir), id), { recursive: true, force: true });
+export async function deletePerson(fs: FileSystem, id: string): Promise<void> {
+  await fs.remove(`${PEOPLE_DIR}/${id}`);
 }

@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { generateMasterKey } from '@selfos/core/crypto';
+import type { FileSystem } from '@selfos/core/host';
+import { createNodeFileSystem } from '../host/nodeFileSystem';
 import type { ClaudeClient } from '../claude/claudeService';
 import type { Person } from '../../shared/schemas';
 import { savePerson } from '../people/peopleService';
@@ -15,8 +17,10 @@ import { runChatTurn } from './chatService';
 const key = Buffer.from(generateMasterKey());
 const now = new Date('2026-06-15T12:00:00.000Z');
 let vault: string;
+let fs: FileSystem;
 beforeEach(async () => {
   vault = await mkdtemp(join(tmpdir(), 'selfos-chat-'));
+  fs = createNodeFileSystem(vault);
 });
 afterEach(async () => {
   await rm(vault, { recursive: true, force: true });
@@ -47,7 +51,7 @@ function person(id: string, name: string): Person {
 }
 
 async function base(): Promise<void> {
-  await savePerson(vault, key, person('p1', 'Alex'));
+  await savePerson(fs, key, person('p1', 'Alex'));
 }
 
 describe('runChatTurn', () => {
@@ -55,7 +59,7 @@ describe('runChatTurn', () => {
     await base();
     const chunks: string[] = [];
     const result = await runChatTurn({
-      vaultDir: vault,
+      fs,
       key,
       client: fakeClient,
       apiKey: 'sk-test',
@@ -70,7 +74,7 @@ describe('runChatTurn', () => {
     expect(result.ok).toBe(true);
     expect(chunks.join('')).toBe('I hear you.');
 
-    const conversation = await getConversation(vault, key, 'p1', 'c1');
+    const conversation = await getConversation(fs, key, 'p1', 'c1');
     expect(conversation?.messages.map((m) => m.role)).toEqual(['user', 'assistant']);
     expect(conversation?.messages[1]?.content).toBe('I hear you.');
     expect(conversation?.title).toBe('I had a hard day');
@@ -84,7 +88,7 @@ describe('runChatTurn', () => {
   it('refuses to start with no API key', async () => {
     await base();
     const result = await runChatTurn({
-      vaultDir: vault,
+      fs,
       key,
       client: fakeClient,
       apiKey: null,
@@ -100,8 +104,8 @@ describe('runChatTurn', () => {
 
   it('blocks when the person is over budget, unless the owner overrides', async () => {
     await base();
-    await setPersonBudget(vault, key, 'p1', { limitUsd: 0.01, period: 'month', warnRatio: 0.8 });
-    await recordUsage(vault, key, {
+    await setPersonBudget(fs, key, 'p1', { limitUsd: 0.01, period: 'month', warnRatio: 0.8 });
+    await recordUsage(fs, key, {
       id: 'prior',
       schemaVersion: 1,
       type: 'chat',
@@ -116,7 +120,7 @@ describe('runChatTurn', () => {
     });
 
     const blocked = await runChatTurn({
-      vaultDir: vault,
+      fs,
       key,
       client: fakeClient,
       apiKey: 'sk-test',
@@ -130,7 +134,7 @@ describe('runChatTurn', () => {
     expect(blocked).toMatchObject({ ok: false, reason: 'BUDGET' });
 
     const overridden = await runChatTurn({
-      vaultDir: vault,
+      fs,
       key,
       client: fakeClient,
       apiKey: 'sk-test',
@@ -148,7 +152,7 @@ describe('runChatTurn', () => {
   it('continues an existing conversation across turns', async () => {
     await base();
     const deps = {
-      vaultDir: vault,
+      fs,
       key,
       client: fakeClient,
       apiKey: 'sk-test',
@@ -160,8 +164,8 @@ describe('runChatTurn', () => {
     };
     await runChatTurn({ ...deps, userText: 'first' });
     await runChatTurn({ ...deps, userText: 'second' });
-    const conversation = await getConversation(vault, key, 'p1', 'c1');
+    const conversation = await getConversation(fs, key, 'p1', 'c1');
     expect(conversation?.messages.length).toBe(4); // 2 user + 2 assistant
-    expect((await listConversations(vault, key, 'p1')).length).toBe(1);
+    expect((await listConversations(fs, key, 'p1')).length).toBe(1);
   });
 });

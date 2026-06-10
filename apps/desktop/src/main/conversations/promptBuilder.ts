@@ -1,3 +1,4 @@
+import type { FileSystem } from '@selfos/core/host';
 import { buildContext } from '../people/buildContext';
 
 /** The fixed v1 coach voice (05-conversations §11.5). Warm, reflective, non-clinical. */
@@ -17,10 +18,10 @@ alone. Do not attempt to manage a crisis by yourself.`;
 
 /** Assemble the system prompt: persona + safety + the person's consented context. */
 export async function buildSystemPrompt(
-  vaultDir: string,
+  fs: FileSystem,
   key: Buffer,
   personId: string,
 ): Promise<string> {
-  const context = await buildContext(vaultDir, key, personId);
+  const context = await buildContext(fs, key, personId);
   return [PERSONA, SAFETY, context].filter(Boolean).join('\n\n');
 }

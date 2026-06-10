@@ -239,6 +239,23 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-10 — Build (Capacitor track **slice (ii-b): FileSystem host + the encrypted vault-data layer**
+  — [07-mobile-platform](docs/specs/07-mobile-platform.md) §5.1/§5.3): introduced the **`FileSystem`
+  host interface** (`@selfos/core/host`: `read`/`writeAtomic`/`list`/`remove`, **vault-relative** POSIX
+  paths) and refactored the encrypted data layer to depend on it instead of `node:fs`/`node:path` — a
+  **pure I/O abstraction, no behavior change**. `encryptedStore` + the 6 data services (people /
+  relationship / access / usage / budget / conversation) + buildContext/promptBuilder/chatService now
+  thread `fs: FileSystem`; the Electron impl **`createNodeFileSystem(vaultDir)`** (app
+  `main/host/`) is node `fs` rooted at the vault + atomic temp-file→rename + `notifyWrite` echo-
+  suppression. `ipc.ts` `vaultAndKey()` → `{ fs, key }`. Services **stay in the app** for now (still use
+  `key: Buffer` + `randomUUID`); they **relocate into core** in a later slice. On-disk format/paths are
+  byte-identical (proven: 23 E2E seed+read real encrypted vaults; encrypted-at-rest unit assertions read
+  the real `.enc`). Gates green: typecheck/lint/format, **189 unit** (22 core + 167 desktop), 23 E2E.
+  **Lesson (code-reviewer caught a real regression): the old `listPeople` filtered `isDirectory()`; the
+  fs version `getPerson`s every entry, so a stray `people/.DS_Store` (common in iCloud/Dropbox-synced
+  vaults) made `read('people/.DS_Store/profile.enc')` throw `ENOTDIR` and cascade into Usage + chat
+  context. Fixed in the host — `read`/`list` treat `ENOTDIR` like `ENOENT` (absent → null/[]) — + a
+  `nodeFileSystem` contract test and a stray-file `listPeople` regression test.**
 - 2026-06-10 — Build (Capacitor track **slice (ii-a): scaffold `@selfos/core` + extract crypto + shared
   schemas** — [07-mobile-platform](docs/specs/07-mobile-platform.md) §5.2): created the platform-agnostic
   **`@selfos/core`** workspace package (source-only; `exports` map → `.ts`; bundled into Electron `main`

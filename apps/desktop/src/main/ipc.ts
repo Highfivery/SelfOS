@@ -56,6 +56,8 @@ import {
   upsertRelationship,
 } from './people/relationshipService';
 import { loadMasterKey } from './crypto/masterKey';
+import type { FileSystem } from '@selfos/core/host';
+import { createNodeFileSystem } from './host/nodeFileSystem';
 import { queryUsage, summarize } from './usage/usageStore';
 import {
   checkBudget,
@@ -127,17 +129,17 @@ function userDataDir(): string {
   return app.getPath('userData');
 }
 
-/** The active vault + decrypted master key, or null when the household isn't set up. */
-async function vaultAndKey(): Promise<{ vaultDir: string; key: Buffer } | null> {
+/** The active vault's FileSystem host + decrypted master key, or null when the household isn't set up. */
+async function vaultAndKey(): Promise<{ fs: FileSystem; key: Buffer } | null> {
   const vaultDir = await activeVaultPath();
   if (!vaultDir) return null;
   const key = await loadMasterKey(userDataDir(), encryptor);
-  return key ? { vaultDir, key } : null;
+  return key ? { fs: createNodeFileSystem(vaultDir), key } : null;
 }
 
 /** Whether the active person's role grants a capability (enforces admin-only actions in main). */
 async function activePersonCan(
-  vaultDir: string,
+  fs: FileSystem,
   key: Buffer,
   capability: CapabilityKey,
 ): Promise<boolean> {
@@ -146,7 +148,7 @@ async function activePersonCan(
   if (isSuperAdminActive()) return true;
   const personId = await getActivePersonId(userDataDir());
   if (!personId) return false;
-  const access = await getAccessConfig(vaultDir, key);
+  const access = await getAccessConfig(fs, key);
   const account = access.accounts.find((candidate) => candidate.personId === personId);
   const role = access.roles.find((candidate) => candidate.id === account?.roleId);
   return roleAllows(role, capability);
@@ -248,29 +250,29 @@ export function registerIpcHandlers(): void {
     const ctx = await vaultAndKey();
     if (!ctx) return null;
     const id = await getActivePersonId(userDataDir());
-    return id ? getPerson(ctx.vaultDir, ctx.key, id) : null;
+    return id ? getPerson(ctx.fs, ctx.key, id) : null;
   });
 
   ipcMain.handle(IpcChannels.peopleList, async (): Promise<Person[]> => {
     const ctx = await vaultAndKey();
-    return ctx ? listPeople(ctx.vaultDir, ctx.key) : [];
+    return ctx ? listPeople(ctx.fs, ctx.key) : [];
   });
 
   ipcMain.handle(IpcChannels.peopleSave, async (_event, raw: unknown): Promise<Person> => {
     const ctx = await vaultAndKey();
     if (!ctx) throw new Error('Household is not set up');
-    return upsertPerson(ctx.vaultDir, ctx.key, PersonInputSchema.parse(raw));
+    return upsertPerson(ctx.fs, ctx.key, PersonInputSchema.parse(raw));
   });
 
   ipcMain.handle(IpcChannels.peopleDelete, async (_event, raw: unknown): Promise<void> => {
     const ctx = await vaultAndKey();
     if (!ctx) return;
-    await deletePerson(ctx.vaultDir, z.string().min(1).parse(raw));
+    await deletePerson(ctx.fs, z.string().min(1).parse(raw));
   });
 
   ipcMain.handle(IpcChannels.relationshipsList, async (): Promise<Relationship[]> => {
     const ctx = await vaultAndKey();
-    return ctx ? listRelationships(ctx.vaultDir, ctx.key) : [];
+    return ctx ? listRelationships(ctx.fs, ctx.key) : [];
   });
 
   ipcMain.handle(
@@ -278,26 +280,26 @@ export function registerIpcHandlers(): void {
     async (_event, raw: unknown): Promise<Relationship> => {
       const ctx = await vaultAndKey();
       if (!ctx) throw new Error('Household is not set up');
-      return upsertRelationship(ctx.vaultDir, ctx.key, RelationshipInputSchema.parse(raw));
+      return upsertRelationship(ctx.fs, ctx.key, RelationshipInputSchema.parse(raw));
     },
   );
 
   ipcMain.handle(IpcChannels.relationshipsDelete, async (_event, raw: unknown): Promise<void> => {
     const ctx = await vaultAndKey();
     if (!ctx) return;
-    await deleteRelationship(ctx.vaultDir, z.string().min(1).parse(raw));
+    await deleteRelationship(ctx.fs, z.string().min(1).parse(raw));
   });
 
   ipcMain.handle(IpcChannels.accessGet, async (): Promise<AccessView> => {
     const ctx = await vaultAndKey();
-    return ctx ? getAccessView(ctx.vaultDir, ctx.key) : { roles: [], accounts: [] };
+    return ctx ? getAccessView(ctx.fs, ctx.key) : { roles: [], accounts: [] };
   });
 
   ipcMain.handle(IpcChannels.accessSaveRole, async (_event, raw: unknown): Promise<AccessView> => {
     const ctx = await vaultAndKey();
     if (!ctx) throw new Error('Household is not set up');
-    await saveRole(ctx.vaultDir, ctx.key, RoleSchema.parse(raw));
-    return getAccessView(ctx.vaultDir, ctx.key);
+    await saveRole(ctx.fs, ctx.key, RoleSchema.parse(raw));
+    return getAccessView(ctx.fs, ctx.key);
   });
 
   ipcMain.handle(
@@ -305,8 +307,8 @@ export function registerIpcHandlers(): void {
     async (_event, raw: unknown): Promise<AccessView> => {
       const ctx = await vaultAndKey();
       if (!ctx) throw new Error('Household is not set up');
-      await setAccount(ctx.vaultDir, ctx.key, SetAccountSchema.parse(raw));
-      return getAccessView(ctx.vaultDir, ctx.key);
+      await setAccount(ctx.fs, ctx.key, SetAccountSchema.parse(raw));
+      return getAccessView(ctx.fs, ctx.key);
     },
   );
 
@@ -315,8 +317,8 @@ export function registerIpcHandlers(): void {
     async (_event, raw: unknown): Promise<AccessView> => {
       const ctx = await vaultAndKey();
       if (!ctx) throw new Error('Household is not set up');
-      await removeAccount(ctx.vaultDir, ctx.key, z.string().min(1).parse(raw));
-      return getAccessView(ctx.vaultDir, ctx.key);
+      await removeAccount(ctx.fs, ctx.key, z.string().min(1).parse(raw));
+      return getAccessView(ctx.fs, ctx.key);
     },
   );
 
@@ -326,9 +328,9 @@ export function registerIpcHandlers(): void {
       const ctx = await vaultAndKey();
       if (!ctx) return { ok: false, reason: 'NO_ACCOUNT' };
       const { personId, pin } = SetActiveSchema.parse(raw);
-      const person = await getPerson(ctx.vaultDir, ctx.key, personId);
+      const person = await getPerson(ctx.fs, ctx.key, personId);
       if (!person) return { ok: false, reason: 'NO_ACCOUNT' };
-      if (!(await verifyAccountPin(ctx.vaultDir, ctx.key, personId, pin ?? ''))) {
+      if (!(await verifyAccountPin(ctx.fs, ctx.key, personId, pin ?? ''))) {
         return { ok: false, reason: 'WRONG_PIN' };
       }
       await setActivePersonId(userDataDir(), personId);
@@ -365,15 +367,14 @@ export function registerIpcHandlers(): void {
     const from = periodStart(now, period);
     const to = now.toISOString();
     // Only an admin may see the whole household or another person; everyone else sees only their own.
-    const canManage = await activePersonCan(ctx.vaultDir, ctx.key, 'budgets.manage');
+    const canManage = await activePersonCan(ctx.fs, ctx.key, 'budgets.manage');
     if (canManage) {
-      if (personId)
-        return summarize(await queryUsage(ctx.vaultDir, ctx.key, { from, to, personId }));
-      if (scope === 'app') return summarize(await queryUsage(ctx.vaultDir, ctx.key, { from, to }));
+      if (personId) return summarize(await queryUsage(ctx.fs, ctx.key, { from, to, personId }));
+      if (scope === 'app') return summarize(await queryUsage(ctx.fs, ctx.key, { from, to }));
     }
     const self = await getActivePersonId(userDataDir());
     if (!self) return summarize([]);
-    return summarize(await queryUsage(ctx.vaultDir, ctx.key, { from, to, personId: self }));
+    return summarize(await queryUsage(ctx.fs, ctx.key, { from, to, personId: self }));
   });
 
   ipcMain.handle(
@@ -381,11 +382,11 @@ export function registerIpcHandlers(): void {
     async (): Promise<{ app: Budget | null; person: Budget | null }> => {
       const ctx = await vaultAndKey();
       if (!ctx) return { app: null, person: null };
-      const budgets = await getBudgets(ctx.vaultDir, ctx.key);
+      const budgets = await getBudgets(ctx.fs, ctx.key);
       const personId = await getActivePersonId(userDataDir());
       return {
         app: budgets.app ?? null,
-        person: personId ? await effectivePersonBudget(ctx.vaultDir, ctx.key, personId) : null,
+        person: personId ? await effectivePersonBudget(ctx.fs, ctx.key, personId) : null,
       };
     },
   );
@@ -393,16 +394,16 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IpcChannels.budgetGetPerson, async (_event, raw: unknown): Promise<Budget> => {
     const personId = z.string().min(1).parse(raw);
     const ctx = await vaultAndKey();
-    if (!ctx || !(await activePersonCan(ctx.vaultDir, ctx.key, 'budgets.manage'))) {
+    if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'budgets.manage'))) {
       return DEFAULT_BUDGET;
     }
-    return effectivePersonBudget(ctx.vaultDir, ctx.key, personId);
+    return effectivePersonBudget(ctx.fs, ctx.key, personId);
   });
 
   ipcMain.handle(IpcChannels.budgetSetApp, async (_event, raw: unknown): Promise<void> => {
     const ctx = await vaultAndKey();
-    if (!ctx || !(await activePersonCan(ctx.vaultDir, ctx.key, 'budgets.manage'))) return;
-    await setAppBudget(ctx.vaultDir, ctx.key, raw === null ? null : BudgetSchema.parse(raw));
+    if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'budgets.manage'))) return;
+    await setAppBudget(ctx.fs, ctx.key, raw === null ? null : BudgetSchema.parse(raw));
   });
 
   ipcMain.handle(IpcChannels.budgetSetPerson, async (_event, raw: unknown): Promise<void> => {
@@ -410,8 +411,8 @@ export function registerIpcHandlers(): void {
       .object({ personId: z.string().min(1), budget: BudgetSchema.nullable() })
       .parse(raw);
     const ctx = await vaultAndKey();
-    if (!ctx || !(await activePersonCan(ctx.vaultDir, ctx.key, 'budgets.manage'))) return;
-    await setPersonBudget(ctx.vaultDir, ctx.key, personId, budget);
+    if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'budgets.manage'))) return;
+    await setPersonBudget(ctx.fs, ctx.key, personId, budget);
   });
 
   ipcMain.handle(
@@ -423,9 +424,9 @@ export function registerIpcHandlers(): void {
       const now = new Date();
       const personId = await getActivePersonId(userDataDir());
       const person = personId
-        ? await checkBudget(ctx.vaultDir, ctx.key, { scope: 'person', personId, now })
+        ? await checkBudget(ctx.fs, ctx.key, { scope: 'person', personId, now })
         : none;
-      const app = await checkBudget(ctx.vaultDir, ctx.key, { scope: 'app', now });
+      const app = await checkBudget(ctx.fs, ctx.key, { scope: 'app', now });
       return { person, app };
     },
   );
@@ -434,7 +435,7 @@ export function registerIpcHandlers(): void {
     const ctx = await vaultAndKey();
     const personId = ctx ? await getActivePersonId(userDataDir()) : null;
     if (!ctx || !personId) return [];
-    return (await listConversations(ctx.vaultDir, ctx.key, personId)).map((c) => ({
+    return (await listConversations(ctx.fs, ctx.key, personId)).map((c) => ({
       id: c.id,
       title: c.title,
       updatedAt: c.updatedAt,
@@ -447,7 +448,7 @@ export function registerIpcHandlers(): void {
       const ctx = await vaultAndKey();
       const personId = ctx ? await getActivePersonId(userDataDir()) : null;
       if (!ctx || !personId) return null;
-      return getConversation(ctx.vaultDir, ctx.key, personId, z.string().min(1).parse(raw));
+      return getConversation(ctx.fs, ctx.key, personId, z.string().min(1).parse(raw));
     },
   );
 
@@ -456,9 +457,9 @@ export function registerIpcHandlers(): void {
     const personId = ctx ? await getActivePersonId(userDataDir()) : null;
     if (!ctx || !personId) return;
     const { id, title } = z.object({ id: z.string().min(1), title: z.string().min(1) }).parse(raw);
-    const conversation = await getConversation(ctx.vaultDir, ctx.key, personId, id);
+    const conversation = await getConversation(ctx.fs, ctx.key, personId, id);
     if (!conversation) return;
-    await saveConversation(ctx.vaultDir, ctx.key, {
+    await saveConversation(ctx.fs, ctx.key, {
       ...conversation,
       title,
       updatedAt: new Date().toISOString(),
@@ -469,7 +470,7 @@ export function registerIpcHandlers(): void {
     const ctx = await vaultAndKey();
     const personId = ctx ? await getActivePersonId(userDataDir()) : null;
     if (!ctx || !personId) return;
-    await deleteConversation(ctx.vaultDir, personId, z.string().min(1).parse(raw));
+    await deleteConversation(ctx.fs, personId, z.string().min(1).parse(raw));
   });
 
   ipcMain.handle(IpcChannels.chatStream, async (event, raw): Promise<ChatTurnResult> => {
@@ -481,7 +482,7 @@ export function registerIpcHandlers(): void {
     }
     const apiKey = await getSecret(userDataDir(), encryptor, ANTHROPIC_API_KEY_ID);
     return runChatTurn({
-      vaultDir: ctx.vaultDir,
+      fs: ctx.fs,
       key: ctx.key,
       client: claudeClient,
       apiKey,

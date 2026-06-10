@@ -253,6 +253,17 @@ reduced-motion honored (already global).
   code. The crypto layer is now async (awaits rippled to callers/tests/e2e). `Buffer`,
   portable-base64, and the `randomUUID` call sites are intentionally deferred to **slice (ii)** (the
   `@selfos/core` extraction, "no `node:*`"). Gates green: typecheck/lint/format, 183 unit, 23 E2E.
+- 2026-06-10 — **slice (ii-b) landed (§5.1/§5.3):** introduced the **`FileSystem`** host interface
+  (`@selfos/core/host` — `read`/`writeAtomic`/`list`/`remove`, vault-relative paths) and refactored the
+  encrypted vault-data layer (`encryptedStore` + people/relationship/access/usage/budget/conversation
+  services + buildContext/promptBuilder/chatService) to thread `fs` instead of `node:fs`/`node:path` — a
+  pure I/O abstraction, no behavior change. The Electron impl `createNodeFileSystem(vaultDir)` (node fs
+  rooted at the vault + atomic write + `notifyWrite` echo-suppression) lives in the app; `ipc.ts`'s
+  `vaultAndKey()` returns `{ fs, key }`. Services stay in the app (keep `Buffer` + `randomUUID`) and
+  relocate into core in a follow-up. On-disk format/paths byte-identical; the host treats `ENOTDIR` like
+  `ENOENT` so stray synced files (`.DS_Store`) don't break listings. Gates green: 189 unit, 23 E2E.
+  Next: **(ii-c)** SecretStore + ClaudeClient hosts (masterKey/secrets/claude/chatService), then relocate
+  the platform-agnostic service files into core.
 - 2026-06-10 — **slice (ii-a) landed (§5.2):** created the source-only **`@selfos/core`** package
   (`exports`→`.ts`, bundled into Electron `main` via electron-vite `externalizeDepsPlugin({exclude})`).
   Moved the shared schemas/types (`schemas`/`capabilities`/`usageTypes`/`appearance`) and crypto

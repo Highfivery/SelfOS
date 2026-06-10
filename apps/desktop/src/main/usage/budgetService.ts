@@ -1,12 +1,10 @@
-import { join } from 'node:path';
+import type { FileSystem } from '@selfos/core/host';
 import type { BudgetState, BudgetStateKind } from '../../shared/channels';
 import { BudgetsConfigSchema, type Budget, type BudgetsConfig } from '../../shared/schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../crypto/encryptedStore';
 import { queryUsage } from './usageStore';
 
-function budgetsPath(vaultDir: string): string {
-  return join(vaultDir, 'config', 'budgets.enc');
-}
+const BUDGETS_PATH = 'config/budgets.enc';
 
 /** Everyone has a budget: this default applies to a person the admin hasn't configured (06 §12). */
 export const DEFAULT_BUDGET: Budget = { limitUsd: 10, period: 'week', warnRatio: 0.8 };
@@ -17,46 +15,46 @@ function defaults(): BudgetsConfig {
 
 /** A person's effective budget: their override, or the $10/week default. */
 export async function effectivePersonBudget(
-  vaultDir: string,
+  fs: FileSystem,
   key: Buffer,
   personId: string,
 ): Promise<Budget> {
-  return (await getBudgets(vaultDir, key)).perPerson[personId] ?? DEFAULT_BUDGET;
+  return (await getBudgets(fs, key)).perPerson[personId] ?? DEFAULT_BUDGET;
 }
 
-export async function getBudgets(vaultDir: string, key: Buffer): Promise<BudgetsConfig> {
-  const raw = await readEncryptedJson(budgetsPath(vaultDir), key);
+export async function getBudgets(fs: FileSystem, key: Buffer): Promise<BudgetsConfig> {
+  const raw = await readEncryptedJson(fs, BUDGETS_PATH, key);
   return raw === null ? defaults() : BudgetsConfigSchema.parse(raw);
 }
 
-async function write(vaultDir: string, key: Buffer, config: BudgetsConfig): Promise<BudgetsConfig> {
-  await writeEncryptedJson(budgetsPath(vaultDir), config, key);
+async function write(fs: FileSystem, key: Buffer, config: BudgetsConfig): Promise<BudgetsConfig> {
+  await writeEncryptedJson(fs, BUDGETS_PATH, config, key);
   return config;
 }
 
 export async function setAppBudget(
-  vaultDir: string,
+  fs: FileSystem,
   key: Buffer,
   budget: Budget | null,
 ): Promise<BudgetsConfig> {
-  const config = await getBudgets(vaultDir, key);
+  const config = await getBudgets(fs, key);
   const next: BudgetsConfig = { ...config, perPerson: config.perPerson };
   if (budget) next.app = budget;
   else delete next.app;
-  return write(vaultDir, key, next);
+  return write(fs, key, next);
 }
 
 export async function setPersonBudget(
-  vaultDir: string,
+  fs: FileSystem,
   key: Buffer,
   personId: string,
   budget: Budget | null,
 ): Promise<BudgetsConfig> {
-  const config = await getBudgets(vaultDir, key);
+  const config = await getBudgets(fs, key);
   const perPerson = { ...config.perPerson };
   if (budget) perPerson[personId] = budget;
   else delete perPerson[personId];
-  return write(vaultDir, key, { ...config, perPerson });
+  return write(fs, key, { ...config, perPerson });
 }
 
 /** Start-of-period ISO for `now` (calendar month, or the most recent Monday for week). */
@@ -76,7 +74,7 @@ export function periodStart(now: Date, period: 'week' | 'month'): string {
  * An owner override downgrades a hard `over` to `warn` so the owner is never stranded.
  */
 export async function checkBudget(
-  vaultDir: string,
+  fs: FileSystem,
   key: Buffer,
   options: {
     scope: 'app' | 'person';
@@ -85,7 +83,7 @@ export async function checkBudget(
     override?: boolean | undefined;
   },
 ): Promise<BudgetState> {
-  const budgets = await getBudgets(vaultDir, key);
+  const budgets = await getBudgets(fs, key);
   // Person scope always has a budget (override or the $10/week default); app scope may be unset.
   const budget =
     options.scope === 'app'
@@ -98,7 +96,7 @@ export async function checkBudget(
   const from = periodStart(options.now, budget.period);
   const to = options.now.toISOString();
   const events = await queryUsage(
-    vaultDir,
+    fs,
     key,
     options.scope === 'person' && options.personId
       ? { from, to, personId: options.personId }

@@ -1,3 +1,4 @@
+import type { FileSystem } from '@selfos/core/host';
 import { getPerson, listPeople } from './peopleService';
 import { listRelationships } from './relationshipService';
 
@@ -6,16 +7,12 @@ import { listRelationships } from './relationshipService';
  * OWN full profile (their session, their data) plus only the **shareable** facts about the people they
  * relate to — other people's private notes are never included. The chat proxy feeds this to Claude.
  */
-export async function buildContext(
-  vaultDir: string,
-  key: Buffer,
-  personId: string,
-): Promise<string> {
-  const person = await getPerson(vaultDir, key, personId);
+export async function buildContext(fs: FileSystem, key: Buffer, personId: string): Promise<string> {
+  const person = await getPerson(fs, key, personId);
   if (!person) return '';
 
-  const people = await listPeople(vaultDir, key);
-  const relationships = await listRelationships(vaultDir, key);
+  const people = await listPeople(fs, key);
+  const relationships = await listRelationships(fs, key);
   const byId = new Map(people.map((candidate) => [candidate.id, candidate]));
 
   const lines: string[] = [];

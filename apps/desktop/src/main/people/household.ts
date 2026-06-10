@@ -3,6 +3,7 @@ import { OWNER_ROLE_ID } from '../../shared/capabilities';
 import type { HouseholdStatus } from '../../shared/channels';
 import type { Person } from '../../shared/schemas';
 import { createMasterKey, loadMasterKey } from '../crypto/masterKey';
+import { createNodeFileSystem } from '../host/nodeFileSystem';
 import type { Encryptor } from '../secrets/secretStore';
 import { getAccessConfig, setAccount } from './accessService';
 import { savePerson } from './peopleService';
@@ -19,7 +20,7 @@ export async function householdStatus(
   if (!key || !vaultDir) {
     return { hasMasterKey: key !== null, hasOwner: false, activePersonId: null };
   }
-  const access = await getAccessConfig(vaultDir, key);
+  const access = await getAccessConfig(createNodeFileSystem(vaultDir), key);
   const hasOwner = access.accounts.some((account) => account.roleId === OWNER_ROLE_ID);
   return { hasMasterKey: true, hasOwner, activePersonId: await getActivePersonId(userDataDir) };
 }
@@ -38,6 +39,7 @@ export async function setupHousehold(
   const key = await loadMasterKey(userDataDir, encryptor);
   if (!key) throw new Error('Master key creation failed');
 
+  const fs = createNodeFileSystem(vaultDir);
   const now = new Date().toISOString();
   const owner: Person = {
     id: randomUUID(),
@@ -48,8 +50,8 @@ export async function setupHousehold(
     createdAt: now,
     updatedAt: now,
   };
-  await savePerson(vaultDir, key, owner);
-  await setAccount(vaultDir, key, { personId: owner.id, roleId: OWNER_ROLE_ID });
+  await savePerson(fs, key, owner);
+  await setAccount(fs, key, { personId: owner.id, roleId: OWNER_ROLE_ID });
   await setSuperAdminPassphrase(userDataDir, input.passphrase);
   await setActivePersonId(userDataDir, owner.id);
 

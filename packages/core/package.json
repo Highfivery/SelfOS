@@ -10,7 +10,8 @@
     "./capabilities": "./src/capabilities.ts",
     "./usage-types": "./src/usageTypes.ts",
     "./appearance": "./src/appearance.ts",
-    "./crypto": "./src/crypto/index.ts"
+    "./crypto": "./src/crypto/index.ts",
+    "./host": "./src/host/index.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",

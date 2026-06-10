@@ -157,7 +157,9 @@ this is the v1 inventory:
   `Select`, `Checkbox`, `Radio`, `Switch`, `Slider`, `Field` (label/help/error wrapper).
 - **Surfaces:** `Card`, `Panel`, `Modal`/`Dialog`, `Popover`, `Tooltip`, `Toast`.
 - **Navigation:** `Tabs`, `Menu`, `SidebarItem`, `Breadcrumb`.
-- **Feedback / status:** `Badge`, `Avatar`, `Spinner`, `Skeleton`, `EmptyState`, `Banner`.
+- **Feedback / status:** `Badge`, `AdminOnlyBadge` (the "Admin only" lock pill — marks any
+  control/section only admins can see; CLAUDE.md §12), `Avatar`, `Spinner`, `Skeleton`, `EmptyState`,
+  `Banner`.
 - **Icons:** **`lucide-react`** — a single outline icon set (calm, consistent, tree-shakeable).
 
 ## 6. IPC / API contracts

@@ -3,6 +3,7 @@ import { Trash2 } from 'lucide-react';
 import { usePeopleStore } from '../../../stores/peopleStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import {
+  AdminOnlyBadge,
   Button,
   Card,
   Field,
@@ -170,7 +171,10 @@ export function PersonEditor({
       {tab === 'budget' && person ? (
         <Card>
           <Stack gap={3}>
-            <Heading level={3}>Budget</Heading>
+            <Inline gap={2}>
+              <Heading level={3}>Budget</Heading>
+              <AdminOnlyBadge />
+            </Inline>
             <PersonBudgetEditor person={person} />
           </Stack>
         </Card>

@@ -67,6 +67,8 @@ describe('Usage', () => {
     expect(screen.getByText('claude-sonnet-4-6')).toBeInTheDocument(); // by model
     expect(screen.getByText('$0.05')).toBeInTheDocument(); // cache savings ($)
     expect(screen.getAllByRole('button', { name: 'Save' }).length).toBeGreaterThan(0); // budget editor
+    // Admin-only sections are marked (picker, cost, by-person, overall cap).
+    expect(screen.getAllByText('Admin only').length).toBeGreaterThanOrEqual(3);
   });
 
   it('hides cost and budgets for a normal user, showing only their usage', async () => {
@@ -80,6 +82,7 @@ describe('Usage', () => {
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument(); // no budgets
     expect(screen.queryByLabelText('Whose usage')).not.toBeInTheDocument(); // no person picker
     expect(screen.queryByRole('heading', { name: 'By person' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Admin only')).not.toBeInTheDocument(); // no admin markers
   });
 
   it('saves the optional overall cap as an admin', async () => {

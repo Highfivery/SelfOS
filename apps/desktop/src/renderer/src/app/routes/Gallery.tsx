@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { AlignCenter, AlignLeft, AlignRight, Check, Plus } from 'lucide-react';
 import {
+  AdminOnlyBadge,
   Button,
   Card,
   Field,
@@ -147,6 +148,15 @@ export function Gallery(): JSX.Element {
               </Text>
             </Stack>
           </Card>
+        </Section>
+
+        <Section title="Markers">
+          <Inline gap={3} wrap>
+            <AdminOnlyBadge />
+            <Text tone="secondary" size="sm">
+              Sits beside any heading or control that only admins can see.
+            </Text>
+          </Inline>
         </Section>
       </Stack>
     </div>

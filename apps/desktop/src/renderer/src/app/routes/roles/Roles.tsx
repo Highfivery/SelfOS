@@ -1,7 +1,14 @@
 import { useEffect } from 'react';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { CAPABILITIES, CAPABILITY_LABELS, roleAllows } from '@shared/capabilities';
-import { Heading, Stack, Switch, Text } from '../../../design-system/components';
+import {
+  AdminOnlyBadge,
+  Heading,
+  Inline,
+  Stack,
+  Switch,
+  Text,
+} from '../../../design-system/components';
 import type { Role } from '@shared/channels';
 import styles from './Roles.module.css';
 
@@ -29,7 +36,10 @@ export function Roles(): JSX.Element {
   return (
     <Stack gap={5}>
       <Stack gap={1}>
-        <Heading level={2}>Roles</Heading>
+        <Inline gap={2}>
+          <Heading level={2}>Roles</Heading>
+          <AdminOnlyBadge />
+        </Inline>
         <Text tone="secondary">
           Choose what each role can do. The owner always has full access.
         </Text>

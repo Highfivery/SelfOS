@@ -21,6 +21,7 @@ describe('Roles', () => {
     useSessionStore.setState({ access: { roles: DEFAULT_ROLES, accounts: [] } });
     render(<Roles />);
 
+    expect(screen.getByText('Admin only')).toBeInTheDocument(); // the Roles screen is admin-only
     expect(screen.getByRole('switch', { name: 'Owner: Manage people' })).toBeDisabled();
 
     const memberManage = screen.getByRole('switch', { name: 'Member: Manage people' });

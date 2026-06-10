@@ -3,6 +3,7 @@ import { useUsageStore } from '../../../stores/usageStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { usageTypeLabel } from '@shared/usageTypes';
 import {
+  AdminOnlyBadge,
   Card,
   Heading,
   Inline,
@@ -74,20 +75,23 @@ export function Usage(): JSX.Element {
 
       <Inline gap={3} wrap>
         {canManage ? (
-          <Select
-            aria-label="Whose usage"
-            value={selectedPersonId ?? 'app'}
-            onChange={(event) =>
-              void setSelectedPerson(event.target.value === 'app' ? null : event.target.value)
-            }
-          >
-            <option value="app">Everyone</option>
-            {people.map((person) => (
-              <option key={person.id} value={person.id}>
-                {person.displayName}
-              </option>
-            ))}
-          </Select>
+          <Inline gap={2}>
+            <Select
+              aria-label="Whose usage"
+              value={selectedPersonId ?? 'app'}
+              onChange={(event) =>
+                void setSelectedPerson(event.target.value === 'app' ? null : event.target.value)
+              }
+            >
+              <option value="app">Everyone</option>
+              {people.map((person) => (
+                <option key={person.id} value={person.id}>
+                  {person.displayName}
+                </option>
+              ))}
+            </Select>
+            <AdminOnlyBadge />
+          </Inline>
         ) : null}
         <SegmentedControl
           aria-label="Period"
@@ -107,7 +111,12 @@ export function Usage(): JSX.Element {
               <Text size="sm" tone="secondary">
                 {scopeLabel}, this {period}
               </Text>
-              {canManage ? <Heading level={1}>{formatUsd(summary.totalCostUsd)}</Heading> : null}
+              {canManage ? (
+                <Inline gap={2}>
+                  <Heading level={1}>{formatUsd(summary.totalCostUsd)}</Heading>
+                  <AdminOnlyBadge />
+                </Inline>
+              ) : null}
               <div className={styles.stats}>
                 <Stat label="Sessions" value={String(summary.sessionCount)} />
                 {canManage ? (
@@ -173,7 +182,10 @@ export function Usage(): JSX.Element {
           {canManage && selectedPersonId === null && Object.keys(summary.byPerson).length > 0 ? (
             <Card>
               <Stack gap={2}>
-                <Heading level={3}>By person</Heading>
+                <Inline gap={2}>
+                  <Heading level={3}>By person</Heading>
+                  <AdminOnlyBadge />
+                </Inline>
                 {Object.entries(summary.byPerson).map(([personId, row]) => (
                   <Inline key={personId} gap={2} justify="between">
                     <Text size="sm">{nameOf(personId)}</Text>
@@ -191,7 +203,10 @@ export function Usage(): JSX.Element {
       {canManage && budget && status ? (
         <Card>
           <Stack gap={3}>
-            <Heading level={3}>Overall cap (optional)</Heading>
+            <Inline gap={2}>
+              <Heading level={3}>Overall cap (optional)</Heading>
+              <AdminOnlyBadge />
+            </Inline>
             <Text size="sm" tone="secondary">
               A ceiling across everyone, on top of each person’s budget. Per-person budgets are set
               on each person’s page.

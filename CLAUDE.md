@@ -226,6 +226,18 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-10 — Build (admin-only marker): a reusable **`AdminOnlyBadge`** design-system primitive (a
+  "🔒 Admin only" pill, icon + text, never colour-alone) now marks every admin-gated surface so admins
+  know normal users don't see it (§12) — applied to the Usage cost figure, the person picker, the
+  by-person card, and the overall-cap editor; the person **Budget** tab; and the **Roles** screen.
+  Added to `/gallery`. Tests: a component test + Usage/Roles unit assertions (present for admins,
+  absent for users) + E2E (Budget-tab badge, none on a member's Usage, markers appear on super-admin
+  unlock). This is the standing convention for all current and future admin-gated UI.
+- 2026-06-10 — Build (app-shell chrome): sprout brand lockup; appearance toggle + usage ring + a new
+  account menu (Switch person / Lock / super-admin Lock-inspect) in the slot-based **TopBar**; sidebar
+  footer reduced to Settings + a **collapse toggle** (desktop icon rail, persisted device-local);
+  **logout = lock to a full-screen person picker** (a UI reveal-gate). Added Textarea to `/gallery`.
+  Updated [02-app-shell](docs/specs/02-app-shell.md) §3.4–3.6, §4, §6, §11.
 - 2026-06-10 — Correction landed: **removed the `questionnaires.answer` / `questionnaires.assign`
   capabilities** (unbuilt-feature scaffolding flagged in the prior entry). Stripped from
   `shared/capabilities.ts` (CAPABILITIES, labels, default Member/Guest roles) and synced

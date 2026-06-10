@@ -234,6 +234,7 @@ test('people: an admin sets a per-person budget on the Budget tab', async () => 
     await w.getByRole('link', { name: 'People' }).click();
     await w.getByRole('button', { name: 'Tester Subject' }).click();
     await w.getByRole('button', { name: 'Budget', exact: true }).click();
+    await expect(w.getByText('Admin only')).toBeVisible(); // admin-only marker on the Budget tab
     await w.getByLabel('Limit (USD)').fill('20');
     await w.getByRole('button', { name: 'Save budget' }).click();
     await expect(w.getByText('Saved.')).toBeVisible();
@@ -370,6 +371,7 @@ test('super-admin: inspect mode unlocks full budget/usage access for a non-admin
     await expect(w.getByLabel('Whose usage')).toHaveCount(0);
     await expect(w.getByRole('link', { name: 'People' })).toHaveCount(0);
     await expect(w.getByRole('heading', { name: '$3.00' })).toHaveCount(0);
+    await expect(w.getByText('Admin only')).toHaveCount(0); // no admin markers for a normal user
 
     // Unlock super-admin via the concealed long-press on the version.
     await w.getByRole('link', { name: 'Settings' }).click();
@@ -383,6 +385,7 @@ test('super-admin: inspect mode unlocks full budget/usage access for a non-admin
     // Now main grants full access: cost is shown and the owner's usage appears (app scope allowed).
     await w.getByRole('link', { name: 'Usage' }).click();
     await expect(w.getByLabel('Whose usage')).toBeVisible();
+    await expect(w.getByText('Admin only').first()).toBeVisible(); // markers appear once elevated
     await expect(w.getByRole('heading', { name: '$3.00' })).toBeVisible();
     await expect(w.getByRole('heading', { name: 'By person' })).toBeVisible();
     await expect(w.getByRole('option', { name: 'Alex' })).toBeAttached();

@@ -1,6 +1,6 @@
 # 05 — AI conversations
 
-> **Status:** Draft · _last updated 2026-06-09_
+> **Status:** Approved · _last updated 2026-06-09_
 >
 > The first conversational surface: a **streaming Claude chat** scoped to the **active person**. The
 > system prompt is assembled from the coach **persona**, the **wellness/not-medical/crisis safety**
@@ -93,8 +93,10 @@ service (AES-256-GCM, master key). Zod-validated on read; `schemaVersion` + migr
 ### 5.1 Main process
 
 - **claudeService (extended)** — add a **streaming** `send` that yields text deltas, backed by the
-  SDK's `messages.stream()` (`.finalMessage()` for the full turn). The injectable `ClaudeClient` keeps
-  the offline fake (for tests/E2E) so streaming is deterministic without network.
+  SDK's `messages.stream()` (`.finalMessage()` for the full turn) with **adaptive thinking**
+  (`thinking: {type: "adaptive"}`) for deeper reflection; only the visible **text** is streamed to the
+  renderer (thinking blocks are not displayed). The injectable `ClaudeClient` keeps the offline fake
+  (for tests/E2E) so streaming is deterministic without network.
 - **conversationService** — CRUD over encrypted transcripts (list/get/save/delete) per person.
 - **promptBuilder** — assembles the system prompt: `PERSONA` + `SAFETY` (constants) + `buildContext`.
 - **chat IPC** — `claude:streamStart({ conversationId, userText })` opens a stream; main emits
@@ -152,19 +154,25 @@ the crisis affordance is reachable and clearly labeled.
 2. **Chat UI** — conversation list + thread + composer + streaming + the crisis footer; nav gating.
 3. **Polish** — titles/rename, delete, empty/error states, accessibility live-region pass.
 
-## 11. Open questions
+## 11. Resolved decisions
 
-1. **Conversations per person** — multiple named conversations + a list (proposed), or a single
-   rolling thread per person?
-2. **Crisis handling depth** — model-instruction + always-visible resources (proposed), or also a
-   keyword-triggered crisis interstitial that interrupts the flow?
-3. **Transcript format** — encrypted (proposed; conversations are the most sensitive data) vs. plain
-   Markdown (human-readable but readable by anyone with the folder)?
-4. **Persona & tone** — confirm the coach persona/voice (warm, reflective, non-clinical) and whether
-   it's fixed or partly user-configurable (a future setting).
-5. **Model thinking** — default `claude-sonnet-4-6` with no thinking for snappy chat, or enable
-   adaptive thinking for deeper reflection (slower, more tokens)?
+Confirmed with the user (2026-06-09):
+
+1. **Conversations** — multiple named conversations per person, with a list (title from the first
+   message, editable; deletable).
+2. **Crisis handling** — the `SAFETY` system-prompt block routes crisis/self-harm to professional
+   resources, plus a persistent, non-dismissable **"Get help now"** affordance always on screen. No
+   keyword interstitial in v1 (avoids false positives; revisit later).
+3. **Transcripts** — **encrypted** at rest (AES-256-GCM, master key), like the rest of People data.
+4. **Model / thinking** — default to the `ai.model` setting (`claude-sonnet-4-6`) with **adaptive
+   thinking** (`thinking: {type: "adaptive"}`) for deeper reflection; only visible text is streamed.
+5. **Persona** — a fixed v1 coach voice: **warm, reflective, non-clinical, curious, non-judgmental**;
+   asks open questions, validates, never diagnoses or prescribes. Lives as a `PERSONA` constant in the
+   prompt builder; making it user-configurable is a future setting.
 
 ## 12. Changelog
 
 - 2026-06-09 — created (draft).
+- 2026-06-09 — resolved open questions (multiple named conversations, model-instruction + always-on
+  crisis resources, encrypted transcripts, adaptive thinking, fixed warm non-clinical persona); set
+  §5.1 to adaptive thinking; marked Approved.

@@ -221,3 +221,9 @@ A running log of durable decisions and feedback captured into the project config
   sections. `ThemeProvider` now reads from settings. Added a shared mock-bridge test helper. Deferred:
   accent options, high-contrast, the AI/secret settings + keychain (slice 5), and the broader
   feature-module registry abstraction.
+- 2026-06-09 — Fix + test hardening: the Vault/About settings sections overflowed and overlapped
+  because long custom content (the vault path, the disclaimer) sat in the fixed control column —
+  custom rows now render full-width and wrap. Version showed Electron's version; now injected at build
+  time via electron-vite `define` (`__APP_VERSION__`). E2E now walks **every** settings section with a
+  no-horizontal-overflow visual guard, and `SettingField` has component tests. (Lesson: E2E must cover
+  every surface, not just the happy-path one.)

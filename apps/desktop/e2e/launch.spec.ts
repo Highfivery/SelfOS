@@ -139,3 +139,50 @@ test('settings: a persisted dark theme is applied on boot', async () => {
     await rm(vault, { recursive: true, force: true });
   }
 });
+
+test('settings: every section renders content without horizontal overflow', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('heading', { name: 'Settings' }).waitFor();
+
+    // Visual guard: nothing should overflow the content area or the window horizontally.
+    const noOverflow = (): Promise<boolean> =>
+      w.evaluate(() => {
+        const main = document.querySelector('main');
+        const mainOk = !!main && main.scrollWidth <= main.clientWidth;
+        const docOk = document.documentElement.scrollWidth <= window.innerWidth;
+        return mainOk && docOk;
+      });
+
+    // Walk every section generically so new sections are covered automatically.
+    const sectionButtons = w
+      .getByRole('navigation', { name: 'Settings sections' })
+      .getByRole('button');
+    const count = await sectionButtons.count();
+    expect(count).toBeGreaterThanOrEqual(3);
+    for (let i = 0; i < count; i++) {
+      await sectionButtons.nth(i).click();
+      await w.waitForTimeout(50);
+      expect(await noOverflow()).toBe(true);
+    }
+
+    // Content sanity on the sections that previously had bugs.
+    await w.getByRole('button', { name: 'Vault' }).click();
+    await expect(w.getByRole('button', { name: /reveal in file manager/i })).toBeVisible();
+    await expect(w.getByText(vault, { exact: false })).toBeVisible(); // full path, wrapped
+
+    await w.getByRole('button', { name: 'About' }).click();
+    await expect(w.getByText(/not a substitute for professional care/i)).toBeVisible();
+    const pkg = JSON.parse(await readFile(join(__dirname, '..', 'package.json'), 'utf8')) as {
+      version: string;
+    };
+    await expect(w.getByText(pkg.version, { exact: false })).toBeVisible(); // app version, not Electron's
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});

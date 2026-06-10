@@ -63,7 +63,7 @@ export function registerIpcHandlers(): void {
     if (vaultPath) await shell.openPath(vaultPath);
   });
 
-  ipcMain.handle(IpcChannels.getAppVersion, (): string => app.getVersion());
+  ipcMain.handle(IpcChannels.getAppVersion, (): string => __APP_VERSION__);
 
   ipcMain.handle(IpcChannels.getSettings, async (): Promise<SettingsValues> => {
     const vaultPath = await activeVaultPath();

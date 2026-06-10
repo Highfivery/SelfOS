@@ -87,9 +87,25 @@ export function SettingField({ def }: { def: SettingDefinition }): JSX.Element |
   if (def.visibleWhen && !def.visibleWhen(values)) return null;
 
   const value = values[def.key];
-  const isDefault = JSON.stringify(value) === JSON.stringify(def.default);
-  const resettable = def.control.type !== 'custom' && !isDefault;
+  const onChange = (next: unknown): void => void setValue(def.key, next);
 
+  // Custom rows (info, actions, long content) render full-width and stacked so text wraps instead of
+  // overflowing the fixed control column.
+  if (def.control.type === 'custom') {
+    return (
+      <div className={styles.stacked}>
+        <Text weight={500}>{def.label}</Text>
+        {def.description ? (
+          <Text size="sm" tone="secondary">
+            {def.description}
+          </Text>
+        ) : null}
+        <div className={styles.customBody}>{renderControl(def, value, onChange)}</div>
+      </div>
+    );
+  }
+
+  const isDefault = JSON.stringify(value) === JSON.stringify(def.default);
   return (
     <div className={styles.row}>
       <div className={styles.info}>
@@ -102,8 +118,8 @@ export function SettingField({ def }: { def: SettingDefinition }): JSX.Element |
       </div>
       <div className={styles.control}>
         <Inline gap={2}>
-          {renderControl(def, value, (next) => void setValue(def.key, next))}
-          {resettable ? (
+          {renderControl(def, value, onChange)}
+          {!isDefault ? (
             <IconButton aria-label={`Reset ${def.label}`} onClick={() => void resetValue(def.key)}>
               <RotateCcw size={15} aria-hidden="true" />
             </IconButton>

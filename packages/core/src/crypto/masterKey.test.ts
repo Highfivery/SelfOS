@@ -1,10 +1,7 @@
-// @vitest-environment node
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { SecretStore } from '@selfos/core/host';
-import { createNodeFileSystem } from '../host/nodeFileSystem';
+import { beforeEach, describe, expect, it } from 'vitest';
+import type { SecretStore } from '../host';
+import { memFileSystem } from '../host/memFileSystem';
+import { toBase64 } from '../encoding';
 import {
   MASTER_KEY_ID,
   createMasterKey,
@@ -30,18 +27,14 @@ function memSecretStore(): SecretStore {
   };
 }
 
-let vault: string;
-beforeEach(async () => {
-  vault = await mkdtemp(join(tmpdir(), 'selfos-mk-vault-'));
-});
-afterEach(async () => {
-  await rm(vault, { recursive: true, force: true });
+let fs: ReturnType<typeof memFileSystem>;
+beforeEach(() => {
+  fs = memFileSystem();
 });
 
 describe('masterKey', () => {
   it('creates and loads a master key', async () => {
     const secrets = memSecretStore();
-    const fs = createNodeFileSystem(vault);
     expect(await hasMasterKey(secrets)).toBe(false);
     await createMasterKey(secrets, fs);
     expect(await hasMasterKey(secrets)).toBe(true);
@@ -50,7 +43,6 @@ describe('masterKey', () => {
 
   it('restores the same key from the recovery phrase after secret-store loss', async () => {
     const secrets = memSecretStore();
-    const fs = createNodeFileSystem(vault);
     const { recoveryPhrase } = await createMasterKey(secrets, fs);
     const original = await loadMasterKey(secrets);
 
@@ -58,12 +50,12 @@ describe('masterKey', () => {
     expect(await loadMasterKey(secrets)).toBeNull();
 
     expect(await restoreFromRecoveryPhrase(secrets, fs, recoveryPhrase)).toBe(true);
-    expect((await loadMasterKey(secrets))?.toString('base64')).toBe(original?.toString('base64'));
+    const restored = await loadMasterKey(secrets);
+    expect(restored && toBase64(restored)).toBe(original && toBase64(original));
   });
 
   it('rejects a wrong recovery phrase', async () => {
     const secrets = memSecretStore();
-    const fs = createNodeFileSystem(vault);
     await createMasterKey(secrets, fs);
     await secrets.clear(MASTER_KEY_ID);
     expect(await restoreFromRecoveryPhrase(secrets, fs, 'WRON-GPHR-ASE0-0000')).toBe(false);

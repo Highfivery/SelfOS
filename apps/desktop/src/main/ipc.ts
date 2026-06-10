@@ -56,7 +56,7 @@ import {
   upsertRelationship,
   verifyAccountPin,
 } from '@selfos/core/people';
-import { loadMasterKey } from './crypto/masterKey';
+import { loadMasterKey } from '@selfos/core/crypto';
 import type { FileSystem, SecretStore } from '@selfos/core/host';
 import { createNodeFileSystem } from './host/nodeFileSystem';
 import {
@@ -137,7 +137,7 @@ function secretStore(): SecretStore {
 }
 
 /** The active vault's FileSystem host + decrypted master key, or null when the household isn't set up. */
-async function vaultAndKey(): Promise<{ fs: FileSystem; key: Buffer } | null> {
+async function vaultAndKey(): Promise<{ fs: FileSystem; key: Uint8Array } | null> {
   const vaultDir = await activeVaultPath();
   if (!vaultDir) return null;
   const key = await loadMasterKey(secretStore());
@@ -147,7 +147,7 @@ async function vaultAndKey(): Promise<{ fs: FileSystem; key: Buffer } | null> {
 /** Whether the active person's role grants a capability (enforces admin-only actions in main). */
 async function activePersonCan(
   fs: FileSystem,
-  key: Buffer,
+  key: Uint8Array,
   capability: CapabilityKey,
 ): Promise<boolean> {
   // Concealed super-admin inspect mode grants everything (04-people-roles §8) — and main, not the

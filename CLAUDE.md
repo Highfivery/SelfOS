@@ -239,6 +239,18 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-10 — Build (cleanup: **`masterKey` → `@selfos/core/crypto`**, closing the last `Buffer` bridge):
+  moved `masterKey.ts` (master-key generate/store/recover flow) out of `apps/desktop/src/main/crypto/`
+  into core so the future iOS host gets the flow too. It was already node/electron-free; the only thing
+  pinning it to the app was its `Buffer` return. Now it returns/uses **`Uint8Array`** (via the core
+  `toBase64`/`fromBase64` helpers), so the app threads `Uint8Array` for the master key **end-to-end** —
+  no Buffer bridge left. `ipc.vaultAndKey()`/`activePersonCan` key types → `Uint8Array`; household + e2e
+  import masterKey from `@selfos/core/crypto`. **recovery.enc + the stored master key are byte-identical**
+  (the reviewer fuzz-verified `toBase64`/`fromBase64` == `Buffer` base64 across all 0–255 bytes), so
+  existing vaults still restore. The app's `main/crypto/` dir is gone. Gates green: typecheck/lint/format,
+  **193 unit** (61 core + 132 desktop), 23 E2E (one clean run; a transient people-CRUD e2e timeout under a
+  loaded run passed on isolation + re-run — pre-existing Playwright/Electron timing flakiness, not a
+  regression, per reviewer). **The `@selfos/core` extraction is now fully complete incl. masterKey.**
 - 2026-06-10 — Fix (red CI build — user flagged): `apps/desktop/src/main/host/nodeSecretStore.test.ts`
   value-imported `passthroughEncryptor` from `secrets/encryptor.ts`, which **top-level-imports
   `electron`** (`safeStorage`). CI runs the Vitest unit tests **without the Electron binary**, so loading

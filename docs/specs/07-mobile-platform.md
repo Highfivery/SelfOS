@@ -253,6 +253,11 @@ reduced-motion honored (already global).
   code. The crypto layer is now async (awaits rippled to callers/tests/e2e). `Buffer`,
   portable-base64, and the `randomUUID` call sites are intentionally deferred to **slice (ii)** (the
   `@selfos/core` extraction, "no `node:*`"). Gates green: typecheck/lint/format, 183 unit, 23 E2E.
+- 2026-06-10 — **`masterKey` relocated into `@selfos/core/crypto` (§5.1/§5.2):** the master-key
+  generate/store/recover flow now lives in core (returns `Uint8Array` via the core base64 helpers),
+  closing the last `Buffer` bridge — the app threads `Uint8Array` for the master key end-to-end. recovery.enc
+  - the stored key are byte-identical (existing vaults restore). The iOS host (§5.4) gets the master-key
+    flow for free.
 - 2026-06-10 — **relocation slice 3 landed — `@selfos/core` extraction COMPLETE (§5.2):** moved
   `pricing`/`usageStore`/`budgetService` → `@selfos/core/usage` and `promptBuilder`/`chatService` →
   `@selfos/core/conversations` (verbatim; `Uint8Array` keys; portable `uuid()`). The `UsageSummary`/

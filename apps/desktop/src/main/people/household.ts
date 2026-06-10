@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { OWNER_ROLE_ID } from '../../shared/capabilities';
 import type { HouseholdStatus } from '../../shared/channels';
 import type { Person } from '../../shared/schemas';
-import { createMasterKey, loadMasterKey } from '../crypto/masterKey';
+import { createMasterKey, loadMasterKey } from '@selfos/core/crypto';
 import { createNodeFileSystem } from '../host/nodeFileSystem';
 import { createNodeSecretStore } from '../host/nodeSecretStore';
 import type { Encryptor } from '../secrets/encryptor';

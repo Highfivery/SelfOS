@@ -126,6 +126,11 @@ A slice is **not** done until **all** of these pass:
 - [ ] **Docs in lockstep** — relevant spec / `CLAUDE.md` / skills updated (`sync-docs`)
 - [ ] **Self code-review** passed (`code-reviewer` agent); findings fixed or explicitly accepted
 - [ ] Accessibility check for any UI
+- [ ] **Responsive** — every UI works and looks intentional from ~360px (phone) to desktop; include a
+      mobile-width layout guard (see §12)
+- [ ] **`/gallery` updated** when a design-system primitive is added or changed (it must showcase all of them)
+- [ ] **Admin-only UI is marked** — any control/section visible only to an Owner / super-admin carries a
+      consistent "admin only" indicator (see §12)
 - [ ] **Conventional Commit** on a feature branch
 
 The `quality-gate` skill runs the automatable subset. The git hooks
@@ -194,10 +199,39 @@ and feature-module architecture are built.)
 
 ---
 
+## 12. UI/UX principles (non-negotiable)
+
+Every UI change is designed **as part of the whole** — sleek, modern, and intentional. Nothing should
+look bolted-on or like an afterthought; consider the overall layout and likely future additions before
+placing anything. Specifically:
+
+- **Responsive, one codebase.** SelfOS is a single responsive app (no separate mobile UI). Every screen
+  must look and work great from ~360px (phone) to desktop, adapting purely by screen size. Treat this
+  like accessibility — always. (Electron is desktop-only; the iPhone path is **Capacitor** — see the
+  platform memory and the Capacitor track.)
+- **Admin-only visibility marker.** Anything visible **only** to an Owner / super-admin (cost, budgets,
+  the Everyone scope + person picker + by-person breakdown, the Roles screen, etc.) carries a clear,
+  consistent indicator (e.g. a small "Admin only" / lock badge) so admins know normal users don't see
+  it. Apply to **all** current and future admin-gated UI.
+- **Global controls live in the `TopBar`** (a slot-based header): the usage ring, the appearance
+  (light/dark) toggle, logout, and future global items — integrated seamlessly, not as separate add-ons.
+- **`/gallery` is the living component catalog** — update it whenever a design-system primitive is
+  added or changed (DoD item).
+- **No scaffolding for unbuilt features.** Don't pre-create capabilities/schemas/settings/routes for
+  features that aren't specced and built (see the "never assume" rule in §6).
+
+---
+
 ## Changelog
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-10 — Captured UI/UX conventions (new §12) + DoD items from user feedback: the app must be
+  **fully responsive** (one codebase, ~360px→desktop); **admin-only UI must be visibly marked**;
+  **global controls (usage ring, appearance toggle, logout) live in the TopBar**; **`/gallery` must
+  stay current** with every primitive; and **no scaffolding for unbuilt features**. Also flagged: the
+  `questionnaires.*` capabilities were an unspecced assumption and must be **removed** until the
+  feature is specced. These feed the next session (Slice D + app-shell modernization + Capacitor track).
 - 2026-06-09 — Initial CLAUDE.md established. Stack, architecture principles, Definition of Done,
   living-docs loops, and git standards set per the approved foundation plan.
 - 2026-06-09 — Build slice 1 landed: electron-vite app scaffold (secure window, design tokens, themed

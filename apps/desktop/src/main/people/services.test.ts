@@ -1,0 +1,95 @@
+// @vitest-environment node
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { generateMasterKey } from '../crypto/cryptoService';
+import type { Person, Relationship } from '../../shared/schemas';
+import { deletePerson, getPerson, listPeople, savePerson } from './peopleService';
+import { deleteRelationship, listRelationships, saveRelationship } from './relationshipService';
+import { getAccessConfig, setAccount, verifyAccountPin } from './accessService';
+
+const key = generateMasterKey();
+let vault: string;
+beforeEach(async () => {
+  vault = await mkdtemp(join(tmpdir(), 'selfos-people-'));
+});
+afterEach(async () => {
+  await rm(vault, { recursive: true, force: true });
+});
+
+function person(id: string, displayName: string, isSubject = false): Person {
+  return {
+    id,
+    schemaVersion: 1,
+    displayName,
+    isSubject,
+    tags: [],
+    createdAt: 'now',
+    updatedAt: 'now',
+  };
+}
+
+describe('peopleService', () => {
+  it('saves, reads, lists (sorted), and deletes people', async () => {
+    await savePerson(vault, key, person('p1', 'Bea', true));
+    await savePerson(vault, key, person('p2', 'Alex'));
+    expect((await listPeople(vault, key)).map((p) => p.displayName)).toEqual(['Alex', 'Bea']);
+    expect((await getPerson(vault, key, 'p1'))?.isSubject).toBe(true);
+    await deletePerson(vault, 'p1');
+    expect(await getPerson(vault, key, 'p1')).toBeNull();
+  });
+
+  it('stores profiles encrypted at rest (no plaintext name on disk)', async () => {
+    await savePerson(vault, key, person('p1', 'SecretName'));
+    const raw = await readFile(join(vault, 'people', 'p1', 'profile.enc'), 'utf8');
+    expect(raw).not.toContain('SecretName');
+    expect(raw).toContain('aes-256-gcm');
+  });
+
+  it('cannot be read with the wrong master key', async () => {
+    await savePerson(vault, key, person('p1', 'Bea'));
+    await expect(getPerson(vault, generateMasterKey(), 'p1')).rejects.toThrow();
+  });
+});
+
+describe('relationshipService', () => {
+  it('saves, lists, and deletes relationships', async () => {
+    const rel: Relationship = {
+      id: 'r1',
+      schemaVersion: 1,
+      fromPersonId: 'p1',
+      toPersonId: 'p2',
+      type: 'partner',
+      createdAt: 'now',
+      updatedAt: 'now',
+    };
+    await saveRelationship(vault, key, rel);
+    expect((await listRelationships(vault, key))[0]?.type).toBe('partner');
+    await deleteRelationship(vault, 'r1');
+    expect(await listRelationships(vault, key)).toEqual([]);
+  });
+});
+
+describe('accessService', () => {
+  it('defaults to the built-in roles and no accounts', async () => {
+    const config = await getAccessConfig(vault, key);
+    expect(config.roles.map((r) => r.id)).toEqual(['owner', 'member', 'guest']);
+    expect(config.accounts).toEqual([]);
+  });
+
+  it('sets an account and verifies its pin', async () => {
+    await setAccount(vault, key, { personId: 'p1', roleId: 'owner', pin: '4321' });
+    expect(await verifyAccountPin(vault, key, 'p1', '4321')).toBe(true);
+    expect(await verifyAccountPin(vault, key, 'p1', '0000')).toBe(false);
+  });
+
+  it('treats a pinless account as open and clears a pin with null', async () => {
+    await setAccount(vault, key, { personId: 'p2', roleId: 'member' });
+    expect(await verifyAccountPin(vault, key, 'p2', 'anything')).toBe(true);
+    await setAccount(vault, key, { personId: 'p2', roleId: 'member', pin: '1111' });
+    expect(await verifyAccountPin(vault, key, 'p2', 'anything')).toBe(false);
+    await setAccount(vault, key, { personId: 'p2', roleId: 'member', pin: null });
+    expect(await verifyAccountPin(vault, key, 'p2', 'anything')).toBe(true);
+  });
+});

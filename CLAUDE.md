@@ -222,6 +222,13 @@ A running log of durable decisions and feedback captured into the project config
   sections. `ThemeProvider` now reads from settings. Added a shared mock-bridge test helper. Deferred:
   accent options, high-contrast, the AI/secret settings + keychain (slice 5), and the broader
   feature-module registry abstraction.
+- 2026-06-09 — Build People-1 (crypto + data foundation for
+  [04-people-roles](docs/specs/04-people-roles.md)): AES-256-GCM at-rest encryption (`cryptoService`)
+  with a device-keychain **master key** (`masterKey`) + recovery-phrase wrap/unwrap; encrypted vault
+  I/O; Person/Relationship/Role/Account/AccessConfig schemas + a capability registry + default roles
+  (Owner/Member/Guest); people/relationship/access services (encrypted, Zod-validated) + scrypt PIN
+  hashing. Backend only — IPC/bridge + UI land in People-2. New tests cover crypto round-trip/tamper,
+  recovery restore, encrypted-at-rest, and pins.
 - 2026-06-09 — Build slice 5 (AI plumbing): encrypted API-key storage via Electron `safeStorage`
   (device-local `secrets.json`, injectable encryptor + test passthrough; the key is write-only to the
   renderer — no `getSecret`), a Claude proxy with an injectable client (`@anthropic-ai/sdk` + an

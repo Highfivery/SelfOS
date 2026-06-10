@@ -48,3 +48,74 @@ export const DeviceStateSchema = z.object({
   window: WindowBoundsSchema.optional(),
 });
 export type DeviceState = z.infer<typeof DeviceStateSchema>;
+
+/**
+ * People, relationships, and access (04-people-roles). Person/Relationship content is written
+ * encrypted at rest; these schemas validate the decrypted shape.
+ */
+
+export const PersonSchema = z.object({
+  id: z.string().min(1),
+  schemaVersion: z.number().int().positive(),
+  displayName: z.string().min(1),
+  isSubject: z.boolean(),
+  pronouns: z.string().optional(),
+  birthday: z.string().optional(),
+  avatarPath: z.string().optional(),
+  tags: z.array(z.string()),
+  publicNotes: z.string().optional(),
+  privateNotes: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type Person = z.infer<typeof PersonSchema>;
+
+export const RelationshipTypeSchema = z.enum([
+  'partner',
+  'parent',
+  'child',
+  'sibling',
+  'friend',
+  'coworker',
+  'ex',
+  'other',
+]);
+export type RelationshipType = z.infer<typeof RelationshipTypeSchema>;
+
+export const RelationshipSchema = z.object({
+  id: z.string().min(1),
+  schemaVersion: z.number().int().positive(),
+  fromPersonId: z.string().min(1),
+  toPersonId: z.string().min(1),
+  type: RelationshipTypeSchema,
+  label: z.string().optional(),
+  closeness: z.number().int().min(1).max(5).optional(),
+  since: z.string().optional(),
+  publicNotes: z.string().optional(),
+  privateNotes: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type Relationship = z.infer<typeof RelationshipSchema>;
+
+export const RoleSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  builtin: z.boolean(),
+  capabilities: z.record(z.string(), z.boolean()),
+});
+export type Role = z.infer<typeof RoleSchema>;
+
+export const AccountSchema = z.object({
+  personId: z.string().min(1),
+  roleId: z.string().min(1),
+  pinHash: z.string().optional(),
+});
+export type Account = z.infer<typeof AccountSchema>;
+
+export const AccessConfigSchema = z.object({
+  schemaVersion: z.number().int().positive(),
+  roles: z.array(RoleSchema),
+  accounts: z.array(AccountSchema),
+});
+export type AccessConfig = z.infer<typeof AccessConfigSchema>;

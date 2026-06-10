@@ -23,3 +23,18 @@ export async function verifySuperAdminPassphrase(
   const hash = (await readDeviceState(userDataDir)).superAdminPassphraseHash;
   return hash !== undefined && verifyPin(passphrase, hash);
 }
+
+/**
+ * In-memory "inspect everything" state for the current session (04-people-roles §8). Main is the
+ * source of truth so that capability gating in IPC handlers honors super-admin mode — the renderer
+ * flag alone is not trusted. Cleared on lock and never persisted.
+ */
+let inspectModeActive = false;
+
+export function setSuperAdminActive(active: boolean): void {
+  inspectModeActive = active;
+}
+
+export function isSuperAdminActive(): boolean {
+  return inspectModeActive;
+}

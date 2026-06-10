@@ -64,5 +64,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     if (ok) set({ superAdmin: true, unlockPromptOpen: false });
     return ok;
   },
-  lockSuperAdmin: () => set({ superAdmin: false }),
+  lockSuperAdmin: () => {
+    void window.selfos?.superadminLock();
+    set({ superAdmin: false });
+  },
 }));

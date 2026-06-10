@@ -46,6 +46,7 @@ export const IpcChannels = {
   accessRemoveAccount: 'access:removeAccount',
   sessionSetActive: 'session:setActive',
   superadminUnlock: 'superadmin:unlock',
+  superadminLock: 'superadmin:lock',
   usageSummary: 'usage:summary',
   budgetGet: 'budget:get',
   budgetGetPerson: 'budget:getPerson',
@@ -196,8 +197,10 @@ export interface SelfosBridge {
   accessRemoveAccount(personId: string): Promise<AccessView>;
   /** Switch the active person, verifying their PIN if set. */
   sessionSetActive(input: { personId: string; pin?: string }): Promise<SetActiveResult>;
-  /** Verify the concealed super-admin passphrase. Returns true on a match. */
+  /** Verify the concealed super-admin passphrase; on success, main enters inspect-everything mode. */
   superadminUnlock(input: { passphrase: string }): Promise<boolean>;
+  /** Leave super-admin inspect mode (clears the main-process bypass). */
+  superadminLock(): Promise<void>;
   /**
    * Rolled-up usage. Non-admins always get their own. Admins (`budgets.manage`) get the whole app
    * (`scope: 'app'`) or, with `personId`, a single chosen person.

@@ -42,6 +42,7 @@ const bridge: SelfosBridge = {
   accessRemoveAccount: (personId) => ipcRenderer.invoke(IpcChannels.accessRemoveAccount, personId),
   sessionSetActive: (input) => ipcRenderer.invoke(IpcChannels.sessionSetActive, input),
   superadminUnlock: (input) => ipcRenderer.invoke(IpcChannels.superadminUnlock, input),
+  superadminLock: () => ipcRenderer.invoke(IpcChannels.superadminLock),
   usageSummary: (input) => ipcRenderer.invoke(IpcChannels.usageSummary, input),
   budgetGet: () => ipcRenderer.invoke(IpcChannels.budgetGet),
   budgetGetPerson: (personId) => ipcRenderer.invoke(IpcChannels.budgetGetPerson, personId),

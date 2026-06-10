@@ -36,7 +36,11 @@ import { runConnectionTest } from './claude/claudeService';
 import { defaultClaudeClient } from './claude/anthropicClient';
 import { householdStatus, setupHousehold } from './people/household';
 import { getActivePersonId, setActivePersonId } from './people/session';
-import { verifySuperAdminPassphrase } from './people/superAdmin';
+import {
+  isSuperAdminActive,
+  setSuperAdminActive,
+  verifySuperAdminPassphrase,
+} from './people/superAdmin';
 import {
   getAccessConfig,
   getAccessView,
@@ -137,6 +141,9 @@ async function activePersonCan(
   key: Buffer,
   capability: CapabilityKey,
 ): Promise<boolean> {
+  // Concealed super-admin inspect mode grants everything (04-people-roles §8) — and main, not the
+  // renderer, is the source of truth so the bypass actually reaches the data, not just the UI.
+  if (isSuperAdminActive()) return true;
   const personId = await getActivePersonId(userDataDir());
   if (!personId) return false;
   const access = await getAccessConfig(vaultDir, key);
@@ -331,7 +338,13 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(IpcChannels.superadminUnlock, async (_event, raw: unknown): Promise<boolean> => {
     const { passphrase } = z.object({ passphrase: z.string() }).parse(raw);
-    return verifySuperAdminPassphrase(userDataDir(), passphrase);
+    const ok = await verifySuperAdminPassphrase(userDataDir(), passphrase);
+    if (ok) setSuperAdminActive(true);
+    return ok;
+  });
+
+  ipcMain.handle(IpcChannels.superadminLock, (): void => {
+    setSuperAdminActive(false);
   });
 
   ipcMain.handle(IpcChannels.usageSummary, async (_event, raw: unknown): Promise<UsageSummary> => {

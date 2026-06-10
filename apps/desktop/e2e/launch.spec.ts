@@ -304,6 +304,93 @@ test('super-admin: a hidden long-press on the version unlocks inspect mode', asy
   }
 });
 
+test('super-admin: inspect mode unlocks full budget/usage access for a non-admin', async () => {
+  // Seed an owner + a member, with the MEMBER active and a usage event owned by the owner.
+  const userData = await mkdtemp(join(tmpdir(), 'selfos-e2e-ud-'));
+  const vault = await mkdtemp(join(tmpdir(), 'selfos-e2e-vault-'));
+  const now = new Date().toISOString();
+  await writeJson(join(vault, '.selfos', 'meta.json'), {
+    schemaVersion: 1,
+    vaultId: 'e2e',
+    createdAt: now,
+    updatedAt: now,
+  });
+  await writeJson(join(vault, 'config', 'settings.json'), { schemaVersion: 1, values: {} });
+  await createMasterKey(userData, passthrough, vault);
+  const key = await loadMasterKey(userData, passthrough);
+  if (!key) throw new Error('super-admin e2e: master key missing');
+  await savePerson(vault, key, {
+    id: 'owner-1',
+    schemaVersion: 1,
+    displayName: 'Alex',
+    isSubject: true,
+    tags: [],
+    createdAt: now,
+    updatedAt: now,
+  });
+  await savePerson(vault, key, {
+    id: 'member-1',
+    schemaVersion: 1,
+    displayName: 'Sam',
+    isSubject: true,
+    tags: [],
+    createdAt: now,
+    updatedAt: now,
+  });
+  await setAccount(vault, key, { personId: 'owner-1', roleId: 'owner' });
+  await setAccount(vault, key, { personId: 'member-1', roleId: 'member' });
+  await recordUsage(vault, key, {
+    id: 'u1',
+    schemaVersion: 1,
+    type: 'chat',
+    personId: 'owner-1',
+    sessionId: 'c1',
+    model: 'claude-sonnet-4-6',
+    at: now,
+    inputTokens: 1000,
+    outputTokens: 500,
+    cacheWriteTokens: 0,
+    cacheReadTokens: 0,
+    costUsd: 3,
+  });
+  await writeJson(join(userData, 'state.json'), {
+    schemaVersion: 1,
+    vaultPath: vault,
+    activePersonId: 'member-1',
+    superAdminPassphraseHash: hashPin('superpass'),
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    // As a member: no admin person picker, no People nav, no cost figure.
+    await w.getByRole('link', { name: 'Usage' }).click();
+    await expect(w.getByLabel('Whose usage')).toHaveCount(0);
+    await expect(w.getByRole('link', { name: 'People' })).toHaveCount(0);
+    await expect(w.getByRole('heading', { name: '$3.00' })).toHaveCount(0);
+
+    // Unlock super-admin via the concealed long-press on the version.
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'About' }).click();
+    await w.getByText(/^\d+\.\d+\.\d+$/).click({ delay: 700 });
+    const dialog = w.getByRole('dialog', { name: 'Unlock' });
+    await dialog.getByLabel('Passphrase').fill('superpass');
+    await dialog.getByRole('button', { name: 'Unlock' }).click();
+    await expect(w.getByRole('button', { name: /super-admin/i })).toBeVisible();
+
+    // Now main grants full access: cost is shown and the owner's usage appears (app scope allowed).
+    await w.getByRole('link', { name: 'Usage' }).click();
+    await expect(w.getByLabel('Whose usage')).toBeVisible();
+    await expect(w.getByRole('heading', { name: '$3.00' })).toBeVisible();
+    await expect(w.getByRole('heading', { name: 'By person' })).toBeVisible();
+    await expect(w.getByRole('option', { name: 'Alex' })).toBeAttached();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('sessions: send a message, stream a reply, and show the usage header + crisis footer', async () => {
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
   await setSecret(userData, passthrough, 'anthropic.apiKey', 'sk-ant-e2e');

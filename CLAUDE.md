@@ -244,6 +244,13 @@ A running log of durable decisions and feedback captured into the project config
   `<progress>` bars. IPC: `usage:summary`, `budget:get`/`setApp`/`setPerson`/`status` (computed in
   main; `UsageSummary`/`BudgetState` moved to shared). Tests + an E2E (seeded usage → dashboard +
   budget save + no-overflow guard). v1 limit: app-scope is UI-gated, not IPC-enforced.
+- 2026-06-10 — Fix (super-admin parity): the concealed super-admin's inspect mode now bypasses
+  capability gating in the **main** process, not just the renderer. Main tracks super-admin active
+  state (set on `superadmin:unlock`, cleared by a new `superadmin:lock`), so `activePersonCan` returns
+  true while it's active — a super-admin signed in as a non-admin gets full budget/usage/cost access
+  (writes, the Everyone scope, by-person), matching the Owner. Before, main still checked the active
+  person's role, so the admin UI showed but the data was silently redacted/blocked. The Usage view
+  reloads when admin status flips. Tests + an E2E (a Member unlocks → cost + Everyone + by-person).
 - 2026-06-10 — Build Slice C (admin usage by person): `usage:summary` now accepts an arbitrary
   `personId` (admin-only, enforced in main) and the summary gained a **`byPerson`** breakdown. The
   Usage dashboard replaces the Mine/Everyone toggle with a **person picker** (Everyone + each person)

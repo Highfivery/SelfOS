@@ -39,7 +39,7 @@ describe('sessionStore.can', () => {
     expect(useSessionStore.getState().can('people.manage')).toBe(true);
   });
 
-  it('denies a guest the manage capability but allows answering questionnaires', () => {
+  it('grants a guest no capabilities (an empty default role until one is specced)', () => {
     useSessionStore.setState({
       activePerson: owner,
       access: {
@@ -48,7 +48,8 @@ describe('sessionStore.can', () => {
       },
     });
     expect(useSessionStore.getState().can('people.manage')).toBe(false);
-    expect(useSessionStore.getState().can('questionnaires.answer')).toBe(true);
+    expect(useSessionStore.getState().can('sessions.own')).toBe(false);
+    expect(useSessionStore.getState().can('relationships.manage')).toBe(false);
   });
 
   it('super-admin bypasses all capability checks', () => {

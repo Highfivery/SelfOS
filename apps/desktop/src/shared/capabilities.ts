@@ -14,8 +14,6 @@ export const CAPABILITIES = [
   'roles.manage',
   'budgets.manage',
   'sessions.own',
-  'questionnaires.answer',
-  'questionnaires.assign',
 ] as const;
 
 export type CapabilityKey = (typeof CAPABILITIES)[number];
@@ -30,8 +28,6 @@ export const CAPABILITY_LABELS: Record<CapabilityKey, string> = {
   'roles.manage': 'Manage roles',
   'budgets.manage': 'Manage budgets & view cost',
   'sessions.own': 'Have their own sessions',
-  'questionnaires.answer': 'Answer questionnaires',
-  'questionnaires.assign': 'Assign questionnaires',
 };
 
 function capabilityMap(enabled: readonly CapabilityKey[]): Record<string, boolean> {
@@ -42,8 +38,9 @@ function capabilityMap(enabled: readonly CapabilityKey[]): Record<string, boolea
 
 /**
  * Built-in roles (04-people-roles §12): Owner = everything; Member = own data + own relationships +
- * answer questionnaires; Guest = answer assigned questionnaires only. The matrix is Owner-editable;
- * "own vs all" scoping is enforced in the service/UI layer in a later slice.
+ * their own sessions; Guest = no capabilities yet (a login slot with nothing enabled until a Guest
+ * purpose is specced). The matrix is Owner-editable; "own vs all" scoping is enforced in the
+ * service/UI layer in a later slice.
  */
 export const DEFAULT_ROLES: Role[] = [
   { id: 'owner', name: 'Owner', builtin: true, capabilities: capabilityMap(CAPABILITIES) },
@@ -51,13 +48,13 @@ export const DEFAULT_ROLES: Role[] = [
     id: 'member',
     name: 'Member',
     builtin: true,
-    capabilities: capabilityMap(['relationships.manage', 'sessions.own', 'questionnaires.answer']),
+    capabilities: capabilityMap(['relationships.manage', 'sessions.own']),
   },
   {
     id: 'guest',
     name: 'Guest',
     builtin: true,
-    capabilities: capabilityMap(['questionnaires.answer']),
+    capabilities: capabilityMap([]),
   },
 ];
 

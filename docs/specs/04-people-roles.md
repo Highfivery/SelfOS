@@ -125,7 +125,7 @@ Most relationships are mutual; the inverse type is derived for display (parent�
 ### 4.3 Access, roles, capabilities
 
 ```ts
-type CapabilityKey = string; // e.g. 'people.manage', 'sessions.own', 'questionnaires.answer'
+type CapabilityKey = string; // e.g. 'people.manage', 'sessions.own', 'budgets.manage'
 
 interface Role {
   id: string;
@@ -143,9 +143,12 @@ interface Account {
 
 - **Capabilities** are registered like settings (a registry features extend). v1 set:
   `people.manage`, `people.viewOthers`, `relationships.manage`, `settings.manage`, `users.manage`,
-  `roles.manage`, `sessions.own`, `questionnaires.answer`, `questionnaires.assign`.
+  `roles.manage`, `budgets.manage`, `sessions.own`. (Feature-specific capabilities — e.g.
+  questionnaires — are added only when that feature is actually specced and built; we do not
+  pre-register capabilities for unbuilt features.)
 - **Default roles**: **Owner** (all visible capabilities), **Member** (own data + own relationships +
-  answer questionnaires), **Guest** (answer assigned questionnaires only). Owner-editable matrix.
+  their own sessions), **Guest** (no capabilities yet — a login slot with nothing enabled until a
+  Guest purpose is specced). Owner-editable matrix.
 - **Super-admin** is **not** a normal role — it's a concealed elevation above all roles (§8).
 
 ### 4.4 Vault layout
@@ -273,8 +276,10 @@ Confirmed with the user (2026-06-09):
    → set the **super-admin passphrase** → show the **recovery phrase** (write it down). One guided
    flow (extends 02-app-shell onboarding).
 2. **Default capability matrix** — **Owner** = all capabilities; **Member** = manage their own
-   profile + their own relationships + answer questionnaires (no access to others' private data, no
-   household management); **Guest** = answer assigned questionnaires only.
+   profile + their own relationships + have their own sessions (no access to others' private data, no
+   household management); **Guest** = no capabilities yet (a login slot, nothing enabled until a Guest
+   purpose is specced). _Updated 2026-06-10: the questionnaires capabilities were removed as unbuilt
+   scaffolding (see §12 changelog); they return when questionnaires is specced._
 3. **Recovery** — build a **recovery phrase** now (§5): the super-admin can reset any person's PIN;
    the recovery phrase restores the master key and can reset the super-admin passphrase; losing both
    the keychain key and the phrase = unrecoverable data.
@@ -289,3 +294,8 @@ Confirmed with the user (2026-06-09):
 - 2026-06-09 — resolved open questions (first-run owner+passphrase+recovery-phrase, capability
   defaults, recovery phrase in scope, plain avatars, self = Person #1) and added the recovery-phrase
   design to §5; marked Approved.
+- 2026-06-10 — removed the `questionnaires.answer` / `questionnaires.assign` capabilities (§4.3, §12)
+  — they were registered for a feature that was never specced or built, contradicting "no scaffolding
+  for unbuilt features." Member now defaults to own profile + own relationships + own sessions; Guest
+  defaults to no capabilities. Questionnaires stays on the roadmap (still referenced as a future
+  surface throughout); its capabilities return when it is specced.

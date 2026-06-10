@@ -417,7 +417,7 @@ test('owner: a vault persisted before newer capabilities still grants full budge
     createdAt: now,
     updatedAt: now,
   });
-  // Stale Owner role — note: NO budgets.manage (and no questionnaires.*), as a pre-Metering-3 vault.
+  // Stale Owner role — note: NO budgets.manage, as a pre-Metering-3 vault.
   await writeEncryptedJson(
     join(vault, 'config', 'access.enc'),
     {

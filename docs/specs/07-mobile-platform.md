@@ -253,3 +253,13 @@ reduced-motion honored (already global).
   code. The crypto layer is now async (awaits rippled to callers/tests/e2e). `Buffer`,
   portable-base64, and the `randomUUID` call sites are intentionally deferred to **slice (ii)** (the
   `@selfos/core` extraction, "no `node:*`"). Gates green: typecheck/lint/format, 183 unit, 23 E2E.
+- 2026-06-10 — **slice (ii-a) landed (§5.2):** created the source-only **`@selfos/core`** package
+  (`exports`→`.ts`, bundled into Electron `main` via electron-vite `externalizeDepsPlugin({exclude})`).
+  Moved the shared schemas/types (`schemas`/`capabilities`/`usageTypes`/`appearance`) and crypto
+  (`cryptoService`/`pin`) into it; `apps/desktop/src/shared/*` are re-export shims so the renderer + IPC
+  contract are untouched. Crypto completed its **`Buffer`→`Uint8Array` + portable-base64** (`btoa`/`atob`)
+  migration → core is `node:*`/`Buffer`-free (enforced by an ESLint override on `packages/core`); the app
+  bridges back to `Buffer` at `masterKey`. Byte-compat fixtures moved into core, still green. Decisions:
+  sub-slices = incremental; injection = thread the host objects; schemas = into core + shim. Gates green:
+  typecheck/lint/format, 183 unit (22 core + 161 desktop), 23 E2E. Next: **(ii-b)** FileSystem host +
+  vault/atomic + the file-using services (people/conversations/usage).

@@ -3,12 +3,12 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { generateMasterKey } from '../crypto/cryptoService';
+import { generateMasterKey } from '@selfos/core/crypto';
 import { savePerson } from '../people/peopleService';
 import type { Person, UsageEvent } from '../../shared/schemas';
 import { queryUsage, recordUsage, summarize } from './usageStore';
 
-const key = generateMasterKey();
+const key = Buffer.from(generateMasterKey());
 let vault: string;
 beforeEach(async () => {
   vault = await mkdtemp(join(tmpdir(), 'selfos-usage-'));

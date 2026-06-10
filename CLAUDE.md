@@ -239,6 +239,20 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-10 — Build (Capacitor track **slice (ii-a): scaffold `@selfos/core` + extract crypto + shared
+  schemas** — [07-mobile-platform](docs/specs/07-mobile-platform.md) §5.2): created the platform-agnostic
+  **`@selfos/core`** workspace package (source-only; `exports` map → `.ts`; bundled into Electron `main`
+  by excluding it from electron-vite's `externalizeDepsPlugin`). Moved the shared Zod schemas/types
+  (`schemas`, `capabilities`, `usageTypes`, `appearance`) and the at-rest crypto (`cryptoService`, `pin`)
+  into core; `apps/desktop/src/shared/*` are now **thin re-export shims** so the renderer + IPC
+  `channels.ts` are **untouched**. Completed the deferred **`Buffer`→`Uint8Array` + portable-base64**
+  (`btoa`/`atob` in `encoding.ts`) migration so core is `node:*`/`Buffer`-free; the app keeps threading
+  `Buffer` and **bridges at `masterKey.ts`**. Portability is enforced by an **ESLint override** on
+  `packages/core` (no `Buffer`, no `node:*`/`electron`). Byte-compat fixtures moved into core and still
+  pass (vaults stay readable). Decisions (asked): **incremental sub-slices**, **thread the host objects**
+  (next slices), **schemas into core + shim**. Gates green: typecheck/lint/format, **183 unit** (22 core
+  - 161 desktop), **23 E2E** (the built app bundles core + seeds/reads encrypted vaults). Next: **(ii-b)**
+    FileSystem host + the file-using services.
 - 2026-06-10 — Build (Capacitor track **slice (i): crypto unification** —
   [07-mobile-platform](docs/specs/07-mobile-platform.md) §5.1): the at-rest crypto is rewritten **off
   `node:crypto` onto WebCrypto (`globalThis.crypto.subtle`, AES-256-GCM) + `scrypt-js`** so one

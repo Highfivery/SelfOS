@@ -1,5 +1,5 @@
+import { decrypt, encrypt, isEncryptedEnvelope } from '@selfos/core/crypto';
 import { pathExists, readJson, writeJsonAtomic } from '../vault/atomic';
-import { decrypt, encrypt, isEncryptedEnvelope } from './cryptoService';
 
 /** Write `data` as an encrypted `*.enc` file (JSON → ciphertext envelope → atomic write). */
 export async function writeEncryptedJson(path: string, data: unknown, key: Buffer): Promise<void> {

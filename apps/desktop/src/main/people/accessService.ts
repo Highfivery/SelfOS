@@ -7,8 +7,8 @@ import {
   type Account,
   type Role,
 } from '../../shared/schemas';
+import { hashPin, verifyPin } from '@selfos/core/crypto';
 import { readEncryptedJson, writeEncryptedJson } from '../crypto/encryptedStore';
-import { hashPin, verifyPin } from './pin';
 
 function accessPath(vaultDir: string): string {
   return join(vaultDir, 'config', 'access.enc');

@@ -1,5 +1,5 @@
-// @vitest-environment node
 import { describe, expect, it } from 'vitest';
+import { toBase64 } from '../encoding';
 import {
   decrypt,
   deriveKeyFromPhrase,
@@ -32,7 +32,7 @@ describe('encrypt/decrypt', () => {
   it('fails to decrypt if the ciphertext is tampered with', async () => {
     const env = await encrypt('secret', key);
     await expect(
-      decrypt({ ...env, data: Buffer.from('tampered').toString('base64') }, key),
+      decrypt({ ...env, data: toBase64(new TextEncoder().encode('tampered')) }, key),
     ).rejects.toThrow();
   });
 });
@@ -46,7 +46,7 @@ describe('recovery phrase', () => {
     const salt = randomBytes(16);
     const a = await deriveKeyFromPhrase('a1b2-c3d4', salt);
     const b = await deriveKeyFromPhrase('A1B2C3D4', salt);
-    expect(a.equals(b)).toBe(true);
+    expect(toBase64(a)).toBe(toBase64(b));
   });
 
   it('wraps and unwraps the master key with the recovery key', async () => {
@@ -54,7 +54,7 @@ describe('recovery phrase', () => {
     const phrase = generateRecoveryPhrase();
     const kek = await deriveKeyFromPhrase(phrase, salt);
     const wrapped = await wrapKey(key, kek);
-    expect((await unwrapKey(wrapped, kek)).equals(key)).toBe(true);
+    expect(toBase64(await unwrapKey(wrapped, kek))).toBe(toBase64(key));
   });
 
   it('cannot unwrap with the wrong phrase', async () => {

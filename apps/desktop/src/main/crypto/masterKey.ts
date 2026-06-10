@@ -1,7 +1,3 @@
-import { join } from 'node:path';
-import { z } from 'zod';
-import { getSecret, setSecret, type Encryptor } from '../secrets/secretStore';
-import { pathExists, readJson, writeJsonAtomic } from '../vault/atomic';
 import {
   deriveKeyFromPhrase,
   generateMasterKey,
@@ -9,7 +5,11 @@ import {
   randomBytes,
   unwrapKey,
   wrapKey,
-} from './cryptoService';
+} from '@selfos/core/crypto';
+import { join } from 'node:path';
+import { z } from 'zod';
+import { getSecret, setSecret, type Encryptor } from '../secrets/secretStore';
+import { pathExists, readJson, writeJsonAtomic } from '../vault/atomic';
 
 export const MASTER_KEY_ID = 'selfos.masterKey';
 
@@ -60,11 +60,12 @@ export async function createMasterKey(
   encryptor: Encryptor,
   vaultDir: string,
 ): Promise<{ recoveryPhrase: string }> {
-  const masterKey = generateMasterKey();
+  // Core returns Uint8Array; the app keeps threading Buffer, so bridge at this boundary (07 slice ii).
+  const masterKey = Buffer.from(generateMasterKey());
   await storeMasterKey(userDataDir, encryptor, masterKey);
 
   const recoveryPhrase = generateRecoveryPhrase();
-  const salt = randomBytes(16);
+  const salt = Buffer.from(randomBytes(16));
   const wrapped = await wrapKey(masterKey, await deriveKeyFromPhrase(recoveryPhrase, salt));
   await writeJsonAtomic(recoveryPath(vaultDir), {
     schemaVersion: 1,
@@ -87,7 +88,7 @@ export async function restoreFromRecoveryPhrase(
   try {
     const bundle = RecoveryBundleSchema.parse(await readJson(path));
     const kek = await deriveKeyFromPhrase(phrase, Buffer.from(bundle.salt, 'base64'));
-    const masterKey = await unwrapKey(bundle.wrapped, kek);
+    const masterKey = Buffer.from(await unwrapKey(bundle.wrapped, kek));
     await storeMasterKey(userDataDir, encryptor, masterKey);
     return true;
   } catch {

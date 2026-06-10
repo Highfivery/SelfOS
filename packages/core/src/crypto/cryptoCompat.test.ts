@@ -1,5 +1,3 @@
-// @vitest-environment node
-//
 // BYTE-COMPATIBILITY FIXTURES (07-mobile-platform §5.1 / §10).
 //
 // These constants were produced by the ORIGINAL `node:crypto` implementation of cryptoService/pin
@@ -8,6 +6,7 @@
 // If this test ever fails, the rewrite has broken on-disk compatibility and existing vaults would be
 // unreadable. Do not regenerate these casually.
 import { describe, expect, it } from 'vitest';
+import { fromBase64, toBase64 } from '../encoding';
 import {
   decrypt,
   deriveKeyFromPhrase,
@@ -15,7 +14,7 @@ import {
   type EncryptedEnvelope,
   unwrapKey,
 } from './cryptoService';
-import { verifyPin } from '../people/pin';
+import { verifyPin } from './pin';
 
 // --- captured from the legacy node:crypto implementation ---
 const AES = {
@@ -56,23 +55,22 @@ const PIN = {
 
 describe('crypto byte-compat with the legacy node:crypto implementation', () => {
   it('decrypts a legacy AES-256-GCM envelope to the known plaintext', async () => {
-    const key = Buffer.from(AES.keyB64, 'base64');
-    expect(await decrypt(AES.envelope, key)).toBe(AES.plaintext);
+    expect(await decrypt(AES.envelope, fromBase64(AES.keyB64))).toBe(AES.plaintext);
   });
 
   it('rejects a legacy envelope under the wrong key (auth tag still enforced)', async () => {
-    await expect(decrypt(AES.envelope, Buffer.alloc(32))).rejects.toThrow();
+    await expect(decrypt(AES.envelope, new Uint8Array(32))).rejects.toThrow();
   });
 
   it('derives the identical scrypt key from the same phrase + salt', async () => {
-    const derived = await deriveKeyFromPhrase(SCRYPT.phrase, Buffer.from(SCRYPT.saltB64, 'base64'));
-    expect(derived.toString('base64')).toBe(SCRYPT.derivedKeyB64);
+    const derived = await deriveKeyFromPhrase(SCRYPT.phrase, fromBase64(SCRYPT.saltB64));
+    expect(toBase64(derived)).toBe(SCRYPT.derivedKeyB64);
   });
 
   it('unwraps a legacy recovery bundle back to the original master key', async () => {
-    const kek = await deriveKeyFromPhrase(WRAPPED.phrase, Buffer.from(WRAPPED.saltB64, 'base64'));
+    const kek = await deriveKeyFromPhrase(WRAPPED.phrase, fromBase64(WRAPPED.saltB64));
     const masterKey = await unwrapKey(WRAPPED.wrapped, kek);
-    expect(masterKey.toString('base64')).toBe(WRAPPED.masterKeyB64);
+    expect(toBase64(masterKey)).toBe(WRAPPED.masterKeyB64);
   });
 
   it('verifies a legacy PIN hash (and rejects a wrong PIN)', async () => {
@@ -81,7 +79,7 @@ describe('crypto byte-compat with the legacy node:crypto implementation', () => 
   });
 
   it('round-trips new ciphertext under the same legacy key', async () => {
-    const key = Buffer.from(AES.keyB64, 'base64');
+    const key = fromBase64(AES.keyB64);
     const env = await encrypt(AES.plaintext, key);
     expect(await decrypt(env, key)).toBe(AES.plaintext);
   });

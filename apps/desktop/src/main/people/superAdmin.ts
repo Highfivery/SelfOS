@@ -1,5 +1,5 @@
+import { hashPin, verifyPin } from '@selfos/core/crypto';
 import { readDeviceState, updateDeviceState } from '../state/deviceStore';
-import { hashPin, verifyPin } from './pin';
 
 /**
  * The concealed super-admin passphrase (04-people-roles §8). Stored device-local as a salted hash;

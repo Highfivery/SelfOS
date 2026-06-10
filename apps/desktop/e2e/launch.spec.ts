@@ -6,7 +6,7 @@ import { createMasterKey, loadMasterKey } from '../src/main/crypto/masterKey';
 import type { Encryptor } from '../src/main/secrets/secretStore';
 import { savePerson } from '../src/main/people/peopleService';
 import { setAccount } from '../src/main/people/accessService';
-import { hashPin } from '../src/main/people/pin';
+import { hashPin } from '@selfos/core/crypto';
 import { recordUsage } from '../src/main/usage/usageStore';
 import { setSecret } from '../src/main/secrets/secretStore';
 import { writeEncryptedJson } from '../src/main/crypto/encryptedStore';

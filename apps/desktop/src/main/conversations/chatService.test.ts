@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { generateMasterKey } from '../crypto/cryptoService';
+import { generateMasterKey } from '@selfos/core/crypto';
 import type { ClaudeClient } from '../claude/claudeService';
 import type { Person } from '../../shared/schemas';
 import { savePerson } from '../people/peopleService';
@@ -12,7 +12,7 @@ import { recordUsage } from '../usage/usageStore';
 import { getConversation, listConversations } from './conversationService';
 import { runChatTurn } from './chatService';
 
-const key = generateMasterKey();
+const key = Buffer.from(generateMasterKey());
 const now = new Date('2026-06-15T12:00:00.000Z');
 let vault: string;
 beforeEach(async () => {

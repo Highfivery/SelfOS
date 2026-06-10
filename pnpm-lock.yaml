@@ -53,6 +53,9 @@ importers:
       '@fontsource/lora':
         specifier: ^5.1.0
         version: 5.2.8
+      '@selfos/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       chokidar:
         specifier: ^3.6.0
         version: 3.6.0
@@ -68,9 +71,6 @@ importers:
       react-router-dom:
         specifier: ^6.28.0
         version: 6.30.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      scrypt-js:
-        specifier: ^3.0.1
-        version: 3.0.1
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -117,6 +117,22 @@ importers:
       vite:
         specifier: ^6.0.7
         version: 6.4.3(@types/node@22.19.20)(jiti@2.6.1)(yaml@2.9.0)
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.6(@types/debug@4.1.13)(@types/node@22.19.20)(jiti@2.6.1)(jsdom@25.0.1)(yaml@2.9.0)
+
+  packages/core:
+    dependencies:
+      scrypt-js:
+        specifier: ^3.0.1
+        version: 3.0.1
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.19.20
       vitest:
         specifier: ^3.0.0
         version: 3.2.6(@types/debug@4.1.13)(@types/node@22.19.20)(jiti@2.6.1)(jsdom@25.0.1)(yaml@2.9.0)

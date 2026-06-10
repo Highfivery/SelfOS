@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { generateMasterKey } from '../crypto/cryptoService';
+import { generateMasterKey } from '@selfos/core/crypto';
 import type { Person, Relationship } from '../../shared/schemas';
 import { deletePerson, getPerson, listPeople, savePerson, upsertPerson } from './peopleService';
 import {
@@ -14,7 +14,7 @@ import {
 } from './relationshipService';
 import { getAccessConfig, getAccessView, setAccount, verifyAccountPin } from './accessService';
 
-const key = generateMasterKey();
+const key = Buffer.from(generateMasterKey());
 let vault: string;
 beforeEach(async () => {
   vault = await mkdtemp(join(tmpdir(), 'selfos-people-'));
@@ -54,7 +54,7 @@ describe('peopleService', () => {
 
   it('cannot be read with the wrong master key', async () => {
     await savePerson(vault, key, person('p1', 'Bea'));
-    await expect(getPerson(vault, generateMasterKey(), 'p1')).rejects.toThrow();
+    await expect(getPerson(vault, Buffer.from(generateMasterKey()), 'p1')).rejects.toThrow();
   });
 });
 

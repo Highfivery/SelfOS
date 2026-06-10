@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    // Same lib/types as the Electron host so this source typechecks identically there and standalone.
+    // @types/node is a COMPILE-TIME type environment only (ambient globals like crypto/btoa); core uses
+    // no node:* at runtime and no Buffer — enforced by the `packages/core` ESLint override, so this stays
+    // portable to the iOS WKWebView (07-mobile-platform §5.1).
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": ["src/**/*"]
+}

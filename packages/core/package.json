@@ -1,0 +1,28 @@
+{
+  "name": "@selfos/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "SelfOS platform-agnostic core: shared schemas/types + at-rest crypto (no node:* / electron / Buffer), so it runs on both the Electron host and the future iOS WKWebView. Host interfaces (FileSystem/SecretStore/ClaudeClient) and the rest of the business logic land in later slices (07-mobile-platform §5).",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schemas": "./src/schemas.ts",
+    "./capabilities": "./src/capabilities.ts",
+    "./usage-types": "./src/usageTypes.ts",
+    "./appearance": "./src/appearance.ts",
+    "./crypto": "./src/crypto/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "scrypt-js": "^3.0.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "vitest": "^3.0.0"
+  }
+}

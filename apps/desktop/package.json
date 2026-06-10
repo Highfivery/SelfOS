@@ -17,12 +17,12 @@
     "@anthropic-ai/sdk": "^0.104.1",
     "@fontsource/lora": "^5.1.0",
     "@fontsource-variable/mulish": "^5.1.0",
+    "@selfos/core": "workspace:*",
     "chokidar": "^3.6.0",
     "lucide-react": "^0.469.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0",
-    "scrypt-js": "^3.0.1",
     "zod": "^3.24.1",
     "zustand": "^5.0.2"
   },

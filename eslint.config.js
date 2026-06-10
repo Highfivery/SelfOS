@@ -36,5 +36,40 @@ export default tseslint.config(
     files: ['**/*.cjs'],
     languageOptions: { sourceType: 'commonjs' },
   },
+  {
+    // @selfos/core is platform-agnostic: it runs on both Electron (Node) and the iOS WKWebView, so it
+    // must not reach for node:*, electron, or the node-only `Buffer` (07-mobile-platform §5). The tsconfig
+    // uses @types/node only as a compile-time global environment; this rule enforces the real boundary.
+    files: ['packages/core/**/*.ts'],
+    rules: {
+      'no-restricted-globals': [
+        'error',
+        {
+          name: 'Buffer',
+          message:
+            '@selfos/core must be portable (Electron + iOS WKWebView): use Uint8Array + the base64 helpers in encoding.ts, not Buffer.',
+        },
+      ],
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'electron',
+              message:
+                '@selfos/core is platform-agnostic — depend on injected host interfaces, not electron.',
+            },
+          ],
+          patterns: [
+            {
+              group: ['node:*'],
+              message:
+                '@selfos/core must not use node:* — it also runs in the iOS WKWebView (07-mobile-platform §5).',
+            },
+          ],
+        },
+      ],
+    },
+  },
   prettier,
 );

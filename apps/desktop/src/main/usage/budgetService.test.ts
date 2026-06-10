@@ -3,13 +3,13 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { generateMasterKey } from '../crypto/cryptoService';
+import { generateMasterKey } from '@selfos/core/crypto';
 import { savePerson } from '../people/peopleService';
 import type { Person, UsageEvent } from '../../shared/schemas';
 import { recordUsage } from './usageStore';
 import { checkBudget, setAppBudget, setPersonBudget } from './budgetService';
 
-const key = generateMasterKey();
+const key = Buffer.from(generateMasterKey());
 const now = new Date('2026-06-15T12:00:00.000Z');
 let vault: string;
 beforeEach(async () => {

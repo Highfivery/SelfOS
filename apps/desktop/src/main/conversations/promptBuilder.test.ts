@@ -3,12 +3,12 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { generateMasterKey } from '../crypto/cryptoService';
+import { generateMasterKey } from '@selfos/core/crypto';
 import { savePerson } from '../people/peopleService';
 import type { Person } from '../../shared/schemas';
 import { buildSystemPrompt } from './promptBuilder';
 
-const key = generateMasterKey();
+const key = Buffer.from(generateMasterKey());
 let vault: string;
 beforeEach(async () => {
   vault = await mkdtemp(join(tmpdir(), 'selfos-prompt-'));

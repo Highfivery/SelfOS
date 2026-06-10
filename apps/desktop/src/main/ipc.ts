@@ -29,6 +29,7 @@ import { runConnectionTest } from './claude/claudeService';
 import { defaultClaudeClient } from './claude/anthropicClient';
 import { householdStatus, setupHousehold } from './people/household';
 import { getActivePersonId, setActivePersonId } from './people/session';
+import { verifySuperAdminPassphrase } from './people/superAdmin';
 import {
   getAccessView,
   removeAccount,
@@ -278,4 +279,9 @@ export function registerIpcHandlers(): void {
       return { ok: true, person };
     },
   );
+
+  ipcMain.handle(IpcChannels.superadminUnlock, async (_event, raw: unknown): Promise<boolean> => {
+    const { passphrase } = z.object({ passphrase: z.string() }).parse(raw);
+    return verifySuperAdminPassphrase(userDataDir(), passphrase);
+  });
 }

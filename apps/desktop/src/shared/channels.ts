@@ -42,6 +42,7 @@ export const IpcChannels = {
   accessSetAccount: 'access:setAccount',
   accessRemoveAccount: 'access:removeAccount',
   sessionSetActive: 'session:setActive',
+  superadminUnlock: 'superadmin:unlock',
 } as const;
 
 export type SettingScope = 'vault' | 'device';
@@ -142,6 +143,8 @@ export interface SelfosBridge {
   accessRemoveAccount(personId: string): Promise<AccessView>;
   /** Switch the active person, verifying their PIN if set. */
   sessionSetActive(input: { personId: string; pin?: string }): Promise<SetActiveResult>;
+  /** Verify the concealed super-admin passphrase. Returns true on a match. */
+  superadminUnlock(input: { passphrase: string }): Promise<boolean>;
 }
 
 export type { BootState, Person, PersonInput, Relationship, RelationshipInput, Role };

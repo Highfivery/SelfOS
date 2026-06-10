@@ -71,6 +71,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
           updatedAt: 'now',
         },
       }),
+    superadminUnlock: (input) => Promise.resolve(input.passphrase === 'superpass'),
     ...overrides,
   };
   window.selfos = bridge;

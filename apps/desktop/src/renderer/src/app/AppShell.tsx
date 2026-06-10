@@ -5,6 +5,7 @@ import { AppearanceToggle } from './AppearanceToggle';
 import { useVaultConflicts } from './useVaultConflicts';
 import { useSessionStore } from '../stores/sessionStore';
 import { Switcher } from './Switcher';
+import { SuperAdminUnlock } from './SuperAdminUnlock';
 import { Banner } from '../design-system/components';
 import styles from './AppShell.module.css';
 
@@ -17,6 +18,9 @@ export function AppShell(): JSX.Element {
   const activePerson = useSessionStore((s) => s.activePerson);
   const canManagePeople = useSessionStore((s) => s.can('people.manage'));
   const canManageRoles = useSessionStore((s) => s.can('roles.manage'));
+  const superAdmin = useSessionStore((s) => s.superAdmin);
+  const unlockPromptOpen = useSessionStore((s) => s.unlockPromptOpen);
+  const lockSuperAdmin = useSessionStore((s) => s.lockSuperAdmin);
   const [switching, setSwitching] = useState(false);
 
   return (
@@ -54,6 +58,11 @@ export function AppShell(): JSX.Element {
         <div className={styles.spacer} />
 
         <footer className={styles.footer}>
+          {superAdmin ? (
+            <button type="button" className={styles.superAdminBadge} onClick={lockSuperAdmin}>
+              Super-admin · Lock
+            </button>
+          ) : null}
           {activePerson ? (
             <button
               type="button"
@@ -86,6 +95,7 @@ export function AppShell(): JSX.Element {
       </main>
 
       {switching ? <Switcher onClose={() => setSwitching(false)} /> : null}
+      {unlockPromptOpen ? <SuperAdminUnlock /> : null}
     </div>
   );
 }

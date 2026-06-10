@@ -41,6 +41,7 @@ const bridge: SelfosBridge = {
   accessSetAccount: (input) => ipcRenderer.invoke(IpcChannels.accessSetAccount, input),
   accessRemoveAccount: (personId) => ipcRenderer.invoke(IpcChannels.accessRemoveAccount, personId),
   sessionSetActive: (input) => ipcRenderer.invoke(IpcChannels.sessionSetActive, input),
+  superadminUnlock: (input) => ipcRenderer.invoke(IpcChannels.superadminUnlock, input),
 };
 
 contextBridge.exposeInMainWorld('selfos', bridge);

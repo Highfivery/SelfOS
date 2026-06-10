@@ -14,7 +14,13 @@ const owner: Person = {
 };
 
 afterEach(() =>
-  useSessionStore.setState({ status: null, activePerson: null, access: null, loaded: false }),
+  useSessionStore.setState({
+    status: null,
+    activePerson: null,
+    access: null,
+    loaded: false,
+    superAdmin: false,
+  }),
 );
 
 describe('sessionStore.can', () => {
@@ -43,5 +49,11 @@ describe('sessionStore.can', () => {
     });
     expect(useSessionStore.getState().can('people.manage')).toBe(false);
     expect(useSessionStore.getState().can('questionnaires.answer')).toBe(true);
+  });
+
+  it('super-admin bypasses all capability checks', () => {
+    useSessionStore.setState({ superAdmin: true });
+    expect(useSessionStore.getState().can('people.manage')).toBe(true);
+    expect(useSessionStore.getState().can('roles.manage')).toBe(true);
   });
 });

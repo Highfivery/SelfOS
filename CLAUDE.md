@@ -232,6 +232,12 @@ A running log of durable decisions and feedback captured into the project config
   switch, nav gated). Known v1 limits: only the nav (not the route) is gated, and a PIN-less owner is
   switchable by anyone on the device — the super-admin passphrase is the real gate. The roles×capability
   matrix editor, the concealed super-admin unlock, and shareable context are People-3.
+- 2026-06-09 — Build People-3b (concealed super-admin unlock): a hidden long-press on the version in
+  About opens a deliberately generic passphrase prompt; the super-admin passphrase (set at setup) is
+  verified in main (scrypt, `superadmin:unlock`) and, on success, enters an in-memory inspect-all mode
+  where `sessionStore.can()` bypasses all gating (all nav/screens) with a subtle "Super-admin · Lock"
+  badge that only shows when active. Tests + an E2E. Note: this is a UI-reveal gate (the app already
+  holds the master key); surfacing private _data_ comes with shareable context (People-3c).
 - 2026-06-09 — Build People-3a (roles × capability matrix): a **Roles** screen (nav gated by
   `roles.manage`) where the owner toggles each non-owner role's capabilities; the owner column is
   locked all-on. New `access:saveRole` IPC + bridge + `CAPABILITY_LABELS`. Tests + an E2E (owner

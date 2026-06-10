@@ -6,6 +6,7 @@ import { createMasterKey, loadMasterKey } from '../src/main/crypto/masterKey';
 import type { Encryptor } from '../src/main/secrets/secretStore';
 import { savePerson } from '../src/main/people/peopleService';
 import { setAccount } from '../src/main/people/accessService';
+import { hashPin } from '../src/main/people/pin';
 
 const MAIN = join(__dirname, '..', 'out', 'main', 'index.js');
 
@@ -228,6 +229,30 @@ test('access: grant a login, switch person, and gate the People nav', async () =
   }
 });
 
+test('super-admin: a hidden long-press on the version unlocks inspect mode', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'About' }).click();
+
+    // Concealed entry: long-press the version number.
+    await w.getByText(/^\d+\.\d+\.\d+$/).click({ delay: 700 });
+    const dialog = w.getByRole('dialog', { name: 'Unlock' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByLabel('Passphrase').fill('superpass');
+    await dialog.getByRole('button', { name: 'Unlock' }).click();
+
+    // Inspect mode is active — the (only-now-visible) super-admin badge appears.
+    await expect(w.getByRole('button', { name: /super-admin/i })).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('roles: the owner edits the role × capability matrix', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);
@@ -301,6 +326,7 @@ async function seedReadyVault(
     schemaVersion: 1,
     vaultPath: vault,
     activePersonId: ownerId,
+    superAdminPassphraseHash: hashPin('superpass'),
   });
   return { userData, vault };
 }

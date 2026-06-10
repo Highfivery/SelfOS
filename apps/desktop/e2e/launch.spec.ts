@@ -884,3 +884,37 @@ test('responsive: at a phone width the nav is a drawer and no screen overflows h
     await rm(vault, { recursive: true, force: true });
   }
 });
+
+test('design: the TopBar controls share a height and vertical alignment', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await expect(w.getByRole('link', { name: 'Home' })).toBeVisible();
+    const geo = await w.evaluate(() => {
+      const rect = (sel: string): { top: number; height: number } | null => {
+        const el = document.querySelector(sel);
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { top: Math.round(r.top), height: Math.round(r.height) };
+      };
+      return {
+        appearance: rect('button[aria-label^="Appearance"]'),
+        ring: rect('button[aria-label*="AI usage"]'),
+        account: rect('button[aria-label^="Signed in as"]'),
+      };
+    });
+    const items = [geo.appearance, geo.ring, geo.account];
+    for (const item of items) expect(item).not.toBeNull();
+    const tops = items.map((i) => i?.top ?? -1);
+    const heights = items.map((i) => i?.height ?? -1);
+    // The appearance toggle, usage ring, and account control must share a top edge + height
+    // (≤1px tolerance) — guards against the vertical-misalignment regression.
+    expect(Math.max(...tops) - Math.min(...tops)).toBeLessThanOrEqual(1);
+    expect(Math.max(...heights) - Math.min(...heights)).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});

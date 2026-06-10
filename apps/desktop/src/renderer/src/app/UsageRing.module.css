@@ -1,12 +1,14 @@
 .wrap {
   position: relative;
+  display: inline-flex;
 }
 
 .ringButton {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-1) var(--space-2);
+  height: 32px;
+  padding: 0 var(--space-2);
   border: none;
   border-radius: var(--radius-md);
   background: none;
@@ -25,6 +27,7 @@
 }
 
 .ring {
+  display: block;
   width: 26px;
   height: 26px;
   transform: rotate(-90deg);
@@ -32,7 +35,7 @@
 
 .track {
   fill: none;
-  stroke: var(--color-surface-alt);
+  stroke: var(--color-border-strong);
   stroke-width: 4;
 }
 

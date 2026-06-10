@@ -239,6 +239,14 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-10 — Fix (TopBar alignment + usage-ring visibility — user flagged): the appearance toggle,
+  usage ring, and account control now share a fixed **32px height** and align to the same top edge
+  (the ring's wrapper was `display:block`, a line-box gap that floated it ~2px high; now `inline-flex`
+  like its siblings). The usage ring's track moved from the near-invisible `--color-surface-alt` to
+  `--color-border-strong` so the ring actually reads. Added an **E2E geometry guard** asserting the
+  three TopBar controls share a top edge + height (≤1px). **Lesson (again): measure geometry in
+  testing — I missed a 2px vertical misalignment + an invisible ring by not screenshotting/measuring
+  the TopBar.**
 - 2026-06-10 — UI polish + feedback (user flagged three shipped-but-unpolished things): (1) **buttons
   in rows of labelled fields now bottom-align** with the inputs (`Inline align="end"` in the budget
   editors) instead of floating mid-height; (2) the **appearance toggle was redesigned** for the

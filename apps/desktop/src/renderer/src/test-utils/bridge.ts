@@ -55,6 +55,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         roles: DEFAULT_ROLES,
         accounts: [{ personId: 'owner-1', roleId: 'owner', hasPin: false }],
       }),
+    accessSaveRole: () => Promise.resolve({ roles: DEFAULT_ROLES, accounts: [] }),
     accessSetAccount: () => Promise.resolve({ roles: DEFAULT_ROLES, accounts: [] }),
     accessRemoveAccount: () => Promise.resolve({ roles: DEFAULT_ROLES, accounts: [] }),
     sessionSetActive: (input) =>

@@ -19,6 +19,19 @@ export const CAPABILITIES = [
 
 export type CapabilityKey = (typeof CAPABILITIES)[number];
 
+/** Human-readable labels for the role × capability matrix editor. */
+export const CAPABILITY_LABELS: Record<CapabilityKey, string> = {
+  'people.manage': 'Manage people',
+  'people.viewOthers': "View others' profiles",
+  'relationships.manage': 'Manage relationships',
+  'settings.manage': 'Manage settings',
+  'users.manage': 'Manage logins',
+  'roles.manage': 'Manage roles',
+  'sessions.own': 'Have their own sessions',
+  'questionnaires.answer': 'Answer questionnaires',
+  'questionnaires.assign': 'Assign questionnaires',
+};
+
 function capabilityMap(enabled: readonly CapabilityKey[]): Record<string, boolean> {
   const map: Record<string, boolean> = {};
   for (const capability of CAPABILITIES) map[capability] = enabled.includes(capability);

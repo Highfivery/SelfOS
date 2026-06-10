@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { House, Settings, Shapes, Users } from 'lucide-react';
+import { House, Settings, Shapes, ShieldCheck, Users } from 'lucide-react';
 import { AppearanceToggle } from './AppearanceToggle';
 import { useVaultConflicts } from './useVaultConflicts';
 import { useSessionStore } from '../stores/sessionStore';
@@ -16,6 +16,7 @@ export function AppShell(): JSX.Element {
   const conflicts = useVaultConflicts();
   const activePerson = useSessionStore((s) => s.activePerson);
   const canManagePeople = useSessionStore((s) => s.can('people.manage'));
+  const canManageRoles = useSessionStore((s) => s.can('roles.manage'));
   const [switching, setSwitching] = useState(false);
 
   return (
@@ -34,6 +35,12 @@ export function AppShell(): JSX.Element {
             <NavLink to="/people" className={navClass}>
               <Users size={18} aria-hidden="true" />
               <span>People</span>
+            </NavLink>
+          ) : null}
+          {canManageRoles ? (
+            <NavLink to="/roles" className={navClass}>
+              <ShieldCheck size={18} aria-hidden="true" />
+              <span>Roles</span>
             </NavLink>
           ) : null}
           {import.meta.env.DEV ? (

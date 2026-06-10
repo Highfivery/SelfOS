@@ -232,6 +232,11 @@ A running log of durable decisions and feedback captured into the project config
   switch, nav gated). Known v1 limits: only the nav (not the route) is gated, and a PIN-less owner is
   switchable by anyone on the device — the super-admin passphrase is the real gate. The roles×capability
   matrix editor, the concealed super-admin unlock, and shareable context are People-3.
+- 2026-06-09 — Build People-3a (roles × capability matrix): a **Roles** screen (nav gated by
+  `roles.manage`) where the owner toggles each non-owner role's capabilities; the owner column is
+  locked all-on. New `access:saveRole` IPC + bridge + `CAPABILITY_LABELS`. Tests + an E2E (owner
+  toggles a member capability). People-3b (concealed super-admin unlock) and 3c (shareable context)
+  are next.
 - 2026-06-09 — Fix: the `Switch` thumb was pushed flush against the right edge when on, because the
   fixed-size control had no `flex-shrink: 0` and got compressed inside content-tight flex rows (e.g.
   the Subject toggle in the person editor). Added `flex: none` to `.switch`; added an E2E geometry

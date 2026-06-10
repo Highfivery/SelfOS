@@ -228,6 +228,25 @@ test('access: grant a login, switch person, and gate the People nav', async () =
   }
 });
 
+test('roles: the owner edits the role × capability matrix', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Roles' }).click();
+    await expect(w.getByRole('heading', { name: 'Roles' })).toBeVisible();
+
+    const memberManage = w.getByRole('switch', { name: 'Member: Manage people' });
+    await expect(memberManage).not.toBeChecked();
+    await memberManage.click();
+    await expect(memberManage).toBeChecked();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('design: a Switch never shrinks in a flex row and its thumb stays on-track', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);

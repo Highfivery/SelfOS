@@ -13,6 +13,7 @@ import {
   BootStateSchema,
   PersonInputSchema,
   RelationshipInputSchema,
+  RoleSchema,
   type BootState,
   type Person,
   type Relationship,
@@ -28,7 +29,13 @@ import { runConnectionTest } from './claude/claudeService';
 import { defaultClaudeClient } from './claude/anthropicClient';
 import { householdStatus, setupHousehold } from './people/household';
 import { getActivePersonId, setActivePersonId } from './people/session';
-import { getAccessView, removeAccount, setAccount, verifyAccountPin } from './people/accessService';
+import {
+  getAccessView,
+  removeAccount,
+  saveRole,
+  setAccount,
+  verifyAccountPin,
+} from './people/accessService';
 import { deletePerson, getPerson, listPeople, upsertPerson } from './people/peopleService';
 import {
   deleteRelationship,
@@ -227,6 +234,13 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IpcChannels.accessGet, async (): Promise<AccessView> => {
     const ctx = await vaultAndKey();
     return ctx ? getAccessView(ctx.vaultDir, ctx.key) : { roles: [], accounts: [] };
+  });
+
+  ipcMain.handle(IpcChannels.accessSaveRole, async (_event, raw: unknown): Promise<AccessView> => {
+    const ctx = await vaultAndKey();
+    if (!ctx) throw new Error('Household is not set up');
+    await saveRole(ctx.vaultDir, ctx.key, RoleSchema.parse(raw));
+    return getAccessView(ctx.vaultDir, ctx.key);
   });
 
   ipcMain.handle(

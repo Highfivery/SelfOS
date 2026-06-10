@@ -38,6 +38,7 @@ export const IpcChannels = {
   relationshipsSave: 'relationships:save',
   relationshipsDelete: 'relationships:delete',
   accessGet: 'access:get',
+  accessSaveRole: 'access:saveRole',
   accessSetAccount: 'access:setAccount',
   accessRemoveAccount: 'access:removeAccount',
   sessionSetActive: 'session:setActive',
@@ -129,6 +130,8 @@ export interface SelfosBridge {
   relationshipsDelete(id: string): Promise<void>;
   /** Roles + accounts (PIN hashes stripped). */
   accessGet(): Promise<AccessView>;
+  /** Create or update a role (capability matrix); returns the refreshed view. */
+  accessSaveRole(role: Role): Promise<AccessView>;
   /** Grant or update a person's account (role + optional PIN); returns the refreshed view. */
   accessSetAccount(input: {
     personId: string;

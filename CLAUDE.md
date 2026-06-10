@@ -222,6 +222,13 @@ A running log of durable decisions and feedback captured into the project config
   sections. `ThemeProvider` now reads from settings. Added a shared mock-bridge test helper. Deferred:
   accent options, high-contrast, the AI/secret settings + keychain (slice 5), and the broader
   feature-module registry abstraction.
+- 2026-06-09 — Build People-2a (onboarding setup + active person): first run now creates the owner
+  (Person #1), sets the super-admin passphrase (device-local scrypt hash), and shows the recovery
+  phrase once via `household:setup`; a `HouseholdGate` between boot-ready and the app routes to a
+  `Setup` wizard until a master key + owner exist; session/household IPC + bridge
+  (`householdStatus`/`householdSetup`/`getActivePerson`) + a "Signed in as …" indicator in the shell.
+  E2E seeds an encrypted household so existing tests still boot, plus a new setup-flow E2E. UI to
+  add/manage people + the "Who's here?" switcher is People-2b.
 - 2026-06-09 — Build People-1 (crypto + data foundation for
   [04-people-roles](docs/specs/04-people-roles.md)): AES-256-GCM at-rest encryption (`cryptoService`)
   with a device-keychain **master key** (`masterKey`) + recovery-phrase wrap/unwrap; encrypted vault

@@ -2,8 +2,43 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { _electron as electron, expect, test, type ElectronApplication } from '@playwright/test';
+import { createMasterKey, loadMasterKey } from '../src/main/crypto/masterKey';
+import type { Encryptor } from '../src/main/secrets/secretStore';
+import { savePerson } from '../src/main/people/peopleService';
+import { setAccount } from '../src/main/people/accessService';
 
 const MAIN = join(__dirname, '..', 'out', 'main', 'index.js');
+
+// Matches the app's SELFOS_FAKE_SECRETS encryptor so seeded ciphertext is readable by the launched app.
+const passthrough: Encryptor = {
+  isAvailable: () => true,
+  encrypt: (plain) => Buffer.from(plain, 'utf8').toString('base64'),
+  decrypt: (ciphertext) => Buffer.from(ciphertext, 'base64').toString('utf8'),
+};
+
+/** Seed an encrypted household (master key + owner + active person) so the app boots past setup. */
+async function seedHousehold(
+  userData: string,
+  vault: string,
+  ownerName = 'Tester',
+): Promise<string> {
+  await createMasterKey(userData, passthrough, vault);
+  const key = await loadMasterKey(userData, passthrough);
+  if (!key) throw new Error('seedHousehold: master key missing');
+  const ownerId = 'owner-1';
+  const now = new Date().toISOString();
+  await savePerson(vault, key, {
+    id: ownerId,
+    schemaVersion: 1,
+    displayName: ownerName,
+    isSubject: true,
+    tags: [],
+    createdAt: now,
+    updatedAt: now,
+  });
+  await setAccount(vault, key, { personId: ownerId, roleId: 'owner' });
+  return ownerId;
+}
 
 // Deterministic AI: passthrough secret encryption (no keychain prompt) + offline Claude client.
 function e2eEnv(): Record<string, string> {
@@ -51,7 +86,12 @@ test('boots straight to the shell when a valid vault is configured', async () =>
     updatedAt: now,
   });
   await writeJson(join(vault, 'config', 'settings.json'), { schemaVersion: 1, values: {} });
-  await writeJson(join(userData, 'state.json'), { schemaVersion: 1, vaultPath: vault });
+  const ownerId = await seedHousehold(userData, vault);
+  await writeJson(join(userData, 'state.json'), {
+    schemaVersion: 1,
+    vaultPath: vault,
+    activePersonId: ownerId,
+  });
 
   const app = await launch(userData);
   try {
@@ -77,7 +117,12 @@ test('surfaces a sync conflict when a conflict copy exists in the vault', async 
     updatedAt: now,
   });
   await writeJson(join(vault, 'config', 'settings.json'), { schemaVersion: 1, values: {} });
-  await writeJson(join(userData, 'state.json'), { schemaVersion: 1, vaultPath: vault });
+  const conflictOwnerId = await seedHousehold(userData, vault);
+  await writeJson(join(userData, 'state.json'), {
+    schemaVersion: 1,
+    vaultPath: vault,
+    activePersonId: conflictOwnerId,
+  });
   await mkdir(join(vault, 'journal'), { recursive: true });
   await writeFile(join(vault, 'journal', 'note (conflicted copy 2026-06-09).md'), 'x', 'utf8');
 
@@ -85,6 +130,41 @@ test('surfaces a sync conflict when a conflict copy exists in the vault', async 
   try {
     const w = await app.firstWindow();
     await expect(w.getByText(/sync conflict copy was found/i)).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('first-time setup creates the owner and enters the app', async () => {
+  const userData = await mkdtemp(join(tmpdir(), 'selfos-e2e-ud-'));
+  const vault = await mkdtemp(join(tmpdir(), 'selfos-e2e-vault-'));
+  const now = new Date().toISOString();
+  // A ready vault but no household yet → the setup gate should appear.
+  await writeJson(join(vault, '.selfos', 'meta.json'), {
+    schemaVersion: 1,
+    vaultId: 'e2e',
+    createdAt: now,
+    updatedAt: now,
+  });
+  await writeJson(join(vault, 'config', 'settings.json'), { schemaVersion: 1, values: {} });
+  await writeJson(join(userData, 'state.json'), { schemaVersion: 1, vaultPath: vault });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await expect(w.getByRole('heading', { name: 'Create your profile' })).toBeVisible();
+    await w.getByLabel('Your name').fill('Alex');
+    await w.getByLabel('Super-admin passphrase').fill('hunter2');
+    await w.getByLabel('Confirm passphrase').fill('hunter2');
+    await w.getByRole('button', { name: /create profile/i }).click();
+
+    // Recovery phrase shown once, then into the app as the owner.
+    await expect(w.getByRole('heading', { name: 'Write this down' })).toBeVisible();
+    await w.getByRole('button', { name: /saved it/i }).click();
+    await expect(w.getByRole('link', { name: 'Home' })).toBeVisible();
+    await expect(w.getByText('Signed in as Alex')).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -108,7 +188,12 @@ async function seedReadyVault(
     schemaVersion: 1,
     values: settingsValues,
   });
-  await writeJson(join(userData, 'state.json'), { schemaVersion: 1, vaultPath: vault });
+  const ownerId = await seedHousehold(userData, vault);
+  await writeJson(join(userData, 'state.json'), {
+    schemaVersion: 1,
+    vaultPath: vault,
+    activePersonId: ownerId,
+  });
   return { userData, vault };
 }
 

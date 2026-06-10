@@ -27,3 +27,13 @@ export async function readDeviceState(userDataDir: string): Promise<DeviceState>
 export async function writeDeviceState(userDataDir: string, state: DeviceState): Promise<void> {
   await writeJsonAtomic(deviceStatePath(userDataDir), DeviceStateSchema.parse(state));
 }
+
+/** Merge a partial update into device-local state and persist it. */
+export async function updateDeviceState(
+  userDataDir: string,
+  patch: Partial<DeviceState>,
+): Promise<DeviceState> {
+  const next = { ...(await readDeviceState(userDataDir)), ...patch };
+  await writeDeviceState(userDataDir, next);
+  return next;
+}

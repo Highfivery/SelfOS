@@ -3,7 +3,7 @@ import { useAppStore } from '../stores/appStore';
 import { Splash } from './boot/Splash';
 import { Onboarding } from './boot/Onboarding';
 import { VaultError } from './boot/VaultError';
-import { Shell } from './Shell';
+import { HouseholdGate } from './HouseholdGate';
 
 /** Renders the right surface for the current boot phase (02-app-shell §3.1). */
 export function BootGate(): JSX.Element {
@@ -20,7 +20,7 @@ export function BootGate(): JSX.Element {
     case 'vault-error':
       return <VaultError />;
     case 'ready':
-      return <Shell />;
+      return <HouseholdGate />;
     case 'starting':
     default:
       return <Splash />;

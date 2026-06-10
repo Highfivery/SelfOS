@@ -1,0 +1,57 @@
+import { randomUUID } from 'node:crypto';
+import { OWNER_ROLE_ID } from '../../shared/capabilities';
+import type { HouseholdStatus } from '../../shared/channels';
+import type { Person } from '../../shared/schemas';
+import { createMasterKey, loadMasterKey } from '../crypto/masterKey';
+import type { Encryptor } from '../secrets/secretStore';
+import { getAccessConfig, setAccount } from './accessService';
+import { savePerson } from './peopleService';
+import { getActivePersonId, setActivePersonId } from './session';
+import { setSuperAdminPassphrase } from './superAdmin';
+
+/** Whether the household is set up and who is active — drives the renderer's post-boot gate. */
+export async function householdStatus(
+  userDataDir: string,
+  encryptor: Encryptor,
+  vaultDir: string | null,
+): Promise<HouseholdStatus> {
+  const key = await loadMasterKey(userDataDir, encryptor);
+  if (!key || !vaultDir) {
+    return { hasMasterKey: key !== null, hasOwner: false, activePersonId: null };
+  }
+  const access = await getAccessConfig(vaultDir, key);
+  const hasOwner = access.accounts.some((account) => account.roleId === OWNER_ROLE_ID);
+  return { hasMasterKey: true, hasOwner, activePersonId: await getActivePersonId(userDataDir) };
+}
+
+/**
+ * First-run setup: generate the master key (+ recovery phrase), create the owner person and account,
+ * store the super-admin passphrase, and activate the owner. Returns the recovery phrase to show once.
+ */
+export async function setupHousehold(
+  userDataDir: string,
+  encryptor: Encryptor,
+  vaultDir: string,
+  input: { ownerName: string; passphrase: string },
+): Promise<{ recoveryPhrase: string; ownerId: string }> {
+  const { recoveryPhrase } = await createMasterKey(userDataDir, encryptor, vaultDir);
+  const key = await loadMasterKey(userDataDir, encryptor);
+  if (!key) throw new Error('Master key creation failed');
+
+  const now = new Date().toISOString();
+  const owner: Person = {
+    id: randomUUID(),
+    schemaVersion: 1,
+    displayName: input.ownerName,
+    isSubject: true,
+    tags: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+  await savePerson(vaultDir, key, owner);
+  await setAccount(vaultDir, key, { personId: owner.id, roleId: OWNER_ROLE_ID });
+  await setSuperAdminPassphrase(userDataDir, input.passphrase);
+  await setActivePersonId(userDataDir, owner.id);
+
+  return { recoveryPhrase, ownerId: owner.id };
+}

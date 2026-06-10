@@ -27,6 +27,9 @@ const bridge: SelfosBridge = {
   secretHas: (input) => ipcRenderer.invoke(IpcChannels.secretHas, input),
   secretClear: (input) => ipcRenderer.invoke(IpcChannels.secretClear, input),
   claudeTest: () => ipcRenderer.invoke(IpcChannels.claudeTest),
+  householdStatus: () => ipcRenderer.invoke(IpcChannels.householdStatus),
+  householdSetup: (input) => ipcRenderer.invoke(IpcChannels.householdSetup, input),
+  getActivePerson: () => ipcRenderer.invoke(IpcChannels.getActivePerson),
 };
 
 contextBridge.exposeInMainWorld('selfos', bridge);

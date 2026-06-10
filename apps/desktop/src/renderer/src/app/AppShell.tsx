@@ -2,7 +2,8 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { House, Settings, Shapes } from 'lucide-react';
 import { AppearanceToggle } from './AppearanceToggle';
 import { useVaultConflicts } from './useVaultConflicts';
-import { Banner } from '../design-system/components';
+import { useSessionStore } from '../stores/sessionStore';
+import { Banner, Text } from '../design-system/components';
 import styles from './AppShell.module.css';
 
 function navClass({ isActive }: { isActive: boolean }): string {
@@ -11,6 +12,7 @@ function navClass({ isActive }: { isActive: boolean }): string {
 
 export function AppShell(): JSX.Element {
   const conflicts = useVaultConflicts();
+  const activePerson = useSessionStore((s) => s.activePerson);
 
   return (
     <div className={styles.shell}>
@@ -35,6 +37,11 @@ export function AppShell(): JSX.Element {
         <div className={styles.spacer} />
 
         <footer className={styles.footer}>
+          {activePerson ? (
+            <Text size="xs" tone="secondary">
+              Signed in as {activePerson.displayName}
+            </Text>
+          ) : null}
           <NavLink to="/settings" className={navClass}>
             <Settings size={18} aria-hidden="true" />
             <span>Settings</span>

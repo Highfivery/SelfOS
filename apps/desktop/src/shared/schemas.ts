@@ -46,6 +46,8 @@ export const DeviceStateSchema = z.object({
   schemaVersion: z.number().int().positive(),
   vaultPath: z.string().nullable(),
   window: WindowBoundsSchema.optional(),
+  activePersonId: z.string().nullable().optional(),
+  superAdminPassphraseHash: z.string().optional(),
 });
 export type DeviceState = z.infer<typeof DeviceStateSchema>;
 

@@ -1,4 +1,4 @@
-import type { BootState } from './schemas';
+import type { BootState, Person } from './schemas';
 
 /**
  * IPC channel names + the renderer-facing bridge type. This module is zod-free so it is safe to
@@ -21,6 +21,9 @@ export const IpcChannels = {
   secretHas: 'secret:has',
   secretClear: 'secret:clear',
   claudeTest: 'claude:test',
+  householdStatus: 'household:status',
+  householdSetup: 'household:setup',
+  getActivePerson: 'session:getActivePerson',
 } as const;
 
 export type SettingScope = 'vault' | 'device';
@@ -36,6 +39,13 @@ export type ClaudeTestResult =
 export interface SettingsValues {
   vault: Record<string, unknown>;
   device: Record<string, unknown>;
+}
+
+/** Drives the post-boot household gate (setup vs. the app). */
+export interface HouseholdStatus {
+  hasMasterKey: boolean;
+  hasOwner: boolean;
+  activePersonId: string | null;
 }
 
 export interface SelfosBridge {
@@ -69,6 +79,15 @@ export interface SelfosBridge {
   secretClear(input: { id: string }): Promise<void>;
   /** Test the Claude connection with the stored key + selected model. */
   claudeTest(): Promise<ClaudeTestResult>;
+  /** Whether the household is set up (master key + owner) and who is active. */
+  householdStatus(): Promise<HouseholdStatus>;
+  /** First-run setup: create the owner, set the super-admin passphrase, return the recovery phrase. */
+  householdSetup(input: {
+    ownerName: string;
+    passphrase: string;
+  }): Promise<{ recoveryPhrase: string; ownerId: string }>;
+  /** The currently active person (decrypted), or null. */
+  getActivePerson(): Promise<Person | null>;
 }
 
-export type { BootState };
+export type { BootState, Person };

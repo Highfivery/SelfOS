@@ -4,9 +4,10 @@ import {
   ANTHROPIC_API_KEY_ID,
   IpcChannels,
   type ClaudeTestResult,
+  type HouseholdStatus,
   type SettingsValues,
 } from '../shared/channels';
-import { BootStateSchema, type BootState } from '../shared/schemas';
+import { BootStateSchema, type BootState, type Person } from '../shared/schemas';
 import { computeBootState } from './boot';
 import { initializeVault } from './vault/vault';
 import { findConflicts } from './vault/conflicts';
@@ -16,6 +17,10 @@ import { clearSecret, getSecret, hasSecret, setSecret } from './secrets/secretSt
 import { defaultEncryptor } from './secrets/encryptor';
 import { runConnectionTest } from './claude/claudeService';
 import { defaultClaudeClient } from './claude/anthropicClient';
+import { householdStatus, setupHousehold } from './people/household';
+import { getActivePersonId } from './people/session';
+import { getPerson } from './people/peopleService';
+import { loadMasterKey } from './crypto/masterKey';
 import { startVaultWatcher } from './vaultWatcherManager';
 
 const ScopeSchema = z.enum(['vault', 'device']);
@@ -27,6 +32,10 @@ const SetSettingSchema = z.object({
 const ResetSettingSchema = z.object({ key: z.string().min(1), scope: ScopeSchema });
 const SecretSetSchema = z.object({ id: z.string().min(1), value: z.string() });
 const SecretIdSchema = z.object({ id: z.string().min(1) });
+const HouseholdSetupSchema = z.object({
+  ownerName: z.string().min(1),
+  passphrase: z.string().min(6),
+});
 
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
 const encryptor = defaultEncryptor();
@@ -123,5 +132,27 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IpcChannels.claudeTest, async (): Promise<ClaudeTestResult> => {
     const apiKey = await getSecret(userDataDir(), encryptor, ANTHROPIC_API_KEY_ID);
     return runConnectionTest(claudeClient, apiKey, await activeModel());
+  });
+
+  ipcMain.handle(IpcChannels.householdStatus, async (): Promise<HouseholdStatus> => {
+    return householdStatus(userDataDir(), encryptor, await activeVaultPath());
+  });
+
+  ipcMain.handle(
+    IpcChannels.householdSetup,
+    async (_event, raw: unknown): Promise<{ recoveryPhrase: string; ownerId: string }> => {
+      const input = HouseholdSetupSchema.parse(raw);
+      const vaultPath = await activeVaultPath();
+      if (!vaultPath) throw new Error('No vault selected');
+      return setupHousehold(userDataDir(), encryptor, vaultPath, input);
+    },
+  );
+
+  ipcMain.handle(IpcChannels.getActivePerson, async (): Promise<Person | null> => {
+    const vaultPath = await activeVaultPath();
+    const key = vaultPath ? await loadMasterKey(userDataDir(), encryptor) : null;
+    if (!vaultPath || !key) return null;
+    const id = await getActivePersonId(userDataDir());
+    return id ? getPerson(vaultPath, key, id) : null;
   });
 }

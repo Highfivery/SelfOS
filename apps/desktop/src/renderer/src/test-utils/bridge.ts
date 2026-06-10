@@ -21,6 +21,10 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     secretHas: () => Promise.resolve(false),
     secretClear: () => Promise.resolve(),
     claudeTest: () => Promise.resolve({ ok: true, text: 'ok' }),
+    householdStatus: () =>
+      Promise.resolve({ hasMasterKey: true, hasOwner: true, activePersonId: 'owner-1' }),
+    householdSetup: () => Promise.resolve({ recoveryPhrase: 'TEST-PHRASE', ownerId: 'owner-1' }),
+    getActivePerson: () => Promise.resolve(null),
     ...overrides,
   };
   window.selfos = bridge;

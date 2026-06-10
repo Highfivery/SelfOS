@@ -115,7 +115,8 @@ A slice is **not** done until **all** of these pass:
 - [ ] `pnpm typecheck` clean
 - [ ] `pnpm lint` clean (ESLint) and Prettier-formatted
 - [ ] Unit/component tests for new logic (Vitest); meaningful, not trivial
-- [ ] E2E tests for new user-facing flows (Playwright)
+- [ ] E2E tests for **every** new user-facing surface/section, not just the happy path (Playwright);
+      include a no-horizontal-overflow / layout guard for content-heavy screens
 - [ ] **Docs in lockstep** — relevant spec / `CLAUDE.md` / skills updated (`sync-docs`)
 - [ ] **Self code-review** passed (`code-reviewer` agent); findings fixed or explicitly accepted
 - [ ] Accessibility check for any UI

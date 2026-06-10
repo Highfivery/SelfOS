@@ -47,4 +47,15 @@ describe('SettingsScreen', () => {
     expect(screen.getByText('Density')).toBeInTheDocument();
     expect(screen.queryByText('Theme')).not.toBeInTheDocument();
   });
+
+  it('reveals the AI model only once AI is enabled (visibleWhen)', async () => {
+    installMockBridge();
+    useSettingsStore.setState((state) => ({ values: { ...state.values, 'ai.enabled': false } }));
+    render(<SettingsScreen />);
+    await userEvent.click(screen.getByRole('button', { name: 'AI' }));
+    expect(screen.queryByText('Model')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('switch', { name: 'Enable AI' }));
+    expect(screen.getByText('Model')).toBeInTheDocument();
+  });
 });

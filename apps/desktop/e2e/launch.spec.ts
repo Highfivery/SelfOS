@@ -5,9 +5,20 @@ import { _electron as electron, expect, test, type ElectronApplication } from '@
 
 const MAIN = join(__dirname, '..', 'out', 'main', 'index.js');
 
+// Deterministic AI: passthrough secret encryption (no keychain prompt) + offline Claude client.
+function e2eEnv(): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value !== undefined) env[key] = value;
+  }
+  env.SELFOS_FAKE_SECRETS = '1';
+  env.SELFOS_FAKE_CLAUDE = '1';
+  return env;
+}
+
 // Each test uses an isolated --user-data-dir so device-local state is deterministic.
 function launch(userDataDir: string): Promise<ElectronApplication> {
-  return electron.launch({ args: [`--user-data-dir=${userDataDir}`, MAIN] });
+  return electron.launch({ args: [`--user-data-dir=${userDataDir}`, MAIN], env: e2eEnv() });
 }
 
 async function writeJson(file: string, data: unknown): Promise<void> {
@@ -133,6 +144,32 @@ test('settings: a persisted dark theme is applied on boot', async () => {
   try {
     const w = await app.firstWindow();
     await expect(w.locator('html')).toHaveAttribute('data-theme', 'dark');
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('AI: enabling reveals key + model, saving a key and testing connects', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'AI' }).click();
+
+    // Model + key controls are visible because AI is enabled.
+    await expect(w.getByLabel('Claude API key')).toBeVisible();
+    await expect(w.getByLabel('Model')).toBeVisible();
+
+    // Save a (fake) key, then test the connection (offline fake client → success).
+    await w.getByLabel('Claude API key').fill('sk-ant-e2e');
+    await w.getByRole('button', { name: /save key/i }).click();
+    await expect(w.getByText(/key is configured/i)).toBeVisible();
+
+    await w.getByRole('button', { name: /test connection/i }).click();
+    await expect(w.getByText('Connected')).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

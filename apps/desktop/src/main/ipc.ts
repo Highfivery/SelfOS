@@ -1,12 +1,21 @@
 import { app, dialog, ipcMain, shell } from 'electron';
 import { z } from 'zod';
-import { IpcChannels, type SettingsValues } from '../shared/channels';
+import {
+  ANTHROPIC_API_KEY_ID,
+  IpcChannels,
+  type ClaudeTestResult,
+  type SettingsValues,
+} from '../shared/channels';
 import { BootStateSchema, type BootState } from '../shared/schemas';
 import { computeBootState } from './boot';
 import { initializeVault } from './vault/vault';
 import { findConflicts } from './vault/conflicts';
 import { readDeviceState, writeDeviceState } from './state/deviceStore';
 import { readAllSettings, resetSettingValue, writeSettingValue } from './settings/settingsStore';
+import { clearSecret, getSecret, hasSecret, setSecret } from './secrets/secretStore';
+import { defaultEncryptor } from './secrets/encryptor';
+import { runConnectionTest } from './claude/claudeService';
+import { defaultClaudeClient } from './claude/anthropicClient';
 import { startVaultWatcher } from './vaultWatcherManager';
 
 const ScopeSchema = z.enum(['vault', 'device']);
@@ -16,6 +25,19 @@ const SetSettingSchema = z.object({
   scope: ScopeSchema,
 });
 const ResetSettingSchema = z.object({ key: z.string().min(1), scope: ScopeSchema });
+const SecretSetSchema = z.object({ id: z.string().min(1), value: z.string() });
+const SecretIdSchema = z.object({ id: z.string().min(1) });
+
+const DEFAULT_MODEL = 'claude-sonnet-4-6';
+const encryptor = defaultEncryptor();
+const claudeClient = defaultClaudeClient();
+
+async function activeModel(): Promise<string> {
+  const vaultPath = await activeVaultPath();
+  if (!vaultPath) return DEFAULT_MODEL;
+  const model = (await readAllSettings(vaultPath, userDataDir())).vault['ai.model'];
+  return typeof model === 'string' ? model : DEFAULT_MODEL;
+}
 
 async function activeVaultPath(): Promise<string | null> {
   return (await readDeviceState(userDataDir())).vaultPath;
@@ -81,5 +103,25 @@ export function registerIpcHandlers(): void {
     const { key, scope } = ResetSettingSchema.parse(raw);
     const vaultPath = await activeVaultPath();
     if (vaultPath) await resetSettingValue(scope, key, vaultPath, userDataDir());
+  });
+
+  ipcMain.handle(IpcChannels.secretSet, async (_event, raw: unknown): Promise<void> => {
+    const { id, value } = SecretSetSchema.parse(raw);
+    await setSecret(userDataDir(), encryptor, id, value);
+  });
+
+  ipcMain.handle(IpcChannels.secretHas, async (_event, raw: unknown): Promise<boolean> => {
+    const { id } = SecretIdSchema.parse(raw);
+    return hasSecret(userDataDir(), id);
+  });
+
+  ipcMain.handle(IpcChannels.secretClear, async (_event, raw: unknown): Promise<void> => {
+    const { id } = SecretIdSchema.parse(raw);
+    await clearSecret(userDataDir(), id);
+  });
+
+  ipcMain.handle(IpcChannels.claudeTest, async (): Promise<ClaudeTestResult> => {
+    const apiKey = await getSecret(userDataDir(), encryptor, ANTHROPIC_API_KEY_ID);
+    return runConnectionTest(claudeClient, apiKey, await activeModel());
   });
 }

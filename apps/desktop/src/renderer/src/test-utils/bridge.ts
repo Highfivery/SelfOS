@@ -17,6 +17,10 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     getSettings: () => Promise.resolve({ vault: {}, device: {} }),
     setSetting: () => Promise.resolve(),
     resetSetting: () => Promise.resolve(),
+    secretSet: () => Promise.resolve(),
+    secretHas: () => Promise.resolve(false),
+    secretClear: () => Promise.resolve(),
+    claudeTest: () => Promise.resolve({ ok: true, text: 'ok' }),
     ...overrides,
   };
   window.selfos = bridge;

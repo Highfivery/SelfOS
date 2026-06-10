@@ -14,6 +14,7 @@
     "e2e": "electron-vite build && playwright test"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.68.0",
     "@fontsource/lora": "^5.1.0",
     "@fontsource-variable/mulish": "^5.1.0",
     "chokidar": "^3.6.0",

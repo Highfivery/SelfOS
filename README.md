@@ -17,8 +17,9 @@ design tokens (1); the design-system primitive components + a dev gallery (2); t
 first-run vault selection and the boot flow — onboarding, vault-error recovery, and the ready shell
 (3, hardened in 3b with migrations, file-watching, sync-conflict detection, and window-state); and
 the **schema-driven settings system** — registry, typed access, auto-generated Settings UI, and
-working appearance settings persisted to the vault (4). We build slice by slice; AI (keychain + Claude
-proxy) is next.
+working appearance settings persisted to the vault (4); and the **AI plumbing** — an encrypted,
+device-local Claude API key (OS keychain via `safeStorage`), a model setting, and a Claude proxy with
+a "Test connection" (5). We build slice by slice; the conversational/chat surface is the next slice.
 
 ## Tech stack
 

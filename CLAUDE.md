@@ -222,6 +222,12 @@ A running log of durable decisions and feedback captured into the project config
   sections. `ThemeProvider` now reads from settings. Added a shared mock-bridge test helper. Deferred:
   accent options, high-contrast, the AI/secret settings + keychain (slice 5), and the broader
   feature-module registry abstraction.
+- 2026-06-09 — Build slice 5 (AI plumbing): encrypted API-key storage via Electron `safeStorage`
+  (device-local `secrets.json`, injectable encryptor + test passthrough; the key is write-only to the
+  renderer — no `getSecret`), a Claude proxy with an injectable client (`@anthropic-ai/sdk` + an
+  offline fake) and a "Test connection", and the AI settings section (enable + model select [default
+  `claude-sonnet-4-6`, `claude-opus-4-8` option] + secret key control), gated by `visibleWhen`. The
+  chat surface is a later slice. E2E uses `SELFOS_FAKE_SECRETS`/`SELFOS_FAKE_CLAUDE` for determinism.
 - 2026-06-09 — Fix + test hardening: the Vault/About settings sections overflowed and overlapped
   because long custom content (the vault path, the disclaimer) sat in the fixed control column —
   custom rows now render full-width and wrap. Version showed Electron's version; now injected at build

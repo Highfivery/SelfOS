@@ -17,9 +17,21 @@ export const IpcChannels = {
   getSettings: 'settings:get',
   setSetting: 'settings:set',
   resetSetting: 'settings:reset',
+  secretSet: 'secret:set',
+  secretHas: 'secret:has',
+  secretClear: 'secret:clear',
+  claudeTest: 'claude:test',
 } as const;
 
 export type SettingScope = 'vault' | 'device';
+
+/** The secret id under which the Claude API key is stored. */
+export const ANTHROPIC_API_KEY_ID = 'anthropic.apiKey';
+
+export type ClaudeErrorCode = 'NO_KEY' | 'AUTH' | 'RATE_LIMIT' | 'NETWORK' | 'API_ERROR';
+export type ClaudeTestResult =
+  | { ok: true; text: string }
+  | { ok: false; code: ClaudeErrorCode; message: string };
 
 export interface SettingsValues {
   vault: Record<string, unknown>;
@@ -49,6 +61,14 @@ export interface SelfosBridge {
   setSetting(input: { key: string; value: unknown; scope: SettingScope }): Promise<void>;
   /** Remove a single setting value (revert to its default). */
   resetSetting(input: { key: string; scope: SettingScope }): Promise<void>;
+  /** Store an encrypted secret (e.g. the Claude API key) device-local. The value never comes back. */
+  secretSet(input: { id: string; value: string }): Promise<void>;
+  /** Whether a secret is configured (the value itself is never exposed to the renderer). */
+  secretHas(input: { id: string }): Promise<boolean>;
+  /** Remove a stored secret. */
+  secretClear(input: { id: string }): Promise<void>;
+  /** Test the Claude connection with the stored key + selected model. */
+  claudeTest(): Promise<ClaudeTestResult>;
 }
 
 export type { BootState };

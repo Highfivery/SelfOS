@@ -1,8 +1,9 @@
 import { z } from 'zod';
-import { Database, Info, Palette } from 'lucide-react';
+import { Database, Info, Palette, Sparkles } from 'lucide-react';
 import { registerSection, registerSettings } from './registry';
 import { defineSetting } from './types';
 import { AboutDisclaimer, AboutVersion, RevealVaultRow, VaultLocationValue } from './customRows';
+import { ApiKeyControl, TestConnectionControl } from './aiControls';
 
 declare module './types' {
   interface SettingsTypeMap {
@@ -10,8 +11,13 @@ declare module './types' {
     'appearance.density': 'comfortable' | 'compact';
     'appearance.textScale': number;
     'appearance.reduceMotion': boolean;
+    'ai.enabled': boolean;
+    'ai.model': 'claude-sonnet-4-6' | 'claude-opus-4-8';
   }
 }
+
+const aiEnabled = (values: Readonly<Record<string, unknown>>): boolean =>
+  values['ai.enabled'] === true;
 
 let registered = false;
 
@@ -28,13 +34,20 @@ export function registerBuiltinSettings(): void {
     order: 1,
   });
   registerSection({
+    id: 'ai',
+    title: 'AI',
+    description: 'Connect Claude to power conversations.',
+    icon: Sparkles,
+    order: 2,
+  });
+  registerSection({
     id: 'vault',
     title: 'Vault',
     description: 'Where your data is stored.',
     icon: Database,
-    order: 2,
+    order: 3,
   });
-  registerSection({ id: 'about', title: 'About', icon: Info, order: 3 });
+  registerSection({ id: 'about', title: 'About', icon: Info, order: 4 });
 
   registerSettings([
     defineSetting({
@@ -96,6 +109,54 @@ export function registerBuiltinSettings(): void {
       default: false,
       control: { type: 'switch' },
       order: 4,
+    }),
+    defineSetting({
+      key: 'ai.enabled',
+      section: 'ai',
+      label: 'Enable AI',
+      description:
+        'Turn on AI features. When on, your messages are sent to Anthropic (Claude) to generate responses. SelfOS is wellness support, not medical care.',
+      schema: z.boolean(),
+      default: false,
+      control: { type: 'switch' },
+      order: 1,
+    }),
+    defineSetting({
+      key: 'ai.model',
+      section: 'ai',
+      label: 'Model',
+      description: 'Sonnet is faster and cheaper; Opus is the most capable.',
+      schema: z.enum(['claude-sonnet-4-6', 'claude-opus-4-8']),
+      default: 'claude-sonnet-4-6',
+      control: {
+        type: 'select',
+        options: [
+          { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 — faster' },
+          { value: 'claude-opus-4-8', label: 'Claude Opus 4.8 — most capable' },
+        ],
+      },
+      order: 2,
+      visibleWhen: aiEnabled,
+    }),
+    defineSetting({
+      key: 'ai.apiKey',
+      section: 'ai',
+      label: 'Claude API key',
+      schema: z.null(),
+      default: null,
+      control: { type: 'custom', render: ApiKeyControl },
+      order: 3,
+      visibleWhen: aiEnabled,
+    }),
+    defineSetting({
+      key: 'ai.test',
+      section: 'ai',
+      label: 'Connection',
+      schema: z.null(),
+      default: null,
+      control: { type: 'custom', render: TestConnectionControl },
+      order: 4,
+      visibleWhen: aiEnabled,
     }),
     defineSetting({
       key: 'vault.location',

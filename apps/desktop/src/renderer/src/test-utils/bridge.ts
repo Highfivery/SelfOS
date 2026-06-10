@@ -87,6 +87,8 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         byModel: {},
       }),
     budgetGet: () => Promise.resolve({ app: null, person: null }),
+    budgetGetPerson: () =>
+      Promise.resolve({ limitUsd: 10, period: 'week' as const, warnRatio: 0.8 }),
     budgetSetApp: () => Promise.resolve(),
     budgetSetPerson: () => Promise.resolve(),
     budgetStatus: () =>

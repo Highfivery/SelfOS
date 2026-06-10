@@ -8,6 +8,7 @@ export { Card } from './Card';
 export { Banner } from './Banner';
 export { Field } from './Field';
 export { TextInput } from './TextInput';
+export { Textarea } from './Textarea';
 export { Select } from './Select';
 export { Switch } from './Switch';
 export { Slider } from './Slider';

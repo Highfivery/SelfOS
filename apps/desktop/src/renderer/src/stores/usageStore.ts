@@ -12,7 +12,6 @@ interface UsageState {
   load: () => Promise<void>;
   setScope: (scope: UsageScope) => Promise<void>;
   setPeriod: (period: UsagePeriod) => Promise<void>;
-  savePersonBudget: (budget: Budget | null) => Promise<void>;
   saveAppBudget: (budget: Budget | null) => Promise<void>;
 }
 
@@ -36,10 +35,6 @@ export const useUsageStore = create<UsageState>((set, get) => ({
   },
   setPeriod: async (period) => {
     set({ period });
-    await get().load();
-  },
-  savePersonBudget: async (budget) => {
-    await window.selfos?.budgetSetPerson(budget);
     await get().load();
   },
   saveAppBudget: async (budget) => {

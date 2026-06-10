@@ -38,7 +38,6 @@ export function Usage(): JSX.Element {
   const load = useUsageStore((s) => s.load);
   const setScope = useUsageStore((s) => s.setScope);
   const setPeriod = useUsageStore((s) => s.setPeriod);
-  const savePersonBudget = useUsageStore((s) => s.savePersonBudget);
   const saveAppBudget = useUsageStore((s) => s.saveAppBudget);
   const canManage = useSessionStore((s) => s.can('budgets.manage'));
 
@@ -154,14 +153,12 @@ export function Usage(): JSX.Element {
 
       {canManage && budget && status ? (
         <Card>
-          <Stack gap={4}>
-            <Heading level={3}>Budgets</Heading>
-            <BudgetEditor
-              label="Active person"
-              budget={budget.person}
-              status={status.person}
-              onSave={(next) => void savePersonBudget(next)}
-            />
+          <Stack gap={3}>
+            <Heading level={3}>Overall cap (optional)</Heading>
+            <Text size="sm" tone="secondary">
+              A ceiling across everyone, on top of each person’s budget. Per-person budgets are set
+              on each person’s page.
+            </Text>
             <BudgetEditor
               label="Everyone (app)"
               budget={budget.app}

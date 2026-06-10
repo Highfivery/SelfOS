@@ -69,14 +69,14 @@ describe('Usage', () => {
     expect(screen.queryByRole('group', { name: 'Whose usage' })).not.toBeInTheDocument(); // no Everyone scope
   });
 
-  it('saves a budget as an admin', async () => {
-    const budgetSetPerson = vi.fn(() => Promise.resolve());
-    installMockBridge({ usageSummary: () => Promise.resolve(summary), budgetSetPerson });
+  it('saves the optional overall cap as an admin', async () => {
+    const budgetSetApp = vi.fn(() => Promise.resolve());
+    installMockBridge({ usageSummary: () => Promise.resolve(summary), budgetSetApp });
     setAdmin(true);
     render(<Usage />);
     await screen.findByRole('heading', { name: '$1.23' });
-    await userEvent.type(screen.getByLabelText('Active person limit (USD)'), '10');
-    await userEvent.click(screen.getAllByRole('button', { name: 'Save' })[0]!);
-    expect(budgetSetPerson).toHaveBeenCalledWith({ limitUsd: 10, period: 'month', warnRatio: 0.8 });
+    await userEvent.type(screen.getByLabelText('Everyone (app) limit (USD)'), '25');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(budgetSetApp).toHaveBeenCalledWith({ limitUsd: 25, period: 'month', warnRatio: 0.8 });
   });
 });

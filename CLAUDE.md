@@ -244,6 +244,12 @@ A running log of durable decisions and feedback captured into the project config
   `<progress>` bars. IPC: `usage:summary`, `budget:get`/`setApp`/`setPerson`/`status` (computed in
   main; `UsageSummary`/`BudgetState` moved to shared). Tests + an E2E (seeded usage → dashboard +
   budget save + no-overflow guard). v1 limit: app-scope is UI-gated, not IPC-enforced.
+- 2026-06-10 — Build Slice A (per-person budgets on a tabbed, scalable person page): `PersonEditor`
+  rebuilt into **tabs** (Profile / Notes / Relationships / Access / Budget) so person-scoped settings
+  grow without one long page; shared + private notes are now **textareas** (new `Textarea` primitive);
+  **per-person budgets** move to a `budgets.manage`-gated **Budget tab** via `budget:getPerson` +
+  `budget:setPerson({personId,budget})` (admin-enforced in main, $10/week default); the Usage view now
+  keeps only the **optional overall app cap**. Tests + E2E (budget-tab round-trip).
 - 2026-06-10 — Build Metering-3 (admin-only budgets + a usage header + cost hidden from users — user
   correction to [06](docs/specs/06-ai-usage-and-budgets.md)): a `budgets.manage` capability (Owner by
   default) gates budget editing, cost ($) display, and the "Everyone" scope; budget _writes_ and the

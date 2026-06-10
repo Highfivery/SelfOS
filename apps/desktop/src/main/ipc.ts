@@ -55,6 +55,7 @@ import { loadMasterKey } from './crypto/masterKey';
 import { queryUsage, summarize } from './usage/usageStore';
 import {
   checkBudget,
+  DEFAULT_BUDGET,
   effectivePersonBudget,
   getBudgets,
   setAppBudget,
@@ -363,6 +364,15 @@ export function registerIpcHandlers(): void {
     },
   );
 
+  ipcMain.handle(IpcChannels.budgetGetPerson, async (_event, raw: unknown): Promise<Budget> => {
+    const personId = z.string().min(1).parse(raw);
+    const ctx = await vaultAndKey();
+    if (!ctx || !(await activePersonCan(ctx.vaultDir, ctx.key, 'budgets.manage'))) {
+      return DEFAULT_BUDGET;
+    }
+    return effectivePersonBudget(ctx.vaultDir, ctx.key, personId);
+  });
+
   ipcMain.handle(IpcChannels.budgetSetApp, async (_event, raw: unknown): Promise<void> => {
     const ctx = await vaultAndKey();
     if (!ctx || !(await activePersonCan(ctx.vaultDir, ctx.key, 'budgets.manage'))) return;
@@ -370,16 +380,12 @@ export function registerIpcHandlers(): void {
   });
 
   ipcMain.handle(IpcChannels.budgetSetPerson, async (_event, raw: unknown): Promise<void> => {
+    const { personId, budget } = z
+      .object({ personId: z.string().min(1), budget: BudgetSchema.nullable() })
+      .parse(raw);
     const ctx = await vaultAndKey();
     if (!ctx || !(await activePersonCan(ctx.vaultDir, ctx.key, 'budgets.manage'))) return;
-    const personId = await getActivePersonId(userDataDir());
-    if (!personId) return;
-    await setPersonBudget(
-      ctx.vaultDir,
-      ctx.key,
-      personId,
-      raw === null ? null : BudgetSchema.parse(raw),
-    );
+    await setPersonBudget(ctx.vaultDir, ctx.key, personId, budget);
   });
 
   ipcMain.handle(

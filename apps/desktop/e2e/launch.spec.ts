@@ -188,8 +188,9 @@ test('people: add a person and link a relationship', async () => {
     await w.getByRole('button', { name: 'Create' }).click();
     await expect(w.getByText('Jordan')).toBeVisible();
 
-    // Open Jordan and link them to the owner.
+    // Open Jordan and link them to the owner (relationships live on the Relationships tab).
     await w.getByText('Jordan').click();
+    await w.getByRole('button', { name: 'Relationships' }).click();
     await w.getByLabel('Related person').selectOption({ label: 'Tester' });
     await w.getByRole('button', { name: 'Add', exact: true }).click();
     await expect(w.getByText(/Friend — Tester/)).toBeVisible();
@@ -207,14 +208,39 @@ test('people: shared and private notes persist', async () => {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'People' }).click();
     await w.getByRole('button', { name: 'Tester Subject' }).click();
+    await w.getByRole('button', { name: 'Notes' }).click();
     await w.getByLabel('Shared notes').fill('enjoys cycling');
     await w.getByLabel('Private notes').fill('processing a tough week');
     await w.getByRole('button', { name: 'Save' }).click();
 
     // Reopen and confirm both fields round-tripped through encryption.
     await w.getByRole('button', { name: 'Tester Subject' }).click();
+    await w.getByRole('button', { name: 'Notes' }).click();
     await expect(w.getByLabel('Shared notes')).toHaveValue('enjoys cycling');
     await expect(w.getByLabel('Private notes')).toHaveValue('processing a tough week');
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('people: an admin sets a per-person budget on the Budget tab', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'People' }).click();
+    await w.getByRole('button', { name: 'Tester Subject' }).click();
+    await w.getByRole('button', { name: 'Budget', exact: true }).click();
+    await w.getByLabel('Limit (USD)').fill('20');
+    await w.getByRole('button', { name: 'Save budget' }).click();
+    await expect(w.getByText('Saved.')).toBeVisible();
+
+    // Reopen the Budget tab and confirm the value round-tripped.
+    await w.getByRole('button', { name: 'Tester Subject' }).click();
+    await w.getByRole('button', { name: 'Budget', exact: true }).click();
+    await expect(w.getByLabel('Limit (USD)')).toHaveValue('20');
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -234,6 +260,7 @@ test('access: grant a login, switch person, and gate the People nav', async () =
     await w.getByLabel('Name').fill('Jordan');
     await w.getByRole('button', { name: 'Create' }).click();
     await w.getByText('Jordan').click();
+    await w.getByRole('button', { name: 'Access' }).click();
     await w.getByRole('button', { name: 'Grant access' }).click();
     await expect(w.getByText(/can sign in/i)).toBeVisible();
 
@@ -340,9 +367,9 @@ test('usage: the dashboard shows recorded usage and accepts a budget, without ov
     await expect(w.getByRole('heading', { name: 'Usage' })).toBeVisible();
     await expect(w.getByText('Coaching session')).toBeVisible(); // by-type breakdown
 
-    await w.getByLabel('Active person limit (USD)').fill('5');
+    await w.getByLabel('Everyone (app) limit (USD)').fill('5');
     await w.getByRole('button', { name: 'Save' }).first().click();
-    await expect(w.getByText(/\$5\.00/)).toBeVisible(); // budget progress reflects the limit (admin sees $)
+    await expect(w.getByText(/\$5\.00/)).toBeVisible(); // app-cap progress reflects the limit (admin sees $)
 
     const overflow = await w.evaluate(() => {
       const main = document.querySelector('main');

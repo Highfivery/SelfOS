@@ -72,6 +72,8 @@ describe('People', () => {
     render(<People />);
     await userEvent.click(screen.getByRole('button', { name: 'Add person' }));
     await userEvent.type(screen.getByLabelText('Name'), 'Sam');
+    // Notes live on the Notes tab now.
+    await userEvent.click(screen.getByRole('button', { name: 'Notes' }));
     await userEvent.type(screen.getByLabelText('Shared notes'), 'a nurse');
     await userEvent.type(screen.getByLabelText('Private notes'), 'secret');
     await userEvent.click(screen.getByRole('button', { name: 'Create' }));

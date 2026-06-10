@@ -48,6 +48,7 @@ export const IpcChannels = {
   superadminUnlock: 'superadmin:unlock',
   usageSummary: 'usage:summary',
   budgetGet: 'budget:get',
+  budgetGetPerson: 'budget:getPerson',
   budgetSetApp: 'budget:setApp',
   budgetSetPerson: 'budget:setPerson',
   budgetStatus: 'budget:status',
@@ -198,12 +199,14 @@ export interface SelfosBridge {
   superadminUnlock(input: { passphrase: string }): Promise<boolean>;
   /** Rolled-up usage for the active person or the whole app, over the given period. */
   usageSummary(input: { scope: UsageScope; period: UsagePeriod }): Promise<UsageSummary>;
-  /** The active person's budget + the app budget. */
+  /** The active person's effective budget + the app cap. */
   budgetGet(): Promise<{ app: Budget | null; person: Budget | null }>;
-  /** Set (or clear with null) the app-wide budget. */
+  /** A specific person's effective budget (override or the default). Admin-only. */
+  budgetGetPerson(personId: string): Promise<Budget>;
+  /** Set (or clear with null) the optional app-wide cap. Admin-only. */
   budgetSetApp(budget: Budget | null): Promise<void>;
-  /** Set (or clear with null) the active person's budget. */
-  budgetSetPerson(budget: Budget | null): Promise<void>;
+  /** Set (or clear with null → default) a specific person's budget. Admin-only. */
+  budgetSetPerson(input: { personId: string; budget: Budget | null }): Promise<void>;
   /** Current budget state for the active person + the app (drives progress + chat warnings). */
   budgetStatus(): Promise<{ person: BudgetState; app: BudgetState }>;
   /** Send a chat message: streams reply chunks via `onChatChunk`, resolves with the final turn. */

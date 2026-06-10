@@ -19,8 +19,33 @@ export interface ClaudeSendOptions {
   maxTokens: number;
 }
 
+export interface ClaudeUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheWriteTokens: number;
+  cacheReadTokens: number;
+}
+
+export interface ClaudeStreamOptions {
+  apiKey: string;
+  model: string;
+  system: string;
+  messages: ClaudeMessage[];
+  maxTokens: number;
+}
+
+export interface ClaudeStreamResult {
+  text: string;
+  usage: ClaudeUsage;
+}
+
 export interface ClaudeClient {
   send(options: ClaudeSendOptions): Promise<string>;
+  /** Stream a reply, invoking `onDelta` per text chunk; resolves with the full text + token usage. */
+  stream(
+    options: ClaudeStreamOptions,
+    onDelta: (text: string) => void,
+  ): Promise<ClaudeStreamResult>;
 }
 
 function statusOf(error: unknown): number | undefined {

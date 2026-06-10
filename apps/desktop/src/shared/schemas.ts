@@ -178,3 +178,22 @@ export const BudgetsConfigSchema = z.object({
   perPerson: z.record(z.string(), BudgetSchema),
 });
 export type BudgetsConfig = z.infer<typeof BudgetsConfigSchema>;
+
+/** Conversations (05-conversations) — encrypted per-person chat transcripts. */
+export const ChatMessageSchema = z.object({
+  role: z.enum(['user', 'assistant']),
+  content: z.string(),
+  ts: z.string(),
+});
+export type ChatMessage = z.infer<typeof ChatMessageSchema>;
+
+export const ConversationSchema = z.object({
+  id: z.string().min(1),
+  schemaVersion: z.number().int().positive(),
+  personId: z.string().min(1),
+  title: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  messages: z.array(ChatMessageSchema),
+});
+export type Conversation = z.infer<typeof ConversationSchema>;

@@ -2,8 +2,16 @@
 import { describe, expect, it } from 'vitest';
 import { runConnectionTest, type ClaudeClient } from './claudeService';
 
-const okClient: ClaudeClient = { send: () => Promise.resolve('ok') };
-const throwing = (error: unknown): ClaudeClient => ({ send: () => Promise.reject(error) });
+const noopStream: ClaudeClient['stream'] = () =>
+  Promise.resolve({
+    text: '',
+    usage: { inputTokens: 0, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0 },
+  });
+const okClient: ClaudeClient = { send: () => Promise.resolve('ok'), stream: noopStream };
+const throwing = (error: unknown): ClaudeClient => ({
+  send: () => Promise.reject(error),
+  stream: noopStream,
+});
 
 describe('runConnectionTest', () => {
   it('returns NO_KEY when no key is set', async () => {

@@ -74,7 +74,12 @@ export interface BudgetState {
 export async function checkBudget(
   vaultDir: string,
   key: Buffer,
-  options: { scope: 'app' | 'person'; personId?: string; now: Date; override?: boolean },
+  options: {
+    scope: 'app' | 'person';
+    personId?: string | undefined;
+    now: Date;
+    override?: boolean | undefined;
+  },
 ): Promise<BudgetState> {
   const budgets = await getBudgets(vaultDir, key);
   const budget =

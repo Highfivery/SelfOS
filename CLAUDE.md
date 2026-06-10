@@ -232,6 +232,15 @@ A running log of durable decisions and feedback captured into the project config
   switch, nav gated). Known v1 limits: only the nav (not the route) is gated, and a PIN-less owner is
   switchable by anyone on the device — the super-admin passphrase is the real gate. The roles×capability
   matrix editor, the concealed super-admin unlock, and shareable context are People-3.
+- 2026-06-10 — Build Chat-6a (streaming chat backend for
+  [05-conversations](docs/specs/05-conversations.md)): `conversationService` (encrypted per-person
+  transcript CRUD); `promptBuilder` (PERSONA + SAFETY + `buildContext` → system prompt); a streaming
+  `ClaudeClient` (real SDK impl with **adaptive thinking** + `cache_control` on the system prefix for
+  prompt caching, plus an offline fake); and `chatService.runChatTurn` — the orchestrator: budget
+  check (person + app, owner override) → stream deltas → persist the transcript → record a usage event
+  (Metering-1). Upgraded `@anthropic-ai/sdk` 0.68→0.104 for adaptive thinking. Backend only — the IPC
+  - chat UI are Chat-6b. Tests cover transcripts, the system prompt, and the full turn (stream/persist/
+    usage/budget-block/override/continuity).
 - 2026-06-10 — Build Metering-1 (usage/pricing/budget core for
   [06-ai-usage-and-budgets](docs/specs/06-ai-usage-and-budgets.md)): a maintained per-model pricing
   table + `costOf`/`cacheSavingsOf`; an encrypted per-person `usageStore` (record → monthly `.enc`

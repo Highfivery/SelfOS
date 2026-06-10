@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { ClaudeClient } from './claudeService';
+import type { ClaudeClient, ClaudeStreamResult } from './claudeService';
 
 /** Real Claude client backed by the official Anthropic SDK. */
 export function anthropicClient(): ClaudeClient {
@@ -19,12 +19,54 @@ export function anthropicClient(): ClaudeClient {
       }
       return text;
     },
+
+    async stream(
+      { apiKey, model, system, messages, maxTokens },
+      onDelta,
+    ): Promise<ClaudeStreamResult> {
+      const client = new Anthropic({ apiKey });
+      const stream = client.messages.stream({
+        model,
+        max_tokens: maxTokens,
+        thinking: { type: 'adaptive' },
+        // cache_control on the stable system prefix → repeat turns read it at ~0.1× (06 §7).
+        system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
+        messages: messages.map((message) => ({ role: message.role, content: message.content })),
+      });
+      stream.on('text', (delta) => onDelta(delta));
+
+      const final = await stream.finalMessage();
+      let text = '';
+      for (const block of final.content) {
+        if (block.type === 'text') text += block.text;
+      }
+      const usage = final.usage;
+      return {
+        text,
+        usage: {
+          inputTokens: usage.input_tokens,
+          outputTokens: usage.output_tokens,
+          cacheWriteTokens: usage.cache_creation_input_tokens ?? 0,
+          cacheReadTokens: usage.cache_read_input_tokens ?? 0,
+        },
+      };
+    },
   };
 }
 
-/** Offline stub used in E2E (gated by SELFOS_FAKE_CLAUDE) so the connection test is deterministic. */
+/** Offline stub (gated by SELFOS_FAKE_CLAUDE) so chat + the connection test are deterministic. */
 export function fakeClaudeClient(): ClaudeClient {
-  return { send: () => Promise.resolve('ok') };
+  return {
+    send: () => Promise.resolve('ok'),
+    stream: (_options, onDelta) => {
+      const reply = 'I hear you. What feels most important about that right now?';
+      for (const word of reply.split(' ')) onDelta(`${word} `);
+      return Promise.resolve({
+        text: reply,
+        usage: { inputTokens: 120, outputTokens: 18, cacheWriteTokens: 0, cacheReadTokens: 0 },
+      });
+    },
+  };
 }
 
 export function defaultClaudeClient(): ClaudeClient {

@@ -871,7 +871,7 @@ test('responsive: at a phone width the nav is a drawer and no screen overflows h
 
     // Walk every primary screen via the drawer; open the People editor too (it's a second pane that
     // must stack on mobile). Assert nothing overflows horizontally anywhere.
-    for (const name of ['Sessions', 'People', 'Roles', 'Usage', 'Home']) {
+    for (const name of ['Sessions', 'People', 'Roles', 'Usage', 'Settings', 'Home']) {
       await hamburger.click();
       await w.getByRole('link', { name }).click(); // selecting a nav item closes the drawer
       await w.waitForTimeout(150);
@@ -881,6 +881,29 @@ test('responsive: at a phone width the nav is a drawer and no screen overflows h
         await w.waitForTimeout(150);
         expect(await noOverflow()).toBe(true); // the 5 person tabs scroll, not overflow
         await w.getByRole('button', { name: 'People' }).click(); // back to the list
+      }
+      if (name === 'Roles') {
+        // The role cards must STACK (one column), not sit in a scrolling row — assert two role
+        // headings share a left edge, which only holds when the grid has collapsed to 1 column.
+        const ownerBox = await w.getByRole('heading', { name: 'Owner' }).boundingBox();
+        const memberBox = await w.getByRole('heading', { name: 'Member' }).boundingBox();
+        expect(ownerBox).not.toBeNull();
+        expect(memberBox).not.toBeNull();
+        expect(Math.abs((ownerBox?.x ?? 0) - (memberBox?.x ?? 0))).toBeLessThanOrEqual(1);
+      }
+      if (name === 'Settings') {
+        // The section nav becomes a horizontal pill row (it scrolls); each section's stacked fields
+        // must not overflow — this is the bug the phone screenshots showed (one-word-per-line).
+        const sectionButtons = w
+          .getByRole('navigation', { name: 'Settings sections' })
+          .getByRole('button');
+        const sectionCount = await sectionButtons.count();
+        expect(sectionCount).toBeGreaterThanOrEqual(3);
+        for (let i = 0; i < sectionCount; i++) {
+          await sectionButtons.nth(i).click();
+          await w.waitForTimeout(50);
+          expect(await noOverflow()).toBe(true);
+        }
       }
     }
 

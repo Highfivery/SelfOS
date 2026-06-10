@@ -239,6 +239,22 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-10 — Fix (responsive Settings + Roles — user flagged from the iOS simulator): two screens
+  failed the responsive DoD at phone width. **Settings** crammed the 176px section rail beside the
+  content, crushing field descriptions to one-word-per-line; now below `--bp-md` the layout is one
+  column, the section nav is a **horizontal scrollable pill row** (44px tap targets) above the content,
+  and each `SettingField` **stacks** the label/description above a full-width control. Desktop keeps the
+  sticky side rail + two-column rows (unchanged). **Roles** was a 4-column `role × capability` `<table>`
+  that needed horizontal scroll and clipped the Guest column + left labels; redesigned into **per-role
+  cards** (Owner/Member/Guest) — a 3-up `auto-fit minmax(240px,1fr)` grid on desktop that **stacks** on
+  phones, so there's never a horizontal scroll. Owner card is locked all-on with a "Full access" marker.
+  Per-toggle `aria-label`s (`"{role}: {capability}"`) are preserved; the visible capability label is
+  `aria-hidden` to avoid a double SR announcement. **Decisions (asked):** Settings nav = pill row; Roles
+  = card-per-role. Tests: Roles unit asserts the Full-access marker; the **390px E2E guard now walks
+  Settings** (+ a per-section-pill sub-walk) and asserts the **Roles cards stack** (shared left edge).
+  doc-auditor: specs say "matrix" conceptually (not `<table>`) so **no spec edits** needed. Gates green:
+  typecheck/lint/format, 193 unit, 23 E2E. **Lesson (again): desktop-fine ≠ phone-fine — these only
+  surfaced on the simulator; screenshot every touched surface at 390px.**
 - 2026-06-10 — Fix (iOS deployment target → **18.0**) + note: the **generated `ios/` Xcode project is now
   tracked** in the repo (`apps/desktop/ios/`). `cap add ios` (run while iterating on the simulator) scaffolds
   the project at Capacitor's default **iOS 14.0**; corrected the `Podfile` (`platform :ios, '18.0'`) and all

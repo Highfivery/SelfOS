@@ -1,37 +1,54 @@
-.tableWrap {
-  overflow-x: auto;
+/* Per-role cards: 3-up on desktop, stacking to one column on phones (auto-fit handles the reflow, so
+   there's never a horizontal scroll). */
+.roleGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-4);
+  align-items: start;
 }
 
-.table {
-  border-collapse: collapse;
-  width: 100%;
-  max-width: 640px;
+.roleCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
 }
 
-.table th,
-.table td {
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--color-border);
-  text-align: center;
+.roleHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
 }
 
-.table thead th {
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-
-.capCol {
-  text-align: left;
-  font-weight: 400;
+.fullAccess {
+  flex-shrink: 0;
+  font-size: var(--text-xs);
   color: var(--color-text-secondary);
-  white-space: nowrap;
 }
 
-.table thead .capCol {
-  font-weight: 600;
-  color: var(--color-text-primary);
+.capList {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.cell {
-  width: 1%;
+.capRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.capRow:first-child {
+  border-top: none;
+}
+
+.capLabel {
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
 }

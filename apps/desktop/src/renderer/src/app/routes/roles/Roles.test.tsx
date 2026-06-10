@@ -22,6 +22,9 @@ describe('Roles', () => {
     render(<Roles />);
 
     expect(screen.getByText('Admin only')).toBeInTheDocument(); // the Roles screen is admin-only
+    // Per-role cards: the owner card is locked all-on and marked "Full access".
+    expect(screen.getByRole('heading', { name: 'Owner' })).toBeInTheDocument();
+    expect(screen.getByText('Full access')).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'Owner: Manage people' })).toBeDisabled();
 
     const memberManage = screen.getByRole('switch', { name: 'Member: Manage people' });

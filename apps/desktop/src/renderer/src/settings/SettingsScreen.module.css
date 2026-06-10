@@ -55,3 +55,41 @@
 .groupHead {
   margin-bottom: var(--space-2);
 }
+
+/* On phones the 176px side rail doesn't fit beside the content, so the content column collapses and
+   field descriptions wrap badly. Stack to one column and turn the section nav into a horizontal,
+   scrollable pill row above the content. Desktop keeps the sticky side rail. */
+@media (max-width: 767px) {
+  .layout {
+    grid-template-columns: 1fr;
+    gap: var(--space-5);
+  }
+
+  .sections {
+    flex-direction: row;
+    position: static;
+    gap: var(--space-2);
+    overflow-x: auto;
+    /* room for the pills' resting border + a comfortable scroll gutter */
+    padding-bottom: var(--space-1);
+    scrollbar-width: none;
+  }
+
+  .sections::-webkit-scrollbar {
+    display: none;
+  }
+
+  .sectionItem {
+    flex-shrink: 0;
+    white-space: nowrap;
+    min-height: 44px; /* comfortable touch target (07-mobile-platform §tap targets) */
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
+    background: var(--color-surface-alt);
+  }
+
+  .sectionActive,
+  .sectionActive:hover {
+    border-color: transparent;
+  }
+}

@@ -3,6 +3,7 @@ import { useSessionStore } from '../../../stores/sessionStore';
 import { CAPABILITIES, CAPABILITY_LABELS, roleAllows } from '@shared/capabilities';
 import {
   AdminOnlyBadge,
+  Card,
   Heading,
   Inline,
   Stack,
@@ -45,40 +46,37 @@ export function Roles(): JSX.Element {
         </Text>
       </Stack>
 
-      <div className={styles.tableWrap}>
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th scope="col" className={styles.capCol}>
-                Capability
-              </th>
-              {roles.map((role) => (
-                <th key={role.id} scope="col">
-                  {role.name}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {CAPABILITIES.map((capability) => (
-              <tr key={capability}>
-                <th scope="row" className={styles.capCol}>
-                  {CAPABILITY_LABELS[capability]}
-                </th>
-                {roles.map((role) => (
-                  <td key={role.id} className={styles.cell}>
+      {/* One card per role (07-mobile-platform responsive pass): a 3-up grid on desktop that stacks on
+          phones, so there's never a horizontal scroll. The owner card is locked all-on. */}
+      <div className={styles.roleGrid}>
+        {roles.map((role) => {
+          const isOwner = role.id === 'owner';
+          return (
+            <Card key={role.id} className={styles.roleCard}>
+              <div className={styles.roleHead}>
+                <Heading level={3}>{role.name}</Heading>
+                {isOwner ? <span className={styles.fullAccess}>Full access</span> : null}
+              </div>
+              <ul className={styles.capList}>
+                {CAPABILITIES.map((capability) => (
+                  <li key={capability} className={styles.capRow}>
+                    {/* The Switch's aria-label already carries the role-qualified name, so the visible
+                        label is decorative to screen readers (avoids a double announcement per row). */}
+                    <span className={styles.capLabel} aria-hidden="true">
+                      {CAPABILITY_LABELS[capability]}
+                    </span>
                     <Switch
                       checked={roleAllows(role, capability)}
-                      disabled={role.id === 'owner'}
+                      disabled={isOwner}
                       aria-label={`${role.name}: ${CAPABILITY_LABELS[capability]}`}
                       onChange={() => void toggle(role, capability)}
                     />
-                  </td>
+                  </li>
                 ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+              </ul>
+            </Card>
+          );
+        })}
       </div>
     </Stack>
   );

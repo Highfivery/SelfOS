@@ -63,7 +63,7 @@ export function SettingsScreen(): JSX.Element {
           ))}
         </nav>
 
-        <div className={styles.content}>
+        <div>
           {filtered ? (
             filtered.length === 0 ? (
               <Text tone="secondary">No settings match “{query}”.</Text>
@@ -71,7 +71,7 @@ export function SettingsScreen(): JSX.Element {
               filtered.map((group) => (
                 <section key={group.section.id} className={styles.group}>
                   <Heading level={3}>{group.section.title}</Heading>
-                  <div className={styles.fields}>
+                  <div>
                     {group.defs.map((def) => (
                       <SettingField key={def.key} def={def} />
                     ))}

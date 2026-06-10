@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { UserPlus, Users } from 'lucide-react';
+import { ArrowLeft, UserPlus, Users } from 'lucide-react';
 import { usePeopleStore } from '../../../stores/peopleStore';
 import { Button, Card, Heading, Stack, Text } from '../../../design-system/components';
 import { PersonEditor } from './PersonEditor';
@@ -23,8 +23,12 @@ export function People(): JSX.Element {
       ? (people.find((person) => person.id === selection.id) ?? null)
       : null;
 
+  // On mobile the list + editor become a master–detail (the editor shows full-width with a back
+  // affordance); desktop shows both panes side by side.
+  const detailOpen = selection.mode !== 'none';
+
   return (
-    <div className={styles.layout}>
+    <div className={styles.layout} data-view={detailOpen ? 'detail' : 'list'}>
       <section className={styles.list} aria-label="People">
         <div className={styles.header}>
           <Heading level={2}>People</Heading>
@@ -66,6 +70,14 @@ export function People(): JSX.Element {
       </section>
 
       <section className={styles.detail}>
+        <button
+          type="button"
+          className={styles.back}
+          onClick={() => setSelection({ mode: 'none' })}
+        >
+          <ArrowLeft size={16} aria-hidden="true" />
+          People
+        </button>
         {selection.mode === 'new' ? (
           <PersonEditor key="new" person={null} onDone={() => setSelection({ mode: 'none' })} />
         ) : selectedPerson ? (

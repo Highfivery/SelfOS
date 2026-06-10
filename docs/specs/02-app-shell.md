@@ -75,8 +75,11 @@ Clear, non-destructive screen: explain the vault can't be reached; offer **Retry
   then a footer with **Settings** and a **collapse toggle**.
 - **Collapsible to an icon rail** on desktop: the toggle hides the labels (and the wordmark), leaving
   a narrow rail of icons with tooltips/`aria-label`s; the collapsed state is persisted device-local.
-  Below the `md` (768px) breakpoint the sidebar instead becomes an off-canvas drawer (the responsive
-  pass — Slice D; see [`01-design-system.md`](01-design-system.md) breakpoints).
+- **Off-canvas drawer below `--bp-md` (768px):** the sidebar slides in over the content (overlay +
+  scrim) from a **hamburger** in the TopBar's left slot, and closes on nav-select, Esc, scrim-tap, or
+  a resize back to desktop. The rail-collapse toggle is desktop-only. Two-pane feature screens
+  (Sessions, People) collapse to a **master–detail** at this width (list → detail with a back
+  affordance). See [`01-design-system.md`](01-design-system.md) breakpoints.
 - Selecting a nav item routes to that module's primary route; the active item is highlighted.
 
 ### 3.5 Global controls & session (the TopBar)
@@ -253,3 +256,8 @@ _No open questions remain. New questions that arise during implementation are ap
   a new account menu moved into the slot-based **TopBar**; the sidebar footer reduced to Settings + a
   **collapse toggle** (desktop icon rail, persisted device-local via `ui:get/setSidebarCollapsed`); and
   **logout = lock to a full-screen person picker** (§3.6). Updated §3.4–3.6, §4, §6, and §11.
+- 2026-06-10 — Responsive pass (Slice D): below `--bp-md` (768px) the sidebar becomes an **off-canvas
+  drawer** (overlay + scrim) opened by a TopBar hamburger; two-pane screens (Sessions, People) collapse
+  to a **master–detail**; content padding tightens and tap targets are ≥44px. Breakpoint tokens added
+  to `tokens.css`. A 390px mobile-width E2E guard walks every screen (asserting no horizontal overflow
+  on the content scroll container, not just `main`). Updated §3.4.

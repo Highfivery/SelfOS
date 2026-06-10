@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import {
   BarChart3,
   House,
+  Menu,
   MessageCircle,
   PanelLeftClose,
   PanelLeftOpen,
@@ -25,6 +26,8 @@ import { UsageRing } from './UsageRing';
 import { Banner } from '../design-system/components';
 import styles from './AppShell.module.css';
 
+const MOBILE_BREAKPOINT = 768; // --bp-md: below this the sidebar is an off-canvas drawer
+
 function navClass({ isActive }: { isActive: boolean }): string {
   return isActive ? `${styles.navItem} ${styles.navItemActive}` : (styles.navItem ?? '');
 }
@@ -39,6 +42,38 @@ export function AppShell(): JSX.Element {
   const collapsed = useNavStore((s) => s.collapsed);
   const toggleSidebar = useNavStore((s) => s.toggle);
   const [switching, setSwitching] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < MOBILE_BREAKPOINT);
+  const drawerRef = useRef<HTMLElement>(null);
+  const hamburgerRef = useRef<HTMLButtonElement>(null);
+
+  const closeDrawer = (): void => setDrawerOpen(false);
+
+  // Track the mobile breakpoint; collapse any open drawer when the viewport grows back to desktop.
+  useEffect(() => {
+    const onResize = (): void => {
+      const mobile = window.innerWidth < MOBILE_BREAKPOINT;
+      setIsMobile(mobile);
+      if (!mobile) setDrawerOpen(false);
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  // While the drawer is open: move focus into it, close on Escape, and restore focus to the
+  // hamburger on close (standard overlay-menu a11y; 02-app-shell §9).
+  useEffect(() => {
+    if (!drawerOpen) return undefined;
+    drawerRef.current?.focus();
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setDrawerOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      hamburgerRef.current?.focus();
+    };
+  }, [drawerOpen]);
 
   const tip = (label: string): string | undefined => (collapsed ? label : undefined);
 
@@ -46,15 +81,40 @@ export function AppShell(): JSX.Element {
   // nothing behind it stays focusable or in the assistive-tech tree (02-app-shell §3.6).
   if (locked) return <LockScreen />;
 
+  const sidebarClass = [
+    styles.sidebar,
+    collapsed ? styles.collapsed : '',
+    drawerOpen ? styles.drawerOpen : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return (
     <div className={styles.shell}>
-      <aside className={collapsed ? `${styles.sidebar} ${styles.collapsed}` : styles.sidebar}>
+      {drawerOpen ? (
+        <button
+          type="button"
+          className={styles.scrim}
+          aria-label="Close navigation"
+          tabIndex={-1}
+          onClick={closeDrawer}
+        />
+      ) : null}
+
+      <aside ref={drawerRef} className={sidebarClass} tabIndex={-1}>
         <header className={styles.brand}>
-          <Brand collapsed={collapsed} />
+          <Brand collapsed={collapsed && !isMobile} />
         </header>
 
         <nav className={styles.nav} aria-label="Primary">
-          <NavLink to="/" end className={navClass} aria-label="Home" title={tip('Home')}>
+          <NavLink
+            to="/"
+            end
+            className={navClass}
+            aria-label="Home"
+            title={tip('Home')}
+            onClick={closeDrawer}
+          >
             <House size={18} aria-hidden="true" />
             <span className={styles.label}>Home</span>
           </NavLink>
@@ -64,31 +124,56 @@ export function AppShell(): JSX.Element {
               className={navClass}
               aria-label="Sessions"
               title={tip('Sessions')}
+              onClick={closeDrawer}
             >
               <MessageCircle size={18} aria-hidden="true" />
               <span className={styles.label}>Sessions</span>
             </NavLink>
           ) : null}
           {canManagePeople ? (
-            <NavLink to="/people" className={navClass} aria-label="People" title={tip('People')}>
+            <NavLink
+              to="/people"
+              className={navClass}
+              aria-label="People"
+              title={tip('People')}
+              onClick={closeDrawer}
+            >
               <Users size={18} aria-hidden="true" />
               <span className={styles.label}>People</span>
             </NavLink>
           ) : null}
           {canManageRoles ? (
-            <NavLink to="/roles" className={navClass} aria-label="Roles" title={tip('Roles')}>
+            <NavLink
+              to="/roles"
+              className={navClass}
+              aria-label="Roles"
+              title={tip('Roles')}
+              onClick={closeDrawer}
+            >
               <ShieldCheck size={18} aria-hidden="true" />
               <span className={styles.label}>Roles</span>
             </NavLink>
           ) : null}
           {hasSessions ? (
-            <NavLink to="/usage" className={navClass} aria-label="Usage" title={tip('Usage')}>
+            <NavLink
+              to="/usage"
+              className={navClass}
+              aria-label="Usage"
+              title={tip('Usage')}
+              onClick={closeDrawer}
+            >
               <BarChart3 size={18} aria-hidden="true" />
               <span className={styles.label}>Usage</span>
             </NavLink>
           ) : null}
           {import.meta.env.DEV ? (
-            <NavLink to="/gallery" className={navClass} aria-label="Gallery" title={tip('Gallery')}>
+            <NavLink
+              to="/gallery"
+              className={navClass}
+              aria-label="Gallery"
+              title={tip('Gallery')}
+              onClick={closeDrawer}
+            >
               <Shapes size={18} aria-hidden="true" />
               <span className={styles.label}>Gallery</span>
             </NavLink>
@@ -103,6 +188,7 @@ export function AppShell(): JSX.Element {
             className={navClass}
             aria-label="Settings"
             title={tip('Settings')}
+            onClick={closeDrawer}
           >
             <Settings size={18} aria-hidden="true" />
             <span className={styles.label}>Settings</span>
@@ -126,7 +212,20 @@ export function AppShell(): JSX.Element {
       </aside>
 
       <main className={styles.content}>
-        <TopBar>
+        <TopBar
+          left={
+            <button
+              ref={hamburgerRef}
+              type="button"
+              className={styles.hamburger}
+              aria-label="Open navigation"
+              aria-expanded={drawerOpen}
+              onClick={() => setDrawerOpen(true)}
+            >
+              <Menu size={20} aria-hidden="true" />
+            </button>
+          }
+        >
           <AppearanceToggle />
           <UsageRing />
           <AccountMenu onSwitch={() => setSwitching(true)} />

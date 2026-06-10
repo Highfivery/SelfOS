@@ -145,6 +145,12 @@ contrast (see §9). All values are tuned; exact ramp stops may be fine-tuned dur
 - **Motion**: durations `--motion-fast` 120ms, `--motion-base` 200ms, `--motion-slow` 320ms; easing
   `--ease-standard` `cubic-bezier(0.2,0,0,1)`. **All motion is gated by `prefers-reduced-motion` and
   the Reduce-motion setting.**
+- **Breakpoints** (`--bp-sm` 480, `--bp-md` 768, `--bp-lg` 1024, `--bp-xl` 1280): the canonical
+  responsive stops, declared in `tokens.css`. SelfOS is **one responsive codebase** (mobile-first,
+  ~360px→desktop — a standing requirement, like accessibility). The sidebar becomes an off-canvas
+  drawer below `--bp-md`; two-pane screens (Sessions, People) collapse to a master–detail. Because
+  CSS custom properties can't be used inside `@media`, use these exact pixel values as literals in
+  media queries (and read the tokens from JS when needed). Tap targets are ≥44px on touch widths.
 
 ### 5.6 Primitive components (inventory)
 

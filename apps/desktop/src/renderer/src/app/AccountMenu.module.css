@@ -61,6 +61,13 @@
   white-space: nowrap;
 }
 
+/* On very narrow screens the name yields to keep the TopBar uncrowded (avatar + chevron remain). */
+@media (max-width: 479px) {
+  .name {
+    display: none;
+  }
+}
+
 .backdrop {
   position: fixed;
   inset: 0;

@@ -59,6 +59,26 @@
   min-width: 0;
 }
 
+/* Mobile-only back affordance (master–detail); hidden on desktop where both panes show. */
+.back {
+  display: none;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: flex-start;
+  margin-bottom: var(--space-3);
+  padding: var(--space-2) var(--space-2) var(--space-2) 0;
+  border: none;
+  background: transparent;
+  color: var(--color-accent-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.back:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
 .empty {
   display: flex;
   align-items: center;
@@ -68,4 +88,24 @@
   border-radius: var(--radius-md);
   padding: var(--space-6);
   text-align: center;
+}
+
+/* Mobile: the list + editor become a master–detail (one pane at a time). */
+@media (max-width: 767px) {
+  .layout {
+    grid-template-columns: 1fr;
+    gap: var(--space-4);
+  }
+
+  .layout[data-view='list'] .detail {
+    display: none;
+  }
+
+  .layout[data-view='detail'] .list {
+    display: none;
+  }
+
+  .back {
+    display: inline-flex;
+  }
 }

@@ -226,6 +226,17 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-10 — Build (Slice D — responsive pass): SelfOS is now **one responsive codebase**
+  (~360px→desktop). Breakpoint tokens (480/768/1024/1280) in `tokens.css`; below 768px the sidebar
+  becomes an **off-canvas drawer** (overlay + scrim) from a TopBar hamburger (closes on nav-select /
+  Esc / scrim / resize); two-pane screens (**Sessions**, **People**) collapse to a **master–detail**
+  with a back affordance; the Sessions **crisis footer** was pulled out of the thread pane so it stays
+  present in both list and detail views; `SegmentedControl` scrolls-x when it can't fit (the 5 person
+  tabs on a phone); content padding tightens; tap targets ≥44px; the account name hides <480px. A
+  **390px mobile-width E2E guard** walks every screen + opens the People editor, asserting no
+  horizontal overflow on the content scroll container (not just `main` — caught a clipped People pane
+  a `main`-only check missed). **Lesson: an E2E overflow guard that only checks `main` misses inner
+  scroll containers; verify with a real screenshot at mobile width.**
 - 2026-06-10 — Build (admin-only marker): a reusable **`AdminOnlyBadge`** design-system primitive (a
   "🔒 Admin only" pill, icon + text, never colour-alone) now marks every admin-gated surface so admins
   know normal users don't see it (§12) — applied to the Usage cost figure, the person picker, the

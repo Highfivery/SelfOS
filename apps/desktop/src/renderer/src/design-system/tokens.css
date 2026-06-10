@@ -6,6 +6,15 @@
   --type-scale: 1;
   --space-scale: 1;
 
+  /* Breakpoints (Slice D) — the canonical responsive stops. CSS custom properties can't be used
+     inside @media queries, so use these exact pixel values as literals when writing media queries
+     (mobile-first, min-width); they're declared here as the single source of truth + for JS reads.
+     The sidebar collapses to an off-canvas drawer below --bp-md (768px). */
+  --bp-sm: 480px;
+  --bp-md: 768px;
+  --bp-lg: 1024px;
+  --bp-xl: 1280px;
+
   /* Typography */
   --font-sans: 'Mulish Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-serif: 'Lora', Georgia, 'Times New Roman', serif;

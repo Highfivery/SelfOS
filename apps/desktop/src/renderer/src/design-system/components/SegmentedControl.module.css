@@ -3,12 +3,15 @@
   display: inline-flex;
   gap: 2px;
   padding: 3px;
+  max-width: 100%;
+  overflow-x: auto;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
 }
 
 .segment {
+  flex: none; /* never squash segments — scroll the group instead when it can't fit (e.g. 5 tabs on a phone) */
   display: inline-flex;
   align-items: center;
   justify-content: center;

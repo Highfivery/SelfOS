@@ -824,3 +824,62 @@ test('shell: collapsing the sidebar to a rail persists across relaunch', async (
     await rm(vault, { recursive: true, force: true });
   }
 });
+
+test('responsive: at a phone width the nav is a drawer and no screen overflows horizontally', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await expect(w.getByRole('link', { name: 'Home' })).toBeVisible();
+
+    // Shrink the window to a phone width (below the per-window minimum, which we lower for the test).
+    await app.evaluate(async ({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows()[0];
+      if (win) {
+        win.setMinimumSize(360, 480);
+        win.setSize(390, 800);
+      }
+    });
+    await w.waitForTimeout(200);
+
+    // The nav collapsed into a hamburger-opened drawer; the rail collapse toggle is gone on mobile.
+    const hamburger = w.getByRole('button', { name: 'Open navigation' });
+    await expect(hamburger).toBeVisible();
+    await expect(w.getByRole('button', { name: /Collapse sidebar|Expand sidebar/ })).toHaveCount(0);
+
+    const noOverflow = (): Promise<boolean> =>
+      w.evaluate(() => {
+        const fits = (el: Element | null | undefined): boolean =>
+          !el || el.scrollWidth <= el.clientWidth + 1;
+        const main = document.querySelector('main');
+        // The real scroll container is main's content div — check it too, so an inner two-pane
+        // layout that overflows (clipped by main's overflow:hidden) is still caught.
+        const inner = main?.querySelector(':scope > div');
+        const docOk = document.documentElement.scrollWidth <= window.innerWidth + 1;
+        return fits(main) && fits(inner) && docOk;
+      });
+
+    // Walk every primary screen via the drawer; open the People editor too (it's a second pane that
+    // must stack on mobile). Assert nothing overflows horizontally anywhere.
+    for (const name of ['Sessions', 'People', 'Roles', 'Usage', 'Home']) {
+      await hamburger.click();
+      await w.getByRole('link', { name }).click(); // selecting a nav item closes the drawer
+      await w.waitForTimeout(150);
+      expect(await noOverflow()).toBe(true);
+      if (name === 'People') {
+        await w.getByRole('button', { name: 'Tester Subject' }).click(); // open the editor (detail)
+        await w.waitForTimeout(150);
+        expect(await noOverflow()).toBe(true); // the 5 person tabs scroll, not overflow
+        await w.getByRole('button', { name: 'People' }).click(); // back to the list
+      }
+    }
+
+    // The drawer opens over the content and a scrim appears; selecting closes it again.
+    await hamburger.click();
+    await expect(w.getByRole('button', { name: 'Close navigation' })).toBeVisible(); // scrim
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});

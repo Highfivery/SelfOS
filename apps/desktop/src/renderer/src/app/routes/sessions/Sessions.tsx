@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MessageCircle, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, MessageCircle, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useConversationStore } from '../../../stores/conversationStore';
 import { useSetting } from '../../../settings/useSetting';
 import { ANTHROPIC_API_KEY_ID } from '@shared/channels';
@@ -39,6 +39,18 @@ export function Sessions(): JSX.Element {
   const navigate = useNavigate();
   const threadRef = useRef<HTMLDivElement>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
+  // On mobile the two panes stack into a master–detail: the list, then a full-screen thread with a
+  // back affordance. Desktop ignores this (both panes always show via CSS).
+  const [view, setView] = useState<'list' | 'thread'>('list');
+
+  const openConversation = (id: string): void => {
+    void open(id);
+    setView('thread');
+  };
+  const startNew = (): void => {
+    newConversation();
+    setView('thread');
+  };
 
   useEffect(() => {
     void load();
@@ -54,11 +66,13 @@ export function Sessions(): JSX.Element {
   }, [messages, streaming]);
 
   const configured = aiEnabled && hasKey;
+  // When unconfigured, keep the detail pane (the connect CTA) in view on mobile.
+  const effectiveView = configured ? view : 'thread';
 
   return (
-    <div className={styles.layout}>
+    <div className={styles.layout} data-view={effectiveView}>
       <aside className={styles.sidebar} aria-label="Conversations">
-        <Button variant="secondary" onClick={newConversation}>
+        <Button variant="secondary" onClick={startNew}>
           <Plus size={16} aria-hidden="true" />
           New session
         </Button>
@@ -89,7 +103,7 @@ export function Sessions(): JSX.Element {
                   <button
                     type="button"
                     className={styles.convOpen}
-                    onClick={() => void open(conversation.id)}
+                    onClick={() => openConversation(conversation.id)}
                   >
                     <MessageCircle size={14} aria-hidden="true" />
                     <span className={styles.convTitle}>{conversation.title}</span>
@@ -114,6 +128,12 @@ export function Sessions(): JSX.Element {
       </aside>
 
       <section className={styles.main}>
+        {configured ? (
+          <button type="button" className={styles.back} onClick={() => setView('list')}>
+            <ArrowLeft size={16} aria-hidden="true" />
+            Conversations
+          </button>
+        ) : null}
         {!configured ? (
           <div className={styles.empty}>
             <Stack gap={3} align="center">
@@ -156,8 +176,11 @@ export function Sessions(): JSX.Element {
             <Composer disabled={sending} onSend={(text) => void send(text)} />
           </>
         )}
-        <CrisisFooter />
       </section>
+
+      <div className={styles.crisisWrap}>
+        <CrisisFooter />
+      </div>
     </div>
   );
 }

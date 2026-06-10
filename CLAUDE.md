@@ -239,6 +239,14 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-10 — Fix (iOS safe-area — user flagged from the simulator): on iPhone the shell drew under the
+  status bar / notch, tucking the TopBar hamburger up where it was hard to tap (and content ran under the
+  home indicator). Applied **`env(safe-area-inset-*)`** (enabled by the `viewport-fit=cover` from iii-a):
+  TopBar `padding-top`/`-right`, the off-canvas sidebar drawer `padding-top`/`-bottom`, and `contentInner`
+  `padding-bottom` — all `calc(base + env(..., 0px))`, so **0 on desktop/Electron** (no notch → unchanged;
+  23 E2E + the 390px responsive guard green) and correct on iOS. Implements 07-mobile-platform §5.4
+  (safe-area insets). **Lesson: the desktop browser can't show this (env insets are 0 without a real
+  notch) — iOS chrome issues like this surface only on the device/simulator.**
 - 2026-06-10 — Build (Capacitor track **slice (iii-a): iOS scaffold + web build** —
   [07-mobile-platform](docs/specs/07-mobile-platform.md) §5.3/§5.4): first iOS step — the React renderer
   now has a **standalone web build** (`vite.web.config.ts` → `dist-web/`, `pnpm build:web`) separate from

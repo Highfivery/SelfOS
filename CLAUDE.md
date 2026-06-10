@@ -232,6 +232,14 @@ A running log of durable decisions and feedback captured into the project config
   switch, nav gated). Known v1 limits: only the nav (not the route) is gated, and a PIN-less owner is
   switchable by anyone on the device — the super-admin passphrase is the real gate. The roles×capability
   matrix editor, the concealed super-admin unlock, and shareable context are People-3.
+- 2026-06-10 — Build Metering-2 (usage dashboard + budgets UI for
+  [06-ai-usage-and-budgets](docs/specs/06-ai-usage-and-budgets.md)): a **Usage** screen (nav gated by
+  `sessions.own`) with scope (Mine / Everyone — app gated by `settings.manage`) + period (week/month)
+  toggles, totals (estimated cost, sessions, avg per session/type, input/output/cache tokens, cache
+  savings), by-type + by-model breakdowns, and per-person + app budget editors with accessible
+  `<progress>` bars. IPC: `usage:summary`, `budget:get`/`setApp`/`setPerson`/`status` (computed in
+  main; `UsageSummary`/`BudgetState` moved to shared). Tests + an E2E (seeded usage → dashboard +
+  budget save + no-overflow guard). v1 limit: app-scope is UI-gated, not IPC-enforced.
 - 2026-06-10 — Build Chat-6a (streaming chat backend for
   [05-conversations](docs/specs/05-conversations.md)): `conversationService` (encrypted per-person
   transcript CRUD); `promptBuilder` (PERSONA + SAFETY + `buildContext` → system prompt); a streaming

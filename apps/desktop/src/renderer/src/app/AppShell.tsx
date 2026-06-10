@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { House, Settings, Shapes, ShieldCheck, Users } from 'lucide-react';
+import { BarChart3, House, Settings, Shapes, ShieldCheck, Users } from 'lucide-react';
 import { AppearanceToggle } from './AppearanceToggle';
 import { useVaultConflicts } from './useVaultConflicts';
 import { useSessionStore } from '../stores/sessionStore';
@@ -18,6 +18,7 @@ export function AppShell(): JSX.Element {
   const activePerson = useSessionStore((s) => s.activePerson);
   const canManagePeople = useSessionStore((s) => s.can('people.manage'));
   const canManageRoles = useSessionStore((s) => s.can('roles.manage'));
+  const canSeeUsage = useSessionStore((s) => s.can('sessions.own'));
   const superAdmin = useSessionStore((s) => s.superAdmin);
   const unlockPromptOpen = useSessionStore((s) => s.unlockPromptOpen);
   const lockSuperAdmin = useSessionStore((s) => s.lockSuperAdmin);
@@ -45,6 +46,12 @@ export function AppShell(): JSX.Element {
             <NavLink to="/roles" className={navClass}>
               <ShieldCheck size={18} aria-hidden="true" />
               <span>Roles</span>
+            </NavLink>
+          ) : null}
+          {canSeeUsage ? (
+            <NavLink to="/usage" className={navClass}>
+              <BarChart3 size={18} aria-hidden="true" />
+              <span>Usage</span>
             </NavLink>
           ) : null}
           {import.meta.env.DEV ? (

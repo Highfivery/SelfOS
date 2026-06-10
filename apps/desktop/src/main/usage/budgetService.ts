@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import type { BudgetState, BudgetStateKind } from '../../shared/channels';
 import { BudgetsConfigSchema, type Budget, type BudgetsConfig } from '../../shared/schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../crypto/encryptedStore';
 import { queryUsage } from './usageStore';
@@ -56,15 +57,6 @@ export function periodStart(now: Date, period: 'week' | 'month'): string {
   start.setDate(start.getDate() - offset);
   start.setHours(0, 0, 0, 0);
   return start.toISOString();
-}
-
-export type BudgetStateKind = 'none' | 'ok' | 'warn' | 'over';
-
-export interface BudgetState {
-  state: BudgetStateKind;
-  spentUsd: number;
-  limitUsd: number | null;
-  period: 'week' | 'month' | null;
 }
 
 /**

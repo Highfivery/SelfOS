@@ -1,6 +1,7 @@
 import { mkdir, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
+import type { UsageSummary } from '../../shared/channels';
 import { UsageEventSchema, type UsageEvent } from '../../shared/schemas';
 import { pathExists } from '../vault/atomic';
 import { readEncryptedJson, writeEncryptedJson } from '../crypto/encryptedStore';
@@ -69,20 +70,6 @@ export async function queryUsage(
     }
   }
   return out;
-}
-
-export interface UsageSummary {
-  totalCostUsd: number;
-  inputTokens: number;
-  outputTokens: number;
-  cacheWriteTokens: number;
-  cacheReadTokens: number;
-  cacheSavingsUsd: number;
-  sessionCount: number;
-  avgCostPerSession: number;
-  avgCostPerType: number;
-  byType: Record<string, { costUsd: number; count: number }>;
-  byModel: Record<string, { costUsd: number; count: number }>;
 }
 
 /** Roll a set of usage events up into the dashboard summary. Pure. */

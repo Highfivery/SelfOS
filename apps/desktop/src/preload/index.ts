@@ -42,6 +42,11 @@ const bridge: SelfosBridge = {
   accessRemoveAccount: (personId) => ipcRenderer.invoke(IpcChannels.accessRemoveAccount, personId),
   sessionSetActive: (input) => ipcRenderer.invoke(IpcChannels.sessionSetActive, input),
   superadminUnlock: (input) => ipcRenderer.invoke(IpcChannels.superadminUnlock, input),
+  usageSummary: (input) => ipcRenderer.invoke(IpcChannels.usageSummary, input),
+  budgetGet: () => ipcRenderer.invoke(IpcChannels.budgetGet),
+  budgetSetApp: (budget) => ipcRenderer.invoke(IpcChannels.budgetSetApp, budget),
+  budgetSetPerson: (budget) => ipcRenderer.invoke(IpcChannels.budgetSetPerson, budget),
+  budgetStatus: () => ipcRenderer.invoke(IpcChannels.budgetStatus),
 };
 
 contextBridge.exposeInMainWorld('selfos', bridge);

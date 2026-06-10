@@ -7,6 +7,7 @@ import type { Encryptor } from '../src/main/secrets/secretStore';
 import { savePerson } from '../src/main/people/peopleService';
 import { setAccount } from '../src/main/people/accessService';
 import { hashPin } from '../src/main/people/pin';
+import { recordUsage } from '../src/main/usage/usageStore';
 
 const MAIN = join(__dirname, '..', 'out', 'main', 'index.js');
 
@@ -268,6 +269,48 @@ test('super-admin: a hidden long-press on the version unlocks inspect mode', asy
 
     // Inspect mode is active — the (only-now-visible) super-admin badge appears.
     await expect(w.getByRole('button', { name: /super-admin/i })).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('usage: the dashboard shows recorded usage and accepts a budget, without overflow', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const key = await loadMasterKey(userData, passthrough);
+  if (!key) throw new Error('usage e2e: master key missing');
+  await recordUsage(vault, key, {
+    id: 'u1',
+    schemaVersion: 1,
+    type: 'chat',
+    personId: 'owner-1',
+    sessionId: 'c1',
+    model: 'claude-sonnet-4-6',
+    at: new Date().toISOString(),
+    inputTokens: 1000,
+    outputTokens: 500,
+    cacheWriteTokens: 0,
+    cacheReadTokens: 0,
+    costUsd: 0.12,
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Usage' }).click();
+    await expect(w.getByRole('heading', { name: 'Usage' })).toBeVisible();
+    await expect(w.getByText('Coaching session')).toBeVisible(); // by-type breakdown
+
+    await w.getByLabel('My budget limit (USD)').fill('5');
+    await w.getByRole('button', { name: 'Save' }).first().click();
+    await expect(w.getByText(/\$5\.00/)).toBeVisible(); // budget progress reflects the limit
+
+    const overflow = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      return main ? main.scrollWidth - main.clientWidth : 0;
+    });
+    expect(overflow).toBeLessThanOrEqual(1);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

@@ -72,6 +72,28 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         },
       }),
     superadminUnlock: (input) => Promise.resolve(input.passphrase === 'superpass'),
+    usageSummary: () =>
+      Promise.resolve({
+        totalCostUsd: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheWriteTokens: 0,
+        cacheReadTokens: 0,
+        cacheSavingsUsd: 0,
+        sessionCount: 0,
+        avgCostPerSession: 0,
+        avgCostPerType: 0,
+        byType: {},
+        byModel: {},
+      }),
+    budgetGet: () => Promise.resolve({ app: null, person: null }),
+    budgetSetApp: () => Promise.resolve(),
+    budgetSetPerson: () => Promise.resolve(),
+    budgetStatus: () =>
+      Promise.resolve({
+        person: { state: 'none', spentUsd: 0, limitUsd: null, period: null },
+        app: { state: 'none', spentUsd: 0, limitUsd: null, period: null },
+      }),
     ...overrides,
   };
   window.selfos = bridge;

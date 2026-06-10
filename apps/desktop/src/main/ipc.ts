@@ -4,17 +4,21 @@ import {
   ANTHROPIC_API_KEY_ID,
   IpcChannels,
   type AccessView,
+  type BudgetState,
   type ClaudeTestResult,
   type HouseholdStatus,
   type SetActiveResult,
   type SettingsValues,
+  type UsageSummary,
 } from '../shared/channels';
 import {
   BootStateSchema,
+  BudgetSchema,
   PersonInputSchema,
   RelationshipInputSchema,
   RoleSchema,
   type BootState,
+  type Budget,
   type Person,
   type Relationship,
 } from '../shared/schemas';
@@ -44,6 +48,14 @@ import {
   upsertRelationship,
 } from './people/relationshipService';
 import { loadMasterKey } from './crypto/masterKey';
+import { queryUsage, summarize } from './usage/usageStore';
+import {
+  checkBudget,
+  getBudgets,
+  setAppBudget,
+  setPersonBudget,
+  periodStart,
+} from './usage/budgetService';
 import { startVaultWatcher } from './vaultWatcherManager';
 
 const ScopeSchema = z.enum(['vault', 'device']);
@@ -67,6 +79,10 @@ const SetAccountSchema = z.object({
 const SetActiveSchema = z.object({
   personId: z.string().min(1),
   pin: z.string().optional(),
+});
+const UsageSummarySchema = z.object({
+  scope: z.enum(['person', 'app']),
+  period: z.enum(['week', 'month']),
 });
 
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
@@ -284,4 +300,68 @@ export function registerIpcHandlers(): void {
     const { passphrase } = z.object({ passphrase: z.string() }).parse(raw);
     return verifySuperAdminPassphrase(userDataDir(), passphrase);
   });
+
+  ipcMain.handle(IpcChannels.usageSummary, async (_event, raw: unknown): Promise<UsageSummary> => {
+    const { scope, period } = UsageSummarySchema.parse(raw);
+    const ctx = await vaultAndKey();
+    if (!ctx) return summarize([]);
+    const now = new Date();
+    const from = periodStart(now, period);
+    const to = now.toISOString();
+    if (scope === 'person') {
+      const personId = await getActivePersonId(userDataDir());
+      if (!personId) return summarize([]);
+      return summarize(await queryUsage(ctx.vaultDir, ctx.key, { from, to, personId }));
+    }
+    return summarize(await queryUsage(ctx.vaultDir, ctx.key, { from, to }));
+  });
+
+  ipcMain.handle(
+    IpcChannels.budgetGet,
+    async (): Promise<{ app: Budget | null; person: Budget | null }> => {
+      const ctx = await vaultAndKey();
+      if (!ctx) return { app: null, person: null };
+      const budgets = await getBudgets(ctx.vaultDir, ctx.key);
+      const personId = await getActivePersonId(userDataDir());
+      return {
+        app: budgets.app ?? null,
+        person: (personId ? budgets.perPerson[personId] : undefined) ?? null,
+      };
+    },
+  );
+
+  ipcMain.handle(IpcChannels.budgetSetApp, async (_event, raw: unknown): Promise<void> => {
+    const ctx = await vaultAndKey();
+    if (!ctx) return;
+    await setAppBudget(ctx.vaultDir, ctx.key, raw === null ? null : BudgetSchema.parse(raw));
+  });
+
+  ipcMain.handle(IpcChannels.budgetSetPerson, async (_event, raw: unknown): Promise<void> => {
+    const ctx = await vaultAndKey();
+    if (!ctx) return;
+    const personId = await getActivePersonId(userDataDir());
+    if (!personId) return;
+    await setPersonBudget(
+      ctx.vaultDir,
+      ctx.key,
+      personId,
+      raw === null ? null : BudgetSchema.parse(raw),
+    );
+  });
+
+  ipcMain.handle(
+    IpcChannels.budgetStatus,
+    async (): Promise<{ person: BudgetState; app: BudgetState }> => {
+      const none: BudgetState = { state: 'none', spentUsd: 0, limitUsd: null, period: null };
+      const ctx = await vaultAndKey();
+      if (!ctx) return { person: none, app: none };
+      const now = new Date();
+      const personId = await getActivePersonId(userDataDir());
+      const person = personId
+        ? await checkBudget(ctx.vaultDir, ctx.key, { scope: 'person', personId, now })
+        : none;
+      const app = await checkBudget(ctx.vaultDir, ctx.key, { scope: 'app', now });
+      return { person, app };
+    },
+  );
 }

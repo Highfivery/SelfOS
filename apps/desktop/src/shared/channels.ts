@@ -1,5 +1,6 @@
 import type {
   BootState,
+  Budget,
   Person,
   PersonInput,
   Relationship,
@@ -43,6 +44,11 @@ export const IpcChannels = {
   accessRemoveAccount: 'access:removeAccount',
   sessionSetActive: 'session:setActive',
   superadminUnlock: 'superadmin:unlock',
+  usageSummary: 'usage:summary',
+  budgetGet: 'budget:get',
+  budgetSetApp: 'budget:setApp',
+  budgetSetPerson: 'budget:setPerson',
+  budgetStatus: 'budget:status',
 } as const;
 
 export type SettingScope = 'vault' | 'device';
@@ -76,6 +82,32 @@ export interface AccessView {
 export type SetActiveResult =
   | { ok: true; person: Person }
   | { ok: false; reason: 'WRONG_PIN' | 'NO_ACCOUNT' };
+
+/** Rolled-up AI usage for the dashboard (06-ai-usage-and-budgets). */
+export interface UsageSummary {
+  totalCostUsd: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheWriteTokens: number;
+  cacheReadTokens: number;
+  cacheSavingsUsd: number;
+  sessionCount: number;
+  avgCostPerSession: number;
+  avgCostPerType: number;
+  byType: Record<string, { costUsd: number; count: number }>;
+  byModel: Record<string, { costUsd: number; count: number }>;
+}
+
+export type BudgetStateKind = 'none' | 'ok' | 'warn' | 'over';
+export interface BudgetState {
+  state: BudgetStateKind;
+  spentUsd: number;
+  limitUsd: number | null;
+  period: 'week' | 'month' | null;
+}
+
+export type UsageScope = 'person' | 'app';
+export type UsagePeriod = 'week' | 'month';
 
 export interface SelfosBridge {
   /** Current boot state (computed from device-local state + vault status). */
@@ -145,6 +177,16 @@ export interface SelfosBridge {
   sessionSetActive(input: { personId: string; pin?: string }): Promise<SetActiveResult>;
   /** Verify the concealed super-admin passphrase. Returns true on a match. */
   superadminUnlock(input: { passphrase: string }): Promise<boolean>;
+  /** Rolled-up usage for the active person or the whole app, over the given period. */
+  usageSummary(input: { scope: UsageScope; period: UsagePeriod }): Promise<UsageSummary>;
+  /** The active person's budget + the app budget. */
+  budgetGet(): Promise<{ app: Budget | null; person: Budget | null }>;
+  /** Set (or clear with null) the app-wide budget. */
+  budgetSetApp(budget: Budget | null): Promise<void>;
+  /** Set (or clear with null) the active person's budget. */
+  budgetSetPerson(budget: Budget | null): Promise<void>;
+  /** Current budget state for the active person + the app (drives progress + chat warnings). */
+  budgetStatus(): Promise<{ person: BudgetState; app: BudgetState }>;
 }
 
-export type { BootState, Person, PersonInput, Relationship, RelationshipInput, Role };
+export type { BootState, Budget, Person, PersonInput, Relationship, RelationshipInput, Role };

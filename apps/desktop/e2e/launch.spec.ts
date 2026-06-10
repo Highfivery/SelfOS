@@ -172,6 +172,31 @@ test('first-time setup creates the owner and enters the app', async () => {
   }
 });
 
+test('people: add a person and link a relationship', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'People' }).click();
+
+    // The seeded owner ("Tester") is already listed; add Jordan.
+    await w.getByRole('button', { name: 'Add person' }).click();
+    await w.getByLabel('Name').fill('Jordan');
+    await w.getByRole('button', { name: 'Create' }).click();
+    await expect(w.getByText('Jordan')).toBeVisible();
+
+    // Open Jordan and link them to the owner.
+    await w.getByText('Jordan').click();
+    await w.getByLabel('Related person').selectOption({ label: 'Tester' });
+    await w.getByRole('button', { name: 'Add', exact: true }).click();
+    await expect(w.getByText(/Friend — Tester/)).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 async function seedReadyVault(
   settingsValues: Record<string, unknown> = {},
 ): Promise<{ userData: string; vault: string }> {

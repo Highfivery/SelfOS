@@ -1,4 +1,4 @@
-import type { BootState, Person } from './schemas';
+import type { BootState, Person, PersonInput, Relationship, RelationshipInput } from './schemas';
 
 /**
  * IPC channel names + the renderer-facing bridge type. This module is zod-free so it is safe to
@@ -24,6 +24,12 @@ export const IpcChannels = {
   householdStatus: 'household:status',
   householdSetup: 'household:setup',
   getActivePerson: 'session:getActivePerson',
+  peopleList: 'people:list',
+  peopleSave: 'people:save',
+  peopleDelete: 'people:delete',
+  relationshipsList: 'relationships:list',
+  relationshipsSave: 'relationships:save',
+  relationshipsDelete: 'relationships:delete',
 } as const;
 
 export type SettingScope = 'vault' | 'device';
@@ -88,6 +94,18 @@ export interface SelfosBridge {
   }): Promise<{ recoveryPhrase: string; ownerId: string }>;
   /** The currently active person (decrypted), or null. */
   getActivePerson(): Promise<Person | null>;
+  /** All people in the household (decrypted), sorted by name. */
+  peopleList(): Promise<Person[]>;
+  /** Create or update a person; returns the saved record. */
+  peopleSave(input: PersonInput): Promise<Person>;
+  /** Delete a person and their data folder. */
+  peopleDelete(id: string): Promise<void>;
+  /** All relationships in the household. */
+  relationshipsList(): Promise<Relationship[]>;
+  /** Create or update a relationship; returns the saved record. */
+  relationshipsSave(input: RelationshipInput): Promise<Relationship>;
+  /** Delete a relationship. */
+  relationshipsDelete(id: string): Promise<void>;
 }
 
-export type { BootState, Person };
+export type { BootState, Person, PersonInput, Relationship, RelationshipInput };

@@ -30,6 +30,12 @@ const bridge: SelfosBridge = {
   householdStatus: () => ipcRenderer.invoke(IpcChannels.householdStatus),
   householdSetup: (input) => ipcRenderer.invoke(IpcChannels.householdSetup, input),
   getActivePerson: () => ipcRenderer.invoke(IpcChannels.getActivePerson),
+  peopleList: () => ipcRenderer.invoke(IpcChannels.peopleList),
+  peopleSave: (input) => ipcRenderer.invoke(IpcChannels.peopleSave, input),
+  peopleDelete: (id) => ipcRenderer.invoke(IpcChannels.peopleDelete, id),
+  relationshipsList: () => ipcRenderer.invoke(IpcChannels.relationshipsList),
+  relationshipsSave: (input) => ipcRenderer.invoke(IpcChannels.relationshipsSave, input),
+  relationshipsDelete: (id) => ipcRenderer.invoke(IpcChannels.relationshipsDelete, id),
 };
 
 contextBridge.exposeInMainWorld('selfos', bridge);

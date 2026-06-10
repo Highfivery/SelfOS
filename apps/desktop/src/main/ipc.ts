@@ -7,7 +7,14 @@ import {
   type HouseholdStatus,
   type SettingsValues,
 } from '../shared/channels';
-import { BootStateSchema, type BootState, type Person } from '../shared/schemas';
+import {
+  BootStateSchema,
+  PersonInputSchema,
+  RelationshipInputSchema,
+  type BootState,
+  type Person,
+  type Relationship,
+} from '../shared/schemas';
 import { computeBootState } from './boot';
 import { initializeVault } from './vault/vault';
 import { findConflicts } from './vault/conflicts';
@@ -19,7 +26,12 @@ import { runConnectionTest } from './claude/claudeService';
 import { defaultClaudeClient } from './claude/anthropicClient';
 import { householdStatus, setupHousehold } from './people/household';
 import { getActivePersonId } from './people/session';
-import { getPerson } from './people/peopleService';
+import { deletePerson, getPerson, listPeople, upsertPerson } from './people/peopleService';
+import {
+  deleteRelationship,
+  listRelationships,
+  upsertRelationship,
+} from './people/relationshipService';
 import { loadMasterKey } from './crypto/masterKey';
 import { startVaultWatcher } from './vaultWatcherManager';
 
@@ -54,6 +66,14 @@ async function activeVaultPath(): Promise<string | null> {
 
 function userDataDir(): string {
   return app.getPath('userData');
+}
+
+/** The active vault + decrypted master key, or null when the household isn't set up. */
+async function vaultAndKey(): Promise<{ vaultDir: string; key: Buffer } | null> {
+  const vaultDir = await activeVaultPath();
+  if (!vaultDir) return null;
+  const key = await loadMasterKey(userDataDir(), encryptor);
+  return key ? { vaultDir, key } : null;
 }
 
 async function currentBootState(): Promise<BootState> {
@@ -149,10 +169,46 @@ export function registerIpcHandlers(): void {
   );
 
   ipcMain.handle(IpcChannels.getActivePerson, async (): Promise<Person | null> => {
-    const vaultPath = await activeVaultPath();
-    const key = vaultPath ? await loadMasterKey(userDataDir(), encryptor) : null;
-    if (!vaultPath || !key) return null;
+    const ctx = await vaultAndKey();
+    if (!ctx) return null;
     const id = await getActivePersonId(userDataDir());
-    return id ? getPerson(vaultPath, key, id) : null;
+    return id ? getPerson(ctx.vaultDir, ctx.key, id) : null;
+  });
+
+  ipcMain.handle(IpcChannels.peopleList, async (): Promise<Person[]> => {
+    const ctx = await vaultAndKey();
+    return ctx ? listPeople(ctx.vaultDir, ctx.key) : [];
+  });
+
+  ipcMain.handle(IpcChannels.peopleSave, async (_event, raw: unknown): Promise<Person> => {
+    const ctx = await vaultAndKey();
+    if (!ctx) throw new Error('Household is not set up');
+    return upsertPerson(ctx.vaultDir, ctx.key, PersonInputSchema.parse(raw));
+  });
+
+  ipcMain.handle(IpcChannels.peopleDelete, async (_event, raw: unknown): Promise<void> => {
+    const ctx = await vaultAndKey();
+    if (!ctx) return;
+    await deletePerson(ctx.vaultDir, z.string().min(1).parse(raw));
+  });
+
+  ipcMain.handle(IpcChannels.relationshipsList, async (): Promise<Relationship[]> => {
+    const ctx = await vaultAndKey();
+    return ctx ? listRelationships(ctx.vaultDir, ctx.key) : [];
+  });
+
+  ipcMain.handle(
+    IpcChannels.relationshipsSave,
+    async (_event, raw: unknown): Promise<Relationship> => {
+      const ctx = await vaultAndKey();
+      if (!ctx) throw new Error('Household is not set up');
+      return upsertRelationship(ctx.vaultDir, ctx.key, RelationshipInputSchema.parse(raw));
+    },
+  );
+
+  ipcMain.handle(IpcChannels.relationshipsDelete, async (_event, raw: unknown): Promise<void> => {
+    const ctx = await vaultAndKey();
+    if (!ctx) return;
+    await deleteRelationship(ctx.vaultDir, z.string().min(1).parse(raw));
   });
 }

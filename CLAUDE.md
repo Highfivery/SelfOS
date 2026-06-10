@@ -222,6 +222,12 @@ A running log of durable decisions and feedback captured into the project config
   sections. `ThemeProvider` now reads from settings. Added a shared mock-bridge test helper. Deferred:
   accent options, high-contrast, the AI/secret settings + keychain (slice 5), and the broader
   feature-module registry abstraction.
+- 2026-06-09 — Build People-2b (people + relationship management UI): a **People** screen (list of
+  subjects/contacts) with add/edit/delete and a relationship editor (typed links between people),
+  backed by people/relationship CRUD IPC (`upsert` owns id + timestamps in main) + a `peopleStore`,
+  plus a nav "People" entry. Tests + an E2E that adds a person and links a relationship. The
+  "Who's here?" switcher, granting others access (roles/PINs), and capability-gating the nav are
+  People-2c.
 - 2026-06-09 — Build People-2a (onboarding setup + active person): first run now creates the owner
   (Person #1), sets the super-admin passphrase (device-local scrypt hash), and shows the recovery
   phrase once via `household:setup`; a `HouseholdGate` between boot-ready and the app routes to a

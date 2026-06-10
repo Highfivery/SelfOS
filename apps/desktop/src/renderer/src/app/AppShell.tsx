@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom';
-import { House, Settings, Shapes } from 'lucide-react';
+import { House, Settings, Shapes, Users } from 'lucide-react';
 import { AppearanceToggle } from './AppearanceToggle';
 import { useVaultConflicts } from './useVaultConflicts';
 import { useSessionStore } from '../stores/sessionStore';
@@ -25,6 +25,10 @@ export function AppShell(): JSX.Element {
           <NavLink to="/" end className={navClass}>
             <House size={18} aria-hidden="true" />
             <span>Home</span>
+          </NavLink>
+          <NavLink to="/people" className={navClass}>
+            <Users size={18} aria-hidden="true" />
+            <span>People</span>
           </NavLink>
           {import.meta.env.DEV ? (
             <NavLink to="/gallery" className={navClass}>

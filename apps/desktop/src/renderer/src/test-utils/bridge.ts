@@ -25,6 +25,30 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
       Promise.resolve({ hasMasterKey: true, hasOwner: true, activePersonId: 'owner-1' }),
     householdSetup: () => Promise.resolve({ recoveryPhrase: 'TEST-PHRASE', ownerId: 'owner-1' }),
     getActivePerson: () => Promise.resolve(null),
+    peopleList: () => Promise.resolve([]),
+    peopleSave: (input) =>
+      Promise.resolve({
+        id: input.id ?? 'new-id',
+        schemaVersion: 1,
+        displayName: input.displayName,
+        isSubject: input.isSubject,
+        tags: input.tags,
+        createdAt: 'now',
+        updatedAt: 'now',
+      }),
+    peopleDelete: () => Promise.resolve(),
+    relationshipsList: () => Promise.resolve([]),
+    relationshipsSave: (input) =>
+      Promise.resolve({
+        id: input.id ?? 'new-rel',
+        schemaVersion: 1,
+        fromPersonId: input.fromPersonId,
+        toPersonId: input.toPersonId,
+        type: input.type,
+        createdAt: 'now',
+        updatedAt: 'now',
+      }),
+    relationshipsDelete: () => Promise.resolve(),
     ...overrides,
   };
   window.selfos = bridge;

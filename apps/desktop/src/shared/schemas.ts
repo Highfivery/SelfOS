@@ -121,3 +121,29 @@ export const AccessConfigSchema = z.object({
   accounts: z.array(AccountSchema),
 });
 export type AccessConfig = z.infer<typeof AccessConfigSchema>;
+
+/** Renderer-supplied person fields; the main process owns `id`, `schemaVersion`, and timestamps. */
+export const PersonInputSchema = z.object({
+  id: z.string().optional(),
+  displayName: z.string().min(1),
+  isSubject: z.boolean(),
+  pronouns: z.string().optional(),
+  birthday: z.string().optional(),
+  tags: z.array(z.string()).default([]),
+  publicNotes: z.string().optional(),
+  privateNotes: z.string().optional(),
+});
+export type PersonInput = z.infer<typeof PersonInputSchema>;
+
+export const RelationshipInputSchema = z.object({
+  id: z.string().optional(),
+  fromPersonId: z.string().min(1),
+  toPersonId: z.string().min(1),
+  type: RelationshipTypeSchema,
+  label: z.string().optional(),
+  closeness: z.number().int().min(1).max(5).optional(),
+  since: z.string().optional(),
+  publicNotes: z.string().optional(),
+  privateNotes: z.string().optional(),
+});
+export type RelationshipInput = z.infer<typeof RelationshipInputSchema>;

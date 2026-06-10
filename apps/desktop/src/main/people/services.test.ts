@@ -5,8 +5,13 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { generateMasterKey } from '../crypto/cryptoService';
 import type { Person, Relationship } from '../../shared/schemas';
-import { deletePerson, getPerson, listPeople, savePerson } from './peopleService';
-import { deleteRelationship, listRelationships, saveRelationship } from './relationshipService';
+import { deletePerson, getPerson, listPeople, savePerson, upsertPerson } from './peopleService';
+import {
+  deleteRelationship,
+  listRelationships,
+  saveRelationship,
+  upsertRelationship,
+} from './relationshipService';
 import { getAccessConfig, setAccount, verifyAccountPin } from './accessService';
 
 const key = generateMasterKey();
@@ -53,6 +58,29 @@ describe('peopleService', () => {
   });
 });
 
+describe('upsertPerson', () => {
+  it('creates with a generated id + timestamps, then updates preserving createdAt', async () => {
+    const created = await upsertPerson(vault, key, {
+      displayName: 'Sam',
+      isSubject: false,
+      tags: [],
+    });
+    expect(created.id).toBeTruthy();
+    expect(created.createdAt).toBeTruthy();
+
+    const updated = await upsertPerson(vault, key, {
+      id: created.id,
+      displayName: 'Samuel',
+      isSubject: true,
+      tags: ['close'],
+    });
+    expect(updated.id).toBe(created.id);
+    expect(updated.displayName).toBe('Samuel');
+    expect(updated.isSubject).toBe(true);
+    expect(updated.createdAt).toBe(created.createdAt);
+  });
+});
+
 describe('relationshipService', () => {
   it('saves, lists, and deletes relationships', async () => {
     const rel: Relationship = {
@@ -68,6 +96,16 @@ describe('relationshipService', () => {
     expect((await listRelationships(vault, key))[0]?.type).toBe('partner');
     await deleteRelationship(vault, 'r1');
     expect(await listRelationships(vault, key)).toEqual([]);
+  });
+
+  it('upserts a relationship with a generated id', async () => {
+    const created = await upsertRelationship(vault, key, {
+      fromPersonId: 'a',
+      toPersonId: 'b',
+      type: 'friend',
+    });
+    expect(created.id).toBeTruthy();
+    expect((await listRelationships(vault, key)).length).toBe(1);
   });
 });
 

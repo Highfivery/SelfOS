@@ -239,6 +239,33 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Build (**Dreams slice 4b — the Patterns UI; §13.4 COMPLETE**;
+  [12-dreams](docs/specs/12-dreams.md) §3.5/§5.3/§8.2/§9/§13.4). The **`/dreams/patterns`** screen + three
+  **new `/gallery` chart primitives**. Built bespoke SVG/bars on tokens (**no chart library** — matching
+  the hand-rolled usage ring) with the **count/figure always rendered as text** (not colour-only, §9):
+  **`FrequencyBars`** (recurring symbols/themes/people/emotions), **`ProportionBar`** (lucid/nightmare
+  rates), **`TrendLine`** (mood/vividness over time, a direction-aware `role="img"` label) — all exported
+  from the design-system + **showcased in `/gallery`** (DoD). **`DreamPatterns`** composes the four §3.5
+  visualizations into cards + a **30d / 90d / All-time** `SegmentedControl` + the **gentle recurring-
+  nightmare nudge** Banner (when `nightmareNudge`) + the **on-demand** AI narrative card (Generate →
+  Approve/Remove + the "in your coaching context" badge; disabled+hinted when `dreams.memoryEnabled` is off;
+  a calm connect-Claude state when AI is off — **the deterministic charts still render offline**) + the
+  not-medical line + the reused `CrisisFooter`. Reached via a **"Patterns" button in the Dreams header**.
+  A per-person **`dreamPatternStore`** (reset wired into AppShell's active-person effect). The §8.2 nudge
+  **also surfaces in the dream detail** — a gentle `distressSignal` banner on the synthesis card. All four
+  product/UX forks were **asked + user-confirmed** (nudge = 3-in-14-days; the window toggle; on-demand
+  generation; the header-button entry). Code-reviewer **fix-first** (should-fix: a `load()` late-resolve
+  **window guard** so a fast toggle can't show stale stats; nits: the `!`→guarded-access §4 fix, a
+  direction-aware TrendLine label, `title` on truncated bars). Gate green: typecheck (node + web/DOM-lib),
+  lint, format, **156 core + 242 desktop** unit (+4 chart RTL, +7 Patterns RTL), **35 E2E** (+1: seeds 3
+  nightmares + an analyzed dream → the charts render, the nudge fires, generate+approve the narrative, a
+  390px overflow guard). **Visual QA** at desktop + 390px via real Electron screenshots (charts legible,
+  the grid stacks). On `feat/dreams-slice-4b` (in the Dreams worktree). **Lesson: build in-app charts as
+  bespoke token-driven SVG/bars (the usage-ring precedent) — no chart-lib dependency — and give every chart
+  a TEXT equivalent (the count/figure as text + a direction-aware aria-label), since §9 forbids colour-only
+  data.** **Slice 4 (Patterns) is COMPLETE; NEXT: §13.5 per-dream sharing** (per-fact shareable promotion
+  into a related person's context, gated by `dreams.shareContext`, excluded for sensitive tiers).
+  (Concurrent questionnaire session's main-tree work untouched.)
 - 2026-06-11 — Build (**Dreams slice 4a — patterns backend + IPC seam**;
   [12-dreams](docs/specs/12-dreams.md) §3.5/§4.4/§8.2/§6/§13.4). **Asked first (4 product/UX forks, all
   recommendations confirmed):** recurring-nightmare nudge threshold = **3 nightmares in 14 days** (the

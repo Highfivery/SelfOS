@@ -71,7 +71,11 @@ describe('Dreams analysis UI', () => {
     installMockBridge({
       dreamsList: () => Promise.resolve([{ ...baseDream, status: 'analyzed' }]),
     });
-    render(<Dreams />);
+    render(
+      <MemoryRouter>
+        <Dreams />
+      </MemoryRouter>,
+    );
     await userEvent.click(await screen.findByText(/i was flying/i));
     expect(screen.getByRole('button', { name: /view analysis/i })).toBeInTheDocument();
   });

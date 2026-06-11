@@ -5,9 +5,11 @@ import {
   Button,
   Card,
   Field,
+  FrequencyBars,
   Heading,
   IconButton,
   Inline,
+  ProportionBar,
   SegmentedControl,
   Select,
   Slider,
@@ -16,6 +18,7 @@ import {
   Text,
   Textarea,
   TextInput,
+  TrendLine,
   type SegmentOption,
 } from '../../design-system/components';
 import styles from './Gallery.module.css';
@@ -157,6 +160,48 @@ export function Gallery(): JSX.Element {
               Sits beside any heading or control that only admins can see.
             </Text>
           </Inline>
+        </Section>
+
+        <Section title="Charts">
+          <Stack gap={4}>
+            <div>
+              <Text size="sm" weight={600} tone="secondary">
+                FrequencyBars — ranked recurrence (count rendered as text)
+              </Text>
+              <FrequencyBars
+                items={[
+                  { label: 'water', value: 6 },
+                  { label: 'house', value: 4 },
+                  { label: 'flight', value: 2 },
+                ]}
+              />
+            </div>
+            <div>
+              <Text size="sm" weight={600} tone="secondary">
+                ProportionBar — a single proportion (value of total)
+              </Text>
+              <Stack gap={2}>
+                <ProportionBar label="Lucid dreams" value={3} total={12} />
+                <ProportionBar label="Nightmares" value={5} total={12} tone="warning" />
+              </Stack>
+            </div>
+            <div>
+              <Text size="sm" weight={600} tone="secondary">
+                TrendLine — a value over time (scales to width)
+              </Text>
+              <TrendLine
+                points={[
+                  { date: '2026-06-01', value: -0.5 },
+                  { date: '2026-06-04', value: 0.2 },
+                  { date: '2026-06-07', value: 0 },
+                  { date: '2026-06-10', value: 0.6 },
+                ]}
+                min={-1}
+                max={1}
+                aria-label="Example mood trend"
+              />
+            </div>
+          </Stack>
         </Section>
       </Stack>
     </div>

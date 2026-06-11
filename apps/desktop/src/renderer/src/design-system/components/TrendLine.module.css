@@ -1,0 +1,27 @@
+.wrap {
+  width: 100%;
+}
+
+.svg {
+  display: block;
+  width: 100%;
+  height: 64px;
+}
+
+.area {
+  fill: var(--color-accent-subtle-bg);
+}
+
+.line {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.empty {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-text-tertiary);
+}

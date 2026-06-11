@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Moon, Plus, Sparkles } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, BarChart3, Moon, Plus, Sparkles } from 'lucide-react';
 import type { Dream } from '@shared/channels';
 import { useDreamStore } from '../../../stores/dreamStore';
-import { Button, Card, Heading, Stack, Text } from '../../../design-system/components';
+import { Button, Card, Heading, Inline, Stack, Text } from '../../../design-system/components';
 import { DreamComposer } from './DreamComposer';
 import { DreamAnalysisPane } from './DreamAnalysisPane';
 import styles from './Dreams.module.css';
@@ -37,6 +38,7 @@ export function Dreams(): JSX.Element {
   const dreams = useDreamStore((s) => s.dreams);
   const loaded = useDreamStore((s) => s.loaded);
   const load = useDreamStore((s) => s.load);
+  const navigate = useNavigate();
   const [selection, setSelection] = useState<Selection>({ mode: 'none' });
   // Within a saved dream, the detail toggles between the editor and the in-pane analysis surface.
   const [analyzing, setAnalyzing] = useState(false);
@@ -60,10 +62,16 @@ export function Dreams(): JSX.Element {
       <section className={styles.list} aria-label="Dream journal">
         <div className={styles.header}>
           <Heading level={2}>Dreams</Heading>
-          <Button variant="primary" onClick={() => select({ mode: 'new' })}>
-            <Plus size={16} aria-hidden="true" />
-            Log a dream
-          </Button>
+          <Inline gap={2}>
+            <Button variant="secondary" onClick={() => navigate('/dreams/patterns')}>
+              <BarChart3 size={16} aria-hidden="true" />
+              Patterns
+            </Button>
+            <Button variant="primary" onClick={() => select({ mode: 'new' })}>
+              <Plus size={16} aria-hidden="true" />
+              Log a dream
+            </Button>
+          </Inline>
         </div>
 
         {loaded && dreams.length === 0 ? (

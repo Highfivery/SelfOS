@@ -1,10 +1,20 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import type { Dream } from '@shared/channels';
 import { Dreams } from './Dreams';
 import { useDreamStore } from '../../../stores/dreamStore';
 import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
+
+/** Dreams now navigates to /dreams/patterns, so it needs a Router in tests. */
+function renderDreams(): void {
+  render(
+    <MemoryRouter>
+      <Dreams />
+    </MemoryRouter>,
+  );
+}
 
 afterEach(() => {
   clearMockBridge();
@@ -50,20 +60,20 @@ function saveSpy(): ReturnType<typeof vi.fn> {
 describe('Dreams', () => {
   it('shows the empty state when there are no dreams', async () => {
     installMockBridge({ dreamsList: () => Promise.resolve([]) });
-    render(<Dreams />);
+    renderDreams();
     expect(await screen.findByText(/no dreams yet/i)).toBeInTheDocument();
   });
 
   it('lists existing dreams by title', async () => {
     installMockBridge({ dreamsList: () => Promise.resolve([baseDream]) });
-    render(<Dreams />);
+    renderDreams();
     expect(await screen.findByText('Mountain flight')).toBeInTheDocument();
   });
 
   it('captures a dream: narrative-first, with optional flags', async () => {
     const save = saveSpy();
     installMockBridge({ dreamsList: () => Promise.resolve([]), dreamSave: save });
-    render(<Dreams />);
+    renderDreams();
 
     await userEvent.click(screen.getByRole('button', { name: 'Log a dream' }));
     await userEvent.type(
@@ -87,7 +97,7 @@ describe('Dreams', () => {
 
   it('disables Save until a narrative is entered', async () => {
     installMockBridge({ dreamsList: () => Promise.resolve([]) });
-    render(<Dreams />);
+    renderDreams();
     await userEvent.click(screen.getByRole('button', { name: 'Log a dream' }));
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
   });
@@ -97,7 +107,7 @@ describe('Dreams', () => {
       dreamsList: () => Promise.resolve([]),
       dreamSave: () => Promise.reject(new Error('Not permitted')),
     });
-    render(<Dreams />);
+    renderDreams();
 
     await userEvent.click(screen.getByRole('button', { name: 'Log a dream' }));
     await userEvent.type(screen.getByLabelText('What happened?'), 'A dream.');
@@ -109,7 +119,7 @@ describe('Dreams', () => {
   it('deletes a dream after a confirm step', async () => {
     const remove = vi.fn(() => Promise.resolve());
     installMockBridge({ dreamsList: () => Promise.resolve([baseDream]), dreamDelete: remove });
-    render(<Dreams />);
+    renderDreams();
 
     await userEvent.click(await screen.findByText('Mountain flight'));
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }));

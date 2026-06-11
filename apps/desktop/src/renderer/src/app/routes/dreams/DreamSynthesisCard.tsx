@@ -75,6 +75,11 @@ export function DreamSynthesisCard({
           This dream touched on something heavy. If you’re struggling, you don’t have to carry it
           alone — use “Get help now” below, or reach out to someone you trust.
         </Banner>
+      ) : analysis.distressSignal ? (
+        <Banner tone="warning">
+          This dream carried some distress. If dreams like this keep coming up, it can help to talk
+          them through — with someone you trust, or a professional.
+        </Banner>
       ) : null}
 
       <div className={styles.cardHead}>

@@ -6,6 +6,7 @@ import { Gallery } from './routes/Gallery';
 import { Sessions } from './routes/sessions/Sessions';
 import { Questionnaires } from './routes/questionnaires/Questionnaires';
 import { Dreams } from './routes/dreams/Dreams';
+import { DreamPatterns } from './routes/dreams/DreamPatterns';
 import { People } from './routes/people/People';
 import { Roles } from './routes/roles/Roles';
 import { Usage } from './routes/usage/Usage';
@@ -28,6 +29,7 @@ export function Shell(): JSX.Element {
           <Route path="sessions" element={<Sessions />} />
           <Route path="questionnaires" element={<Questionnaires />} />
           <Route path="dreams" element={<Dreams />} />
+          <Route path="dreams/patterns" element={<DreamPatterns />} />
           <Route path="people" element={<People />} />
           <Route path="roles" element={<Roles />} />
           <Route path="usage" element={<Usage />} />

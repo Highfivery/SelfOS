@@ -17,6 +17,7 @@ import { hashPin } from '@selfos/core/crypto';
 import { recordUsage } from '@selfos/core/usage';
 import { writeEncryptedJson } from '@selfos/core/vault';
 import { listInsightsForPerson, summarizeForContext } from '@selfos/core/insights';
+import { saveAnalysis, saveDream } from '@selfos/core/dreams';
 
 const MAIN = join(__dirname, '..', 'out', 'main', 'index.js');
 
@@ -1050,6 +1051,114 @@ test('dreams: analyze → synthesize → edit → approve feeds the coach; the t
     await w.getByRole('button', { name: 'Send' }).click();
     await expect(w.getByText(/hear you/i).first()).toBeVisible();
     await expect(w.getByText('The rearranging house')).toHaveCount(0);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('dreams: the Patterns screen charts seeded dreams, nudges on recurring nightmares, approves a narrative', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+
+  // Seed dreams straight into the encrypted vault: 3 recent nightmares (→ the nudge) + one analyzed
+  // dream with structured tags (→ the charts) — faster + more deterministic than logging via the UI.
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('seed: master key missing');
+  const at = new Date().toISOString();
+  for (let i = 0; i < 3; i++) {
+    await saveDream(fs, key, {
+      id: `nm${i}`,
+      schemaVersion: 1,
+      personId: 'owner-1',
+      narrative: `A storm at sea (${i}).`,
+      lucid: false,
+      nightmare: true,
+      tags: [],
+      people: [],
+      sensitivity: 'standard',
+      status: 'captured',
+      createdAt: at,
+      updatedAt: at,
+    });
+  }
+  await saveDream(fs, key, {
+    id: 'd-analyzed',
+    schemaVersion: 1,
+    personId: 'owner-1',
+    narrative: 'I was back in my childhood house, rooms rearranging.',
+    lucid: true,
+    nightmare: false,
+    tags: [],
+    people: [{ name: 'Mara' }],
+    sensitivity: 'standard',
+    status: 'analyzed',
+    analysisId: 'a1',
+    createdAt: at,
+    updatedAt: at,
+  });
+  await saveAnalysis(fs, key, {
+    id: 'a1',
+    schemaVersion: 1,
+    dreamId: 'd-analyzed',
+    personId: 'owner-1',
+    summary: 'A dream of a shifting house.',
+    emotionalLandscape: '',
+    wakingLifeConnections: '',
+    notableImages: '',
+    reflectiveQuestions: [],
+    tags: {
+      emotions: ['unease'],
+      symbols: ['house'],
+      settings: [],
+      themes: ['change'],
+      people: ['Mara'],
+    },
+    edited: false,
+    generatedAt: at,
+    updatedAt: at,
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Dreams' }).click();
+    await w.getByRole('button', { name: 'Patterns' }).click();
+    await expect(w.getByRole('heading', { name: 'Dream patterns' })).toBeVisible();
+
+    // Deterministic charts render from the seeded data (no AI needed).
+    await expect(w.getByText('house')).toBeVisible(); // a recurring symbol
+    await expect(w.getByText('Mara')).toBeVisible(); // a person who appears
+    await expect(w.getByText(/3 of 4/)).toBeVisible(); // nightmares of total
+
+    // The recurring-nightmare nudge fires (3 nightmares within the window).
+    await expect(w.getByText(/recurring nightmares can be worth talking through/i)).toBeVisible();
+
+    // Generate the on-demand AI narrative → approve it into the coaching context.
+    await w.getByRole('button', { name: 'Generate a reflection' }).click();
+    await expect(w.getByText(/hear you/i)).toBeVisible(); // the offline fake reflection
+    await w.getByRole('button', { name: /add to my coaching context/i }).click();
+    await expect(w.getByText(/in your coaching context/i)).toBeVisible();
+
+    // The chart grid fits at phone width with no horizontal overflow.
+    await app.evaluate(async ({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows()[0];
+      if (win) {
+        win.setMinimumSize(360, 480);
+        win.setSize(390, 800);
+      }
+    });
+    await w.waitForTimeout(200);
+    const noOverflow = await w.evaluate(() => {
+      const fits = (el: Element | null | undefined): boolean =>
+        !el || el.scrollWidth <= el.clientWidth + 1;
+      const main = document.querySelector('main');
+      const inner = main?.querySelector(':scope > div');
+      return fits(main) && fits(inner);
+    });
+    expect(noOverflow).toBe(true);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

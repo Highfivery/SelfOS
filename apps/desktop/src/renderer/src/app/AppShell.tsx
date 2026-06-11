@@ -24,6 +24,7 @@ import { useBudgetStore } from '../stores/budgetStore';
 import { useUsageStore } from '../stores/usageStore';
 import { useDreamStore } from '../stores/dreamStore';
 import { useDreamAnalysisStore } from '../stores/dreamAnalysisStore';
+import { useDreamPatternStore } from '../stores/dreamPatternStore';
 import { AccountMenu } from './AccountMenu';
 import { Switcher } from './Switcher';
 import { LockScreen } from './LockScreen';
@@ -68,6 +69,7 @@ export function AppShell(): JSX.Element {
     useUsageStore.getState().reset();
     useDreamStore.getState().reset();
     useDreamAnalysisStore.getState().reset();
+    useDreamPatternStore.getState().reset();
     void useConversationStore.getState().load();
     void useBudgetStore.getState().refresh();
     void useDreamStore.getState().load();

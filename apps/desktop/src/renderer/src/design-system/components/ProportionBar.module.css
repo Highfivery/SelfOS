@@ -1,0 +1,48 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.label {
+  font-size: 0.875rem;
+  color: var(--color-text-primary);
+}
+
+.figure {
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+}
+
+.track {
+  height: 10px;
+  border-radius: var(--radius-pill, 999px);
+  background: var(--color-surface-alt);
+  overflow: hidden;
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.accent {
+  background: var(--color-accent);
+}
+
+.warning {
+  background: var(--color-warning);
+}
+
+.danger {
+  background: var(--color-danger);
+}

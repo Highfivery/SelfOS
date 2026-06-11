@@ -651,6 +651,26 @@ Confirmed in review (2026-06-11):
      the digest/window-range nit so the cached `windowFrom/To` match what Claude saw). Gate green (typecheck
      node+web/DOM-lib, lint, format, **156 core + 231 desktop** unit). No user surface, so no E2E/visual-QA
      (the charts + Patterns screen are **4b**)._
+   - _**4b built 2026-06-11 (the Patterns UI — §13.4 COMPLETE):** the **`/dreams/patterns`** screen + three
+     new `/gallery` chart primitives. **Asked first (4 product/UX forks, all confirmed):** nudge = **3
+     nightmares in 14 days** (+ the AI signal); window = a **30d / 90d / All-time** `SegmentedControl`;
+     narrative = **on-demand "Generate"**; entry = a **"Patterns" button in the Dreams header**. New
+     design-system primitives (bespoke SVG/bars on tokens, no chart lib — count/figure always rendered as
+     **text**, not colour-only, §9): **`FrequencyBars`** (recurring symbols/themes/people/emotions),
+     **`ProportionBar`** (lucid/nightmare rates), **`TrendLine`** (mood/vividness over time, with a
+     direction-aware `role="img"` label) — all showcased in **`/gallery`**. **`DreamPatterns`** composes the
+     four §3.5 visualizations into cards + the **gentle recurring-nightmare nudge** Banner (when
+     `nightmareNudge`) + the on-demand narrative card (Generate → Approve/Remove + "in your coaching
+     context" badge; disabled+hinted when memory off; a calm connect-Claude state when AI is off — **the
+     deterministic charts still render offline**) + the not-medical line + the reused `CrisisFooter`. A
+     **`dreamPatternStore`** (per-person, reset wired into AppShell). The §8.2 nudge also surfaces **in the
+     dream detail** — a gentle `distressSignal` banner on the synthesis card. Code-reviewer **fix-first**
+     (applied the should-fix: a `load()` late-resolve window guard; + the `!`→guarded-access §4 fix, a
+     direction-aware TrendLine label, and `title` on truncated bars). Gate green: typecheck (node +
+     web/DOM-lib), lint, format, **156 core + 242 desktop** unit (+4 chart RTL, +7 Patterns RTL), **35 E2E**
+     (+1: seeds 3 nightmares + an analyzed dream → charts render, the nudge fires, generate+approve the
+     narrative, 390px guard). **Visual QA** at desktop + 390px (real Electron screenshots — charts legible,
+     the grid stacks). On `feat/dreams-slice-4b`. **§13.4 is complete; NEXT: §13.5 per-dream sharing.**_
 5. **Per-dream sharing** — per-fact shareable promotion into a related person's context (reusing `08`/`09`),
    gated by `dreams.shareContext`, excluded for sensitive tiers.
 
@@ -756,3 +776,21 @@ proven.)_
   unit). On `feat/dreams-slice-4a`. No user surface → no E2E/visual-QA. **NEXT: 4b** the four `/gallery`
   chart primitives + the `/dreams/patterns` screen (30d/90d/all toggle, on-demand narrative + approve, the
   nightmare nudge) + E2E.
+- 2026-06-11 — **Slice 4b built — §13.4 COMPLETE** (the Patterns UI). The **`/dreams/patterns`** screen +
+  three new `/gallery` chart primitives (bespoke SVG/bars on tokens, no chart lib; the count/figure is
+  always rendered as **text**, §9): **`FrequencyBars`** (recurring symbols/themes/people/emotions),
+  **`ProportionBar`** (lucid/nightmare rates), **`TrendLine`** (mood/vividness over time, direction-aware
+  `role="img"` label). **`DreamPatterns`** composes the four §3.5 visualizations into cards + a **30d/90d/
+  All-time** `SegmentedControl` + the **gentle recurring-nightmare nudge** Banner + the **on-demand**
+  narrative card (Generate → Approve/Remove + "in your coaching context" badge; disabled+hinted when memory
+  off; a calm connect-Claude state when AI is off — the deterministic charts still render offline) + the
+  not-medical line + the reused `CrisisFooter`. Reached via a **"Patterns" button in the Dreams header**.
+  A per-person **`dreamPatternStore`** (reset wired into AppShell). The §8.2 nudge also surfaces in the
+  **dream detail** (a gentle `distressSignal` banner on the synthesis card). All four UX forks were
+  user-confirmed (nudge 3-in-14, the window toggle, on-demand generation, the header button). Code-reviewer
+  **fix-first** (applied the should-fix — a `load()` late-resolve window guard; + nits: the `!`→guarded-
+  access §4 fix, a direction-aware TrendLine label, `title` on truncated bars). Gate green: typecheck (node
+  - web/DOM-lib), lint, format, **156 core + 242 desktop** unit (+4 chart RTL, +7 Patterns RTL), **35 E2E**
+    (+1 seeded charts→nudge→generate→approve flow with a 390px guard). **Visual QA** at desktop + 390px (real
+    Electron screenshots — clean). On `feat/dreams-slice-4b`. **Slice 4 (Patterns) is done; NEXT: §13.5
+    per-dream sharing.**

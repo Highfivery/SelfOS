@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   currentDeviceId,
+  scrubLegacyLocalStorageSecrets,
   webDeviceSettings,
   webDeviceStore,
   webFakeClaudeClient,
@@ -28,6 +29,24 @@ describe('webSecretStore', () => {
     expect(await b.get('master')).toBeNull();
     await a.clear('master');
     expect(await a.has('master')).toBe(false);
+  });
+});
+
+describe('scrubLegacyLocalStorageSecrets', () => {
+  it('removes only legacy secret keys, leaving device-state/settings + non-app keys', async () => {
+    await webSecretStore('A').set('selfos.masterKey', 'KEY');
+    await webSecretStore('B').set('anthropic.apiKey', 'sk');
+    localStorage.setItem('selfos:A:deviceState', '{"schemaVersion":1,"vaultPath":null}');
+    localStorage.setItem('selfos:A:deviceSettings', '{}');
+    localStorage.setItem('unrelated', 'keep');
+
+    scrubLegacyLocalStorageSecrets();
+
+    expect(localStorage.getItem('selfos:A:secret:selfos.masterKey')).toBeNull();
+    expect(localStorage.getItem('selfos:B:secret:anthropic.apiKey')).toBeNull();
+    expect(localStorage.getItem('selfos:A:deviceState')).not.toBeNull();
+    expect(localStorage.getItem('selfos:A:deviceSettings')).not.toBeNull();
+    expect(localStorage.getItem('unrelated')).toBe('keep');
   });
 });
 

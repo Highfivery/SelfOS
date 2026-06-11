@@ -239,6 +239,21 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Fix + **Capacitor track wrap-up (iOS app layer COMPLETE, on-device verified)**;
+  [07-mobile-platform](docs/specs/07-mobile-platform.md) §13. Security cleanup: **`scrubLegacyLocalStorageSecrets()`**
+  (`host/webStores.ts`) removes the orphaned master key + API key the pre-iii-c1 stub left in WKWebView
+  `localStorage` (now that secrets live in the Keychain — lower-protection duplicate). It runs **only in
+  `installRealBridge`'s native branch** (iOS); the web preview keeps its `localStorage` secrets. Regex
+  `^selfos:[^:]*:secret:` matches secret keys only (device-state/settings + non-app keys are left). +1
+  test. **Decision (asked):** security cleanup + finalize, over the optional iii-b3b live-refresh polish.
+  **Milestone:** the user verified the full app on a physical iPhone — shared iCloud vault (with
+  download-on-demand), Keychain secrets (one-time re-unlock), and **real streamed Claude**. So the iOS app
+  layer (iii-a → iii-c) is **done**: one responsive codebase running on Electron + iPhone off the **same**
+  iCloud-Drive vault via `createCoreBridge` over platform hosts. Gates: typecheck/lint/format, **259 unit**
+  (76 core + 183 desktop), `build:web`. (Self-reviewed — small, iOS-gated, tested cleanup.) **Remaining,
+  non-blocking:** **iii-b3b** live `NSFilePresenter` change feed (`onVaultChanged` is a no-op; reads are
+  fresh anyway), **iii-d** wife's-phone install (Xcode signing only, no code), **(iv)** Developer Program +
+  TestFlight. (Concurrent agent's `docs/specs/0{4,5,8,9}` + `11` still untouched.)
 - 2026-06-11 — Build (**Capacitor track slice iii-c2 — real Claude on iOS**;
   [07-mobile-platform](docs/specs/07-mobile-platform.md) §5.3/§11.3/§13). Replaces the fake assistant on
   iOS with the Anthropic SDK in **browser mode**. New `host/browserClaudeClient.ts` — the

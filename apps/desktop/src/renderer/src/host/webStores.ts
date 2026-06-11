@@ -40,6 +40,22 @@ export function webSecretStore(device: string): SecretStore {
   };
 }
 
+/**
+ * Remove legacy secret copies from WKWebView `localStorage` (07-mobile-platform §5.3, post-iii-c1). Before
+ * the Keychain landed, iOS kept the master key + API key in `localStorage` (`webSecretStore`); they now
+ * live in the iOS Keychain, so any `selfos:*:secret:*` entry here is an orphaned copy in lower-protection
+ * storage — scrub it. **iOS-only**: never call this in the web preview, where `localStorage` IS the secret
+ * store. (Device-state/settings entries are left alone — they're not secrets.)
+ */
+export function scrubLegacyLocalStorageSecrets(): void {
+  const legacy: string[] = [];
+  for (let i = 0; i < localStorage.length; i += 1) {
+    const key = localStorage.key(i);
+    if (key && /^selfos:[^:]*:secret:/.test(key)) legacy.push(key);
+  }
+  for (const key of legacy) localStorage.removeItem(key);
+}
+
 export interface WebDeviceStore {
   read(): Promise<DeviceState>;
   update(patch: Partial<DeviceState>): Promise<DeviceState>;

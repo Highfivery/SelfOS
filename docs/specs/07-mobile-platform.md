@@ -377,6 +377,19 @@ build:web` then `cap add ios` + Xcode on their Mac (free signing first; §11.7).
   blind-written** (can't compile here) — the user builds + verifies on-device in Xcode (`build:web` →
   `npx cap sync ios` → add `VaultFs.swift` to the App target → run). **Next: iii-c** (iOS Keychain + real
   Claude) then iii-b3b (live change presenter).
+- 2026-06-11 — **slices iii-c1 + iii-c2 landed + the iOS app layer is COMPLETE (on-device verified).**
+  **iii-c1** native `Keychain` plugin (`ios/App/App/Keychain.swift`, `kSecClassGenericPassword`,
+  after-first-unlock-this-device-only, not synced) → the master key + API key move off the `localStorage`
+  stub; `host/capacitorSecretStore.ts` + a `secrets` part in `createBridgeHost`. **iii-c2** real Claude via
+  the Anthropic **browser-mode SDK** (`host/browserClaudeClient.ts`, `dangerouslyAllowBrowser`) in the
+  WKWebView, a mirror of the Electron `anthropicClient`; the SDK typechecks under the DOM lib + bundles
+  (151 KB gzip). **Cleanup:** `scrubLegacyLocalStorageSecrets()` drops the orphaned master key/API key left
+  in `localStorage` by the pre-Keychain stub (iOS-only, in `installRealBridge`'s native branch). The user
+  **verified the full app on a physical iPhone**: shared iCloud vault (incl. download-on-demand), Keychain
+  secrets (one-time re-unlock), and real streamed Claude. Gates: typecheck/lint/format, **259 unit** (76
+  core + 183 desktop), `build:web`. **Remaining (no longer blocking a usable app):** **iii-b3b** the live
+  `NSFilePresenter` change feed (`onVaultChanged` is a no-op today; reads are always fresh), **iii-d**
+  free-signing install on the wife's phone (Xcode only, no code), **(iv)** Developer Program + TestFlight.
 
 ## 13. Implementation roadmap & status
 

@@ -10,6 +10,7 @@ import { capacitorSecretStore, Keychain, type KeychainPlugin } from './capacitor
 import { browserClaudeClient } from './browserClaudeClient';
 import {
   currentDeviceId,
+  scrubLegacyLocalStorageSecrets,
   webDeviceSettings,
   webDeviceStore,
   webFakeClaudeClient,
@@ -199,6 +200,12 @@ export function createCapacitorHost(
  * the native iOS `VaultFs` host on a device, the IndexedDB web host in a browser preview.
  */
 export function installRealBridge(): void {
-  const host = Capacitor.isNativePlatform() ? createCapacitorHost() : createWebHost();
-  window.selfos = createCoreBridge(host);
+  if (Capacitor.isNativePlatform()) {
+    // iOS keeps secrets in the Keychain — drop any legacy master key / API key left in localStorage
+    // by the pre-iii-c1 stub (lower-protection storage). Web preview keeps its localStorage secrets.
+    scrubLegacyLocalStorageSecrets();
+    window.selfos = createCoreBridge(createCapacitorHost());
+    return;
+  }
+  window.selfos = createCoreBridge(createWebHost());
 }

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import {
   BarChart3,
+  ClipboardList,
   House,
   Menu,
   MessageCircle,
@@ -40,6 +41,7 @@ export function AppShell(): JSX.Element {
   const canManagePeople = useSessionStore((s) => s.can('people.manage'));
   const canManageRoles = useSessionStore((s) => s.can('roles.manage'));
   const hasSessions = useSessionStore((s) => s.can('sessions.own'));
+  const canCreateQuestionnaires = useSessionStore((s) => s.can('questionnaires.create'));
   const locked = useSessionStore((s) => s.locked);
   const unlockPromptOpen = useSessionStore((s) => s.unlockPromptOpen);
   const activePersonId = useSessionStore((s) => s.activePerson?.id ?? null);
@@ -143,6 +145,18 @@ export function AppShell(): JSX.Element {
             >
               <MessageCircle size={18} aria-hidden="true" />
               <span className={styles.label}>Sessions</span>
+            </NavLink>
+          ) : null}
+          {canCreateQuestionnaires ? (
+            <NavLink
+              to="/questionnaires"
+              className={navClass}
+              aria-label="Questionnaires"
+              title={tip('Questionnaires')}
+              onClick={closeDrawer}
+            >
+              <ClipboardList size={18} aria-hidden="true" />
+              <span className={styles.label}>Questionnaires</span>
             </NavLink>
           ) : null}
           {canManagePeople ? (

@@ -97,6 +97,10 @@ gap-finder, the "what the coach knows" surface, and `11`'s trends — read it re
 A new **Questionnaires** feature module registers a nav entry (gated by `questionnaires.create` **or**
 `questionnaires.answer`) and the route tree `/questionnaires`:
 
+> **Build state:** until the **Inbox / answer** surfaces ship ([§13](#13-build-slices) slice 5), the nav
+> entry and `/questionnaires` route are gated by **`questionnaires.create` only**; the `.answer` half of
+> the gate lands with the Inbox.
+
 - **My Questionnaires** — the sender's created questionnaires (drafts + sent history), each **re-sendable**
   (for trends). _(No template library — questionnaires are created fresh.)_
 - **Builder** — create/edit; pick a type; add own questions and/or AI-generate; preview; **test-on-self**;

@@ -667,6 +667,52 @@ test('usage: the dashboard shows recorded usage and accepts a budget, without ov
   }
 });
 
+test('questionnaires: author a single-choice questionnaire, validate, persist, no overflow', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await expect(w.getByRole('heading', { name: 'Questionnaires' })).toBeVisible();
+    await expect(w.getByText(/no questionnaires yet/i)).toBeVisible();
+
+    // Build a questionnaire with one single-choice question and three options.
+    await w.getByRole('button', { name: 'New' }).click();
+    await w.getByLabel('Title').fill('Weekly check-in');
+    await w.getByLabel('Question 1', { exact: true }).fill('How satisfied are you?');
+    await w.getByLabel('Answer type').selectOption({ label: 'Single choice' });
+    await w.getByLabel('Option 1', { exact: true }).fill('Very');
+    await w.getByLabel('Option 2', { exact: true }).fill('Somewhat');
+    await w.getByRole('button', { name: 'Add option' }).click();
+    await w.getByLabel('Option 3', { exact: true }).fill('Not at all');
+
+    // Validation should pass, then save.
+    await w.getByRole('button', { name: 'Check' }).click();
+    await expect(w.getByText(/ready to send/i)).toBeVisible();
+    await w.getByRole('button', { name: 'Create' }).click();
+
+    // The new questionnaire shows in the list with its question count.
+    await expect(w.getByRole('button', { name: /Weekly check-in/ })).toBeVisible();
+    await expect(w.getByText('1 question')).toBeVisible();
+
+    // Reopen and confirm the title + options round-tripped through the encrypted vault.
+    await w.getByRole('button', { name: /Weekly check-in/ }).click();
+    await expect(w.getByLabel('Title')).toHaveValue('Weekly check-in');
+    await expect(w.getByLabel('Option 1', { exact: true })).toHaveValue('Very');
+    await expect(w.getByLabel('Option 3', { exact: true })).toHaveValue('Not at all');
+
+    const overflow = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      return main ? main.scrollWidth - main.clientWidth : 0;
+    });
+    expect(overflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('roles: the owner edits the role × capability matrix', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);
@@ -1215,11 +1261,25 @@ test('responsive: at a phone width the nav is a drawer and no screen overflows h
 
     // Walk every primary screen via the drawer; open the People editor too (it's a second pane that
     // must stack on mobile). Assert nothing overflows horizontally anywhere.
-    for (const name of ['Sessions', 'People', 'Roles', 'Usage', 'Settings', 'Home']) {
+    for (const name of [
+      'Sessions',
+      'Questionnaires',
+      'People',
+      'Roles',
+      'Usage',
+      'Settings',
+      'Home',
+    ]) {
       await hamburger.click();
       await w.getByRole('link', { name }).click(); // selecting a nav item closes the drawer
       await w.waitForTimeout(150);
       expect(await noOverflow()).toBe(true);
+      if (name === 'Questionnaires') {
+        await w.getByRole('button', { name: 'New' }).click(); // open the builder (detail pane)
+        await w.waitForTimeout(150);
+        expect(await noOverflow()).toBe(true); // the builder stacks on mobile, doesn't overflow
+        await w.getByRole('button', { name: 'Questionnaires' }).click(); // back to the list
+      }
       if (name === 'People') {
         await w.getByRole('button', { name: 'Tester Subject' }).click(); // open the editor (detail)
         await w.waitForTimeout(150);

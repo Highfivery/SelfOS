@@ -1,0 +1,205 @@
+/* Master–detail (list + builder), mirroring the People screen so the app feels consistent. */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) 1fr;
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--motion-fast);
+}
+
+.row:hover {
+  background: var(--color-surface-alt);
+}
+
+.rowActive {
+  border-color: var(--color-accent);
+  background: var(--color-surface-alt);
+}
+
+.rowName {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.rowBadge {
+  flex-shrink: 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+
+.detail {
+  min-width: 0;
+}
+
+.back {
+  display: none;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: flex-start;
+  margin-bottom: var(--space-3);
+  padding: var(--space-2) var(--space-2) var(--space-2) 0;
+  border: none;
+  background: transparent;
+  color: var(--color-accent-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.back:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-6);
+  text-align: center;
+}
+
+/* --- Builder --- */
+.questions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.question {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.questionTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.questionTop > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.typeRow {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+
+.typeRow > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.requiredToggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  padding-bottom: var(--space-2);
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.optionRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.optionRow > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.scaleRow {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.scaleRow > * {
+  flex: 1;
+  min-width: 0;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-top: var(--space-2);
+}
+
+.footerActions {
+  display: flex;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+/* Mobile: one pane at a time. */
+@media (max-width: 767px) {
+  .layout {
+    grid-template-columns: 1fr;
+    gap: var(--space-4);
+  }
+
+  .layout[data-view='list'] .detail {
+    display: none;
+  }
+
+  .layout[data-view='detail'] .list {
+    display: none;
+  }
+
+  .back {
+    display: inline-flex;
+  }
+
+  .scaleRow {
+    flex-direction: column;
+  }
+}

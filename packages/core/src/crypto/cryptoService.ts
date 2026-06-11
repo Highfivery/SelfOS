@@ -40,10 +40,23 @@ export function randomBytes(length: number): Uint8Array {
   return globalThis.crypto.getRandomValues(new Uint8Array(length));
 }
 
+/**
+ * WebCrypto's `BufferSource` parameters require an `ArrayBuffer`-backed view, but TS 5.7 types a plain
+ * `Uint8Array` as `Uint8Array<ArrayBufferLike>` (its buffer could be a `SharedArrayBuffer`). Copy into a
+ * fresh `ArrayBuffer`-backed array so the `subtle.*` calls typecheck under **both** the host's node lib
+ * and the iOS WebView's DOM lib (07-mobile-platform — `@selfos/core` runs in the WebView). The copy is
+ * cheap (keys / IVs / small blobs) and byte-identical.
+ */
+function bufferSource(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy;
+}
+
 // Return type inferred, not annotated: `CryptoKey` is a global only under the DOM lib, but this source
 // is also typechecked under the host's node-lib config (07 slice ii). `globalThis.crypto` exists in both.
 function importAesKey(key: Uint8Array) {
-  return globalThis.crypto.subtle.importKey('raw', key, { name: 'AES-GCM' }, false, [
+  return globalThis.crypto.subtle.importKey('raw', bufferSource(key), { name: 'AES-GCM' }, false, [
     'encrypt',
     'decrypt',
   ]);
@@ -56,9 +69,9 @@ export async function encrypt(plaintext: string, key: Uint8Array): Promise<Encry
   // envelope identical to the legacy node:crypto output.
   const sealed = new Uint8Array(
     await globalThis.crypto.subtle.encrypt(
-      { name: 'AES-GCM', iv, tagLength: GCM_TAG_BYTES * 8 },
+      { name: 'AES-GCM', iv: bufferSource(iv), tagLength: GCM_TAG_BYTES * 8 },
       cryptoKey,
-      new TextEncoder().encode(plaintext),
+      bufferSource(new TextEncoder().encode(plaintext)),
     ),
   );
   const data = sealed.subarray(0, sealed.length - GCM_TAG_BYTES);
@@ -83,9 +96,9 @@ export async function decrypt(envelope: EncryptedEnvelope, key: Uint8Array): Pro
   sealed.set(tag, data.length);
   const cryptoKey = await importAesKey(key);
   const plaintext = await globalThis.crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv, tagLength: GCM_TAG_BYTES * 8 },
+    { name: 'AES-GCM', iv: bufferSource(iv), tagLength: GCM_TAG_BYTES * 8 },
     cryptoKey,
-    sealed,
+    bufferSource(sealed),
   );
   return new TextDecoder().decode(plaintext);
 }

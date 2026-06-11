@@ -10,5 +10,6 @@ import UIKit
 class MainViewController: CAPBridgeViewController {
     override func capacitorDidLoad() {
         bridge?.registerPluginInstance(VaultFsPlugin())
+        bridge?.registerPluginInstance(KeychainPlugin())
     }
 }

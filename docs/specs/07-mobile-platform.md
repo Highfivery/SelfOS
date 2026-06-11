@@ -428,10 +428,18 @@ The full arc, so no session loses the thread. Update the status boxes as slices 
       presents, and setup writes the encrypted vault through `VaultFs`. To rebuild: `build:web` →
       `npx cap sync ios` → in Xcode add `VaultFs.swift` **and** `MainViewController.swift` to the App target
       (Reference in place) → run.
-- [ ] **iii-c — iOS Keychain + Claude.** Real Keychain `SecretStore` (replace iii-b2's stub:
-      `kSecClassGenericPassword`, accessible-after-first-unlock-this-device-only, not synced; holds master
-      key + API key) + Claude via the Anthropic **browser-mode SDK** (`dangerouslyAllowBrowser`) with a
-      **native-HTTP fallback** for WKWebView CORS (§11.3).
+- [x] **iii-c1 — iOS Keychain `SecretStore`.** Native `Keychain` plugin (`ios/App/App/Keychain.swift`,
+      `CAPBridgedPlugin` registered in `MainViewController`): `get`/`set`(upsert)/`has`/`remove` over
+      `kSecClassGenericPassword`, service = bundle id, `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`,
+      **not synced**. TS `host/capacitorSecretStore.ts` (`capacitorSecretStore(plugin?)` → core
+      `SecretStore`); `createCapacitorHost` uses it for the master key + API key (device-state/non-secret
+      settings stay in `localStorage`). Migration: a device that unlocked under the iii-b2 `localStorage`
+      stub simply **re-unlocks once** via recovery phrase (the gate routes `vaultInitialized && !hasMasterKey`
+      → Unlock; no re-key/lockout) — no blind migration. _Backlog: scrub the legacy `localStorage` secret
+      keys post-migration._ Gates: typecheck/lint/format, 255 unit, build:web; Swift built on-device by the user.
+- [ ] **iii-c2 — real Claude on iOS.** Replace the fake `ClaudeClient` (web stores) with the Anthropic
+      **browser-mode SDK** (`dangerouslyAllowBrowser`) in the WKWebView, with a **native-HTTP fallback** for
+      WKWebView CORS/streaming (§11.3). The web preview keeps the deterministic fake.
 - [ ] **iii-d — free-signing install** on the user's + wife's physical iPhones (personal team; trust the
       cert on-device; 7-day provisioning expiry — §11.7).
 - [ ] **(iv) Distribution (later)** — Apple Developer Program + TestFlight (free signing first; a

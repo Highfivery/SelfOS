@@ -239,6 +239,26 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Build (**Capacitor track slice iii-c1 — native iOS Keychain `SecretStore`**;
+  [07-mobile-platform](docs/specs/07-mobile-platform.md) §5.1/§5.3/§13). Moves the vault **master key + Claude
+  API key** off the iii-b2 `localStorage` stub into the **iOS Keychain**. New `ios/App/App/Keychain.swift`
+  (`CAPBridgedPlugin` `jsName "Keychain"`, registered alongside `VaultFs` in `MainViewController`):
+  `get`/`set`(upsert via SecItemUpdate→Add)/`has`/`remove` over `kSecClassGenericPassword`, service = bundle
+  id, **`kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`, not synced**, settle-once on every path. TS
+  `host/capacitorSecretStore.ts` (`capacitorSecretStore(plugin?)` → core `SecretStore`); `webHost`'s
+  `createBridgeHost` now takes a `secrets` part — `createWebHost` keeps `localStorage` (preview),
+  `createCapacitorHost` uses the Keychain. **Decision (asked):** Keychain first, then real Claude (iii-c2).
+  **Migration:** a device that unlocked under the old `localStorage` stub re-unlocks **once** via recovery
+  phrase (gate routes `vaultInitialized && !hasMasterKey` → Unlock; no re-key, no lockout, recovery phrase
+  still held) — no blind migration written (reviewer confirmed safe). Reviewer verdict **ship** (no
+  blockers; Keychain query/upsert/error-handling correct, TS adapter faithful + tested). Gates: typecheck
+  (node + web/DOM-lib), lint, format, **255 unit** (76 core + 179 desktop, +5 adapter tests), `build:web`.
+  **Swift is blind** — user adds `Keychain.swift` to the App target + rebuilds (re-unlock once after).
+  **Lesson: each new app-local Capacitor plugin needs its own `registerPluginInstance` line in
+  `MainViewController.capacitorDidLoad` — that's now the established pattern (`VaultFs`, `Keychain`, and the
+  iii-c2 Claude/HTTP plugin if any).** Backlog: scrub the legacy `localStorage` secret keys post-migration.
+  **NEXT: iii-c2** real Claude (browser-mode SDK + native-HTTP fallback). (Concurrent agent's
+  `docs/specs/0{4,5,8,9}` + `11` untouched.)
 - 2026-06-11 — Fix (**iOS WebView stuck-zoom — content didn't fit, scrolled both axes**; user flagged on
   their device). Diagnosed from the device (NOT guessed): an on-device console probe showed `vw=319`
   while the page layout + every element was **393** (the iPhone's logical width) — i.e. the layout was

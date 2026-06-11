@@ -1,11 +1,12 @@
 import { Capacitor } from '@capacitor/core';
 import type { BootState } from '@shared/schemas';
-import type { FileSystem } from '@selfos/core/host';
+import type { FileSystem, SecretStore } from '@selfos/core/host';
 import { loadMasterKey } from '@selfos/core/crypto';
 import { uuid } from '@selfos/core/id';
 import { createCoreBridge, readVaultSettingsValues, type BridgeHost } from '@shared/coreBridge';
 import { idbFileSystem } from './idbFileSystem';
 import { capacitorFileSystem, VaultFs, type VaultFsPlugin } from './capacitorVaultFs';
+import { capacitorSecretStore, Keychain, type KeychainPlugin } from './capacitorSecretStore';
 import {
   currentDeviceId,
   webDeviceSettings,
@@ -38,12 +39,16 @@ interface HostParts {
   makeFileSystem(vaultId: string): FileSystem;
   /** Choose a vault: a fixed id on web, the native folder picker's bookmark on iOS; null if cancelled. */
   selectVaultFolder(): Promise<string | null>;
+  /** Device-local secret store: `localStorage` in the web preview, the iOS Keychain on a device. */
+  secrets: SecretStore;
 }
 
-/** Assemble a `BridgeHost` from interchangeable filesystem/picker parts (shared by web + iOS). */
+/** Assemble a `BridgeHost` from interchangeable filesystem/picker/secrets parts (shared by web + iOS). */
 function createBridgeHost(parts: HostParts): BridgeHost {
   const device = currentDeviceId();
-  const secrets = webSecretStore(device);
+  const secrets = parts.secrets;
+  // Device-state + non-secret device-settings stay in localStorage on both platforms (the bookmark +
+  // active person aren't secrets); only the master key / API key move to the Keychain (parts.secrets).
   const deviceStore = webDeviceStore(device);
   const deviceSettings = webDeviceSettings(device);
   const claude = webFakeClaudeClient();
@@ -152,30 +157,35 @@ export interface WebHostOptions {
   factory?: IDBFactory;
 }
 
-/** Web-preview host: an IndexedDB vault + a fixed vault id (no native picker in the browser). */
+/** Web-preview host: an IndexedDB vault + a fixed vault id + a `localStorage` secret store. */
 export function createWebHost(options: WebHostOptions = {}): BridgeHost {
   return createBridgeHost({
     makeFileSystem: (vaultId) =>
       idbFileSystem(vaultId, options.factory ? { factory: options.factory } : {}),
     selectVaultFolder: () => Promise.resolve(PREVIEW_VAULT_ID),
+    secrets: webSecretStore(currentDeviceId()),
   });
 }
 
 /**
- * iOS host: the native security-scoped iCloud `VaultFs` plugin + the document picker (iii-b3). `plugin`
- * is injectable for tests; production uses the registered native plugin.
+ * iOS host: the native iCloud `VaultFs` plugin + document picker (iii-b3) and the native `Keychain`
+ * secret store (iii-c1). Both plugins are injectable for tests; production uses the registered natives.
  */
-export function createCapacitorHost(plugin: VaultFsPlugin = VaultFs): BridgeHost {
+export function createCapacitorHost(
+  vaultFs: VaultFsPlugin = VaultFs,
+  keychain: KeychainPlugin = Keychain,
+): BridgeHost {
   return createBridgeHost({
-    makeFileSystem: (bookmark) => capacitorFileSystem(bookmark, plugin),
+    makeFileSystem: (bookmark) => capacitorFileSystem(bookmark, vaultFs),
     selectVaultFolder: async () => {
       try {
-        return (await plugin.pickFolder()).bookmark;
+        return (await vaultFs.pickFolder()).bookmark;
       } catch {
         // The user cancelled the picker (or it failed) — stay on onboarding rather than erroring.
         return null;
       }
     },
+    secrets: capacitorSecretStore(keychain),
   });
 }
 

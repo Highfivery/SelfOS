@@ -181,6 +181,12 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.insightsUpdate, bridge.insightsUpdate);
   handle(IpcChannels.insightsDelete, bridge.insightsDelete);
   handle(IpcChannels.assignmentsCreate, bridge.assignmentsCreate);
+  handle(IpcChannels.assignmentsInbox, bridge.assignmentsInbox);
+  handle(IpcChannels.assignmentsGet, bridge.assignmentsGet);
+  handle(IpcChannels.assignmentsOpen, bridge.assignmentsOpen);
+  handle(IpcChannels.assignmentsSaveProgress, bridge.assignmentsSaveProgress);
+  handle(IpcChannels.assignmentsSubmit, bridge.assignmentsSubmit);
+  handle(IpcChannels.assignmentsDecline, bridge.assignmentsDecline);
   handle(IpcChannels.getSidebarCollapsed, bridge.getSidebarCollapsed);
   handle(IpcChannels.setSidebarCollapsed, bridge.setSidebarCollapsed);
 

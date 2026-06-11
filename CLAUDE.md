@@ -239,6 +239,35 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Build (Questionnaires **slice §13.5a — the in-app send + answer core loop**,
+  [08-questionnaires](docs/specs/08-questionnaires.md) §3.2/§3.3/§6/§13.5). **This finally lights up the loop:**
+  a sender can send a questionnaire in-app and a recipient can answer it. **Decisions (asked):** scope =
+  **the core loop** (send + Inbox + answer; Results/Analyze deferred to §13.5b, trends/compat/deletion to
+  §13.5c); Inbox = a **separate `/inbox` nav** gated by **`questionnaires.answer`** (unanswered badge);
+  Send = **from the builder** (a "Send" button beside Save → validate + save first, then a recipient +
+  privacy panel that freezes the immutable snapshot); privacy default = **Private (break-glass)** — the
+  recipient is told their answers personalize the sender's coaching and the raw responses stay hidden.
+  Core **`@selfos/core/questionnaires/answerService`** (`openAssignment`/`saveProgress`/`submitResponse`/
+  `declineAssignment` + an `isAnswerable` guard — locked after submit); `listAssignments` gains a
+  **`recipientPersonId`** filter (the Inbox side); **`ResponseSet.submittedAt` → optional** (a saved-but-
+  unsubmitted draft persists; status is the lifecycle marker) and **`Answer.value` widened to
+  `Record<string,number>`** (matrix/allocation answers now persist) — both additive, **no migration**.
+  New **derived** `InboxItem`/`InboxAssignmentDetail` view types — the **raw answers never cross IPC to the
+  sender** (privacy honesty). IPC `assignments:inbox/get/open/saveProgress/submit/decline` gated by
+  `questionnaires.answer` **AND recipient-scoped in the bridge** (the trust boundary — a non-recipient can't
+  read or mutate another person's send; super-admin inspect still can't answer-as-someone-else because it
+  doesn't change `activePersonId`). Renderer: a builder **Send panel** + a separate **Inbox** master-detail
+  reusing `QuestionnaireForm` (save/resume, decline silent/with-note, submit; crisis footer on every state);
+  per-person **`inboxStore`** resets on `activePerson.id` change (the per-person-state rule); the nav badge
+  carries `flex: none` (the Switch-shrink rule — the reviewer's preview caught it compressed). Code-reviewed
+  **fix-first** (should-fix: **`analyzeAssignment` now guards on `submittedAt`** so a draft can't be analyzed
+  or burn budget — drafts are newly reachable as `ResponseSet`s; + crisis footer on locked/declining/missing).
+  Gate green (typecheck/lint/format, **227 desktop + 147 core unit, 36 E2E** — incl. a coreBridge inbox-flow/
+  recipient-gating test, RTL Inbox + builder-send tests, and an E2E send→answer→submit encrypted round-trip;
+  the 390px sweep now walks the Inbox). Synced `08` §3/§4.3/§6/§13.5. **Lesson: relaxing a "required" schema
+  field (`submittedAt`) makes a previously-unreachable state (a draft `ResponseSet`) reachable — re-check
+  every consumer that assumed the old invariant (here, `analyzeAssignment`).** **Next: §13.5b** (Results +
+  the live Analyze trigger + `autoAnalyze` — lights up Memory), then §13.5c, then §13.6 relay.
 - 2026-06-11 — Build (Questionnaires **slice 4 — analyze → Insights → Memory** [§13.4 engine + surface],
   [08-questionnaires](docs/specs/08-questionnaires.md) §3.7/§4.4/§6/§8.2/§13.4). **Surfaced a real
   dependency + asked:** §13.4 analyzes a recipient's submitted answers, but the Inbox that collects them is

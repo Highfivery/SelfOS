@@ -352,4 +352,68 @@ describe('createCoreBridge', () => {
       bridge.assignmentsCreate({ questionnaireId: saved.id, recipientPersonId: 'ghost' }),
     ).rejects.toThrow(/Recipient not found/);
   });
+
+  it('delivers a send to the recipient Inbox, answers + submits, and gates non-recipients', async () => {
+    const { bridge } = await freshOwner();
+    const recipient = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: recipient.id, roleId: 'member', pin: null });
+
+    const q = await bridge.questionnairesSave({
+      title: 'Weekly check-in',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'How are we doing?', required: true }],
+    });
+    const assignment = await bridge.assignmentsCreate({
+      questionnaireId: q.id,
+      recipientPersonId: recipient.id,
+      privacy: 'private',
+    });
+
+    // As the owner (the SENDER, not the recipient): the Inbox is empty, the detail is gated to null,
+    // and an answer mutation is refused — the recipient check lives in the bridge, not the renderer.
+    expect(await bridge.assignmentsInbox()).toEqual([]);
+    expect(await bridge.assignmentsGet(assignment.id)).toBeNull();
+    await expect(
+      bridge.assignmentsSubmit({
+        assignmentId: assignment.id,
+        answers: [{ questionId: 'q1', value: 'x' }],
+      }),
+    ).rejects.toThrow(/permitted/);
+
+    // Switch to the recipient: it appears in their Inbox with who's asking + the privacy mode.
+    await bridge.sessionSetActive({ personId: recipient.id });
+    const inbox = await bridge.assignmentsInbox();
+    expect(inbox).toHaveLength(1);
+    expect(inbox[0]).toMatchObject({
+      assignmentId: assignment.id,
+      title: 'Weekly check-in',
+      senderName: 'Ben',
+      privacy: 'private',
+      answerable: true,
+      hasDraft: false,
+    });
+
+    // The detail (recipient-scoped) yields the frozen snapshot to answer.
+    const detail = await bridge.assignmentsGet(assignment.id);
+    expect(detail?.questionnaire.questions[0]?.prompt).toBe('How are we doing?');
+
+    // Save a draft → inProgress + hasDraft; then submit → locked at submitted.
+    await bridge.assignmentsSaveProgress({
+      assignmentId: assignment.id,
+      answers: [{ questionId: 'q1', value: 'partial' }],
+    });
+    expect((await bridge.assignmentsInbox())[0]).toMatchObject({
+      status: 'inProgress',
+      hasDraft: true,
+    });
+    await bridge.assignmentsSubmit({
+      assignmentId: assignment.id,
+      answers: [{ questionId: 'q1', value: 'Doing well' }],
+    });
+    expect((await bridge.assignmentsInbox())[0]).toMatchObject({
+      status: 'submitted',
+      answerable: false,
+    });
+  });
 });

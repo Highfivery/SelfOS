@@ -16,6 +16,7 @@ import { createInvite, getAccessConfig, savePerson, setAccount } from '@selfos/c
 import { hashPin } from '@selfos/core/crypto';
 import { recordUsage } from '@selfos/core/usage';
 import { writeEncryptedJson } from '@selfos/core/vault';
+import { getResponse, listAssignments } from '@selfos/core/questionnaires';
 
 const MAIN = join(__dirname, '..', 'out', 'main', 'index.js');
 
@@ -968,6 +969,73 @@ test('memory: the Insights surface shows its empty state + crisis affordance', a
   }
 });
 
+test('inbox: send a questionnaire, answer it, submit, and round-trip through the encrypted vault', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    // Author a one-question questionnaire.
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await w.getByRole('button', { name: 'New' }).click();
+    await w.getByLabel('Title').fill('Weekly check-in');
+    await w.getByLabel('Question 1', { exact: true }).fill('How are we doing?');
+
+    // Send it (to self — a valid self check-in). Private is the default privacy mode.
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByRole('heading', { name: /Send .Weekly check-in/ })).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Private' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await w.getByLabel('Send to').selectOption({ label: 'Tester' });
+    await w.getByRole('button', { name: 'Send' }).last().click();
+    await expect(w.getByText(/Sent to Tester/)).toBeVisible();
+    await w.getByRole('button', { name: 'Done' }).click();
+
+    // It arrives in the recipient's (here, the same person's) Inbox, flagged New.
+    await w.getByRole('link', { name: /Inbox/ }).click();
+    await expect(w.getByRole('heading', { name: 'Inbox' })).toBeVisible();
+    await expect(w.getByText('New')).toBeVisible();
+    await w.getByRole('button', { name: /Weekly check-in/ }).click();
+
+    // The answer pane shows the Private promise + the always-present crisis affordance.
+    await expect(w.getByText(/won’t see your raw responses/i)).toBeVisible();
+    await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible();
+
+    // Answer and submit; the row then reads Submitted.
+    await w.getByLabel('How are we doing?').fill('Doing great');
+    await w.getByRole('button', { name: 'Submit' }).click();
+    await expect(w.getByText('Submitted')).toBeVisible();
+
+    // No horizontal overflow on the Inbox.
+    const overflow = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      return main ? main.scrollWidth - main.clientWidth : 0;
+    });
+    expect(overflow).toBeLessThanOrEqual(1);
+
+    // The answer round-tripped through the encrypted vault (a ResponseSet was written + the
+    // assignment is locked at submitted) — proving the full IPC → core → at-rest path.
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('expected a master key');
+    const assignments = await listAssignments(fs, key);
+    expect(assignments).toHaveLength(1);
+    const assignment = assignments[0];
+    if (!assignment) throw new Error('expected an assignment');
+    expect(assignment.status).toBe('submitted');
+    expect(assignment.privacy).toBe('private');
+    const response = await getResponse(fs, key, assignment.id);
+    expect(response?.answers[0]?.value).toBe('Doing great');
+    expect(response?.submittedAt).toBeTruthy();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('roles: the owner edits the role × capability matrix', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);
@@ -1518,6 +1586,7 @@ test('responsive: at a phone width the nav is a drawer and no screen overflows h
     // must stack on mobile). Assert nothing overflows horizontally anywhere.
     for (const name of [
       'Sessions',
+      'Inbox',
       'Questionnaires',
       'Memory',
       'People',

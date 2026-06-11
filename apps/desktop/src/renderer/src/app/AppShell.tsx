@@ -5,6 +5,7 @@ import {
   Brain,
   ClipboardList,
   House,
+  Inbox,
   Menu,
   MessageCircle,
   PanelLeftClose,
@@ -22,6 +23,7 @@ import { useSessionStore } from '../stores/sessionStore';
 import { useConversationStore } from '../stores/conversationStore';
 import { useBudgetStore } from '../stores/budgetStore';
 import { useUsageStore } from '../stores/usageStore';
+import { unansweredCount, useInboxStore } from '../stores/inboxStore';
 import { AccountMenu } from './AccountMenu';
 import { Switcher } from './Switcher';
 import { LockScreen } from './LockScreen';
@@ -43,7 +45,10 @@ export function AppShell(): JSX.Element {
   const canManageRoles = useSessionStore((s) => s.can('roles.manage'));
   const hasSessions = useSessionStore((s) => s.can('sessions.own'));
   const canCreateQuestionnaires = useSessionStore((s) => s.can('questionnaires.create'));
+  const canAnswerQuestionnaires = useSessionStore((s) => s.can('questionnaires.answer'));
   const canViewInsights = useSessionStore((s) => s.can('questionnaires.viewResults'));
+  const inboxItems = useInboxStore((s) => s.items);
+  const inboxCount = unansweredCount(inboxItems);
   const locked = useSessionStore((s) => s.locked);
   const unlockPromptOpen = useSessionStore((s) => s.unlockPromptOpen);
   const activePersonId = useSessionStore((s) => s.activePerson?.id ?? null);
@@ -64,8 +69,10 @@ export function AppShell(): JSX.Element {
     useConversationStore.getState().reset();
     useBudgetStore.getState().reset();
     useUsageStore.getState().reset();
+    useInboxStore.getState().reset();
     void useConversationStore.getState().load();
     void useBudgetStore.getState().refresh();
+    void useInboxStore.getState().load();
   }, [activePersonId]);
 
   // Track the mobile breakpoint; collapse any open drawer when the viewport grows back to desktop.
@@ -147,6 +154,23 @@ export function AppShell(): JSX.Element {
             >
               <MessageCircle size={18} aria-hidden="true" />
               <span className={styles.label}>Sessions</span>
+            </NavLink>
+          ) : null}
+          {canAnswerQuestionnaires ? (
+            <NavLink
+              to="/inbox"
+              className={navClass}
+              aria-label={inboxCount > 0 ? `Inbox, ${inboxCount} to answer` : 'Inbox'}
+              title={tip('Inbox')}
+              onClick={closeDrawer}
+            >
+              <Inbox size={18} aria-hidden="true" />
+              <span className={styles.label}>Inbox</span>
+              {inboxCount > 0 ? (
+                <span className={styles.navBadge} aria-hidden="true">
+                  {inboxCount}
+                </span>
+              ) : null}
             </NavLink>
           ) : null}
           {canCreateQuestionnaires ? (

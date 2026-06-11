@@ -1,5 +1,6 @@
 import type {
   AccessView,
+  Answer,
   AnswerType,
   Assignment,
   BootState,
@@ -7,6 +8,8 @@ import type {
   BudgetState,
   ChatTurnResult,
   Conversation,
+  InboxAssignmentDetail,
+  InboxItem,
   InviteSummary,
   Insight,
   Person,
@@ -100,6 +103,12 @@ export const IpcChannels = {
   insightsUpdate: 'insights:update',
   insightsDelete: 'insights:delete',
   assignmentsCreate: 'assignments:create',
+  assignmentsInbox: 'assignments:inbox',
+  assignmentsGet: 'assignments:get',
+  assignmentsOpen: 'assignments:open',
+  assignmentsSaveProgress: 'assignments:saveProgress',
+  assignmentsSubmit: 'assignments:submit',
+  assignmentsDecline: 'assignments:decline',
   getSidebarCollapsed: 'ui:getSidebarCollapsed',
   setSidebarCollapsed: 'ui:setSidebarCollapsed',
 } as const;
@@ -333,6 +342,21 @@ export interface SelfosBridge {
     senderVisibleToRecipient?: boolean;
     expiresAt?: string;
   }): Promise<Assignment>;
+  /** The active person's Inbox — questionnaires sent to them, newest first. Requires `questionnaires.answer`. */
+  assignmentsInbox(): Promise<InboxItem[]>;
+  /**
+   * The answering view for one Inbox assignment (frozen snapshot + any saved draft answers). Returns
+   * null unless the active person is the recipient. Requires `questionnaires.answer`.
+   */
+  assignmentsGet(assignmentId: string): Promise<InboxAssignmentDetail | null>;
+  /** Mark an assignment opened (sent → opened). Recipient-only; requires `questionnaires.answer`. */
+  assignmentsOpen(assignmentId: string): Promise<void>;
+  /** Save resumable draft answers without submitting. Recipient-only; requires `questionnaires.answer`. */
+  assignmentsSaveProgress(input: { assignmentId: string; answers: Answer[] }): Promise<void>;
+  /** Submit the recipient's answers (locks the assignment). Recipient-only; requires `questionnaires.answer`. */
+  assignmentsSubmit(input: { assignmentId: string; answers: Answer[] }): Promise<void>;
+  /** Decline an assignment, silently or with a short note. Recipient-only; requires `questionnaires.answer`. */
+  assignmentsDecline(input: { assignmentId: string; note?: string }): Promise<void>;
   /** Whether the desktop sidebar is collapsed to an icon rail (device-local). */
   getSidebarCollapsed(): Promise<boolean>;
   /** Persist the sidebar collapsed/expanded state (device-local). */
@@ -341,12 +365,15 @@ export interface SelfosBridge {
 
 export type {
   AccessView,
+  Answer,
   Assignment,
   BootState,
   Budget,
   BudgetState,
   ChatTurnResult,
   Conversation,
+  InboxAssignmentDetail,
+  InboxItem,
   InviteSummary,
   Person,
   PersonInput,

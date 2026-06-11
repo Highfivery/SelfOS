@@ -324,4 +324,60 @@ describe('Questionnaires', () => {
     if (!firstCall) throw new Error('save was not called');
     expect(firstCall[0].questions[1].branch).toBeUndefined();
   });
+
+  it('sends to a household person from the builder, defaulting to Private', async () => {
+    const save = saveSpy();
+    const assignmentsCreate = vi.fn((input: { recipientPersonId: string }) =>
+      Promise.resolve({
+        id: 'a1',
+        schemaVersion: 1,
+        questionnaireId: 'q1',
+        senderPersonId: 'owner-1',
+        recipient: { kind: 'person' as const, personId: input.recipientPersonId },
+        channel: 'inApp' as const,
+        privacy: 'private' as const,
+        senderVisibleToRecipient: true,
+        status: 'sent' as const,
+        createdAt: 'now',
+        updatedAt: 'now',
+      }),
+    );
+    const person = (id: string, displayName: string) => ({
+      id,
+      schemaVersion: 1,
+      displayName,
+      isSubject: true,
+      tags: [],
+      createdAt: 'now',
+      updatedAt: 'now',
+    });
+    installMockBridge({
+      questionnairesList: () => Promise.resolve([]),
+      questionnairesSave: save,
+      peopleList: () => Promise.resolve([person('p-mara', 'Mara'), person('p-ben', 'Ben')]),
+      assignmentsCreate,
+    });
+    await openNewBuilder();
+
+    await userEvent.type(screen.getByLabelText('Title'), 'Weekly check-in');
+    await userEvent.type(screen.getByLabelText('Question 1'), 'How are we doing?');
+
+    // Open the send panel (validates + saves first), pick a recipient, and send.
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await userEvent.selectOptions(await screen.findByLabelText('Send to'), 'p-mara');
+    // Private is the default privacy mode (break-glass).
+    expect(screen.getByRole('button', { name: 'Private' })).toHaveAttribute('aria-pressed', 'true');
+
+    const sendButtons = screen.getAllByRole('button', { name: 'Send' });
+    await userEvent.click(sendButtons[sendButtons.length - 1] as HTMLElement);
+
+    expect(assignmentsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        questionnaireId: 'q1',
+        recipientPersonId: 'p-mara',
+        privacy: 'private',
+      }),
+    );
+    expect(await screen.findByText(/sent to mara/i)).toBeInTheDocument();
+  });
 });

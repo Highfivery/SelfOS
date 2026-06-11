@@ -1,6 +1,7 @@
 export * from './questionnaireService';
 export * from './assignmentService';
 export * from './responseService';
+export * from './answerService';
 export * from './customTypeService';
 export * from './answering';
 export * from './imageService';

@@ -15,6 +15,7 @@ import {
   type UsageSummary,
 } from './channels';
 import {
+  AnswerSchema,
   AnswerTypeSchema,
   BudgetSchema,
   PersonInputSchema,
@@ -24,6 +25,8 @@ import {
   SensitivityTierSchema,
   SettingsFileSchema,
   type Assignment,
+  type InboxAssignmentDetail,
+  type InboxItem,
   type Insight,
   type QuestionnaireAnalyzeResult,
   type QuestionnaireGenerateResult,
@@ -96,18 +99,27 @@ import {
   addCustomType,
   analyzeAssignment,
   createAssignment,
+  declineAssignment,
   deleteQuestionnaire,
   deleteQuestionnaireImage,
   generateQuestions,
+  getAssignment,
+  getAssignmentSnapshot,
   getQuestionnaire,
   getQuestionnaireImage,
+  getResponse,
   improveQuestion,
   isAllowedImageMime,
+  isAnswerable,
+  listAssignments,
   listCustomTypes,
   listQuestionnaires,
   MAX_IMAGE_BYTES,
+  openAssignment,
+  saveProgress,
   saveQuestionnaire,
   storeQuestionnaireImage,
+  submitResponse,
   suggestQuestionnaires,
   validateQuestionnaire,
   type AiDeps,
@@ -277,6 +289,15 @@ const InsightEditSchema = z.object({
   facts: z.array(InsightFactInputSchema).optional(),
 });
 const InsightIdSchema = z.object({ subjectPersonId: z.string().min(1), id: z.string().min(1) });
+const AssignmentIdSchema = z.string().min(1);
+const AnswersSchema = z.object({
+  assignmentId: z.string().min(1),
+  answers: z.array(AnswerSchema),
+});
+const DeclineSchema = z.object({
+  assignmentId: z.string().min(1),
+  note: z.string().optional(),
+});
 
 /** Build the renderer-facing `SelfosBridge` from a platform `BridgeHost`. */
 export function createCoreBridge(host: BridgeHost): SelfosBridge {
@@ -317,6 +338,40 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       personId,
       now: new Date(),
     };
+  };
+
+  /** The sender's display name for the recipient — null when the send is anonymous (§3.2). */
+  const senderNameFor = async (
+    fs: FileSystem,
+    key: Uint8Array,
+    assignment: Assignment,
+  ): Promise<string | null> => {
+    if (!assignment.senderVisibleToRecipient) return null;
+    const sender = await getPerson(fs, key, assignment.senderPersonId);
+    return sender?.displayName ?? null;
+  };
+
+  /**
+   * Resolve an assignment the active person is **allowed to answer** — they hold `questionnaires.answer`
+   * AND are the in-app person recipient. Returns null otherwise, so a non-recipient can never read or
+   * mutate someone else's send. The renderer isn't the trust boundary; this enforcement lives here.
+   */
+  const recipientAssignment = async (
+    assignmentId: string,
+  ): Promise<{ fs: FileSystem; key: Uint8Array; assignment: Assignment } | null> => {
+    const ctx = await host.vaultAndKey();
+    if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.answer'))) return null;
+    const personId = await activePersonId();
+    if (!personId) return null;
+    const assignment = await getAssignment(ctx.fs, ctx.key, assignmentId);
+    if (
+      !assignment ||
+      assignment.recipient.kind !== 'person' ||
+      assignment.recipient.personId !== personId
+    ) {
+      return null;
+    }
+    return { fs: ctx.fs, key: ctx.key, assignment };
   };
 
   return {
@@ -891,6 +946,78 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         privacy: privacy ?? 'standard',
         senderVisibleToRecipient: senderVisibleToRecipient ?? true,
         ...(expiresAt !== undefined ? { expiresAt } : {}),
+      });
+    },
+
+    // --- Inbox / answering (08-questionnaires §13.5) — gated by `questionnaires.answer` + recipient-scoped ---
+    assignmentsInbox: async (): Promise<InboxItem[]> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.answer'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      const assignments = await listAssignments(ctx.fs, ctx.key, { recipientPersonId: personId });
+      const items: InboxItem[] = [];
+      for (const a of assignments) {
+        const snapshot = await getAssignmentSnapshot(ctx.fs, ctx.key, a.id);
+        if (!snapshot) continue; // a half-written send with no snapshot is unanswerable — skip it
+        const draft = await getResponse(ctx.fs, ctx.key, a.id);
+        items.push({
+          assignmentId: a.id,
+          title: snapshot.title,
+          questionCount: snapshot.questions.length,
+          status: a.status,
+          privacy: a.privacy,
+          senderName: await senderNameFor(ctx.fs, ctx.key, a),
+          createdAt: a.createdAt,
+          answerable: isAnswerable(a.status),
+          hasDraft: Boolean(draft && draft.submittedAt === undefined),
+        });
+      }
+      return items;
+    },
+    assignmentsGet: async (assignmentId): Promise<InboxAssignmentDetail | null> => {
+      const resolved = await recipientAssignment(AssignmentIdSchema.parse(assignmentId));
+      if (!resolved) return null;
+      const { fs, key, assignment } = resolved;
+      const snapshot = await getAssignmentSnapshot(fs, key, assignment.id);
+      if (!snapshot) return null;
+      const draft = await getResponse(fs, key, assignment.id);
+      return {
+        assignmentId: assignment.id,
+        questionnaire: snapshot,
+        status: assignment.status,
+        privacy: assignment.privacy,
+        senderName: await senderNameFor(fs, key, assignment),
+        answers: draft?.answers ?? [],
+        answerable: isAnswerable(assignment.status),
+      };
+    },
+    assignmentsOpen: async (assignmentId): Promise<void> => {
+      // Best-effort status nudge (sent → opened); a non-recipient simply no-ops here rather than
+      // throwing like the answer mutations, since opening reveals nothing and isn't user-initiated.
+      const resolved = await recipientAssignment(AssignmentIdSchema.parse(assignmentId));
+      if (!resolved) return;
+      await openAssignment(resolved.fs, resolved.key, resolved.assignment.id);
+    },
+    assignmentsSaveProgress: async (input): Promise<void> => {
+      const { assignmentId, answers } = AnswersSchema.parse(input);
+      const resolved = await recipientAssignment(assignmentId);
+      if (!resolved) throw new Error('Not permitted');
+      await saveProgress(resolved.fs, resolved.key, { assignmentId, answers });
+    },
+    assignmentsSubmit: async (input): Promise<void> => {
+      const { assignmentId, answers } = AnswersSchema.parse(input);
+      const resolved = await recipientAssignment(assignmentId);
+      if (!resolved) throw new Error('Not permitted');
+      await submitResponse(resolved.fs, resolved.key, { assignmentId, answers });
+    },
+    assignmentsDecline: async (input): Promise<void> => {
+      const { assignmentId, note } = DeclineSchema.parse(input);
+      const resolved = await recipientAssignment(assignmentId);
+      if (!resolved) throw new Error('Not permitted');
+      await declineAssignment(resolved.fs, resolved.key, {
+        assignmentId,
+        ...(note !== undefined ? { note } : {}),
       });
     },
 

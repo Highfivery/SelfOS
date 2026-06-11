@@ -404,6 +404,13 @@
   margin-left: auto;
 }
 
+/* Inline lock glyph that precedes the Private-mode disclosure copy in the send panel. */
+.privacyIcon {
+  vertical-align: -1px;
+  margin-right: var(--space-1);
+  color: var(--color-text-tertiary);
+}
+
 /* Mobile: one pane at a time. */
 @media (max-width: 767px) {
   .layout {

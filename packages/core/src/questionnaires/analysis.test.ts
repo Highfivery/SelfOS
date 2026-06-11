@@ -129,6 +129,21 @@ describe('analyzeAssignment', () => {
     });
   });
 
+  it('refuses to analyze an unsubmitted draft (saved progress, no submittedAt)', async () => {
+    const fs = memFileSystem();
+    const assignmentId = await seedAnswered(fs);
+    // Overwrite the seeded (submitted) response with a draft — a saved-but-unsubmitted ResponseSet.
+    await saveResponse(fs, key, {
+      id: 'r1',
+      schemaVersion: 1,
+      assignmentId,
+      answers: [{ questionId: 'q1', value: 'still thinking…' }],
+    });
+    expect(await analyzeAssignment(deps(fs, fakeClient(ANALYSIS)), { assignmentId })).toMatchObject(
+      { ok: false, reason: 'NO_RESPONSE' },
+    );
+  });
+
   it('re-analyzing the same assignment overwrites its Insight (no duplicate)', async () => {
     const fs = memFileSystem();
     const assignmentId = await seedAnswered(fs);

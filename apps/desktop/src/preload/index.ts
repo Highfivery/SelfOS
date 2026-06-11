@@ -91,6 +91,13 @@ const bridge: SelfosBridge = {
   insightsUpdate: (input) => ipcRenderer.invoke(IpcChannels.insightsUpdate, input),
   insightsDelete: (input) => ipcRenderer.invoke(IpcChannels.insightsDelete, input),
   assignmentsCreate: (input) => ipcRenderer.invoke(IpcChannels.assignmentsCreate, input),
+  assignmentsInbox: () => ipcRenderer.invoke(IpcChannels.assignmentsInbox),
+  assignmentsGet: (assignmentId) => ipcRenderer.invoke(IpcChannels.assignmentsGet, assignmentId),
+  assignmentsOpen: (assignmentId) => ipcRenderer.invoke(IpcChannels.assignmentsOpen, assignmentId),
+  assignmentsSaveProgress: (input) =>
+    ipcRenderer.invoke(IpcChannels.assignmentsSaveProgress, input),
+  assignmentsSubmit: (input) => ipcRenderer.invoke(IpcChannels.assignmentsSubmit, input),
+  assignmentsDecline: (input) => ipcRenderer.invoke(IpcChannels.assignmentsDecline, input),
   getSidebarCollapsed: () => ipcRenderer.invoke(IpcChannels.getSidebarCollapsed),
   setSidebarCollapsed: (collapsed) =>
     ipcRenderer.invoke(IpcChannels.setSidebarCollapsed, collapsed),

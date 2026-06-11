@@ -92,11 +92,15 @@ export async function getAssignmentSnapshot(
   return raw ? QuestionnaireSchema.parse(raw) : null;
 }
 
-/** List assignments, newest first (by `createdAt`); optionally scoped to one sender. */
+/**
+ * List assignments, newest first (by `createdAt`). Optionally scoped to one **sender** (the My
+ * Questionnaires / Results side) or one **recipient person** (the Inbox side — only in-app person
+ * recipients can match). Passing both narrows to assignments matching both.
+ */
 export async function listAssignments(
   fs: FileSystem,
   key: Uint8Array,
-  filter: { senderPersonId?: string } = {},
+  filter: { senderPersonId?: string; recipientPersonId?: string } = {},
 ): Promise<Assignment[]> {
   const out: Assignment[] = [];
   for (const name of await fs.list(SENDS_DIR)) {
@@ -104,6 +108,15 @@ export async function listAssignments(
     if (!raw) continue; // stray non-send entry (e.g. a synced .DS_Store) → skipped
     const assignment = AssignmentSchema.parse(raw);
     if (filter.senderPersonId && assignment.senderPersonId !== filter.senderPersonId) continue;
+    if (
+      filter.recipientPersonId &&
+      !(
+        assignment.recipient.kind === 'person' &&
+        assignment.recipient.personId === filter.recipientPersonId
+      )
+    ) {
+      continue;
+    }
     out.push(assignment);
   }
   out.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));

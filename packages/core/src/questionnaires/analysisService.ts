@@ -58,7 +58,10 @@ export async function analyzeAssignment(
   const assignment = await getAssignment(deps.fs, deps.key, input.assignmentId);
   const snapshot = await getAssignmentSnapshot(deps.fs, deps.key, input.assignmentId);
   const response = await getResponse(deps.fs, deps.key, input.assignmentId);
-  if (!assignment || !snapshot || !response) {
+  // Only a SUBMITTED response is analyzable. Since §13.5 a saved-but-unsubmitted draft also persists
+  // as a `ResponseSet` (no `submittedAt`), guard on submission so we never derive an Insight — or burn
+  // budget — from in-progress answers.
+  if (!assignment || !snapshot || !response || response.submittedAt === undefined) {
     return { ok: false, reason: 'NO_RESPONSE', message: 'There are no answers to analyze yet.' };
   }
 

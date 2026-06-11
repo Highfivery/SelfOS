@@ -97,9 +97,10 @@ gap-finder, the "what the coach knows" surface, and `11`'s trends — read it re
 A new **Questionnaires** feature module registers a nav entry (gated by `questionnaires.create` **or**
 `questionnaires.answer`) and the route tree `/questionnaires`:
 
-> **Build state:** until the **Inbox / answer** surfaces ship ([§13](#13-build-slices) slice 5), the nav
-> entry and `/questionnaires` route are gated by **`questionnaires.create` only**; the `.answer` half of
-> the gate lands with the Inbox.
+> **Build state:** the **Questionnaires** nav/route are gated by **`questionnaires.create`**; a separate
+> **Inbox** nav/route (`/inbox`, with an unanswered badge) is gated by **`questionnaires.answer`** (built
+> 2026-06-11, [§13](#13-build-slices) slice 5 / §13.5a). The sender-side **Results & Insights** view + the
+> live Analyze trigger land with §13.5b.
 
 - **My Questionnaires** — the sender's created questionnaires (drafts + sent history), each **re-sendable**
   (for trends). _(No template library — questionnaires are created fresh.)_
@@ -373,7 +374,7 @@ interface Assignment {
 
 interface Answer {
   questionId: string;
-  value: string | number | boolean | string[];
+  value: string | number | boolean | string[] | Record<string, number>; // record = matrix/allocation
 }
 
 interface ResponseSet {
@@ -382,7 +383,7 @@ interface ResponseSet {
   assignmentId: string;
   reAskOf?: string; // prior ResponseSet id → longitudinal chain
   answers: Answer[]; // encrypted at rest
-  submittedAt: string;
+  submittedAt?: string; // absent while a saved-but-unsubmitted draft; set on submit
 }
 ```
 
@@ -534,10 +535,13 @@ renderer):
   `:deleteImage(path)` / `:generate` / `:improveQuestion`. _(all wired.)_ Image ops are gated by
   `questionnaires.create`, mime + size re-validated in main, and reads/deletes are confined to the media
   dir (`isMediaPath`). `:generate`/`:improveQuestion` + `gapfinder:suggest` are budget-gated + metered (§13.3).
-- **Send/collect** — `assignments:create` (the in-app send for now — wired; relay-link material attaches
-  with the relay slice) / `:list` / `:get` / `:createRelayLink` / `:drain` / `:revoke` / `:delete`.
-- **Answer** — `assignments:saveProgress` / `:submit` / `:decline({ note? })` (in-app); the relay page talks
-  to the **Worker** directly (submit / decline / withdraw).
+- **Send/collect** — `assignments:create` (the in-app send — wired) / `:inbox` (the recipient's Inbox) /
+  `:get` (the recipient answering view) / `:open` (sent → opened) — _all wired, recipient-scoped + gated by
+  `questionnaires.answer`_; `:list` / `:createRelayLink` / `:drain` / `:revoke` / `:delete` land with the
+  relay slice.
+- **Answer** — `assignments:saveProgress` / `:submit` / `:decline({ note? })` _(in-app — wired; gated by
+  `questionnaires.answer`, recipient-scoped in the bridge)_; the relay page talks to the **Worker** directly
+  (submit / decline / withdraw).
 - **Analysis/insights** — `insights:analyze({assignmentId})` / `insights:list` / `:approve` / `:update` /
   `:delete`; `gapfinder:suggest`. _(All wired, gated by `questionnaires.viewResults`; analyze is
   budget-gated + metered as `questionnaire.analyze`. The **`autoAnalyze`** auto-trigger lands with the
@@ -822,6 +826,18 @@ update/delete` gated by **`questionnaires.viewResults`**. A top-level **"Memory"
      **`queryMetrics`** (→ §11, its consumer). The Memory surface is empty until §13.5 produces Insights._
 5. **Send / collect (in-app + household)** — assignments, Inbox, lifecycle, save/resume, Results + per-question
    trends + compatibility, deletion/purge.
+   - _**Send + answer core loop (built 2026-06-11, §13.5a):** the in-app send→answer loop. A builder **Send
+     panel** (recipient + privacy picker, default **Private** break-glass); a separate **Inbox** nav/route
+     (`/inbox`, gated by `questionnaires.answer`, with an unanswered badge) + an **Inbox answer screen**
+     reusing `QuestionnaireForm` (save/resume, decline silent/with-note, submit; locked after submit; crisis
+     footer on every state). Core **`answerService`** (`openAssignment`/`saveProgress`/`submitResponse`/
+     `declineAssignment` + an `isAnswerable` guard); `listAssignments` gains a `recipientPersonId` filter;
+     `ResponseSet.submittedAt` → optional (draft) + `Answer.value` widened to `Record<string,number>`
+     (matrix/allocation); `analyzeAssignment` now guards on `submittedAt` (won't analyze a draft). New
+     `InboxItem`/`InboxAssignmentDetail` view types — derived (never the raw answers over IPC). IPC
+     `assignments:inbox/get/open/saveProgress/submit/decline`, gated by `questionnaires.answer` +
+     recipient-scoped in the bridge. **Deferred:** the sender's **Results & Insights** view + the live
+     **Analyze** trigger + `autoAnalyze` (§13.5b); trends/compatibility/deletion (§13.5c); the relay (§13.6)._
 6. **External: relay + delivery + explicit gates** — `apps/relay` Worker + shared renderer page, the Cloudflare
    connect/deploy/update/teardown flow, PIN/consent/age gating + question-image ZK, link delivery, the
    disclosure setting + audit log, the privacy notice.
@@ -960,3 +976,20 @@ update/delete` gated by **`questionnaires.viewResults`**. A top-level **"Memory"
   (219 desktop + 140 core unit, 35 E2E). **Deferred (no dead code, §12):** the **`autoAnalyze`** setting +
   the live `Analyze` trigger → **§13.5** (where answers arrive); **`queryMetrics`** → **§11**. The Memory
   surface is empty until §13.5 collects responses to analyze.
+- 2026-06-11 — **Slice §13.5a built** (the in-app send + answer core loop): the builder **Send panel**
+  (recipient + privacy picker, default **Private** break-glass → freezes the immutable snapshot); a separate
+  **Inbox** nav/route (`/inbox`, gated by `questionnaires.answer`, unanswered badge) + an **Inbox answer
+  screen** reusing `QuestionnaireForm` (save/resume, decline silent/with-note, submit; locked after submit;
+  crisis footer on every state). Core **`answerService`** (`openAssignment`/`saveProgress`/`submitResponse`/
+  `declineAssignment` + an `isAnswerable` guard); `listAssignments` gains a `recipientPersonId` filter;
+  **`ResponseSet.submittedAt` → optional** (a saved draft persists with no `submittedAt`; status is the
+  lifecycle marker) and **`Answer.value` widened to `Record<string,number>`** (matrix/allocation answers) —
+  both additive, no migration. New `InboxItem`/`InboxAssignmentDetail` **derived** view types (the raw
+  answers never cross IPC to the sender). IPC `assignments:inbox/get/open/saveProgress/submit/decline`,
+  gated by `questionnaires.answer` **and recipient-scoped in the bridge** (a non-recipient can't read or
+  mutate another's send). Code-reviewed **fix-first** (the should-fix applied: `analyzeAssignment` now
+  guards on `submittedAt` so a draft can't be analyzed; crisis footer added to the locked/declining/missing
+  states). Gate green (**227 desktop + 147 core unit, 36 E2E** — incl. a coreBridge inbox-flow/gating test,
+  RTL Inbox + builder-send tests, and an E2E send→answer→submit encrypted round-trip; the 390px sweep now
+  walks the Inbox). **Deferred:** the sender's **Results & Insights** view + the live **Analyze** trigger +
+  `autoAnalyze` (§13.5b); trends/compatibility/deletion (§13.5c); the external relay (§13.6).

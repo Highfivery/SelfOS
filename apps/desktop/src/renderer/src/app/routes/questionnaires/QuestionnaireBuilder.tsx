@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ImagePlus, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { ImagePlus, Plus, Send, Sparkles, Trash2 } from 'lucide-react';
 import { ALLOWED_IMAGE_MIME, MAX_IMAGE_BYTES } from '@selfos/core/questionnaires';
 import { ANTHROPIC_API_KEY_ID } from '@shared/channels';
 import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
@@ -29,6 +29,7 @@ import type {
 import { QuestionImage } from './QuestionImage';
 import { QuestionnaireAiPanel } from './QuestionnaireAiPanel';
 import { QuestionnairePreview } from './QuestionnairePreview';
+import { QuestionnaireSendPanel } from './QuestionnaireSendPanel';
 import styles from './Questionnaires.module.css';
 
 type BuilderMode = 'edit' | 'preview';
@@ -311,6 +312,9 @@ export function QuestionnaireBuilder({
   const [newType, setNewType] = useState('');
   const [typeError, setTypeError] = useState<string | null>(null);
 
+  // Send: holds the saved questionnaire id once "Send" validates + saves; the send panel reads it.
+  const [sendId, setSendId] = useState<string | null>(null);
+
   // Edit ⇄ Preview (test-on-self). Preview renders the live drafts as the recipient would see them.
   const [mode, setMode] = useState<BuilderMode>('edit');
   const previewQuestions = drafts
@@ -412,11 +416,9 @@ export function QuestionnaireBuilder({
     }
   };
 
-  const onCheck = async (): Promise<void> => {
-    if (!allPrompts) {
-      setProblems(['Every question needs a prompt.']);
-      return;
-    }
+  /** The full set of blocking problems (client-side range/alt checks + the engine's validate). */
+  const computeProblems = async (): Promise<string[]> => {
+    if (!allPrompts) return ['Every question needs a prompt.'];
     const rangeProblems = drafts
       .filter(
         (d) =>
@@ -428,7 +430,33 @@ export function QuestionnaireBuilder({
     const altProblems = drafts
       .filter((d) => d.media && d.media.alt.trim() === '')
       .map((d) => `The image on "${d.prompt.trim()}" needs a description (alt text).`);
-    setProblems([...rangeProblems, ...altProblems, ...(await validate(input()))]);
+    return [...rangeProblems, ...altProblems, ...(await validate(input()))];
+  };
+
+  const onCheck = async (): Promise<void> => {
+    setProblems(await computeProblems());
+  };
+
+  // Send: a complete questionnaire must be saved (so the snapshot matches what's on screen) before the
+  // send panel can freeze it. We validate, save, then reveal the recipient/privacy picker.
+  const onOpenSend = async (): Promise<void> => {
+    const found = await computeProblems();
+    if (found.length > 0) {
+      setProblems(found);
+      return;
+    }
+    setBusy(true);
+    try {
+      const saved = await save(input());
+      if (!saved) {
+        setProblems(['Could not save this questionnaire before sending.']);
+        return;
+      }
+      setProblems(null);
+      setSendId(saved.id);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const onRemove = async (): Promise<void> => {
@@ -973,6 +1001,10 @@ export function QuestionnaireBuilder({
               <Button variant="primary" onClick={() => void onSave()} disabled={!canSave}>
                 {questionnaire ? 'Save' : 'Create'}
               </Button>
+              <Button variant="secondary" onClick={() => void onOpenSend()} disabled={!canSave}>
+                <Send size={16} aria-hidden="true" />
+                Send
+              </Button>
               <Button variant="secondary" onClick={onDone} disabled={busy}>
                 Cancel
               </Button>
@@ -988,6 +1020,18 @@ export function QuestionnaireBuilder({
               ) : null}
             </div>
           </div>
+
+          {sendId ? (
+            <QuestionnaireSendPanel
+              questionnaireId={sendId}
+              title={title.trim()}
+              onCancel={() => setSendId(null)}
+              onSent={() => {
+                setSendId(null);
+                onDone();
+              }}
+            />
+          ) : null}
         </>
       )}
     </Stack>

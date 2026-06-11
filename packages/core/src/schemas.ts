@@ -489,7 +489,15 @@ export type Assignment = z.infer<typeof AssignmentSchema>;
 
 export const AnswerSchema = z.object({
   questionId: z.string().min(1),
-  value: z.union([z.string(), z.number(), z.boolean(), z.array(z.string())]),
+  // The persisted answer value. The `Record<string, number>` arm carries matrix (row → point) and
+  // allocation (option → amount) answers — matching the live `AnswerValue` the answering renderer emits.
+  value: z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.array(z.string()),
+    z.record(z.string(), z.number()),
+  ]),
 });
 export type Answer = z.infer<typeof AnswerSchema>;
 
@@ -499,7 +507,11 @@ export const ResponseSetSchema = z.object({
   assignmentId: z.string().min(1),
   reAskOf: z.string().optional(), // prior ResponseSet id → longitudinal chain
   answers: z.array(AnswerSchema),
-  submittedAt: z.string(),
+  // Present once the recipient submits; absent while the response is a saved-but-unsubmitted draft
+  // (save/resume, §3.3). The assignment status (`inProgress` vs `submitted`) is the authoritative
+  // lifecycle marker; `submittedAt` is the submission timestamp. Relaxing required→optional is
+  // additive (existing submitted responses still parse) — no schemaVersion bump.
+  submittedAt: z.string().optional(),
 });
 export type ResponseSet = z.infer<typeof ResponseSetSchema>;
 
@@ -537,3 +549,31 @@ export interface BudgetState {
 export type ChatTurnResult =
   | { ok: true; conversation: Conversation; usage: UsageEvent }
   | { ok: false; reason: 'NO_KEY' | 'BUDGET' | 'ERROR'; message: string };
+
+/**
+ * One Inbox row for the recipient (08-questionnaires §3.3). A **derived** view — the recipient sees the
+ * purpose and (unless the sender chose anonymity) who's asking, never the sender's private data.
+ * Computed in the bridge from the assignment + its frozen snapshot, so raw answers never cross IPC here.
+ */
+export interface InboxItem {
+  assignmentId: string;
+  title: string;
+  questionCount: number;
+  status: AssignmentStatus;
+  privacy: PrivacyMode;
+  senderName: string | null; // null = the sender stayed anonymous
+  createdAt: string;
+  answerable: boolean; // still open to answer / decline
+  hasDraft: boolean; // saved-but-unsubmitted progress exists
+}
+
+/** The recipient's answering view: the frozen snapshot + any saved draft answers to resume. */
+export interface InboxAssignmentDetail {
+  assignmentId: string;
+  questionnaire: Questionnaire; // the immutable as-sent snapshot the recipient answers
+  status: AssignmentStatus;
+  privacy: PrivacyMode;
+  senderName: string | null;
+  answers: Answer[]; // saved draft answers; empty until the recipient saves progress
+  answerable: boolean;
+}

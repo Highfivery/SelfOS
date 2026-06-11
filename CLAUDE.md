@@ -239,6 +239,31 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Build (Questionnaires **slice 3 — AI generate + gap-finder** [the FULL §13.3],
+  [08-questionnaires](docs/specs/08-questionnaires.md) §3.1/§3.7/§5.1/§6/§8.1/§13.3). Asked first (4 Qs):
+  scope = **everything** (registry + generate + per-question assists + the gap-finder surface); generate
+  context = **configurable sources** (the user's words — pick one or more of **own data / a target person /
+  the relationship between them**); generated questions = **append as editable** (AI-marked); safety =
+  **prompt-embedded + schema-validate** (no separate judge). Built: the **context-provider registry**
+  (`registerContextProvider` + built-in profiles/relationships/insights — the extensibility backbone `09`
+  will extend) + `gatherGenerationContext`; **generationService** (`generateQuestions` brief+context → JSON
+  → Zod-validate → mint ids → de-dup; `improveQuestion`) + **gapFinderService** (`suggestQuestionnaires`,
+  structured context only — **never raw transcripts**), each mirroring `chatService`'s **budget→call→record**
+  (gated by `questionnaires.create`, metered `questionnaire.generate`/`.suggest`; refusals degrade to a calm
+  `REFUSED`, still charged). **Privacy boundary (airtight, reviewer-verified):** a **target person's data is
+  shareable-facts-only** — their private notes never reach Claude (the §04/§8.4 split, like `buildContext`);
+  the author's own private data does feed. The API key stays in main. IPC `questionnaires:generate`/
+  `:improveQuestion`/`gapfinder:suggest`. Renderer: a builder **"Draft with AI"** panel (brief + target
+  picker + context toggles), per-question **reword** assists, the **"Suggested"** surface; AI-off /
+  over-budget show calm states. Code-reviewer **fix-first** (all 4 should-fixes applied): a denial now
+  returns a distinct **`DENIED`** (not `NO_KEY`); the per-question reword is **gated on AI-ready + debounced**
+  (no double-charge); a test asserts **usage is recorded even on REFUSED**; a **390px guard** exercises the
+  AI panel + Suggested. Gate green: typecheck/lint/format, **215 desktop** + **133 core** unit, **34 E2E**.
+  Visual QA of the calm states (the AI-ready UI is RTL-covered — the web preview couldn't reach `aiReady`
+  without a real key). **Lesson: at 390px the nav is a hidden drawer — E2E that navigates must do so at
+  desktop width (or open the hamburger first), then resize only to measure layout.** **Deferred:** the
+  analyze→Insight pipeline + `autoAnalyze` (§13.4). **NEXT: §13.4 analyze→Insights/metrics, then §13.5
+  send/Inbox, §13.6 relay.** Synced `08` §3.1/§5.1/§6/§13.3 + changelog.
 - 2026-06-11 — Build (Questionnaires **slice 2 — question images** [§13.2 last leaf; **§13.2 now
   complete**], [08-questionnaires](docs/specs/08-questionnaires.md) §4.1/§4.2/§5.1/§6/§8.6/§13.2). Asked
   first (3 Qs): storage = **shared media dir** `questionnaires/media/<id>.enc`; picker = **in-renderer

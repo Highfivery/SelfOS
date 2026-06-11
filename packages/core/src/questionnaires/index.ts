@@ -4,3 +4,6 @@ export * from './responseService';
 export * from './customTypeService';
 export * from './answering';
 export * from './imageService';
+export * from './contextProviders';
+export * from './generationService';
+export * from './gapFinderService';

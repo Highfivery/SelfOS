@@ -1,14 +1,30 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { Questionnaires } from './Questionnaires';
 import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
+import { useSettingsStore } from '../../../settings/settingsStore';
 import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
+
+/** The screen uses `useNavigate` (the AI panel links to Settings), so render inside a router. */
+const renderApp = (): ReturnType<typeof render> =>
+  render(
+    <MemoryRouter>
+      <Questionnaires />
+    </MemoryRouter>,
+  );
 
 afterEach(() => {
   clearMockBridge();
   useQuestionnaireStore.setState({ questionnaires: [], loaded: false, customTypes: [] });
+  useSettingsStore.setState({ values: {} });
 });
+
+/** Turn AI on for the renderer (settings flag + a stubbed key) so the AI surfaces become ready. */
+function enableAi(): void {
+  useSettingsStore.setState({ values: { 'ai.enabled': true } });
+}
 
 /** Capture the payload the builder saves so tests can assert its shape. */
 function saveSpy(): ReturnType<typeof vi.fn> {
@@ -28,14 +44,14 @@ function saveSpy(): ReturnType<typeof vi.fn> {
 }
 
 async function openNewBuilder(): Promise<void> {
-  render(<Questionnaires />);
+  renderApp();
   await userEvent.click(screen.getByRole('button', { name: 'New' }));
 }
 
 describe('Questionnaires', () => {
   it('shows the empty state when there are none', async () => {
     installMockBridge({ questionnairesList: () => Promise.resolve([]) });
-    render(<Questionnaires />);
+    renderApp();
     expect(await screen.findByText(/no questionnaires yet/i)).toBeInTheDocument();
   });
 
@@ -159,6 +175,81 @@ describe('Questionnaires', () => {
       expect.objectContaining({ equals: 'Yes', action: 'show' }),
     );
     expect(payload.questions[1].branch.whenQuestionId).toBe(payload.questions[0].id);
+  });
+
+  it('generates questions with AI and appends them as editable AI drafts', async () => {
+    enableAi();
+    installMockBridge({
+      questionnairesList: () => Promise.resolve([]),
+      secretHas: () => Promise.resolve(true),
+      questionnairesGenerate: () =>
+        Promise.resolve({
+          ok: true,
+          questions: [
+            {
+              id: 'g1',
+              type: 'shortText',
+              prompt: 'What felt hardest this week?',
+              required: false,
+            },
+          ],
+        }),
+    });
+    await openNewBuilder();
+
+    await userEvent.click(await screen.findByRole('button', { name: /draft with ai/i }));
+    await userEvent.click(screen.getByRole('button', { name: /generate questions/i }));
+
+    expect(await screen.findByDisplayValue('What felt hardest this week?')).toBeInTheDocument();
+    expect(screen.getByText(/ai draft/i)).toBeInTheDocument();
+  });
+
+  it('rewords a question via the per-question AI assist (gated on AI being ready)', async () => {
+    enableAi();
+    installMockBridge({
+      questionnairesList: () => Promise.resolve([]),
+      secretHas: () => Promise.resolve(true),
+      questionnairesImproveQuestion: () =>
+        Promise.resolve({ ok: true, prompt: 'How are we really doing lately?' }),
+    });
+    await openNewBuilder();
+
+    await userEvent.type(screen.getByLabelText('Question 1'), 'how r we');
+    // The reword assist only appears once AI is ready.
+    await userEvent.click(await screen.findByRole('button', { name: 'Warmer' }));
+    expect(await screen.findByDisplayValue('How are we really doing lately?')).toBeInTheDocument();
+  });
+
+  it('suggests questionnaires and creates one from a suggestion', async () => {
+    enableAi();
+    installMockBridge({
+      questionnairesList: () => Promise.resolve([]),
+      secretHas: () => Promise.resolve(true),
+      gapfinderSuggest: () =>
+        Promise.resolve({
+          ok: true,
+          suggestions: [
+            {
+              title: 'Partner check-in',
+              type: 'role-feedback',
+              rationale: 'You value quality time.',
+              questions: [
+                { type: 'rating', prompt: 'How was this week together?', required: true },
+              ],
+            },
+          ],
+        }),
+    });
+    renderApp();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Suggested' }));
+    expect(screen.getByRole('heading', { name: /suggested for you/i })).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: /suggest questionnaires/i }));
+    expect(await screen.findByText('Partner check-in')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /create from this/i }));
+    expect(screen.getByLabelText('Title')).toHaveValue('Partner check-in');
+    expect(screen.getByDisplayValue('How was this week together?')).toBeInTheDocument();
   });
 
   it('previews the in-progress draft as the recipient would see it', async () => {

@@ -864,6 +864,85 @@ test('questionnaires: attach an encrypted image, require alt, round-trip + show 
   }
 });
 
+test('questionnaires: AI draft + Suggested surfaces show calm enable-AI states', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+
+    // Builder: with AI off, the "Draft with AI" panel prompts to enable it (never an error).
+    await w.getByRole('button', { name: 'New' }).click();
+    await expect(w.getByText(/turn on ai in settings to draft questions/i)).toBeVisible();
+
+    // Suggested (gap-finder) opens its own surface with the same calm state.
+    await w.getByRole('button', { name: 'Suggested' }).click();
+    await expect(w.getByRole('heading', { name: /suggested for you/i })).toBeVisible();
+    await expect(w.getByText(/turn on ai in settings to get suggestions/i)).toBeVisible();
+
+    const overflow = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      return main ? main.scrollWidth - main.clientWidth : 0;
+    });
+    expect(overflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('questionnaires: the AI draft panel + Suggested surface fit at phone width', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    // Configure a (fake) key so the AI surfaces become ready (not the calm enable state).
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'AI', exact: true }).click();
+    await w.getByLabel('Claude API key').fill('sk-ant-e2e');
+    await w.getByRole('button', { name: /save key/i }).click();
+    await expect(w.getByText(/key is configured/i)).toBeVisible();
+
+    const resize = (width: number): Promise<void> =>
+      app.evaluate(async ({ BrowserWindow }, w2) => {
+        const win = BrowserWindow.getAllWindows()[0];
+        if (win) {
+          win.setMinimumSize(360, 480);
+          win.setSize(w2, 800);
+        }
+      }, width);
+    const overflow = (): Promise<number> =>
+      w.evaluate(() => {
+        const inner = document.querySelector('main > div');
+        return inner ? inner.scrollWidth - inner.clientWidth : 0;
+      });
+
+    // Navigate + open each surface at desktop width (the nav is a hidden drawer on phones), then
+    // shrink to 390px just to measure that the rendered surface fits.
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await w.getByRole('button', { name: 'New' }).click();
+    // The "Draft with AI" panel is ready; expanding it shows the context toggles (a flex row).
+    await w.getByRole('button', { name: /draft with ai/i }).click();
+    await expect(w.getByText('Use my information')).toBeVisible();
+    await resize(390);
+    await w.waitForTimeout(150);
+    expect(await overflow()).toBeLessThanOrEqual(1);
+
+    // The Suggested (gap-finder) surface also fits — switch back to desktop to reach the list button.
+    await resize(1100);
+    await w.getByRole('button', { name: 'Suggested' }).click();
+    await expect(w.getByRole('button', { name: /suggest questionnaires/i })).toBeVisible();
+    await resize(390);
+    await w.waitForTimeout(150);
+    expect(await overflow()).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('roles: the owner edits the role × capability matrix', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);

@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, ClipboardList, Plus } from 'lucide-react';
+import { ArrowLeft, ClipboardList, Plus, Sparkles } from 'lucide-react';
 import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
 import { Button, Card, Heading, Stack, Text } from '../../../design-system/components';
-import { QuestionnaireBuilder } from './QuestionnaireBuilder';
+import { QuestionnaireBuilder, type BuilderSeed } from './QuestionnaireBuilder';
+import { SuggestedPanel } from './SuggestedPanel';
 import styles from './Questionnaires.module.css';
 
-type Selection = { mode: 'none' } | { mode: 'new' } | { mode: 'edit'; id: string };
+type Selection =
+  | { mode: 'none' }
+  | { mode: 'new'; seed?: BuilderSeed }
+  | { mode: 'edit'; id: string }
+  | { mode: 'suggested' };
 
 /** Author questionnaires: a list of your definitions (left) with a builder pane (right). */
 export function Questionnaires(): JSX.Element {
@@ -29,10 +34,16 @@ export function Questionnaires(): JSX.Element {
       <section className={styles.list} aria-label="Questionnaires">
         <div className={styles.header}>
           <Heading level={2}>Questionnaires</Heading>
-          <Button variant="primary" onClick={() => setSelection({ mode: 'new' })}>
-            <Plus size={16} aria-hidden="true" />
-            New
-          </Button>
+          <div className={styles.headerActions}>
+            <Button variant="secondary" onClick={() => setSelection({ mode: 'suggested' })}>
+              <Sparkles size={16} aria-hidden="true" />
+              Suggested
+            </Button>
+            <Button variant="primary" onClick={() => setSelection({ mode: 'new' })}>
+              <Plus size={16} aria-hidden="true" />
+              New
+            </Button>
+          </div>
         </div>
 
         {loaded && questionnaires.length === 0 ? (
@@ -76,10 +87,13 @@ export function Questionnaires(): JSX.Element {
           <ArrowLeft size={16} aria-hidden="true" />
           Questionnaires
         </button>
-        {selection.mode === 'new' ? (
+        {selection.mode === 'suggested' ? (
+          <SuggestedPanel onCreate={(seed) => setSelection({ mode: 'new', seed })} />
+        ) : selection.mode === 'new' ? (
           <QuestionnaireBuilder
-            key="new"
+            key={selection.seed ? 'new-seeded' : 'new'}
             questionnaire={null}
+            {...(selection.seed ? { seed: selection.seed } : {})}
             onDone={() => setSelection({ mode: 'none' })}
           />
         ) : selected ? (

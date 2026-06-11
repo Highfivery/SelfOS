@@ -4,6 +4,8 @@
  */
 export const USAGE_TYPE_LABELS: Record<string, string> = {
   chat: 'Coaching session',
+  'questionnaire.generate': 'Questionnaire — AI draft',
+  'questionnaire.suggest': 'Questionnaire — suggestions',
 };
 
 export function usageTypeLabel(type: string): string {

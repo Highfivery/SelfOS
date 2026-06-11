@@ -18,6 +18,29 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.headerActions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.suggestionHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-accent-text);
+}
+
+.suggestionQuestions {
+  margin: 0;
+  padding-left: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
 }
 
 .row {
@@ -88,6 +111,100 @@
   border-radius: var(--radius-md);
   padding: var(--space-6);
   text-align: center;
+}
+
+/* --- AI generate panel --- */
+.aiPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  background: var(--color-accent-subtle-bg);
+}
+
+.aiHeader {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-accent-text);
+  cursor: pointer;
+  font: inherit;
+}
+
+.aiHeader:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.aiToggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-4);
+}
+
+.aiToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+}
+
+.linkButton {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-accent-text);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* AI-drafted marker + per-question reword assists. */
+.aiBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  align-self: flex-start;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.aiAssist {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.aiAssistButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px var(--space-2);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.aiAssistButton:hover {
+  background: var(--color-surface-alt);
+}
+
+.aiAssistButton:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
 }
 
 /* --- Builder --- */

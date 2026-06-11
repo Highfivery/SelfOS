@@ -1,5 +1,19 @@
 import { create } from 'zustand';
-import type { Questionnaire, QuestionnaireInput } from '@shared/channels';
+import type { Questionnaire, QuestionnaireInput, SelfosBridge } from '@shared/channels';
+
+// Derive AI call shapes from the bridge contract so the store never drifts from the IPC.
+type GenerateInput = Parameters<SelfosBridge['questionnairesGenerate']>[0];
+type GenerateResult = Awaited<ReturnType<SelfosBridge['questionnairesGenerate']>>;
+type ImproveInput = Parameters<SelfosBridge['questionnairesImproveQuestion']>[0];
+type ImproveResult = Awaited<ReturnType<SelfosBridge['questionnairesImproveQuestion']>>;
+type SuggestInput = Parameters<SelfosBridge['gapfinderSuggest']>[0];
+type SuggestResult = Awaited<ReturnType<SelfosBridge['gapfinderSuggest']>>;
+
+const AI_UNAVAILABLE = {
+  ok: false as const,
+  reason: 'ERROR' as const,
+  message: 'AI is unavailable.',
+};
 
 interface QuestionnaireState {
   questionnaires: Questionnaire[];
@@ -14,6 +28,10 @@ interface QuestionnaireState {
   /** Read a stored image back as base64 for display (null if absent). */
   getImage: (imagePath: string) => Promise<string | null>;
   deleteImage: (imagePath: string) => Promise<void>;
+  /** AI authoring (budget-gated + metered in main). */
+  generate: (input: GenerateInput) => Promise<GenerateResult>;
+  improveQuestion: (input: ImproveInput) => Promise<ImproveResult>;
+  suggest: (input: SuggestInput) => Promise<SuggestResult>;
   save: (input: QuestionnaireInput) => Promise<Questionnaire | null>;
   remove: (id: string) => Promise<void>;
   validate: (input: QuestionnaireInput) => Promise<string[]>;
@@ -42,6 +60,10 @@ export const useQuestionnaireStore = create<QuestionnaireState>((set, get) => ({
   deleteImage: async (imagePath) => {
     await window.selfos?.questionnairesDeleteImage(imagePath);
   },
+  generate: async (input) => (await window.selfos?.questionnairesGenerate(input)) ?? AI_UNAVAILABLE,
+  improveQuestion: async (input) =>
+    (await window.selfos?.questionnairesImproveQuestion(input)) ?? AI_UNAVAILABLE,
+  suggest: async (input) => (await window.selfos?.gapfinderSuggest(input)) ?? AI_UNAVAILABLE,
   save: async (input) => {
     const saved = (await window.selfos?.questionnairesSave(input)) ?? null;
     await get().load();

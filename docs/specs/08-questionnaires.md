@@ -531,9 +531,9 @@ renderer):
 - **Authoring** — `questionnaires:list` / `:get` / `:save` / `:delete` / `:validate` (→ `problems[]`) /
   `:generate({type, targetId, brief?, useData})` (→ schema-validated draft) / `:improveQuestion` /
   `:listTypes` / `:addType` / `:storeImage({base64, mime})` (→ `{imagePath, mime}`) / `:getImage(path)` /
-  `:deleteImage(path)`. _(list/get/save/delete/validate + listTypes/addType + the image trio are wired;
-  generate/improve land with AI generation.)_ Image ops are gated by `questionnaires.create`, mime + size
-  re-validated in main, and reads/deletes are confined to the media dir (`isMediaPath`).
+  `:deleteImage(path)` / `:generate` / `:improveQuestion`. _(all wired.)_ Image ops are gated by
+  `questionnaires.create`, mime + size re-validated in main, and reads/deletes are confined to the media
+  dir (`isMediaPath`). `:generate`/`:improveQuestion` + `gapfinder:suggest` are budget-gated + metered (§13.3).
 - **Send/collect** — `assignments:create` (the in-app send for now — wired; relay-link material attaches
   with the relay slice) / `:list` / `:get` / `:createRelayLink` / `:drain` / `:revoke` / `:delete`.
 - **Answer** — `assignments:saveProgress` / `:submit` / `:decline({ note? })` (in-app); the relay page talks
@@ -791,6 +791,20 @@ Confirmed with the user (2026-06-10):
      `getImage` gating for the recipient/Inbox view (currently `create`-only)._
 3. **AI generate + gap-finder** — brief + data-grounded generation (safety pass, schema-valid, de-dup) via
    the registry; the Suggested surface; metered + budget-gated.
+   - _**Built 2026-06-11:** the **context-provider registry** (`registerContextProvider` + built-in
+     profiles/relationships/insights; `09` extends it) + **`gatherGenerationContext`**; the author picks
+     which sources feed generation — **their own data, an optional target person (shareable facts only,
+     never private notes), and/or the relationship**. **`generationService`** (`generateQuestions` brief +
+     context → JSON → Zod-validate → mint ids → de-dup; `improveQuestion`) + **`gapFinderService`**
+     (`suggestQuestionnaires` — structured context only, never raw transcripts), each mirroring
+     `chatService`'s **budget→call→record** (gated by `questionnaires.create`, types `questionnaire.generate`
+     /`.suggest`, owner... no override; refusals degrade to a calm state, charged anyway). Safety is
+     **prompt-embedded** (original/evidence-informed, never clinical/diagnostic, within Anthropic policy) —
+     no separate judge. IPC `questionnaires:generate`/`:improveQuestion`/`gapfinder:suggest`. Renderer: a
+     builder **"Draft with AI"** panel (brief + target picker + context toggles), per-question **reword**
+     assists, and the **"Suggested"** gap-finder surface; AI-off / over-budget show calm states; generated
+     questions append as editable **AI-draft** questions. **Deferred:** `autoAnalyze` + the analyze→Insight
+     pipeline (§13.4)._
 4. **Analyze → Insights/metrics → context** — analysis, approve-step, Insight management, prioritization/cap,
    crisis flag.
 5. **Send / collect (in-app + household)** — assignments, Inbox, lifecycle, save/resume, Results + per-question
@@ -897,3 +911,18 @@ Confirmed with the user (2026-06-10):
   decrypt→display round-trip at desktop + 390px. **Deferred:** orphan-image GC + purge-on-delete (§3.9);
   copying images into the send snapshot + relay ZK re-encryption (§13.5/§13.6); `getImage` recipient/Inbox
   gating (currently `create`-only).
+- 2026-06-11 — **AI generate + gap-finder built** (§3.1/§3.7/§5.1/§6/§8.1/§13.3 — the full slice): the
+  **context-provider registry** (`registerContextProvider` + built-in profiles/relationships/insights;
+  `09` extends it) + `gatherGenerationContext`, with the author choosing which sources feed generation —
+  **own data, an optional target person (shareable facts only, never private notes — §04/§8.4), and/or the
+  relationship**. **`generationService`** (`generateQuestions` + `improveQuestion`) + **`gapFinderService`**
+  (`suggestQuestionnaires`, structured context only — never raw transcripts), each mirroring `chatService`'s
+  budget→call→record (gated by `questionnaires.create`, metered as `questionnaire.generate`/`.suggest`;
+  refusals/parse-failures degrade to a calm `REFUSED`, still charged). Safety is **prompt-embedded** (no
+  separate judge). IPC `questionnaires:generate`/`:improveQuestion`/`gapfinder:suggest` (a denial returns a
+  distinct `DENIED`, not `NO_KEY`). Renderer: a builder "Draft with AI" panel (brief + target + context
+  toggles), per-question reword assists (gated on AI-ready + debounced), and the "Suggested" gap-finder
+  surface; calm AI-off / over-budget states; generated questions append as editable AI drafts. Code-reviewed
+  **fix-first** (all 4 should-fixes applied: DENIED reason; gated+debounced reword; REFUSED-usage test;
+  390px AI-surface guard). Gate green (215 desktop + 133 core unit, 34 E2E). **Deferred:** `autoAnalyze` +
+  analyze→Insight (§13.4).

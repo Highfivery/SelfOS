@@ -1,7 +1,9 @@
-import { useState } from 'react';
-import { ImagePlus, Plus, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ImagePlus, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { ALLOWED_IMAGE_MIME, MAX_IMAGE_BYTES } from '@selfos/core/questionnaires';
+import { ANTHROPIC_API_KEY_ID } from '@shared/channels';
 import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
+import { useSetting } from '../../../settings/useSetting';
 import {
   Banner,
   Button,
@@ -25,6 +27,7 @@ import type {
   SensitivityTier,
 } from '@shared/schemas';
 import { QuestionImage } from './QuestionImage';
+import { QuestionnaireAiPanel } from './QuestionnaireAiPanel';
 import { QuestionnairePreview } from './QuestionnairePreview';
 import styles from './Questionnaires.module.css';
 
@@ -119,6 +122,7 @@ interface QDraft {
   maxLabel: string;
   branch: { whenQuestionId: string; equals: string } | null;
   media: { imagePath: string; alt: string; mime: string } | null;
+  aiDrafted: boolean;
 }
 
 const genId = (): string => `q-${Math.random().toString(36).slice(2, 10)}`;
@@ -149,7 +153,13 @@ function blankDraft(): QDraft {
     maxLabel: '',
     branch: null,
     media: null,
+    aiDrafted: false,
   };
+}
+
+/** Map an AI-generated Question to an editable draft, flagged so the author knows to review it. */
+function fromGenerated(q: Question): QDraft {
+  return { ...fromQuestion(q), aiDrafted: true };
 }
 
 const toTextRows = (values: string[] | undefined): TextRow[] =>
@@ -173,6 +183,7 @@ function fromQuestion(q: Question): QDraft {
       ? { whenQuestionId: q.branch.whenQuestionId, equals: String(q.branch.equals) }
       : null,
     media: q.media ? { ...q.media } : null,
+    aiDrafted: false,
   };
 }
 
@@ -241,12 +252,21 @@ function triggerValues(ref: QDraft): { value: string; label: string }[] {
     .map((text) => ({ value: text, label: text }));
 }
 
+/** A gap-finder suggestion the builder can open pre-filled (08-questionnaires §3.7). */
+export interface BuilderSeed {
+  title: string;
+  type: string;
+  questions: Question[];
+}
+
 /** Create or edit a questionnaire: title + type + sensitivity + a list of questions, with a check. */
 export function QuestionnaireBuilder({
   questionnaire,
+  seed,
   onDone,
 }: {
   questionnaire: Questionnaire | null;
+  seed?: BuilderSeed;
   onDone: () => void;
 }): JSX.Element {
   const save = useQuestionnaireStore((s) => s.save);
@@ -256,15 +276,32 @@ export function QuestionnaireBuilder({
   const addType = useQuestionnaireStore((s) => s.addType);
   const storeImage = useQuestionnaireStore((s) => s.storeImage);
   const getImage = useQuestionnaireStore((s) => s.getImage);
+  const improve = useQuestionnaireStore((s) => s.improveQuestion);
   const [imageErrors, setImageErrors] = useState<Record<string, string>>({});
+  const [aiErrors, setAiErrors] = useState<Record<string, string>>({});
+  const [improving, setImproving] = useState<Record<string, boolean>>({});
 
-  const [title, setTitle] = useState(questionnaire?.title ?? '');
-  const [type, setType] = useState(questionnaire?.type ?? 'role-feedback');
+  // Whether the AI authoring features are usable (gates the generate panel + per-question reword).
+  const [aiEnabled] = useSetting('ai.enabled');
+  const [hasAiKey, setHasAiKey] = useState(false);
+  useEffect(() => {
+    void window.selfos
+      ?.secretHas({ id: ANTHROPIC_API_KEY_ID })
+      .then((v) => setHasAiKey(Boolean(v)));
+  }, []);
+  const aiReady = aiEnabled === true && hasAiKey;
+
+  const [title, setTitle] = useState(questionnaire?.title ?? seed?.title ?? '');
+  const [type, setType] = useState(questionnaire?.type ?? seed?.type ?? 'role-feedback');
   const [sensitivity, setSensitivity] = useState<SensitivityTier>(
     questionnaire?.sensitivity ?? 'standard',
   );
   const [drafts, setDrafts] = useState<QDraft[]>(
-    questionnaire ? questionnaire.questions.map(fromQuestion) : [blankDraft()],
+    questionnaire
+      ? questionnaire.questions.map(fromQuestion)
+      : seed
+        ? seed.questions.map(fromGenerated)
+        : [blankDraft()],
   );
   const [problems, setProblems] = useState<string[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -336,6 +373,24 @@ export function QuestionnaireBuilder({
   const onRemoveImage = (d: QDraft): void => {
     setImageErrors((e) => ({ ...e, [d.id]: '' }));
     patch(d.id, { media: null });
+  };
+
+  const appendGenerated = (questions: Question[]): void => {
+    setProblems(null);
+    setDrafts((ds) => [...ds, ...questions.map(fromGenerated)]);
+  };
+
+  const onImprove = async (d: QDraft, instruction: string): Promise<void> => {
+    if (improving[d.id]) return; // debounce: never fire a second (metered) call while one is in flight
+    setAiErrors((e) => ({ ...e, [d.id]: '' }));
+    setImproving((m) => ({ ...m, [d.id]: true }));
+    try {
+      const result = await improve({ prompt: d.prompt.trim(), type: d.type, instruction });
+      if (result.ok && result.prompt) patch(d.id, { prompt: result.prompt });
+      else setAiErrors((e) => ({ ...e, [d.id]: result.message ?? 'Couldn’t reword that one.' }));
+    } finally {
+      setImproving((m) => ({ ...m, [d.id]: false }));
+    }
   };
 
   const input = (): QuestionnaireInput => ({
@@ -530,6 +585,14 @@ export function QuestionnaireBuilder({
             </Stack>
           </Card>
 
+          <QuestionnaireAiPanel
+            aiReady={aiReady}
+            type={type}
+            sensitivity={sensitivity}
+            existingPrompts={drafts.map((d) => d.prompt.trim()).filter(Boolean)}
+            onGenerated={appendGenerated}
+          />
+
           <div className={styles.questions}>
             {drafts.map((d, index) => {
               const candidates = drafts
@@ -548,6 +611,12 @@ export function QuestionnaireBuilder({
 
               return (
                 <div key={d.id} className={styles.question}>
+                  {d.aiDrafted ? (
+                    <span className={styles.aiBadge}>
+                      <Sparkles size={12} aria-hidden="true" />
+                      AI draft — review it
+                    </span>
+                  ) : null}
                   <div className={styles.questionTop}>
                     <Field label={`Question ${index + 1}`}>
                       {(props) => (
@@ -571,6 +640,31 @@ export function QuestionnaireBuilder({
                       <Trash2 size={16} aria-hidden="true" />
                     </IconButton>
                   </div>
+
+                  {aiReady && d.prompt.trim() !== '' ? (
+                    <div className={styles.aiAssist}>
+                      <Text size="xs" tone="tertiary">
+                        Reword:
+                      </Text>
+                      {['warmer', 'tighter'].map((instruction) => (
+                        <button
+                          key={instruction}
+                          type="button"
+                          className={styles.aiAssistButton}
+                          disabled={improving[d.id]}
+                          onClick={() => void onImprove(d, instruction)}
+                        >
+                          <Sparkles size={12} aria-hidden="true" />
+                          {instruction === 'warmer' ? 'Warmer' : 'Tighter'}
+                        </button>
+                      ))}
+                      {aiErrors[d.id] ? (
+                        <Text size="xs" tone="secondary">
+                          {aiErrors[d.id]}
+                        </Text>
+                      ) : null}
+                    </div>
+                  ) : null}
 
                   <Field label="Help text (optional)">
                     {(props) => (

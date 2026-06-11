@@ -15,13 +15,18 @@ import {
   type UsageSummary,
 } from './channels';
 import {
+  AnswerTypeSchema,
   BudgetSchema,
   PersonInputSchema,
   QuestionnaireInputSchema,
   RelationshipInputSchema,
   RoleSchema,
+  SensitivityTierSchema,
   SettingsFileSchema,
   type Assignment,
+  type QuestionnaireGenerateResult,
+  type QuestionnaireImproveResult,
+  type QuestionnaireSuggestResult,
   type BootState,
   type Budget,
   type Conversation,
@@ -89,15 +94,19 @@ import {
   createAssignment,
   deleteQuestionnaire,
   deleteQuestionnaireImage,
+  generateQuestions,
   getQuestionnaire,
   getQuestionnaireImage,
+  improveQuestion,
   isAllowedImageMime,
   listCustomTypes,
   listQuestionnaires,
   MAX_IMAGE_BYTES,
   saveQuestionnaire,
   storeQuestionnaireImage,
+  suggestQuestionnaires,
   validateQuestionnaire,
+  type AiDeps,
 } from '@selfos/core/questionnaires';
 import { fromBase64, toBase64 } from '@selfos/core/encoding';
 
@@ -235,6 +244,22 @@ const AssignmentsCreateSchema = z.object({
   expiresAt: z.string().datetime().optional(),
 });
 const StoreImageSchema = z.object({ base64: z.string().min(1), mime: z.string().min(1) });
+const GenerateSchema = z.object({
+  type: z.string().min(1),
+  sensitivity: SensitivityTierSchema,
+  brief: z.string().optional(),
+  targetPersonId: z.string().min(1).optional(),
+  includeAuthor: z.boolean(),
+  includeTarget: z.boolean(),
+  includeRelationship: z.boolean(),
+  existingPrompts: z.array(z.string()),
+});
+const ImproveSchema = z.object({
+  prompt: z.string().min(1),
+  type: AnswerTypeSchema,
+  instruction: z.string().min(1),
+});
+const SuggestSchema = z.object({ targetPersonId: z.string().min(1).optional() });
 
 /** Build the renderer-facing `SelfosBridge` from a platform `BridgeHost`. */
 export function createCoreBridge(host: BridgeHost): SelfosBridge {
@@ -256,6 +281,23 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     const account = access.accounts.find((candidate) => candidate.personId === personId);
     const role = access.roles.find((candidate) => candidate.id === account?.roleId);
     return roleAllows(role, capability);
+  };
+
+  /** Build the deps for an AI authoring call (gated by `questionnaires.create`); null if not permitted. */
+  const aiDeps = async (): Promise<AiDeps | null> => {
+    const ctx = await host.vaultAndKey();
+    if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) return null;
+    const personId = await activePersonId();
+    if (!personId) return null;
+    return {
+      fs: ctx.fs,
+      key: ctx.key,
+      client: host.claude,
+      apiKey: await host.secrets.get(ANTHROPIC_API_KEY_ID),
+      model: await host.activeModel(),
+      personId,
+      now: new Date(),
+    };
   };
 
   return {
@@ -737,6 +779,35 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const ctx = await host.vaultAndKey();
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) return;
       await deleteQuestionnaireImage(ctx.fs, z.string().parse(imagePath));
+    },
+    questionnairesGenerate: async (input): Promise<QuestionnaireGenerateResult> => {
+      const deps = await aiDeps();
+      if (!deps) return { ok: false, reason: 'DENIED', message: 'Not available.' };
+      const p = GenerateSchema.parse(input);
+      return generateQuestions(deps, {
+        type: p.type,
+        sensitivity: p.sensitivity,
+        ...(p.brief !== undefined ? { brief: p.brief } : {}),
+        context: {
+          authorPersonId: deps.personId,
+          includeAuthor: p.includeAuthor,
+          ...(p.targetPersonId !== undefined ? { targetPersonId: p.targetPersonId } : {}),
+          includeTarget: p.includeTarget,
+          includeRelationship: p.includeRelationship,
+        },
+        existingPrompts: p.existingPrompts,
+      });
+    },
+    questionnairesImproveQuestion: async (input): Promise<QuestionnaireImproveResult> => {
+      const deps = await aiDeps();
+      if (!deps) return { ok: false, reason: 'DENIED', message: 'Not available.' };
+      return improveQuestion(deps, ImproveSchema.parse(input));
+    },
+    gapfinderSuggest: async (input): Promise<QuestionnaireSuggestResult> => {
+      const deps = await aiDeps();
+      if (!deps) return { ok: false, reason: 'DENIED', message: 'Not available.' };
+      const { targetPersonId } = SuggestSchema.parse(input);
+      return suggestQuestionnaires(deps, targetPersonId !== undefined ? { targetPersonId } : {});
     },
     assignmentsCreate: async (input): Promise<Assignment> => {
       const ctx = await host.vaultAndKey();

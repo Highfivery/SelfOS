@@ -167,6 +167,9 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
       Promise.resolve({ imagePath: 'questionnaires/media/mock.enc', mime: input.mime }),
     questionnairesGetImage: () => Promise.resolve(null),
     questionnairesDeleteImage: () => Promise.resolve(),
+    questionnairesGenerate: () => Promise.resolve({ ok: true, questions: [] }),
+    questionnairesImproveQuestion: () => Promise.resolve({ ok: true, prompt: 'improved' }),
+    gapfinderSuggest: () => Promise.resolve({ ok: true, suggestions: [] }),
     assignmentsCreate: (input) =>
       Promise.resolve({
         id: 'new-a',

@@ -1,5 +1,6 @@
 import type {
   AccessView,
+  AnswerType,
   Assignment,
   BootState,
   Budget,
@@ -11,10 +12,14 @@ import type {
   PersonInput,
   PrivacyMode,
   Questionnaire,
+  QuestionnaireGenerateResult,
+  QuestionnaireImproveResult,
   QuestionnaireInput,
+  QuestionnaireSuggestResult,
   Relationship,
   RelationshipInput,
   Role,
+  SensitivityTier,
   UsageEvent,
   UsageSummary,
 } from './schemas';
@@ -84,6 +89,9 @@ export const IpcChannels = {
   questionnairesStoreImage: 'questionnaires:storeImage',
   questionnairesGetImage: 'questionnaires:getImage',
   questionnairesDeleteImage: 'questionnaires:deleteImage',
+  questionnairesGenerate: 'questionnaires:generate',
+  questionnairesImproveQuestion: 'questionnaires:improveQuestion',
+  gapfinderSuggest: 'gapfinder:suggest',
   assignmentsCreate: 'assignments:create',
   getSidebarCollapsed: 'ui:getSidebarCollapsed',
   setSidebarCollapsed: 'ui:setSidebarCollapsed',
@@ -271,6 +279,25 @@ export interface SelfosBridge {
   questionnairesGetImage(imagePath: string): Promise<string | null>;
   /** Delete a stored question image. */
   questionnairesDeleteImage(imagePath: string): Promise<void>;
+  /** AI-draft questions from a brief and/or the configured structured context. Budget-gated + metered. */
+  questionnairesGenerate(input: {
+    type: string;
+    sensitivity: SensitivityTier;
+    brief?: string;
+    targetPersonId?: string;
+    includeAuthor: boolean;
+    includeTarget: boolean;
+    includeRelationship: boolean;
+    existingPrompts: string[];
+  }): Promise<QuestionnaireGenerateResult>;
+  /** Reword a single question per an instruction ("warmer", "tighter"). Budget-gated + metered. */
+  questionnairesImproveQuestion(input: {
+    prompt: string;
+    type: AnswerType;
+    instruction: string;
+  }): Promise<QuestionnaireImproveResult>;
+  /** Gap-finder: propose the next questionnaires from structured context. Budget-gated + metered. */
+  gapfinderSuggest(input: { targetPersonId?: string }): Promise<QuestionnaireSuggestResult>;
   /** Send a questionnaire to a household person (in-app), freezing an immutable snapshot at send. */
   assignmentsCreate(input: {
     questionnaireId: string;

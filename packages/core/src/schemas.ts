@@ -390,6 +390,41 @@ export const QuestionnairePrefsSchema = z.object({
 });
 export type QuestionnairePrefs = z.infer<typeof QuestionnairePrefsSchema>;
 
+/** A gap-finder proposal (08-questionnaires §3.7): a questionnaire idea + a few sample questions. */
+export const QuestionnaireSuggestionSchema = z.object({
+  title: z.string().min(1),
+  type: z.string().min(1),
+  rationale: z.string(),
+  questions: z.array(
+    z.object({ type: AnswerTypeSchema, prompt: z.string().min(1), required: z.boolean() }),
+  ),
+});
+export type QuestionnaireSuggestion = z.infer<typeof QuestionnaireSuggestionSchema>;
+
+/** Outcome shapes for the AI authoring calls (08-questionnaires §13.3) — shared by the IPC + services. */
+export type AiFailureReason = 'NO_KEY' | 'DENIED' | 'BUDGET' | 'REFUSED' | 'ERROR';
+export interface QuestionnaireGenerateResult {
+  ok: boolean;
+  questions?: Question[];
+  usage?: UsageEvent;
+  reason?: AiFailureReason;
+  message?: string;
+}
+export interface QuestionnaireImproveResult {
+  ok: boolean;
+  prompt?: string;
+  usage?: UsageEvent;
+  reason?: AiFailureReason;
+  message?: string;
+}
+export interface QuestionnaireSuggestResult {
+  ok: boolean;
+  suggestions?: QuestionnaireSuggestion[];
+  usage?: UsageEvent;
+  reason?: AiFailureReason;
+  message?: string;
+}
+
 export const ChannelSchema = z.enum(['inApp', 'relay']);
 export type Channel = z.infer<typeof ChannelSchema>;
 

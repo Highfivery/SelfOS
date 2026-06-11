@@ -222,6 +222,31 @@ describe('createCoreBridge', () => {
     expect(await bridge.questionnairesGet(saved.id)).toBeNull();
   });
 
+  it('gates AI authoring on questionnaires.create and runs the metered path for the owner', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const req = {
+      type: 'role-feedback',
+      sensitivity: 'standard' as const,
+      includeAuthor: true,
+      includeTarget: false,
+      includeRelationship: false,
+      existingPrompts: [],
+    };
+    // Owner with a key: the call runs past the gate + reaches Claude (the fake host returns non-JSON,
+    // so it gracefully REFUSEs — proving the gate passed and the metered path executed).
+    const gen = await bridge.questionnairesGenerate(req);
+    expect(gen.ok).toBe(false);
+    expect(gen.reason).toBe('REFUSED');
+
+    // A Guest (no questionnaires.create) is denied before any Claude call.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    expect((await bridge.sessionSetActive({ personId: guest.id })).ok).toBe(true);
+    expect(await bridge.questionnairesGenerate(req)).toMatchObject({ ok: false, reason: 'DENIED' });
+    expect(await bridge.gapfinderSuggest({})).toMatchObject({ ok: false, reason: 'DENIED' });
+  });
+
   it('persists custom types for the picker, gated by questionnaires.create', async () => {
     const { bridge } = await freshOwner();
     expect(await bridge.questionnairesListTypes()).toEqual([]);

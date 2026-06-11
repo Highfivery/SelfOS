@@ -86,6 +86,11 @@ export const PersonSchema = z.object({
   tags: z.array(z.string()),
   publicNotes: z.string().optional(),
   privateNotes: z.string().optional(),
+  // Contact details (08-questionnaires) — used to prefill questionnaire delivery (mailto:/SMS). Encrypted
+  // with the rest of the profile; intentionally excluded from `buildContext` (operational, not coaching
+  // data). Additive-optional, so person files written before this parse unchanged (no migration needed).
+  email: z.string().optional(),
+  phone: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -165,6 +170,8 @@ export const PersonInputSchema = z.object({
   tags: z.array(z.string()).default([]),
   publicNotes: z.string().optional(),
   privateNotes: z.string().optional(),
+  email: z.string().optional(),
+  phone: z.string().optional(),
 });
 export type PersonInput = z.infer<typeof PersonInputSchema>;
 
@@ -230,6 +237,43 @@ export const ConversationSchema = z.object({
   messages: z.array(ChatMessageSchema),
 });
 export type Conversation = z.infer<typeof ConversationSchema>;
+
+/**
+ * The shared Insight / metrics layer (08-questionnaires §4.4). A single, source-discriminated record:
+ * questionnaires produce them now; session analysis (09) and the tracking dashboards (11) build on the
+ * same shape. Stored encrypted per subject person; `metrics` is the extensible basis for every trend.
+ */
+export const InsightSourceSchema = z.enum(['questionnaire', 'session']);
+export type InsightSource = z.infer<typeof InsightSourceSchema>;
+
+export const InsightFactSchema = z.object({
+  id: z.string().min(1),
+  text: z.string(),
+  shareable: z.boolean(), // false = private to the subject; true = may feed related people's context
+});
+export type InsightFact = z.infer<typeof InsightFactSchema>;
+
+export const InsightSchema = z.object({
+  id: z.string().min(1),
+  schemaVersion: z.number().int().positive(),
+  source: InsightSourceSchema,
+  subjectPersonId: z.string().min(1), // whose coaching this informs
+  relationshipId: z.string().optional(),
+  summary: z.string(),
+  facts: z.array(InsightFactSchema),
+  metrics: z.record(z.string(), z.number()).optional(), // named normalized signals; the basis for trends
+  confidence: z.enum(['low', 'medium', 'high']),
+  approved: z.boolean(), // questionnaire insights require approval before entering buildContext (08 §3.7)
+  provenance: z.object({
+    assignmentId: z.string().optional(),
+    conversationId: z.string().optional(),
+    at: z.string(),
+  }),
+  crisisFlag: z.boolean().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type Insight = z.infer<typeof InsightSchema>;
 
 /**
  * Derived "view" types produced by the core services and surfaced over IPC. They live here (a

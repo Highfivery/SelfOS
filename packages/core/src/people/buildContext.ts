@@ -1,4 +1,5 @@
 import type { FileSystem } from '../host';
+import { summarizeForContext } from '../insights';
 import { getPerson, listPeople } from './peopleService';
 import { listRelationships } from './relationshipService';
 
@@ -30,6 +31,7 @@ export async function buildContext(
     (relationship) =>
       relationship.fromPersonId === personId || relationship.toPersonId === personId,
   );
+  const related: { id: string; displayName: string }[] = [];
   if (theirs.length > 0) {
     lines.push('People in their life:');
     for (const relationship of theirs) {
@@ -39,12 +41,18 @@ export async function buildContext(
           : relationship.fromPersonId;
       const other = byId.get(otherId);
       if (!other) continue;
+      related.push({ id: other.id, displayName: other.displayName });
       // Only shareable data about others — never their private notes.
       const about = other.publicNotes ? ` — ${other.publicNotes}` : '';
       const aboutRel = relationship.publicNotes ? ` (${relationship.publicNotes})` : '';
       lines.push(`- ${other.displayName} (${relationship.type})${about}${aboutRel}`);
     }
   }
+
+  // Insight / memory layer (08-questionnaires §4.4): their own approved insights + shareable facts about
+  // the people they relate to. Others' private facts are never included (the shareable-vs-private split).
+  const insightContext = await summarizeForContext(fs, key, personId, related);
+  if (insightContext) lines.push(insightContext);
 
   return lines.join('\n');
 }

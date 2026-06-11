@@ -14,6 +14,13 @@ export const CAPABILITIES = [
   'roles.manage',
   'budgets.manage',
   'sessions.own',
+  // Questionnaires (08-questionnaires §3/§12). `readRaw` (break-glass raw-answer access) is intentionally
+  // NOT registered here: it ships off even for the Owner and is reached only via the concealed super-admin
+  // unlock, so it lands with the private-mode/break-glass slice, not as a normal owner-granted capability.
+  'questionnaires.create',
+  'questionnaires.answer',
+  'questionnaires.viewResults',
+  'questionnaires.sendExternal',
 ] as const;
 
 export type CapabilityKey = (typeof CAPABILITIES)[number];
@@ -28,6 +35,10 @@ export const CAPABILITY_LABELS: Record<CapabilityKey, string> = {
   'roles.manage': 'Manage roles',
   'budgets.manage': 'Manage budgets & view cost',
   'sessions.own': 'Have their own sessions',
+  'questionnaires.create': 'Create & send questionnaires',
+  'questionnaires.answer': 'Answer questionnaires',
+  'questionnaires.viewResults': 'View questionnaire results',
+  'questionnaires.sendExternal': 'Send questionnaires to external people',
 };
 
 function capabilityMap(enabled: readonly CapabilityKey[]): Record<string, boolean> {
@@ -48,7 +59,14 @@ export const DEFAULT_ROLES: Role[] = [
     id: 'member',
     name: 'Member',
     builtin: true,
-    capabilities: capabilityMap(['relationships.manage', 'sessions.own']),
+    capabilities: capabilityMap([
+      'relationships.manage',
+      'sessions.own',
+      'questionnaires.create',
+      'questionnaires.answer',
+      'questionnaires.viewResults',
+      'questionnaires.sendExternal',
+    ]),
   },
   {
     id: 'guest',

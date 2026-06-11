@@ -239,6 +239,17 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Build (Questionnaires **slice 1a — the shared Insight/metrics layer foundation**,
+  [08-questionnaires](docs/specs/08-questionnaires.md) §4.4/§13): added the `Insight`/`InsightFact`/
+  `InsightSource` Zod schemas, the new **`@selfos/core/insights`** `insightStore` (encrypted per-subject
+  CRUD + `summarizeForContext` — own approved insights + related people's shareable facts, recency-capped),
+  and wired it into **`buildContext`**. Registered `questionnaires.create/answer/viewResults/sendExternal`
+  (Member gets all four); **`readRaw` intentionally NOT registered** (deferred to the break-glass slice;
+  ships OFF even for the Owner). Added optional `email`/`phone` to `Person`/`PersonInput`
+  (additive-optional — **no `schemaVersion` bump/migration**, matching the `DeviceStateSchema` precedent);
+  `upsertPerson` persists them (the code-reviewer caught it dropping them). Gate green (typecheck/lint/
+  format, **83 core unit tests**). **Deferred** to consuming slices: questionnaire/assignment schemas +
+  services, the context-provider registry, `readRaw` + break-glass, `queryMetrics`. Synced `04` + `08` §13.
 - 2026-06-11 — Fix (**per-person session isolation — the previous account's sessions lingered in the UI
   after a switch**; user flagged). Diagnosed (not guessed): conversation **storage is correctly
   per-person** (`people/<personId>/conversations/*.enc`; `listConversations` only reads that person's dir)

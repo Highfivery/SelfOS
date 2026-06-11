@@ -96,15 +96,18 @@ interface Person {
   tags: string[];
   publicNotes?: string; // shareable
   privateNotes?: string; // encrypted, owner/self only
+  email?: string; // encrypted; prefills questionnaire delivery (08); excluded from buildContext
+  phone?: string; // encrypted; prefills questionnaire delivery (08); excluded from buildContext
   createdAt: string;
   updatedAt: string;
 }
 ```
 
-> **Planned amendment** — [`08-questionnaires.md`](08-questionnaires.md) (Draft) adds optional encrypted
-> **`email?`** / **`phone?`** contact fields (to prefill questionnaire `mailto:`/SMS delivery; **excluded
-> from `buildContext`** — operational, not coaching data), with a `schemaVersion` bump + migration and
-> contact fields in the People editor. Applied when 08 is approved/built.
+> **Amended** (built 2026-06-11, [`08-questionnaires.md`](08-questionnaires.md) slice 1) — added optional
+> encrypted **`email?`** / **`phone?`** contact fields (prefill questionnaire `mailto:`/SMS delivery;
+> **excluded from `buildContext`** — operational, not coaching data). Additive-optional, so existing person
+> files parse unchanged — **no `schemaVersion` bump or migration**. The People-editor contact inputs land
+> with the questionnaire-delivery slice.
 
 ### 4.2 Relationship (the graph edge)
 
@@ -148,8 +151,10 @@ interface Account {
 
 - **Capabilities** are registered like settings (a registry features extend). v1 set:
   `people.manage`, `people.viewOthers`, `relationships.manage`, `settings.manage`, `users.manage`,
-  `roles.manage`, `budgets.manage`, `sessions.own`. (Feature-specific capabilities — e.g.
-  questionnaires — are added only when that feature is actually specced and built; we do not
+  `roles.manage`, `budgets.manage`, `sessions.own`, plus the questionnaires set
+  (`questionnaires.create` / `.answer` / `.viewResults` / `.sendExternal`, registered in `08` slice 1;
+  `questionnaires.readRaw` is deferred to the break-glass slice and ships OFF even for the Owner).
+  (Feature-specific capabilities are added only when that feature is actually specced and built; we do not
   pre-register capabilities for unbuilt features.)
 - **Default roles**: **Owner** (all visible capabilities), **Member** (own data + own relationships +
   their own sessions), **Guest** (no capabilities yet — a login slot with nothing enabled until a
@@ -284,7 +289,8 @@ Confirmed with the user (2026-06-09):
    profile + their own relationships + have their own sessions (no access to others' private data, no
    household management); **Guest** = no capabilities yet (a login slot, nothing enabled until a Guest
    purpose is specced). _Updated 2026-06-10: the questionnaires capabilities were removed as unbuilt
-   scaffolding (see §12 changelog); they return when questionnaires is specced._
+   scaffolding; updated 2026-06-11: questionnaires is now specced + built (`08` slice 1), so **Member** also
+   gains `questionnaires.create/answer/viewResults/sendExternal`; `readRaw` stays deferred + OFF._
 3. **Recovery** — build a **recovery phrase** now (§5): the super-admin can reset any person's PIN;
    the recovery phrase restores the master key and can reset the super-admin passphrase; losing both
    the keychain key and the phrase = unrecoverable data.

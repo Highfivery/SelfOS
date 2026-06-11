@@ -52,6 +52,8 @@ export async function upsertPerson(
     ...(existing?.avatarPath ? { avatarPath: existing.avatarPath } : {}),
     ...(input.publicNotes !== undefined ? { publicNotes: input.publicNotes } : {}),
     ...(input.privateNotes !== undefined ? { privateNotes: input.privateNotes } : {}),
+    ...(input.email !== undefined ? { email: input.email } : {}),
+    ...(input.phone !== undefined ? { phone: input.phone } : {}),
   };
   await savePerson(fs, key, person);
   return person;

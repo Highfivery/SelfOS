@@ -81,6 +81,19 @@ describe('upsertPerson', () => {
     expect(updated.isSubject).toBe(true);
     expect(updated.createdAt).toBe(created.createdAt);
   });
+
+  it('persists the email/phone contact fields (round-trips through the writer)', async () => {
+    const created = await upsertPerson(fs, key, {
+      displayName: 'Sam',
+      isSubject: false,
+      tags: [],
+      email: 'sam@example.com',
+      phone: '+15551234567',
+    });
+    const read = await getPerson(fs, key, created.id);
+    expect(read?.email).toBe('sam@example.com');
+    expect(read?.phone).toBe('+15551234567');
+  });
 });
 
 describe('relationshipService', () => {

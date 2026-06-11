@@ -715,6 +715,12 @@ Confirmed with the user (2026-06-10):
 1. **Schema + engine + capabilities + Insight/metrics layer** — Zod models, vault layout, `Person`
    migration, `questionnaires.*` capabilities, `insightStore` + `metrics` + `buildContext` extension + the
    context-provider registry. Mostly core/backend.
+   - _Sub-sliced — **1a (built 2026-06-11):** the `Insight`/`InsightFact`/`InsightSource` schemas, `Person`
+     `email`/`phone` (additive-optional, **no migration**), the `questionnaires.*` capabilities
+     (**`readRaw` deferred** to the break-glass slice §8.4), `insightStore` CRUD + `summarizeForContext`,
+     and the `buildContext` Insight extension. **Deferred** to their consuming slices: the
+     questionnaire/assignment/ResponseSet schemas + vault layout, the **context-provider registry**, and
+     `insightStore.queryMetrics`._
 2. **Builder + answer-type library** — create flow (type incl. custom), all answer types (incl.
    matrix/allocation + question-image attach), preview, simple branching, test-on-self.
 3. **AI generate + gap-finder** — brief + data-grounded generation (safety pass, schema-valid, de-dup) via
@@ -751,3 +757,8 @@ Confirmed with the user (2026-06-10):
 - 2026-06-11 — **Approved.** Re-reviewed against the completed multi-device + iOS host work (all host-layer;
   at-rest crypto unchanged) — no structural changes; §11.1 (iOS relay deploy) de-risked by the built
   in-webview HTTPS host. Ready for slice 1.
+- 2026-06-11 — **Slice 1a built** (§13.1): the shared `Insight`/`InsightFact`/`InsightSource` schemas,
+  `@selfos/core/insights` `insightStore` (encrypted per-subject CRUD + `summarizeForContext`), the
+  `buildContext` Insight extension, the `questionnaires.*` capabilities (`readRaw` deferred), and `Person`
+  `email`/`phone` (additive-optional, no migration). Code-reviewed (the `upsertPerson` drop fixed) + gate
+  green (83 core unit tests). Engine/registry/`queryMetrics` deferred to consuming slices.

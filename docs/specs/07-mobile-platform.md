@@ -153,8 +153,11 @@ The renderer, design system, and settings UI are untouched.
 
 - `@capacitor/core` + `@capacitor/ios`; `capacitor.config.ts` (appId, `webDir` = the built renderer,
   scheme). Build pipeline: `vite build` (renderer) → `cap copy ios` → open/run in Xcode.
-- Custom native plugin(s) in Swift under `ios/App/.../plugins`: a `VaultFs` plugin (document picker,
-  bookmarks, coordinated FS, change presenter) and a Keychain plugin (or a vetted community one).
+- Custom native plugin(s) in Swift under `ios/App/App/`: a `VaultFs` plugin (document picker, bookmarks,
+  coordinated FS, change presenter) and a Keychain plugin (or a vetted community one). App-local plugins
+  are **registered explicitly** (they aren't auto-discovered like packaged plugins) — a
+  `CAPBridgeViewController` subclass (`MainViewController`, set as the `Main.storyboard` root VC) calls
+  `bridge?.registerPluginInstance(...)` in `capacitorDidLoad`.
 - **Safe-area insets:** the shell (TopBar, drawer, content) honors `env(safe-area-inset-*)` so content
   clears the status bar, notch, and home indicator.
 
@@ -414,9 +417,14 @@ The full arc, so no session loses the thread. Update the status boxes as slices 
       `webHost`'s `createCapacitorHost` (native FS + picker, reusing the iii-b2 `localStorage` stores) wired
       into `installRealBridge` via `Capacitor.isNativePlatform()`. **No iCloud-container entitlement** (access
       is via security scope — §11.6). _Live change events (NSFilePresenter → `onVaultChanged`) **deferred to
-      iii-b3b** (no-op for now); download-on-demand UX stays open (Q8)._ TS verified (typecheck/lint/250 unit/
-      27 E2E/`build:web`); the **Swift is blind-written — build + verify on-device in Xcode** (`build:web` →
-      `npx cap sync ios` → add `VaultFs.swift` to the App target → run).
+      iii-b3b** (no-op for now); download-on-demand UX stays open (Q8)._ Plugin registration: app-local
+      Capacitor plugins are **not** auto-discovered (only packaged ones are), so `ios/App/App/MainViewController.swift`
+      (a `CAPBridgeViewController` subclass) registers it in `capacitorDidLoad` via
+      `bridge?.registerPluginInstance(VaultFsPlugin())`, and `Main.storyboard`'s root VC points at
+      `MainViewController`. **Verified on-device** (iPhone 17 Pro Max sim): build succeeds, the folder picker
+      presents, and setup writes the encrypted vault through `VaultFs`. To rebuild: `build:web` →
+      `npx cap sync ios` → in Xcode add `VaultFs.swift` **and** `MainViewController.swift` to the App target
+      (Reference in place) → run.
 - [ ] **iii-c — iOS Keychain + Claude.** Real Keychain `SecretStore` (replace iii-b2's stub:
       `kSecClassGenericPassword`, accessible-after-first-unlock-this-device-only, not synced; holds master
       key + API key) + Claude via the Anthropic **browser-mode SDK** (`dangerouslyAllowBrowser`) with a

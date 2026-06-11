@@ -239,6 +239,20 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Fix + **iii-b3 verified on-device** (user built it in Xcode). The native `VaultFs` plugin
+  was compiling but **not registered** — `Capacitor.isPluginAvailable('VaultFs')` was `false`, so
+  `pickFolder()` rejected and our `selectVaultFolder` catch swallowed it to null → tapping "Choose a
+  folder" did nothing. **Cause + lesson: app-local Capacitor plugins are NOT auto-discovered** — only
+  plugins shipped as packages (with a podspec) are. An in-app Swift plugin must be **registered
+  explicitly**. Fix: added `ios/App/App/MainViewController.swift` (a `CAPBridgeViewController` subclass)
+  that calls `bridge?.registerPluginInstance(VaultFsPlugin())` in `capacitorDidLoad`, and repointed
+  `Main.storyboard`'s root VC to `MainViewController`. After re-adding both Swift files to the App target
+  (Reference in place) + rebuild: `isPluginAvailable` → true, the iOS folder picker presents, and setup
+  writes the encrypted vault through `VaultFs` on the simulator. **So the iii-c Keychain plugin (and any
+  future native plugin) needs the same `registerPluginInstance` line in `MainViewController`.** Diagnosis
+  tip: the Safari Web Inspector console (Develop → simulator → the app) + `Capacitor.isPluginAvailable(...)`
+  is the fastest way to tell "plugin not registered" from "plugin errored". (Native-only change; TS gates
+  unaffected. Concurrent agent's `docs/specs/0{4,5,8,9}` + `11` still untouched.)
 - 2026-06-11 — Build (**Capacitor track slice iii-b3 — native Swift `VaultFs` plugin + TS FS adapter**;
   [07-mobile-platform](docs/specs/07-mobile-platform.md) §5.4/§13). The **real security-scoped iCloud-Drive
   filesystem for iOS**, so the iOS WebView shares the _same_ vault as desktop. **`ios/App/App/VaultFs.swift`**

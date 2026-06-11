@@ -239,6 +239,29 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Build (Questionnaires **slice 2 — preview / test-on-self** [§13.2], the **shared answering
+  renderer**, [08-questionnaires](docs/specs/08-questionnaires.md) §3.1/§5.1/§5.3/§8.2/§13.2). Asked first
+  (4 Qs): presentation = **in-pane Edit ⇄ Preview toggle** (not a modal — the app is modal-free; avoids a
+  new focus-trapped primitive); **one interactive preview** (live branching + required, nothing saved);
+  **all 12 answer-type controls now**; **ephemeral "nothing was saved"** confirmation on Finish. I also
+  recommended (spec-backed, §8.2) that preview **shows the crisis footer + not-medical line** — reusing the
+  existing `CrisisFooter`. Built: **`QuestionnaireForm`** (the renderer the Inbox + relay will reuse) — 12
+  controls (radio/checkbox choice, yes-no/this-or-that pills, rating/matrix min→max scale, slider, ranking
+  with ↑/↓, allocation with a live `/100` hint, date), driven by a new **pure core helper**
+  `@selfos/core/questionnaires` **`answering`** (`isQuestionVisible`/`visibleQuestions`/`isAnswered`/
+  `unansweredRequired`/`allocationTotal`) so the branching/required logic is DOM-free + reused; plus
+  **`QuestionnairePreview`** (Finish gating → ephemeral result) and the builder toggle. **No new IPC** —
+  pure renderer + a core helper; preview persists nothing + produces no Insight. Slider/ranking **seed once
+  on mount** (min / authored order) so an untouched control still reads as answered; allocation clamps to
+  ≥ 0. Live web-preview visual QA of all 12 controls at desktop + 390px (matrix label stacks above its
+  scale on phones — clean). Reviewer verdict **ship** (no blockers/should-fixes; applied one clamp nit). Gate
+  green: typecheck/lint/format, **208 desktop** + **115 core** unit (+11 `answering`, +7 form/preview RTL,
+  +1 builder toggle), **31 E2E** (new preview flow; the 390px sweep now opens Preview). **Lesson: the
+  renderer can import runtime helpers from `@selfos/core/questionnaires` directly (first value-import of that
+  barrel into the renderer) — it bundles via the web host + crypto is already DOM-lib-safe (`bufferSource`),
+  so tree-shaking keeps just the pure `answering` fns.** **Still deferred (§13.2):** question-image attach
+  editor (needs encrypted media storage + IPC). Built **in-place**; physically extracted to a shared package
+  when the relay (§13.6) needs it. Synced `08` §3.1/§5.1/§5.3/§13.2 + changelog.
 - 2026-06-11 — Build (Questionnaires **slice 2 — builder authoring editors** [§13.2 follow-ups],
   [08-questionnaires](docs/specs/08-questionnaires.md) §3.1/§4.1/§6/§13.2). Asked first (4 Qs): scope =
   **authoring editors only** (images + preview/test-on-self deferred to their own slices); custom types =

@@ -772,6 +772,46 @@ test('questionnaires: custom type, sensitivity, matrix + branching round-trip', 
   }
 });
 
+test('questionnaires: preview / test-on-self renders the form, gates Finish, saves nothing', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await w.getByRole('button', { name: 'New' }).click();
+    await w.getByLabel('Title').fill('Dry run');
+    await w.getByLabel('Question 1', { exact: true }).fill('How are you feeling?');
+    await w.getByLabel('Answer type').selectOption({ label: 'Rating' });
+
+    // Switch to Preview — the answering form + crisis footer render exactly as the recipient sees them.
+    await w.getByRole('button', { name: 'Preview' }).click();
+    await expect(w.getByText(/exactly what your recipient sees/i)).toBeVisible();
+    await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible();
+
+    // Finish is gated on the required (and unanswered) rating.
+    await w.getByRole('button', { name: 'Finish' }).click();
+    await expect(w.getByText(/answer the 1 required question to finish/i)).toBeVisible();
+
+    // Answer it on the 1→5 scale, then Finish confirms the dry run saved nothing.
+    await w.getByRole('radio', { name: '4', exact: true }).click();
+    await w.getByRole('button', { name: 'Finish' }).click();
+    await expect(w.getByText(/nothing you entered was saved/i)).toBeVisible();
+
+    // Nothing was persisted — the list still shows no saved questionnaire for this draft.
+    await expect(w.getByRole('button', { name: /Dry run/ })).toHaveCount(0);
+
+    const overflow = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      return main ? main.scrollWidth - main.clientWidth : 0;
+    });
+    expect(overflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('roles: the owner edits the role × capability matrix', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);
@@ -1350,6 +1390,10 @@ test('responsive: at a phone width the nav is a drawer and no screen overflows h
         await w.getByLabel('Only show this question').selectOption({ index: 1 });
         await w.waitForTimeout(120);
         expect(await noOverflow()).toBe(true); // the branch row wraps, no overflow
+        // The preview / answering form (matrix scale, branch-aware) must also fit at phone width.
+        await w.getByRole('button', { name: 'Preview' }).click();
+        await w.waitForTimeout(120);
+        expect(await noOverflow()).toBe(true);
         await w.getByRole('button', { name: 'Questionnaires' }).click(); // back to the list
       }
       if (name === 'People') {

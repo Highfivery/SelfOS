@@ -472,6 +472,9 @@ interface RawAccessAuditEntry {
   prefs file (`QuestionnairePrefsSchema`), so they reappear in the builder's type picker on every device.
 - **assignmentService / responseService** — lifecycle, status transitions, ResponseSet round-trip, re-ask
   chaining.
+- **answering** — pure, DOM-free answering logic shared by every host that renders a questionnaire to be
+  answered (preview/test-on-self now; Inbox + relay later): `isQuestionVisible`/`visibleQuestions` (live
+  branching), `isAnswered`/`unansweredRequired` (required gating), `allocationTotal`.
 - **contextProviderRegistry** — `registerContextProvider({ id, gather(personId|relId) })`; generation +
   the gap-finder pull from all registered providers (profiles, relationships, prior answers, Insights; `09`
   registers a session-insight provider; future features register their own). **This is the extensibility
@@ -497,8 +500,10 @@ interface RawAccessAuditEntry {
 - **Screens:** My Questionnaires, Builder (+ answer-type editors incl. matrix/allocation + question-image
   attach, AI-generate, preview, test-on-self), Inbox, Results & Insights (+ rating-over-time +
   compatibility alignment → `/gallery` chart primitives), Suggested, and the admin **Relay setup** panel.
-- **Shared renderer package** — the questionnaire-answering renderer is extracted so **both** the in-app
-  Inbox and the **relay page** use one implementation.
+- **Shared answering renderer** — `QuestionnaireForm` (built) renders the 12 answer-type controls + live
+  branching/required (over the core `answering` helper) + the crisis footer; it's used by preview/test-on-self
+  now and the in-app Inbox next, and is **physically extracted to a shared package when the relay page (§5.4)
+  needs it** so both hosts share one implementation.
 
 ### 5.4 `apps/relay` (Cloudflare Worker)
 
@@ -755,6 +760,18 @@ Confirmed with the user (2026-06-10):
      `customTypeService` over the plain `config/questionnaires.json` prefs + `QuestionnairePrefsSchema`,
      IPC `questionnaires:listTypes`/`:addType`). **Still deferred:** question-image attach editor,
      preview/test-on-self._
+   - _**Preview / test-on-self (built 2026-06-11):** the **shared answering renderer** (`QuestionnaireForm`)
+     — all **12 answer-type controls** (choice/multi as radio/checkbox, yes-no/this-or-that as pills,
+     rating/matrix as a min→max scale, slider, ranking with ↑/↓, allocation with a live `/100` hint, date),
+     **live branching + required gating** driven by a new pure core helper `@selfos/core/questionnaires`
+     **`answering`** (`isQuestionVisible`/`visibleQuestions`/`isAnswered`/`unansweredRequired`/
+     `allocationTotal`), and the always-present crisis footer + not-medical line (§8.2). An in-pane
+     **Edit ⇄ Preview** toggle in the builder renders the live drafts as the recipient sees them;
+     "Finish" is required-gated and confirms (ephemerally) that **nothing was saved** — it's a dry run,
+     no persistence, no Insight, **no new IPC**. The renderer is built in-place for the Inbox to reuse;
+     it's physically extracted to a shared package when the relay (§13.6) needs it. Core unit + RTL +
+     an E2E preview flow + the 390px sweep now opens Preview. **Still deferred:** question-image attach
+     editor._
 3. **AI generate + gap-finder** — brief + data-grounded generation (safety pass, schema-valid, de-dup) via
    the registry; the Suggested surface; metered + budget-gated.
 4. **Analyze → Insights/metrics → context** — analysis, approve-step, Insight management, prioritization/cap,
@@ -831,3 +848,17 @@ Confirmed with the user (2026-06-10):
   core service test + an E2E round-trip; the 390px sweep now exercises matrix + new-type + branch. Gate
   green (200 desktop + 104 core unit, 30 E2E). **Still deferred:** question-image attach editor,
   preview/test-on-self.
+- 2026-06-11 — **Preview / test-on-self built** (§3.1/§5.1/§5.3/§8.2/§13.2): the **shared answering
+  renderer** `QuestionnaireForm` — all **12 answer-type controls** (radio/checkbox choice, yes-no/this-or-that
+  pills, rating/matrix min→max scale, slider, ranking with ↑/↓, allocation with a live `/100` hint, date),
+  **live branching + required gating** over a new pure core helper `@selfos/core/questionnaires` **`answering`**
+  (`isQuestionVisible`/`visibleQuestions`/`isAnswered`/`unansweredRequired`/`allocationTotal`), and the
+  always-present crisis footer + not-medical line (§8.2). An in-pane **Edit ⇄ Preview** toggle in the builder
+  renders the live drafts as the recipient sees them; **`QuestionnairePreview`**'s "Finish" is required-gated
+  and confirms (ephemerally) that **nothing was saved** — a dry run, no persistence, **no Insight, no new
+  IPC**. Slider/ranking seed once on mount (min / authored order) so an untouched control still reads as
+  answered; allocation clamps buckets to ≥ 0. Reviewer verdict **ship** (no blockers; applied the negative-
+  allocation clamp nit since the renderer is the shared Inbox/relay artifact). Core unit (`answering`) + RTL
+  (form controls, branch reveal, Finish gating) + an E2E preview flow; the 390px sweep now opens Preview.
+  Gate green (208 desktop + 115 core unit, 31 E2E). Built **in-place**; physically extracted to a shared
+  package when the relay (§13.6) needs it. **Still deferred (§13.2):** question-image attach editor.

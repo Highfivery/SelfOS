@@ -161,6 +161,18 @@ describe('Questionnaires', () => {
     expect(payload.questions[1].branch.whenQuestionId).toBe(payload.questions[0].id);
   });
 
+  it('previews the in-progress draft as the recipient would see it', async () => {
+    installMockBridge({ questionnairesList: () => Promise.resolve([]) });
+    await openNewBuilder();
+
+    await userEvent.type(screen.getByLabelText('Question 1'), 'How was your week?');
+    // Switch to Preview — the authored question renders in the answering form, with the crisis footer.
+    await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
+    expect(screen.getByText(/exactly what your recipient sees/i)).toBeInTheDocument();
+    expect(screen.getByLabelText('How was your week?')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /get help now/i })).toBeInTheDocument();
+  });
+
   it('drops a branch when its trigger loses the chosen option', async () => {
     const save = saveSpy();
     installMockBridge({ questionnairesList: () => Promise.resolve([]), questionnairesSave: save });

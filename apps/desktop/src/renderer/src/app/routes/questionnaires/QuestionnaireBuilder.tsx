@@ -8,6 +8,7 @@ import {
   Field,
   Heading,
   IconButton,
+  SegmentedControl,
   Select,
   Stack,
   Switch,
@@ -22,7 +23,10 @@ import type {
   QuestionnaireInput,
   SensitivityTier,
 } from '@shared/schemas';
+import { QuestionnairePreview } from './QuestionnairePreview';
 import styles from './Questionnaires.module.css';
+
+type BuilderMode = 'edit' | 'preview';
 
 /** A small starter taxonomy (custom types are added by the user and persist in the vault). */
 const QUESTIONNAIRE_TYPES: { value: string; label: string }[] = [
@@ -245,6 +249,12 @@ export function QuestionnaireBuilder({
   const [newType, setNewType] = useState('');
   const [typeError, setTypeError] = useState<string | null>(null);
 
+  // Edit ⇄ Preview (test-on-self). Preview renders the live drafts as the recipient would see them.
+  const [mode, setMode] = useState<BuilderMode>('edit');
+  const previewQuestions = drafts
+    .filter((d) => d.prompt.trim() !== '')
+    .map((d) => toQuestion(d, drafts));
+
   const allPrompts = drafts.every((d) => d.prompt.trim() !== '');
   const canSave = title.trim() !== '' && allPrompts && !busy;
 
@@ -323,439 +333,467 @@ export function QuestionnaireBuilder({
 
   return (
     <Stack gap={4}>
-      <Heading level={3}>{questionnaire ? 'Edit questionnaire' : 'New questionnaire'}</Heading>
+      <div className={styles.builderHeader}>
+        <Heading level={3}>{questionnaire ? 'Edit questionnaire' : 'New questionnaire'}</Heading>
+        <SegmentedControl<BuilderMode>
+          aria-label="Builder mode"
+          value={mode}
+          onChange={setMode}
+          options={[
+            { value: 'edit', label: 'Edit' },
+            { value: 'preview', label: 'Preview' },
+          ]}
+        />
+      </div>
 
-      <Card>
-        <Stack gap={4}>
-          <Field label="Title">
-            {(props) => (
-              <TextInput
-                {...props}
-                value={title}
-                placeholder="e.g. Weekly check-in"
-                onChange={(event) => {
-                  setProblems(null);
-                  setTitle(event.target.value);
-                }}
-              />
-            )}
-          </Field>
-
-          <div className={styles.metaRow}>
-            <Field label="Type">
-              {(props) => (
-                <div className={styles.typePicker}>
-                  <Select
-                    {...props}
-                    value={type}
-                    onChange={(event) => {
-                      setProblems(null);
-                      setType(event.target.value);
-                    }}
-                  >
-                    <optgroup label="Starter">
-                      {QUESTIONNAIRE_TYPES.map((t) => (
-                        <option key={t.value} value={t.value}>
-                          {t.label}
-                        </option>
-                      ))}
-                    </optgroup>
-                    {customList.length > 0 ? (
-                      <optgroup label="Custom">
-                        {customList.map((t) => (
-                          <option key={t} value={t}>
-                            {t}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ) : null}
-                  </Select>
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      setAddingType(true);
-                      setNewType('');
-                      setTypeError(null);
-                    }}
-                  >
-                    <Plus size={14} aria-hidden="true" />
-                    New type
-                  </Button>
-                </div>
-              )}
-            </Field>
-
-            <Field label="Sensitivity">
-              {(props) => (
-                <Select
-                  {...props}
-                  value={sensitivity}
-                  onChange={(event) => {
-                    setProblems(null);
-                    setSensitivity(event.target.value as SensitivityTier);
-                  }}
-                >
-                  {SENSITIVITY_OPTIONS.map((s) => (
-                    <option key={s.value} value={s.value}>
-                      {s.label}
-                    </option>
-                  ))}
-                </Select>
-              )}
-            </Field>
-          </div>
-
-          {addingType ? (
-            <div className={styles.addType}>
-              <TextInput
-                value={newType}
-                aria-label="New type name"
-                placeholder="Name your type (e.g. Affair recovery)"
-                autoFocus
-                onChange={(event) => {
-                  setTypeError(null);
-                  setNewType(event.target.value);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault();
-                    void confirmAddType();
-                  }
-                }}
-              />
-              <Button variant="primary" onClick={() => void confirmAddType()}>
-                Add
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setAddingType(false);
-                  setTypeError(null);
-                }}
-              >
-                Cancel
-              </Button>
-            </div>
-          ) : null}
-          {typeError ? (
-            <p className={styles.typeError} role="alert">
-              {typeError}
-            </p>
-          ) : null}
-
-          {SENSITIVITY_NOTES[sensitivity] ? (
-            <Banner tone="info">{SENSITIVITY_NOTES[sensitivity]}</Banner>
-          ) : null}
-        </Stack>
-      </Card>
-
-      <div className={styles.questions}>
-        {drafts.map((d, index) => {
-          const candidates = drafts
-            .slice(0, index)
-            .map((t, i) => ({ draft: t, number: i + 1 }))
-            .filter(
-              ({ draft }) =>
-                draft.type === 'yesNo' ||
-                (draft.type === 'singleChoice' && draft.options.some((o) => o.text.trim() !== '')),
-            );
-          const branchRef = d.branch
-            ? candidates.find((c) => c.draft.id === d.branch?.whenQuestionId)
-            : undefined;
-          const branchOnId = branchRef ? branchRef.draft.id : '';
-
-          return (
-            <div key={d.id} className={styles.question}>
-              <div className={styles.questionTop}>
-                <Field label={`Question ${index + 1}`}>
-                  {(props) => (
-                    <TextInput
-                      {...props}
-                      value={d.prompt}
-                      placeholder="What do you want to ask?"
-                      onChange={(event) => patch(d.id, { prompt: event.target.value })}
-                    />
-                  )}
-                </Field>
-                <IconButton
-                  aria-label={`Remove question ${index + 1}`}
-                  variant="secondary"
-                  disabled={busy}
-                  onClick={() => {
-                    setProblems(null);
-                    setDrafts((ds) => ds.filter((x) => x.id !== d.id));
-                  }}
-                >
-                  <Trash2 size={16} aria-hidden="true" />
-                </IconButton>
-              </div>
-
-              <Field label="Help text (optional)">
+      {mode === 'preview' ? (
+        <QuestionnairePreview questions={previewQuestions} />
+      ) : (
+        <>
+          <Card>
+            <Stack gap={4}>
+              <Field label="Title">
                 {(props) => (
                   <TextInput
                     {...props}
-                    value={d.help}
-                    placeholder="Extra context shown under the question"
-                    onChange={(event) => patch(d.id, { help: event.target.value })}
+                    value={title}
+                    placeholder="e.g. Weekly check-in"
+                    onChange={(event) => {
+                      setProblems(null);
+                      setTitle(event.target.value);
+                    }}
                   />
                 )}
               </Field>
 
-              <div className={styles.typeRow}>
-                <Field label="Answer type">
+              <div className={styles.metaRow}>
+                <Field label="Type">
+                  {(props) => (
+                    <div className={styles.typePicker}>
+                      <Select
+                        {...props}
+                        value={type}
+                        onChange={(event) => {
+                          setProblems(null);
+                          setType(event.target.value);
+                        }}
+                      >
+                        <optgroup label="Starter">
+                          {QUESTIONNAIRE_TYPES.map((t) => (
+                            <option key={t.value} value={t.value}>
+                              {t.label}
+                            </option>
+                          ))}
+                        </optgroup>
+                        {customList.length > 0 ? (
+                          <optgroup label="Custom">
+                            {customList.map((t) => (
+                              <option key={t} value={t}>
+                                {t}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ) : null}
+                      </Select>
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          setAddingType(true);
+                          setNewType('');
+                          setTypeError(null);
+                        }}
+                      >
+                        <Plus size={14} aria-hidden="true" />
+                        New type
+                      </Button>
+                    </div>
+                  )}
+                </Field>
+
+                <Field label="Sensitivity">
                   {(props) => (
                     <Select
                       {...props}
-                      value={d.type}
-                      onChange={(event) => patch(d.id, { type: event.target.value as AnswerType })}
+                      value={sensitivity}
+                      onChange={(event) => {
+                        setProblems(null);
+                        setSensitivity(event.target.value as SensitivityTier);
+                      }}
                     >
-                      {TYPE_OPTIONS.map((t) => (
-                        <option key={t.value} value={t.value}>
-                          {t.label}
+                      {SENSITIVITY_OPTIONS.map((s) => (
+                        <option key={s.value} value={s.value}>
+                          {s.label}
                         </option>
                       ))}
                     </Select>
                   )}
                 </Field>
-                <div className={styles.requiredToggle}>
-                  <Switch
-                    checked={d.required}
-                    onChange={(checked) => patch(d.id, { required: checked })}
-                    aria-label={`Question ${index + 1} required`}
-                  />
-                  <Text size="sm">Required</Text>
-                </div>
               </div>
 
-              {OPTION_TYPES.includes(d.type) ? (
-                <div className={styles.options}>
-                  <Text size="sm" weight={500}>
-                    Options
-                  </Text>
-                  {d.options.map((o, oi) => (
-                    <div key={o.id} className={styles.optionRow}>
-                      <TextInput
-                        value={o.text}
-                        aria-label={`Option ${oi + 1}`}
-                        placeholder={`Option ${oi + 1}`}
-                        onChange={(event) =>
-                          patch(d.id, {
-                            options: d.options.map((x) =>
-                              x.id === o.id ? { ...x, text: event.target.value } : x,
-                            ),
-                          })
-                        }
-                      />
-                      <IconButton
-                        aria-label={`Remove option ${oi + 1}`}
-                        variant="secondary"
-                        onClick={() =>
-                          patch(d.id, { options: d.options.filter((x) => x.id !== o.id) })
-                        }
-                      >
-                        <Trash2 size={14} aria-hidden="true" />
-                      </IconButton>
-                    </div>
-                  ))}
+              {addingType ? (
+                <div className={styles.addType}>
+                  <TextInput
+                    value={newType}
+                    aria-label="New type name"
+                    placeholder="Name your type (e.g. Affair recovery)"
+                    autoFocus
+                    onChange={(event) => {
+                      setTypeError(null);
+                      setNewType(event.target.value);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        void confirmAddType();
+                      }
+                    }}
+                  />
+                  <Button variant="primary" onClick={() => void confirmAddType()}>
+                    Add
+                  </Button>
                   <Button
                     variant="secondary"
-                    onClick={() =>
-                      patch(d.id, { options: [...d.options, { id: genId(), text: '' }] })
-                    }
+                    onClick={() => {
+                      setAddingType(false);
+                      setTypeError(null);
+                    }}
                   >
-                    <Plus size={14} aria-hidden="true" />
-                    Add option
+                    Cancel
                   </Button>
                 </div>
               ) : null}
-
-              {d.type === 'matrix' ? (
-                <div className={styles.options}>
-                  <Text size="sm" weight={500}>
-                    Rows
-                  </Text>
-                  {d.rows.map((r, ri) => (
-                    <div key={r.id} className={styles.optionRow}>
-                      <TextInput
-                        value={r.text}
-                        aria-label={`Row ${ri + 1}`}
-                        placeholder={`Row ${ri + 1}`}
-                        onChange={(event) =>
-                          patch(d.id, {
-                            rows: d.rows.map((x) =>
-                              x.id === r.id ? { ...x, text: event.target.value } : x,
-                            ),
-                          })
-                        }
-                      />
-                      <IconButton
-                        aria-label={`Remove row ${ri + 1}`}
-                        variant="secondary"
-                        onClick={() => patch(d.id, { rows: d.rows.filter((x) => x.id !== r.id) })}
-                      >
-                        <Trash2 size={14} aria-hidden="true" />
-                      </IconButton>
-                    </div>
-                  ))}
-                  <Button
-                    variant="secondary"
-                    onClick={() => patch(d.id, { rows: [...d.rows, { id: genId(), text: '' }] })}
-                  >
-                    <Plus size={14} aria-hidden="true" />
-                    Add row
-                  </Button>
-                </div>
+              {typeError ? (
+                <p className={styles.typeError} role="alert">
+                  {typeError}
+                </p>
               ) : null}
 
-              {RANGE_TYPES.includes(d.type) ? (
-                <>
-                  <div className={styles.scaleRow}>
-                    <Field label="Min">
-                      {(props) => (
-                        <TextInput
-                          {...props}
-                          type="number"
-                          value={String(d.min)}
-                          onChange={(event) => patch(d.id, { min: toFinite(event.target.value) })}
-                        />
-                      )}
-                    </Field>
-                    <Field label="Max">
-                      {(props) => (
-                        <TextInput
-                          {...props}
-                          type="number"
-                          value={String(d.max)}
-                          onChange={(event) => patch(d.id, { max: toFinite(event.target.value) })}
-                        />
-                      )}
-                    </Field>
-                  </div>
-                  <div className={styles.scaleRow}>
-                    <Field label="Low label (optional)">
-                      {(props) => (
-                        <TextInput
-                          {...props}
-                          value={d.minLabel}
-                          placeholder="e.g. Never"
-                          onChange={(event) => patch(d.id, { minLabel: event.target.value })}
-                        />
-                      )}
-                    </Field>
-                    <Field label="High label (optional)">
-                      {(props) => (
-                        <TextInput
-                          {...props}
-                          value={d.maxLabel}
-                          placeholder="e.g. Always"
-                          onChange={(event) => patch(d.id, { maxLabel: event.target.value })}
-                        />
-                      )}
-                    </Field>
-                  </div>
-                </>
+              {SENSITIVITY_NOTES[sensitivity] ? (
+                <Banner tone="info">{SENSITIVITY_NOTES[sensitivity]}</Banner>
               ) : null}
+            </Stack>
+          </Card>
 
-              {candidates.length > 0 ? (
-                <div className={styles.branchRow}>
-                  <Field label="Only show this question">
+          <div className={styles.questions}>
+            {drafts.map((d, index) => {
+              const candidates = drafts
+                .slice(0, index)
+                .map((t, i) => ({ draft: t, number: i + 1 }))
+                .filter(
+                  ({ draft }) =>
+                    draft.type === 'yesNo' ||
+                    (draft.type === 'singleChoice' &&
+                      draft.options.some((o) => o.text.trim() !== '')),
+                );
+              const branchRef = d.branch
+                ? candidates.find((c) => c.draft.id === d.branch?.whenQuestionId)
+                : undefined;
+              const branchOnId = branchRef ? branchRef.draft.id : '';
+
+              return (
+                <div key={d.id} className={styles.question}>
+                  <div className={styles.questionTop}>
+                    <Field label={`Question ${index + 1}`}>
+                      {(props) => (
+                        <TextInput
+                          {...props}
+                          value={d.prompt}
+                          placeholder="What do you want to ask?"
+                          onChange={(event) => patch(d.id, { prompt: event.target.value })}
+                        />
+                      )}
+                    </Field>
+                    <IconButton
+                      aria-label={`Remove question ${index + 1}`}
+                      variant="secondary"
+                      disabled={busy}
+                      onClick={() => {
+                        setProblems(null);
+                        setDrafts((ds) => ds.filter((x) => x.id !== d.id));
+                      }}
+                    >
+                      <Trash2 size={16} aria-hidden="true" />
+                    </IconButton>
+                  </div>
+
+                  <Field label="Help text (optional)">
                     {(props) => (
-                      <Select
+                      <TextInput
                         {...props}
-                        value={branchOnId}
-                        onChange={(event) => {
-                          const value = event.target.value;
-                          if (value === '') {
-                            patch(d.id, { branch: null });
-                            return;
-                          }
-                          const ref = drafts.find((x) => x.id === value);
-                          const first = ref ? (triggerValues(ref)[0]?.value ?? '') : '';
-                          patch(d.id, { branch: { whenQuestionId: value, equals: first } });
-                        }}
-                      >
-                        <option value="">Always</option>
-                        {candidates.map((c) => (
-                          <option key={c.draft.id} value={c.draft.id}>
-                            When question {c.number} answered…
-                          </option>
-                        ))}
-                      </Select>
+                        value={d.help}
+                        placeholder="Extra context shown under the question"
+                        onChange={(event) => patch(d.id, { help: event.target.value })}
+                      />
                     )}
                   </Field>
-                  {branchRef ? (
-                    <Field label="…equals">
+
+                  <div className={styles.typeRow}>
+                    <Field label="Answer type">
                       {(props) => (
                         <Select
                           {...props}
-                          value={d.branch?.equals ?? ''}
+                          value={d.type}
                           onChange={(event) =>
-                            patch(d.id, {
-                              branch: {
-                                whenQuestionId: branchRef.draft.id,
-                                equals: event.target.value,
-                              },
-                            })
+                            patch(d.id, { type: event.target.value as AnswerType })
                           }
                         >
-                          {triggerValues(branchRef.draft).map((v) => (
-                            <option key={v.value} value={v.value}>
-                              {v.label}
+                          {TYPE_OPTIONS.map((t) => (
+                            <option key={t.value} value={t.value}>
+                              {t.label}
                             </option>
                           ))}
                         </Select>
                       )}
                     </Field>
+                    <div className={styles.requiredToggle}>
+                      <Switch
+                        checked={d.required}
+                        onChange={(checked) => patch(d.id, { required: checked })}
+                        aria-label={`Question ${index + 1} required`}
+                      />
+                      <Text size="sm">Required</Text>
+                    </div>
+                  </div>
+
+                  {OPTION_TYPES.includes(d.type) ? (
+                    <div className={styles.options}>
+                      <Text size="sm" weight={500}>
+                        Options
+                      </Text>
+                      {d.options.map((o, oi) => (
+                        <div key={o.id} className={styles.optionRow}>
+                          <TextInput
+                            value={o.text}
+                            aria-label={`Option ${oi + 1}`}
+                            placeholder={`Option ${oi + 1}`}
+                            onChange={(event) =>
+                              patch(d.id, {
+                                options: d.options.map((x) =>
+                                  x.id === o.id ? { ...x, text: event.target.value } : x,
+                                ),
+                              })
+                            }
+                          />
+                          <IconButton
+                            aria-label={`Remove option ${oi + 1}`}
+                            variant="secondary"
+                            onClick={() =>
+                              patch(d.id, { options: d.options.filter((x) => x.id !== o.id) })
+                            }
+                          >
+                            <Trash2 size={14} aria-hidden="true" />
+                          </IconButton>
+                        </div>
+                      ))}
+                      <Button
+                        variant="secondary"
+                        onClick={() =>
+                          patch(d.id, { options: [...d.options, { id: genId(), text: '' }] })
+                        }
+                      >
+                        <Plus size={14} aria-hidden="true" />
+                        Add option
+                      </Button>
+                    </div>
+                  ) : null}
+
+                  {d.type === 'matrix' ? (
+                    <div className={styles.options}>
+                      <Text size="sm" weight={500}>
+                        Rows
+                      </Text>
+                      {d.rows.map((r, ri) => (
+                        <div key={r.id} className={styles.optionRow}>
+                          <TextInput
+                            value={r.text}
+                            aria-label={`Row ${ri + 1}`}
+                            placeholder={`Row ${ri + 1}`}
+                            onChange={(event) =>
+                              patch(d.id, {
+                                rows: d.rows.map((x) =>
+                                  x.id === r.id ? { ...x, text: event.target.value } : x,
+                                ),
+                              })
+                            }
+                          />
+                          <IconButton
+                            aria-label={`Remove row ${ri + 1}`}
+                            variant="secondary"
+                            onClick={() =>
+                              patch(d.id, { rows: d.rows.filter((x) => x.id !== r.id) })
+                            }
+                          >
+                            <Trash2 size={14} aria-hidden="true" />
+                          </IconButton>
+                        </div>
+                      ))}
+                      <Button
+                        variant="secondary"
+                        onClick={() =>
+                          patch(d.id, { rows: [...d.rows, { id: genId(), text: '' }] })
+                        }
+                      >
+                        <Plus size={14} aria-hidden="true" />
+                        Add row
+                      </Button>
+                    </div>
+                  ) : null}
+
+                  {RANGE_TYPES.includes(d.type) ? (
+                    <>
+                      <div className={styles.scaleRow}>
+                        <Field label="Min">
+                          {(props) => (
+                            <TextInput
+                              {...props}
+                              type="number"
+                              value={String(d.min)}
+                              onChange={(event) =>
+                                patch(d.id, { min: toFinite(event.target.value) })
+                              }
+                            />
+                          )}
+                        </Field>
+                        <Field label="Max">
+                          {(props) => (
+                            <TextInput
+                              {...props}
+                              type="number"
+                              value={String(d.max)}
+                              onChange={(event) =>
+                                patch(d.id, { max: toFinite(event.target.value) })
+                              }
+                            />
+                          )}
+                        </Field>
+                      </div>
+                      <div className={styles.scaleRow}>
+                        <Field label="Low label (optional)">
+                          {(props) => (
+                            <TextInput
+                              {...props}
+                              value={d.minLabel}
+                              placeholder="e.g. Never"
+                              onChange={(event) => patch(d.id, { minLabel: event.target.value })}
+                            />
+                          )}
+                        </Field>
+                        <Field label="High label (optional)">
+                          {(props) => (
+                            <TextInput
+                              {...props}
+                              value={d.maxLabel}
+                              placeholder="e.g. Always"
+                              onChange={(event) => patch(d.id, { maxLabel: event.target.value })}
+                            />
+                          )}
+                        </Field>
+                      </div>
+                    </>
+                  ) : null}
+
+                  {candidates.length > 0 ? (
+                    <div className={styles.branchRow}>
+                      <Field label="Only show this question">
+                        {(props) => (
+                          <Select
+                            {...props}
+                            value={branchOnId}
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              if (value === '') {
+                                patch(d.id, { branch: null });
+                                return;
+                              }
+                              const ref = drafts.find((x) => x.id === value);
+                              const first = ref ? (triggerValues(ref)[0]?.value ?? '') : '';
+                              patch(d.id, { branch: { whenQuestionId: value, equals: first } });
+                            }}
+                          >
+                            <option value="">Always</option>
+                            {candidates.map((c) => (
+                              <option key={c.draft.id} value={c.draft.id}>
+                                When question {c.number} answered…
+                              </option>
+                            ))}
+                          </Select>
+                        )}
+                      </Field>
+                      {branchRef ? (
+                        <Field label="…equals">
+                          {(props) => (
+                            <Select
+                              {...props}
+                              value={d.branch?.equals ?? ''}
+                              onChange={(event) =>
+                                patch(d.id, {
+                                  branch: {
+                                    whenQuestionId: branchRef.draft.id,
+                                    equals: event.target.value,
+                                  },
+                                })
+                              }
+                            >
+                              {triggerValues(branchRef.draft).map((v) => (
+                                <option key={v.value} value={v.value}>
+                                  {v.label}
+                                </option>
+                              ))}
+                            </Select>
+                          )}
+                        </Field>
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
+              );
+            })}
+
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setProblems(null);
+                setDrafts((ds) => [...ds, blankDraft()]);
+              }}
+            >
+              <Plus size={16} aria-hidden="true" />
+              Add question
+            </Button>
+          </div>
+
+          {problems !== null ? (
+            <Banner tone={problems.length === 0 ? 'info' : 'warning'}>
+              {problems.length === 0
+                ? 'Looks good — this questionnaire is ready to send.'
+                : problems.join(' ')}
+            </Banner>
+          ) : null}
+
+          <div className={styles.footer}>
+            <Button variant="secondary" onClick={() => void onCheck()} disabled={busy}>
+              Check
+            </Button>
+            <div className={styles.footerActions}>
+              <Button variant="primary" onClick={() => void onSave()} disabled={!canSave}>
+                {questionnaire ? 'Save' : 'Create'}
+              </Button>
+              <Button variant="secondary" onClick={onDone} disabled={busy}>
+                Cancel
+              </Button>
+              {questionnaire ? (
+                <IconButton
+                  aria-label="Delete questionnaire"
+                  variant="secondary"
+                  onClick={() => void onRemove()}
+                  disabled={busy}
+                >
+                  <Trash2 size={16} aria-hidden="true" />
+                </IconButton>
               ) : null}
             </div>
-          );
-        })}
-
-        <Button
-          variant="secondary"
-          onClick={() => {
-            setProblems(null);
-            setDrafts((ds) => [...ds, blankDraft()]);
-          }}
-        >
-          <Plus size={16} aria-hidden="true" />
-          Add question
-        </Button>
-      </div>
-
-      {problems !== null ? (
-        <Banner tone={problems.length === 0 ? 'info' : 'warning'}>
-          {problems.length === 0
-            ? 'Looks good — this questionnaire is ready to send.'
-            : problems.join(' ')}
-        </Banner>
-      ) : null}
-
-      <div className={styles.footer}>
-        <Button variant="secondary" onClick={() => void onCheck()} disabled={busy}>
-          Check
-        </Button>
-        <div className={styles.footerActions}>
-          <Button variant="primary" onClick={() => void onSave()} disabled={!canSave}>
-            {questionnaire ? 'Save' : 'Create'}
-          </Button>
-          <Button variant="secondary" onClick={onDone} disabled={busy}>
-            Cancel
-          </Button>
-          {questionnaire ? (
-            <IconButton
-              aria-label="Delete questionnaire"
-              variant="secondary"
-              onClick={() => void onRemove()}
-              disabled={busy}
-            >
-              <Trash2 size={16} aria-hidden="true" />
-            </IconButton>
-          ) : null}
-        </div>
-      </div>
+          </div>
+        </>
+      )}
     </Stack>
   );
 }

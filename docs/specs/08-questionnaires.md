@@ -721,6 +721,13 @@ Confirmed with the user (2026-06-10):
      and the `buildContext` Insight extension. **Deferred** to their consuming slices: the
      questionnaire/assignment/ResponseSet schemas + vault layout, the **context-provider registry**, and
      `insightStore.queryMetrics`._
+   - _**1b (built 2026-06-11):** the `Questionnaire`/`Question` (all answer types incl. matrix/allocation +
+     `media` + simple `branch`)/`Assignment`/`ResponseSet` schemas + the §4.1 vault layout, and the
+     `questionnaires/` services — `questionnaireService` (CRUD + version-bump + `validateQuestionnaire`),
+     `assignmentService` (`createAssignment` with the immutable snapshot + send-time validation, status
+     transitions, sender-scoped list), `responseService`. **Still deferred:** the context-provider
+     registry, `queryMetrics`, relay link material (token/PIN/keys), and the renderer (IPC + builder/inbox/
+     results UI)._
 2. **Builder + answer-type library** — create flow (type incl. custom), all answer types (incl.
    matrix/allocation + question-image attach), preview, simple branching, test-on-self.
 3. **AI generate + gap-finder** — brief + data-grounded generation (safety pass, schema-valid, de-dup) via
@@ -762,3 +769,10 @@ Confirmed with the user (2026-06-10):
   `buildContext` Insight extension, the `questionnaires.*` capabilities (`readRaw` deferred), and `Person`
   `email`/`phone` (additive-optional, no migration). Code-reviewed (the `upsertPerson` drop fixed) + gate
   green (83 core unit tests). Engine/registry/`queryMetrics` deferred to consuming slices.
+- 2026-06-11 — **Slice 1b built** (§13.1, the questionnaire engine): the `Questionnaire`/`Question`/
+  `Assignment`/`ResponseSet` schemas (all answer types incl. matrix/allocation + `media` + simple `branch`)
+  - the `@selfos/core/questionnaires` services — `questionnaireService` (CRUD + version-bump +
+    `validateQuestionnaire`), `assignmentService` (immutable send-time snapshot + validation-gated send +
+    status transitions), `responseService`. Code-reviewed (per-type validation + stray-entry tests added) +
+    gate green (98 core unit tests). Deferred: context-provider registry, `queryMetrics`, relay material,
+    the renderer.

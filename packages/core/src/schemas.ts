@@ -276,6 +276,179 @@ export const InsightSchema = z.object({
 export type Insight = z.infer<typeof InsightSchema>;
 
 /**
+ * Questionnaires (08-questionnaires §4.2/§4.3). Created fresh (no templates), sent as an immutable
+ * snapshot, and answered into a ResponseSet. All file shapes are Zod-validated + versioned.
+ */
+
+export const AnswerTypeSchema = z.enum([
+  'shortText',
+  'longText',
+  'singleChoice',
+  'multiChoice',
+  'rating',
+  'slider',
+  'ranking',
+  'thisOrThat',
+  'yesNo',
+  'date',
+  'matrix',
+  'allocation',
+]);
+export type AnswerType = z.infer<typeof AnswerTypeSchema>;
+
+/** Simple conditional branching (v1): show a question/section when a prior answer equals a value. */
+export const BranchRuleSchema = z.object({
+  whenQuestionId: z.string().min(1),
+  equals: z.union([z.string(), z.number(), z.boolean()]),
+  action: z.literal('show'),
+});
+export type BranchRule = z.infer<typeof BranchRuleSchema>;
+
+export const QuestionSchema = z.object({
+  id: z.string().min(1),
+  canonicalId: z.string().optional(), // shared across compatibility variants for alignment
+  type: AnswerTypeSchema,
+  prompt: z.string().min(1),
+  help: z.string().optional(),
+  required: z.boolean(),
+  media: z.object({ imagePath: z.string().min(1), alt: z.string() }).optional(),
+  options: z.array(z.string()).optional(), // choice/ranking/thisOrThat/allocation buckets
+  scale: z
+    .object({
+      min: z.number(),
+      max: z.number(),
+      minLabel: z.string().optional(),
+      maxLabel: z.string().optional(),
+      step: z.number().optional(),
+    })
+    .optional(),
+  matrix: z
+    .object({
+      rows: z.array(z.string()),
+      min: z.number(),
+      max: z.number(),
+      minLabel: z.string().optional(),
+      maxLabel: z.string().optional(),
+    })
+    .optional(),
+  metricKey: z.string().optional(), // rating/slider/matrix → populates Insight.metrics
+  branch: BranchRuleSchema.optional(),
+});
+export type Question = z.infer<typeof QuestionSchema>;
+
+export const SensitivityTierSchema = z.enum([
+  'standard',
+  'intimacyGeneral',
+  'explicit',
+  'unfiltered',
+]);
+export type SensitivityTier = z.infer<typeof SensitivityTierSchema>;
+
+export const CompatibilityConfigSchema = z.object({
+  enabled: z.literal(true),
+  visibility: z.enum(['sharedReport', 'senderSeesAll', 'eachSeesOwn']),
+});
+export type CompatibilityConfig = z.infer<typeof CompatibilityConfigSchema>;
+
+export const QuestionnaireSchema = z.object({
+  id: z.string().min(1),
+  schemaVersion: z.number().int().positive(),
+  version: z.number().int().positive(), // immutable-snapshot version; bumps on edit
+  title: z.string().min(1),
+  description: z.string().optional(),
+  type: z.string().min(1), // a starter-taxonomy key OR a user-defined custom type
+  sensitivity: SensitivityTierSchema,
+  questions: z.array(QuestionSchema),
+  compatibility: CompatibilityConfigSchema.optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type Questionnaire = z.infer<typeof QuestionnaireSchema>;
+
+/** Renderer-supplied questionnaire fields; main owns id, schemaVersion, version, and timestamps. */
+export const QuestionnaireInputSchema = z.object({
+  id: z.string().optional(),
+  title: z.string().min(1),
+  description: z.string().optional(),
+  type: z.string().min(1),
+  sensitivity: SensitivityTierSchema,
+  questions: z.array(QuestionSchema),
+  compatibility: CompatibilityConfigSchema.optional(),
+});
+export type QuestionnaireInput = z.infer<typeof QuestionnaireInputSchema>;
+
+export const ChannelSchema = z.enum(['inApp', 'relay']);
+export type Channel = z.infer<typeof ChannelSchema>;
+
+export const AssignmentStatusSchema = z.enum([
+  'draft',
+  'sent',
+  'opened',
+  'inProgress',
+  'submitted',
+  'analyzed',
+  'expired',
+  'revoked',
+  'declined',
+]);
+export type AssignmentStatus = z.infer<typeof AssignmentStatusSchema>;
+
+export const PrivacyModeSchema = z.enum(['standard', 'private']);
+export type PrivacyMode = z.infer<typeof PrivacyModeSchema>;
+
+export const RecipientSchema = z.union([
+  z.object({ kind: z.literal('person'), personId: z.string().min(1) }),
+  z.object({
+    kind: z.literal('external'),
+    displayName: z.string().optional(),
+    email: z.string().optional(),
+    phone: z.string().optional(),
+  }),
+]);
+export type Recipient = z.infer<typeof RecipientSchema>;
+
+export const AssignmentSchema = z.object({
+  id: z.string().min(1),
+  schemaVersion: z.number().int().positive(),
+  questionnaireId: z.string().min(1), // source definition id (provenance); the as-sent snapshot is keyed by assignment id
+  senderPersonId: z.string().min(1),
+  recipient: RecipientSchema,
+  channel: ChannelSchema,
+  privacy: PrivacyModeSchema,
+  senderVisibleToRecipient: z.boolean(), // false = anonymous (external)
+  status: AssignmentStatusSchema,
+  expiresAt: z.string().optional(), // omitted = indefinite
+  declineNote: z.string().optional(),
+  relay: z
+    .object({
+      token: z.string().min(1),
+      pinHash: z.string().min(1),
+      publicKey: z.string().min(1),
+      privateKeyWrapped: z.string().min(1),
+    })
+    .optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type Assignment = z.infer<typeof AssignmentSchema>;
+
+export const AnswerSchema = z.object({
+  questionId: z.string().min(1),
+  value: z.union([z.string(), z.number(), z.boolean(), z.array(z.string())]),
+});
+export type Answer = z.infer<typeof AnswerSchema>;
+
+export const ResponseSetSchema = z.object({
+  id: z.string().min(1),
+  schemaVersion: z.number().int().positive(),
+  assignmentId: z.string().min(1),
+  reAskOf: z.string().optional(), // prior ResponseSet id → longitudinal chain
+  answers: z.array(AnswerSchema),
+  submittedAt: z.string(),
+});
+export type ResponseSet = z.infer<typeof ResponseSetSchema>;
+
+/**
  * Derived "view" types produced by the core services and surfaced over IPC. They live here (a
  * crypto-free module) rather than alongside their services so `channels.ts` can import them from the
  * schemas shim without dragging `@selfos/core/crypto` into the renderer/web tsconfig (07-mobile-platform

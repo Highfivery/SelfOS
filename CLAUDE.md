@@ -239,6 +239,17 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Build (Questionnaires **slice 1b — the questionnaire engine backend**,
+  [08-questionnaires](docs/specs/08-questionnaires.md) §4.2/§4.3/§13.1): the `Questionnaire`/`Question`
+  (all answer types incl. matrix/allocation + author `media` + simple `branch`)/`Assignment`/`ResponseSet`
+  Zod schemas + the new **`@selfos/core/questionnaires`** services — `questionnaireService` (CRUD +
+  **version-bump-on-edit** + `validateQuestionnaire`), `assignmentService` (`createAssignment` freezes an
+  **immutable snapshot** of the as-sent questionnaire + refuses an invalid send; status transitions incl.
+  decline-with-note; sender-scoped list), `responseService` (encrypted response CRUD + re-ask chaining).
+  Code-reviewed (no blockers; added per-answer-type validation tests + a stray-`sends/`-entry regression);
+  gate green (typecheck/lint/format, **98 core unit tests**). Deferred: relay link material, the
+  context-provider registry, `queryMetrics`, and the renderer (IPC + builder/inbox/results UI). Synced `08`
+  §13.1.
 - 2026-06-11 — Build (Questionnaires **slice 1a — the shared Insight/metrics layer foundation**,
   [08-questionnaires](docs/specs/08-questionnaires.md) §4.4/§13): added the `Insight`/`InsightFact`/
   `InsightSource` Zod schemas, the new **`@selfos/core/insights`** `insightStore` (encrypted per-subject

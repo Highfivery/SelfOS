@@ -18,7 +18,8 @@
     "./people": "./src/people/index.ts",
     "./usage": "./src/usage/index.ts",
     "./conversations": "./src/conversations/index.ts",
-    "./insights": "./src/insights/index.ts"
+    "./insights": "./src/insights/index.ts",
+    "./questionnaires": "./src/questionnaires/index.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",

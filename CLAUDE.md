@@ -239,6 +239,24 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-10 — Fix + decisions (**Capacitor track iii-b start: iOS host**). **Decisions (asked):** the
+  iOS host shares logic with Electron via **one platform-agnostic `createCoreBridge(host)` factory**
+  (both hosts expose the same `SelfosBridge`; ~40 data ops live once), and we **browser-verify the host
+  first** (wire `@selfos/core` to an in-browser filesystem so the real app works in the web preview
+  before the blind Swift plugin). Sub-slices: **iii-b1** factory + Electron migration → **iii-b2** iOS
+  in-webview host + browser verify → **iii-b3** Swift `VaultFs` plugin (Xcode). **Foundational blocker
+  found + fixed first:** the iOS host runs `@selfos/core` in the WKWebView, so core must typecheck under
+  the renderer's **DOM lib**, but TS 5.7's `Uint8Array<ArrayBufferLike>` is incompatible with WebCrypto's
+  `BufferSource` (wants `ArrayBuffer`, not `SharedArrayBuffer`) — `importKey`/`encrypt`/`decrypt` in
+  `cryptoService` wouldn't compile under DOM lib. Added a `bufferSource()` copy at the `subtle.*`
+  boundary; **the whole core surface (crypto/people/usage/conversations/vault/host) now typechecks under
+  both `tsconfig.web` (DOM) and `tsconfig.node`.** Byte-identical (cryptoCompat fixtures + encrypted-vault
+  E2E pass). **Lesson: any code destined for the WebView must be typechecked under the DOM lib early —
+  the Node lib is lenient about `BufferSource`/`Uint8Array<ArrayBufferLike>` where the DOM lib is strict;
+  probe with a throwaway import before building on top.** **NEXT: iii-b1 the `createCoreBridge` factory.**
+  **Note: a concurrent agent renumbered its stray spec `10-relationship-tracking` → `11` (resolving the
+  number collision with this 10-multi-device-vault) and is editing `04`/`05` — left untouched per the
+  user; my commits exclude all of `docs/specs/0{4,5,8,9}` + `11`.**
 - 2026-06-10 — Build (**Slice 2b — [10-multi-device-vault](docs/specs/10-multi-device-vault.md) Slice 2
   complete; the whole spec is now built**). The **member redeem flow**: `invites:redeem` (needs **no
   device key** — unwraps the master key from the matching invite via core `redeemInvite`, stores it

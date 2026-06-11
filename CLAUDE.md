@@ -239,6 +239,24 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Build (Questionnaires **slice 2 — the builder UI**,
+  [08-questionnaires](docs/specs/08-questionnaires.md) §3/§13.2): the first renderer surface — a
+  **Questionnaires** master-detail screen (list + builder pane, mirroring People), gated by
+  **`questionnaires.create`**, with a **`questionnaireStore`** (Zustand: load/save/remove/validate,
+  re-fetching after mutations) over the `window.selfos.questionnaires*` IPC. The **builder** authors
+  title + type (taxonomy Select) + a question list — each with a prompt, an answer-type Select (11
+  authorable types; matrix/branching/images deferred), a Required toggle, an **options editor** for
+  choice/ranking/allocation (stable `{id,text}[]` model so edits never steal focus), and a min/max
+  **scale editor** (rating/slider). "Check" runs the engine's `validate` + a client-side guard; scale
+  bounds are **coerced finite at the input boundary** so a cleared field can't persist `NaN`
+  (code-reviewer caught the `z.number()`-accepts-`NaN` edge). Nav entry + `/questionnaires` route in
+  AppShell/Shell. Tests: 3 RTL (empty state, save-payload shape, validation surfacing) + a new E2E
+  (author single-choice → option editor → validate → save → encrypted round-trip + overflow guard);
+  the **responsive phone-width sweep now visits Questionnaires + opens the builder**. Gate green
+  (typecheck/lint/format, **194 desktop** + 98 core unit, **29 E2E**). Synced `08` §3.1 (nav is
+  `create`-only until the Inbox/answer surface ships, §13.5). \*\*Next §13 slices: builder follow-ups
+  (matrix/images/branching editors, sensitivity picker, preview/test-on-self, send UI) → AI generate
+  - context-provider registry → analyze→insights → send/collect (Inbox/Results) → relay.\*\*
 - 2026-06-11 — Build (Questionnaires **IPC/bridge wiring** — exposing the engine to the renderer,
   [08-questionnaires](docs/specs/08-questionnaires.md) §6/§13.2): added `questionnaires:list/get/save/
 delete/validate` + `assignments:create` (in-app) through the typed seam — `channels.ts` (contract +

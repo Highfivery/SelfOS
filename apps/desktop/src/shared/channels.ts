@@ -7,7 +7,11 @@ import type {
   ChatTurnResult,
   Conversation,
   Dream,
+  DreamAnalysis,
+  DreamAnalysisEdits,
+  DreamApproveResult,
   DreamInput,
+  DreamSynthesisResult,
   InviteSummary,
   Person,
   PersonInput,
@@ -91,6 +95,14 @@ export const IpcChannels = {
   dreamGet: 'dreams:get',
   dreamSave: 'dreams:save',
   dreamDelete: 'dreams:delete',
+  dreamAnalyzeTurn: 'dreams:analyzeTurn',
+  dreamChunk: 'dreams:chunk', // main → renderer event
+  dreamGetAnalysis: 'dreams:getAnalysis',
+  dreamGetConversation: 'dreams:getConversation',
+  dreamSynthesize: 'dreams:synthesize',
+  dreamUpdateAnalysis: 'dreams:updateAnalysis',
+  dreamApprove: 'dreams:approve',
+  dreamRemoveFromContext: 'dreams:removeFromContext',
   getSidebarCollapsed: 'ui:getSidebarCollapsed',
   setSidebarCollapsed: 'ui:setSidebarCollapsed',
 } as const;
@@ -293,6 +305,28 @@ export interface SelfosBridge {
   dreamSave(input: DreamInput): Promise<Dream>;
   /** Delete a dream (purges its folder: dream + analysis + transcript). Requires `dreams.own`. */
   dreamDelete(id: string): Promise<void>;
+  /**
+   * One turn of a dream's guided-analysis chat: streams reply chunks via `onDreamChunk`, resolves with
+   * the final turn. The transcript persists under the dream (never in Sessions). Requires `dreams.own`.
+   */
+  dreamAnalyzeTurn(input: { dreamId: string; userText: string }): Promise<ChatTurnResult>;
+  /** Subscribe to streamed dream-analysis reply chunks; returns an unsubscribe function. */
+  onDreamChunk(listener: (delta: string) => void): () => void;
+  /** Load a dream's synthesized analysis; null if not analyzed yet. Requires `dreams.own`. */
+  dreamGetAnalysis(dreamId: string): Promise<DreamAnalysis | null>;
+  /** Load a dream's guided-analysis transcript (to resume the chat); null if none. Requires `dreams.own`. */
+  dreamGetConversation(dreamId: string): Promise<Conversation | null>;
+  /** Synthesize the dream (+ any transcript) into a structured, editable analysis. Requires `dreams.own`. */
+  dreamSynthesize(input: { dreamId: string }): Promise<DreamSynthesisResult>;
+  /** Save the person's edits to a dream's analysis (marks it edited); null if absent. Requires `dreams.own`. */
+  dreamUpdateAnalysis(input: {
+    dreamId: string;
+    edits: DreamAnalysisEdits;
+  }): Promise<DreamAnalysis | null>;
+  /** Approve a dream's analysis into the coach's memory (→ Insight). Requires `dreams.own` + memory enabled. */
+  dreamApprove(input: { dreamId: string }): Promise<DreamApproveResult>;
+  /** Remove a dream's analysis from the coach's memory (delete its Insight, unlink). Requires `dreams.own`. */
+  dreamRemoveFromContext(input: { dreamId: string }): Promise<void>;
   /** Whether the desktop sidebar is collapsed to an icon rail (device-local). */
   getSidebarCollapsed(): Promise<boolean>;
   /** Persist the sidebar collapsed/expanded state (device-local). */
@@ -308,7 +342,11 @@ export type {
   ChatTurnResult,
   Conversation,
   Dream,
+  DreamAnalysis,
+  DreamAnalysisEdits,
+  DreamApproveResult,
   DreamInput,
+  DreamSynthesisResult,
   InviteSummary,
   Person,
   PersonInput,

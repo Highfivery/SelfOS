@@ -6,6 +6,9 @@ import type {
   ChatTurnResult,
   Conversation,
   DreamAnalysis,
+  DreamAnalysisEdits,
+  DreamApproveResult,
+  DreamSynthesisResult,
   Insight,
   InsightFact,
   UsageEvent,
@@ -66,14 +69,6 @@ const DreamAnalysisDraftSchema = z.object({
   crisisFlag: z.boolean().optional(),
   distressSignal: z.boolean().optional(),
 });
-
-export type DreamSynthesisResult =
-  | { ok: true; analysis: DreamAnalysis; usage: UsageEvent }
-  | { ok: false; reason: 'NO_KEY' | 'BUDGET' | 'ERROR' | 'NOT_FOUND'; message: string };
-
-export type DreamApproveResult =
-  | { ok: true; insightId: string }
-  | { ok: false; reason: 'MEMORY_DISABLED' | 'NOT_FOUND'; message: string };
 
 export interface DreamAnalysisTurnDeps {
   fs: FileSystem;
@@ -320,6 +315,43 @@ export async function synthesizeAnalysis(deps: DreamSynthesisDeps): Promise<Drea
   });
 
   return { ok: true, analysis, usage };
+}
+
+/**
+ * Save the person's edits to a dream's analysis (12 §3.2/§3.3) — overwriting only the supplied readable
+ * sections, marking it `edited`. The AI-owned structured tags/metrics/flags and the `insightId` link are
+ * preserved; null if there's no analysis yet. Re-approving after an edit refreshes the linked Insight.
+ */
+export async function updateAnalysis(deps: {
+  fs: FileSystem;
+  key: Uint8Array;
+  personId: string;
+  dreamId: string;
+  edits: DreamAnalysisEdits;
+  now: Date;
+}): Promise<DreamAnalysis | null> {
+  const { fs, key, personId, dreamId, edits, now } = deps;
+  const analysis = await getAnalysis(fs, key, personId, dreamId);
+  if (!analysis) return null;
+  const updated: DreamAnalysis = {
+    ...analysis,
+    ...(edits.summary !== undefined ? { summary: edits.summary } : {}),
+    ...(edits.emotionalLandscape !== undefined
+      ? { emotionalLandscape: edits.emotionalLandscape }
+      : {}),
+    ...(edits.wakingLifeConnections !== undefined
+      ? { wakingLifeConnections: edits.wakingLifeConnections }
+      : {}),
+    ...(edits.notableImages !== undefined ? { notableImages: edits.notableImages } : {}),
+    ...(edits.reflectiveQuestions !== undefined
+      ? { reflectiveQuestions: edits.reflectiveQuestions }
+      : {}),
+    ...(edits.coachingPrompt !== undefined ? { coachingPrompt: edits.coachingPrompt } : {}),
+    edited: true,
+    updatedAt: now.toISOString(),
+  };
+  await saveAnalysis(fs, key, updated);
+  return updated;
 }
 
 /**

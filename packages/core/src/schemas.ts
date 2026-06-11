@@ -578,6 +578,21 @@ export const DreamInputSchema = z.object({
 export type DreamInput = z.infer<typeof DreamInputSchema>;
 
 /**
+ * The user-editable sections of a synthesized analysis (12 §3.2/§3.3). All optional → a partial edit;
+ * the structured tags/metrics/flags are AI-owned and not editable here. Validated in the bridge before
+ * the analysis is re-saved (marked `edited`).
+ */
+export const DreamAnalysisEditsSchema = z.object({
+  summary: z.string().optional(),
+  emotionalLandscape: z.string().optional(),
+  wakingLifeConnections: z.string().optional(),
+  notableImages: z.string().optional(),
+  reflectiveQuestions: z.array(z.string()).optional(),
+  coachingPrompt: z.string().optional(),
+});
+export type DreamAnalysisEdits = z.infer<typeof DreamAnalysisEditsSchema>;
+
+/**
  * Derived "view" types produced by the core services and surfaced over IPC. They live here (a
  * crypto-free module) rather than alongside their services so `channels.ts` can import them from the
  * schemas shim without dragging `@selfos/core/crypto` into the renderer/web tsconfig (07-mobile-platform
@@ -611,3 +626,13 @@ export interface BudgetState {
 export type ChatTurnResult =
   | { ok: true; conversation: Conversation; usage: UsageEvent }
   | { ok: false; reason: 'NO_KEY' | 'BUDGET' | 'ERROR'; message: string };
+
+/** The result of synthesizing a dream (+ guided transcript) into a structured analysis (12 §3.2). */
+export type DreamSynthesisResult =
+  | { ok: true; analysis: DreamAnalysis; usage: UsageEvent }
+  | { ok: false; reason: 'NO_KEY' | 'BUDGET' | 'ERROR' | 'NOT_FOUND'; message: string };
+
+/** The result of approving a dream's analysis into the coach's memory (→ Insight, 12 §3.3). */
+export type DreamApproveResult =
+  | { ok: true; insightId: string }
+  | { ok: false; reason: 'MEMORY_DISABLED' | 'NOT_FOUND'; message: string };

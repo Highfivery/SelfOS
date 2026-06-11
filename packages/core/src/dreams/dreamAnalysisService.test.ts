@@ -13,6 +13,7 @@ import {
   removeFromContext,
   runAnalysisTurn,
   synthesizeAnalysis,
+  updateAnalysis,
 } from './dreamAnalysisService';
 
 const key = generateMasterKey();
@@ -118,6 +119,41 @@ describe('dreamAnalysisService', () => {
     const d = await getDream(fs, key, 'p1', 'd1');
     expect(d?.status).toBe('analyzed');
     expect(d?.analysisId).toBe(res.analysis.id);
+  });
+
+  it('saves edits to a section, marks it edited, and leaves AI-owned coding intact', async () => {
+    const fs = memFileSystem();
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+    await synthesizeAnalysis(deps(fs, fakeClient()));
+
+    const updated = await updateAnalysis({
+      fs,
+      key,
+      personId: 'p1',
+      dreamId: 'd1',
+      edits: { summary: 'My own retelling.' },
+      now: new Date('2026-06-11T12:00:00.000Z'),
+    });
+    expect(updated?.summary).toBe('My own retelling.');
+    expect(updated?.edited).toBe(true);
+    // Untouched sections + the AI-owned structured tags are preserved.
+    expect(updated?.emotionalLandscape).toBe(VALID_DRAFT.emotionalLandscape);
+    expect(updated?.tags.symbols).toContain('house');
+    expect((await getAnalysis(fs, key, 'p1', 'd1'))?.summary).toBe('My own retelling.');
+  });
+
+  it('updateAnalysis is a no-op (null) when there is no analysis yet', async () => {
+    const fs = memFileSystem();
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+    const res = await updateAnalysis({
+      fs,
+      key,
+      personId: 'p1',
+      dreamId: 'd1',
+      edits: { summary: 'x' },
+      now: new Date('2026-06-11T12:00:00.000Z'),
+    });
+    expect(res).toBeNull();
   });
 
   it('returns ERROR when the synthesis output is not valid JSON', async () => {

@@ -7,6 +7,8 @@ import {
   type ChatTurnResult,
   type ClaudeTestResult,
   type ConversationMeta,
+  type DreamApproveResult,
+  type DreamSynthesisResult,
   type HouseholdStatus,
   type InviteSummary,
   type SelfosBridge,
@@ -16,6 +18,7 @@ import {
 } from './channels';
 import {
   BudgetSchema,
+  DreamAnalysisEditsSchema,
   DreamInputSchema,
   PersonInputSchema,
   QuestionnaireInputSchema,
@@ -28,6 +31,7 @@ import {
   type Conversation,
   type DeviceState,
   type Dream,
+  type DreamAnalysis,
   type Person,
   type Questionnaire,
   type Relationship,
@@ -101,7 +105,19 @@ import {
   storeQuestionnaireImage,
   validateQuestionnaire,
 } from '@selfos/core/questionnaires';
-import { getDream, listDreams, purgeDream, saveDream } from '@selfos/core/dreams';
+import {
+  approveAnalysis,
+  getAnalysis,
+  getDream,
+  getDreamConversation,
+  listDreams,
+  purgeDream,
+  removeFromContext,
+  runAnalysisTurn,
+  saveDream,
+  synthesizeAnalysis,
+  updateAnalysis,
+} from '@selfos/core/dreams';
 import { fromBase64, toBase64 } from '@selfos/core/encoding';
 
 /**
@@ -149,6 +165,8 @@ export interface BridgeHost {
   // --- Streaming sink ---
   /** Deliver a chat reply chunk to the renderer (Electron → IPC event; iOS → in-webview listener). */
   emitChatChunk(chunk: string): void;
+  /** Deliver a dream-analysis reply chunk to the renderer (separate channel from chat). */
+  emitDreamChunk(chunk: string): void;
 
   // --- Platform-specific surface, forwarded verbatim to the renderer-facing bridge ---
   getBootState(): Promise<BootState>;
@@ -161,6 +179,8 @@ export interface BridgeHost {
   onVaultChanged(listener: () => void): () => void;
   /** Subscribe to streamed chat chunks; the renderer-facing counterpart to `emitChatChunk`. */
   onChatChunk(listener: (delta: string) => void): () => void;
+  /** Subscribe to streamed dream-analysis chunks; the counterpart to `emitDreamChunk`. */
+  onDreamChunk(listener: (delta: string) => void): () => void;
 }
 
 /** Vault-relative path of the plain-JSON, vault-scoped settings file (02-app-shell). */
@@ -219,6 +239,15 @@ const ChatStreamSchema = z.object({
   conversationId: z.string().min(1),
   userText: z.string().min(1),
 });
+const DreamAnalyzeTurnSchema = z.object({
+  dreamId: z.string().min(1),
+  userText: z.string().min(1),
+});
+const DreamIdSchema = z.object({ dreamId: z.string().min(1) });
+const DreamUpdateAnalysisSchema = z.object({
+  dreamId: z.string().min(1),
+  edits: DreamAnalysisEditsSchema,
+});
 const PersonIdSchema = z.string().min(1);
 const InvitePersonSchema = z.object({ personId: z.string().min(1) });
 const InviteIdSchema = z.object({ id: z.string().min(1) });
@@ -271,6 +300,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     revealVault: () => host.revealVault(),
     onVaultChanged: (listener) => host.onVaultChanged(listener),
     onChatChunk: (listener) => host.onChatChunk(listener),
+    onDreamChunk: (listener) => host.onDreamChunk(listener),
     getAppVersion: () => Promise.resolve(host.appVersion),
 
     // --- Settings ---
@@ -811,6 +841,100 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // purgeDream (not deleteDream) so the linked Insight is removed too — else it orphans + keeps
       // feeding the coach (12 §3.6).
       await purgeDream(ctx.fs, ctx.key, personId, PersonIdSchema.parse(id));
+    },
+    dreamAnalyzeTurn: async (input): Promise<ChatTurnResult> => {
+      const { dreamId, userText } = DreamAnalyzeTurnSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      // The API key is read host-side and never crosses to the renderer; streamed deltas go to the
+      // dedicated dream sink so they never mix with the Sessions chat stream.
+      const apiKey = await host.secrets.get(ANTHROPIC_API_KEY_ID);
+      return runAnalysisTurn({
+        fs: ctx.fs,
+        key: ctx.key,
+        client: host.claude,
+        apiKey,
+        model: await host.activeModel(),
+        personId,
+        dreamId,
+        userText,
+        onDelta: (text) => host.emitDreamChunk(text),
+        now: new Date(),
+      });
+    },
+    dreamGetAnalysis: async (dreamId): Promise<DreamAnalysis | null> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) return null;
+      return getAnalysis(ctx.fs, ctx.key, personId, PersonIdSchema.parse(dreamId));
+    },
+    dreamGetConversation: async (dreamId): Promise<Conversation | null> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) return null;
+      return getDreamConversation(ctx.fs, ctx.key, personId, PersonIdSchema.parse(dreamId));
+    },
+    dreamSynthesize: async (input): Promise<DreamSynthesisResult> => {
+      const { dreamId } = DreamIdSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      const apiKey = await host.secrets.get(ANTHROPIC_API_KEY_ID);
+      return synthesizeAnalysis({
+        fs: ctx.fs,
+        key: ctx.key,
+        client: host.claude,
+        apiKey,
+        model: await host.activeModel(),
+        personId,
+        dreamId,
+        now: new Date(),
+      });
+    },
+    dreamUpdateAnalysis: async (input): Promise<DreamAnalysis | null> => {
+      const { dreamId, edits } = DreamUpdateAnalysisSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) return null;
+      return updateAnalysis({
+        fs: ctx.fs,
+        key: ctx.key,
+        personId,
+        dreamId,
+        edits,
+        now: new Date(),
+      });
+    },
+    dreamApprove: async (input): Promise<DreamApproveResult> => {
+      const { dreamId } = DreamIdSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) {
+        return { ok: false, reason: 'NOT_FOUND', message: 'There’s no analysis to approve yet.' };
+      }
+      // The dream→coach master toggle lives in vault settings (default ON); the service refuses when off.
+      const memoryEnabled =
+        (await readVaultSettingsValues(ctx.fs))['dreams.memoryEnabled'] !== false;
+      return approveAnalysis({
+        fs: ctx.fs,
+        key: ctx.key,
+        personId,
+        dreamId,
+        memoryEnabled,
+        now: new Date(),
+      });
+    },
+    dreamRemoveFromContext: async (input): Promise<void> => {
+      const { dreamId } = DreamIdSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) return;
+      await removeFromContext({ fs: ctx.fs, key: ctx.key, personId, dreamId, now: new Date() });
     },
 
     // --- UI state (device-local) ---

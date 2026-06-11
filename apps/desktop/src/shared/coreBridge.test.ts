@@ -18,6 +18,7 @@ function makeHost(): {
   host: BridgeHost;
   fs: FileSystem;
   chunks: string[];
+  dreamChunks: string[];
   device: () => DeviceState;
   deviceSettings: () => Record<string, unknown>;
 } {
@@ -39,12 +40,36 @@ function makeHost(): {
   let deviceSettings: Record<string, unknown> = {};
   let superAdmin = false;
   const chunks: string[] = [];
+  const dreamChunks: string[] = [];
   const claude: ClaudeClient = {
     send: () => Promise.resolve('ok'),
-    stream: (_options, onDelta) => {
+    stream: (options, onDelta) => {
+      // Dream synthesis asks for a single JSON object — return a valid DreamAnalysis draft so the
+      // synthesize path can parse it; every other turn just streams a short reply.
+      const wantsJson = options.messages.some((m) => m.content.includes('JSON object'));
+      const text = wantsJson
+        ? JSON.stringify({
+            summary: 'A dream of shifting rooms.',
+            emotionalLandscape: 'Unsettled but curious.',
+            wakingLifeConnections: 'Perhaps a sense of change at home.',
+            notableImages: 'The rearranging house, framed as imaginative reflection.',
+            reflectiveQuestions: ['What feels in flux right now?'],
+            coachingPrompt: 'Notice one steady thing today.',
+            tags: {
+              emotions: ['unsettled'],
+              symbols: ['house'],
+              settings: ['childhood home'],
+              themes: ['change'],
+              people: [],
+            },
+            metrics: { emotionalIntensity: 0.4, valence: -0.1 },
+            crisisFlag: false,
+            distressSignal: false,
+          })
+        : 'hi';
       onDelta('hi');
       return Promise.resolve({
-        text: 'hi',
+        text,
         usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
       });
     },
@@ -76,6 +101,7 @@ function makeHost(): {
     },
     appVersion: '1.2.3',
     emitChatChunk: (chunk) => chunks.push(chunk),
+    emitDreamChunk: (chunk) => dreamChunks.push(chunk),
     getBootState: () => Promise.resolve(ready),
     refreshBootState: () => Promise.resolve(ready),
     selectVaultFolder: () => Promise.resolve(null),
@@ -84,8 +110,16 @@ function makeHost(): {
     revealVault: () => Promise.resolve(),
     onVaultChanged: () => () => {},
     onChatChunk: () => () => {},
+    onDreamChunk: () => () => {},
   };
-  return { host, fs, chunks, device: () => device, deviceSettings: () => deviceSettings };
+  return {
+    host,
+    fs,
+    chunks,
+    dreamChunks,
+    device: () => device,
+    deviceSettings: () => deviceSettings,
+  };
 }
 
 async function freshOwner(): Promise<{
@@ -345,5 +379,94 @@ describe('createCoreBridge', () => {
         sensitivity: 'standard',
       }),
     ).rejects.toThrow(/permitted/);
+  });
+
+  it('runs a guided dream turn, synthesizes, edits, approves, and removes from context', async () => {
+    const { bridge, host } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const dream = await bridge.dreamSave({
+      narrative: 'I was back in my childhood house, rooms rearranging.',
+      lucid: false,
+      nightmare: false,
+      tags: [],
+      people: [],
+      sensitivity: 'standard',
+    });
+
+    // A guided turn streams on the dream sink (not the chat sink) and persists the transcript UNDER the
+    // dream — never in the Sessions list (12 §3.2).
+    const turn = await bridge.dreamAnalyzeTurn({
+      dreamId: dream.id,
+      userText: 'It felt unsettling but oddly familiar.',
+    });
+    expect(turn.ok).toBe(true);
+    expect(host.dreamChunks).toContain('hi');
+    expect(host.chunks).toEqual([]); // the chat stream sink is untouched
+    expect(await bridge.conversationsList()).toEqual([]); // not a Session
+    expect((await bridge.dreamGetConversation(dream.id))?.messages.length).toBe(2);
+    expect((await bridge.dreamGet(dream.id))?.status).toBe('analyzing');
+
+    // Synthesize → a structured analysis; the dream flips to analyzed and the call is metered.
+    const synth = await bridge.dreamSynthesize({ dreamId: dream.id });
+    expect(synth.ok).toBe(true);
+    if (!synth.ok) throw new Error('expected a synthesis');
+    expect(synth.analysis.summary).toContain('shifting rooms');
+    expect(synth.usage.type).toBe('dream.analyze');
+    expect((await bridge.dreamGet(dream.id))?.status).toBe('analyzed');
+
+    // Edits overwrite only the supplied section and mark the analysis edited.
+    const edited = await bridge.dreamUpdateAnalysis({
+      dreamId: dream.id,
+      edits: { summary: 'My own retelling.' },
+    });
+    expect(edited?.summary).toBe('My own retelling.');
+    expect(edited?.edited).toBe(true);
+
+    // Approve → the analysis links an Insight (source 'dream') feeding the dreamer's coach.
+    const approved = await bridge.dreamApprove({ dreamId: dream.id });
+    expect(approved.ok).toBe(true);
+    expect((await bridge.dreamGetAnalysis(dream.id))?.insightId).toBeTruthy();
+
+    // Remove from context → the analysis stays but no longer feeds the coach.
+    await bridge.dreamRemoveFromContext({ dreamId: dream.id });
+    expect((await bridge.dreamGetAnalysis(dream.id))?.insightId).toBeUndefined();
+  });
+
+  it('refuses to approve a dream into context when dream memory is off', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    await bridge.setSetting({ key: 'dreams.memoryEnabled', value: false, scope: 'vault' });
+    const dream = await bridge.dreamSave({
+      narrative: 'A short dream.',
+      lucid: false,
+      nightmare: false,
+      tags: [],
+      people: [],
+      sensitivity: 'standard',
+    });
+    // Synthesis still works (memory-off only blocks approval into context).
+    expect((await bridge.dreamSynthesize({ dreamId: dream.id })).ok).toBe(true);
+    expect(await bridge.dreamApprove({ dreamId: dream.id })).toMatchObject({
+      ok: false,
+      reason: 'MEMORY_DISABLED',
+    });
+    expect((await bridge.dreamGetAnalysis(dream.id))?.insightId).toBeUndefined();
+  });
+
+  it('denies dream analysis ops to a person without dreams.own', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    expect((await bridge.sessionSetActive({ personId: guest.id })).ok).toBe(true);
+
+    expect(await bridge.dreamAnalyzeTurn({ dreamId: 'd1', userText: 'hi' })).toMatchObject({
+      ok: false,
+      reason: 'ERROR',
+    });
+    expect(await bridge.dreamGetAnalysis('d1')).toBeNull();
+    expect(await bridge.dreamGetConversation('d1')).toBeNull();
+    expect(await bridge.dreamSynthesize({ dreamId: 'd1' })).toMatchObject({ ok: false });
+    expect(await bridge.dreamUpdateAnalysis({ dreamId: 'd1', edits: { summary: 'x' } })).toBeNull();
   });
 });

@@ -41,9 +41,11 @@ async function currentBootState(): Promise<BootState> {
  * watcher / stream target the invoking `WebContents`.
  */
 export function registerIpcHandlers(): void {
-  // The device-local secret store + the renderer to stream chat chunks back to (set per chat turn).
+  // The device-local secret store + the renderers to stream chat / dream-analysis chunks back to (each
+  // set per turn, on the dedicated channel).
   const secrets = createNodeSecretStore(userDataDir(), encryptor);
   let chatSender: WebContents | undefined;
+  let dreamSender: WebContents | undefined;
 
   const host: BridgeHost = {
     vaultAndKey: async () => {
@@ -72,6 +74,11 @@ export function registerIpcHandlers(): void {
     emitChatChunk: (chunk) => {
       if (chatSender && !chatSender.isDestroyed()) {
         chatSender.send(IpcChannels.chatChunk, chunk);
+      }
+    },
+    emitDreamChunk: (chunk) => {
+      if (dreamSender && !dreamSender.isDestroyed()) {
+        dreamSender.send(IpcChannels.dreamChunk, chunk);
       }
     },
     getBootState: currentBootState,
@@ -103,6 +110,7 @@ export function registerIpcHandlers(): void {
     // bridge — so the bridge's own subscriptions are unused in main (they exist for the iOS host).
     onVaultChanged: () => () => {},
     onChatChunk: () => () => {},
+    onDreamChunk: () => () => {},
   };
 
   const bridge = createCoreBridge(host);
@@ -177,6 +185,12 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.dreamGet, bridge.dreamGet);
   handle(IpcChannels.dreamSave, bridge.dreamSave);
   handle(IpcChannels.dreamDelete, bridge.dreamDelete);
+  handle(IpcChannels.dreamGetAnalysis, bridge.dreamGetAnalysis);
+  handle(IpcChannels.dreamGetConversation, bridge.dreamGetConversation);
+  handle(IpcChannels.dreamSynthesize, bridge.dreamSynthesize);
+  handle(IpcChannels.dreamUpdateAnalysis, bridge.dreamUpdateAnalysis);
+  handle(IpcChannels.dreamApprove, bridge.dreamApprove);
+  handle(IpcChannels.dreamRemoveFromContext, bridge.dreamRemoveFromContext);
   handle(IpcChannels.getSidebarCollapsed, bridge.getSidebarCollapsed);
   handle(IpcChannels.setSidebarCollapsed, bridge.setSidebarCollapsed);
 
@@ -197,6 +211,17 @@ export function registerIpcHandlers(): void {
       return await bridge.chatStream(raw as { conversationId: string; userText: string });
     } finally {
       chatSender = undefined;
+    }
+  });
+
+  // dreamAnalyzeTurn streams the guided-analysis reply on its own channel (kept separate from chat so the
+  // Sessions and Dreams streams never cross). Same per-turn sender binding + reset as chatStream.
+  ipcMain.handle(IpcChannels.dreamAnalyzeTurn, async (event, raw: unknown) => {
+    dreamSender = event.sender;
+    try {
+      return await bridge.dreamAnalyzeTurn(raw as { dreamId: string; userText: string });
+    } finally {
+      dreamSender = undefined;
     }
   });
 }

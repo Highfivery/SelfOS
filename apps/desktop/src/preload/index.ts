@@ -86,6 +86,20 @@ const bridge: SelfosBridge = {
   dreamGet: (id) => ipcRenderer.invoke(IpcChannels.dreamGet, id),
   dreamSave: (input) => ipcRenderer.invoke(IpcChannels.dreamSave, input),
   dreamDelete: (id) => ipcRenderer.invoke(IpcChannels.dreamDelete, id),
+  dreamAnalyzeTurn: (input) => ipcRenderer.invoke(IpcChannels.dreamAnalyzeTurn, input),
+  onDreamChunk: (listener) => {
+    const handler = (_event: unknown, delta: string): void => listener(delta);
+    ipcRenderer.on(IpcChannels.dreamChunk, handler);
+    return () => {
+      ipcRenderer.removeListener(IpcChannels.dreamChunk, handler);
+    };
+  },
+  dreamGetAnalysis: (dreamId) => ipcRenderer.invoke(IpcChannels.dreamGetAnalysis, dreamId),
+  dreamGetConversation: (dreamId) => ipcRenderer.invoke(IpcChannels.dreamGetConversation, dreamId),
+  dreamSynthesize: (input) => ipcRenderer.invoke(IpcChannels.dreamSynthesize, input),
+  dreamUpdateAnalysis: (input) => ipcRenderer.invoke(IpcChannels.dreamUpdateAnalysis, input),
+  dreamApprove: (input) => ipcRenderer.invoke(IpcChannels.dreamApprove, input),
+  dreamRemoveFromContext: (input) => ipcRenderer.invoke(IpcChannels.dreamRemoveFromContext, input),
   getSidebarCollapsed: () => ipcRenderer.invoke(IpcChannels.getSidebarCollapsed),
   setSidebarCollapsed: (collapsed) =>
     ipcRenderer.invoke(IpcChannels.setSidebarCollapsed, collapsed),

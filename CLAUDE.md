@@ -239,6 +239,30 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Build (**Dreams slice 3b — the analysis IPC seam**;
+  [12-dreams](docs/specs/12-dreams.md) §6/§13.3). Wired the slice-3a guided-analysis ops through the typed
+  seam (`channels` → `coreBridge` → `ipc` → preload → `test-utils/bridge`), all **gated by `dreams.own`** +
+  scoped to the active dreamer (the **bridge is the trust boundary** — inputs Zod-validated; the API key is
+  read host-side and **never crosses to the renderer**): `dreams:analyzeTurn` (streams on a **new
+  `dreams:chunk` event** via a dedicated `emitDreamChunk`/`onDreamChunk` sink — **separate from the Sessions
+  `chat:chunk` stream** so the two never cross; `ipc.ts` binds `event.sender` per turn and resets in
+  `finally`, exactly like `chatStream`), `dreams:getAnalysis`/`:getConversation` (resume the chat),
+  `dreams:synthesize`, `dreams:updateAnalysis` (save section edits → `edited:true`), `dreams:approve` (the
+  host reads `dreams.memoryEnabled` from vault settings — **default ON unless explicitly `false`** — and
+  passes it to `approveAnalysis`), `dreams:removeFromContext`. Added a new core **`updateAnalysis`** that
+  overwrites only the supplied readable sections (conditional spreads under `exactOptionalPropertyTypes`),
+  preserving the AI-owned tags/metrics/flags + `insightId` so re-approval refreshes the **same** Insight.
+  The two result view types (`DreamSynthesisResult`/`DreamApproveResult`) + the `DreamAnalysisEdits` input
+  schema live in the **crypto-free `@selfos/core/schemas`** (the `ChatTurnResult` precedent), so
+  `channels.ts` imports them without dragging crypto into the renderer/web tsconfig; the iOS/web `webHost`
+  gained the parallel `emitDreamChunk`/`onDreamChunk`. Code-reviewer verdict **ship** (no blockers/
+  should-fixes; dreamer-scoping, key-host-side, sender-reset parity, and the `memoryEnabled` default all
+  verified). Gate green: typecheck (node + web/DOM-lib), lint, format, **145 core + 221 desktop** unit (+2
+  core `updateAnalysis`, +3 bridge: a full analyze→synthesize→edit→approve→remove round-trip, the
+  memory-off refusal, and a capability denial). On `feat/dreams-slice-3b` (in the Dreams worktree).
+  **No new user-facing surface**, so no E2E/visual-QA this slice — the guided-analysis chat + synthesis
+  card + approve UI + the E2E land in **3c**. (The concurrent questionnaire session's `08`/main-tree work
+  left untouched; my commit is the 10 seam/test/doc files only.)
 - 2026-06-11 — Build (**Dreams slice 3a — core guided-analysis backend**;
   [12-dreams](docs/specs/12-dreams.md) §13.3). The first AI-bearing Dreams code (no IPC/UI yet). New
   **`@selfos/core/dreams` `dreamAnalysisService`**: `runAnalysisTurn` (a **dream-scoped** reflective

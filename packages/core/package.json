@@ -6,6 +6,7 @@
   "description": "SelfOS platform-agnostic core: shared schemas/types + at-rest crypto (no node:* / electron / Buffer), so it runs on both the Electron host and the future iOS WKWebView. Host interfaces (FileSystem/SecretStore/ClaudeClient) and the rest of the business logic land in later slices (07-mobile-platform §5).",
   "exports": {
     ".": "./src/index.ts",
+    "./id": "./src/id.ts",
     "./schemas": "./src/schemas.ts",
     "./capabilities": "./src/capabilities.ts",
     "./usage-types": "./src/usageTypes.ts",

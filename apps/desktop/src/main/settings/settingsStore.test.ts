@@ -3,42 +3,30 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { readAllSettings, resetSettingValue, writeSettingValue } from './settingsStore';
+import { readDeviceSettings, writeDeviceSettings } from './settingsStore';
 
-let vault: string;
 let userData: string;
 
 beforeEach(async () => {
-  vault = await mkdtemp(join(tmpdir(), 'selfos-set-vault-'));
   userData = await mkdtemp(join(tmpdir(), 'selfos-set-ud-'));
 });
 afterEach(async () => {
-  await rm(vault, { recursive: true, force: true });
   await rm(userData, { recursive: true, force: true });
 });
 
-describe('main settings store', () => {
-  it('returns empty maps when nothing is persisted', async () => {
-    expect(await readAllSettings(vault, userData)).toEqual({ vault: {}, device: {} });
+describe('device settings store', () => {
+  it('returns an empty map when nothing is persisted', async () => {
+    expect(await readDeviceSettings(userData)).toEqual({});
   });
 
-  it('writes and reads a vault-scoped value', async () => {
-    await writeSettingValue('vault', 'appearance.theme', 'dark', vault, userData);
-    const all = await readAllSettings(vault, userData);
-    expect(all.vault['appearance.theme']).toBe('dark');
-    expect(all.device).toEqual({});
+  it('round-trips the device-scoped values map', async () => {
+    await writeDeviceSettings(userData, { 'window.x': 1, 'window.y': 2 });
+    expect(await readDeviceSettings(userData)).toEqual({ 'window.x': 1, 'window.y': 2 });
   });
 
-  it('keeps device-scoped values out of the synced vault', async () => {
-    await writeSettingValue('device', 'window.x', 1, vault, userData);
-    const all = await readAllSettings(vault, userData);
-    expect(all.device['window.x']).toBe(1);
-    expect(all.vault).toEqual({});
-  });
-
-  it('resets (removes) a value', async () => {
-    await writeSettingValue('vault', 'a', 1, vault, userData);
-    await resetSettingValue('vault', 'a', vault, userData);
-    expect((await readAllSettings(vault, userData)).vault).toEqual({});
+  it('replaces the whole map on write (the factory does read-merge-write)', async () => {
+    await writeDeviceSettings(userData, { a: 1, b: 2 });
+    await writeDeviceSettings(userData, { a: 1 });
+    expect(await readDeviceSettings(userData)).toEqual({ a: 1 });
   });
 });

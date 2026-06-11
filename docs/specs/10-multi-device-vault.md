@@ -272,6 +272,12 @@ Electron `main` host today and the iOS host in 07:
 - `ipc.ts` — `superadminUnlock` now verifies against the **vault** (`fs` + `key`) instead of
   `deviceStore`. A new `household:unlockWithRecoveryPhrase` handler (§6.2) restores the device key.
 
+> **Relocated in [07-mobile-platform](07-mobile-platform.md) iii-b1:** the above describes the
+> slice-1 design. `householdStatus`/`setupHousehold`, the super-admin set/has/verify, and the
+> device→vault migration now live in the shared `createCoreBridge` factory (one impl for Electron +
+> iOS); `household.ts`/`session.ts` are removed, the app's `superAdmin.ts` keeps only the in-memory
+> inspect flag, and `ipc.ts` delegates these channels to the factory.
+
 ### 5.3 Renderer changes
 
 - `HouseholdGate.tsx` — replaces the two-way `!hasMasterKey || !hasOwner ? Setup : Shell` with the

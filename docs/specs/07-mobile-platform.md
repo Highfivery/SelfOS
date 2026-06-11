@@ -324,6 +324,22 @@ build:web` then `cap add ios` + Xcode on their Mac (free signing first; §11.7).
   sub-slices = incremental; injection = thread the host objects; schemas = into core + shim. Gates green:
   typecheck/lint/format, 183 unit (22 core + 161 desktop), 23 E2E. Next: **(ii-b)** FileSystem host +
   vault/atomic + the file-using services (people/conversations/usage).
+- 2026-06-10 — **slice iii-b1 landed (§5.3):** extracted the shared **`createCoreBridge(host)` factory**
+  (`apps/desktop/src/shared/coreBridge.ts`, node/electron-free) — one `BridgeHost` interface + the ~30
+  `SelfosBridge` data ops implemented **once** over injected platform primitives (`vaultAndKey`/`fileSystem`/
+  `secrets`/`claude`/device-state/device-settings/`activeModel`/super-admin flag/`emitChatChunk`/`appVersion`
+  - the forwarded platform ops). Electron's `ipc.ts` now builds a node-backed host, calls the factory, and
+    registers each `ipcMain.handle` as a thin delegate; platform-specific ops (folder picker, chokidar
+    watcher, conflicts, reveal, boot-state) stay in the host, and `useVault`/`chatStream` are special-cased to
+    capture `event.sender`. Supporting moves: `runConnectionTest`/`mapError` → **`shared/claudeProxy.ts`**
+    (deleted `main/claude/claudeService.ts`); `main/settings/settingsStore.ts` slimmed to device-only (vault
+    settings handled in the factory via the FileSystem host); `main/people/superAdmin.ts` slimmed to the
+    in-memory inspect flag (passphrase set/has/verify + the device→vault migration moved into the factory);
+    **deleted `main/people/household.ts` + `session.ts`** (logic → factory); core gains a `./id` export +
+    re-exports `memFileSystem`. Behavior-preserving — inputs are still Zod-validated **in the factory** so the
+    trust boundary holds on both hosts; the API key stays host-side. Gates green: typecheck/lint/format,
+    **228 unit** (76 core + 152 desktop, incl. a new factory test exercising real `@selfos/core` over
+    `memFileSystem`), **27 E2E**. The factory is iOS-ready; **iii-b2** wires the in-webview host to it.
 
 ## 13. Implementation roadmap & status
 
@@ -339,12 +355,12 @@ The full arc, so no session loses the thread. Update the status boxes as slices 
 - [x] **iii-b prerequisite — WebView crypto/DOM-lib compat** — `@selfos/core` now typechecks under the
       renderer's DOM lib (a `bufferSource()` copy at the WebCrypto boundary in `cryptoService.ts`), so it
       can run in the WKWebView. Verified under both `tsconfig.web` and `tsconfig.node`.
-- [ ] **iii-b1 — shared `createCoreBridge(host)` factory + Electron migration.** Extract one
+- [x] **iii-b1 — shared `createCoreBridge(host)` factory + Electron migration.** Extracted one
       platform-agnostic factory (`apps/desktop/src/shared/coreBridge.ts`, node/electron-free) implementing
-      the ~30 `SelfosBridge` data ops over an injected `BridgeHost`; migrate Electron's `ipc.ts` to delegate
+      the ~30 `SelfosBridge` data ops over an injected `BridgeHost`; migrated Electron's `ipc.ts` to delegate
       to it (platform-specific ops — folder picker, conflicts, reveal, chokidar watcher, boot-state — stay
-      in the host). Behavior-preserving: the 223 unit + 27 E2E are the proof. _(Decided: shared factory;
-      browser-verify before Swift.)_
+      in the host). Behavior-preserving: 228 unit + 27 E2E green. _(Decided: shared factory; browser-verify
+      before Swift.)_
 - [ ] **iii-b2 — iOS in-webview host + browser verification.** Implement `BridgeHost` for the WebView:
       an in-browser FileSystem (for the web preview), a DeviceStore over Capacitor Preferences/localStorage,
       **temporary** SecretStore + ClaudeClient stubs. Add `vaultBookmark?: string` to `DeviceStateSchema`

@@ -1,11 +1,12 @@
 import type { ClaudeClient } from '@selfos/core/host';
-import type { ClaudeErrorCode, ClaudeTestResult } from '../../shared/channels';
+import type { ClaudeErrorCode, ClaudeTestResult } from './channels';
 
 /**
- * The Claude proxy boundary (00-architecture §6.2). The `ClaudeClient` host interface lives in
- * `@selfos/core/host`; here are the platform-agnostic proxy helpers (error mapping + the connection
- * test) over an injected client, unit-testable without network or a key. The API key stays in the main
- * process — it is passed to `send`/`stream` and never reaches the renderer.
+ * The Claude proxy boundary (00-architecture §6.2) — platform-agnostic proxy helpers (error mapping +
+ * the connection test) over an injected `ClaudeClient`, unit-testable without network or a key. Lives in
+ * `shared` (not `main`) so the shared `createCoreBridge` factory — bundled into both the Electron main
+ * process and the iOS WebView (07-mobile-platform §5.3) — can run the connection test on either host. The
+ * API key is passed per call and never reaches the renderer.
  */
 
 function statusOf(error: unknown): number | undefined {

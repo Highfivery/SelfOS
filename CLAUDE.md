@@ -239,6 +239,36 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-10 — Build (**Capacitor track slice iii-b1 — shared `createCoreBridge(host)` factory + Electron
+  migration**; [07-mobile-platform](docs/specs/07-mobile-platform.md) §5.3/§13). Extracted ONE
+  platform-agnostic factory (`apps/desktop/src/shared/coreBridge.ts`, node/electron/`Buffer`-free) that
+  implements the ~30 `SelfosBridge` data ops **once** over an injected **`BridgeHost`** of platform
+  primitives (`vaultAndKey`/`fileSystem`/`secrets`/`claude`/device-state/device-settings/`activeModel`/
+  super-admin flag/`emitChatChunk`/`appVersion` + the forwarded platform ops). Electron's `ipc.ts` now
+  builds a node-backed host, calls the factory, and registers each `ipcMain.handle` as a **thin delegate**
+  (via a typed `handle<F>` helper); platform-specific ops (folder picker, chokidar watcher, conflicts,
+  reveal, boot-state) stay in the host, and `useVault`/`chatStream` are special-cased to capture
+  `event.sender` (the chat sender is bound per-turn + reset in `finally`). Supporting moves:
+  `runConnectionTest`/`mapError` → **`shared/claudeProxy.ts`** (deleted `main/claude/claudeService.ts`,
+  only `anthropicClient` stays in main); `main/settings/settingsStore.ts` slimmed to **device-only** (vault
+  settings now read/written in the factory over the FileSystem host — `readVaultSettingsValues`);
+  `main/people/superAdmin.ts` slimmed to **just the in-memory inspect flag** (passphrase set/has/verify +
+  the legacy device→vault migration moved into the factory via `@selfos/core/people`); **deleted
+  `main/people/household.ts` + `session.ts`** (householdStatus/setupHousehold + active-person now in the
+  factory over `host.readDeviceState`/`updateDeviceState`); core gains a `./id` export + re-exports
+  `memFileSystem`. **Behavior-preserving** — the suite is the proof, and inputs are still **Zod-validated in
+  the factory** so the trust boundary holds on BOTH hosts (the renderer is never the boundary); the API key
+  stays host-side. Reviewer verdict **ship** (exact IPC channel parity; every moved handler logically
+  identical to the old `ipc.ts`). Gates green: typecheck (incl. `tsconfig.web` DOM lib — the factory imports
+  `@selfos/core/crypto`), lint, format, **228 unit** (76 core + 152 desktop, incl. a new `coreBridge.test`
+  driving real `@selfos/core` over `memFileSystem` the way the iOS host will), **27 E2E**. **Lesson: the
+  factory's return type is the full `SelfosBridge`, but in Electron the renderer subscriptions
+  (`onVaultChanged`/`onChatChunk`) live in the PRELOAD, so the bridge's own subscription methods are
+  no-ops in main — they exist for the iOS host. Keep streaming as `emitChatChunk` (host sink) + a
+  per-turn-bound sender.** **NEXT: iii-b2** — the iOS in-webview host implementing `BridgeHost` + browser
+  verification (in-browser FS, DeviceStore over Preferences, temp Secret/Claude stubs), then delete
+  `stubBridge.ts`. **(Concurrent-agent note unchanged: left all of `docs/specs/0{4,5,8,9}` + `11`
+  untouched; this slice's doc edits are only 07, 10 §5.2, and this entry.)**
 - 2026-06-10 — Fix + decisions (**Capacitor track iii-b start: iOS host**). **Decisions (asked):** the
   iOS host shares logic with Electron via **one platform-agnostic `createCoreBridge(host)` factory**
   (both hosts expose the same `SelfosBridge`; ~40 data ops live once), and we **browser-verify the host

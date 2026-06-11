@@ -324,3 +324,47 @@ build:web` then `cap add ios` + Xcode on their Mac (free signing first; §11.7).
   sub-slices = incremental; injection = thread the host objects; schemas = into core + shim. Gates green:
   typecheck/lint/format, 183 unit (22 core + 161 desktop), 23 E2E. Next: **(ii-b)** FileSystem host +
   vault/atomic + the file-using services (people/conversations/usage).
+
+## 13. Implementation roadmap & status
+
+The full arc, so no session loses the thread. Update the status boxes as slices land; the Changelog
+(§12) holds the detail. The renderer is shared; the only per-platform difference is who provides
+`window.selfos` (Electron preload+IPC vs. the iOS in-webview host) — see §5.3.
+
+- [x] **(i) Crypto unification** — at-rest crypto on WebCrypto + `scrypt-js`, vaults byte-compatible.
+- [x] **(ii) Extract `@selfos/core` + rewire Electron** — all platform-agnostic logic behind the
+      FileSystem/SecretStore/ClaudeClient host interfaces (ii-a/b/c + relocation slices 1–3).
+- [x] **(iii-a) Capacitor shell + web build** — `vite.web.config.ts`→`dist-web/`, `capacitor.config.ts`,
+      the tracked `ios/` Xcode project; UI renders on the simulator via a **temporary `stubBridge.ts`**.
+- [x] **iii-b prerequisite — WebView crypto/DOM-lib compat** — `@selfos/core` now typechecks under the
+      renderer's DOM lib (a `bufferSource()` copy at the WebCrypto boundary in `cryptoService.ts`), so it
+      can run in the WKWebView. Verified under both `tsconfig.web` and `tsconfig.node`.
+- [ ] **iii-b1 — shared `createCoreBridge(host)` factory + Electron migration.** Extract one
+      platform-agnostic factory (`apps/desktop/src/shared/coreBridge.ts`, node/electron-free) implementing
+      the ~30 `SelfosBridge` data ops over an injected `BridgeHost`; migrate Electron's `ipc.ts` to delegate
+      to it (platform-specific ops — folder picker, conflicts, reveal, chokidar watcher, boot-state — stay
+      in the host). Behavior-preserving: the 223 unit + 27 E2E are the proof. _(Decided: shared factory;
+      browser-verify before Swift.)_
+- [ ] **iii-b2 — iOS in-webview host + browser verification.** Implement `BridgeHost` for the WebView:
+      an in-browser FileSystem (for the web preview), a DeviceStore over Capacitor Preferences/localStorage,
+      **temporary** SecretStore + ClaudeClient stubs. Add `vaultBookmark?: string` to `DeviceStateSchema`
+      (iOS persists a security-scoped bookmark, not a path — §4). Build `installRealBridge()`, **delete
+      `stubBridge.ts`**, and verify the real app (onboarding → setup → people → invites → multi-device) in
+      the web preview against real `@selfos/core` + a real in-browser filesystem.
+- [ ] **iii-b3 — Swift `VaultFs` Capacitor plugin + TS FS adapter.** `UIDocumentPicker` open-directory
+      (iCloud folder), security-scoped bookmark create/resolve (handle stale → re-pick), `NSFileCoordinator`
+      coordinated read/writeAtomic(temp+rename)/list/remove on vault-relative paths, a presenter for change
+      events. Blind-written; user runs `build:web` → `npx cap sync ios` → Xcode. No iCloud-container
+      entitlement needed (access is via security scope — §11.6).
+- [ ] **iii-c — iOS Keychain + Claude.** Real Keychain `SecretStore` (replace iii-b2's stub:
+      `kSecClassGenericPassword`, accessible-after-first-unlock-this-device-only, not synced; holds master
+      key + API key) + Claude via the Anthropic **browser-mode SDK** (`dangerouslyAllowBrowser`) with a
+      **native-HTTP fallback** for WKWebView CORS (§11.3).
+- [ ] **iii-d — free-signing install** on the user's + wife's physical iPhones (personal team; trust the
+      cert on-device; 7-day provisioning expiry — §11.7).
+- [ ] **(iv) Distribution (later)** — Apple Developer Program + TestFlight (free signing first; a
+      signing-team switch in Xcode, no code changes — §11.7).
+
+**Cross-cutting dependency:** [`10-multi-device-vault.md`](10-multi-device-vault.md) (vault identity,
+device join & recovery, member invites) is **fully built** and shares the same `@selfos/core` flows, so
+it comes along to iOS for free once the host (iii-b) lands.

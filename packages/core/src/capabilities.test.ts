@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_ROLES, roleAllows } from './capabilities';
+import { CAPABILITIES, CAPABILITY_LABELS, DEFAULT_ROLES, roleAllows } from './capabilities';
 import type { Role } from './schemas';
 
 describe('roleAllows', () => {
@@ -30,5 +30,26 @@ describe('roleAllows', () => {
 
   it('denies when there is no role', () => {
     expect(roleAllows(undefined, 'budgets.manage')).toBe(false);
+  });
+});
+
+describe('dreams capabilities (12-dreams)', () => {
+  const owner = DEFAULT_ROLES.find((role) => role.id === 'owner')!;
+  const member = DEFAULT_ROLES.find((role) => role.id === 'member')!;
+  const guest = DEFAULT_ROLES.find((role) => role.id === 'guest')!;
+
+  it('registers dreams.own and dreams.shareContext with labels', () => {
+    expect(CAPABILITIES).toContain('dreams.own');
+    expect(CAPABILITIES).toContain('dreams.shareContext');
+    expect(CAPABILITY_LABELS['dreams.own']).toBeTruthy();
+    expect(CAPABILITY_LABELS['dreams.shareContext']).toBeTruthy();
+  });
+
+  it('grants both to Owner and Member by default, but not Guest', () => {
+    expect(roleAllows(owner, 'dreams.own')).toBe(true);
+    expect(roleAllows(member, 'dreams.own')).toBe(true);
+    expect(roleAllows(member, 'dreams.shareContext')).toBe(true);
+    expect(roleAllows(guest, 'dreams.own')).toBe(false);
+    expect(roleAllows(guest, 'dreams.shareContext')).toBe(false);
   });
 });

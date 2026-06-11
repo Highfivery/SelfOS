@@ -45,12 +45,13 @@ the **derived Insight**, never the raw answers wholesale.
 
 ### 1.1 The shared Insight / metrics layer
 
-`Insight` is a single, source-discriminated record (`source: 'questionnaire' | 'session'`) stored
+`Insight` is a single, source-discriminated record (`source: 'questionnaire' | 'session' | 'dream'`) stored
 encrypted per person/relationship — the app's **long-term memory** (the thing `05` deferred). It carries
 free-text facts **and** a `metrics` map of named, normalized numeric signals (e.g. `connection`,
 `desire`, `moodValence`) that are **chartable over time**. Questionnaires define and own this layer here;
-`09` (session analysis) and `11` (tracking dashboard) build on it. Consumers — `buildContext`, the
-gap-finder, the "what the coach knows" surface, and `11`'s trends — read it regardless of source.
+`09` (session analysis), `11` (tracking dashboard), and `12` (dreams) build on it. Consumers —
+`buildContext`, the gap-finder, the "what the coach knows" surface, and `11`'s trends — read it regardless
+of source.
 
 ## 2. Goals / Non-goals
 
@@ -389,7 +390,7 @@ interface ResponseSet {
 ### 4.4 Insight (the shared Insight / metrics layer)
 
 ```ts
-type InsightSource = 'questionnaire' | 'session'; // 'session' produced by spec 09
+type InsightSource = 'questionnaire' | 'session' | 'dream'; // 'session' by spec 09, 'dream' by spec 12
 
 interface InsightFact {
   id: string;
@@ -409,7 +410,7 @@ interface Insight {
   //   moodValence, moodEnergy). The flexible basis for all trends.
   confidence: 'low' | 'medium' | 'high';
   approved: boolean; // questionnaire insights require approval; session insights auto-true (09)
-  provenance: { assignmentId?: string; conversationId?: string; at: string };
+  provenance: { assignmentId?: string; conversationId?: string; dreamId?: string; at: string }; // dreamId: spec 12
   crisisFlag?: boolean;
   createdAt: string;
   updatedAt: string;

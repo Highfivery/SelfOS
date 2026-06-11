@@ -239,6 +239,35 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Spec + Build (**Dreams** — new spec [12-dreams](docs/specs/12-dreams.md) drafted, approved,
+  and **slice 1 built**; §13.1). Dreams = guided AI dream journaling + analysis + cross-dream patterns; the
+  **third producer** into `08`'s shared Insight/metrics layer (a dream's **approved** analysis becomes an
+  `Insight` `source:'dream'` feeding `buildContext` — no new context plumbing). Spec written ask-first (16
+  decisions / 4 rounds + a 5-Q review): blended **honest** voice (evidence + symbolic, framed as reflection
+  not fact), **guide→synthesize** chat (reuses `05`, stored **under the dream**, kept OUT of the Sessions
+  list), structured 5-section analysis, **approve-gate** before context, per-dream sharing (off by default),
+  per-dream `SensitivityTier`, dreamer-only + super-admin break-glass (**no audit log v1**), **full
+  cross-dream patterns in v1** (hybrid stats + view-only AI narrative w/ opt-in add-to-context),
+  recurring-nightmare nudge (**count OR AI distress signal**). **Image generation deferred to a future
+  companion spec** (2nd provider/OpenAI, consent, **binary-blob vault storage**, per-image cost) — no
+  scaffolding here. UX reviewed via interactive mockups of the 4 surfaces before approval. **Slice 1
+  (backend/core):** the `Dream`/`DreamPersonRef`/`DreamStatus`/`DreamTags`/`DreamAnalysis`/
+  `DreamPatternSummary` schemas; the **additive** `Insight` `source:'dream'` + `provenance.dreamId`
+  amendment (**no migration** — additive-optional, `schemaVersion` stays 1; synced into `08`);
+  `dreams.own`/`dreams.shareContext` capabilities (Member default; **no view-others'-dreams** capability);
+  and **`@selfos/core/dreams`** `dreamService` (encrypted per-dream-folder CRUD over Dream+DreamAnalysis;
+  **delete purges the folder**; listing skips non-dream sidecars like `patterns.enc` + enforces dreamer
+  scoping, mirroring `insightStore`). Code-reviewed (verdict **ship**; fixed: `DreamPersonRef` now forbids
+  an empty `{}` ref; added a populated round-trip + a Zod-bounds-rejection test). Gate green:
+  typecheck/lint/format, **133 core + 211 desktop** unit (no E2E — backend-only, no new surface).
+  **Process:** the approved spec committed (`99e3264`) but **landed on `main`** because a concurrent
+  questionnaires session switched the shared HEAD mid-session (moving it onto a branch is deferred per the
+  user); slice 1 was then built in an **isolated git worktree** (`feat/dreams-slice-1` off the spec commit)
+  so the live questionnaires session (`feat/questionnaire-ai-generate`, doing §13.3) was untouched.
+  **Lesson: with a concurrent agent in a SHARED working tree, switching branches moves the one shared HEAD
+  — use a separate `git worktree` for feature work to avoid disrupting the other session, and re-check
+  `git branch --show-current` immediately before any commit.** **Next §13 slices:** capture + journal UI +
+  settings + nav (2) → guided analysis (3) → patterns (4) → per-dream sharing (5).
 - 2026-06-11 — Build (Questionnaires **slice 2 — question images** [§13.2 last leaf; **§13.2 now
   complete**], [08-questionnaires](docs/specs/08-questionnaires.md) §4.1/§4.2/§5.1/§6/§8.6/§13.2). Asked
   first (3 Qs): storage = **shared media dir** `questionnaires/media/<id>.enc`; picker = **in-renderer

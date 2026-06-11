@@ -299,9 +299,10 @@ type InsightSource = 'questionnaire' | 'session' | 'dream'; // + 'dream'
 //   provenance: { assignmentId?: string; conversationId?: string; dreamId?: string; at: string }
 ```
 
-These bump the shared `Insight.schemaVersion` (additive-optional; existing Insights migrate trivially —
-absent `dreamId`, never `source: 'dream'`) and are **synced into `08`** via `sync-docs`. The `Conversation`
-schema (`05`/`09`) is **reused unchanged** for the dream-scoped transcript.
+These are **additive-optional**, so existing Insights parse unchanged with **no migration** (absent
+`dreamId`, never `source: 'dream'`; `Insight.schemaVersion` stays at 1) — the `Person.email` /
+`DeviceState` additive-optional precedent. Synced into `08`. The `Conversation` schema (`05`/`09`) is
+**reused unchanged** for the dream-scoped transcript.
 
 ## 5. Architecture & modules
 
@@ -543,6 +544,17 @@ Confirmed in review (2026-06-11):
    `DreamPatternSummary` Zod models + the §4.1 vault layout; the additive `Insight`
    `source: 'dream'` + `provenance.dreamId` amendment (synced into `08`); the `dreams.own` /
    `dreams.shareContext` capabilities (default-ON for Member). Mostly core/backend.
+   - _**Built 2026-06-11:** the `Dream`/`DreamPersonRef`/`DreamStatus`/`DreamTags`/`DreamAnalysis`/
+     `DreamPatternSummary` schemas; the additive `Insight` `source: 'dream'` + `provenance.dreamId`
+     amendment (no migration — additive-optional, `schemaVersion` stays 1); the `dreams.own` /
+     `dreams.shareContext` capabilities (Member default); and the **`@selfos/core/dreams`**
+     `dreamService` — encrypted per-dream-folder CRUD over `Dream` + `DreamAnalysis`, delete **purges the
+     folder**, listing skips non-dream sidecars (e.g. `patterns.enc`) + enforces dreamer scoping
+     (defense in depth, mirroring `insightStore`). Code-reviewed (verdict **ship**; tightened
+     `DreamPersonRef` to forbid empty refs + added a populated round-trip and a bounds-rejection test).
+     Gate green: typecheck/lint/format, **133 core + 211 desktop** unit. Built in an **isolated git
+     worktree** off the spec commit (a concurrent questionnaires session was live on `main`). **Deferred
+     to the later slices:** the guided-analysis service, IPC, renderer, patterns, and sharing._
 2. **Capture + journal UI + settings + nav** — the Dreams master–detail journal, the fast capture composer
    - optional quick fields, the `dreamStore`, the `dreams.memoryEnabled` setting, and the `/dreams` nav
      entry. No AI yet — pure journaling works offline.
@@ -571,3 +583,12 @@ proven.)_
 - 2026-06-11 — **Approved.** UX reviewed against interactive mockups of the four core surfaces (journal,
   capture, guided analysis, patterns); §3 flows match. Cleared for slice 1 (schema + `dreamService` +
   capabilities + the additive `Insight` amendment).
+- 2026-06-11 — **Slice 1 built** (§13.1): the `Dream`/`DreamPersonRef`/`DreamStatus`/`DreamTags`/
+  `DreamAnalysis`/`DreamPatternSummary` schemas; the additive `Insight` `source: 'dream'` +
+  `provenance.dreamId` amendment (no migration — additive-optional, synced into `08`); the
+  `dreams.own`/`dreams.shareContext` capabilities (Member default); and `@selfos/core/dreams`
+  `dreamService` (encrypted per-dream-folder CRUD; delete purges the folder; robust listing).
+  Code-reviewed (**ship**; tightened `DreamPersonRef` + added round-trip/bounds-rejection tests). Gate
+  green (typecheck/lint/format, **133 core + 211 desktop** unit). Built in an isolated worktree off the
+  spec commit (concurrent questionnaires session live on `main`). Deferred to later slices: the
+  guided-analysis service, IPC, renderer, patterns, and sharing.

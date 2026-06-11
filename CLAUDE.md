@@ -239,6 +239,25 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Fix (**per-person session isolation — the previous account's sessions lingered in the UI
+  after a switch**; user flagged). Diagnosed (not guessed): conversation **storage is correctly
+  per-person** (`people/<personId>/conversations/*.enc`; `listConversations` only reads that person's dir)
+  — the leak was **stale renderer state**. `sessionStore.switchTo` reloaded only the session store; the
+  **person-scoped stores (`conversationStore`, `budgetStore`, `usageStore`) were never reset**, so after
+  switching, the prior account's Sessions list / open transcript / usage-ring lingered until some later
+  `load()` ("disappears after a little bit" — e.g. navigating to Sessions re-ran its mount-effect). Fix:
+  each store gets a `reset()`, and **`AppShell` runs an effect keyed on `activePerson.id`** that
+  resets all three + reloads conversations/budget — so a switch clears the UI immediately, even while the
+  Sessions screen stays mounted (the bug's trigger: switching via the always-visible TopBar account menu).
+  Also resets the admin's "view person X" usage filter so it can't carry into another account. Unit tests
+  for the three resets + an **E2E** (owner creates a renamed session → grant a member → switch to them
+  while on Sessions → the owner's session is gone, `toHaveCount(0)`). **Lesson: any renderer store holding
+  PER-PERSON data must reset when `activePerson.id` changes — storage scoping alone isn't enough; stale
+  client state leaks one user's data into another's view. Household-wide stores (people, settings) and
+  device-scoped ones (nav) are exempt.** Gates: typecheck/lint/format, 188 desktop unit (+3), **28 E2E**
+  (+1). Renderer-only. **NOTE: a concurrent agent is now editing `packages/core` (capabilities/schemas/
+  peopleService/buildContext + a new `insights/` dir — their session-analysis track) — all UNCOMMITTED;
+  left untouched, my commit is the 5 renderer files only.**
 - 2026-06-11 — Build (**Capacitor track slice iii-b3b — live vault change feed**;
   [07-mobile-platform](docs/specs/07-mobile-platform.md) §5.4/§13). Closes the last deferred iii item. The
   existing `VaultFs` plugin gains a private **`NSFilePresenter`** watching the vault directory →

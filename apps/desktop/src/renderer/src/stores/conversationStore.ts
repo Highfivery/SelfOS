@@ -19,17 +19,23 @@ interface ConversationState {
   rename: (id: string, title: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
   appendChunk: (delta: string) => void;
+  /** Clear all per-person state — called when the signed-in person changes (sessions are per-user). */
+  reset: () => void;
 }
 
-export const useConversationStore = create<ConversationState>((set, get) => ({
-  conversations: [],
+const EMPTY = {
+  conversations: [] as ConversationMeta[],
   activeId: null,
-  messages: [],
+  messages: [] as ChatMessage[],
   streaming: '',
   sending: false,
   runningCostUsd: 0,
   budget: null,
   error: null,
+} satisfies Partial<ConversationState>;
+
+export const useConversationStore = create<ConversationState>((set, get) => ({
+  ...EMPTY,
   load: async () => {
     const conversations = (await window.selfos?.conversationsList()) ?? [];
     const budget = (await window.selfos?.budgetStatus()) ?? null;
@@ -90,4 +96,5 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     await get().load();
   },
   appendChunk: (delta) => set((state) => ({ streaming: state.streaming + delta })),
+  reset: () => set({ ...EMPTY }),
 }));

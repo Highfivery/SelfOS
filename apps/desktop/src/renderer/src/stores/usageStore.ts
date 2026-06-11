@@ -16,16 +16,23 @@ interface UsageState {
   setSelectedPerson: (personId: string | null) => Promise<void>;
   setPeriod: (period: UsagePeriod) => Promise<void>;
   saveAppBudget: (budget: Budget | null) => Promise<void>;
+  /** Reset to defaults — called when the signed-in person changes (usage + the admin person-filter
+   * are per-user; an admin's "view person X" selection must not carry into another account). */
+  reset: () => void;
 }
 
-export const useUsageStore = create<UsageState>((set, get) => ({
+const INITIAL = {
   selectedPersonId: null,
-  period: 'month',
+  period: 'month' as UsagePeriod,
   summary: null,
   budget: null,
   status: null,
   people: [],
   loaded: false,
+} satisfies Partial<UsageState>;
+
+export const useUsageStore = create<UsageState>((set, get) => ({
+  ...INITIAL,
   load: async () => {
     const { selectedPersonId, period } = get();
     const input = selectedPersonId
@@ -52,4 +59,5 @@ export const useUsageStore = create<UsageState>((set, get) => ({
     await window.selfos?.budgetSetApp(budget);
     await get().load();
   },
+  reset: () => set({ ...INITIAL }),
 }));

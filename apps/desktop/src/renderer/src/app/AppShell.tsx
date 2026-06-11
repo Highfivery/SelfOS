@@ -17,6 +17,9 @@ import { Brand } from './Brand';
 import { useVaultConflicts } from './useVaultConflicts';
 import { useNavStore } from '../stores/navStore';
 import { useSessionStore } from '../stores/sessionStore';
+import { useConversationStore } from '../stores/conversationStore';
+import { useBudgetStore } from '../stores/budgetStore';
+import { useUsageStore } from '../stores/usageStore';
 import { AccountMenu } from './AccountMenu';
 import { Switcher } from './Switcher';
 import { LockScreen } from './LockScreen';
@@ -39,6 +42,7 @@ export function AppShell(): JSX.Element {
   const hasSessions = useSessionStore((s) => s.can('sessions.own'));
   const locked = useSessionStore((s) => s.locked);
   const unlockPromptOpen = useSessionStore((s) => s.unlockPromptOpen);
+  const activePersonId = useSessionStore((s) => s.activePerson?.id ?? null);
   const collapsed = useNavStore((s) => s.collapsed);
   const toggleSidebar = useNavStore((s) => s.toggle);
   const [switching, setSwitching] = useState(false);
@@ -48,6 +52,17 @@ export function AppShell(): JSX.Element {
   const hamburgerRef = useRef<HTMLButtonElement>(null);
 
   const closeDrawer = (): void => setDrawerOpen(false);
+
+  // When the signed-in person changes, drop the previous account's per-person data and load this
+  // person's — sessions/usage/budget are per-user, so nothing from the prior login may linger
+  // (the usage ring + Sessions list update immediately; the Usage screen reloads on next view).
+  useEffect(() => {
+    useConversationStore.getState().reset();
+    useBudgetStore.getState().reset();
+    useUsageStore.getState().reset();
+    void useConversationStore.getState().load();
+    void useBudgetStore.getState().refresh();
+  }, [activePersonId]);
 
   // Track the mobile breakpoint; collapse any open drawer when the viewport grows back to desktop.
   useEffect(() => {

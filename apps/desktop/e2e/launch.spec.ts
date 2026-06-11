@@ -567,6 +567,56 @@ test('sessions: send a message, stream a reply, and show the usage header + cris
   }
 });
 
+test('sessions: switching accounts immediately clears the previous person’s sessions', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    // Owner creates a session and renames it to a recognizable marker.
+    await w.getByRole('link', { name: 'Sessions' }).click();
+    await w.getByLabel('Message').fill('owner private note');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/hear you/i).first()).toBeVisible();
+    await w.getByRole('button', { name: /^Rename / }).click();
+    const title = w.getByLabel('Session title');
+    await title.fill('OWNER-ONLY SESSION');
+    await title.press('Enter');
+    await expect(w.getByText('OWNER-ONLY SESSION')).toBeVisible();
+
+    // Grant a member (Jordan, no PIN).
+    await w.getByRole('link', { name: 'People' }).click();
+    await w.getByRole('button', { name: 'Add person' }).click();
+    await w.getByLabel('Name').fill('Jordan');
+    await w.getByRole('button', { name: 'Create' }).click();
+    await w.getByText('Jordan').click();
+    await w.getByRole('button', { name: 'Access' }).click();
+    await w.getByRole('button', { name: 'Grant access' }).click();
+    await expect(w.getByText(/can sign in/i)).toBeVisible();
+
+    // Back on the Sessions screen as the owner — the owner's session is there.
+    await w.getByRole('link', { name: 'Sessions' }).click();
+    await expect(w.getByText('OWNER-ONLY SESSION')).toBeVisible();
+
+    // Switch to Jordan WHILE on Sessions (the screen stays mounted — this is the bug's trigger).
+    await w.getByRole('button', { name: /signed in as/i }).click();
+    await w.getByRole('menuitem', { name: 'Switch person' }).click();
+    await w
+      .getByRole('dialog', { name: /who.s here/i })
+      .getByText('Jordan')
+      .click();
+    await expect(w.getByRole('button', { name: 'Signed in as Jordan' })).toBeVisible();
+
+    // Jordan must NOT see the owner's session — it used to linger until a later reload.
+    await expect(w.getByText('OWNER-ONLY SESSION')).toHaveCount(0);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('usage: the dashboard shows recorded usage and accepts a budget, without overflow', async () => {
   const { userData, vault } = await seedReadyVault();
   const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));

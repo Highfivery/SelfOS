@@ -239,6 +239,25 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-10 — Build (**Slice 1 of [10-multi-device-vault](docs/specs/10-multi-device-vault.md) complete**
+  — sub-slices 1b + 1c shipped on top of 1a). **1b: super-admin secret → the vault.** New
+  `@selfos/core/people/superAdmin` writes a salted scrypt hash, encrypted under the master key, to
+  `config/superadmin.enc` (the same at-rest pipeline as the rest of the vault); the app module is now a
+  thin host wrapper owning a **one-time idempotent device-local→vault migration** (legacy
+  `superAdminPassphraseHash` in deviceStore is read once to seed the vault, then unused). `verify`
+  degrades to `false` (never throws) on a corrupt file; `has` is **presence-based** so the migration
+  can't clobber a corrupt copy. So the super-admin is now **one-per-directory** and works on any device
+  holding the key. **1c: owner PIN required at Setup.** A "Your PIN" + "Confirm PIN" field (min
+  `MIN_OWNER_PIN_LENGTH`=4) threads through `householdSetup` into the owner account, so a leaked
+  recovery phrase alone can't sign in as the owner on a joined device. Reviewer verdicts: 1b **ship**
+  (hash never plaintext on disk/logs; migration idempotent + can't fail-open), 1c **ship** (validation
+  parity front-to-back; the Confirm-PIN was added per the reviewer's typo-lockout flag). Also **fixed a
+  pre-existing flaky E2E**: the concealed super-admin long-press now dispatches `pointerdown`/`up`
+  directly on the version element (deterministic; 8/8 under `--repeat-each`) instead of
+  `click({delay})`. Gates green: typecheck/lint/format, **210 unit** (69 core + 141 desktop), **25 E2E**.
+  **NOTE (flag): three spec files appeared untracked in the tree mid-session — `08-questionnaires.md`,
+  `09-session-analysis.md`, and `10-relationship-tracking.md` (a number-10 collision with this spec) —
+  created by something outside this work; left untracked, not committed. Needs the user to decide.**
 - 2026-06-10 — Spec approved + **Slice 1a built**: **[10-multi-device-vault](docs/specs/10-multi-device-vault.md)**
   (multi-device household — vault identity, device join & recovery). User flagged: only **one owner +
   one super-admin per directory** — a second person opening the same shared (iCloud) folder must NOT

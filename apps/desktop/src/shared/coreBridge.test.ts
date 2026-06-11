@@ -469,4 +469,51 @@ describe('createCoreBridge', () => {
     expect(await bridge.dreamSynthesize({ dreamId: 'd1' })).toMatchObject({ ok: false });
     expect(await bridge.dreamUpdateAnalysis({ dreamId: 'd1', edits: { summary: 'x' } })).toBeNull();
   });
+
+  it('computes pattern stats + generates/approves the cross-dream narrative, gated by dreams.own', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+
+    const d1 = await bridge.dreamSave({
+      narrative: 'I was back in my childhood house, rooms rearranging.',
+      lucid: true,
+      nightmare: false,
+      tags: [],
+      people: [{ name: 'Mara' }],
+      sensitivity: 'standard',
+    });
+    await bridge.dreamSave({
+      narrative: 'A storm at sea.',
+      lucid: false,
+      nightmare: true,
+      tags: [],
+      people: [],
+      sensitivity: 'standard',
+    });
+    // Synthesize d1 → an analysis with structured tags (the fake claude returns a valid draft).
+    expect((await bridge.dreamSynthesize({ dreamId: d1.id })).ok).toBe(true);
+
+    const stats = await bridge.dreamPatternStats({ window: 'all' });
+    expect(stats.dreamCount).toBe(2);
+    expect(stats.analyzedCount).toBe(1);
+    expect(stats.lucidCount).toBe(1);
+    expect(stats.nightmareCount).toBe(1);
+    expect(stats.symbols[0]).toEqual({ label: 'house', count: 1 });
+    expect(stats.people.some((person) => person.label === 'Mara')).toBe(true);
+
+    // Narrative: generate → cache → approve (links an Insight) → remove (unlinks it).
+    expect((await bridge.dreamPatternNarrative()).ok).toBe(true);
+    expect((await bridge.dreamGetPatternSummary())?.narrative).toBeTruthy();
+    expect((await bridge.dreamApprovePatternNarrative()).ok).toBe(true);
+    expect((await bridge.dreamGetPatternSummary())?.insightId).toBeTruthy();
+    await bridge.dreamRemovePatternNarrative();
+    expect((await bridge.dreamGetPatternSummary())?.insightId).toBeUndefined();
+
+    // A Guest (no dreams.own) gets zeroed stats + a refused narrative.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    expect((await bridge.sessionSetActive({ personId: guest.id })).ok).toBe(true);
+    expect((await bridge.dreamPatternStats({ window: 'all' })).dreamCount).toBe(0);
+    expect(await bridge.dreamPatternNarrative()).toMatchObject({ ok: false, reason: 'ERROR' });
+  });
 });

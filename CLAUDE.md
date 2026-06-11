@@ -239,6 +239,34 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Build (**Dreams slice 4a — patterns backend + IPC seam**;
+  [12-dreams](docs/specs/12-dreams.md) §3.5/§4.4/§8.2/§6/§13.4). **Asked first (4 product/UX forks, all
+  recommendations confirmed):** recurring-nightmare nudge threshold = **3 nightmares in 14 days** (the
+  deterministic backstop; the AI distress signal fires independently); patterns window = a **30d / 90d /
+  All-time toggle**; the AI narrative = **on-demand "Generate"** (cached + regenerable, never auto-spends
+  budget); Patterns entry = a **"Patterns" button in the Dreams header** → `/dreams/patterns`. Built the
+  backend: `@selfos/core/dreams` **`dreamPatternService`** — **`computePatternStats`** (a PURE aggregation
+  over `{dream, analysis}[]` → recurring symbols/themes/people/emotions counts, lucid+nightmare counts,
+  mood & vividness trend series) + the **`nightmareNudge`** (3-in-14-days OR an AI `distressSignal`,
+  computed over the FULL set on a **fixed 14-day window** so a longer view window never dilutes the safety
+  signal); `getPatternStats`; **`generatePatternNarrative`** (the budget-gated `dream.patterns` pass over a
+  bounded recent-dreams digest → cached as `DreamPatternSummary` at `people/<id>/dreams/patterns.enc`;
+  meters before caching; re-gen drops the prior approved Insight); `approvePatternNarrative` (→ a
+  **cross-dream `Insight`** `source:'dream'` with **no `dreamId`**, gated by injected `memoryEnabled`);
+  `removePatternNarrativeFromContext`. New **crypto-free** view types (`DreamPatternWindow`
+  `'30d'|'90d'|'all'`, `DreamPatternStats`, `DreamNarrativeResult`) in `@selfos/core/schemas`;
+  `dream.patterns` usage type. IPC seam (gated **`dreams.own`**, dreamer-scoped):
+  `dreams:patternStats`/`:getPatternSummary`/`:patternNarrative`/`:approvePatternNarrative`/
+  `:removePatternNarrative` (a denied `patternStats` read returns **zeroed stats**, never throws). The API
+  key stays host-side. Code-reviewer verdict **ship** (no blockers/should-fixes — nudge decoupling,
+  no-`dreamId` Insight, re-gen+remove dropping the Insight, metering-before-cache, and key-host-side all
+  verified; applied the one nit so the cached `windowFrom/To` match the digest Claude actually saw). Gate
+  green: typecheck (node + web/DOM-lib), lint, format, **156 core + 231 desktop** unit (+11 core
+  `dreamPatternService` incl. the windowing + nudge paths, +1 bridge patterns round-trip/gating). On
+  `feat/dreams-slice-4a` (in the Dreams worktree). **No user-facing surface, so no E2E/visual-QA** — the
+  four `/gallery` chart primitives + the `/dreams/patterns` screen (window toggle, on-demand narrative +
+  approve, the nightmare nudge) land in **4b**. (Concurrent questionnaire session's main-tree work
+  untouched.)
 - 2026-06-11 — Build (**Dreams slice 3c — the guided-analysis UI; §13.3 COMPLETE**;
   [12-dreams](docs/specs/12-dreams.md) §3.2/§3.3/§13.3). The in-pane **Dream ⇄ Analysis** surface.
   **Asked first (3 UX forks, all recommendations confirmed):** presentation = **in-pane mode switch**

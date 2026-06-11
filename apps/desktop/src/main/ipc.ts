@@ -191,6 +191,11 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.dreamUpdateAnalysis, bridge.dreamUpdateAnalysis);
   handle(IpcChannels.dreamApprove, bridge.dreamApprove);
   handle(IpcChannels.dreamRemoveFromContext, bridge.dreamRemoveFromContext);
+  handle(IpcChannels.dreamPatternStats, bridge.dreamPatternStats);
+  handle(IpcChannels.dreamGetPatternSummary, bridge.dreamGetPatternSummary);
+  handle(IpcChannels.dreamPatternNarrative, bridge.dreamPatternNarrative);
+  handle(IpcChannels.dreamApprovePatternNarrative, bridge.dreamApprovePatternNarrative);
+  handle(IpcChannels.dreamRemovePatternNarrative, bridge.dreamRemovePatternNarrative);
   handle(IpcChannels.getSidebarCollapsed, bridge.getSidebarCollapsed);
   handle(IpcChannels.setSidebarCollapsed, bridge.setSidebarCollapsed);
 

@@ -632,6 +632,25 @@ Confirmed in review (2026-06-11):
      `feat/dreams-slice-3c`. **§13.3 is now complete; NEXT: §13.4 Patterns.**_
 4. **Patterns** — `dreamPatternService` deterministic stats + the new `/gallery` chart primitives + the
    `dream.patterns` AI narrative (approvable) + the recurring-nightmare nudge.
+   - _**4a built 2026-06-11 (patterns backend + IPC seam):** `@selfos/core/dreams` `dreamPatternService` —
+     **`computePatternStats`** (a PURE aggregation over `{dream, analysis}[]` → recurring symbols / themes /
+     people / emotions counts, lucid+nightmare counts, mood & vividness trend series) + the
+     **recurring-nightmare nudge** (`nightmareNudge`: **3 nightmares in a fixed 14-day window OR an AI
+     `distressSignal`** — confirmed thresholds; computed over the FULL set so a longer view window never
+     dilutes the safety signal), `getPatternStats` (loads + computes), **`generatePatternNarrative`** (the
+     budget-gated `dream.patterns` pass over a bounded digest of recent dreams → cached as a
+     `DreamPatternSummary`; meters before caching; re-gen drops the prior approved Insight),
+     `approvePatternNarrative` (→ a **cross-dream `Insight`** `source:'dream'` with **no `dreamId`**, gated
+     by injected `memoryEnabled`), `removePatternNarrativeFromContext`. The cache lives at
+     `people/<id>/dreams/patterns.enc` (dreams-dir root, not under a dream). New crypto-free view types
+     (`DreamPatternWindow` `'30d'|'90d'|'all'`, `DreamPatternStats`, `DreamNarrativeResult`); `dream.patterns`
+     usage type. IPC seam (gated `dreams.own`, dreamer-scoped): `dreams:patternStats`/`:getPatternSummary`/
+     `:patternNarrative`/`:approvePatternNarrative`/`:removePatternNarrative` (a denied `patternStats` read
+     returns zeroed stats, never throws). Code-reviewer **ship** (no blockers/should-fixes; nudge-decoupling,
+     no-`dreamId` Insight, re-gen/remove-drop-Insight, metering, and key-host-side all verified — applied
+     the digest/window-range nit so the cached `windowFrom/To` match what Claude saw). Gate green (typecheck
+     node+web/DOM-lib, lint, format, **156 core + 231 desktop** unit). No user surface, so no E2E/visual-QA
+     (the charts + Patterns screen are **4b**)._
 5. **Per-dream sharing** — per-fact shareable promotion into a related person's context (reusing `08`/`09`),
    gated by `dreams.shareContext`, excluded for sensitive tiers.
 
@@ -720,3 +739,20 @@ proven.)_
   Sessions** + a 390px guard). Both offline fake Claude clients now emit a valid synthesis JSON.
   **Visual QA** at desktop + 390px (real Electron screenshots — clean). On `feat/dreams-slice-3c`.
   **Slice 3 (guided analysis) is done; NEXT: §13.4 Patterns.**
+- 2026-06-11 — **Slice 4a built** (§13.4, patterns backend + IPC seam). `@selfos/core/dreams`
+  `dreamPatternService`: **`computePatternStats`** (pure — recurring symbols/themes/people/emotions counts,
+  lucid+nightmare counts, mood/vividness trend series) + the **recurring-nightmare nudge** (**3 nightmares
+  in a fixed 14-day window OR an AI `distressSignal`**, confirmed; decoupled from the view window so a
+  longer view never dilutes the safety signal); `getPatternStats`; **`generatePatternNarrative`** (the
+  budget-gated `dream.patterns` pass over a bounded recent-dreams digest → cached `DreamPatternSummary`;
+  meters before caching; re-gen drops the stale Insight); `approvePatternNarrative` (→ a cross-dream
+  `Insight` `source:'dream'`, **no `dreamId`**, gated by `memoryEnabled`); `removePatternNarrativeFromContext`.
+  Cache at `people/<id>/dreams/patterns.enc`. New crypto-free view types (`DreamPatternWindow`
+  `'30d'|'90d'|'all'`, `DreamPatternStats`, `DreamNarrativeResult`) + `dream.patterns` usage type. IPC seam
+  (gated `dreams.own`, dreamer-scoped): `dreams:patternStats`/`:getPatternSummary`/`:patternNarrative`/
+  `:approvePatternNarrative`/`:removePatternNarrative`. Code-reviewer **ship** (nudge-decoupling /
+  no-`dreamId` Insight / re-gen+remove drop the Insight / metering / key-host-side all verified; applied the
+  cached-window-range nit). Gate green (typecheck node+web/DOM-lib, lint, format, **156 core + 231 desktop**
+  unit). On `feat/dreams-slice-4a`. No user surface → no E2E/visual-QA. **NEXT: 4b** the four `/gallery`
+  chart primitives + the `/dreams/patterns` screen (30d/90d/all toggle, on-demand narrative + approve, the
+  nightmare nudge) + E2E.

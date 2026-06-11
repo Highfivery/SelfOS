@@ -11,6 +11,10 @@ import type {
   DreamAnalysisEdits,
   DreamApproveResult,
   DreamInput,
+  DreamNarrativeResult,
+  DreamPatternStats,
+  DreamPatternSummary,
+  DreamPatternWindow,
   DreamSynthesisResult,
   InviteSummary,
   Person,
@@ -103,6 +107,11 @@ export const IpcChannels = {
   dreamUpdateAnalysis: 'dreams:updateAnalysis',
   dreamApprove: 'dreams:approve',
   dreamRemoveFromContext: 'dreams:removeFromContext',
+  dreamPatternStats: 'dreams:patternStats',
+  dreamGetPatternSummary: 'dreams:getPatternSummary',
+  dreamPatternNarrative: 'dreams:patternNarrative',
+  dreamApprovePatternNarrative: 'dreams:approvePatternNarrative',
+  dreamRemovePatternNarrative: 'dreams:removePatternNarrative',
   getSidebarCollapsed: 'ui:getSidebarCollapsed',
   setSidebarCollapsed: 'ui:setSidebarCollapsed',
 } as const;
@@ -327,6 +336,16 @@ export interface SelfosBridge {
   dreamApprove(input: { dreamId: string }): Promise<DreamApproveResult>;
   /** Remove a dream's analysis from the coach's memory (delete its Insight, unlink). Requires `dreams.own`. */
   dreamRemoveFromContext(input: { dreamId: string }): Promise<void>;
+  /** Deterministic cross-dream stats over the chosen window (no Claude). Requires `dreams.own`. */
+  dreamPatternStats(input: { window: DreamPatternWindow }): Promise<DreamPatternStats>;
+  /** The cached cross-dream AI narrative; null until first generated. Requires `dreams.own`. */
+  dreamGetPatternSummary(): Promise<DreamPatternSummary | null>;
+  /** Generate (and cache) the cross-dream AI narrative — a budget-gated `dream.patterns` call. Requires `dreams.own`. */
+  dreamPatternNarrative(): Promise<DreamNarrativeResult>;
+  /** Approve the cached narrative into the coach's memory (→ a cross-dream Insight). Requires `dreams.own` + memory enabled. */
+  dreamApprovePatternNarrative(): Promise<DreamApproveResult>;
+  /** Remove the narrative from context (delete its Insight, unlink). Requires `dreams.own`. */
+  dreamRemovePatternNarrative(): Promise<void>;
   /** Whether the desktop sidebar is collapsed to an icon rail (device-local). */
   getSidebarCollapsed(): Promise<boolean>;
   /** Persist the sidebar collapsed/expanded state (device-local). */
@@ -346,6 +365,10 @@ export type {
   DreamAnalysisEdits,
   DreamApproveResult,
   DreamInput,
+  DreamNarrativeResult,
+  DreamPatternStats,
+  DreamPatternSummary,
+  DreamPatternWindow,
   DreamSynthesisResult,
   InviteSummary,
   Person,

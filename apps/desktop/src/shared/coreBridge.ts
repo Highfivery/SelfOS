@@ -8,6 +8,7 @@ import {
   type ClaudeTestResult,
   type ConversationMeta,
   type DreamApproveResult,
+  type DreamNarrativeResult,
   type DreamSynthesisResult,
   type HouseholdStatus,
   type InviteSummary,
@@ -32,6 +33,9 @@ import {
   type DeviceState,
   type Dream,
   type DreamAnalysis,
+  type DreamPatternStats,
+  type DreamPatternSummary,
+  type DreamPatternWindow,
   type Person,
   type Questionnaire,
   type Relationship,
@@ -107,12 +111,17 @@ import {
 } from '@selfos/core/questionnaires';
 import {
   approveAnalysis,
+  approvePatternNarrative,
+  generatePatternNarrative,
   getAnalysis,
   getDream,
   getDreamConversation,
+  getPatternStats,
+  getPatternSummary,
   listDreams,
   purgeDream,
   removeFromContext,
+  removePatternNarrativeFromContext,
   runAnalysisTurn,
   saveDream,
   synthesizeAnalysis,
@@ -248,6 +257,25 @@ const DreamUpdateAnalysisSchema = z.object({
   dreamId: z.string().min(1),
   edits: DreamAnalysisEditsSchema,
 });
+const DreamPatternWindowSchema = z.object({ window: z.enum(['30d', '90d', 'all']) });
+
+/** A zeroed stats object — returned to a denied/unready `dreamPatternStats` caller (a read, never throws). */
+function emptyPatternStats(window: DreamPatternWindow): DreamPatternStats {
+  return {
+    window,
+    dreamCount: 0,
+    analyzedCount: 0,
+    symbols: [],
+    themes: [],
+    people: [],
+    emotions: [],
+    lucidCount: 0,
+    nightmareCount: 0,
+    moodTrend: [],
+    vividnessTrend: [],
+    nightmareNudge: false,
+  };
+}
 const PersonIdSchema = z.string().min(1);
 const InvitePersonSchema = z.object({ personId: z.string().min(1) });
 const InviteIdSchema = z.object({ id: z.string().min(1) });
@@ -935,6 +963,64 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const personId = ctx ? await activePersonId() : null;
       if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) return;
       await removeFromContext({ fs: ctx.fs, key: ctx.key, personId, dreamId, now: new Date() });
+    },
+    dreamPatternStats: async (input): Promise<DreamPatternStats> => {
+      const { window } = DreamPatternWindowSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) {
+        return emptyPatternStats(window);
+      }
+      return getPatternStats(ctx.fs, ctx.key, personId, window, new Date());
+    },
+    dreamGetPatternSummary: async (): Promise<DreamPatternSummary | null> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) return null;
+      return getPatternSummary(ctx.fs, ctx.key, personId);
+    },
+    dreamPatternNarrative: async (): Promise<DreamNarrativeResult> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      const apiKey = await host.secrets.get(ANTHROPIC_API_KEY_ID);
+      return generatePatternNarrative({
+        fs: ctx.fs,
+        key: ctx.key,
+        client: host.claude,
+        apiKey,
+        model: await host.activeModel(),
+        personId,
+        now: new Date(),
+      });
+    },
+    dreamApprovePatternNarrative: async (): Promise<DreamApproveResult> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) {
+        return {
+          ok: false,
+          reason: 'NOT_FOUND',
+          message: 'There’s no pattern reflection to approve yet.',
+        };
+      }
+      const memoryEnabled =
+        (await readVaultSettingsValues(ctx.fs))['dreams.memoryEnabled'] !== false;
+      return approvePatternNarrative({
+        fs: ctx.fs,
+        key: ctx.key,
+        personId,
+        memoryEnabled,
+        now: new Date(),
+      });
+    },
+    dreamRemovePatternNarrative: async (): Promise<void> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) return;
+      await removePatternNarrativeFromContext({ fs: ctx.fs, key: ctx.key, personId });
     },
 
     // --- UI state (device-local) ---

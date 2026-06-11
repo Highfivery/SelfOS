@@ -2,10 +2,12 @@ import type { FileSystem } from '../host';
 import {
   ConversationSchema,
   DreamAnalysisSchema,
+  DreamPatternSummarySchema,
   DreamSchema,
   type Conversation,
   type Dream,
   type DreamAnalysis,
+  type DreamPatternSummary,
 } from '../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 
@@ -41,6 +43,11 @@ function analysisPath(personId: string, dreamId: string): string {
 
 function conversationPath(personId: string, dreamId: string): string {
   return `${dreamDir(personId, dreamId)}/conversation.enc`;
+}
+
+/** The cached cross-dream pattern narrative lives at the dreams-dir root, NOT under any one dream. */
+function patternsPath(personId: string): string {
+  return `${dreamsDir(personId)}/patterns.enc`;
 }
 
 /** Write (or overwrite) a dream under its dreamer's encrypted folder. */
@@ -143,4 +150,22 @@ export async function saveDreamConversation(
     conversation,
     key,
   );
+}
+
+/** The cached cross-dream pattern narrative (12 §3.5/§4.4); null until first generated. */
+export async function getPatternSummary(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+): Promise<DreamPatternSummary | null> {
+  const raw = await readEncryptedJson(fs, patternsPath(personId), key);
+  return raw ? DreamPatternSummarySchema.parse(raw) : null;
+}
+
+export async function savePatternSummary(
+  fs: FileSystem,
+  key: Uint8Array,
+  summary: DreamPatternSummary,
+): Promise<void> {
+  await writeEncryptedJson(fs, patternsPath(summary.personId), summary, key);
 }

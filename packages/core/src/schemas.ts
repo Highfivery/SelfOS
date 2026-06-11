@@ -636,3 +636,44 @@ export type DreamSynthesisResult =
 export type DreamApproveResult =
   | { ok: true; insightId: string }
   | { ok: false; reason: 'MEMORY_DISABLED' | 'NOT_FOUND'; message: string };
+
+/** The time window cross-dream patterns aggregate over (12 §3.5). */
+export type DreamPatternWindow = '30d' | '90d' | 'all';
+
+/** One ranked label + occurrence count (recurring symbols/themes/people/emotions). */
+export interface DreamPatternCount {
+  label: string;
+  count: number;
+  personId?: string; // set when a "people" entry resolves to a People-graph person (04)
+}
+
+/** One time-series point (a normalized signal on the date the dream occurred). */
+export interface DreamTrendPoint {
+  date: string; // YYYY-MM-DD (the dream's occurred-date)
+  value: number;
+}
+
+/**
+ * Deterministic cross-dream statistics (12 §3.5) — computed live from each `DreamAnalysis.tags` + the
+ * `Dream` metadata over the chosen window. A crypto-free view type (surfaced over IPC like `UsageSummary`).
+ */
+export interface DreamPatternStats {
+  window: DreamPatternWindow;
+  dreamCount: number; // dreams in the window
+  analyzedCount: number; // of those, how many have a synthesized analysis
+  symbols: DreamPatternCount[]; // recurring symbols, most frequent first
+  themes: DreamPatternCount[]; // recurring themes
+  people: DreamPatternCount[]; // who appears most (dream.people + analysis.tags.people)
+  emotions: DreamPatternCount[]; // dominant emotions across dreams
+  lucidCount: number;
+  nightmareCount: number;
+  moodTrend: DreamTrendPoint[]; // waking mood (−1..1) over time
+  vividnessTrend: DreamTrendPoint[]; // vividness (1..5) over time
+  /** The recurring-nightmare nudge (12 §8.2): a recent frequency of nightmares OR an AI distress signal. */
+  nightmareNudge: boolean;
+}
+
+/** The result of generating the cross-dream AI narrative (12 §3.5) — budget-gated `dream.patterns`. */
+export type DreamNarrativeResult =
+  | { ok: true; summary: DreamPatternSummary; usage: UsageEvent }
+  | { ok: false; reason: 'NO_KEY' | 'BUDGET' | 'ERROR' | 'EMPTY'; message: string };

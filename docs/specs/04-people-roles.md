@@ -101,6 +101,11 @@ interface Person {
 }
 ```
 
+> **Planned amendment** — [`08-questionnaires.md`](08-questionnaires.md) (Draft) adds optional encrypted
+> **`email?`** / **`phone?`** contact fields (to prefill questionnaire `mailto:`/SMS delivery; **excluded
+> from `buildContext`** — operational, not coaching data), with a `schemaVersion` bump + migration and
+> contact fields in the People editor. Applied when 08 is approved/built.
+
 ### 4.2 Relationship (the graph edge)
 
 ```ts

@@ -94,6 +94,10 @@ interface Conversation {
 Stored encrypted at `people/<person-id>/conversations/<conversation-id>.enc` via the People-1 crypto
 service (AES-256-GCM, master key). Zod-validated on read; `schemaVersion` + migrations.
 
+> **Planned amendment** — [`09-session-analysis.md`](09-session-analysis.md) (Draft) adds **`endedAt?`** /
+> **`insightId?`** / **`insightStale?`** to `Conversation` for the "End & summarize" flow (a `schemaVersion`
+> bump + migration; existing transcripts get them absent/false). Applied when 09 is approved/built.
+
 ## 5. Architecture & modules
 
 ### 5.1 Main process

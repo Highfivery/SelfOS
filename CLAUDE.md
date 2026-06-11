@@ -239,6 +239,24 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-10 — Build (**Slice 2b — [10-multi-device-vault](docs/specs/10-multi-device-vault.md) Slice 2
+  complete; the whole spec is now built**). The **member redeem flow**: `invites:redeem` (needs **no
+  device key** — unwraps the master key from the matching invite via core `redeemInvite`, stores it
+  device-local, **persists** the resolved person as `DeviceState.pendingJoinPersonId`) +
+  `invites:completeJoin` (sets that member's **own PIN** + signs them in; only the redeemed person —
+  never the owner — can be completed, so the renderer can't target another account). `UnlockScreen` now
+  has two modes: recovery-phrase (owner) and **invite** ("Have an invite code?" → enter code → "Set
+  your PIN" → Finish). **Security fix the reviewer caught:** redeem stores the key + consumes the invite
+  (single-use), so a crash before the PIN was set would have dropped to an **open person picker** where
+  anyone could sign in as the PIN-less member with the key already on disk. Fixed by **persisting the
+  pending join device-local** and having `HouseholdGate` **resume the "Set your PIN" step** on next boot.
+  Gates green: typecheck/lint/format, **223 unit** (76 core + 147 desktop), **27 E2E** (owner→member
+  round trip joins **member-only** + account gains a PIN + invite consumed; an interrupted-redeem reboot;
+  a 390px overflow guard on the invite surfaces). **Lesson: a two-step that persists secret material
+  (key on disk) in step 1 must make step 2 resumable on crash — otherwise the interrupted state is an
+  open door. Persist the pending state and re-route to it on boot.** Multi-device household is DONE:
+  one owner/super-admin per directory, no re-keying, recovery-phrase device join, super-admin in the
+  vault, owner PIN, and secure member invites.
 - 2026-06-10 — Build (**Slice 2a of [10-multi-device-vault](docs/specs/10-multi-device-vault.md)** — the
   owner side of **member invite codes**). **Decisions (asked):** code = **word phrase** (6 words from a
   curated 128-word `inviteWords` list, ~2⁴²); **7-day** expiry; the **member sets their own PIN** on

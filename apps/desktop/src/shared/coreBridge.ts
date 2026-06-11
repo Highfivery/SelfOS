@@ -101,7 +101,7 @@ import {
   storeQuestionnaireImage,
   validateQuestionnaire,
 } from '@selfos/core/questionnaires';
-import { deleteDream, getDream, listDreams, saveDream } from '@selfos/core/dreams';
+import { getDream, listDreams, purgeDream, saveDream } from '@selfos/core/dreams';
 import { fromBase64, toBase64 } from '@selfos/core/encoding';
 
 /**
@@ -808,7 +808,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const ctx = await host.vaultAndKey();
       const personId = ctx ? await activePersonId() : null;
       if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) return;
-      await deleteDream(ctx.fs, personId, PersonIdSchema.parse(id));
+      // purgeDream (not deleteDream) so the linked Insight is removed too — else it orphans + keeps
+      // feeding the coach (12 §3.6).
+      await purgeDream(ctx.fs, ctx.key, personId, PersonIdSchema.parse(id));
     },
 
     // --- UI state (device-local) ---

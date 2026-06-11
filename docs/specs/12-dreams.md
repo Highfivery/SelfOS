@@ -573,6 +573,19 @@ Confirmed in review (2026-06-11):
 3. **Guided analysis → structured analysis → approve → context** — `dreamAnalysisService` (reusing `05`'s
    engine, dream-folder transcript, blended honest prompt, `dream.analyze` metering), the guided chat +
    synthesis card, edit + approve → `Insight`, remove-from-context, crisis routing.
+   - _**3a built 2026-06-11 (core backend):** `@selfos/core/dreams` `dreamAnalysisService` —
+     `runAnalysisTurn` (dream-scoped reflective chat: reuses the `05` budget/stream/metering pattern but
+     stores the transcript **under the dream**, kept out of Sessions, metered **`dream.analyze`**),
+     `synthesizeAnalysis` (structured-output → `extractJson` + Zod-validated `DreamAnalysisDraftSchema` →
+     a `DreamAnalysis`; marks the dream `analyzed`; **meters the paid call before parsing**; re-synth
+     drops the stale Insight), `approveAnalysis` (→ `Insight` `source:'dream'`, gated by an injected
+     `memoryEnabled`), `removeFromContext`, and **`purgeDream`** (delete the dream **and** its linked
+     Insight — the bridge delete path now uses it so a delete can't orphan an Insight that keeps feeding
+     the coach, §3.6). The blended-honest `DREAM_ANALYSIS_GUIDANCE` + synthesis contract reuse
+     `PERSONA`/`SAFETY`; `dream.analyze` usage type; dream-conversation persistence. Code-reviewed
+     (**fix-first → resolved**: orphan-Insight leak + unmetered-on-parse-failure both fixed; nits
+     applied). Gate green (typecheck/lint/format, **143 core + 218 desktop** unit). **3b** = the IPC seam
+     for these ops; **3c** = the chat + synthesis + approve UI + E2E._
 4. **Patterns** — `dreamPatternService` deterministic stats + the new `/gallery` chart primitives + the
    `dream.patterns` AI narrative (approvable) + the recurring-nightmare nudge.
 5. **Per-dream sharing** — per-fact shareable promotion into a related person's context (reusing `08`/`09`),
@@ -613,3 +626,14 @@ proven.)_
   sweep now visits Dreams; visual QA at desktop + 390px). Built in the slice-1 worktree on
   `feat/dreams-slice-2`. Deferred: People-graph linking of "people present" (free names for now); the
   Analyze entry point + everything AI lands in slice 3.
+- 2026-06-11 — **Slice 3a built** (§13.3, core backend): `@selfos/core/dreams` `dreamAnalysisService` —
+  `runAnalysisTurn` (dream-scoped guided chat; transcript stored under the dream, out of Sessions;
+  metered `dream.analyze`), `synthesizeAnalysis` (structured-output → Zod-validated `DreamAnalysis`;
+  meters the paid call before parsing; re-synth drops the stale Insight), `approveAnalysis` (→ `Insight`
+  `source:'dream'`, gated by injected `memoryEnabled`), `removeFromContext`, and **`purgeDream`** (the
+  bridge delete path now removes the linked Insight too — no orphan feeding the coach, §3.6). Blended-
+  honest prompt reusing `PERSONA`/`SAFETY`; dream-conversation persistence; `dream.analyze` usage type.
+  Code-reviewed (**fix-first → resolved**: orphan-Insight leak + unmetered-on-parse-failure fixed; nits
+  applied — reuse `DreamTagsSchema`, request `metrics`, fence-strip `extractJson`). Gate green
+  (typecheck/lint/format, **143 core + 218 desktop** unit). On `feat/dreams-slice-3`. Next: **3b** IPC
+  seam, **3c** the chat + synthesis + approve UI + E2E.

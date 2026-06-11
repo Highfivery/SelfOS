@@ -1,5 +1,12 @@
 import type { FileSystem } from '../host';
-import { DreamAnalysisSchema, DreamSchema, type Dream, type DreamAnalysis } from '../schemas';
+import {
+  ConversationSchema,
+  DreamAnalysisSchema,
+  DreamSchema,
+  type Conversation,
+  type Dream,
+  type DreamAnalysis,
+} from '../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 
 /**
@@ -30,6 +37,10 @@ function dreamPath(personId: string, dreamId: string): string {
 
 function analysisPath(personId: string, dreamId: string): string {
   return `${dreamDir(personId, dreamId)}/analysis.enc`;
+}
+
+function conversationPath(personId: string, dreamId: string): string {
+  return `${dreamDir(personId, dreamId)}/conversation.enc`;
 }
 
 /** Write (or overwrite) a dream under its dreamer's encrypted folder. */
@@ -104,4 +115,32 @@ export async function getAnalysis(
 ): Promise<DreamAnalysis | null> {
   const raw = await readEncryptedJson(fs, analysisPath(personId, dreamId), key);
   return raw ? DreamAnalysisSchema.parse(raw) : null;
+}
+
+/**
+ * The guided-analysis transcript for a dream — a `Conversation` stored UNDER the dream (12 §3.2/§4.1),
+ * so the Sessions surface (05, which lists only `people/<id>/conversations/`) never shows it.
+ */
+export async function getDreamConversation(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  dreamId: string,
+): Promise<Conversation | null> {
+  const raw = await readEncryptedJson(fs, conversationPath(personId, dreamId), key);
+  return raw ? ConversationSchema.parse(raw) : null;
+}
+
+export async function saveDreamConversation(
+  fs: FileSystem,
+  key: Uint8Array,
+  conversation: Conversation,
+): Promise<void> {
+  // The conversation's `id` is the dream id (one transcript per dream); `personId` is the dreamer.
+  await writeEncryptedJson(
+    fs,
+    conversationPath(conversation.personId, conversation.id),
+    conversation,
+    key,
+  );
 }

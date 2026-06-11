@@ -239,6 +239,32 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Build (**Dreams slice 3a — core guided-analysis backend**;
+  [12-dreams](docs/specs/12-dreams.md) §13.3). The first AI-bearing Dreams code (no IPC/UI yet). New
+  **`@selfos/core/dreams` `dreamAnalysisService`**: `runAnalysisTurn` (a **dream-scoped** reflective
+  chat — reuses the `05` chat / `06` budget+stream+metering pattern but stores the transcript **under the
+  dream** at `dreams/<id>/conversation.enc`, so the Sessions surface never lists it; metered
+  **`dream.analyze`**); `synthesizeAnalysis` (one `client.stream` w/ a no-op `onDelta` to get token usage
+  → fence-stripping `extractJson` + a Zod-validated **`DreamAnalysisDraftSchema`** → a `DreamAnalysis`;
+  marks the dream `analyzed`; **records usage BEFORE parsing** so a paid call whose JSON fails validation
+  is still metered; re-synth drops the prior analysis's stale Insight); `approveAnalysis` (→ `Insight`
+  `source:'dream'`, `provenance.dreamId`; gated by an **injected `memoryEnabled`** — host reads
+  `dreams.memoryEnabled` in 3b; refuses when off); `removeFromContext`; and **`purgeDream`** (delete the
+  dream **and** its linked Insight). The blended-**honest** voice lives in `DREAM_ANALYSIS_GUIDANCE` + the
+  synthesis contract, reusing `PERSONA`/`SAFETY` (symbolic readings framed as reflection-not-fact;
+  `crisisFlag`/`distressSignal`, §8.1/§8.2). Registered the `dream.analyze` usage type; added
+  dream-conversation persistence to `dreamService`. Code-reviewer verdict **fix-first** — both
+  should-fixes resolved: (#1) the slice-2 bridge delete path orphaned an approved dream Insight (it lives
+  OUTSIDE the dream folder, under `people/<id>/insights/`) → now routed through **`purgeDream`**; (#2) a
+  paid synthesis call that failed JSON/Zod validation wasn't metered → **`recordUsage` moved ahead of the
+  parse**. Nits applied (reuse `DreamTagsSchema`, request `metrics` in the prompt, fence-strip the
+  extractor). Gate green: typecheck/lint/format, **143 core + 218 desktop** unit (10 new analysis-service
+  tests: transcript-not-in-Sessions, approve→Insight-feeds-context, memory-off refusal, re-synth-drops-
+  stale, purge-removes-insight, meter-on-parse-failure, …). On `feat/dreams-slice-3`. **Lesson: when a
+  feature stores derived data OUTSIDE the entity's own folder (an `Insight` under `people/<id>/insights/`,
+  not under the dream), the entity's delete path must explicitly clean it up — a folder purge alone
+  orphans it, and an approved source-discriminated Insight keeps feeding `buildContext` forever.** Next:
+  **3b** (IPC seam) → **3c** (guided-chat + synthesis card + approve UI + E2E).
 - 2026-06-11 — Build (**Dreams slice 2 — capture + journal UI + nav + settings**;
   [12-dreams](docs/specs/12-dreams.md) §13.2). The first Dreams **renderer** surface (no AI yet — pure
   journaling works offline). IPC seam `dreams:list/get/save/delete` through the typed seam

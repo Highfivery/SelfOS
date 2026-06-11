@@ -8,14 +8,16 @@ import '@fontsource/lora/400-italic.css';
 import './design-system/tokens.css';
 import './app/app.css';
 import { App } from './app/App';
-import { installStubBridge } from './host/stubBridge';
+import { installRealBridge } from './host/webHost';
 
 /**
  * Web/iOS entry (07-mobile-platform §5.3). Same React UI as Electron — the only difference is who
- * provides `window.selfos`: on Electron the preload, here the in-webview host. iii-a installs a temporary
- * stub so the UI renders inside the iOS WKWebView; iii-b/c/d replace it with the real `@selfos/core` host.
+ * provides `window.selfos`: on Electron the preload, here the in-webview host. iii-b2 wires the real
+ * in-webview host (the `createCoreBridge` factory over an IndexedDB vault + `localStorage` secrets +
+ * a fake Claude), so the actual `@selfos/core` logic runs in the browser. The native iCloud FS /
+ * Keychain / real Claude hosts replace those browser stubs in iii-b3/c.
  */
-installStubBridge();
+installRealBridge();
 
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('Root element #root not found');

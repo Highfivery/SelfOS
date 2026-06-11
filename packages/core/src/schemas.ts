@@ -45,6 +45,13 @@ export type SettingsFile = z.infer<typeof SettingsFileSchema>;
 export const DeviceStateSchema = z.object({
   schemaVersion: z.number().int().positive(),
   vaultPath: z.string().nullable(),
+  /**
+   * The iOS vault handle (07-mobile-platform §4): a security-scoped bookmark blob, not a path —
+   * resolved on launch to regain access to the shared iCloud folder. The web preview host uses it as
+   * the IndexedDB vault id. Optional; the boot logic picks whichever the platform provides (Electron
+   * uses `vaultPath`). Additive, so existing device-state files parse unchanged.
+   */
+  vaultBookmark: z.string().optional(),
   window: WindowBoundsSchema.optional(),
   activePersonId: z.string().nullable().optional(),
   /**

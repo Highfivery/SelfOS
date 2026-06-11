@@ -18,8 +18,8 @@
     "@anthropic-ai/sdk": "^0.104.1",
     "@capacitor/core": "^7.0.0",
     "@capacitor/ios": "^7.0.0",
-    "@fontsource/lora": "^5.1.0",
     "@fontsource-variable/mulish": "^5.1.0",
+    "@fontsource/lora": "^5.1.0",
     "@selfos/core": "workspace:*",
     "chokidar": "^3.6.0",
     "lucide-react": "^0.469.0",
@@ -42,6 +42,7 @@
     "electron": "^33.2.1",
     "electron-builder": "^25.1.8",
     "electron-vite": "^3.0.0",
+    "fake-indexeddb": "^6.2.5",
     "jsdom": "^25.0.1",
     "vite": "^6.0.7",
     "vitest": "^3.0.0"

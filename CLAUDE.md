@@ -239,6 +239,31 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-10 — Build (**Capacitor track slice iii-b2 — iOS in-webview host + browser verification**;
+  [07-mobile-platform](docs/specs/07-mobile-platform.md) §5.3/§13). The real **in-webview `BridgeHost`**
+  wiring the shared `createCoreBridge` factory to browser APIs, so the actual `@selfos/core` runs in a
+  WKWebView/web preview (replacing the throwaway iii-a stub). New `renderer/src/host/`: **`idbFileSystem`**
+  (IndexedDB `FileSystem` — vault-relative paths keyed `<vaultId>/<path>`, atomic per-tx writes + subtree
+  removes), **`webStores`** (`localStorage` SecretStore + device state/settings **namespaced by a `?device=`
+  id** so two tabs = two devices sharing one vault, + a deterministic fake `ClaudeClient`), **`webHost`**
+  (assembles the host + boot/`useVault`/`initVault` over IDB + `installRealBridge()`). `main.web.tsx` calls
+  `installRealBridge()`; **`stubBridge.ts` deleted**. `DeviceStateSchema` gained optional `vaultBookmark?`
+  (the iOS vault handle; the web host uses it as the IDB vault id). **Decisions (asked):** IndexedDB-backed
+  preview vault (persistent), deterministic fake Claude reply, and **yes to the `?device=` multi-device
+  switch** (recommended — it's the one risky path: redeem with NO device key). **Browser-verified** the real
+  app end-to-end: onboarding → real WebCrypto/scrypt `householdSetup` → people → invite → a `?device=B` tab
+  reading the shared IndexedDB vault + redeeming the invite with no prior key (joins **member-only**, not
+  owner) → capability-gated nav (member's nav omits People) → chat streaming, no console errors. Reviewer
+  verdict **ship** (added a `webHost` boot/initVault test + made `idbFileSystem.remove` single-transaction
+  per the findings). Gates green: typecheck (node + web/DOM-lib), lint, format, **244 unit** (76 core + 168
+  desktop, incl. 16 new host tests via `fake-indexeddb`), **27 Electron E2E** (no regression),
+  `pnpm build:web` bundles `@selfos/core` (105 KB gzip). **Lesson: `fake-indexeddb`'s tx scheduler needs
+  `setImmediate` (node env, not jsdom), and a shared global IDB deadlocks across tests when a prior open
+  connection blocks `deleteDatabase` — inject a fresh `IDBFactory` per test (as `idbFileSystem` already
+  did).** The web host is the same one the iOS WebView will use until the native plugins land. **NEXT:
+  iii-b3** — the Swift `VaultFs` Capacitor plugin (real security-scoped iCloud FS) replaces `idbFileSystem`;
+  then iii-c (iOS Keychain + browser-mode Claude) replaces the `localStorage`/fake stubs. **(Concurrent
+  agent's `docs/specs/0{4,5,8,9}` + `11` left untouched; this slice's only doc edits are 07 + this entry.)**
 - 2026-06-10 — Build (**Capacitor track slice iii-b1 — shared `createCoreBridge(host)` factory + Electron
   migration**; [07-mobile-platform](docs/specs/07-mobile-platform.md) §5.3/§13). Extracted ONE
   platform-agnostic factory (`apps/desktop/src/shared/coreBridge.ts`, node/electron/`Buffer`-free) that

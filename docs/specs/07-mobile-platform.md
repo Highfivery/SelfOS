@@ -340,6 +340,21 @@ build:web` then `cap add ios` + Xcode on their Mac (free signing first; §11.7).
     trust boundary holds on both hosts; the API key stays host-side. Gates green: typecheck/lint/format,
     **228 unit** (76 core + 152 desktop, incl. a new factory test exercising real `@selfos/core` over
     `memFileSystem`), **27 E2E**. The factory is iOS-ready; **iii-b2** wires the in-webview host to it.
+- 2026-06-10 — **slice iii-b2 landed (§5.3/§5.4):** the **in-webview `BridgeHost`** wiring the shared
+  `createCoreBridge` factory to browser APIs, so the real `@selfos/core` runs in a WKWebView/web preview.
+  New `apps/desktop/src/renderer/src/host/`: **`idbFileSystem`** (an IndexedDB `FileSystem`, vault-relative
+  paths keyed by `<vaultId>/<path>`, atomic per-transaction writes + subtree removes); **`webStores`**
+  (`localStorage` SecretStore + device state/settings, namespaced by a simulated `?device=` id so two tabs
+  act as two devices sharing one vault, + a deterministic offline fake `ClaudeClient`); **`webHost`**
+  (assembles the host + boot-state/`useVault`/`initVault` over IDB + `installRealBridge()`). `main.web.tsx`
+  now calls `installRealBridge()`; **`stubBridge.ts` deleted**. `DeviceStateSchema` gains optional
+  `vaultBookmark?` (§4). **Browser-verified** end-to-end (onboarding → real WebCrypto/scrypt setup → people
+  → invite → a `?device=B` tab redeeming with no prior device key, joining member-only → capability-gated
+  nav → chat streaming). Gates green: typecheck (node + web/DOM-lib), lint, format, **244 unit** (76 core +
+  168 desktop, incl. 16 new host tests via `fake-indexeddb`), **27 Electron E2E** (no regression),
+  `pnpm build:web` bundles `@selfos/core` (105 KB gzip). The iOS/web host can't run in headless CI (§10) —
+  verified manually in the browser. **Next: iii-b3** the Swift `VaultFs` plugin (real iCloud FS) + iii-c
+  (Keychain + real Claude) replace the browser stubs.
 
 ## 13. Implementation roadmap & status
 
@@ -361,12 +376,16 @@ The full arc, so no session loses the thread. Update the status boxes as slices 
       to it (platform-specific ops — folder picker, conflicts, reveal, chokidar watcher, boot-state — stay
       in the host). Behavior-preserving: 228 unit + 27 E2E green. _(Decided: shared factory; browser-verify
       before Swift.)_
-- [ ] **iii-b2 — iOS in-webview host + browser verification.** Implement `BridgeHost` for the WebView:
-      an in-browser FileSystem (for the web preview), a DeviceStore over Capacitor Preferences/localStorage,
-      **temporary** SecretStore + ClaudeClient stubs. Add `vaultBookmark?: string` to `DeviceStateSchema`
-      (iOS persists a security-scoped bookmark, not a path — §4). Build `installRealBridge()`, **delete
-      `stubBridge.ts`**, and verify the real app (onboarding → setup → people → invites → multi-device) in
-      the web preview against real `@selfos/core` + a real in-browser filesystem.
+- [x] **iii-b2 — iOS in-webview host + browser verification.** Implemented `BridgeHost` for the WebView:
+      an **IndexedDB** FileSystem (`idbFileSystem`), `localStorage` SecretStore + device state/settings
+      namespaced by a simulated `?device=` id (two tabs = two devices sharing one vault), and a
+      deterministic offline fake `ClaudeClient` (`webStores`). Added `vaultBookmark?: string` to
+      `DeviceStateSchema` (iOS persists a security-scoped bookmark, not a path — §4; the web host uses it
+      as the IDB vault id). Built `installRealBridge()` (`webHost`) and **deleted `stubBridge.ts`**.
+      **Browser-verified** the real app against `@selfos/core`: onboarding → real WebCrypto/scrypt
+      `householdSetup` → people → invite generation → a second `?device=B` tab redeeming the invite **with
+      no prior device key** (joins member-only) → capability-gated nav → chat streaming, no console errors.
+      (SecretStore/Claude are temporary; the native iOS Keychain + browser-mode Claude land in iii-c.)
 - [ ] **iii-b3 — Swift `VaultFs` Capacitor plugin + TS FS adapter.** `UIDocumentPicker` open-directory
       (iCloud folder), security-scoped bookmark create/resolve (handle stale → re-pick), `NSFileCoordinator`
       coordinated read/writeAtomic(temp+rename)/list/remove on vault-relative paths, a presenter for change

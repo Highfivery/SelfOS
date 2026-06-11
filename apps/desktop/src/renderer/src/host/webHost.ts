@@ -1,4 +1,4 @@
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
 import type { BootState } from '@shared/schemas';
 import type { ClaudeClient, FileSystem, SecretStore } from '@selfos/core/host';
 import { loadMasterKey } from '@selfos/core/crypto';
@@ -45,6 +45,8 @@ interface HostParts {
   secrets: SecretStore;
   /** Claude client: the deterministic fake in the web preview, the real browser-mode SDK on iOS. */
   claude: ClaudeClient;
+  /** Subscribe to external vault changes; a no-op in the web preview, the native watcher on iOS. */
+  onVaultChanged(listener: () => void): () => void;
 }
 
 /** Assemble a `BridgeHost` from interchangeable filesystem/picker/secrets parts (shared by web + iOS). */
@@ -147,8 +149,7 @@ function createBridgeHost(parts: HostParts): BridgeHost {
     },
     getConflicts: () => Promise.resolve([]),
     revealVault: () => Promise.resolve(),
-    // No live cross-tab/device change feed yet (the NSFilePresenter is iii-b3b); reads are always fresh.
-    onVaultChanged: () => () => {},
+    onVaultChanged: parts.onVaultChanged,
     onChatChunk: (listener) => {
       chatListeners.add(listener);
       return () => chatListeners.delete(listener);
@@ -169,7 +170,41 @@ export function createWebHost(options: WebHostOptions = {}): BridgeHost {
     selectVaultFolder: () => Promise.resolve(PREVIEW_VAULT_ID),
     secrets: webSecretStore(currentDeviceId()),
     claude: webFakeClaudeClient(),
+    // The browser preview has no cross-tab/device change feed; reads are always fresh on navigation.
+    onVaultChanged: () => () => {},
   });
+}
+
+/**
+ * Live vault-change subscription on iOS (iii-b3b): start the native `VaultFs` watcher on the active
+ * vault and forward its `vaultChanged` events; the returned cleanup stops the watch + removes the
+ * listener. (Setup is async; the cleanup is safe to call before it completes.)
+ */
+function watchCapacitorVault(vaultFs: VaultFsPlugin, listener: () => void): () => void {
+  let handle: PluginListenerHandle | undefined;
+  let watching = false;
+  let cancelled = false;
+  void (async () => {
+    const bookmark = (await webDeviceStore(currentDeviceId()).read()).vaultBookmark;
+    if (!bookmark || cancelled) return;
+    handle = await vaultFs.addListener('vaultChanged', listener);
+    if (cancelled) {
+      void handle.remove();
+      return;
+    }
+    await vaultFs.startWatch({ bookmark });
+    if (cancelled) {
+      void vaultFs.stopWatch();
+      void handle.remove();
+      return;
+    }
+    watching = true;
+  })();
+  return () => {
+    cancelled = true;
+    void handle?.remove();
+    if (watching) void vaultFs.stopWatch();
+  };
 }
 
 /**
@@ -192,6 +227,7 @@ export function createCapacitorHost(
     },
     secrets: capacitorSecretStore(keychain),
     claude: browserClaudeClient(),
+    onVaultChanged: (listener) => watchCapacitorVault(vaultFs, listener),
   });
 }
 

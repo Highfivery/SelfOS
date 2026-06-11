@@ -239,6 +239,26 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Build (**Capacitor track slice iii-b3b — live vault change feed**;
+  [07-mobile-platform](docs/specs/07-mobile-platform.md) §5.4/§13). Closes the last deferred iii item. The
+  existing `VaultFs` plugin gains a private **`NSFilePresenter`** watching the vault directory →
+  `notifyListeners("vaultChanged")` (fires when iCloud applies a sync from another device), plus
+  `startWatch`/`stopWatch` (methods on the **already-registered** plugin — the user just rebuilds, no
+  Add-Files). TS: `VaultFsPlugin` gains `startWatch`/`stopWatch`/`addListener`; `webHost`'s
+  `createBridgeHost` gains an `onVaultChanged` part — `createCapacitorHost` arms the native watch from the
+  active bookmark + forwards events, the web preview stays a no-op. Reviewer-driven robustness:
+  **disarm on background / re-arm on foreground + `deinit`** (so a suspended app never holds a coordination
+  presenter or leaks the security scope), and the TS watcher re-checks a `cancelled` flag after each await
+  (no listener/watch leak if cleanup races setup). **Honesty caveat:** the only consumer (`useVaultConflicts`
+  → `getConflicts`) is **still a stub on iOS** (`getConflicts` returns `[]`), so the feed is wired + correct
+  but yields **no visible conflict banner on iPhone yet** — iOS conflict _detection_ is a separate deferred
+  piece; the presenter is the seam for it + future live data re-fetch. Reviewer verdict **ship**. Gates:
+  typecheck (node + web/DOM-lib), lint, format, **261 unit** (76 core + 185 desktop, +2 watcher tests),
+  `build:web`. **Swift blind** — user rebuilds (no Add-Files) + device-tests a background→foreground cycle.
+  **Lesson: an iOS `NSFilePresenter`/held security scope MUST be torn down on app-background (and re-armed
+  on foreground) — a suspended app holding one can block coordinated writes + leak the scope.** **The iii
+  arc is now fully done** (a/b1/b2/b3/b3b + c1/c2); only iii-d (wife's-phone install, Xcode-only) + (iv)
+  distribution remain, both user-driven. (Concurrent agent's `docs/specs/0{4,5,8,9}` + `11` untouched.)
 - 2026-06-11 — Fix + **Capacitor track wrap-up (iOS app layer COMPLETE, on-device verified)**;
   [07-mobile-platform](docs/specs/07-mobile-platform.md) §13. Security cleanup: **`scrubLegacyLocalStorageSecrets()`**
   (`host/webStores.ts`) removes the orphaned master key + API key the pre-iii-c1 stub left in WKWebView

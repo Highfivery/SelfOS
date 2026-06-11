@@ -457,6 +457,17 @@ The full arc, so no session loses the thread. Update the status boxes as slices 
       Gates: typecheck (the SDK typechecks under the DOM lib + bundles in `build:web`), lint, format, 258
       unit (+3 SDK-mocked tests). _**Native-HTTP fallback deferred** (§11.3): only built if WKWebView blocks
       CORS/SSE on-device — pending the user's on-device chat test._
+- [x] **iii-b3b — live vault change feed.** `VaultFs.swift` gains a private `NSFilePresenter` watching the
+      vault dir → `notifyListeners("vaultChanged")` (fires on iCloud syncs from other devices), plus
+      `startWatch`/`stopWatch` (methods on the already-registered plugin — no Xcode Add-Files; just rebuild).
+      It **disarms on background / re-arms on foreground** and `deinit`s cleanly, so a suspended app never
+      holds a coordination presenter or leaks the security scope. TS: `VaultFsPlugin` gains
+      `startWatch`/`stopWatch`/`addListener`; `createCapacitorHost.onVaultChanged` arms the native watch
+      from the active bookmark and forwards events (web preview stays a no-op). _Caveat: the only consumer,
+      `useVaultConflicts` → `getConflicts`, is **still a stub on iOS** (returns `[]`) — so the feed is wired
+      and correct but produces **no visible conflict banner on iPhone yet**; iOS conflict **detection** is a
+      separate, still-deferred piece. Verify on-device that a background→foreground cycle keeps the watch
+      working._ Gates: typecheck/lint/format, 261 unit (+2), build:web.
 - [ ] **iii-d — free-signing install** on the user's + wife's physical iPhones (personal team; trust the
       cert on-device; 7-day provisioning expiry — §11.7).
 - [ ] **(iv) Distribution (later)** — Apple Developer Program + TestFlight (free signing first; a

@@ -78,9 +78,14 @@ function fakePlugin(overrides: Partial<VaultFsPlugin> = {}): VaultFsPlugin {
     writeAtomic: vi.fn(() => Promise.resolve()),
     list: vi.fn(() => Promise.resolve({ entries: [] })),
     remove: vi.fn(() => Promise.resolve()),
+    startWatch: vi.fn(() => Promise.resolve()),
+    stopWatch: vi.fn(() => Promise.resolve()),
+    addListener: vi.fn(() => Promise.resolve({ remove: () => Promise.resolve() })),
     ...overrides,
   };
 }
+
+const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe('createCapacitorHost', () => {
   it('selectVaultFolder returns the picked folder bookmark', async () => {
@@ -93,5 +98,37 @@ describe('createCapacitorHost', () => {
       fakePlugin({ pickFolder: () => Promise.reject(new Error('cancelled')) }),
     );
     expect(await host.selectVaultFolder()).toBeNull();
+  });
+
+  it('onVaultChanged starts the native watch + forwards events; cleanup stops it', async () => {
+    storage.set(
+      'selfos:A:deviceState',
+      JSON.stringify({ schemaVersion: 1, vaultPath: null, vaultBookmark: 'bm' }),
+    );
+    const remove = vi.fn(() => Promise.resolve());
+    let fire: () => void = () => {};
+    const plugin = fakePlugin({
+      addListener: vi.fn((_event, cb) => {
+        fire = cb;
+        return Promise.resolve({ remove });
+      }),
+    });
+    const fired: number[] = [];
+    const cleanup = createCapacitorHost(plugin).onVaultChanged(() => fired.push(1));
+    await flush();
+    expect(plugin.startWatch).toHaveBeenCalledWith({ bookmark: 'bm' });
+    fire();
+    expect(fired).toHaveLength(1);
+    cleanup();
+    await flush();
+    expect(plugin.stopWatch).toHaveBeenCalled();
+    expect(remove).toHaveBeenCalled();
+  });
+
+  it('onVaultChanged does not watch when no vault is selected', async () => {
+    const plugin = fakePlugin();
+    createCapacitorHost(plugin).onVaultChanged(() => {});
+    await flush();
+    expect(plugin.startWatch).not.toHaveBeenCalled();
   });
 });

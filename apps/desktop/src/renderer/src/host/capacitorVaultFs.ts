@@ -1,4 +1,4 @@
-import { registerPlugin } from '@capacitor/core';
+import { registerPlugin, type PluginListenerHandle } from '@capacitor/core';
 import type { FileSystem } from '@selfos/core/host';
 import { fromBase64, toBase64 } from '@selfos/core/encoding';
 
@@ -27,6 +27,12 @@ export interface VaultFsPlugin {
   list(options: { bookmark: string; path: string }): Promise<{ entries: string[] }>;
   /** Remove a vault-relative file or directory (recursively); a no-op if absent. */
   remove(options: { bookmark: string; path: string }): Promise<void>;
+  /** Begin observing the vault for changes (incl. iCloud syncs); emits `vaultChanged` events (iii-b3b). */
+  startWatch(options: { bookmark: string }): Promise<void>;
+  /** Stop observing the vault. */
+  stopWatch(): Promise<void>;
+  /** Subscribe to vault-change events fired by `startWatch`. */
+  addListener(eventName: 'vaultChanged', listenerFunc: () => void): Promise<PluginListenerHandle>;
 }
 
 export const VaultFs = registerPlugin<VaultFsPlugin>('VaultFs');

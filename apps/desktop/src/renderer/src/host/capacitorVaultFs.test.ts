@@ -14,6 +14,9 @@ function mockPlugin(overrides: Partial<VaultFsPlugin> = {}): VaultFsPlugin {
     writeAtomic: vi.fn(() => Promise.resolve()),
     list: vi.fn(() => Promise.resolve({ entries: [] })),
     remove: vi.fn(() => Promise.resolve()),
+    startWatch: vi.fn(() => Promise.resolve()),
+    stopWatch: vi.fn(() => Promise.resolve()),
+    addListener: vi.fn(() => Promise.resolve({ remove: () => Promise.resolve() })),
     ...overrides,
   };
 }

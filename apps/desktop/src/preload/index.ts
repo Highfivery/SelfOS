@@ -105,6 +105,9 @@ const bridge: SelfosBridge = {
   dreamPatternNarrative: () => ipcRenderer.invoke(IpcChannels.dreamPatternNarrative),
   dreamApprovePatternNarrative: () => ipcRenderer.invoke(IpcChannels.dreamApprovePatternNarrative),
   dreamRemovePatternNarrative: () => ipcRenderer.invoke(IpcChannels.dreamRemovePatternNarrative),
+  dreamShareTargets: () => ipcRenderer.invoke(IpcChannels.dreamShareTargets),
+  dreamGetInsight: (dreamId) => ipcRenderer.invoke(IpcChannels.dreamGetInsight, dreamId),
+  dreamSetFactShare: (input) => ipcRenderer.invoke(IpcChannels.dreamSetFactShare, input),
   getSidebarCollapsed: () => ipcRenderer.invoke(IpcChannels.getSidebarCollapsed),
   setSidebarCollapsed: (collapsed) =>
     ipcRenderer.invoke(IpcChannels.setSidebarCollapsed, collapsed),

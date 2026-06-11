@@ -252,6 +252,9 @@ export const InsightFactSchema = z.object({
   id: z.string().min(1),
   text: z.string(),
   shareable: z.boolean(), // false = private to the subject; true = may feed related people's context
+  // Per-person targeted sharing (12-dreams §3.4): person ids this fact is shared with, in addition to the
+  // broadcast `shareable` boolean. Additive-optional — existing facts parse unchanged, no migration.
+  shareableWith: z.array(z.string()).optional(),
 });
 export type InsightFact = z.infer<typeof InsightFactSchema>;
 
@@ -677,3 +680,12 @@ export interface DreamPatternStats {
 export type DreamNarrativeResult =
   | { ok: true; summary: DreamPatternSummary; usage: UsageEvent }
   | { ok: false; reason: 'NO_KEY' | 'BUDGET' | 'ERROR' | 'EMPTY'; message: string };
+
+/** A related person the dreamer can share a dream insight with (12 §3.4). */
+export interface DreamShareTarget {
+  id: string;
+  displayName: string;
+}
+
+/** The result of sharing/unsharing a dream-insight fact with a related person (12 §3.4). */
+export type DreamShareResult = { ok: true } | { ok: false; reason: 'SENSITIVE' | 'NOT_FOUND' };

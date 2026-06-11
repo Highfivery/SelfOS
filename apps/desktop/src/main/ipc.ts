@@ -196,6 +196,9 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.dreamPatternNarrative, bridge.dreamPatternNarrative);
   handle(IpcChannels.dreamApprovePatternNarrative, bridge.dreamApprovePatternNarrative);
   handle(IpcChannels.dreamRemovePatternNarrative, bridge.dreamRemovePatternNarrative);
+  handle(IpcChannels.dreamShareTargets, bridge.dreamShareTargets);
+  handle(IpcChannels.dreamGetInsight, bridge.dreamGetInsight);
+  handle(IpcChannels.dreamSetFactShare, bridge.dreamSetFactShare);
   handle(IpcChannels.getSidebarCollapsed, bridge.getSidebarCollapsed);
   handle(IpcChannels.setSidebarCollapsed, bridge.setSidebarCollapsed);
 

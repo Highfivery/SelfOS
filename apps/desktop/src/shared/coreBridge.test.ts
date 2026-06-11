@@ -516,4 +516,59 @@ describe('createCoreBridge', () => {
     expect((await bridge.dreamPatternStats({ window: 'all' })).dreamCount).toBe(0);
     expect(await bridge.dreamPatternNarrative()).toMatchObject({ ok: false, reason: 'ERROR' });
   });
+
+  it('shares an approved dream insight fact with a related person, gated by dreams.shareContext', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+
+    // A related person to share with.
+    const partner = await bridge.peopleSave({ displayName: 'Partner', isSubject: true, tags: [] });
+    await bridge.relationshipsSave({
+      fromPersonId: ownerId,
+      toPersonId: partner.id,
+      type: 'partner',
+    });
+
+    // Create + approve a dream analysis so an Insight (with facts) exists.
+    const dream = await bridge.dreamSave({
+      narrative: 'A dream about my partner.',
+      lucid: false,
+      nightmare: false,
+      tags: [],
+      people: [],
+      sensitivity: 'standard',
+    });
+    expect((await bridge.dreamSynthesize({ dreamId: dream.id })).ok).toBe(true);
+    expect((await bridge.dreamApprove({ dreamId: dream.id })).ok).toBe(true);
+
+    expect(await bridge.dreamShareTargets()).toEqual([{ id: partner.id, displayName: 'Partner' }]);
+    const insight = await bridge.dreamGetInsight(dream.id);
+    if (!insight) throw new Error('expected an approved insight');
+    const factId = insight.facts[0]?.id;
+    if (!factId) throw new Error('expected at least one fact');
+
+    expect(
+      await bridge.dreamSetFactShare({
+        dreamId: dream.id,
+        factId,
+        withPersonId: partner.id,
+        share: true,
+      }),
+    ).toEqual({ ok: true });
+    const shared = await bridge.dreamGetInsight(dream.id);
+    expect(shared?.facts.find((fact) => fact.id === factId)?.shareableWith).toEqual([partner.id]);
+
+    // A Guest (no dreams.shareContext) is refused the share action.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    expect((await bridge.sessionSetActive({ personId: guest.id })).ok).toBe(true);
+    expect(
+      await bridge.dreamSetFactShare({
+        dreamId: dream.id,
+        factId,
+        withPersonId: partner.id,
+        share: true,
+      }),
+    ).toMatchObject({ ok: false });
+  });
 });

@@ -9,6 +9,7 @@ import {
   type ConversationMeta,
   type DreamApproveResult,
   type DreamNarrativeResult,
+  type DreamShareResult,
   type DreamSynthesisResult,
   type HouseholdStatus,
   type InviteSummary,
@@ -36,6 +37,8 @@ import {
   type DreamPatternStats,
   type DreamPatternSummary,
   type DreamPatternWindow,
+  type DreamShareTarget,
+  type Insight,
   type Person,
   type Questionnaire,
   type Relationship,
@@ -116,14 +119,17 @@ import {
   getAnalysis,
   getDream,
   getDreamConversation,
+  getDreamInsight,
   getPatternStats,
   getPatternSummary,
   listDreams,
+  listDreamShareTargets,
   purgeDream,
   removeFromContext,
   removePatternNarrativeFromContext,
   runAnalysisTurn,
   saveDream,
+  setDreamFactShare,
   synthesizeAnalysis,
   updateAnalysis,
 } from '@selfos/core/dreams';
@@ -258,6 +264,12 @@ const DreamUpdateAnalysisSchema = z.object({
   edits: DreamAnalysisEditsSchema,
 });
 const DreamPatternWindowSchema = z.object({ window: z.enum(['30d', '90d', 'all']) });
+const DreamSetFactShareSchema = z.object({
+  dreamId: z.string().min(1),
+  factId: z.string().min(1),
+  withPersonId: z.string().min(1),
+  share: z.boolean(),
+});
 
 /** A zeroed stats object — returned to a denied/unready `dreamPatternStats` caller (a read, never throws). */
 function emptyPatternStats(window: DreamPatternWindow): DreamPatternStats {
@@ -1021,6 +1033,37 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const personId = ctx ? await activePersonId() : null;
       if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) return;
       await removePatternNarrativeFromContext({ fs: ctx.fs, key: ctx.key, personId });
+    },
+    dreamShareTargets: async (): Promise<DreamShareTarget[]> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) return [];
+      return listDreamShareTargets(ctx.fs, ctx.key, personId);
+    },
+    dreamGetInsight: async (dreamId): Promise<Insight | null> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) return null;
+      return getDreamInsight(ctx.fs, ctx.key, personId, PersonIdSchema.parse(dreamId));
+    },
+    dreamSetFactShare: async (input): Promise<DreamShareResult> => {
+      const { dreamId, factId, withPersonId, share } = DreamSetFactShareSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      // Cross-person sharing is the privileged action — gated by `dreams.shareContext`, not `dreams.own`.
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.shareContext'))) {
+        return { ok: false, reason: 'NOT_FOUND' };
+      }
+      return setDreamFactShare({
+        fs: ctx.fs,
+        key: ctx.key,
+        personId,
+        dreamId,
+        factId,
+        withPersonId,
+        share,
+        now: new Date(),
+      });
     },
 
     // --- UI state (device-local) ---

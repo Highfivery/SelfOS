@@ -56,3 +56,31 @@ export async function buildContext(
 
   return lines.join('\n');
 }
+
+/**
+ * The distinct people a person has a relationship with (the share-target set for per-dream sharing,
+ * 12-dreams §3.4): a shareable/targeted fact on this person's Insight only reaches someone they relate to.
+ * This is the de-duped share-target view of the same relationship traversal `buildContext` does inline
+ * above — kept separate so the tested context path stays untouched; they must stay in lockstep.
+ */
+export async function listRelatedPeople(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+): Promise<{ id: string; displayName: string }[]> {
+  const people = await listPeople(fs, key);
+  const byId = new Map(people.map((candidate) => [candidate.id, candidate]));
+  const out: { id: string; displayName: string }[] = [];
+  const seen = new Set<string>();
+  for (const relationship of await listRelationships(fs, key)) {
+    if (relationship.fromPersonId !== personId && relationship.toPersonId !== personId) continue;
+    const otherId =
+      relationship.fromPersonId === personId ? relationship.toPersonId : relationship.fromPersonId;
+    if (seen.has(otherId)) continue;
+    const other = byId.get(otherId);
+    if (!other) continue;
+    seen.add(otherId);
+    out.push({ id: other.id, displayName: other.displayName });
+  }
+  return out;
+}

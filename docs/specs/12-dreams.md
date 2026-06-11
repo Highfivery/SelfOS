@@ -156,9 +156,14 @@ A new **Dreams** feature module registers a nav entry (gated by `dreams.own`) an
 
 ### 3.4 Per-dream sharing (default off)
 
-- In the analysis/Insight detail, the dreamer can mark a **specific fact** shareable into a **related
-  person's** context (relationship-scoped `InsightFact.shareable`, `08` §4.4 / `09` §3.3). Default **off** —
-  dreams are private; sharing is a deliberate per-fact act, gated by **`dreams.shareContext`**.
+- In the analysis/Insight detail, the dreamer can mark a **specific fact** shareable into a **specific
+  related person's** context (`08` §4.4 / `09` §3.3). Targeting is **per-person**: each `InsightFact`
+  carries an additive `shareableWith: string[]` (the person ids the fact is shared with), alongside the
+  existing broadcast `shareable` boolean; `summarizeForContext` surfaces a related person's fact when it is
+  `shareable` **or** `shareableWith.includes(thatPerson)`. A target must be one of the dreamer's
+  **relationship-graph relations** (sharing with anyone else would never reach their context). Default
+  **off** — dreams are private; sharing is a deliberate per-fact, per-person act, gated by
+  **`dreams.shareContext`**.
 - Sensitive-tier dreams (§3.1) are **excluded from sharing** to avoid leaking intimate content.
 
 ### 3.5 Patterns
@@ -297,12 +302,14 @@ interface DreamPatternSummary {
 type InsightSource = 'questionnaire' | 'session' | 'dream'; // + 'dream'
 // Insight.provenance gains an optional dreamId:
 //   provenance: { assignmentId?: string; conversationId?: string; dreamId?: string; at: string }
+// InsightFact gains optional per-person targeting (per-dream sharing, §3.4):
+//   shareableWith?: string[]   // person ids this fact is shared with, alongside the `shareable` boolean
 ```
 
 These are **additive-optional**, so existing Insights parse unchanged with **no migration** (absent
-`dreamId`, never `source: 'dream'`; `Insight.schemaVersion` stays at 1) — the `Person.email` /
-`DeviceState` additive-optional precedent. Synced into `08`. The `Conversation` schema (`05`/`09`) is
-**reused unchanged** for the dream-scoped transcript.
+`dreamId`/`shareableWith`, never `source: 'dream'`; `Insight.schemaVersion` stays at 1) — the
+`Person.email` / `DeviceState` additive-optional precedent. Synced into `08`. The `Conversation` schema
+(`05`/`09`) is **reused unchanged** for the dream-scoped transcript.
 
 ## 5. Architecture & modules
 
@@ -673,6 +680,26 @@ Confirmed in review (2026-06-11):
      the grid stacks). On `feat/dreams-slice-4b`. **§13.4 is complete; NEXT: §13.5 per-dream sharing.**_
 5. **Per-dream sharing** — per-fact shareable promotion into a related person's context (reusing `08`/`09`),
    gated by `dreams.shareContext`, excluded for sensitive tiers.
+   - _**5a built 2026-06-11 (sharing backend + IPC seam):** the **per-person** sharing mechanism. **Asked
+     first (2 forks, both confirmed):** the shareable unit = the **distilled insight facts** (the emotional-
+     landscape + waking-life-connection facts approval produces); the control = **pick a related person,
+     tick which facts**. Added an **additive-optional `InsightFact.shareableWith: string[]`** (person ids a
+     fact is targeted at, alongside the broadcast `shareable` boolean — no migration; existing
+     questionnaire/session facts unaffected) + `summarizeForContext` now surfaces a related person's fact
+     when `shareable` **OR** `shareableWith.includes(thatPerson)` (the boolean path unchanged). New
+     **`dreamInsightService`** — `listDreamShareTargets` (the dreamer's relationship-graph relations, via a
+     new exported `listRelatedPeople`), `getDreamInsight` (the dream's approved Insight + its facts/sharing),
+     **`setDreamFactShare`** (toggles a person in a fact's `shareableWith`; **refuses sensitive-tier dreams**
+     [`SENSITIVE`] + a **non-related/unknown target** [`NOT_FOUND`]). IPC seam: `dreams:shareTargets` +
+     `:getInsight` gated by **`dreams.own`**, `dreams:setFactShare` gated by the privileged
+     **`dreams.shareContext`**. New crypto-free view types `DreamShareTarget`/`DreamShareResult`.
+     Code-reviewer verdict **ship** — the privacy boundary verified airtight on every path (a targeted fact
+     reaches ONLY its target; the relationship graph **re-gates at read time** so deleting a relationship
+     drops the share; sensitive tiers excluded; the boolean/private paths unchanged); applied the two nits
+     (a dedup-divergence doc note on `listRelatedPeople`; a broadcast-path regression test). Gate green
+     (typecheck node+web/DOM-lib, lint, format, **162 core + 243 desktop** unit). No user surface → no
+     E2E/visual-QA. **NEXT: 5b** the share UI on the (approved, non-sensitive) analysis card (a related-person
+     picker + per-fact ticks + "shared with X" chips) + E2E._
 
 _(Future companion spec: **AI dream-image generation** — the deferred §2 / §11.9 work, when the core is
 proven.)_
@@ -794,3 +821,17 @@ proven.)_
     (+1 seeded charts→nudge→generate→approve flow with a 390px guard). **Visual QA** at desktop + 390px (real
     Electron screenshots — clean). On `feat/dreams-slice-4b`. **Slice 4 (Patterns) is done; NEXT: §13.5
     per-dream sharing.**
+- 2026-06-11 — **Slice 5a built** (§13.5, sharing backend + IPC seam). The **per-person** sharing
+  mechanism. **Asked first (2 forks, both confirmed):** shareable unit = the distilled insight facts;
+  control = pick a related person + tick facts. Added an **additive-optional `InsightFact.shareableWith:
+string[]`** (no migration; existing facts unaffected) + `summarizeForContext` surfaces a related person's
+  fact when `shareable` OR `shareableWith.includes(thatPerson)` (boolean path unchanged). New
+  **`dreamInsightService`** — `listDreamShareTargets` (relationship-graph relations, via a new
+  `listRelatedPeople`), `getDreamInsight`, **`setDreamFactShare`** (refuses sensitive-tier dreams +
+  non-related/unknown targets). IPC seam: `dreams:shareTargets`/`:getInsight` gated by `dreams.own`,
+  `dreams:setFactShare` gated by **`dreams.shareContext`**. New view types `DreamShareTarget`/
+  `DreamShareResult`. Code-reviewer **ship** — the privacy boundary verified airtight (targeted facts reach
+  only their target; the relationship graph re-gates at read time; sensitive tiers excluded; boolean/private
+  paths unchanged); applied the two nits. Gate green (typecheck node+web/DOM-lib, lint, format, **162 core +
+  243 desktop** unit). On `feat/dreams-slice-5a`. No user surface → no E2E/visual-QA. **NEXT: 5b** the share
+  UI on the approved, non-sensitive analysis card + E2E.

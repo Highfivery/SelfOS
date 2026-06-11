@@ -239,6 +239,34 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Build (**Dreams slice 5a — per-dream sharing backend + IPC seam**;
+  [12-dreams](docs/specs/12-dreams.md) §3.4/§8.3/§8.4/§6/§13.5). The **per-person** dream-insight sharing
+  mechanism. **Asked first (2 forks, both confirmed):** the shareable unit = the **distilled insight facts**
+  (the emotional-landscape + waking-life-connection facts approval produces); the control = **pick a related
+  person, tick which facts**. Added an **additive-optional `InsightFact.shareableWith: string[]`** (the
+  person ids a fact is targeted at, alongside the broadcast `shareable` boolean — **no migration**, existing
+  questionnaire/session facts unaffected); **`summarizeForContext`** now surfaces a related person's fact
+  when `shareable` **OR** `shareableWith.includes(thatPerson)` (the boolean broadcast path unchanged). New
+  **`dreamInsightService`** (`@selfos/core/dreams`): `listDreamShareTargets` (the dreamer's relationship-
+  graph relations — via a new exported **`listRelatedPeople`**), `getDreamInsight` (the dream's approved
+  Insight + its facts/sharing), **`setDreamFactShare`** (toggles a person in a fact's `shareableWith`;
+  **refuses sensitive-tier dreams** [`SENSITIVE`] + a **non-related/unknown target** [`NOT_FOUND`]; drops the
+  prop when empty). IPC seam: `dreams:shareTargets` + `:getInsight` gated by **`dreams.own`**;
+  `dreams:setFactShare` gated by the privileged **`dreams.shareContext`** (a Member has both by default; a
+  Guest neither). New crypto-free view types `DreamShareTarget`/`DreamShareResult`. Code-reviewer verdict
+  **ship** — the **privacy boundary verified airtight on every path** (a targeted fact reaches ONLY its
+  target, never other related or unrelated people; the **relationship graph re-gates at read time** so
+  deleting a relationship drops the share — no stale `shareableWith` leak; sensitive tiers excluded;
+  others'-private + the boolean paths unchanged). Applied the two nits (a dedup-divergence doc note on
+  `listRelatedPeople` vs `buildContext`'s inline traversal; a broadcast-path regression test). Gate green:
+  typecheck (node + web/DOM-lib), lint, format, **162 core + 243 desktop** unit (+7 core sharing/targeting,
+  +1 bridge round-trip/gating). On `feat/dreams-slice-5a` (in the Dreams worktree). **Lesson: per-person
+  sharing rides on an additive `InsightFact.shareableWith` checked in `summarizeForContext` (`shareable ||
+shareableWith.includes(reader)`) — and the relationship graph re-gates at READ time, so a shared fact
+  auto-revokes when the relationship is removed; no separate revocation needed.** **No user-facing surface,
+  so no E2E/visual-QA** — the share UI on the approved, non-sensitive analysis card (a related-person picker
+  - per-fact ticks + "shared with X" chips) lands in **5b**. (Concurrent questionnaire session's main-tree
+    work untouched.)
 - 2026-06-11 — Build (**Dreams slice 4b — the Patterns UI; §13.4 COMPLETE**;
   [12-dreams](docs/specs/12-dreams.md) §3.5/§5.3/§8.2/§9/§13.4). The **`/dreams/patterns`** screen + three
   **new `/gallery` chart primitives**. Built bespoke SVG/bars on tokens (**no chart library** — matching

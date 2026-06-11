@@ -15,7 +15,10 @@ import type {
   DreamPatternStats,
   DreamPatternSummary,
   DreamPatternWindow,
+  DreamShareResult,
+  DreamShareTarget,
   DreamSynthesisResult,
+  Insight,
   InviteSummary,
   Person,
   PersonInput,
@@ -112,6 +115,9 @@ export const IpcChannels = {
   dreamPatternNarrative: 'dreams:patternNarrative',
   dreamApprovePatternNarrative: 'dreams:approvePatternNarrative',
   dreamRemovePatternNarrative: 'dreams:removePatternNarrative',
+  dreamShareTargets: 'dreams:shareTargets',
+  dreamGetInsight: 'dreams:getInsight',
+  dreamSetFactShare: 'dreams:setFactShare',
   getSidebarCollapsed: 'ui:getSidebarCollapsed',
   setSidebarCollapsed: 'ui:setSidebarCollapsed',
 } as const;
@@ -346,6 +352,17 @@ export interface SelfosBridge {
   dreamApprovePatternNarrative(): Promise<DreamApproveResult>;
   /** Remove the narrative from context (delete its Insight, unlink). Requires `dreams.own`. */
   dreamRemovePatternNarrative(): Promise<void>;
+  /** Related people the dreamer can share a dream insight with. Requires `dreams.own`. */
+  dreamShareTargets(): Promise<DreamShareTarget[]>;
+  /** The approved Insight a dream produced (facts + sharing); null if not approved. Requires `dreams.own`. */
+  dreamGetInsight(dreamId: string): Promise<Insight | null>;
+  /** Share/unshare a dream-insight fact with a related person. Requires `dreams.shareContext`. */
+  dreamSetFactShare(input: {
+    dreamId: string;
+    factId: string;
+    withPersonId: string;
+    share: boolean;
+  }): Promise<DreamShareResult>;
   /** Whether the desktop sidebar is collapsed to an icon rail (device-local). */
   getSidebarCollapsed(): Promise<boolean>;
   /** Persist the sidebar collapsed/expanded state (device-local). */
@@ -369,7 +386,10 @@ export type {
   DreamPatternStats,
   DreamPatternSummary,
   DreamPatternWindow,
+  DreamShareResult,
+  DreamShareTarget,
   DreamSynthesisResult,
+  Insight,
   InviteSummary,
   Person,
   PersonInput,

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Moon, Plus } from 'lucide-react';
+import { ArrowLeft, Moon, Plus, Sparkles } from 'lucide-react';
+import type { Dream } from '@shared/channels';
 import { useDreamStore } from '../../../stores/dreamStore';
 import { Button, Card, Heading, Stack, Text } from '../../../design-system/components';
 import { DreamComposer } from './DreamComposer';
+import { DreamAnalysisPane } from './DreamAnalysisPane';
 import styles from './Dreams.module.css';
 
 type Selection = { mode: 'none' } | { mode: 'new' } | { mode: 'edit'; id: string };
@@ -17,12 +19,33 @@ function dayLabel(dream: { dreamDate?: string | undefined; createdAt: string }):
   return (dream.dreamDate ?? dream.createdAt).slice(0, 10);
 }
 
+/** The analyze entry-point label depends on how far along the dream's analysis is (12-dreams §3). */
+function analyzeLabel(status: Dream['status']): string {
+  if (status === 'analyzed') return 'View analysis';
+  if (status === 'analyzing') return 'Resume analysis';
+  return 'Analyze this dream';
+}
+
+function analyzeHint(status: Dream['status']): string {
+  if (status === 'analyzed') return 'Read it, edit it, or add it to your coaching context.';
+  if (status === 'analyzing') return 'Pick up the reflection where you left off.';
+  return 'Reflect on it with your coach when you have a moment.';
+}
+
 /** The Dreams journal: a master–detail of captured dreams + the capture composer (12-dreams §3). */
 export function Dreams(): JSX.Element {
   const dreams = useDreamStore((s) => s.dreams);
   const loaded = useDreamStore((s) => s.loaded);
   const load = useDreamStore((s) => s.load);
   const [selection, setSelection] = useState<Selection>({ mode: 'none' });
+  // Within a saved dream, the detail toggles between the editor and the in-pane analysis surface.
+  const [analyzing, setAnalyzing] = useState(false);
+
+  // Changing the selected dream (or starting a new one) always returns to the editor view.
+  const select = (next: Selection): void => {
+    setSelection(next);
+    setAnalyzing(false);
+  };
 
   useEffect(() => {
     void load();
@@ -37,7 +60,7 @@ export function Dreams(): JSX.Element {
       <section className={styles.list} aria-label="Dream journal">
         <div className={styles.header}>
           <Heading level={2}>Dreams</Heading>
-          <Button variant="primary" onClick={() => setSelection({ mode: 'new' })}>
+          <Button variant="primary" onClick={() => select({ mode: 'new' })}>
             <Plus size={16} aria-hidden="true" />
             Log a dream
           </Button>
@@ -61,7 +84,7 @@ export function Dreams(): JSX.Element {
                   key={dream.id}
                   type="button"
                   className={active ? `${styles.row} ${styles.rowActive}` : styles.row}
-                  onClick={() => setSelection({ mode: 'edit', id: dream.id })}
+                  onClick={() => select({ mode: 'edit', id: dream.id })}
                 >
                   <span className={styles.rowMain}>
                     <span className={styles.rowName}>
@@ -82,22 +105,38 @@ export function Dreams(): JSX.Element {
       </section>
 
       <section className={styles.detail}>
-        <button
-          type="button"
-          className={styles.back}
-          onClick={() => setSelection({ mode: 'none' })}
-        >
-          <ArrowLeft size={16} aria-hidden="true" />
-          Dreams
-        </button>
+        {/* The list-level back affordance (mobile) is hidden only while the analysis pane is actually
+            shown (it has its own "Back to dream") — so a phone always has exactly one back action, even
+            if the selected dream vanishes mid-analysis (external delete/sync) and the pane unmounts. */}
+        {!(analyzing && selected) ? (
+          <button type="button" className={styles.back} onClick={() => select({ mode: 'none' })}>
+            <ArrowLeft size={16} aria-hidden="true" />
+            Dreams
+          </button>
+        ) : null}
         {selection.mode === 'new' ? (
-          <DreamComposer key="new" dream={null} onDone={() => setSelection({ mode: 'none' })} />
+          <DreamComposer key="new" dream={null} onDone={() => select({ mode: 'none' })} />
         ) : selected ? (
-          <DreamComposer
-            key={selected.id}
-            dream={selected}
-            onDone={() => setSelection({ mode: 'none' })}
-          />
+          analyzing ? (
+            <DreamAnalysisPane dream={selected} onBack={() => setAnalyzing(false)} />
+          ) : (
+            <Stack gap={4}>
+              <div className={styles.analyzeEntry}>
+                <Button variant="primary" onClick={() => setAnalyzing(true)}>
+                  <Sparkles size={16} aria-hidden="true" />
+                  {analyzeLabel(selected.status)}
+                </Button>
+                <Text size="sm" tone="secondary">
+                  {analyzeHint(selected.status)}
+                </Text>
+              </div>
+              <DreamComposer
+                key={selected.id}
+                dream={selected}
+                onDone={() => select({ mode: 'none' })}
+              />
+            </Stack>
+          )
         ) : (
           <div className={styles.empty}>
             <Text tone="tertiary">Select a dream, or log a new one.</Text>

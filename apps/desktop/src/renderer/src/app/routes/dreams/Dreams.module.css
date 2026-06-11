@@ -141,6 +141,153 @@
   font-size: 0.8125rem;
 }
 
+/* --- Analyze entry (shown on a saved dream, above the composer) --- */
+.analyzeEntry {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-alt);
+}
+
+.analyzeEntry > p {
+  flex: 1;
+  min-width: 12ch;
+}
+
+/* --- Guided-analysis pane --- */
+.analysisLayout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.analysisBack {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: flex-start;
+  padding: var(--space-2) var(--space-2) var(--space-2) 0;
+  border: none;
+  background: transparent;
+  color: var(--color-accent-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.analysisBack:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.thread {
+  display: flex;
+  flex-direction: column;
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: var(--space-2);
+}
+
+.userMsg,
+.coachMsg {
+  max-width: 80%;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.userMsg {
+  align-self: flex-end;
+  margin-left: auto;
+  background: var(--color-accent-solid);
+  color: var(--color-accent-solid-text);
+}
+
+.coachMsg {
+  align-self: flex-start;
+  background: var(--color-surface-alt);
+  color: var(--color-text-primary);
+}
+
+.thinking {
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+.synthRow {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.continueWrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+/* --- Synthesis card --- */
+.cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.contextBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill, 999px);
+  background: var(--color-accent-subtle, var(--color-surface-alt));
+  color: var(--color-accent-text);
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.sectionBody {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.questionList {
+  margin: 0;
+  padding-left: var(--space-5);
+  color: var(--color-text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.cardActions {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-top: var(--space-2);
+}
+
+.approveWrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
 /* Mobile: one pane at a time. */
 @media (max-width: 767px) {
   .layout {
@@ -162,5 +309,10 @@
 
   .detailsGrid {
     grid-template-columns: 1fr;
+  }
+
+  .userMsg,
+  .coachMsg {
+    max-width: 92%;
   }
 }

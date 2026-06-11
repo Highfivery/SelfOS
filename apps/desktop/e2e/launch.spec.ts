@@ -16,6 +16,7 @@ import { createInvite, getAccessConfig, savePerson, setAccount } from '@selfos/c
 import { hashPin } from '@selfos/core/crypto';
 import { recordUsage } from '@selfos/core/usage';
 import { writeEncryptedJson } from '@selfos/core/vault';
+import { listInsightsForPerson, summarizeForContext } from '@selfos/core/insights';
 
 const MAIN = join(__dirname, '..', 'out', 'main', 'index.js');
 
@@ -956,6 +957,99 @@ test('dreams: log a dream, persist through the encrypted vault, reopen, no overf
       return main ? main.scrollWidth - main.clientWidth : 0;
     });
     expect(overflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('dreams: analyze → synthesize → edit → approve feeds the coach; the transcript stays out of Sessions', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    // Capture a dream.
+    await w.getByRole('link', { name: 'Dreams' }).click();
+    await w.getByRole('button', { name: 'Log a dream' }).click();
+    await w
+      .getByLabel('What happened?')
+      .fill('I was back in my childhood house, rooms rearranging.');
+    await w.getByLabel('Title (optional)').fill('The rearranging house');
+    await w.getByRole('button', { name: 'Save' }).click();
+
+    // Enter the in-pane analysis surface.
+    await w.getByRole('button', { name: /The rearranging house/ }).click();
+    await w.getByRole('button', { name: 'Analyze this dream' }).click();
+    await expect(w.getByRole('heading', { name: 'Dream analysis' })).toBeVisible();
+
+    // A guided turn streams the reflective reply.
+    await w.getByLabel('Message').fill('It felt unsettling but oddly familiar.');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/hear you/i).first()).toBeVisible();
+
+    // Synthesize → the structured card.
+    await w.getByRole('button', { name: 'Create analysis' }).click();
+    await expect(w.getByRole('heading', { name: 'Your dream analysis' })).toBeVisible();
+    await expect(w.getByText(/shifting rooms and open skies/i)).toBeVisible();
+
+    // Edit a section (read-first → Edit toggle → Save).
+    await w.getByRole('button', { name: 'Edit' }).click();
+    await w.getByLabel('Summary').fill('My own retelling of the dream.');
+    await w.getByRole('button', { name: 'Save changes' }).click();
+    await expect(w.getByText('My own retelling of the dream.')).toBeVisible();
+
+    // The analysis surface fits at phone width (no horizontal overflow).
+    await app.evaluate(async ({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows()[0];
+      if (win) {
+        win.setMinimumSize(360, 480);
+        win.setSize(390, 800);
+      }
+    });
+    await w.waitForTimeout(200);
+    const noOverflow = await w.evaluate(() => {
+      const fits = (el: Element | null | undefined): boolean =>
+        !el || el.scrollWidth <= el.clientWidth + 1;
+      const main = document.querySelector('main');
+      const inner = main?.querySelector(':scope > div');
+      return fits(main) && fits(inner);
+    });
+    expect(noOverflow).toBe(true);
+    await app.evaluate(async ({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows()[0];
+      if (win) win.setSize(1200, 800);
+    });
+    await w.waitForTimeout(150);
+
+    // Approve → the badge; the dream Insight now feeds the coach.
+    await w.getByRole('button', { name: /add to my coaching context/i }).click();
+    await expect(w.getByText(/in your coaching context/i)).toBeVisible();
+
+    // Proof of grounding: the approved dream Insight is what buildContext feeds the coach. Read it
+    // straight from the encrypted vault (the system prompt itself isn't observable in the UI).
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('master key missing');
+    await expect
+      .poll(async () => {
+        const insights = await listInsightsForPerson(fs, key, 'owner-1');
+        return insights.some((insight) => insight.source === 'dream');
+      })
+      .toBe(true);
+    const grounding = await summarizeForContext(fs, key, 'owner-1', []);
+    expect(grounding).toContain('My own retelling of the dream.');
+
+    // The dream's guided transcript NEVER appears in the Sessions list (it lives under the dream).
+    await w.getByRole('link', { name: 'Sessions' }).click();
+    await expect(w.getByText('The rearranging house')).toHaveCount(0);
+    // Sessions remains its own independent surface.
+    await w.getByLabel('Message').fill('A fresh, unrelated session.');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/hear you/i).first()).toBeVisible();
+    await expect(w.getByText('The rearranging house')).toHaveCount(0);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

@@ -239,6 +239,39 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Build (**Dreams slice 3c — the guided-analysis UI; §13.3 COMPLETE**;
+  [12-dreams](docs/specs/12-dreams.md) §3.2/§3.3/§13.3). The in-pane **Dream ⇄ Analysis** surface.
+  **Asked first (3 UX forks, all recommendations confirmed):** presentation = **in-pane mode switch**
+  (modal-free, mirroring the questionnaire Edit⇄Preview toggle); post-synthesis = **lead with the card**
+  (chat tucks behind a "Continue the conversation" disclosure); editing = **read-first + Edit toggle**.
+  A status-aware **Analyze / Resume analysis / View analysis** entry on a saved dream opens
+  **`DreamAnalysisPane`** — a guided reflective chat (reuses the Sessions **`Composer` + `CrisisFooter`**
+  over a new per-person **`dreamAnalysisStore`** subscribing to `onDreamChunk`) → **"Create analysis"**
+  synthesis → the **`DreamSynthesisCard`** (5 read-first sections; Edit → **`DreamAnalysisEditor`** → Save
+  via `dreamUpdateAnalysis`). The store **re-approves an already-approved analysis on edit** so the
+  coaching context stays in sync (approve is a cheap, **unmetered** local distillation). **Approve** → the
+  "in your coaching context" badge + **Remove from context**; Approve is **disabled + hinted when
+  `dreams.memoryEnabled` is off**. **Safety:** a `crisisFlag` makes the card **lead with resources**; the
+  not-medical line + crisis footer are on every analysis state; symbolic readings stay framed as
+  imaginative reflection; AI-off shows a calm connect state, but an **existing** analysis stays
+  viewable/editable/approvable offline (only the chat + synthesis need AI). `dreamAnalysisStore.reset()`
+  wired into AppShell's active-person effect (per the per-person rule). Both offline fake Claude clients
+  (Electron + web preview) now emit a valid synthesis JSON for the "JSON object" turn. Code-reviewer
+  **fix-first** (both should-fixes applied: closed a **mobile back-button dead-end** if the selected dream
+  vanishes mid-analysis — the list-back now hides only while the pane actually renders; added the missing
+  **re-approve-on-edit** test; + an `aria-controls` a11y nit). Gate green: typecheck (node + web/DOM-lib),
+  lint, format, **145 core + 230 desktop** unit (+9 RTL: entry label, calm AI-off, guided turn, synthesize,
+  edit, approve+badge, remove, memory-off, re-approve-on-edit), **34 E2E** (+1 full
+  capture→analyze→synthesize→edit→approve flow that decrypts the vault to assert the dream Insight feeds
+  `summarizeForContext` **grounding** + the transcript is **absent from the Sessions list** + a 390px
+  no-overflow guard on the analysis surface). **Visual QA** at desktop + 390px via real Electron
+  screenshots (the card, entry bar, actions, and crisis footer all clean + intentional). On
+  `feat/dreams-slice-3c` (in the Dreams worktree). **Lesson: the shared web-preview MCP server is rooted
+  at the MAIN tree, so it serves the OTHER worktree's build — for worktree visual QA, capture screenshots
+  inside the Playwright run (`w.screenshot`) from the worktree's own build instead.** **Slice 3 (guided
+  analysis) is COMPLETE; NEXT: §13.4 Patterns** (deterministic stats + four `/gallery` chart primitives +
+  the `dream.patterns` narrative + the recurring-nightmare nudge). (Concurrent questionnaire session's
+  main-tree work untouched.)
 - 2026-06-11 — Build (**Dreams slice 3b — the analysis IPC seam**;
   [12-dreams](docs/specs/12-dreams.md) §6/§13.3). Wired the slice-3a guided-analysis ops through the typed
   seam (`channels` → `coreBridge` → `ipc` → preload → `test-utils/bridge`), all **gated by `dreams.own`** +

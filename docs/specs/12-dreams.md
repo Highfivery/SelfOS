@@ -606,6 +606,30 @@ Confirmed in review (2026-06-11):
      desktop** unit (+2 core `updateAnalysis`, +3 bridge: analyze→synthesize→edit→approve→remove round-trip,
      memory-off refusal, capability denial). No new user-facing surface, so no E2E/visual-QA this slice (the
      UI + E2E are **3c**)._
+   - _**3c built 2026-06-11 (the guided-analysis UI — §13.3 COMPLETE):** the in-pane Dream ⇄ Analysis
+     surface. A status-aware **Analyze / Resume analysis / View analysis** entry on a saved dream opens a
+     **`DreamAnalysisPane`** (in the detail pane, modal-free — the confirmed in-pane mode switch): a guided
+     reflective chat (reusing the Sessions **`Composer` + `CrisisFooter`** + a new `dreamAnalysisStore`
+     subscribing to `onDreamChunk`) → a **"Create analysis"** synthesis → the **`DreamSynthesisCard`**.
+     Once analyzed it **leads with the card** (confirmed), tucking the chat behind a "Continue the
+     conversation" disclosure. The card is **read-first with an Edit toggle** (confirmed) →
+     **`DreamAnalysisEditor`** (the 5 editable sections; Save → `dreamUpdateAnalysis`, and the store
+     **re-approves if already approved** so the coaching context stays in sync — approve is a cheap local
+     distillation, unmetered). **Approve** → the "in your coaching context" badge + **Remove from
+     context**; Approve is **disabled + hinted when `dreams.memoryEnabled` is off**. A `crisisFlag` makes
+     the card **lead with resources**; the not-medical line + crisis footer are on every analysis state;
+     AI-off shows a calm connect state but an existing analysis stays viewable/editable/approvable.
+     `dreamAnalysisStore` is per-person (reset wired into AppShell). Code-reviewer **fix-first** (both
+     should-fixes applied: a mobile back-button dead-end if the dream vanishes mid-analysis is closed —
+     the list-back now hides only while the pane actually renders; + a test for the re-approve-on-edit
+     path; a11y `aria-controls` nit applied). Gate green: typecheck (node + web/DOM-lib), lint, format,
+     **145 core + 230 desktop** unit (+9 RTL: entry label, calm AI-off, guided turn, synthesize, edit,
+     approve+badge, remove, memory-off, re-approve-on-edit), **34 E2E** (+1 full
+     capture→analyze→synthesize→edit→approve flow asserting the dream Insight feeds `summarizeForContext`
+     grounding + the transcript is **absent from Sessions** + a 390px guard). Both offline fake Claude
+     clients now emit a valid synthesis JSON for E2E + the preview. **Visual QA** at desktop + 390px (real
+     Electron screenshots — the analysis card, entry bar, and crisis footer all clean). On
+     `feat/dreams-slice-3c`. **§13.3 is now complete; NEXT: §13.4 Patterns.**_
 4. **Patterns** — `dreamPatternService` deterministic stats + the new `/gallery` chart primitives + the
    `dream.patterns` AI narrative (approvable) + the recurring-nightmare nudge.
 5. **Per-dream sharing** — per-fact shareable promotion into a related person's context (reusing `08`/`09`),
@@ -676,3 +700,23 @@ proven.)_
   core `updateAnalysis`, +3 bridge: analyze→synthesize→edit→approve→remove round-trip, memory-off refusal,
   capability denial). On `feat/dreams-slice-3b`. No new user-facing surface, so no E2E/visual-QA (the UI +
   E2E are **3c**). Next: **3c** the guided-analysis chat + synthesis card + approve UI + E2E.
+- 2026-06-11 — **Slice 3c built — §13.3 COMPLETE** (the guided-analysis UI). The in-pane **Dream ⇄
+  Analysis** surface: a status-aware **Analyze / Resume analysis / View analysis** entry on a saved dream
+  opens **`DreamAnalysisPane`** — a guided reflective chat (reuses the Sessions **`Composer` +
+  `CrisisFooter`** over a new per-person **`dreamAnalysisStore`** subscribing to `onDreamChunk`) → a
+  **"Create analysis"** synthesis → the **`DreamSynthesisCard`**. Once analyzed it **leads with the card**,
+  tucking the chat behind a "Continue the conversation" disclosure (both UX forks confirmed with the user,
+  plus **read-first + Edit toggle** → **`DreamAnalysisEditor`**). Save edits → `dreamUpdateAnalysis`; the
+  store **re-approves an already-approved analysis** to keep the coaching context in sync (approve is a
+  cheap, unmetered local distillation). **Approve** → the "in your coaching context" badge + **Remove from
+  context**; Approve is **disabled + hinted when `dreams.memoryEnabled` is off**. A `crisisFlag` makes the
+  card **lead with resources**; the not-medical line + crisis footer are on every state; AI-off shows a
+  calm connect state but an existing analysis stays viewable/editable/approvable. Reset wired into
+  AppShell's active-person effect. Code-reviewer **fix-first** (both should-fixes applied: a mobile
+  back-button dead-end if the dream vanishes mid-analysis is closed; a test for the re-approve-on-edit
+  path; + an `aria-controls` a11y nit). Gate green: typecheck (node + web/DOM-lib), lint, format, **145
+  core + 230 desktop** unit (+9 RTL), **34 E2E** (+1 full capture→analyze→synthesize→edit→approve flow
+  asserting the dream Insight feeds `summarizeForContext` grounding + the transcript is **absent from
+  Sessions** + a 390px guard). Both offline fake Claude clients now emit a valid synthesis JSON.
+  **Visual QA** at desktop + 390px (real Electron screenshots — clean). On `feat/dreams-slice-3c`.
+  **Slice 3 (guided analysis) is done; NEXT: §13.4 Patterns.**

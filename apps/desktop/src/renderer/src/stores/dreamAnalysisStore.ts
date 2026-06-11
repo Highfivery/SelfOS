@@ -1,5 +1,11 @@
 import { create } from 'zustand';
-import type { ChatMessage, DreamAnalysis, DreamAnalysisEdits } from '@shared/schemas';
+import type {
+  ChatMessage,
+  DreamAnalysis,
+  DreamAnalysisEdits,
+  DreamShareTarget,
+  Insight,
+} from '@shared/schemas';
 import { useBudgetStore } from './budgetStore';
 import { useDreamStore } from './dreamStore';
 
@@ -16,6 +22,10 @@ interface DreamAnalysisState {
   synthesizing: boolean; // awaiting the synthesis
   approving: boolean;
   analysis: DreamAnalysis | null;
+  /** The approved Insight this dream produced (facts + per-person sharing), once approved (12 §3.4). */
+  insight: Insight | null;
+  /** Related people the dreamer can share facts with (their relationship-graph relations). */
+  shareTargets: DreamShareTarget[];
   error: string | null;
   /** Enter a dream's Analysis view: load its transcript + any existing analysis. */
   open: (dreamId: string) => Promise<void>;
@@ -29,6 +39,10 @@ interface DreamAnalysisState {
   approve: () => Promise<void>;
   /** Un-approve: remove the analysis's Insight from context (the analysis itself stays). */
   removeFromContext: () => Promise<void>;
+  /** Load the dream's Insight (facts + sharing) + the dreamer's share targets — once it's approved. */
+  loadSharing: () => Promise<void>;
+  /** Share/unshare a specific insight fact with a related person (12 §3.4). */
+  setFactShare: (factId: string, withPersonId: string, share: boolean) => Promise<void>;
   appendChunk: (delta: string) => void;
   reset: () => void;
 }
@@ -41,6 +55,8 @@ const EMPTY = {
   synthesizing: false,
   approving: false,
   analysis: null,
+  insight: null,
+  shareTargets: [] as DreamShareTarget[],
   error: null,
 } satisfies Partial<DreamAnalysisState>;
 
@@ -55,6 +71,7 @@ export const useDreamAnalysisStore = create<DreamAnalysisState>((set, get) => ({
     // Guard against a late resolve after the user moved to a different dream.
     if (get().dreamId !== dreamId) return;
     set({ messages: conversation?.messages ?? [], analysis: analysis ?? null });
+    if (analysis?.insightId) await get().loadSharing();
   },
   sendTurn: async (text) => {
     const trimmed = text.trim();
@@ -101,8 +118,11 @@ export const useDreamAnalysisStore = create<DreamAnalysisState>((set, get) => ({
     if (!updated) return;
     set({ analysis: updated });
     // If this analysis already feeds the coach, refresh its Insight so the context matches the edits
-    // (approve is a cheap local distillation — no Claude call).
-    if (updated.insightId) await window.selfos?.dreamApprove({ dreamId });
+    // (approve is a cheap local distillation — no Claude call), then reload its facts/sharing.
+    if (updated.insightId) {
+      await window.selfos?.dreamApprove({ dreamId });
+      await get().loadSharing();
+    }
   },
   approve: async () => {
     const dreamId = get().dreamId;
@@ -116,6 +136,7 @@ export const useDreamAnalysisStore = create<DreamAnalysisState>((set, get) => ({
           ? { ...state.analysis, insightId: result.insightId }
           : state.analysis,
       }));
+      await get().loadSharing(); // the Insight (+ its shareable facts) now exists
     } else {
       set({
         approving: false,
@@ -128,10 +149,32 @@ export const useDreamAnalysisStore = create<DreamAnalysisState>((set, get) => ({
     if (!dreamId) return;
     await window.selfos?.dreamRemoveFromContext({ dreamId });
     set((state) => {
-      if (!state.analysis) return {};
+      if (!state.analysis) return { insight: null };
       const next = { ...state.analysis };
       delete next.insightId; // unlink — the analysis stays, just no longer feeds the coach
-      return { analysis: next };
+      return { analysis: next, insight: null };
+    });
+  },
+  loadSharing: async () => {
+    const dreamId = get().dreamId;
+    if (!dreamId) return;
+    const [insight, shareTargets] = await Promise.all([
+      window.selfos?.dreamGetInsight(dreamId) ?? Promise.resolve(null),
+      window.selfos?.dreamShareTargets() ?? Promise.resolve([]),
+    ]);
+    if (get().dreamId !== dreamId) return;
+    set({ insight: insight ?? null, shareTargets: shareTargets ?? [] });
+  },
+  setFactShare: async (factId, withPersonId, share) => {
+    const dreamId = get().dreamId;
+    if (!dreamId) return;
+    const result = await window.selfos?.dreamSetFactShare({ dreamId, factId, withPersonId, share });
+    // Re-fetch so the toggle reflects the persisted truth (it snaps back if the share was refused).
+    const insight = (await window.selfos?.dreamGetInsight(dreamId)) ?? null;
+    if (get().dreamId !== dreamId) return;
+    set({
+      insight,
+      ...(result && !result.ok ? { error: 'Couldn’t update sharing — please try again.' } : {}),
     });
   },
   appendChunk: (delta) => set((state) => ({ streaming: state.streaming + delta })),

@@ -239,6 +239,32 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Build (**Dreams slice 5b — the sharing UI; §13.5 COMPLETE — the Dreams feature is fully
+  built**; [12-dreams](docs/specs/12-dreams.md) §3.4/§8.3/§13.5). A **`DreamShareControls`** section on the
+  approved analysis card: a **related-person picker** + a `Switch` **per insight fact** (on = shared with
+  the selected person) + a **"Shared with X" line** per fact. It renders only when `analysis.insightId &&
+can('dreams.shareContext') && sensitivity === 'standard'` and the dreamer has related people — but the
+  **bridge re-enforces the capability + sensitivity + target-is-related + fact-exists server-side, so the
+  UI gate is convenience, not the trust boundary**. A **sensitive-tier dream shows a one-line "kept out of
+  shared context" note** instead. `dreamAnalysisStore` gained `insight`/`shareTargets` +
+  `loadSharing`/`setFactShare` (loaded after approve / re-approve-on-edit / open-when-approved; cleared on
+  remove + reset). **Fixed a real footgun the reviewer caught (should-fix → applied):** editing an approved
+  analysis used to **silently wipe all per-person sharing** (`approveAnalysis` rebuilt facts with fresh
+  `uuid()`s) — facts now use a **stable per-field id** (`<insightId>:waking`/`:emotional`) and **carry
+  `shareableWith` forward** on re-approval, so re-wording a section **keeps** its shares with the updated
+  text (re-_synthesizing_ a wholly new analysis still resets sharing, correctly). Applied the two nits
+  (surface an `error` if a share toggle is refused; reconcile a stale selected person so the controls never
+  point at a removed relation). Gate green: typecheck (node + web/DOM-lib), lint, format, **164 core + 249
+  desktop** unit (+1 core carry-forward, +6 RTL: component toggles/already-shared/empty + pane integration /
+  sensitive note / capability-hide), **36 E2E** (+1 full capture→analyze→approve→**share** flow that
+  decrypts the vault to assert the shared fact reaches the related person's `summarizeForContext` grounding
+  - a 390px guard). **Visual QA** at desktop (the share section — picker + per-fact toggles + the "Shared
+    with Partner" chip — renders cleanly, no overflow). On `feat/dreams-slice-5b` (in the Dreams worktree).
+    **Lesson: any derived record (a distilled Insight's facts) that the user can attach state to (sharing
+    toggles) must carry that state across regeneration via STABLE ids — rebuilding with fresh uuids silently
+    drops the user's choices.** **The Dreams feature (spec 12, §13.1–§13.5) is now FULLY BUILT** — capture →
+    guided analysis → patterns → per-dream sharing. Only the deferred AI dream-image-generation companion
+    spec remains. (Concurrent questionnaire session's main-tree work untouched.)
 - 2026-06-11 — Build (**Dreams slice 5a — per-dream sharing backend + IPC seam**;
   [12-dreams](docs/specs/12-dreams.md) §3.4/§8.3/§8.4/§6/§13.5). The **per-person** dream-insight sharing
   mechanism. **Asked first (2 forks, both confirmed):** the shareable unit = the **distilled insight facts**

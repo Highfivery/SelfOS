@@ -4,11 +4,13 @@ import { ArrowLeft, Sparkles } from 'lucide-react';
 import type { Dream } from '@shared/channels';
 import { ANTHROPIC_API_KEY_ID } from '@shared/channels';
 import { useDreamAnalysisStore } from '../../../stores/dreamAnalysisStore';
+import { useSessionStore } from '../../../stores/sessionStore';
 import { useSetting } from '../../../settings/useSetting';
 import { Banner, Button, Heading, Stack, Text } from '../../../design-system/components';
 import { Composer } from '../sessions/Composer';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { DreamSynthesisCard } from './DreamSynthesisCard';
+import { DreamShareControls } from './DreamShareControls';
 import styles from './Dreams.module.css';
 
 interface DreamAnalysisPaneProps {
@@ -35,7 +37,11 @@ export function DreamAnalysisPane({ dream, onBack }: DreamAnalysisPaneProps): JS
   const synthesizing = useDreamAnalysisStore((s) => s.synthesizing);
   const approving = useDreamAnalysisStore((s) => s.approving);
   const analysis = useDreamAnalysisStore((s) => s.analysis);
+  const insight = useDreamAnalysisStore((s) => s.insight);
+  const shareTargets = useDreamAnalysisStore((s) => s.shareTargets);
+  const setFactShare = useDreamAnalysisStore((s) => s.setFactShare);
   const error = useDreamAnalysisStore((s) => s.error);
+  const canShare = useSessionStore((s) => s.can('dreams.shareContext'));
   const open = useDreamAnalysisStore((s) => s.open);
   const sendTurn = useDreamAnalysisStore((s) => s.sendTurn);
   const synthesize = useDreamAnalysisStore((s) => s.synthesize);
@@ -130,6 +136,23 @@ export function DreamAnalysisPane({ dream, onBack }: DreamAnalysisPaneProps): JS
             onApprove={() => void approve()}
             onRemoveFromContext={() => void removeFromContext()}
           />
+          {analysis.insightId && canShare ? (
+            dream.sensitivity === 'standard' ? (
+              insight ? (
+                <DreamShareControls
+                  facts={insight.facts}
+                  targets={shareTargets}
+                  onSetShare={(factId, withPersonId, share) =>
+                    void setFactShare(factId, withPersonId, share)
+                  }
+                />
+              ) : null
+            ) : (
+              <Text size="xs" tone="tertiary">
+                This dream is marked sensitive, so it’s kept out of shared context.
+              </Text>
+            )
+          ) : null}
           {configured ? (
             <div className={styles.continueWrap}>
               <Button

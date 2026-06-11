@@ -4,7 +4,7 @@ import { memFileSystem } from '../host/memFileSystem';
 import type { ClaudeClient } from '../host';
 import type { Dream } from '../schemas';
 import { listConversations } from '../conversations';
-import { listInsightsForPerson, summarizeForContext } from '../insights';
+import { getInsight, listInsightsForPerson, saveInsight, summarizeForContext } from '../insights';
 import { queryUsage } from '../usage';
 import { getAnalysis, getDream, getDreamConversation, saveDream } from './dreamService';
 import {
@@ -197,6 +197,44 @@ describe('dreamAnalysisService', () => {
     // The approved dream insight now feeds the coach's context.
     expect(await summarizeForContext(fs, key, 'p1', [])).toContain(VALID_DRAFT.summary);
     if (res.ok) expect((await getAnalysis(fs, key, 'p1', 'd1'))?.insightId).toBe(res.insightId);
+  });
+
+  it('preserves a fact’s per-person sharing across a re-approval (an edit keeps who it’s shared with)', async () => {
+    const fs = memFileSystem();
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+    await synthesizeAnalysis(deps(fs, fakeClient()));
+    const first = await approveAnalysis({
+      fs,
+      key,
+      personId: 'p1',
+      dreamId: 'd1',
+      memoryEnabled: true,
+      now: new Date('2026-06-11T11:00:00.000Z'),
+    });
+    if (!first.ok) throw new Error('approve failed');
+
+    // Share the first fact with someone, then re-approve (as an edit would) — the share must survive.
+    const insight = await getInsight(fs, key, 'p1', first.insightId);
+    if (!insight) throw new Error('expected an insight');
+    const factId = insight.facts[0]?.id;
+    if (!factId) throw new Error('expected a fact');
+    await saveInsight(fs, key, {
+      ...insight,
+      facts: insight.facts.map((fact) =>
+        fact.id === factId ? { ...fact, shareableWith: ['p2'] } : fact,
+      ),
+    });
+
+    await approveAnalysis({
+      fs,
+      key,
+      personId: 'p1',
+      dreamId: 'd1',
+      memoryEnabled: true,
+      now: new Date('2026-06-11T12:00:00.000Z'),
+    });
+    const after = await getInsight(fs, key, 'p1', first.insightId);
+    expect(after?.facts.find((fact) => fact.id === factId)?.shareableWith).toEqual(['p2']);
   });
 
   it('refuses to approve when dream memory is disabled', async () => {

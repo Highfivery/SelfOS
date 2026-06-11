@@ -12,7 +12,13 @@ import { createMasterKey, loadMasterKey } from '@selfos/core/crypto';
 import type { Encryptor } from '../src/main/secrets/encryptor';
 import { createNodeFileSystem } from '../src/main/host/nodeFileSystem';
 import { createNodeSecretStore } from '../src/main/host/nodeSecretStore';
-import { createInvite, getAccessConfig, savePerson, setAccount } from '@selfos/core/people';
+import {
+  createInvite,
+  getAccessConfig,
+  savePerson,
+  saveRelationship,
+  setAccount,
+} from '@selfos/core/people';
 import { hashPin } from '@selfos/core/crypto';
 import { recordUsage } from '@selfos/core/usage';
 import { writeEncryptedJson } from '@selfos/core/vault';
@@ -1143,6 +1149,93 @@ test('dreams: the Patterns screen charts seeded dreams, nudges on recurring nigh
     await expect(w.getByText(/in your coaching context/i)).toBeVisible();
 
     // The chart grid fits at phone width with no horizontal overflow.
+    await app.evaluate(async ({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows()[0];
+      if (win) {
+        win.setMinimumSize(360, 480);
+        win.setSize(390, 800);
+      }
+    });
+    await w.waitForTimeout(200);
+    const noOverflow = await w.evaluate(() => {
+      const fits = (el: Element | null | undefined): boolean =>
+        !el || el.scrollWidth <= el.clientWidth + 1;
+      const main = document.querySelector('main');
+      const inner = main?.querySelector(':scope > div');
+      return fits(main) && fits(inner);
+    });
+    expect(noOverflow).toBe(true);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('dreams: share an approved insight fact into a related person’s coaching context', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+
+  // Seed a related person (Partner) + an owner↔partner relationship so there's someone to share with.
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('seed: master key missing');
+  const at = new Date().toISOString();
+  await savePerson(fs, key, {
+    id: 'p2',
+    schemaVersion: 1,
+    displayName: 'Partner',
+    isSubject: true,
+    tags: [],
+    createdAt: at,
+    updatedAt: at,
+  });
+  await saveRelationship(fs, key, {
+    id: 'r1',
+    schemaVersion: 1,
+    fromPersonId: 'owner-1',
+    toPersonId: 'p2',
+    type: 'partner',
+    createdAt: at,
+    updatedAt: at,
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    // Capture → analyze → approve.
+    await w.getByRole('link', { name: 'Dreams' }).click();
+    await w.getByRole('button', { name: 'Log a dream' }).click();
+    await w.getByLabel('What happened?').fill('A dream about my partner and our home.');
+    await w.getByLabel('Title (optional)').fill('Our home');
+    await w.getByRole('button', { name: 'Save' }).click();
+    await w.getByRole('button', { name: /Our home/ }).click();
+    await w.getByRole('button', { name: 'Analyze this dream' }).click();
+    await w.getByRole('button', { name: 'Create analysis' }).click();
+    await expect(w.getByRole('heading', { name: 'Your dream analysis' })).toBeVisible();
+    await w.getByRole('button', { name: /add to my coaching context/i }).click();
+    await expect(w.getByText(/in your coaching context/i)).toBeVisible();
+
+    // The share controls appear; share the first fact with Partner (the only switches on this surface).
+    await expect(w.getByText('Share with someone in your life')).toBeVisible();
+    await w.getByRole('switch').first().click();
+
+    // From the vault: the fact is now targeted at Partner AND reaches THEIR coaching grounding.
+    await expect
+      .poll(async () => {
+        const insights = await listInsightsForPerson(fs, key, 'owner-1');
+        return insights
+          .flatMap((insight) => insight.facts)
+          .some((fact) => (fact.shareableWith ?? []).includes('p2'));
+      })
+      .toBe(true);
+    const partnerCtx = await summarizeForContext(fs, key, 'p2', [
+      { id: 'owner-1', displayName: 'Tester' },
+    ]);
+    expect(partnerCtx).toContain('Perhaps something at home feels like it is changing.');
+
+    // The share surface fits at phone width.
     await app.evaluate(async ({ BrowserWindow }) => {
       const win = BrowserWindow.getAllWindows()[0];
       if (win) {

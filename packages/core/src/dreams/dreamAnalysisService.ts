@@ -16,7 +16,7 @@ import type {
 import { checkBudget, costOf, recordUsage } from '../usage';
 import { buildContext } from '../people';
 import { PERSONA, SAFETY } from '../conversations/promptBuilder';
-import { deleteInsight, saveInsight } from '../insights';
+import { deleteInsight, getInsight, saveInsight } from '../insights';
 import {
   deleteDream,
   getAnalysis,
@@ -380,15 +380,28 @@ export async function approveAnalysis(deps: {
     return { ok: false, reason: 'NOT_FOUND', message: 'There’s no analysis to approve yet.' };
 
   const at = now.toISOString();
-  const facts: InsightFact[] = [];
-  if (analysis.wakingLifeConnections.trim()) {
-    facts.push({ id: uuid(), text: analysis.wakingLifeConnections, shareable: false });
-  }
-  if (analysis.emotionalLandscape.trim()) {
-    facts.push({ id: uuid(), text: analysis.emotionalLandscape, shareable: false });
-  }
-
   const insightId = analysis.insightId ?? uuid();
+
+  // Re-approving an edited analysis must KEEP who each fact was shared with (12 §3.4) — so facts use a
+  // stable per-field id and carry their prior `shareableWith` forward (re-wording a section keeps its
+  // shares). A fresh approval (no prior insight) starts unshared.
+  const prior = analysis.insightId ? await getInsight(fs, key, personId, insightId) : null;
+  const priorShares = new Map((prior?.facts ?? []).map((fact) => [fact.id, fact.shareableWith]));
+  const facts: InsightFact[] = [];
+  const addFact = (suffix: string, text: string): void => {
+    if (!text.trim()) return;
+    const id = `${insightId}:${suffix}`;
+    const carried = priorShares.get(id);
+    facts.push({
+      id,
+      text,
+      shareable: false,
+      ...(carried && carried.length > 0 ? { shareableWith: carried } : {}),
+    });
+  };
+  addFact('waking', analysis.wakingLifeConnections);
+  addFact('emotional', analysis.emotionalLandscape);
+
   const insight: Insight = {
     id: insightId,
     schemaVersion: 1,

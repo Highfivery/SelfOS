@@ -165,6 +165,9 @@ A new **Dreams** feature module registers a nav entry (gated by `dreams.own`) an
   **off** — dreams are private; sharing is a deliberate per-fact, per-person act, gated by
   **`dreams.shareContext`**.
 - Sensitive-tier dreams (§3.1) are **excluded from sharing** to avoid leaking intimate content.
+- **Editing keeps sharing.** A dream insight's facts use a **stable per-field id**, so re-approving after
+  an edit (§3.6) **preserves** who each fact is shared with (re-wording a section keeps its shares, with the
+  updated text). Re-_synthesizing_ (a wholly new analysis) drops the prior Insight, resetting sharing.
 
 ### 3.5 Patterns
 
@@ -700,6 +703,24 @@ Confirmed in review (2026-06-11):
      (typecheck node+web/DOM-lib, lint, format, **162 core + 243 desktop** unit). No user surface → no
      E2E/visual-QA. **NEXT: 5b** the share UI on the (approved, non-sensitive) analysis card (a related-person
      picker + per-fact ticks + "shared with X" chips) + E2E._
+   - _**5b built 2026-06-11 (the sharing UI — §13.5 COMPLETE; the whole spec is now built):** a
+     **`DreamShareControls`** section on the approved analysis card — a related-person picker + a `Switch`
+     per insight fact (on = shared with the selected person) + a "Shared with X" line per fact. It renders
+     only when `analysis.insightId && can('dreams.shareContext') && sensitivity === 'standard'` and there
+     are related people (the **bridge re-enforces** all of that server-side — the UI gate is convenience,
+     not the trust boundary); a **sensitive-tier dream shows a one-line "kept out of shared context" note**
+     instead. `dreamAnalysisStore` gained `insight`/`shareTargets` + `loadSharing`/`setFactShare` (loaded
+     after approve / re-approve-on-edit / open-when-approved; cleared on remove + reset). **Fixed a footgun
+     the reviewer caught (should-fix):** editing an approved analysis used to **silently wipe all
+     sharing** (`approveAnalysis` rebuilt facts with fresh uuids) — facts now use a **stable per-field id**
+     and **carry `shareableWith` forward** on re-approval, so a reworded section keeps its shares (§3.4).
+     Applied the two nits (surface an error if a toggle is refused; reconcile a stale selected person).
+     Gate green: typecheck (node + web/DOM-lib), lint, format, **164 core + 249 desktop** unit (+1 core
+     carry-forward, +6 RTL: component toggles/empty + pane integration / sensitive note / capability hide),
+     **36 E2E** (+1 full capture→analyze→approve→**share** flow that decrypts the vault to assert the fact
+     reaches the related person's `summarizeForContext` grounding + a 390px guard). **Visual QA** at desktop
+     (the share section renders cleanly — picker + toggles + "Shared with Partner" chip). On
+     `feat/dreams-slice-5b`. **§13.5 is complete — the Dreams feature (§13.1–§13.5) is fully built.**_
 
 _(Future companion spec: **AI dream-image generation** — the deferred §2 / §11.9 work, when the core is
 proven.)_
@@ -835,3 +856,15 @@ string[]`** (no migration; existing facts unaffected) + `summarizeForContext` su
   paths unchanged); applied the two nits. Gate green (typecheck node+web/DOM-lib, lint, format, **162 core +
   243 desktop** unit). On `feat/dreams-slice-5a`. No user surface → no E2E/visual-QA. **NEXT: 5b** the share
   UI on the approved, non-sensitive analysis card + E2E.
+- 2026-06-11 — **Slice 5b built — §13.5 COMPLETE; the Dreams feature is fully built** (the sharing UI). A
+  **`DreamShareControls`** section on the approved analysis card: a related-person picker + a `Switch` per
+  insight fact + a "Shared with X" line. It renders only when approved + `dreams.shareContext` +
+  standard-tier + related people exist (the **bridge re-enforces all of it server-side**); a sensitive-tier
+  dream shows a "kept out of shared context" note instead. `dreamAnalysisStore` gained `insight`/
+  `shareTargets` + `loadSharing`/`setFactShare`. **Fixed a footgun (reviewer should-fix):** editing an
+  approved analysis used to silently wipe all sharing — facts now use a **stable per-field id** and **carry
+  `shareableWith` forward** on re-approval (§3.4); applied the two nits. Gate green (typecheck node+web/
+  DOM-lib, lint, format, **164 core + 249 desktop** unit, **36 E2E** incl. a full
+  capture→analyze→approve→share flow asserting the fact reaches the related person's grounding + a 390px
+  guard; visual QA at desktop). On `feat/dreams-slice-5b`. **The Dreams spec (§13.1–§13.5) is now fully
+  built.** Only the deferred image-gen companion spec remains.

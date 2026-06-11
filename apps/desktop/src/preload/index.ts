@@ -68,6 +68,12 @@ const bridge: SelfosBridge = {
   conversationsGet: (id) => ipcRenderer.invoke(IpcChannels.conversationsGet, id),
   conversationsRename: (input) => ipcRenderer.invoke(IpcChannels.conversationsRename, input),
   conversationsDelete: (id) => ipcRenderer.invoke(IpcChannels.conversationsDelete, id),
+  questionnairesList: () => ipcRenderer.invoke(IpcChannels.questionnairesList),
+  questionnairesGet: (id) => ipcRenderer.invoke(IpcChannels.questionnairesGet, id),
+  questionnairesSave: (input) => ipcRenderer.invoke(IpcChannels.questionnairesSave, input),
+  questionnairesDelete: (id) => ipcRenderer.invoke(IpcChannels.questionnairesDelete, id),
+  questionnairesValidate: (input) => ipcRenderer.invoke(IpcChannels.questionnairesValidate, input),
+  assignmentsCreate: (input) => ipcRenderer.invoke(IpcChannels.assignmentsCreate, input),
   getSidebarCollapsed: () => ipcRenderer.invoke(IpcChannels.getSidebarCollapsed),
   setSidebarCollapsed: (collapsed) =>
     ipcRenderer.invoke(IpcChannels.setSidebarCollapsed, collapsed),

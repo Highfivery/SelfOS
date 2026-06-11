@@ -514,10 +514,12 @@ untouched.
 Typed channels (`src/shared`, Zod-validated both sides; the API key + Cloudflare token never cross to the
 renderer):
 
-- **Authoring** — `questionnaires:list` / `:get` / `:save` / `:generate({type, targetId, brief?, useData})`
-  (→ schema-validated draft) / `:improveQuestion` / `:listTypes` / `:addType`.
-- **Send/collect** — `assignments:create` / `:list` / `:get` / `:sendInApp` / `:createRelayLink` / `:drain`
-  / `:revoke` / `:delete`.
+- **Authoring** — `questionnaires:list` / `:get` / `:save` / `:delete` / `:validate` (→ `problems[]`) /
+  `:generate({type, targetId, brief?, useData})` (→ schema-validated draft) / `:improveQuestion` /
+  `:listTypes` / `:addType`. _(list/get/save/delete/validate are wired as of the IPC slice;
+  generate/improve/types land with AI generation.)_
+- **Send/collect** — `assignments:create` (the in-app send for now — wired; relay-link material attaches
+  with the relay slice) / `:list` / `:get` / `:createRelayLink` / `:drain` / `:revoke` / `:delete`.
 - **Answer** — `assignments:saveProgress` / `:submit` / `:decline({ note? })` (in-app); the relay page talks
   to the **Worker** directly (submit / decline / withdraw).
 - **Analysis/insights** — `insights:analyze({assignmentId})` (manual, or auto when `autoAnalyze` is on) /
@@ -730,6 +732,10 @@ Confirmed with the user (2026-06-10):
      results UI)._
 2. **Builder + answer-type library** — create flow (type incl. custom), all answer types (incl.
    matrix/allocation + question-image attach), preview, simple branching, test-on-self.
+   - _**IPC wiring (built 2026-06-11):** `questionnaires:list/get/save/delete/validate` +
+     `assignments:create` (in-app) wired through `channels.ts` → `coreBridge` → `ipc.ts` → preload,
+     capability-gated by `questionnaires.create`. Unblocks the builder UI. The relay `assignments:create`
+     path + the answer/results channels land with their slices._
 3. **AI generate + gap-finder** — brief + data-grounded generation (safety pass, schema-valid, de-dup) via
    the registry; the Suggested surface; metered + budget-gated.
 4. **Analyze → Insights/metrics → context** — analysis, approve-step, Insight management, prioritization/cap,
@@ -776,3 +782,9 @@ Confirmed with the user (2026-06-10):
     status transitions), `responseService`. Code-reviewed (per-type validation + stray-entry tests added) +
     gate green (98 core unit tests). Deferred: context-provider registry, `queryMetrics`, relay material,
     the renderer.
+- 2026-06-11 — **IPC wiring built** (§6/§13.2): exposed the engine to the renderer —
+  `questionnaires:list/get/save/delete/validate` + `assignments:create` (in-app) through `channels.ts` →
+  `coreBridge` → `ipc.ts` → preload, gated by `questionnaires.create` (`validate` ungated — pure pre-flight).
+  Code-reviewed (added a recipient-existence check so a send can't bind a phantom recipient; tightened
+  `expiresAt`). Gate green (191 desktop unit tests). Relay-channel send + answer/results/insights IPC
+  deferred to their slices.

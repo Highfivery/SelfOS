@@ -17,14 +17,17 @@ import {
 import {
   BudgetSchema,
   PersonInputSchema,
+  QuestionnaireInputSchema,
   RelationshipInputSchema,
   RoleSchema,
   SettingsFileSchema,
+  type Assignment,
   type BootState,
   type Budget,
   type Conversation,
   type DeviceState,
   type Person,
+  type Questionnaire,
   type Relationship,
 } from './schemas';
 import { OWNER_ROLE_ID, roleAllows, type CapabilityKey } from './capabilities';
@@ -81,6 +84,14 @@ import {
   runChatTurn,
   saveConversation,
 } from '@selfos/core/conversations';
+import {
+  createAssignment,
+  deleteQuestionnaire,
+  getQuestionnaire,
+  listQuestionnaires,
+  saveQuestionnaire,
+  validateQuestionnaire,
+} from '@selfos/core/questionnaires';
 
 /**
  * The platform-agnostic SelfOS bridge factory (07-mobile-platform §5.3, slice iii-b1). The renderer
@@ -208,6 +219,13 @@ const BudgetSetPersonSchema = z.object({
   budget: BudgetSchema.nullable(),
 });
 const PassphraseSchema = z.object({ passphrase: z.string() });
+const AssignmentsCreateSchema = z.object({
+  questionnaireId: z.string().min(1),
+  recipientPersonId: z.string().min(1),
+  privacy: z.enum(['standard', 'private']).optional(),
+  senderVisibleToRecipient: z.boolean().optional(),
+  expiresAt: z.string().datetime().optional(),
+});
 
 /** Build the renderer-facing `SelfosBridge` from a platform `BridgeHost`. */
 export function createCoreBridge(host: BridgeHost): SelfosBridge {
@@ -645,6 +663,59 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         userText,
         onDelta: (text) => host.emitChatChunk(text),
         now: new Date(),
+      });
+    },
+
+    // --- Questionnaires (08-questionnaires) — gated by `questionnaires.create` ---
+    questionnairesList: async (): Promise<Questionnaire[]> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) return [];
+      return listQuestionnaires(ctx.fs, ctx.key);
+    },
+    questionnairesGet: async (id): Promise<Questionnaire | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) return null;
+      return getQuestionnaire(ctx.fs, ctx.key, PersonIdSchema.parse(id));
+    },
+    questionnairesSave: async (input): Promise<Questionnaire> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) {
+        throw new Error('Not permitted');
+      }
+      return saveQuestionnaire(ctx.fs, ctx.key, QuestionnaireInputSchema.parse(input));
+    },
+    questionnairesDelete: async (id): Promise<void> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) return;
+      await deleteQuestionnaire(ctx.fs, PersonIdSchema.parse(id));
+    },
+    questionnairesValidate: async (input): Promise<string[]> => {
+      // Pure pre-flight check — exposes nothing sensitive, so no vault/capability gate.
+      return validateQuestionnaire(QuestionnaireInputSchema.parse(input));
+    },
+    assignmentsCreate: async (input): Promise<Assignment> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) {
+        throw new Error('Not permitted');
+      }
+      const personId = await activePersonId();
+      if (!personId) throw new Error('No active person');
+      const { questionnaireId, recipientPersonId, privacy, senderVisibleToRecipient, expiresAt } =
+        AssignmentsCreateSchema.parse(input);
+      // The recipient must be a real household person, so we never persist a dangling, unanswerable
+      // send (a self-send is allowed — self check-ins are a valid use). Mirrors invitesCreate's lookup.
+      if (!(await getPerson(ctx.fs, ctx.key, recipientPersonId))) {
+        throw new Error('Recipient not found');
+      }
+      // In-app/household send only for now; the external relay channel lands with the delivery slice.
+      return createAssignment(ctx.fs, ctx.key, {
+        questionnaireId,
+        senderPersonId: personId,
+        recipient: { kind: 'person' as const, personId: recipientPersonId },
+        channel: 'inApp',
+        privacy: privacy ?? 'standard',
+        senderVisibleToRecipient: senderVisibleToRecipient ?? true,
+        ...(expiresAt !== undefined ? { expiresAt } : {}),
       });
     },
 

@@ -180,4 +180,68 @@ describe('createCoreBridge', () => {
     expect(await bridge.invitesList({ personId: member.id })).toHaveLength(1);
     await expect(bridge.invitesCreate({ personId: ownerId })).rejects.toThrow();
   });
+
+  it('authors, lists, validates, sends, and deletes a questionnaire (owner has the capability)', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    const recipient = await bridge.peopleSave({
+      displayName: 'Partner',
+      isSubject: true,
+      tags: [],
+    });
+
+    const saved = await bridge.questionnairesSave({
+      title: 'Quick check-in',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'How are we doing?', required: true }],
+    });
+    expect(saved.version).toBe(1);
+    expect((await bridge.questionnairesList()).map((q) => q.id)).toContain(saved.id);
+    expect((await bridge.questionnairesGet(saved.id))?.title).toBe('Quick check-in');
+
+    // validate surfaces structural problems (a choice question with no options).
+    expect(
+      await bridge.questionnairesValidate({
+        title: 'bad',
+        type: 'x',
+        sensitivity: 'standard',
+        questions: [{ id: 'q1', type: 'singleChoice', prompt: 'Pick', required: true }],
+      }),
+    ).not.toEqual([]);
+
+    const assignment = await bridge.assignmentsCreate({
+      questionnaireId: saved.id,
+      recipientPersonId: recipient.id,
+    });
+    expect(assignment.status).toBe('sent');
+    expect(assignment.senderPersonId).toBe(ownerId);
+    expect(assignment.recipient).toEqual({ kind: 'person', personId: recipient.id });
+
+    await bridge.questionnairesDelete(saved.id);
+    expect(await bridge.questionnairesGet(saved.id)).toBeNull();
+  });
+
+  it('denies questionnaire authoring to a person without questionnaires.create (a Guest)', async () => {
+    const { bridge } = await freshOwner();
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    expect((await bridge.sessionSetActive({ personId: guest.id })).ok).toBe(true);
+    await expect(
+      bridge.questionnairesSave({ title: 'x', type: 'x', sensitivity: 'standard', questions: [] }),
+    ).rejects.toThrow(/permitted/);
+    expect(await bridge.questionnairesList()).toEqual([]);
+  });
+
+  it('rejects an in-app send to a non-existent recipient', async () => {
+    const { bridge } = await freshOwner();
+    const saved = await bridge.questionnairesSave({
+      title: 'q',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'hi', required: true }],
+    });
+    await expect(
+      bridge.assignmentsCreate({ questionnaireId: saved.id, recipientPersonId: 'ghost' }),
+    ).rejects.toThrow(/Recipient not found/);
+  });
 });

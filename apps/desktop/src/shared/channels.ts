@@ -1,5 +1,6 @@
 import type {
   AccessView,
+  Assignment,
   BootState,
   Budget,
   BudgetState,
@@ -8,6 +9,9 @@ import type {
   InviteSummary,
   Person,
   PersonInput,
+  PrivacyMode,
+  Questionnaire,
+  QuestionnaireInput,
   Relationship,
   RelationshipInput,
   Role,
@@ -70,6 +74,12 @@ export const IpcChannels = {
   conversationsGet: 'conversations:get',
   conversationsRename: 'conversations:rename',
   conversationsDelete: 'conversations:delete',
+  questionnairesList: 'questionnaires:list',
+  questionnairesGet: 'questionnaires:get',
+  questionnairesSave: 'questionnaires:save',
+  questionnairesDelete: 'questionnaires:delete',
+  questionnairesValidate: 'questionnaires:validate',
+  assignmentsCreate: 'assignments:create',
   getSidebarCollapsed: 'ui:getSidebarCollapsed',
   setSidebarCollapsed: 'ui:setSidebarCollapsed',
 } as const;
@@ -233,6 +243,24 @@ export interface SelfosBridge {
   conversationsRename(input: { id: string; title: string }): Promise<void>;
   /** Delete a conversation. */
   conversationsDelete(id: string): Promise<void>;
+  /** The household's questionnaire definitions, newest first. Requires `questionnaires.create`. */
+  questionnairesList(): Promise<Questionnaire[]>;
+  /** Load one questionnaire definition; null if absent. */
+  questionnairesGet(id: string): Promise<Questionnaire | null>;
+  /** Create or update a questionnaire definition (editing bumps its version); returns the saved record. */
+  questionnairesSave(input: QuestionnaireInput): Promise<Questionnaire>;
+  /** Delete a questionnaire definition. */
+  questionnairesDelete(id: string): Promise<void>;
+  /** Structural problems with a draft (empty array = valid) — for live builder feedback. */
+  questionnairesValidate(input: QuestionnaireInput): Promise<string[]>;
+  /** Send a questionnaire to a household person (in-app), freezing an immutable snapshot at send. */
+  assignmentsCreate(input: {
+    questionnaireId: string;
+    recipientPersonId: string;
+    privacy?: PrivacyMode;
+    senderVisibleToRecipient?: boolean;
+    expiresAt?: string;
+  }): Promise<Assignment>;
   /** Whether the desktop sidebar is collapsed to an icon rail (device-local). */
   getSidebarCollapsed(): Promise<boolean>;
   /** Persist the sidebar collapsed/expanded state (device-local). */
@@ -241,6 +269,7 @@ export interface SelfosBridge {
 
 export type {
   AccessView,
+  Assignment,
   BootState,
   Budget,
   BudgetState,
@@ -249,6 +278,9 @@ export type {
   InviteSummary,
   Person,
   PersonInput,
+  PrivacyMode,
+  Questionnaire,
+  QuestionnaireInput,
   Relationship,
   RelationshipInput,
   Role,

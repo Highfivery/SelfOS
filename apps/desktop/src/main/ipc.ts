@@ -162,6 +162,12 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.conversationsGet, bridge.conversationsGet);
   handle(IpcChannels.conversationsRename, bridge.conversationsRename);
   handle(IpcChannels.conversationsDelete, bridge.conversationsDelete);
+  handle(IpcChannels.questionnairesList, bridge.questionnairesList);
+  handle(IpcChannels.questionnairesGet, bridge.questionnairesGet);
+  handle(IpcChannels.questionnairesSave, bridge.questionnairesSave);
+  handle(IpcChannels.questionnairesDelete, bridge.questionnairesDelete);
+  handle(IpcChannels.questionnairesValidate, bridge.questionnairesValidate);
+  handle(IpcChannels.assignmentsCreate, bridge.assignmentsCreate);
   handle(IpcChannels.getSidebarCollapsed, bridge.getSidebarCollapsed);
   handle(IpcChannels.setSidebarCollapsed, bridge.setSidebarCollapsed);
 

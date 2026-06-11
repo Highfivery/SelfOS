@@ -239,6 +239,16 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Build (Questionnaires **IPC/bridge wiring** — exposing the engine to the renderer,
+  [08-questionnaires](docs/specs/08-questionnaires.md) §6/§13.2): added `questionnaires:list/get/save/
+delete/validate` + `assignments:create` (in-app) through the typed seam — `channels.ts` (contract +
+  `SelfosBridge`) → **`coreBridge`** (host-agnostic, so the iOS host gets it free) → `ipc.ts` handlers →
+  preload. All gated by **`questionnaires.create`** (`validate` is an ungated pure pre-flight check);
+  `assignments:create` is **in-app/household only** for now (forces `channel: inApp` + a household-person
+  recipient; the relay channel + answer/results/insights IPC land with their slices). Renderer inputs are
+  Zod-validated in the bridge. Code-reviewed (added a recipient-existence check so a send can't bind a
+  phantom recipient; `expiresAt` tightened to a datetime). Gate green (typecheck/lint/format, **191
+  desktop** + 98 core unit tests). Synced `08` §6/§13.2.
 - 2026-06-11 — Build (Questionnaires **slice 1b — the questionnaire engine backend**,
   [08-questionnaires](docs/specs/08-questionnaires.md) §4.2/§4.3/§13.1): the `Questionnaire`/`Question`
   (all answer types incl. matrix/allocation + author `media` + simple `branch`)/`Assignment`/`ResponseSet`

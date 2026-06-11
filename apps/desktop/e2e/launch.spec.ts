@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import {
@@ -12,7 +12,7 @@ import { createMasterKey, loadMasterKey } from '@selfos/core/crypto';
 import type { Encryptor } from '../src/main/secrets/encryptor';
 import { createNodeFileSystem } from '../src/main/host/nodeFileSystem';
 import { createNodeSecretStore } from '../src/main/host/nodeSecretStore';
-import { getAccessConfig, savePerson, setAccount } from '@selfos/core/people';
+import { createInvite, getAccessConfig, savePerson, setAccount } from '@selfos/core/people';
 import { hashPin } from '@selfos/core/crypto';
 import { recordUsage } from '@selfos/core/usage';
 import { writeEncryptedJson } from '@selfos/core/vault';
@@ -937,6 +937,161 @@ test('multi-device: an interrupted setup (key + recovery.enc, no owner) is finis
   // The existing key was finished-with, never regenerated.
   expect(await readFile(join(vault, 'config', 'recovery.enc'), 'utf8')).toBe(recoveryBefore);
   await rm(userData, { recursive: true, force: true });
+  await rm(vault, { recursive: true, force: true });
+});
+
+test('invites: a member redeems a code on a new device, sets their own PIN, and joins member-only', async () => {
+  // 10-multi-device-vault §5.4 — the owner→member round trip. "Device A" seeds the vault with an owner
+  // + a PIN-less member and creates an invite for the member; capture the code.
+  const vault = await mkdtemp(join(tmpdir(), 'selfos-e2e-vault-'));
+  const now = new Date().toISOString();
+  await writeJson(join(vault, '.selfos', 'meta.json'), {
+    schemaVersion: 1,
+    vaultId: 'e2e',
+    createdAt: now,
+    updatedAt: now,
+  });
+  await writeJson(join(vault, 'config', 'settings.json'), { schemaVersion: 1, values: {} });
+
+  const deviceA = await mkdtemp(join(tmpdir(), 'selfos-e2e-ud-'));
+  const fs = createNodeFileSystem(vault);
+  await createMasterKey(createNodeSecretStore(deviceA, passthrough), fs);
+  const key = await loadMasterKey(createNodeSecretStore(deviceA, passthrough));
+  if (!key) throw new Error('seed: master key missing');
+  const person = (id: string, displayName: string): Parameters<typeof savePerson>[2] => ({
+    id,
+    schemaVersion: 1,
+    displayName,
+    isSubject: true,
+    tags: [],
+    createdAt: now,
+    updatedAt: now,
+  });
+  await savePerson(fs, key, person('owner-1', 'You'));
+  await setAccount(fs, key, { personId: 'owner-1', roleId: 'owner', pin: '9999' });
+  await savePerson(fs, key, person('wife-1', 'Wife'));
+  await setAccount(fs, key, { personId: 'wife-1', roleId: 'member' }); // no PIN — she sets it on redeem
+  const { code } = await createInvite(fs, key, 'wife-1', Date.now());
+
+  // "Device B" (the wife's): a fresh user-data dir on the same vault, with no master key.
+  const deviceB = await mkdtemp(join(tmpdir(), 'selfos-e2e-ud-'));
+  await writeJson(join(deviceB, 'state.json'), { schemaVersion: 1, vaultPath: vault });
+
+  const app = await launch(deviceB);
+  try {
+    const w = await app.firstWindow();
+    await expect(w.getByRole('heading', { name: 'This vault is already set up' })).toBeVisible();
+
+    // Switch to the invite flow, enter the code, then set her own PIN.
+    await w.getByRole('button', { name: /have an invite code/i }).click();
+    await w.getByLabel('Invite code').fill(code);
+    await w.getByRole('button', { name: 'Continue' }).click();
+    await expect(w.getByRole('heading', { name: 'Set your PIN' })).toBeVisible();
+    await w.getByLabel('Your PIN').fill('1234');
+    await w.getByLabel('Confirm PIN').fill('1234');
+    await w.getByRole('button', { name: 'Finish' }).click();
+
+    // She's in as herself, member-only (no People/Roles admin nav for a member).
+    await expect(w.getByRole('link', { name: 'Home' })).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Signed in as Wife' })).toBeVisible();
+    await expect(w.getByRole('link', { name: 'People' })).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+
+  // Her account now carries a PIN, and the invite was consumed (single-use).
+  const account = (await getAccessConfig(fs, key)).accounts.find((a) => a.personId === 'wife-1');
+  expect(account?.pinHash).toBeTruthy();
+  const remaining = (await readdir(join(vault, 'config', 'invites')).catch(() => [])).filter((f) =>
+    f.endsWith('.enc'),
+  );
+  expect(remaining).toHaveLength(0);
+
+  await rm(deviceA, { recursive: true, force: true });
+  await rm(deviceB, { recursive: true, force: true });
+  await rm(vault, { recursive: true, force: true });
+});
+
+test('invites: a redeem interrupted before the PIN resumes on next boot (no open access)', async () => {
+  // 10-multi-device-vault §5.4 / §7 — the unhappy path: a crash between redeem and finish must NOT
+  // leave a PIN-less member anyone can sign in as. Seed owner + member + an invite for the member.
+  const vault = await mkdtemp(join(tmpdir(), 'selfos-e2e-vault-'));
+  const now = new Date().toISOString();
+  await writeJson(join(vault, '.selfos', 'meta.json'), {
+    schemaVersion: 1,
+    vaultId: 'e2e',
+    createdAt: now,
+    updatedAt: now,
+  });
+  await writeJson(join(vault, 'config', 'settings.json'), { schemaVersion: 1, values: {} });
+  const deviceA = await mkdtemp(join(tmpdir(), 'selfos-e2e-ud-'));
+  const fs = createNodeFileSystem(vault);
+  await createMasterKey(createNodeSecretStore(deviceA, passthrough), fs);
+  const key = await loadMasterKey(createNodeSecretStore(deviceA, passthrough));
+  if (!key) throw new Error('seed: master key missing');
+  const seedPerson = (id: string, displayName: string): Parameters<typeof savePerson>[2] => ({
+    id,
+    schemaVersion: 1,
+    displayName,
+    isSubject: true,
+    tags: [],
+    createdAt: now,
+    updatedAt: now,
+  });
+  await savePerson(fs, key, seedPerson('owner-1', 'You'));
+  await setAccount(fs, key, { personId: 'owner-1', roleId: 'owner', pin: '9999' });
+  await savePerson(fs, key, seedPerson('wife-1', 'Wife'));
+  await setAccount(fs, key, { personId: 'wife-1', roleId: 'member' });
+  const { code } = await createInvite(fs, key, 'wife-1', Date.now());
+
+  const deviceB = await mkdtemp(join(tmpdir(), 'selfos-e2e-ud-'));
+  await writeJson(join(deviceB, 'state.json'), { schemaVersion: 1, vaultPath: vault });
+
+  const noOverflow = (w: Page): Promise<boolean> =>
+    w.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+
+  // First launch: redeem the code, reach the PIN step at phone width (no overflow), then quit early.
+  let app = await launch(deviceB);
+  try {
+    const w = await app.firstWindow();
+    await app.evaluate(async ({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows()[0];
+      if (win) {
+        win.setMinimumSize(360, 480);
+        win.setSize(390, 800);
+      }
+    });
+    await w.getByRole('button', { name: /have an invite code/i }).click();
+    await w.waitForTimeout(150);
+    expect(await noOverflow(w)).toBe(true); // invite-code step
+    await w.getByLabel('Invite code').fill(code);
+    await w.getByRole('button', { name: 'Continue' }).click();
+    await expect(w.getByRole('heading', { name: 'Set your PIN' })).toBeVisible();
+    expect(await noOverflow(w)).toBe(true); // set-PIN step
+  } finally {
+    await app.close(); // crash mid-join — the PIN was never set
+  }
+
+  // Relaunch: resume the PIN step (the key is on disk + invite consumed) — NOT the open person picker.
+  app = await launch(deviceB);
+  try {
+    const w = await app.firstWindow();
+    await expect(w.getByRole('heading', { name: 'Set your PIN' })).toBeVisible();
+    await expect(w.getByRole('heading', { name: 'Welcome back' })).toHaveCount(0);
+    await w.getByLabel('Your PIN').fill('1234');
+    await w.getByLabel('Confirm PIN').fill('1234');
+    await w.getByRole('button', { name: 'Finish' }).click();
+    await expect(w.getByRole('link', { name: 'Home' })).toBeVisible();
+  } finally {
+    await app.close();
+  }
+
+  // The member's account ended up with a PIN — the guarantee held across the interruption.
+  const account = (await getAccessConfig(fs, key)).accounts.find((a) => a.personId === 'wife-1');
+  expect(account?.pinHash).toBeTruthy();
+
+  await rm(deviceA, { recursive: true, force: true });
+  await rm(deviceB, { recursive: true, force: true });
   await rm(vault, { recursive: true, force: true });
 });
 

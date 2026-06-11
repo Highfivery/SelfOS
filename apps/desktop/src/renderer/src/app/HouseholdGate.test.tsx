@@ -19,6 +19,7 @@ describe('HouseholdGate', () => {
           hasMasterKey: false,
           hasOwner: false,
           activePersonId: null,
+          pendingJoinPersonId: null,
         }),
     });
     render(<HouseholdGate />);
@@ -33,6 +34,7 @@ describe('HouseholdGate', () => {
           hasMasterKey: false,
           hasOwner: false,
           activePersonId: null,
+          pendingJoinPersonId: null,
         }),
     });
     render(<HouseholdGate />);
@@ -49,6 +51,7 @@ describe('HouseholdGate', () => {
           hasMasterKey: true,
           hasOwner: false,
           activePersonId: null,
+          pendingJoinPersonId: null,
         }),
     });
     render(<HouseholdGate />);
@@ -72,6 +75,7 @@ describe('HouseholdGate', () => {
           hasMasterKey: true,
           hasOwner: false,
           activePersonId: null,
+          pendingJoinPersonId: null,
         }),
     });
     render(<HouseholdGate />);
@@ -88,10 +92,28 @@ describe('HouseholdGate', () => {
           hasMasterKey: true,
           hasOwner: true,
           activePersonId: null,
+          pendingJoinPersonId: null,
         }),
     });
     render(<HouseholdGate />);
     expect(await screen.findByText('Welcome back')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Home' })).not.toBeInTheDocument();
+  });
+
+  it('resumes the "set your PIN" step when a member redeemed but has not finished joining', async () => {
+    installMockBridge({
+      householdStatus: () =>
+        Promise.resolve({
+          vaultInitialized: true,
+          hasMasterKey: true,
+          hasOwner: true,
+          activePersonId: null,
+          pendingJoinPersonId: 'wife-1',
+        }),
+    });
+    render(<HouseholdGate />);
+    // Not the open picker — the PIN step, so the redeemed member must set a PIN before getting in.
+    expect(await screen.findByRole('heading', { name: 'Set your PIN' })).toBeInTheDocument();
+    expect(screen.queryByText('Welcome back')).not.toBeInTheDocument();
   });
 });

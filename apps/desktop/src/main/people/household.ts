@@ -10,6 +10,7 @@ import {
 } from '@selfos/core/crypto';
 import { createNodeFileSystem } from '../host/nodeFileSystem';
 import { createNodeSecretStore } from '../host/nodeSecretStore';
+import { readDeviceState } from '../state/deviceStore';
 import type { Encryptor } from '../secrets/encryptor';
 import { getAccessConfig, savePerson, setAccount } from '@selfos/core/people';
 import { getActivePersonId, setActivePersonId } from './session';
@@ -26,18 +27,26 @@ export async function householdStatus(
   vaultDir: string | null,
 ): Promise<HouseholdStatus> {
   const key = await loadMasterKey(createNodeSecretStore(userDataDir, encryptor));
+  const pendingJoinPersonId = (await readDeviceState(userDataDir)).pendingJoinPersonId ?? null;
   if (!vaultDir) {
     return {
       vaultInitialized: false,
       hasMasterKey: key !== null,
       hasOwner: false,
       activePersonId: null,
+      pendingJoinPersonId,
     };
   }
   const fs = createNodeFileSystem(vaultDir);
   const vaultInitialized = await isVaultInitialized(fs);
   if (!key) {
-    return { vaultInitialized, hasMasterKey: false, hasOwner: false, activePersonId: null };
+    return {
+      vaultInitialized,
+      hasMasterKey: false,
+      hasOwner: false,
+      activePersonId: null,
+      pendingJoinPersonId,
+    };
   }
   const access = await getAccessConfig(fs, key);
   const hasOwner = access.accounts.some((account) => account.roleId === OWNER_ROLE_ID);
@@ -46,6 +55,7 @@ export async function householdStatus(
     hasMasterKey: true,
     hasOwner,
     activePersonId: await getActivePersonId(userDataDir),
+    pendingJoinPersonId,
   };
 }
 

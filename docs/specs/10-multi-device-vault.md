@@ -48,18 +48,20 @@ no device key — the **only** path that mints the owner + super-admin), **Unloc
 (initialized vault, no device key), or the existing person-picker / app (device key present). A
 recovery-phrase unlock lets a device cross from the second state to the third without ever re-keying.
 
-**Phasing.** This spec describes both phases; only **Slice 1** is built now:
+**Phasing.** Both phases are now **built**, in independently-shipped sub-slices for the methodical cadence:
 
-- **Slice 1 (build now)** — the safety fix + foundation: key-free `vaultInitialized` detection, the
-  three-way boot gate, hard guards against overwriting `recovery.enc` / re-running setup, the
-  super-admin secret moved into the vault (with migration), and a recovery-phrase **unlock** UI.
-  Delivered in three independently-shipped sub-slices for the methodical cadence:
+- **Slice 1** — the safety fix + foundation: key-free `vaultInitialized` detection, the three-way boot
+  gate, hard guards against overwriting `recovery.enc` / re-running setup, the super-admin secret moved
+  into the vault (with migration), and a recovery-phrase **unlock** UI.
   - **1a** — `vaultInitialized` detection + the `createMasterKey`/`setupHousehold` overwrite guards +
     the three-way `HouseholdGate` + the recovery-phrase `UnlockScreen` (the data-loss fix + device join).
   - **1b** — super-admin secret moved into `config/superadmin.enc` (+ the device-local migration, §6.4).
   - **1c** — the required owner PIN at Setup (§3.2).
-- **Slice 2 (designed here, not built)** — one-time, member-scoped **invite / pairing codes** so a
-  non-owner can join a new device without ever seeing the recovery phrase (§5.4).
+- **Slice 2** — one-time, member-scoped **invite / pairing codes** so a non-owner can join a new device
+  without ever seeing the recovery phrase (§5.4).
+  - **2a** — the core invite service + the owner's Generate-UI on the Access tab.
+  - **2b** — the member redeem flow (`UnlockScreen` invite mode → set own PIN), with a persisted pending
+    join so a crash mid-redeem resumes the "Set your PIN" step instead of an open picker.
 
 ## 2. Goals / Non-goals
 
@@ -512,6 +514,18 @@ All Slice-1 questions are **resolved** (2026-06-10):
 
 ## 12. Changelog
 
+- 2026-06-10 — **Slice 2b built (Slice 2 complete).** The member redeem flow: `invites:redeem` (no
+  device key required — unwraps the master key from the invite via `redeemInvite`, stores it
+  device-local, and **persists** the resolved `personId` as `DeviceState.pendingJoinPersonId`) +
+  `invites:completeJoin` (sets that member's OWN PIN via `setAccount` and signs them in — only the
+  redeemed person can be completed, never the owner, so the renderer can't target another account).
+  `UnlockScreen` gains an invite mode ("Have an invite code?" → enter code → "Set your PIN" → Finish),
+  alongside the recovery-phrase mode. **Security fix (reviewer-caught):** because redeem stores the key
+  - consumes the invite, a crash before the PIN was set would have dropped to an **open person picker**
+    where anyone could sign in as the PIN-less member. So the pending join is **persisted device-local**
+    and the boot gate **resumes the "Set your PIN" step** on next launch (`HouseholdGate`), closing the
+    window. Full owner-generate→member-redeem E2E (member joins **member-only**, account gains a PIN,
+    invite consumed) + an interrupted-redeem-reboot E2E + a 390px overflow guard on the invite surfaces.
 - 2026-06-10 — **Slice 2a built** (owner side of the invite codes). Core `@selfos/core/people/inviteService`:
   `generateInviteCode` (6 words from a 128-word `inviteWords` list, ~2⁴²), `createInvite` (wraps the
   master key under the code's KEK → key-free-readable `config/invites/<id>.enc`), `listInvitesForPerson`

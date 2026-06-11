@@ -41,4 +41,34 @@ describe('UnlockScreen', () => {
     expect(await screen.findByText(/match this vault/)).toBeInTheDocument();
     expect(screen.getByLabelText('Recovery phrase')).toHaveValue('nope');
   });
+
+  it('redeems an invite code, then sets a PIN to finish joining', async () => {
+    const invitesRedeem = vi.fn(() => Promise.resolve({ ok: true, displayName: 'Wife' }));
+    const invitesCompleteJoin = vi.fn(() => Promise.resolve({ ok: true }));
+    installMockBridge({ invitesRedeem, invitesCompleteJoin });
+    render(<UnlockScreen />);
+
+    await userEvent.click(screen.getByRole('button', { name: /have an invite code/i }));
+    await userEvent.type(screen.getByLabelText('Invite code'), 'amber-tide-fox-quill-river-stone');
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(invitesRedeem).toHaveBeenCalledWith({ code: 'amber-tide-fox-quill-river-stone' });
+
+    // The PIN step, addressed to the resolved member.
+    expect(await screen.findByRole('heading', { name: 'Set your PIN' })).toBeInTheDocument();
+    expect(screen.getByText(/Wife/)).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('Your PIN'), '1234');
+    await userEvent.type(screen.getByLabelText('Confirm PIN'), '1234');
+    await userEvent.click(screen.getByRole('button', { name: 'Finish' }));
+    expect(invitesCompleteJoin).toHaveBeenCalledWith({ pin: '1234' });
+  });
+
+  it('shows an error on a bad invite code', async () => {
+    installMockBridge({ invitesRedeem: () => Promise.resolve({ ok: false }) });
+    render(<UnlockScreen />);
+
+    await userEvent.click(screen.getByRole('button', { name: /have an invite code/i }));
+    await userEvent.type(screen.getByLabelText('Invite code'), 'nope');
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(await screen.findByText(/match or has expired/)).toBeInTheDocument();
+  });
 });

@@ -55,7 +55,8 @@ export async function hasMasterKey(secrets: SecretStore): Promise<boolean> {
   return (await loadMasterKey(secrets)) !== null;
 }
 
-async function storeMasterKey(secrets: SecretStore, key: Uint8Array): Promise<void> {
+/** Store a master key into this device's secret store (e.g. after redeeming an invite — §5.4). */
+export async function storeMasterKey(secrets: SecretStore, key: Uint8Array): Promise<void> {
   await secrets.set(MASTER_KEY_ID, toBase64(key));
 }
 

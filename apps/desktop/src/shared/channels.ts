@@ -53,6 +53,8 @@ export const IpcChannels = {
   invitesCreate: 'invites:create',
   invitesList: 'invites:list',
   invitesCancel: 'invites:cancel',
+  invitesRedeem: 'invites:redeem',
+  invitesCompleteJoin: 'invites:completeJoin',
   sessionSetActive: 'session:setActive',
   superadminUnlock: 'superadmin:unlock',
   superadminLock: 'superadmin:lock',
@@ -99,6 +101,8 @@ export interface HouseholdStatus {
   /** Whether an owner account exists (requires the key to read; false when hasMasterKey is false). */
   hasOwner: boolean;
   activePersonId: string | null;
+  /** A redeemed-but-not-yet-finished member join (set their PIN) — resumes on boot (§5.4). */
+  pendingJoinPersonId: string | null;
 }
 
 export type SetActiveResult =
@@ -188,6 +192,10 @@ export interface SelfosBridge {
   invitesList(input: { personId: string }): Promise<InviteSummary[]>;
   /** Cancel a pending invite by id. */
   invitesCancel(input: { id: string }): Promise<void>;
+  /** Redeem an invite code on this device: unlock the vault key, resolving who the invite is for. */
+  invitesRedeem(input: { code: string }): Promise<{ ok: boolean; displayName?: string }>;
+  /** Finish joining after a redeem: set the member's own PIN and sign them in. */
+  invitesCompleteJoin(input: { pin: string }): Promise<{ ok: boolean }>;
   /** Switch the active person, verifying their PIN if set. */
   sessionSetActive(input: { personId: string; pin?: string }): Promise<SetActiveResult>;
   /** Verify the concealed super-admin passphrase; on success, main enters inspect-everything mode. */

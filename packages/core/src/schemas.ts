@@ -52,6 +52,12 @@ export const DeviceStateSchema = z.object({
    * the vault (`config/superadmin.enc`); this device-local copy is read once to seed it, then unused.
    */
   superAdminPassphraseHash: z.string().optional(),
+  /**
+   * A member who redeemed an invite but hasn't yet set their PIN (10-multi-device-vault §5.4). Persisted
+   * so a crash between redeem and finish resumes the "Set your PIN" step on next boot rather than
+   * dropping into an open person picker. Cleared once the join completes.
+   */
+  pendingJoinPersonId: z.string().nullable().optional(),
   /** Whether the desktop sidebar is collapsed to an icon rail (device-local UI preference). */
   sidebarCollapsed: z.boolean().optional(),
 });

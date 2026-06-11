@@ -30,7 +30,7 @@ import {
 import { computeBootState } from './boot';
 import { initializeVault } from './vault/vault';
 import { findConflicts } from './vault/conflicts';
-import { readDeviceState, writeDeviceState } from './state/deviceStore';
+import { readDeviceState, updateDeviceState, writeDeviceState } from './state/deviceStore';
 import { readAllSettings, resetSettingValue, writeSettingValue } from './settings/settingsStore';
 import { createNodeSecretStore } from './host/nodeSecretStore';
 import { defaultEncryptor } from './secrets/encryptor';
@@ -54,6 +54,7 @@ import {
   listInvitesForPerson,
   listPeople,
   listRelationships,
+  redeemInvite,
   removeAccount,
   saveRole,
   setAccount,
@@ -61,7 +62,7 @@ import {
   upsertRelationship,
   verifyAccountPin,
 } from '@selfos/core/people';
-import { loadMasterKey, restoreFromRecoveryPhrase } from '@selfos/core/crypto';
+import { loadMasterKey, restoreFromRecoveryPhrase, storeMasterKey } from '@selfos/core/crypto';
 import type { FileSystem, SecretStore } from '@selfos/core/host';
 import { createNodeFileSystem } from './host/nodeFileSystem';
 import {
@@ -393,6 +394,48 @@ export function registerIpcHandlers(): void {
     const { id } = z.object({ id: z.string().min(1) }).parse(raw);
     await cancelInvite(ctx.fs, id);
   });
+
+  // Member redeem (no device key required yet — that's the point): unwrap the master key from the
+  // invite and store it device-local, remembering who the invite is for (10-multi-device §5.4).
+  ipcMain.handle(
+    IpcChannels.invitesRedeem,
+    async (_event, raw: unknown): Promise<{ ok: boolean; displayName?: string }> => {
+      const { code } = z.object({ code: z.string().min(1) }).parse(raw);
+      const vaultPath = await activeVaultPath();
+      if (!vaultPath) return { ok: false };
+      const fs = createNodeFileSystem(vaultPath);
+      const result = await redeemInvite(fs, code, Date.now());
+      if (!result) return { ok: false };
+      await storeMasterKey(secretStore(), result.masterKey);
+      // Persist the pending join so a crash before completeJoin resumes the "Set your PIN" step on
+      // next boot — never drop into an open picker with a PIN-less account (the master key is now
+      // on this device).
+      await updateDeviceState(userDataDir(), { pendingJoinPersonId: result.personId });
+      const person = await getPerson(fs, result.masterKey, result.personId);
+      return { ok: true, ...(person ? { displayName: person.displayName } : {}) };
+    },
+  );
+
+  // Finish joining: set the freshly-redeemed member's OWN PIN and sign them in. Only the person the
+  // redeem resolved (persisted device-local) can be completed — the renderer can't target another
+  // account, and never the owner.
+  ipcMain.handle(
+    IpcChannels.invitesCompleteJoin,
+    async (_event, raw: unknown): Promise<{ ok: boolean }> => {
+      const { pin } = z.object({ pin: z.string().min(MIN_OWNER_PIN_LENGTH) }).parse(raw);
+      const ctx = await vaultAndKey();
+      const personId = (await readDeviceState(userDataDir())).pendingJoinPersonId ?? null;
+      if (!ctx || !personId) return { ok: false };
+      const account = (await getAccessConfig(ctx.fs, ctx.key)).accounts.find(
+        (candidate) => candidate.personId === personId,
+      );
+      if (!account || account.roleId === OWNER_ROLE_ID) return { ok: false };
+      await setAccount(ctx.fs, ctx.key, { personId, roleId: account.roleId, pin });
+      await setActivePersonId(userDataDir(), personId);
+      await updateDeviceState(userDataDir(), { pendingJoinPersonId: null });
+      return { ok: true };
+    },
+  );
 
   ipcMain.handle(
     IpcChannels.sessionSetActive,

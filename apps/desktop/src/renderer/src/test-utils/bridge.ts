@@ -28,6 +28,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         hasMasterKey: true,
         hasOwner: true,
         activePersonId: 'owner-1',
+        pendingJoinPersonId: null,
       }),
     householdSetup: () => Promise.resolve({ recoveryPhrase: 'TEST-PHRASE', ownerId: 'owner-1' }),
     unlockWithRecoveryPhrase: () => Promise.resolve({ ok: true }),
@@ -68,6 +69,8 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
       Promise.resolve({ code: 'amber-tide-fox-quill-river-stone', expiresAt: '' }),
     invitesList: () => Promise.resolve([]),
     invitesCancel: () => Promise.resolve(),
+    invitesRedeem: () => Promise.resolve({ ok: true, displayName: 'Wife' }),
+    invitesCompleteJoin: () => Promise.resolve({ ok: true }),
     sessionSetActive: (input) =>
       Promise.resolve({
         ok: true,

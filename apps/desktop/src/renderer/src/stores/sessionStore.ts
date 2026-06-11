@@ -19,6 +19,10 @@ interface SessionState {
   setup: (input: { ownerName: string; passphrase: string; pin: string }) => Promise<string>;
   /** Join/recover this device with the recovery phrase; reloads the gate on success. */
   unlock: (phrase: string) => Promise<boolean>;
+  /** Redeem a member invite code; resolves to who it's for (or null if it didn't match). */
+  redeemInvite: (code: string) => Promise<{ ok: boolean; displayName?: string }>;
+  /** Finish joining after a redeem: set the member's own PIN and sign in; reloads the gate. */
+  completeJoin: (pin: string) => Promise<boolean>;
   /** Whether the active person's role grants a capability (super-admin bypasses all). */
   can: (capability: CapabilityKey) => boolean;
   /** Switch the active person (verifying their PIN); reloads on success. */
@@ -53,6 +57,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   unlock: async (phrase) => {
     const result = await window.selfos?.unlockWithRecoveryPhrase({ phrase });
     if (result?.ok) await get().load(); // re-evaluate the gate — this device now holds the key
+    return result?.ok ?? false;
+  },
+  redeemInvite: async (code) => {
+    return (await window.selfos?.invitesRedeem({ code })) ?? { ok: false };
+  },
+  completeJoin: async (pin) => {
+    const result = await window.selfos?.invitesCompleteJoin({ pin });
+    if (result?.ok) await get().load(); // re-evaluate the gate — member is now active with the key
     return result?.ok ?? false;
   },
   can: (capability) => {

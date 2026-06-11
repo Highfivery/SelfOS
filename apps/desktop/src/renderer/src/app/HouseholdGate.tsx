@@ -40,6 +40,9 @@ export function HouseholdGate(): JSX.Element {
   if (!status.vaultInitialized) return <UnlockScreen />;
   // Key + recovery.enc but no owner → interrupted setup; finish it (Setup won't re-key, §6.3).
   if (!status.hasOwner) return <Setup />;
+  // A member redeemed an invite but hasn't set their PIN yet (e.g. a crash mid-join) → resume that
+  // step rather than dropping into an open picker with a PIN-less account (§5.4).
+  if (status.pendingJoinPersonId) return <UnlockScreen resumeJoin />;
   // Fully set up: pick who's here if nobody is active on this device yet.
   return status.activePersonId ? <Shell /> : <LockScreen />;
 }

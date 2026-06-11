@@ -77,6 +77,20 @@ export const GAP_FINDER_SYSTEM = `${SAFETY}\n\nYou suggest the NEXT questionnair
 {"title": string, "type": string, "rationale": short string (why this, now), "questions": [{"type": string, "prompt": string, "required": boolean}] (2-4 sample questions)}.
 Use the same answer types as generation. Return ONLY the JSON array.`;
 
+export const ANALYSIS_SYSTEM = `${SAFETY}
+
+Turn a person's questionnaire answers into a durable coaching Insight. Return ONLY a JSON object:
+{"summary": string (2-4 sentences, what this means for supporting them), "facts": [{"text": string, "shareable": boolean}] (3-6 concise facts; "shareable" = safe to share with the person the fact is about), "confidence": "low" | "medium" | "high", "crisisFlag": boolean}.
+Set "crisisFlag": true ONLY if the answers disclose risk of self-harm, abuse, or acute crisis. Never diagnose. Do not quote the raw answers back verbatim — synthesize.`;
+
+export function buildAnalysisUserMessage(input: {
+  title: string;
+  qa: { prompt: string; answer: string }[];
+}): string {
+  const lines = input.qa.map((x) => `Q: ${x.prompt}\nA: ${x.answer}`).join('\n\n');
+  return `Questionnaire: "${input.title}"\n\nAnswers:\n${lines}\n\nProduce the Insight JSON.`;
+}
+
 export function buildGapFinderUserMessage(context: string): string {
   return context.trim()
     ? `Here is the structured context about this person and their relationships:\n${context.trim()}\n\nSuggest up to 3 questionnaires that would help them learn something useful next.`

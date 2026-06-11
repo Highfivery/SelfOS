@@ -175,6 +175,11 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.questionnairesGenerate, bridge.questionnairesGenerate);
   handle(IpcChannels.questionnairesImproveQuestion, bridge.questionnairesImproveQuestion);
   handle(IpcChannels.gapfinderSuggest, bridge.gapfinderSuggest);
+  handle(IpcChannels.insightsList, bridge.insightsList);
+  handle(IpcChannels.insightsAnalyze, bridge.insightsAnalyze);
+  handle(IpcChannels.insightsApprove, bridge.insightsApprove);
+  handle(IpcChannels.insightsUpdate, bridge.insightsUpdate);
+  handle(IpcChannels.insightsDelete, bridge.insightsDelete);
   handle(IpcChannels.assignmentsCreate, bridge.assignmentsCreate);
   handle(IpcChannels.getSidebarCollapsed, bridge.getSidebarCollapsed);
   handle(IpcChannels.setSidebarCollapsed, bridge.setSidebarCollapsed);

@@ -24,6 +24,8 @@ import {
   SensitivityTierSchema,
   SettingsFileSchema,
   type Assignment,
+  type Insight,
+  type QuestionnaireAnalyzeResult,
   type QuestionnaireGenerateResult,
   type QuestionnaireImproveResult,
   type QuestionnaireSuggestResult,
@@ -89,8 +91,10 @@ import {
   runChatTurn,
   saveConversation,
 } from '@selfos/core/conversations';
+import { deleteInsight, listAllInsights, updateInsight } from '@selfos/core/insights';
 import {
   addCustomType,
+  analyzeAssignment,
   createAssignment,
   deleteQuestionnaire,
   deleteQuestionnaireImage,
@@ -260,6 +264,19 @@ const ImproveSchema = z.object({
   instruction: z.string().min(1),
 });
 const SuggestSchema = z.object({ targetPersonId: z.string().min(1).optional() });
+const AnalyzeSchema = z.object({ assignmentId: z.string().min(1) });
+const InsightFactInputSchema = z.object({
+  id: z.string().min(1),
+  text: z.string(),
+  shareable: z.boolean(),
+});
+const InsightEditSchema = z.object({
+  subjectPersonId: z.string().min(1),
+  id: z.string().min(1),
+  summary: z.string().optional(),
+  facts: z.array(InsightFactInputSchema).optional(),
+});
+const InsightIdSchema = z.object({ subjectPersonId: z.string().min(1), id: z.string().min(1) });
 
 /** Build the renderer-facing `SelfosBridge` from a platform `BridgeHost`. */
 export function createCoreBridge(host: BridgeHost): SelfosBridge {
@@ -283,10 +300,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     return roleAllows(role, capability);
   };
 
-  /** Build the deps for an AI authoring call (gated by `questionnaires.create`); null if not permitted. */
-  const aiDeps = async (): Promise<AiDeps | null> => {
+  /** Build the deps for an AI authoring call, gated by `capability`; null if not permitted. */
+  const aiDeps = async (
+    capability: CapabilityKey = 'questionnaires.create',
+  ): Promise<AiDeps | null> => {
     const ctx = await host.vaultAndKey();
-    if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) return null;
+    if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, capability))) return null;
     const personId = await activePersonId();
     if (!personId) return null;
     return {
@@ -808,6 +827,46 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!deps) return { ok: false, reason: 'DENIED', message: 'Not available.' };
       const { targetPersonId } = SuggestSchema.parse(input);
       return suggestQuestionnaires(deps, targetPersonId !== undefined ? { targetPersonId } : {});
+    },
+
+    // --- Insights / analysis (08-questionnaires §13.4) — gated by `questionnaires.viewResults` ---
+    insightsList: async (): Promise<Insight[]> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.viewResults')))
+        return [];
+      return listAllInsights(ctx.fs, ctx.key);
+    },
+    insightsAnalyze: async (input): Promise<QuestionnaireAnalyzeResult> => {
+      const deps = await aiDeps('questionnaires.viewResults');
+      if (!deps) return { ok: false, reason: 'DENIED', message: 'Not available.' };
+      return analyzeAssignment(deps, AnalyzeSchema.parse(input));
+    },
+    insightsApprove: async (input): Promise<Insight | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.viewResults')))
+        return null;
+      const p = InsightEditSchema.parse(input);
+      return updateInsight(ctx.fs, ctx.key, p.subjectPersonId, p.id, {
+        approved: true,
+        ...(p.summary !== undefined ? { summary: p.summary } : {}),
+        ...(p.facts !== undefined ? { facts: p.facts } : {}),
+      });
+    },
+    insightsUpdate: async (input): Promise<Insight | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.viewResults')))
+        return null;
+      const p = InsightEditSchema.parse(input);
+      return updateInsight(ctx.fs, ctx.key, p.subjectPersonId, p.id, {
+        ...(p.summary !== undefined ? { summary: p.summary } : {}),
+        ...(p.facts !== undefined ? { facts: p.facts } : {}),
+      });
+    },
+    insightsDelete: async (input): Promise<void> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.viewResults'))) return;
+      const { subjectPersonId, id } = InsightIdSchema.parse(input);
+      await deleteInsight(ctx.fs, subjectPersonId, id);
     },
     assignmentsCreate: async (input): Promise<Assignment> => {
       const ctx = await host.vaultAndKey();

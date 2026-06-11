@@ -538,8 +538,10 @@ renderer):
   with the relay slice) / `:list` / `:get` / `:createRelayLink` / `:drain` / `:revoke` / `:delete`.
 - **Answer** — `assignments:saveProgress` / `:submit` / `:decline({ note? })` (in-app); the relay page talks
   to the **Worker** directly (submit / decline / withdraw).
-- **Analysis/insights** — `insights:analyze({assignmentId})` (manual, or auto when `autoAnalyze` is on) /
-  `insights:list` / `:approve({ edits?, shareableFactIds })` / `:update` / `:delete`; `gapfinder:suggest`.
+- **Analysis/insights** — `insights:analyze({assignmentId})` / `insights:list` / `:approve` / `:update` /
+  `:delete`; `gapfinder:suggest`. _(All wired, gated by `questionnaires.viewResults`; analyze is
+  budget-gated + metered as `questionnaire.analyze`. The **`autoAnalyze`** auto-trigger lands with the
+  Inbox/drain in §13.5; the live `Analyze` action lives in §13.5's Results view.)_
 - **Relay admin** — `relay:status` / `relay:connect` / `relay:deploy` / `relay:update` / `relay:teardown`.
 - **Super-admin** — `superadmin:revealRaw({assignmentId})` (break-glass; writes an audit entry, §8.4).
 - **Claude** — generation/analysis/suggest run the `06` path: `checkBudget → call → recordUsage` with
@@ -807,6 +809,17 @@ Confirmed with the user (2026-06-10):
      pipeline (§13.4)._
 4. **Analyze → Insights/metrics → context** — analysis, approve-step, Insight management, prioritization/cap,
    crisis flag.
+   - _**Built 2026-06-11 (engine + Memory surface):** core **`analysisService`** (`analyzeAssignment`: read
+     the assignment snapshot + ResponseSet → Claude → an Insight saved **`approved:false`**, `subjectPersonId`
+     = the **sender**, budget-gated + metered `questionnaire.analyze`; model-based **crisisFlag**;
+     **dedup by `provenance.assignmentId`** so re-analysis overwrites). `insightStore` gains
+     **`listAllInsights`** + **`updateInsight`** (the approve-step). IPC `insights:list/analyze/approve/
+update/delete` gated by **`questionnaires.viewResults`**. A top-level **"Memory"** surface (the
+     window into the slice-1a memory layer): lists every Insight, drafts open in an **inline review**
+     (edit summary, choose shareable facts, Approve/Discard), crisis-flagged Insights **lead with concern +
+     resources** (§8.2) + the always-present crisis footer. **Deferred (no dead code, §12):** the
+     **`autoAnalyze`** setting + the live `Analyze` trigger (→ §13.5, where responses arrive) and
+     **`queryMetrics`** (→ §11, its consumer). The Memory surface is empty until §13.5 produces Insights._
 5. **Send / collect (in-app + household)** — assignments, Inbox, lifecycle, save/resume, Results + per-question
    trends + compatibility, deletion/purge.
 6. **External: relay + delivery + explicit gates** — `apps/relay` Worker + shared renderer page, the Cloudflare
@@ -926,3 +939,24 @@ Confirmed with the user (2026-06-10):
   **fix-first** (all 4 should-fixes applied: DENIED reason; gated+debounced reword; REFUSED-usage test;
   390px AI-surface guard). Gate green (215 desktop + 133 core unit, 34 E2E). **Deferred:** `autoAnalyze` +
   analyze→Insight (§13.4).
+- 2026-06-11 — **Analyze → Insights → Memory built** (§3.7/§4.4/§6/§8.2/§13.4 — the engine + surface):
+  core **`analysisService.analyzeAssignment`** turns a recipient's submitted answers (the ResponseSet +
+  the immutable snapshot) into a durable **Insight** saved **`approved:false`** — `subjectPersonId` = the
+  **sender** (the Insight informs the sender's coaching, §1); budget-gated + metered `questionnaire.analyze`
+  (mirrors generation); a **model-based crisisFlag** (no keyword scan, §8.2); **idempotent** (dedup by
+  `provenance.assignmentId` so re-analysis overwrites, not duplicates). `insightStore` gains
+  **`listAllInsights`** (reads `people/` directly to avoid a people↔insights cycle) + **`updateInsight`**
+  (the approve-step + edits). IPC `insights:list/analyze/approve/update/delete`, gated by
+  **`questionnaires.viewResults`** (analyze via a capability-parametrized `aiDeps`; denial → `DENIED`). A
+  top-level **Memory** nav + surface: lists every Insight, drafts open in an **inline review** (edit the
+  summary, toggle which facts are **shareable**, Approve/Discard), approved ones show view + Edit/Delete,
+  crisis-flagged **lead with concern + 988/emergency**, + the always-present crisis footer. **Privacy
+  (reviewer-verified):** the surface/IPC only ever carry the **derived Insight**, never the raw answers;
+  unapproved Insights don't feed `buildContext` (`summarizeForContext` filters on `approved`+`shareable`).
+  Code-reviewed **fix-first** (3 should-fixes applied: the Approve card now collapses to the read view;
+  approve/update/remove failures surface a calm inline error; analysis dedups by assignment). Core unit
+  (analysis + approve-step + dedup) + RTL (Memory empty/approve/crisis) + a coreBridge gating/NO_RESPONSE
+  test + an E2E (Memory empty-state + crisis affordance; the 390px sweep now walks Memory). Gate green
+  (219 desktop + 140 core unit, 35 E2E). **Deferred (no dead code, §12):** the **`autoAnalyze`** setting +
+  the live `Analyze` trigger → **§13.5** (where answers arrive); **`queryMetrics`** → **§11**. The Memory
+  surface is empty until §13.5 collects responses to analyze.

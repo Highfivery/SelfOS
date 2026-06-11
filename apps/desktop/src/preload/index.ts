@@ -85,6 +85,11 @@ const bridge: SelfosBridge = {
   questionnairesImproveQuestion: (input) =>
     ipcRenderer.invoke(IpcChannels.questionnairesImproveQuestion, input),
   gapfinderSuggest: (input) => ipcRenderer.invoke(IpcChannels.gapfinderSuggest, input),
+  insightsList: () => ipcRenderer.invoke(IpcChannels.insightsList),
+  insightsAnalyze: (input) => ipcRenderer.invoke(IpcChannels.insightsAnalyze, input),
+  insightsApprove: (input) => ipcRenderer.invoke(IpcChannels.insightsApprove, input),
+  insightsUpdate: (input) => ipcRenderer.invoke(IpcChannels.insightsUpdate, input),
+  insightsDelete: (input) => ipcRenderer.invoke(IpcChannels.insightsDelete, input),
   assignmentsCreate: (input) => ipcRenderer.invoke(IpcChannels.assignmentsCreate, input),
   getSidebarCollapsed: () => ipcRenderer.invoke(IpcChannels.getSidebarCollapsed),
   setSidebarCollapsed: (collapsed) =>

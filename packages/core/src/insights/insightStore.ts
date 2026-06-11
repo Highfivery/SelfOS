@@ -69,6 +69,39 @@ export async function deleteInsight(
 }
 
 /**
+ * Every insight across all subject people, newest first — the "what the coach knows" / Memory surface
+ * (08-questionnaires §3.7/§13.4). Reads the `people/` dir directly (not `peopleService`) to avoid a
+ * people↔insights import cycle; a stray non-folder entry resolves to no insights (the host maps
+ * `ENOTDIR` → []).
+ */
+export async function listAllInsights(fs: FileSystem, key: Uint8Array): Promise<Insight[]> {
+  const out: Insight[] = [];
+  for (const personId of await fs.list('people')) {
+    out.push(...(await listInsightsForPerson(fs, key, personId)));
+  }
+  out.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0));
+  return out;
+}
+
+/**
+ * Apply edits to an insight and re-save (the approve-step + later edits, §3.7). Loads by subject +
+ * id, merges the patch, bumps `updatedAt`. Returns the updated insight, or null if it's gone.
+ */
+export async function updateInsight(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  insightId: string,
+  patch: Partial<Pick<Insight, 'summary' | 'facts' | 'approved' | 'confidence' | 'metrics'>>,
+): Promise<Insight | null> {
+  const existing = await getInsight(fs, key, personId, insightId);
+  if (!existing) return null;
+  const updated: Insight = { ...existing, ...patch, updatedAt: new Date().toISOString() };
+  await saveInsight(fs, key, updated);
+  return updated;
+}
+
+/**
  * Caps for how much Insight content feeds a single coaching context (08 §4.4). Prioritization is
  * recency-first (§11.7 leaves the exact weighting open to tune); these keep the system prompt bounded.
  */

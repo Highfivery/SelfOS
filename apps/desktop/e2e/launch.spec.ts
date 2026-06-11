@@ -943,6 +943,31 @@ test('questionnaires: the AI draft panel + Suggested surface fit at phone width'
   }
 });
 
+test('memory: the Insights surface shows its empty state + crisis affordance', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Memory' }).click();
+    await expect(w.getByRole('heading', { name: 'Memory' })).toBeVisible();
+    // No analyzed answers yet (the live producer wires up with the Inbox, §13.5).
+    await expect(w.getByText(/nothing here yet/i)).toBeVisible();
+    // The not-medical line + crisis affordance are always present on this surface.
+    await expect(w.getByText(/not medical care/i)).toBeVisible();
+    await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible();
+
+    const overflow = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      return main ? main.scrollWidth - main.clientWidth : 0;
+    });
+    expect(overflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('roles: the owner edits the role × capability matrix', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);
@@ -1494,6 +1519,7 @@ test('responsive: at a phone width the nav is a drawer and no screen overflows h
     for (const name of [
       'Sessions',
       'Questionnaires',
+      'Memory',
       'People',
       'Roles',
       'Usage',

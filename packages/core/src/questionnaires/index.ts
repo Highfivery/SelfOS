@@ -7,3 +7,4 @@ export * from './imageService';
 export * from './contextProviders';
 export * from './generationService';
 export * from './gapFinderService';
+export * from './analysisService';

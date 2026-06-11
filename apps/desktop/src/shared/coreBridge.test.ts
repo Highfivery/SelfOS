@@ -247,6 +247,44 @@ describe('createCoreBridge', () => {
     expect(await bridge.gapfinderSuggest({})).toMatchObject({ ok: false, reason: 'DENIED' });
   });
 
+  it('gates insights/analysis on viewResults; analyze with no answers returns NO_RESPONSE', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const recipient = await bridge.peopleSave({
+      displayName: 'Partner',
+      isSubject: true,
+      tags: [],
+    });
+    const q = await bridge.questionnairesSave({
+      title: 'Q',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'Hi?', required: true }],
+    });
+    const a = await bridge.assignmentsCreate({
+      questionnaireId: q.id,
+      recipientPersonId: recipient.id,
+    });
+
+    // Owner has viewResults; with no submitted answers yet, analyze reports NO_RESPONSE (the live
+    // trigger needs §13.5's answer flow), and the Memory list is empty.
+    expect(await bridge.insightsAnalyze({ assignmentId: a.id })).toMatchObject({
+      ok: false,
+      reason: 'NO_RESPONSE',
+    });
+    expect(await bridge.insightsList()).toEqual([]);
+
+    // A Guest (no viewResults) is denied.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    expect((await bridge.sessionSetActive({ personId: guest.id })).ok).toBe(true);
+    expect(await bridge.insightsList()).toEqual([]);
+    expect(await bridge.insightsAnalyze({ assignmentId: a.id })).toMatchObject({
+      ok: false,
+      reason: 'DENIED',
+    });
+  });
+
   it('persists custom types for the picker, gated by questionnaires.create', async () => {
     const { bridge } = await freshOwner();
     expect(await bridge.questionnairesListTypes()).toEqual([]);

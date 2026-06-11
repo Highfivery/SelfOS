@@ -239,6 +239,30 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Build (Questionnaires **slice 4 — analyze → Insights → Memory** [§13.4 engine + surface],
+  [08-questionnaires](docs/specs/08-questionnaires.md) §3.7/§4.4/§6/§8.2/§13.4). **Surfaced a real
+  dependency + asked:** §13.4 analyzes a recipient's submitted answers, but the Inbox that collects them is
+  §13.5 — so there's no live response source yet. Decisions: **build §13.4 now** (engine + surface,
+  seeded-tested, live trigger with §13.5); a **top-level "Memory" nav**; an **inline review panel** for the
+  approve-step; crisis flags **lead with concern + resources**. Built: core **`analysisService`**
+  (`analyzeAssignment` → an Insight saved **`approved:false`**, `subjectPersonId` = the **sender**;
+  budget-gated + metered `questionnaire.analyze`; model **crisisFlag**; **idempotent** — dedup by
+  `provenance.assignmentId`); `insightStore` **`listAllInsights`** (+ `updateInsight` for approve);
+  IPC `insights:list/analyze/approve/update/delete` gated by **`questionnaires.viewResults`** (analyze via
+  a capability-parametrized `aiDeps`). The **Memory** surface lists every Insight, drafts open in an inline
+  review (edit summary, choose **shareable** facts, Approve/Discard), crisis-flagged lead with 988 +
+  resources + the crisis footer. **Privacy (reviewer-verified airtight):** the surface/IPC only carry the
+  **derived Insight**, never the raw answers; unapproved Insights don't feed `buildContext`. Code-reviewer
+  **fix-first** (3 applied): the Approve card now **collapses** to the read view (a `useEffect` syncs
+  `editing` to `approved` — `useState` doesn't re-run on `key` reuse); approve/update/remove failures
+  surface a **calm inline error** (no swallow); analysis **dedups**. Gate green: typecheck/lint/format,
+  **219 desktop** + **140 core** unit, **35 E2E** (Memory empty-state + the 390px sweep now walks Memory).
+  Visual QA of the empty Memory surface (the insight-card/approve form is RTL-covered — no live insight in
+  the preview, since none exist until §13.5). **DELIBERATELY DEFERRED (no dead code, §12):** the
+  **`autoAnalyze`** setting + the live `Analyze` trigger → **§13.5** (where responses arrive), and
+  **`queryMetrics`** → **§11** (its consumer) — flagged rather than ship a dead toggle. **NEXT: §13.5
+  send/collect + Inbox** (reuses `QuestionnaireForm`; produces the responses that finally light up
+  Analyze/Memory), then **§13.6 relay.** Synced `08` §6/§13.4 + changelog.
 - 2026-06-11 — Build (Questionnaires **slice 3 — AI generate + gap-finder** [the FULL §13.3],
   [08-questionnaires](docs/specs/08-questionnaires.md) §3.1/§3.7/§5.1/§6/§8.1/§13.3). Asked first (4 Qs):
   scope = **everything** (registry + generate + per-question assists + the gap-finder surface); generate

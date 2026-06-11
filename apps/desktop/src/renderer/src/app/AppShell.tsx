@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import {
   BarChart3,
+  Brain,
   ClipboardList,
   House,
   Menu,
@@ -42,6 +43,7 @@ export function AppShell(): JSX.Element {
   const canManageRoles = useSessionStore((s) => s.can('roles.manage'));
   const hasSessions = useSessionStore((s) => s.can('sessions.own'));
   const canCreateQuestionnaires = useSessionStore((s) => s.can('questionnaires.create'));
+  const canViewInsights = useSessionStore((s) => s.can('questionnaires.viewResults'));
   const locked = useSessionStore((s) => s.locked);
   const unlockPromptOpen = useSessionStore((s) => s.unlockPromptOpen);
   const activePersonId = useSessionStore((s) => s.activePerson?.id ?? null);
@@ -157,6 +159,18 @@ export function AppShell(): JSX.Element {
             >
               <ClipboardList size={18} aria-hidden="true" />
               <span className={styles.label}>Questionnaires</span>
+            </NavLink>
+          ) : null}
+          {canViewInsights ? (
+            <NavLink
+              to="/memory"
+              className={navClass}
+              aria-label="Memory"
+              title={tip('Memory')}
+              onClick={closeDrawer}
+            >
+              <Brain size={18} aria-hidden="true" />
+              <span className={styles.label}>Memory</span>
             </NavLink>
           ) : null}
           {canManagePeople ? (

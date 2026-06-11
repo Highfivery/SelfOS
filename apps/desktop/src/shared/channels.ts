@@ -8,10 +8,12 @@ import type {
   ChatTurnResult,
   Conversation,
   InviteSummary,
+  Insight,
   Person,
   PersonInput,
   PrivacyMode,
   Questionnaire,
+  QuestionnaireAnalyzeResult,
   QuestionnaireGenerateResult,
   QuestionnaireImproveResult,
   QuestionnaireInput,
@@ -92,6 +94,11 @@ export const IpcChannels = {
   questionnairesGenerate: 'questionnaires:generate',
   questionnairesImproveQuestion: 'questionnaires:improveQuestion',
   gapfinderSuggest: 'gapfinder:suggest',
+  insightsList: 'insights:list',
+  insightsAnalyze: 'insights:analyze',
+  insightsApprove: 'insights:approve',
+  insightsUpdate: 'insights:update',
+  insightsDelete: 'insights:delete',
   assignmentsCreate: 'assignments:create',
   getSidebarCollapsed: 'ui:getSidebarCollapsed',
   setSidebarCollapsed: 'ui:setSidebarCollapsed',
@@ -298,6 +305,26 @@ export interface SelfosBridge {
   }): Promise<QuestionnaireImproveResult>;
   /** Gap-finder: propose the next questionnaires from structured context. Budget-gated + metered. */
   gapfinderSuggest(input: { targetPersonId?: string }): Promise<QuestionnaireSuggestResult>;
+  /** Every Insight across all subject people (the "what the coach knows" / Memory surface). */
+  insightsList(): Promise<Insight[]>;
+  /** Analyze a submitted assignment's answers into an UNapproved Insight. Budget-gated + metered. */
+  insightsAnalyze(input: { assignmentId: string }): Promise<QuestionnaireAnalyzeResult>;
+  /** Approve an Insight (apply edits + chosen shareable facts) so it enters the coach's context. */
+  insightsApprove(input: {
+    subjectPersonId: string;
+    id: string;
+    summary?: string;
+    facts?: { id: string; text: string; shareable: boolean }[];
+  }): Promise<Insight | null>;
+  /** Edit an existing Insight (summary / facts). */
+  insightsUpdate(input: {
+    subjectPersonId: string;
+    id: string;
+    summary?: string;
+    facts?: { id: string; text: string; shareable: boolean }[];
+  }): Promise<Insight | null>;
+  /** Delete an Insight. */
+  insightsDelete(input: { subjectPersonId: string; id: string }): Promise<void>;
   /** Send a questionnaire to a household person (in-app), freezing an immutable snapshot at send. */
   assignmentsCreate(input: {
     questionnaireId: string;

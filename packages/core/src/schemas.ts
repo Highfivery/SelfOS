@@ -424,6 +424,13 @@ export interface QuestionnaireSuggestResult {
   reason?: AiFailureReason;
   message?: string;
 }
+export interface QuestionnaireAnalyzeResult {
+  ok: boolean;
+  insight?: Insight;
+  usage?: UsageEvent;
+  reason?: AiFailureReason | 'NO_RESPONSE';
+  message?: string;
+}
 
 export const ChannelSchema = z.enum(['inApp', 'relay']);
 export type Channel = z.infer<typeof ChannelSchema>;

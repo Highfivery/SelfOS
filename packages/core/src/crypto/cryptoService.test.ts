@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { toBase64 } from '../encoding';
 import {
   decrypt,
+  decryptBytes,
   deriveKeyFromPhrase,
   encrypt,
+  encryptBytes,
   generateMasterKey,
   generateRecoveryPhrase,
   randomBytes,
@@ -34,6 +36,23 @@ describe('encrypt/decrypt', () => {
     await expect(
       decrypt({ ...env, data: toBase64(new TextEncoder().encode('tampered')) }, key),
     ).rejects.toThrow();
+  });
+
+  it('round-trips raw bytes (binary blobs like question images)', async () => {
+    const bytes = randomBytes(2048);
+    const env = await encryptBytes(bytes, key);
+    const out = await decryptBytes(env, key);
+    expect(Array.from(out)).toEqual(Array.from(bytes));
+  });
+
+  it('byte and text paths share one envelope (string encrypt decodes via decryptBytes)', async () => {
+    const env = await encrypt('hello 🌿', key);
+    expect(new TextDecoder().decode(await decryptBytes(env, key))).toBe('hello 🌿');
+  });
+
+  it('rejects tampered binary ciphertext', async () => {
+    const env = await encryptBytes(randomBytes(64), key);
+    await expect(decryptBytes({ ...env, tag: toBase64(randomBytes(16)) }, key)).rejects.toThrow();
   });
 });
 

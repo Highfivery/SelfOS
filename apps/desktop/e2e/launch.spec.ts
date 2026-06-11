@@ -812,6 +812,58 @@ test('questionnaires: preview / test-on-self renders the form, gates Finish, sav
   }
 });
 
+test('questionnaires: attach an encrypted image, require alt, round-trip + show in preview', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await w.getByRole('button', { name: 'New' }).click();
+    await w.getByLabel('Title').fill('Photo prompt');
+    await w.getByLabel('Question 1', { exact: true }).fill('What stands out?');
+
+    // Attach a real (tiny) PNG through the hidden file input.
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    await w.locator('input[type="file"]').setInputFiles({
+      name: 'shot.png',
+      mimeType: 'image/png',
+      buffer: png,
+    });
+    await expect(w.getByLabel('Image description (alt text)')).toBeVisible();
+
+    // Accessibility: Check flags the missing alt text, then clears once it's provided.
+    await w.getByRole('button', { name: 'Check' }).click();
+    await expect(w.getByText(/needs a description \(alt text\)/i)).toBeVisible();
+    await w.getByLabel('Image description (alt text)').fill('A test image');
+    await w.getByRole('button', { name: 'Check' }).click();
+    await expect(w.getByText(/ready to send/i)).toBeVisible();
+
+    await w.getByRole('button', { name: 'Create' }).click();
+
+    // Reopen: the alt text round-tripped through the encrypted vault and the image still loads.
+    await w.getByRole('button', { name: /Photo prompt/ }).click();
+    await expect(w.getByLabel('Image description (alt text)')).toHaveValue('A test image');
+    await expect(w.getByRole('img', { name: 'A test image' })).toBeVisible();
+
+    // It also renders in the recipient-facing preview.
+    await w.getByRole('button', { name: 'Preview' }).click();
+    await expect(w.getByRole('img', { name: 'A test image' })).toBeVisible();
+
+    const overflow = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      return main ? main.scrollWidth - main.clientWidth : 0;
+    });
+    expect(overflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('roles: the owner edits the role × capability matrix', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { ImagePlus, Plus, Trash2 } from 'lucide-react';
+import { ALLOWED_IMAGE_MIME, MAX_IMAGE_BYTES } from '@selfos/core/questionnaires';
 import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
 import {
   Banner,
@@ -23,10 +24,25 @@ import type {
   QuestionnaireInput,
   SensitivityTier,
 } from '@shared/schemas';
+import { QuestionImage } from './QuestionImage';
 import { QuestionnairePreview } from './QuestionnairePreview';
 import styles from './Questionnaires.module.css';
 
 type BuilderMode = 'edit' | 'preview';
+
+/** Read a picked image File into base64 (no data-URL prefix) for the store IPC. */
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error ?? new Error('Could not read the file.'));
+    reader.onload = () => {
+      const base64 = String(reader.result).split(',')[1];
+      if (base64) resolve(base64);
+      else reject(new Error('Could not read the file.'));
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 /** A small starter taxonomy (custom types are added by the user and persist in the vault). */
 const QUESTIONNAIRE_TYPES: { value: string; label: string }[] = [
@@ -102,6 +118,7 @@ interface QDraft {
   minLabel: string;
   maxLabel: string;
   branch: { whenQuestionId: string; equals: string } | null;
+  media: { imagePath: string; alt: string; mime: string } | null;
 }
 
 const genId = (): string => `q-${Math.random().toString(36).slice(2, 10)}`;
@@ -131,6 +148,7 @@ function blankDraft(): QDraft {
     minLabel: '',
     maxLabel: '',
     branch: null,
+    media: null,
   };
 }
 
@@ -154,6 +172,7 @@ function fromQuestion(q: Question): QDraft {
     branch: q.branch
       ? { whenQuestionId: q.branch.whenQuestionId, equals: String(q.branch.equals) }
       : null,
+    media: q.media ? { ...q.media } : null,
   };
 }
 
@@ -194,6 +213,9 @@ function toQuestion(d: QDraft, drafts: QDraft[]): Question {
     prompt: d.prompt.trim(),
     required: d.required,
     ...(d.help.trim() ? { help: d.help.trim() } : {}),
+    ...(d.media
+      ? { media: { imagePath: d.media.imagePath, alt: d.media.alt.trim(), mime: d.media.mime } }
+      : {}),
     ...(OPTION_TYPES.includes(d.type)
       ? { options: d.options.map((o) => o.text.trim()).filter(Boolean) }
       : {}),
@@ -232,6 +254,9 @@ export function QuestionnaireBuilder({
   const validate = useQuestionnaireStore((s) => s.validate);
   const customTypes = useQuestionnaireStore((s) => s.customTypes);
   const addType = useQuestionnaireStore((s) => s.addType);
+  const storeImage = useQuestionnaireStore((s) => s.storeImage);
+  const getImage = useQuestionnaireStore((s) => s.getImage);
+  const [imageErrors, setImageErrors] = useState<Record<string, string>>({});
 
   const [title, setTitle] = useState(questionnaire?.title ?? '');
   const [type, setType] = useState(questionnaire?.type ?? 'role-feedback');
@@ -286,6 +311,33 @@ export function QuestionnaireBuilder({
     setNewType('');
   };
 
+  const onPickImage = async (id: string, file: File | undefined): Promise<void> => {
+    if (!file) return;
+    if (!(ALLOWED_IMAGE_MIME as readonly string[]).includes(file.type)) {
+      setImageErrors((e) => ({ ...e, [id]: 'Use a PNG, JPEG, WebP, or GIF image.' }));
+      return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      setImageErrors((e) => ({ ...e, [id]: 'Image must be under 5 MB.' }));
+      return;
+    }
+    try {
+      const stored = await storeImage(await fileToBase64(file), file.type);
+      if (!stored) return;
+      setImageErrors((e) => ({ ...e, [id]: '' }));
+      patch(id, { media: { imagePath: stored.imagePath, alt: '', mime: stored.mime } });
+    } catch {
+      setImageErrors((e) => ({ ...e, [id]: 'Could not attach that image. Try again.' }));
+    }
+  };
+
+  // Only clear the draft reference — never delete the vault file here, so an unsaved "remove" is
+  // discarded cleanly (no dangling reference) and the now-unreferenced image is reaped by a later GC.
+  const onRemoveImage = (d: QDraft): void => {
+    setImageErrors((e) => ({ ...e, [d.id]: '' }));
+    patch(d.id, { media: null });
+  };
+
   const input = (): QuestionnaireInput => ({
     ...(questionnaire ? { id: questionnaire.id } : {}),
     title: title.trim(),
@@ -317,7 +369,11 @@ export function QuestionnaireBuilder({
           (!Number.isFinite(d.min) || !Number.isFinite(d.max) || d.min >= d.max),
       )
       .map((d) => `"${d.prompt.trim()}" needs Min below Max.`);
-    setProblems([...rangeProblems, ...(await validate(input()))]);
+    // Accessibility: an attached image must carry alt text (the relay page meets the same WCAG bar).
+    const altProblems = drafts
+      .filter((d) => d.media && d.media.alt.trim() === '')
+      .map((d) => `The image on "${d.prompt.trim()}" needs a description (alt text).`);
+    setProblems([...rangeProblems, ...altProblems, ...(await validate(input()))]);
   };
 
   const onRemove = async (): Promise<void> => {
@@ -526,6 +582,52 @@ export function QuestionnaireBuilder({
                       />
                     )}
                   </Field>
+
+                  <div className={styles.imageEditor}>
+                    {d.media ? (
+                      <>
+                        <QuestionImage media={d.media} loadImage={getImage} />
+                        <Field label="Image description (alt text)">
+                          {(props) => (
+                            <TextInput
+                              {...props}
+                              value={d.media?.alt ?? ''}
+                              placeholder="Describe the image for screen readers"
+                              onChange={(event) =>
+                                patch(d.id, {
+                                  media: d.media ? { ...d.media, alt: event.target.value } : null,
+                                })
+                              }
+                            />
+                          )}
+                        </Field>
+                        <Button variant="secondary" onClick={() => onRemoveImage(d)}>
+                          <Trash2 size={14} aria-hidden="true" />
+                          Remove image
+                        </Button>
+                      </>
+                    ) : (
+                      <label className={styles.addImage}>
+                        <ImagePlus size={14} aria-hidden="true" />
+                        Add image
+                        <input
+                          type="file"
+                          className={styles.hiddenFile}
+                          accept={ALLOWED_IMAGE_MIME.join(',')}
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            event.target.value = ''; // allow re-picking the same file
+                            void onPickImage(d.id, file);
+                          }}
+                        />
+                      </label>
+                    )}
+                    {imageErrors[d.id] ? (
+                      <p className={styles.typeError} role="alert">
+                        {imageErrors[d.id]}
+                      </p>
+                    ) : null}
+                  </div>
 
                   <div className={styles.typeRow}>
                     <Field label="Answer type">

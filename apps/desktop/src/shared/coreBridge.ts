@@ -88,12 +88,18 @@ import {
   addCustomType,
   createAssignment,
   deleteQuestionnaire,
+  deleteQuestionnaireImage,
   getQuestionnaire,
+  getQuestionnaireImage,
+  isAllowedImageMime,
   listCustomTypes,
   listQuestionnaires,
+  MAX_IMAGE_BYTES,
   saveQuestionnaire,
+  storeQuestionnaireImage,
   validateQuestionnaire,
 } from '@selfos/core/questionnaires';
+import { fromBase64, toBase64 } from '@selfos/core/encoding';
 
 /**
  * The platform-agnostic SelfOS bridge factory (07-mobile-platform §5.3, slice iii-b1). The renderer
@@ -228,6 +234,7 @@ const AssignmentsCreateSchema = z.object({
   senderVisibleToRecipient: z.boolean().optional(),
   expiresAt: z.string().datetime().optional(),
 });
+const StoreImageSchema = z.object({ base64: z.string().min(1), mime: z.string().min(1) });
 
 /** Build the renderer-facing `SelfosBridge` from a platform `BridgeHost`. */
 export function createCoreBridge(host: BridgeHost): SelfosBridge {
@@ -706,6 +713,30 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         throw new Error('Not permitted');
       }
       return addCustomType(ctx.fs, z.string().parse(name));
+    },
+    questionnairesStoreImage: async (input): Promise<{ imagePath: string; mime: string }> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) {
+        throw new Error('Not permitted');
+      }
+      const { base64, mime } = StoreImageSchema.parse(input);
+      if (!isAllowedImageMime(mime)) throw new Error('Unsupported image type');
+      const bytes = fromBase64(base64);
+      // Re-validate the size in main (the renderer's check isn't the trust boundary).
+      if (bytes.length === 0 || bytes.length > MAX_IMAGE_BYTES) throw new Error('Image too large');
+      const imagePath = await storeQuestionnaireImage(ctx.fs, ctx.key, bytes);
+      return { imagePath, mime };
+    },
+    questionnairesGetImage: async (imagePath): Promise<string | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) return null;
+      const bytes = await getQuestionnaireImage(ctx.fs, ctx.key, z.string().parse(imagePath));
+      return bytes ? toBase64(bytes) : null;
+    },
+    questionnairesDeleteImage: async (imagePath): Promise<void> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) return;
+      await deleteQuestionnaireImage(ctx.fs, z.string().parse(imagePath));
     },
     assignmentsCreate: async (input): Promise<Assignment> => {
       const ctx = await host.vaultAndKey();

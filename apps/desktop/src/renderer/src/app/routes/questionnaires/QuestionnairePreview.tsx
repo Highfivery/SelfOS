@@ -3,6 +3,7 @@ import { unansweredRequired } from '@selfos/core/questionnaires';
 import type { AnswerMap } from '@selfos/core/questionnaires';
 import type { Question } from '@shared/schemas';
 import { Banner, Button, Stack } from '../../../design-system/components';
+import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
 import { QuestionnaireForm } from './QuestionnaireForm';
 import styles from './Questionnaires.module.css';
 
@@ -13,6 +14,7 @@ import styles from './Questionnaires.module.css';
  * answered, then confirms (ephemerally) that nothing was kept.
  */
 export function QuestionnairePreview({ questions }: { questions: Question[] }): JSX.Element {
+  const getImage = useQuestionnaireStore((s) => s.getImage);
   const [answers, setAnswers] = useState<AnswerMap>({});
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
 
@@ -40,6 +42,7 @@ export function QuestionnairePreview({ questions }: { questions: Question[] }): 
       <QuestionnaireForm
         questions={questions}
         answers={answers}
+        loadImage={getImage}
         onChange={(id, value) => {
           setResult(null);
           setAnswers((prev) => ({ ...prev, [id]: value }));

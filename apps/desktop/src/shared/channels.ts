@@ -81,6 +81,9 @@ export const IpcChannels = {
   questionnairesValidate: 'questionnaires:validate',
   questionnairesListTypes: 'questionnaires:listTypes',
   questionnairesAddType: 'questionnaires:addType',
+  questionnairesStoreImage: 'questionnaires:storeImage',
+  questionnairesGetImage: 'questionnaires:getImage',
+  questionnairesDeleteImage: 'questionnaires:deleteImage',
   assignmentsCreate: 'assignments:create',
   getSidebarCollapsed: 'ui:getSidebarCollapsed',
   setSidebarCollapsed: 'ui:setSidebarCollapsed',
@@ -259,6 +262,15 @@ export interface SelfosBridge {
   questionnairesListTypes(): Promise<string[]>;
   /** Add a custom type (trimmed, de-duped) and return the updated list. Requires `questionnaires.create`. */
   questionnairesAddType(name: string): Promise<string[]>;
+  /** Encrypt + store an author-attached question image (base64 in); returns its vault path + mime. */
+  questionnairesStoreImage(input: { base64: string; mime: string }): Promise<{
+    imagePath: string;
+    mime: string;
+  }>;
+  /** Read + decrypt a stored question image as base64; null if absent/out-of-bounds. */
+  questionnairesGetImage(imagePath: string): Promise<string | null>;
+  /** Delete a stored question image. */
+  questionnairesDeleteImage(imagePath: string): Promise<void>;
   /** Send a questionnaire to a household person (in-app), freezing an immutable snapshot at send. */
   assignmentsCreate(input: {
     questionnaireId: string;

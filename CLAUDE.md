@@ -239,6 +239,30 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Build (Questionnaires **slice 2 — question images** [§13.2 last leaf; **§13.2 now
+  complete**], [08-questionnaires](docs/specs/08-questionnaires.md) §4.1/§4.2/§5.1/§6/§8.6/§13.2). Asked
+  first (3 Qs): storage = **shared media dir** `questionnaires/media/<id>.enc`; picker = **in-renderer
+  `<input type=file>`** (base64 over IPC — portable to web/iOS, no native dialog); limits = **~5 MB,
+  PNG/JPEG/WebP/GIF**. Decided (not asked): **alt text required** (a11y), one image/question, image renders
+  under prompt/help in builder + form, `media` gains **`mime`** (additive, no migration), relay ZK
+  re-encryption deferred to §13.6. Built: core **`imageService`** (encrypted CRUD in the shared dir) over
+  **new byte-level `encryptBytes`/`decryptBytes`** — the string `encrypt`/`decrypt` now **wrap** them so the
+  on-disk envelope is byte-identical (vaults stay readable; `cryptoCompat` fixture green). IPC
+  `questionnaires:storeImage`/`:getImage`/`:deleteImage` gated by `questionnaires.create`, **mime + ≤5 MB
+  re-validated in main** (the renderer's check isn't the trust boundary), and an **`isMediaPath` guard**
+  confines reads/deletes to the media dir (a malicious renderer can't `getImage('config/recovery.enc')`).
+  Builder: thumbnail + required-alt field; the shared `QuestionnaireForm` takes a **`loadImage`** prop (relay
+  will supply its own decrypt). Code-reviewer **fix-first** (applied both): the attach flow no longer
+  **swallows errors** (surfaces a message), and **remove no longer eagerly deletes the vault file** — it only
+  clears the draft, so an unsaved "remove" discards cleanly with no dangling reference, and the orphan is
+  reaped by a later GC. Live web-preview QA of the full encrypt→IndexedDB→decrypt→display round-trip at
+  desktop + 390px. Gate green: typecheck/lint/format, **211 desktop** + **123 core** unit, **32 E2E** (new
+  attach→alt→round-trip→preview). **Lesson: a caller-supplied vault path from the renderer is untrusted —
+  any read/delete-by-path IPC must confine the path (prefix + suffix + no `..`) in MAIN, never the
+  renderer.** **Deferred:** orphan-image GC + purge-on-questionnaire-delete (§3.9); image-into-send-snapshot
+  - relay ZK (§13.5/§13.6); `getImage` recipient/Inbox gating (`create`-only today). Synced `08`
+    §4.1/§4.2/§5.1/§6/§13.2 + changelog. **§13.2 builder follow-ups are DONE; next is §13.3 (AI generate +
+    context-provider registry) or §13.4/§13.5.**
 - 2026-06-11 — Build (Questionnaires **slice 2 — preview / test-on-self** [§13.2], the **shared answering
   renderer**, [08-questionnaires](docs/specs/08-questionnaires.md) §3.1/§5.1/§5.3/§8.2/§13.2). Asked first
   (4 Qs): presentation = **in-pane Edit ⇄ Preview toggle** (not a modal — the app is modal-free; avoids a

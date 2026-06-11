@@ -251,6 +251,7 @@ vault/
     questionnaires.json            # plain: default message templates, custom types, non-secret prefs
   questionnaires/
     defs/<questionnaire-id>.enc    # a created Questionnaire (versioned; re-sendable)
+    media/<image-id>.enc           # encrypted author-attached question image (shared dir; isMediaPath-guarded)
     sends/<assignment-id>/
       questionnaire.enc            # immutable snapshot of the sent Questionnaire
       assignment.enc               # Assignment (status, channel, privacy, recipient, keys)
@@ -300,7 +301,7 @@ interface Question {
   prompt: string;
   help?: string;
   required: boolean;
-  media?: { imagePath: string; alt: string }; // author-attached image (encrypted; ZK on relay)
+  media?: { imagePath: string; alt: string; mime: string }; // author-attached image (encrypted; ZK on relay)
   options?: string[]; // choice/ranking/thisOrThat/allocation buckets
   scale?: { min: number; max: number; minLabel?: string; maxLabel?: string; step?: number };
   matrix?: { rows: string[]; min: number; max: number; minLabel?: string; maxLabel?: string };
@@ -475,6 +476,9 @@ interface RawAccessAuditEntry {
 - **answering** — pure, DOM-free answering logic shared by every host that renders a questionnaire to be
   answered (preview/test-on-self now; Inbox + relay later): `isQuestionVisible`/`visibleQuestions` (live
   branching), `isAnswered`/`unansweredRequired` (required gating), `allocationTotal`.
+- **imageService** — encrypted CRUD over author-attached question images in the shared media dir
+  (`storeQuestionnaireImage`/`getQuestionnaireImage`/`deleteQuestionnaireImage`; `isMediaPath` guard;
+  `ALLOWED_IMAGE_MIME`/`MAX_IMAGE_BYTES`), over the byte-level `encryptBytes`/`decryptBytes` crypto.
 - **contextProviderRegistry** — `registerContextProvider({ id, gather(personId|relId) })`; generation +
   the gap-finder pull from all registered providers (profiles, relationships, prior answers, Insights; `09`
   registers a session-insight provider; future features register their own). **This is the extensibility
@@ -526,8 +530,10 @@ renderer):
 
 - **Authoring** — `questionnaires:list` / `:get` / `:save` / `:delete` / `:validate` (→ `problems[]`) /
   `:generate({type, targetId, brief?, useData})` (→ schema-validated draft) / `:improveQuestion` /
-  `:listTypes` / `:addType`. _(list/get/save/delete/validate + listTypes/addType are wired;
-  generate/improve land with AI generation.)_
+  `:listTypes` / `:addType` / `:storeImage({base64, mime})` (→ `{imagePath, mime}`) / `:getImage(path)` /
+  `:deleteImage(path)`. _(list/get/save/delete/validate + listTypes/addType + the image trio are wired;
+  generate/improve land with AI generation.)_ Image ops are gated by `questionnaires.create`, mime + size
+  re-validated in main, and reads/deletes are confined to the media dir (`isMediaPath`).
 - **Send/collect** — `assignments:create` (the in-app send for now — wired; relay-link material attaches
   with the relay slice) / `:list` / `:get` / `:createRelayLink` / `:drain` / `:revoke` / `:delete`.
 - **Answer** — `assignments:saveProgress` / `:submit` / `:decline({ note? })` (in-app); the relay page talks
@@ -772,6 +778,17 @@ Confirmed with the user (2026-06-10):
      it's physically extracted to a shared package when the relay (§13.6) needs it. Core unit + RTL +
      an E2E preview flow + the 390px sweep now opens Preview. **Still deferred:** question-image attach
      editor._
+   - _**Question images (built 2026-06-11):** author-attached images per question. Stored encrypted under
+     the master key in a **shared media dir** (`questionnaires/media/<id>.enc`) via core **`imageService`**
+     (+ byte-level `encryptBytes`/`decryptBytes`); picked with an in-renderer `<input type=file>`
+     (base64 over IPC `questionnaires:storeImage`/`:getImage`/`:deleteImage`, gated by
+     `questionnaires.create`, mime + ≤5 MB re-validated in main, reads/deletes `isMediaPath`-confined).
+     `Question.media` gains **`mime`** (additive — no migration). The builder shows a thumbnail + a
+     **required alt-text** field (a11y); the shared `QuestionnaireForm` takes a `loadImage` prop and
+     renders the image (so the relay can supply its own decrypt). **§13.2 is now complete.** **Deferred:**
+     orphan-image GC + purge-referenced-images on questionnaire delete (§3.9); copying images into the
+     immutable send snapshot + the relay's zero-knowledge re-encryption (§13.5/§13.6); revisiting
+     `getImage` gating for the recipient/Inbox view (currently `create`-only)._
 3. **AI generate + gap-finder** — brief + data-grounded generation (safety pass, schema-valid, de-dup) via
    the registry; the Suggested surface; metered + budget-gated.
 4. **Analyze → Insights/metrics → context** — analysis, approve-step, Insight management, prioritization/cap,
@@ -862,3 +879,21 @@ Confirmed with the user (2026-06-10):
   (form controls, branch reveal, Finish gating) + an E2E preview flow; the 390px sweep now opens Preview.
   Gate green (208 desktop + 115 core unit, 31 E2E). Built **in-place**; physically extracted to a shared
   package when the relay (§13.6) needs it. **Still deferred (§13.2):** question-image attach editor.
+- 2026-06-11 — **Question images built** (§4.1/§4.2/§5.1/§6/§8.6/§13.2 — **§13.2 now complete**):
+  author-attached images per question. Stored encrypted under the master key in a **shared media dir**
+  (`questionnaires/media/<id>.enc`) via core **`imageService`** over new byte-level **`encryptBytes`/
+  `decryptBytes`** (the string `encrypt`/`decrypt` now wrap them — envelope byte-identical, vaults stay
+  readable). Picked with an in-renderer `<input type=file>` (base64 over IPC `questionnaires:storeImage`/
+  `:getImage`/`:deleteImage`); gated by `questionnaires.create`, mime (PNG/JPEG/WebP/GIF) + **≤5 MB**
+  re-validated in **main**, and reads/deletes confined to the media dir by **`isMediaPath`** (blocks
+  arbitrary-vault-file access — e.g. `config/recovery.enc`). `Question.media` gains **`mime`** (additive,
+  no migration). Builder: a thumbnail + a **required alt-text** field (a11y `onCheck` guard); the shared
+  `QuestionnaireForm` takes a **`loadImage`** prop and renders the image (relay supplies its own decrypt).
+  Code-reviewed (fixed: swallowed errors in the attach flow now surface a message; **remove no longer
+  eagerly deletes the vault file** — it only clears the draft, so an unsaved remove discards cleanly and
+  the orphan is reaped by GC). Core unit (`imageService` + byte crypto) + RTL (attach/alt-required + form
+  image render) + a coreBridge gating/round-trip test + an E2E (attach → alt → encrypted round-trip → shows
+  in preview). Gate green (211 desktop + 123 core unit, 32 E2E). Live web-preview QA of the encrypt→store→
+  decrypt→display round-trip at desktop + 390px. **Deferred:** orphan-image GC + purge-on-delete (§3.9);
+  copying images into the send snapshot + relay ZK re-encryption (§13.5/§13.6); `getImage` recipient/Inbox
+  gating (currently `create`-only).

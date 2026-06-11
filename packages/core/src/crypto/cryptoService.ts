@@ -62,7 +62,11 @@ function importAesKey(key: Uint8Array) {
   ]);
 }
 
-export async function encrypt(plaintext: string, key: Uint8Array): Promise<EncryptedEnvelope> {
+/** Encrypt raw bytes (used for binary blobs like question images — §4.2). Same envelope as `encrypt`. */
+export async function encryptBytes(
+  plaintext: Uint8Array,
+  key: Uint8Array,
+): Promise<EncryptedEnvelope> {
   const iv = randomBytes(12);
   const cryptoKey = await importAesKey(key);
   // WebCrypto returns ciphertext with the 16-byte auth tag appended; split it to keep the {iv,tag,data}
@@ -71,7 +75,7 @@ export async function encrypt(plaintext: string, key: Uint8Array): Promise<Encry
     await globalThis.crypto.subtle.encrypt(
       { name: 'AES-GCM', iv: bufferSource(iv), tagLength: GCM_TAG_BYTES * 8 },
       cryptoKey,
-      bufferSource(new TextEncoder().encode(plaintext)),
+      bufferSource(plaintext),
     ),
   );
   const data = sealed.subarray(0, sealed.length - GCM_TAG_BYTES);
@@ -85,12 +89,15 @@ export async function encrypt(plaintext: string, key: Uint8Array): Promise<Encry
   };
 }
 
-export async function decrypt(envelope: EncryptedEnvelope, key: Uint8Array): Promise<string> {
+/** Decrypt to raw bytes. Rejects on a bad key or tampered tag (OperationError). */
+export async function decryptBytes(
+  envelope: EncryptedEnvelope,
+  key: Uint8Array,
+): Promise<Uint8Array> {
   const iv = fromBase64(envelope.iv);
   const data = fromBase64(envelope.data);
   const tag = fromBase64(envelope.tag);
-  // Re-join ciphertext + tag for WebCrypto, which expects them concatenated. Rejects on a bad key or a
-  // tampered tag (OperationError) — preserving the throw-on-tamper contract.
+  // Re-join ciphertext + tag for WebCrypto, which expects them concatenated.
   const sealed = new Uint8Array(data.length + tag.length);
   sealed.set(data, 0);
   sealed.set(tag, data.length);
@@ -100,7 +107,15 @@ export async function decrypt(envelope: EncryptedEnvelope, key: Uint8Array): Pro
     cryptoKey,
     bufferSource(sealed),
   );
-  return new TextDecoder().decode(plaintext);
+  return new Uint8Array(plaintext);
+}
+
+export async function encrypt(plaintext: string, key: Uint8Array): Promise<EncryptedEnvelope> {
+  return encryptBytes(new TextEncoder().encode(plaintext), key);
+}
+
+export async function decrypt(envelope: EncryptedEnvelope, key: Uint8Array): Promise<string> {
+  return new TextDecoder().decode(await decryptBytes(envelope, key));
 }
 
 export function generateMasterKey(): Uint8Array {

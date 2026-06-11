@@ -311,7 +311,9 @@ export const QuestionSchema = z.object({
   prompt: z.string().min(1),
   help: z.string().optional(),
   required: z.boolean(),
-  media: z.object({ imagePath: z.string().min(1), alt: z.string() }).optional(),
+  media: z
+    .object({ imagePath: z.string().min(1), alt: z.string(), mime: z.string().min(1) })
+    .optional(), // author-attached image (encrypted; ZK on relay). `mime` builds the display data URL.
   options: z.array(z.string()).optional(), // choice/ranking/thisOrThat/allocation buckets
   scale: z
     .object({

@@ -60,6 +60,27 @@ describe('QuestionnaireForm', () => {
     expect(four).toHaveAttribute('aria-checked', 'true');
   });
 
+  it('renders an attached image (decrypted via loadImage) with its alt text', async () => {
+    const questions = [
+      q({
+        id: 'a',
+        type: 'shortText',
+        prompt: 'Look at this',
+        media: { imagePath: 'questionnaires/media/x.enc', alt: 'a sunset', mime: 'image/png' },
+      }),
+    ];
+    render(
+      <QuestionnaireForm
+        questions={questions}
+        answers={{}}
+        onChange={() => {}}
+        loadImage={() => Promise.resolve('QUJD')}
+      />,
+    );
+    const img = await screen.findByRole('img', { name: 'a sunset' });
+    expect(img).toHaveAttribute('src', 'data:image/png;base64,QUJD');
+  });
+
   it('reveals a branched question only once its trigger matches', async () => {
     const questions = [
       q({ id: 'q1', type: 'singleChoice', prompt: 'Partnered?', options: ['Yes', 'No'] }),

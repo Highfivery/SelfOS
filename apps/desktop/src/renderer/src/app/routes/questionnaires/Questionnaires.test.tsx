@@ -173,6 +173,37 @@ describe('Questionnaires', () => {
     expect(screen.getByRole('button', { name: /get help now/i })).toBeInTheDocument();
   });
 
+  it('attaches an image to a question and requires alt text', async () => {
+    const store = vi.fn((input: { base64: string; mime: string }) =>
+      Promise.resolve({ imagePath: 'questionnaires/media/x.enc', mime: input.mime }),
+    );
+    installMockBridge({
+      questionnairesList: () => Promise.resolve([]),
+      questionnairesStoreImage: store,
+    });
+    await openNewBuilder();
+    await userEvent.type(screen.getByLabelText('Question 1'), 'What do you see?');
+
+    const file = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], 'pic.png', {
+      type: 'image/png',
+    });
+    await userEvent.upload(screen.getByLabelText('Add image'), file);
+
+    // Once attached, an alt-text field + a remove control appear.
+    expect(store).toHaveBeenCalledWith(expect.objectContaining({ mime: 'image/png' }));
+    const alt = await screen.findByLabelText('Image description (alt text)');
+    expect(screen.getByRole('button', { name: /remove image/i })).toBeInTheDocument();
+
+    // Check flags the missing alt text (accessibility).
+    await userEvent.click(screen.getByRole('button', { name: 'Check' }));
+    expect(await screen.findByText(/needs a description \(alt text\)/i)).toBeInTheDocument();
+
+    // Provide alt → the warning clears on the next Check.
+    await userEvent.type(alt, 'A sunset over the bay');
+    await userEvent.click(screen.getByRole('button', { name: 'Check' }));
+    expect(screen.queryByText(/needs a description \(alt text\)/i)).not.toBeInTheDocument();
+  });
+
   it('drops a branch when its trigger loses the chosen option', async () => {
     const save = saveSpy();
     installMockBridge({ questionnairesList: () => Promise.resolve([]), questionnairesSave: save });

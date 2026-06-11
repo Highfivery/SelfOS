@@ -75,6 +75,12 @@ const bridge: SelfosBridge = {
   questionnairesValidate: (input) => ipcRenderer.invoke(IpcChannels.questionnairesValidate, input),
   questionnairesListTypes: () => ipcRenderer.invoke(IpcChannels.questionnairesListTypes),
   questionnairesAddType: (name) => ipcRenderer.invoke(IpcChannels.questionnairesAddType, name),
+  questionnairesStoreImage: (input) =>
+    ipcRenderer.invoke(IpcChannels.questionnairesStoreImage, input),
+  questionnairesGetImage: (imagePath) =>
+    ipcRenderer.invoke(IpcChannels.questionnairesGetImage, imagePath),
+  questionnairesDeleteImage: (imagePath) =>
+    ipcRenderer.invoke(IpcChannels.questionnairesDeleteImage, imagePath),
   assignmentsCreate: (input) => ipcRenderer.invoke(IpcChannels.assignmentsCreate, input),
   getSidebarCollapsed: () => ipcRenderer.invoke(IpcChannels.getSidebarCollapsed),
   setSidebarCollapsed: (collapsed) =>

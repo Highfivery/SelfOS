@@ -169,6 +169,9 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.questionnairesValidate, bridge.questionnairesValidate);
   handle(IpcChannels.questionnairesListTypes, bridge.questionnairesListTypes);
   handle(IpcChannels.questionnairesAddType, bridge.questionnairesAddType);
+  handle(IpcChannels.questionnairesStoreImage, bridge.questionnairesStoreImage);
+  handle(IpcChannels.questionnairesGetImage, bridge.questionnairesGetImage);
+  handle(IpcChannels.questionnairesDeleteImage, bridge.questionnairesDeleteImage);
   handle(IpcChannels.assignmentsCreate, bridge.assignmentsCreate);
   handle(IpcChannels.getSidebarCollapsed, bridge.getSidebarCollapsed);
   handle(IpcChannels.setSidebarCollapsed, bridge.setSidebarCollapsed);

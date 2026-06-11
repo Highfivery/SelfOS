@@ -23,6 +23,15 @@
   color: var(--color-text-primary);
 }
 
+/* Author-attached question image — fits the column, never overflows. */
+.questionImage {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+
 .required {
   color: var(--color-danger);
 }

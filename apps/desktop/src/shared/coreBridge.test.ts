@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { memFileSystem } from '@selfos/core/host';
 import { loadMasterKey } from '@selfos/core/crypto';
+import { toBase64 } from '@selfos/core/encoding';
 import type { ClaudeClient, FileSystem, SecretStore } from '@selfos/core/host';
 import { ANTHROPIC_API_KEY_ID } from './channels';
 import type { DeviceState } from './schemas';
@@ -233,6 +234,36 @@ describe('createCoreBridge', () => {
     expect((await bridge.sessionSetActive({ personId: guest.id })).ok).toBe(true);
     expect(await bridge.questionnairesListTypes()).toEqual([]);
     await expect(bridge.questionnairesAddType('Sneaky')).rejects.toThrow(/permitted/);
+  });
+
+  it('stores, reads back, and deletes an encrypted question image; gated + validated', async () => {
+    const { bridge } = await freshOwner();
+    const base64 = toBase64(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3, 4]));
+
+    const { imagePath, mime } = await bridge.questionnairesStoreImage({
+      base64,
+      mime: 'image/png',
+    });
+    expect(imagePath.startsWith('questionnaires/media/')).toBe(true);
+    expect(mime).toBe('image/png');
+    expect(await bridge.questionnairesGetImage(imagePath)).toBe(base64); // round-trips through encryption
+
+    // Unsupported mime is rejected; an out-of-bounds read is refused.
+    await expect(
+      bridge.questionnairesStoreImage({ base64, mime: 'image/svg+xml' }),
+    ).rejects.toThrow();
+    expect(await bridge.questionnairesGetImage('config/recovery.enc')).toBeNull();
+
+    await bridge.questionnairesDeleteImage(imagePath);
+    expect(await bridge.questionnairesGetImage(imagePath)).toBeNull();
+
+    // A Guest (no questionnaires.create) can't store and sees nothing.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    expect((await bridge.sessionSetActive({ personId: guest.id })).ok).toBe(true);
+    await expect(bridge.questionnairesStoreImage({ base64, mime: 'image/png' })).rejects.toThrow(
+      /permitted/,
+    );
   });
 
   it('denies questionnaire authoring to a person without questionnaires.create (a Guest)', async () => {

@@ -9,6 +9,11 @@ interface QuestionnaireState {
   load: () => Promise<void>;
   loadTypes: () => Promise<void>;
   addType: (name: string) => Promise<string[]>;
+  /** Encrypt + store an attached image; returns its vault path + mime (null if the bridge is absent). */
+  storeImage: (base64: string, mime: string) => Promise<{ imagePath: string; mime: string } | null>;
+  /** Read a stored image back as base64 for display (null if absent). */
+  getImage: (imagePath: string) => Promise<string | null>;
+  deleteImage: (imagePath: string) => Promise<void>;
   save: (input: QuestionnaireInput) => Promise<Questionnaire | null>;
   remove: (id: string) => Promise<void>;
   validate: (input: QuestionnaireInput) => Promise<string[]>;
@@ -30,6 +35,12 @@ export const useQuestionnaireStore = create<QuestionnaireState>((set, get) => ({
     const customTypes = (await window.selfos?.questionnairesAddType(name)) ?? get().customTypes;
     set({ customTypes });
     return customTypes;
+  },
+  storeImage: async (base64, mime) =>
+    (await window.selfos?.questionnairesStoreImage({ base64, mime })) ?? null,
+  getImage: async (imagePath) => (await window.selfos?.questionnairesGetImage(imagePath)) ?? null,
+  deleteImage: async (imagePath) => {
+    await window.selfos?.questionnairesDeleteImage(imagePath);
   },
   save: async (input) => {
     const saved = (await window.selfos?.questionnairesSave(input)) ?? null;

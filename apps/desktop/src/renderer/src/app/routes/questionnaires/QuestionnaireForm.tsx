@@ -5,7 +5,11 @@ import type { AnswerValue, AnswerMap } from '@selfos/core/questionnaires';
 import type { Question } from '@shared/schemas';
 import { IconButton, Slider, Text, Textarea, TextInput } from '../../../design-system/components';
 import { CrisisFooter } from '../sessions/CrisisFooter';
+import { QuestionImage } from './QuestionImage';
 import styles from './QuestionnaireForm.module.css';
+
+/** Decrypt an attached image to base64 for display; the host wires this to its image source. */
+export type LoadImage = (imagePath: string) => Promise<string | null>;
 
 /**
  * The shared questionnaire-answering renderer (08-questionnaires §5.3) — used by preview / test-on-self
@@ -17,6 +21,8 @@ interface QuestionnaireFormProps {
   questions: Question[];
   answers: AnswerMap;
   onChange: (questionId: string, value: AnswerValue) => void;
+  /** Supplies decrypted image bytes for any question with `media`; omit to skip image rendering. */
+  loadImage?: LoadImage;
 }
 
 const range = (min: number, max: number): number[] => {
@@ -343,15 +349,17 @@ function Control({
   }
 }
 
-/** One question: prompt (with a required marker), optional help, and its answer control. */
+/** One question: prompt (with a required marker), optional help + image, and its answer control. */
 function QuestionField({
   question,
   value,
   onChange,
+  loadImage,
 }: {
   question: Question;
   value: AnswerValue | undefined;
   onChange: (questionId: string, value: AnswerValue) => void;
+  loadImage?: LoadImage;
 }): JSX.Element {
   return (
     <fieldset className={styles.question}>
@@ -372,6 +380,9 @@ function QuestionField({
           {question.help}
         </Text>
       ) : null}
+      {question.media && loadImage ? (
+        <QuestionImage media={question.media} loadImage={loadImage} />
+      ) : null}
       <Control question={question} value={value} set={(v) => onChange(question.id, v)} />
     </fieldset>
   );
@@ -381,6 +392,7 @@ export function QuestionnaireForm({
   questions,
   answers,
   onChange,
+  loadImage,
 }: QuestionnaireFormProps): JSX.Element {
   const visible = visibleQuestions(questions, answers);
   return (
@@ -394,6 +406,7 @@ export function QuestionnaireForm({
             question={question}
             value={answers[question.id]}
             onChange={onChange}
+            {...(loadImage ? { loadImage } : {})}
           />
         ))
       )}

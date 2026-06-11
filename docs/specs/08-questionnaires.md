@@ -740,6 +740,13 @@ Confirmed with the user (2026-06-10):
      `assignments:create` (in-app) wired through `channels.ts` → `coreBridge` → `ipc.ts` → preload,
      capability-gated by `questionnaires.create`. Unblocks the builder UI. The relay `assignments:create`
      path + the answer/results channels land with their slices._
+   - _**Builder UI (built 2026-06-11):** the `Questionnaires` master-detail screen (list + builder pane,
+     gated by `questionnaires.create`) + a `questionnaireStore`. The builder authors title + type + a
+     question list — prompt, answer-type (11 authorable types; **matrix/branching/question-images +
+     custom types + sensitivity picker + preview/test-on-self still deferred**), Required toggle, an
+     options editor (stable `{id,text}[]`), and a min/max scale editor with a finite/`Min<Max` guard.
+     RTL + E2E (author → validate → save → encrypted round-trip + the phone-width sweep). **Send UI is
+     §13.5.**_
 3. **AI generate + gap-finder** — brief + data-grounded generation (safety pass, schema-valid, de-dup) via
    the registry; the Suggested surface; metered + budget-gated.
 4. **Analyze → Insights/metrics → context** — analysis, approve-step, Insight management, prioritization/cap,
@@ -792,3 +799,14 @@ Confirmed with the user (2026-06-10):
   Code-reviewed (added a recipient-existence check so a send can't bind a phantom recipient; tightened
   `expiresAt`). Gate green (191 desktop unit tests). Relay-channel send + answer/results/insights IPC
   deferred to their slices.
+- 2026-06-11 — **Builder UI built** (§3/§13.2): the first renderer surface — a `Questionnaires`
+  master-detail screen (list + builder pane, mirroring People) gated by `questionnaires.create`, with a
+  `questionnaireStore` over the `questionnaires:*` IPC. The builder authors title + type (taxonomy) + a
+  question list (prompt, answer-type Select of 11 authorable types, Required toggle, an options editor on
+  a stable `{id,text}[]` model, a min/max scale editor); "Check" runs `validateQuestionnaire` + a
+  client-side finite/`Min<Max` guard (scale bounds coerced finite at the input so a cleared field can't
+  persist `NaN` — code-reviewer caught the `z.number()`-accepts-`NaN` edge). Nav is **`create`-only until
+  the Inbox/answer surface ships** (§13.5). RTL (3) + a new E2E (author single-choice → validate → save →
+  encrypted round-trip + overflow) + the phone-width sweep now opens the builder. Gate green (194 desktop
+  - 98 core unit, 29 E2E). **Deferred to later builder sub-slices:** matrix/branching/question-image
+    editors, custom types, the sensitivity picker, and preview/test-on-self.

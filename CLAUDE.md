@@ -239,6 +239,20 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Fix (**iOS WebView stuck-zoom — content didn't fit, scrolled both axes**; user flagged on
+  their device). Diagnosed from the device (NOT guessed): an on-device console probe showed `vw=319`
+  while the page layout + every element was **393** (the iPhone's logical width) — i.e. the layout was
+  correct and fit, but the WKWebView was **zoomed ~1.23×** so only 319 of the 393 showed → scroll in both
+  axes, on every screen (the zoom persists across in-app navigation). **Cause:** iOS auto-zooms a WebView
+  when an `<input>` with font < 16px is focused (1.23 ≈ 16/13 — the unlock PIN field), and the viewport
+  meta didn't lock scaling so it never zoomed back. **Fix:** added `maximum-scale=1.0, user-scalable=no`
+  to the viewport meta in `apps/desktop/index.html` (the web/iOS entry; Electron uses its own html, so it's
+  unaffected). It's an app shell, not a web page — locking scale is standard for a Capacitor WebView, and
+  system-level Accessibility → Zoom still works. **Lesson: the E2E 390px overflow guard can't catch this —
+  it's a real-device WebView zoom behavior (insets/auto-zoom are 0/absent in jsdom + the browser preview).
+  On-device, measure `window.innerWidth` vs `documentElement.scrollWidth`: a mismatch = a zoom problem, a
+  match-but-too-wide = a layout overflow.** (Web-only change; rebuild via `build:web` → `cap sync` → Xcode.
+  Concurrent agent's `docs/specs/0{4,5,8,9}` + `11` untouched.)
 - 2026-06-11 — Fix (**iCloud download-on-demand in `VaultFs`** — user hit it doing the shared-vault test).
   Symptom: the phone pointed at the **same** iCloud `SelfOS` folder the Mac set up, but still showed
   **Setup** instead of Unlock. Cause: on a fresh device the Mac's files are iCloud **placeholders**

@@ -2,8 +2,17 @@
 <html lang="en" data-theme="light">
   <head>
     <meta charset="UTF-8" />
-    <!-- viewport-fit=cover so content can use the iOS safe-area insets (notch / home indicator). -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!--
+      viewport-fit=cover so content can use the iOS safe-area insets (notch / home indicator).
+      maximum-scale=1 + user-scalable=no lock the WebView scale: without them iOS auto-zooms when an
+      <input> (e.g. the unlock PIN) is focused and never zooms back, leaving the app scaled up and
+      scrolling in both axes (07-mobile-platform §5.4). This is an app shell, not a web page; system-level
+      Accessibility → Zoom still works regardless.
+    -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
     <title>SelfOS</title>
   </head>
   <body>

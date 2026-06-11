@@ -134,6 +134,14 @@ export interface AccessView {
   accounts: { personId: string; roleId: string; hasPin: boolean }[];
 }
 
+/** Non-secret view of a pending device-invite (10-multi-device-vault §5.4) — never the wrapped key or code. */
+export interface InviteSummary {
+  id: string;
+  personId: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
 /** Renderer-supplied person fields; the main process owns `id`, `schemaVersion`, and timestamps. */
 export const PersonInputSchema = z.object({
   id: z.string().optional(),

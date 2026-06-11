@@ -293,22 +293,37 @@ guesses, which scrypt slows but does not stop. Wrapping the whole-vault master k
 therefore insecure. The fix is to wrap it under a **high-entropy, single-use, member-scoped** secret
 instead — the device-pairing pattern Signal and 1Password use.
 
+**Resolved design (decided 2026-06-10).** The code is a **word phrase** (6 words from a curated
+~128-word list, dash-joined, e.g. `amber-tide-fox-quill-river-stone` — ~2⁴² entropy; case- and
+separator-insensitive via `normalizeRecoveryPhrase`); it **expires after 7 days**; the **member sets
+their own PIN** on redeem (the owner never knows it); the owner generates it from the **member's
+Access tab**; a QR variant is deferred. The whole-master-key-under-a-word-phrase tradeoff is acceptable
+because the wrap is **single-use** (deleted on redeem), **7-day-expiring**, **member-scoped**, behind
+scrypt, and the threat (an attacker with the synced folder brute-forcing a _pending_ invite before it
+expires) is narrow for a trusted household — far stronger than a 4–6 digit PIN.
+
 **Flow.**
 
-1. The owner (with `people.manage`) generates a one-time **invite code** for a specific member: high
-   entropy (§11 — length TBD), human-typeable.
-2. Main derives a KEK from the code (scrypt) and writes `config/invites/<id>.enc` — the master key
-   wrapped by that KEK, plus metadata `{ personId, createdAt, expiresAt, schemaVersion }`. The plain
-   code is shown to the owner once and never stored.
-3. The owner conveys the code out-of-band. The member enters it on a new device; main finds the
-   matching pending invite, derives the KEK, unwraps the master key into the device secret store, then
-   **deletes the invite file** (single-use).
-4. The member sets a **local device PIN** (device-local, like any persona PIN) and joins as their own
-   persona, **member-only** — they never see the recovery phrase.
+1. The owner (with `people.manage`) first creates the member as a Person and grants them a Member
+   login on the Access tab (existing UI), then clicks **Generate invite code**. The code is shown
+   **once** (copyable) and never stored; a pending invite shows its expiry with **Cancel** /
+   **Regenerate**.
+2. Main derives a KEK from the code (`deriveKeyFromPhrase`, scrypt) and writes `config/invites/<id>.enc`
+   — a **key-free-readable** bundle `{ schemaVersion, id, personId, createdAt, expiresAt, salt, wrapped }`
+   where `wrapped` is the master key wrapped by that KEK (the redeeming device has no master key yet, so
+   the file must be readable without it, like `recovery.enc`). The plain code is never persisted.
+3. The member installs SelfOS, points at the shared folder (→ `vaultInitialized`, no key → Unlock), and
+   chooses **"Have an invite code?"**. Main tries the entered code against each pending invite's salt;
+   the one that unwraps (and isn't expired) is the match → the master key is stored in this device's
+   secret store, the invite file is **deleted** (single-use), and main remembers the redeemed `personId`.
+4. The member then **sets their own PIN**; main writes it to that account (`setAccount`) and activates
+   them. They're in as their own persona, **member-only** — they never see the recovery phrase. (Main
+   only lets the freshly-redeemed `personId` set its PIN, so the renderer can't target another account.)
 
-**Properties.** One-time (deleted on use), **expiring** (ignored/garbage-collected past `expiresAt`),
-**member-scoped** (bound to a `personId`), and it **never shares the owner's recovery phrase**.
-Exact code length/format, expiry window, and whether to offer a QR variant are deferred (§11).
+**Properties.** One-time (deleted on use), **expiring** (ignored past `expiresAt`; expired files are
+GC'd on next list), **member-scoped** (bound to a `personId`), and it **never shares the owner's
+recovery phrase**. Delivered in **2a** (core invite service + owner Generate-UI) then **2b** (member
+redeem flow).
 
 ## 6. IPC / API contracts
 
@@ -497,6 +512,15 @@ All Slice-1 questions are **resolved** (2026-06-10):
 
 ## 12. Changelog
 
+- 2026-06-10 — **Slice 2a built** (owner side of the invite codes). Core `@selfos/core/people/inviteService`:
+  `generateInviteCode` (6 words from a 128-word `inviteWords` list, ~2⁴²), `createInvite` (wraps the
+  master key under the code's KEK → key-free-readable `config/invites/<id>.enc`), `listInvitesForPerson`
+  (GCs expired), `cancelInvite`, and `redeemInvite` (unit-tested round-trip; wired in 2b). IPC
+  `invites:create/list/cancel`, owner-only (`people.manage`) and **member-scoped enforced in main** —
+  `invites:create` rejects a missing/owner target and supersedes any prior pending invite for that
+  person (not just the UI). Owner UI: `DeviceInviteControl` on the member's Access tab (generate → code
+  shown once + copy + warning; pending list + cancel/regenerate). The owner-generate→member-redeem
+  **E2E lands with 2b** (the round trip naturally exercises the generate path).
 - 2026-06-10 — **Slice 1c built (Slice 1 complete).** Setup now requires the owner to set a login PIN
   (min `MIN_OWNER_PIN_LENGTH` = 4, with a Confirm-PIN field to avoid a typo lockout): the PIN is
   threaded through `householdSetup` (`HouseholdSetupSchema.pin`) into the owner account

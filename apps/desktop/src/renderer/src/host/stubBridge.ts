@@ -83,6 +83,10 @@ export function installStubBridge(): void {
     accessSaveRole: () => Promise.resolve({ roles: DEFAULT_ROLES, accounts: [] }),
     accessSetAccount: () => Promise.resolve({ roles: DEFAULT_ROLES, accounts: [] }),
     accessRemoveAccount: () => Promise.resolve({ roles: DEFAULT_ROLES, accounts: [] }),
+    invitesCreate: () =>
+      Promise.resolve({ code: 'amber-tide-fox-quill-river-stone', expiresAt: 'preview' }),
+    invitesList: () => Promise.resolve([]),
+    invitesCancel: () => Promise.resolve(),
     sessionSetActive: () => Promise.resolve({ ok: true, person: OWNER }),
     superadminUnlock: () => Promise.resolve(false),
     superadminLock: () => Promise.resolve(),

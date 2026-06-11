@@ -5,6 +5,7 @@ import type {
   BudgetState,
   ChatTurnResult,
   Conversation,
+  InviteSummary,
   Person,
   PersonInput,
   Relationship,
@@ -49,6 +50,9 @@ export const IpcChannels = {
   accessSaveRole: 'access:saveRole',
   accessSetAccount: 'access:setAccount',
   accessRemoveAccount: 'access:removeAccount',
+  invitesCreate: 'invites:create',
+  invitesList: 'invites:list',
+  invitesCancel: 'invites:cancel',
   sessionSetActive: 'session:setActive',
   superadminUnlock: 'superadmin:unlock',
   superadminLock: 'superadmin:lock',
@@ -178,6 +182,12 @@ export interface SelfosBridge {
   }): Promise<AccessView>;
   /** Revoke a person's account. */
   accessRemoveAccount(personId: string): Promise<AccessView>;
+  /** Generate a one-time device-invite code for a member; the code is shown once and never stored. */
+  invitesCreate(input: { personId: string }): Promise<{ code: string; expiresAt: string }>;
+  /** Pending (non-expired) invites for a person, for the owner's UI. */
+  invitesList(input: { personId: string }): Promise<InviteSummary[]>;
+  /** Cancel a pending invite by id. */
+  invitesCancel(input: { id: string }): Promise<void>;
   /** Switch the active person, verifying their PIN if set. */
   sessionSetActive(input: { personId: string; pin?: string }): Promise<SetActiveResult>;
   /** Verify the concealed super-admin passphrase; on success, main enters inspect-everything mode. */
@@ -228,6 +238,7 @@ export type {
   BudgetState,
   ChatTurnResult,
   Conversation,
+  InviteSummary,
   Person,
   PersonInput,
   Relationship,

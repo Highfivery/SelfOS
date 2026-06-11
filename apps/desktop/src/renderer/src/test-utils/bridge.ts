@@ -64,6 +64,10 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     accessSaveRole: () => Promise.resolve({ roles: DEFAULT_ROLES, accounts: [] }),
     accessSetAccount: () => Promise.resolve({ roles: DEFAULT_ROLES, accounts: [] }),
     accessRemoveAccount: () => Promise.resolve({ roles: DEFAULT_ROLES, accounts: [] }),
+    invitesCreate: () =>
+      Promise.resolve({ code: 'amber-tide-fox-quill-river-stone', expiresAt: '' }),
+    invitesList: () => Promise.resolve([]),
+    invitesCancel: () => Promise.resolve(),
     sessionSetActive: (input) =>
       Promise.resolve({
         ok: true,

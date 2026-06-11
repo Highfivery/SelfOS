@@ -10,6 +10,7 @@ import {
   type ClaudeTestResult,
   type ConversationMeta,
   type HouseholdStatus,
+  type InviteSummary,
   type SetActiveResult,
   type SettingsValues,
   type UsageSummary,
@@ -43,11 +44,14 @@ import {
   verifySuperAdminPassphrase,
 } from './people/superAdmin';
 import {
+  cancelInvite,
+  createInvite,
   deletePerson,
   deleteRelationship,
   getAccessConfig,
   getAccessView,
   getPerson,
+  listInvitesForPerson,
   listPeople,
   listRelationships,
   removeAccount,
@@ -71,7 +75,7 @@ import {
   setPersonBudget,
   summarize,
 } from '@selfos/core/usage';
-import { roleAllows, type CapabilityKey } from '../shared/capabilities';
+import { OWNER_ROLE_ID, roleAllows, type CapabilityKey } from '../shared/capabilities';
 import {
   deleteConversation,
   getConversation,
@@ -348,6 +352,47 @@ export function registerIpcHandlers(): void {
       return getAccessView(ctx.fs, ctx.key);
     },
   );
+
+  // Device invites (10-multi-device-vault §5.4) — owner-only (people.manage), enforced in main.
+  ipcMain.handle(
+    IpcChannels.invitesCreate,
+    async (_event, raw: unknown): Promise<{ code: string; expiresAt: string }> => {
+      const ctx = await vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'people.manage'))) {
+        throw new Error('Not permitted');
+      }
+      const { personId } = z.object({ personId: z.string().min(1) }).parse(raw);
+      // Member-scoped, enforced in main (not just the UI): the target must be a real, NON-owner
+      // account — never wrap the master key in an invite bound to the owner (10-multi-device §5.4).
+      const access = await getAccessConfig(ctx.fs, ctx.key);
+      const account = access.accounts.find((candidate) => candidate.personId === personId);
+      if (!account || account.roleId === OWNER_ROLE_ID) throw new Error('Not a member');
+      // One valid code per person — supersede any existing pending invite at the boundary.
+      const now = Date.now();
+      for (const pending of await listInvitesForPerson(ctx.fs, personId, now)) {
+        await cancelInvite(ctx.fs, pending.id);
+      }
+      const { code, invite } = await createInvite(ctx.fs, ctx.key, personId, now);
+      return { code, expiresAt: invite.expiresAt };
+    },
+  );
+
+  ipcMain.handle(
+    IpcChannels.invitesList,
+    async (_event, raw: unknown): Promise<InviteSummary[]> => {
+      const ctx = await vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'people.manage'))) return [];
+      const { personId } = z.object({ personId: z.string().min(1) }).parse(raw);
+      return listInvitesForPerson(ctx.fs, personId, Date.now());
+    },
+  );
+
+  ipcMain.handle(IpcChannels.invitesCancel, async (_event, raw: unknown): Promise<void> => {
+    const ctx = await vaultAndKey();
+    if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'people.manage'))) return;
+    const { id } = z.object({ id: z.string().min(1) }).parse(raw);
+    await cancelInvite(ctx.fs, id);
+  });
 
   ipcMain.handle(
     IpcChannels.sessionSetActive,

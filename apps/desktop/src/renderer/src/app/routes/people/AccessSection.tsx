@@ -11,6 +11,7 @@ import {
   TextInput,
 } from '../../../design-system/components';
 import type { Person } from '@shared/channels';
+import { DeviceInviteControl } from './DeviceInviteControl';
 
 /** Grant, update, or revoke a person's login (role + optional PIN) so they can use the app. */
 export function AccessSection({ person }: { person: Person }): JSX.Element {
@@ -89,6 +90,9 @@ export function AccessSection({ person }: { person: Person }): JSX.Element {
             </Button>
           ) : null}
         </Inline>
+        {account && !isOwner ? (
+          <DeviceInviteControl personId={person.id} displayName={person.displayName} />
+        ) : null}
       </Stack>
     </Card>
   );

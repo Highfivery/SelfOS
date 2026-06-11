@@ -85,9 +85,11 @@ import {
   saveConversation,
 } from '@selfos/core/conversations';
 import {
+  addCustomType,
   createAssignment,
   deleteQuestionnaire,
   getQuestionnaire,
+  listCustomTypes,
   listQuestionnaires,
   saveQuestionnaire,
   validateQuestionnaire,
@@ -692,6 +694,18 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     questionnairesValidate: async (input): Promise<string[]> => {
       // Pure pre-flight check — exposes nothing sensitive, so no vault/capability gate.
       return validateQuestionnaire(QuestionnaireInputSchema.parse(input));
+    },
+    questionnairesListTypes: async (): Promise<string[]> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) return [];
+      return listCustomTypes(ctx.fs);
+    },
+    questionnairesAddType: async (name): Promise<string[]> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) {
+        throw new Error('Not permitted');
+      }
+      return addCustomType(ctx.fs, z.string().parse(name));
     },
     assignmentsCreate: async (input): Promise<Assignment> => {
       const ctx = await host.vaultAndKey();

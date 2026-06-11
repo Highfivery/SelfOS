@@ -12,11 +12,13 @@ export function Questionnaires(): JSX.Element {
   const questionnaires = useQuestionnaireStore((s) => s.questionnaires);
   const loaded = useQuestionnaireStore((s) => s.loaded);
   const load = useQuestionnaireStore((s) => s.load);
+  const loadTypes = useQuestionnaireStore((s) => s.loadTypes);
   const [selection, setSelection] = useState<Selection>({ mode: 'none' });
 
   useEffect(() => {
     void load();
-  }, [load]);
+    void loadTypes();
+  }, [load, loadTypes]);
 
   const selected =
     selection.mode === 'edit' ? (questionnaires.find((q) => q.id === selection.id) ?? null) : null;

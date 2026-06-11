@@ -161,6 +161,8 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
       }),
     questionnairesDelete: () => Promise.resolve(),
     questionnairesValidate: () => Promise.resolve([]),
+    questionnairesListTypes: () => Promise.resolve([]),
+    questionnairesAddType: (name) => Promise.resolve([name]),
     assignmentsCreate: (input) =>
       Promise.resolve({
         id: 'new-a',

@@ -239,6 +239,31 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Build (Questionnaires **slice 2 — builder authoring editors** [§13.2 follow-ups],
+  [08-questionnaires](docs/specs/08-questionnaires.md) §3.1/§4.1/§6/§13.2). Asked first (4 Qs): scope =
+  **authoring editors only** (images + preview/test-on-self deferred to their own slices); custom types =
+  **persisted registry**; sensitivity = **picker + author note, gates deferred** to send/relay; branching
+  triggers = **discrete answers only** (singleChoice/yesNo). Built: a **sensitivity picker** (4
+  `SensitivityTier` tiers; a sensitive tier shows a calm author note — the 18+/DOB/consent gates stay
+  recipient-side at send per §3.2/§8.3, **not scaffolded here**), a **matrix** rows+scale editor, **help
+  text** + **scale low/high labels**, a **branching editor** ("show this question when an earlier
+  single-choice/yes-no answer = value"; **staleness-pruned** in `resolveBranch` so a branch the UI has
+  hidden — trigger deleted / no longer discrete / chosen option cleared or renamed — never persists), and
+  **persisted custom types**: new core **`customTypeService`** (`listCustomTypes`/`addCustomType` over the
+  **plain** `config/questionnaires.json` prefs file + `QuestionnairePrefsSchema`, matching the
+  `config/settings.json` plain precedent), exposed via new IPC **`questionnaires:listTypes`/`:addType`**
+  through the seam (channels → coreBridge → ipc → preload → store), gated by **`questionnaires.create`**.
+  Code-reviewer caught two real misses (fixed): a **test-only `noUncheckedIndexedAccess` typecheck failure
+  the green Vitest run masked** (esbuild doesn't enforce the flag — **re-run `pnpm typecheck` after adding
+  tests, not just `pnpm test`**), and a **branch that could persist after its trigger lost the chosen
+  option** (UI hid it but `resolveBranch` still emitted it). Live web-preview visual QA at desktop + 390px
+  caught + fixed a **Type-select + "New type" button overflow** (`.metaRow > * { min-width: 0 }`). Gate
+  green: typecheck/lint/format, **200 desktop** + **104 core** unit (+1 staleness RTL, +1 core service, +1
+  coreBridge gating test), **30 E2E** (new custom-type/sensitivity/matrix/branching round-trip; the 390px
+  sweep now exercises matrix + new-type + branch). Renderer + a thin core service. **Lesson: the Vitest
+  run does NOT typecheck (esbuild strips types) — `noUncheckedIndexedAccess`/strict-optional errors in
+  test files slip through unless you run `pnpm typecheck` after writing tests.** **Still deferred (§13.2):**
+  question-image attach editor, preview/test-on-self. Synced `08` §3.1/§5.1/§6/§13.2 + changelog.
 - 2026-06-11 — Build (Questionnaires **slice 2 — the builder UI**,
   [08-questionnaires](docs/specs/08-questionnaires.md) §3/§13.2): the first renderer surface — a
   **Questionnaires** master-detail screen (list + builder pane, mirroring People), gated by

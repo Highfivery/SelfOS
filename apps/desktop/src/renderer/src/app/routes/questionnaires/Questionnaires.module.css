@@ -91,6 +91,47 @@
 }
 
 /* --- Builder --- */
+.metaRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+/* Let the grid tracks shrink below the (long) Type select's intrinsic width — no overflow on phones. */
+.metaRow > * {
+  min-width: 0;
+}
+
+/* Type select + "New type" button sit on one line, the button bottom-aligned with the select. */
+.typePicker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.typePicker > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.addType {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.addType > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.typeError {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: 0.8125rem;
+}
+
 .questions {
   display: flex;
   flex-direction: column;
@@ -165,6 +206,18 @@
   min-width: 0;
 }
 
+/* Branching: "only show this question … equals …" on one line, wrapping on narrow screens. */
+.branchRow {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.branchRow > * {
+  flex: 1;
+  min-width: 160px;
+}
+
 .footer {
   display: flex;
   align-items: center;
@@ -201,5 +254,9 @@
 
   .scaleRow {
     flex-direction: column;
+  }
+
+  .metaRow {
+    grid-template-columns: 1fr;
   }
 }

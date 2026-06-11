@@ -221,6 +221,20 @@ describe('createCoreBridge', () => {
     expect(await bridge.questionnairesGet(saved.id)).toBeNull();
   });
 
+  it('persists custom types for the picker, gated by questionnaires.create', async () => {
+    const { bridge } = await freshOwner();
+    expect(await bridge.questionnairesListTypes()).toEqual([]);
+    expect(await bridge.questionnairesAddType('Affair recovery')).toEqual(['Affair recovery']);
+    expect(await bridge.questionnairesListTypes()).toEqual(['Affair recovery']);
+
+    // A Guest (no questionnaires.create) sees none and can't add one.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    expect((await bridge.sessionSetActive({ personId: guest.id })).ok).toBe(true);
+    expect(await bridge.questionnairesListTypes()).toEqual([]);
+    await expect(bridge.questionnairesAddType('Sneaky')).rejects.toThrow(/permitted/);
+  });
+
   it('denies questionnaire authoring to a person without questionnaires.create (a Guest)', async () => {
     const { bridge } = await freshOwner();
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });

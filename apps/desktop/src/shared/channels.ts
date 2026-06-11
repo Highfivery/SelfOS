@@ -79,6 +79,8 @@ export const IpcChannels = {
   questionnairesSave: 'questionnaires:save',
   questionnairesDelete: 'questionnaires:delete',
   questionnairesValidate: 'questionnaires:validate',
+  questionnairesListTypes: 'questionnaires:listTypes',
+  questionnairesAddType: 'questionnaires:addType',
   assignmentsCreate: 'assignments:create',
   getSidebarCollapsed: 'ui:getSidebarCollapsed',
   setSidebarCollapsed: 'ui:setSidebarCollapsed',
@@ -253,6 +255,10 @@ export interface SelfosBridge {
   questionnairesDelete(id: string): Promise<void>;
   /** Structural problems with a draft (empty array = valid) — for live builder feedback. */
   questionnairesValidate(input: QuestionnaireInput): Promise<string[]>;
+  /** The user-defined custom types (vault-stored), for the builder's type picker. Requires `questionnaires.create`. */
+  questionnairesListTypes(): Promise<string[]>;
+  /** Add a custom type (trimmed, de-duped) and return the updated list. Requires `questionnaires.create`. */
+  questionnairesAddType(name: string): Promise<string[]>;
   /** Send a questionnaire to a household person (in-app), freezing an immutable snapshot at send. */
   assignmentsCreate(input: {
     questionnaireId: string;

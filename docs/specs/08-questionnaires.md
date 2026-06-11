@@ -467,8 +467,9 @@ interface RawAccessAuditEntry {
 
 - **insightStore** — encrypted CRUD over `Insight`; `query`, `summarizeForContext` (prioritize + cap),
   `queryMetrics` (for trends). The shared Insight/metrics layer; consumed by `buildContext`, `09`, `11`.
-- **questionnaireService** — encrypted CRUD over created definitions; immutable-snapshot versioning;
-  custom-type persistence.
+- **questionnaireService** — encrypted CRUD over created definitions; immutable-snapshot versioning.
+- **customTypeService** — persists user-defined custom types to the plain `config/questionnaires.json`
+  prefs file (`QuestionnairePrefsSchema`), so they reappear in the builder's type picker on every device.
 - **assignmentService / responseService** — lifecycle, status transitions, ResponseSet round-trip, re-ask
   chaining.
 - **contextProviderRegistry** — `registerContextProvider({ id, gather(personId|relId) })`; generation +
@@ -520,8 +521,8 @@ renderer):
 
 - **Authoring** — `questionnaires:list` / `:get` / `:save` / `:delete` / `:validate` (→ `problems[]`) /
   `:generate({type, targetId, brief?, useData})` (→ schema-validated draft) / `:improveQuestion` /
-  `:listTypes` / `:addType`. _(list/get/save/delete/validate are wired as of the IPC slice;
-  generate/improve/types land with AI generation.)_
+  `:listTypes` / `:addType`. _(list/get/save/delete/validate + listTypes/addType are wired;
+  generate/improve land with AI generation.)_
 - **Send/collect** — `assignments:create` (the in-app send for now — wired; relay-link material attaches
   with the relay slice) / `:list` / `:get` / `:createRelayLink` / `:drain` / `:revoke` / `:delete`.
 - **Answer** — `assignments:saveProgress` / `:submit` / `:decline({ note? })` (in-app); the relay page talks
@@ -742,11 +743,18 @@ Confirmed with the user (2026-06-10):
      path + the answer/results channels land with their slices._
    - _**Builder UI (built 2026-06-11):** the `Questionnaires` master-detail screen (list + builder pane,
      gated by `questionnaires.create`) + a `questionnaireStore`. The builder authors title + type + a
-     question list — prompt, answer-type (11 authorable types; **matrix/branching/question-images +
-     custom types + sensitivity picker + preview/test-on-self still deferred**), Required toggle, an
-     options editor (stable `{id,text}[]`), and a min/max scale editor with a finite/`Min<Max` guard.
-     RTL + E2E (author → validate → save → encrypted round-trip + the phone-width sweep). **Send UI is
-     §13.5.**_
+     question list — prompt, answer-type (12 authorable types incl. matrix; **question-image attach +
+     preview/test-on-self still deferred**), Required toggle, an options editor (stable `{id,text}[]`),
+     and a min/max scale editor with a finite/`Min<Max` guard. RTL + E2E (author → validate → save →
+     encrypted round-trip + the phone-width sweep). **Send UI is §13.5.**_
+   - _**Builder authoring editors (built 2026-06-11):** a **sensitivity picker** (the 4 `SensitivityTier`
+     tiers; sensitive tiers show an author note — the age/consent gates stay recipient-side at send,
+     §3.2/§8.3, not built here), a **matrix** rows+scale editor, **help text** + **scale low/high
+     labels**, a **branching editor** (discrete singleChoice/yesNo earlier-question triggers only;
+     staleness-pruned so a hidden branch never persists), and **persisted custom types** (core
+     `customTypeService` over the plain `config/questionnaires.json` prefs + `QuestionnairePrefsSchema`,
+     IPC `questionnaires:listTypes`/`:addType`). **Still deferred:** question-image attach editor,
+     preview/test-on-self._
 3. **AI generate + gap-finder** — brief + data-grounded generation (safety pass, schema-valid, de-dup) via
    the registry; the Suggested surface; metered + budget-gated.
 4. **Analyze → Insights/metrics → context** — analysis, approve-step, Insight management, prioritization/cap,
@@ -810,3 +818,16 @@ Confirmed with the user (2026-06-10):
   encrypted round-trip + overflow) + the phone-width sweep now opens the builder. Gate green (194 desktop
   - 98 core unit, 29 E2E). **Deferred to later builder sub-slices:** matrix/branching/question-image
     editors, custom types, the sensitivity picker, and preview/test-on-self.
+- 2026-06-11 — **Builder authoring editors built** (§3.1/§4.1/§6/§13.2): the builder gained a
+  **sensitivity picker** (the 4 `SensitivityTier` tiers; sensitive tiers show an author note — the
+  age/consent gates stay recipient-side at send, §3.2/§8.3, not built here), a **matrix** rows+scale
+  editor, **help text** + **scale low/high labels**, a **branching editor** (discrete singleChoice/yesNo
+  earlier-question triggers only; staleness-pruned so a branch the UI has hidden never persists), and
+  **persisted custom types** — new core `customTypeService` (`listCustomTypes`/`addCustomType`) over the
+  plain `config/questionnaires.json` prefs file + `QuestionnairePrefsSchema`, exposed via new IPC
+  `questionnaires:listTypes`/`:addType` (gated by `questionnaires.create`). Code-reviewed (fixed a
+  test-only `noUncheckedIndexedAccess` typecheck miss + a branch that could persist after its trigger
+  lost the chosen option; added a 390px guard over the new editors). RTL + a coreBridge gating test + a
+  core service test + an E2E round-trip; the 390px sweep now exercises matrix + new-type + branch. Gate
+  green (200 desktop + 104 core unit, 30 E2E). **Still deferred:** question-image attach editor,
+  preview/test-on-self.

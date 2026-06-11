@@ -3,6 +3,9 @@
 export const DEFS_DIR = 'questionnaires/defs';
 export const SENDS_DIR = 'questionnaires/sends';
 
+/** Plain-JSON, non-secret questionnaire prefs (custom types; later: message templates). §4.1. */
+export const PREFS_PATH = 'config/questionnaires.json';
+
 /** A created questionnaire definition. */
 export function defPath(id: string): string {
   return `${DEFS_DIR}/${id}.enc`;

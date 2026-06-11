@@ -713,6 +713,65 @@ test('questionnaires: author a single-choice questionnaire, validate, persist, n
   }
 });
 
+test('questionnaires: custom type, sensitivity, matrix + branching round-trip', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await w.getByRole('button', { name: 'New' }).click();
+    await w.getByLabel('Title').fill('Date-night check-in');
+
+    // A custom type the user names — it becomes the selected type and persists for next time.
+    await w.getByRole('button', { name: 'New type' }).click();
+    await w.getByLabel('New type name').fill('Date night');
+    await w.getByRole('button', { name: 'Add', exact: true }).click();
+    await expect(w.getByLabel('Type', { exact: true })).toHaveValue('Date night');
+
+    // A sensitive tier shows the author note (the actual gates apply at send time).
+    await w.getByLabel('Sensitivity').selectOption('explicit');
+    await expect(w.getByText(/date of birth and consent/i)).toBeVisible();
+
+    // Q1: single choice (a valid branch trigger).
+    await w.getByLabel('Question 1', { exact: true }).fill('Are you partnered?');
+    await w.getByLabel('Answer type').selectOption({ label: 'Single choice' });
+    await w.getByLabel('Option 1', { exact: true }).fill('Yes');
+    await w.getByLabel('Option 2', { exact: true }).fill('No');
+
+    // Q2: a matrix question that only shows when Q1 = Yes.
+    await w.getByRole('button', { name: 'Add question' }).click();
+    await w.getByLabel('Question 2', { exact: true }).fill('Rate these together');
+    await w.getByLabel('Answer type').nth(1).selectOption({ label: 'Matrix (rows on one scale)' });
+    await w.getByLabel('Row 1', { exact: true }).fill('Trust');
+    await w.getByLabel('Row 2', { exact: true }).fill('Fun');
+    await w.getByLabel('Only show this question').selectOption({ index: 1 });
+    await w.getByLabel('…equals').selectOption('Yes');
+
+    // Validate, then save.
+    await w.getByRole('button', { name: 'Check' }).click();
+    await expect(w.getByText(/ready to send/i)).toBeVisible();
+    await w.getByRole('button', { name: 'Create' }).click();
+    await expect(w.getByText('2 questions')).toBeVisible();
+
+    // Reopen and confirm everything round-tripped through the encrypted vault.
+    await w.getByRole('button', { name: /Date-night check-in/ }).click();
+    await expect(w.getByLabel('Type', { exact: true })).toHaveValue('Date night');
+    await expect(w.getByLabel('Sensitivity')).toHaveValue('explicit');
+    await expect(w.getByLabel('Row 1', { exact: true })).toHaveValue('Trust');
+    await expect(w.getByLabel('…equals')).toHaveValue('Yes');
+
+    const overflow = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      return main ? main.scrollWidth - main.clientWidth : 0;
+    });
+    expect(overflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('roles: the owner edits the role × capability matrix', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);
@@ -1278,6 +1337,19 @@ test('responsive: at a phone width the nav is a drawer and no screen overflows h
         await w.getByRole('button', { name: 'New' }).click(); // open the builder (detail pane)
         await w.waitForTimeout(150);
         expect(await noOverflow()).toBe(true); // the builder stacks on mobile, doesn't overflow
+        // The follow-up authoring editors must also fit at phone width:
+        await w.getByRole('button', { name: 'New type' }).click(); // inline add-type row + meta row
+        await w.getByLabel('Answer type').selectOption({ label: 'Matrix (rows on one scale)' });
+        await w.waitForTimeout(120);
+        expect(await noOverflow()).toBe(true); // metaRow + matrix rows/scale don't overflow
+        // Branch editor: a second question conditioned on a discrete first question.
+        await w.getByLabel('Answer type').selectOption({ label: 'Single choice' });
+        await w.getByLabel('Option 1', { exact: true }).fill('A');
+        await w.getByLabel('Option 2', { exact: true }).fill('B');
+        await w.getByRole('button', { name: 'Add question' }).click();
+        await w.getByLabel('Only show this question').selectOption({ index: 1 });
+        await w.waitForTimeout(120);
+        expect(await noOverflow()).toBe(true); // the branch row wraps, no overflow
         await w.getByRole('button', { name: 'Questionnaires' }).click(); // back to the list
       }
       if (name === 'People') {

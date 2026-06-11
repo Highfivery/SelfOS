@@ -239,6 +239,26 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Build (**Capacitor track slice iii-c2 — real Claude on iOS**;
+  [07-mobile-platform](docs/specs/07-mobile-platform.md) §5.3/§11.3/§13). Replaces the fake assistant on
+  iOS with the Anthropic SDK in **browser mode**. New `host/browserClaudeClient.ts` — the
+  `@anthropic-ai/sdk` with **`dangerouslyAllowBrowser: true`** running in the WKWebView, a faithful mirror
+  of the Electron `anthropicClient` (adaptive thinking + `cache_control` on the system prefix, streamed
+  `on('text')` deltas, usage-field mapping). `webHost`'s `createBridgeHost` gained a `claude` part:
+  `createWebHost` keeps the deterministic fake (preview), `createCapacitorHost` uses the real browser
+  client. **No native-HTTP fallback yet** — per spec §11.3 it's only built if WKWebView blocks CORS/SSE on
+  the user's device (browser-mode tried first). **Probe result: the SDK typechecks under the DOM lib AND
+  bundles into `build:web`** (151 KB gzip total, +42 KB; advisory chunk-size warning only) — so browser-mode
+  is viable. Security: the API key is read from the Keychain and passed to the SDK per call; on iOS the host
+  runs in the WebView, so the key is transiently in JS memory during the call (inherent to Capacitor; the
+  native-HTTP fallback would keep it native). Reviewer verdict **ship** (parity with `anthropicClient`
+  verified line-for-line + against the SDK 0.104.1 `Usage` type; no leaks/logging). Gates: typecheck, lint,
+  format, **258 unit** (76 core + 182 desktop, +3 SDK-mocked tests), `build:web`. **The browser-mode network
+  path is verified ON-DEVICE by the user** (can't unit/E2E the real API). **This completes the iii-c app
+  layer — iOS now has the real iCloud FS (VaultFs) + Keychain secrets + real Claude.** **NEXT: the user's
+  on-device chat test** — if it hits a WKWebView CORS/SSE error, build the native-HTTP fallback (CapacitorHttp
+  or a small plugin); else **iii-b3b** (live NSFilePresenter change feed) / **iii-d** (wife's phone install).
+  (Concurrent agent's `docs/specs/0{4,5,8,9}` + `11` untouched.)
 - 2026-06-11 — Build (**Capacitor track slice iii-c1 — native iOS Keychain `SecretStore`**;
   [07-mobile-platform](docs/specs/07-mobile-platform.md) §5.1/§5.3/§13). Moves the vault **master key + Claude
   API key** off the iii-b2 `localStorage` stub into the **iOS Keychain**. New `ios/App/App/Keychain.swift`

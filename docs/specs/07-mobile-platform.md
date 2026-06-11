@@ -437,9 +437,13 @@ The full arc, so no session loses the thread. Update the status boxes as slices 
       stub simply **re-unlocks once** via recovery phrase (the gate routes `vaultInitialized && !hasMasterKey`
       → Unlock; no re-key/lockout) — no blind migration. _Backlog: scrub the legacy `localStorage` secret
       keys post-migration._ Gates: typecheck/lint/format, 255 unit, build:web; Swift built on-device by the user.
-- [ ] **iii-c2 — real Claude on iOS.** Replace the fake `ClaudeClient` (web stores) with the Anthropic
-      **browser-mode SDK** (`dangerouslyAllowBrowser`) in the WKWebView, with a **native-HTTP fallback** for
-      WKWebView CORS/streaming (§11.3). The web preview keeps the deterministic fake.
+- [x] **iii-c2 — real Claude on iOS.** `host/browserClaudeClient.ts` — the Anthropic **browser-mode SDK**
+      (`dangerouslyAllowBrowser`) in the WKWebView, a faithful mirror of the Electron `anthropicClient`
+      (adaptive thinking + `cache_control`, streamed deltas, usage mapping); `createCapacitorHost` uses it,
+      the web preview keeps the deterministic fake. The key is read from the Keychain and passed per-call.
+      Gates: typecheck (the SDK typechecks under the DOM lib + bundles in `build:web`), lint, format, 258
+      unit (+3 SDK-mocked tests). _**Native-HTTP fallback deferred** (§11.3): only built if WKWebView blocks
+      CORS/SSE on-device — pending the user's on-device chat test._
 - [ ] **iii-d — free-signing install** on the user's + wife's physical iPhones (personal team; trust the
       cert on-device; 7-day provisioning expiry — §11.7).
 - [ ] **(iv) Distribution (later)** — Apple Developer Program + TestFlight (free signing first; a

@@ -1,12 +1,13 @@
 import { Capacitor } from '@capacitor/core';
 import type { BootState } from '@shared/schemas';
-import type { FileSystem, SecretStore } from '@selfos/core/host';
+import type { ClaudeClient, FileSystem, SecretStore } from '@selfos/core/host';
 import { loadMasterKey } from '@selfos/core/crypto';
 import { uuid } from '@selfos/core/id';
 import { createCoreBridge, readVaultSettingsValues, type BridgeHost } from '@shared/coreBridge';
 import { idbFileSystem } from './idbFileSystem';
 import { capacitorFileSystem, VaultFs, type VaultFsPlugin } from './capacitorVaultFs';
 import { capacitorSecretStore, Keychain, type KeychainPlugin } from './capacitorSecretStore';
+import { browserClaudeClient } from './browserClaudeClient';
 import {
   currentDeviceId,
   webDeviceSettings,
@@ -41,6 +42,8 @@ interface HostParts {
   selectVaultFolder(): Promise<string | null>;
   /** Device-local secret store: `localStorage` in the web preview, the iOS Keychain on a device. */
   secrets: SecretStore;
+  /** Claude client: the deterministic fake in the web preview, the real browser-mode SDK on iOS. */
+  claude: ClaudeClient;
 }
 
 /** Assemble a `BridgeHost` from interchangeable filesystem/picker/secrets parts (shared by web + iOS). */
@@ -51,7 +54,7 @@ function createBridgeHost(parts: HostParts): BridgeHost {
   // active person aren't secrets); only the master key / API key move to the Keychain (parts.secrets).
   const deviceStore = webDeviceStore(device);
   const deviceSettings = webDeviceSettings(device);
-  const claude = webFakeClaudeClient();
+  const claude = parts.claude;
 
   // Cache one FileSystem per vault id/bookmark (re-using its connection/scope across ops).
   const fsCache = new Map<string, FileSystem>();
@@ -164,6 +167,7 @@ export function createWebHost(options: WebHostOptions = {}): BridgeHost {
       idbFileSystem(vaultId, options.factory ? { factory: options.factory } : {}),
     selectVaultFolder: () => Promise.resolve(PREVIEW_VAULT_ID),
     secrets: webSecretStore(currentDeviceId()),
+    claude: webFakeClaudeClient(),
   });
 }
 
@@ -186,6 +190,7 @@ export function createCapacitorHost(
       }
     },
     secrets: capacitorSecretStore(keychain),
+    claude: browserClaudeClient(),
   });
 }
 

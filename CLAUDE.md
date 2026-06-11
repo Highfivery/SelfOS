@@ -239,6 +239,23 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-10 — Build (**Slice 2a of [10-multi-device-vault](docs/specs/10-multi-device-vault.md)** — the
+  owner side of **member invite codes**). **Decisions (asked):** code = **word phrase** (6 words from a
+  curated 128-word `inviteWords` list, ~2⁴²); **7-day** expiry; the **member sets their own PIN** on
+  redeem (owner never knows it); generated from the member's **Access tab**; QR deferred; invites
+  cancelable. Core `@selfos/core/people/inviteService`: `generateInviteCode`, `createInvite` (wraps the
+  master key under the code's scrypt KEK into a **key-free-readable** `config/invites/<id>.enc` — the
+  redeeming device has no key yet, like `recovery.enc`), `listInvitesForPerson` (GCs expired),
+  `cancelInvite`, `redeemInvite` (single-use: deletes on redeem). IPC `invites:create/list/cancel` are
+  **owner-only (`people.manage`) AND member-scoped, enforced in main** — `create` rejects a missing/owner
+  target and supersedes any prior pending invite (the reviewer flagged closing the UI↔main trust gap).
+  Owner UI: `DeviceInviteControl` on the Access tab (generate → code shown **once** + copy + warning;
+  pending list + cancel/regenerate). Reviewer: crypto sound (2⁴² + scrypt + 7-day + single-use beats a
+  brute-force racing a pending invite; master key never plaintext on disk/IPC). Gates green: typecheck/
+  lint/format, **220 unit** (76 core + 144 desktop), visual QA desktop + 390px. **NEXT: Slice 2b** — the
+  member **redeem** flow (UnlockScreen "Have an invite code?" → enter code → set own PIN → join) + the
+  owner-generate→member-redeem E2E round-trip. **Lesson: enforce member-scoping in MAIN, not just by
+  rendering the control for non-owners — the renderer isn't the trust boundary.**
 - 2026-06-10 — Build (**Slice 1 of [10-multi-device-vault](docs/specs/10-multi-device-vault.md) complete**
   — sub-slices 1b + 1c shipped on top of 1a). **1b: super-admin secret → the vault.** New
   `@selfos/core/people/superAdmin` writes a salted scrypt hash, encrypted under the master key, to

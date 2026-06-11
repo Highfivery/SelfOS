@@ -420,6 +420,12 @@
   flex-wrap: wrap;
 }
 
+.resultHeadRight {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 .qaList {
   margin: 0;
   display: flex;

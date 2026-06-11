@@ -17,7 +17,13 @@ const renderResults = (): ReturnType<typeof render> =>
 
 afterEach(() => {
   clearMockBridge();
-  useResultsStore.setState({ questionnaireId: null, results: [], loaded: false, loading: false });
+  useResultsStore.setState({
+    questionnaireId: null,
+    results: [],
+    trends: [],
+    loaded: false,
+    loading: false,
+  });
   useSettingsStore.setState({ values: {} });
 });
 
@@ -121,6 +127,46 @@ describe('QuestionnaireResults', () => {
     renderResults();
     expect(await screen.findByText(/couldn’t load these answers/i)).toBeInTheDocument();
     expect(screen.queryByText(/raw responses stay hidden/i)).not.toBeInTheDocument();
+  });
+
+  it('deletes a send after an inline confirm', async () => {
+    const assignmentsDelete = vi.fn(() => Promise.resolve());
+    installMockBridge({
+      assignmentsResults: () => Promise.resolve([send()]),
+      assignmentsDelete,
+    });
+    renderResults();
+
+    await userEvent.click(await screen.findByRole('button', { name: /delete this send/i }));
+    expect(assignmentsDelete).not.toHaveBeenCalled(); // gated behind the confirm
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    expect(assignmentsDelete).toHaveBeenCalledWith('a1');
+  });
+
+  it('renders a Trends section with a chart when sends have re-asks', async () => {
+    installMockBridge({
+      assignmentsResults: () => Promise.resolve([send()]),
+      assignmentsTrends: () =>
+        Promise.resolve([
+          {
+            questionId: 'q1',
+            prompt: 'How connected do you feel?',
+            series: [
+              {
+                label: 'Mara',
+                points: [
+                  { at: '2026-01-01', value: 3 },
+                  { at: '2026-02-01', value: 5 },
+                ],
+              },
+            ],
+          },
+        ]),
+    });
+    renderResults();
+    expect(await screen.findByRole('heading', { name: 'Trends' })).toBeInTheDocument();
+    expect(screen.getByText('How connected do you feel?')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: /trend over time for/i })).toBeInTheDocument();
   });
 
   it('shows a declined send with its note', async () => {

@@ -28,6 +28,7 @@ import {
   type InboxAssignmentDetail,
   type InboxItem,
   type Insight,
+  type QuestionTrend,
   type SendAnswer,
   type SendResult,
   type QuestionnaireAnalyzeResult,
@@ -105,11 +106,13 @@ import {
 import {
   addCustomType,
   analyzeAssignment,
+  buildQuestionTrends,
   createAssignment,
   declineAssignment,
-  deleteQuestionnaire,
   deleteQuestionnaireImage,
+  deleteSend,
   formatAnswerForDisplay,
+  hasSends,
   generateQuestions,
   getAssignment,
   getAssignmentSnapshot,
@@ -124,6 +127,7 @@ import {
   listQuestionnaires,
   MAX_IMAGE_BYTES,
   openAssignment,
+  purgeQuestionnaire,
   saveProgress,
   saveQuestionnaire,
   storeQuestionnaireImage,
@@ -131,6 +135,7 @@ import {
   suggestQuestionnaires,
   validateQuestionnaire,
   type AiDeps,
+  type TrendSend,
 } from '@selfos/core/questionnaires';
 import { fromBase64, toBase64 } from '@selfos/core/encoding';
 
@@ -816,12 +821,35 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) {
         throw new Error('Not permitted');
       }
-      return saveQuestionnaire(ctx.fs, ctx.key, QuestionnaireInputSchema.parse(input));
+      const personId = await activePersonId();
+      // Stamp the creator (main-side, never the renderer) so deletion can enforce "creator-only" rules.
+      return saveQuestionnaire(
+        ctx.fs,
+        ctx.key,
+        QuestionnaireInputSchema.parse(input),
+        personId ?? undefined,
+      );
     },
     questionnairesDelete: async (id): Promise<void> => {
       const ctx = await host.vaultAndKey();
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) return;
-      await deleteQuestionnaire(ctx.fs, PersonIdSchema.parse(id));
+      const questionnaireId = QuestionnaireIdSchema.parse(id);
+      // Owner / super-admin (people.manage) purge a questionnaire + everything downstream at any stage
+      // (§3.9). A non-owner creator may delete their OWN questionnaire only while it is still unsent.
+      if (await activePersonCan(ctx.fs, ctx.key, 'people.manage')) {
+        await purgeQuestionnaire(ctx.fs, ctx.key, questionnaireId);
+        return;
+      }
+      const questionnaire = await getQuestionnaire(ctx.fs, ctx.key, questionnaireId);
+      if (!questionnaire) return;
+      const personId = await activePersonId();
+      if (
+        questionnaire.creatorPersonId !== personId ||
+        (await hasSends(ctx.fs, ctx.key, questionnaireId))
+      ) {
+        throw new Error('Not permitted');
+      }
+      await purgeQuestionnaire(ctx.fs, ctx.key, questionnaireId);
     },
     questionnairesValidate: async (input): Promise<string[]> => {
       // Pure pre-flight check — exposes nothing sensitive, so no vault/capability gate.
@@ -1077,6 +1105,52 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         });
       }
       return results;
+    },
+    assignmentsDelete: async (assignmentId): Promise<void> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.viewResults'))) return;
+      const id = AssignmentIdSchema.parse(assignmentId);
+      const assignment = await getAssignment(ctx.fs, ctx.key, id);
+      if (!assignment) return;
+      // Only the send's own sender (or an Owner / super-admin) may delete it + its derived Insight.
+      const personId = await activePersonId();
+      if (
+        assignment.senderPersonId !== personId &&
+        !(await activePersonCan(ctx.fs, ctx.key, 'people.manage'))
+      ) {
+        throw new Error('Not permitted');
+      }
+      await deleteSend(ctx.fs, ctx.key, id);
+    },
+    assignmentsTrends: async (questionnaireId): Promise<QuestionTrend[]> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.viewResults')))
+        return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      const qid = QuestionnaireIdSchema.parse(questionnaireId);
+      // Trends span every SUBMITTED send of this questionnaire by the active person — Standard AND
+      // Private (the Private disclosure is worded to allow this, §3.2). Numbers, never the prose answers.
+      const sends = (await listAssignments(ctx.fs, ctx.key, { senderPersonId: personId })).filter(
+        (a) => a.questionnaireId === qid && a.status === 'submitted',
+      );
+      const trendSends: TrendSend[] = [];
+      for (const a of sends) {
+        const snapshot = await getAssignmentSnapshot(ctx.fs, ctx.key, a.id);
+        const response = await getResponse(ctx.fs, ctx.key, a.id);
+        if (!snapshot || !response) continue;
+        const recipientName =
+          a.recipient.kind === 'person'
+            ? ((await getPerson(ctx.fs, ctx.key, a.recipient.personId))?.displayName ?? 'Unknown')
+            : (a.recipient.displayName ?? 'External');
+        trendSends.push({
+          submittedAt: a.updatedAt,
+          recipientName,
+          questions: snapshot.questions,
+          answers: response.answers,
+        });
+      }
+      return buildQuestionTrends(trendSends);
     },
 
     // --- UI state (device-local) ---

@@ -8,6 +8,7 @@ import {
   Heading,
   IconButton,
   Inline,
+  LineChart,
   SegmentedControl,
   Select,
   Slider,
@@ -157,6 +158,34 @@ export function Gallery(): JSX.Element {
               Sits beside any heading or control that only admins can see.
             </Text>
           </Inline>
+        </Section>
+
+        <Section title="Line chart">
+          <div style={{ maxWidth: 360 }}>
+            <LineChart
+              ariaLabel="Example trend with two series"
+              series={[
+                {
+                  label: 'Mara',
+                  points: [
+                    { x: 0, y: 3 },
+                    { x: 1, y: 4 },
+                    { x: 2, y: 4 },
+                    { x: 3, y: 5 },
+                  ],
+                },
+                {
+                  label: 'Sam',
+                  points: [
+                    { x: 0, y: 5 },
+                    { x: 1, y: 3 },
+                    { x: 2, y: 4 },
+                    { x: 3, y: 2 },
+                  ],
+                },
+              ]}
+            />
+          </div>
         </Section>
       </Stack>
     </div>

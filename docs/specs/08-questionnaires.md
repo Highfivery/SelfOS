@@ -101,7 +101,8 @@ A new **Questionnaires** feature module registers a nav entry (gated by `questio
 > **Inbox** nav/route (`/inbox`, with an unanswered badge) is gated by **`questionnaires.answer`** (built
 > 2026-06-11, [§13](#13-build-slices) slice 5 / §13.5a). The sender-side **Results** view + the live
 > Analyze trigger + `questionnaires.autoAnalyze` are built (2026-06-11, §13.5b); per-question trends +
-> compatibility + deletion/purge land with §13.5c.
+> deletion/purge are built (2026-06-11, §13.5c); compatibility (variants + alignment + visibility modes +
+> `readRaw`) lands with §13.5d.
 
 - **My Questionnaires** — the sender's created questionnaires (drafts + sent history), each **re-sendable**
   (for trends). _(No template library — questionnaires are created fresh.)_
@@ -212,6 +213,11 @@ automatically:
 - **Insights surface ("what the coach knows")** — list/edit/delete Insights with **provenance**; the
   shareable-vs-private split (`04`) governs whether a fact about a related person can feed **that** person's
   coaching.
+- **Per-question trends (built §13.5c)** — for numeric questions (rating/slider, and per row/bucket for
+  matrix/allocation) the Results view charts each recipient's answers **over re-asks** (≥2 points), via core
+  `buildQuestionTrends` + the `assignments:trends` IPC + the `LineChart` primitive. Trends include
+  **Private** sends' numeric values (the disclosure is worded accordingly, §3.2/§8.4) — numbers only, never
+  the prose answers.
 - **Suggested (gap-finder)** — AI scans **structured context only** (via the context-provider registry —
   profiles, relationships, prior answers + Insights; **never raw chat transcripts**) and proposes the next
   questionnaire/questions. Budget-gated; over budget it renders a calm "budget reached" state without
@@ -231,6 +237,14 @@ Per-household **bring-your-own Cloudflare**, provisioned + deployed from the app
    device manages without re-entering the token.
 
 ### 3.9 Deletion
+
+> **Build state (built §13.5c):** core `purgeQuestionnaire` (def + every send's snapshot/assignment/
+> response + derived Insights) + `deleteSend` + `hasSends`; `Questionnaire.creatorPersonId` is main-stamped
+> on create (preserved on edit, never back-filled onto a legacy def). `questionnaires:delete` is role-aware
+> — Owner/super-admin (`people.manage`) purge at any stage; a non-owner **creator** deletes their own
+> **only while unsent**. Per-send delete is `assignments:delete` (sender/admin-only). Inline "Are you sure?"
+> confirms in the builder + each Results send card. **Deferred to §13.6:** the relay-link revoke for an
+> external send.
 
 - **Owner / super-admin** delete **any** questionnaire at any stage → **purge everything** (questionnaire +
   relay link + raw responses + Insights) after a clear confirmation; the relay link is revoked.
@@ -317,6 +331,7 @@ interface Questionnaire {
   id: string;
   schemaVersion: number;
   version: number; // immutable-snapshot version
+  creatorPersonId?: string; // main-stamped author (on create only); gates "creator deletes own while unsent" (§3.9); legacy defs lack it → Owner-deletable-only
   title: string;
   description?: string;
   type: string; // a starter-taxonomy key OR a user-defined custom type
@@ -531,7 +546,9 @@ untouched.
 Typed channels (`src/shared`, Zod-validated both sides; the API key + Cloudflare token never cross to the
 renderer):
 
-- **Authoring** — `questionnaires:list` / `:get` / `:save` / `:delete` / `:validate` (→ `problems[]`) /
+- **Authoring** — `questionnaires:list` / `:get` / `:save` (main stamps `creatorPersonId` on create) /
+  `:delete` (**role-aware purge §13.5c** — Owner/super-admin purge any stage; a non-owner creator deletes
+  own-while-unsent) / `:validate` (→ `problems[]`) /
   `:generate({type, targetId, brief?, useData})` (→ schema-validated draft) / `:improveQuestion` /
   `:listTypes` / `:addType` / `:storeImage({base64, mime})` (→ `{imagePath, mime}`) / `:getImage(path)` /
   `:deleteImage(path)` / `:generate` / `:improveQuestion`. _(all wired.)_ Image ops are gated by
@@ -541,8 +558,11 @@ renderer):
   `:get` (the recipient answering view) / `:open` (sent → opened) — _all wired, recipient-scoped + gated by
   `questionnaires.answer`_; `assignments:results(questionnaireId)` returns the sender's sends + per-send
   outcome (Standard, submitted → raw answers; Private → none), _sender-scoped + gated by
-  `questionnaires.viewResults` (built §13.5b)_; `:list` / `:createRelayLink` / `:drain` / `:revoke` /
-  `:delete` land with the relay slice.
+  `questionnaires.viewResults` (built §13.5b)_; `assignments:trends(questionnaireId)` returns per-question
+  rating-over-time trends — _sender-scoped + gated `questionnaires.viewResults`, **includes Private sends'
+  numeric values** (numbers only); built §13.5c_; `assignments:delete(assignmentId)` deletes one send + its
+  derived Insight (_sender or Owner/super-admin only; built §13.5c_); `:list` / `:createRelayLink` /
+  `:drain` / `:revoke` land with the relay slice.
 - **Answer** — `assignments:saveProgress` / `:submit` / `:decline({ note? })` _(in-app — wired; gated by
   `questionnaires.answer`, recipient-scoped in the bridge)_; the relay page talks to the **Worker** directly
   (submit / decline / withdraw).
@@ -609,8 +629,11 @@ gate, store-guideline compliance, remote disable).
 ### 8.4 The break-glass privacy model (private mode)
 
 - **Promise to the recipient:** in **Private** mode the recipient is told their answers are _"used only to
-  personalize coaching."_ In normal operation that is true: **no UI exposes raw answers**, and the
-  `questionnaires.readRaw` capability ships **OFF** (even for the Owner).
+  personalize coaching."_ In normal operation that is true: **no UI exposes the raw/prose answers**, and the
+  `questionnaires.readRaw` capability ships **OFF** (even for the Owner). _Since §13.5c the disclosure also
+  states that the recipient's **numeric ratings may appear in the sender's trends over time** (the
+  rating-over-time charts include Private sends' numbers — never the prose answers); the copy is kept
+  consistent across the send panel + the recipient Inbox so the promise stays honest (§3.2)._
 - **The only path to raw answers** is the concealed **super-admin break-glass** (`superadmin:revealRaw`),
   which **writes an audit entry** `{ at, superAdmin, assignmentId, action }` to a **vault-stored (encrypted)**
   log viewable in super-admin mode **from any device**. The developer's debug door, not an everyday
@@ -828,8 +851,8 @@ update/delete` gated by **`questionnaires.viewResults`**. A top-level **"Memory"
      resources** (§8.2) + the always-present crisis footer. **Deferred (no dead code, §12):** the
      **`autoAnalyze`** setting + the live `Analyze` trigger (→ §13.5, where responses arrive) and
      **`queryMetrics`** (→ §11, its consumer). The Memory surface is empty until §13.5 produces Insights._
-5. **Send / collect (in-app + household)** — assignments, Inbox, lifecycle, save/resume, Results + per-question
-   trends + compatibility, deletion/purge.
+5. **Send / collect (in-app + household)** — assignments, Inbox, lifecycle, save/resume, Results +
+   per-question trends, deletion/purge (§13.5a–c); **compatibility → §13.5d**.
    - _**Send + answer core loop (built 2026-06-11, §13.5a):** the in-app send→answer loop. A builder **Send
      panel** (recipient + privacy picker, default **Private** break-glass); a separate **Inbox** nav/route
      (`/inbox`, gated by `questionnaires.answer`, with an unanswered badge) + an **Inbox answer screen**
@@ -850,8 +873,20 @@ update/delete` gated by **`questionnaires.viewResults`**. A top-level **"Memory"
      none, the privacy boundary enforced in the bridge) + derived `SendResult`/`SendAnswer` view types. The
      live **Analyze** reuses `insights:analyze` → a draft Insight reviewed in **Memory**; the
      **`questionnaires.autoAnalyze`** setting (default OFF, AI-gated) auto-runs it when Results opens for new
-     responses. **Deferred:** per-question trends + compatibility + deletion/purge (§13.5c); the relay (§13.6);
-     the break-glass `readRaw` reveal of Private answers._
+     responses. **Deferred:** per-question trends + deletion/purge (§13.5c); compatibility (§13.5d); the
+     relay (§13.6); the break-glass `readRaw` reveal of Private answers._
+   - _**Trends + deletion/purge (built 2026-06-11, §13.5c):** core **`buildQuestionTrends`** (rating-over-time
+     across re-asks — rating/slider + matrix/allocation per row/bucket; one series per recipient; a question
+     appears only with ≥2 points) + the **`assignments:trends`** IPC (sender-scoped, gated `viewResults`,
+     **includes Private sends' numeric values** — numbers only); `QuestionTrend`/`TrendSeries`/`TrendPoint`
+     view types; a token-driven, theme-aware **`LineChart`** primitive (+ `--color-chart-1..4`) shown in
+     `/gallery`; a **Trends** section in Results. **Deletion:** core **`purgeQuestionnaire`**/`deleteSend`/
+     `hasSends`; main-stamped **`Questionnaire.creatorPersonId`** (create-only, never back-filled); role-aware
+     **`questionnaires:delete`** (Owner/super-admin purge any stage; a non-owner creator deletes own-while-
+     unsent) + **`assignments:delete`** (per-send, sender/admin-only); inline "Are you sure?" confirms in the
+     builder + Results cards. The **Private disclosure was updated** (send panel + Inbox) to say numeric
+     ratings may appear in the sender's trends. **Deferred → §13.5d:** **compatibility** (variants + alignment
+     report + the 3 visibility modes + the `readRaw` capability + audit); the relay (§13.6)._
 6. **External: relay + delivery + explicit gates** — `apps/relay` Worker + shared renderer page, the Cloudflare
    connect/deploy/update/teardown flow, PIN/consent/age gating + question-image ZK, link delivery, the
    disclosure setting + audit log, the privacy notice.
@@ -1024,3 +1059,26 @@ update/delete` gated by **`questionnaires.viewResults`**. A top-level **"Memory"
   RTL for the Results states + the builder Results tab, and an E2E send→answer→submit→Results raw round-trip
   with a 390px guard). **Deferred:** per-question trends + compatibility + deletion/purge (§13.5c); the
   external relay (§13.6); the break-glass `readRaw` reveal.
+- 2026-06-11 — **Slice §13.5c built** (per-question trends + deletion/purge; compatibility split out to a
+  focused §13.5d). **Trends:** core **`buildQuestionTrends`** (rating-over-time across re-asks; rating/slider
+  - matrix/allocation per row/bucket; one series per recipient; ≥2 points) + the **`assignments:trends`** IPC
+    (sender-scoped, gated `viewResults`) — **includes Private sends' numeric values** (a deliberate product
+    call; numbers only, never prose); `QuestionTrend`/`TrendSeries`/`TrendPoint` view types; a token-driven,
+    theme-aware **`LineChart`** design-system primitive (+ `--color-chart-1..4` tokens) in `/gallery`; a Trends
+    section in Results. To keep that honest, the **Private disclosure was updated** on the send panel + the
+    recipient Inbox to say numeric ratings may appear in the sender's trends (§3.2/§8.4). **Deletion/purge
+    (§3.9):** core **`purgeQuestionnaire`** (def + all sends + responses + derived Insights) + `deleteSend` +
+    `hasSends`; a main-stamped **`Questionnaire.creatorPersonId`** (additive-optional, create-only, preserved
+    on edit, **never back-filled** onto a legacy def); role-aware **`questionnaires:delete`** (Owner/super-admin
+    purge any stage; a non-owner creator deletes their own **only while unsent**) + a per-send
+    **`assignments:delete`** (sender/admin-only); inline "Are you sure?" confirms in the builder + each Results
+    send card. Code-reviewed **ship** (2 should-fixes applied: a forbidden delete now surfaces a calm inline
+    error instead of an unhandled throw; editing a legacy creator-less def no longer transfers authorship to the
+    editor). Gate green (**243 desktop + 159 core unit, 38 E2E** — incl. a coreBridge test proving Private
+    numbers reach trends + per-send delete is sender/admin-only, deletion/trends core tests, a `LineChart` RTL
+    test, and an E2E that re-asks → charts a trend → deletes a send → purges the questionnaire, with a 390px
+    guard). Synced `08` §3/§4.2/§6/§8.4/§13.5 + `01` (the `LineChart` primitive + chart tokens). **Lesson:
+    relaxing a required field or a delete's silent no-op into a throw (`questionnaires:delete`) means every
+    caller must handle the new rejection — the renderer's `void onRemove()` would otherwise swallow it.**
+    **Next: §13.5d** (compatibility: AI variants + dual-send + alignment report + the 3 visibility modes +
+    `readRaw` + audit), then **§13.6** (relay).

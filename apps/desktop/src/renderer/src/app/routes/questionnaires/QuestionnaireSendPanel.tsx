@@ -18,7 +18,7 @@ import styles from './Questionnaires.module.css';
 /** Per-mode disclosure copy — this is what the recipient is told, so the promise stays honest (§3.2/§8). */
 const PRIVACY_COPY: Record<PrivacyMode, string> = {
   private:
-    'Break-glass: their answers are used only to personalize your coaching. You won’t see the raw responses — just the insight drawn from them.',
+    'Break-glass: you won’t see their individual responses — just the insight drawn from them. Their numeric ratings may appear in your trends over time.',
   standard: 'Standard: you’ll see their answers.',
 };
 

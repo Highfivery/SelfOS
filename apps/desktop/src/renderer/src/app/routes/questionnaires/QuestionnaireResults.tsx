@@ -1,9 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Brain, Lock, Sparkles } from 'lucide-react';
+import { Brain, Lock, Sparkles, Trash2 } from 'lucide-react';
 import { ANTHROPIC_API_KEY_ID } from '@shared/channels';
-import type { AssignmentStatus, SendResult } from '@shared/schemas';
-import { Banner, Button, Card, Heading, Stack, Text } from '../../../design-system/components';
+import type { AssignmentStatus, QuestionTrend, SendResult } from '@shared/schemas';
+import {
+  Banner,
+  Button,
+  Card,
+  Heading,
+  IconButton,
+  Inline,
+  LineChart,
+  Stack,
+  Text,
+  type LineChartSeries,
+} from '../../../design-system/components';
 import { useResultsStore } from '../../../stores/resultsStore';
 import { useSetting } from '../../../settings/useSetting';
 import styles from './Questionnaires.module.css';
@@ -33,9 +44,11 @@ export function QuestionnaireResults({
   questionnaireId: string;
 }): JSX.Element {
   const results = useResultsStore((s) => s.results);
+  const trends = useResultsStore((s) => s.trends);
   const loaded = useResultsStore((s) => s.loaded);
   const load = useResultsStore((s) => s.load);
   const analyze = useResultsStore((s) => s.analyze);
+  const remove = useResultsStore((s) => s.remove);
   const reset = useResultsStore((s) => s.reset);
 
   const [autoAnalyze] = useSetting('questionnaires.autoAnalyze');
@@ -72,6 +85,22 @@ export function QuestionnaireResults({
       }));
     } finally {
       setAnalyzing((m) => ({ ...m, [assignmentId]: false }));
+    }
+  };
+
+  const runDelete = async (assignmentId: string): Promise<void> => {
+    setMessages((m) => {
+      const next = { ...m };
+      delete next[assignmentId];
+      return next;
+    });
+    try {
+      await remove(assignmentId);
+    } catch {
+      setMessages((m) => ({
+        ...m,
+        [assignmentId]: { tone: 'warning', text: 'Couldn’t delete this send. Please try again.' },
+      }));
     }
   };
 
@@ -121,9 +150,38 @@ export function QuestionnaireResults({
           analyzing={analyzing[send.assignmentId] === true}
           message={messages[send.assignmentId]}
           onAnalyze={() => void runAnalyze(send.assignmentId)}
+          onDelete={() => void runDelete(send.assignmentId)}
         />
       ))}
+
+      {trends.length > 0 ? (
+        <Stack gap={3}>
+          <Heading level={3}>Trends</Heading>
+          <Text size="sm" tone="secondary">
+            How numeric answers have moved across re-asks.
+          </Text>
+          {trends.map((trend) => (
+            <TrendCard key={trend.questionId} trend={trend} />
+          ))}
+        </Stack>
+      ) : null}
     </Stack>
+  );
+}
+
+/** One numeric question's rating-over-time chart across the questionnaire's re-asks. */
+function TrendCard({ trend }: { trend: QuestionTrend }): JSX.Element {
+  const series: LineChartSeries[] = trend.series.map((s) => ({
+    label: s.label,
+    points: s.points.map((p) => ({ x: Date.parse(p.at), y: p.value })),
+  }));
+  return (
+    <Card>
+      <Stack gap={2}>
+        <Text weight={500}>{trend.prompt}</Text>
+        <LineChart series={series} ariaLabel={`Trend over time for “${trend.prompt}”`} />
+      </Stack>
+    </Card>
   );
 }
 
@@ -133,25 +191,37 @@ function SendCard({
   analyzing,
   message,
   onAnalyze,
+  onDelete,
 }: {
   send: SendResult;
   aiReady: boolean;
   analyzing: boolean;
   message: { tone: 'info' | 'warning'; text: string } | undefined;
   onAnalyze: () => void;
+  onDelete: () => void;
 }): JSX.Element {
   const isSubmitted = send.status === 'submitted';
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   return (
     <Card>
       <Stack gap={3}>
         <div className={styles.resultHead}>
           <Text weight={500}>{send.recipientName}</Text>
-          <span className={styles.rowBadge}>
-            {send.privacy === 'private' ? (
-              <Lock size={12} aria-hidden="true" className={styles.privacyIcon} />
-            ) : null}
-            {STATUS_LABEL[send.status]}
-          </span>
+          <div className={styles.resultHeadRight}>
+            <span className={styles.rowBadge}>
+              {send.privacy === 'private' ? (
+                <Lock size={12} aria-hidden="true" className={styles.privacyIcon} />
+              ) : null}
+              {STATUS_LABEL[send.status]}
+            </span>
+            <IconButton
+              aria-label={`Delete this send to ${send.recipientName}`}
+              variant="secondary"
+              onClick={() => setConfirmingDelete(true)}
+            >
+              <Trash2 size={14} aria-hidden="true" />
+            </IconButton>
+          </div>
         </div>
 
         {send.status === 'declined' ? (
@@ -200,6 +270,31 @@ function SendCard({
         ) : null}
 
         {message ? <Banner tone={message.tone}>{message.text}</Banner> : null}
+
+        {confirmingDelete ? (
+          <Banner tone="warning">
+            <Stack gap={2}>
+              <Text>
+                Delete this send to {send.recipientName}? It removes their response and any insight
+                drawn from it. This can’t be undone.
+              </Text>
+              <Inline gap={2}>
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    setConfirmingDelete(false);
+                    onDelete();
+                  }}
+                >
+                  Delete
+                </Button>
+                <Button variant="secondary" onClick={() => setConfirmingDelete(false)}>
+                  Cancel
+                </Button>
+              </Inline>
+            </Stack>
+          </Banner>
+        ) : null}
       </Stack>
     </Card>
   );

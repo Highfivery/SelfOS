@@ -100,6 +100,10 @@ const bridge: SelfosBridge = {
   assignmentsDecline: (input) => ipcRenderer.invoke(IpcChannels.assignmentsDecline, input),
   assignmentsResults: (questionnaireId) =>
     ipcRenderer.invoke(IpcChannels.assignmentsResults, questionnaireId),
+  assignmentsTrends: (questionnaireId) =>
+    ipcRenderer.invoke(IpcChannels.assignmentsTrends, questionnaireId),
+  assignmentsDelete: (assignmentId) =>
+    ipcRenderer.invoke(IpcChannels.assignmentsDelete, assignmentId),
   getSidebarCollapsed: () => ipcRenderer.invoke(IpcChannels.getSidebarCollapsed),
   setSidebarCollapsed: (collapsed) =>
     ipcRenderer.invoke(IpcChannels.setSidebarCollapsed, collapsed),

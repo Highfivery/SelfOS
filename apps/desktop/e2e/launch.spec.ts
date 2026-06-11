@@ -1000,7 +1000,7 @@ test('inbox: send a questionnaire, answer it, submit, and round-trip through the
     await w.getByRole('button', { name: /Weekly check-in/ }).click();
 
     // The answer pane shows the Private promise + the always-present crisis affordance.
-    await expect(w.getByText(/won’t see your raw responses/i)).toBeVisible();
+    await expect(w.getByText(/won’t see your individual responses/i)).toBeVisible();
     await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible();
 
     // Answer and submit; the row then reads Submitted.
@@ -1088,6 +1088,72 @@ test('results: a Standard response surfaces the raw answers in the sender’s Re
     });
     await w.waitForTimeout(150);
     expect(await overflow()).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('results: re-asks chart a trend, a send deletes, and the questionnaire purges', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    // Author a one-question rating questionnaire.
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await w.getByRole('button', { name: 'New' }).click();
+    await w.getByLabel('Title').fill('Mood check');
+    await w.getByLabel('Question 1', { exact: true }).fill('How connected do you feel?');
+    await w.getByLabel('Answer type').selectOption({ label: 'Rating' });
+
+    // Send it to self twice (a re-ask), answering each with a different rating.
+    const sendToSelf = async (): Promise<void> => {
+      await w.getByRole('button', { name: 'Send' }).click();
+      await w.getByRole('button', { name: 'Standard' }).click();
+      await w.getByLabel('Send to').selectOption({ label: 'Tester' });
+      await w.getByRole('button', { name: 'Send' }).last().click();
+      await w.getByRole('button', { name: 'Done' }).click();
+    };
+    await sendToSelf();
+    await w.getByRole('button', { name: /Mood check/ }).click();
+    await sendToSelf();
+
+    // Answer both from the Inbox with ratings 2 then 5. Pick the still-unanswered "New" item, waiting
+    // for the list to settle after each submit (else the just-submitted row is still briefly "New").
+    await w.getByRole('link', { name: /Inbox/ }).click();
+    const ratings = ['2', '5'];
+    for (let i = 0; i < ratings.length; i++) {
+      const newItems = w.getByRole('button', { name: /Mood check/ }).filter({ hasText: 'New' });
+      await expect(newItems).toHaveCount(ratings.length - i);
+      await newItems.first().click();
+      await w.getByRole('radio', { name: ratings[i] }).click();
+      await w.getByRole('button', { name: 'Submit', exact: true }).click();
+    }
+
+    // Results: both sends + a Trends chart for the rating question.
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await w.getByRole('button', { name: /Mood check/ }).click();
+    await w.getByRole('button', { name: 'Results' }).click();
+    await expect(w.getByRole('heading', { name: 'Trends' })).toBeVisible();
+    await expect(w.getByRole('img', { name: /trend over time/i })).toBeVisible();
+
+    // Delete one send — confirm inline, then it's gone (one card remains).
+    expect(await w.getByRole('button', { name: /Delete this send/ }).count()).toBe(2);
+    await w
+      .getByRole('button', { name: /Delete this send/ })
+      .first()
+      .click();
+    await w.getByRole('button', { name: 'Delete', exact: true }).click();
+    await expect(w.getByRole('button', { name: /Delete this send/ })).toHaveCount(1);
+
+    // Delete the whole questionnaire — confirm purge, back to an empty list.
+    await w.getByRole('button', { name: 'Edit' }).click();
+    await w.getByRole('button', { name: 'Delete questionnaire' }).click();
+    await w.getByRole('button', { name: 'Delete', exact: true }).click();
+    await expect(w.getByRole('button', { name: /Mood check/ })).toHaveCount(0);
+    await expect(w.getByText(/no questionnaires yet/i)).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

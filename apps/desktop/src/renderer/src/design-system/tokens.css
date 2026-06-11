@@ -79,6 +79,12 @@
   --color-warning: #c28a3e;
   --color-danger: #c25b4e;
   --color-info: #4f7388;
+
+  /* Chart series palette — light (cohesive with the accent + feedback hues) */
+  --color-chart-1: #4f7388;
+  --color-chart-2: #5e8c6a;
+  --color-chart-3: #c28a3e;
+  --color-chart-4: #9b6a8c;
 }
 
 [data-theme='dark'] {
@@ -102,6 +108,12 @@
   --color-warning: #e0b36b;
   --color-danger: #e08c7f;
   --color-info: #94b2c6;
+
+  /* Chart series palette — dark */
+  --color-chart-1: #94b2c6;
+  --color-chart-2: #8fb89a;
+  --color-chart-3: #e0b36b;
+  --color-chart-4: #c79ab8;
 }
 
 /* Text size: scaling the root font-size scales every rem-based token. */

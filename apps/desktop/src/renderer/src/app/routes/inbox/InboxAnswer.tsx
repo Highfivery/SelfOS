@@ -176,7 +176,7 @@ export function InboxAnswer({
               <Lock size={12} aria-hidden="true" className={styles.privacyIcon} />
             ) : null}
             {detail.privacy === 'private'
-              ? 'Your answers personalize their coaching — they won’t see your raw responses.'
+              ? 'Your answers personalize their coaching. They won’t see your individual responses — though your numeric ratings may appear in their trends over time.'
               : 'They’ll see your answers.'}
           </span>
         </div>

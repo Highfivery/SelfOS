@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { SelfosBridge, SendResult } from '@shared/channels';
+import type { QuestionTrend, SelfosBridge, SendResult } from '@shared/channels';
 
 // Derive the analyze result shape from the bridge contract so the store never drifts from the IPC.
 type AnalyzeResult = Awaited<ReturnType<SelfosBridge['insightsAnalyze']>>;
@@ -18,24 +18,32 @@ const ANALYZE_UNAVAILABLE: AnalyzeResult = {
 interface ResultsState {
   questionnaireId: string | null;
   results: SendResult[];
+  /** Per-question rating-over-time trends across this questionnaire's submitted sends. */
+  trends: QuestionTrend[];
   /** True once the first load for the current questionnaire has resolved — gates the empty state so it
    *  never flashes before data arrives. */
   loaded: boolean;
   loading: boolean;
   load: (questionnaireId: string) => Promise<void>;
   analyze: (assignmentId: string) => Promise<AnalyzeResult>;
+  /** Delete one send (its response + any derived Insight), then refresh. */
+  remove: (assignmentId: string) => Promise<void>;
   reset: () => void;
 }
 
 export const useResultsStore = create<ResultsState>((set, get) => ({
   questionnaireId: null,
   results: [],
+  trends: [],
   loaded: false,
   loading: false,
   load: async (questionnaireId) => {
     set({ questionnaireId, loading: true });
-    const results = (await window.selfos?.assignmentsResults(questionnaireId)) ?? [];
-    set({ results, loading: false, loaded: true });
+    const [results, trends] = await Promise.all([
+      window.selfos?.assignmentsResults(questionnaireId) ?? Promise.resolve([]),
+      window.selfos?.assignmentsTrends(questionnaireId) ?? Promise.resolve([]),
+    ]);
+    set({ results, trends, loading: false, loaded: true });
   },
   analyze: async (assignmentId) => {
     const result = (await window.selfos?.insightsAnalyze({ assignmentId })) ?? ANALYZE_UNAVAILABLE;
@@ -44,5 +52,11 @@ export const useResultsStore = create<ResultsState>((set, get) => ({
     if (questionnaireId) await get().load(questionnaireId);
     return result;
   },
-  reset: () => set({ questionnaireId: null, results: [], loaded: false, loading: false }),
+  remove: async (assignmentId) => {
+    await window.selfos?.assignmentsDelete(assignmentId);
+    const { questionnaireId } = get();
+    if (questionnaireId) await get().load(questionnaireId);
+  },
+  reset: () =>
+    set({ questionnaireId: null, results: [], trends: [], loaded: false, loading: false }),
 }));

@@ -408,4 +408,35 @@ describe('Questionnaires', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Results' }));
     expect(await screen.findByText(/haven’t sent this questionnaire yet/i)).toBeInTheDocument();
   });
+
+  it('confirms before deleting a saved questionnaire', async () => {
+    const questionnairesDelete = vi.fn(() => Promise.resolve());
+    installMockBridge({
+      questionnairesList: () =>
+        Promise.resolve([
+          {
+            id: 'q1',
+            schemaVersion: 1,
+            version: 1,
+            title: 'Weekly check-in',
+            type: 'role-feedback',
+            sensitivity: 'standard',
+            questions: [{ id: 'qq1', type: 'shortText', prompt: 'How?', required: true }],
+            createdAt: 'now',
+            updatedAt: 'now',
+          },
+        ]),
+      questionnairesDelete,
+    });
+    renderApp();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Delete questionnaire' }));
+    // The destructive action is gated behind an inline confirm — nothing deleted yet.
+    expect(questionnairesDelete).not.toHaveBeenCalled();
+    expect(screen.getByText(/can’t be undone/i)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    expect(questionnairesDelete).toHaveBeenCalledWith('q1');
+  });
 });

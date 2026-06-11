@@ -356,6 +356,10 @@ export const QuestionnaireSchema = z.object({
   id: z.string().min(1),
   schemaVersion: z.number().int().positive(),
   version: z.number().int().positive(), // immutable-snapshot version; bumps on edit
+  // Who authored it — set by main on create from the active person, never the renderer. Gates "a creator
+  // may delete their own questionnaire only while unsent" (§3.9). Additive-optional (legacy defs lack it →
+  // only Owner/super-admin can delete those); no schemaVersion bump.
+  creatorPersonId: z.string().optional(),
   title: z.string().min(1),
   description: z.string().optional(),
   type: z.string().min(1), // a starter-taxonomy key OR a user-defined custom type
@@ -582,6 +586,29 @@ export interface InboxAssignmentDetail {
 export interface SendAnswer {
   prompt: string;
   answer: string; // formatted for display; '' when unanswered
+}
+
+/** One point on a per-question trend line: a numeric answer at a submission time. */
+export interface TrendPoint {
+  at: string; // ISO submit time
+  value: number;
+}
+
+/** One series within a question's trend — a recipient (and, for matrix/allocation, a row/bucket). */
+export interface TrendSeries {
+  label: string;
+  points: TrendPoint[]; // ≥2, ordered by time
+}
+
+/**
+ * A numeric question's rating-over-time across a questionnaire's re-asks (08-questionnaires §3.7). Only
+ * questions with ≥2 points in some series appear. Includes **all** submitted sends — Standard and Private
+ * — so the Private disclosure is worded to say answers may appear in the sender's trends (§3.2).
+ */
+export interface QuestionTrend {
+  questionId: string;
+  prompt: string;
+  series: TrendSeries[];
 }
 
 /**

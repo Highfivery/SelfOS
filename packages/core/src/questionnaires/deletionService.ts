@@ -1,0 +1,64 @@
+import type { FileSystem } from '../host';
+import { deleteInsight, listAllInsights } from '../insights';
+import { deleteAssignment, listAssignments } from './assignmentService';
+import { deleteQuestionnaire } from './questionnaireService';
+
+/**
+ * Deletion + purge (08-questionnaires §3.9). Removing a send or a whole questionnaire also removes every
+ * artifact derived from it — the encrypted responses **and** any Insight drafted from them — so nothing
+ * is left dangling in the vault or the coach's context. The role rules (who may delete what, when) are
+ * enforced one layer up in the bridge; these services do the thorough teardown.
+ *
+ * (The relay link revoke for an external send lands with the relay slice, §13.6.)
+ */
+
+/** Delete every Insight (across all subjects) drafted from any of the given assignment ids. */
+async function purgeInsightsFor(
+  fs: FileSystem,
+  key: Uint8Array,
+  assignmentIds: ReadonlySet<string>,
+): Promise<void> {
+  for (const insight of await listAllInsights(fs, key)) {
+    const from = insight.provenance.assignmentId;
+    if (from && assignmentIds.has(from)) {
+      await deleteInsight(fs, insight.subjectPersonId, insight.id);
+    }
+  }
+}
+
+/** Delete one send entirely — its snapshot + assignment + response, and any Insight derived from it. */
+export async function deleteSend(
+  fs: FileSystem,
+  key: Uint8Array,
+  assignmentId: string,
+): Promise<void> {
+  await purgeInsightsFor(fs, key, new Set([assignmentId]));
+  await deleteAssignment(fs, assignmentId);
+}
+
+/**
+ * Purge a questionnaire and everything downstream of it: every send of it (snapshot + assignment +
+ * response + any derived Insight), then the definition itself. Idempotent — a missing piece is a no-op.
+ */
+export async function purgeQuestionnaire(
+  fs: FileSystem,
+  key: Uint8Array,
+  questionnaireId: string,
+): Promise<void> {
+  const sends = (await listAssignments(fs, key)).filter(
+    (a) => a.questionnaireId === questionnaireId,
+  );
+  await purgeInsightsFor(fs, key, new Set(sends.map((a) => a.id)));
+  for (const send of sends) await deleteAssignment(fs, send.id);
+  await deleteQuestionnaire(fs, questionnaireId);
+}
+
+/** Whether a questionnaire has any sends (gates a non-owner creator's "delete only while unsent"). */
+export async function hasSends(
+  fs: FileSystem,
+  key: Uint8Array,
+  questionnaireId: string,
+): Promise<boolean> {
+  const sends = await listAssignments(fs, key);
+  return sends.some((a) => a.questionnaireId === questionnaireId);
+}

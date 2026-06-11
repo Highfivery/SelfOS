@@ -11,6 +11,7 @@ import {
   Field,
   Heading,
   IconButton,
+  Inline,
   SegmentedControl,
   Select,
   Stack,
@@ -316,6 +317,8 @@ export function QuestionnaireBuilder({
 
   // Send: holds the saved questionnaire id once "Send" validates + saves; the send panel reads it.
   const [sendId, setSendId] = useState<string | null>(null);
+  // Inline delete confirmation (the app is modal-free), so a destructive purge is never one mis-tap away.
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   // Edit ⇄ Preview ⇄ Results. Preview renders the live drafts as the recipient sees them; Results (only
   // for a saved questionnaire, and only with viewResults) shows its sends + per-send outcome.
@@ -470,6 +473,13 @@ export function QuestionnaireBuilder({
     try {
       await remove(questionnaire.id);
       onDone();
+    } catch {
+      // `questionnairesDelete` throws when you may not delete this one (not your questionnaire, or it
+      // has already been sent and you're not an admin) — surface it calmly instead of failing silently.
+      setConfirmingDelete(false);
+      setProblems([
+        'You don’t have permission to delete this questionnaire — it may have already been sent.',
+      ]);
     } finally {
       setBusy(false);
     }
@@ -1020,7 +1030,7 @@ export function QuestionnaireBuilder({
                 <IconButton
                   aria-label="Delete questionnaire"
                   variant="secondary"
-                  onClick={() => void onRemove()}
+                  onClick={() => setConfirmingDelete(true)}
                   disabled={busy}
                 >
                   <Trash2 size={16} aria-hidden="true" />
@@ -1028,6 +1038,29 @@ export function QuestionnaireBuilder({
               ) : null}
             </div>
           </div>
+
+          {confirmingDelete ? (
+            <Banner tone="warning">
+              <Stack gap={2}>
+                <Text>
+                  Delete “{title.trim()}”? This permanently removes the questionnaire and every
+                  response and insight from it. This can’t be undone.
+                </Text>
+                <Inline gap={2}>
+                  <Button variant="primary" onClick={() => void onRemove()} disabled={busy}>
+                    Delete
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setConfirmingDelete(false)}
+                    disabled={busy}
+                  >
+                    Cancel
+                  </Button>
+                </Inline>
+              </Stack>
+            </Banner>
+          ) : null}
 
           {sendId ? (
             <QuestionnaireSendPanel

@@ -45,9 +45,14 @@ export async function saveQuestionnaire(
   fs: FileSystem,
   key: Uint8Array,
   input: QuestionnaireInput,
+  creatorPersonId?: string,
 ): Promise<Questionnaire> {
   const existing = input.id ? await getQuestionnaire(fs, key, input.id) : null;
   const at = new Date().toISOString();
+  // Creator is stamped ONLY on actual create; an edit preserves the original (and never back-fills a
+  // legacy creator-less def — editing it must not transfer authorship to the editor, which would let a
+  // non-owner then delete it). A legacy def stays Owner-deletable-only (§3.9).
+  const creator = existing ? existing.creatorPersonId : creatorPersonId;
   const questionnaire: Questionnaire = {
     id: existing?.id ?? input.id ?? uuid(),
     schemaVersion: 1,
@@ -58,6 +63,7 @@ export async function saveQuestionnaire(
     questions: input.questions,
     createdAt: existing?.createdAt ?? at,
     updatedAt: at,
+    ...(creator !== undefined ? { creatorPersonId: creator } : {}),
     ...(input.description !== undefined ? { description: input.description } : {}),
     ...(input.compatibility !== undefined ? { compatibility: input.compatibility } : {}),
   };

@@ -489,4 +489,110 @@ describe('createCoreBridge', () => {
     await bridge.sessionSetActive({ personId: guest.id });
     expect(await bridge.assignmentsResults(q.id)).toEqual([]);
   });
+
+  it('deletion: owner purges any stage; a member-creator only deletes their own while unsent', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    const member = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: member.id, roleId: 'member', pin: null });
+
+    // The member creates a questionnaire (its creatorPersonId is stamped to them).
+    await bridge.sessionSetActive({ personId: member.id });
+    const q = await bridge.questionnairesSave({
+      title: 'Member’s questionnaire',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'How?', required: true }],
+    });
+    expect((await bridge.questionnairesGet(q.id))?.creatorPersonId).toBe(member.id);
+
+    // Sent → it now has a send, so the member-creator can no longer delete it.
+    const assignment = await bridge.assignmentsCreate({
+      questionnaireId: q.id,
+      recipientPersonId: ownerId,
+      privacy: 'standard',
+    });
+    await expect(bridge.questionnairesDelete(q.id)).rejects.toThrow(/permitted/);
+    expect(await bridge.questionnairesGet(q.id)).not.toBeNull();
+
+    // A different member can't delete someone else's questionnaire either.
+    const other = await bridge.peopleSave({ displayName: 'Sam', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: other.id, roleId: 'member', pin: null });
+    await bridge.sessionSetActive({ personId: other.id });
+    await expect(bridge.questionnairesDelete(q.id)).rejects.toThrow(/permitted/);
+
+    // The owner purges it at any stage — def + the send disappear.
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    await bridge.questionnairesDelete(q.id);
+    expect(await bridge.questionnairesGet(q.id)).toBeNull();
+    // The send (its sender was the member) is gone too — verified from the member's Results scope.
+    await bridge.sessionSetActive({ personId: member.id });
+    expect(await bridge.assignmentsResults(q.id)).toEqual([]);
+
+    // A member-creator CAN delete their own questionnaire while it's still unsent.
+    const draft = await bridge.questionnairesSave({
+      title: 'Unsent draft',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      questions: [],
+    });
+    await bridge.questionnairesDelete(draft.id);
+    expect(await bridge.questionnairesGet(draft.id)).toBeNull();
+    void assignment;
+  });
+
+  it('trends include Private sends’ numeric values; per-send delete is sender/admin-only', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: mara.id, roleId: 'member', pin: null });
+    const q = await bridge.questionnairesSave({
+      title: 'Connection check',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      questions: [
+        {
+          id: 'c1',
+          type: 'rating',
+          prompt: 'How connected?',
+          required: true,
+          scale: { min: 1, max: 5 },
+        },
+      ],
+    });
+    // The owner sends a PRIVATE questionnaire to Mara twice (a re-ask).
+    const sends: string[] = [];
+    for (const value of [2, 4]) {
+      const a = await bridge.assignmentsCreate({
+        questionnaireId: q.id,
+        recipientPersonId: mara.id,
+        privacy: 'private',
+      });
+      sends.push(a.id);
+      await bridge.sessionSetActive({ personId: mara.id });
+      await bridge.assignmentsSubmit({
+        assignmentId: a.id,
+        answers: [{ questionId: 'c1', value }],
+      });
+      await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    }
+
+    // Per-send Results never expose the Private raw answers, but the TREND carries the numbers (the
+    // Private disclosure is worded to allow this) — the central §13.5c privacy decision.
+    expect((await bridge.assignmentsResults(q.id)).every((r) => r.answers === undefined)).toBe(
+      true,
+    );
+    const trends = await bridge.assignmentsTrends(q.id);
+    expect(trends[0]?.series[0]?.points.map((p) => p.value)).toEqual([2, 4]);
+
+    // A non-sender member (with viewResults) cannot delete the owner's send.
+    const sam = await bridge.peopleSave({ displayName: 'Sam', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: sam.id, roleId: 'member', pin: null });
+    await bridge.sessionSetActive({ personId: sam.id });
+    const target = sends[0] ?? '';
+    await expect(bridge.assignmentsDelete(target)).rejects.toThrow(/permitted/);
+
+    // The sender (owner) can.
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    await bridge.assignmentsDelete(target);
+    expect((await bridge.assignmentsTrends(q.id)).length).toBe(0); // one point left → no trend
+  });
 });

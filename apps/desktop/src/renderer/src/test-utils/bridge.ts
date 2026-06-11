@@ -196,6 +196,8 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     assignmentsSubmit: () => Promise.resolve(),
     assignmentsDecline: () => Promise.resolve(),
     assignmentsResults: () => Promise.resolve([]),
+    assignmentsTrends: () => Promise.resolve([]),
+    assignmentsDelete: () => Promise.resolve(),
     getSidebarCollapsed: () => Promise.resolve(false),
     setSidebarCollapsed: () => Promise.resolve(),
     ...overrides,

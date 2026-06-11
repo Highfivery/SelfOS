@@ -239,6 +239,37 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Build (Questionnaires **slice §13.5c — per-question trends + deletion/purge**,
+  [08-questionnaires](docs/specs/08-questionnaires.md) §3.7/§3.9/§4.2/§6/§8.4/§13.5; design-system
+  [01](docs/specs/01-design-system.md) §5.3/§5.6). **Scope decision (asked, twice):** the user chose "all
+  three together" (trends + compatibility + deletion) **and** all 3 compatibility visibility modes (which
+  pulls in the deferred break-glass `readRaw` + audit). After building the tractable two-thirds I **flagged
+  the true size honestly + asked again** — the user chose to **ship trends + deletion now as §13.5c** and do
+  **compatibility as a focused §13.5d**. **Privacy call (asked, with a clear warning):** trends **include
+  Private sends' numeric values** — which contradicts the "they won't see your raw responses" promise; the
+  user chose to **reconcile by updating the Private disclosure** (send panel + Inbox now say numeric ratings
+  may appear in the sender's trends), so the app stays honest to recipients (§3.2). **Trends:** core
+  **`buildQuestionTrends`** (rating-over-time across re-asks; rating/slider + matrix/allocation per
+  row/bucket; one series per recipient; ≥2 points) + the **`assignments:trends`** IPC (sender-scoped, gated
+  `viewResults`; numbers only, never prose); `QuestionTrend`/`TrendSeries`/`TrendPoint` view types; a
+  **token-driven, theme-aware `LineChart`** primitive (+ `--color-chart-1..4` tokens) in `/gallery`; a Trends
+  section in Results. **Deletion/purge (§3.9):** core **`purgeQuestionnaire`** (def + all sends + responses +
+  derived Insights) + `deleteSend` + `hasSends`; a **main-stamped `Questionnaire.creatorPersonId`**
+  (additive-optional, create-only, **never back-filled** onto a legacy def); **role-aware
+  `questionnaires:delete`** (Owner/super-admin purge any stage; a non-owner creator deletes their own **only
+  while unsent**) + a per-send **`assignments:delete`** (sender/admin-only); inline "Are you sure?" confirms
+  in the builder + each Results send card. Live web-preview QA: the trend chart renders cleanly (2→4 line +
+  legend), the delete confirms work, no console errors, no 390px overflow. Code-reviewer **ship** (2
+  should-fixes applied: a forbidden delete surfaces a **calm inline error** instead of an unhandled throw;
+  editing a legacy creator-less def **no longer transfers authorship** to the editor — which would have let a
+  Member delete an Owner's def). Gate green: typecheck/lint/format, **243 desktop + 159 core unit, 38 E2E**
+  (a coreBridge test proving Private numbers reach trends + per-send delete is sender/admin-only, deletion +
+  trends core tests, a `LineChart` RTL test, and an E2E re-ask→chart→delete-send→purge with a 390px guard).
+  Synced `08` + `01`. **Lesson: turning a silent no-op (the old `questionnaires:delete`) into a throw means
+  every caller must handle the rejection — `void onRemove()` in the renderer would otherwise swallow it into
+  an unhandled rejection with no user feedback. When a gate newly throws, audit its callers.** **Next:
+  §13.5d** (compatibility: AI variants + dual-send + alignment report + Insight + the 3 visibility modes +
+  the `readRaw` capability + audit), then **§13.6** (the external relay).
 - 2026-06-11 — Build (Questionnaires **slice §13.5b — the sender's Results view + live Analyze + autoAnalyze**,
   [08-questionnaires](docs/specs/08-questionnaires.md) §3.7/§4.5/§6/§13.5). **This lights up the analysis loop**
   the §13.4 Memory surface was waiting on — a sender can now see a send's outcome and turn a response into a

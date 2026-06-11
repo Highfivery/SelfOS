@@ -22,6 +22,7 @@ import type {
   QuestionnaireImproveResult,
   QuestionnaireInput,
   QuestionnaireSuggestResult,
+  QuestionTrend,
   Relationship,
   RelationshipInput,
   Role,
@@ -111,6 +112,8 @@ export const IpcChannels = {
   assignmentsSubmit: 'assignments:submit',
   assignmentsDecline: 'assignments:decline',
   assignmentsResults: 'assignments:results',
+  assignmentsTrends: 'assignments:trends',
+  assignmentsDelete: 'assignments:delete',
   getSidebarCollapsed: 'ui:getSidebarCollapsed',
   setSidebarCollapsed: 'ui:setSidebarCollapsed',
 } as const;
@@ -365,6 +368,16 @@ export interface SelfosBridge {
    * `questionnaires.viewResults`.
    */
   assignmentsResults(questionnaireId: string): Promise<SendResult[]>;
+  /**
+   * Per-question rating-over-time trends across a questionnaire's submitted sends (Standard + Private —
+   * numeric values only). Sender-scoped; requires `questionnaires.viewResults`.
+   */
+  assignmentsTrends(questionnaireId: string): Promise<QuestionTrend[]>;
+  /**
+   * Delete one send (its snapshot + assignment + response + any derived Insight). Allowed for the send's
+   * sender or an Owner / super-admin. Requires `questionnaires.viewResults`.
+   */
+  assignmentsDelete(assignmentId: string): Promise<void>;
   /** Whether the desktop sidebar is collapsed to an icon rail (device-local). */
   getSidebarCollapsed(): Promise<boolean>;
   /** Persist the sidebar collapsed/expanded state (device-local). */
@@ -388,6 +401,7 @@ export type {
   PrivacyMode,
   Questionnaire,
   QuestionnaireInput,
+  QuestionTrend,
   Relationship,
   RelationshipInput,
   Role,

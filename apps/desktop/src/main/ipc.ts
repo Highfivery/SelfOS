@@ -188,6 +188,8 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.assignmentsSubmit, bridge.assignmentsSubmit);
   handle(IpcChannels.assignmentsDecline, bridge.assignmentsDecline);
   handle(IpcChannels.assignmentsResults, bridge.assignmentsResults);
+  handle(IpcChannels.assignmentsTrends, bridge.assignmentsTrends);
+  handle(IpcChannels.assignmentsDelete, bridge.assignmentsDelete);
   handle(IpcChannels.getSidebarCollapsed, bridge.getSidebarCollapsed);
   handle(IpcChannels.setSidebarCollapsed, bridge.setSidebarCollapsed);
 

@@ -72,7 +72,7 @@ describe('Inbox', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
     // Private mode tells the recipient their raw answers stay hidden, and crisis help is always present.
-    expect(await screen.findByText(/won’t see your raw responses/i)).toBeInTheDocument();
+    expect(await screen.findByText(/won’t see your individual responses/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /get help now/i })).toBeInTheDocument();
 
     await userEvent.type(screen.getByLabelText('How are we doing?'), 'Pretty well');

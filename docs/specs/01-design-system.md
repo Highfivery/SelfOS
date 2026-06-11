@@ -117,6 +117,9 @@ contrast (see §9). All values are tuned; exact ramp stops may be fine-tuned dur
 `#C28A3E`/`#E0B36B`, `--color-danger` `#C25B4E`/`#E08C7F`, `--color-info` = accent. Each has a
 `-subtle-bg` and `-text` variant meeting contrast.
 
+**Chart series** — a 4-color series palette (`--color-chart-1…4`), themed light/dark, drawn from the
+accent + feedback hues so multi-series charts (`LineChart`) stay cohesive with the calm palette.
+
 ### 5.4 Typography
 
 - **Mulish** — UI & body (weights 400/500/600). **Lora** — long-form reading (journal entries,
@@ -166,6 +169,9 @@ this is the v1 inventory:
 - **Feedback / status:** `Badge`, `AdminOnlyBadge` (the "Admin only" lock pill — marks any
   control/section only admins can see; CLAUDE.md §12), `Avatar`, `Spinner`, `Skeleton`, `EmptyState`,
   `Banner`.
+- **Data viz:** `LineChart` — a minimal multi-series line chart (token-driven `--color-chart-*`,
+  theme-aware, `role="img"` + a labelled `<title>` + a legend); powers questionnaire trends and any small
+  time-series.
 - **Icons:** **`lucide-react`** — a single outline icon set (calm, consistent, tree-shakeable).
 
 ## 6. IPC / API contracts

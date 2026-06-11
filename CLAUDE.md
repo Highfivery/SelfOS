@@ -239,6 +239,28 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-10 — Spec approved + **Slice 1a built**: **[10-multi-device-vault](docs/specs/10-multi-device-vault.md)**
+  (multi-device household — vault identity, device join & recovery). User flagged: only **one owner +
+  one super-admin per directory** — a second person opening the same shared (iCloud) folder must NOT
+  become owner/super-admin; a **member** should install on their own device and do member things.
+  Investigation found it's worse than that: the boot gate decided "first-run setup" from whether **this
+  device** held the master key, so a 2nd device re-ran Setup → `createMasterKey` **overwrote
+  `config/recovery.enc`** (orphaning all ciphertext) **+ minted a second owner** — a data-loss bug.
+  **Decisions (asked):** super-admin hash moves **into the vault**; **phased** delivery — Slice 1
+  (safety fix: detection + guards + super-admin→vault + recovery-phrase unlock) then Slice 2 (one-time
+  member **invite/pairing codes** — chosen over PIN-wrapping the master key, which is offline-
+  brute-forceable from the synced file); owner **PIN required** at Setup; recovery-phrase unlock allows
+  **any persona** (it's the owner's secret; members onboard via Slice 2). Slice 1 ships in 3 sub-slices:
+  **1a (done)** = key-free `vaultInitialized` (recovery.enc presence) + a hard `createMasterKey` guard
+  that **never overwrites** an existing recovery.enc + a resume-aware `setupHousehold` (finishes an
+  interrupted setup without re-keying, refuses a second owner) + the **three-way `HouseholdGate`**
+  (Setup / `UnlockScreen` / Shell-or-picker) + `household:unlockWithRecoveryPhrase` IPC + the
+  recovery-phrase `UnlockScreen`; **1b** = super-admin → `config/superadmin.enc` (+ migration); **1c** =
+  owner PIN at Setup. Reviewer verdict: the re-key guard is airtight (recovery.enc byte-identical after
+  a blocked 2nd setup; phrase never logged; renderer never sees the key). Gates green: typecheck/lint/
+  format, **203 unit** (64 core + 139 desktop), **25 E2E** (incl. 2nd-device-unlocks-no-second-owner +
+  interrupted-setup-resume). **Lesson: "is the vault set up?" is a property of the VAULT (a key-free
+  file marker), not of the device's keychain — conflating them re-keys shared vaults.**
 - 2026-06-10 — Fix (responsive Settings + Roles — user flagged from the iOS simulator): two screens
   failed the responsive DoD at phone width. **Settings** crammed the 176px section rail beside the
   content, crushing field descriptions to one-word-per-line; now below `--bp-md` the layout is one

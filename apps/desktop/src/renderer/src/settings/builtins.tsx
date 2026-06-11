@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Database, Info, Palette, Sparkles } from 'lucide-react';
+import { ClipboardList, Database, Info, Palette, Sparkles } from 'lucide-react';
 import { registerSection, registerSettings } from './registry';
 import { defineSetting } from './types';
 import { AboutDisclaimer, AboutVersion, RevealVaultRow, VaultLocationValue } from './customRows';
@@ -13,6 +13,7 @@ declare module './types' {
     'appearance.reduceMotion': boolean;
     'ai.enabled': boolean;
     'ai.model': 'claude-sonnet-4-6' | 'claude-opus-4-8';
+    'questionnaires.autoAnalyze': boolean;
   }
 }
 
@@ -41,13 +42,20 @@ export function registerBuiltinSettings(): void {
     order: 2,
   });
   registerSection({
+    id: 'questionnaires',
+    title: 'Questionnaires',
+    description: 'How questionnaire responses are turned into insights.',
+    icon: ClipboardList,
+    order: 3,
+  });
+  registerSection({
     id: 'vault',
     title: 'Vault',
     description: 'Where your data is stored.',
     icon: Database,
-    order: 3,
+    order: 4,
   });
-  registerSection({ id: 'about', title: 'About', icon: Info, order: 4 });
+  registerSection({ id: 'about', title: 'About', icon: Info, order: 5 });
 
   registerSettings([
     defineSetting({
@@ -156,6 +164,18 @@ export function registerBuiltinSettings(): void {
       default: null,
       control: { type: 'custom', render: TestConnectionControl },
       order: 4,
+      visibleWhen: aiEnabled,
+    }),
+    defineSetting({
+      key: 'questionnaires.autoAnalyze',
+      section: 'questionnaires',
+      label: 'Analyze responses automatically',
+      description:
+        'When on, opening a questionnaire’s Results automatically analyzes any new responses into draft insights (using your AI allowance) instead of waiting for you to tap Analyze. You still review and approve each insight before it informs your coaching.',
+      schema: z.boolean(),
+      default: false,
+      control: { type: 'switch' },
+      order: 1,
       visibleWhen: aiEnabled,
     }),
     defineSetting({

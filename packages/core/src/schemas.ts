@@ -577,3 +577,27 @@ export interface InboxAssignmentDetail {
   answers: Answer[]; // saved draft answers; empty until the recipient saves progress
   answerable: boolean;
 }
+
+/** One question + its answer rendered as display text, for the sender's Standard-send Results (§3.7). */
+export interface SendAnswer {
+  prompt: string;
+  answer: string; // formatted for display; '' when unanswered
+}
+
+/**
+ * One send of a questionnaire as the **sender** sees it in Results (08-questionnaires §3.7). A derived
+ * view: `answers` is populated **only** for a Standard, submitted send — a Private send never carries the
+ * raw answers across IPC (the break-glass `readRaw` reveal is a separate, deferred slice). The `analyzed`
+ * flag reflects whether an Insight already exists for this send (drafted or approved).
+ */
+export interface SendResult {
+  assignmentId: string;
+  recipientName: string;
+  status: AssignmentStatus;
+  privacy: PrivacyMode;
+  createdAt: string;
+  submittedAt?: string;
+  declineNote?: string;
+  analyzed: boolean;
+  answers?: SendAnswer[]; // present only for a Standard, submitted send
+}

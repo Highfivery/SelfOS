@@ -13,6 +13,7 @@ import type {
   InviteSummary,
   Insight,
   Person,
+  SendResult,
   PersonInput,
   PrivacyMode,
   Questionnaire,
@@ -109,6 +110,7 @@ export const IpcChannels = {
   assignmentsSaveProgress: 'assignments:saveProgress',
   assignmentsSubmit: 'assignments:submit',
   assignmentsDecline: 'assignments:decline',
+  assignmentsResults: 'assignments:results',
   getSidebarCollapsed: 'ui:getSidebarCollapsed',
   setSidebarCollapsed: 'ui:setSidebarCollapsed',
 } as const;
@@ -357,6 +359,12 @@ export interface SelfosBridge {
   assignmentsSubmit(input: { assignmentId: string; answers: Answer[] }): Promise<void>;
   /** Decline an assignment, silently or with a short note. Recipient-only; requires `questionnaires.answer`. */
   assignmentsDecline(input: { assignmentId: string; note?: string }): Promise<void>;
+  /**
+   * The active person's sends of one questionnaire, newest first — the sender's Results view. Raw answers
+   * are included only for **Standard, submitted** sends (a Private send carries none). Requires
+   * `questionnaires.viewResults`.
+   */
+  assignmentsResults(questionnaireId: string): Promise<SendResult[]>;
   /** Whether the desktop sidebar is collapsed to an icon rail (device-local). */
   getSidebarCollapsed(): Promise<boolean>;
   /** Persist the sidebar collapsed/expanded state (device-local). */
@@ -383,6 +391,7 @@ export type {
   Relationship,
   RelationshipInput,
   Role,
+  SendResult,
   UsageEvent,
   UsageSummary,
 };

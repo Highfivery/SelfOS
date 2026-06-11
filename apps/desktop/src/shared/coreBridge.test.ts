@@ -416,4 +416,77 @@ describe('createCoreBridge', () => {
       answerable: false,
     });
   });
+
+  it('Results expose Standard answers but never Private ones; Analyze flips the analyzed flag', async () => {
+    const { host, bridge, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const recipient = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: recipient.id, roleId: 'member', pin: null });
+    const q = await bridge.questionnairesSave({
+      title: 'Weekly check-in',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'How are we doing?', required: true }],
+    });
+    const standard = await bridge.assignmentsCreate({
+      questionnaireId: q.id,
+      recipientPersonId: recipient.id,
+      privacy: 'standard',
+    });
+    const priv = await bridge.assignmentsCreate({
+      questionnaireId: q.id,
+      recipientPersonId: recipient.id,
+      privacy: 'private',
+    });
+
+    // The recipient submits to both sends.
+    await bridge.sessionSetActive({ personId: recipient.id });
+    await bridge.assignmentsSubmit({
+      assignmentId: standard.id,
+      answers: [{ questionId: 'q1', value: 'Doing great' }],
+    });
+    await bridge.assignmentsSubmit({
+      assignmentId: priv.id,
+      answers: [{ questionId: 'q1', value: 'A private answer' }],
+    });
+
+    // Back to the owner (the sender) — Results carries the Standard answers, never the Private ones.
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    const before = await bridge.assignmentsResults(q.id);
+    const standardResult = before.find((r) => r.assignmentId === standard.id);
+    const privateResult = before.find((r) => r.assignmentId === priv.id);
+    expect(standardResult?.answers).toEqual([
+      { prompt: 'How are we doing?', answer: 'Doing great' },
+    ]);
+    expect(privateResult?.answers).toBeUndefined(); // the privacy boundary holds in the bridge
+    expect(standardResult?.analyzed).toBe(false);
+
+    // Analyze the Standard response (a Claude that returns valid analysis JSON) → an Insight is drafted.
+    host.host.claude = {
+      send: () => Promise.resolve('{}'),
+      stream: (_options, onDelta) => {
+        const json = JSON.stringify({
+          summary: 'They want more time together.',
+          facts: [{ text: 'Wants more date nights', shareable: true }],
+          confidence: 'high',
+        });
+        onDelta(json);
+        return Promise.resolve({
+          text: json,
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    expect((await bridge.insightsAnalyze({ assignmentId: standard.id })).ok).toBe(true);
+    const after = await bridge.assignmentsResults(q.id);
+    expect(after.find((r) => r.assignmentId === standard.id)?.analyzed).toBe(true);
+
+    // A member (no viewResults) can't read Results at all.
+    await bridge.sessionSetActive({ personId: recipient.id });
+    // recipient is a Member — Member HAS viewResults, so use a guest to prove the gate.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+    expect(await bridge.assignmentsResults(q.id)).toEqual([]);
+  });
 });

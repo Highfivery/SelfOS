@@ -99,8 +99,9 @@ A new **Questionnaires** feature module registers a nav entry (gated by `questio
 
 > **Build state:** the **Questionnaires** nav/route are gated by **`questionnaires.create`**; a separate
 > **Inbox** nav/route (`/inbox`, with an unanswered badge) is gated by **`questionnaires.answer`** (built
-> 2026-06-11, [§13](#13-build-slices) slice 5 / §13.5a). The sender-side **Results & Insights** view + the
-> live Analyze trigger land with §13.5b.
+> 2026-06-11, [§13](#13-build-slices) slice 5 / §13.5a). The sender-side **Results** view + the live
+> Analyze trigger + `questionnaires.autoAnalyze` are built (2026-06-11, §13.5b); per-question trends +
+> compatibility + deletion/purge land with §13.5c.
 
 - **My Questionnaires** — the sender's created questionnaires (drafts + sent history), each **re-sendable**
   (for trends). _(No template library — questionnaires are created fresh.)_
@@ -455,8 +456,9 @@ interface RawAccessAuditEntry {
 ```
 
 - **Settings (schema-driven, `03`)** — `questionnaires.discloseAdminAccess` (admin-only, **default OFF**),
-  `questionnaires.autoAnalyze` (**default OFF** — auto-run analysis on each arriving response vs the default
-  manual "Analyze"), `questionnaires.defaultMessages` (email/SMS templates). The relay connection lives
+  `questionnaires.autoAnalyze` (**default OFF**, `visibleWhen` AI is enabled — auto-runs analysis when the
+  Results view opens for any new responses vs the default manual "Analyze"; **built §13.5b**),
+  `questionnaires.defaultMessages` (email/SMS templates). The relay connection lives
   behind an admin-only Settings panel. (`sessions.memoryEnabled`/`sessions.autoSummarizeOnEnd` are declared
   by `09`.)
 - **Person (amends `04` §4.1)** — add optional **`email?`** / **`phone?`** (encrypted with the profile;
@@ -537,15 +539,17 @@ renderer):
   dir (`isMediaPath`). `:generate`/`:improveQuestion` + `gapfinder:suggest` are budget-gated + metered (§13.3).
 - **Send/collect** — `assignments:create` (the in-app send — wired) / `:inbox` (the recipient's Inbox) /
   `:get` (the recipient answering view) / `:open` (sent → opened) — _all wired, recipient-scoped + gated by
-  `questionnaires.answer`_; `:list` / `:createRelayLink` / `:drain` / `:revoke` / `:delete` land with the
-  relay slice.
+  `questionnaires.answer`_; `assignments:results(questionnaireId)` returns the sender's sends + per-send
+  outcome (Standard, submitted → raw answers; Private → none), _sender-scoped + gated by
+  `questionnaires.viewResults` (built §13.5b)_; `:list` / `:createRelayLink` / `:drain` / `:revoke` /
+  `:delete` land with the relay slice.
 - **Answer** — `assignments:saveProgress` / `:submit` / `:decline({ note? })` _(in-app — wired; gated by
   `questionnaires.answer`, recipient-scoped in the bridge)_; the relay page talks to the **Worker** directly
   (submit / decline / withdraw).
 - **Analysis/insights** — `insights:analyze({assignmentId})` / `insights:list` / `:approve` / `:update` /
   `:delete`; `gapfinder:suggest`. _(All wired, gated by `questionnaires.viewResults`; analyze is
-  budget-gated + metered as `questionnaire.analyze`. The **`autoAnalyze`** auto-trigger lands with the
-  Inbox/drain in §13.5; the live `Analyze` action lives in §13.5's Results view.)_
+  budget-gated + metered as `questionnaire.analyze`. The live `Analyze` action runs from the Results view;
+  the **`autoAnalyze`** setting auto-runs it when Results opens for any new responses — built §13.5b.)_
 - **Relay admin** — `relay:status` / `relay:connect` / `relay:deploy` / `relay:update` / `relay:teardown`.
 - **Super-admin** — `superadmin:revealRaw({assignmentId})` (break-glass; writes an audit entry, §8.4).
 - **Claude** — generation/analysis/suggest run the `06` path: `checkBudget → call → recordUsage` with
@@ -836,8 +840,18 @@ update/delete` gated by **`questionnaires.viewResults`**. A top-level **"Memory"
      (matrix/allocation); `analyzeAssignment` now guards on `submittedAt` (won't analyze a draft). New
      `InboxItem`/`InboxAssignmentDetail` view types — derived (never the raw answers over IPC). IPC
      `assignments:inbox/get/open/saveProgress/submit/decline`, gated by `questionnaires.answer` +
-     recipient-scoped in the bridge. **Deferred:** the sender's **Results & Insights** view + the live
-     **Analyze** trigger + `autoAnalyze` (§13.5b); trends/compatibility/deletion (§13.5c); the relay (§13.6)._
+     recipient-scoped in the bridge. **Deferred:** trends/compatibility/deletion (§13.5c); the relay (§13.6)._
+   - _**Results + live Analyze + autoAnalyze (built 2026-06-11, §13.5b):** the sender's **Results** view.
+     An Edit/Preview/**Results** toggle in the questionnaire detail (Results only on a saved questionnaire +
+     `questionnaires.viewResults`); per-send cards — Standard, submitted → the **raw Q&A** (via core
+     `formatAnswerForDisplay`); Private → "raw responses stay hidden" + Analyze; analyzed → "Review it in
+     Memory →"; declined → note. New IPC **`assignments:results`** (sender-scoped, gated by
+     `questionnaires.viewResults`; raw `answers` only for a Standard + submitted send — a Private send carries
+     none, the privacy boundary enforced in the bridge) + derived `SendResult`/`SendAnswer` view types. The
+     live **Analyze** reuses `insights:analyze` → a draft Insight reviewed in **Memory**; the
+     **`questionnaires.autoAnalyze`** setting (default OFF, AI-gated) auto-runs it when Results opens for new
+     responses. **Deferred:** per-question trends + compatibility + deletion/purge (§13.5c); the relay (§13.6);
+     the break-glass `readRaw` reveal of Private answers._
 6. **External: relay + delivery + explicit gates** — `apps/relay` Worker + shared renderer page, the Cloudflare
    connect/deploy/update/teardown flow, PIN/consent/age gating + question-image ZK, link delivery, the
    disclosure setting + audit log, the privacy notice.
@@ -993,3 +1007,20 @@ update/delete` gated by **`questionnaires.viewResults`**. A top-level **"Memory"
   RTL Inbox + builder-send tests, and an E2E send→answer→submit encrypted round-trip; the 390px sweep now
   walks the Inbox). **Deferred:** the sender's **Results & Insights** view + the live **Analyze** trigger +
   `autoAnalyze` (§13.5b); trends/compatibility/deletion (§13.5c); the external relay (§13.6).
+- 2026-06-11 — **Slice §13.5b built** (the sender's Results view + the live Analyze trigger +
+  `autoAnalyze`): an Edit/Preview/**Results** toggle in the questionnaire detail (Results only on a saved
+  questionnaire **and** with `questionnaires.viewResults`); per-send cards — a Standard submitted send shows
+  the **raw Q&A** (via core **`formatAnswerForDisplay`**), a Private send shows only "raw responses stay
+  hidden" + Analyze (raw answers never shown — break-glass `readRaw` stays deferred), an analyzed send links
+  to **Memory**, a declined send shows its note. New IPC **`assignments:results(questionnaireId)`** —
+  **sender-scoped + gated by `questionnaires.viewResults`**, with the **privacy boundary enforced in the
+  bridge** (raw `answers` populated only for a Standard + submitted send; a Private send carries none) +
+  derived **`SendResult`/`SendAnswer`** view types. The live **Analyze** reuses `insights:analyze` → a draft
+  Insight (the sender pays + reviews in Memory); the new **`questionnaires.autoAnalyze`** setting (default
+  **OFF**, `visibleWhen` AI on) auto-runs analysis when Results opens for any new responses, one at a time
+  (a `useRef` guard never retries a failed/over-budget attempt). Code-reviewed **ship** (nits applied: the
+  Standard-but-empty case no longer mislabels as private; a `loaded` flag removes an empty-state flash).
+  Gate green (**236 desktop + 149 core unit, 37 E2E** — incl. a coreBridge Results privacy/analyzed test,
+  RTL for the Results states + the builder Results tab, and an E2E send→answer→submit→Results raw round-trip
+  with a 390px guard). **Deferred:** per-question trends + compatibility + deletion/purge (§13.5c); the
+  external relay (§13.6); the break-glass `readRaw` reveal.

@@ -1036,6 +1036,65 @@ test('inbox: send a questionnaire, answer it, submit, and round-trip through the
   }
 });
 
+test('results: a Standard response surfaces the raw answers in the sender’s Results view', async () => {
+  const { userData, vault } = await seedReadyVault(); // AI off → analysis is gated behind a calm prompt
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    // Author a one-question questionnaire.
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await w.getByRole('button', { name: 'New' }).click();
+    await w.getByLabel('Title').fill('Weekly check-in');
+    await w.getByLabel('Question 1', { exact: true }).fill('How are we doing?');
+
+    // Send it to self, switching the privacy mode from the default Private to Standard.
+    await w.getByRole('button', { name: 'Send' }).click();
+    await w.getByRole('button', { name: 'Standard' }).click();
+    await w.getByLabel('Send to').selectOption({ label: 'Tester' });
+    await w.getByRole('button', { name: 'Send' }).last().click();
+    await expect(w.getByText(/Sent to Tester/)).toBeVisible();
+    await w.getByRole('button', { name: 'Done' }).click();
+
+    // Answer + submit it from the Inbox.
+    await w.getByRole('link', { name: /Inbox/ }).click();
+    await w.getByRole('button', { name: /Weekly check-in/ }).click();
+    await w.getByLabel('How are we doing?').fill('Doing great');
+    await w.getByRole('button', { name: 'Submit' }).click();
+    await expect(w.getByText('Submitted')).toBeVisible();
+
+    // Open the questionnaire's Results tab — a Standard send shows the raw answers.
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await w.getByRole('button', { name: /Weekly check-in/ }).click();
+    await w.getByRole('button', { name: 'Results' }).click();
+    await expect(w.getByText('How are we doing?')).toBeVisible();
+    await expect(w.getByText('Doing great')).toBeVisible();
+    // AI is off, so analysis is offered via a calm Settings prompt (no dead Analyze button).
+    await expect(w.getByText(/turn on ai/i)).toBeVisible();
+
+    // No horizontal overflow at desktop or phone width.
+    const overflow = (): Promise<number> =>
+      w.evaluate(() => {
+        const main = document.querySelector('main');
+        return main ? main.scrollWidth - main.clientWidth : 0;
+      });
+    expect(await overflow()).toBeLessThanOrEqual(1);
+    await app.evaluate(async ({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows()[0];
+      if (win) {
+        win.setMinimumSize(360, 480);
+        win.setSize(390, 800);
+      }
+    });
+    await w.waitForTimeout(150);
+    expect(await overflow()).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('roles: the owner edits the role × capability matrix', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);

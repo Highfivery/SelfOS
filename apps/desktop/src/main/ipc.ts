@@ -187,6 +187,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.assignmentsSaveProgress, bridge.assignmentsSaveProgress);
   handle(IpcChannels.assignmentsSubmit, bridge.assignmentsSubmit);
   handle(IpcChannels.assignmentsDecline, bridge.assignmentsDecline);
+  handle(IpcChannels.assignmentsResults, bridge.assignmentsResults);
   handle(IpcChannels.getSidebarCollapsed, bridge.getSidebarCollapsed);
   handle(IpcChannels.setSidebarCollapsed, bridge.setSidebarCollapsed);
 

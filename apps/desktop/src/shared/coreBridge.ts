@@ -28,6 +28,8 @@ import {
   type InboxAssignmentDetail,
   type InboxItem,
   type Insight,
+  type SendAnswer,
+  type SendResult,
   type QuestionnaireAnalyzeResult,
   type QuestionnaireGenerateResult,
   type QuestionnaireImproveResult,
@@ -94,7 +96,12 @@ import {
   runChatTurn,
   saveConversation,
 } from '@selfos/core/conversations';
-import { deleteInsight, listAllInsights, updateInsight } from '@selfos/core/insights';
+import {
+  deleteInsight,
+  listAllInsights,
+  listInsightsForPerson,
+  updateInsight,
+} from '@selfos/core/insights';
 import {
   addCustomType,
   analyzeAssignment,
@@ -102,6 +109,7 @@ import {
   declineAssignment,
   deleteQuestionnaire,
   deleteQuestionnaireImage,
+  formatAnswerForDisplay,
   generateQuestions,
   getAssignment,
   getAssignmentSnapshot,
@@ -290,6 +298,7 @@ const InsightEditSchema = z.object({
 });
 const InsightIdSchema = z.object({ subjectPersonId: z.string().min(1), id: z.string().min(1) });
 const AssignmentIdSchema = z.string().min(1);
+const QuestionnaireIdSchema = z.string().min(1);
 const AnswersSchema = z.object({
   assignmentId: z.string().min(1),
   answers: z.array(AnswerSchema),
@@ -1019,6 +1028,55 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         assignmentId,
         ...(note !== undefined ? { note } : {}),
       });
+    },
+    assignmentsResults: async (questionnaireId): Promise<SendResult[]> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.viewResults')))
+        return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      const qid = QuestionnaireIdSchema.parse(questionnaireId);
+      // The active person's own sends of this questionnaire (Results is sender-scoped, newest first).
+      const sends = (await listAssignments(ctx.fs, ctx.key, { senderPersonId: personId })).filter(
+        (a) => a.questionnaireId === qid,
+      );
+      const analyzed = new Set(
+        (await listInsightsForPerson(ctx.fs, ctx.key, personId)).flatMap((i) =>
+          i.provenance.assignmentId ? [i.provenance.assignmentId] : [],
+        ),
+      );
+      const results: SendResult[] = [];
+      for (const a of sends) {
+        const recipientName =
+          a.recipient.kind === 'person'
+            ? ((await getPerson(ctx.fs, ctx.key, a.recipient.personId))?.displayName ?? 'Unknown')
+            : (a.recipient.displayName ?? 'External');
+        // Privacy boundary: only a Standard, submitted send exposes the raw answers to the sender.
+        let answers: SendAnswer[] | undefined;
+        if (a.privacy === 'standard' && a.status === 'submitted') {
+          const snapshot = await getAssignmentSnapshot(ctx.fs, ctx.key, a.id);
+          const response = await getResponse(ctx.fs, ctx.key, a.id);
+          if (snapshot && response) {
+            const byId = new Map(response.answers.map((ans) => [ans.questionId, ans.value]));
+            answers = snapshot.questions.map((q) => ({
+              prompt: q.prompt,
+              answer: formatAnswerForDisplay(q, byId.get(q.id)),
+            }));
+          }
+        }
+        results.push({
+          assignmentId: a.id,
+          recipientName,
+          status: a.status,
+          privacy: a.privacy,
+          createdAt: a.createdAt,
+          analyzed: analyzed.has(a.id),
+          ...(a.status === 'submitted' ? { submittedAt: a.updatedAt } : {}),
+          ...(a.declineNote !== undefined ? { declineNote: a.declineNote } : {}),
+          ...(answers ? { answers } : {}),
+        });
+      }
+      return results;
     },
 
     // --- UI state (device-local) ---

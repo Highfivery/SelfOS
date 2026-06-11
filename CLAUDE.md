@@ -239,6 +239,32 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Build (Questionnaires **slice §13.5b — the sender's Results view + live Analyze + autoAnalyze**,
+  [08-questionnaires](docs/specs/08-questionnaires.md) §3.7/§4.5/§6/§13.5). **This lights up the analysis loop**
+  the §13.4 Memory surface was waiting on — a sender can now see a send's outcome and turn a response into a
+  draft Insight. **Decisions (asked, all 4):** Results lives as an **Edit ⇄ Preview ⇄ Results** toggle in the
+  questionnaire detail (only on a saved questionnaire + `questionnaires.viewResults`); **Standard = raw Q&A
+  shown, Private = Analyze-only** (raw hidden; break-glass `readRaw` stays deferred); after Analyze, an inline
+  **"Insight drafted — review it in Memory →"** confirmation (the Memory approve-step stays the one review
+  place); **`autoAnalyze` default OFF**, and when ON it **auto-runs on opening Results** for new responses
+  (spends the sender's AI allowance). Core **`formatAnswerForDisplay`** (read-only display per answer type incl.
+  ranking/matrix/allocation) + derived **`SendResult`/`SendAnswer`** view types. IPC
+  **`assignments:results(questionnaireId)`** — **sender-scoped + gated by `questionnaires.viewResults`**, with
+  the **privacy boundary enforced in the bridge** (raw `answers` only for a Standard + submitted send; a Private
+  send carries none — the reviewer verified airtight). Live **Analyze** reuses `insights:analyze` (the sender
+  pays + reviews in Memory). New **`questionnaires.autoAnalyze`** setting (boolean, default OFF, `visibleWhen`
+  AI on) + a **Questionnaires** settings section; the Results view auto-runs analysis one-at-a-time via a
+  `useRef` guard that never retries a failed/over-budget attempt. Calm "Turn on AI in Settings" state when AI
+  is off (no dead Analyze button). Code-reviewer verdict **ship** (nits applied: a Standard-but-unreadable
+  response no longer mislabels as private; a store `loaded` flag removes a one-frame empty-state flash).
+  Live web-preview visual QA of all three send states (Standard raw, Private locked, Sent waiting) + the calm
+  Analyze degradation + the settings toggle, desktop + 390px, no console errors. Gate green:
+  typecheck/lint/format, **236 desktop + 149 core unit, 37 E2E** (a coreBridge Results privacy/analyzed test,
+  RTL for the Results states + the builder Results tab, an E2E send→answer→submit→Results raw round-trip with a
+  390px guard). Synced `08` §3/§4.5/§6/§13.5. **Lesson: a derived "view" type at the IPC seam is how you keep a
+  privacy promise — `SendResult` carries answers only for Standard sends, so a Private send's raw answers
+  physically cannot reach the sender's renderer (the boundary is the bridge, not the UI).** **Next: §13.5c**
+  (per-question trends + compatibility + deletion/purge), then **§13.6 relay** (external delivery).
 - 2026-06-11 — Build (Questionnaires **slice §13.5a — the in-app send + answer core loop**,
   [08-questionnaires](docs/specs/08-questionnaires.md) §3.2/§3.3/§6/§13.5). **This finally lights up the loop:**
   a sender can send a questionnaire in-app and a recipient can answer it. **Decisions (asked):** scope =

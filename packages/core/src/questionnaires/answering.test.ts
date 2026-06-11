@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Question } from '../schemas';
 import {
   allocationTotal,
+  formatAnswerForDisplay,
   isAnswered,
   isQuestionVisible,
   unansweredRequired,
@@ -101,5 +102,39 @@ describe('answering — unansweredRequired', () => {
     expect(unansweredRequired(questions, { q1: 'Yes', q2: 'done' }).map((x) => x.id)).toEqual([
       'q3',
     ]);
+  });
+});
+
+describe('answering — formatAnswerForDisplay', () => {
+  it('renders each answer type as read-only display text', () => {
+    expect(formatAnswerForDisplay(q({ id: 'a', type: 'yesNo' }), true)).toBe('Yes');
+    expect(formatAnswerForDisplay(q({ id: 'a', type: 'yesNo' }), false)).toBe('No');
+    expect(formatAnswerForDisplay(q({ id: 'a', type: 'rating' }), 4)).toBe('4');
+    expect(formatAnswerForDisplay(q({ id: 'a', type: 'shortText' }), '  hi  ')).toBe('hi');
+    expect(
+      formatAnswerForDisplay(q({ id: 'a', type: 'multiChoice', options: ['A', 'B'] }), ['A', 'B']),
+    ).toBe('A, B');
+    // ranking is ordered → numbered
+    expect(
+      formatAnswerForDisplay(q({ id: 'a', type: 'ranking', options: ['A', 'B'] }), ['B', 'A']),
+    ).toBe('1. B, 2. A');
+    // matrix prints rows in authored order
+    expect(
+      formatAnswerForDisplay(
+        q({ id: 'a', type: 'matrix', matrix: { rows: ['Trust', 'Fun'], min: 1, max: 5 } }),
+        { Fun: 5, Trust: 4 },
+      ),
+    ).toBe('Trust: 4, Fun: 5');
+    // allocation prints options in authored order, keeping an explicit 0
+    expect(
+      formatAnswerForDisplay(q({ id: 'a', type: 'allocation', options: ['X', 'Y'] }), {
+        Y: 100,
+        X: 0,
+      }),
+    ).toBe('X: 0, Y: 100');
+  });
+
+  it('returns an empty string for an unanswered value', () => {
+    expect(formatAnswerForDisplay(q({ id: 'a', type: 'shortText' }), undefined)).toBe('');
   });
 });

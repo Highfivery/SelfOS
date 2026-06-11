@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { Questionnaires } from './Questionnaires';
 import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
+import { useSessionStore } from '../../../stores/sessionStore';
 import { useSettingsStore } from '../../../settings/settingsStore';
 import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
 
@@ -19,6 +20,7 @@ afterEach(() => {
   clearMockBridge();
   useQuestionnaireStore.setState({ questionnaires: [], loaded: false, customTypes: [] });
   useSettingsStore.setState({ values: {} });
+  useSessionStore.setState({ superAdmin: false });
 });
 
 /** Turn AI on for the renderer (settings flag + a stubbed key) so the AI surfaces become ready. */
@@ -379,5 +381,31 @@ describe('Questionnaires', () => {
       }),
     );
     expect(await screen.findByText(/sent to mara/i)).toBeInTheDocument();
+  });
+
+  it('offers a Results tab on a saved questionnaire (gated by viewResults)', async () => {
+    useSessionStore.setState({ superAdmin: true }); // grants every capability incl. viewResults
+    installMockBridge({
+      questionnairesList: () =>
+        Promise.resolve([
+          {
+            id: 'q1',
+            schemaVersion: 1,
+            version: 1,
+            title: 'Weekly check-in',
+            type: 'role-feedback',
+            sensitivity: 'standard',
+            questions: [{ id: 'qq1', type: 'shortText', prompt: 'How?', required: true }],
+            createdAt: 'now',
+            updatedAt: 'now',
+          },
+        ]),
+      assignmentsResults: () => Promise.resolve([]),
+    });
+    renderApp();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Results' }));
+    expect(await screen.findByText(/haven’t sent this questionnaire yet/i)).toBeInTheDocument();
   });
 });

@@ -26,13 +26,15 @@ import type {
   QuestionnaireInput,
   SensitivityTier,
 } from '@shared/schemas';
+import { useSessionStore } from '../../../stores/sessionStore';
 import { QuestionImage } from './QuestionImage';
 import { QuestionnaireAiPanel } from './QuestionnaireAiPanel';
 import { QuestionnairePreview } from './QuestionnairePreview';
+import { QuestionnaireResults } from './QuestionnaireResults';
 import { QuestionnaireSendPanel } from './QuestionnaireSendPanel';
 import styles from './Questionnaires.module.css';
 
-type BuilderMode = 'edit' | 'preview';
+type BuilderMode = 'edit' | 'preview' | 'results';
 
 /** Read a picked image File into base64 (no data-URL prefix) for the store IPC. */
 function fileToBase64(file: File): Promise<string> {
@@ -315,8 +317,11 @@ export function QuestionnaireBuilder({
   // Send: holds the saved questionnaire id once "Send" validates + saves; the send panel reads it.
   const [sendId, setSendId] = useState<string | null>(null);
 
-  // Edit ⇄ Preview (test-on-self). Preview renders the live drafts as the recipient would see them.
+  // Edit ⇄ Preview ⇄ Results. Preview renders the live drafts as the recipient sees them; Results (only
+  // for a saved questionnaire, and only with viewResults) shows its sends + per-send outcome.
   const [mode, setMode] = useState<BuilderMode>('edit');
+  const canViewResults = useSessionStore((s) => s.can('questionnaires.viewResults'));
+  const showResults = questionnaire !== null && canViewResults;
   const previewQuestions = drafts
     .filter((d) => d.prompt.trim() !== '')
     .map((d) => toQuestion(d, drafts));
@@ -481,11 +486,14 @@ export function QuestionnaireBuilder({
           options={[
             { value: 'edit', label: 'Edit' },
             { value: 'preview', label: 'Preview' },
+            ...(showResults ? [{ value: 'results' as const, label: 'Results' }] : []),
           ]}
         />
       </div>
 
-      {mode === 'preview' ? (
+      {mode === 'results' && questionnaire ? (
+        <QuestionnaireResults questionnaireId={questionnaire.id} />
+      ) : mode === 'preview' ? (
         <QuestionnairePreview questions={previewQuestions} />
       ) : (
         <>

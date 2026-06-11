@@ -74,3 +74,28 @@ export function unansweredRequired(questions: Question[], answers: AnswerMap): Q
     (q) => q.required && !isAnswered(q, answers[q.id]),
   );
 }
+
+/**
+ * Render one answer as read-only display text for the sender's Results view (Standard sends only). Pure +
+ * DOM-free so it's reused/tested in core; the renderer just prints the string. Returns '' for an empty
+ * answer so callers can show a "—" placeholder.
+ */
+export function formatAnswerForDisplay(question: Question, value: AnswerValue | undefined): string {
+  if (value === undefined) return '';
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (typeof value === 'number') return Number.isFinite(value) ? String(value) : '';
+  if (typeof value === 'string') return value.trim();
+  if (Array.isArray(value)) {
+    // ranking carries an ordered list → number it; multiChoice is an unordered set → comma-join.
+    return question.type === 'ranking'
+      ? value.map((v, i) => `${i + 1}. ${v}`).join(', ')
+      : value.join(', ');
+  }
+  // matrix (rows → rating) / allocation (option → amount): print in the authored order.
+  const keys =
+    question.type === 'matrix' ? (question.matrix?.rows ?? []) : (question.options ?? []);
+  return keys
+    .filter((k) => value[k] !== undefined)
+    .map((k) => `${k}: ${value[k]}`)
+    .join(', ');
+}

@@ -100,6 +100,30 @@ public class VaultFsPlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDelegat
         return URL(fileURLWithPath: path, relativeTo: vault)
     }
 
+    /**
+     Ensure a vault file is available locally, **downloading a not-yet-downloaded iCloud item on demand**
+     (07-mobile-platform §7, Q8). A fresh device sees another device's files as iCloud placeholders
+     (`.<name>.icloud`) that `fileExists` reports as absent — which is why the very first cross-device
+     read (e.g. `config/recovery.enc`) otherwise looked like an empty vault. Returns `false` when the file
+     is genuinely absent (no placeholder), or — rarely, e.g. offline — when the bounded wait elapses before
+     it materializes (tiny `.enc` files normally download in well under a second once triggered).
+     Runs on Capacitor's background queue, so the brief poll-sleep doesn't block the UI.
+     */
+    private func ensureDownloaded(_ url: URL) -> Bool {
+        let fm = FileManager.default
+        if fm.fileExists(atPath: url.path) { return true }
+        let placeholder = url.deletingLastPathComponent()
+            .appendingPathComponent(".\(url.lastPathComponent).icloud")
+        guard fm.fileExists(atPath: placeholder.path) else { return false }  // truly absent
+        try? fm.startDownloadingUbiquitousItem(at: url)
+        let deadline = Date().addingTimeInterval(30)
+        while Date() < deadline {
+            if fm.fileExists(atPath: url.path) { return true }
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+        return fm.fileExists(atPath: url.path)
+    }
+
     @objc func read(_ call: CAPPluginCall) {
         guard let path = call.getString("path") else {
             call.reject("Missing path")
@@ -110,11 +134,17 @@ public class VaultFsPlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDelegat
         defer { if didAccess { vault.stopAccessingSecurityScopedResource() } }
 
         let target = fileURL(vault, path)
+        // Materialize a not-yet-downloaded iCloud item first (download-on-demand), outside the
+        // coordinated read so we don't hold the coordination claim during the download.
+        guard ensureDownloaded(target) else {
+            call.resolve(["data": NSNull()])  // genuinely absent → null (the FileSystem contract)
+            return
+        }
         let coordinator = NSFileCoordinator()
         var coordError: NSError?
         var ran = false
         var opError: String?
-        var data: Any = NSNull()  // absent → null (the FileSystem contract)
+        var data: Any = NSNull()
         coordinator.coordinate(readingItemAt: target, options: [], error: &coordError) { readURL in
             ran = true
             guard FileManager.default.fileExists(atPath: readURL.path) else { return }
@@ -189,7 +219,14 @@ public class VaultFsPlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDelegat
         var entries: [String] = []
         coordinator.coordinate(readingItemAt: target, options: [], error: &coordError) { readURL in
             // Absent dir → [] (matches the FileSystem contract); contentsOfDirectory throws otherwise.
-            entries = (try? FileManager.default.contentsOfDirectory(atPath: readURL.path)) ?? []
+            let raw = (try? FileManager.default.contentsOfDirectory(atPath: readURL.path)) ?? []
+            // Map not-downloaded iCloud placeholders ".<real>.icloud" back to their real names, so a
+            // directory of cloud-only files (a fresh cross-device read) lists the names the app expects.
+            entries = raw.map { name in
+                (name.hasPrefix(".") && name.hasSuffix(".icloud"))
+                    ? String(name.dropFirst().dropLast(".icloud".count))
+                    : name
+            }
         }
         // list never rejects on absence/coordination failure — an absent or unreadable dir is just [].
         call.resolve(["entries": entries])

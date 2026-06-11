@@ -417,7 +417,10 @@ The full arc, so no session loses the thread. Update the status boxes as slices 
       `webHost`'s `createCapacitorHost` (native FS + picker, reusing the iii-b2 `localStorage` stores) wired
       into `installRealBridge` via `Capacitor.isNativePlatform()`. **No iCloud-container entitlement** (access
       is via security scope — §11.6). _Live change events (NSFilePresenter → `onVaultChanged`) **deferred to
-      iii-b3b** (no-op for now); download-on-demand UX stays open (Q8)._ Plugin registration: app-local
+      iii-b3b** (no-op for now). **iCloud download-on-demand for reads is handled** (`read` materializes a
+      not-yet-downloaded item via `startDownloadingUbiquitousItem` + a bounded wait; `list` maps
+      `.<name>.icloud` placeholders to real names) — required for the first cross-device read; the richer
+      "downloading…" progress UX (Q8) is still open._ Plugin registration: app-local
       Capacitor plugins are **not** auto-discovered (only packaged ones are), so `ios/App/App/MainViewController.swift`
       (a `CAPBridgeViewController` subclass) registers it in `capacitorDidLoad` via
       `bridge?.registerPluginInstance(VaultFsPlugin())`, and `Main.storyboard`'s root VC points at

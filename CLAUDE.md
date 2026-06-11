@@ -239,6 +239,24 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Fix (**iCloud download-on-demand in `VaultFs`** — user hit it doing the shared-vault test).
+  Symptom: the phone pointed at the **same** iCloud `SelfOS` folder the Mac set up, but still showed
+  **Setup** instead of Unlock. Cause: on a fresh device the Mac's files are iCloud **placeholders**
+  (`.recovery.enc.icloud`) until downloaded, and v1 `VaultFs` checked `fileExists` on the real name →
+  `false` → `read('config/recovery.enc')` returned null → `isVaultInitialized` false → Setup. (Worse,
+  `initVault`'s placeholder-blind meta read had rewritten the vault's `.selfos/meta.json` + empty
+  `settings.json` — cosmetic; `recovery.enc` + `people/*.enc` were never touched, so unlock still works.)
+  This is the §7/Q8 edge we'd deferred — turns out it's required for the **very first cross-device read**.
+  Fix (Swift, `ios/App/App/VaultFs.swift`): `read` now **materializes a not-yet-downloaded item on demand**
+  — if the real file is absent but a `.<name>.icloud` placeholder exists, call
+  `startDownloadingUbiquitousItem` + poll (bounded 30s, off the main thread) before the coordinated read;
+  genuinely-absent (no placeholder) still → null. `list` maps `.<real>.icloud` placeholder names back to
+  real names. **Lesson: on iCloud Drive, `fileExists`/`contentsOfDirectory` reflect only _downloaded_
+  state — any cross-device read must trigger `startDownloadingUbiquitousItem` and handle the
+  `.<name>.icloud` placeholder, or a synced-but-not-downloaded vault reads as empty.** Swift-only (TS gates
+  unaffected); user rebuilds in Xcode (no `cap sync` needed — the file's already in the target). Still open
+  (Q8): the richer "downloading from iCloud…" progress UX, and eviction/delete of not-downloaded files.
+  (Concurrent agent's `docs/specs/0{4,5,8,9}` + `11` untouched.)
 - 2026-06-11 — Fix + **iii-b3 verified on-device** (user built it in Xcode). The native `VaultFs` plugin
   was compiling but **not registered** — `Capacitor.isPluginAvailable('VaultFs')` was `false`, so
   `pickFolder()` rejected and our `selectVaultFolder` catch swallowed it to null → tapping "Choose a

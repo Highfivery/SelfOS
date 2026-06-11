@@ -8,6 +8,18 @@ import type {
   BudgetState,
   ChatTurnResult,
   Conversation,
+  Dream,
+  DreamAnalysis,
+  DreamAnalysisEdits,
+  DreamApproveResult,
+  DreamInput,
+  DreamNarrativeResult,
+  DreamPatternStats,
+  DreamPatternSummary,
+  DreamPatternWindow,
+  DreamShareResult,
+  DreamShareTarget,
+  DreamSynthesisResult,
   InboxAssignmentDetail,
   InboxItem,
   InviteSummary,
@@ -114,6 +126,26 @@ export const IpcChannels = {
   assignmentsResults: 'assignments:results',
   assignmentsTrends: 'assignments:trends',
   assignmentsDelete: 'assignments:delete',
+  dreamsList: 'dreams:list',
+  dreamGet: 'dreams:get',
+  dreamSave: 'dreams:save',
+  dreamDelete: 'dreams:delete',
+  dreamAnalyzeTurn: 'dreams:analyzeTurn',
+  dreamChunk: 'dreams:chunk', // main → renderer event
+  dreamGetAnalysis: 'dreams:getAnalysis',
+  dreamGetConversation: 'dreams:getConversation',
+  dreamSynthesize: 'dreams:synthesize',
+  dreamUpdateAnalysis: 'dreams:updateAnalysis',
+  dreamApprove: 'dreams:approve',
+  dreamRemoveFromContext: 'dreams:removeFromContext',
+  dreamPatternStats: 'dreams:patternStats',
+  dreamGetPatternSummary: 'dreams:getPatternSummary',
+  dreamPatternNarrative: 'dreams:patternNarrative',
+  dreamApprovePatternNarrative: 'dreams:approvePatternNarrative',
+  dreamRemovePatternNarrative: 'dreams:removePatternNarrative',
+  dreamShareTargets: 'dreams:shareTargets',
+  dreamGetInsight: 'dreams:getInsight',
+  dreamSetFactShare: 'dreams:setFactShare',
   getSidebarCollapsed: 'ui:getSidebarCollapsed',
   setSidebarCollapsed: 'ui:setSidebarCollapsed',
 } as const;
@@ -378,6 +410,57 @@ export interface SelfosBridge {
    * sender or an Owner / super-admin. Requires `questionnaires.viewResults`.
    */
   assignmentsDelete(assignmentId: string): Promise<void>;
+  /** The active person's dreams, newest first (12-dreams). Requires `dreams.own`. */
+  dreamsList(): Promise<Dream[]>;
+  /** Load one of the active person's dreams; null if absent. Requires `dreams.own`. */
+  dreamGet(id: string): Promise<Dream | null>;
+  /** Create or update one of the active person's dreams; returns the saved record. Requires `dreams.own`. */
+  dreamSave(input: DreamInput): Promise<Dream>;
+  /** Delete a dream (purges its folder: dream + analysis + transcript). Requires `dreams.own`. */
+  dreamDelete(id: string): Promise<void>;
+  /**
+   * One turn of a dream's guided-analysis chat: streams reply chunks via `onDreamChunk`, resolves with
+   * the final turn. The transcript persists under the dream (never in Sessions). Requires `dreams.own`.
+   */
+  dreamAnalyzeTurn(input: { dreamId: string; userText: string }): Promise<ChatTurnResult>;
+  /** Subscribe to streamed dream-analysis reply chunks; returns an unsubscribe function. */
+  onDreamChunk(listener: (delta: string) => void): () => void;
+  /** Load a dream's synthesized analysis; null if not analyzed yet. Requires `dreams.own`. */
+  dreamGetAnalysis(dreamId: string): Promise<DreamAnalysis | null>;
+  /** Load a dream's guided-analysis transcript (to resume the chat); null if none. Requires `dreams.own`. */
+  dreamGetConversation(dreamId: string): Promise<Conversation | null>;
+  /** Synthesize the dream (+ any transcript) into a structured, editable analysis. Requires `dreams.own`. */
+  dreamSynthesize(input: { dreamId: string }): Promise<DreamSynthesisResult>;
+  /** Save the person's edits to a dream's analysis (marks it edited); null if absent. Requires `dreams.own`. */
+  dreamUpdateAnalysis(input: {
+    dreamId: string;
+    edits: DreamAnalysisEdits;
+  }): Promise<DreamAnalysis | null>;
+  /** Approve a dream's analysis into the coach's memory (→ Insight). Requires `dreams.own` + memory enabled. */
+  dreamApprove(input: { dreamId: string }): Promise<DreamApproveResult>;
+  /** Remove a dream's analysis from the coach's memory (delete its Insight, unlink). Requires `dreams.own`. */
+  dreamRemoveFromContext(input: { dreamId: string }): Promise<void>;
+  /** Deterministic cross-dream stats over the chosen window (no Claude). Requires `dreams.own`. */
+  dreamPatternStats(input: { window: DreamPatternWindow }): Promise<DreamPatternStats>;
+  /** The cached cross-dream AI narrative; null until first generated. Requires `dreams.own`. */
+  dreamGetPatternSummary(): Promise<DreamPatternSummary | null>;
+  /** Generate (and cache) the cross-dream AI narrative — a budget-gated `dream.patterns` call. Requires `dreams.own`. */
+  dreamPatternNarrative(): Promise<DreamNarrativeResult>;
+  /** Approve the cached narrative into the coach's memory (→ a cross-dream Insight). Requires `dreams.own` + memory enabled. */
+  dreamApprovePatternNarrative(): Promise<DreamApproveResult>;
+  /** Remove the narrative from context (delete its Insight, unlink). Requires `dreams.own`. */
+  dreamRemovePatternNarrative(): Promise<void>;
+  /** Related people the dreamer can share a dream insight with. Requires `dreams.own`. */
+  dreamShareTargets(): Promise<DreamShareTarget[]>;
+  /** The approved Insight a dream produced (facts + sharing); null if not approved. Requires `dreams.own`. */
+  dreamGetInsight(dreamId: string): Promise<Insight | null>;
+  /** Share/unshare a dream-insight fact with a related person. Requires `dreams.shareContext`. */
+  dreamSetFactShare(input: {
+    dreamId: string;
+    factId: string;
+    withPersonId: string;
+    share: boolean;
+  }): Promise<DreamShareResult>;
   /** Whether the desktop sidebar is collapsed to an icon rail (device-local). */
   getSidebarCollapsed(): Promise<boolean>;
   /** Persist the sidebar collapsed/expanded state (device-local). */
@@ -393,8 +476,21 @@ export type {
   BudgetState,
   ChatTurnResult,
   Conversation,
+  Dream,
+  DreamAnalysis,
+  DreamAnalysisEdits,
+  DreamApproveResult,
+  DreamInput,
+  DreamNarrativeResult,
+  DreamPatternStats,
+  DreamPatternSummary,
+  DreamPatternWindow,
+  DreamShareResult,
+  DreamShareTarget,
+  DreamSynthesisResult,
   InboxAssignmentDetail,
   InboxItem,
+  Insight,
   InviteSummary,
   Person,
   PersonInput,

@@ -7,6 +7,8 @@ export const USAGE_TYPE_LABELS: Record<string, string> = {
   'questionnaire.generate': 'Questionnaire — AI draft',
   'questionnaire.suggest': 'Questionnaire — suggestions',
   'questionnaire.analyze': 'Questionnaire — analysis',
+  'dream.analyze': 'Dream analysis',
+  'dream.patterns': 'Dream patterns',
 };
 
 export function usageTypeLabel(type: string): string {

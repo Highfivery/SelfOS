@@ -71,6 +71,7 @@ function createBridgeHost(parts: HostParts): BridgeHost {
 
   let superAdminActive = false;
   const chatListeners = new Set<(delta: string) => void>();
+  const dreamListeners = new Set<(delta: string) => void>();
 
   const activeVaultId = async (): Promise<string | null> =>
     (await deviceStore.read()).vaultBookmark ?? null;
@@ -139,6 +140,9 @@ function createBridgeHost(parts: HostParts): BridgeHost {
     emitChatChunk: (chunk) => {
       for (const listener of chatListeners) listener(chunk);
     },
+    emitDreamChunk: (chunk) => {
+      for (const listener of dreamListeners) listener(chunk);
+    },
     getBootState: bootState,
     refreshBootState: bootState,
     selectVaultFolder: parts.selectVaultFolder,
@@ -153,6 +157,10 @@ function createBridgeHost(parts: HostParts): BridgeHost {
     onChatChunk: (listener) => {
       chatListeners.add(listener);
       return () => chatListeners.delete(listener);
+    },
+    onDreamChunk: (listener) => {
+      dreamListeners.add(listener);
+      return () => dreamListeners.delete(listener);
     },
   };
 }

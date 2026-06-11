@@ -104,6 +104,32 @@ const bridge: SelfosBridge = {
     ipcRenderer.invoke(IpcChannels.assignmentsTrends, questionnaireId),
   assignmentsDelete: (assignmentId) =>
     ipcRenderer.invoke(IpcChannels.assignmentsDelete, assignmentId),
+  dreamsList: () => ipcRenderer.invoke(IpcChannels.dreamsList),
+  dreamGet: (id) => ipcRenderer.invoke(IpcChannels.dreamGet, id),
+  dreamSave: (input) => ipcRenderer.invoke(IpcChannels.dreamSave, input),
+  dreamDelete: (id) => ipcRenderer.invoke(IpcChannels.dreamDelete, id),
+  dreamAnalyzeTurn: (input) => ipcRenderer.invoke(IpcChannels.dreamAnalyzeTurn, input),
+  onDreamChunk: (listener) => {
+    const handler = (_event: unknown, delta: string): void => listener(delta);
+    ipcRenderer.on(IpcChannels.dreamChunk, handler);
+    return () => {
+      ipcRenderer.removeListener(IpcChannels.dreamChunk, handler);
+    };
+  },
+  dreamGetAnalysis: (dreamId) => ipcRenderer.invoke(IpcChannels.dreamGetAnalysis, dreamId),
+  dreamGetConversation: (dreamId) => ipcRenderer.invoke(IpcChannels.dreamGetConversation, dreamId),
+  dreamSynthesize: (input) => ipcRenderer.invoke(IpcChannels.dreamSynthesize, input),
+  dreamUpdateAnalysis: (input) => ipcRenderer.invoke(IpcChannels.dreamUpdateAnalysis, input),
+  dreamApprove: (input) => ipcRenderer.invoke(IpcChannels.dreamApprove, input),
+  dreamRemoveFromContext: (input) => ipcRenderer.invoke(IpcChannels.dreamRemoveFromContext, input),
+  dreamPatternStats: (input) => ipcRenderer.invoke(IpcChannels.dreamPatternStats, input),
+  dreamGetPatternSummary: () => ipcRenderer.invoke(IpcChannels.dreamGetPatternSummary),
+  dreamPatternNarrative: () => ipcRenderer.invoke(IpcChannels.dreamPatternNarrative),
+  dreamApprovePatternNarrative: () => ipcRenderer.invoke(IpcChannels.dreamApprovePatternNarrative),
+  dreamRemovePatternNarrative: () => ipcRenderer.invoke(IpcChannels.dreamRemovePatternNarrative),
+  dreamShareTargets: () => ipcRenderer.invoke(IpcChannels.dreamShareTargets),
+  dreamGetInsight: (dreamId) => ipcRenderer.invoke(IpcChannels.dreamGetInsight, dreamId),
+  dreamSetFactShare: (input) => ipcRenderer.invoke(IpcChannels.dreamSetFactShare, input),
   getSidebarCollapsed: () => ipcRenderer.invoke(IpcChannels.getSidebarCollapsed),
   setSidebarCollapsed: (collapsed) =>
     ipcRenderer.invoke(IpcChannels.setSidebarCollapsed, collapsed),

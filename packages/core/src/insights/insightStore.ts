@@ -137,7 +137,13 @@ export async function summarizeForContext(
   for (const other of related) {
     const shared = (await listInsightsForPerson(fs, key, other.id))
       .filter((insight) => insight.approved)
-      .flatMap((insight) => insight.facts.filter((fact) => fact.shareable))
+      // A related person's fact reaches THIS person's context if it's broadcast-shareable OR targeted
+      // specifically at them (12-dreams §3.4 per-person sharing). Others' untargeted private facts never do.
+      .flatMap((insight) =>
+        insight.facts.filter(
+          (fact) => fact.shareable || (fact.shareableWith?.includes(personId) ?? false),
+        ),
+      )
       .slice(0, MAX_SHARED_FACTS_PER_PERSON);
     if (shared.length === 0) continue;
     lines.push(`Shareable about ${other.displayName}:`);

@@ -120,7 +120,35 @@ export function webFakeClaudeClient(): ClaudeClient {
   const reply = 'I hear you. What feels most important about that right now?';
   return {
     send: () => Promise.resolve('ok'),
-    stream: (_options, onDelta): Promise<ClaudeStreamResult> => {
+    stream: (options, onDelta): Promise<ClaudeStreamResult> => {
+      // The dream-analysis synthesis turn asks for a single JSON object (12-dreams §3.2) — return a
+      // valid DreamAnalysis draft so the preview can render the full synthesis card; every other turn
+      // streams the canned reflective reply.
+      if (options.messages.some((message) => message.content.includes('JSON object'))) {
+        const draft = JSON.stringify({
+          summary: 'A dream of shifting rooms and open skies.',
+          emotionalLandscape: 'A mix of unease and quiet wonder.',
+          wakingLifeConnections: 'Perhaps something at home feels like it is changing.',
+          notableImages:
+            'The rearranging house, offered as imaginative reflection rather than fact.',
+          reflectiveQuestions: ['What in your life feels like it is rearranging right now?'],
+          coachingPrompt: 'Notice one thing that felt steady today.',
+          tags: {
+            emotions: ['unease', 'wonder'],
+            symbols: ['house'],
+            settings: ['childhood home'],
+            themes: ['change'],
+            people: [],
+          },
+          metrics: { emotionalIntensity: 0.5, valence: 0 },
+          crisisFlag: false,
+          distressSignal: false,
+        });
+        return Promise.resolve({
+          text: draft,
+          usage: { inputTokens: 200, outputTokens: 90, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
       for (const word of reply.split(' ')) onDelta(`${word} `);
       return Promise.resolve({
         text: reply,

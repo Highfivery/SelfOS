@@ -21,6 +21,11 @@ export const CAPABILITIES = [
   'questionnaires.answer',
   'questionnaires.viewResults',
   'questionnaires.sendExternal',
+  // Dreams (12-dreams §12). `dreams.own` = capture + analyze + view one's own dreams; `dreams.shareContext`
+  // = promote a specific dream-insight fact into a related person's context (off by default per dream).
+  // There is intentionally no "view others' dreams" capability — dreams are dreamer-only (12 §8.4).
+  'dreams.own',
+  'dreams.shareContext',
 ] as const;
 
 export type CapabilityKey = (typeof CAPABILITIES)[number];
@@ -39,6 +44,8 @@ export const CAPABILITY_LABELS: Record<CapabilityKey, string> = {
   'questionnaires.answer': 'Answer questionnaires',
   'questionnaires.viewResults': 'View questionnaire results',
   'questionnaires.sendExternal': 'Send questionnaires to external people',
+  'dreams.own': 'Log & analyze their own dreams',
+  'dreams.shareContext': 'Share a dream insight into a relationship',
 };
 
 function capabilityMap(enabled: readonly CapabilityKey[]): Record<string, boolean> {
@@ -66,6 +73,8 @@ export const DEFAULT_ROLES: Role[] = [
       'questionnaires.answer',
       'questionnaires.viewResults',
       'questionnaires.sendExternal',
+      'dreams.own',
+      'dreams.shareContext',
     ]),
   },
   {

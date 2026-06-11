@@ -8,6 +8,7 @@ import {
   Inbox,
   Menu,
   MessageCircle,
+  Moon,
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
@@ -24,6 +25,9 @@ import { useConversationStore } from '../stores/conversationStore';
 import { useBudgetStore } from '../stores/budgetStore';
 import { useUsageStore } from '../stores/usageStore';
 import { unansweredCount, useInboxStore } from '../stores/inboxStore';
+import { useDreamStore } from '../stores/dreamStore';
+import { useDreamAnalysisStore } from '../stores/dreamAnalysisStore';
+import { useDreamPatternStore } from '../stores/dreamPatternStore';
 import { AccountMenu } from './AccountMenu';
 import { Switcher } from './Switcher';
 import { LockScreen } from './LockScreen';
@@ -49,6 +53,7 @@ export function AppShell(): JSX.Element {
   const canViewInsights = useSessionStore((s) => s.can('questionnaires.viewResults'));
   const inboxItems = useInboxStore((s) => s.items);
   const inboxCount = unansweredCount(inboxItems);
+  const canOwnDreams = useSessionStore((s) => s.can('dreams.own'));
   const locked = useSessionStore((s) => s.locked);
   const unlockPromptOpen = useSessionStore((s) => s.unlockPromptOpen);
   const activePersonId = useSessionStore((s) => s.activePerson?.id ?? null);
@@ -70,9 +75,13 @@ export function AppShell(): JSX.Element {
     useBudgetStore.getState().reset();
     useUsageStore.getState().reset();
     useInboxStore.getState().reset();
+    useDreamStore.getState().reset();
+    useDreamAnalysisStore.getState().reset();
+    useDreamPatternStore.getState().reset();
     void useConversationStore.getState().load();
     void useBudgetStore.getState().refresh();
     void useInboxStore.getState().load();
+    void useDreamStore.getState().load();
   }, [activePersonId]);
 
   // Track the mobile breakpoint; collapse any open drawer when the viewport grows back to desktop.
@@ -195,6 +204,18 @@ export function AppShell(): JSX.Element {
             >
               <Brain size={18} aria-hidden="true" />
               <span className={styles.label}>Memory</span>
+            </NavLink>
+          ) : null}
+          {canOwnDreams ? (
+            <NavLink
+              to="/dreams"
+              className={navClass}
+              aria-label="Dreams"
+              title={tip('Dreams')}
+              onClick={closeDrawer}
+            >
+              <Moon size={18} aria-hidden="true" />
+              <span className={styles.label}>Dreams</span>
             </NavLink>
           ) : null}
           {canManagePeople ? (

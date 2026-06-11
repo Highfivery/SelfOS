@@ -240,16 +240,21 @@ export type Conversation = z.infer<typeof ConversationSchema>;
 
 /**
  * The shared Insight / metrics layer (08-questionnaires §4.4). A single, source-discriminated record:
- * questionnaires produce them now; session analysis (09) and the tracking dashboards (11) build on the
- * same shape. Stored encrypted per subject person; `metrics` is the extensible basis for every trend.
+ * questionnaires produce them now; session analysis (09), the tracking dashboards (11), and dreams (12)
+ * build on the same shape. Stored encrypted per subject person; `metrics` is the extensible basis for
+ * every trend. `'dream'` is the third producer (12-dreams §1.1) — additive, so existing Insights parse
+ * unchanged.
  */
-export const InsightSourceSchema = z.enum(['questionnaire', 'session']);
+export const InsightSourceSchema = z.enum(['questionnaire', 'session', 'dream']);
 export type InsightSource = z.infer<typeof InsightSourceSchema>;
 
 export const InsightFactSchema = z.object({
   id: z.string().min(1),
   text: z.string(),
   shareable: z.boolean(), // false = private to the subject; true = may feed related people's context
+  // Per-person targeted sharing (12-dreams §3.4): person ids this fact is shared with, in addition to the
+  // broadcast `shareable` boolean. Additive-optional — existing facts parse unchanged, no migration.
+  shareableWith: z.array(z.string()).optional(),
 });
 export type InsightFact = z.infer<typeof InsightFactSchema>;
 
@@ -267,6 +272,7 @@ export const InsightSchema = z.object({
   provenance: z.object({
     assignmentId: z.string().optional(),
     conversationId: z.string().optional(),
+    dreamId: z.string().optional(), // set for dream-sourced insights (12-dreams §4.4)
     at: z.string(),
   }),
   crisisFlag: z.boolean().optional(),
@@ -520,6 +526,134 @@ export const ResponseSetSchema = z.object({
 export type ResponseSet = z.infer<typeof ResponseSetSchema>;
 
 /**
+ * Dreams (12-dreams). A person captures a dream (narrative-first), optionally works through a guided
+ * analysis that synthesizes a structured DreamAnalysis, and — once approved — that analysis becomes an
+ * Insight (`source: 'dream'`) feeding `buildContext`. All shapes are Zod-validated, versioned, and stored
+ * encrypted under the dreamer's folder; dreams are private to the dreamer (12 §8.4). The per-dream
+ * `sensitivity` reuses 08's `SensitivityTier` (12 §8.3); trauma is the orthogonal `nightmare` flag.
+ */
+
+/** Someone who appeared in a dream — linked to the People graph (04) when known, else a free name. */
+export const DreamPersonRefSchema = z
+  .object({
+    personId: z.string().min(1).optional(),
+    name: z.string().min(1).optional(),
+  })
+  // Exactly one identity is meaningful: a People-graph link OR a free name, never an empty ref (12 §4.2).
+  .refine((ref) => Boolean(ref.personId ?? ref.name), {
+    message: 'a dream person needs a personId or a name',
+  });
+export type DreamPersonRef = z.infer<typeof DreamPersonRefSchema>;
+
+export const DreamStatusSchema = z.enum(['captured', 'analyzing', 'analyzed']);
+export type DreamStatus = z.infer<typeof DreamStatusSchema>;
+
+export const DreamSchema = z.object({
+  id: z.string().min(1),
+  schemaVersion: z.number().int().positive(),
+  personId: z.string().min(1), // the dreamer (owner of this data)
+  title: z.string().optional(),
+  narrative: z.string().min(1), // the brain-dump (voice-ready later)
+  dreamDate: z.string().optional(), // when it occurred; may differ from createdAt (when logged)
+  mood: z.number().min(-1).max(1).optional(), // waking mood, normalized valence (chartable)
+  vividness: z.number().int().min(1).max(5).optional(),
+  lucid: z.boolean(),
+  nightmare: z.boolean(),
+  sleepQuality: z.number().int().min(1).max(5).optional(),
+  tags: z.array(z.string()),
+  people: z.array(DreamPersonRefSchema),
+  sensitivity: SensitivityTierSchema, // reuse 08's tier (12 §8.3); default 'standard'
+  status: DreamStatusSchema,
+  analysisId: z.string().optional(), // the canonical DreamAnalysis, once created
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type Dream = z.infer<typeof DreamSchema>;
+
+/** Structured tags coded onto a dream by analysis — the substrate for cross-dream patterns (12 §3.5). */
+export const DreamTagsSchema = z.object({
+  emotions: z.array(z.string()),
+  symbols: z.array(z.string()),
+  settings: z.array(z.string()),
+  themes: z.array(z.string()),
+  people: z.array(z.string()),
+});
+export type DreamTags = z.infer<typeof DreamTagsSchema>;
+
+export const DreamAnalysisSchema = z.object({
+  id: z.string().min(1),
+  schemaVersion: z.number().int().positive(),
+  dreamId: z.string().min(1),
+  personId: z.string().min(1),
+  // readable, editable sections (12 §3.2/§4.3)
+  summary: z.string(),
+  emotionalLandscape: z.string(),
+  wakingLifeConnections: z.string(),
+  notableImages: z.string(), // symbolic/archetypal reflection — honestly framed (12 §8.1)
+  reflectiveQuestions: z.array(z.string()),
+  coachingPrompt: z.string().optional(),
+  // structured coding for patterns (content-analysis style)
+  tags: DreamTagsSchema,
+  metrics: z.record(z.string(), z.number()).optional(), // normalized signals, e.g. emotionalIntensity
+  lensesApplied: z.array(z.string()).optional(), // transparency, e.g. ['reflective','continuity','symbolic']
+  crisisFlag: z.boolean().optional(), // self-harm/crisis risk → result leads with resources (12 §8.2)
+  distressSignal: z.boolean().optional(), // milder trauma/distress → feeds the nightmare nudge (12 §8.2)
+  edited: z.boolean(), // the person edited the AI output before approving
+  insightId: z.string().optional(), // the Insight produced on approval (08 §4.4)
+  generatedAt: z.string(),
+  updatedAt: z.string(),
+});
+export type DreamAnalysis = z.infer<typeof DreamAnalysisSchema>;
+
+/** Cached cross-dream AI narrative (12 §4.4); deterministic stats are computed live, not stored. */
+export const DreamPatternSummarySchema = z.object({
+  schemaVersion: z.number().int().positive(),
+  personId: z.string().min(1),
+  narrative: z.string(),
+  windowFrom: z.string(), // range covered
+  windowTo: z.string(),
+  computedAt: z.string(),
+  insightId: z.string().optional(), // set if the person approved the narrative into context
+});
+export type DreamPatternSummary = z.infer<typeof DreamPatternSummarySchema>;
+
+/**
+ * Renderer-supplied dream capture fields; the main process owns `id`, `schemaVersion`, `personId`
+ * (the active dreamer), `status`, `analysisId`, and timestamps (12 §5.1). Booleans + collections default
+ * so a fast brain-dump (narrative only) is valid.
+ */
+export const DreamInputSchema = z.object({
+  id: z.string().optional(), // present when editing an existing dream
+  title: z.string().optional(),
+  narrative: z.string().min(1),
+  dreamDate: z.string().optional(),
+  mood: z.number().min(-1).max(1).optional(),
+  vividness: z.number().int().min(1).max(5).optional(),
+  lucid: z.boolean().default(false),
+  nightmare: z.boolean().default(false),
+  sleepQuality: z.number().int().min(1).max(5).optional(),
+  tags: z.array(z.string()).default([]),
+  people: z.array(DreamPersonRefSchema).default([]),
+  sensitivity: SensitivityTierSchema.default('standard'),
+});
+export type DreamInput = z.infer<typeof DreamInputSchema>;
+
+/**
+ * The user-editable sections of a synthesized analysis (12 §3.2/§3.3). All optional → a partial edit;
+ * the structured tags/metrics/flags are AI-owned and not editable here. Validated in the bridge before
+ * the analysis is re-saved (marked `edited`).
+ */
+export const DreamAnalysisEditsSchema = z.object({
+  summary: z.string().optional(),
+  emotionalLandscape: z.string().optional(),
+  wakingLifeConnections: z.string().optional(),
+  notableImages: z.string().optional(),
+  reflectiveQuestions: z.array(z.string()).optional(),
+  coachingPrompt: z.string().optional(),
+});
+export type DreamAnalysisEdits = z.infer<typeof DreamAnalysisEditsSchema>;
+
+/**
  * Derived "view" types produced by the core services and surfaced over IPC. They live here (a
  * crypto-free module) rather than alongside their services so `channels.ts` can import them from the
  * schemas shim without dragging `@selfos/core/crypto` into the renderer/web tsconfig (07-mobile-platform
@@ -628,3 +762,63 @@ export interface SendResult {
   analyzed: boolean;
   answers?: SendAnswer[]; // present only for a Standard, submitted send
 }
+
+/** The result of synthesizing a dream (+ guided transcript) into a structured analysis (12 §3.2). */
+export type DreamSynthesisResult =
+  | { ok: true; analysis: DreamAnalysis; usage: UsageEvent }
+  | { ok: false; reason: 'NO_KEY' | 'BUDGET' | 'ERROR' | 'NOT_FOUND'; message: string };
+
+/** The result of approving a dream's analysis into the coach's memory (→ Insight, 12 §3.3). */
+export type DreamApproveResult =
+  | { ok: true; insightId: string }
+  | { ok: false; reason: 'MEMORY_DISABLED' | 'NOT_FOUND'; message: string };
+
+/** The time window cross-dream patterns aggregate over (12 §3.5). */
+export type DreamPatternWindow = '30d' | '90d' | 'all';
+
+/** One ranked label + occurrence count (recurring symbols/themes/people/emotions). */
+export interface DreamPatternCount {
+  label: string;
+  count: number;
+  personId?: string; // set when a "people" entry resolves to a People-graph person (04)
+}
+
+/** One time-series point (a normalized signal on the date the dream occurred). */
+export interface DreamTrendPoint {
+  date: string; // YYYY-MM-DD (the dream's occurred-date)
+  value: number;
+}
+
+/**
+ * Deterministic cross-dream statistics (12 §3.5) — computed live from each `DreamAnalysis.tags` + the
+ * `Dream` metadata over the chosen window. A crypto-free view type (surfaced over IPC like `UsageSummary`).
+ */
+export interface DreamPatternStats {
+  window: DreamPatternWindow;
+  dreamCount: number; // dreams in the window
+  analyzedCount: number; // of those, how many have a synthesized analysis
+  symbols: DreamPatternCount[]; // recurring symbols, most frequent first
+  themes: DreamPatternCount[]; // recurring themes
+  people: DreamPatternCount[]; // who appears most (dream.people + analysis.tags.people)
+  emotions: DreamPatternCount[]; // dominant emotions across dreams
+  lucidCount: number;
+  nightmareCount: number;
+  moodTrend: DreamTrendPoint[]; // waking mood (−1..1) over time
+  vividnessTrend: DreamTrendPoint[]; // vividness (1..5) over time
+  /** The recurring-nightmare nudge (12 §8.2): a recent frequency of nightmares OR an AI distress signal. */
+  nightmareNudge: boolean;
+}
+
+/** The result of generating the cross-dream AI narrative (12 §3.5) — budget-gated `dream.patterns`. */
+export type DreamNarrativeResult =
+  | { ok: true; summary: DreamPatternSummary; usage: UsageEvent }
+  | { ok: false; reason: 'NO_KEY' | 'BUDGET' | 'ERROR' | 'EMPTY'; message: string };
+
+/** A related person the dreamer can share a dream insight with (12 §3.4). */
+export interface DreamShareTarget {
+  id: string;
+  displayName: string;
+}
+
+/** The result of sharing/unsharing a dream-insight fact with a related person (12 §3.4). */
+export type DreamShareResult = { ok: true } | { ok: false; reason: 'SENSITIVE' | 'NOT_FOUND' };

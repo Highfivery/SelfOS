@@ -374,6 +374,251 @@ A running log of durable decisions and feedback captured into the project config
   desktop width (or open the hamburger first), then resize only to measure layout.** **Deferred:** the
   analyze→Insight pipeline + `autoAnalyze` (§13.4). **NEXT: §13.4 analyze→Insights/metrics, then §13.5
   send/Inbox, §13.6 relay.** Synced `08` §3.1/§5.1/§6/§13.3 + changelog.
+- 2026-06-11 — Build (**Dreams slice 5b — the sharing UI; §13.5 COMPLETE — the Dreams feature is fully
+  built**; [12-dreams](docs/specs/12-dreams.md) §3.4/§8.3/§13.5). A **`DreamShareControls`** section on the
+  approved analysis card: a **related-person picker** + a `Switch` **per insight fact** (on = shared with
+  the selected person) + a **"Shared with X" line** per fact. It renders only when `analysis.insightId &&
+can('dreams.shareContext') && sensitivity === 'standard'` and the dreamer has related people — but the
+  **bridge re-enforces the capability + sensitivity + target-is-related + fact-exists server-side, so the
+  UI gate is convenience, not the trust boundary**. A **sensitive-tier dream shows a one-line "kept out of
+  shared context" note** instead. `dreamAnalysisStore` gained `insight`/`shareTargets` +
+  `loadSharing`/`setFactShare` (loaded after approve / re-approve-on-edit / open-when-approved; cleared on
+  remove + reset). **Fixed a real footgun the reviewer caught (should-fix → applied):** editing an approved
+  analysis used to **silently wipe all per-person sharing** (`approveAnalysis` rebuilt facts with fresh
+  `uuid()`s) — facts now use a **stable per-field id** (`<insightId>:waking`/`:emotional`) and **carry
+  `shareableWith` forward** on re-approval, so re-wording a section **keeps** its shares with the updated
+  text (re-_synthesizing_ a wholly new analysis still resets sharing, correctly). Applied the two nits
+  (surface an `error` if a share toggle is refused; reconcile a stale selected person so the controls never
+  point at a removed relation). Gate green: typecheck (node + web/DOM-lib), lint, format, **164 core + 249
+  desktop** unit (+1 core carry-forward, +6 RTL: component toggles/already-shared/empty + pane integration /
+  sensitive note / capability-hide), **36 E2E** (+1 full capture→analyze→approve→**share** flow that
+  decrypts the vault to assert the shared fact reaches the related person's `summarizeForContext` grounding
+  - a 390px guard). **Visual QA** at desktop (the share section — picker + per-fact toggles + the "Shared
+    with Partner" chip — renders cleanly, no overflow). On `feat/dreams-slice-5b` (in the Dreams worktree).
+    **Lesson: any derived record (a distilled Insight's facts) that the user can attach state to (sharing
+    toggles) must carry that state across regeneration via STABLE ids — rebuilding with fresh uuids silently
+    drops the user's choices.** **The Dreams feature (spec 12, §13.1–§13.5) is now FULLY BUILT** — capture →
+    guided analysis → patterns → per-dream sharing. Only the deferred AI dream-image-generation companion
+    spec remains. (Concurrent questionnaire session's main-tree work untouched.)
+- 2026-06-11 — Build (**Dreams slice 5a — per-dream sharing backend + IPC seam**;
+  [12-dreams](docs/specs/12-dreams.md) §3.4/§8.3/§8.4/§6/§13.5). The **per-person** dream-insight sharing
+  mechanism. **Asked first (2 forks, both confirmed):** the shareable unit = the **distilled insight facts**
+  (the emotional-landscape + waking-life-connection facts approval produces); the control = **pick a related
+  person, tick which facts**. Added an **additive-optional `InsightFact.shareableWith: string[]`** (the
+  person ids a fact is targeted at, alongside the broadcast `shareable` boolean — **no migration**, existing
+  questionnaire/session facts unaffected); **`summarizeForContext`** now surfaces a related person's fact
+  when `shareable` **OR** `shareableWith.includes(thatPerson)` (the boolean broadcast path unchanged). New
+  **`dreamInsightService`** (`@selfos/core/dreams`): `listDreamShareTargets` (the dreamer's relationship-
+  graph relations — via a new exported **`listRelatedPeople`**), `getDreamInsight` (the dream's approved
+  Insight + its facts/sharing), **`setDreamFactShare`** (toggles a person in a fact's `shareableWith`;
+  **refuses sensitive-tier dreams** [`SENSITIVE`] + a **non-related/unknown target** [`NOT_FOUND`]; drops the
+  prop when empty). IPC seam: `dreams:shareTargets` + `:getInsight` gated by **`dreams.own`**;
+  `dreams:setFactShare` gated by the privileged **`dreams.shareContext`** (a Member has both by default; a
+  Guest neither). New crypto-free view types `DreamShareTarget`/`DreamShareResult`. Code-reviewer verdict
+  **ship** — the **privacy boundary verified airtight on every path** (a targeted fact reaches ONLY its
+  target, never other related or unrelated people; the **relationship graph re-gates at read time** so
+  deleting a relationship drops the share — no stale `shareableWith` leak; sensitive tiers excluded;
+  others'-private + the boolean paths unchanged). Applied the two nits (a dedup-divergence doc note on
+  `listRelatedPeople` vs `buildContext`'s inline traversal; a broadcast-path regression test). Gate green:
+  typecheck (node + web/DOM-lib), lint, format, **162 core + 243 desktop** unit (+7 core sharing/targeting,
+  +1 bridge round-trip/gating). On `feat/dreams-slice-5a` (in the Dreams worktree). **Lesson: per-person
+  sharing rides on an additive `InsightFact.shareableWith` checked in `summarizeForContext` (`shareable ||
+shareableWith.includes(reader)`) — and the relationship graph re-gates at READ time, so a shared fact
+  auto-revokes when the relationship is removed; no separate revocation needed.** **No user-facing surface,
+  so no E2E/visual-QA** — the share UI on the approved, non-sensitive analysis card (a related-person picker
+  - per-fact ticks + "shared with X" chips) lands in **5b**. (Concurrent questionnaire session's main-tree
+    work untouched.)
+- 2026-06-11 — Build (**Dreams slice 4b — the Patterns UI; §13.4 COMPLETE**;
+  [12-dreams](docs/specs/12-dreams.md) §3.5/§5.3/§8.2/§9/§13.4). The **`/dreams/patterns`** screen + three
+  **new `/gallery` chart primitives**. Built bespoke SVG/bars on tokens (**no chart library** — matching
+  the hand-rolled usage ring) with the **count/figure always rendered as text** (not colour-only, §9):
+  **`FrequencyBars`** (recurring symbols/themes/people/emotions), **`ProportionBar`** (lucid/nightmare
+  rates), **`TrendLine`** (mood/vividness over time, a direction-aware `role="img"` label) — all exported
+  from the design-system + **showcased in `/gallery`** (DoD). **`DreamPatterns`** composes the four §3.5
+  visualizations into cards + a **30d / 90d / All-time** `SegmentedControl` + the **gentle recurring-
+  nightmare nudge** Banner (when `nightmareNudge`) + the **on-demand** AI narrative card (Generate →
+  Approve/Remove + the "in your coaching context" badge; disabled+hinted when `dreams.memoryEnabled` is off;
+  a calm connect-Claude state when AI is off — **the deterministic charts still render offline**) + the
+  not-medical line + the reused `CrisisFooter`. Reached via a **"Patterns" button in the Dreams header**.
+  A per-person **`dreamPatternStore`** (reset wired into AppShell's active-person effect). The §8.2 nudge
+  **also surfaces in the dream detail** — a gentle `distressSignal` banner on the synthesis card. All four
+  product/UX forks were **asked + user-confirmed** (nudge = 3-in-14-days; the window toggle; on-demand
+  generation; the header-button entry). Code-reviewer **fix-first** (should-fix: a `load()` late-resolve
+  **window guard** so a fast toggle can't show stale stats; nits: the `!`→guarded-access §4 fix, a
+  direction-aware TrendLine label, `title` on truncated bars). Gate green: typecheck (node + web/DOM-lib),
+  lint, format, **156 core + 242 desktop** unit (+4 chart RTL, +7 Patterns RTL), **35 E2E** (+1: seeds 3
+  nightmares + an analyzed dream → the charts render, the nudge fires, generate+approve the narrative, a
+  390px overflow guard). **Visual QA** at desktop + 390px via real Electron screenshots (charts legible,
+  the grid stacks). On `feat/dreams-slice-4b` (in the Dreams worktree). **Lesson: build in-app charts as
+  bespoke token-driven SVG/bars (the usage-ring precedent) — no chart-lib dependency — and give every chart
+  a TEXT equivalent (the count/figure as text + a direction-aware aria-label), since §9 forbids colour-only
+  data.** **Slice 4 (Patterns) is COMPLETE; NEXT: §13.5 per-dream sharing** (per-fact shareable promotion
+  into a related person's context, gated by `dreams.shareContext`, excluded for sensitive tiers).
+  (Concurrent questionnaire session's main-tree work untouched.)
+- 2026-06-11 — Build (**Dreams slice 4a — patterns backend + IPC seam**;
+  [12-dreams](docs/specs/12-dreams.md) §3.5/§4.4/§8.2/§6/§13.4). **Asked first (4 product/UX forks, all
+  recommendations confirmed):** recurring-nightmare nudge threshold = **3 nightmares in 14 days** (the
+  deterministic backstop; the AI distress signal fires independently); patterns window = a **30d / 90d /
+  All-time toggle**; the AI narrative = **on-demand "Generate"** (cached + regenerable, never auto-spends
+  budget); Patterns entry = a **"Patterns" button in the Dreams header** → `/dreams/patterns`. Built the
+  backend: `@selfos/core/dreams` **`dreamPatternService`** — **`computePatternStats`** (a PURE aggregation
+  over `{dream, analysis}[]` → recurring symbols/themes/people/emotions counts, lucid+nightmare counts,
+  mood & vividness trend series) + the **`nightmareNudge`** (3-in-14-days OR an AI `distressSignal`,
+  computed over the FULL set on a **fixed 14-day window** so a longer view window never dilutes the safety
+  signal); `getPatternStats`; **`generatePatternNarrative`** (the budget-gated `dream.patterns` pass over a
+  bounded recent-dreams digest → cached as `DreamPatternSummary` at `people/<id>/dreams/patterns.enc`;
+  meters before caching; re-gen drops the prior approved Insight); `approvePatternNarrative` (→ a
+  **cross-dream `Insight`** `source:'dream'` with **no `dreamId`**, gated by injected `memoryEnabled`);
+  `removePatternNarrativeFromContext`. New **crypto-free** view types (`DreamPatternWindow`
+  `'30d'|'90d'|'all'`, `DreamPatternStats`, `DreamNarrativeResult`) in `@selfos/core/schemas`;
+  `dream.patterns` usage type. IPC seam (gated **`dreams.own`**, dreamer-scoped):
+  `dreams:patternStats`/`:getPatternSummary`/`:patternNarrative`/`:approvePatternNarrative`/
+  `:removePatternNarrative` (a denied `patternStats` read returns **zeroed stats**, never throws). The API
+  key stays host-side. Code-reviewer verdict **ship** (no blockers/should-fixes — nudge decoupling,
+  no-`dreamId` Insight, re-gen+remove dropping the Insight, metering-before-cache, and key-host-side all
+  verified; applied the one nit so the cached `windowFrom/To` match the digest Claude actually saw). Gate
+  green: typecheck (node + web/DOM-lib), lint, format, **156 core + 231 desktop** unit (+11 core
+  `dreamPatternService` incl. the windowing + nudge paths, +1 bridge patterns round-trip/gating). On
+  `feat/dreams-slice-4a` (in the Dreams worktree). **No user-facing surface, so no E2E/visual-QA** — the
+  four `/gallery` chart primitives + the `/dreams/patterns` screen (window toggle, on-demand narrative +
+  approve, the nightmare nudge) land in **4b**. (Concurrent questionnaire session's main-tree work
+  untouched.)
+- 2026-06-11 — Build (**Dreams slice 3c — the guided-analysis UI; §13.3 COMPLETE**;
+  [12-dreams](docs/specs/12-dreams.md) §3.2/§3.3/§13.3). The in-pane **Dream ⇄ Analysis** surface.
+  **Asked first (3 UX forks, all recommendations confirmed):** presentation = **in-pane mode switch**
+  (modal-free, mirroring the questionnaire Edit⇄Preview toggle); post-synthesis = **lead with the card**
+  (chat tucks behind a "Continue the conversation" disclosure); editing = **read-first + Edit toggle**.
+  A status-aware **Analyze / Resume analysis / View analysis** entry on a saved dream opens
+  **`DreamAnalysisPane`** — a guided reflective chat (reuses the Sessions **`Composer` + `CrisisFooter`**
+  over a new per-person **`dreamAnalysisStore`** subscribing to `onDreamChunk`) → **"Create analysis"**
+  synthesis → the **`DreamSynthesisCard`** (5 read-first sections; Edit → **`DreamAnalysisEditor`** → Save
+  via `dreamUpdateAnalysis`). The store **re-approves an already-approved analysis on edit** so the
+  coaching context stays in sync (approve is a cheap, **unmetered** local distillation). **Approve** → the
+  "in your coaching context" badge + **Remove from context**; Approve is **disabled + hinted when
+  `dreams.memoryEnabled` is off**. **Safety:** a `crisisFlag` makes the card **lead with resources**; the
+  not-medical line + crisis footer are on every analysis state; symbolic readings stay framed as
+  imaginative reflection; AI-off shows a calm connect state, but an **existing** analysis stays
+  viewable/editable/approvable offline (only the chat + synthesis need AI). `dreamAnalysisStore.reset()`
+  wired into AppShell's active-person effect (per the per-person rule). Both offline fake Claude clients
+  (Electron + web preview) now emit a valid synthesis JSON for the "JSON object" turn. Code-reviewer
+  **fix-first** (both should-fixes applied: closed a **mobile back-button dead-end** if the selected dream
+  vanishes mid-analysis — the list-back now hides only while the pane actually renders; added the missing
+  **re-approve-on-edit** test; + an `aria-controls` a11y nit). Gate green: typecheck (node + web/DOM-lib),
+  lint, format, **145 core + 230 desktop** unit (+9 RTL: entry label, calm AI-off, guided turn, synthesize,
+  edit, approve+badge, remove, memory-off, re-approve-on-edit), **34 E2E** (+1 full
+  capture→analyze→synthesize→edit→approve flow that decrypts the vault to assert the dream Insight feeds
+  `summarizeForContext` **grounding** + the transcript is **absent from the Sessions list** + a 390px
+  no-overflow guard on the analysis surface). **Visual QA** at desktop + 390px via real Electron
+  screenshots (the card, entry bar, actions, and crisis footer all clean + intentional). On
+  `feat/dreams-slice-3c` (in the Dreams worktree). **Lesson: the shared web-preview MCP server is rooted
+  at the MAIN tree, so it serves the OTHER worktree's build — for worktree visual QA, capture screenshots
+  inside the Playwright run (`w.screenshot`) from the worktree's own build instead.** **Slice 3 (guided
+  analysis) is COMPLETE; NEXT: §13.4 Patterns** (deterministic stats + four `/gallery` chart primitives +
+  the `dream.patterns` narrative + the recurring-nightmare nudge). (Concurrent questionnaire session's
+  main-tree work untouched.)
+- 2026-06-11 — Build (**Dreams slice 3b — the analysis IPC seam**;
+  [12-dreams](docs/specs/12-dreams.md) §6/§13.3). Wired the slice-3a guided-analysis ops through the typed
+  seam (`channels` → `coreBridge` → `ipc` → preload → `test-utils/bridge`), all **gated by `dreams.own`** +
+  scoped to the active dreamer (the **bridge is the trust boundary** — inputs Zod-validated; the API key is
+  read host-side and **never crosses to the renderer**): `dreams:analyzeTurn` (streams on a **new
+  `dreams:chunk` event** via a dedicated `emitDreamChunk`/`onDreamChunk` sink — **separate from the Sessions
+  `chat:chunk` stream** so the two never cross; `ipc.ts` binds `event.sender` per turn and resets in
+  `finally`, exactly like `chatStream`), `dreams:getAnalysis`/`:getConversation` (resume the chat),
+  `dreams:synthesize`, `dreams:updateAnalysis` (save section edits → `edited:true`), `dreams:approve` (the
+  host reads `dreams.memoryEnabled` from vault settings — **default ON unless explicitly `false`** — and
+  passes it to `approveAnalysis`), `dreams:removeFromContext`. Added a new core **`updateAnalysis`** that
+  overwrites only the supplied readable sections (conditional spreads under `exactOptionalPropertyTypes`),
+  preserving the AI-owned tags/metrics/flags + `insightId` so re-approval refreshes the **same** Insight.
+  The two result view types (`DreamSynthesisResult`/`DreamApproveResult`) + the `DreamAnalysisEdits` input
+  schema live in the **crypto-free `@selfos/core/schemas`** (the `ChatTurnResult` precedent), so
+  `channels.ts` imports them without dragging crypto into the renderer/web tsconfig; the iOS/web `webHost`
+  gained the parallel `emitDreamChunk`/`onDreamChunk`. Code-reviewer verdict **ship** (no blockers/
+  should-fixes; dreamer-scoping, key-host-side, sender-reset parity, and the `memoryEnabled` default all
+  verified). Gate green: typecheck (node + web/DOM-lib), lint, format, **145 core + 221 desktop** unit (+2
+  core `updateAnalysis`, +3 bridge: a full analyze→synthesize→edit→approve→remove round-trip, the
+  memory-off refusal, and a capability denial). On `feat/dreams-slice-3b` (in the Dreams worktree).
+  **No new user-facing surface**, so no E2E/visual-QA this slice — the guided-analysis chat + synthesis
+  card + approve UI + the E2E land in **3c**. (The concurrent questionnaire session's `08`/main-tree work
+  left untouched; my commit is the 10 seam/test/doc files only.)
+- 2026-06-11 — Build (**Dreams slice 3a — core guided-analysis backend**;
+  [12-dreams](docs/specs/12-dreams.md) §13.3). The first AI-bearing Dreams code (no IPC/UI yet). New
+  **`@selfos/core/dreams` `dreamAnalysisService`**: `runAnalysisTurn` (a **dream-scoped** reflective
+  chat — reuses the `05` chat / `06` budget+stream+metering pattern but stores the transcript **under the
+  dream** at `dreams/<id>/conversation.enc`, so the Sessions surface never lists it; metered
+  **`dream.analyze`**); `synthesizeAnalysis` (one `client.stream` w/ a no-op `onDelta` to get token usage
+  → fence-stripping `extractJson` + a Zod-validated **`DreamAnalysisDraftSchema`** → a `DreamAnalysis`;
+  marks the dream `analyzed`; **records usage BEFORE parsing** so a paid call whose JSON fails validation
+  is still metered; re-synth drops the prior analysis's stale Insight); `approveAnalysis` (→ `Insight`
+  `source:'dream'`, `provenance.dreamId`; gated by an **injected `memoryEnabled`** — host reads
+  `dreams.memoryEnabled` in 3b; refuses when off); `removeFromContext`; and **`purgeDream`** (delete the
+  dream **and** its linked Insight). The blended-**honest** voice lives in `DREAM_ANALYSIS_GUIDANCE` + the
+  synthesis contract, reusing `PERSONA`/`SAFETY` (symbolic readings framed as reflection-not-fact;
+  `crisisFlag`/`distressSignal`, §8.1/§8.2). Registered the `dream.analyze` usage type; added
+  dream-conversation persistence to `dreamService`. Code-reviewer verdict **fix-first** — both
+  should-fixes resolved: (#1) the slice-2 bridge delete path orphaned an approved dream Insight (it lives
+  OUTSIDE the dream folder, under `people/<id>/insights/`) → now routed through **`purgeDream`**; (#2) a
+  paid synthesis call that failed JSON/Zod validation wasn't metered → **`recordUsage` moved ahead of the
+  parse**. Nits applied (reuse `DreamTagsSchema`, request `metrics` in the prompt, fence-strip the
+  extractor). Gate green: typecheck/lint/format, **143 core + 218 desktop** unit (10 new analysis-service
+  tests: transcript-not-in-Sessions, approve→Insight-feeds-context, memory-off refusal, re-synth-drops-
+  stale, purge-removes-insight, meter-on-parse-failure, …). On `feat/dreams-slice-3`. **Lesson: when a
+  feature stores derived data OUTSIDE the entity's own folder (an `Insight` under `people/<id>/insights/`,
+  not under the dream), the entity's delete path must explicitly clean it up — a folder purge alone
+  orphans it, and an approved source-discriminated Insight keeps feeding `buildContext` forever.** Next:
+  **3b** (IPC seam) → **3c** (guided-chat + synthesis card + approve UI + E2E).
+- 2026-06-11 — Build (**Dreams slice 2 — capture + journal UI + nav + settings**;
+  [12-dreams](docs/specs/12-dreams.md) §13.2). The first Dreams **renderer** surface (no AI yet — pure
+  journaling works offline). IPC seam `dreams:list/get/save/delete` through the typed seam
+  (`channels` → `coreBridge` → `ipc` → preload), **gated by `dreams.own`** + **scoped to the active
+  dreamer** (mirrors conversations); main owns id/`schemaVersion`/`personId`/`status`/timestamps and
+  merges over an existing dream on edit (preserves `createdAt`/analysis link). New `DreamInputSchema`
+  (renderer-supplied; booleans/collections default so a narrative-only dump is valid). Renderer: a
+  `dreamStore` with a per-person **`reset()`** wired into AppShell's active-person reset+reload effect
+  (the per-person-isolation rule — dreams must not leak across a switch); a **Dreams** master–detail
+  journal; a narrative-first **`DreamComposer`** (lucid/nightmare `Switch` toggles + optional
+  mood/vividness/sleep/date + tags/people via a reusable **`ChipEditor`** + sensitivity; Save gated on a
+  non-empty narrative; delete behind a confirm); the `/dreams` nav entry (moon icon, `dreams.own`-gated)
+  - route; and the **`dreams.memoryEnabled`** vault setting in a new Dreams settings section.
+    **People-graph linking of "people present" deferred** (free-name chips for now); the **Analyze** entry
+    point + all AI land in slice 3 (no scaffolding here, §12). Tests: +1 coreBridge dreams test
+    (CRUD + per-dreamer scoping + Guest-denied), 5 Dreams RTL (empty/list/capture-payload/save-gating/
+    delete-confirm), +1 E2E (capture → encrypted round-trip → reopen + overflow guard) + Dreams added to
+    the **390px sweep**. Visual QA done from the live app at desktop + 390px (master–detail; the
+    optional-details grid stacks on phones). Gate green: typecheck/lint/format, **133 core + 217 desktop**
+    unit, E2E. Built on **`feat/dreams-slice-2`** (stacked on slice 1) in the isolated worktree — the
+    concurrent questionnaires session (`feat/questionnaire-ai-generate`, §13.3) untouched. **NOTE: the
+    shared seam files (`channels`/`coreBridge`/`ipc`/preload) + `CLAUDE.md` will conflict-merge with that
+    session's work — both append; trivial to resolve.** Next: **slice 3** (guided analysis → approve →
+    context).
+- 2026-06-11 — Spec + Build (**Dreams** — new spec [12-dreams](docs/specs/12-dreams.md) drafted, approved,
+  and **slice 1 built**; §13.1). Dreams = guided AI dream journaling + analysis + cross-dream patterns; the
+  **third producer** into `08`'s shared Insight/metrics layer (a dream's **approved** analysis becomes an
+  `Insight` `source:'dream'` feeding `buildContext` — no new context plumbing). Spec written ask-first (16
+  decisions / 4 rounds + a 5-Q review): blended **honest** voice (evidence + symbolic, framed as reflection
+  not fact), **guide→synthesize** chat (reuses `05`, stored **under the dream**, kept OUT of the Sessions
+  list), structured 5-section analysis, **approve-gate** before context, per-dream sharing (off by default),
+  per-dream `SensitivityTier`, dreamer-only + super-admin break-glass (**no audit log v1**), **full
+  cross-dream patterns in v1** (hybrid stats + view-only AI narrative w/ opt-in add-to-context),
+  recurring-nightmare nudge (**count OR AI distress signal**). **Image generation deferred to a future
+  companion spec** (2nd provider/OpenAI, consent, **binary-blob vault storage**, per-image cost) — no
+  scaffolding here. UX reviewed via interactive mockups of the 4 surfaces before approval. **Slice 1
+  (backend/core):** the `Dream`/`DreamPersonRef`/`DreamStatus`/`DreamTags`/`DreamAnalysis`/
+  `DreamPatternSummary` schemas; the **additive** `Insight` `source:'dream'` + `provenance.dreamId`
+  amendment (**no migration** — additive-optional, `schemaVersion` stays 1; synced into `08`);
+  `dreams.own`/`dreams.shareContext` capabilities (Member default; **no view-others'-dreams** capability);
+  and **`@selfos/core/dreams`** `dreamService` (encrypted per-dream-folder CRUD over Dream+DreamAnalysis;
+  **delete purges the folder**; listing skips non-dream sidecars like `patterns.enc` + enforces dreamer
+  scoping, mirroring `insightStore`). Code-reviewed (verdict **ship**; fixed: `DreamPersonRef` now forbids
+  an empty `{}` ref; added a populated round-trip + a Zod-bounds-rejection test). Gate green:
+  typecheck/lint/format, **133 core + 211 desktop** unit (no E2E — backend-only, no new surface).
+  **Process:** the approved spec committed (`99e3264`) but **landed on `main`** because a concurrent
+  questionnaires session switched the shared HEAD mid-session (moving it onto a branch is deferred per the
+  user); slice 1 was then built in an **isolated git worktree** (`feat/dreams-slice-1` off the spec commit)
+  so the live questionnaires session (`feat/questionnaire-ai-generate`, doing §13.3) was untouched.
+  **Lesson: with a concurrent agent in a SHARED working tree, switching branches moves the one shared HEAD
+  — use a separate `git worktree` for feature work to avoid disrupting the other session, and re-check
+  `git branch --show-current` immediately before any commit.** **Next §13 slices:** capture + journal UI +
+  settings + nav (2) → guided analysis (3) → patterns (4) → per-dream sharing (5).
 - 2026-06-11 — Build (Questionnaires **slice 2 — question images** [§13.2 last leaf; **§13.2 now
   complete**], [08-questionnaires](docs/specs/08-questionnaires.md) §4.1/§4.2/§5.1/§6/§8.6/§13.2). Asked
   first (3 Qs): storage = **shared media dir** `questionnaires/media/<id>.enc`; picker = **in-renderer

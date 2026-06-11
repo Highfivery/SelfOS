@@ -239,6 +239,33 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Build (**Capacitor track slice iii-b3 — native Swift `VaultFs` plugin + TS FS adapter**;
+  [07-mobile-platform](docs/specs/07-mobile-platform.md) §5.4/§13). The **real security-scoped iCloud-Drive
+  filesystem for iOS**, so the iOS WebView shares the _same_ vault as desktop. **`ios/App/App/VaultFs.swift`**
+  (`CAPBridgedPlugin`): `pickFolder` (UIDocumentPicker open-directory → a security-scoped bookmark),
+  bookmark resolve, and `read`/`writeAtomic`(temp+rename via `Data(.atomic)`)/`list`/`remove` over
+  `NSFileCoordinator`, each bracketed in `start/stopAccessingSecurityScopedResource` and settling its
+  `CAPPluginCall` **exactly once after coordination**. TS: **`host/capacitorVaultFs.ts`**
+  (`registerPlugin('VaultFs')` + `capacitorFileSystem(bookmark, plugin?)` over the core `FileSystem`, bytes
+  base64-bridged via a new **`@selfos/core/encoding`** export); **`webHost` refactored** to a shared
+  `createBridgeHost(parts)` used by both `createWebHost` (IndexedDB) and `createCapacitorHost` (native FS +
+  picker, reusing the iii-b2 `localStorage` stores); **`installRealBridge` now picks the host by
+  `Capacitor.isNativePlatform()`**. **Decisions (asked):** **defer the NSFilePresenter** change feed to a
+  iii-b3b follow-up (`onVaultChanged` no-op for now); **reuse `localStorage`** for interim iOS
+  device-state/secrets (only the FileSystem swaps to native; iii-c brings the Keychain). No
+  iCloud-container entitlement (access is via security scope — §11.6). Reviewer verdict **ship**; applied
+  the should-fixes — restructured all 4 Swift coordinated ops to **settle the call once after `coordinate`
+  returns** (a hung call would freeze boot — the worst on-device failure), and made `createCapacitorHost`
+  **injectable + tested** (picker→bookmark + cancel→null). Gates green: typecheck (node + web/DOM-lib), lint,
+  format, **250 unit** (76 core + 174 desktop, +6 TS host tests), **27 Electron E2E** (no regression),
+  `pnpm build:web` bundles `@capacitor/core`. **The Swift is BLIND-WRITTEN — I can't compile it here; the
+  user builds + verifies on-device in Xcode** (`pnpm build:web` → `npx cap sync ios` → **add `VaultFs.swift`
+  to the App target's Compile Sources** → run; expect to iterate on any Swift compile nits). **Lesson: for a
+  blind-written native bridge method, the #1 robustness rule is "settle the platform call exactly once on
+  every path" — an unsettled `CAPPluginCall`/promise hangs the JS caller (here: a frozen boot with no
+  error).** **NEXT: iii-c** (iOS Keychain `SecretStore` + browser-mode Claude with a native-HTTP fallback),
+  then **iii-b3b** (the live NSFilePresenter change feed). **(Concurrent agent's `docs/specs/0{4,5,8,9}` +
+  `11` left untouched; this slice's doc edits are only 07 + this entry.)**
 - 2026-06-10 — Build (**Capacitor track slice iii-b2 — iOS in-webview host + browser verification**;
   [07-mobile-platform](docs/specs/07-mobile-platform.md) §5.3/§13). The real **in-webview `BridgeHost`**
   wiring the shared `createCoreBridge` factory to browser APIs, so the actual `@selfos/core` runs in a

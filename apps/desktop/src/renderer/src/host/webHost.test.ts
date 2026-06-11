@@ -1,7 +1,8 @@
 // @vitest-environment node
 import { IDBFactory } from 'fake-indexeddb';
-import { beforeEach, describe, expect, it } from 'vitest';
-import { createWebHost } from './webHost';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { VaultFsPlugin } from './capacitorVaultFs';
+import { createCapacitorHost, createWebHost } from './webHost';
 
 // A minimal in-memory localStorage (node env has none); the web stores read/write it. A fresh
 // IDBFactory is injected per test so cross-test open connections can't deadlock the shared DB. node
@@ -67,5 +68,30 @@ describe('createWebHost', () => {
     const second = decodeMeta(await host.fileSystem('SelfOS').read('.selfos/meta.json'));
     expect(first?.vaultId).toBeTruthy();
     expect(second?.vaultId).toBe(first?.vaultId);
+  });
+});
+
+function fakePlugin(overrides: Partial<VaultFsPlugin> = {}): VaultFsPlugin {
+  return {
+    pickFolder: vi.fn(() => Promise.resolve({ bookmark: 'bm-xyz', name: 'SelfOS' })),
+    read: vi.fn(() => Promise.resolve({ data: null })),
+    writeAtomic: vi.fn(() => Promise.resolve()),
+    list: vi.fn(() => Promise.resolve({ entries: [] })),
+    remove: vi.fn(() => Promise.resolve()),
+    ...overrides,
+  };
+}
+
+describe('createCapacitorHost', () => {
+  it('selectVaultFolder returns the picked folder bookmark', async () => {
+    const host = createCapacitorHost(fakePlugin());
+    expect(await host.selectVaultFolder()).toBe('bm-xyz');
+  });
+
+  it('selectVaultFolder returns null when the picker is cancelled or fails', async () => {
+    const host = createCapacitorHost(
+      fakePlugin({ pickFolder: () => Promise.reject(new Error('cancelled')) }),
+    );
+    expect(await host.selectVaultFolder()).toBeNull();
   });
 });

@@ -355,6 +355,25 @@ build:web` then `cap add ios` + Xcode on their Mac (free signing first; §11.7).
   `pnpm build:web` bundles `@selfos/core` (105 KB gzip). The iOS/web host can't run in headless CI (§10) —
   verified manually in the browser. **Next: iii-b3** the Swift `VaultFs` plugin (real iCloud FS) + iii-c
   (Keychain + real Claude) replace the browser stubs.
+- 2026-06-11 — **slice iii-b3 landed (§5.4):** the native **Swift `VaultFs` Capacitor plugin** + its TS
+  adapter — the real security-scoped iCloud-Drive filesystem for iOS. `ios/App/App/VaultFs.swift`
+  (`CAPBridgedPlugin`): `pickFolder` (UIDocumentPicker open-directory → a security-scoped bookmark),
+  bookmark resolve, and `read`/`writeAtomic`(temp+rename via `Data(.atomic)`)/`list`/`remove` over
+  `NSFileCoordinator`, each bracketed in `start/stopAccessingSecurityScopedResource` and settling its
+  `CAPPluginCall` **exactly once after coordination** (a blind-write robustness fix from review — a hung
+  call would freeze boot). TS: `host/capacitorVaultFs.ts` (`registerPlugin('VaultFs')` +
+  `capacitorFileSystem(bookmark, plugin?)` over the core `FileSystem`, bytes base64-bridged via the new
+  `@selfos/core/encoding` export); `webHost` refactored to a shared `createBridgeHost(parts)` used by both
+  `createWebHost` (IndexedDB) and `createCapacitorHost` (native FS + picker, reusing the iii-b2
+  `localStorage` stores), with `installRealBridge` picking by `Capacitor.isNativePlatform()`. **Decisions
+  (asked):** defer the NSFilePresenter change feed to **iii-b3b** (`onVaultChanged` no-op for now); reuse
+  the `localStorage` device-state/secret stores on iOS until iii-c's Keychain. No iCloud-container
+  entitlement (security scope — §11.6). Gates green: typecheck (node + web/DOM-lib), lint, format,
+  **250 unit** (76 core + 174 desktop, incl. 6 new TS host tests for the adapter + capacitor host),
+  **27 Electron E2E** (no regression), `pnpm build:web` bundles `@capacitor/core` too. The **Swift is
+  blind-written** (can't compile here) — the user builds + verifies on-device in Xcode (`build:web` →
+  `npx cap sync ios` → add `VaultFs.swift` to the App target → run). **Next: iii-c** (iOS Keychain + real
+  Claude) then iii-b3b (live change presenter).
 
 ## 13. Implementation roadmap & status
 
@@ -386,11 +405,18 @@ The full arc, so no session loses the thread. Update the status boxes as slices 
       `householdSetup` → people → invite generation → a second `?device=B` tab redeeming the invite **with
       no prior device key** (joins member-only) → capability-gated nav → chat streaming, no console errors.
       (SecretStore/Claude are temporary; the native iOS Keychain + browser-mode Claude land in iii-c.)
-- [ ] **iii-b3 — Swift `VaultFs` Capacitor plugin + TS FS adapter.** `UIDocumentPicker` open-directory
-      (iCloud folder), security-scoped bookmark create/resolve (handle stale → re-pick), `NSFileCoordinator`
-      coordinated read/writeAtomic(temp+rename)/list/remove on vault-relative paths, a presenter for change
-      events. Blind-written; user runs `build:web` → `npx cap sync ios` → Xcode. No iCloud-container
-      entitlement needed (access is via security scope — §11.6).
+- [x] **iii-b3 — Swift `VaultFs` Capacitor plugin + TS FS adapter.** `ios/App/App/VaultFs.swift`
+      (`CAPBridgedPlugin`): `pickFolder` (UIDocumentPicker open-directory → security-scoped bookmark),
+      bookmark resolve, and `read`/`writeAtomic`(temp+rename via `Data(.atomic)`)/`list`/`remove` over
+      `NSFileCoordinator` + `start/stopAccessingSecurityScopedResource`, on vault-relative POSIX paths; each
+      op settles its `CAPPluginCall` exactly once after coordination (no hung promises). TS:
+      `host/capacitorVaultFs.ts` (`capacitorFileSystem(bookmark)` over the plugin, base64 byte bridge) +
+      `webHost`'s `createCapacitorHost` (native FS + picker, reusing the iii-b2 `localStorage` stores) wired
+      into `installRealBridge` via `Capacitor.isNativePlatform()`. **No iCloud-container entitlement** (access
+      is via security scope — §11.6). _Live change events (NSFilePresenter → `onVaultChanged`) **deferred to
+      iii-b3b** (no-op for now); download-on-demand UX stays open (Q8)._ TS verified (typecheck/lint/250 unit/
+      27 E2E/`build:web`); the **Swift is blind-written — build + verify on-device in Xcode** (`build:web` →
+      `npx cap sync ios` → add `VaultFs.swift` to the App target → run).
 - [ ] **iii-c — iOS Keychain + Claude.** Real Keychain `SecretStore` (replace iii-b2's stub:
       `kSecClassGenericPassword`, accessible-after-first-unlock-this-device-only, not synced; holds master
       key + API key) + Claude via the Anthropic **browser-mode SDK** (`dangerouslyAllowBrowser`) with a

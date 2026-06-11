@@ -6,6 +6,7 @@ import {
   House,
   Menu,
   MessageCircle,
+  Moon,
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
@@ -21,6 +22,7 @@ import { useSessionStore } from '../stores/sessionStore';
 import { useConversationStore } from '../stores/conversationStore';
 import { useBudgetStore } from '../stores/budgetStore';
 import { useUsageStore } from '../stores/usageStore';
+import { useDreamStore } from '../stores/dreamStore';
 import { AccountMenu } from './AccountMenu';
 import { Switcher } from './Switcher';
 import { LockScreen } from './LockScreen';
@@ -42,6 +44,7 @@ export function AppShell(): JSX.Element {
   const canManageRoles = useSessionStore((s) => s.can('roles.manage'));
   const hasSessions = useSessionStore((s) => s.can('sessions.own'));
   const canCreateQuestionnaires = useSessionStore((s) => s.can('questionnaires.create'));
+  const canOwnDreams = useSessionStore((s) => s.can('dreams.own'));
   const locked = useSessionStore((s) => s.locked);
   const unlockPromptOpen = useSessionStore((s) => s.unlockPromptOpen);
   const activePersonId = useSessionStore((s) => s.activePerson?.id ?? null);
@@ -62,8 +65,10 @@ export function AppShell(): JSX.Element {
     useConversationStore.getState().reset();
     useBudgetStore.getState().reset();
     useUsageStore.getState().reset();
+    useDreamStore.getState().reset();
     void useConversationStore.getState().load();
     void useBudgetStore.getState().refresh();
+    void useDreamStore.getState().load();
   }, [activePersonId]);
 
   // Track the mobile breakpoint; collapse any open drawer when the viewport grows back to desktop.
@@ -157,6 +162,18 @@ export function AppShell(): JSX.Element {
             >
               <ClipboardList size={18} aria-hidden="true" />
               <span className={styles.label}>Questionnaires</span>
+            </NavLink>
+          ) : null}
+          {canOwnDreams ? (
+            <NavLink
+              to="/dreams"
+              className={navClass}
+              aria-label="Dreams"
+              title={tip('Dreams')}
+              onClick={closeDrawer}
+            >
+              <Moon size={18} aria-hidden="true" />
+              <span className={styles.label}>Dreams</span>
             </NavLink>
           ) : null}
           {canManagePeople ? (

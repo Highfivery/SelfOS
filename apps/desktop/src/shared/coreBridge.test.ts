@@ -289,4 +289,61 @@ describe('createCoreBridge', () => {
       bridge.assignmentsCreate({ questionnaireId: saved.id, recipientPersonId: 'ghost' }),
     ).rejects.toThrow(/Recipient not found/);
   });
+
+  it('saves/edits a dream, scoped to the active dreamer and gated by dreams.own', async () => {
+    const { bridge, ownerId } = await freshOwner();
+
+    const saved = await bridge.dreamSave({
+      narrative: 'I was back in my childhood house, rooms rearranging.',
+      title: 'The rearranging house',
+      lucid: true,
+      nightmare: false,
+      tags: ['childhood home'],
+      people: [{ name: 'Brother' }],
+      sensitivity: 'standard',
+      mood: 0.5,
+      vividness: 5,
+    });
+    expect(saved.personId).toBe(ownerId);
+    expect(saved.status).toBe('captured');
+    expect((await bridge.dreamsList()).map((d) => d.id)).toEqual([saved.id]);
+    expect((await bridge.dreamGet(saved.id))?.title).toBe('The rearranging house');
+
+    // Editing preserves id + createdAt (main owns those).
+    const edited = await bridge.dreamSave({
+      id: saved.id,
+      narrative: 'A clearer retelling.',
+      lucid: false,
+      nightmare: false,
+      tags: [],
+      people: [],
+      sensitivity: 'standard',
+    });
+    expect(edited.id).toBe(saved.id);
+    expect(edited.createdAt).toBe(saved.createdAt);
+    expect((await bridge.dreamGet(saved.id))?.narrative).toBe('A clearer retelling.');
+
+    // A member with dreams.own sees their OWN (empty) journal, never the owner's — per-person scoping.
+    const member = await bridge.peopleSave({ displayName: 'Member', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: member.id, roleId: 'member', pin: null });
+    expect((await bridge.sessionSetActive({ personId: member.id })).ok).toBe(true);
+    expect(await bridge.dreamsList()).toEqual([]);
+    expect(await bridge.dreamGet(saved.id)).toBeNull();
+
+    // A Guest (no dreams.own) is denied entirely.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    expect((await bridge.sessionSetActive({ personId: guest.id })).ok).toBe(true);
+    expect(await bridge.dreamsList()).toEqual([]);
+    await expect(
+      bridge.dreamSave({
+        narrative: 'x',
+        lucid: false,
+        nightmare: false,
+        tags: [],
+        people: [],
+        sensitivity: 'standard',
+      }),
+    ).rejects.toThrow(/permitted/);
+  });
 });

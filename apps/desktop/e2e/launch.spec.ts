@@ -916,6 +916,53 @@ test('design: a Switch never shrinks in a flex row and its thumb stays on-track'
   }
 });
 
+test('dreams: log a dream, persist through the encrypted vault, reopen, no overflow', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Dreams' }).click();
+    await expect(w.getByRole('heading', { name: 'Dreams' })).toBeVisible();
+    await expect(w.getByText(/no dreams yet/i)).toBeVisible();
+
+    // Capture: narrative-first, plus a couple of optional fields.
+    await w.getByRole('button', { name: 'Log a dream' }).click();
+    await w
+      .getByLabel('What happened?')
+      .fill('I was back in my childhood house, rooms rearranging.');
+    await w.getByLabel('Title (optional)').fill('The rearranging house');
+    await w.getByRole('switch', { name: 'Lucid dream' }).click();
+    await w.getByLabel('Waking mood').selectOption({ label: 'Good' });
+    await w.getByLabel('Vividness').selectOption('5');
+    await w.getByRole('button', { name: 'Save' }).click();
+
+    // It appears in the journal.
+    await expect(w.getByRole('button', { name: /The rearranging house/ })).toBeVisible();
+
+    // Reopen → the fields round-tripped through the encrypted vault.
+    await w.getByRole('button', { name: /The rearranging house/ }).click();
+    await expect(w.getByLabel('Title (optional)')).toHaveValue('The rearranging house');
+    await expect(w.getByLabel('What happened?')).toHaveValue(
+      'I was back in my childhood house, rooms rearranging.',
+    );
+    await expect(w.getByLabel('Vividness')).toHaveValue('5');
+    await expect(w.getByRole('switch', { name: 'Lucid dream' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+
+    const overflow = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      return main ? main.scrollWidth - main.clientWidth : 0;
+    });
+    expect(overflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 async function seedReadyVault(
   settingsValues: Record<string, unknown> = {},
 ): Promise<{ userData: string; vault: string }> {
@@ -1415,6 +1462,7 @@ test('responsive: at a phone width the nav is a drawer and no screen overflows h
     for (const name of [
       'Sessions',
       'Questionnaires',
+      'Dreams',
       'People',
       'Roles',
       'Usage',
@@ -1447,6 +1495,15 @@ test('responsive: at a phone width the nav is a drawer and no screen overflows h
         await w.waitForTimeout(120);
         expect(await noOverflow()).toBe(true);
         await w.getByRole('button', { name: 'Questionnaires' }).click(); // back to the list
+      }
+      if (name === 'Dreams') {
+        await w.getByRole('button', { name: 'Log a dream' }).click(); // open the composer (detail pane)
+        await w.waitForTimeout(150);
+        expect(await noOverflow()).toBe(true);
+        await w.getByLabel('What happened?').fill('A short dream.');
+        await w.waitForTimeout(80);
+        expect(await noOverflow()).toBe(true); // the optional-details grid stacks on mobile
+        await w.getByRole('button', { name: 'Dreams' }).click(); // back to the list
       }
       if (name === 'People') {
         await w.getByRole('button', { name: 'Tester Subject' }).click(); // open the editor (detail)

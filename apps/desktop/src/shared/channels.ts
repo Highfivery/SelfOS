@@ -6,6 +6,8 @@ import type {
   BudgetState,
   ChatTurnResult,
   Conversation,
+  Dream,
+  DreamInput,
   InviteSummary,
   Person,
   PersonInput,
@@ -85,6 +87,10 @@ export const IpcChannels = {
   questionnairesGetImage: 'questionnaires:getImage',
   questionnairesDeleteImage: 'questionnaires:deleteImage',
   assignmentsCreate: 'assignments:create',
+  dreamsList: 'dreams:list',
+  dreamGet: 'dreams:get',
+  dreamSave: 'dreams:save',
+  dreamDelete: 'dreams:delete',
   getSidebarCollapsed: 'ui:getSidebarCollapsed',
   setSidebarCollapsed: 'ui:setSidebarCollapsed',
 } as const;
@@ -279,6 +285,14 @@ export interface SelfosBridge {
     senderVisibleToRecipient?: boolean;
     expiresAt?: string;
   }): Promise<Assignment>;
+  /** The active person's dreams, newest first (12-dreams). Requires `dreams.own`. */
+  dreamsList(): Promise<Dream[]>;
+  /** Load one of the active person's dreams; null if absent. Requires `dreams.own`. */
+  dreamGet(id: string): Promise<Dream | null>;
+  /** Create or update one of the active person's dreams; returns the saved record. Requires `dreams.own`. */
+  dreamSave(input: DreamInput): Promise<Dream>;
+  /** Delete a dream (purges its folder: dream + analysis + transcript). Requires `dreams.own`. */
+  dreamDelete(id: string): Promise<void>;
   /** Whether the desktop sidebar is collapsed to an icon rail (device-local). */
   getSidebarCollapsed(): Promise<boolean>;
   /** Persist the sidebar collapsed/expanded state (device-local). */
@@ -293,6 +307,8 @@ export type {
   BudgetState,
   ChatTurnResult,
   Conversation,
+  Dream,
+  DreamInput,
   InviteSummary,
   Person,
   PersonInput,

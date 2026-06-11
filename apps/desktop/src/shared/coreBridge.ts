@@ -16,6 +16,7 @@ import {
 } from './channels';
 import {
   BudgetSchema,
+  DreamInputSchema,
   PersonInputSchema,
   QuestionnaireInputSchema,
   RelationshipInputSchema,
@@ -26,6 +27,7 @@ import {
   type Budget,
   type Conversation,
   type DeviceState,
+  type Dream,
   type Person,
   type Questionnaire,
   type Relationship,
@@ -99,6 +101,7 @@ import {
   storeQuestionnaireImage,
   validateQuestionnaire,
 } from '@selfos/core/questionnaires';
+import { deleteDream, getDream, listDreams, saveDream } from '@selfos/core/dreams';
 import { fromBase64, toBase64 } from '@selfos/core/encoding';
 
 /**
@@ -762,6 +765,50 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         senderVisibleToRecipient: senderVisibleToRecipient ?? true,
         ...(expiresAt !== undefined ? { expiresAt } : {}),
       });
+    },
+
+    // --- Dreams (12-dreams) — gated by `dreams.own`, scoped to the active dreamer ---
+    dreamsList: async (): Promise<Dream[]> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) return [];
+      return listDreams(ctx.fs, ctx.key, personId);
+    },
+    dreamGet: async (id): Promise<Dream | null> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) return null;
+      return getDream(ctx.fs, ctx.key, personId, PersonIdSchema.parse(id));
+    },
+    dreamSave: async (input): Promise<Dream> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) {
+        throw new Error('Not permitted');
+      }
+      const { id: inputId, ...fields } = DreamInputSchema.parse(input);
+      // Main owns id/schemaVersion/personId/status/timestamps; merge over an existing dream so editing
+      // preserves createdAt + the analysis link (status/analysisId change only in the analysis slice).
+      const existing = inputId ? await getDream(ctx.fs, ctx.key, personId, inputId) : null;
+      const now = new Date().toISOString();
+      const dream: Dream = {
+        ...fields,
+        id: existing?.id ?? inputId ?? uuid(),
+        schemaVersion: 1,
+        personId,
+        status: existing?.status ?? 'captured',
+        ...(existing?.analysisId !== undefined ? { analysisId: existing.analysisId } : {}),
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      };
+      await saveDream(ctx.fs, ctx.key, dream);
+      return dream;
+    },
+    dreamDelete: async (id): Promise<void> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) return;
+      await deleteDream(ctx.fs, personId, PersonIdSchema.parse(id));
     },
 
     // --- UI state (device-local) ---

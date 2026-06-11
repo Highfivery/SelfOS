@@ -557,6 +557,27 @@ export const DreamPatternSummarySchema = z.object({
 export type DreamPatternSummary = z.infer<typeof DreamPatternSummarySchema>;
 
 /**
+ * Renderer-supplied dream capture fields; the main process owns `id`, `schemaVersion`, `personId`
+ * (the active dreamer), `status`, `analysisId`, and timestamps (12 §5.1). Booleans + collections default
+ * so a fast brain-dump (narrative only) is valid.
+ */
+export const DreamInputSchema = z.object({
+  id: z.string().optional(), // present when editing an existing dream
+  title: z.string().optional(),
+  narrative: z.string().min(1),
+  dreamDate: z.string().optional(),
+  mood: z.number().min(-1).max(1).optional(),
+  vividness: z.number().int().min(1).max(5).optional(),
+  lucid: z.boolean().default(false),
+  nightmare: z.boolean().default(false),
+  sleepQuality: z.number().int().min(1).max(5).optional(),
+  tags: z.array(z.string()).default([]),
+  people: z.array(DreamPersonRefSchema).default([]),
+  sensitivity: SensitivityTierSchema.default('standard'),
+});
+export type DreamInput = z.infer<typeof DreamInputSchema>;
+
+/**
  * Derived "view" types produced by the core services and surfaced over IPC. They live here (a
  * crypto-free module) rather than alongside their services so `channels.ts` can import them from the
  * schemas shim without dragging `@selfos/core/crypto` into the renderer/web tsconfig (07-mobile-platform

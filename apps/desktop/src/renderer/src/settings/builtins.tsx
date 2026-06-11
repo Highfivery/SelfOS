@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Database, Info, Palette, Sparkles } from 'lucide-react';
+import { Database, Info, Moon, Palette, Sparkles } from 'lucide-react';
 import { registerSection, registerSettings } from './registry';
 import { defineSetting } from './types';
 import { AboutDisclaimer, AboutVersion, RevealVaultRow, VaultLocationValue } from './customRows';
@@ -13,6 +13,7 @@ declare module './types' {
     'appearance.reduceMotion': boolean;
     'ai.enabled': boolean;
     'ai.model': 'claude-sonnet-4-6' | 'claude-opus-4-8';
+    'dreams.memoryEnabled': boolean;
   }
 }
 
@@ -41,13 +42,20 @@ export function registerBuiltinSettings(): void {
     order: 2,
   });
   registerSection({
+    id: 'dreams',
+    title: 'Dreams',
+    description: 'Your dream journal and how it informs your coaching.',
+    icon: Moon,
+    order: 3,
+  });
+  registerSection({
     id: 'vault',
     title: 'Vault',
     description: 'Where your data is stored.',
     icon: Database,
-    order: 3,
+    order: 4,
   });
-  registerSection({ id: 'about', title: 'About', icon: Info, order: 4 });
+  registerSection({ id: 'about', title: 'About', icon: Info, order: 5 });
 
   registerSettings([
     defineSetting({
@@ -157,6 +165,18 @@ export function registerBuiltinSettings(): void {
       control: { type: 'custom', render: TestConnectionControl },
       order: 4,
       visibleWhen: aiEnabled,
+    }),
+    defineSetting({
+      key: 'dreams.memoryEnabled',
+      section: 'dreams',
+      label: 'Dream memory',
+      description:
+        'When on, dreams you analyze and approve help personalize your coaching across the app. Turn off to keep dreams out of your coaching context entirely.',
+      schema: z.boolean(),
+      default: true,
+      control: { type: 'switch' },
+      scope: 'vault',
+      order: 1,
     }),
     defineSetting({
       key: 'vault.location',

@@ -82,6 +82,10 @@ const bridge: SelfosBridge = {
   questionnairesDeleteImage: (imagePath) =>
     ipcRenderer.invoke(IpcChannels.questionnairesDeleteImage, imagePath),
   assignmentsCreate: (input) => ipcRenderer.invoke(IpcChannels.assignmentsCreate, input),
+  dreamsList: () => ipcRenderer.invoke(IpcChannels.dreamsList),
+  dreamGet: (id) => ipcRenderer.invoke(IpcChannels.dreamGet, id),
+  dreamSave: (input) => ipcRenderer.invoke(IpcChannels.dreamSave, input),
+  dreamDelete: (id) => ipcRenderer.invoke(IpcChannels.dreamDelete, id),
   getSidebarCollapsed: () => ipcRenderer.invoke(IpcChannels.getSidebarCollapsed),
   setSidebarCollapsed: (collapsed) =>
     ipcRenderer.invoke(IpcChannels.setSidebarCollapsed, collapsed),

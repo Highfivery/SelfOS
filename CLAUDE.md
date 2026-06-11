@@ -239,6 +239,30 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Build (**Dreams slice 2 — capture + journal UI + nav + settings**;
+  [12-dreams](docs/specs/12-dreams.md) §13.2). The first Dreams **renderer** surface (no AI yet — pure
+  journaling works offline). IPC seam `dreams:list/get/save/delete` through the typed seam
+  (`channels` → `coreBridge` → `ipc` → preload), **gated by `dreams.own`** + **scoped to the active
+  dreamer** (mirrors conversations); main owns id/`schemaVersion`/`personId`/`status`/timestamps and
+  merges over an existing dream on edit (preserves `createdAt`/analysis link). New `DreamInputSchema`
+  (renderer-supplied; booleans/collections default so a narrative-only dump is valid). Renderer: a
+  `dreamStore` with a per-person **`reset()`** wired into AppShell's active-person reset+reload effect
+  (the per-person-isolation rule — dreams must not leak across a switch); a **Dreams** master–detail
+  journal; a narrative-first **`DreamComposer`** (lucid/nightmare `Switch` toggles + optional
+  mood/vividness/sleep/date + tags/people via a reusable **`ChipEditor`** + sensitivity; Save gated on a
+  non-empty narrative; delete behind a confirm); the `/dreams` nav entry (moon icon, `dreams.own`-gated)
+  - route; and the **`dreams.memoryEnabled`** vault setting in a new Dreams settings section.
+    **People-graph linking of "people present" deferred** (free-name chips for now); the **Analyze** entry
+    point + all AI land in slice 3 (no scaffolding here, §12). Tests: +1 coreBridge dreams test
+    (CRUD + per-dreamer scoping + Guest-denied), 5 Dreams RTL (empty/list/capture-payload/save-gating/
+    delete-confirm), +1 E2E (capture → encrypted round-trip → reopen + overflow guard) + Dreams added to
+    the **390px sweep**. Visual QA done from the live app at desktop + 390px (master–detail; the
+    optional-details grid stacks on phones). Gate green: typecheck/lint/format, **133 core + 217 desktop**
+    unit, E2E. Built on **`feat/dreams-slice-2`** (stacked on slice 1) in the isolated worktree — the
+    concurrent questionnaires session (`feat/questionnaire-ai-generate`, §13.3) untouched. **NOTE: the
+    shared seam files (`channels`/`coreBridge`/`ipc`/preload) + `CLAUDE.md` will conflict-merge with that
+    session's work — both append; trivial to resolve.** Next: **slice 3** (guided analysis → approve →
+    context).
 - 2026-06-11 — Spec + Build (**Dreams** — new spec [12-dreams](docs/specs/12-dreams.md) drafted, approved,
   and **slice 1 built**; §13.1). Dreams = guided AI dream journaling + analysis + cross-dream patterns; the
   **third producer** into `08`'s shared Insight/metrics layer (a dream's **approved** analysis becomes an

@@ -558,6 +558,18 @@ Confirmed in review (2026-06-11):
 2. **Capture + journal UI + settings + nav** — the Dreams master–detail journal, the fast capture composer
    - optional quick fields, the `dreamStore`, the `dreams.memoryEnabled` setting, and the `/dreams` nav
      entry. No AI yet — pure journaling works offline.
+   - \_**Built 2026-06-11:** the IPC seam (`dreams:list/get/save/delete` through `channels` →
+     `coreBridge` → `ipc` → preload, **gated by `dreams.own`**, scoped to the active dreamer, main owns
+     id/`schemaVersion`/`personId`/`status`/timestamps; `DreamInputSchema` added) + the `dreamStore`
+     (with per-person `reset()`, wired into AppShell's active-person reset/reload), the **Dreams**
+     master–detail journal, the narrative-first **`DreamComposer`** (lucid/nightmare toggles + optional
+     mood/vividness/sleep/date/tags/people/sensitivity; Save gated on a non-empty narrative; delete behind
+     a confirm), a reusable **`ChipEditor`** (tags + people), the `/dreams` nav entry (moon, `dreams.own`)
+     - route, and the **`dreams.memoryEnabled`** vault setting in a new Dreams settings section.
+       Code-reviewed; gate green (typecheck/lint/format, **133 core + 217 desktop** unit, **+1 E2E** capture
+       round-trip + Dreams added to the 390px sweep; visual QA at desktop + 390px). **People-graph linking of
+       "people present" is deferred** (free-name chips for now); the **Analyze** entry point lands with slice
+       3 (no scaffolding here).\_
 3. **Guided analysis → structured analysis → approve → context** — `dreamAnalysisService` (reusing `05`'s
    engine, dream-folder transcript, blended honest prompt, `dream.analyze` metering), the guided chat +
    synthesis card, edit + approve → `Insight`, remove-from-context, crisis routing.
@@ -592,3 +604,12 @@ proven.)_
   green (typecheck/lint/format, **133 core + 211 desktop** unit). Built in an isolated worktree off the
   spec commit (concurrent questionnaires session live on `main`). Deferred to later slices: the
   guided-analysis service, IPC, renderer, patterns, and sharing.
+- 2026-06-11 — **Slice 2 built** (§13.2): the IPC seam (`dreams:list/get/save/delete`, gated by
+  `dreams.own`, scoped to the active dreamer; `DreamInputSchema`), the `dreamStore` (per-person
+  `reset()` + reload wired into AppShell), the **Dreams** master–detail journal, the narrative-first
+  `DreamComposer` + reusable `ChipEditor`, the `/dreams` nav (moon) + route, and the
+  `dreams.memoryEnabled` vault setting. No AI yet — pure journaling works offline. Code-reviewed; gate
+  green (typecheck/lint/format, **133 core + 217 desktop** unit, the dreams-capture E2E + the 390px
+  sweep now visits Dreams; visual QA at desktop + 390px). Built in the slice-1 worktree on
+  `feat/dreams-slice-2`. Deferred: People-graph linking of "people present" (free names for now); the
+  Analyze entry point + everything AI lands in slice 3.

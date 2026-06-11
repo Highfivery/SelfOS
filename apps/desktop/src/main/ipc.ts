@@ -173,6 +173,10 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.questionnairesGetImage, bridge.questionnairesGetImage);
   handle(IpcChannels.questionnairesDeleteImage, bridge.questionnairesDeleteImage);
   handle(IpcChannels.assignmentsCreate, bridge.assignmentsCreate);
+  handle(IpcChannels.dreamsList, bridge.dreamsList);
+  handle(IpcChannels.dreamGet, bridge.dreamGet);
+  handle(IpcChannels.dreamSave, bridge.dreamSave);
+  handle(IpcChannels.dreamDelete, bridge.dreamDelete);
   handle(IpcChannels.getSidebarCollapsed, bridge.getSidebarCollapsed);
   handle(IpcChannels.setSidebarCollapsed, bridge.setSidebarCollapsed);
 

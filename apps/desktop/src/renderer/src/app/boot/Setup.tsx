@@ -11,6 +11,7 @@ import {
   TextInput,
 } from '../../design-system/components';
 import { useSessionStore } from '../../stores/sessionStore';
+import { MIN_OWNER_PIN_LENGTH } from '@shared/channels';
 
 /**
  * First-run household setup (04-people-roles §3.1): name the owner, set the super-admin passphrase,
@@ -23,18 +24,25 @@ export function Setup(): JSX.Element {
   const [name, setName] = useState('');
   const [passphrase, setPassphrase] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [pin, setPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recoveryPhrase, setRecoveryPhrase] = useState<string | null>(null);
 
-  const canSubmit = name.trim().length > 0 && passphrase.length >= 6 && passphrase === confirm;
+  const canSubmit =
+    name.trim().length > 0 &&
+    passphrase.length >= 6 &&
+    passphrase === confirm &&
+    pin.length >= MIN_OWNER_PIN_LENGTH &&
+    pin === confirmPin;
 
   const submit = async (): Promise<void> => {
     if (!canSubmit) return;
     setBusy(true);
     setError(null);
     try {
-      const phrase = await setup({ ownerName: name.trim(), passphrase });
+      const phrase = await setup({ ownerName: name.trim(), passphrase, pin });
       // A fresh vault returns a recovery phrase to show once; resuming an interrupted setup returns
       // none (the phrase was already issued), so go straight into the app.
       if (phrase) setRecoveryPhrase(phrase);
@@ -127,6 +135,32 @@ export function Setup(): JSX.Element {
                   type="password"
                   value={confirm}
                   onChange={(event) => setConfirm(event.target.value)}
+                />
+              )}
+            </Field>
+            <Field
+              label="Your PIN"
+              help={`At least ${MIN_OWNER_PIN_LENGTH} characters. You’ll use it to unlock your profile — including on another device.`}
+            >
+              {(props) => (
+                <TextInput
+                  {...props}
+                  type="password"
+                  value={pin}
+                  onChange={(event) => setPin(event.target.value)}
+                />
+              )}
+            </Field>
+            <Field
+              label="Confirm PIN"
+              error={confirmPin.length > 0 && confirmPin !== pin ? 'PINs don’t match.' : ''}
+            >
+              {(props) => (
+                <TextInput
+                  {...props}
+                  type="password"
+                  value={confirmPin}
+                  onChange={(event) => setConfirmPin(event.target.value)}
                 />
               )}
             </Field>

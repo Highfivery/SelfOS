@@ -16,7 +16,7 @@ interface SessionState {
   /** Fetch household status, the active person, and the access view. */
   load: () => Promise<void>;
   /** Run first-run setup; resolves to the recovery phrase to show once. */
-  setup: (input: { ownerName: string; passphrase: string }) => Promise<string>;
+  setup: (input: { ownerName: string; passphrase: string; pin: string }) => Promise<string>;
   /** Join/recover this device with the recovery phrase; reloads the gate on success. */
   unlock: (phrase: string) => Promise<boolean>;
   /** Whether the active person's role grants a capability (super-admin bypasses all). */

@@ -1,7 +1,13 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { _electron as electron, expect, test, type ElectronApplication } from '@playwright/test';
+import {
+  _electron as electron,
+  expect,
+  test,
+  type ElectronApplication,
+  type Page,
+} from '@playwright/test';
 import { createMasterKey, loadMasterKey } from '@selfos/core/crypto';
 import type { Encryptor } from '../src/main/secrets/encryptor';
 import { createNodeFileSystem } from '../src/main/host/nodeFileSystem';
@@ -65,6 +71,20 @@ function launch(userDataDir: string): Promise<ElectronApplication> {
 async function writeJson(file: string, data: unknown): Promise<void> {
   await mkdir(dirname(file), { recursive: true });
   await writeFile(file, JSON.stringify(data, null, 2), 'utf8');
+}
+
+/**
+ * Drive the concealed super-admin entry: a pointer-hold on the version number (a 600ms timer in
+ * customRows.tsx). Dispatching pointerdown/up directly on the element is deterministic — it always
+ * hits the handler regardless of mouse position — unlike `click({ delay })` or mouse-positioned holds,
+ * which don't reliably drive a custom pointer-hold gesture under Electron timing.
+ */
+async function longPressVersion(w: Page): Promise<void> {
+  const version = w.getByText(/^\d+\.\d+\.\d+$/);
+  await version.dispatchEvent('pointerdown');
+  await w.waitForTimeout(750); // exceed the 600ms hold threshold so the unlock prompt opens
+  await version.dispatchEvent('pointerup');
+  await expect(w.getByRole('dialog', { name: 'Unlock' })).toBeVisible();
 }
 
 test('first run shows onboarding when no vault is configured', async () => {
@@ -164,6 +184,8 @@ test('first-time setup creates the owner and enters the app', async () => {
     await w.getByLabel('Your name').fill('Alex');
     await w.getByLabel('Super-admin passphrase').fill('hunter2');
     await w.getByLabel('Confirm passphrase').fill('hunter2');
+    await w.getByLabel('Your PIN').fill('1234'); // owner PIN is required (10-multi-device-vault §3.2)
+    await w.getByLabel('Confirm PIN').fill('1234');
     await w.getByRole('button', { name: /create profile/i }).click();
 
     // Recovery phrase shown once, then into the app as the owner.
@@ -171,6 +193,12 @@ test('first-time setup creates the owner and enters the app', async () => {
     await w.getByRole('button', { name: /saved it/i }).click();
     await expect(w.getByRole('link', { name: 'Home' })).toBeVisible();
     await expect(w.getByRole('button', { name: 'Signed in as Alex' })).toBeVisible();
+
+    // The owner now has a PIN: locking and re-picking them prompts for it (not an instant resume).
+    await w.getByRole('button', { name: 'Signed in as Alex' }).click();
+    await w.getByRole('menuitem', { name: 'Lock' }).click();
+    await w.getByRole('dialog', { name: 'Locked' }).getByText('Alex').click();
+    await expect(w.getByLabel('PIN for Alex')).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -294,7 +322,7 @@ test('super-admin: a hidden long-press on the version unlocks inspect mode', asy
     await w.getByRole('button', { name: 'About' }).click();
 
     // Concealed entry: long-press the version number.
-    await w.getByText(/^\d+\.\d+\.\d+$/).click({ delay: 700 });
+    await longPressVersion(w);
     const dialog = w.getByRole('dialog', { name: 'Unlock' });
     await expect(dialog).toBeVisible();
     await dialog.getByLabel('Passphrase').fill('superpass');
@@ -386,7 +414,7 @@ test('super-admin: inspect mode unlocks full budget/usage access for a non-admin
     // Unlock super-admin via the concealed long-press on the version.
     await w.getByRole('link', { name: 'Settings' }).click();
     await w.getByRole('button', { name: 'About' }).click();
-    await w.getByText(/^\d+\.\d+\.\d+$/).click({ delay: 700 });
+    await longPressVersion(w);
     const dialog = w.getByRole('dialog', { name: 'Unlock' });
     await dialog.getByLabel('Passphrase').fill('superpass');
     await dialog.getByRole('button', { name: 'Unlock' }).click();
@@ -897,6 +925,8 @@ test('multi-device: an interrupted setup (key + recovery.enc, no owner) is finis
     await w.getByLabel('Your name').fill('Tester');
     await w.getByLabel('Super-admin passphrase').fill('superpass');
     await w.getByLabel('Confirm passphrase').fill('superpass');
+    await w.getByLabel('Your PIN').fill('1234');
+    await w.getByLabel('Confirm PIN').fill('1234');
     await w.getByRole('button', { name: 'Create profile' }).click();
     // Resuming issues no new recovery phrase, so we land straight in the app.
     await expect(w.getByRole('link', { name: 'Home' })).toBeVisible();

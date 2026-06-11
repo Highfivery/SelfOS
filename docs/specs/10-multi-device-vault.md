@@ -497,6 +497,13 @@ All Slice-1 questions are **resolved** (2026-06-10):
 
 ## 12. Changelog
 
+- 2026-06-10 — **Slice 1c built (Slice 1 complete).** Setup now requires the owner to set a login PIN
+  (min `MIN_OWNER_PIN_LENGTH` = 4, with a Confirm-PIN field to avoid a typo lockout): the PIN is
+  threaded through `householdSetup` (`HouseholdSetupSchema.pin`) into the owner account
+  (`setAccount({…, pin})`), so a leaked recovery phrase alone can't sign in as the owner on a joined
+  device (§3.2). E2E proves the owner then requires the PIN at the picker. Also hardened the concealed
+  super-admin long-press E2E (dispatch pointerdown/up directly on the element) — removes a pre-existing
+  Electron-timing flake.
 - 2026-06-10 — **Slice 1b built.** The super-admin passphrase moved out of device-local state into the
   vault: a new `@selfos/core/people/superAdmin` module writes a salted scrypt hash, encrypted under the
   master key, to `config/superadmin.enc`; the app module is now a thin host wrapper that owns the

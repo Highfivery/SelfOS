@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   ANTHROPIC_API_KEY_ID,
   IpcChannels,
+  MIN_OWNER_PIN_LENGTH,
   type AccessView,
   type BudgetState,
   type ChatTurnResult,
@@ -92,6 +93,7 @@ const SecretIdSchema = z.object({ id: z.string().min(1) });
 const HouseholdSetupSchema = z.object({
   ownerName: z.string().min(1),
   passphrase: z.string().min(6),
+  pin: z.string().min(MIN_OWNER_PIN_LENGTH),
 });
 const UnlockWithRecoveryPhraseSchema = z.object({ phrase: z.string().min(1) });
 const SetAccountSchema = z.object({

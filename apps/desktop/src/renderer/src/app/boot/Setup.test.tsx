@@ -14,6 +14,8 @@ async function fillValidForm(): Promise<void> {
   await userEvent.type(screen.getByLabelText('Your name'), 'Alex');
   await userEvent.type(screen.getByLabelText('Super-admin passphrase'), 'hunter2');
   await userEvent.type(screen.getByLabelText('Confirm passphrase'), 'hunter2');
+  await userEvent.type(screen.getByLabelText('Your PIN'), '1234');
+  await userEvent.type(screen.getByLabelText('Confirm PIN'), '1234');
 }
 
 describe('Setup', () => {
@@ -26,6 +28,27 @@ describe('Setup', () => {
     expect(submit).toBeEnabled();
   });
 
+  it('requires an owner PIN (submit stays disabled without one)', async () => {
+    installMockBridge();
+    render(<Setup />);
+    await userEvent.type(screen.getByLabelText('Your name'), 'Alex');
+    await userEvent.type(screen.getByLabelText('Super-admin passphrase'), 'hunter2');
+    await userEvent.type(screen.getByLabelText('Confirm passphrase'), 'hunter2');
+    // Everything but the PIN — still blocked.
+    expect(screen.getByRole('button', { name: /create profile/i })).toBeDisabled();
+    await userEvent.type(screen.getByLabelText('Your PIN'), '1234');
+    await userEvent.type(screen.getByLabelText('Confirm PIN'), '1234');
+    expect(screen.getByRole('button', { name: /create profile/i })).toBeEnabled();
+  });
+
+  it('flags a PIN mismatch', async () => {
+    installMockBridge();
+    render(<Setup />);
+    await userEvent.type(screen.getByLabelText('Your PIN'), '1234');
+    await userEvent.type(screen.getByLabelText('Confirm PIN'), '9999');
+    expect(screen.getByText(/PINs don.t match/i)).toBeInTheDocument();
+  });
+
   it('runs setup and shows the recovery phrase once', async () => {
     const householdSetup = vi.fn(() =>
       Promise.resolve({ recoveryPhrase: 'AAAA-BBBB-CCCC', ownerId: 'o1' }),
@@ -34,7 +57,11 @@ describe('Setup', () => {
     render(<Setup />);
     await fillValidForm();
     await userEvent.click(screen.getByRole('button', { name: /create profile/i }));
-    expect(householdSetup).toHaveBeenCalledWith({ ownerName: 'Alex', passphrase: 'hunter2' });
+    expect(householdSetup).toHaveBeenCalledWith({
+      ownerName: 'Alex',
+      passphrase: 'hunter2',
+      pin: '1234',
+    });
     expect(await screen.findByText('AAAA-BBBB-CCCC')).toBeInTheDocument();
   });
 

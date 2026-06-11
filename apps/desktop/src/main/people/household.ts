@@ -63,7 +63,7 @@ export async function setupHousehold(
   userDataDir: string,
   encryptor: Encryptor,
   vaultDir: string,
-  input: { ownerName: string; passphrase: string },
+  input: { ownerName: string; passphrase: string; pin: string },
 ): Promise<{ recoveryPhrase: string; ownerId: string }> {
   const secrets = createNodeSecretStore(userDataDir, encryptor);
   const fs = createNodeFileSystem(vaultDir);
@@ -97,7 +97,7 @@ export async function setupHousehold(
     updatedAt: now,
   };
   await savePerson(fs, key, owner);
-  await setAccount(fs, key, { personId: owner.id, roleId: OWNER_ROLE_ID });
+  await setAccount(fs, key, { personId: owner.id, roleId: OWNER_ROLE_ID, pin: input.pin });
   await setSuperAdminPassphrase(fs, key, input.passphrase);
   await setActivePersonId(userDataDir, owner.id);
 

@@ -70,6 +70,9 @@ export const IpcChannels = {
 
 export type SettingScope = 'vault' | 'device';
 
+/** Minimum length of the owner login PIN set at Setup (10-multi-device-vault §3.2). */
+export const MIN_OWNER_PIN_LENGTH = 4;
+
 /** The secret id under which the Claude API key is stored. */
 export const ANTHROPIC_API_KEY_ID = 'anthropic.apiKey';
 
@@ -141,10 +144,11 @@ export interface SelfosBridge {
   claudeTest(): Promise<ClaudeTestResult>;
   /** Whether the household is set up (master key + owner) and who is active. */
   householdStatus(): Promise<HouseholdStatus>;
-  /** First-run setup: create the owner, set the super-admin passphrase, return the recovery phrase. */
+  /** First-run setup: create the owner (with a login PIN), set the super-admin passphrase, return the recovery phrase. */
   householdSetup(input: {
     ownerName: string;
     passphrase: string;
+    pin: string;
   }): Promise<{ recoveryPhrase: string; ownerId: string }>;
   /** Join/recover this device: restore the master key from the recovery phrase. No owner is created. */
   unlockWithRecoveryPhrase(input: { phrase: string }): Promise<{ ok: boolean }>;

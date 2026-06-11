@@ -98,7 +98,7 @@ export async function setupHousehold(
   };
   await savePerson(fs, key, owner);
   await setAccount(fs, key, { personId: owner.id, roleId: OWNER_ROLE_ID });
-  await setSuperAdminPassphrase(userDataDir, input.passphrase);
+  await setSuperAdminPassphrase(fs, key, input.passphrase);
   await setActivePersonId(userDataDir, owner.id);
 
   return { recoveryPhrase, ownerId: owner.id };

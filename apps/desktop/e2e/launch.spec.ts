@@ -302,6 +302,12 @@ test('super-admin: a hidden long-press on the version unlocks inspect mode', asy
 
     // Inspect mode is active — the (only-now-visible) super-admin badge appears in the account area.
     await expect(w.getByText('Super-admin')).toBeVisible();
+
+    // The legacy device-local hash was migrated into the vault on unlock (10-multi-device-vault §6.4),
+    // so the super-admin secret is now one-per-directory and works on any device that opens this vault.
+    await expect(readFile(join(vault, 'config', 'superadmin.enc'), 'utf8')).resolves.toContain(
+      'alg',
+    );
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

@@ -365,7 +365,11 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(IpcChannels.superadminUnlock, async (_event, raw: unknown): Promise<boolean> => {
     const { passphrase } = z.object({ passphrase: z.string() }).parse(raw);
-    const ok = await verifySuperAdminPassphrase(userDataDir(), passphrase);
+    // The super-admin secret lives in the vault now (10-multi-device-vault §6.4) — verify against it
+    // (migrating a legacy device-local hash on first use). Requires the vault to be unlocked.
+    const ctx = await vaultAndKey();
+    if (!ctx) return false;
+    const ok = await verifySuperAdminPassphrase(ctx.fs, ctx.key, userDataDir(), passphrase);
     if (ok) setSuperAdminActive(true);
     return ok;
   });

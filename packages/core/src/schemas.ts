@@ -47,6 +47,10 @@ export const DeviceStateSchema = z.object({
   vaultPath: z.string().nullable(),
   window: WindowBoundsSchema.optional(),
   activePersonId: z.string().nullable().optional(),
+  /**
+   * @deprecated Migration source only (10-multi-device-vault §6.4). The super-admin hash now lives in
+   * the vault (`config/superadmin.enc`); this device-local copy is read once to seed it, then unused.
+   */
   superAdminPassphraseHash: z.string().optional(),
   /** Whether the desktop sidebar is collapsed to an icon rail (device-local UI preference). */
   sidebarCollapsed: z.boolean().optional(),

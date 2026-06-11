@@ -1,27 +1,51 @@
-import { hashPin, verifyPin } from '@selfos/core/crypto';
-import { readDeviceState, updateDeviceState } from '../state/deviceStore';
+import type { FileSystem } from '@selfos/core/host';
+import {
+  hasSuperAdminPassphrase as hasVaultSuperAdmin,
+  setSuperAdminPassphrase as setVaultSuperAdmin,
+  storeSuperAdminHash,
+  verifySuperAdminPassphrase as verifyVaultSuperAdmin,
+} from '@selfos/core/people';
+import { readDeviceState } from '../state/deviceStore';
 
 /**
- * The concealed super-admin passphrase (04-people-roles §8). Stored device-local as a salted hash;
- * the unlock/inspect UI is a later slice — here we only set and verify it.
+ * The concealed super-admin passphrase now lives in the vault (10-multi-device-vault §5.2), so it's one
+ * household-wide secret. This app module is a thin host wrapper: it threads the vault `FileSystem` + key
+ * into the core functions, owns the device-local → vault migration, and keeps the in-memory inspect-mode
+ * flag (a device-session concern, never persisted).
  */
+
+/** Persist the super-admin passphrase into the vault. */
 export async function setSuperAdminPassphrase(
-  userDataDir: string,
+  fs: FileSystem,
+  key: Uint8Array,
   passphrase: string,
 ): Promise<void> {
-  await updateDeviceState(userDataDir, { superAdminPassphraseHash: await hashPin(passphrase) });
+  await setVaultSuperAdmin(fs, key, passphrase);
 }
 
-export async function hasSuperAdminPassphrase(userDataDir: string): Promise<boolean> {
-  return (await readDeviceState(userDataDir)).superAdminPassphraseHash !== undefined;
-}
-
+/**
+ * Verify the super-admin passphrase against the vault copy, first migrating a legacy device-local hash
+ * into the vault if this vault has none yet (§6.4). One-time and idempotent.
+ */
 export async function verifySuperAdminPassphrase(
+  fs: FileSystem,
+  key: Uint8Array,
   userDataDir: string,
   passphrase: string,
 ): Promise<boolean> {
-  const hash = (await readDeviceState(userDataDir)).superAdminPassphraseHash;
-  return hash !== undefined && (await verifyPin(passphrase, hash));
+  await migrateLegacySuperAdmin(fs, key, userDataDir);
+  return verifyVaultSuperAdmin(fs, key, passphrase);
+}
+
+/** Seed `config/superadmin.enc` from the legacy device-local hash if the vault has none (§6.4). */
+async function migrateLegacySuperAdmin(
+  fs: FileSystem,
+  key: Uint8Array,
+  userDataDir: string,
+): Promise<void> {
+  if (await hasVaultSuperAdmin(fs)) return;
+  const legacy = (await readDeviceState(userDataDir)).superAdminPassphraseHash;
+  if (legacy) await storeSuperAdminHash(fs, key, legacy);
 }
 
 /**

@@ -382,6 +382,7 @@ hasOwner: false, activePersonId: null }`.
 | 13  | **iOS host (07) — same vault opened via iCloud**                                                                   | Identical routing: detection + unlock run in core through the Capacitor `VaultFs` `FileSystem` + Keychain `SecretStore`. A 2nd device that is the user's iPhone joins via recovery phrase (Slice 1) exactly like a 2nd desktop.                                                                                                                                                                                                                                                                                                                                                                                  |
 | 14  | **No vault mounted** (boot phase `onboarding`/`vault-error`)                                                       | `household:status` is not the gate yet — boot (`computeBootState`) handles vault selection/errors first (00 §7, 02 §3). The three-way gate runs only at boot-`ready`.                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | 15  | **Empty / loading**                                                                                                | While `householdStatus` resolves, `HouseholdGate` shows `Splash` (existing `!loaded` path). UnlockScreen has its own submitting state (§3.3).                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| 16  | **Corrupt `config/superadmin.enc`**                                                                                | `verifySuperAdminPassphrase` catches the decrypt/parse error and returns `false` (the concealed unlock stays a generic "didn't match", never an exception to the renderer). `hasSuperAdminPassphrase` is **presence-based**, so a corrupt file still counts as "set" and the §6.4 migration never clobbers it by mistaking corrupt for absent. Restore the file from sync history to recover the break-glass.                                                                                                                                                                                                    |
 
 ## 8. Safety
 
@@ -496,6 +497,12 @@ All Slice-1 questions are **resolved** (2026-06-10):
 
 ## 12. Changelog
 
+- 2026-06-10 — **Slice 1b built.** The super-admin passphrase moved out of device-local state into the
+  vault: a new `@selfos/core/people/superAdmin` module writes a salted scrypt hash, encrypted under the
+  master key, to `config/superadmin.enc`; the app module is now a thin host wrapper that owns the
+  one-time, idempotent device-local→vault migration (§6.4) and the in-memory inspect-mode flag. `verify`
+  degrades to `false` (never throws) on a corrupt file; `has` is presence-based so the migration can't
+  clobber a corrupt copy (§7 #16). `superadmin:unlock` + Setup now read/write the vault copy.
 - 2026-06-10 — **Slice 1a built.** `isVaultInitialized` + the `createMasterKey`/`setupHousehold`
   overwrite guards (no re-key, ever), `HouseholdStatus.vaultInitialized`, the three-way `HouseholdGate`
   (with the `!hasOwner` interrupted-setup → Setup resume that finishes a half-built household without

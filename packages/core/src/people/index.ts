@@ -3,3 +3,4 @@ export * from './peopleService';
 export * from './relationshipService';
 export * from './accessService';
 export * from './buildContext';
+export * from './superAdmin';

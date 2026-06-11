@@ -34,7 +34,11 @@ export function Setup(): JSX.Element {
     setBusy(true);
     setError(null);
     try {
-      setRecoveryPhrase(await setup({ ownerName: name.trim(), passphrase }));
+      const phrase = await setup({ ownerName: name.trim(), passphrase });
+      // A fresh vault returns a recovery phrase to show once; resuming an interrupted setup returns
+      // none (the phrase was already issued), so go straight into the app.
+      if (phrase) setRecoveryPhrase(phrase);
+      else await load();
     } catch {
       setError('Couldn’t complete setup. Please try again.');
     } finally {

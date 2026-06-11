@@ -37,6 +37,7 @@ export const IpcChannels = {
   claudeTest: 'claude:test',
   householdStatus: 'household:status',
   householdSetup: 'household:setup',
+  unlockWithRecoveryPhrase: 'household:unlockWithRecoveryPhrase',
   getActivePerson: 'session:getActivePerson',
   peopleList: 'people:list',
   peopleSave: 'people:save',
@@ -82,9 +83,13 @@ export interface SettingsValues {
   device: Record<string, unknown>;
 }
 
-/** Drives the post-boot household gate (setup vs. the app). */
+/** Drives the post-boot household gate (setup vs. unlock vs. the app — 10-multi-device-vault §3.1). */
 export interface HouseholdStatus {
+  /** Whether the vault is already initialized (config/recovery.enc present) — key-free, vault property. */
+  vaultInitialized: boolean;
+  /** Whether THIS device holds the master key (in its secret store). */
   hasMasterKey: boolean;
+  /** Whether an owner account exists (requires the key to read; false when hasMasterKey is false). */
   hasOwner: boolean;
   activePersonId: string | null;
 }
@@ -141,6 +146,8 @@ export interface SelfosBridge {
     ownerName: string;
     passphrase: string;
   }): Promise<{ recoveryPhrase: string; ownerId: string }>;
+  /** Join/recover this device: restore the master key from the recovery phrase. No owner is created. */
+  unlockWithRecoveryPhrase(input: { phrase: string }): Promise<{ ok: boolean }>;
   /** The currently active person (decrypted), or null. */
   getActivePerson(): Promise<Person | null>;
   /** All people in the household (decrypted), sorted by name. */

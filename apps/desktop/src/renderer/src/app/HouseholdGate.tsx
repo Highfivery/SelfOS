@@ -2,11 +2,24 @@ import { useEffect } from 'react';
 import { useSessionStore } from '../stores/sessionStore';
 import { Splash } from './boot/Splash';
 import { Setup } from './boot/Setup';
+import { UnlockScreen } from './boot/UnlockScreen';
+import { LockScreen } from './LockScreen';
 import { Shell } from './Shell';
 
 /**
- * Sits between boot-ready and the app: if the household isn't set up (no master key / no owner),
- * show the setup wizard; otherwise render the app (04-people-roles §3.1).
+ * Sits between boot-ready and the app and routes three ways on two signals (10-multi-device-vault
+ * §3.1): the key-free `vaultInitialized` (a vault property) and `hasMasterKey` (this device).
+ *
+ * | vaultInitialized | hasMasterKey | route                                            |
+ * | ---------------- | ------------ | ------------------------------------------------ |
+ * | false            | false        | Setup  — fresh vault; the ONLY path that mints an owner |
+ * | true             | false        | Unlock — initialized vault, this device hasn't joined  |
+ * | true             | true         | Shell / picker — this device holds the key; resume     |
+ * | false            | true         | Unlock — desync (key but no recovery.enc); fails safely|
+ *
+ * With the key present we further split on `hasOwner` and the active person: an initialized vault with
+ * no owner is an interrupted first-run that Setup finishes (without re-keying — §6.3); and a key-holding
+ * device with no active person (e.g. a freshly-joined second device) shows the person picker first.
  */
 export function HouseholdGate(): JSX.Element {
   const loaded = useSessionStore((s) => s.loaded);
@@ -18,6 +31,15 @@ export function HouseholdGate(): JSX.Element {
   }, [load]);
 
   if (!loaded || !status) return <Splash />;
-  if (!status.hasMasterKey || !status.hasOwner) return <Setup />;
-  return <Shell />;
+
+  if (!status.hasMasterKey) {
+    // No key on this device: join an initialized vault, or first-run a fresh one.
+    return status.vaultInitialized ? <UnlockScreen /> : <Setup />;
+  }
+  // Key present but no recovery.enc → desync; recover by unlocking.
+  if (!status.vaultInitialized) return <UnlockScreen />;
+  // Key + recovery.enc but no owner → interrupted setup; finish it (Setup won't re-key, §6.3).
+  if (!status.hasOwner) return <Setup />;
+  // Fully set up: pick who's here if nobody is active on this device yet.
+  return status.activePersonId ? <Shell /> : <LockScreen />;
 }

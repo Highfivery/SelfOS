@@ -56,7 +56,7 @@ import {
   upsertRelationship,
   verifyAccountPin,
 } from '@selfos/core/people';
-import { loadMasterKey } from '@selfos/core/crypto';
+import { loadMasterKey, restoreFromRecoveryPhrase } from '@selfos/core/crypto';
 import type { FileSystem, SecretStore } from '@selfos/core/host';
 import { createNodeFileSystem } from './host/nodeFileSystem';
 import {
@@ -93,6 +93,7 @@ const HouseholdSetupSchema = z.object({
   ownerName: z.string().min(1),
   passphrase: z.string().min(6),
 });
+const UnlockWithRecoveryPhraseSchema = z.object({ phrase: z.string().min(1) });
 const SetAccountSchema = z.object({
   personId: z.string().min(1),
   roleId: z.string().min(1),
@@ -250,6 +251,23 @@ export function registerIpcHandlers(): void {
       const vaultPath = await activeVaultPath();
       if (!vaultPath) throw new Error('No vault selected');
       return setupHousehold(userDataDir(), encryptor, vaultPath, input);
+    },
+  );
+
+  ipcMain.handle(
+    IpcChannels.unlockWithRecoveryPhrase,
+    async (_event, raw: unknown): Promise<{ ok: boolean }> => {
+      // Join/recover this device: restore the master key from the recovery phrase (10-multi-device
+      // §6.2). No owner is created. The phrase is never logged. Bad/garbled phrase → { ok: false }.
+      const { phrase } = UnlockWithRecoveryPhraseSchema.parse(raw);
+      const vaultPath = await activeVaultPath();
+      if (!vaultPath) return { ok: false };
+      const ok = await restoreFromRecoveryPhrase(
+        secretStore(),
+        createNodeFileSystem(vaultPath),
+        phrase,
+      );
+      return { ok };
     },
   );
 

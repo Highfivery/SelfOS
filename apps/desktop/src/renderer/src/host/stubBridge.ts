@@ -42,8 +42,14 @@ export function installStubBridge(): void {
     claudeTest: () =>
       Promise.resolve({ ok: false, code: 'NO_KEY', message: 'Add your Claude API key.' }),
     householdStatus: () =>
-      Promise.resolve({ hasMasterKey: true, hasOwner: true, activePersonId: 'owner-1' }),
+      Promise.resolve({
+        vaultInitialized: true,
+        hasMasterKey: true,
+        hasOwner: true,
+        activePersonId: 'owner-1',
+      }),
     householdSetup: () => Promise.resolve({ recoveryPhrase: 'PREVIEW-ONLY', ownerId: 'owner-1' }),
+    unlockWithRecoveryPhrase: () => Promise.resolve({ ok: true }),
     getActivePerson: () => Promise.resolve(OWNER),
     peopleList: () => Promise.resolve([OWNER]),
     peopleSave: (input) =>

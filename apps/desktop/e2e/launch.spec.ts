@@ -6,7 +6,7 @@ import { createMasterKey, loadMasterKey } from '@selfos/core/crypto';
 import type { Encryptor } from '../src/main/secrets/encryptor';
 import { createNodeFileSystem } from '../src/main/host/nodeFileSystem';
 import { createNodeSecretStore } from '../src/main/host/nodeSecretStore';
-import { savePerson, setAccount } from '@selfos/core/people';
+import { getAccessConfig, savePerson, setAccount } from '@selfos/core/people';
 import { hashPin } from '@selfos/core/crypto';
 import { recordUsage } from '@selfos/core/usage';
 import { writeEncryptedJson } from '@selfos/core/vault';
@@ -799,6 +799,109 @@ test('shell: locking from the account menu gates the app, and resuming returns t
     await rm(userData, { recursive: true, force: true });
     await rm(vault, { recursive: true, force: true });
   }
+});
+
+test('multi-device: a second device unlocks an initialized vault without re-keying or a second owner', async () => {
+  // 10-multi-device-vault Slice 1 — the headline scenario. "Device A" initializes the vault; we
+  // capture the recovery phrase and the exact recovery.enc bytes so we can prove they're untouched.
+  const vault = await mkdtemp(join(tmpdir(), 'selfos-e2e-vault-'));
+  const now = new Date().toISOString();
+  await writeJson(join(vault, '.selfos', 'meta.json'), {
+    schemaVersion: 1,
+    vaultId: 'e2e',
+    createdAt: now,
+    updatedAt: now,
+  });
+  await writeJson(join(vault, 'config', 'settings.json'), { schemaVersion: 1, values: {} });
+
+  const deviceA = await mkdtemp(join(tmpdir(), 'selfos-e2e-ud-'));
+  const fs = createNodeFileSystem(vault);
+  const { recoveryPhrase } = await createMasterKey(createNodeSecretStore(deviceA, passthrough), fs);
+  const key = await loadMasterKey(createNodeSecretStore(deviceA, passthrough));
+  if (!key) throw new Error('seed: master key missing');
+  await savePerson(fs, key, {
+    id: 'owner-1',
+    schemaVersion: 1,
+    displayName: 'Tester',
+    isSubject: true,
+    tags: [],
+    createdAt: now,
+    updatedAt: now,
+  });
+  await setAccount(fs, key, { personId: 'owner-1', roleId: 'owner' });
+  const recoveryBefore = await readFile(join(vault, 'config', 'recovery.enc'), 'utf8');
+
+  // "Device B": a fresh user-data dir pointed at the SAME vault — no master key, no active person.
+  const deviceB = await mkdtemp(join(tmpdir(), 'selfos-e2e-ud-'));
+  await writeJson(join(deviceB, 'state.json'), { schemaVersion: 1, vaultPath: vault });
+
+  const app = await launch(deviceB);
+  try {
+    const w = await app.firstWindow();
+
+    // Initialized vault + no device key ⇒ Unlock, NOT Setup. This is the data-loss bug, fixed.
+    await expect(w.getByRole('heading', { name: 'This vault is already set up' })).toBeVisible();
+    await expect(w.getByText('Create your profile')).toHaveCount(0);
+
+    // Join with the recovery phrase ⇒ the person picker (this device has no active person yet).
+    await w.getByLabel('Recovery phrase').fill(recoveryPhrase);
+    await w.getByRole('button', { name: 'Unlock' }).click();
+    await expect(w.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
+
+    // Resume as the existing owner ⇒ the shared data is right there.
+    await w.getByRole('dialog', { name: 'Locked' }).getByText('Tester').click();
+    await expect(w.getByRole('link', { name: 'Home' })).toBeVisible();
+  } finally {
+    await app.close();
+  }
+
+  // The vault was never re-keyed (recovery.enc byte-identical) and no second owner was minted.
+  expect(await readFile(join(vault, 'config', 'recovery.enc'), 'utf8')).toBe(recoveryBefore);
+  const access = await getAccessConfig(fs, key);
+  expect(access.accounts.filter((account) => account.roleId === 'owner')).toHaveLength(1);
+
+  await rm(deviceA, { recursive: true, force: true });
+  await rm(deviceB, { recursive: true, force: true });
+  await rm(vault, { recursive: true, force: true });
+});
+
+test('multi-device: an interrupted setup (key + recovery.enc, no owner) is finished without re-keying', async () => {
+  // 10-multi-device-vault §3.1 / §7: a crash mid-first-run leaves a master key + recovery.enc but no
+  // owner. The gate routes to Setup to FINISH it (not a dead-end picker), and Setup must not re-key.
+  const userData = await mkdtemp(join(tmpdir(), 'selfos-e2e-ud-'));
+  const vault = await mkdtemp(join(tmpdir(), 'selfos-e2e-vault-'));
+  const now = new Date().toISOString();
+  await writeJson(join(vault, '.selfos', 'meta.json'), {
+    schemaVersion: 1,
+    vaultId: 'e2e',
+    createdAt: now,
+    updatedAt: now,
+  });
+  await writeJson(join(vault, 'config', 'settings.json'), { schemaVersion: 1, values: {} });
+
+  // Master key + recovery.enc exist (createMasterKey ran), but no owner was ever created.
+  await createMasterKey(createNodeSecretStore(userData, passthrough), createNodeFileSystem(vault));
+  const recoveryBefore = await readFile(join(vault, 'config', 'recovery.enc'), 'utf8');
+  await writeJson(join(userData, 'state.json'), { schemaVersion: 1, vaultPath: vault });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await expect(w.getByRole('heading', { name: 'Create your profile' })).toBeVisible();
+    await w.getByLabel('Your name').fill('Tester');
+    await w.getByLabel('Super-admin passphrase').fill('superpass');
+    await w.getByLabel('Confirm passphrase').fill('superpass');
+    await w.getByRole('button', { name: 'Create profile' }).click();
+    // Resuming issues no new recovery phrase, so we land straight in the app.
+    await expect(w.getByRole('link', { name: 'Home' })).toBeVisible();
+  } finally {
+    await app.close();
+  }
+
+  // The existing key was finished-with, never regenerated.
+  expect(await readFile(join(vault, 'config', 'recovery.enc'), 'utf8')).toBe(recoveryBefore);
+  await rm(userData, { recursive: true, force: true });
+  await rm(vault, { recursive: true, force: true });
 });
 
 test('shell: collapsing the sidebar to a rail persists across relaunch', async () => {

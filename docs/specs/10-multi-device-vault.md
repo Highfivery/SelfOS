@@ -53,6 +53,11 @@ recovery-phrase unlock lets a device cross from the second state to the third wi
 - **Slice 1 (build now)** — the safety fix + foundation: key-free `vaultInitialized` detection, the
   three-way boot gate, hard guards against overwriting `recovery.enc` / re-running setup, the
   super-admin secret moved into the vault (with migration), and a recovery-phrase **unlock** UI.
+  Delivered in three independently-shipped sub-slices for the methodical cadence:
+  - **1a** — `vaultInitialized` detection + the `createMasterKey`/`setupHousehold` overwrite guards +
+    the three-way `HouseholdGate` + the recovery-phrase `UnlockScreen` (the data-loss fix + device join).
+  - **1b** — super-admin secret moved into `config/superadmin.enc` (+ the device-local migration, §6.4).
+  - **1c** — the required owner PIN at Setup (§3.2).
 - **Slice 2 (designed here, not built)** — one-time, member-scoped **invite / pairing codes** so a
   non-owner can join a new device without ever seeing the recovery phrase (§5.4).
 
@@ -170,9 +175,10 @@ unwrap the key and set a local PIN, joining member-only. Full flow in §5.4.
 **`config/recovery.enc` is key-free readable and is the canonical "vault initialized" marker.** The
 bundle JSON (`{ schemaVersion, salt, wrapped: { v, alg, iv, tag, data } }`, see
 `RecoveryBundleSchema` in `masterKey.ts`) is **plaintext JSON**; only the `wrapped` master key inside
-is ciphertext. So `vaultInitialized` is just "does `config/recovery.enc` exist and parse as a
-recovery bundle?" — no key required. (Contrast `superadmin.enc`, whose payload is encrypted under the
-master key and is only verifiable **after** the key is loaded.)
+is ciphertext. So `vaultInitialized` is just "does `config/recovery.enc` **exist**?" — presence only,
+no parse, no key required. A present-but-corrupt file deliberately still counts as initialized (§7 #5):
+parsing would risk treating a corrupt vault as fresh and re-keying it. (Contrast `superadmin.enc`,
+whose payload is encrypted under the master key and is only verifiable **after** the key is loaded.)
 
 ### 4.2 Schemas
 
@@ -490,6 +496,12 @@ All Slice-1 questions are **resolved** (2026-06-10):
 
 ## 12. Changelog
 
+- 2026-06-10 — **Slice 1a built.** `isVaultInitialized` + the `createMasterKey`/`setupHousehold`
+  overwrite guards (no re-key, ever), `HouseholdStatus.vaultInitialized`, the three-way `HouseholdGate`
+  (with the `!hasOwner` interrupted-setup → Setup resume that finishes a half-built household without
+  re-keying), the `household:unlockWithRecoveryPhrase` IPC, and the recovery-phrase `UnlockScreen`.
+  Clarified §4.1: `vaultInitialized` is **presence-only** (a corrupt `recovery.enc` still counts as
+  initialized). 1b (super-admin → vault + migration) and 1c (owner PIN) follow.
 - 2026-06-10 — **Approved.** Resolved the four §11 questions: owner PIN **required** at Setup;
   super-admin stored as the **encrypted** `config/superadmin.enc`; recovery-phrase unlock allows
   **any persona** post-unlock (recovery phrase = the owner's secret; members onboard via Slice 2);

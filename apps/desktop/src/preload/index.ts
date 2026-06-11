@@ -29,6 +29,8 @@ const bridge: SelfosBridge = {
   claudeTest: () => ipcRenderer.invoke(IpcChannels.claudeTest),
   householdStatus: () => ipcRenderer.invoke(IpcChannels.householdStatus),
   householdSetup: (input) => ipcRenderer.invoke(IpcChannels.householdSetup, input),
+  unlockWithRecoveryPhrase: (input) =>
+    ipcRenderer.invoke(IpcChannels.unlockWithRecoveryPhrase, input),
   getActivePerson: () => ipcRenderer.invoke(IpcChannels.getActivePerson),
   peopleList: () => ipcRenderer.invoke(IpcChannels.peopleList),
   peopleSave: (input) => ipcRenderer.invoke(IpcChannels.peopleSave, input),

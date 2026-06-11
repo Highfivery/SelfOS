@@ -4,8 +4,10 @@ import { memFileSystem } from '../host/memFileSystem';
 import { toBase64 } from '../encoding';
 import {
   MASTER_KEY_ID,
+  VAULT_ALREADY_INITIALIZED,
   createMasterKey,
   hasMasterKey,
+  isVaultInitialized,
   loadMasterKey,
   restoreFromRecoveryPhrase,
 } from './masterKey';
@@ -60,5 +62,34 @@ describe('masterKey', () => {
     await secrets.clear(MASTER_KEY_ID);
     expect(await restoreFromRecoveryPhrase(secrets, fs, 'WRON-GPHR-ASE0-0000')).toBe(false);
     expect(await hasMasterKey(secrets)).toBe(false);
+  });
+
+  // 10-multi-device-vault §6.3 — the headline data-integrity guarantee.
+  describe('vault-initialized detection + overwrite guard', () => {
+    it('reports vaultInitialized only once config/recovery.enc exists', async () => {
+      expect(await isVaultInitialized(fs)).toBe(false);
+      await createMasterKey(memSecretStore(), fs);
+      expect(await isVaultInitialized(fs)).toBe(true);
+    });
+
+    it('treats a present-but-corrupt recovery.enc as initialized (never re-key)', async () => {
+      await fs.writeAtomic('config/recovery.enc', new TextEncoder().encode('{ not a bundle'));
+      expect(await isVaultInitialized(fs)).toBe(true);
+    });
+
+    it('refuses to overwrite an existing recovery.enc, leaving it byte-identical', async () => {
+      const secrets = memSecretStore();
+      await createMasterKey(secrets, fs);
+      const before = await fs.read('config/recovery.enc');
+      expect(before).not.toBeNull();
+
+      // A second device completing setup must NOT re-key the vault.
+      await expect(createMasterKey(memSecretStore(), fs)).rejects.toThrow(
+        VAULT_ALREADY_INITIALIZED,
+      );
+
+      const after = await fs.read('config/recovery.enc');
+      expect(after && toBase64(after)).toBe(before && toBase64(before));
+    });
   });
 });

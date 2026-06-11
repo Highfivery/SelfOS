@@ -17,6 +17,8 @@ interface SessionState {
   load: () => Promise<void>;
   /** Run first-run setup; resolves to the recovery phrase to show once. */
   setup: (input: { ownerName: string; passphrase: string }) => Promise<string>;
+  /** Join/recover this device with the recovery phrase; reloads the gate on success. */
+  unlock: (phrase: string) => Promise<boolean>;
   /** Whether the active person's role grants a capability (super-admin bypasses all). */
   can: (capability: CapabilityKey) => boolean;
   /** Switch the active person (verifying their PIN); reloads on success. */
@@ -47,6 +49,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   setup: async (input) => {
     const result = await window.selfos?.householdSetup(input);
     return result?.recoveryPhrase ?? '';
+  },
+  unlock: async (phrase) => {
+    const result = await window.selfos?.unlockWithRecoveryPhrase({ phrase });
+    if (result?.ok) await get().load(); // re-evaluate the gate — this device now holds the key
+    return result?.ok ?? false;
   },
   can: (capability) => {
     const { activePerson, access, superAdmin } = get();

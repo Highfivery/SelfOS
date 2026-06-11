@@ -29,6 +29,23 @@ const RecoveryBundleSchema = z.object({
   wrapped: EnvelopeSchema,
 });
 
+/**
+ * Thrown by {@link createMasterKey} when the vault already holds a `config/recovery.enc`. Refusing to
+ * overwrite it is the headline data-integrity guarantee of 10-multi-device-vault: a second device must
+ * never re-key an initialized vault (which would orphan all existing ciphertext).
+ */
+export const VAULT_ALREADY_INITIALIZED = 'VAULT_ALREADY_INITIALIZED';
+
+/**
+ * Whether the vault is already initialized — a key-free property of the **vault**, answerable before
+ * any master key exists on this device (10-multi-device-vault §4.1). True iff `config/recovery.enc`
+ * is present. A present-but-corrupt file still counts as initialized: we must never mistake "corrupt"
+ * for "fresh", or the boot gate would re-key and orphan the data.
+ */
+export async function isVaultInitialized(fs: FileSystem): Promise<boolean> {
+  return (await fs.read(RECOVERY_PATH)) !== null;
+}
+
 export async function loadMasterKey(secrets: SecretStore): Promise<Uint8Array | null> {
   const base64 = await secrets.get(MASTER_KEY_ID);
   return base64 ? fromBase64(base64) : null;
@@ -50,6 +67,10 @@ export async function createMasterKey(
   secrets: SecretStore,
   fs: FileSystem,
 ): Promise<{ recoveryPhrase: string }> {
+  // Hard guard (10-multi-device-vault §6.3): never overwrite an existing wrapped key. This is the
+  // single most important safety check — re-keying an initialized vault orphans all its ciphertext.
+  if (await isVaultInitialized(fs)) throw new Error(VAULT_ALREADY_INITIALIZED);
+
   const masterKey = generateMasterKey();
   await storeMasterKey(secrets, masterKey);
 

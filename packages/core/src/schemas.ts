@@ -1156,7 +1156,7 @@ export type DreamImageGenerateResult =
  * prompt or the pixels back.
  */
 export type DreamImageResult =
-  | { ok: true; mime: string }
+  | { ok: true; mime: string; costUsd?: number } // costUsd present only for admins (budgets.manage), §3.2
   | {
       ok: false;
       reason: 'NO_CONSENT' | 'NO_KEY' | 'BUDGET' | 'REFUSED' | 'ERROR';

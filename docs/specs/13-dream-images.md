@@ -762,11 +762,18 @@ Confirmed with the user (2026-06-11) — encoded above, **not** to be re-opened:
    `ApiKeyControl`; write-only). The `image` host part added to `BridgeHost` — Electron `defaultImageClient`,
    web preview `webFakeImageClient`, iOS `browserImageClient` (browser-mode OpenAI, the `browserClaudeClient`
    mirror). Code-reviewer **ship**. Renderer panel + generate E2E is slice 4.
-4. **Renderer + E2E (generate)** — the shared `DreamImagePanel` in both placements (entry / loading / success /
-   refusal / calm states, the sensitive-tier warning, the style picker, Regenerate/Delete, admin-only cost);
-   the `dreamStore`/`dreamAnalysisStore` image lifecycle; visual QA at desktop + 390px; the E2E (consent →
-   generate → encrypted round-trip → regenerate → delete; sensitive-tier warning; refusal-not-metered;
-   capability-off).
+4. **Renderer + E2E (generate)** — ✅ **Built 2026-06-12** (branch `feat/dream-images-slice-4`). The shared
+   **`DreamImagePanel`** rendered in BOTH the dream detail/composer (`DreamComposer`, on a saved dream) and the
+   analysis card (`DreamAnalysisPane`, beside the synthesis card), bound to the dream id — self-contained local
+   state + a `reqId` request-guard so a stale fetch after a switch is dropped (no store change needed:
+   per-person isolation holds because the panel remounts per dream and `dreamStore.reset()` fires on a person
+   switch). States: capability-absent → hidden; calm consent-off / AI-off / no-key (gated on the async key
+   check resolving, so the happy path doesn't flash) → Settings link; entry (style picker + "Visualize this
+   dream"); the sensitive-tier warning-before-send; loading; success (image + Regenerate + "Delete image" +
+   **admin-only cost**, double-gated — the bridge omits `costUsd` for non-admins AND the panel requires
+   `budgets.manage`); REFUSED/BUDGET/ERROR calm messages. Code-reviewer **fix-first**. 8 RTL + an E2E
+   (sensitive warning → generate → assert `image.enc` is an AES-GCM envelope on disk → regenerate → delete) +
+   visual QA at desktop + 390px.
 5. **Export + per-dream sharing** — the `dreams:exportImage` save flow (§3.5); the `dreams:imageShareTargets` /
    `:setImageShare` (gated `dreams.shareContext`, sensitive-excluded) / `:getSharedImage` seam +
    `Dream.image.shareableWith`; the panel's **Save image…** + **Share** controls; the recipient's **"Shared with
@@ -852,3 +859,28 @@ defaultImageClient()` host wiring → `preload` → `test-utils/bridge` mock), a
   E2E** (+1 dream-image settings reveal + admin-only marker; the section-overflow + responsive sweeps now
   cover the new settings). Visual QA at desktop + 390px. **NEXT: slice 4 — the `DreamImagePanel` renderer
   (both placements) + the generate E2E + visual QA.**
+- 2026-06-12 — **Slice 4 built** (the `DreamImagePanel` renderer + generate E2E; §13.1 slice 4 / §3). The
+  shared **`DreamImagePanel`** rendered in BOTH the dream detail/composer (`DreamComposer`, on a saved dream)
+  and the analysis card (`DreamAnalysisPane`, beside the synthesis card), bound to the dream id —
+  **self-contained local state + a `reqId` request-guard** (no store change: per-person isolation holds
+  because the panel remounts per dream and `dreamStore.reset()` fires on a person switch). States:
+  capability-absent → **hidden**; calm consent-off / AI-off / no-key (the no-key state gated on the async key
+  check resolving, so the happy path doesn't flash) → Settings link; entry (style picker + "Visualize this
+  dream"); the **sensitive-tier warning-before-send**; loading; success (the `<img>` from a base64 data URL +
+  Regenerate + "Delete image" + **admin-only cost**, double-gated — the bridge omits `costUsd` for non-admins
+  AND the panel requires `budgets.manage`); REFUSED/BUDGET/ERROR calm messages. A small admin-gated `costUsd`
+  was added to `DreamImageResult` (the bridge includes it only for `budgets.manage`, = flat image + distillation
+  cost). Code-reviewer **fix-first** (the one should-fix applied: the no-key calm state flashed before the async
+  `secretHas` resolved on the happy path → now gated on `!loading`; per-dream/person isolation, the
+  double-gated cost, the capability boundary, the sensitive-tier warning, and a11y all verified clean). Gate
+  green: typecheck (node + web/DOM-lib), lint, format, **266 core + 339 desktop + 8 relay** unit (+8 RTL:
+  every calm state, generate+cost, sensitive warning, existing-image+delete, refusal), **+1 E2E** (sensitive
+  warning → generate → **assert `image.enc` is an AES-GCM envelope on disk, not the raw PNG** → regenerate →
+  delete; `SELFOS_FAKE_IMAGE` added to `e2eEnv`). Visual QA at desktop + 390px (the panel sits below the dream
+  fields / beside the analysis card; square image, clean actions, no overflow). Built in the
+  **`feat/dream-images-slice-4`** worktree off `main`. **Lesson: a panel whose readiness depends on an ASYNC
+  check (`secretHas`) must gate that calm state on the load completing (`!loading && !hasKey`), or the common
+  happy path flashes the wrong "add a key" state for a frame before the check returns.** **NEXT: slice 5 —
+  export (`dreams:exportImage` save dialog) + per-dream image sharing (`Dream.image.shareableWith` +
+  `dreams:imageShareTargets`/`:setImageShare`/`:getSharedImage`) + the "Shared with you" recipient surface
+  (ASK placement). This is the LAST slice of spec 13.**

@@ -1983,9 +1983,15 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         dreamId,
         now: new Date(),
       });
-      return result.ok
-        ? { ok: true, mime: result.mime }
-        : { ok: false, reason: result.reason, message: result.message };
+      if (!result.ok) return { ok: false, reason: result.reason, message: result.message };
+      // Cost ($) is admin-only (the budgets.manage gate, like everywhere else) — a non-admin's result
+      // carries no cost figure. Combines the flat image charge + the small distillation charge.
+      const showCost = await activePersonCan(ctx.fs, ctx.key, 'budgets.manage');
+      return {
+        ok: true,
+        mime: result.mime,
+        ...(showCost ? { costUsd: result.imageUsage.costUsd + result.promptUsage.costUsd } : {}),
+      };
     },
     dreamGetImage: async (input): Promise<{ mime: string; dataBase64: string } | null> => {
       const { dreamId } = DreamIdSchema.parse(input);

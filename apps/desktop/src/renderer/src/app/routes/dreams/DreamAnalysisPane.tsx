@@ -11,6 +11,7 @@ import { Composer } from '../sessions/Composer';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { DreamSynthesisCard } from './DreamSynthesisCard';
 import { DreamShareControls } from './DreamShareControls';
+import { DreamImagePanel } from './DreamImagePanel';
 import styles from './Dreams.module.css';
 
 interface DreamAnalysisPaneProps {
@@ -153,6 +154,8 @@ export function DreamAnalysisPane({ dream, onBack }: DreamAnalysisPaneProps): JS
               </Text>
             )
           ) : null}
+          {/* Visualize the dream alongside the written reflection (13-dream-images §3.1). */}
+          <DreamImagePanel dream={dream} />
           {configured ? (
             <div className={styles.continueWrap}>
               <Button

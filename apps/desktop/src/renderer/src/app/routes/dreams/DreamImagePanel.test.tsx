@@ -1,0 +1,166 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
+import type { Dream } from '@shared/channels';
+import { DreamImagePanel } from './DreamImagePanel';
+import { useSessionStore } from '../../../stores/sessionStore';
+import { useSettingsStore } from '../../../settings/settingsStore';
+import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
+
+const dream: Dream = {
+  id: 'd1',
+  schemaVersion: 1,
+  personId: 'owner-1',
+  narrative: 'rooms that rearrange',
+  title: 'The shifting house',
+  lucid: false,
+  nightmare: false,
+  tags: [],
+  people: [],
+  sensitivity: 'standard',
+  status: 'captured',
+  createdAt: 'now',
+  updatedAt: 'now',
+};
+
+afterEach(() => {
+  clearMockBridge();
+  useSessionStore.setState({ superAdmin: false });
+  useSettingsStore.setState((s) => ({
+    values: {
+      ...s.values,
+      'ai.enabled': false,
+      'dreams.imageGenerationEnabled': false,
+    },
+  }));
+});
+
+/** superAdmin grants every capability (dreams.generateImage + budgets.manage); set the gate settings. */
+function enable({ consent = true, ai = true }: { consent?: boolean; ai?: boolean } = {}): void {
+  useSessionStore.setState({ superAdmin: true });
+  useSettingsStore.setState((s) => ({
+    values: { ...s.values, 'ai.enabled': ai, 'dreams.imageGenerationEnabled': consent },
+  }));
+}
+
+function renderPanel(d: Dream = dream): void {
+  render(
+    <MemoryRouter>
+      <DreamImagePanel dream={d} />
+    </MemoryRouter>,
+  );
+}
+
+describe('DreamImagePanel', () => {
+  it('renders nothing without the dreams.generateImage capability', () => {
+    // Default session (no superAdmin, no access) → can() is false.
+    installMockBridge({ secretHas: () => Promise.resolve(true) });
+    const { container } = render(
+      <MemoryRouter>
+        <DreamImagePanel dream={dream} />
+      </MemoryRouter>,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('shows a calm consent state when image generation is off', async () => {
+    enable({ consent: false });
+    installMockBridge({ secretHas: () => Promise.resolve(true) });
+    renderPanel();
+    expect(
+      await screen.findByText(/turn on dream-image generation in settings/i),
+    ).toBeInTheDocument();
+  });
+
+  it('shows a calm AI-off state when AI is disabled', async () => {
+    enable({ ai: false });
+    installMockBridge({ secretHas: () => Promise.resolve(true) });
+    renderPanel();
+    expect(await screen.findByText(/enable ai in settings/i)).toBeInTheDocument();
+  });
+
+  it('shows a calm no-key state when the OpenAI key is missing', async () => {
+    enable();
+    installMockBridge({ secretHas: () => Promise.resolve(false) });
+    renderPanel();
+    expect(await screen.findByText(/add your openai key in settings/i)).toBeInTheDocument();
+  });
+
+  it('generates an image from the entry state and shows the admin cost', async () => {
+    enable();
+    const dreamGenerateImage = vi.fn(() =>
+      Promise.resolve({ ok: true as const, mime: 'image/png', costUsd: 0.17 }),
+    );
+    let stored = false;
+    installMockBridge({
+      secretHas: () => Promise.resolve(true),
+      dreamGetImage: () =>
+        Promise.resolve(stored ? { mime: 'image/png', dataBase64: 'AAAA' } : null),
+      dreamGenerateImage: () => {
+        stored = true;
+        return dreamGenerateImage();
+      },
+    });
+    renderPanel();
+    await userEvent.click(await screen.findByRole('button', { name: /visualize this dream/i }));
+    const img = await screen.findByRole('img');
+    expect(img.getAttribute('src')).toContain('data:image/png;base64,AAAA');
+    expect(screen.getByText(/estimated cost: \$0\.17/i)).toBeInTheDocument();
+    expect(screen.getByText('Admin only')).toBeInTheDocument();
+  });
+
+  it('warns before generating a sensitive dream, then proceeds on Continue', async () => {
+    enable();
+    let stored = false;
+    installMockBridge({
+      secretHas: () => Promise.resolve(true),
+      dreamGetImage: () =>
+        Promise.resolve(stored ? { mime: 'image/png', dataBase64: 'AAAA' } : null),
+      dreamGenerateImage: () => {
+        stored = true;
+        return Promise.resolve({ ok: true as const, mime: 'image/png' });
+      },
+    });
+    renderPanel({ ...dream, sensitivity: 'explicit' });
+    await userEvent.click(await screen.findByRole('button', { name: /visualize this dream/i }));
+    expect(screen.getByText(/this is a sensitive dream/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(await screen.findByRole('img')).toBeInTheDocument();
+  });
+
+  it('shows an existing image with Regenerate + Delete, and deletes on confirm', async () => {
+    enable();
+    const dreamDeleteImage = vi.fn(() => Promise.resolve());
+    let present = true;
+    installMockBridge({
+      secretHas: () => Promise.resolve(true),
+      dreamGetImage: () =>
+        Promise.resolve(present ? { mime: 'image/png', dataBase64: 'AAAA' } : null),
+      dreamDeleteImage: () => {
+        present = false;
+        return dreamDeleteImage();
+      },
+    });
+    renderPanel();
+    expect(await screen.findByRole('img')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Delete image' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Delete image' }));
+    expect(dreamDeleteImage).toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole('img')).not.toBeInTheDocument());
+  });
+
+  it('shows a calm refusal message when OpenAI declines (content policy)', async () => {
+    enable();
+    installMockBridge({
+      secretHas: () => Promise.resolve(true),
+      dreamGetImage: () => Promise.resolve(null),
+      dreamGenerateImage: () =>
+        Promise.resolve({ ok: false as const, reason: 'REFUSED' as const, message: 'policy' }),
+    });
+    renderPanel();
+    await userEvent.click(await screen.findByRole('button', { name: /visualize this dream/i }));
+    expect(await screen.findByText(/openai declined to generate this image/i)).toBeInTheDocument();
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+  });
+});

@@ -18,6 +18,7 @@ import {
 } from '../../../design-system/components';
 import { ChipEditor } from './ChipEditor';
 import { DreamPeopleEditor } from './DreamPeopleEditor';
+import { DreamImagePanel } from './DreamImagePanel';
 import styles from './Dreams.module.css';
 
 interface DreamComposerProps {
@@ -208,6 +209,9 @@ export function DreamComposer({ dream, onDone }: DreamComposerProps): JSX.Elemen
           {error}
         </p>
       ) : null}
+
+      {/* A saved dream can be visualized as an AI image (13-dream-images §3.1). */}
+      {dream ? <DreamImagePanel dream={dream} /> : null}
 
       <div className={styles.footer}>
         {dream ? (

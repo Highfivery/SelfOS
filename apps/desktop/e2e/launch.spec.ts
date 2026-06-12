@@ -77,6 +77,7 @@ function e2eEnv(): Record<string, string> {
   env.SELFOS_FAKE_SECRETS = '1';
   env.SELFOS_FAKE_CLAUDE = '1';
   env.SELFOS_FAKE_RELAY = '1'; // deterministic in-memory relay (no Cloudflare account/network)
+  env.SELFOS_FAKE_IMAGE = '1'; // deterministic tiny-PNG image client (no OpenAI network)
   return env;
 }
 
@@ -88,6 +89,20 @@ function launch(userDataDir: string): Promise<ElectronApplication> {
 async function writeJson(file: string, data: unknown): Promise<void> {
   await mkdir(dirname(file), { recursive: true });
   await writeFile(file, JSON.stringify(data, null, 2), 'utf8');
+}
+
+/** Recursively find the first file with `name` under `dir` (used to assert encrypted blobs on disk). */
+async function findFileNamed(dir: string, name: string): Promise<string | null> {
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      const found = await findFileNamed(full, name);
+      if (found) return found;
+    } else if (entry.name === name) {
+      return full;
+    }
+  }
+  return null;
 }
 
 /**
@@ -1500,6 +1515,60 @@ test('dreams: log a dream, persist through the encrypted vault, reopen, no overf
       return main ? main.scrollWidth - main.clientWidth : 0;
     });
     expect(overflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('dreams: visualize a dream — sensitive warning, generate, encrypted round-trip, regenerate, delete', async () => {
+  const { userData, vault } = await seedReadyVault({
+    'ai.enabled': true,
+    'dreams.imageGenerationEnabled': true,
+  });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+  await secrets.set('openai.apiKey', 'sk-openai-e2e');
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Dreams' }).click();
+    await w.getByRole('button', { name: 'Log a dream' }).click();
+    await w.getByLabel('What happened?').fill('A bright surreal place of open doors.');
+    await w.getByLabel('Title (optional)').fill('Visualize me');
+    await w.getByLabel('Sensitivity').selectOption({ label: 'Explicit' });
+    await w.getByRole('button', { name: 'Save' }).click();
+
+    // Reopen the saved dream → the image panel sits on the detail.
+    await w.getByRole('button', { name: /Visualize me/ }).click();
+
+    // A non-standard tier warns before sending to OpenAI; Continue proceeds.
+    await w.getByRole('button', { name: /visualize this dream/i }).click();
+    await expect(w.getByText(/this is a sensitive dream/i)).toBeVisible();
+    await w.getByRole('button', { name: 'Continue' }).click();
+    await expect(w.getByRole('img')).toBeVisible();
+
+    // The image is stored ENCRYPTED at rest (image.enc is an AES-GCM envelope, not the raw PNG).
+    const imgPath = await findFileNamed(vault, 'image.enc');
+    expect(imgPath).not.toBeNull();
+    const envelope = JSON.parse(await readFile(imgPath as string, 'utf8')) as {
+      alg: string;
+      data: string;
+    };
+    expect(envelope.alg).toBe('aes-256-gcm');
+    expect(envelope.data).not.toContain('iVBORw0KG'); // the fake PNG's base64 header — never in ciphertext
+
+    // Regenerate replaces it (a confirm, then the new image).
+    await w.getByRole('button', { name: 'Regenerate' }).click();
+    await w.getByRole('button', { name: 'Regenerate' }).click();
+    await expect(w.getByRole('img')).toBeVisible();
+
+    // Delete clears it back to the entry state.
+    await w.getByRole('button', { name: 'Delete image' }).click();
+    await w.getByRole('button', { name: 'Delete image' }).click();
+    await expect(w.getByRole('button', { name: /visualize this dream/i })).toBeVisible();
+    await expect(await findFileNamed(vault, 'image.enc')).toBeNull();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

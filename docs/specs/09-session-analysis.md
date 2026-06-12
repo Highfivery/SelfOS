@@ -1,6 +1,6 @@
 # 09 — Session analysis (the coach's memory)
 
-> **Status:** **Approved** · _last updated 2026-06-11_
+> **Status:** **Approved** (core) · **Review** (2026-06 lifecycle amendment, §14) · _last updated 2026-06-12_
 >
 > When a coaching session ends, AI can **analyze and summarize** it into a durable **Insight** so the
 > coach remembers across sessions instead of re-reading transcripts. Session analysis is the **second
@@ -9,6 +9,12 @@
 > **2D mood signal** (valence + energy) as metrics, which the relationship/wellbeing dashboard
 > ([`11`](11-relationship-tracking.md)) charts. This is the "cross-conversation long-term memory" that
 > [`05-conversations.md`](05-conversations.md) §2 deferred.
+>
+> **2026-06 amendment (§14, package B of the app refresh):** the binary open/ended model gains an explicit
+> **lifecycle status** — _in&nbsp;progress / on&nbsp;hold / complete_ — that the user sets and the AI can
+> **suggest** (never silently flip); marking a session **complete** is the natural moment "End & summarize"
+> is offered (AI-assisted, user-confirmed). Each session also shows its **accumulated AI cost** ($ for
+> admins only, a budget-relative indicator for everyone else). Read §14 together with §3–§6.
 
 Builds on [`05-conversations.md`](05-conversations.md) (the Sessions surface + transcripts + crisis/
 not-medical safety — **amended here** to add an explicit session "end" + analysis),
@@ -108,14 +114,20 @@ The **`Conversation`** schema (`05` §4.1) is amended:
 ```ts
 interface Conversation {
   // …existing fields…
-  endedAt?: string; // set by "End & summarize"; absent = open
+  status?: SessionStatus; // 'inProgress' (default) | 'onHold' | 'complete' — see §14.1
+  endedAt?: string; // set when status → 'complete'; absent = not yet completed
   insightId?: string; // the current SessionInsight for this conversation
   insightStale?: boolean; // true after continuing past an end → re-run on next end
 }
+// SessionStatusSchema = z.enum(['inProgress', 'onHold', 'complete'])
 ```
 
-Bumps `Conversation.schemaVersion` with a migration (existing transcripts: `endedAt`/`insightId` absent,
-`insightStale` false). All reads/writes through the vault + crypto service (`04` §5).
+`status` (§14.1) and `endedAt` move together: completing a session sets both; reopening a completed session
+returns it to `inProgress` and marks the Insight stale. Absent `status` ⇒ `inProgress` (additive-optional).
+
+Bumps `Conversation.schemaVersion` with a migration (existing transcripts: `status`/`endedAt`/`insightId`
+absent ⇒ treated as `inProgress`, `insightStale` false). All reads/writes through the vault + crypto service
+(`04` §5).
 
 ## 5. Architecture & modules
 
@@ -225,3 +237,122 @@ Confirmed with the user (2026-06-10):
   review/approval before any code.
 - 2026-06-11 — **Approved** alongside `08`/`11` (companion refs renumbered to `11`). Builds after `08`
   slice 1 lands the Insight/metrics layer.
+- 2026-06-12 — **2026-06 lifecycle amendment** added (§14, package B of the app refresh; Review): explicit
+  `status` lifecycle (in&nbsp;progress / on&nbsp;hold / complete) the user sets and the AI can suggest;
+  "complete" becomes the summarize trigger (AI-assisted, user-confirmed); per-session accumulated cost
+  ($ admin-only, budget-relative indicator otherwise). Decisions in memory `app-refresh-plan-2026-06`.
+
+---
+
+## 14. 2026-06 amendment — session lifecycle, AI-assisted completion & per-session cost
+
+Layers on top of §1–§13 (which remain accurate). Covers app-refresh items **3** (status + AI-set status +
+summarize-on-complete feeding context) and **4** (per-session cost). Nothing here changes the Insight/metrics
+model; it changes **when** analysis is offered and **what the Sessions surface shows**.
+
+### 14.1 Lifecycle status
+
+A session carries an explicit **`status`** — `SessionStatusSchema = z.enum(['inProgress','onHold','complete'])`,
+default `inProgress`:
+
+- **In progress** — the normal active state. New sessions start here.
+- **On hold** — the user has paused this thread (something they intend to return to). Purely a user signal; no
+  analysis is triggered. It keeps a half-finished session out of the "active" mental bucket without completing it.
+- **Complete** — the user (or an accepted AI suggestion) considers the work wrapped. Completing sets `endedAt`
+  and is the moment **"End & summarize"** is offered (§14.2). Reopening a completed session (continuing to type)
+  returns it to `inProgress` and marks its Insight **stale** (the existing §3.2 reopen rule, now expressed
+  through status).
+
+**Who sets it.** The user sets status manually from the Sessions surface (§14.5). The **AI may _suggest_** a
+status — specifically, that a session "looks complete" — but **never sets it silently** (the "AI-assisted, user
+confirms" decision). The suggestion surfaces as a gentle, dismissible affordance (a chip/prompt: _"This feels
+wrapped up — mark complete and summarize?"_) that the user accepts or ignores. `onHold` and reopen are
+user-only; AI only ever suggests `complete`.
+
+**How the AI completion signal is produced (no extra spend).** Rather than a separate Claude call, the
+**existing chat turn** carries the signal: the assistant response includes a lightweight structured hint
+(e.g. a `wrapUpSuggested: boolean` in the turn result) assessed as part of the turn the user already paid for.
+The renderer shows the suggestion when the hint is set and the session isn't already complete. (Resolved: the
+turn-embedded hint, no extra call — §14.7.)
+
+### 14.2 Completion ⇄ summarize reconciliation
+
+Completing a session is the trigger point for §3.1's **"End & summarize"**:
+
+- With **`sessions.autoSummarizeOnEnd` ON** — completing auto-runs analysis (budget-gated) and shows the wrap-up.
+- With it **OFF (default)** — completing **offers** summarize ("Summarize this session?"), the user confirms
+  before any budget is spent. Declining still completes the session (status `complete`, no Insight) — a user can
+  mark something done without summarizing it.
+
+So "complete" is the lifecycle state; "summarize" is the optional, confirmed AI step attached to it. The
+resulting `SessionInsight` feeds the subject's own context (and, per §3.3, can be shared) exactly as already
+specified — this is the path that makes a completed session reusable across Dreams, the questionnaire gap-finder,
+and the Home dashboard (memory `app-refresh-plan-2026-06`, packages C/G depend on it).
+
+### 14.3 Per-session cost (item 4)
+
+Each session shows its **accumulated AI cost** — the sum of all `UsageEvent`s whose `sessionId` equals the
+conversation id (chat turns + any `session.analyze`). Cost visibility follows the **existing admin-only-$ rule**
+(`06`; memory `selfos-usage-budget-rules`): the **dollar figure is computed and returned only for users who can
+`budgets.manage`** (admins), enforced in the **bridge** (the trust boundary), never the renderer. Everyone else
+sees a **budget-relative indicator** instead — the session's token usage as a small bar (its share of the
+person's period allowance), with **no dollar amount**. This keeps the "no $ for regular users" rule intact while
+still giving every user a felt sense of a session's weight.
+
+### 14.4 IPC additions
+
+- **`sessions:setStatus({ conversationId, status })`** → persists `status` (and `endedAt` when → `complete`),
+  scoped to the active person, gated by `sessions.own`. Reopening (a new chat turn on a `complete` session)
+  flips it back to `inProgress` + `insightStale` in the chat-turn handler, not a separate call.
+- **`usage:sessionCosts()`** (or a field added to the conversations list) → `Record<conversationId, { tokens:
+number; costUsd?: number }>` for the active person; **`costUsd` present only for admins** (bridge-gated, like
+  the existing `usage:summary` cost redaction). The Sessions list/header reads this to annotate each session.
+- `sessions:endAndSummarize` / `:reanalyze` (§6) unchanged; completing simply calls `setStatus('complete')` then
+  (per §14.2) may invoke `endAndSummarize`.
+
+### 14.5 UX placement
+
+- **Sessions list** — each item shows a small **status pill** (In progress / On hold / Complete) and the
+  **per-session cost/usage indicator** (§14.3). A per-item menu lets the user set status. The list includes a
+  **status filter / grouping** (All · In progress · On hold · Complete) so completed/paused sessions don't
+  clutter the active view — built in this amendment (default view: All, newest-first).
+- **Thread header** — the active session shows its status (settable here) and its running cost/usage indicator.
+  When the AI completion hint is set, a dismissible **"mark complete & summarize?"** prompt appears near the
+  composer (non-blocking; never auto-acts).
+- The wrap-up card (§3.1) appears on confirmed summarize, unchanged.
+- All new controls are token-driven, responsive ~360px→desktop, and admin-only $ carries the standard
+  **AdminOnlyBadge** where a dollar figure is shown (UI conventions, memory `selfos-ui-conventions`).
+
+### 14.6 Edge cases & testing additions (extend §7/§9)
+
+- **Status migration** — existing transcripts (no `status`) read as `inProgress`; covered by the §4 migration.
+- **Complete without summarize** — allowed; no Insight produced; re-completing later can still summarize.
+- **Reopen a complete+summarized session** — status → `inProgress`, Insight marked stale; next complete offers
+  re-summarize (the existing stale/reanalyze path).
+- **Cost for a session with zero turns** — shows `$0.00` / empty indicator, never errors.
+- **Non-admin never receives a $ value** — assert `usage:sessionCosts` omits `costUsd` for non-admins at the
+  bridge (a unit/bridge test mirroring the existing `usage:summary` redaction test).
+- **Tests:** unit — status transitions + reopen-flips-to-inProgress+stale; per-session cost rollup sums only
+  matching `sessionId`; the admin-only-$ bridge redaction. Component — status pill + setter, the AI
+  completion-suggestion chip shows only when hinted and not already complete, cost indicator renders admin $
+  vs non-admin bar, the status filter narrows the list. E2E — hold a session → mark complete → confirm summarize
+  → wrap-up → later session sees the Insight; filter to Complete shows it; an admin sees per-session $, a member
+  sees the usage bar with no $; 390px + control-geometry guards.
+
+### 14.7 Resolved decisions (2026-06-12)
+
+- **Status model** — three states (`inProgress` / `onHold` / `complete`); default `inProgress`.
+- **AI & status** — AI may **suggest `complete`** (assisted, user-confirmed); it never silently sets status, and
+  never sets `onHold`/reopen.
+- **Summarize trigger** — completing is the trigger; with `autoSummarizeOnEnd` off (default) it **asks** before
+  spending budget; declining still completes without an Insight.
+- **Per-session cost** — shown per session; **$ admin-only** (bridge-gated), budget-relative indicator for
+  everyone else (keeps the established no-$-for-users rule).
+- **AI completion signal** — a lightweight **`wrapUpSuggested`** hint embedded in the existing chat-turn result
+  (no extra Claude call); the turn result schema gains the optional flag.
+- **List filtering** — the Sessions list ships a **status filter / grouping** (All · In progress · On hold ·
+  Complete) in this amendment.
+
+### 14.8 Open questions (amendment)
+
+_All resolved (2026-06-12) — see §14.7. The amendment is build-ready pending final approval._

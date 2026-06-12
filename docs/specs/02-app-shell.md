@@ -1,6 +1,13 @@
 # 02 — App shell
 
-> **Status:** Approved · _last updated 2026-06-09_
+> **Status:** Approved · **Review** (2026-06 chrome amendment, §13) · _last updated 2026-06-12_
+>
+> **2026-06 amendment (§13, package E of the app refresh):** an **integrated custom titlebar** (the brand +
+> global controls share one cohesive top bar spanning the window, fixing the macOS brand-vs-traffic-lights
+> collision and tuning window controls per platform); a **more consistent TopBar** (uniform control sizing +
+> a curated set of useful items); and an **enriched global usage dropdown** (a quick summary + link to Usage).
+> Read §13 with §3.4/§3.5/§5.1. (Desktop window chrome is Electron-only; the same header renders on iOS without
+> window controls.)
 >
 > The skeleton every feature plugs into: the Electron window, the first-run vault-selection flow, the
 > boot sequence, navigation + routing, the global state stores, the theme layer, and the layout
@@ -262,3 +269,118 @@ _No open questions remain. New questions that arise during implementation are ap
   to a **master–detail**; content padding tightens and tap targets are ≥44px. Breakpoint tokens added
   to `tokens.css`. A 390px mobile-width E2E guard walks every screen (asserting no horizontal overflow
   on the content scroll container, not just `main`). Updated §3.4.
+- 2026-06-12 — **2026-06 chrome amendment added (§13, package E of the app refresh; Review).** An integrated
+  custom titlebar (brand + global controls in one window-spanning bar; macOS `trafficLightPosition` inset,
+  Windows `titleBarOverlay`), TopBar consistency + a curated item set, and an enriched global usage dropdown.
+  Decisions in memory `app-refresh-plan-2026-06`. Mostly renderer + a small `window.ts`/platform-flag change.
+
+---
+
+## 13. 2026-06 amendment — integrated titlebar, TopBar consistency & usage dropdown
+
+Layers on §1–§12 (which remain accurate). Covers app-refresh items **14** (brand vs. window controls), **13**
+(TopBar consistency + more items), and **5** (global usage dropdown). Per-session cost display (item 4) lives in
+[`09 §14`](09-session-analysis.md), not here. **Desktop-only window chrome** (Electron); the same header
+component renders on iOS (`07`) without the window-control zone, respecting safe-area insets.
+
+### 13.1 The problem (item 14)
+
+macOS uses `titleBarStyle: 'hiddenInset'` ([`window.ts`](../../apps/desktop/src/main/window.ts)), so the
+traffic-light buttons float at the top-left **over** the sidebar's brand header with no reserved space — the
+brand "butts right against" them and reads as bolted-on. The current TopBar is a separate strip inside the
+content column, so the brand (sidebar) and the global controls (TopBar) live in two disconnected places.
+
+### 13.2 Integrated custom titlebar (resolves items 13 + 14)
+
+Restructure the top of the app into **one cohesive, window-spanning titlebar** — a single `AppHeader` row across
+the full width, above the sidebar+content split:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ [⬤⬤⬤]  🌱 SelfOS        (drag region)        ◷usage  ☼theme  ◑account │  ← AppHeader (titlebar)
+├───────────────┬─────────────────────────────────────────────────────┤
+│  sidebar nav  │  content (routed Outlet)                             │
+└───────────────┴─────────────────────────────────────────────────────┘
+```
+
+- The **brand moves out of the sidebar header into the titlebar's left** (after the window-control zone). The
+  sidebar starts **below** the titlebar, so it no longer owns the brand and there's no collision.
+- The titlebar's empty middle is the **drag region** (`-webkit-app-region: drag`); every interactive control is
+  `no-drag`. This is the one place `drag` lives (today it's awkwardly on the sidebar brand).
+- **Global controls** (usage, appearance, account — §3.5) sit at the titlebar's **right**, consistently sized
+  and aligned (§13.3). The mobile nav **hamburger** moves to the titlebar's left (next to the brand) below
+  `--bp-md`.
+
+**Per-platform window chrome** (`window.ts` + a `platform` flag exposed to the renderer):
+
+- **macOS** — keep `titleBarStyle: 'hiddenInset'`; set **`trafficLightPosition`** to vertically center the
+  lights within the titlebar height, and reserve a left inset (~`var(--titlebar-traffic-width)`) before the
+  brand so they never overlap. The titlebar height becomes a token (`--titlebar-height`, ≥ the traffic-light
+  cluster).
+- **Windows** — `titleBarStyle: 'hidden'` + **`titleBarOverlay`** (native min/max/close drawn into the custom
+  bar, colored to match the theme); brand at far left, controls right, native buttons far right.
+- **Linux** — `titleBarOverlay` where supported, else default frame; the `AppHeader` still renders (brand +
+  controls), just without the overlaid window buttons.
+- On **iOS** (`07`) there are no window controls; `AppHeader` renders brand + controls and pads for the
+  safe-area/notch (the existing `env(safe-area-inset-*)` treatment moves here).
+
+### 13.3 TopBar consistency + items (item 13)
+
+- **Consistent control sizing.** All titlebar controls share one **control primitive** — same height
+  (`--control-height`, e.g. 32px), hit area, radius, hover/focus treatment, vertically centered — so the
+  appearance icon, usage ring, account control (and any future item) line up exactly (extending the earlier
+  2px-misalignment fix into a single shared component, not per-control CSS).
+- **A curated, useful item set** (item 13 — "add more things … more helpful, informative"). The right cluster,
+  in order: a **vault/sync status chip** (surfaces the sync-conflict state as a small icon+tooltip instead of
+  only the content banner, and a calm "all synced" otherwise); the **usage dropdown** (§13.4); **appearance**;
+  **account**. (Resolved §13.6: **no** section-title/breadcrumb and **no** global new-session button — the
+  guided-session launcher in package C owns "start a session"; kept deliberately uncluttered.) New items still
+  drop into the slot without reworking the shell (§3.5).
+
+### 13.4 Global usage dropdown (item 5)
+
+The usage **ring** stays the at-a-glance affordance; clicking it opens an **enriched dropdown** (the current
+popover, expanded) with a quick summary + a link to the full Usage page:
+
+- **This period** (week/month per the user's setting) — the ring + **% of allowance**, **sessions count**, and
+  **top usage by type** (1–2 lines, e.g. "Sessions · Dream images").
+- **Admins** (`budgets.manage`) additionally see **$ spent / budget** (AdminOnlyBadge); non-admins never see $
+  (the established rule — memory `selfos-usage-budget-rules`).
+- A small **recent-usage sparkline** (reusing the `TrendLine` primitive) is a nice-to-have.
+- **"View usage details →"** links to `/usage`.
+
+This is mostly enriching the existing `UsageRing` popover (already ~80% there) — no new IPC; it reads the
+existing `usage:summary` + budget state.
+
+### 13.5 Architecture & states
+
+- **Renderer** — a new `AppHeader` component (replaces the in-content `TopBar` strip + the sidebar brand
+  header); a shared `TitlebarControl` primitive (→ `/gallery`, DoD §12); the sidebar loses its brand block and
+  starts below the header. On the smallest widths (iOS/≤~360px) the brand renders as a **compact tile-only mark**
+  (no wordmark), keeping the hamburger + essential controls.
+- **Main (`window.ts`)** — set `trafficLightPosition` (macOS) / `titleBarOverlay` (Windows); expose `platform`
+  to the renderer so `AppHeader` adapts padding/controls. `--titlebar-height`, `--titlebar-traffic-width`,
+  `--control-height` tokens (`01`).
+- **States/edge cases** — fullscreen on macOS hides traffic lights → the brand reclaims the inset (listen for
+  enter/leave-fullscreen); very narrow widths (≤ ~360px) collapse the sync chip + brand wordmark first (brand →
+  tile-only mark), keeping the essential controls; the drag region never swallows control clicks (`no-drag` on
+  every control); reduced-motion respected for any header transitions.
+- **A11y** — `AppHeader` is a `<header>` with labelled controls; the usage dropdown is a proper
+  menu/disclosure with managed focus + Escape; window-control overlay colors meet contrast; keyboard reaches
+  every control. Responsive ~360px→desktop with the documented collapse order.
+- **Tests** — RTL: `AppHeader` renders brand + the control set (sync chip · usage · appearance · account),
+  controls share computed height (a geometry guard, like the existing TopBar alignment test), the usage dropdown
+  shows admin $ vs non-admin no-$. E2E: traffic-light inset present on macOS (brand not overlapping — measure
+  geometry), the usage dropdown opens + links to `/usage`, 390px guard (brand collapses to tile-only).
+  (Windows/iOS chrome verified by the user on-device, like other platform-specific work.)
+
+### 13.6 Resolved decisions (2026-06-12)
+
+- **TopBar item set** — **sync/vault status chip · usage dropdown · appearance · account**. **No**
+  section-title/breadcrumb and **no** global new-session quick action (the package-C launcher owns "start a
+  session"); kept deliberately uncluttered.
+- **Mobile brand** — **compact tile-only mark** at the smallest widths (iOS/≤~360px).
+- **Cross-platform** — **macOS fully designed + verified now**; **Windows (`titleBarOverlay`) / Linux fallback
+  best-effort**, blind-written and verified on-device later (like the iOS work).
+
+_All resolved; the amendment is build-ready pending final approval._

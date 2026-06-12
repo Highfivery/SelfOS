@@ -1,6 +1,10 @@
 # 13 — Dream images (AI image generation of a dream)
 
-> **Status:** **Built** (all 5 slices shipped to `main`) · _last updated 2026-06-12_
+> **Status:** **Built** (all 5 slices shipped to `main`) · **Review** (2026-06 style amendment, §15) · _last updated 2026-06-12_
+>
+> **2026-06 amendment (§15, package F of the app refresh):** a richer **default image style** picker (more
+> presets) plus a **free-text style description** so the dreamer can refine the look in their own words — both in
+> Settings → Dreams (defaults) and optionally per image. Read §15 with §5.3/§6.
 >
 > The deferred companion to [`12-dreams.md`](12-dreams.md): a dreamer can **visualize a dream** as a single
 > AI-generated image. It introduces SelfOS's **second AI provider** (OpenAI, for image generation only — text
@@ -789,6 +793,11 @@ Confirmed with the user (2026-06-11) — encoded above, **not** to be re-opened:
 
 ## 14. Changelog
 
+- 2026-06-12 — **2026-06 style amendment added (§15, package F of the app refresh; Review).** Expands the
+  `dreams.imageStyle` presets and adds a **free-text style description** (`dreams.imageStyleNotes`) so the
+  dreamer can refine the look in their own words; threads it through `buildImagePromptInput` while keeping the
+  baseline non-photorealistic safety framing (§8.2). Adds a reusable `textarea` settings control type. Decisions
+  in memory `app-refresh-plan-2026-06`. Renderer + one core prompt-builder param + settings.
 - 2026-06-11 — created (**Draft**). The deferred AI dream-image-generation companion spec parked in
   [`12-dreams.md`](12-dreams.md) §2/§11.2. All product decisions pre-made by the user (§12): OpenAI provider +
   admin model select, a second `openai.apiKey` in the `SecretStore`, a new `ImageClient` host interface,
@@ -920,3 +929,92 @@ defaultImageClient()` host wiring → `preload` → `test-utils/bridge` mock), a
   auto-revokes when ANY of those changes — no separate revocation/cleanup of `shareableWith` is needed, and a
   removed relationship drops the share for free.** **Spec 13 (AI dream images) is COMPLETE — all 5 slices on
   `main`. The only Dreams work left is the user's real on-device/OpenAI verification.**
+
+---
+
+## 15. 2026-06 amendment — richer image style + free-text style description
+
+Layers on the built feature (§1–§14 remain accurate). Covers app-refresh item **12**: a more comprehensive
+style picker and a free-text description so the dreamer can refine the look. Renderer + settings + one core
+prompt-builder parameter; no schema change (`Dream.image.style` is already a free string, §4.2), no new IPC, no
+provider/metering change.
+
+### 15.1 Expanded style presets
+
+Today `dreams.imageStyle` offers four presets (`dreamlike` · `painterly` · `watercolor` · `realistic`). Expand to
+a broader, curated set so the dreamer can pick a look that fits, e.g.:
+
+> dreamlike (surreal) · painterly (oil) · watercolor · gouache · ink & line art · charcoal sketch · pastel ·
+> storybook illustration · impressionist · art nouveau · ukiyo-e · cinematic · concept art · comic / graphic
+> novel · ethereal / luminous · gothic / dark · vaporwave / neon · minimalist · collage · abstract
+
+The presets are **grouped by family** in the picker (e.g. _Painted_ · _Drawn_ · _Stylized_ ·
+_Photographic-ish_) so a longer list stays scannable; the exact final set is tunable at build (these are
+representative). Each preset is a short label that becomes a style phrase in the prompt. The schema field stays a
+**free string** (`Dream.image.style`), so the set can grow without migration; the settings select and the
+per-image picker share **one constant** (`IMAGE_STYLE_PRESETS`, family-grouped) so Settings and the panel never
+drift.
+
+**Safety reconciliation (§8.2).** A baseline **"stylized / evocative, non-photorealistic"** framing remains in
+the prompt **regardless of preset** — the §8.2 reason (a figure may _resemble_ a real person from name-free
+depiction notes, so the image must never read as a photoreal likeness). So `realistic`/`cinematic` mean
+_painterly-realistic / filmic_, never photographic of a real person. The fixed `DREAMLIKE_FRAMING` becomes a
+slightly softer **"evocative, non-photorealistic"** baseline that blends with (rather than contradicts) a
+non-dreamlike preset, but the non-photorealism guarantee is non-negotiable.
+
+### 15.2 Free-text style description
+
+Add a new vault setting **`dreams.imageStyleNotes`** (free text, default empty, `visibleWhen` image-gen consent
+ON, like the other image settings) — the dreamer describes the look in their own words, e.g. _"muted earth
+tones, soft focus, golden-hour light, faint film grain."_ It **augments** the chosen preset (doesn't replace
+it).
+
+**Plumbing.** `buildImagePromptInput` (pure, §5.3) gains an optional `styleNotes?: string`. When present, after
+the `Visual style: <preset>.` line it appends `Additional style direction: <styleNotes>.`, then the baseline
+non-photorealistic safety framing (which still wins). The Claude distillation incorporates the direction into the
+single visual prompt; the name-free / no-private-fields guarantees (§5.3/§8) are unchanged — style notes are
+visual direction only and are passed through the same distillation. `dreamGenerateImage` reads
+`dreams.imageStyleNotes` from vault settings alongside the existing style/model/consent reads (host-side).
+
+**A reusable `textarea` settings control.** The settings registry (`03`) currently has a single-line `text`
+control; this adds a **`textarea`** control type (multiline, reusing the design-system `Textarea`) — generally
+useful, not dream-specific. `dreams.imageStyleNotes` uses it.
+
+### 15.3 Per-image override (panel)
+
+The `DreamImagePanel` (§3.2/§5.5) per-image **style picker** uses the expanded, grouped `IMAGE_STYLE_PRESETS`
+(same constant as Settings). **Style notes are Settings-only** (resolved) — they apply to all dream images and
+are not editable per image; the existing `dreams:generateImage({ dreamId, style? })` IPC is **unchanged** (no
+`styleNotes?` param). So a single image can still switch _preset_ on the panel; the free-text direction is a
+single default you set once in Settings.
+
+### 15.4 Edge cases, a11y & testing
+
+- **Empty style notes** — absent/blank ⇒ prompt is exactly as today (preset + framing only); never injects an
+  empty "Additional style direction:" line.
+- **Long / odd notes** — bounded to a reasonable max length (e.g. 300 chars) at the input + schema; the
+  distillation naturally compresses; no policy bypass (the safety framing + distillation still apply).
+- **Preset removed later** — a `Dream.image.style` holding a now-unlisted preset still renders (free string); the
+  picker shows it as a custom/legacy value or falls back to the default label.
+- **A11y** — the new textarea uses the design-system `Textarea` (labelled, keyboard-friendly); the expanded
+  select stays a native `Select`; responsive ~360px→desktop. `/gallery` updated if the `textarea` control type
+  surfaces a new pattern (DoD).
+- **Tests** — unit: `buildImagePromptInput` includes the `Additional style direction:` line when notes are
+  present and omits it when blank, and always includes the non-photorealistic framing. RTL: the Settings style
+  select shows the expanded presets + the notes textarea persists; the panel picker uses the shared constant.
+  E2E (fake image client): generate with a custom style + notes → assert the distillation input carried both
+  (via the fake client capture), the on-disk `Dream.image.style` is stamped, no policy/framing regression; 390px
+  guard on the Settings + panel surfaces.
+
+### 15.5 Resolved decisions (2026-06-12)
+
+- **Expanded preset list, grouped by family** (e.g. Painted / Drawn / Stylized / Photographic-ish), ~20 curated,
+  final set tunable at build, sharing one `IMAGE_STYLE_PRESETS` constant (Settings select + panel picker).
+- **Free-text `dreams.imageStyleNotes`** added (**Settings-only**, augments the preset), threaded via a new
+  `buildImagePromptInput` `styleNotes` param.
+- **Baseline non-photorealistic safety framing kept** for all presets (§8.2 preserved).
+- **New reusable `textarea` settings control type** added to the registry.
+
+### 15.6 Open questions (amendment)
+
+_All resolved (2026-06-12) — see §15.5. The amendment is build-ready pending final approval._

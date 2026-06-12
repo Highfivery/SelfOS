@@ -98,6 +98,26 @@ interface Person {
   privateNotes?: string; // encrypted, owner/self only
   email?: string; // encrypted; prefills questionnaire delivery (08); excluded from buildContext
   phone?: string; // encrypted; prefills questionnaire delivery (08); excluded from buildContext
+
+  // Descriptive profile fields (13-dream-images §4.6). SHAREABLE — feed `buildContext` for the person AND
+  // for related people (like `publicNotes`); the depiction subset (appearanceDescription + gender +
+  // ethnicity + approx age derived from `birthday`) also feeds the dream-image prompt (13 §8.2).
+  gender?: string;
+  appearanceDescription?: string;
+  ethnicity?: string;
+  occupation?: string;
+  interests?: string[];
+  location?: string;
+  goals?: string;
+  communicationStyle?: string;
+  values?: string[];
+  languages?: string[];
+  importantDates?: { label: string; date: string }[];
+  // PRIVATE — own coaching context only; never shared with other people's coach, never sent to the image
+  // provider (13 §8.2). Encrypted with the rest of the profile.
+  healthNotes?: string;
+  faith?: string;
+
   createdAt: string;
   updatedAt: string;
 }
@@ -108,6 +128,19 @@ interface Person {
 > **excluded from `buildContext`** — operational, not coaching data). Additive-optional, so existing person
 > files parse unchanged — **no `schemaVersion` bump or migration**. The People-editor contact inputs land
 > with the questionnaire-delivery slice.
+
+> **Amended** (Draft — [`13-dream-images.md`](13-dream-images.md) §4.6/§13.1, build slice 1) — added optional
+> **descriptive profile fields** used as coaching context **app-wide**, not only for images. The **shareable**
+> set (`gender`, `appearanceDescription`, `ethnicity`, `occupation`, `interests`, `location`, `goals`,
+> `communicationStyle`, `values`, `languages`, `importantDates`) feeds `buildContext` for the person **and**
+> related people — the same "may feed others' AI" bucket as `publicNotes` (§3.4); the depiction subset
+> (`appearanceDescription` + `gender` + `ethnicity` + approx age from the existing **`birthday`**, which is
+> **reused**, not duplicated) additionally feeds the dream-image prompt (13 §8.2). The **private** set
+> (`healthNotes`, `faith`) feeds **only** the person's own context, never another person's coach and never the
+> image provider — the same shareable-vs-private split as `privateNotes`. All **additive-optional**, so
+> existing person files parse unchanged — **no `schemaVersion` bump or migration** (the `email`/`phone`
+> precedent). Surfaced in the tabbed `PersonEditor` (an About group for the shareable fields, a Private group
+> for `healthNotes`/`faith`). Field-type confirmations are tracked in 13 §11. _Lands when 13 is approved/built._
 
 ### 4.2 Relationship (the graph edge)
 

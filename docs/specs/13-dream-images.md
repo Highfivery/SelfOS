@@ -1,6 +1,6 @@
 # 13 — Dream images (AI image generation of a dream)
 
-> **Status:** **Draft** · _last updated 2026-06-11_
+> **Status:** **Approved** · _last updated 2026-06-12_
 >
 > The deferred companion to [`12-dreams.md`](12-dreams.md): a dreamer can **visualize a dream** as a single
 > AI-generated image. It introduces SelfOS's **second AI provider** (OpenAI, for image generation only — text
@@ -779,3 +779,6 @@ Confirmed with the user (2026-06-11) — encoded above, **not** to be re-opened:
   deliberately export or share it. Spec body (§2/§3.5–3.6/§4.2/§4.5/§5.2–5.3/§6/§7/§8.2–8.3/§10/§13) updated in
   lockstep; build slices now 1–5 (slice 5 = export + sharing). Only small build-time confirmations remain (§11).
   Ready for the user's final approval before slice 1.
+- 2026-06-12 — **Approved.** The user reviewed the resolved spec and approved it for build. Cleared for
+  **slice 1 — the People-profile amendment** (`04` §4.1: the additive descriptive fields + `buildContext`
+  threading + the `PersonEditor` groups), then slices 2–5. Only the §11 build-time confirmations remain.

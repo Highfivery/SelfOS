@@ -239,6 +239,22 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Build (Questionnaires **§13.2 image follow-ups — orphan GC + purge-on-delete**,
+  [08-questionnaires](docs/specs/08-questionnaires.md) §3.9/§13.2). Closes the two deferred question-image
+  cleanups. Core **`imageGc.garbageCollectImages`** (`@selfos/core/questionnaires`) reaps every stored
+  image (`questionnaires/media/<id>.enc`) referenced by **no live definition AND no send snapshot**; run
+  after **`purgeQuestionnaire`/`deleteSend`** (purge-on-delete) and, in the bridge `questionnairesSave`
+  handler, after an edit that **drops** an image (the draft-remove orphan the §13.2 builder leaves behind —
+  "remove" only clears the draft). **Key correctness rule (the whole reason GC scans snapshots, not just
+  defs):** an image removed from a definition may **still be frozen in an already-sent snapshot** the
+  recipient/Results need — so it's kept until that send is also deleted. Dependency-light (inlines the def
+  scan; no `questionnaireService` import) to avoid an import cycle. Gate green: typecheck (node + web/DOM-lib),
+  lint, format, **238 core + 309 desktop unit** (+5: core `imageGc` orphan/keep/snapshot-keeps-it/shared-image
+  - a bridge edit-removes-image-reaps test), affected E2E (image round-trip + the re-ask→delete→purge flow)
+    re-run green. Synced `08` §3.9/§13.2. **Lesson: GC over a SHARED store decoupled from one entity's lifecycle
+    must scan EVERY referrer (here both live defs and frozen send snapshots) — reaping by the live def alone
+    would delete an image a sent snapshot still needs.** **The only remaining image follow-up is `getImage`
+    recipient/Inbox gating (currently `create`-only); the Questionnaires feature is otherwise fully built.**
 - 2026-06-11 — Build (Questionnaires **slice §13.6 — the external Cloudflare relay; the Questionnaires
   feature is now FULLY BUILT** except the deferred §13.2 image follow-ups + the AI image-gen companion spec;
   [08-questionnaires](docs/specs/08-questionnaires.md) §3.2/§3.4/§3.5/§3.8/§3.9/§4.1/§4.5/§5.1/§5.2/§5.4/§6/

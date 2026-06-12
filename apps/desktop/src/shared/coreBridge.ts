@@ -159,6 +159,7 @@ import {
   createRelaySend,
   drainRelaySend,
   externalSendDisclosure,
+  garbageCollectImages,
   generateQuestions,
   getAssignment,
   getAssignmentSnapshot,
@@ -993,13 +994,20 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         throw new Error('Not permitted');
       }
       const personId = await activePersonId();
+      const parsed = QuestionnaireInputSchema.parse(input);
+      // Detect images dropped by this edit BEFORE saving, so the now-orphaned media gets reaped (the
+      // builder's "remove" only clears the draft — §13.2 — leaving the encrypted file for GC).
+      const before = parsed.id ? await getQuestionnaire(ctx.fs, ctx.key, parsed.id) : null;
       // Stamp the creator (main-side, never the renderer) so deletion can enforce "creator-only" rules.
-      return saveQuestionnaire(
-        ctx.fs,
-        ctx.key,
-        QuestionnaireInputSchema.parse(input),
-        personId ?? undefined,
-      );
+      const saved = await saveQuestionnaire(ctx.fs, ctx.key, parsed, personId ?? undefined);
+      if (before) {
+        const after = new Set(saved.questions.flatMap((q) => (q.media ? [q.media.imagePath] : [])));
+        const removedAnImage = before.questions.some(
+          (q) => q.media && !after.has(q.media.imagePath),
+        );
+        if (removedAnImage) await garbageCollectImages(ctx.fs, ctx.key);
+      }
+      return saved;
     },
     questionnairesDelete: async (id): Promise<void> => {
       const ctx = await host.vaultAndKey();

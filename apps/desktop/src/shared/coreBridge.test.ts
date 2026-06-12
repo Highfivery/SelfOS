@@ -450,6 +450,38 @@ describe('createCoreBridge', () => {
     );
   });
 
+  it('reaps an orphaned image when an edit removes it from the questionnaire (§13.2 GC)', async () => {
+    const { bridge } = await freshOwner();
+    const base64 = toBase64(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 9, 9, 9]));
+    const { imagePath } = await bridge.questionnairesStoreImage({ base64, mime: 'image/png' });
+
+    const def = await bridge.questionnairesSave({
+      title: 'Has an image',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      questions: [
+        {
+          id: 'q1',
+          type: 'shortText',
+          prompt: 'Look',
+          required: false,
+          media: { imagePath, alt: 'x', mime: 'image/png' },
+        },
+      ],
+    });
+    expect(await bridge.questionnairesGetImage(imagePath)).toBe(base64); // referenced → kept
+
+    // Editing the def to drop the image reaps the now-orphaned encrypted file.
+    await bridge.questionnairesSave({
+      id: def.id,
+      title: 'Has an image',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'Look', required: false }],
+    });
+    expect(await bridge.questionnairesGetImage(imagePath)).toBeNull(); // reaped
+  });
+
   it('denies questionnaire authoring to a person without questionnaires.create (a Guest)', async () => {
     const { bridge } = await freshOwner();
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });

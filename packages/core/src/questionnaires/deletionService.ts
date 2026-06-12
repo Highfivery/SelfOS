@@ -2,6 +2,7 @@ import type { FileSystem } from '../host';
 import { deleteInsight, listAllInsights } from '../insights';
 import { purgeCompatibilityGroup } from './alignmentService';
 import { deleteAssignment, getAssignment, listAssignments } from './assignmentService';
+import { garbageCollectImages } from './imageGc';
 import { deleteQuestionnaire } from './questionnaireService';
 
 /**
@@ -41,6 +42,9 @@ export async function deleteSend(
   }
   await purgeInsightsFor(fs, key, new Set([assignmentId]));
   await deleteAssignment(fs, assignmentId);
+  // The deleted send's snapshot no longer references its images — reap any now-orphaned ones (kept if
+  // still referenced by the live def or another snapshot).
+  await garbageCollectImages(fs, key);
 }
 
 /**
@@ -63,6 +67,9 @@ export async function purgeQuestionnaire(
   await purgeInsightsFor(fs, key, new Set(sends.map((a) => a.id)));
   for (const send of sends) await deleteAssignment(fs, send.id);
   await deleteQuestionnaire(fs, questionnaireId);
+  // Purge-on-delete: with the def + all its snapshots gone, this questionnaire's images are now
+  // unreferenced — reap them (and any pre-existing orphans) in one pass.
+  await garbageCollectImages(fs, key);
 }
 
 /** Whether a questionnaire has any sends (gates a non-owner creator's "delete only while unsent"). */

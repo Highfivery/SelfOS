@@ -245,8 +245,11 @@ report.enc` + the group's derived Insight, §13.5d) + `deleteSend` + `hasSends`;
 > on create (preserved on edit, never back-filled onto a legacy def). `questionnaires:delete` is role-aware
 > — Owner/super-admin (`people.manage`) purge at any stage; a non-owner **creator** deletes their own
 > **only while unsent**. Per-send delete is `assignments:delete` (sender/admin-only). Inline "Are you sure?"
-> confirms in the builder + each Results send card. **Deferred to §13.6:** the relay-link revoke for an
-> external send.
+> confirms in the builder + each Results send card. **Built §13.6:** the relay-link **revoke** before an
+> external send's teardown, and **question-image garbage collection** — `purgeQuestionnaire`/`deleteSend`
+> (and an image-dropping save) run `imageGc.garbageCollectImages`, which deletes media referenced by no
+> live definition or send snapshot (an image still frozen in a sent snapshot is kept until that send is
+> also gone).
 
 - **Owner / super-admin** delete **any** questionnaire at any stage → **purge everything** (questionnaire +
   relay link + raw responses + Insights) after a clear confirmation; the relay link is revoked.
@@ -848,10 +851,14 @@ Confirmed with the user (2026-06-10):
      `questionnaires.create`, mime + ≤5 MB re-validated in main, reads/deletes `isMediaPath`-confined).
      `Question.media` gains **`mime`** (additive — no migration). The builder shows a thumbnail + a
      **required alt-text** field (a11y); the shared `QuestionnaireForm` takes a `loadImage` prop and
-     renders the image (so the relay can supply its own decrypt). **§13.2 is now complete.** **Deferred:**
-     orphan-image GC + purge-referenced-images on questionnaire delete (§3.9); copying images into the
-     immutable send snapshot + the relay's zero-knowledge re-encryption (§13.5/§13.6); revisiting
-     `getImage` gating for the recipient/Inbox view (currently `create`-only)._
+     renders the image (so the relay can supply its own decrypt). **§13.2 is now complete.** **Deferred —
+     since DONE:** copying images into the immutable send snapshot + the relay's zero-knowledge
+     re-encryption (built §13.6); **orphan-image GC + purge-referenced-images on delete (built 2026-06-11
+     — core `imageGc.garbageCollectImages`: scans every live definition AND every send snapshot, deletes
+     media referenced by neither; run after `purgeQuestionnaire`/`deleteSend` (purge-on-delete) and after
+     an image-dropping save (the draft-remove orphan). The reference scan covers snapshots too, so an image
+     removed from a def but still frozen in a sent snapshot is kept until that send is also gone, §3.9).**
+     **Still deferred:** revisiting `getImage` gating for the recipient/Inbox view (currently `create`-only)._
 3. **AI generate + gap-finder** — brief + data-grounded generation (safety pass, schema-valid, de-dup) via
    the registry; the Suggested surface; metered + budget-gated.
    - _**Built 2026-06-11:** the **context-provider registry** (`registerContextProvider` + built-in
@@ -996,6 +1003,13 @@ compatibilityGroupId`, each with its own frozen variant snapshot); blocked when 
 
 ## 14. Changelog
 
+- 2026-06-11 — **§13.2 image follow-ups built (orphan GC + purge-on-delete).** Core
+  **`imageGc.garbageCollectImages`** reaps every stored question image not referenced by any live
+  definition **or** send snapshot; runs after `purgeQuestionnaire`/`deleteSend` (purge-on-delete) and after
+  an edit that drops an image (the draft-remove orphan, via the bridge). The reference scan deliberately
+  covers send snapshots, so an image removed from a def but still frozen in an already-sent snapshot is
+  **kept** until that send is also deleted. +5 unit (core `imageGc` + a bridge edit-removes-image-reaps
+  test). The only remaining image follow-up is `getImage` recipient/Inbox gating (currently `create`-only).
 - 2026-06-11 — **§13.6 built — the external Cloudflare relay; the Questionnaires feature is now fully built.**
   Decisions confirmed (ask-first): the whole relay on **one branch**; tested against a **fake Worker/Cloudflare**
   (`SELFOS_FAKE_RELAY`), real deploy user-verified later; **question-image ZK included**; spec **§11.3 retention

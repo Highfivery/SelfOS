@@ -12,6 +12,7 @@ export * from './trends';
 export * from './customTypeService';
 export * from './answering';
 export * from './imageService';
+export * from './imageGc';
 export * from './contextProviders';
 export * from './generationService';
 export * from './gapFinderService';

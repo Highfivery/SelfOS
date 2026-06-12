@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Lock, Send } from 'lucide-react';
-import type { PrivacyMode } from '@shared/channels';
+import type { PrivacyMode, SensitivityTier } from '@shared/schemas';
 import {
   Banner,
   Button,
@@ -13,7 +13,10 @@ import {
   Text,
 } from '../../../design-system/components';
 import { usePeopleStore } from '../../../stores/peopleStore';
+import { RelaySendPanel } from './RelaySendPanel';
 import styles from './Questionnaires.module.css';
+
+type RecipientKind = 'household' | 'external';
 
 /** Per-mode disclosure copy — this is what the recipient is told, so the promise stays honest (§3.2/§8). */
 const PRIVACY_COPY: Record<PrivacyMode, string> = {
@@ -30,11 +33,13 @@ const PRIVACY_COPY: Record<PrivacyMode, string> = {
 export function QuestionnaireSendPanel({
   questionnaireId,
   title,
+  sensitivity,
   onCancel,
   onSent,
 }: {
   questionnaireId: string;
   title: string;
+  sensitivity: SensitivityTier;
   onCancel: () => void;
   onSent: (recipientName: string) => void;
 }): JSX.Element {
@@ -45,6 +50,7 @@ export function QuestionnaireSendPanel({
     if (!loaded) void loadPeople();
   }, [loaded, loadPeople]);
 
+  const [kind, setKind] = useState<RecipientKind>('household');
   const [recipientId, setRecipientId] = useState('');
   const [privacy, setPrivacy] = useState<PrivacyMode>('private'); // default: Private (break-glass)
   const [busy, setBusy] = useState(false);
@@ -97,58 +103,78 @@ export function QuestionnaireSendPanel({
       <Stack gap={4}>
         <Heading level={3}>Send “{title}”</Heading>
 
-        <Field label="Send to">
-          {(props) => (
-            <Select
-              {...props}
-              value={recipientId}
-              onChange={(event) => {
-                setError(null);
-                setRecipientId(event.target.value);
-              }}
-            >
-              <option value="">Choose a person…</option>
-              {people.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.displayName}
-                </option>
-              ))}
-            </Select>
-          )}
-        </Field>
+        <SegmentedControl<RecipientKind>
+          aria-label="Recipient"
+          value={kind}
+          onChange={setKind}
+          options={[
+            { value: 'household', label: 'Someone in the household' },
+            { value: 'external', label: 'Someone else (link)' },
+          ]}
+        />
 
-        <Stack gap={2}>
-          <Text size="sm" weight={500}>
-            Privacy
-          </Text>
-          <SegmentedControl<PrivacyMode>
-            aria-label="Privacy mode"
-            value={privacy}
-            onChange={setPrivacy}
-            options={[
-              { value: 'private', label: 'Private' },
-              { value: 'standard', label: 'Standard' },
-            ]}
+        {kind === 'external' ? (
+          <RelaySendPanel
+            questionnaireId={questionnaireId}
+            sensitivity={sensitivity}
+            onDone={onCancel}
           />
-          <Text size="sm" tone="secondary">
-            {privacy === 'private' ? (
-              <Lock size={12} aria-hidden="true" className={styles.privacyIcon} />
-            ) : null}
-            {PRIVACY_COPY[privacy]}
-          </Text>
-        </Stack>
+        ) : (
+          <>
+            <Field label="Send to">
+              {(props) => (
+                <Select
+                  {...props}
+                  value={recipientId}
+                  onChange={(event) => {
+                    setError(null);
+                    setRecipientId(event.target.value);
+                  }}
+                >
+                  <option value="">Choose a person…</option>
+                  {people.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.displayName}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
 
-        {error ? <Banner tone="warning">{error}</Banner> : null}
+            <Stack gap={2}>
+              <Text size="sm" weight={500}>
+                Privacy
+              </Text>
+              <SegmentedControl<PrivacyMode>
+                aria-label="Privacy mode"
+                value={privacy}
+                onChange={setPrivacy}
+                options={[
+                  { value: 'private', label: 'Private' },
+                  { value: 'standard', label: 'Standard' },
+                ]}
+              />
+              <Text size="sm" tone="secondary">
+                {privacy === 'private' ? (
+                  <Lock size={12} aria-hidden="true" className={styles.privacyIcon} />
+                ) : null}
+                {PRIVACY_COPY[privacy]}
+              </Text>
+            </Stack>
 
-        <div className={styles.footer}>
-          <Button variant="primary" onClick={() => void onSend()} disabled={busy}>
-            <Send size={16} aria-hidden="true" />
-            Send
-          </Button>
-          <Button variant="secondary" onClick={onCancel} disabled={busy}>
-            Cancel
-          </Button>
-        </div>
+            {error ? <Banner tone="warning">{error}</Banner> : null}
+
+            <div className={styles.footer}>
+              <Button variant="primary" onClick={() => void onSend()} disabled={busy}>
+                <Send size={16} aria-hidden="true" />
+                Send
+              </Button>
+              <Button variant="secondary" onClick={onCancel} disabled={busy}>
+                Cancel
+              </Button>
+            </div>
+          </>
+        )}
       </Stack>
     </Card>
   );

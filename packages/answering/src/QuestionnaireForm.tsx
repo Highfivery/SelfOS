@@ -1,21 +1,22 @@
-import { useEffect } from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { useEffect, type ReactNode } from 'react';
 import { visibleQuestions, allocationTotal } from '@selfos/core/questionnaires';
 import type { AnswerValue, AnswerMap } from '@selfos/core/questionnaires';
-import type { Question } from '@shared/schemas';
-import { IconButton, Slider, Text, Textarea, TextInput } from '../../../design-system/components';
-import { CrisisFooter } from '../sessions/CrisisFooter';
-import { QuestionImage } from './QuestionImage';
-import styles from './QuestionnaireForm.module.css';
+import type { Question } from '@selfos/core/schemas';
+import { CrisisFooter } from './CrisisFooter';
+import { QuestionImage, type LoadImage } from './QuestionImage';
+import styles from './styles.module.css';
 
-/** Decrypt an attached image to base64 for display; the host wires this to its image source. */
-export type LoadImage = (imagePath: string) => Promise<string | null>;
+export type { LoadImage } from './QuestionImage';
 
 /**
- * The shared questionnaire-answering renderer (08-questionnaires §5.3) — used by preview / test-on-self
- * now, and the in-app Inbox + relay page later (one renderer, many hosts). It renders the currently
- * **visible** questions (branch-aware), one control per answer type, and never persists anything: the
- * host owns the `answers` state. The crisis footer + not-medical line are always present (§8.2).
+ * The shared questionnaire-answering renderer (08-questionnaires §5.3) — the ONE implementation used by
+ * preview / test-on-self, the in-app Inbox, AND the relay answering page (one renderer, many hosts). It
+ * renders the currently **visible** questions (branch-aware), one control per answer type, and never
+ * persists anything: the host owns the `answers` state. The crisis footer + not-medical line are always
+ * present (§8.2) — a host may swap in its own `footer`, but one is always shown.
+ *
+ * Self-contained: plain elements + token CSS, depending only on the pure `@selfos/core/questionnaires`
+ * `answering` helper — no app design-system — so it bundles into the relay Worker's static page too.
  */
 interface QuestionnaireFormProps {
   questions: Question[];
@@ -23,6 +24,8 @@ interface QuestionnaireFormProps {
   onChange: (questionId: string, value: AnswerValue) => void;
   /** Supplies decrypted image bytes for any question with `media`; omit to skip image rendering. */
   loadImage?: LoadImage;
+  /** Crisis affordance shown below the questions; defaults to the built-in `CrisisFooter` (§8.2). */
+  footer?: ReactNode;
 }
 
 const range = (min: number, max: number): number[] => {
@@ -87,7 +90,9 @@ function SliderControl({
   const current = typeof value === 'number' ? value : scale.min;
   return (
     <div className={styles.sliderWrap}>
-      <Slider
+      <input
+        type="range"
+        className={styles.slider}
         min={scale.min}
         max={scale.max}
         step={scale.step ?? 1}
@@ -96,15 +101,9 @@ function SliderControl({
         onChange={(event) => set(Number(event.target.value))}
       />
       <div className={styles.sliderScale}>
-        <Text size="xs" tone="secondary">
-          {scale.minLabel ?? scale.min}
-        </Text>
-        <Text size="sm" weight={600}>
-          {current}
-        </Text>
-        <Text size="xs" tone="secondary">
-          {scale.maxLabel ?? scale.max}
-        </Text>
+        <span className={styles.sliderEnd}>{scale.minLabel ?? scale.min}</span>
+        <span className={styles.sliderValue}>{current}</span>
+        <span className={styles.sliderEnd}>{scale.maxLabel ?? scale.max}</span>
       </div>
     </div>
   );
@@ -145,22 +144,28 @@ function RankingControl({
             {index + 1}
           </span>
           <span className={styles.rankText}>{option}</span>
-          <IconButton
+          <button
+            type="button"
+            className={styles.rankButton}
             aria-label={`Move ${option} up`}
-            variant="secondary"
             disabled={index === 0}
             onClick={() => move(index, -1)}
           >
-            <ChevronUp size={16} aria-hidden="true" />
-          </IconButton>
-          <IconButton
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M18 15l-6-6-6 6" stroke="currentColor" strokeWidth="2" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className={styles.rankButton}
             aria-label={`Move ${option} down`}
-            variant="secondary"
             disabled={index === order.length - 1}
             onClick={() => move(index, 1)}
           >
-            <ChevronDown size={16} aria-hidden="true" />
-          </IconButton>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" />
+            </svg>
+          </button>
         </li>
       ))}
     </ol>
@@ -181,7 +186,9 @@ function Control({
   switch (question.type) {
     case 'shortText':
       return (
-        <TextInput
+        <input
+          type="text"
+          className={styles.input}
           value={typeof value === 'string' ? value : ''}
           aria-label={question.prompt}
           onChange={(event) => set(event.target.value)}
@@ -189,7 +196,9 @@ function Control({
       );
     case 'longText':
       return (
-        <Textarea
+        <textarea
+          className={styles.textarea}
+          rows={4}
           value={typeof value === 'string' ? value : ''}
           aria-label={question.prompt}
           onChange={(event) => set(event.target.value)}
@@ -197,8 +206,9 @@ function Control({
       );
     case 'date':
       return (
-        <TextInput
+        <input
           type="date"
+          className={styles.input}
           value={typeof value === 'string' ? value : ''}
           aria-label={question.prompt}
           onChange={(event) => set(event.target.value)}
@@ -324,28 +334,35 @@ function Control({
           {options.map((bucket) => (
             <div key={bucket} className={styles.allocationRow}>
               <span className={styles.allocationLabel}>{bucket}</span>
-              <TextInput
+              <input
                 type="number"
                 min={0}
+                className={`${styles.input} ${styles.allocationInput}`}
                 value={String(current[bucket] ?? 0)}
                 aria-label={`${question.prompt} — ${bucket}`}
                 onChange={(event) => {
                   // Clamp to ≥ 0 so a negative bucket can't fake a 100-point total (this control is
-                  // the shared answering renderer the Inbox + relay will reuse).
+                  // the shared answering renderer the Inbox + relay reuse).
                   const n = Number(event.target.value);
                   set({ ...current, [bucket]: Number.isFinite(n) ? Math.max(0, n) : 0 });
                 }}
               />
             </div>
           ))}
-          <Text size="sm" tone={remaining === 0 ? 'secondary' : 'accent'}>
+          <p
+            className={
+              remaining === 0
+                ? `${styles.allocationHint} ${styles.allocationHintDone}`
+                : `${styles.allocationHint} ${styles.allocationHintLeft}`
+            }
+          >
             {remaining === 0 ? 'All 100 points allocated.' : `${remaining} of 100 points left.`}
-          </Text>
+          </p>
         </div>
       );
     }
     default:
-      return <Text tone="secondary">Unsupported question type.</Text>;
+      return <p className={styles.help}>Unsupported question type.</p>;
   }
 }
 
@@ -375,11 +392,7 @@ function QuestionField({
           </>
         ) : null}
       </legend>
-      {question.help ? (
-        <Text size="sm" tone="secondary">
-          {question.help}
-        </Text>
-      ) : null}
+      {question.help ? <p className={styles.help}>{question.help}</p> : null}
       {question.media && loadImage ? (
         <QuestionImage media={question.media} loadImage={loadImage} />
       ) : null}
@@ -393,12 +406,13 @@ export function QuestionnaireForm({
   answers,
   onChange,
   loadImage,
+  footer,
 }: QuestionnaireFormProps): JSX.Element {
   const visible = visibleQuestions(questions, answers);
   return (
     <div className={styles.form}>
       {visible.length === 0 ? (
-        <Text tone="secondary">Add a question with a prompt to preview it.</Text>
+        <p className={styles.empty}>Add a question with a prompt to preview it.</p>
       ) : (
         visible.map((question) => (
           <QuestionField
@@ -410,7 +424,7 @@ export function QuestionnaireForm({
           />
         ))
       )}
-      <CrisisFooter />
+      {footer ?? <CrisisFooter />}
     </div>
   );
 }

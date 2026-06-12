@@ -1,0 +1,23 @@
+{
+  "name": "@selfos/answering",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "SelfOS shared questionnaire-answering renderer (08-questionnaires §5.3). The ONE implementation of the answer-type controls, branching/required gating, and crisis footer — imported by both the Electron renderer and the apps/relay zero-knowledge answering page so the two hosts never diverge. Self-contained: plain elements + design-token CSS (no app design-system dependency), driven by the pure @selfos/core/questionnaires `answering` helper.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@selfos/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.18",
+    "react": "^18.3.1"
+  }
+}

@@ -4,7 +4,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Question } from '@shared/schemas';
 import type { AnswerMap, AnswerValue } from '@selfos/core/questionnaires';
-import { QuestionnaireForm } from './QuestionnaireForm';
+import { QuestionnaireForm } from '@selfos/answering';
 import { QuestionnairePreview } from './QuestionnairePreview';
 
 function q(over: Partial<Question> & Pick<Question, 'id' | 'type' | 'prompt'>): Question {

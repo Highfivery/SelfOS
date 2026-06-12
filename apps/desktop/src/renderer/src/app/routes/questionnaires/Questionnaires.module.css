@@ -410,6 +410,51 @@
   margin-left: auto;
 }
 
+.resultsHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+/* Relay external-send + delivery layout. */
+.toggleRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.toggleText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.copyRow {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-2);
+}
+
+.copyRow > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.pinValue {
+  font-family: var(--font-mono);
+  letter-spacing: 0.2em;
+}
+
+.deliveryRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
 /* Inline lock glyph that precedes the Private-mode disclosure copy in the send panel. */
 .privacyIcon {
   vertical-align: -1px;

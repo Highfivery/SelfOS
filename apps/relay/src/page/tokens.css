@@ -1,0 +1,83 @@
+/*
+ * Relay page design tokens — mirror the SelfOS app palette + scale (01-design-system) so the answering
+ * page feels like one product, while staying a standalone bundle. Light by default; dark via the OS
+ * preference. The shared @selfos/answering form reads these same variables.
+ */
+:root {
+  --font-sans: 'Mulish Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.9375rem;
+  --text-md: 1.0625rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.5rem;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 999px;
+
+  --motion-fast: 120ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  --color-bg: #f7f2ea;
+  --color-surface: #ffffff;
+  --color-surface-alt: #fbf7f1;
+  --color-border: #e7dfd3;
+  --color-border-strong: #d7cdbc;
+  --color-text-primary: #2e2a25;
+  --color-text-secondary: #6e665c;
+  --color-text-tertiary: #948b7e;
+
+  --color-accent: #6e8fa6;
+  --color-accent-solid: #4f7388;
+  --color-accent-solid-text: #ffffff;
+  --color-accent-text: #3e5f73;
+  --color-accent-subtle-bg: #ecf1f5;
+  --color-focus-ring: rgba(110, 143, 166, 0.5);
+
+  --color-danger: #c25b4e;
+  --color-danger-subtle-bg: #f7e6e3;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #1c1a17;
+    --color-surface: #26231f;
+    --color-surface-alt: #2f2b26;
+    --color-border: #38332c;
+    --color-border-strong: #4a4339;
+    --color-text-primary: #ece5db;
+    --color-text-secondary: #a79e92;
+    --color-text-tertiary: #7c7468;
+
+    --color-accent: #94b2c6;
+    --color-accent-solid: #94b2c6;
+    --color-accent-solid-text: #1c1a17;
+    --color-accent-text: #afc7d6;
+    --color-accent-subtle-bg: #2a3742;
+    --color-focus-ring: rgba(148, 178, 198, 0.55);
+
+    --color-danger: #e08c7f;
+    --color-danger-subtle-bg: #3a2a27;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

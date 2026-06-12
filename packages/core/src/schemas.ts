@@ -565,6 +565,128 @@ export const RawAccessAuditLogSchema = z.object({
 });
 export type RawAccessAuditLog = z.infer<typeof RawAccessAuditLogSchema>;
 
+// ── Relay: external zero-knowledge delivery (08-questionnaires §3.4/§4.5/§5.4/§8.6) ──────────────────
+// The Worker stores ONLY ciphertext. Questions (+ author images) are sealed under a symmetric content
+// key carried in the URL **fragment** (never sent to the server); responses are sealed to the send's
+// public key in the recipient's browser. These schemas validate every wire boundary on both hosts.
+
+/** AES-256-GCM envelope (matches the crypto `EncryptedEnvelope`), Zod-validated at the relay boundary. */
+export const EncryptedEnvelopeSchema = z.object({
+  v: z.literal(1),
+  alg: z.literal('aes-256-gcm'),
+  iv: z.string().min(1),
+  tag: z.string().min(1),
+  data: z.string(),
+});
+export type EncryptedEnvelopeData = z.infer<typeof EncryptedEnvelopeSchema>;
+
+/**
+ * The plaintext questionnaire content the recipient's browser decrypts with the URL-fragment content
+ * key. The relay only ever holds the sealed form of this. `images` maps each `Question.media.imagePath`
+ * to its bytes sealed under the same content key (§8.6), so author images decrypt client-side too.
+ */
+export const RelayContentSchema = z.object({
+  schemaVersion: z.number().int().positive(),
+  questionnaire: QuestionnaireSchema, // the immutable as-sent snapshot the recipient answers
+  publicKey: z.string().min(1), // seal responses to this (ECDH P-256, base64 raw)
+  senderName: z.string().nullable(), // null = anonymous
+  disclosure: z.string(), // the honest privacy text, DERIVED from privacy/visibility (§8.4)
+  images: z.record(z.string(), EncryptedEnvelopeSchema), // imagePath → sealed bytes (content key)
+});
+export type RelayContent = z.infer<typeof RelayContentSchema>;
+
+/** A response sealed to the send public key (ephemeral ECDH + AES-GCM) — the relay never sees plaintext. */
+export const SealedResponseSchema = z.object({
+  epk: z.string().min(1), // ephemeral public key (base64 raw)
+  env: EncryptedEnvelopeSchema, // AES-GCM(RelayResponsePayload)
+});
+export type SealedResponse = z.infer<typeof SealedResponseSchema>;
+
+/** Age attestation captured on the relay before sensitive content renders (§8.3). */
+export const AgeAttestationSchema = z.object({
+  tier: SensitivityTierSchema,
+  method: z.enum(['checkbox', 'dob']),
+  bornBefore: z.string().optional(), // the DOB the recipient attested being born on/before (dob method)
+});
+export type AgeAttestation = z.infer<typeof AgeAttestationSchema>;
+
+/** The consent/disclosure the recipient saw, sealed inside the response (the app fills in the rest). */
+export const RelayConsentInfoSchema = z.object({
+  disclosureShown: z.string(),
+  senderShown: z.string().nullable(),
+  ageAttestation: AgeAttestationSchema.optional(),
+});
+export type RelayConsentInfo = z.infer<typeof RelayConsentInfoSchema>;
+
+/** What's inside a sealed response — a submission or a decline (both zero-knowledge to the relay). */
+export const RelayResponsePayloadSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('submit'),
+    answers: z.array(AnswerSchema),
+    submittedAt: z.string(),
+    consent: RelayConsentInfoSchema.optional(),
+  }),
+  z.object({ kind: z.literal('decline'), note: z.string().optional(), at: z.string() }),
+]);
+export type RelayResponsePayload = z.infer<typeof RelayResponsePayloadSchema>;
+
+/** The mailbox the app uploads + the Worker stores per token (ciphertext + the PIN gate). */
+export const RelayMailboxSchema = z.object({
+  schemaVersion: z.number().int().positive(),
+  token: z.string().min(1),
+  sealedContent: EncryptedEnvelopeSchema, // RelayContent sealed under the fragment content key
+  pinHash: z.string().min(1), // scrypt `salt:hash`; the Worker PIN-gates content release (rate-limited)
+  createdAt: z.string(),
+  expiresAt: z.string().optional(), // unclaimed expiry (§11.3); omitted = the 60-day default applied app-side
+});
+export type RelayMailbox = z.infer<typeof RelayMailboxSchema>;
+
+/** A response the Worker is holding for the app to drain (purge-on-drain). */
+export const RelayStoredResponseSchema = z.object({
+  sealed: SealedResponseSchema,
+  receivedAt: z.string(),
+});
+export type RelayStoredResponse = z.infer<typeof RelayStoredResponseSchema>;
+
+/** The consent/disclosure receipt stored with an external response (§4.5/§8.3/§8.5). */
+export const ConsentReceiptSchema = z.object({
+  schemaVersion: z.number().int().positive(),
+  assignmentId: z.string().min(1),
+  disclosureShown: z.string(), // the exact derived privacy text shown
+  senderShown: z.string().nullable(), // the name shown, or null if anonymous
+  ageAttestation: AgeAttestationSchema.optional(),
+  at: z.string(),
+});
+export type ConsentReceipt = z.infer<typeof ConsentReceiptSchema>;
+
+/**
+ * The per-household relay configuration (`config/relay.enc`, encrypted — §4.1/§4.5). The Cloudflare API
+ * token + the drain secret are secrets that **never cross to the renderer** (the IPC bridge is the
+ * boundary); they live host-side only. `relayVersion` is the deployed Worker version for one-click update.
+ */
+export const RelayConfigSchema = z.object({
+  schemaVersion: z.number().int().positive(),
+  endpointUrl: z.string().min(1),
+  drainSecret: z.string().min(1),
+  cloudflare: z.object({
+    accountId: z.string().min(1),
+    apiToken: z.string().min(1),
+    relayVersion: z.string().min(1),
+    scriptName: z.string().min(1), // the deployed Worker name (for update/teardown)
+    kvNamespaceId: z.string().min(1), // the provisioned KV namespace (for teardown)
+  }),
+});
+export type RelayConfig = z.infer<typeof RelayConfigSchema>;
+
+/** Renderer-safe relay status (no secrets) for the admin Settings → Relay panel. */
+export const RelayStatusSchema = z.object({
+  configured: z.boolean(),
+  endpointUrl: z.string().optional(),
+  relayVersion: z.string().optional(),
+  updateAvailable: z.boolean(),
+});
+export type RelayStatus = z.infer<typeof RelayStatusSchema>;
+
 /** How aligned two answerers were on one canonical question (08-questionnaires §3.6). */
 export const AlignmentAgreementSchema = z.enum(['aligned', 'mixed', 'divergent']);
 export type AlignmentAgreement = z.infer<typeof AlignmentAgreementSchema>;
@@ -839,6 +961,7 @@ export interface QuestionTrend {
 export interface SendResult {
   assignmentId: string;
   recipientName: string;
+  channel: Channel; // 'relay' = an external link send (drainable / revocable); 'inApp' = household
   status: AssignmentStatus;
   privacy: PrivacyMode;
   createdAt: string;

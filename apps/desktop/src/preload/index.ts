@@ -112,6 +112,15 @@ const bridge: SelfosBridge = {
     ipcRenderer.invoke(IpcChannels.assignmentsAlign, compatibilityGroupId),
   assignmentsRevealRaw: (assignmentId) =>
     ipcRenderer.invoke(IpcChannels.assignmentsRevealRaw, assignmentId),
+  assignmentsCreateRelayLink: (input) =>
+    ipcRenderer.invoke(IpcChannels.assignmentsCreateRelayLink, input),
+  assignmentsDrain: () => ipcRenderer.invoke(IpcChannels.assignmentsDrain),
+  assignmentsRevoke: (assignmentId) =>
+    ipcRenderer.invoke(IpcChannels.assignmentsRevoke, assignmentId),
+  relayStatus: () => ipcRenderer.invoke(IpcChannels.relayStatus),
+  relayConnect: (input) => ipcRenderer.invoke(IpcChannels.relayConnect, input),
+  relayUpdate: () => ipcRenderer.invoke(IpcChannels.relayUpdate),
+  relayTeardown: () => ipcRenderer.invoke(IpcChannels.relayTeardown),
   auditList: () => ipcRenderer.invoke(IpcChannels.auditList),
   dreamsList: () => ipcRenderer.invoke(IpcChannels.dreamsList),
   dreamGet: (id) => ipcRenderer.invoke(IpcChannels.dreamGet, id),

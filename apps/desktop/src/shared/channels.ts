@@ -42,6 +42,7 @@ import type {
   QuestionTrend,
   Relationship,
   RelationshipInput,
+  RelayStatus,
   Role,
   SensitivityTier,
   UsageEvent,
@@ -135,6 +136,13 @@ export const IpcChannels = {
   assignmentsCompatibility: 'assignments:compatibility',
   assignmentsAlign: 'assignments:align',
   assignmentsRevealRaw: 'assignments:revealRaw',
+  assignmentsCreateRelayLink: 'assignments:createRelayLink',
+  assignmentsDrain: 'assignments:drain',
+  assignmentsRevoke: 'assignments:revoke',
+  relayStatus: 'relay:status',
+  relayConnect: 'relay:connect',
+  relayUpdate: 'relay:update',
+  relayTeardown: 'relay:teardown',
   auditList: 'audit:list',
   dreamsList: 'dreams:list',
   dreamGet: 'dreams:get',
@@ -446,6 +454,34 @@ export interface SelfosBridge {
    * compatibility send holding `questionnaires.readRaw`. Returns null if not permitted / absent.
    */
   assignmentsRevealRaw(assignmentId: string): Promise<SendAnswer[] | null>;
+  /**
+   * Mint an external (relay) send: snapshots the questionnaire, seals it to a new per-send keypair +
+   * content key, uploads the ciphertext mailbox, and returns the recipient link (content key in the
+   * fragment) + the 6-digit PIN, shown once for delivery. Requires `questionnaires.sendExternal` + a
+   * configured relay. The Cloudflare token + drain secret never cross to the renderer.
+   */
+  assignmentsCreateRelayLink(input: {
+    questionnaireId: string;
+    recipient: { kind: 'external'; displayName?: string; email?: string; phone?: string };
+    senderVisibleToRecipient: boolean;
+    privacy?: PrivacyMode;
+    expiresAt?: string;
+  }): Promise<{ assignmentId: string; link: string; pin: string }>;
+  /**
+   * Drain the active person's external sends: fetch + locally decrypt any responses, persist them, and
+   * purge the relay copies. Returns how many were collected. Requires `questionnaires.sendExternal`.
+   */
+  assignmentsDrain(): Promise<{ drained: number; declined: number }>;
+  /** Revoke an external send's relay link (sender or admin). Requires `questionnaires.sendExternal`. */
+  assignmentsRevoke(assignmentId: string): Promise<void>;
+  /** The relay connection status (no secrets) for the send panel + admin Relay setup. */
+  relayStatus(): Promise<RelayStatus>;
+  /** Connect + deploy the household relay to Cloudflare (admin-only). Returns the new status. */
+  relayConnect(input: { apiToken: string; accountId: string }): Promise<RelayStatus>;
+  /** Re-deploy the latest relay Worker version (admin-only). */
+  relayUpdate(): Promise<RelayStatus>;
+  /** Tear down + forget the relay (admin-only). */
+  relayTeardown(): Promise<RelayStatus>;
   /** The break-glass raw-access audit trail, newest first. Super-admin only. */
   auditList(): Promise<RawAccessAuditEntry[]>;
   /** The active person's dreams, newest first (12-dreams). Requires `dreams.own`. */

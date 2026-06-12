@@ -62,9 +62,25 @@ import {
   type Person,
   type Questionnaire,
   type Relationship,
+  type RelayConfig,
+  type RelayStatus,
 } from './schemas';
 import { OWNER_ROLE_ID, roleAllows, type CapabilityKey } from './capabilities';
 import { runConnectionTest } from './claudeProxy';
+import {
+  deployRelay,
+  teardownRelay,
+  updateRelay,
+  type FetchLike,
+  type RelayBundle,
+} from './relay/cloudflareDeployer';
+import { createRelayHttpClient } from './relay/relayHttpClient';
+import {
+  clearRelayConfig,
+  readRelayConfig,
+  relayStatusOf,
+  writeRelayConfig,
+} from './relay/relayConfig';
 import type { ClaudeClient, FileSystem, SecretStore } from '@selfos/core/host';
 import { uuid } from '@selfos/core/id';
 import {
@@ -140,6 +156,9 @@ import {
   getAlignmentReport,
   getCompatibilityGroup,
   hasSends,
+  createRelaySend,
+  drainRelaySend,
+  externalSendDisclosure,
   generateQuestions,
   getAssignment,
   getAssignmentSnapshot,
@@ -156,6 +175,8 @@ import {
   MAX_IMAGE_BYTES,
   openAssignment,
   purgeQuestionnaire,
+  revokeRelayForDeletion,
+  revokeRelaySend,
   saveProgress,
   saveQuestionnaire,
   storeQuestionnaireImage,
@@ -229,6 +250,16 @@ export interface BridgeHost {
   setSuperAdminActive(active: boolean): void;
   /** The app version string (About section). */
   appVersion: string;
+
+  // --- Relay (external delivery, 08-questionnaires §5.2/§5.4) ---
+  /** Relay host surface: outbound `fetch` (Cloudflare REST + Worker) + the built Worker bundle to deploy. */
+  relay: {
+    fetch: FetchLike;
+    /** The built relay Worker (`apps/relay/dist/worker.js`) + its version, read host-side. */
+    loadBundle(): Promise<RelayBundle>;
+    /** The app's current bundled relay version (drives the "update available" check). */
+    currentVersion: string;
+  };
 
   // --- Streaming sink ---
   /** Deliver a chat reply chunk to the renderer (Electron → IPC event; iOS → in-webview listener). */
@@ -377,6 +408,22 @@ const ImproveSchema = z.object({
 });
 const SuggestSchema = z.object({ targetPersonId: z.string().min(1).optional() });
 const AnalyzeSchema = z.object({ assignmentId: z.string().min(1) });
+const CreateRelayLinkSchema = z.object({
+  questionnaireId: z.string().min(1),
+  recipient: z.object({
+    kind: z.literal('external'),
+    displayName: z.string().optional(),
+    email: z.string().optional(),
+    phone: z.string().optional(),
+  }),
+  privacy: z.enum(['standard', 'private']).optional(),
+  senderVisibleToRecipient: z.boolean().optional(),
+  expiresAt: z.string().datetime().optional(),
+});
+const RelayConnectSchema = z.object({
+  apiToken: z.string().min(1),
+  accountId: z.string().min(1),
+});
 const InsightFactInputSchema = z.object({
   id: z.string().min(1),
   text: z.string(),
@@ -426,6 +473,26 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     const account = access.accounts.find((candidate) => candidate.personId === personId);
     const role = access.roles.find((candidate) => candidate.id === account?.roleId);
     return roleAllows(role, capability);
+  };
+
+  /**
+   * Best-effort revoke of the relay links for the sends matching `predicate`, before a deletion purges
+   * them (§3.9). No-op if no relay is configured; a relay that's unreachable doesn't block the delete —
+   * the mailbox expires on its own (§11.3).
+   */
+  const revokeRelayLinks = async (
+    fs: FileSystem,
+    key: Uint8Array,
+    predicate: (assignment: Assignment) => boolean,
+  ): Promise<void> => {
+    const config = await readRelayConfig(fs, key);
+    if (!config) return;
+    const client = createRelayHttpClient(config.endpointUrl, config.drainSecret, host.relay.fetch);
+    for (const assignment of await listAssignments(fs, key, {})) {
+      if (assignment.relay && predicate(assignment)) {
+        await revokeRelayForDeletion(fs, key, client, assignment.id);
+      }
+    }
   };
 
   /** Build the deps for an AI authoring call, gated by `capability`; null if not permitted. */
@@ -941,6 +1008,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // Owner / super-admin (people.manage) purge a questionnaire + everything downstream at any stage
       // (§3.9). A non-owner creator may delete their OWN questionnaire only while it is still unsent.
       if (await activePersonCan(ctx.fs, ctx.key, 'people.manage')) {
+        await revokeRelayLinks(ctx.fs, ctx.key, (a) => a.questionnaireId === questionnaireId);
         await purgeQuestionnaire(ctx.fs, ctx.key, questionnaireId);
         return;
       }
@@ -953,6 +1021,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       ) {
         throw new Error('Not permitted');
       }
+      // A creator-only delete is unsent (no sends), but revoke any preview relay link to be safe.
+      await revokeRelayLinks(ctx.fs, ctx.key, (a) => a.questionnaireId === questionnaireId);
       await purgeQuestionnaire(ctx.fs, ctx.key, questionnaireId);
     },
     questionnairesValidate: async (input): Promise<string[]> => {
@@ -1217,6 +1287,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         results.push({
           assignmentId: a.id,
           recipientName,
+          channel: a.channel,
           status: a.status,
           privacy: a.privacy,
           createdAt: a.createdAt,
@@ -1242,6 +1313,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       ) {
         throw new Error('Not permitted');
       }
+      if (assignment.relay) await revokeRelayLinks(ctx.fs, ctx.key, (a) => a.id === id);
       await deleteSend(ctx.fs, ctx.key, id);
     },
     assignmentsTrends: async (questionnaireId): Promise<QuestionTrend[]> => {
@@ -1442,6 +1514,173 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // Super-admin only — the break-glass trail is not a normal-capability surface (§8.4).
       if (!ctx || !host.isSuperAdminActive()) return [];
       return listAuditEntries(ctx.fs, ctx.key);
+    },
+
+    // --- Relay: external delivery (08-questionnaires §3.2/§3.5/§3.8/§5.2). The Cloudflare token + drain
+    //     secret stay host-side (read from config/relay.enc); only renderer-safe data crosses the bridge.
+    assignmentsCreateRelayLink: async (
+      input,
+    ): Promise<{ assignmentId: string; link: string; pin: string }> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.sendExternal')))
+        throw new Error('Not permitted');
+      const parsed = CreateRelayLinkSchema.parse(input);
+      const config = await readRelayConfig(ctx.fs, ctx.key);
+      if (!config) {
+        throw new Error('No relay is connected. Ask an admin to set one up in Settings → Relay.');
+      }
+      const personId = await activePersonId();
+      if (!personId) throw new Error('Not permitted');
+      const sender = await getPerson(ctx.fs, ctx.key, personId);
+      const senderName = sender?.displayName ?? 'Someone';
+      const privacy = parsed.privacy ?? 'private';
+      const senderVisible = parsed.senderVisibleToRecipient ?? true;
+      const settings = await readVaultSettingsValues(ctx.fs);
+      const disclosure = externalSendDisclosure(
+        senderVisible ? senderName : 'the person who sent this',
+        privacy,
+        { discloseAdminAccess: settings['questionnaires.discloseAdminAccess'] === true },
+      );
+      const client = createRelayHttpClient(
+        config.endpointUrl,
+        config.drainSecret,
+        host.relay.fetch,
+      );
+      const { assignment, link, pin } = await createRelaySend(ctx.fs, ctx.key, client, {
+        questionnaireId: parsed.questionnaireId,
+        senderPersonId: personId,
+        senderName,
+        // Rebuild with conditional spreads so optional fields are absent (not `undefined`) under
+        // exactOptionalPropertyTypes.
+        recipient: {
+          kind: 'external',
+          ...(parsed.recipient.displayName !== undefined
+            ? { displayName: parsed.recipient.displayName }
+            : {}),
+          ...(parsed.recipient.email !== undefined ? { email: parsed.recipient.email } : {}),
+          ...(parsed.recipient.phone !== undefined ? { phone: parsed.recipient.phone } : {}),
+        },
+        senderVisibleToRecipient: senderVisible,
+        privacy,
+        disclosure,
+        endpointUrl: config.endpointUrl,
+        ...(parsed.expiresAt !== undefined ? { expiresAt: parsed.expiresAt } : {}),
+      });
+      return { assignmentId: assignment.id, link, pin };
+    },
+    assignmentsDrain: async (): Promise<{ drained: number; declined: number }> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.sendExternal')))
+        return { drained: 0, declined: 0 };
+      const config = await readRelayConfig(ctx.fs, ctx.key);
+      const personId = await activePersonId();
+      if (!config || !personId) return { drained: 0, declined: 0 };
+      const client = createRelayHttpClient(
+        config.endpointUrl,
+        config.drainSecret,
+        host.relay.fetch,
+      );
+      // Drain only the active person's still-open external sends; submitted/declined/revoked/expired
+      // ones are already drained or done, so re-draining them is wasted relay round-trips.
+      const open = ['sent', 'opened', 'inProgress'];
+      const sends = (await listAssignments(ctx.fs, ctx.key, { senderPersonId: personId })).filter(
+        (a) => a.channel === 'relay' && a.relay && open.includes(a.status),
+      );
+      let drained = 0;
+      let declined = 0;
+      for (const a of sends) {
+        try {
+          const result = await drainRelaySend(ctx.fs, ctx.key, client, a.id);
+          drained += result.drained;
+          if (result.declined) declined += 1;
+        } catch {
+          // A send the relay can't reach right now is skipped; the next drain retries (idempotent).
+        }
+      }
+      return { drained, declined };
+    },
+    assignmentsRevoke: async (assignmentId): Promise<void> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.sendExternal'))) return;
+      const id = AssignmentIdSchema.parse(assignmentId);
+      const assignment = await getAssignment(ctx.fs, ctx.key, id);
+      if (!assignment?.relay) return;
+      const personId = await activePersonId();
+      if (
+        assignment.senderPersonId !== personId &&
+        !(await activePersonCan(ctx.fs, ctx.key, 'people.manage'))
+      ) {
+        throw new Error('Not permitted');
+      }
+      const config = await readRelayConfig(ctx.fs, ctx.key);
+      if (!config) return;
+      const client = createRelayHttpClient(
+        config.endpointUrl,
+        config.drainSecret,
+        host.relay.fetch,
+      );
+      await revokeRelaySend(ctx.fs, ctx.key, client, id);
+    },
+    relayStatus: async (): Promise<RelayStatus> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.sendExternal')))
+        return { configured: false, updateAvailable: false };
+      return relayStatusOf(await readRelayConfig(ctx.fs, ctx.key), host.relay.currentVersion);
+    },
+    relayConnect: async (input): Promise<RelayStatus> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'settings.manage')))
+        throw new Error('Not permitted');
+      const { apiToken, accountId } = RelayConnectSchema.parse(input);
+      const bundle = await host.relay.loadBundle();
+      const result = await deployRelay(host.relay.fetch, bundle, { apiToken, accountId });
+      const config: RelayConfig = {
+        schemaVersion: 1,
+        endpointUrl: result.endpointUrl,
+        drainSecret: result.drainSecret,
+        cloudflare: {
+          accountId,
+          apiToken,
+          relayVersion: result.relayVersion,
+          scriptName: result.scriptName,
+          kvNamespaceId: result.kvNamespaceId,
+        },
+      };
+      await writeRelayConfig(ctx.fs, ctx.key, config);
+      return relayStatusOf(config, host.relay.currentVersion);
+    },
+    relayUpdate: async (): Promise<RelayStatus> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'settings.manage')))
+        throw new Error('Not permitted');
+      const config = await readRelayConfig(ctx.fs, ctx.key);
+      if (!config) return { configured: false, updateAvailable: false };
+      const bundle = await host.relay.loadBundle();
+      const relayVersion = await updateRelay(host.relay.fetch, bundle, {
+        apiToken: config.cloudflare.apiToken,
+        accountId: config.cloudflare.accountId,
+        kvNamespaceId: config.cloudflare.kvNamespaceId,
+        drainSecret: config.drainSecret,
+      });
+      const next: RelayConfig = { ...config, cloudflare: { ...config.cloudflare, relayVersion } };
+      await writeRelayConfig(ctx.fs, ctx.key, next);
+      return relayStatusOf(next, host.relay.currentVersion);
+    },
+    relayTeardown: async (): Promise<RelayStatus> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'settings.manage')))
+        throw new Error('Not permitted');
+      const config = await readRelayConfig(ctx.fs, ctx.key);
+      if (config) {
+        await teardownRelay(host.relay.fetch, {
+          apiToken: config.cloudflare.apiToken,
+          accountId: config.cloudflare.accountId,
+          scriptName: config.cloudflare.scriptName,
+          kvNamespaceId: config.cloudflare.kvNamespaceId,
+        });
+        await clearRelayConfig(ctx.fs);
+      }
+      return { configured: false, updateAvailable: false };
     },
 
     // --- Dreams (12-dreams) — gated by `dreams.own`, scoped to the active dreamer ---

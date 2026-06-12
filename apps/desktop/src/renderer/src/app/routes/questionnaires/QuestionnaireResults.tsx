@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Brain, Lock, Sparkles, Trash2 } from 'lucide-react';
+import { Brain, Link2Off, Lock, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 import { ANTHROPIC_API_KEY_ID } from '@shared/channels';
 import type {
   AssignmentStatus,
@@ -66,7 +66,30 @@ function StandardResults({ questionnaireId }: { questionnaireId: string }): JSX.
   const load = useResultsStore((s) => s.load);
   const analyze = useResultsStore((s) => s.analyze);
   const remove = useResultsStore((s) => s.remove);
+  const drain = useResultsStore((s) => s.drain);
+  const revoke = useResultsStore((s) => s.revoke);
   const reset = useResultsStore((s) => s.reset);
+
+  const [draining, setDraining] = useState(false);
+  const [drainMsg, setDrainMsg] = useState<string | null>(null);
+  const hasExternal = results.some((r) => r.channel === 'relay');
+
+  const runDrain = async (): Promise<void> => {
+    setDraining(true);
+    setDrainMsg(null);
+    try {
+      const { drained, declined } = await drain();
+      setDrainMsg(
+        drained + declined === 0
+          ? 'No new responses yet.'
+          : `Collected ${drained} response${drained === 1 ? '' : 's'}${declined ? ` and ${declined} decline${declined === 1 ? '' : 's'}` : ''}.`,
+      );
+    } catch {
+      setDrainMsg('Couldn’t check for responses. Please try again.');
+    } finally {
+      setDraining(false);
+    }
+  };
 
   const [autoAnalyze] = useSetting('questionnaires.autoAnalyze');
   const [aiEnabled] = useSetting('ai.enabled');
@@ -152,7 +175,16 @@ function StandardResults({ questionnaireId }: { questionnaireId: string }): JSX.
 
   return (
     <Stack gap={3}>
-      <Heading level={3}>Results</Heading>
+      <div className={styles.resultsHead}>
+        <Heading level={3}>Results</Heading>
+        {hasExternal ? (
+          <Button variant="secondary" onClick={() => void runDrain()} disabled={draining}>
+            <RefreshCw size={15} aria-hidden="true" />
+            {draining ? 'Checking…' : 'Check for responses'}
+          </Button>
+        ) : null}
+      </div>
+      {drainMsg ? <Banner tone="info">{drainMsg}</Banner> : null}
       {!aiReady ? (
         <Banner tone="info">
           Turn on AI in <Link to="/settings">Settings</Link> to analyze responses into insights.
@@ -168,6 +200,7 @@ function StandardResults({ questionnaireId }: { questionnaireId: string }): JSX.
           message={messages[send.assignmentId]}
           onAnalyze={() => void runAnalyze(send.assignmentId)}
           onDelete={() => void runDelete(send.assignmentId)}
+          onRevoke={() => void revoke(send.assignmentId)}
         />
       ))}
 
@@ -209,6 +242,7 @@ function SendCard({
   message,
   onAnalyze,
   onDelete,
+  onRevoke,
 }: {
   send: SendResult;
   aiReady: boolean;
@@ -216,8 +250,12 @@ function SendCard({
   message: { tone: 'info' | 'warning'; text: string } | undefined;
   onAnalyze: () => void;
   onDelete: () => void;
+  onRevoke: () => void;
 }): JSX.Element {
   const isSubmitted = send.status === 'submitted';
+  // An external link that's still open (not answered / declined / revoked / expired) can be revoked.
+  const canRevoke =
+    send.channel === 'relay' && ['sent', 'opened', 'inProgress'].includes(send.status);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   return (
     <Card>
@@ -231,6 +269,15 @@ function SendCard({
               ) : null}
               {STATUS_LABEL[send.status]}
             </span>
+            {canRevoke ? (
+              <IconButton
+                aria-label={`Revoke the link sent to ${send.recipientName}`}
+                variant="secondary"
+                onClick={onRevoke}
+              >
+                <Link2Off size={14} aria-hidden="true" />
+              </IconButton>
+            ) : null}
             <IconButton
               aria-label={`Delete this send to ${send.recipientName}`}
               variant="secondary"
@@ -240,6 +287,12 @@ function SendCard({
             </IconButton>
           </div>
         </div>
+
+        {send.channel === 'relay' ? (
+          <Text size="sm" tone="secondary">
+            Sent via a private link.
+          </Text>
+        ) : null}
 
         {send.status === 'declined' ? (
           <Text tone="secondary">

@@ -149,13 +149,18 @@ resetSetting('appearance.theme'); // back to default
 
 ### 5.4 Initial settings (validates the system end-to-end in v1)
 
-| Section    | Settings                                                                                                                                                                      |
-| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Appearance | theme (select), accent (select), density (segmented), text size (slider), reduce motion (switch), high contrast (switch) — drive [`01-design-system.md`](01-design-system.md) |
-| General    | resume to last route (switch) — see [`02-app-shell.md`](02-app-shell.md)                                                                                                      |
-| Vault      | current location (read-only path), change vault (path), reveal in file manager (action)                                                                                       |
-| AI         | enable AI (switch), API key (`secret`, device scope), model (select; default `claude-sonnet-4-6`, `claude-opus-4-8` option) — model/key hidden unless AI enabled              |
-| About      | version, the wellness/not-medical statement                                                                                                                                   |
+| Section    | Settings                                                                                                                                                                                                                            |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Appearance | theme (select), accent (select), density (segmented), text size (slider), reduce motion (switch), high contrast (switch) — drive [`01-design-system.md`](01-design-system.md)                                                       |
+| General    | resume to last route (switch) — see [`02-app-shell.md`](02-app-shell.md)                                                                                                                                                            |
+| Vault      | current location (read-only path), change vault (path), reveal in file manager (action)                                                                                                                                             |
+| AI         | enable AI (switch), API key (`secret`, device scope), model (select; default `claude-sonnet-4-6`, `claude-opus-4-8` option) — model/key hidden unless AI enabled                                                                    |
+| Relay      | **`adminOnly`** Cloudflare relay panel (`custom` control): connect (account id + scoped token) → provision + deploy the zero-knowledge Worker, status, update, teardown — the token never crosses IPC (08-questionnaires §3.8/§5.2) |
+| About      | version, the wellness/not-medical statement                                                                                                                                                                                         |
+
+The `custom`-control `SettingField` renders the **"Admin only"** badge alongside the label for an
+`adminOnly` setting (so a bespoke admin panel like Relay is marked the same as a switch), and the Settings
+screen filters `adminOnly` settings out entirely for non-admins.
 
 ## 6. IPC / API contracts
 

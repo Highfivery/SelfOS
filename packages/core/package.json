@@ -20,7 +20,8 @@
     "./conversations": "./src/conversations/index.ts",
     "./insights": "./src/insights/index.ts",
     "./questionnaires": "./src/questionnaires/index.ts",
-    "./dreams": "./src/dreams/index.ts"
+    "./dreams": "./src/dreams/index.ts",
+    "./relay": "./src/relay/index.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",

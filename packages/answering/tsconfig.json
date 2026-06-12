@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    // Renders in a browser/WKWebView, so it typechecks under the DOM lib (07-mobile-platform §5.1).
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "types": ["react"],
+    "noEmit": true
+  },
+  "include": ["src/**/*"]
+}

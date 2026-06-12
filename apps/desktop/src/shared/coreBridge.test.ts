@@ -4,9 +4,70 @@ import { memFileSystem } from '@selfos/core/host';
 import { loadMasterKey } from '@selfos/core/crypto';
 import { toBase64 } from '@selfos/core/encoding';
 import type { ClaudeClient, FileSystem, SecretStore } from '@selfos/core/host';
+import {
+  contentKeyFromFragment,
+  drain as kvDrain,
+  openContent,
+  purge as kvPurge,
+  putMailbox as kvPut,
+  respond as kvRespond,
+  revoke as kvRevoke,
+  sealResponse,
+  unlock as kvUnlock,
+  type RelayEnv,
+} from '@selfos/core/relay';
 import { ANTHROPIC_API_KEY_ID } from './channels';
 import type { DeviceState } from './schemas';
 import { createCoreBridge, type BridgeHost } from './coreBridge';
+
+/** A fake `fetch` that simulates BOTH the Cloudflare REST API and the deployed relay Worker, over an
+ *  in-memory KV — so the bridge's relay path round-trips end-to-end with no network/account. */
+function makeRelayFetch(): typeof fetch {
+  const store = new Map<string, string>();
+  const env: RelayEnv = {
+    kv: {
+      get: (k) => Promise.resolve(store.get(k) ?? null),
+      put: (k, v) => {
+        store.set(k, v);
+        return Promise.resolve();
+      },
+      delete: (k) => {
+        store.delete(k);
+        return Promise.resolve();
+      },
+    },
+    nowMs: () => 1_000_000,
+    nowIso: () => '2026-06-11T00:00:00.000Z',
+  };
+  const json = (body: unknown, status = 200): Response =>
+    new Response(JSON.stringify(body), { status });
+  return (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const url = String(input);
+    const body = typeof init?.body === 'string' ? JSON.parse(init.body) : null;
+    if (url.startsWith('https://api.cloudflare.com')) {
+      if (url.endsWith('/user/tokens/verify'))
+        return json({ success: true, result: { status: 'active' } });
+      if (url.endsWith('/workers/subdomain'))
+        return json({ success: true, result: { subdomain: 'acme' } });
+      if (url.endsWith('/storage/kv/namespaces'))
+        return json({ success: true, result: { id: 'kv1' } });
+      return json({ success: true, result: {} });
+    }
+    const path = new URL(url).pathname;
+    const ops: Record<string, () => Promise<{ status: number; json: unknown }>> = {
+      '/api/admin/mailbox': () => kvPut(env, body),
+      '/api/admin/drain': () => kvDrain(env, body),
+      '/api/admin/purge': () => kvPurge(env, body),
+      '/api/admin/revoke': () => kvRevoke(env, body),
+      '/api/unlock': () => kvUnlock(env, body),
+      '/api/respond': () => kvRespond(env, body),
+    };
+    const op = ops[path];
+    if (!op) return json({ error: 'not found' }, 404);
+    const result = await op();
+    return json(result.json, result.status);
+  }) as typeof fetch;
+}
 
 /**
  * Exercises the shared `createCoreBridge` factory the same way the iOS host will — against the real
@@ -121,6 +182,11 @@ function makeHost(): {
       superAdmin = active;
     },
     appVersion: '1.2.3',
+    relay: {
+      fetch: makeRelayFetch(),
+      loadBundle: () => Promise.resolve({ script: 'export default {}', version: '1' }),
+      currentVersion: '1',
+    },
     emitChatChunk: (chunk) => chunks.push(chunk),
     emitDreamChunk: (chunk) => dreamChunks.push(chunk),
     getBootState: () => Promise.resolve(ready),
@@ -809,6 +875,78 @@ describe('createCoreBridge', () => {
     const log = await bridge.auditList();
     expect(log).toHaveLength(1);
     expect(log[0]).toMatchObject({ assignmentId: a.id, viaSuperAdmin: true });
+  });
+
+  it('connects a relay, mints an external link, drains a response, and revoke-on-delete', async () => {
+    const { host, bridge, ownerId } = await freshOwner();
+
+    // Admin connect → deploys against the fake Cloudflare + persists config/relay.enc.
+    const status = await bridge.relayConnect({ apiToken: 'cf-token', accountId: 'acct' });
+    expect(status.configured).toBe(true);
+    expect(status.endpointUrl).toContain('.workers.dev');
+    // A non-admin (member) cannot connect.
+    const member = await bridge.peopleSave({ displayName: 'Mo', isSubject: false, tags: [] });
+    await bridge.accessSetAccount({ personId: member.id, roleId: 'member', pin: null });
+    await bridge.sessionSetActive({ personId: member.id });
+    await expect(bridge.relayConnect({ apiToken: 't', accountId: 'a' })).rejects.toThrow();
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+
+    const q = await bridge.questionnairesSave({
+      title: 'Outside view',
+      type: 'blind-spots',
+      sensitivity: 'standard',
+      questions: [{ id: 'a', type: 'shortText', prompt: 'How do I come across?', required: true }],
+    });
+    const { assignmentId, link, pin } = await bridge.assignmentsCreateRelayLink({
+      questionnaireId: q.id,
+      recipient: { kind: 'external', displayName: 'Alex' },
+      senderVisibleToRecipient: true,
+    });
+    expect(pin).toMatch(/^\d{6}$/);
+
+    // Simulate the recipient's browser hitting the relay Worker (same fake fetch / KV).
+    const relayFetch = host.host.relay.fetch;
+    const token = link.split('/q/')[1]?.split('#')[0] ?? '';
+    const contentKey = contentKeyFromFragment(link.slice(link.indexOf('#')))!;
+    const unlockRes = await relayFetch('https://relay/api/unlock', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token, pin }),
+    });
+    const unlocked = (await unlockRes.json()) as {
+      sealedContent: Parameters<typeof openContent>[0];
+    };
+    const content = await openContent(unlocked.sealedContent, contentKey);
+    expect(content.questionnaire.title).toBe('Outside view');
+    const sealed = await sealResponse(
+      {
+        kind: 'submit',
+        answers: [{ questionId: 'a', value: 'Warmly' }],
+        submittedAt: '2026-06-11T01:00:00.000Z',
+      },
+      content.publicKey,
+    );
+    const respondRes = await relayFetch('https://relay/api/respond', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token, pin, sealed }),
+    });
+    expect(respondRes.status).toBe(200);
+
+    // Drain into the vault; the external send becomes submitted, but a Private send hides raw answers.
+    expect(await bridge.assignmentsDrain()).toEqual({ drained: 1, declined: 0 });
+    const results = await bridge.assignmentsResults(q.id);
+    expect(results.find((r) => r.assignmentId === assignmentId)?.status).toBe('submitted');
+    expect(results.find((r) => r.assignmentId === assignmentId)?.answers).toBeUndefined();
+
+    // Deleting the questionnaire revokes the relay link: the recipient can no longer unlock.
+    await bridge.questionnairesDelete(q.id);
+    const after = await relayFetch('https://relay/api/unlock', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token, pin }),
+    });
+    expect(after.status).toBe(404);
   });
 
   it('saves/edits a dream, scoped to the active dreamer and gated by dreams.own', async () => {

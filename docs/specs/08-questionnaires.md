@@ -714,15 +714,20 @@ fallback message). Responsive ~360px→desktop everywhere, including the relay p
 
 ## 11. Open questions
 
-1. **iOS relay deploy** — confirm Cloudflare REST provisioning/deploy from Capacitor (no Wrangler).
-   _De-risked_: the iOS in-webview host + browser-mode Claude SDK (`07`, built) already issue outbound
-   HTTPS from the WKWebView, so the Cloudflare REST API is reachable the same way.
+1. **iOS relay deploy** — **resolved (§13.6):** the host's `cloudflareDeployer` issues the Cloudflare REST
+   calls over the platform `fetch`, so the same code provisions/deploys from Electron's main process and the
+   iOS WKWebView (the in-webview HTTPS host is built, `07`). The Electron path is tested against a fake; the
+   real deploy is user-verified on-device. (Shipping the built `dist/worker.js` into the iOS app bundle is
+   the one remaining iOS wiring step.)
 2. **iOS + explicit content / App Store** — final stance (17+ rating + gate vs region gating vs remote
-   disable); risk recorded (§8.3).
-3. **Relay retention defaults** — confirm "purge on drain; unclaimed expire at the send's expiry; default 60
-   days when not indefinite"; single-submission-per-link.
-4. **Crisis resources** — finalize the curated default list + locale coverage.
-5. **Custom relay domain** — `*.workers.dev` is the zero-setup default; confirm custom-domain in v1 vs later.
+   disable); risk recorded (§8.3). _Still open._
+3. **Relay retention defaults** — **resolved (§13.6):** purge on drain; unclaimed expire at the send's
+   `expiresAt`; a **60-day default** when the sender didn't set one; **single-submission-per-link**.
+4. **Crisis resources** — **resolved (§13.6):** the relay page shows 988 (call/text) + Crisis Text Line
+   (HOME → 741741) + the local emergency number + findahelpline.com for international; English page, the
+   intl link covers non-US recipients.
+5. **Custom relay domain** — **resolved (§13.6):** `*.workers.dev` only in v1; a custom domain is a
+   documented later add.
 6. **Per-questionnaire usage rollup** — optional `refId`/`refType` on `UsageEvent` (additive, deferred).
 7. **Insight token cap** — exact per-person budget + prioritization weighting for `summarizeForContext`.
 8. **Starter type taxonomy wording** — final type labels (incl. Intimacy + Scenario families) reviewed for
@@ -940,15 +945,70 @@ compatibilityGroupId`, each with its own frozen variant snapshot); blocked when 
      `RawAccessAuditLog`, extracted `CompatibilityVisibilitySchema`; derived view types `CompatibilityGroup`/
      `CompatibilityMember`/`InboxCompatibilityView`/`AlignmentResult`/`CompatibilitySendResult`. \*\*This
      completes §13.5; the only remaining questionnaire work is §13.6 (the external Cloudflare relay)._
-6. **External: relay + delivery + explicit gates** — `apps/relay` Worker + shared renderer page, the Cloudflare
-   connect/deploy/update/teardown flow, PIN/consent/age gating + question-image ZK, link delivery, the
-   disclosure setting + audit log, the privacy notice.
+6. **External: relay + delivery + explicit gates (built §13.6 — the Questionnaires feature is now fully
+   built)** — `apps/relay` Worker + shared renderer page, the Cloudflare connect/deploy/update/teardown
+   flow, PIN/consent/age gating + question-image ZK, link delivery, the disclosure setting, the privacy
+   notice, and the relay-link revoke on deletion.
+   - \_**Built 2026-06-11 (§13.6):** the whole external relay on one branch. **Extraction:** the shared
+     answering renderer moved into a new **`@selfos/answering`** package (`QuestionnaireForm` +
+     `QuestionImage` + `CrisisFooter`, self-contained — plain elements + design-token CSS, no app
+     design-system) so the Electron renderer AND the relay page render ONE implementation. **Relay crypto
+     (`@selfos/core/relay`):** per-send **ECDH P-256** keypair (responses sealed to the public key in the
+     browser, opened with the private key wrapped under the master key), a symmetric **content key** in the
+     URL **fragment** sealing questions + author images (decrypted client-side, never seen by the server),
+     a 6-digit **PIN**, and the pure **mailbox ops** (`unlock`/`respond`/`withdraw`/`drain`/`purge`/`revoke`
+     - `putMailbox`) the Worker calls — all rate-limited through ONE shared PIN gate (5 attempts → 15-min
+       lockout, shared across every PIN-checked endpoint so no endpoint is a brute-force oracle).
+       **`relayService`** mints `Assignment.relay` at send (re-encrypting question images into the snapshot
+       under the content key), drains + decrypts responses locally + purges, and revokes. **`apps/relay`
+       Worker** — a zero-knowledge mailbox + a branded, WCAG, responsive **static answering page** (bundles
+       `@selfos/answering` + `@selfos/core/relay`, built to one self-contained `dist/worker.js` the app
+       uploads): stores ciphertext keyed by token, PIN-gates content release, accepts ≤256 KB single
+       submissions, serves the privacy notice + static crisis resources + the derived disclosure + the
+       not-medical line + a "Sent securely via SelfOS" trust line; drain/revoke authed by `drainSecret`;
+       strict CSP. **Host services:** **`cloudflareDeployer`** (provision KV + deploy/update/teardown the
+       Worker via the Cloudflare REST API) + **`relayHttpClient`** + **`relayConfig`** (`config/relay.enc` —
+       endpoint + drainSecret + **encrypted Cloudflare token**, host-side only, never crossing IPC); both the
+       deployer + transport are interfaces with fakes (`SELFOS_FAKE_RELAY`), no real account/network in CI.
+       **Renderer:** the admin-only **Settings → Relay** panel (connect/manage/update/teardown, "Admin only"
+       marker), the external send path (recipient + privacy + anonymity → link + 6-digit PIN, Copy / prefilled
+       mailto / SMS / native share, PIN included by default with a per-send opt-out for sensitive sends), the
+       drain flow ("Check for responses" + new-responses count), and external delivery + revoke in Results.
+       **Sensitive gates on the relay page:** intimacyGeneral → 18+ acknowledgement; explicit/unfiltered →
+       date-of-birth gate + explicit consent before any explicit content (incl. images) renders; a
+       `ConsentReceipt` is stored. **Revoke-on-deletion (§3.9 deferred piece):** purge + per-send delete now
+       revoke the relay link first. New schemas: `EncryptedEnvelopeData`, `RelayContent`, `SealedResponse`,
+       `RelayResponsePayload`, `RelayConsentInfo`, `RelayMailbox`, `RelayStoredResponse`, `AgeAttestation`,
+       `ConsentReceipt`, `RelayConfig`, `RelayStatus`; `SendResult` gains `channel`. Code-reviewer **fix-first**
+       — fixed a blocker (the PIN rate-limit had only guarded `unlock`, leaving `respond`/`withdraw` as
+       unthrottled brute-force oracles → all three now share one gate) + should-fixes (the IPC contract carries
+       `privacy`; drain skips already-drained sends). Gate green: typecheck (node + web/DOM-lib), lint, format,
+       **234 core + 308 desktop + 8 relay unit, 45 E2E** (relay crypto seal/open + tamper, the mailbox PIN
+       gate + cross-endpoint lockout, a coreBridge connect→mint→answer→drain→revoke-on-delete round-trip
+       against a fake Worker, the deployer/client against a fake Cloudflare, the relay-page PIN/consent/age-gate
+       RTL flow, and an E2E that connects a relay + mints an external link + PIN with a 390px guard). Live
+       web-preview visual QA of the admin Relay panel (connect → connected) + the external send → delivery, at
+       desktop + 390px. **Deploy-time verification** (the real Cloudflare provision/deploy) is user-driven —
+       the deployer is blind-written against a fake, like the iOS native bits.\_
 
 (Companions: [`09-session-analysis.md`](09-session-analysis.md) and
 [`11-relationship-tracking.md`](11-relationship-tracking.md) build on slice 1's Insight/metrics layer.)
 
 ## 14. Changelog
 
+- 2026-06-11 — **§13.6 built — the external Cloudflare relay; the Questionnaires feature is now fully built.**
+  Decisions confirmed (ask-first): the whole relay on **one branch**; tested against a **fake Worker/Cloudflare**
+  (`SELFOS_FAKE_RELAY`), real deploy user-verified later; **question-image ZK included**; spec **§11.3 retention
+  defaults confirmed** (purge-on-drain, unclaimed expire at the send expiry, 60-day default, single-submission);
+  **`*.workers.dev`-only** in v1 (§11.5); a **US-focused + findahelpline.com** crisis list (§11.4); the relay page
+  **mirrors the SelfOS look, English v1, localizable later**; the proposed email/SMS templates with the PIN
+  included by default. Extracted **`@selfos/answering`** (the one shared answering renderer), added
+  **`@selfos/core/relay`** (ECDH/​content-key/​PIN crypto + the pure mailbox ops) + `relayService`, the
+  **`apps/relay`** Worker + branded answering page, the host `cloudflareDeployer`/`relayHttpClient`/`relayConfig`,
+  the admin Relay panel + external send/​drain/​Results, and the relay-page sensitive gates + revoke-on-deletion.
+  Code-reviewed **fix-first** (fixed a PIN-rate-limit brute-force oracle on `respond`/`withdraw`). Resolves
+  §11.1 (Cloudflare REST from the host), §11.3, §11.4, §11.5. Folded into §3.2/§3.4/§3.5/§3.8/§3.9, §4.1/§4.5,
+  §5.1/§5.2/§5.4, §6, §8.3/§8.6, §13.6.
 - 2026-06-10 — created (Draft) after an extended design brainstorm; all foundational + detailed decisions
   resolved with the user (§12). Revised the same day: **templates removed** (create = type + own questions +
   AI), a **context-provider registry** added for extensibility, the **Insight model generalized with a

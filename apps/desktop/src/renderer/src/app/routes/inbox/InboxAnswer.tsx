@@ -20,7 +20,7 @@ import {
 import { useInboxStore } from '../../../stores/inboxStore';
 import { useSetting } from '../../../settings/useSetting';
 import { CrisisFooter } from '../sessions/CrisisFooter';
-import { QuestionnaireForm } from '../questionnaires/QuestionnaireForm';
+import { QuestionnaireForm } from '@selfos/answering';
 import { AlignmentReportView, AnswerList } from '../questionnaires/AlignmentReportView';
 import styles from './Inbox.module.css';
 
@@ -245,6 +245,7 @@ export function InboxAnswer({
             answers={answers}
             loadImage={loadImage}
             onChange={onChange}
+            footer={<CrisisFooter />}
           />
 
           {saved ? <Banner tone="info">Saved — you can come back and finish later.</Banner> : null}

@@ -149,7 +149,13 @@ apps/desktop/src/
 ```
 
 Shared code that outgrows one app is extracted to `packages/*` (e.g. `@selfos/design-system`,
-`@selfos/core`).
+`@selfos/core`, and **`@selfos/answering`** — the one questionnaire-answering renderer shared by the
+Electron renderer and the relay page). A second app, **`apps/relay`** (08-questionnaires §5.4), is the
+per-household **zero-knowledge Cloudflare Worker** + its static answering page: it builds to a single
+self-contained `dist/worker.js` (the page bundle inlined) that the desktop app uploads via the Cloudflare
+REST API; it stores only ciphertext (questions decrypt via a URL-fragment key, responses seal to a per-send
+public key — neither key ever reaches the Worker). The relay's encrypted config (endpoint + drain secret +
+Cloudflare token) lives in the vault at `config/relay.enc`, host-side only, never crossing the IPC boundary.
 
 ### 5.2 Feature-module registry (the "scale infinitely" backbone)
 

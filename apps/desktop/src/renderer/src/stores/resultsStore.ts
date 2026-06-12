@@ -28,6 +28,10 @@ interface ResultsState {
   analyze: (assignmentId: string) => Promise<AnalyzeResult>;
   /** Delete one send (its response + any derived Insight), then refresh. */
   remove: (assignmentId: string) => Promise<void>;
+  /** Check the relay for new external responses, persist them locally, then refresh. */
+  drain: () => Promise<{ drained: number; declined: number }>;
+  /** Revoke an external send's relay link, then refresh. */
+  revoke: (assignmentId: string) => Promise<void>;
   reset: () => void;
 }
 
@@ -54,6 +58,17 @@ export const useResultsStore = create<ResultsState>((set, get) => ({
   },
   remove: async (assignmentId) => {
     await window.selfos?.assignmentsDelete(assignmentId);
+    const { questionnaireId } = get();
+    if (questionnaireId) await get().load(questionnaireId);
+  },
+  drain: async () => {
+    const result = (await window.selfos?.assignmentsDrain()) ?? { drained: 0, declined: 0 };
+    const { questionnaireId } = get();
+    if (questionnaireId) await get().load(questionnaireId);
+    return result;
+  },
+  revoke: async (assignmentId) => {
+    await window.selfos?.assignmentsRevoke(assignmentId);
     const { questionnaireId } = get();
     if (questionnaireId) await get().load(questionnaireId);
   },

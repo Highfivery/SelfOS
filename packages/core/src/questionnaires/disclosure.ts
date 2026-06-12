@@ -1,4 +1,4 @@
-import type { CompatibilityVisibility } from '../schemas';
+import type { CompatibilityVisibility, PrivacyMode } from '../schemas';
 
 /**
  * The recipient disclosure text, **derived** from the send's privacy/visibility (08-questionnaires
@@ -29,3 +29,21 @@ export function compatibilityDisclosure(
  */
 export const ADMIN_ACCESS_DISCLOSURE =
   'A household owner or administrator may be able to access your answers.';
+
+/**
+ * What an EXTERNAL (relay) recipient is told, derived from the send's privacy mode (§3.2/§8.4). Computed
+ * at send time and sealed into the relay content so the page shows exactly this — the honesty guard
+ * applies to external sends too. `discloseAdminAccess` (the admin-only setting) appends the break-glass
+ * acknowledgement when on.
+ */
+export function externalSendDisclosure(
+  askerName: string,
+  privacy: PrivacyMode,
+  options: { discloseAdminAccess: boolean },
+): string {
+  const base =
+    privacy === 'standard'
+      ? `Your answers will be shared with ${askerName} to help them understand you better.`
+      : `Your answers are private — they’re used only to personalize ${askerName}’s coaching, and ${askerName} won’t see your written answers. Numeric ratings may appear in their trends over time.`;
+  return options.discloseAdminAccess ? `${base} ${ADMIN_ACCESS_DISCLOSURE}` : base;
+}

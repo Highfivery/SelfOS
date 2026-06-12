@@ -20,6 +20,7 @@
     "@capacitor/ios": "^7.0.0",
     "@fontsource-variable/mulish": "^5.1.0",
     "@fontsource/lora": "^5.1.0",
+    "@selfos/answering": "workspace:*",
     "@selfos/core": "workspace:*",
     "chokidar": "^3.6.0",
     "lucide-react": "^0.469.0",

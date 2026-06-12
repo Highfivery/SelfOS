@@ -1,6 +1,7 @@
 export * from './questionnaireService';
 export * from './assignmentService';
 export * from './responseService';
+export * from './relayService';
 export * from './answerService';
 export * from './compatibilityService';
 export * from './alignmentService';

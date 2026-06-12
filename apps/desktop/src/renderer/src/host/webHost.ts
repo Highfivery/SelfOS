@@ -4,6 +4,7 @@ import type { ClaudeClient, FileSystem, SecretStore } from '@selfos/core/host';
 import { loadMasterKey } from '@selfos/core/crypto';
 import { uuid } from '@selfos/core/id';
 import { createCoreBridge, readVaultSettingsValues, type BridgeHost } from '@shared/coreBridge';
+import { fakeRelayBundle, fakeRelayFetch } from '@shared/relay/fakeRelay';
 import { idbFileSystem } from './idbFileSystem';
 import { capacitorFileSystem, VaultFs, type VaultFsPlugin } from './capacitorVaultFs';
 import { capacitorSecretStore, Keychain, type KeychainPlugin } from './capacitorSecretStore';
@@ -45,6 +46,8 @@ interface HostParts {
   secrets: SecretStore;
   /** Claude client: the deterministic fake in the web preview, the real browser-mode SDK on iOS. */
   claude: ClaudeClient;
+  /** Relay transport: the deterministic in-memory fake in the web preview, real HTTPS on iOS. */
+  relay: BridgeHost['relay'];
   /** Subscribe to external vault changes; a no-op in the web preview, the native watcher on iOS. */
   onVaultChanged(listener: () => void): () => void;
 }
@@ -137,6 +140,7 @@ function createBridgeHost(parts: HostParts): BridgeHost {
       superAdminActive = active;
     },
     appVersion: APP_VERSION,
+    relay: parts.relay,
     emitChatChunk: (chunk) => {
       for (const listener of chatListeners) listener(chunk);
     },
@@ -178,6 +182,8 @@ export function createWebHost(options: WebHostOptions = {}): BridgeHost {
     selectVaultFolder: () => Promise.resolve(PREVIEW_VAULT_ID),
     secrets: webSecretStore(currentDeviceId()),
     claude: webFakeClaudeClient(),
+    // A deterministic in-memory relay so the preview can demo the external-send flow (no Cloudflare).
+    relay: { fetch: fakeRelayFetch(), loadBundle: fakeRelayBundle, currentVersion: '1' },
     // The browser preview has no cross-tab/device change feed; reads are always fresh on navigation.
     onVaultChanged: () => () => {},
   });
@@ -235,6 +241,14 @@ export function createCapacitorHost(
     },
     secrets: capacitorSecretStore(keychain),
     claude: browserClaudeClient(),
+    // iOS issues real outbound HTTPS for the Cloudflare REST API + the deployed Worker (07 §11.1).
+    // The Worker bundle isn't shipped in the iOS app yet, so deploy throws until that's wired.
+    relay: {
+      fetch: (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) =>
+        globalThis.fetch(input, init),
+      loadBundle: () => Promise.reject(new Error('Relay deploy is not available on iOS yet.')),
+      currentVersion: '1',
+    },
     onVaultChanged: (listener) => watchCapacitorVault(vaultFs, listener),
   });
 }

@@ -1,0 +1,25 @@
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.endpoint {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  word-break: break-all;
+}
+
+.help {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-accent-text);
+  font-size: var(--text-sm);
+  text-decoration: none;
+}
+
+.help:hover {
+  text-decoration: underline;
+}

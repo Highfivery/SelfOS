@@ -76,6 +76,7 @@ function e2eEnv(): Record<string, string> {
   }
   env.SELFOS_FAKE_SECRETS = '1';
   env.SELFOS_FAKE_CLAUDE = '1';
+  env.SELFOS_FAKE_RELAY = '1'; // deterministic in-memory relay (no Cloudflare account/network)
   return env;
 }
 
@@ -1044,6 +1045,65 @@ test('inbox: send a questionnaire, answer it, submit, and round-trip through the
     const response = await getResponse(fs, key, assignment.id);
     expect(response?.answers[0]?.value).toBe('Doing great');
     expect(response?.submittedAt).toBeTruthy();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('relay: connect a household relay, then mint an external link + PIN, no overflow', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    // Admin connects the relay (fake Cloudflare) in Settings → Relay.
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'Relay' }).click();
+    await expect(w.getByText('Admin only')).toBeVisible(); // the admin-only marker on the panel
+    await w.getByLabel(/cloudflare account id/i).fill('acct-123');
+    await w.getByLabel(/cloudflare api token/i).fill('cf-token');
+    await w.getByRole('button', { name: /connect & deploy/i }).click();
+    await expect(w.getByText(/relay connected at/i)).toBeVisible();
+    await expect(w.getByText(/\.workers\.dev/i)).toBeVisible();
+
+    // Author a one-question questionnaire and send it externally via the relay.
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await w.getByRole('button', { name: 'New' }).click();
+    await w.getByLabel('Title').fill('Outside view');
+    await w.getByLabel('Question 1', { exact: true }).fill('How do I come across?');
+    await w.getByRole('button', { name: 'Send' }).click();
+
+    await w.getByRole('button', { name: 'Someone else (link)' }).click();
+    await w.getByLabel(/their name/i).fill('Alex');
+    await w.getByRole('button', { name: /create link/i }).click();
+
+    // The link (a workers.dev URL with the content key in the fragment) + a 6-digit PIN are shown once.
+    await expect(w.getByText(/share this link/i)).toBeVisible();
+    const link = await w.getByLabel('Secure link').inputValue();
+    expect(link).toMatch(/\.workers\.dev\/q\/[0-9a-f]+#k=/);
+    const pin = await w.getByLabel('PIN', { exact: true }).inputValue();
+    expect(pin).toMatch(/^\d{6}$/);
+
+    // No horizontal overflow on the delivery surface at phone width.
+    await app.evaluate(({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows()[0];
+      if (win) win.setSize(390, 800);
+    });
+    await w.waitForTimeout(150);
+    const overflow = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      return main ? main.scrollWidth - main.clientWidth : 0;
+    });
+    expect(overflow).toBeLessThanOrEqual(1);
+
+    // The relay assignment landed in the encrypted vault (channel relay + relay key material).
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('expected a master key');
+    const assignments = await listAssignments(fs, key);
+    expect(assignments.some((a) => a.channel === 'relay' && a.relay?.token)).toBe(true);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

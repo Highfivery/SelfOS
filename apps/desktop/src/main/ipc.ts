@@ -14,6 +14,8 @@ import { defaultClaudeClient } from './claude/anthropicClient';
 import { isSuperAdminActive, setSuperAdminActive } from './people/superAdmin';
 import { loadMasterKey } from '@selfos/core/crypto';
 import { createNodeFileSystem } from './host/nodeFileSystem';
+import { loadRelayBundle, RELAY_VERSION } from './relay/relayBundle';
+import { fakeRelayBundle, fakeRelayFetch } from '../shared/relay/fakeRelay';
 import { startVaultWatcher } from './vaultWatcherManager';
 
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
@@ -46,6 +48,8 @@ export function registerIpcHandlers(): void {
   const secrets = createNodeSecretStore(userDataDir(), encryptor);
   let chatSender: WebContents | undefined;
   let dreamSender: WebContents | undefined;
+  // E2E/dev: a deterministic in-memory relay (no real Cloudflare account/network), like SELFOS_FAKE_CLAUDE.
+  const useFakeRelay = Boolean(process.env['SELFOS_FAKE_RELAY']);
 
   const host: BridgeHost = {
     vaultAndKey: async () => {
@@ -71,6 +75,16 @@ export function registerIpcHandlers(): void {
     isSuperAdminActive,
     setSuperAdminActive,
     appVersion: __APP_VERSION__,
+    relay: useFakeRelay
+      ? { fetch: fakeRelayFetch(), loadBundle: fakeRelayBundle, currentVersion: RELAY_VERSION }
+      : {
+          // Node ≥20's global fetch reaches the Cloudflare REST API + the deployed Worker; the API token +
+          // drain secret used here stay host-side (read from config/relay.enc), never reaching the renderer.
+          fetch: (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) =>
+            globalThis.fetch(input, init),
+          loadBundle: loadRelayBundle,
+          currentVersion: RELAY_VERSION,
+        },
     emitChatChunk: (chunk) => {
       if (chatSender && !chatSender.isDestroyed()) {
         chatSender.send(IpcChannels.chatChunk, chunk);
@@ -202,6 +216,13 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.assignmentsCompatibility, bridge.assignmentsCompatibility);
   handle(IpcChannels.assignmentsAlign, bridge.assignmentsAlign);
   handle(IpcChannels.assignmentsRevealRaw, bridge.assignmentsRevealRaw);
+  handle(IpcChannels.assignmentsCreateRelayLink, bridge.assignmentsCreateRelayLink);
+  handle(IpcChannels.assignmentsDrain, bridge.assignmentsDrain);
+  handle(IpcChannels.assignmentsRevoke, bridge.assignmentsRevoke);
+  handle(IpcChannels.relayStatus, bridge.relayStatus);
+  handle(IpcChannels.relayConnect, bridge.relayConnect);
+  handle(IpcChannels.relayUpdate, bridge.relayUpdate);
+  handle(IpcChannels.relayTeardown, bridge.relayTeardown);
   handle(IpcChannels.auditList, bridge.auditList);
   handle(IpcChannels.dreamsList, bridge.dreamsList);
   handle(IpcChannels.dreamGet, bridge.dreamGet);

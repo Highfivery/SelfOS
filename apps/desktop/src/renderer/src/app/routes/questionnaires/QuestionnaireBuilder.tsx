@@ -28,8 +28,8 @@ import type {
   QuestionnaireInput,
   SensitivityTier,
 } from '@shared/schemas';
+import { QuestionImage } from '@selfos/answering';
 import { useSessionStore } from '../../../stores/sessionStore';
-import { QuestionImage } from './QuestionImage';
 import { QuestionnaireAiPanel } from './QuestionnaireAiPanel';
 import { QuestionnairePreview } from './QuestionnairePreview';
 import { QuestionnaireResults } from './QuestionnaireResults';
@@ -1169,6 +1169,7 @@ export function QuestionnaireBuilder({
               <QuestionnaireSendPanel
                 questionnaireId={sendId}
                 title={title.trim()}
+                sensitivity={sensitivity}
                 onCancel={() => setSendId(null)}
                 onSent={() => {
                   setSendId(null);

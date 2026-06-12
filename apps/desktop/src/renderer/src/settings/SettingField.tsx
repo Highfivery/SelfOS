@@ -95,7 +95,10 @@ export function SettingField({ def }: { def: SettingDefinition }): JSX.Element |
   if (def.control.type === 'custom') {
     return (
       <div className={styles.stacked}>
-        <Text weight={500}>{def.label}</Text>
+        <Inline gap={2}>
+          <Text weight={500}>{def.label}</Text>
+          {def.adminOnly ? <AdminOnlyBadge /> : null}
+        </Inline>
         {def.description ? (
           <Text size="sm" tone="secondary">
             {def.description}

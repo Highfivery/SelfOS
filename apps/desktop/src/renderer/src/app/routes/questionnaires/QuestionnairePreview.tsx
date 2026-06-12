@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { unansweredRequired } from '@selfos/core/questionnaires';
 import type { AnswerMap } from '@selfos/core/questionnaires';
 import type { Question } from '@shared/schemas';
+import { QuestionnaireForm } from '@selfos/answering';
 import { Banner, Button, Stack } from '../../../design-system/components';
 import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
-import { QuestionnaireForm } from './QuestionnaireForm';
+import { CrisisFooter } from '../sessions/CrisisFooter';
 import styles from './Questionnaires.module.css';
 
 /**
@@ -47,6 +48,7 @@ export function QuestionnairePreview({ questions }: { questions: Question[] }): 
           setResult(null);
           setAnswers((prev) => ({ ...prev, [id]: value }));
         }}
+        footer={<CrisisFooter />}
       />
 
       {result ? <Banner tone={result.ok ? 'info' : 'warning'}>{result.message}</Banner> : null}

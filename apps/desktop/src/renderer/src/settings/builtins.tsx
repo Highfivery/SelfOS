@@ -1,9 +1,10 @@
 import { z } from 'zod';
-import { ClipboardList, Database, Info, Moon, Palette, Sparkles } from 'lucide-react';
+import { ClipboardList, Database, Info, Moon, Palette, Send, Sparkles } from 'lucide-react';
 import { registerSection, registerSettings } from './registry';
 import { defineSetting } from './types';
 import { AboutDisclaimer, AboutVersion, RevealVaultRow, VaultLocationValue } from './customRows';
 import { ApiKeyControl, TestConnectionControl } from './aiControls';
+import { RelaySettingsPanel } from './RelaySettingsPanel';
 
 declare module './types' {
   interface SettingsTypeMap {
@@ -58,13 +59,20 @@ export function registerBuiltinSettings(): void {
     order: 4,
   });
   registerSection({
+    id: 'relay',
+    title: 'Relay',
+    description: 'Send questionnaires to people without SelfOS, via a private encrypted link.',
+    icon: Send,
+    order: 5,
+  });
+  registerSection({
     id: 'vault',
     title: 'Vault',
     description: 'Where your data is stored.',
     icon: Database,
-    order: 5,
+    order: 6,
   });
-  registerSection({ id: 'about', title: 'About', icon: Info, order: 6 });
+  registerSection({ id: 'about', title: 'About', icon: Info, order: 7 });
 
   registerSettings([
     defineSetting({
@@ -210,6 +218,16 @@ export function registerBuiltinSettings(): void {
       default: true,
       control: { type: 'switch' },
       scope: 'vault',
+      order: 1,
+    }),
+    defineSetting({
+      key: 'relay.connection',
+      section: 'relay',
+      label: 'Cloudflare relay',
+      schema: z.null(),
+      default: null,
+      control: { type: 'custom', render: RelaySettingsPanel },
+      adminOnly: true,
       order: 1,
     }),
     defineSetting({

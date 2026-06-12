@@ -239,6 +239,44 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Build (Questionnaires **slice §13.6 — the external Cloudflare relay; the Questionnaires
+  feature is now FULLY BUILT** except the deferred §13.2 image follow-ups + the AI image-gen companion spec;
+  [08-questionnaires](docs/specs/08-questionnaires.md) §3.2/§3.4/§3.5/§3.8/§3.9/§4.1/§4.5/§5.1/§5.2/§5.4/§6/
+  §8.3/§8.6/§11/§13.6). **The whole relay on ONE branch** (the user chose this over sub-slicing — the pieces
+  are coupled). All decisions **asked first** (2 rounds, all recommendations confirmed): fake Worker/Cloudflare
+  now (`SELFOS_FAKE_RELAY`) + user deploys/verifies later (blind-written like the iOS bits); **image ZK
+  included**; spec **§11 retention/domain/crisis defaults confirmed**; relay page mirrors the SelfOS look,
+  English v1. **Extraction:** the shared answering renderer → a new **`@selfos/answering`** package
+  (`QuestionnaireForm` + `QuestionImage` + `CrisisFooter`, self-contained — plain elements + design-token CSS,
+  no app design-system) so Electron + the relay page render ONE implementation (in-app callers pass the
+  Sessions `CrisisFooter` so behaviour is byte-identical; the suite is the proof). **Relay crypto
+  (`@selfos/core/relay`):** per-send **ECDH P-256** (responses sealed to the public key in the browser, opened
+  with the private key wrapped under the master key), a symmetric **content key** in the URL **fragment**
+  sealing questions + images (never seen by the server), a 6-digit **PIN**, and the pure **mailbox ops** the
+  Worker calls — all through ONE shared PIN gate (5 attempts → 15-min lockout). **`relayService`** mints
+  `Assignment.relay` at send (re-encrypting question images into the snapshot), drains + decrypts + purges,
+  revokes. **`apps/relay` Worker** — a zero-knowledge mailbox + a branded WCAG responsive **static answering
+  page** (bundles `@selfos/answering` + `@selfos/core/relay` → one `dist/worker.js` the app uploads; strict CSP;
+  ≤256 KB single submissions; serves the derived disclosure + static crisis resources + the privacy notice +
+  the trust line; drain/revoke authed by `drainSecret`). **Host:** `cloudflareDeployer` (provision KV + deploy/
+  update/teardown via the Cloudflare REST API) + `relayHttpClient` + `relayConfig` (`config/relay.enc` —
+  endpoint + drainSecret + **encrypted CF token**, host-side only, **never crossing IPC**); deployer + transport
+  are interfaces with fakes. **Renderer:** the admin-only **Settings → Relay** panel (with the "Admin only"
+  marker — also fixed the `custom`-control `SettingField` to render that badge), the external send + delivery
+  (link + PIN, Copy / mailto / SMS / native share, PIN-included default + sensitive opt-out), the drain flow,
+  and external delivery + revoke in Results. **Sensitive gates on the relay page** (18+ ack / DOB+consent →
+  `ConsentReceipt`) + **revoke-on-deletion** (§3.9). Code-reviewer **fix-first**: **a blocker** — the PIN
+  rate-limit had guarded only `unlock`, leaving `respond`/`withdraw` as **unthrottled brute-force oracles**;
+  now all three share one `pinGate` so a wrong PIN on ANY endpoint counts toward the lockout (+ a cross-endpoint
+  test); should-fixes applied (the IPC contract carries `privacy`; drain skips already-drained sends). Gate
+  green: typecheck (node + web/DOM-lib), lint, format, **234 core + 308 desktop + 8 relay unit, 45 E2E**. Live
+  web-preview visual QA (admin Relay connect → connected; external send → delivery; desktop + 390px; no console
+  errors). Synced `08`/`00`/`03`. **Lesson: a rate-limit that lives on ONE endpoint is no rate-limit — every
+  endpoint that checks the same secret (PIN) must share one gate that increments on each failure, or an
+  unthrottled sibling endpoint (`respond`/`withdraw`) becomes a brute-force oracle for it.** **Deploy-time
+  verification (the real Cloudflare provision/deploy + shipping `worker.js` into the iOS bundle) is the only
+  remaining user-driven step.**
+
 - 2026-06-11 — Build (Questionnaires **slice §13.5d — COMPATIBILITY mode; §13.5 COMPLETE — the
   Questionnaires feature is fully built** except the deferred §13.6 relay; [08-questionnaires](docs/specs/08-questionnaires.md)
   §3.6/§3.9/§4.1/§4.3/§4.4/§4.5/§6/§8.4/§13.5d). **The whole compatibility feature on ONE branch, merged

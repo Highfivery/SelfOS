@@ -42,6 +42,11 @@ export function responsePath(assignmentId: string): string {
   return `${sendDir(assignmentId)}/response.enc`;
 }
 
+/** The consent receipt for an external (relay) send (§4.1/§4.5), present once the recipient submits. */
+export function consentPath(assignmentId: string): string {
+  return `${sendDir(assignmentId)}/consent.enc`;
+}
+
 /** Compatibility groups (§3.6): the alignment report for one paired send, keyed by its group id. */
 export const COMPAT_DIR = 'questionnaires/compat';
 

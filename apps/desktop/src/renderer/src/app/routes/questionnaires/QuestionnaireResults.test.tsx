@@ -35,6 +35,7 @@ function enableAi(): void {
 const send = (over: Partial<SendResult> = {}): SendResult => ({
   assignmentId: 'a1',
   recipientName: 'Mara',
+  channel: 'inApp',
   status: 'submitted',
   privacy: 'standard',
   createdAt: 'now',
@@ -176,5 +177,26 @@ describe('QuestionnaireResults', () => {
     });
     renderResults();
     expect(await screen.findByText(/Not now/)).toBeInTheDocument();
+  });
+
+  it('offers "Check for responses" + revoke for an open external (relay) send', async () => {
+    let drained = false;
+    installMockBridge({
+      assignmentsResults: () =>
+        Promise.resolve([send({ channel: 'relay', status: 'sent', recipientName: 'Alex' })]),
+      assignmentsDrain: () => {
+        drained = true;
+        return Promise.resolve({ drained: 1, declined: 0 });
+      },
+    });
+    renderResults();
+    await screen.findByText('Alex');
+    // External, still-open send → drain + revoke affordances appear.
+    expect(screen.getByRole('button', { name: /check for responses/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /revoke the link sent to Alex/i }),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /check for responses/i }));
+    await waitFor(() => expect(drained).toBe(true));
   });
 });

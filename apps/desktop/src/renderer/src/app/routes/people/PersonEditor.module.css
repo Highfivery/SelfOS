@@ -1,0 +1,9 @@
+/* An "important date" row: the label grows, the date + remove stay inline (no wrap-below at desktop). */
+.dateLabel {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.dateValue {
+  flex: 0 0 auto;
+}

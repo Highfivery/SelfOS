@@ -1,7 +1,47 @@
 import type { FileSystem } from '../host';
 import { listInsightsForPerson, summarizeForContext } from '../insights';
+import type { Person } from '../schemas';
 import { getPerson, listPeople } from './peopleService';
 import { listRelationships } from './relationshipService';
+
+/**
+ * The SHAREABLE descriptive profile fields (13-dream-images §4.6) formatted as "Label: value" lines — the
+ * same "may feed others' AI" bucket as `publicNotes` (04 §3.4). Used both for the person's own context and
+ * for the people they relate to. `birthday` is intentionally NOT surfaced here (it's reused for the
+ * image-depiction's exact age, 13 §5.2, not narrated into chat context).
+ */
+export function shareableProfileLines(person: Person): string[] {
+  const lines: string[] = [];
+  const add = (label: string, value: string | undefined): void => {
+    const trimmed = value?.trim();
+    if (trimmed) lines.push(`${label}: ${trimmed}`);
+  };
+  add('Gender', person.gender);
+  add('Appearance', person.appearanceDescription);
+  add('Ethnicity', person.ethnicity);
+  add('Occupation', person.occupation);
+  if (person.interests?.length) add('Interests', person.interests.join(', '));
+  add('Location', person.location);
+  add('Goals', person.goals);
+  add('Communication style', person.communicationStyle);
+  if (person.values?.length) add('Values', person.values.join(', '));
+  if (person.languages?.length) add('Languages', person.languages.join(', '));
+  if (person.importantDates?.length)
+    add('Important dates', person.importantDates.map((d) => `${d.label} (${d.date})`).join(', '));
+  return lines;
+}
+
+/**
+ * The PRIVATE descriptive fields (13-dream-images §4.6) — surfaced ONLY in the person's own context block,
+ * never about a related/linked person (the shareable-vs-private boundary, like `privateNotes`). Never sent
+ * to the image provider (13 §8.2).
+ */
+export function privateProfileLines(person: Person): string[] {
+  const lines: string[] = [];
+  if (person.healthNotes?.trim()) lines.push(`Health notes: ${person.healthNotes.trim()}`);
+  if (person.faith?.trim()) lines.push(`Faith: ${person.faith.trim()}`);
+  return lines;
+}
 
 /**
  * Assemble the AI context block for a person's session (04-people-roles §3.4). Includes the person's
@@ -25,7 +65,11 @@ export async function buildContext(
     `You are supporting ${person.displayName}${person.pronouns ? ` (${person.pronouns})` : ''}.`,
   );
   if (person.publicNotes) lines.push(`About them: ${person.publicNotes}`);
+  // Their own shareable descriptive fields (13 §4.6) — part of their own full profile.
+  for (const line of shareableProfileLines(person)) lines.push(`  ${line}`);
   if (person.privateNotes) lines.push(`Private (their own): ${person.privateNotes}`);
+  // Their own private descriptive fields — only in their own context, never about a related person.
+  for (const line of privateProfileLines(person)) lines.push(`  ${line}`);
 
   const theirs = relationships.filter(
     (relationship) =>
@@ -46,6 +90,8 @@ export async function buildContext(
       const about = other.publicNotes ? ` — ${other.publicNotes}` : '';
       const aboutRel = relationship.publicNotes ? ` (${relationship.publicNotes})` : '';
       lines.push(`- ${other.displayName} (${relationship.type})${about}${aboutRel}`);
+      // Their shareable descriptive fields (13 §4.6) — never their private health/faith.
+      for (const line of shareableProfileLines(other)) lines.push(`  · ${line}`);
     }
   }
 
@@ -123,6 +169,8 @@ export async function buildLinkedPeopleContext(
     const about = person.publicNotes ? ` — ${person.publicNotes}` : '';
     const aboutRel = relationship?.publicNotes ? ` (${relationship.publicNotes})` : '';
     lines.push(`- ${person.displayName}${relType}${about}${aboutRel}`);
+    // Their shareable descriptive fields (13 §4.6) — never their private health/faith.
+    for (const line of shareableProfileLines(person)) lines.push(`  · ${line}`);
     // Only shareable facts about them — never their private/non-shareable facts (the privacy boundary).
     const facts = (await listInsightsForPerson(fs, key, id))
       .filter((insight) => insight.approved)

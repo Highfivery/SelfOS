@@ -239,6 +239,38 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-12 — Build (**Dream-images slice 1 — the People-profile amendment**;
+  [13-dream-images](docs/specs/13-dream-images.md) §4.6/§13.1, [04-people-roles](docs/specs/04-people-roles.md)
+  §4.1). The first slice of the approved spec 13 (AI dream-image generation), but **independently valuable and
+  imageless** — new descriptive `Person` fields used as coaching context **app-wide**. **Asked first** (the one
+  open §11.3 build-time confirmation): `gender` = **Female / Male / Non-binary / Prefer not to say + free-text
+  "Other…"** (user confirmed the spec proposal). **Schema:** additive-optional fields on
+  `PersonSchema`/`PersonInputSchema` — SHAREABLE (`gender`, `appearanceDescription`, `ethnicity`, `occupation`,
+  `interests[]`, `location`, `goals`, `communicationStyle`, `values[]`, `languages[]`,
+  `importantDates[{label,date}]`) + PRIVATE (`healthNotes`, `faith`); **no `schemaVersion` bump, no migration**
+  (the `email`/`phone` precedent); **`birthday` reused** for age, not duplicated. Threaded through
+  `upsertPerson` (conditional spreads — a cleared field drops, doesn't linger). **Context:** two new pure
+  helpers `shareableProfileLines`/`privateProfileLines` in `buildContext.ts` — the shareable set feeds the
+  person's **own AND related/linked** people's context (the `publicNotes` "may feed others' AI" bucket), the
+  private set feeds **only** the person's own block (the `privateNotes` boundary). `buildContext` (related
+  loop) + `buildLinkedPeopleContext` both surface only the shareable set. **Renderer:** `PersonEditor` gained
+  a Profile-tab **birthday** input (previously unreachable in the UI — the depiction's age source) and a new
+  **About** tab — a shared group (gender = preset Select + free-text "Other…" reveal; `ChipEditor` for
+  interests/values/languages; a label+date `importantDates` row editor) and a Private group (health/faith,
+  marked "never shared with anyone else's AI, never sent to an image provider"). Code-reviewer verdict **ship**
+  (privacy boundary verified airtight on every path — health/faith reach only the person's own block, never a
+  related/linked person; applied the one nit: a clear-on-edit drop test). Gate green: typecheck (node +
+  web/DOM-lib), lint, format, **248 core + 326 desktop** unit (+5 core: shareable/private context split,
+  linked-person private exclusion, descriptive round-trip, clean-absence, clear-on-edit; +2 RTL: About save +
+  gender-Other reveal), **E2E** (+1 encrypted About round-trip; the 390px sweep now walks the About tab incl.
+  the densest important-dates row). Visual QA at desktop + 390px (the important-dates row stays single-line
+  inline at desktop via a small flex CSS module, wraps cleanly at phone width; the Private card reads as
+  intentional). Built in the **`feat/dream-images-slice-1`** worktree off `main`. **Lesson: a date-row whose
+  fields flex-grow will push a trailing remove button to wrap below even at desktop — pin the label to
+  `flex:1 1 0; min-width:0` and the date/remove to `flex:0 0 auto` so the row stays inline wide and wraps only
+  when it must.** **NEXT: slice 2 — the image core backend** (`ImageClient` host interface + OpenAI impl +
+  offline fake; `buildDepictionNote`/`buildImagePromptInput` name-free; `dreamImageService`; the `dream.image`
+  flat + `dream.imagePrompt` token usage types).
 - 2026-06-11 — Build (**Dreams amendment — link "people present" to the People graph**, finishing the §13.2
   deferral; [12-dreams](docs/specs/12-dreams.md) §3.1/§4.2/§5.1/§8.4 + §13 item 6). A dream's "people
   present" can now be **linked to a real household person** so the AI dream analysis draws on that person's

@@ -671,8 +671,9 @@ All product decisions are resolved (§12). Only these **build-time confirmations
 2. **Per-image price values** — seeded at the **high-quality 1024² estimate (~$0.17)** for `gpt-image-2`/
    `gpt-image-1` (§4.5); confirm the exact `perImageUsd` per model against current OpenAI pricing at build (cost
    is always an estimate, `06`).
-3. **`gender` enum options** — a small enum **+ free-text "other"** (§12.14); confirm the exact preset list
-   (proposed: female / male / non-binary / prefer not to say / other → free text).
+3. **`gender` enum options** — ✅ **Resolved (2026-06-12, slice 1):** the preset list is **Female / Male /
+   Non-binary / Prefer not to say**, plus a free-text **"Other…"** that reveals a describe field. Built in the
+   `PersonEditor` About tab.
 4. **The "Shared with you" surface** — per-dream image sharing (§3.6) needs a place the recipient views a shared
    image; proposed a lightweight **"Shared with you"** section in Dreams. Confirm the placement during the
    sharing slice (build slice 5).
@@ -732,10 +733,13 @@ Confirmed with the user (2026-06-11) — encoded above, **not** to be re-opened:
 
 ## 13. Proposed build slices (after approval)
 
-1. **People-profile amendment** (`04` §4.1) — the additive-optional descriptive fields on
-   `Person`/`PersonInput` (no migration; `birthday` reused); `buildContext` + `buildLinkedPeopleContext`
-   threading (shareable own + related; private own-only); the `PersonEditor` About + Private field groups; unit
-   - RTL tests. Independently valuable; no images yet.
+1. **People-profile amendment** (`04` §4.1) — ✅ **Built 2026-06-12** (branch `feat/dream-images-slice-1`).
+   The additive-optional descriptive fields on `Person`/`PersonInput` (no migration; `birthday` reused);
+   `buildContext` + `buildLinkedPeopleContext` threading via `shareableProfileLines`/`privateProfileLines`
+   (shareable own + related; private own-only); the `PersonEditor` Profile-tab birthday input + the **About**
+   tab (shared + private field groups; `gender` preset enum + free-text "Other"; `ChipEditor` for
+   interests/values/languages; an important-dates row editor); unit + RTL + E2E tests. Independently valuable;
+   no images yet.
 2. **Image core backend** — the `ImageClient` host interface (OpenAI impl + offline fake) + `OPENAI_API_KEY_ID`
    in the `SecretStore`; `buildDepictionNote` + `buildImagePromptInput` (name-free) + the **Claude distillation**
    pass; `dreamImageService` (distill → generate → `encryptBytes` → store + stamp `Dream.image`; get; delete);
@@ -782,3 +786,21 @@ Confirmed with the user (2026-06-11) — encoded above, **not** to be re-opened:
 - 2026-06-12 — **Approved.** The user reviewed the resolved spec and approved it for build. Cleared for
   **slice 1 — the People-profile amendment** (`04` §4.1: the additive descriptive fields + `buildContext`
   threading + the `PersonEditor` groups), then slices 2–5. Only the §11 build-time confirmations remain.
+- 2026-06-12 — **Slice 1 built** (People-profile amendment; `04` §4.1/§13.1). Additive-optional descriptive
+  fields on `PersonSchema`/`PersonInputSchema` (gender, appearanceDescription, ethnicity, occupation,
+  interests, location, goals, communicationStyle, values, languages, importantDates [shareable]; healthNotes,
+  faith [private]) — **no `schemaVersion` bump, no migration** (the email/phone precedent); `birthday`
+  **reused**. Threaded through `upsertPerson` and surfaced in `buildContext`/`buildLinkedPeopleContext` via two
+  new pure helpers `shareableProfileLines`/`privateProfileLines`: the shareable set feeds the person's own AND
+  related/linked people's context (the `publicNotes` bucket), the private set feeds **only** the person's own
+  block (the `privateNotes` boundary). `PersonEditor` gained a Profile-tab **birthday** input (previously
+  unreachable in the UI — the depiction's age source) and a new **About** tab with a shared group (gender =
+  the §11.3 preset enum + free-text "Other…"; `ChipEditor` for interests/values/languages; a label+date
+  important-dates row editor) and a Private group (health/faith, clearly marked "never shared, never sent to
+  an image provider"). §11.3 (gender options) resolved with the user. Tests: +4 core (buildContext
+  shareable/private split, linked-people private exclusion, peopleService round-trip + clean-absence), +2 RTL
+  (About fields save; gender-Other reveal), +1 E2E (encrypted About round-trip) + the 390px sweep walks the
+  About tab. Gate green: typecheck (node + web/DOM-lib), lint, format, **248 core + 326 desktop** unit, E2E.
+  Visual QA at desktop + 390px. **NEXT: slice 2 — the image core backend** (`ImageClient` host interface +
+  OpenAI impl + fake; `buildDepictionNote`/`buildImagePromptInput`; `dreamImageService`; the `dream.image` /
+  `dream.imagePrompt` usage types).

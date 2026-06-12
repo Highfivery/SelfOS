@@ -105,6 +105,53 @@ describe('buildContext', () => {
     expect(ctx).not.toContain('SAM-PRIVATE'); // never a related person's private fact
   });
 
+  it('surfaces shareable descriptive fields (own + related) but private ones only for the person themself', async () => {
+    const fs = memFileSystem();
+    await savePerson(
+      fs,
+      key,
+      person('a', 'Alex', {
+        occupation: 'nurse',
+        interests: ['hiking', 'pottery'],
+        healthNotes: 'ALEX-HEALTH-SECRET',
+        faith: 'ALEX-FAITH-SECRET',
+      }),
+    );
+    await savePerson(
+      fs,
+      key,
+      person('b', 'Sam', {
+        appearanceDescription: 'tall with curly hair',
+        ethnicity: 'Korean',
+        healthNotes: 'SAM-HEALTH-SECRET',
+        faith: 'SAM-FAITH-SECRET',
+      }),
+    );
+    const rel: Relationship = {
+      id: 'r1',
+      schemaVersion: 1,
+      fromPersonId: 'a',
+      toPersonId: 'b',
+      type: 'partner',
+      createdAt: 'now',
+      updatedAt: 'now',
+    };
+    await saveRelationship(fs, key, rel);
+
+    const ctx = await buildContext(fs, key, 'a');
+    // Own shareable + own private descriptive fields both appear (their own session).
+    expect(ctx).toContain('Occupation: nurse');
+    expect(ctx).toContain('Interests: hiking, pottery');
+    expect(ctx).toContain('ALEX-HEALTH-SECRET'); // own private — allowed in their own block
+    expect(ctx).toContain('ALEX-FAITH-SECRET');
+    // A related person's shareable descriptive fields appear...
+    expect(ctx).toContain('tall with curly hair');
+    expect(ctx).toContain('Ethnicity: Korean');
+    // ...but a related person's PRIVATE descriptive fields never do.
+    expect(ctx).not.toContain('SAM-HEALTH-SECRET');
+    expect(ctx).not.toContain('SAM-FAITH-SECRET');
+  });
+
   it('returns empty for an unknown person', async () => {
     expect(await buildContext(memFileSystem(), key, 'nope')).toBe('');
   });
@@ -166,6 +213,26 @@ describe('buildLinkedPeopleContext', () => {
     expect(ctx).toContain('an old colleague');
     expect(ctx).not.toContain('('); // no relationship type parenthetical when there's no relationship
     expect(ctx).not.toContain('CASEY-PRIVATE');
+  });
+
+  it("surfaces a linked person's shareable descriptive fields, never their private health/faith", async () => {
+    const fs = memFileSystem();
+    await savePerson(fs, key, person('a', 'Alex'));
+    await savePerson(
+      fs,
+      key,
+      person('b', 'Sam', {
+        appearanceDescription: 'tall with curly hair',
+        ethnicity: 'Korean',
+        healthNotes: 'SAM-HEALTH-SECRET',
+        faith: 'SAM-FAITH-SECRET',
+      }),
+    );
+    const ctx = await buildLinkedPeopleContext(fs, key, 'a', ['b']);
+    expect(ctx).toContain('tall with curly hair'); // shareable depiction field
+    expect(ctx).toContain('Ethnicity: Korean');
+    expect(ctx).not.toContain('SAM-HEALTH-SECRET'); // private — never about a linked person
+    expect(ctx).not.toContain('SAM-FAITH-SECRET');
   });
 
   it('honors per-person targeted (shareableWith) facts and skips unknown ids', async () => {

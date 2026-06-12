@@ -54,6 +54,25 @@ export async function upsertPerson(
     ...(input.privateNotes !== undefined ? { privateNotes: input.privateNotes } : {}),
     ...(input.email !== undefined ? { email: input.email } : {}),
     ...(input.phone !== undefined ? { phone: input.phone } : {}),
+    // Descriptive profile fields (13-dream-images §4.6) — additive-optional, conditionally spread so a
+    // person saved without them stays clean (exactOptionalPropertyTypes).
+    ...(input.gender !== undefined ? { gender: input.gender } : {}),
+    ...(input.appearanceDescription !== undefined
+      ? { appearanceDescription: input.appearanceDescription }
+      : {}),
+    ...(input.ethnicity !== undefined ? { ethnicity: input.ethnicity } : {}),
+    ...(input.occupation !== undefined ? { occupation: input.occupation } : {}),
+    ...(input.interests !== undefined ? { interests: input.interests } : {}),
+    ...(input.location !== undefined ? { location: input.location } : {}),
+    ...(input.goals !== undefined ? { goals: input.goals } : {}),
+    ...(input.communicationStyle !== undefined
+      ? { communicationStyle: input.communicationStyle }
+      : {}),
+    ...(input.values !== undefined ? { values: input.values } : {}),
+    ...(input.languages !== undefined ? { languages: input.languages } : {}),
+    ...(input.importantDates !== undefined ? { importantDates: input.importantDates } : {}),
+    ...(input.healthNotes !== undefined ? { healthNotes: input.healthNotes } : {}),
+    ...(input.faith !== undefined ? { faith: input.faith } : {}),
   };
   await savePerson(fs, key, person);
   return person;

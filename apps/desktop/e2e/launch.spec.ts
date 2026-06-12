@@ -273,6 +273,36 @@ test('people: shared and private notes persist', async () => {
   }
 });
 
+test('people: descriptive About fields persist, splitting shareable from private', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'People' }).click();
+    await w.getByRole('button', { name: 'Tester Subject' }).click();
+    await w.getByRole('button', { name: 'About', exact: true }).click();
+    await w.getByLabel('Gender').selectOption('Non-binary');
+    await w.getByLabel('Appearance', { exact: true }).fill('tall, curly hair');
+    await w.getByLabel('Occupation').fill('nurse');
+    await w.getByLabel('Health notes').fill('manages asthma');
+    await w.getByLabel('Faith').fill('Buddhist');
+    await w.getByRole('button', { name: 'Save' }).click();
+
+    // Reopen and confirm every field round-tripped through the encrypted profile.
+    await w.getByRole('button', { name: 'Tester Subject' }).click();
+    await w.getByRole('button', { name: 'About', exact: true }).click();
+    await expect(w.getByLabel('Gender')).toHaveValue('Non-binary');
+    await expect(w.getByLabel('Appearance', { exact: true })).toHaveValue('tall, curly hair');
+    await expect(w.getByLabel('Occupation')).toHaveValue('nurse');
+    await expect(w.getByLabel('Health notes')).toHaveValue('manages asthma');
+    await expect(w.getByLabel('Faith')).toHaveValue('Buddhist');
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('people: an admin sets a per-person budget on the Budget tab', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);
@@ -2377,7 +2407,12 @@ test('responsive: at a phone width the nav is a drawer and no screen overflows h
       if (name === 'People') {
         await w.getByRole('button', { name: 'Tester Subject' }).click(); // open the editor (detail)
         await w.waitForTimeout(150);
-        expect(await noOverflow()).toBe(true); // the 5 person tabs scroll, not overflow
+        expect(await noOverflow()).toBe(true); // the person tabs scroll, not overflow
+        // The About tab has the densest layout (the important-dates label+date+remove row must wrap).
+        await w.getByRole('button', { name: 'About', exact: true }).click();
+        await w.getByRole('button', { name: 'Add date' }).click();
+        await w.waitForTimeout(120);
+        expect(await noOverflow()).toBe(true);
         await w.getByRole('button', { name: 'People' }).click(); // back to the list
       }
       if (name === 'Roles') {

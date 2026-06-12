@@ -94,6 +94,58 @@ describe('upsertPerson', () => {
     expect(read?.email).toBe('sam@example.com');
     expect(read?.phone).toBe('+15551234567');
   });
+
+  it('persists the descriptive profile fields (13-dream-images §4.6), round-tripping arrays + dates', async () => {
+    const created = await upsertPerson(fs, key, {
+      displayName: 'Sam',
+      isSubject: true,
+      tags: [],
+      gender: 'non-binary',
+      appearanceDescription: 'tall with curly hair',
+      ethnicity: 'Korean',
+      occupation: 'nurse',
+      interests: ['hiking', 'pottery'],
+      location: 'Seattle',
+      goals: 'finish the half-marathon',
+      communicationStyle: 'direct',
+      values: ['honesty', 'growth'],
+      languages: ['English', 'Korean'],
+      importantDates: [{ label: 'Anniversary', date: '2015-06-01' }],
+      healthNotes: 'manages asthma',
+      faith: 'Buddhist',
+    });
+    const read = await getPerson(fs, key, created.id);
+    expect(read?.gender).toBe('non-binary');
+    expect(read?.appearanceDescription).toBe('tall with curly hair');
+    expect(read?.interests).toEqual(['hiking', 'pottery']);
+    expect(read?.importantDates).toEqual([{ label: 'Anniversary', date: '2015-06-01' }]);
+    expect(read?.healthNotes).toBe('manages asthma');
+    expect(read?.faith).toBe('Buddhist');
+  });
+
+  it('leaves descriptive fields absent when not provided (no migration, clean shape)', async () => {
+    const created = await upsertPerson(fs, key, { displayName: 'Jo', isSubject: false, tags: [] });
+    const read = await getPerson(fs, key, created.id);
+    expect(read).not.toHaveProperty('gender');
+    expect(read).not.toHaveProperty('healthNotes');
+    expect(read).not.toHaveProperty('interests');
+  });
+
+  it('drops a descriptive field on edit when the renderer omits it (cleared, not lingering)', async () => {
+    const created = await upsertPerson(fs, key, {
+      displayName: 'Jo',
+      isSubject: false,
+      tags: [],
+      gender: 'Male',
+      interests: ['cycling'],
+    });
+    expect((await getPerson(fs, key, created.id))?.gender).toBe('Male');
+    // The editor clears the field → omits it from the next input; upsert rebuilds from input only.
+    await upsertPerson(fs, key, { id: created.id, displayName: 'Jo', isSubject: false, tags: [] });
+    const read = await getPerson(fs, key, created.id);
+    expect(read).not.toHaveProperty('gender');
+    expect(read).not.toHaveProperty('interests');
+  });
 });
 
 describe('relationshipService', () => {

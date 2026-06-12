@@ -140,7 +140,12 @@ interface Person {
 > image provider — the same shareable-vs-private split as `privateNotes`. All **additive-optional**, so
 > existing person files parse unchanged — **no `schemaVersion` bump or migration** (the `email`/`phone`
 > precedent). Surfaced in the tabbed `PersonEditor` (an About group for the shareable fields, a Private group
-> for `healthNotes`/`faith`). Field-type confirmations are tracked in 13 §11. _Lands when 13 is approved/built._
+> for `healthNotes`/`faith`). **Built 2026-06-12 (13-dream-images slice 1):** the schema fields,
+> `upsertPerson` threading, the `buildContext`/`buildLinkedPeopleContext` surfacing (shareable own + related;
+> private own-only), and the `PersonEditor` Profile-tab **birthday** input + **About** tab (shared + private
+> field groups; `gender` = the §11.3 preset enum + free-text "Other"; `interests`/`values`/`languages` via
+> `ChipEditor`; an `importantDates` label+date row editor). The depiction subset that feeds the image prompt
+> lands with 13 slice 2.
 
 ### 4.2 Relationship (the graph edge)
 

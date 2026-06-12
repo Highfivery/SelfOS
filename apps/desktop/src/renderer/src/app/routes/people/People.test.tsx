@@ -56,6 +56,63 @@ describe('People', () => {
     expect(peopleSave.mock.calls[0]?.[0]).toMatchObject({ displayName: 'Sam', isSubject: false });
   });
 
+  it('saves descriptive About fields, splitting shareable from private (13 §4.6)', async () => {
+    const peopleSave = vi.fn((input: { displayName: string }) =>
+      Promise.resolve({
+        id: 'new',
+        schemaVersion: 1,
+        displayName: input.displayName,
+        isSubject: false,
+        tags: [],
+        createdAt: 'now',
+        updatedAt: 'now',
+      }),
+    );
+    installMockBridge({ peopleSave });
+    render(<People />);
+    await userEvent.click(screen.getByRole('button', { name: 'Add person' }));
+    await userEvent.type(screen.getByLabelText('Name'), 'Sam');
+    await userEvent.click(screen.getByRole('button', { name: 'About' }));
+    await userEvent.selectOptions(screen.getByLabelText('Gender'), 'Non-binary');
+    await userEvent.type(screen.getByLabelText('Appearance'), 'tall, curly hair');
+    await userEvent.type(screen.getByLabelText('Occupation'), 'nurse');
+    await userEvent.type(screen.getByLabelText('Health notes'), 'manages asthma');
+    await userEvent.type(screen.getByLabelText('Faith'), 'Buddhist');
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    expect(peopleSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gender: 'Non-binary',
+        appearanceDescription: 'tall, curly hair',
+        occupation: 'nurse',
+        healthNotes: 'manages asthma',
+        faith: 'Buddhist',
+      }),
+    );
+  });
+
+  it('reveals a free-text field when gender is "Other" and saves the typed value', async () => {
+    const peopleSave = vi.fn((input: { displayName: string }) =>
+      Promise.resolve({
+        id: 'new',
+        schemaVersion: 1,
+        displayName: input.displayName,
+        isSubject: false,
+        tags: [],
+        createdAt: 'now',
+        updatedAt: 'now',
+      }),
+    );
+    installMockBridge({ peopleSave });
+    render(<People />);
+    await userEvent.click(screen.getByRole('button', { name: 'Add person' }));
+    await userEvent.type(screen.getByLabelText('Name'), 'Sam');
+    await userEvent.click(screen.getByRole('button', { name: 'About' }));
+    await userEvent.selectOptions(screen.getByLabelText('Gender'), 'Other…');
+    await userEvent.type(screen.getByLabelText('Gender (describe)'), 'genderfluid');
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    expect(peopleSave).toHaveBeenCalledWith(expect.objectContaining({ gender: 'genderfluid' }));
+  });
+
   it('saves shared and private notes separately', async () => {
     const peopleSave = vi.fn((input: { displayName: string }) =>
       Promise.resolve({

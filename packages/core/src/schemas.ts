@@ -91,6 +91,28 @@ export const PersonSchema = z.object({
   // data). Additive-optional, so person files written before this parse unchanged (no migration needed).
   email: z.string().optional(),
   phone: z.string().optional(),
+  // Descriptive profile fields (13-dream-images §4.6). Additive-optional — existing person files parse
+  // unchanged, no schemaVersion bump (the email/phone precedent). The SHAREABLE set feeds `buildContext`
+  // for the person AND related people (the "may feed others' AI" bucket, like `publicNotes`, 04 §3.4); the
+  // depiction subset (appearanceDescription + gender + ethnicity + exact age from `birthday`) also feeds the
+  // dream-image prompt (13 §8.2). `birthday` (above) is reused for age — not duplicated.
+  gender: z.string().optional(), // small enum (female/male/non-binary/prefer-not-to-say) + free-text "other"
+  appearanceDescription: z.string().optional(),
+  ethnicity: z.string().optional(),
+  occupation: z.string().optional(),
+  interests: z.array(z.string()).optional(),
+  location: z.string().optional(),
+  goals: z.string().optional(),
+  communicationStyle: z.string().optional(),
+  values: z.array(z.string()).optional(),
+  languages: z.array(z.string()).optional(),
+  importantDates: z
+    .array(z.object({ label: z.string().min(1), date: z.string().min(1) }))
+    .optional(),
+  // PRIVATE — own coaching context only; never shared with other people's coach, never sent to the image
+  // provider (13 §8.2). Encrypted with the rest of the profile, like `privateNotes`.
+  healthNotes: z.string().optional(),
+  faith: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -172,6 +194,22 @@ export const PersonInputSchema = z.object({
   privateNotes: z.string().optional(),
   email: z.string().optional(),
   phone: z.string().optional(),
+  // Descriptive profile fields (13-dream-images §4.6) — mirror PersonSchema; main owns id/version/timestamps.
+  gender: z.string().optional(),
+  appearanceDescription: z.string().optional(),
+  ethnicity: z.string().optional(),
+  occupation: z.string().optional(),
+  interests: z.array(z.string()).optional(),
+  location: z.string().optional(),
+  goals: z.string().optional(),
+  communicationStyle: z.string().optional(),
+  values: z.array(z.string()).optional(),
+  languages: z.array(z.string()).optional(),
+  importantDates: z
+    .array(z.object({ label: z.string().min(1), date: z.string().min(1) }))
+    .optional(),
+  healthNotes: z.string().optional(),
+  faith: z.string().optional(),
 });
 export type PersonInput = z.infer<typeof PersonInputSchema>;
 

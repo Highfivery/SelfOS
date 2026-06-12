@@ -65,6 +65,9 @@ importers:
       '@selfos/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@selfos/relay':
+        specifier: workspace:*
+        version: link:../relay
       chokidar:
         specifier: ^3.6.0
         version: 3.6.0

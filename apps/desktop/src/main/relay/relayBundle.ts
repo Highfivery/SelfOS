@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { RelayBundle } from '../../shared/relay/cloudflareDeployer';
 
 /**
@@ -12,17 +13,35 @@ export const RELAY_VERSION = '1';
 
 const requireFromHere = createRequire(import.meta.url);
 
-export async function loadRelayBundle(): Promise<RelayBundle> {
-  const dist = resolve(dirname(requireFromHere.resolve('@selfos/relay/package.json')), 'dist');
+/** Candidate `apps/relay/dist` locations: the resolved workspace package, then a path relative to this
+ *  bundled file (`apps/desktop/out/main` → `apps/relay`). The first that holds a `worker.js` wins. */
+function relayDistDirs(): string[] {
+  const dirs: string[] = [];
   try {
-    const script = await readFile(resolve(dist, 'worker.js'), 'utf8');
-    const meta = JSON.parse(await readFile(resolve(dist, 'meta.json'), 'utf8')) as {
-      relayVersion?: string;
-    };
-    return { script, version: meta.relayVersion ?? RELAY_VERSION };
+    dirs.push(resolve(dirname(requireFromHere.resolve('@selfos/relay/package.json')), 'dist'));
   } catch {
-    throw new Error(
-      'The relay Worker bundle is missing. Build it first: pnpm --filter @selfos/relay build',
-    );
+    // @selfos/relay not resolvable from node_modules (e.g. an odd Electron resolve) — fall through.
   }
+  // From the bundled main (apps/desktop/out/main) up to the repo, then apps/relay/dist.
+  const here = dirname(fileURLToPath(import.meta.url));
+  dirs.push(resolve(here, '..', '..', '..', 'relay', 'dist'));
+  dirs.push(resolve(here, '..', '..', '..', '..', 'apps', 'relay', 'dist'));
+  return dirs;
+}
+
+export async function loadRelayBundle(): Promise<RelayBundle> {
+  for (const dist of relayDistDirs()) {
+    try {
+      const script = await readFile(resolve(dist, 'worker.js'), 'utf8');
+      const meta = JSON.parse(await readFile(resolve(dist, 'meta.json'), 'utf8')) as {
+        relayVersion?: string;
+      };
+      return { script, version: meta.relayVersion ?? RELAY_VERSION };
+    } catch {
+      // Try the next candidate.
+    }
+  }
+  throw new Error(
+    'The relay Worker bundle is missing. Build it first: pnpm --filter @selfos/relay build',
+  );
 }

@@ -28,6 +28,8 @@ export const CAPABILITIES = [
   // There is intentionally no "view others' dreams" capability — dreams are dreamer-only (12 §8.4).
   'dreams.own',
   'dreams.shareContext',
+  // Generate an AI image of one's own dream (13-dream-images §6). Default ON for Member, like `dreams.own`.
+  'dreams.generateImage',
 ] as const;
 
 export type CapabilityKey = (typeof CAPABILITIES)[number];
@@ -49,6 +51,7 @@ export const CAPABILITY_LABELS: Record<CapabilityKey, string> = {
   'questionnaires.readRaw': 'Reveal raw private answers (break-glass)',
   'dreams.own': 'Log & analyze their own dreams',
   'dreams.shareContext': 'Share a dream insight into a relationship',
+  'dreams.generateImage': 'Generate an AI image of their own dream',
 };
 
 /**
@@ -96,6 +99,7 @@ export const DEFAULT_ROLES: Role[] = [
       'questionnaires.sendExternal',
       'dreams.own',
       'dreams.shareContext',
+      'dreams.generateImage',
     ]),
   },
   {

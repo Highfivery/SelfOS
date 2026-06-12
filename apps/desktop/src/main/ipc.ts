@@ -11,6 +11,7 @@ import { readDeviceSettings, writeDeviceSettings } from './settings/settingsStor
 import { createNodeSecretStore } from './host/nodeSecretStore';
 import { defaultEncryptor } from './secrets/encryptor';
 import { defaultClaudeClient } from './claude/anthropicClient';
+import { defaultImageClient } from './image/openaiImageClient';
 import { isSuperAdminActive, setSuperAdminActive } from './people/superAdmin';
 import { loadMasterKey } from '@selfos/core/crypto';
 import { createNodeFileSystem } from './host/nodeFileSystem';
@@ -21,6 +22,7 @@ import { startVaultWatcher } from './vaultWatcherManager';
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
 const encryptor = defaultEncryptor();
 const claudeClient = defaultClaudeClient();
+const imageClient = defaultImageClient();
 
 function userDataDir(): string {
   return app.getPath('userData');
@@ -62,6 +64,7 @@ export function registerIpcHandlers(): void {
     fileSystem: createNodeFileSystem,
     secrets,
     claude: claudeClient,
+    image: imageClient,
     readDeviceState: () => readDeviceState(userDataDir()),
     updateDeviceState: (patch) => updateDeviceState(userDataDir(), patch),
     readDeviceSettings: () => readDeviceSettings(userDataDir()),
@@ -242,6 +245,9 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.dreamShareTargets, bridge.dreamShareTargets);
   handle(IpcChannels.dreamGetInsight, bridge.dreamGetInsight);
   handle(IpcChannels.dreamSetFactShare, bridge.dreamSetFactShare);
+  handle(IpcChannels.dreamGenerateImage, bridge.dreamGenerateImage);
+  handle(IpcChannels.dreamGetImage, bridge.dreamGetImage);
+  handle(IpcChannels.dreamDeleteImage, bridge.dreamDeleteImage);
   handle(IpcChannels.getSidebarCollapsed, bridge.getSidebarCollapsed);
   handle(IpcChannels.setSidebarCollapsed, bridge.setSidebarCollapsed);
 

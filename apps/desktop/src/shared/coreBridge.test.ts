@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { memFileSystem } from '@selfos/core/host';
 import { loadMasterKey } from '@selfos/core/crypto';
 import { toBase64 } from '@selfos/core/encoding';
-import type { ClaudeClient, FileSystem, SecretStore } from '@selfos/core/host';
+import type { ClaudeClient, FileSystem, ImageClient, SecretStore } from '@selfos/core/host';
 import {
   contentKeyFromFragment,
   drain as kvDrain,
@@ -16,7 +16,7 @@ import {
   unlock as kvUnlock,
   type RelayEnv,
 } from '@selfos/core/relay';
-import { ANTHROPIC_API_KEY_ID } from './channels';
+import { ANTHROPIC_API_KEY_ID, OPENAI_API_KEY_ID } from './channels';
 import type { DeviceState } from './schemas';
 import { createCoreBridge, type BridgeHost } from './coreBridge';
 
@@ -156,6 +156,10 @@ function makeHost(): {
       });
     },
   };
+  const image: ImageClient = {
+    generate: () =>
+      Promise.resolve({ ok: true, image: { bytes: new Uint8Array([1, 2, 3]), mime: 'image/png' } }),
+  };
   const ready = { phase: 'ready' as const, vaultPath: '/vault', hasSettings: true };
   const host: BridgeHost = {
     vaultAndKey: async () => {
@@ -166,6 +170,7 @@ function makeHost(): {
     fileSystem: () => fs,
     secrets,
     claude,
+    image,
     readDeviceState: () => Promise.resolve(device),
     updateDeviceState: (patch) => {
       device = { ...device, ...patch };
@@ -1149,6 +1154,60 @@ describe('createCoreBridge', () => {
       reason: 'MEMORY_DISABLED',
     });
     expect((await bridge.dreamGetAnalysis(dream.id))?.insightId).toBeUndefined();
+  });
+
+  it('generates → reads → deletes a dream image, gated by consent + key + dreams.generateImage', async () => {
+    const { bridge } = await freshOwner();
+    const dream = await bridge.dreamSave({
+      narrative: 'rooms that rearrange',
+      lucid: false,
+      nightmare: false,
+      tags: [],
+      people: [],
+      sensitivity: 'standard',
+    });
+
+    // No consent yet → refused before any provider call.
+    expect(await bridge.dreamGenerateImage({ dreamId: dream.id })).toMatchObject({
+      ok: false,
+      reason: 'NO_CONSENT',
+    });
+    await bridge.setSetting({ key: 'dreams.imageGenerationEnabled', value: true, scope: 'vault' });
+
+    // Consent on but no OpenAI key → refused.
+    expect(await bridge.dreamGenerateImage({ dreamId: dream.id })).toMatchObject({
+      ok: false,
+      reason: 'NO_KEY',
+    });
+
+    await bridge.secretSet({ id: OPENAI_API_KEY_ID, value: 'sk-openai' });
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-ant' });
+    expect(await bridge.dreamGenerateImage({ dreamId: dream.id })).toMatchObject({
+      ok: true,
+      mime: 'image/png',
+    });
+
+    // The encrypted bytes round-trip back as base64 + the descriptor is stamped (model from settings).
+    const img = await bridge.dreamGetImage({ dreamId: dream.id });
+    expect(img?.mime).toBe('image/png');
+    expect((img?.dataBase64.length ?? 0) > 0).toBe(true);
+    expect((await bridge.dreamGet(dream.id))?.image?.model).toBe('gpt-image-2');
+
+    await bridge.dreamDeleteImage({ dreamId: dream.id });
+    expect(await bridge.dreamGetImage({ dreamId: dream.id })).toBeNull();
+    expect((await bridge.dreamGet(dream.id))?.image).toBeUndefined();
+  });
+
+  it('denies dream-image ops to a person without dreams.generateImage (a Guest)', async () => {
+    const { bridge } = await freshOwner();
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    expect((await bridge.sessionSetActive({ personId: guest.id })).ok).toBe(true);
+    expect(await bridge.dreamGenerateImage({ dreamId: 'd1' })).toMatchObject({
+      ok: false,
+      reason: 'ERROR',
+    });
+    expect(await bridge.dreamGetImage({ dreamId: 'd1' })).toBeNull();
   });
 
   it('denies dream analysis ops to a person without dreams.own', async () => {

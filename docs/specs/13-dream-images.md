@@ -752,10 +752,16 @@ Confirmed with the user (2026-06-11) — encoded above, **not** to be re-opened:
    network). Security units: no name / no private field reaches the distillation input; OpenAI only ever sees
    the Claude-distilled prompt. Code-reviewer **ship**. **Models confirmed (§11.1):** `gpt-image-2` default +
    `gpt-image-1`. **Price confirmed (§11.2):** ~$0.17 flat. No IPC/renderer yet (slice 3).
-3. **IPC seam + settings + capability** — `dreams:generateImage` / `:getImage` / `:deleteImage` through the
-   typed seam (gated by `dreams.generateImage`, dreamer-scoped, key host-side); the `dreams.generateImage`
-   capability (Member default); the Settings consent toggle, admin-only OpenAI key control + image-model
-   select (`gpt-image-2`/`gpt-image-1`), and default-style picker; the host `image` part in `createCoreBridge`.
+3. **IPC seam + settings + capability** — ✅ **Built 2026-06-12** (branch `feat/dream-images-slice-3`).
+   `dreams:generateImage` / `:getImage` / `:deleteImage` through the full typed seam (channels → coreBridge →
+   ipc → preload → bridge mock), gated by the new **`dreams.generateImage`** capability (Member default ON,
+   Owner auto-grants), dreamer-scoped, both API keys read host-side and **never** crossing IPC; the slim
+   `DreamImageResult` keeps usage events host-side. Settings (Dreams section): `dreams.imageGenerationEnabled`
+   (consent, default OFF), `dreams.imageModel` (admin-only `gpt-image-2`/`gpt-image-1`), `dreams.imageStyle`
+   (default-style select), and an admin-only **`OpenAiKeyControl`** (a shared `SecretKeyControl` refactor of
+   `ApiKeyControl`; write-only). The `image` host part added to `BridgeHost` — Electron `defaultImageClient`,
+   web preview `webFakeImageClient`, iOS `browserImageClient` (browser-mode OpenAI, the `browserClaudeClient`
+   mirror). Code-reviewer **ship**. Renderer panel + generate E2E is slice 4.
 4. **Renderer + E2E (generate)** — the shared `DreamImagePanel` in both placements (entry / loading / success /
    refusal / calm states, the sensitive-tier warning, the style picker, Regenerate/Delete, admin-only cost);
    the `dreamStore`/`dreamAnalysisStore` image lifecycle; visual QA at desktop + 390px; the E2E (consent →
@@ -825,3 +831,24 @@ Confirmed with the user (2026-06-11) — encoded above, **not** to be re-opened:
     correct on the refused/billed/pre-gen split; regenerate non-destructive; path-guard confines I/O). Core-only
     (no IPC/renderer — slice 3). Gate green: typecheck (node + web/DOM-lib), lint, format, **266 core + 328
     desktop + 8 relay** unit. **NEXT: slice 3 — IPC seam + settings + the `dreams.generateImage` capability.**
+- 2026-06-12 — **Slice 3 built** (IPC seam + settings + capability; §13.1 slice 3 / §6). The
+  `dreams:generateImage`/`:getImage`/`:deleteImage` channels through the full typed seam (`channels.ts` +
+  `DreamImageResult` → `coreBridge.ts` [the trust boundary] → `ipc.ts` thin delegates + `image:
+defaultImageClient()` host wiring → `preload` → `test-utils/bridge` mock), all gated by a NEW
+  **`dreams.generateImage`** capability (Member default ON, not EXPLICIT_GRANT_ONLY so Owner auto-grants),
+  dreamer-scoped, with **both API keys read host-side** (`ANTHROPIC_API_KEY_ID` + `OPENAI_API_KEY_ID`) and
+  **never** crossing IPC. `dreamGenerateImage` reads consent/model/style from vault settings and maps the rich
+  `DreamImageGenerateResult` → the slim `DreamImageResult` (usage stays host-side); `dreamGetImage` returns
+  base64. Settings (Dreams section): `dreams.imageGenerationEnabled` (consent, default OFF),
+  `dreams.imageModel` (admin-only `gpt-image-2`/`gpt-image-1` select), `dreams.imageStyle` (default-style
+  select), and an admin-only `OpenAiKeyControl` (`aiControls.tsx` refactored to a shared write-only
+  `SecretKeyControl`); model/style/key `visibleWhen` consent on. The `image` host part added to `BridgeHost` —
+  Electron `defaultImageClient`, web preview `webFakeImageClient`, iOS `browserImageClient` (browser-mode
+  OpenAI, the `browserClaudeClient` mirror, so iOS gets it via `createCoreBridge`). Code-reviewer **ship**
+  (trust boundary airtight — keys never returned, all 3 ops re-enforce the capability + scope; settings
+  defaults match; `browserImageClient` faithful; `SecretKeyControl` preserves `ApiKeyControl` behavior). Gate
+  green: typecheck (node + web/DOM-lib), lint, format, **266 core + 331 desktop + 8 relay** unit (+2 bridge:
+  consent/key/capability-gated generate→read→delete round-trip + Guest denial; +1 RTL `OpenAiKeyControl`), **3
+  E2E** (+1 dream-image settings reveal + admin-only marker; the section-overflow + responsive sweeps now
+  cover the new settings). Visual QA at desktop + 390px. **NEXT: slice 4 — the `DreamImagePanel` renderer
+  (both placements) + the generate E2E + visual QA.**

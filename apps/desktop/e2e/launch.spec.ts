@@ -1952,6 +1952,33 @@ test('AI: enabling reveals key + model, saving a key and testing connects', asyn
   }
 });
 
+test('dreams: enabling image generation reveals the model, style, and admin-only OpenAI key', async () => {
+  const { userData, vault } = await seedReadyVault({ 'dreams.imageGenerationEnabled': true });
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'Dreams', exact: true }).click();
+
+    // Consent on → the model, style, and OpenAI key controls are revealed.
+    await expect(w.getByLabel('Image model')).toBeVisible();
+    await expect(w.getByLabel('Default image style')).toBeVisible();
+    await expect(w.getByLabel('OpenAI API key')).toBeVisible();
+
+    // The image model + key are admin-only — marked so admins know normal users don't see them.
+    await expect(w.getByText('Admin only').first()).toBeVisible();
+
+    // The OpenAI key is write-only — saving it reports configured (the value never returns to the renderer).
+    await w.getByLabel('OpenAI API key').fill('sk-openai-e2e');
+    await w.getByRole('button', { name: /save key/i }).click();
+    await expect(w.getByText(/key is configured/i)).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('settings: every section renders content without horizontal overflow', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);

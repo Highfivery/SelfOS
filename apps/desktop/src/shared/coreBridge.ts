@@ -2,12 +2,14 @@ import { z } from 'zod';
 import {
   ANTHROPIC_API_KEY_ID,
   MIN_OWNER_PIN_LENGTH,
+  OPENAI_API_KEY_ID,
   type AccessView,
   type BudgetState,
   type ChatTurnResult,
   type ClaudeTestResult,
   type ConversationMeta,
   type DreamApproveResult,
+  type DreamImageResult,
   type DreamNarrativeResult,
   type DreamShareResult,
   type DreamSynthesisResult,
@@ -81,7 +83,7 @@ import {
   relayStatusOf,
   writeRelayConfig,
 } from './relay/relayConfig';
-import type { ClaudeClient, FileSystem, SecretStore } from '@selfos/core/host';
+import type { ClaudeClient, FileSystem, ImageClient, SecretStore } from '@selfos/core/host';
 import { uuid } from '@selfos/core/id';
 import {
   createMasterKey,
@@ -190,10 +192,13 @@ import {
 import {
   approveAnalysis,
   approvePatternNarrative,
+  deleteDreamImage,
+  generateDreamImage,
   generatePatternNarrative,
   getAnalysis,
   getDream,
   getDreamConversation,
+  getDreamImage,
   getDreamInsight,
   getPatternStats,
   getPatternSummary,
@@ -235,6 +240,8 @@ export interface BridgeHost {
   secrets: SecretStore;
   /** Streaming Claude client. */
   claude: ClaudeClient;
+  /** Image-generation client (OpenAI second provider, 13-dream-images §5.1). */
+  image: ImageClient;
 
   // --- Device-local state ---
   readDeviceState(): Promise<DeviceState>;
@@ -354,6 +361,10 @@ const DreamSetFactShareSchema = z.object({
   factId: z.string().min(1),
   withPersonId: z.string().min(1),
   share: z.boolean(),
+});
+const DreamGenerateImageSchema = z.object({
+  dreamId: z.string().min(1),
+  style: z.string().min(1).optional(), // per-image override; falls back to the Settings default
 });
 
 /** A zeroed stats object — returned to a denied/unready `dreamPatternStats` caller (a read, never throws). */
@@ -1938,6 +1949,62 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         share,
         now: new Date(),
       });
+    },
+    dreamGenerateImage: async (input): Promise<DreamImageResult> => {
+      const { dreamId, style } = DreamGenerateImageSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.generateImage'))) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      // Consent + image model + default style are vault settings; both API keys are read host-side and
+      // never cross to the renderer (the `anthropic.apiKey` rule, applied to the second provider).
+      const settings = await readVaultSettingsValues(ctx.fs);
+      const imageModel =
+        typeof settings['dreams.imageModel'] === 'string'
+          ? settings['dreams.imageModel']
+          : 'gpt-image-2';
+      const defaultStyle =
+        typeof settings['dreams.imageStyle'] === 'string'
+          ? settings['dreams.imageStyle']
+          : 'dreamlike';
+      const result = await generateDreamImage({
+        fs: ctx.fs,
+        key: ctx.key,
+        claude: host.claude,
+        image: host.image,
+        anthropicApiKey: await host.secrets.get(ANTHROPIC_API_KEY_ID),
+        openaiApiKey: await host.secrets.get(OPENAI_API_KEY_ID),
+        consent: settings['dreams.imageGenerationEnabled'] === true,
+        claudeModel: await host.activeModel(),
+        imageModel,
+        style: style ?? defaultStyle,
+        personId,
+        dreamId,
+        now: new Date(),
+      });
+      return result.ok
+        ? { ok: true, mime: result.mime }
+        : { ok: false, reason: result.reason, message: result.message };
+    },
+    dreamGetImage: async (input): Promise<{ mime: string; dataBase64: string } | null> => {
+      const { dreamId } = DreamIdSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.generateImage'))) {
+        return null;
+      }
+      const image = await getDreamImage(ctx.fs, ctx.key, personId, dreamId);
+      return image ? { mime: image.mime, dataBase64: toBase64(image.bytes) } : null;
+    },
+    dreamDeleteImage: async (input): Promise<void> => {
+      const { dreamId } = DreamIdSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.generateImage'))) {
+        return;
+      }
+      await deleteDreamImage(ctx.fs, ctx.key, personId, dreamId, new Date());
     },
 
     // --- UI state (device-local) ---

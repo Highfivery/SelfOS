@@ -15,6 +15,7 @@ import type {
   DreamAnalysis,
   DreamAnalysisEdits,
   DreamApproveResult,
+  DreamImageResult,
   DreamInput,
   DreamNarrativeResult,
   DreamPatternStats,
@@ -165,6 +166,9 @@ export const IpcChannels = {
   dreamShareTargets: 'dreams:shareTargets',
   dreamGetInsight: 'dreams:getInsight',
   dreamSetFactShare: 'dreams:setFactShare',
+  dreamGenerateImage: 'dreams:generateImage',
+  dreamGetImage: 'dreams:getImage',
+  dreamDeleteImage: 'dreams:deleteImage',
   getSidebarCollapsed: 'ui:getSidebarCollapsed',
   setSidebarCollapsed: 'ui:setSidebarCollapsed',
 } as const;
@@ -539,6 +543,16 @@ export interface SelfosBridge {
     withPersonId: string;
     share: boolean;
   }): Promise<DreamShareResult>;
+  /**
+   * Generate (or regenerate) an AI image of one of the active dreamer's dreams (13-dream-images §6).
+   * Distills a name-free prompt via Claude, renders it via OpenAI, and stores the encrypted bytes; the
+   * OpenAI key is read host-side and never crosses to the renderer. Requires `dreams.generateImage`.
+   */
+  dreamGenerateImage(input: { dreamId: string; style?: string }): Promise<DreamImageResult>;
+  /** The active dreamer's stored dream image as base64 for an `<img>` data URL; null if none. Requires `dreams.generateImage`. */
+  dreamGetImage(input: { dreamId: string }): Promise<{ mime: string; dataBase64: string } | null>;
+  /** Delete a dream's image (removes the bytes + clears the descriptor). Requires `dreams.generateImage`. */
+  dreamDeleteImage(input: { dreamId: string }): Promise<void>;
   /** Whether the desktop sidebar is collapsed to an icon rail (device-local). */
   getSidebarCollapsed(): Promise<boolean>;
   /** Persist the sidebar collapsed/expanded state (device-local). */
@@ -561,6 +575,7 @@ export type {
   DreamAnalysis,
   DreamAnalysisEdits,
   DreamApproveResult,
+  DreamImageResult,
   DreamInput,
   DreamNarrativeResult,
   DreamPatternStats,

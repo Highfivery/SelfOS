@@ -1150,5 +1150,18 @@ export type DreamImageGenerateResult =
       imageUsage?: UsageEvent;
     };
 
+/**
+ * The slim IPC result the renderer sees for `dreams:generateImage` (13 §6) — the usage events stay
+ * host-side (recorded through `06`); the renderer fetches the bytes separately, so this never carries the
+ * prompt or the pixels back.
+ */
+export type DreamImageResult =
+  | { ok: true; mime: string }
+  | {
+      ok: false;
+      reason: 'NO_CONSENT' | 'NO_KEY' | 'BUDGET' | 'REFUSED' | 'ERROR';
+      message: string;
+    };
+
 /** The result of sharing/unsharing a dream-insight fact with a related person (12 §3.4). */
 export type DreamShareResult = { ok: true } | { ok: false; reason: 'SENSITIVE' | 'NOT_FOUND' };

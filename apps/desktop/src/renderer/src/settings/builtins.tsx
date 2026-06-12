@@ -3,7 +3,7 @@ import { ClipboardList, Database, Info, Moon, Palette, Send, Sparkles } from 'lu
 import { registerSection, registerSettings } from './registry';
 import { defineSetting } from './types';
 import { AboutDisclaimer, AboutVersion, RevealVaultRow, VaultLocationValue } from './customRows';
-import { ApiKeyControl, TestConnectionControl } from './aiControls';
+import { ApiKeyControl, OpenAiKeyControl, TestConnectionControl } from './aiControls';
 import { RelaySettingsPanel } from './RelaySettingsPanel';
 import { RelayMessagesControl } from './RelayMessagesControl';
 import {
@@ -24,11 +24,18 @@ declare module './types' {
     'questionnaires.discloseAdminAccess': boolean;
     'questionnaires.defaultMessages': RelayMessages;
     'dreams.memoryEnabled': boolean;
+    'dreams.imageGenerationEnabled': boolean;
+    'dreams.imageModel': 'gpt-image-2' | 'gpt-image-1';
+    'dreams.imageStyle': 'dreamlike' | 'painterly' | 'watercolor' | 'realistic';
   }
 }
 
 const aiEnabled = (values: Readonly<Record<string, unknown>>): boolean =>
   values['ai.enabled'] === true;
+
+/** Dream-image config (model / style / OpenAI key) only appears once the consent toggle is on. */
+const dreamImagesEnabled = (values: Readonly<Record<string, unknown>>): boolean =>
+  values['dreams.imageGenerationEnabled'] === true;
 
 let registered = false;
 
@@ -238,6 +245,68 @@ export function registerBuiltinSettings(): void {
       control: { type: 'switch' },
       scope: 'vault',
       order: 1,
+    }),
+    defineSetting({
+      key: 'dreams.imageGenerationEnabled',
+      section: 'dreams',
+      label: 'Generate dream images',
+      description:
+        'When on, you can create an AI image of a dream. Generating sends a description of the dream (never anyone’s name or private notes) to OpenAI, a third party, to draw the picture. Off by default.',
+      schema: z.boolean(),
+      default: false,
+      control: { type: 'switch' },
+      scope: 'vault',
+      order: 2,
+    }),
+    defineSetting({
+      key: 'dreams.imageModel',
+      section: 'dreams',
+      label: 'Image model',
+      description: 'Which OpenAI model draws the image.',
+      schema: z.enum(['gpt-image-2', 'gpt-image-1']),
+      default: 'gpt-image-2',
+      control: {
+        type: 'select',
+        options: [
+          { value: 'gpt-image-2', label: 'GPT Image 2 — newest' },
+          { value: 'gpt-image-1', label: 'GPT Image 1' },
+        ],
+      },
+      scope: 'vault',
+      adminOnly: true,
+      order: 3,
+      visibleWhen: dreamImagesEnabled,
+    }),
+    defineSetting({
+      key: 'dreams.imageStyle',
+      section: 'dreams',
+      label: 'Default image style',
+      description: 'The look used for new dream images. You can override it per image.',
+      schema: z.enum(['dreamlike', 'painterly', 'watercolor', 'realistic']),
+      default: 'dreamlike',
+      control: {
+        type: 'select',
+        options: [
+          { value: 'dreamlike', label: 'Dreamlike' },
+          { value: 'painterly', label: 'Painterly' },
+          { value: 'watercolor', label: 'Watercolor' },
+          { value: 'realistic', label: 'Realistic' },
+        ],
+      },
+      scope: 'vault',
+      order: 4,
+      visibleWhen: dreamImagesEnabled,
+    }),
+    defineSetting({
+      key: 'dreams.imageApiKey',
+      section: 'dreams',
+      label: 'OpenAI API key',
+      schema: z.null(),
+      default: null,
+      control: { type: 'custom', render: OpenAiKeyControl },
+      adminOnly: true,
+      order: 5,
+      visibleWhen: dreamImagesEnabled,
     }),
     defineSetting({
       key: 'relay.connection',

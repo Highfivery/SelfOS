@@ -1,4 +1,11 @@
-import type { ClaudeClient, ClaudeStreamResult, SecretStore } from '@selfos/core/host';
+import type {
+  ClaudeClient,
+  ClaudeStreamResult,
+  ImageClient,
+  ImageGenerateOutcome,
+} from '@selfos/core/host';
+import type { SecretStore } from '@selfos/core/host';
+import { fromBase64 } from '@selfos/core/encoding';
 import { DeviceStateSchema, type DeviceState } from '@shared/schemas';
 
 /**
@@ -155,5 +162,20 @@ export function webFakeClaudeClient(): ClaudeClient {
         usage: { inputTokens: 120, outputTokens: 18, cacheWriteTokens: 0, cacheReadTokens: 0 },
       });
     },
+  };
+}
+
+// A 1×1 transparent PNG — the smallest valid image, so the web preview never touches the network.
+const TINY_PNG_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+/** Deterministic offline image client for the web preview (mirrors the Electron `fakeImageClient`). */
+export function webFakeImageClient(): ImageClient {
+  return {
+    generate: (): Promise<ImageGenerateOutcome> =>
+      Promise.resolve({
+        ok: true,
+        image: { bytes: fromBase64(TINY_PNG_BASE64), mime: 'image/png' },
+      }),
   };
 }

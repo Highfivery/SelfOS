@@ -1,15 +1,31 @@
 import { useEffect, useState } from 'react';
 import { Button, Inline, Stack, Text, TextInput } from '../design-system/components';
-import { ANTHROPIC_API_KEY_ID, type ClaudeTestResult } from '@shared/channels';
+import { ANTHROPIC_API_KEY_ID, OPENAI_API_KEY_ID, type ClaudeTestResult } from '@shared/channels';
 
-/** Set / replace / clear the encrypted Claude API key. The key value never leaves the main process. */
-export function ApiKeyControl(): JSX.Element {
+/**
+ * Set / replace / clear an encrypted device-local API key (the value never leaves the main process —
+ * write-only to the renderer: `secretSet`/`secretHas`/`secretClear`, never a `get`). Parametrized by the
+ * secret id + copy so both the Claude and OpenAI key controls share one implementation.
+ */
+function SecretKeyControl({
+  secretId,
+  label,
+  configuredHint,
+  emptyHint,
+  placeholder,
+}: {
+  secretId: string;
+  label: string;
+  configuredHint: string;
+  emptyHint: string;
+  placeholder: string;
+}): JSX.Element {
   const [configured, setConfigured] = useState(false);
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
 
   const refresh = async (): Promise<void> => {
-    const has = await window.selfos?.secretHas({ id: ANTHROPIC_API_KEY_ID });
+    const has = await window.selfos?.secretHas({ id: secretId });
     setConfigured(Boolean(has));
   };
 
@@ -22,7 +38,7 @@ export function ApiKeyControl(): JSX.Element {
     if (!trimmed) return;
     setBusy(true);
     try {
-      await window.selfos?.secretSet({ id: ANTHROPIC_API_KEY_ID, value: trimmed });
+      await window.selfos?.secretSet({ id: secretId, value: trimmed });
       setValue('');
       await refresh();
     } finally {
@@ -33,7 +49,7 @@ export function ApiKeyControl(): JSX.Element {
   const clear = async (): Promise<void> => {
     setBusy(true);
     try {
-      await window.selfos?.secretClear({ id: ANTHROPIC_API_KEY_ID });
+      await window.selfos?.secretClear({ id: secretId });
       await refresh();
     } finally {
       setBusy(false);
@@ -43,15 +59,13 @@ export function ApiKeyControl(): JSX.Element {
   return (
     <Stack gap={2}>
       <Text size="sm" tone="secondary">
-        {configured
-          ? 'A key is configured — encrypted and stored only on this device.'
-          : 'No key yet. Create one at console.anthropic.com, then paste it here.'}
+        {configured ? configuredHint : emptyHint}
       </Text>
       <TextInput
         type="password"
-        placeholder={configured ? 'Enter a new key to replace it' : 'sk-ant-…'}
+        placeholder={configured ? 'Enter a new key to replace it' : placeholder}
         value={value}
-        aria-label="Claude API key"
+        aria-label={label}
         onChange={(event) => setValue(event.target.value)}
       />
       <Inline gap={2}>
@@ -65,6 +79,32 @@ export function ApiKeyControl(): JSX.Element {
         ) : null}
       </Inline>
     </Stack>
+  );
+}
+
+/** Set / replace / clear the encrypted Claude API key. */
+export function ApiKeyControl(): JSX.Element {
+  return (
+    <SecretKeyControl
+      secretId={ANTHROPIC_API_KEY_ID}
+      label="Claude API key"
+      configuredHint="A key is configured — encrypted and stored only on this device."
+      emptyHint="No key yet. Create one at console.anthropic.com, then paste it here."
+      placeholder="sk-ant-…"
+    />
+  );
+}
+
+/** Set / replace / clear the encrypted OpenAI API key (dream images, 13-dream-images §6). */
+export function OpenAiKeyControl(): JSX.Element {
+  return (
+    <SecretKeyControl
+      secretId={OPENAI_API_KEY_ID}
+      label="OpenAI API key"
+      configuredHint="A key is configured — encrypted and stored only on this device."
+      emptyHint="No key yet. Create one at platform.openai.com, then paste it here."
+      placeholder="sk-…"
+    />
   );
 }
 

@@ -239,6 +239,38 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-12 — Build (**Dream-images slice 3 — IPC seam + settings + capability**;
+  [13-dream-images](docs/specs/13-dream-images.md) §6/§13.1 slice 3). Wires slice 2's `dreamImageService`
+  through the renderer-facing seam. New **`dreams.generateImage`** capability (Member default ON; **not**
+  EXPLICIT_GRANT_ONLY, so the Owner auto-grants it; Guest denied). IPC `dreams:generateImage`/`:getImage`/
+  `:deleteImage` through the full seam (`channels.ts` + the slim `DreamImageResult` → **`coreBridge.ts` (the
+  trust boundary)** → `ipc.ts` thin delegates + `image: defaultImageClient()` host wiring → `preload` →
+  `test-utils/bridge` mock), all **gated by `dreams.generateImage` + dreamer-scoped**, with **both API keys
+  read host-side** (`ANTHROPIC_API_KEY_ID` + `OPENAI_API_KEY_ID`) and **never crossing IPC**. `dreamGenerateImage`
+  reads consent/model/style from vault settings and maps the rich result → the slim `DreamImageResult` (usage
+  events stay host-side); `dreamGetImage` returns base64 (the `08` §13.2 pattern). **Settings** (Dreams
+  section): `dreams.imageGenerationEnabled` (the one-time consent, default OFF), `dreams.imageModel`
+  (**admin-only** `gpt-image-2`/`gpt-image-1` select), `dreams.imageStyle` (default-style select), and an
+  **admin-only `OpenAiKeyControl`** — `aiControls.tsx` refactored to a shared **write-only `SecretKeyControl`**
+  so the Claude + OpenAI key controls share one impl (secretSet/secretHas/secretClear, **never a get**);
+  model/style/key `visibleWhen` consent on. The **`image` host part** added to `BridgeHost` — Electron uses
+  `defaultImageClient`, the web preview `webFakeImageClient`, and iOS a new **`browserImageClient`**
+  (browser-mode OpenAI `fetch`, the `browserClaudeClient` mirror, so iOS gets image-gen via `createCoreBridge`
+  for free). Code-reviewer **ship** (trust boundary airtight — keys never returned; all 3 ops re-enforce the
+  capability + scope in the bridge, not the UI; settings defaults match the service; `browserImageClient`
+  line-for-line faithful to `openaiImageClient`; the `SecretKeyControl` refactor preserves `ApiKeyControl`'s
+  exact behavior; two intentional nits noted, no change). Gate green: typecheck (node + web/DOM-lib), lint,
+  format, **266 core + 331 desktop + 8 relay** unit (+2 bridge: a consent/key/capability-gated
+  generate→read→delete encrypted round-trip + a Guest denial; +1 RTL `OpenAiKeyControl` saves under the OpenAI
+  id), **+1 E2E** (the dream-image settings reveal + the "Admin only" marker; the section-overflow + 390px
+  responsive sweeps now also cover the new settings). Visual QA at desktop + 390px (the Dreams settings
+  section: consent toggle → model [Admin only] + style + OpenAI key reveal cleanly, no overflow). Built in the
+  **`feat/dream-images-slice-3`** worktree off `main`. **Lesson: a second provider's key control is just the
+  same write-only `SecretKeyControl` parametrized by a different `SecretStore` id — secretSet/secretHas/
+  secretClear are generic, so no new secret IPC is needed; the key is read host-side in the bridge and never
+  returned to the renderer.** \*\*NEXT: slice 4 — the shared `DreamImagePanel` (dream detail/composer + analysis
+  card) with the generate/loading/success/refusal/calm states + the sensitive-tier warning + Regenerate/Delete
+  - admin-only cost; the `dreamStore`/`dreamAnalysisStore` image lifecycle; the generate E2E + visual QA.\*\*
 - 2026-06-12 — Build (**Dream-images slice 2 — the image core backend**;
   [13-dream-images](docs/specs/13-dream-images.md) §13.1 slice 2). SelfOS's **second AI provider** (OpenAI,
   images only — text stays Anthropic), core-only (no IPC/renderer — slice 3). **Asked first** the §11.1/§11.2

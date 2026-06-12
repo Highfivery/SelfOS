@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ApiKeyControl, TestConnectionControl } from './aiControls';
-import { ANTHROPIC_API_KEY_ID } from '@shared/channels';
+import { ApiKeyControl, OpenAiKeyControl, TestConnectionControl } from './aiControls';
+import { ANTHROPIC_API_KEY_ID, OPENAI_API_KEY_ID } from '@shared/channels';
 import { clearMockBridge, installMockBridge } from '../test-utils/bridge';
 
 afterEach(() => clearMockBridge());
@@ -22,6 +22,17 @@ describe('ApiKeyControl', () => {
     await userEvent.type(screen.getByLabelText('Claude API key'), 'sk-ant-xyz');
     await userEvent.click(screen.getByRole('button', { name: /save key/i }));
     expect(secretSet).toHaveBeenCalledWith({ id: ANTHROPIC_API_KEY_ID, value: 'sk-ant-xyz' });
+  });
+});
+
+describe('OpenAiKeyControl', () => {
+  it('saves a typed OpenAI key under the OpenAI secret id, write-only', async () => {
+    const secretSet = vi.fn(() => Promise.resolve());
+    installMockBridge({ secretHas: () => Promise.resolve(false), secretSet });
+    render(<OpenAiKeyControl />);
+    await userEvent.type(screen.getByLabelText('OpenAI API key'), 'sk-openai-xyz');
+    await userEvent.click(screen.getByRole('button', { name: /save key/i }));
+    expect(secretSet).toHaveBeenCalledWith({ id: OPENAI_API_KEY_ID, value: 'sk-openai-xyz' });
   });
 });
 

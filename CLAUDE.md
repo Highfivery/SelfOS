@@ -239,6 +239,37 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-12 — Build (**Dream-images slice 2 — the image core backend**;
+  [13-dream-images](docs/specs/13-dream-images.md) §13.1 slice 2). SelfOS's **second AI provider** (OpenAI,
+  images only — text stays Anthropic), core-only (no IPC/renderer — slice 3). **Asked first** the §11.1/§11.2
+  build-time confirmations: ship **`gpt-image-2` (default) + `gpt-image-1`** at **~$0.17** flat. New
+  **`ImageClient`** host interface (`@selfos/core/host`, the `ClaudeClient` mirror; a `REFUSED` [content-policy,
+  uncharged] vs `ERROR` [transport] outcome) + a main-side **OpenAI impl + offline fake**
+  (`apps/desktop/src/main/image/openaiImageClient.ts`, gated by `SELFOS_FAKE_IMAGE`; `=refuse` mode for the
+  slice-4 refusal E2E; blind-written like the relay/iOS bits — user verifies on-device) +
+  `OPENAI_API_KEY_ID = 'openai.apiKey'`. **The privacy core:** `buildDepictionNote` + `ageFromBirthday`
+  (`@selfos/core/people`) is the single, **name-free + private-free** depiction source (appearance + gender +
+  exact age from `birthday` + ethnicity; structurally never reads displayName/notes/private), and the pure
+  `buildImagePromptInput` assembles the name-free distillation input. **Two-call flow** in
+  `dreamImageService.generateDreamImage`: consent + both keys + budget gates → **Claude distillation** (records
+  token `dream.imagePrompt`; the name-stripping pass) → **OpenAI render** → validate bytes/mime → `encryptBytes`
+  → `people/<id>/dreams/<id>/image.enc` → stamp additive-optional `Dream.image` → record **flat** `dream.image`.
+  `getDreamImage`/`deleteDreamImage` + the `isDreamImagePath` guard (the `08` §13.2 `isMediaPath` mirror).
+  Pricing: `IMAGE_PRICING` + a flat-image branch in `costOf` (zero-token image events cost the per-image price,
+  not $0). Code-reviewer **ship** (privacy boundary verified structurally airtight — **OpenAI only ever sees
+  the Claude-distilled prompt, never the narrative or a name**; metering correct on the refused-vs-billed-vs-
+  pre-gen split; a failed regenerate keeps the prior image; the path-guard confines I/O; applied the nit —
+  dropped two unused pricing exports per §12). Gate green: typecheck (node + web/DOM-lib), lint, format, **266
+  core + 328 desktop + 8 relay** unit (+18 core: full distill→render→encrypt→stamp→meter round-trip, the
+  name/private-never-reaches-distillation security units, REFUSED-not-metered, billed-error-metered,
+  regenerate non-destructive + shareableWith carried, the path guard, the pure prompt builder, `buildDepictionNote`
+  - `ageFromBirthday`, the flat-cost pricing; +2 desktop fake-image-client). Built in the
+    **`feat/dream-images-slice-2`** worktree off `main`. **Lesson: a two-provider privacy boundary is enforced
+    by making OpenAI's ONLY input the Claude-distilled output — never the raw narrative/depiction — and by
+    assembling the depiction in ONE name-free/private-free function (`buildDepictionNote`), so the name-exclusion
+    is structural, not a filter that can be bypassed.** **NEXT: slice 3 — the IPC seam (`dreams:generateImage`/
+    `:getImage`/`:deleteImage`) + settings (consent toggle, admin OpenAI key control + model select, default
+    style) + the `dreams.generateImage` capability + the `image` host part in `createCoreBridge`.**
 - 2026-06-12 — Build (**Dream-images slice 1 — the People-profile amendment**;
   [13-dream-images](docs/specs/13-dream-images.md) §4.6/§13.1, [04-people-roles](docs/specs/04-people-roles.md)
   §4.1). The first slice of the approved spec 13 (AI dream-image generation), but **independently valuable and

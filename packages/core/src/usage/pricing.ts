@@ -23,6 +23,20 @@ export function pricingFor(model: string): ModelPricing {
   return PRICING[model] ?? FALLBACK;
 }
 
+/**
+ * Image-generation pricing (13-dream-images §4.5) — a **flat** USD cost per image, since an image call has
+ * no meaningful token counts. Seeded at the high-quality 1024² estimate; all cost is an estimate (the
+ * source of truth is the user's OpenAI bill). `dream.image` events carry zero tokens + this flat cost.
+ */
+export interface ImagePricing {
+  perImageUsd: number;
+}
+
+export const IMAGE_PRICING: Record<string, ImagePricing> = {
+  'gpt-image-2': { perImageUsd: 0.17 },
+  'gpt-image-1': { perImageUsd: 0.17 },
+};
+
 export interface TokenCounts {
   inputTokens: number;
   outputTokens: number;
@@ -32,6 +46,10 @@ export interface TokenCounts {
 
 /** Estimated USD cost for a single call's token counts. */
 export function costOf(model: string, tokens: TokenCounts): number {
+  // Image models charge a flat per-image price (their events carry zero tokens, so the token formula
+  // below would yield $0); the flat cost is the source of truth for a `dream.image` event (§4.5).
+  const image = IMAGE_PRICING[model];
+  if (image) return image.perImageUsd;
   const p = pricingFor(model);
   return (
     (tokens.inputTokens * p.input +

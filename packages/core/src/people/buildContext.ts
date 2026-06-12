@@ -131,6 +131,44 @@ export async function listRelatedPeople(
   return out;
 }
 
+/** Exact age in whole years from an ISO `birthday` as of `now`; null if unparseable or in the future. */
+export function ageFromBirthday(birthday: string, now: Date): number | null {
+  const born = new Date(birthday);
+  if (Number.isNaN(born.getTime())) return null;
+  let age = now.getFullYear() - born.getFullYear();
+  const monthDelta = now.getMonth() - born.getMonth();
+  if (monthDelta < 0 || (monthDelta === 0 && now.getDate() < born.getDate())) age--;
+  return age >= 0 && age < 130 ? age : null;
+}
+
+/**
+ * A **name-free** physical depiction of a People-graph-linked person, from the **shareable** subset only
+ * (appearance + gender + ethnicity + exact age from `birthday`) — the single place the dream-image
+ * depiction subset is assembled (13-dream-images §5.2/§8.2). It NEVER includes the person's name, their
+ * notes, or any private field (`privateNotes`/`healthNotes`/`faith`), so a figure can resemble someone the
+ * dreamer knows without naming or exposing them. Returns '' when there's nothing depictable (or the person
+ * is unknown). The name-exclusion is structural: the displayName is never read into the returned string.
+ */
+export async function buildDepictionNote(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  now: Date,
+): Promise<string> {
+  const person = (await listPeople(fs, key)).find((candidate) => candidate.id === personId);
+  if (!person) return '';
+  const parts: string[] = [];
+  if (person.appearanceDescription?.trim())
+    parts.push(`appearance: ${person.appearanceDescription.trim()}`);
+  if (person.gender?.trim()) parts.push(`gender: ${person.gender.trim()}`);
+  if (person.birthday) {
+    const age = ageFromBirthday(person.birthday, now);
+    if (age !== null) parts.push(`age ${age}`);
+  }
+  if (person.ethnicity?.trim()) parts.push(`ethnicity: ${person.ethnicity.trim()}`);
+  return parts.length > 0 ? `a figure — ${parts.join(', ')}` : '';
+}
+
 const MAX_LINKED_FACTS_PER_PERSON = 5;
 
 /**

@@ -42,4 +42,10 @@ describe('pricing', () => {
       }),
     ).toBeCloseTo(5);
   });
+
+  it('charges a flat per-image cost for image models (zero tokens → not $0)', () => {
+    const zero = { inputTokens: 0, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0 };
+    expect(costOf('gpt-image-2', zero)).toBeCloseTo(0.17);
+    expect(costOf('gpt-image-1', zero)).toBeCloseTo(0.17);
+  });
 });

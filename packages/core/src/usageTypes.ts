@@ -9,6 +9,8 @@ export const USAGE_TYPE_LABELS: Record<string, string> = {
   'questionnaire.analyze': 'Questionnaire — analysis',
   'dream.analyze': 'Dream analysis',
   'dream.patterns': 'Dream patterns',
+  'dream.imagePrompt': 'Dream image — prompt',
+  'dream.image': 'Dream image',
 };
 
 export function usageTypeLabel(type: string): string {

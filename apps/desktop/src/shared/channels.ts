@@ -177,6 +177,9 @@ export const MIN_OWNER_PIN_LENGTH = 4;
 /** The secret id under which the Claude API key is stored. */
 export const ANTHROPIC_API_KEY_ID = 'anthropic.apiKey';
 
+/** The secret id for the OpenAI API key — SelfOS's second provider, for dream images (13-dream-images §6.1). */
+export const OPENAI_API_KEY_ID = 'openai.apiKey';
+
 export type ClaudeErrorCode = 'NO_KEY' | 'AUTH' | 'RATE_LIMIT' | 'NETWORK' | 'API_ERROR';
 export type ClaudeTestResult =
   | { ok: true; text: string }

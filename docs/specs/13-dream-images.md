@@ -665,12 +665,13 @@ follow `04`/`01` form a11y.
 
 All product decisions are resolved (§12). Only these **build-time confirmations** remain — small, non-blocking:
 
-1. **Exact OpenAI model IDs** — the spec offers **`gpt-image-2` (default) + `gpt-image-1`** in the admin
-   select (§12.1). Confirm `gpt-image-2`'s availability/exact id at build; if it isn't GA yet, ship
-   `gpt-image-1` as the default and add `gpt-image-2` when available (the select makes this a one-line config).
-2. **Per-image price values** — seeded at the **high-quality 1024² estimate (~$0.17)** for `gpt-image-2`/
-   `gpt-image-1` (§4.5); confirm the exact `perImageUsd` per model against current OpenAI pricing at build (cost
-   is always an estimate, `06`).
+1. **Exact OpenAI model IDs** — ✅ **Confirmed with the user (2026-06-12, slice 2):** ship **`gpt-image-2`
+   (default) + `gpt-image-1`** (both in `IMAGE_PRICING` + the slice-3 admin select). If `gpt-image-2` turns
+   out not to be available on the user's account at on-device test, it's a one-line config swap to default to
+   `gpt-image-1`.
+2. **Per-image price values** — ✅ **Confirmed (2026-06-12, slice 2):** seeded at **~$0.17** flat for both
+   models (the high-quality 1024² estimate; cost is always an estimate, `06`). Tweakable in one place
+   (`IMAGE_PRICING`).
 3. **`gender` enum options** — ✅ **Resolved (2026-06-12, slice 1):** the preset list is **Female / Male /
    Non-binary / Prefer not to say**, plus a free-text **"Other…"** that reveals a describe field. Built in the
    `PersonEditor` About tab.
@@ -740,13 +741,17 @@ Confirmed with the user (2026-06-11) — encoded above, **not** to be re-opened:
    tab (shared + private field groups; `gender` preset enum + free-text "Other"; `ChipEditor` for
    interests/values/languages; an important-dates row editor); unit + RTL + E2E tests. Independently valuable;
    no images yet.
-2. **Image core backend** — the `ImageClient` host interface (OpenAI impl + offline fake) + `OPENAI_API_KEY_ID`
-   in the `SecretStore`; `buildDepictionNote` + `buildImagePromptInput` (name-free) + the **Claude distillation**
-   pass; `dreamImageService` (distill → generate → `encryptBytes` → store + stamp `Dream.image`; get; delete);
-   the `dream.image` (flat) + `dream.imagePrompt` (token) usage types + the flat-image-cost path in pricing; the
-   `isDreamImagePath` guard; the `Dream.image` schema amendment. Core-only, unit-tested with the fake
-   `ImageClient` + the fake `ClaudeClient` (no real network). Security unit: no name / no private field reaches
-   the distillation input.
+2. **Image core backend** — ✅ **Built 2026-06-12** (branch `feat/dream-images-slice-2`). The `ImageClient`
+   host interface (`@selfos/core/host`) + the main-side OpenAI impl + offline fake (`SELFOS_FAKE_IMAGE`,
+   `=refuse` mode) + `OPENAI_API_KEY_ID = 'openai.apiKey'`; `buildDepictionNote` + `ageFromBirthday`
+   (`@selfos/core/people`, name-free) + the pure `buildImagePromptInput` + the **Claude distillation** pass;
+   `dreamImageService` (`generateDreamImage` distill → render → `encryptBytes` → store + stamp `Dream.image`;
+   `getDreamImage`; `deleteDreamImage`; `isDreamImagePath`); the flat `dream.image` + token `dream.imagePrompt`
+   usage types + the `IMAGE_PRICING` flat-image path in `costOf` (`gpt-image-2`/`gpt-image-1` @ ~$0.17); the
+   `Dream.image` additive-optional schema. Core-only, unit-tested with fake `ImageClient` + `ClaudeClient` (no
+   network). Security units: no name / no private field reaches the distillation input; OpenAI only ever sees
+   the Claude-distilled prompt. Code-reviewer **ship**. **Models confirmed (§11.1):** `gpt-image-2` default +
+   `gpt-image-1`. **Price confirmed (§11.2):** ~$0.17 flat. No IPC/renderer yet (slice 3).
 3. **IPC seam + settings + capability** — `dreams:generateImage` / `:getImage` / `:deleteImage` through the
    typed seam (gated by `dreams.generateImage`, dreamer-scoped, key host-side); the `dreams.generateImage`
    capability (Member default); the Settings consent toggle, admin-only OpenAI key control + image-model
@@ -804,3 +809,19 @@ Confirmed with the user (2026-06-11) — encoded above, **not** to be re-opened:
   Visual QA at desktop + 390px. **NEXT: slice 2 — the image core backend** (`ImageClient` host interface +
   OpenAI impl + fake; `buildDepictionNote`/`buildImagePromptInput`; `dreamImageService`; the `dream.image` /
   `dream.imagePrompt` usage types).
+- 2026-06-12 — **Slice 2 built** (image core backend; §13.1 slice 2). The `ImageClient` host interface
+  (`@selfos/core/host`, the `ClaudeClient` mirror — a `REFUSED` vs `ERROR` outcome) + the main-side OpenAI impl
+  - offline fake (`apps/desktop/src/main/image/openaiImageClient.ts`, gated by `SELFOS_FAKE_IMAGE`, `=refuse`
+    mode for the refusal E2E) + `OPENAI_API_KEY_ID = 'openai.apiKey'`. `buildDepictionNote` + `ageFromBirthday`
+    (`@selfos/core/people`) — the single, **name-free + private-free** depiction source (appearance + gender +
+    exact age from `birthday` + ethnicity; never name/notes/private). The pure `buildImagePromptInput` assembles
+    the name-free distillation input. `dreamImageService.generateDreamImage` (consent + both keys + budget gates
+    → Claude distillation [`dream.imagePrompt`] → OpenAI render → validate bytes/mime → `encryptBytes` →
+    `image.enc` → stamp `Dream.image` → flat `dream.image`), `getDreamImage`, `deleteDreamImage`,
+    `isDreamImagePath`. `IMAGE_PRICING` + the `costOf` flat-image path (`gpt-image-2`/`gpt-image-1` @ ~$0.17);
+    `dream.image`/`dream.imagePrompt` usage labels; the additive-optional `Dream.image` descriptor +
+    `DreamImageGenerateResult` view type. **§11.1/§11.2 confirmed with the user.** Code-reviewer **ship**
+    (privacy boundary structurally airtight — OpenAI only ever sees the Claude-distilled prompt; metering
+    correct on the refused/billed/pre-gen split; regenerate non-destructive; path-guard confines I/O). Core-only
+    (no IPC/renderer — slice 3). Gate green: typecheck (node + web/DOM-lib), lint, format, **266 core + 328
+    desktop + 8 relay** unit. **NEXT: slice 3 — IPC seam + settings + the `dreams.generateImage` capability.**

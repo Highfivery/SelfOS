@@ -780,6 +780,22 @@ export type DreamPersonRef = z.infer<typeof DreamPersonRefSchema>;
 export const DreamStatusSchema = z.enum(['captured', 'analyzing', 'analyzed']);
 export type DreamStatus = z.infer<typeof DreamStatusSchema>;
 
+/**
+ * The generated dream-image descriptor (13-dream-images §4.2) — metadata only; the encrypted bytes live
+ * beside it at `people/<id>/dreams/<id>/image.enc`. Additive-optional on `Dream` — **no `schemaVersion`
+ * bump, no migration** (the `Person.email` / `Insight.dreamId` precedent). Absent = the dream has no image.
+ */
+export const DreamImageDescriptorSchema = z.object({
+  style: z.string().min(1), // the style used (e.g. 'dreamlike'); free string so styles can grow
+  mime: z.string().min(1), // e.g. 'image/png' — builds the display data URL (08 §13.2 `mime` precedent)
+  generatedAt: z.string(),
+  model: z.string().min(1), // the OpenAI image model used (provenance; cost is snapshotted in the UsageEvent)
+  // Per-dream sharing (13 §3.6): the related-person ids this image is shared with (the 12 §13.5
+  // InsightFact.shareableWith model). Absent/[] = dreamer-only. Re-gated at read time. Lands in slice 5.
+  shareableWith: z.array(z.string()).optional(),
+});
+export type DreamImageDescriptor = z.infer<typeof DreamImageDescriptorSchema>;
+
 export const DreamSchema = z.object({
   id: z.string().min(1),
   schemaVersion: z.number().int().positive(),
@@ -797,6 +813,7 @@ export const DreamSchema = z.object({
   sensitivity: SensitivityTierSchema, // reuse 08's tier (12 §8.3); default 'standard'
   status: DreamStatusSchema,
   analysisId: z.string().optional(), // the canonical DreamAnalysis, once created
+  image: DreamImageDescriptorSchema.optional(), // the generated image's metadata (13 §4.2); bytes in image.enc
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -1108,6 +1125,30 @@ export interface DreamShareTarget {
   id: string;
   displayName: string;
 }
+
+/**
+ * The result of generating (or regenerating) a dream's image (13-dream-images §5.2/§6). On success the
+ * bytes are encrypted to `image.enc` and the descriptor is stamped onto the dream; the caller fetches the
+ * bytes separately (the prompt never travels back). `promptUsage` is the Claude distillation charge
+ * (`dream.imagePrompt`); `imageUsage` is the flat OpenAI charge (`dream.image`) — present only when the
+ * provider was actually billed. A `REFUSED` (content-policy decline) is uncharged, so it carries no
+ * `imageUsage` (the distillation, if it ran + billed, still does).
+ */
+export type DreamImageGenerateResult =
+  | {
+      ok: true;
+      descriptor: DreamImageDescriptor;
+      mime: string;
+      promptUsage: UsageEvent;
+      imageUsage: UsageEvent;
+    }
+  | {
+      ok: false;
+      reason: 'NO_CONSENT' | 'NO_KEY' | 'BUDGET' | 'REFUSED' | 'ERROR';
+      message: string;
+      promptUsage?: UsageEvent;
+      imageUsage?: UsageEvent;
+    };
 
 /** The result of sharing/unsharing a dream-insight fact with a related person (12 §3.4). */
 export type DreamShareResult = { ok: true } | { ok: false; reason: 'SENSITIVE' | 'NOT_FOUND' };

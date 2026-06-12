@@ -1,5 +1,5 @@
 import type { FileSystem } from '../host';
-import { summarizeForContext } from '../insights';
+import { listInsightsForPerson, summarizeForContext } from '../insights';
 import { getPerson, listPeople } from './peopleService';
 import { listRelationships } from './relationshipService';
 
@@ -83,4 +83,58 @@ export async function listRelatedPeople(
     out.push({ id: other.id, displayName: other.displayName });
   }
   return out;
+}
+
+const MAX_LINKED_FACTS_PER_PERSON = 5;
+
+/**
+ * The shareable context for a specific set of **People-graph-linked** people — used to foreground who from
+ * the viewer's life appeared in a given dream (12-dreams §3.1/§5.1). For each known `personId`, surfaces
+ * their display name, the relationship to the viewer (type + relationship public notes) when one exists,
+ * their **public** notes, and the **shareable** facts from their approved insights (broadcast `shareable`
+ * OR `shareableWith` targeted at the viewer). It is the **shareable-vs-private** boundary (04 §3.4 / 12
+ * §8.4) applied to dream people: a linked person's **private notes and non-shareable facts are never
+ * included**, even if they aren't a relationship-graph relation. Returns formatted lines, or '' when there
+ * is nothing shareable to add. Unknown ids and refs without a `personId` (free names) are skipped — those
+ * are already in the dream narrative.
+ */
+export async function buildLinkedPeopleContext(
+  fs: FileSystem,
+  key: Uint8Array,
+  viewerId: string,
+  personIds: string[],
+): Promise<string> {
+  const ids = [...new Set(personIds.filter((id) => id && id !== viewerId))];
+  if (ids.length === 0) return '';
+
+  const byId = new Map((await listPeople(fs, key)).map((candidate) => [candidate.id, candidate]));
+  const relationships = await listRelationships(fs, key);
+
+  const lines: string[] = [];
+  for (const id of ids) {
+    const person = byId.get(id);
+    if (!person) continue;
+    const relationship = relationships.find(
+      (r) =>
+        (r.fromPersonId === viewerId && r.toPersonId === id) ||
+        (r.fromPersonId === id && r.toPersonId === viewerId),
+    );
+    const relType = relationship ? ` (${relationship.type})` : '';
+    const about = person.publicNotes ? ` — ${person.publicNotes}` : '';
+    const aboutRel = relationship?.publicNotes ? ` (${relationship.publicNotes})` : '';
+    lines.push(`- ${person.displayName}${relType}${about}${aboutRel}`);
+    // Only shareable facts about them — never their private/non-shareable facts (the privacy boundary).
+    const facts = (await listInsightsForPerson(fs, key, id))
+      .filter((insight) => insight.approved)
+      .flatMap((insight) =>
+        insight.facts.filter(
+          (fact) => fact.shareable || (fact.shareableWith?.includes(viewerId) ?? false),
+        ),
+      )
+      .slice(0, MAX_LINKED_FACTS_PER_PERSON);
+    for (const fact of facts) lines.push(`  · ${fact.text}`);
+  }
+
+  if (lines.length === 0) return '';
+  return ['People from your life who appeared in this dream:', ...lines].join('\n');
 }

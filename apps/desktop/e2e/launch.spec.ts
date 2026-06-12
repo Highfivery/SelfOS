@@ -1477,6 +1477,71 @@ test('dreams: log a dream, persist through the encrypted vault, reopen, no overf
   }
 });
 
+test('dreams: link a household person to a dream and round-trip the link, no overflow', async () => {
+  const { userData, vault } = await seedReadyVault();
+  // Seed a second household person the dreamer can link from the People graph (12 §3.1).
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('seed: master key missing');
+  const now = new Date().toISOString();
+  await savePerson(fs, key, {
+    id: 'p-sam',
+    schemaVersion: 1,
+    displayName: 'Sam',
+    isSubject: true,
+    tags: [],
+    publicNotes: 'a close friend',
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Dreams' }).click();
+    await w.getByRole('button', { name: 'Log a dream' }).click();
+    await w.getByLabel('What happened?').fill('Sam and I were walking by the sea.');
+    await w.getByLabel('Title (optional)').fill('Walking with Sam');
+
+    // Link Sam → a "linked" chip appears (carrying a personId, not a free name).
+    await w.getByLabel('Link a person you know').selectOption({ label: 'Sam' });
+    await expect(w.getByText('linked')).toBeVisible();
+    // A free name alongside the link — both chip styles coexist.
+    await w.getByPlaceholder(/add a name/i).fill('a stranger');
+    await w.getByPlaceholder(/add a name/i).press('Enter');
+    await expect(w.getByRole('button', { name: 'Remove a stranger' })).toBeVisible();
+    await w.getByRole('button', { name: 'Save' }).click();
+
+    // Reopen → the link round-tripped through the encrypted vault. The stored personId resolves back to
+    // the household name "Sam" (the Remove control's label) and still reads as a linked chip.
+    await w.getByRole('button', { name: /Walking with Sam/ }).click();
+    await expect(w.getByRole('button', { name: 'Remove Sam' })).toBeVisible();
+    await expect(w.getByText('linked')).toBeVisible();
+
+    // The composer (incl. the picker) fits at phone width.
+    await app.evaluate(async ({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows()[0];
+      if (win) {
+        win.setMinimumSize(360, 480);
+        win.setSize(390, 800);
+      }
+    });
+    await w.waitForTimeout(200);
+    const noOverflow = await w.evaluate(() => {
+      const fits = (el: Element | null | undefined): boolean =>
+        !el || el.scrollWidth <= el.clientWidth + 1;
+      const main = document.querySelector('main');
+      const inner = main?.querySelector(':scope > div');
+      return fits(main) && fits(inner);
+    });
+    expect(noOverflow).toBe(true);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('dreams: analyze → synthesize → edit → approve feeds the coach; the transcript stays out of Sessions', async () => {
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
   await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');

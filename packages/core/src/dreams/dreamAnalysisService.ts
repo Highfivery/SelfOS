@@ -5,6 +5,7 @@ import { DreamTagsSchema } from '../schemas';
 import type {
   ChatTurnResult,
   Conversation,
+  Dream,
   DreamAnalysis,
   DreamAnalysisEdits,
   DreamApproveResult,
@@ -14,7 +15,7 @@ import type {
   UsageEvent,
 } from '../schemas';
 import { checkBudget, costOf, recordUsage } from '../usage';
-import { buildContext } from '../people';
+import { buildContext, buildLinkedPeopleContext } from '../people';
 import { PERSONA, SAFETY } from '../conversations/promptBuilder';
 import { deleteInsight, getInsight, saveInsight } from '../insights';
 import {
@@ -106,10 +107,23 @@ async function buildDreamPrompt(
   fs: FileSystem,
   key: Uint8Array,
   personId: string,
-  narrative: string,
+  dream: Dream,
 ): Promise<string> {
   const context = await buildContext(fs, key, personId);
-  return [PERSONA, SAFETY, DREAM_ANALYSIS_GUIDANCE, `The dream:\n"${narrative}"`, context]
+  // Foreground the People-graph-linked people who appeared in THIS dream, so the coach can connect the
+  // dream's figures to real relationships (12 §3.1/§5.1). Shareable data only — never their private notes.
+  const linkedIds = dream.people
+    .map((person) => person.personId)
+    .filter((id): id is string => Boolean(id));
+  const dreamPeople = await buildLinkedPeopleContext(fs, key, personId, linkedIds);
+  return [
+    PERSONA,
+    SAFETY,
+    DREAM_ANALYSIS_GUIDANCE,
+    `The dream:\n"${dream.narrative}"`,
+    context,
+    dreamPeople,
+  ]
     .filter(Boolean)
     .join('\n\n');
 }
@@ -183,7 +197,7 @@ export async function runAnalysisTurn(deps: DreamAnalysisTurnDeps): Promise<Chat
   };
   conversation.messages.push({ role: 'user', content: userText, ts: at });
 
-  const system = await buildDreamPrompt(fs, key, personId, dream.narrative);
+  const system = await buildDreamPrompt(fs, key, personId, dream);
   let result;
   try {
     result = await client.stream(
@@ -253,7 +267,7 @@ export async function synthesizeAnalysis(deps: DreamSynthesisDeps): Promise<Drea
       {
         apiKey,
         model,
-        system: await buildDreamPrompt(fs, key, personId, dream.narrative),
+        system: await buildDreamPrompt(fs, key, personId, dream),
         messages,
         maxTokens: 1500,
       },

@@ -121,8 +121,12 @@ A new **Dreams** feature module registers a nav entry (gated by `dreams.own`) an
    - **Lucid** and **Nightmare** flags — toggles (feed patterns + the recurring-nightmare nudge, §8.2).
    - **Sleep context** — the **date the dream occurred** (defaults to "last night," may differ from when
      logged) + an optional rough **sleep quality**.
-   - **Tags** + **people present** — free-text tags and who appeared, the latter linkable to the **People
-     graph** (`04`) or left as a free name. Powers per-dream sharing (§3.4) and people-frequency patterns.
+   - **Tags** + **people present** — free-text tags and who appeared. The **people present** editor is a
+     **hybrid picker**: link a known person from the **People graph** (`04`) — any household person is
+     selectable, the dreamer excluded — **or** type a free name for anyone not in the graph. A linked
+     person carries a `personId` (rendered as a distinct "linked" chip); a free name is text only. Linking
+     lets the analysis draw on that person's **shareable** context (§5.1) and resolves people-frequency
+     patterns (§3.5) to real people. Powers per-dream sharing (§3.4).
 3. **Sensitivity** — a per-dream **sensitivity tier** (reusing `SensitivityTier`), default `standard`; a
    sensitive tier keeps the dream out of shared context (§8.3/§8.4). It **never blocks the person analyzing
    their own dream**.
@@ -219,8 +223,8 @@ automatic per `08` §4.1 / `10`.
 
 ```ts
 interface DreamPersonRef {
-  personId?: string; // linked to the People graph (04) when known…
-  name?: string; //     …or a free-text name when not
+  personId?: string; // linked to the People graph (04) when known — feeds the analysis their shareable context (§5.1)…
+  name?: string; //     …or a free-text name when not (text only; no extra context)
 }
 
 interface Dream {
@@ -324,9 +328,19 @@ These are **additive-optional**, so existing Insights parse unchanged with **no 
 - **dreamAnalysisService** — the guided-analysis orchestration. Reuses `05`'s streaming/turn + budget +
   usage plumbing and `promptBuilder`, but (a) persists the transcript to the **dream folder** (kept out of
   Sessions), (b) uses a **dream-analysis system prompt** (PERSONA + SAFETY + the blended honest dream-work
-  instructions + `buildContext(personId)`), and (c) on **synthesis** returns a schema-validated
-  `DreamAnalysis` (structured output, **adaptive thinking**, `cache_control` on the stable prefix). Charges
-  usage type **`dream.analyze`** to the dreamer (§6).
+  instructions + `buildContext(personId)` + **`buildLinkedPeopleContext`** — the shareable context of the
+  People-graph-linked people who appeared in _this_ dream, foregrounded so the coach can connect the
+  dream's figures to real relationships; **shareable data only** (display name + relationship type +
+  relationship/public notes + shareable insight facts), **never their private notes or non-shareable
+  facts**, even for a linked non-relation — the §8.4 boundary), and (c) on **synthesis** returns a
+  schema-validated `DreamAnalysis` (structured output, **adaptive thinking**, `cache_control` on the stable
+  prefix). Charges usage type **`dream.analyze`** to the dreamer (§6).
+- **buildLinkedPeopleContext** (`@selfos/core/people`, a sibling of `buildContext`) — given the viewer and
+  a set of linked `personId`s, returns the shareable-only context block above. The relationship graph is
+  consulted only to label the link (type + relationship notes); a linked **non-relation**'s **public**
+  notes + **shareable** facts still feed (public notes are the "may feed others' AI" bucket, `04` §3.4),
+  but their private data never does — keeping the shareable-vs-private boundary intact regardless of
+  relationship.
 - **dreamInsightService** — on **approve**, distills a `DreamAnalysis` into an `Insight` (`source: 'dream'`,
   `provenance.dreamId`) via `insightStore` (`08`); supports edit/delete/un-approve and per-fact shareable
   promotion (`08`/`09` model). Gated by `dreams.shareContext` for cross-person sharing.
@@ -451,6 +465,13 @@ handling, never circumvented).
 - **Dreamer-only in normal use** — a person's dreams, transcripts, and analyses are theirs; there is **no
   "view others' dreams" capability**. They feed only **that** person's coach (cross-person sharing is the
   explicit, off-by-default per-fact promotion in §3.4).
+- **Linked people in a dream feed only shareable data** — when a dream's "people present" are linked to the
+  People graph (§3.1), the analysis prompt foregrounds those people via `buildLinkedPeopleContext` (§5.1),
+  but **only their shareable context** (public notes + relationship notes + shareable insight facts) — a
+  linked person's **private notes and non-shareable facts are never sent to Claude**, the same
+  shareable-vs-private boundary `buildContext` enforces (`04` §3.4). This holds even for a linked person the
+  dreamer has no relationship with (any household person is linkable, §3.1): public notes feed, private data
+  does not. The flow is one-directional — a linked person learns nothing about the dream.
 - **Break-glass (v1)** — consistent with `04` §8 and `08` §8.4, the vault is **not zero-knowledge from the
   device owner / super-admin** (one master key decrypts the whole vault; RBAC is an app-layer concern).
   The concealed **super-admin inspect** mode can therefore reach dreams. **v1 ships no dream-access audit
@@ -722,11 +743,42 @@ Confirmed in review (2026-06-11):
      (the share section renders cleanly — picker + toggles + "Shared with Partner" chip). On
      `feat/dreams-slice-5b`. **§13.5 is complete — the Dreams feature (§13.1–§13.5) is fully built.**_
 
+6. **People-graph linking of "people present"** (post-v1 amendment — finishes the §13.2 deferral) — the
+   capture composer's "people present" editor becomes a **hybrid picker** (link a household person **or**
+   type a free name, §3.1), and a linked person's **shareable** context feeds the analysis prompt (§5.1).
+   - _**Built 2026-06-11:** **Asked first (3 forks, all confirmed):** which people are selectable = **all
+     household people** (dreamer excluded); how much linked-person context feeds = the **full shareable set**
+     (display name + relationship type + relationship/public notes + shareable insight facts); picker UX =
+     **hybrid pick-or-type**. **Core:** new **`buildLinkedPeopleContext`** (`@selfos/core/people`, sibling of
+     `buildContext`) — the shareable-only context for a set of linked `personId`s, **never** their private
+     notes/non-shareable facts (the §8.4 boundary), holding even for a linked **non-relation** (public notes
+     feed, private doesn't); `buildDreamPrompt` now appends it for the dream's linked people, foregrounded as
+     "People from your life who appeared in this dream." `DreamPersonRef` already carried `personId` (no
+     schema change; no migration). **Renderer:** a new **`DreamPeopleEditor`** (link a household person via a
+     dropdown — already-linked + the dreamer filtered out — or type a free name; linked chips carry a link
+     icon + "linked" accent badge) replacing the free-text-only people `ChipEditor` in `DreamComposer`
+     (which now stores `DreamPersonRef[]` and loads the household via `peopleStore`, excluding the active
+     dreamer). Code-reviewed; gate green: typecheck (node + web/DOM-lib), lint, format, **239 core + 315
+     desktop** unit (+4 `buildLinkedPeopleContext` core, +1 prompt private-never-leaks core, +6
+     `DreamPeopleEditor` RTL, +1 composer linked-payload RTL), **37 E2E** (+1: link a household person → save
+     → reopen → the personId resolves back to the household name, both chip styles, 390px no-overflow).
+     **Visual QA** at desktop + 390px (the linked vs free chips read as distinct + intentional; the picker
+     self-hides when no one is left to link). **Privacy proof:** a core test asserts a linked person's
+     `privateNotes` never reach the synthesized prompt. **Patterns follow-on:** people-frequency now resolves
+     linked figures to real people (`personId` carried through `tallyPeople`)._
+
 _(Future companion spec: **AI dream-image generation** — the deferred §2 / §11.9 work, when the core is
 proven.)_
 
 ## 14. Changelog
 
+- 2026-06-11 — **Amendment: People-graph linking of "people present"** (§13 item 6; touches §3.1/§4.2/§5.1/
+  §8.4) — finishes the §13.2 deferral. The capture composer's people editor is now a hybrid picker (link a
+  household person or type a free name); a linked person's **shareable** context (display name + relationship
+  - public notes + shareable insight facts — never private data) feeds the dream-analysis prompt via the new
+    `buildLinkedPeopleContext`. Decisions asked + confirmed (all household people selectable; full shareable
+    set; hybrid UX). Privacy boundary enforced + unit-tested (a linked person's private notes never reach the
+    prompt).
 - 2026-06-11 — created (Draft) after an extended design brainstorm; all foundational decisions resolved with
   the user (§12). Dreams is scoped as the **third producer** into `08`'s Insight/metrics layer; image
   generation split out to a future companion spec. Awaiting review/approval before any code.

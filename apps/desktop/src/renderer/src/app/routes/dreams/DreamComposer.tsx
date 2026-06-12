@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Trash2 } from 'lucide-react';
-import type { Dream, DreamInput } from '@shared/channels';
+import type { Dream, DreamInput, DreamPersonRef } from '@shared/channels';
 import type { SensitivityTier } from '@shared/schemas';
 import { useDreamStore } from '../../../stores/dreamStore';
+import { usePeopleStore } from '../../../stores/peopleStore';
+import { useSessionStore } from '../../../stores/sessionStore';
 import {
   Button,
   Field,
@@ -15,6 +17,7 @@ import {
   Textarea,
 } from '../../../design-system/components';
 import { ChipEditor } from './ChipEditor';
+import { DreamPeopleEditor } from './DreamPeopleEditor';
 import styles from './Dreams.module.css';
 
 interface DreamComposerProps {
@@ -28,6 +31,19 @@ const numOrEmpty = (n: number | undefined): string => (n === undefined ? '' : St
 export function DreamComposer({ dream, onDone }: DreamComposerProps): JSX.Element {
   const save = useDreamStore((s) => s.save);
   const remove = useDreamStore((s) => s.remove);
+  const householdPeople = usePeopleStore((s) => s.people);
+  const peopleLoaded = usePeopleStore((s) => s.loaded);
+  const loadPeople = usePeopleStore((s) => s.load);
+  const dreamerId = useSessionStore((s) => s.activePerson?.id);
+
+  // The selectable people: everyone in the household except the dreamer themselves (12 §3.1 decision).
+  const selectablePeople = householdPeople
+    .filter((person) => person.id !== dreamerId)
+    .map((person) => ({ id: person.id, displayName: person.displayName }));
+
+  useEffect(() => {
+    if (!peopleLoaded) void loadPeople();
+  }, [peopleLoaded, loadPeople]);
 
   const [title, setTitle] = useState(dream?.title ?? '');
   const [narrative, setNarrative] = useState(dream?.narrative ?? '');
@@ -39,9 +55,7 @@ export function DreamComposer({ dream, onDone }: DreamComposerProps): JSX.Elemen
   const [nightmare, setNightmare] = useState(dream?.nightmare ?? false);
   const [sensitivity, setSensitivity] = useState<SensitivityTier>(dream?.sensitivity ?? 'standard');
   const [tags, setTags] = useState<string[]>(dream?.tags ?? []);
-  const [people, setPeople] = useState<string[]>(
-    (dream?.people ?? []).map((p) => p.name ?? p.personId ?? '').filter(Boolean),
-  );
+  const [people, setPeople] = useState<DreamPersonRef[]>(dream?.people ?? []);
   const [saving, setSaving] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -63,7 +77,7 @@ export function DreamComposer({ dream, onDone }: DreamComposerProps): JSX.Elemen
       lucid,
       nightmare,
       tags,
-      people: people.map((name) => ({ name })),
+      people,
       sensitivity,
     };
     try {
@@ -172,12 +186,7 @@ export function DreamComposer({ dream, onDone }: DreamComposerProps): JSX.Elemen
       </div>
 
       <ChipEditor label="Tags" values={tags} onChange={setTags} placeholder="Add a tag" />
-      <ChipEditor
-        label="People in the dream"
-        values={people}
-        onChange={setPeople}
-        placeholder="Add a name"
-      />
+      <DreamPeopleEditor values={people} onChange={setPeople} people={selectablePeople} />
 
       <Field label="Sensitivity" help="Sensitive dreams are kept out of any shared context.">
         {(p) => (

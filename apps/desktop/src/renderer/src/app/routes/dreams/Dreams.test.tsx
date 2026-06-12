@@ -5,6 +5,8 @@ import { MemoryRouter } from 'react-router-dom';
 import type { Dream } from '@shared/channels';
 import { Dreams } from './Dreams';
 import { useDreamStore } from '../../../stores/dreamStore';
+import { usePeopleStore } from '../../../stores/peopleStore';
+import { useSessionStore } from '../../../stores/sessionStore';
 import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
 
 /** Dreams now navigates to /dreams/patterns, so it needs a Router in tests. */
@@ -19,6 +21,8 @@ function renderDreams(): void {
 afterEach(() => {
   clearMockBridge();
   useDreamStore.setState({ dreams: [], loaded: false });
+  usePeopleStore.setState({ people: [], relationships: [], loaded: false });
+  useSessionStore.setState({ activePerson: null });
 });
 
 const baseDream: Dream = {
@@ -93,6 +97,38 @@ describe('Dreams', () => {
         sensitivity: 'standard',
       }),
     );
+  });
+
+  it('links a household person to a dream (the payload carries a personId)', async () => {
+    const save = saveSpy();
+    const person = (id: string, displayName: string) => ({
+      id,
+      schemaVersion: 1 as const,
+      displayName,
+      isSubject: true,
+      tags: [] as string[],
+      createdAt: 'now',
+      updatedAt: 'now',
+    });
+    // The dreamer (owner-1) plus a household person they can link; the dreamer is excluded from the picker.
+    usePeopleStore.setState({
+      people: [person('owner-1', 'Me'), person('p-sam', 'Sam')],
+      relationships: [],
+      loaded: true,
+    });
+    useSessionStore.setState({ activePerson: person('owner-1', 'Me') });
+    installMockBridge({ dreamsList: () => Promise.resolve([]), dreamSave: save });
+    renderDreams();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Log a dream' }));
+    await userEvent.type(screen.getByLabelText('What happened?'), 'Sam was there.');
+    // The dreamer is not offered; Sam is.
+    const picker = screen.getByLabelText('Link a person you know');
+    expect(picker).not.toHaveTextContent('Me');
+    await userEvent.selectOptions(picker, 'p-sam');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ people: [{ personId: 'p-sam' }] }));
   });
 
   it('disables Save until a narrative is entered', async () => {

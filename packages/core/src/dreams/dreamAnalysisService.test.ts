@@ -5,6 +5,7 @@ import type { ClaudeClient } from '../host';
 import type { Dream } from '../schemas';
 import { listConversations } from '../conversations';
 import { getInsight, listInsightsForPerson, saveInsight, summarizeForContext } from '../insights';
+import { savePerson, saveRelationship } from '../people';
 import { queryUsage } from '../usage';
 import { getAnalysis, getDream, getDreamConversation, saveDream } from './dreamService';
 import {
@@ -329,5 +330,63 @@ describe('dreamAnalysisService', () => {
     await purgeDream(fs, key, 'p1', 'd1');
     expect(await getDream(fs, key, 'p1', 'd1')).toBeNull();
     expect(await listInsightsForPerson(fs, key, 'p1')).toEqual([]);
+  });
+
+  it("feeds a People-graph-linked dream person's shareable context to the prompt, never their private notes", async () => {
+    const fs = memFileSystem();
+    // The dreamer + a linked person who appeared in the dream.
+    await savePerson(fs, key, {
+      id: 'p1',
+      schemaVersion: 1,
+      displayName: 'Alex',
+      isSubject: true,
+      tags: [],
+      createdAt: 'now',
+      updatedAt: 'now',
+    });
+    await savePerson(fs, key, {
+      id: 'sis',
+      schemaVersion: 1,
+      displayName: 'Robin',
+      isSubject: true,
+      tags: [],
+      publicNotes: 'Alex’s sister, a teacher',
+      privateNotes: 'ROBIN-PRIVATE-NOTE',
+      createdAt: 'now',
+      updatedAt: 'now',
+    });
+    await saveRelationship(fs, key, {
+      id: 'r1',
+      schemaVersion: 1,
+      fromPersonId: 'p1',
+      toPersonId: 'sis',
+      type: 'sibling',
+      createdAt: 'now',
+      updatedAt: 'now',
+    });
+    await saveDream(
+      fs,
+      key,
+      dream({ id: 'd1', personId: 'p1', people: [{ personId: 'sis' }, { name: 'a stranger' }] }),
+    );
+
+    let captured = '';
+    const recordingClient: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (options) => {
+        captured = options.system ?? '';
+        return Promise.resolve({
+          text: JSON.stringify(VALID_DRAFT),
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+
+    await synthesizeAnalysis(deps(fs, recordingClient));
+    expect(captured).toContain('appeared in this dream');
+    expect(captured).toContain('Robin');
+    expect(captured).toContain('(sibling)');
+    expect(captured).toContain('Alex’s sister, a teacher'); // shareable public notes
+    expect(captured).not.toContain('ROBIN-PRIVATE-NOTE'); // private notes never reach the prompt
   });
 });

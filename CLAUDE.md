@@ -239,6 +239,37 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Build (**Dreams amendment — link "people present" to the People graph**, finishing the §13.2
+  deferral; [12-dreams](docs/specs/12-dreams.md) §3.1/§4.2/§5.1/§8.4 + §13 item 6). A dream's "people
+  present" can now be **linked to a real household person** so the AI dream analysis draws on that person's
+  **shareable** context. **Asked first (3 forks, all confirmed):** which people are selectable = **all
+  household people** (the dreamer excluded); how much linked-person context feeds = the **full shareable
+  set** (display name + relationship type + relationship/public notes + shareable insight facts); picker UX
+  = **hybrid pick-or-type**. **Core:** new **`buildLinkedPeopleContext`** (`@selfos/core/people`, a sibling
+  of `buildContext`) — the shareable-only context block for a set of linked `personId`s, **never** their
+  private notes/non-shareable facts (the §8.4 boundary — byte-identical to `summarizeForContext`'s
+  `shareable || shareableWith.includes(viewer)` rule), holding **even for a linked non-relation** (public
+  notes are the "may feed others' AI" bucket — they feed; private data never does). `buildDreamPrompt` now
+  takes the `Dream` and appends this for the dream's linked people, foregrounded as "People from your life
+  who appeared in this dream." `DreamPersonRef` already carried `personId` (**no schema change, no
+  migration**). **Renderer:** a new **`DreamPeopleEditor`** (link a household person from a dropdown —
+  already-linked + the dreamer filtered out — or type a free name; linked chips carry a link icon + accent
+  "linked" badge) replaces the free-text-only people `ChipEditor` in `DreamComposer` (now stores
+  `DreamPersonRef[]`, loads the household via `peopleStore`, excludes the active dreamer; re-exported
+  `DreamPersonRef` through `channels`). **Patterns follow-on:** people-frequency now resolves linked figures
+  to real people (`personId` carried through `tallyPeople`). Code-reviewer **ship** (no blockers/should-fix;
+  privacy boundary verified airtight on every path incl. non-relations + tampered ids; applied the one UX
+  nit — a free name that duplicates an already-linked person's display name is rejected). Gate green:
+  typecheck (node + web/DOM-lib), lint, format, **239 core + 315 desktop + 8 relay** unit (+4
+  `buildLinkedPeopleContext`, +1 prompt-private-never-leaks core; +6 `DreamPeopleEditor` RTL, +1 composer
+  linked-payload RTL), **37 E2E** (+1: link a household person → save → reopen → the `personId` resolves
+  back to the household name, both chip styles, 390px no-overflow). **Visual QA** at desktop + 390px (linked
+  vs free chips read as distinct + intentional; the picker self-hides when no one's left to link). Built in
+  the isolated **`feat/dreams-people-link`** worktree off `main`. **Lesson: any household person is
+  linkable, but the shareable-vs-private boundary still holds without a relationship — `publicNotes` +
+  `shareable`/`shareableWith` facts feed, private data never does; the relationship graph only _labels_ the
+  link.** **NEXT (the other half of this work): the deferred AI dream-image-generation companion spec
+  (§11.2) — spec-first.**
 - 2026-06-11 — Build (Questionnaires **slice §13.6 — the external Cloudflare relay; the Questionnaires
   feature is now FULLY BUILT** except the deferred §13.2 image follow-ups + the AI image-gen companion spec;
   [08-questionnaires](docs/specs/08-questionnaires.md) §3.2/§3.4/§3.5/§3.8/§3.9/§4.1/§4.5/§5.1/§5.2/§5.4/§6/

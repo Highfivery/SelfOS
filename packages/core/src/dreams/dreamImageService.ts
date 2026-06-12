@@ -1,10 +1,16 @@
 import { decryptBytes, encryptBytes, isEncryptedEnvelope } from '../crypto';
 import type { ClaudeClient, FileSystem, ImageClient } from '../host';
 import { uuid } from '../id';
-import type { DreamImageDescriptor, DreamImageGenerateResult, UsageEvent } from '../schemas';
+import type {
+  DreamImageDescriptor,
+  DreamImageGenerateResult,
+  DreamSharedImage,
+  DreamShareResult,
+  UsageEvent,
+} from '../schemas';
 import { checkBudget, costOf, recordUsage } from '../usage';
-import { buildDepictionNote } from '../people';
-import { getDream, saveDream } from './dreamService';
+import { buildDepictionNote, listPeople, listRelatedPeople } from '../people';
+import { getDream, listDreams, saveDream } from './dreamService';
 
 /**
  * Dream-image generation service (13-dream-images §5.2). Two providers, one orchestrator: a **Claude**
@@ -332,4 +338,89 @@ export async function deleteDreamImage(
     delete cleared.image;
     await saveDream(fs, key, cleared);
   }
+}
+
+/**
+ * Share (or unshare) a dream's image with a **related** person (13-dream-images §3.6). Mirrors the §13.5
+ * per-fact sharing: refuses a sensitive-tier dream (intimate content can't leave the dreamer) and a
+ * non-related / unknown target. Toggles the person in `Dream.image.shareableWith` (dropping the prop when
+ * empty). The image still never enters anyone's AI coaching context — sharing only makes it viewable.
+ */
+export async function setDreamImageShare(deps: {
+  fs: FileSystem;
+  key: Uint8Array;
+  dreamerId: string;
+  dreamId: string;
+  targetPersonId: string;
+  shared: boolean;
+  now: Date;
+}): Promise<DreamShareResult> {
+  const { fs, key, dreamerId, dreamId, targetPersonId, shared, now } = deps;
+  const dream = await getDream(fs, key, dreamerId, dreamId);
+  if (!dream?.image) return { ok: false, reason: 'NOT_FOUND' };
+  if (dream.sensitivity !== 'standard') return { ok: false, reason: 'SENSITIVE' };
+  const targets = await listRelatedPeople(fs, key, dreamerId);
+  if (!targets.some((target) => target.id === targetPersonId)) {
+    return { ok: false, reason: 'NOT_FOUND' };
+  }
+
+  const next = new Set(dream.image.shareableWith ?? []);
+  if (shared) next.add(targetPersonId);
+  else next.delete(targetPersonId);
+  const image: DreamImageDescriptor = { ...dream.image };
+  if (next.size > 0) image.shareableWith = [...next];
+  else delete image.shareableWith;
+  await saveDream(fs, key, { ...dream, image, updatedAt: now.toISOString() });
+  return { ok: true };
+}
+
+/**
+ * A recipient reads an image shared **with them** — re-validating the relationship + the share +
+ * standard-tier at READ time (so un-sharing or removing the relationship immediately denies; no stale
+ * access, the §13.5 read-time re-gate). Null if not currently shared with the viewer.
+ */
+export async function getSharedDreamImage(
+  fs: FileSystem,
+  key: Uint8Array,
+  viewerId: string,
+  dreamerId: string,
+  dreamId: string,
+): Promise<{ bytes: Uint8Array; mime: string } | null> {
+  if (viewerId === dreamerId) return null; // your own image is read via getDreamImage
+  const dream = await getDream(fs, key, dreamerId, dreamId);
+  if (!dream?.image || dream.sensitivity !== 'standard') return null;
+  if (!(dream.image.shareableWith ?? []).includes(viewerId)) return null;
+  // The relationship is re-checked here, so deleting it drops the share without touching shareableWith.
+  const related = await listRelatedPeople(fs, key, viewerId);
+  if (!related.some((person) => person.id === dreamerId)) return null;
+  return getDreamImage(fs, key, dreamerId, dreamId);
+}
+
+/**
+ * Every dream image currently shared with the viewer — the "Shared with you" surface (13-dream-images
+ * §3.6). Scans the viewer's **related** people's dreams for a standard-tier image whose `shareableWith`
+ * includes the viewer. Metadata only (bytes fetched via `getSharedDreamImage`). The relationship re-gate
+ * means an un-shared / un-related image simply stops appearing.
+ */
+export async function listImagesSharedWith(
+  fs: FileSystem,
+  key: Uint8Array,
+  viewerId: string,
+): Promise<DreamSharedImage[]> {
+  const relatedIds = new Set((await listRelatedPeople(fs, key, viewerId)).map((p) => p.id));
+  const out: DreamSharedImage[] = [];
+  for (const person of await listPeople(fs, key)) {
+    if (person.id === viewerId || !relatedIds.has(person.id)) continue;
+    for (const dream of await listDreams(fs, key, person.id)) {
+      if (dream.sensitivity !== 'standard' || !dream.image) continue;
+      if (!(dream.image.shareableWith ?? []).includes(viewerId)) continue;
+      out.push({
+        dreamerId: person.id,
+        dreamerName: person.displayName,
+        dreamId: dream.id,
+        mime: dream.image.mime,
+      });
+    }
+  }
+  return out;
 }

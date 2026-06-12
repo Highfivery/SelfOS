@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, BarChart3, Moon, Plus, Sparkles } from 'lucide-react';
 import type { Dream } from '@shared/channels';
 import { useDreamStore } from '../../../stores/dreamStore';
+import { useSessionStore } from '../../../stores/sessionStore';
 import { Button, Card, Heading, Inline, Stack, Text } from '../../../design-system/components';
 import { DreamComposer } from './DreamComposer';
 import { DreamAnalysisPane } from './DreamAnalysisPane';
+import { SharedDreamImages } from './SharedDreamImages';
 import styles from './Dreams.module.css';
 
 type Selection = { mode: 'none' } | { mode: 'new' } | { mode: 'edit'; id: string };
@@ -38,6 +40,7 @@ export function Dreams(): JSX.Element {
   const dreams = useDreamStore((s) => s.dreams);
   const loaded = useDreamStore((s) => s.loaded);
   const load = useDreamStore((s) => s.load);
+  const activePersonId = useSessionStore((s) => s.activePerson?.id);
   const navigate = useNavigate();
   const [selection, setSelection] = useState<Selection>({ mode: 'none' });
   // Within a saved dream, the detail toggles between the editor and the in-pane analysis surface.
@@ -52,6 +55,13 @@ export function Dreams(): JSX.Element {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Reset the detail selection when the active person changes — a switch must not leave another person's
+  // dream selected (which on mobile would hide the list, incl. "Shared with you"). Per-person isolation.
+  useEffect(() => {
+    setSelection({ mode: 'none' });
+    setAnalyzing(false);
+  }, [activePersonId]);
 
   const selected =
     selection.mode === 'edit' ? (dreams.find((d) => d.id === selection.id) ?? null) : null;
@@ -73,6 +83,9 @@ export function Dreams(): JSX.Element {
             </Button>
           </Inline>
         </div>
+
+        {/* Images related people have shared with you (13-dream-images §3.6); self-hides when empty. */}
+        <SharedDreamImages />
 
         {loaded && dreams.length === 0 ? (
           <Card>

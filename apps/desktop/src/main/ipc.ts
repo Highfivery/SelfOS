@@ -1,4 +1,6 @@
 import { app, dialog, ipcMain, shell, type IpcMainInvokeEvent, type WebContents } from 'electron';
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { z } from 'zod';
 import { IpcChannels } from '../shared/channels';
 import { BootStateSchema, type BootState } from '../shared/schemas';
@@ -122,6 +124,18 @@ export function registerIpcHandlers(): void {
     revealVault: async () => {
       const vaultDir = await activeVaultPath();
       if (vaultDir) await shell.openPath(vaultDir);
+    },
+    saveImageFile: async (suggestedName, bytes) => {
+      // E2E hook: write to a fixed path without showing the native dialog (which Playwright can't drive).
+      const fakeDir = process.env['SELFOS_FAKE_SAVE_DIR'];
+      const filePath = fakeDir
+        ? join(fakeDir, suggestedName)
+        : await dialog
+            .showSaveDialog({ title: 'Export dream image', defaultPath: suggestedName })
+            .then((r) => (r.canceled ? null : r.filePath));
+      if (!filePath) return null;
+      await writeFile(filePath, Buffer.from(bytes));
+      return filePath;
     },
     // On Electron the renderer subscribes to these over IPC in the preload, not via the in-process
     // bridge — so the bridge's own subscriptions are unused in main (they exist for the iOS host).
@@ -248,6 +262,10 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.dreamGenerateImage, bridge.dreamGenerateImage);
   handle(IpcChannels.dreamGetImage, bridge.dreamGetImage);
   handle(IpcChannels.dreamDeleteImage, bridge.dreamDeleteImage);
+  handle(IpcChannels.dreamExportImage, bridge.dreamExportImage);
+  handle(IpcChannels.dreamSetImageShare, bridge.dreamSetImageShare);
+  handle(IpcChannels.dreamGetSharedImage, bridge.dreamGetSharedImage);
+  handle(IpcChannels.dreamListSharedImages, bridge.dreamListSharedImages);
   handle(IpcChannels.getSidebarCollapsed, bridge.getSidebarCollapsed);
   handle(IpcChannels.setSidebarCollapsed, bridge.setSidebarCollapsed);
 

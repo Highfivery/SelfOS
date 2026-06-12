@@ -4,7 +4,8 @@ import { memFileSystem } from '../host/memFileSystem';
 import type { ClaudeClient, FileSystem, ImageClient, ImageGenerateOutcome } from '../host';
 import type { Dream, Person } from '../schemas';
 import { DreamSchema } from '../schemas';
-import { savePerson } from '../people';
+import type { Relationship } from '../schemas';
+import { savePerson, saveRelationship } from '../people';
 import { queryUsage, setPersonBudget } from '../usage';
 import { getDream, saveDream } from './dreamService';
 import {
@@ -12,7 +13,10 @@ import {
   deleteDreamImage,
   generateDreamImage,
   getDreamImage,
+  getSharedDreamImage,
   isDreamImagePath,
+  listImagesSharedWith,
+  setDreamImageShare,
   type GenerateDreamImageDeps,
 } from './dreamImageService';
 
@@ -311,6 +315,108 @@ describe('generateDreamImage', () => {
     await deleteDreamImage(fs, key, 'p1', 'd1', NOW);
     expect(await getDreamImage(fs, key, 'p1', 'd1')).toBeNull();
     expect((await getDream(fs, key, 'p1', 'd1'))?.image).toBeUndefined();
+  });
+});
+
+describe('dream image sharing', () => {
+  function relate(a: string, b: string): Relationship {
+    return {
+      id: `r-${a}-${b}`,
+      schemaVersion: 1,
+      fromPersonId: a,
+      toPersonId: b,
+      type: 'partner',
+      createdAt: 'now',
+      updatedAt: 'now',
+    };
+  }
+
+  async function seedSharedImage(sensitivity: Dream['sensitivity'] = 'standard'): Promise<void> {
+    await savePerson(fs, key, person({ id: 'p1', displayName: 'Dreamer' }));
+    await savePerson(fs, key, person({ id: 'p2', displayName: 'Partner' }));
+    await saveRelationship(fs, key, relate('p1', 'p2'));
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1', sensitivity }));
+    await generateDreamImage(deps({ personId: 'p1', dreamId: 'd1' }));
+  }
+
+  it('shares an image with a related person, and a recipient reads it; un-share denies at read time', async () => {
+    await seedSharedImage();
+    expect(
+      await setDreamImageShare({
+        fs,
+        key,
+        dreamerId: 'p1',
+        dreamId: 'd1',
+        targetPersonId: 'p2',
+        shared: true,
+        now: NOW,
+      }),
+    ).toEqual({ ok: true });
+
+    // The recipient reads it...
+    expect(await getSharedDreamImage(fs, key, 'p2', 'p1', 'd1')).not.toBeNull();
+    expect((await listImagesSharedWith(fs, key, 'p2')).map((s) => s.dreamId)).toEqual(['d1']);
+
+    // ...until it's un-shared — then the read re-gate denies immediately.
+    await setDreamImageShare({
+      fs,
+      key,
+      dreamerId: 'p1',
+      dreamId: 'd1',
+      targetPersonId: 'p2',
+      shared: false,
+      now: NOW,
+    });
+    expect(await getSharedDreamImage(fs, key, 'p2', 'p1', 'd1')).toBeNull();
+    expect(await listImagesSharedWith(fs, key, 'p2')).toEqual([]);
+  });
+
+  it('denies a recipient after the RELATIONSHIP is removed, without touching shareableWith', async () => {
+    await seedSharedImage();
+    await setDreamImageShare({
+      fs,
+      key,
+      dreamerId: 'p1',
+      dreamId: 'd1',
+      targetPersonId: 'p2',
+      shared: true,
+      now: NOW,
+    });
+    // Remove the relationship file → the read-time re-gate drops the share.
+    await fs.remove('relationships/r-p1-p2.enc');
+    expect(await getSharedDreamImage(fs, key, 'p2', 'p1', 'd1')).toBeNull();
+    expect(await listImagesSharedWith(fs, key, 'p2')).toEqual([]);
+  });
+
+  it('refuses to share a sensitive-tier dream + a non-related target', async () => {
+    await seedSharedImage('explicit');
+    expect(
+      await setDreamImageShare({
+        fs,
+        key,
+        dreamerId: 'p1',
+        dreamId: 'd1',
+        targetPersonId: 'p2',
+        shared: true,
+        now: NOW,
+      }),
+    ).toEqual({ ok: false, reason: 'SENSITIVE' });
+
+    // A standard dream, but a target the dreamer isn't related to.
+    await saveDream(fs, key, dream({ id: 'd2', personId: 'p1' }));
+    await generateDreamImage(deps({ personId: 'p1', dreamId: 'd2' }));
+    await savePerson(fs, key, person({ id: 'p3', displayName: 'Stranger' }));
+    expect(
+      await setDreamImageShare({
+        fs,
+        key,
+        dreamerId: 'p1',
+        dreamId: 'd2',
+        targetPersonId: 'p3',
+        shared: true,
+        now: NOW,
+      }),
+    ).toEqual({ ok: false, reason: 'NOT_FOUND' });
   });
 });
 

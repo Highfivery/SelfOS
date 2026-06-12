@@ -1,6 +1,6 @@
 # 13 — Dream images (AI image generation of a dream)
 
-> **Status:** **Approved** · _last updated 2026-06-12_
+> **Status:** **Built** (all 5 slices shipped to `main`) · _last updated 2026-06-12_
 >
 > The deferred companion to [`12-dreams.md`](12-dreams.md): a dreamer can **visualize a dream** as a single
 > AI-generated image. It introduces SelfOS's **second AI provider** (OpenAI, for image generation only — text
@@ -675,9 +675,9 @@ All product decisions are resolved (§12). Only these **build-time confirmations
 3. **`gender` enum options** — ✅ **Resolved (2026-06-12, slice 1):** the preset list is **Female / Male /
    Non-binary / Prefer not to say**, plus a free-text **"Other…"** that reveals a describe field. Built in the
    `PersonEditor` About tab.
-4. **The "Shared with you" surface** — per-dream image sharing (§3.6) needs a place the recipient views a shared
-   image; proposed a lightweight **"Shared with you"** section in Dreams. Confirm the placement during the
-   sharing slice (build slice 5).
+4. **The "Shared with you" surface** — ✅ **Resolved (2026-06-12, slice 5):** a lightweight **"Shared with
+   you"** section at the **top of the Dreams journal**, appearing only when something is shared with the
+   viewer (the recipient's `SharedDreamImages` gallery).
 
 ## 12. Resolved decisions
 
@@ -774,11 +774,18 @@ Confirmed with the user (2026-06-11) — encoded above, **not** to be re-opened:
    `budgets.manage`); REFUSED/BUDGET/ERROR calm messages. Code-reviewer **fix-first**. 8 RTL + an E2E
    (sensitive warning → generate → assert `image.enc` is an AES-GCM envelope on disk → regenerate → delete) +
    visual QA at desktop + 390px.
-5. **Export + per-dream sharing** — the `dreams:exportImage` save flow (§3.5); the `dreams:imageShareTargets` /
-   `:setImageShare` (gated `dreams.shareContext`, sensitive-excluded) / `:getSharedImage` seam +
-   `Dream.image.shareableWith`; the panel's **Save image…** + **Share** controls; the recipient's **"Shared with
-   you"** surface; visual QA + E2E (export writes a file; share → recipient reads it → un-share/relationship
-   removal denies; sensitive-tier share refused).
+5. **Export + per-dream sharing** — ✅ **Built 2026-06-12** (branch `feat/dream-images-slice-5`). The
+   `dreams:exportImage` save flow (a main-side `saveImageFile` host op — a native save dialog writing the
+   **decrypted** bytes OUTSIDE the vault; a Blob download on web/iOS); the `:setImageShare` (gated
+   `dreams.shareContext`, sensitive-excluded, dreamer-scoped) / `:getSharedImage` / `:listSharedImages` seam
+   over `Dream.image.shareableWith` — with the **read-time re-gate** (`getSharedDreamImage`/`listImagesSharedWith`
+   re-validate relationship + `shareableWith` + standard-tier at read, so un-share / removed-relationship /
+   sensitive denies, no stale access); the panel's **Save image…** (+ "leaves the encrypted vault" note) +
+   **Share** controls (a per-related-person Switch list); the recipient's **"Shared with you"** gallery at the
+   top of the Dreams journal (§11.4); the `Dreams.tsx` per-person selection reset. Code-reviewer **ship**
+   (privacy re-gate verified airtight on every path). 12 RTL + 4 core + the bridge round-trip + an E2E (export
+   writes a real decrypted file; share → recipient sees it in "Shared with you"); visual QA desktop + 390px.
+   **Spec 13 is now FULLY BUILT.**
 
 ## 14. Changelog
 
@@ -884,3 +891,32 @@ defaultImageClient()` host wiring → `preload` → `test-utils/bridge` mock), a
   export (`dreams:exportImage` save dialog) + per-dream image sharing (`Dream.image.shareableWith` +
   `dreams:imageShareTargets`/`:setImageShare`/`:getSharedImage`) + the "Shared with you" recipient surface
   (ASK placement). This is the LAST slice of spec 13.**
+- 2026-06-12 — **Slice 5 built — spec 13 is now FULLY BUILT** (export + per-dream image sharing; §13.1 slice 5
+  / §3.5/§3.6). **§11.4 confirmed with the user:** the recipient's "Shared with you" lives as a section at the
+  **top of the Dreams journal** (self-hides when empty). **Export:** `dreams:exportImage` decrypts the bytes
+  and a new **`saveImageFile` platform host op** writes them OUTSIDE the vault (Electron save dialog +
+  `writeFile`, with a `SELFOS_FAKE_SAVE_DIR` E2E hook; a Blob download on web/iOS); gated `dreams.generateImage`,
+  dreamer-scoped; the panel's "Save image…" shows a "leaves the encrypted vault" note. **Sharing:** core
+  `setDreamImageShare` (toggle `Dream.image.shareableWith`; refuses sensitive + non-related, the
+  `setDreamFactShare` mirror), `getSharedDreamImage` + `listImagesSharedWith` with the **read-time re-gate** —
+  both re-validate relationship + `shareableWith` + standard-tier at read, so **un-share / removed-relationship
+  / sensitive denies with no stale access** (no `shareableWith` cleanup needed; `listRelatedPeople` is the
+  symmetric gate). Seam: `dreams:setImageShare` (gated **`dreams.shareContext`**, dreamer-scoped — a recipient
+  can't re-share another's image) / `:getSharedImage` / `:listSharedImages` (viewer-scoped — the share is the
+  grant). Renderer: the panel's **Share** controls (a per-related-person Switch list; shown only standard-tier +
+  `dreams.shareContext` + has relations; a "kept out of shared context" note otherwise) + the recipient's
+  **`SharedDreamImages`** gallery; `Dreams.tsx` now **resets its selection on `activePersonId` change** (a
+  pre-existing per-person leak the 390px QA surfaced — a switch left another person's dream selected, hiding
+  the mobile list incl. "Shared with you"). Code-reviewer **ship** (the read-time re-gate verified airtight on
+  every path; export writes a decrypted file only by the dreamer's gated action; sharing scoped to
+  `dreams.shareContext` + the active person). Gate green: typecheck (node + web/DOM-lib), lint, format, **269
+  core + 344 desktop + 8 relay** unit (+3 core sharing [share→read→un-share-denies, relationship-removal
+  denies, sensitive+non-related refused], +1 bridge export→share→recipient round-trip, +4 RTL [panel
+  export/share/sensitive-note + `SharedDreamImages` shows/self-hides]), **+1 E2E** (export writes a real PNG
+  outside the vault + share → switch to the partner → the image appears in their "Shared with you"). Visual QA
+  at desktop + 390px (the Share controls + the "Shared with you" gallery read clean; the per-person reset fixed
+  the mobile recipient view). Built in the **`feat/dream-images-slice-5`** worktree off `main`. **Lesson: a
+  per-person read-time re-gate (relationship + share + sensitivity re-checked on every read) means a share
+  auto-revokes when ANY of those changes — no separate revocation/cleanup of `shareableWith` is needed, and a
+  removed relationship drops the share for free.** **Spec 13 (AI dream images) is COMPLETE — all 5 slices on
+  `main`. The only Dreams work left is the user's real on-device/OpenAI verification.**

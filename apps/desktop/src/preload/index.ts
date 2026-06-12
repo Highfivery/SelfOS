@@ -151,6 +151,10 @@ const bridge: SelfosBridge = {
   dreamGenerateImage: (input) => ipcRenderer.invoke(IpcChannels.dreamGenerateImage, input),
   dreamGetImage: (input) => ipcRenderer.invoke(IpcChannels.dreamGetImage, input),
   dreamDeleteImage: (input) => ipcRenderer.invoke(IpcChannels.dreamDeleteImage, input),
+  dreamExportImage: (input) => ipcRenderer.invoke(IpcChannels.dreamExportImage, input),
+  dreamSetImageShare: (input) => ipcRenderer.invoke(IpcChannels.dreamSetImageShare, input),
+  dreamGetSharedImage: (input) => ipcRenderer.invoke(IpcChannels.dreamGetSharedImage, input),
+  dreamListSharedImages: () => ipcRenderer.invoke(IpcChannels.dreamListSharedImages),
   getSidebarCollapsed: () => ipcRenderer.invoke(IpcChannels.getSidebarCollapsed),
   setSidebarCollapsed: (collapsed) =>
     ipcRenderer.invoke(IpcChannels.setSidebarCollapsed, collapsed),

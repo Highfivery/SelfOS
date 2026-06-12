@@ -22,6 +22,7 @@ import type {
   DreamPatternSummary,
   DreamPatternWindow,
   DreamPersonRef,
+  DreamSharedImage,
   DreamShareResult,
   DreamShareTarget,
   DreamSynthesisResult,
@@ -169,6 +170,10 @@ export const IpcChannels = {
   dreamGenerateImage: 'dreams:generateImage',
   dreamGetImage: 'dreams:getImage',
   dreamDeleteImage: 'dreams:deleteImage',
+  dreamExportImage: 'dreams:exportImage',
+  dreamSetImageShare: 'dreams:setImageShare',
+  dreamGetSharedImage: 'dreams:getSharedImage',
+  dreamListSharedImages: 'dreams:listSharedImages',
   getSidebarCollapsed: 'ui:getSidebarCollapsed',
   setSidebarCollapsed: 'ui:setSidebarCollapsed',
 } as const;
@@ -553,6 +558,27 @@ export interface SelfosBridge {
   dreamGetImage(input: { dreamId: string }): Promise<{ mime: string; dataBase64: string } | null>;
   /** Delete a dream's image (removes the bytes + clears the descriptor). Requires `dreams.generateImage`. */
   dreamDeleteImage(input: { dreamId: string }): Promise<void>;
+  /**
+   * Export a dream's image to a file the dreamer chooses OUTSIDE the encrypted vault (13-dream-images §3.5).
+   * Returns the saved path, or null if cancelled. Requires `dreams.generateImage`, dreamer-scoped.
+   */
+  dreamExportImage(input: { dreamId: string }): Promise<string | null>;
+  /**
+   * Share/unshare a dream's image with a related household person (13-dream-images §3.6). Requires
+   * `dreams.shareContext`; refuses a sensitive-tier dream + a non-related target.
+   */
+  dreamSetImageShare(input: {
+    dreamId: string;
+    targetPersonId: string;
+    shared: boolean;
+  }): Promise<DreamShareResult>;
+  /** A recipient reads an image shared with them (re-gated at read); null if not currently shared. */
+  dreamGetSharedImage(input: {
+    dreamerId: string;
+    dreamId: string;
+  }): Promise<{ mime: string; dataBase64: string } | null>;
+  /** Every dream image currently shared WITH the active person — the "Shared with you" surface (§3.6). */
+  dreamListSharedImages(): Promise<DreamSharedImage[]>;
   /** Whether the desktop sidebar is collapsed to an icon rail (device-local). */
   getSidebarCollapsed(): Promise<boolean>;
   /** Persist the sidebar collapsed/expanded state (device-local). */
@@ -582,6 +608,7 @@ export type {
   DreamPatternSummary,
   DreamPatternWindow,
   DreamPersonRef,
+  DreamSharedImage,
   DreamShareResult,
   DreamShareTarget,
   DreamSynthesisResult,

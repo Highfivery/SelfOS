@@ -150,6 +150,46 @@ describe('DreamImagePanel', () => {
     await waitFor(() => expect(screen.queryByRole('img')).not.toBeInTheDocument());
   });
 
+  it('exports the image and shares it with a related person', async () => {
+    enable();
+    const dreamExportImage = vi.fn(() => Promise.resolve('/tmp/dream-image.png'));
+    const dreamSetImageShare = vi.fn(() => Promise.resolve({ ok: true as const }));
+    installMockBridge({
+      secretHas: () => Promise.resolve(true),
+      dreamGetImage: () => Promise.resolve({ mime: 'image/png', dataBase64: 'AAAA' }),
+      dreamShareTargets: () => Promise.resolve([{ id: 'p2', displayName: 'Partner' }]),
+      dreamExportImage,
+      dreamSetImageShare,
+    });
+    renderPanel();
+    await screen.findByRole('img');
+
+    await userEvent.click(screen.getByRole('button', { name: /save image/i }));
+    expect(dreamExportImage).toHaveBeenCalledWith({ dreamId: 'd1' });
+    expect(await screen.findByText(/leaves the encrypted vault/i)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Share' }));
+    await userEvent.click(screen.getByRole('switch', { name: /share this image with partner/i }));
+    expect(dreamSetImageShare).toHaveBeenCalledWith({
+      dreamId: 'd1',
+      targetPersonId: 'p2',
+      shared: true,
+    });
+  });
+
+  it('keeps a sensitive dream image out of sharing, with a note', async () => {
+    enable();
+    installMockBridge({
+      secretHas: () => Promise.resolve(true),
+      dreamGetImage: () => Promise.resolve({ mime: 'image/png', dataBase64: 'AAAA' }),
+      dreamShareTargets: () => Promise.resolve([{ id: 'p2', displayName: 'Partner' }]),
+    });
+    renderPanel({ ...dream, sensitivity: 'explicit' });
+    await screen.findByRole('img');
+    expect(screen.queryByRole('button', { name: 'Share' })).not.toBeInTheDocument();
+    expect(screen.getByText(/its image can.t be shared/i)).toBeInTheDocument();
+  });
+
   it('shows a calm refusal message when OpenAI declines (content policy)', async () => {
     enable();
     installMockBridge({

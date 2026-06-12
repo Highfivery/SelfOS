@@ -200,6 +200,7 @@ function makeHost(): {
     useVault: () => Promise.resolve(ready),
     getConflicts: () => Promise.resolve([]),
     revealVault: () => Promise.resolve(),
+    saveImageFile: (name) => Promise.resolve(`/tmp/${name}`),
     onVaultChanged: () => () => {},
     onChatChunk: () => () => {},
     onDreamChunk: () => () => {},
@@ -1196,6 +1197,67 @@ describe('createCoreBridge', () => {
     await bridge.dreamDeleteImage({ dreamId: dream.id });
     expect(await bridge.dreamGetImage({ dreamId: dream.id })).toBeNull();
     expect((await bridge.dreamGet(dream.id))?.image).toBeUndefined();
+  });
+
+  it('exports an image, shares it with a related person, and the recipient reads it in "Shared with you"', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    await bridge.setSetting({ key: 'dreams.imageGenerationEnabled', value: true, scope: 'vault' });
+    await bridge.secretSet({ id: OPENAI_API_KEY_ID, value: 'sk-openai' });
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-ant' });
+
+    // A related household person who can sign in.
+    const partner = await bridge.peopleSave({ displayName: 'Partner', isSubject: true, tags: [] });
+    await bridge.relationshipsSave({
+      fromPersonId: ownerId,
+      toPersonId: partner.id,
+      type: 'partner',
+    });
+    await bridge.accessSetAccount({ personId: partner.id, roleId: 'member', pin: null });
+
+    const dream = await bridge.dreamSave({
+      narrative: 'a bright place of open doors',
+      lucid: false,
+      nightmare: false,
+      tags: [],
+      people: [],
+      sensitivity: 'standard',
+    });
+    expect((await bridge.dreamGenerateImage({ dreamId: dream.id })).ok).toBe(true);
+
+    // Export returns the (fake) saved path outside the vault.
+    expect(await bridge.dreamExportImage({ dreamId: dream.id })).toContain('dream-image');
+
+    // Share it with the partner.
+    expect(
+      await bridge.dreamSetImageShare({
+        dreamId: dream.id,
+        targetPersonId: partner.id,
+        shared: true,
+      }),
+    ).toEqual({ ok: true });
+
+    // The partner signs in → the image appears in their "Shared with you" + the bytes read back.
+    expect((await bridge.sessionSetActive({ personId: partner.id })).ok).toBe(true);
+    expect((await bridge.dreamListSharedImages()).map((s) => s.dreamId)).toEqual([dream.id]);
+    expect(
+      await bridge.dreamGetSharedImage({ dreamerId: ownerId, dreamId: dream.id }),
+    ).not.toBeNull();
+    // A partner without dreams.shareContext over someone else's dream still can't re-share it as theirs:
+    // setImageShare is dreamer-scoped to the active person, so it targets the partner's OWN (absent) dream.
+    expect(
+      await bridge.dreamSetImageShare({ dreamId: dream.id, targetPersonId: ownerId, shared: true }),
+    ).toEqual({ ok: false, reason: 'NOT_FOUND' });
+
+    // Back to the owner → un-share → the partner no longer sees it (read-time re-gate).
+    expect((await bridge.sessionSetActive({ personId: ownerId, pin: '1234' })).ok).toBe(true);
+    await bridge.dreamSetImageShare({
+      dreamId: dream.id,
+      targetPersonId: partner.id,
+      shared: false,
+    });
+    expect((await bridge.sessionSetActive({ personId: partner.id })).ok).toBe(true);
+    expect(await bridge.dreamListSharedImages()).toEqual([]);
+    expect(await bridge.dreamGetSharedImage({ dreamerId: ownerId, dreamId: dream.id })).toBeNull();
   });
 
   it('denies dream-image ops to a person without dreams.generateImage (a Guest)', async () => {

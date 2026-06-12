@@ -162,6 +162,20 @@ function createBridgeHost(parts: HostParts): BridgeHost {
     },
     getConflicts: () => Promise.resolve([]),
     revealVault: () => Promise.resolve(),
+    // Export = a browser download (web preview) / share-sheet (iOS, later). No native save dialog here.
+    saveImageFile: (suggestedName, bytes, mime) => {
+      // Copy into a plain ArrayBuffer — a Uint8Array<ArrayBufferLike> isn't a BlobPart under the DOM lib.
+      const buffer = new ArrayBuffer(bytes.byteLength);
+      new Uint8Array(buffer).set(bytes);
+      const blob = new Blob([buffer], { type: mime });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = suggestedName;
+      a.click();
+      URL.revokeObjectURL(url);
+      return Promise.resolve(suggestedName);
+    },
     onVaultChanged: parts.onVaultChanged,
     onChatChunk: (listener) => {
       chatListeners.add(listener);

@@ -1576,6 +1576,86 @@ test('dreams: visualize a dream — sensitive warning, generate, encrypted round
   }
 });
 
+test('dreams: export an image to a file + share it; the recipient sees it in "Shared with you"', async () => {
+  const { userData, vault } = await seedReadyVault({
+    'ai.enabled': true,
+    'dreams.imageGenerationEnabled': true,
+  });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+  await secrets.set('openai.apiKey', 'sk-openai-e2e');
+
+  // Seed a related household partner who can sign in (member, pinless).
+  const key = await loadMasterKey(secrets);
+  if (!key) throw new Error('share e2e: master key missing');
+  const fs = createNodeFileSystem(vault);
+  const now = new Date().toISOString();
+  await savePerson(fs, key, {
+    id: 'partner-1',
+    schemaVersion: 1,
+    displayName: 'Partner',
+    isSubject: true,
+    tags: [],
+    createdAt: now,
+    updatedAt: now,
+  });
+  await saveRelationship(fs, key, {
+    id: 'rel-1',
+    schemaVersion: 1,
+    fromPersonId: 'owner-1',
+    toPersonId: 'partner-1',
+    type: 'partner',
+    createdAt: now,
+    updatedAt: now,
+  });
+  await setAccount(fs, key, { personId: 'partner-1', roleId: 'member' });
+
+  const saveDir = await mkdtemp(join(tmpdir(), 'selfos-e2e-export-'));
+  process.env['SELFOS_FAKE_SAVE_DIR'] = saveDir;
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Dreams' }).click();
+    await w.getByRole('button', { name: 'Log a dream' }).click();
+    await w.getByLabel('What happened?').fill('A field of light.');
+    await w.getByLabel('Title (optional)').fill('Shareable dream');
+    await w.getByRole('button', { name: 'Save' }).click();
+    await w.getByRole('button', { name: /Shareable dream/ }).click();
+    await w.getByRole('button', { name: /visualize this dream/i }).click();
+    await expect(w.getByRole('img')).toBeVisible();
+
+    // Export → a real DECRYPTED file lands outside the vault (PNG magic bytes, not ciphertext).
+    await w.getByRole('button', { name: /save image/i }).click();
+    await expect(w.getByText(/leaves the encrypted vault/i)).toBeVisible();
+    const exported = await findFileNamed(saveDir, 'dream-image.png');
+    expect(exported).not.toBeNull();
+    const head = [...(await readFile(exported as string)).subarray(0, 4)];
+    expect(head).toEqual([0x89, 0x50, 0x4e, 0x47]);
+
+    // Share with the partner.
+    await w.getByRole('button', { name: 'Share', exact: true }).click();
+    await w.getByRole('switch', { name: /share this image with partner/i }).click();
+
+    // Switch to the partner → the image appears in their "Shared with you" gallery.
+    await w.getByRole('button', { name: /signed in as/i }).click();
+    await w.getByRole('menuitem', { name: 'Switch person' }).click();
+    await w
+      .getByRole('dialog', { name: /who.s here/i })
+      .getByText('Partner')
+      .click();
+    await expect(w.getByRole('button', { name: 'Signed in as Partner' })).toBeVisible();
+    await w.getByRole('link', { name: 'Dreams' }).click();
+    await expect(w.getByText('Shared with you')).toBeVisible();
+    await expect(w.getByText(/from tester/i)).toBeVisible();
+  } finally {
+    delete process.env['SELFOS_FAKE_SAVE_DIR'];
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+    await rm(saveDir, { recursive: true, force: true });
+  }
+});
+
 test('dreams: link a household person to a dream and round-trip the link, no overflow', async () => {
   const { userData, vault } = await seedReadyVault();
   // Seed a second household person the dreamer can link from the People graph (12 §3.1).

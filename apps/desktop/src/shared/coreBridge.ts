@@ -11,6 +11,7 @@ import {
   type DreamApproveResult,
   type DreamImageResult,
   type DreamNarrativeResult,
+  type DreamSharedImage,
   type DreamShareResult,
   type DreamSynthesisResult,
   type HouseholdStatus,
@@ -200,6 +201,9 @@ import {
   getDreamConversation,
   getDreamImage,
   getDreamInsight,
+  getSharedDreamImage,
+  listImagesSharedWith,
+  setDreamImageShare,
   getPatternStats,
   getPatternSummary,
   listDreams,
@@ -282,6 +286,11 @@ export interface BridgeHost {
   useVault(path: string): Promise<BootState>;
   getConflicts(): Promise<string[]>;
   revealVault(): Promise<void>;
+  /**
+   * Save image bytes to a file the user chooses OUTSIDE the vault (13-dream-images §3.5) — a native save
+   * dialog on Electron, a download on iOS/web. Returns the chosen path, or null if cancelled.
+   */
+  saveImageFile(suggestedName: string, bytes: Uint8Array, mime: string): Promise<string | null>;
   /** Subscribe to external vault changes (the host's watcher); returns an unsubscribe. */
   onVaultChanged(listener: () => void): () => void;
   /** Subscribe to streamed chat chunks; the renderer-facing counterpart to `emitChatChunk`. */
@@ -365,6 +374,15 @@ const DreamSetFactShareSchema = z.object({
 const DreamGenerateImageSchema = z.object({
   dreamId: z.string().min(1),
   style: z.string().min(1).optional(), // per-image override; falls back to the Settings default
+});
+const DreamSetImageShareSchema = z.object({
+  dreamId: z.string().min(1),
+  targetPersonId: z.string().min(1),
+  shared: z.boolean(),
+});
+const DreamGetSharedImageSchema = z.object({
+  dreamerId: z.string().min(1),
+  dreamId: z.string().min(1),
 });
 
 /** A zeroed stats object — returned to a denied/unready `dreamPatternStats` caller (a read, never throws). */
@@ -2011,6 +2029,54 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         return;
       }
       await deleteDreamImage(ctx.fs, ctx.key, personId, dreamId, new Date());
+    },
+    dreamExportImage: async (input): Promise<string | null> => {
+      const { dreamId } = DreamIdSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.generateImage'))) {
+        return null;
+      }
+      const image = await getDreamImage(ctx.fs, ctx.key, personId, dreamId);
+      if (!image) return null;
+      const ext =
+        image.mime === 'image/webp' ? 'webp' : image.mime === 'image/jpeg' ? 'jpg' : 'png';
+      // The bytes leave the encrypted vault by the dreamer's explicit choice (§3.5/§8.5).
+      return host.saveImageFile(`dream-image.${ext}`, image.bytes, image.mime);
+    },
+    dreamSetImageShare: async (input): Promise<DreamShareResult> => {
+      const { dreamId, targetPersonId, shared } = DreamSetImageShareSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      // Cross-person sharing is the privileged action — gated by `dreams.shareContext` (not `dreams.own`).
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.shareContext'))) {
+        return { ok: false, reason: 'NOT_FOUND' };
+      }
+      return setDreamImageShare({
+        fs: ctx.fs,
+        key: ctx.key,
+        dreamerId: personId,
+        dreamId,
+        targetPersonId,
+        shared,
+        now: new Date(),
+      });
+    },
+    dreamGetSharedImage: async (input): Promise<{ mime: string; dataBase64: string } | null> => {
+      const { dreamerId, dreamId } = DreamGetSharedImageSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const viewerId = ctx ? await activePersonId() : null;
+      // Any signed-in person may read — the SHARE itself is the grant; the service re-gates relationship +
+      // shareableWith + sensitivity at read time, so this can't reach an image not shared with the viewer.
+      if (!ctx || !viewerId) return null;
+      const image = await getSharedDreamImage(ctx.fs, ctx.key, viewerId, dreamerId, dreamId);
+      return image ? { mime: image.mime, dataBase64: toBase64(image.bytes) } : null;
+    },
+    dreamListSharedImages: async (): Promise<DreamSharedImage[]> => {
+      const ctx = await host.vaultAndKey();
+      const viewerId = ctx ? await activePersonId() : null;
+      if (!ctx || !viewerId) return [];
+      return listImagesSharedWith(ctx.fs, ctx.key, viewerId);
     },
 
     // --- UI state (device-local) ---

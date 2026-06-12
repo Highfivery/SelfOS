@@ -1165,3 +1165,15 @@ export type DreamImageResult =
 
 /** The result of sharing/unsharing a dream-insight fact with a related person (12 §3.4). */
 export type DreamShareResult = { ok: true } | { ok: false; reason: 'SENSITIVE' | 'NOT_FOUND' };
+
+/**
+ * One dream image shared **with** the viewer by a related person (13-dream-images §3.6) — for the
+ * recipient's "Shared with you" surface. Metadata only; the bytes are fetched separately via
+ * `getSharedImage` (which re-gates the relationship + share + sensitivity at read time).
+ */
+export interface DreamSharedImage {
+  dreamerId: string;
+  dreamerName: string;
+  dreamId: string;
+  mime: string;
+}

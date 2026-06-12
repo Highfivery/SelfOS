@@ -239,6 +239,41 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-12 — Build (**Dream-images slice 5 — export + per-dream image sharing; SPEC 13 IS NOW FULLY BUILT**;
+  [13-dream-images](docs/specs/13-dream-images.md) §3.5/§3.6/§13.1 slice 5). The final slice. **Asked first**
+  the §11.4 placement: the recipient's **"Shared with you"** lives as a **section at the top of the Dreams
+  journal** (self-hides when empty). **Export:** `dreams:exportImage` decrypts the image and a new
+  **`saveImageFile` platform host op** writes the bytes **OUTSIDE the encrypted vault** (Electron save dialog +
+  `writeFile`, with a `SELFOS_FAKE_SAVE_DIR` E2E hook; a Blob download on web/iOS); gated `dreams.generateImage`,
+  dreamer-scoped; the panel's "Save image…" shows a "leaves the encrypted vault" note. **Sharing (mirrors the
+  `12` §13.5 fact-share):** core `setDreamImageShare` (toggle `Dream.image.shareableWith`; refuses sensitive +
+  non-related target), `getSharedDreamImage` + `listImagesSharedWith` with the **read-time re-gate** — both
+  re-validate relationship + `shareableWith` + standard-tier on **every read**, so **un-share OR removed
+  relationship OR a sensitive tier denies with no stale access** (no `shareableWith` cleanup needed —
+  `listRelatedPeople` is the symmetric gate). Seam: `dreams:setImageShare` (gated **`dreams.shareContext`**,
+  dreamer-scoped — a recipient can't re-share another's image) / `:getSharedImage` / `:listSharedImages`
+  (viewer-scoped — the share itself is the grant). Renderer: the `DreamImagePanel`'s **Save image…** + **Share**
+  controls (a per-related-person `Switch` list; shown only standard-tier + `dreams.shareContext` + has
+  relations; a "kept out of shared context" note otherwise), and the recipient's **`SharedDreamImages`** gallery
+  at the top of Dreams. **Also fixed a pre-existing per-person leak** the 390px QA surfaced: `Dreams.tsx` now
+  **resets its `selection` on `activePersonId` change** — a switch had left another person's dream selected,
+  hiding the mobile list (incl. "Shared with you"). Images still **never feed AI coaching context** — sharing
+  only makes them viewable. Code-reviewer **ship** (the read-time re-gate verified airtight on every path —
+  no path lets a non-recipient read another's image; export writes a decrypted file only by the dreamer's
+  gated action; sharing scoped to `dreams.shareContext` + the active person; two optional nits, no change).
+  Gate green: typecheck (node + web/DOM-lib), lint, format, **269 core + 344 desktop + 8 relay** unit (+3 core
+  sharing [share→read→un-share-denies, relationship-removal-denies, sensitive+non-related-refused], +1 bridge
+  export→share→recipient round-trip, +4 RTL), **+1 E2E** (`SELFOS_FAKE_IMAGE`+`SELFOS_FAKE_SAVE_DIR`: export
+  writes a **real PNG outside the vault** [magic-byte assert — decrypted, not ciphertext] + share → switch to
+  the partner → the image appears in their "Shared with you"). Visual QA at desktop + 390px (the Share controls
+  - cost/Admin-only badge + the recipient gallery all read clean; the per-person reset fixed the mobile
+    recipient view). Built in the **`feat/dream-images-slice-5`** worktree off `main`. **Lesson: a per-person
+    read-time re-gate (relationship + share + sensitivity re-checked on EVERY read) means a share auto-revokes
+    when any of those changes — no separate revocation or `shareableWith` cleanup is needed, and a removed
+    relationship drops the share for free.** **Spec 13 (AI dream images) is COMPLETE — all 5 slices on `main`;
+    the People-profile descriptive fields, the OpenAI second provider, generation, metering, settings, the
+    capability, the panel, export, and per-dream sharing are all built + tested. The only remaining Dreams work
+    is the user's real on-device OpenAI/Cloudflare verification (blind-written like the relay/iOS bits).**
 - 2026-06-12 — Build (**Dream-images slice 4 — the `DreamImagePanel` renderer + generate E2E**;
   [13-dream-images](docs/specs/13-dream-images.md) §3/§13.1 slice 4). The user-facing surface: a shared
   **`DreamImagePanel`** rendered in BOTH the dream detail/composer (`DreamComposer`, on a saved dream) and the

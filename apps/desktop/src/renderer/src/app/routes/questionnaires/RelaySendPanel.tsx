@@ -15,6 +15,13 @@ import {
 } from '../../../design-system/components';
 import { useRelayStore } from '../../../stores/relayStore';
 import { useSessionStore } from '../../../stores/sessionStore';
+import { useSetting } from '../../../settings/useSetting';
+import {
+  DEFAULT_RELAY_MESSAGES,
+  emailBodyFrom,
+  emailSubjectFrom,
+  smsBodyFrom,
+} from './relayMessages';
 import styles from './Questionnaires.module.css';
 
 /** The honest disclosure mirrors the relay page; the recipient sees the derived text there too (§3.2/§8.4). */
@@ -23,18 +30,6 @@ const PRIVACY_COPY: Record<PrivacyMode, string> = {
     'Private (break-glass): you won’t see their written answers — just the insight drawn from them. Numeric ratings may appear in your trends over time.',
   standard: 'Standard: you’ll see their answers.',
 };
-
-function emailBody(sender: string, link: string, pin: string, includePin: boolean): string {
-  return `${sender} invited you to answer a short, private questionnaire.
-
-Open the secure link: ${link}${includePin ? `\nPIN: ${pin}` : ''}
-
-Your answers are encrypted. Sent securely via SelfOS.`;
-}
-
-function smsBody(sender: string, link: string, pin: string, includePin: boolean): string {
-  return `${sender} invited you to a quick questionnaire: ${link}${includePin ? ` (PIN: ${pin})` : ''}`;
-}
 
 interface Minted {
   link: string;
@@ -89,6 +84,8 @@ export function RelaySendPanel({
   const loadStatus = useRelayStore((s) => s.load);
   const senderName = useSessionStore((s) => s.activePerson?.displayName ?? 'Someone');
   const canManageRelay = useSessionStore((s) => s.can('settings.manage'));
+  // Fall back to the defaults if the vault setting hasn't been seeded yet (e.g. a fresh vault).
+  const messages = useSetting('questionnaires.defaultMessages')[0] ?? DEFAULT_RELAY_MESSAGES;
 
   useEffect(() => {
     if (!loaded) void loadStatus();
@@ -127,7 +124,14 @@ export function RelaySendPanel({
       if (!result) throw new Error('No relay');
       setMinted({ link: result.link, pin: result.pin });
       const who = anonymous ? 'Someone' : senderName;
-      setMessage(emailBody(who, result.link, result.pin, !sensitive));
+      setMessage(
+        emailBodyFrom(messages, {
+          sender: who,
+          link: result.link,
+          pin: result.pin,
+          includePin: !sensitive,
+        }),
+      );
     } catch (e) {
       setError(
         e instanceof Error && e.message.includes('relay')
@@ -204,7 +208,14 @@ export function RelaySendPanel({
             checked={includePin}
             onChange={(next) => {
               setIncludePin(next);
-              setMessage(emailBody(who, minted.link, minted.pin, next));
+              setMessage(
+                emailBodyFrom(messages, {
+                  sender: who,
+                  link: minted.link,
+                  pin: minted.pin,
+                  includePin: next,
+                }),
+              );
             }}
           />
           {sensitive ? (
@@ -229,7 +240,7 @@ export function RelaySendPanel({
           <Button
             variant="primary"
             onClick={() => {
-              const subject = `${who} would like your input`;
+              const subject = emailSubjectFrom(messages, who);
               window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
             }}
           >
@@ -239,7 +250,12 @@ export function RelaySendPanel({
           <Button
             variant="secondary"
             onClick={() => {
-              const sms = smsBody(who, minted.link, minted.pin, includePin);
+              const sms = smsBodyFrom(messages, {
+                sender: who,
+                link: minted.link,
+                pin: minted.pin,
+                includePin,
+              });
               window.location.href = `sms:${encodeURIComponent(phone)}?&body=${encodeURIComponent(sms)}`;
             }}
           >

@@ -5,6 +5,12 @@ import { defineSetting } from './types';
 import { AboutDisclaimer, AboutVersion, RevealVaultRow, VaultLocationValue } from './customRows';
 import { ApiKeyControl, TestConnectionControl } from './aiControls';
 import { RelaySettingsPanel } from './RelaySettingsPanel';
+import { RelayMessagesControl } from './RelayMessagesControl';
+import {
+  DEFAULT_RELAY_MESSAGES,
+  RelayMessagesSchema,
+  type RelayMessages,
+} from '../app/routes/questionnaires/relayMessages';
 
 declare module './types' {
   interface SettingsTypeMap {
@@ -16,6 +22,7 @@ declare module './types' {
     'ai.model': 'claude-sonnet-4-6' | 'claude-opus-4-8';
     'questionnaires.autoAnalyze': boolean;
     'questionnaires.discloseAdminAccess': boolean;
+    'questionnaires.defaultMessages': RelayMessages;
     'dreams.memoryEnabled': boolean;
   }
 }
@@ -207,6 +214,18 @@ export function registerBuiltinSettings(): void {
       scope: 'vault',
       adminOnly: true,
       order: 2,
+    }),
+    defineSetting({
+      key: 'questionnaires.defaultMessages',
+      section: 'questionnaires',
+      label: 'External message templates',
+      description:
+        'Default email/text wording for sending a questionnaire to someone without SelfOS.',
+      schema: RelayMessagesSchema,
+      default: DEFAULT_RELAY_MESSAGES,
+      control: { type: 'custom', render: RelayMessagesControl },
+      scope: 'vault',
+      order: 3,
     }),
     defineSetting({
       key: 'dreams.memoryEnabled',

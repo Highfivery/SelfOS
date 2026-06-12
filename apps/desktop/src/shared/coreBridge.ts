@@ -159,6 +159,7 @@ import {
   createRelaySend,
   drainRelaySend,
   externalSendDisclosure,
+  garbageCollectImages,
   generateQuestions,
   getAssignment,
   getAssignmentSnapshot,
@@ -993,13 +994,20 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         throw new Error('Not permitted');
       }
       const personId = await activePersonId();
+      const parsed = QuestionnaireInputSchema.parse(input);
+      // Detect images dropped by this edit BEFORE saving, so the now-orphaned media gets reaped (the
+      // builder's "remove" only clears the draft — §13.2 — leaving the encrypted file for GC).
+      const before = parsed.id ? await getQuestionnaire(ctx.fs, ctx.key, parsed.id) : null;
       // Stamp the creator (main-side, never the renderer) so deletion can enforce "creator-only" rules.
-      return saveQuestionnaire(
-        ctx.fs,
-        ctx.key,
-        QuestionnaireInputSchema.parse(input),
-        personId ?? undefined,
-      );
+      const saved = await saveQuestionnaire(ctx.fs, ctx.key, parsed, personId ?? undefined);
+      if (before) {
+        const after = new Set(saved.questions.flatMap((q) => (q.media ? [q.media.imagePath] : [])));
+        const removedAnImage = before.questions.some(
+          (q) => q.media && !after.has(q.media.imagePath),
+        );
+        if (removedAnImage) await garbageCollectImages(ctx.fs, ctx.key);
+      }
+      return saved;
     },
     questionnairesDelete: async (id): Promise<void> => {
       const ctx = await host.vaultAndKey();
@@ -1056,8 +1064,28 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     },
     questionnairesGetImage: async (imagePath): Promise<string | null> => {
       const ctx = await host.vaultAndKey();
-      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) return null;
-      const bytes = await getQuestionnaireImage(ctx.fs, ctx.key, z.string().parse(imagePath));
+      if (!ctx) return null;
+      const path = z.string().parse(imagePath);
+      // An author (`create`) reads any media for the builder/preview. A recipient (`answer`) may read ONLY
+      // images referenced by a questionnaire actually sent TO THEM — so they can see author images in the
+      // Inbox without being able to enumerate the household's media (the bridge is the trust boundary).
+      if (!(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) {
+        const personId = await activePersonId();
+        if (!personId || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.answer'))) {
+          return null;
+        }
+        const mine = await listAssignments(ctx.fs, ctx.key, { recipientPersonId: personId });
+        let referenced = false;
+        for (const a of mine) {
+          const snapshot = await getAssignmentSnapshot(ctx.fs, ctx.key, a.id);
+          if (snapshot?.questions.some((q) => q.media?.imagePath === path)) {
+            referenced = true;
+            break;
+          }
+        }
+        if (!referenced) return null;
+      }
+      const bytes = await getQuestionnaireImage(ctx.fs, ctx.key, path);
       return bytes ? toBase64(bytes) : null;
     },
     questionnairesDeleteImage: async (imagePath): Promise<void> => {

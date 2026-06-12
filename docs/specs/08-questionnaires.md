@@ -153,9 +153,10 @@ version; in-flight assignments keep their original questions so answers always m
    **date-of-birth gate + explicit consent** on the recipient side (§8.3).
 5. **Link + delivery (external)** — the app generates the relay link + a **6-digit PIN**, and offers
    **Copy link**, a prefilled **`mailto:`** (subject + body unique to this send; recipient email prefilled
-   from the Person record), a prefilled **SMS** (`sms:` on mobile), a **QR code**, and the **native share
-   sheet**. The **PIN is included in the email + SMS by default** (per-send opt-out for sensitive sends).
-   Default wording is editable in Settings, tweakable per send.
+   from the Person record), a prefilled **SMS** (`sms:` on mobile), and the **native share sheet**. The
+   **PIN is included in the email + SMS by default** (per-send opt-out for sensitive sends). Default wording
+   is the **`questionnaires.defaultMessages`** templates, editable in Settings (`{sender}`/`{link}`
+   placeholders) and tweakable per send.
 
 ### 3.3 Recipient — in-app (household)
 
@@ -770,8 +771,10 @@ Confirmed with the user (2026-06-10):
     known birthday.
 15. **Relay notice** — keep a minimal privacy notice on the relay page.
 16. **Sender identity (external)** — named by default, per-send anonymous option.
-17. **Link delivery** — Copy + prefilled `mailto` + prefilled SMS + QR + share sheet, unique per assignment,
-    contact prefilled; **PIN included by default** (per-send opt-out).
+17. **Link delivery** — Copy + prefilled `mailto` + prefilled SMS + native share sheet, unique per
+    assignment, contact prefilled; **PIN included by default** (per-send opt-out). _(QR was considered and
+    cut — it needs a local QR encoder to keep the link off a third-party service, and copy/mailto/SMS/share
+    cover delivery.)_
 18. **Deletion** — Owner/super-admin any stage → **purge everything** (+ revoke link); creator only while
     unsent.
 19. **Capabilities** — `questionnaires.create` / `.answer` / `.viewResults` / `.readRaw` (OFF) / **`.sendExternal`
@@ -858,7 +861,10 @@ Confirmed with the user (2026-06-10):
      media referenced by neither; run after `purgeQuestionnaire`/`deleteSend` (purge-on-delete) and after
      an image-dropping save (the draft-remove orphan). The reference scan covers snapshots too, so an image
      removed from a def but still frozen in a sent snapshot is kept until that send is also gone, §3.9).**
-     **Still deferred:** revisiting `getImage` gating for the recipient/Inbox view (currently `create`-only)._
+     **Also DONE (2026-06-11):** `getImage` recipient/Inbox gating — a recipient (`questionnaires.answer`,
+     not `create`) may now read author images, but ONLY those referenced by a questionnaire actually sent
+     to them (the bridge scans the active person's recipient assignments), so they see Inbox images without
+     being able to enumerate the household's media. \*\*No image follow-ups remain._\*\*
 3. **AI generate + gap-finder** — brief + data-grounded generation (safety pass, schema-valid, de-dup) via
    the registry; the Suggested surface; metered + budget-gated.
    - _**Built 2026-06-11:** the **context-provider registry** (`registerContextProvider` + built-in
@@ -1003,6 +1009,15 @@ compatibilityGroupId`, each with its own frozen variant snapshot); blocked when 
 
 ## 14. Changelog
 
+- 2026-06-11 — **Close-out: QR cut, recipient image-gating fixed, editable message templates built.** Per the
+  user, **QR delivery is removed from the spec** (decision #17 + §3.2) — copy/mailto/SMS/native-share cover
+  delivery and QR would need a local encoder to keep the link off a third-party service. Fixed the
+  **`getImage` recipient/Inbox gating** (a recipient with `answer` but not `create` could not see author
+  images in the Inbox): the bridge now lets a recipient read an image **only** if it's referenced by a
+  questionnaire sent to them (scans their recipient assignments). Built **`questionnaires.defaultMessages`** —
+  the editable email subject/body + SMS templates (vault setting, Questionnaires section, `{sender}`/`{link}`
+  placeholders + a custom control with reset); the send panel prefills from it (PIN appended per the
+  per-send toggle) and stays tweakable per send. +9 unit/RTL.
 - 2026-06-11 — **§13.2 image follow-ups built (orphan GC + purge-on-delete).** Core
   **`imageGc.garbageCollectImages`** reaps every stored question image not referenced by any live
   definition **or** send snapshot; runs after `purgeQuestionnaire`/`deleteSend` (purge-on-delete) and after

@@ -1064,8 +1064,28 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     },
     questionnairesGetImage: async (imagePath): Promise<string | null> => {
       const ctx = await host.vaultAndKey();
-      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) return null;
-      const bytes = await getQuestionnaireImage(ctx.fs, ctx.key, z.string().parse(imagePath));
+      if (!ctx) return null;
+      const path = z.string().parse(imagePath);
+      // An author (`create`) reads any media for the builder/preview. A recipient (`answer`) may read ONLY
+      // images referenced by a questionnaire actually sent TO THEM — so they can see author images in the
+      // Inbox without being able to enumerate the household's media (the bridge is the trust boundary).
+      if (!(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) {
+        const personId = await activePersonId();
+        if (!personId || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.answer'))) {
+          return null;
+        }
+        const mine = await listAssignments(ctx.fs, ctx.key, { recipientPersonId: personId });
+        let referenced = false;
+        for (const a of mine) {
+          const snapshot = await getAssignmentSnapshot(ctx.fs, ctx.key, a.id);
+          if (snapshot?.questions.some((q) => q.media?.imagePath === path)) {
+            referenced = true;
+            break;
+          }
+        }
+        if (!referenced) return null;
+      }
+      const bytes = await getQuestionnaireImage(ctx.fs, ctx.key, path);
       return bytes ? toBase64(bytes) : null;
     },
     questionnairesDeleteImage: async (imagePath): Promise<void> => {

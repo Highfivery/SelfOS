@@ -482,6 +482,47 @@ describe('createCoreBridge', () => {
     expect(await bridge.questionnairesGetImage(imagePath)).toBeNull(); // reaped
   });
 
+  it('lets a recipient read images only for questionnaires sent to THEM (answer, not create)', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    const base64 = toBase64(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 7, 7]));
+    const mine = (await bridge.questionnairesStoreImage({ base64, mime: 'image/png' })).imagePath;
+    const other = (await bridge.questionnairesStoreImage({ base64, mime: 'image/png' })).imagePath;
+
+    const def = await bridge.questionnairesSave({
+      title: 'Has an image',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      questions: [
+        {
+          id: 'q1',
+          type: 'shortText',
+          prompt: 'Look',
+          required: false,
+          media: { imagePath: mine, alt: 'x', mime: 'image/png' },
+        },
+      ],
+    });
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: mara.id, roleId: 'member', pin: null });
+    await bridge.assignmentsCreate({ questionnaireId: def.id, recipientPersonId: mara.id });
+
+    // Make the member role answer-only (no create) so the recipient branch is what's exercised.
+    const member = (await bridge.accessGet()).roles.find((r) => r.id === 'member')!;
+    await bridge.accessSaveRole({
+      ...member,
+      capabilities: { ...member.capabilities, 'questionnaires.create': false },
+    });
+
+    await bridge.sessionSetActive({ personId: mara.id });
+    // Her own assignment references `mine` → she can read it; `other` is not sent to her → null.
+    expect(await bridge.questionnairesGetImage(mine)).toBe(base64);
+    expect(await bridge.questionnairesGetImage(other)).toBeNull();
+
+    // Back to the owner (has create) → reads any media for authoring.
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    expect(await bridge.questionnairesGetImage(other)).toBe(base64);
+  });
+
   it('denies questionnaire authoring to a person without questionnaires.create (a Guest)', async () => {
     const { bridge } = await freshOwner();
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });

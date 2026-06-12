@@ -239,6 +239,31 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Build + decision (Questionnaires **close-out — QR cut, recipient image-gating fixed, editable
+  delivery templates**, [08-questionnaires](docs/specs/08-questionnaires.md) §3.2/§4.5/§6/§13.2). **User
+  decision: QR delivery removed from the spec entirely** (decision #17 + §3.2) — copy/mailto/SMS/native-share
+  cover delivery; QR would need a local QR encoder to keep the link off a third-party service. **Bug fix:**
+  the `questionnaires:getImage` IPC was gated by `questionnaires.create` only, so an in-app recipient
+  (`answer`, not `create` — only reachable via a custom role, since default Member has both) saw **null** for
+  author images in the Inbox. Now a non-`create` person may read an image **only if it's referenced by a
+  questionnaire sent to THEM** (the bridge scans the active person's recipient assignments) — so the Inbox
+  shows author images without letting an answerer enumerate the household's media (the bridge is the trust
+  boundary, not the renderer). **Built `questionnaires.defaultMessages`** (the deferred "editable in Settings"
+  piece): a vault-scoped setting in the Questionnaires section holding `{ emailSubject, emailBody, smsBody }`
+  with **`{sender}`/`{link}` placeholders** + a custom control (`RelayMessagesControl`, three fields + reset);
+  the external send panel sources its email/SMS defaults from it (PIN appended/omitted by the per-send
+  toggle) and stays tweakable per send (the panel + control fall back to `DEFAULT_RELAY_MESSAGES` when the
+  vault value is unseeded). Gate green: typecheck (node + web/DOM-lib), lint, format, **238 core + 317 desktop
+  unit, 45 E2E** (+9: relayMessages builders, the control RTL incl. edit-persists + reset, and a bridge
+  recipient-reads-only-their-own-assigned-image test); web-preview visual QA of the templates control at
+  desktop + 390px (no console errors). Synced `08` §3.2/§13.2 + changelog. **Lesson: a media-read IPC shared
+  by an author (`create`) and a recipient (`answer`) must SCOPE the recipient's reads to media referenced by
+  THEIR assignments — a blanket loosen-to-`answer` would let any answerer read by path; the recipient-scoping
+  pattern (already used across §13.5) is the trust boundary.** **The Questionnaires feature (spec 08) is now
+  fully built with no deferred image/delivery items; only the user's real Cloudflare deploy + the iOS
+  worker-bundle wiring + two product/policy calls (explicit-tier App Store stance §11.2, starter-taxonomy
+  wording §11.8) remain.**
+
 - 2026-06-11 — Build (Questionnaires **§13.2 image follow-ups — orphan GC + purge-on-delete**,
   [08-questionnaires](docs/specs/08-questionnaires.md) §3.9/§13.2). Closes the two deferred question-image
   cleanups. Core **`imageGc.garbageCollectImages`** (`@selfos/core/questionnaires`) reaps every stored

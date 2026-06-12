@@ -22,7 +22,14 @@ import {
 import { hashPin } from '@selfos/core/crypto';
 import { recordUsage } from '@selfos/core/usage';
 import { writeEncryptedJson } from '@selfos/core/vault';
-import { getResponse, listAssignments } from '@selfos/core/questionnaires';
+import {
+  createCompatibilitySend,
+  getAlignmentReport,
+  getResponse,
+  listAssignments,
+  saveQuestionnaire,
+  submitResponse,
+} from '@selfos/core/questionnaires';
 import { listInsightsForPerson, summarizeForContext } from '@selfos/core/insights';
 import { saveAnalysis, saveDream } from '@selfos/core/dreams';
 
@@ -1181,6 +1188,148 @@ test('roles: the owner edits the role × capability matrix', async () => {
     await expect(memberManage).not.toBeChecked();
     await memberManage.click();
     await expect(memberManage).toBeChecked();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('compatibility: align two answered variants into a report + draft Insight, no overflow', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+
+  // Seed an answered compatibility group: two people, a compat questionnaire, two paired sends each
+  // submitted. This drives the sender's compat Results surface (align + report) without the UI
+  // account-switching dance (the full dual-send + answer paths are covered by the coreBridge test).
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('expected a master key');
+  const now = new Date().toISOString();
+  for (const [id, name] of [
+    ['alex-1', 'Alex'],
+    ['bri-1', 'Bri'],
+  ]) {
+    await savePerson(fs, key, {
+      id: id!,
+      schemaVersion: 1,
+      displayName: name!,
+      isSubject: true,
+      tags: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+  const q = await saveQuestionnaire(
+    fs,
+    key,
+    {
+      title: 'Compatibility check',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      questions: [
+        {
+          id: 'c1',
+          canonicalId: 'c1',
+          type: 'rating',
+          prompt: 'How connected do you feel?',
+          required: true,
+          scale: { min: 1, max: 5 },
+        },
+      ],
+      compatibility: { enabled: true, visibility: 'sharedReport' },
+    },
+    'owner-1',
+  );
+  const variant = (label: string) =>
+    q.questions.map((c) => ({ ...c, canonicalId: 'c1', prompt: `${label}: ${c.prompt}` }));
+  const groupId = await createCompatibilitySend(fs, key, {
+    questionnaireId: q.id,
+    senderPersonId: 'owner-1',
+    visibility: 'sharedReport',
+    recipients: [
+      { personId: 'alex-1', questions: variant('Alex') },
+      { personId: 'bri-1', questions: variant('Bri') },
+    ],
+  });
+  const members = (await listAssignments(fs, key)).filter(
+    (a) => a.compatibilityGroupId === groupId,
+  );
+  await submitResponse(fs, key, {
+    assignmentId: members[0]!.id,
+    answers: [{ questionId: 'c1', value: 4 }],
+  });
+  await submitResponse(fs, key, {
+    assignmentId: members[1]!.id,
+    answers: [{ questionId: 'c1', value: 2 }],
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await w.getByRole('button', { name: /Compatibility check/ }).click();
+    await w.getByRole('button', { name: 'Results' }).click();
+
+    // The compat Results surface shows the paired group as "Both answered" and offers to align.
+    await expect(w.getByText('Both answered')).toBeVisible();
+    await w.getByRole('button', { name: /Generate alignment/ }).click();
+
+    // The (offline fake) alignment returns a report → its summary + the "review in Memory" Insight link.
+    await expect(w.getByText(/largely aligned/i)).toBeVisible();
+    await expect(w.getByText(/Review it in Memory/)).toBeVisible();
+
+    // The report + a draft Insight (subject = the sender) round-tripped through the encrypted vault.
+    expect((await getAlignmentReport(fs, key, groupId))?.summary).toContain('aligned');
+    const insights = await listInsightsForPerson(fs, key, 'owner-1');
+    expect(insights.some((i) => i.provenance.compatibilityGroupId === groupId)).toBe(true);
+
+    // No horizontal overflow at desktop or phone width.
+    const overflow = (): Promise<number> =>
+      w.evaluate(() => {
+        const main = document.querySelector('main');
+        return main ? main.scrollWidth - main.clientWidth : 0;
+      });
+    expect(await overflow()).toBeLessThanOrEqual(1);
+    await app.evaluate(async ({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows()[0];
+      if (win) {
+        win.setMinimumSize(360, 480);
+        win.setSize(390, 800);
+      }
+    });
+    await w.waitForTimeout(150);
+    expect(await overflow()).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('audit: super-admin sees the raw-access audit surface (empty until a reveal)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'About' }).click();
+    await longPressVersion(w);
+    const dialog = w.getByRole('dialog', { name: 'Unlock' });
+    await dialog.getByLabel('Passphrase').fill('superpass');
+    await dialog.getByRole('button', { name: 'Unlock' }).click();
+    await expect(w.getByText('Super-admin')).toBeVisible();
+
+    // The Audit nav entry appears only in super-admin mode; the surface shows its empty state.
+    await w.getByRole('link', { name: 'Raw-access audit' }).click();
+    await expect(w.getByRole('heading', { name: 'Raw-access audit' })).toBeVisible();
+    await expect(w.getByText('No raw answers have ever been revealed.')).toBeVisible();
+
+    const overflow = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      return main ? main.scrollWidth - main.clientWidth : 0;
+    });
+    expect(overflow).toBeLessThanOrEqual(1);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

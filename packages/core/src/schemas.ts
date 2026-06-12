@@ -273,6 +273,7 @@ export const InsightSchema = z.object({
     assignmentId: z.string().optional(),
     conversationId: z.string().optional(),
     dreamId: z.string().optional(), // set for dream-sourced insights (12-dreams §4.4)
+    compatibilityGroupId: z.string().optional(), // set for compatibility alignment insights (08 §13.5d)
     at: z.string(),
   }),
   crisisFlag: z.boolean().optional(),
@@ -352,9 +353,22 @@ export const SensitivityTierSchema = z.enum([
 ]);
 export type SensitivityTier = z.infer<typeof SensitivityTierSchema>;
 
+/**
+ * Compatibility visibility (08-questionnaires §3.6) — the author's choice that **derives the recipient's
+ * disclosure**: `sharedReport` (joint report only, raw hidden both ways), `eachSeesOwn` (each answerer
+ * also sees their own answers), `senderSeesAll` (the sender may break-glass reveal raw — needs
+ * `questionnaires.readRaw`).
+ */
+export const CompatibilityVisibilitySchema = z.enum([
+  'sharedReport',
+  'senderSeesAll',
+  'eachSeesOwn',
+]);
+export type CompatibilityVisibility = z.infer<typeof CompatibilityVisibilitySchema>;
+
 export const CompatibilityConfigSchema = z.object({
   enabled: z.literal(true),
-  visibility: z.enum(['sharedReport', 'senderSeesAll', 'eachSeesOwn']),
+  visibility: CompatibilityVisibilitySchema,
 });
 export type CompatibilityConfig = z.infer<typeof CompatibilityConfigSchema>;
 
@@ -481,6 +495,9 @@ export const AssignmentSchema = z.object({
   channel: ChannelSchema,
   privacy: PrivacyModeSchema,
   senderVisibleToRecipient: z.boolean(), // false = anonymous (external)
+  // Links the two paired sends of a compatibility questionnaire (08-questionnaires §3.6/§13.5d) so the
+  // alignment report can find them. Additive-optional — non-compatibility sends omit it, no migration.
+  compatibilityGroupId: z.string().optional(),
   status: AssignmentStatusSchema,
   expiresAt: z.string().optional(), // omitted = indefinite
   declineNote: z.string().optional(),
@@ -524,6 +541,61 @@ export const ResponseSetSchema = z.object({
   submittedAt: z.string().optional(),
 });
 export type ResponseSet = z.infer<typeof ResponseSetSchema>;
+
+/**
+ * The break-glass raw-access audit trail (08-questionnaires §4.5/§8.4). Appended to the encrypted,
+ * cross-device `config/raw-access-audit.enc` every time someone reveals a Private send's raw answers —
+ * either the super-admin (any send) or the sender of a `senderSeesAll` compatibility send holding
+ * `questionnaires.readRaw`. The log is viewable only in super-admin mode, from any device.
+ */
+export const RawAccessAuditEntrySchema = z.object({
+  schemaVersion: z.number().int().positive(),
+  at: z.string(),
+  by: z.string(), // the active person id (or 'super-admin' when no person is signed in)
+  viaSuperAdmin: z.boolean(), // true = the concealed super-admin break-glass; false = a readRaw sender
+  assignmentId: z.string().min(1),
+  recipientName: z.string().optional(),
+  action: z.literal('revealRaw'),
+});
+export type RawAccessAuditEntry = z.infer<typeof RawAccessAuditEntrySchema>;
+
+export const RawAccessAuditLogSchema = z.object({
+  schemaVersion: z.number().int().positive(),
+  entries: z.array(RawAccessAuditEntrySchema),
+});
+export type RawAccessAuditLog = z.infer<typeof RawAccessAuditLogSchema>;
+
+/** How aligned two answerers were on one canonical question (08-questionnaires §3.6). */
+export const AlignmentAgreementSchema = z.enum(['aligned', 'mixed', 'divergent']);
+export type AlignmentAgreement = z.infer<typeof AlignmentAgreementSchema>;
+
+export const AlignmentItemSchema = z.object({
+  canonicalId: z.string(),
+  prompt: z.string(),
+  agreement: AlignmentAgreementSchema,
+  note: z.string(),
+});
+export type AlignmentItem = z.infer<typeof AlignmentItemSchema>;
+
+/**
+ * The AI-aligned compatibility report (08-questionnaires §3.6/§13.5d): the two answerers' responses
+ * aligned by `canonicalId` into a summary + per-question agreement. Stored encrypted at
+ * `questionnaires/compat/<groupId>/report.enc`. Generating it also drafts an Insight (subject = sender)
+ * reviewed in Memory; `insightId` records that link.
+ */
+export const AlignmentReportSchema = z.object({
+  schemaVersion: z.number().int().positive(),
+  compatibilityGroupId: z.string().min(1),
+  questionnaireId: z.string().min(1),
+  personAName: z.string(),
+  personBName: z.string(),
+  summary: z.string(),
+  items: z.array(AlignmentItemSchema),
+  crisisFlag: z.boolean().optional(),
+  insightId: z.string().optional(),
+  generatedAt: z.string(),
+});
+export type AlignmentReport = z.infer<typeof AlignmentReportSchema>;
 
 /**
  * Dreams (12-dreams). A person captures a dream (narrative-first), optionally works through a guided
@@ -705,6 +777,17 @@ export interface InboxItem {
   hasDraft: boolean; // saved-but-unsubmitted progress exists
 }
 
+/**
+ * What an answered compatibility send shows its answerer (08-questionnaires §3.6). The joint `report`
+ * (null until the sender generates it) is shown per the visibility mode; `ownAnswers` is included only
+ * for `eachSeesOwn`, so the answerer can see their own submitted answers alongside the report.
+ */
+export interface InboxCompatibilityView {
+  visibility: CompatibilityVisibility;
+  report: AlignmentReport | null;
+  ownAnswers?: SendAnswer[];
+}
+
 /** The recipient's answering view: the frozen snapshot + any saved draft answers to resume. */
 export interface InboxAssignmentDetail {
   assignmentId: string;
@@ -714,6 +797,8 @@ export interface InboxAssignmentDetail {
   senderName: string | null;
   answers: Answer[]; // saved draft answers; empty until the recipient saves progress
   answerable: boolean;
+  // Present only for a compatibility send — drives the answerer's joint-report view once they've answered.
+  compatibility?: InboxCompatibilityView;
 }
 
 /** One question + its answer rendered as display text, for the sender's Standard-send Results (§3.7). */
@@ -762,6 +847,49 @@ export interface SendResult {
   analyzed: boolean;
   answers?: SendAnswer[]; // present only for a Standard, submitted send
 }
+
+/** One of the two paired sends of a compatibility questionnaire, as the sender sees it (08 §3.6). */
+export interface CompatibilityMember {
+  assignmentId: string;
+  recipientName: string;
+  status: AssignmentStatus;
+  submittedAt?: string;
+}
+
+/**
+ * A compatibility send — its two paired members + the alignment report — as the **sender** sees it in
+ * Results (08-questionnaires §3.6/§13.5d). Raw answers are never inlined here; `canReveal` is true only
+ * for a `senderSeesAll` group when the sender holds `questionnaires.readRaw`, which drives the explicit
+ * (audited) "Reveal raw answers" action.
+ */
+export interface CompatibilityGroup {
+  compatibilityGroupId: string;
+  questionnaireId: string;
+  visibility: CompatibilityVisibility;
+  members: CompatibilityMember[];
+  bothSubmitted: boolean;
+  report: AlignmentReport | null;
+  analyzed: boolean; // an Insight already exists for this group's report
+  canReveal: boolean; // senderSeesAll AND the sender holds questionnaires.readRaw
+}
+
+/** The result of generating a compatibility alignment report (→ report + draft Insight, 08 §13.5d). */
+export type AlignmentResult =
+  | { ok: true; report: AlignmentReport; usage: UsageEvent }
+  | {
+      ok: false;
+      reason: 'NO_KEY' | 'DENIED' | 'BUDGET' | 'REFUSED' | 'ERROR' | 'NOT_READY';
+      message: string;
+    };
+
+/** The result of a dual compatibility send (generate each variant + freeze the paired snapshots). */
+export type CompatibilitySendResult =
+  | { ok: true; compatibilityGroupId: string }
+  | {
+      ok: false;
+      reason: 'NO_KEY' | 'DENIED' | 'BUDGET' | 'REFUSED' | 'ERROR' | 'INVALID';
+      message: string;
+    };
 
 /** The result of synthesizing a dream (+ guided transcript) into a structured analysis (12 §3.2). */
 export type DreamSynthesisResult =

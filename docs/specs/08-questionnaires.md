@@ -102,8 +102,8 @@ A new **Questionnaires** feature module registers a nav entry (gated by `questio
 > **Inbox** nav/route (`/inbox`, with an unanswered badge) is gated by **`questionnaires.answer`** (built
 > 2026-06-11, [§13](#13-build-slices) slice 5 / §13.5a). The sender-side **Results** view + the live
 > Analyze trigger + `questionnaires.autoAnalyze` are built (2026-06-11, §13.5b); per-question trends +
-> deletion/purge are built (2026-06-11, §13.5c); compatibility (variants + alignment + visibility modes +
-> `readRaw`) lands with §13.5d.
+> deletion/purge are built (2026-06-11, §13.5c); compatibility (variants + alignment + the 3 visibility
+> modes + the break-glass `readRaw` capability + the raw-access audit log) is built (2026-06-11, §13.5d).
 
 - **My Questionnaires** — the sender's created questionnaires (drafts + sent history), each **re-sendable**
   (for trends). _(No template library — questionnaires are created fresh.)_
@@ -240,7 +240,8 @@ Per-household **bring-your-own Cloudflare**, provisioned + deployed from the app
 ### 3.9 Deletion
 
 > **Build state (built §13.5c):** core `purgeQuestionnaire` (def + every send's snapshot/assignment/
-> response + derived Insights) + `deleteSend` + `hasSends`; `Questionnaire.creatorPersonId` is main-stamped
+> response + derived Insights — and, for a compatibility send, the `questionnaires/compat/<groupId>/
+report.enc` + the group's derived Insight, §13.5d) + `deleteSend` + `hasSends`; `Questionnaire.creatorPersonId` is main-stamped
 > on create (preserved on edit, never back-filled onto a legacy def). `questionnaires:delete` is role-aware
 > — Owner/super-admin (`people.manage`) purge at any stage; a non-owner **creator** deletes their own
 > **only while unsent**. Per-send delete is `assignments:delete` (sender/admin-only). Inline "Are you sure?"
@@ -274,6 +275,8 @@ vault/
       assignment.enc               # Assignment (status, channel, privacy, recipient, keys)
       response.enc                 # ResponseSet (encrypted answers) — present once collected
       consent.enc                  # ConsentReceipt (external)
+    compat/<group-id>/
+      report.enc                   # AlignmentReport for a compatibility group (§3.6/§13.5d)
   people/<person-id>/insights/<insight-id>.enc          # Insight (source: questionnaire|session)
   relationships/<rel-id>/insights/<insight-id>.enc      # relationship-scoped Insight
 ```
@@ -375,6 +378,7 @@ interface Assignment {
   channel: Channel;
   privacy: PrivacyMode;
   senderVisibleToRecipient: boolean; // false = anonymous
+  compatibilityGroupId?: string; // links the two paired sends of a compatibility questionnaire (§3.6/§13.5d)
   status: AssignmentStatus;
   expiresAt?: string; // omitted = indefinite
   declineNote?: string; // optional short note the recipient chose to leave when declining
@@ -427,7 +431,13 @@ interface Insight {
   //   moodValence, moodEnergy). The flexible basis for all trends.
   confidence: 'low' | 'medium' | 'high';
   approved: boolean; // questionnaire insights require approval; session insights auto-true (09)
-  provenance: { assignmentId?: string; conversationId?: string; dreamId?: string; at: string }; // dreamId: spec 12
+  provenance: {
+    assignmentId?: string;
+    conversationId?: string;
+    dreamId?: string; // spec 12
+    compatibilityGroupId?: string; // §13.5d: a compatibility alignment Insight
+    at: string;
+  };
   crisisFlag?: boolean;
   createdAt: string;
   updatedAt: string;
@@ -462,11 +472,14 @@ interface RelayConfig {
 }
 
 interface RawAccessAuditEntry {
-  // appended to config/raw-access-audit.enc (encrypted, cross-device)
+  // appended to a RawAccessAuditLog { schemaVersion, entries[] } in config/raw-access-audit.enc
+  // (encrypted, cross-device)
   schemaVersion: number;
   at: string;
-  superAdmin: string; // identifier of the elevated session
+  by: string; // the active person id (or 'super-admin' when no person is signed in)
+  viaSuperAdmin: boolean; // true = concealed super-admin break-glass; false = a senderSeesAll readRaw sender
   assignmentId: string;
+  recipientName?: string;
   action: 'revealRaw';
 }
 ```
@@ -562,7 +575,13 @@ renderer):
   `questionnaires.viewResults` (built §13.5b)_; `assignments:trends(questionnaireId)` returns per-question
   rating-over-time trends — _sender-scoped + gated `questionnaires.viewResults`, **includes Private sends'
   numeric values** (numbers only); built §13.5c_; `assignments:delete(assignmentId)` deletes one send + its
-  derived Insight (_sender or Owner/super-admin only; built §13.5c_); `:list` / `:createRelayLink` /
+  derived Insight (_sender or Owner/super-admin only; built §13.5c_); `assignments:createCompatibility`
+  (the dual send — AI personalizes a variant per answerer, freezing the paired snapshots) /
+  `:compatibility(questionnaireId)` (the sender's compatibility groups — paired members + the alignment
+  report) / `:align(compatibilityGroupId)` (generate/regenerate the alignment report + a draft Insight;
+  budget-gated as `questionnaire.analyze`) / `:revealRaw(assignmentId)` (a `senderSeesAll` sender holding
+  `questionnaires.readRaw` — or the super-admin, any send — reveals raw answers; writes an audit entry
+  first) — _all sender-scoped/gated, built §13.5d_; `:list` / `:createRelayLink` /
   `:drain` / `:revoke` land with the relay slice.
 - **Answer** — `assignments:saveProgress` / `:submit` / `:decline({ note? })` _(in-app — wired; gated by
   `questionnaires.answer`, recipient-scoped in the bridge)_; the relay page talks to the **Worker** directly
@@ -572,7 +591,8 @@ renderer):
   budget-gated + metered as `questionnaire.analyze`. The live `Analyze` action runs from the Results view;
   the **`autoAnalyze`** setting auto-runs it when Results opens for any new responses — built §13.5b.)_
 - **Relay admin** — `relay:status` / `relay:connect` / `relay:deploy` / `relay:update` / `relay:teardown`.
-- **Super-admin** — `superadmin:revealRaw({assignmentId})` (break-glass; writes an audit entry, §8.4).
+- **Super-admin** — `assignments:revealRaw({assignmentId})` (break-glass; writes an audit entry, §8.4) +
+  `audit:list` (the break-glass raw-access audit trail; super-admin only; built §13.5d).
 - **Claude** — generation/analysis/suggest run the `06` path: `checkBudget → call → recordUsage` with
   `type` ∈ {`questionnaire.generate`, `questionnaire.suggest`, `questionnaire.analyze`}; cost charged to the
   **active person**; caching on the stable prefix. New labels registered in `usageTypes`.
@@ -634,11 +654,15 @@ gate, store-guideline compliance, remote disable).
   `questionnaires.readRaw` capability ships **OFF** (even for the Owner). _Since §13.5c the disclosure also
   states that the recipient's **numeric ratings may appear in the sender's trends over time** (the
   rating-over-time charts include Private sends' numbers — never the prose answers); the copy is kept
-  consistent across the send panel + the recipient Inbox so the promise stays honest (§3.2)._
-- **The only path to raw answers** is the concealed **super-admin break-glass** (`superadmin:revealRaw`),
-  which **writes an audit entry** `{ at, superAdmin, assignmentId, action }` to a **vault-stored (encrypted)**
-  log viewable in super-admin mode **from any device**. The developer's debug door, not an everyday
-  capability.
+  consistent across the send panel + the recipient Inbox so the promise stays honest (§3.2)._ Since
+  §13.5d, `questionnaires.readRaw` is **registered as an explicit-grant-only capability**: it ships OFF
+  even for the Owner (the Owner's auto-grant in `roleAllows` skips it) and is enabled only by an explicit
+  toggle in the Roles matrix.
+- **Raw answers can be revealed two ways** (each via `assignments:revealRaw`, which **writes an audit
+  entry** `{ at, by, viaSuperAdmin, assignmentId, recipientName?, action }` to a **vault-stored (encrypted)**
+  log viewable in super-admin mode **from any device**): the concealed **super-admin break-glass** (any
+  Private send — the developer's debug door), or the **sender of a `senderSeesAll` compatibility send**
+  holding `questionnaires.readRaw` (§3.6/§13.5d). Nothing else exposes the prose answers.
 - **Disclosure toggle** — `questionnaires.discloseAdminAccess` (admin-only, **default OFF**) controls whether
   the recipient is told an owner/super-admin could ever access answers; default keeps them feeling safe to be
   honest.
@@ -853,7 +877,7 @@ update/delete` gated by **`questionnaires.viewResults`**. A top-level **"Memory"
      **`autoAnalyze`** setting + the live `Analyze` trigger (→ §13.5, where responses arrive) and
      **`queryMetrics`** (→ §11, its consumer). The Memory surface is empty until §13.5 produces Insights._
 5. **Send / collect (in-app + household)** — assignments, Inbox, lifecycle, save/resume, Results +
-   per-question trends, deletion/purge (§13.5a–c); **compatibility → §13.5d**.
+   per-question trends, deletion/purge (§13.5a–c); **compatibility (§13.5d, built)**.
    - _**Send + answer core loop (built 2026-06-11, §13.5a):** the in-app send→answer loop. A builder **Send
      panel** (recipient + privacy picker, default **Private** break-glass); a separate **Inbox** nav/route
      (`/inbox`, gated by `questionnaires.answer`, with an unanswered badge) + an **Inbox answer screen**
@@ -888,6 +912,34 @@ update/delete` gated by **`questionnaires.viewResults`**. A top-level **"Memory"
      builder + Results cards. The **Private disclosure was updated** (send panel + Inbox) to say numeric
      ratings may appear in the sender's trends. **Deferred → §13.5d:** **compatibility** (variants + alignment
      report + the 3 visibility modes + the `readRaw` capability + audit); the relay (§13.6)._
+   - _**Compatibility + break-glass + audit (built 2026-06-11, §13.5d):** the whole compatibility feature on
+     one branch. **Capability:** `questionnaires.readRaw` registered as **explicit-grant-only** (ships OFF even
+     for the Owner — `roleAllows` skips it for the Owner auto-grant; the `EXPLICIT_GRANT_ONLY` set keeps the
+     Owner's Roles column toggleable for exactly these). **Authoring:** a builder compatibility toggle +
+     visibility picker (`sharedReport`/`eachSeesOwn`/`senderSeesAll`, the last gated on the author holding
+     `readRaw`) + per-question `canonicalId` stamping. **Variants + dual-send:** core
+     **`generationService.generateVariant`** (AI personalizes each answerer's variant — same answer type +
+     `canonicalId`, target **shareable-facts-only** context like §13.3) + **`compatibilityService`**
+     (`createCompatibilitySend` → two paired **Private** assignments sharing an additive `Assignment.
+compatibilityGroupId`, each with its own frozen variant snapshot); blocked when AI is off. **Alignment:**
+     **`alignmentService`** (`generateAlignment` — once both submit, aligns the two responses by `canonicalId`
+     → an **`AlignmentReport`** stored at `questionnaires/compat/<groupId>/report.enc` **and** a draft Insight,
+     subject = the sender, `approved:false`, deduped by `provenance.compatibilityGroupId`; budget-gated +
+     metered `questionnaire.analyze`); the sender's **`CompatibilityResults`** view (members + the report +
+     the explicit, audited reveal for `senderSeesAll`); the answerer's joint report on their **answered Inbox
+     item** (per visibility; `eachSeesOwn` also shows their own answers). **Break-glass + audit:**
+     **`auditService`** (encrypted, cross-device `config/raw-access-audit.enc` holding a `RawAccessAuditLog`);
+     IPC **`assignments:revealRaw`** (permits only the super-admin (any Private send) **or** a `senderSeesAll`
+     sender holding `readRaw`; writes a `RawAccessAuditEntry` **before** returning answers) + **`audit:list`**
+     (super-admin only) + a super-admin **`/audit`** viewer surface + nav. **Disclosure (derived, honest):**
+     **`disclosure.ts`** (`compatibilityDisclosure` per visibility, shared by the send panel + Inbox) +
+     **`questionnaires.discloseAdminAccess`** (a new `adminOnly` `SettingDefinition` flag — filtered + marked
+     "Admin only" in Settings; default OFF; appends `ADMIN_ACCESS_DISCLOSURE` to a recipient's private/compat
+     disclosure when on). **Deletion** (`deleteSend`/`purgeQuestionnaire`) tears down the compat report + the
+     group Insight. New schemas: `AlignmentReport`/`AlignmentItem`/`AlignmentAgreement`, `RawAccessAuditEntry`/
+     `RawAccessAuditLog`, extracted `CompatibilityVisibilitySchema`; derived view types `CompatibilityGroup`/
+     `CompatibilityMember`/`InboxCompatibilityView`/`AlignmentResult`/`CompatibilitySendResult`. \*\*This
+     completes §13.5; the only remaining questionnaire work is §13.6 (the external Cloudflare relay)._
 6. **External: relay + delivery + explicit gates** — `apps/relay` Worker + shared renderer page, the Cloudflare
    connect/deploy/update/teardown flow, PIN/consent/age gating + question-image ZK, link delivery, the
    disclosure setting + audit log, the privacy notice.
@@ -918,7 +970,8 @@ update/delete` gated by **`questionnaires.viewResults`**. A top-level **"Memory"
   in-webview HTTPS host. Ready for slice 1.
 - 2026-06-11 — **Slice 1a built** (§13.1): the shared `Insight`/`InsightFact`/`InsightSource` schemas,
   `@selfos/core/insights` `insightStore` (encrypted per-subject CRUD + `summarizeForContext`), the
-  `buildContext` Insight extension, the `questionnaires.*` capabilities (`readRaw` deferred), and `Person`
+  `buildContext` Insight extension, the `questionnaires.*` capabilities (`readRaw` registered later as
+  explicit-grant-only, §13.5d), and `Person`
   `email`/`phone` (additive-optional, no migration). Code-reviewed (the `upsertPerson` drop fixed) + gate
   green (83 core unit tests). Engine/registry/`queryMetrics` deferred to consuming slices.
 - 2026-06-11 — **Slice 1b built** (§13.1, the questionnaire engine): the `Questionnaire`/`Question`/
@@ -1083,3 +1136,39 @@ update/delete` gated by **`questionnaires.viewResults`**. A top-level **"Memory"
     caller must handle the new rejection — the renderer's `void onRemove()` would otherwise swallow it.**
     **Next: §13.5d** (compatibility: AI variants + dual-send + alignment report + the 3 visibility modes +
     `readRaw` + audit), then **§13.6** (relay).
+- 2026-06-11 — **Slice §13.5d built — §13.5 COMPLETE; the compatibility feature is fully built** (all on one
+  branch, merged once, no scaffolding §12). **Capability:** `questionnaires.readRaw` registered as an
+  **`EXPLICIT_GRANT_ONLY`** capability — ships OFF even for the Owner (`roleAllows` skips explicit-grant-only
+  caps before the Owner auto-grant; the Roles matrix leaves the Owner column toggleable for exactly these).
+  **Authoring:** a builder compatibility toggle + visibility picker (`senderSeesAll` selectable only with
+  `readRaw`) + per-question `canonicalId` stamping. **Variants + dual-send:** `generateVariant` (AI
+  personalizes each answerer's variant — same answer type + `canonicalId`; target **shareable-facts-only**
+  context, §13.3 boundary) + `createCompatibilitySend` (two paired **Private** assignments sharing an
+  additive `Assignment.compatibilityGroupId`, each freezing its own variant snapshot); blocked when AI is
+  off. **Alignment:** `alignmentService.generateAlignment` (both submitted → aligns by `canonicalId` → an
+  **`AlignmentReport`** at `questionnaires/compat/<groupId>/report.enc` + a draft Insight, subject = sender,
+  `approved:false`, deduped by `provenance.compatibilityGroupId`; budget-gated `questionnaire.analyze`); the
+  sender's `CompatibilityResults` view (members + report + the audited reveal); the answerer's **joint report
+  on their answered Inbox item** (per visibility; `eachSeesOwn` also shows their own answers). \*\*Break-glass
+  - audit:** `auditService` (encrypted cross-device `config/raw-access-audit.enc` → a `RawAccessAuditLog`);
+    IPC `assignments:revealRaw` (super-admin any send **or** a `senderSeesAll` sender holding `readRaw`; writes
+    a `RawAccessAuditEntry` **before** returning answers — the boundary verified airtight by code-review) +
+    `audit:list` (super-admin only) + a super-admin `/audit` viewer surface. **Honest disclosure:**
+    `disclosure.ts` (`compatibilityDisclosure` per visibility, shared by send panel + Inbox) +
+    `questionnaires.discloseAdminAccess` (a new `adminOnly` `SettingDefinition` flag — filtered + marked
+    "Admin only"; default OFF; appends `ADMIN_ACCESS_DISCLOSURE` when on). Deletion tears down the compat
+    report + group Insight. Code-reviewer verdict **ship** (no blockers; applied the should-fixes: collapsed a
+    double snapshot-decrypt in `revealRaw`; added the readRaw-sender-vs-non-`senderSeesAll`-group denial test;
+    guarded the sender from being their own recipient). Gate green: typecheck (node + web/DOM-lib), lint,
+    format, **213 core + 294 desktop unit, 44 E2E** (a coreBridge dual-send→align→report+Insight + reveal-gate
+    +audit test, a super-admin reveal-any-private test, core compatibility/variant/alignment/audit/disclosure
+    tests, RTL for `CompatibilityResults`/`AuditLog`/the builder compat toggle/the Inbox joint report/the
+    admin-only setting/the Roles readRaw toggle, an E2E that aligns two answered variants into a report + draft
+    Insight and a super-admin audit surface, each with a 390px guard). Live web-preview visual QA: the compat
+    authoring toggle + visibility picker (`senderSeesAll` gated) + derived disclosure + the admin-only setting
+    with the "Admin only" marker, desktop + 390px, no console errors. Synced `08`
+    §3.6/§3.9/§4.1/§4.3/§4.4/§4.5/§6/§8.4/§13.5 + capabilities. **Lesson: an `EXPLICIT_GRANT_ONLY` capability
+    must be special-cased in `roleAllows` BEFORE the Owner's full-access bypass — otherwise the Owner
+    auto-grants the very thing meant to ship off; and the audit entry must be written BEFORE the answers are
+    returned, so a crash mid-reveal still leaves the trail.\*\* **§13.5 is COMPLETE; the only remaining
+    questionnaire work is §13.6 (the external Cloudflare relay).**

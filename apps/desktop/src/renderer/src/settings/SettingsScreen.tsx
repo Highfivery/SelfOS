@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Heading, Stack, Text, TextInput } from '../design-system/components';
+import { useSessionStore } from '../stores/sessionStore';
 import { getDefinitionsForSection, getSections } from './registry';
 import { SettingField } from './SettingField';
 import type { SettingDefinition, SettingsSection } from './types';
@@ -16,19 +17,26 @@ export function SettingsScreen(): JSX.Element {
   const [activeId, setActiveId] = useState<string>(sections[0]?.id ?? '');
   const [query, setQuery] = useState('');
 
+  // Admin-only settings (e.g. the disclosure toggle, §8.4) are hidden from non-admins entirely.
+  const isAdmin = useSessionStore((s) => s.can('settings.manage'));
+
   const q = query.trim().toLowerCase();
   const filtered = useMemo<{ section: SettingsSection; defs: SettingDefinition[] }[] | null>(() => {
     if (!q) return null;
     return sections
       .map((section) => ({
         section,
-        defs: getDefinitionsForSection(section.id).filter((def) => matches(def, q)),
+        defs: getDefinitionsForSection(section.id).filter(
+          (def) => (!def.adminOnly || isAdmin) && matches(def, q),
+        ),
       }))
       .filter((group) => group.defs.length > 0);
-  }, [q, sections]);
+  }, [q, sections, isAdmin]);
 
   const active = sections.find((s) => s.id === activeId);
-  const activeDefs = active ? getDefinitionsForSection(active.id) : [];
+  const activeDefs = (active ? getDefinitionsForSection(active.id) : []).filter(
+    (def) => !def.adminOnly || isAdmin,
+  );
 
   return (
     <div className={styles.screen}>

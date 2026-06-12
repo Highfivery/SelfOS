@@ -2,7 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Brain, Lock, Sparkles, Trash2 } from 'lucide-react';
 import { ANTHROPIC_API_KEY_ID } from '@shared/channels';
-import type { AssignmentStatus, QuestionTrend, SendResult } from '@shared/schemas';
+import type {
+  AssignmentStatus,
+  CompatibilityConfig,
+  QuestionTrend,
+  SendResult,
+} from '@shared/schemas';
+import { CompatibilityResults } from './CompatibilityResults';
 import {
   Banner,
   Button,
@@ -40,9 +46,20 @@ const STATUS_LABEL: Record<AssignmentStatus, string> = {
  */
 export function QuestionnaireResults({
   questionnaireId,
+  compatibility,
 }: {
   questionnaireId: string;
+  compatibility: CompatibilityConfig | null;
 }): JSX.Element {
+  // A compatibility questionnaire has its own paired Results surface (alignment report + break-glass),
+  // distinct from the per-recipient Standard/Private cards below.
+  if (compatibility?.enabled) {
+    return <CompatibilityResults questionnaireId={questionnaireId} />;
+  }
+  return <StandardResults questionnaireId={questionnaireId} />;
+}
+
+function StandardResults({ questionnaireId }: { questionnaireId: string }): JSX.Element {
   const results = useResultsStore((s) => s.results);
   const trends = useResultsStore((s) => s.trends);
   const loaded = useResultsStore((s) => s.loaded);

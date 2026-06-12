@@ -13,6 +13,7 @@ import {
   PanelLeftOpen,
   Settings,
   Shapes,
+  ShieldAlert,
   ShieldCheck,
   Users,
 } from 'lucide-react';
@@ -54,6 +55,7 @@ export function AppShell(): JSX.Element {
   const inboxItems = useInboxStore((s) => s.items);
   const inboxCount = unansweredCount(inboxItems);
   const canOwnDreams = useSessionStore((s) => s.can('dreams.own'));
+  const isSuperAdmin = useSessionStore((s) => s.superAdmin);
   const locked = useSessionStore((s) => s.locked);
   const unlockPromptOpen = useSessionStore((s) => s.unlockPromptOpen);
   const activePersonId = useSessionStore((s) => s.activePerson?.id ?? null);
@@ -252,6 +254,18 @@ export function AppShell(): JSX.Element {
             >
               <BarChart3 size={18} aria-hidden="true" />
               <span className={styles.label}>Usage</span>
+            </NavLink>
+          ) : null}
+          {isSuperAdmin ? (
+            <NavLink
+              to="/audit"
+              className={navClass}
+              aria-label="Raw-access audit"
+              title={tip('Audit')}
+              onClick={closeDrawer}
+            >
+              <ShieldAlert size={18} aria-hidden="true" />
+              <span className={styles.label}>Audit</span>
             </NavLink>
           ) : null}
           {import.meta.env.DEV ? (

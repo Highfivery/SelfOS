@@ -75,6 +75,34 @@ describe('Questionnaires', () => {
     );
   });
 
+  it('authors a compatibility questionnaire (visibility picker + canonicalId stamping)', async () => {
+    const save = saveSpy();
+    installMockBridge({ questionnairesList: () => Promise.resolve([]), questionnairesSave: save });
+    await openNewBuilder();
+
+    await userEvent.type(screen.getByLabelText('Title'), 'Compatibility check');
+    await userEvent.type(screen.getByLabelText('Question 1'), 'How connected do you feel?');
+
+    // The visibility picker is hidden until Compatibility is turned on.
+    expect(screen.queryByLabelText('Who sees what')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('switch', { name: 'Compatibility questionnaire' }));
+    const visibility = await screen.findByLabelText('Who sees what');
+    // Without `questionnaires.readRaw`, the senderSeesAll option is not selectable.
+    const senderSeesAll = screen.getByRole('option', {
+      name: /You can reveal answers/,
+    }) as HTMLOptionElement;
+    expect(senderSeesAll.disabled).toBe(true);
+    await userEvent.selectOptions(visibility, 'eachSeesOwn');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    expect(save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        compatibility: { enabled: true, visibility: 'eachSeesOwn' },
+        questions: [expect.objectContaining({ canonicalId: expect.any(String) })],
+      }),
+    );
+  });
+
   it('surfaces validation problems via Check', async () => {
     installMockBridge({
       questionnairesList: () => Promise.resolve([]),

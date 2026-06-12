@@ -198,6 +198,11 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.assignmentsResults, bridge.assignmentsResults);
   handle(IpcChannels.assignmentsTrends, bridge.assignmentsTrends);
   handle(IpcChannels.assignmentsDelete, bridge.assignmentsDelete);
+  handle(IpcChannels.assignmentsCreateCompatibility, bridge.assignmentsCreateCompatibility);
+  handle(IpcChannels.assignmentsCompatibility, bridge.assignmentsCompatibility);
+  handle(IpcChannels.assignmentsAlign, bridge.assignmentsAlign);
+  handle(IpcChannels.assignmentsRevealRaw, bridge.assignmentsRevealRaw);
+  handle(IpcChannels.auditList, bridge.auditList);
   handle(IpcChannels.dreamsList, bridge.dreamsList);
   handle(IpcChannels.dreamGet, bridge.dreamGet);
   handle(IpcChannels.dreamSave, bridge.dreamSave);

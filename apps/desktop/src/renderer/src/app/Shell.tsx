@@ -11,6 +11,7 @@ import { Dreams } from './routes/dreams/Dreams';
 import { DreamPatterns } from './routes/dreams/DreamPatterns';
 import { People } from './routes/people/People';
 import { Roles } from './routes/roles/Roles';
+import { AuditLog } from './routes/audit/AuditLog';
 import { Usage } from './routes/usage/Usage';
 import { SettingsScreen } from '../settings/SettingsScreen';
 import { useSettingsStore } from '../settings/settingsStore';
@@ -36,6 +37,7 @@ export function Shell(): JSX.Element {
           <Route path="dreams/patterns" element={<DreamPatterns />} />
           <Route path="people" element={<People />} />
           <Route path="roles" element={<Roles />} />
+          <Route path="audit" element={<AuditLog />} />
           <Route path="usage" element={<Usage />} />
           <Route path="settings" element={<SettingsScreen />} />
           {import.meta.env.DEV ? <Route path="gallery" element={<Gallery />} /> : null}

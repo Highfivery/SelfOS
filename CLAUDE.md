@@ -239,6 +239,41 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-11 — Build (Questionnaires **slice §13.5d — COMPATIBILITY mode; §13.5 COMPLETE — the
+  Questionnaires feature is fully built** except the deferred §13.6 relay; [08-questionnaires](docs/specs/08-questionnaires.md)
+  §3.6/§3.9/§4.1/§4.3/§4.4/§4.5/§6/§8.4/§13.5d). **The whole compatibility feature on ONE branch, merged
+  once** (its pieces are tightly coupled — authoring → AI variants → dual-send → alignment — so shipping them
+  separately would leave dead controls, §12). All product/UX decisions were **pre-made** (no re-asking).
+  **Capability:** `questionnaires.readRaw` registered as an **`EXPLICIT_GRANT_ONLY`** capability — ships OFF
+  even for the Owner (`roleAllows` special-cases it BEFORE the Owner's full-access bypass; the Roles matrix
+  leaves the Owner column toggleable for exactly these). **Authoring:** a builder compatibility toggle +
+  visibility picker (`sharedReport`/`eachSeesOwn`/`senderSeesAll`; the last selectable only with `readRaw`) +
+  per-question `canonicalId` stamping. **Variants + dual-send:** core **`generateVariant`** (AI personalizes
+  each answerer's variant — same answer type + `canonicalId`; target **shareable-facts-only** context, the
+  §13.3 boundary) + **`createCompatibilitySend`** (two paired **Private** assignments sharing an additive
+  **`Assignment.compatibilityGroupId`**, each freezing its own variant snapshot); blocked when AI is off.
+  **Alignment:** **`alignmentService`** (both submitted → align by `canonicalId` → an **`AlignmentReport`** at
+  `questionnaires/compat/<groupId>/report.enc` + a draft Insight, subject = sender, `approved:false`,
+  deduped by `provenance.compatibilityGroupId`; budget-gated `questionnaire.analyze`); the sender's
+  **`CompatibilityResults`** view + the answerer's **joint report on their answered Inbox item** (per
+  visibility; `eachSeesOwn` also shows their own answers). **Break-glass + audit:** **`auditService`**
+  (encrypted cross-device `config/raw-access-audit.enc`); IPC **`assignments:revealRaw`** (permits ONLY the
+  super-admin (any send) **or** a `senderSeesAll` sender holding `readRaw`; **writes the audit entry BEFORE
+  returning answers**) + **`audit:list`** (super-admin only) + a super-admin **`/audit`** viewer surface.
+  **Honest disclosure:** **`disclosure.ts`** (`compatibilityDisclosure` per visibility, shared by send panel
+  - Inbox) + the **`questionnaires.discloseAdminAccess`** admin-only setting (a new `adminOnly`
+    `SettingDefinition` flag — filtered + marked "Admin only"; default OFF). Deletion tears down the compat
+    report + group Insight. Code-reviewer **ship** (no blockers; applied the should-fixes: collapsed a double
+    snapshot-decrypt in `revealRaw`, added the readRaw-sender-vs-non-`senderSeesAll`-group denial test, guarded
+    a sender from being their own recipient; the reveal/`readRaw`/audit boundaries verified airtight). Gate
+    green: typecheck (node + web/DOM-lib), lint, format, **213 core + 294 desktop unit, 44 E2E**. Live
+    web-preview visual QA (compat authoring toggle + visibility picker [`senderSeesAll` gated "needs
+    permission"] + derived disclosure + the admin-only setting with the "Admin only" marker; desktop + 390px;
+    no console errors). Synced `08` + `capabilities`. **Lesson: an `EXPLICIT_GRANT_ONLY` capability must be
+    special-cased in `roleAllows` BEFORE the Owner full-access bypass (else the Owner auto-grants the very thing
+    meant to ship off), and a break-glass reveal must WRITE THE AUDIT ENTRY BEFORE returning the answers so a
+    mid-reveal crash still leaves the trail.** **NEXT (the only remaining questionnaire work): §13.6 — the
+    external Cloudflare relay.**
 - 2026-06-11 — Build (Questionnaires **slice §13.5c — per-question trends + deletion/purge**,
   [08-questionnaires](docs/specs/08-questionnaires.md) §3.7/§3.9/§4.2/§6/§8.4/§13.5; design-system
   [01](docs/specs/01-design-system.md) §5.3/§5.6). **Scope decision (asked, twice):** the user chose "all

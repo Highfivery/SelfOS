@@ -59,6 +59,32 @@ export function fakeClaudeClient(): ClaudeClient {
   return {
     send: () => Promise.resolve('ok'),
     stream: (options, onDelta) => {
+      const userText = options.messages.map((message) => message.content).join('\n');
+
+      // Compatibility variant personalization (08 §3.6) asks for a JSON array of rewritten prompts, one
+      // per question. Echo each numbered prompt back (prefixed) so the count matches deterministically.
+      if (userText.includes('rewritten prompts')) {
+        const prompts = [...userText.matchAll(/^\d+\.\s(.+)$/gm)].map((m) => `For you: ${m[1]}`);
+        return Promise.resolve({
+          text: JSON.stringify(prompts),
+          usage: { inputTokens: 80, outputTokens: 40, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+
+      // Compatibility alignment (08 §13.5d) asks for a report JSON object. Items are merged by canonicalId
+      // in the service, so an empty items array still yields a valid report; supply a summary + facts.
+      if (userText.includes('compatibility report JSON')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            summary: 'You two are largely aligned, with a few differences worth talking through.',
+            items: [],
+            crisisFlag: false,
+            facts: [{ text: 'They share core values but differ on pace.', shareable: true }],
+          }),
+          usage: { inputTokens: 150, outputTokens: 60, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+
       // The dream-analysis synthesis turn asks for a single JSON object (12-dreams §3.2). Return a valid
       // DreamAnalysis draft so the offline synthesize path parses deterministically; every other turn is
       // the reflective chat reply.

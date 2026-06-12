@@ -1,0 +1,126 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
+import type { AlignmentReport, CompatibilityGroup } from '@shared/schemas';
+import { CompatibilityResults } from './CompatibilityResults';
+import { useSettingsStore } from '../../../settings/settingsStore';
+import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
+
+afterEach(() => {
+  clearMockBridge();
+  useSettingsStore.setState({ values: {} });
+});
+
+const enableAi = (): void => useSettingsStore.setState({ values: { 'ai.enabled': true } });
+
+const report = (over: Partial<AlignmentReport> = {}): AlignmentReport => ({
+  schemaVersion: 1,
+  compatibilityGroupId: 'g1',
+  questionnaireId: 'q1',
+  personAName: 'Alex',
+  personBName: 'Bri',
+  summary: 'You two are largely aligned.',
+  items: [
+    { canonicalId: 'c1', prompt: 'How connected?', agreement: 'aligned', note: 'Both feel close.' },
+    { canonicalId: 'c2', prompt: 'More time?', agreement: 'divergent', note: 'You differ here.' },
+  ],
+  generatedAt: 'now',
+  ...over,
+});
+
+const group = (over: Partial<CompatibilityGroup> = {}): CompatibilityGroup => ({
+  compatibilityGroupId: 'g1',
+  questionnaireId: 'q1',
+  visibility: 'sharedReport',
+  members: [
+    { assignmentId: 'a1', recipientName: 'Alex', status: 'submitted' },
+    { assignmentId: 'a2', recipientName: 'Bri', status: 'submitted' },
+  ],
+  bothSubmitted: true,
+  report: null,
+  analyzed: false,
+  canReveal: false,
+  ...over,
+});
+
+const renderResults = (): ReturnType<typeof render> =>
+  render(
+    <MemoryRouter>
+      <CompatibilityResults questionnaireId="q1" />
+    </MemoryRouter>,
+  );
+
+describe('CompatibilityResults', () => {
+  it('waits for both people before offering to align', async () => {
+    installMockBridge({
+      assignmentsCompatibility: () =>
+        Promise.resolve([
+          group({
+            bothSubmitted: false,
+            members: [
+              { assignmentId: 'a1', recipientName: 'Alex', status: 'submitted' },
+              { assignmentId: 'a2', recipientName: 'Bri', status: 'sent' },
+            ],
+          }),
+        ]),
+    });
+    enableAi();
+    renderResults();
+    expect(
+      await screen.findByText(/Both people need to answer before you can align/),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Generate alignment/ })).not.toBeInTheDocument();
+  });
+
+  it('generates an alignment when both have answered', async () => {
+    const assignmentsAlign = vi.fn(() =>
+      Promise.resolve({ ok: true as const, report: report(), usage: {} as never }),
+    );
+    installMockBridge({
+      assignmentsCompatibility: () => Promise.resolve([group()]),
+      assignmentsAlign,
+      secretHas: () => Promise.resolve(true),
+    });
+    enableAi();
+    renderResults();
+    const button = await screen.findByRole('button', { name: /Generate alignment/ });
+    await userEvent.click(button);
+    expect(assignmentsAlign).toHaveBeenCalledWith('g1');
+  });
+
+  it('renders the report summary + per-question agreement once generated', async () => {
+    installMockBridge({
+      assignmentsCompatibility: () =>
+        Promise.resolve([group({ report: report(), analyzed: true })]),
+      secretHas: () => Promise.resolve(true),
+    });
+    enableAi();
+    renderResults();
+    expect(await screen.findByText('You two are largely aligned.')).toBeInTheDocument();
+    expect(screen.getByText('Aligned')).toBeInTheDocument();
+    expect(screen.getByText('Different')).toBeInTheDocument();
+    expect(screen.getByText(/Review it in Memory/)).toBeInTheDocument();
+  });
+
+  it('offers an audited reveal only for a senderSeesAll group with readRaw', async () => {
+    const assignmentsRevealRaw = vi.fn(() =>
+      Promise.resolve([{ prompt: 'How connected?', answer: '4' }]),
+    );
+    installMockBridge({
+      assignmentsCompatibility: () =>
+        Promise.resolve([
+          group({ visibility: 'senderSeesAll', canReveal: true, report: report() }),
+        ]),
+      assignmentsRevealRaw,
+      secretHas: () => Promise.resolve(true),
+    });
+    enableAi();
+    renderResults();
+    const revealBtn = await screen.findByRole('button', { name: /Reveal Alex’s answers/ });
+    expect(screen.getByText(/recorded in the audit log/)).toBeInTheDocument();
+    await userEvent.click(revealBtn);
+    expect(assignmentsRevealRaw).toHaveBeenCalledWith('a1');
+    await waitFor(() => expect(screen.getByText('4')).toBeInTheDocument());
+  });
+});

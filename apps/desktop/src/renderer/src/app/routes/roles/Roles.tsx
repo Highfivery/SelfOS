@@ -1,6 +1,11 @@
 import { useEffect } from 'react';
 import { useSessionStore } from '../../../stores/sessionStore';
-import { CAPABILITIES, CAPABILITY_LABELS, roleAllows } from '@shared/capabilities';
+import {
+  CAPABILITIES,
+  CAPABILITY_LABELS,
+  EXPLICIT_GRANT_ONLY,
+  roleAllows,
+} from '@shared/capabilities';
 import {
   AdminOnlyBadge,
   Card,
@@ -10,6 +15,7 @@ import {
   Switch,
   Text,
 } from '../../../design-system/components';
+import type { CapabilityKey } from '@shared/capabilities';
 import type { Role } from '@shared/channels';
 import styles from './Roles.module.css';
 
@@ -24,8 +30,10 @@ export function Roles(): JSX.Element {
 
   const roles = access?.roles ?? [];
 
-  const toggle = async (role: Role, capability: string): Promise<void> => {
-    if (role.id === 'owner') return;
+  const toggle = async (role: Role, capability: CapabilityKey): Promise<void> => {
+    // The owner is locked all-on EXCEPT explicit-grant-only capabilities (e.g. break-glass `readRaw`),
+    // which ship OFF for everyone and are togglable even on the owner row (08-questionnaires §8.4).
+    if (role.id === 'owner' && !EXPLICIT_GRANT_ONLY.has(capability)) return;
     const updated: Role = {
       ...role,
       capabilities: { ...role.capabilities, [capability]: !role.capabilities[capability] },
@@ -67,7 +75,7 @@ export function Roles(): JSX.Element {
                     </span>
                     <Switch
                       checked={roleAllows(role, capability)}
-                      disabled={isOwner}
+                      disabled={isOwner && !EXPLICIT_GRANT_ONLY.has(capability)}
                       aria-label={`${role.name}: ${CAPABILITY_LABELS[capability]}`}
                       onChange={() => void toggle(role, capability)}
                     />

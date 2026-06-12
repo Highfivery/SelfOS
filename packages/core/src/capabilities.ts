@@ -14,13 +14,15 @@ export const CAPABILITIES = [
   'roles.manage',
   'budgets.manage',
   'sessions.own',
-  // Questionnaires (08-questionnaires §3/§12). `readRaw` (break-glass raw-answer access) is intentionally
-  // NOT registered here: it ships off even for the Owner and is reached only via the concealed super-admin
-  // unlock, so it lands with the private-mode/break-glass slice, not as a normal owner-granted capability.
+  // Questionnaires (08-questionnaires §3/§12).
   'questionnaires.create',
   'questionnaires.answer',
   'questionnaires.viewResults',
   'questionnaires.sendExternal',
+  // `readRaw` (break-glass raw-answer access for a `senderSeesAll` compatibility send, §8.4/§13.5d) is an
+  // EXPLICIT_GRANT_ONLY capability: it ships OFF even for the Owner and is granted only by an explicit
+  // toggle in the Roles matrix. The concealed super-admin break-glass reveal works independently of it.
+  'questionnaires.readRaw',
   // Dreams (12-dreams §12). `dreams.own` = capture + analyze + view one's own dreams; `dreams.shareContext`
   // = promote a specific dream-insight fact into a related person's context (off by default per dream).
   // There is intentionally no "view others' dreams" capability — dreams are dreamer-only (12 §8.4).
@@ -44,15 +46,29 @@ export const CAPABILITY_LABELS: Record<CapabilityKey, string> = {
   'questionnaires.answer': 'Answer questionnaires',
   'questionnaires.viewResults': 'View questionnaire results',
   'questionnaires.sendExternal': 'Send questionnaires to external people',
+  'questionnaires.readRaw': 'Reveal raw private answers (break-glass)',
   'dreams.own': 'Log & analyze their own dreams',
   'dreams.shareContext': 'Share a dream insight into a relationship',
 };
+
+/**
+ * Capabilities that ship OFF even for the Owner and never auto-grant — they're enabled only by an
+ * explicit toggle in the Roles matrix (08-questionnaires §8.4). `roleAllows` special-cases these so the
+ * Owner's automatic full-access bypass skips them, and the Roles editor leaves the Owner column toggleable
+ * for exactly these. Today only the break-glass `questionnaires.readRaw` is here.
+ */
+export const EXPLICIT_GRANT_ONLY: ReadonlySet<CapabilityKey> = new Set<CapabilityKey>([
+  'questionnaires.readRaw',
+]);
 
 function capabilityMap(enabled: readonly CapabilityKey[]): Record<string, boolean> {
   const map: Record<string, boolean> = {};
   for (const capability of CAPABILITIES) map[capability] = enabled.includes(capability);
   return map;
 }
+
+/** Every capability except the explicit-grant-only ones — the Owner's default (so `readRaw` ships OFF). */
+const OWNER_DEFAULT_CAPABILITIES = CAPABILITIES.filter((c) => !EXPLICIT_GRANT_ONLY.has(c));
 
 /**
  * Built-in roles (04-people-roles §12): Owner = everything; Member = own data + own relationships +
@@ -61,7 +77,12 @@ function capabilityMap(enabled: readonly CapabilityKey[]): Record<string, boolea
  * service/UI layer in a later slice.
  */
 export const DEFAULT_ROLES: Role[] = [
-  { id: 'owner', name: 'Owner', builtin: true, capabilities: capabilityMap(CAPABILITIES) },
+  {
+    id: 'owner',
+    name: 'Owner',
+    builtin: true,
+    capabilities: capabilityMap(OWNER_DEFAULT_CAPABILITIES),
+  },
   {
     id: 'member',
     name: 'Member',
@@ -90,10 +111,12 @@ export const OWNER_ROLE_ID = 'owner';
 /**
  * Whether a role grants a capability. The **Owner always has every capability** — including ones
  * added after the role was persisted (a stored owner map can be stale, e.g. a vault created before
- * `budgets.manage` existed). For all other roles, a missing key means denied.
+ * `budgets.manage` existed) — **except** the explicit-grant-only ones (e.g. break-glass `readRaw`), which
+ * the Owner gets only when the stored map turns them on. For all other roles, a missing key means denied.
  */
 export function roleAllows(role: Role | undefined, capability: CapabilityKey): boolean {
   if (!role) return false;
+  if (EXPLICIT_GRANT_ONLY.has(capability)) return role.capabilities[capability] === true;
   if (role.id === OWNER_ROLE_ID) return true;
   return role.capabilities[capability] === true;
 }

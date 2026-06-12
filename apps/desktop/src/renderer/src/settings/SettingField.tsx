@@ -1,5 +1,6 @@
 import { RotateCcw } from 'lucide-react';
 import {
+  AdminOnlyBadge,
   IconButton,
   Inline,
   SegmentedControl,
@@ -109,7 +110,10 @@ export function SettingField({ def }: { def: SettingDefinition }): JSX.Element |
   return (
     <div className={styles.row}>
       <div className={styles.info}>
-        <Text weight={500}>{def.label}</Text>
+        <Inline gap={2}>
+          <Text weight={500}>{def.label}</Text>
+          {def.adminOnly ? <AdminOnlyBadge /> : null}
+        </Inline>
         {def.description ? (
           <Text size="sm" tone="secondary">
             {def.description}

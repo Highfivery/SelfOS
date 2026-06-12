@@ -1,5 +1,6 @@
 import type {
   AccessView,
+  AlignmentResult,
   Answer,
   AnswerType,
   Assignment,
@@ -7,6 +8,8 @@ import type {
   Budget,
   BudgetState,
   ChatTurnResult,
+  CompatibilityGroup,
+  CompatibilitySendResult,
   Conversation,
   Dream,
   DreamAnalysis,
@@ -25,6 +28,8 @@ import type {
   InviteSummary,
   Insight,
   Person,
+  RawAccessAuditEntry,
+  SendAnswer,
   SendResult,
   PersonInput,
   PrivacyMode,
@@ -126,6 +131,11 @@ export const IpcChannels = {
   assignmentsResults: 'assignments:results',
   assignmentsTrends: 'assignments:trends',
   assignmentsDelete: 'assignments:delete',
+  assignmentsCreateCompatibility: 'assignments:createCompatibility',
+  assignmentsCompatibility: 'assignments:compatibility',
+  assignmentsAlign: 'assignments:align',
+  assignmentsRevealRaw: 'assignments:revealRaw',
+  auditList: 'audit:list',
   dreamsList: 'dreams:list',
   dreamGet: 'dreams:get',
   dreamSave: 'dreams:save',
@@ -410,6 +420,34 @@ export interface SelfosBridge {
    * sender or an Owner / super-admin. Requires `questionnaires.viewResults`.
    */
   assignmentsDelete(assignmentId: string): Promise<void>;
+  /**
+   * Send a **compatibility** questionnaire to TWO household people at once: AI personalizes a variant per
+   * recipient, freezing a paired per-recipient snapshot (08-questionnaires §3.6). Budget-gated + metered;
+   * requires AI to be on. Requires `questionnaires.create`.
+   */
+  assignmentsCreateCompatibility(input: {
+    questionnaireId: string;
+    recipientPersonIdA: string;
+    recipientPersonIdB: string;
+  }): Promise<CompatibilitySendResult>;
+  /**
+   * The sender's compatibility sends of one questionnaire — paired members + the alignment report (null
+   * until generated). Sender-scoped; requires `questionnaires.viewResults`.
+   */
+  assignmentsCompatibility(questionnaireId: string): Promise<CompatibilityGroup[]>;
+  /**
+   * Generate (or regenerate) a compatibility group's alignment report + a draft Insight. Both answerers
+   * must have submitted. Budget-gated + metered; requires `questionnaires.viewResults`.
+   */
+  assignmentsAlign(compatibilityGroupId: string): Promise<AlignmentResult>;
+  /**
+   * Break-glass reveal of a Private send's raw answers (08-questionnaires §8.4) — writes an audit entry
+   * first. Permitted only for the concealed super-admin (any send) or the sender of a `senderSeesAll`
+   * compatibility send holding `questionnaires.readRaw`. Returns null if not permitted / absent.
+   */
+  assignmentsRevealRaw(assignmentId: string): Promise<SendAnswer[] | null>;
+  /** The break-glass raw-access audit trail, newest first. Super-admin only. */
+  auditList(): Promise<RawAccessAuditEntry[]>;
   /** The active person's dreams, newest first (12-dreams). Requires `dreams.own`. */
   dreamsList(): Promise<Dream[]>;
   /** Load one of the active person's dreams; null if absent. Requires `dreams.own`. */
@@ -469,12 +507,15 @@ export interface SelfosBridge {
 
 export type {
   AccessView,
+  AlignmentResult,
   Answer,
   Assignment,
   BootState,
   Budget,
   BudgetState,
   ChatTurnResult,
+  CompatibilityGroup,
+  CompatibilitySendResult,
   Conversation,
   Dream,
   DreamAnalysis,
@@ -498,9 +539,11 @@ export type {
   Questionnaire,
   QuestionnaireInput,
   QuestionTrend,
+  RawAccessAuditEntry,
   Relationship,
   RelationshipInput,
   Role,
+  SendAnswer,
   SendResult,
   UsageEvent,
   UsageSummary,

@@ -41,3 +41,14 @@ export function assignmentPath(assignmentId: string): string {
 export function responsePath(assignmentId: string): string {
   return `${sendDir(assignmentId)}/response.enc`;
 }
+
+/** Compatibility groups (§3.6): the alignment report for one paired send, keyed by its group id. */
+export const COMPAT_DIR = 'questionnaires/compat';
+
+export function compatDir(groupId: string): string {
+  return `${COMPAT_DIR}/${groupId}`;
+}
+
+export function alignmentReportPath(groupId: string): string {
+  return `${compatDir(groupId)}/report.enc`;
+}

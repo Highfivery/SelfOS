@@ -104,6 +104,15 @@ const bridge: SelfosBridge = {
     ipcRenderer.invoke(IpcChannels.assignmentsTrends, questionnaireId),
   assignmentsDelete: (assignmentId) =>
     ipcRenderer.invoke(IpcChannels.assignmentsDelete, assignmentId),
+  assignmentsCreateCompatibility: (input) =>
+    ipcRenderer.invoke(IpcChannels.assignmentsCreateCompatibility, input),
+  assignmentsCompatibility: (questionnaireId) =>
+    ipcRenderer.invoke(IpcChannels.assignmentsCompatibility, questionnaireId),
+  assignmentsAlign: (compatibilityGroupId) =>
+    ipcRenderer.invoke(IpcChannels.assignmentsAlign, compatibilityGroupId),
+  assignmentsRevealRaw: (assignmentId) =>
+    ipcRenderer.invoke(IpcChannels.assignmentsRevealRaw, assignmentId),
+  auditList: () => ipcRenderer.invoke(IpcChannels.auditList),
   dreamsList: () => ipcRenderer.invoke(IpcChannels.dreamsList),
   dreamGet: (id) => ipcRenderer.invoke(IpcChannels.dreamGet, id),
   dreamSave: (input) => ipcRenderer.invoke(IpcChannels.dreamSave, input),

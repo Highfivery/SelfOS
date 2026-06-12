@@ -1,6 +1,7 @@
 import type { FileSystem } from '../host';
 import { deleteInsight, listAllInsights } from '../insights';
-import { deleteAssignment, listAssignments } from './assignmentService';
+import { purgeCompatibilityGroup } from './alignmentService';
+import { deleteAssignment, getAssignment, listAssignments } from './assignmentService';
 import { deleteQuestionnaire } from './questionnaireService';
 
 /**
@@ -32,6 +33,12 @@ export async function deleteSend(
   key: Uint8Array,
   assignmentId: string,
 ): Promise<void> {
+  // A compatibility member belongs to a paired group with a shared alignment report + a group-level
+  // Insight; deleting either member breaks the pair, so tear the group's report + Insight down too.
+  const assignment = await getAssignment(fs, key, assignmentId);
+  if (assignment?.compatibilityGroupId) {
+    await purgeCompatibilityGroup(fs, key, assignment.compatibilityGroupId);
+  }
   await purgeInsightsFor(fs, key, new Set([assignmentId]));
   await deleteAssignment(fs, assignmentId);
 }
@@ -48,6 +55,11 @@ export async function purgeQuestionnaire(
   const sends = (await listAssignments(fs, key)).filter(
     (a) => a.questionnaireId === questionnaireId,
   );
+  // Tear down any compatibility groups (report folders + group-level Insights) this questionnaire spawned.
+  const groupIds = new Set(
+    sends.flatMap((a) => (a.compatibilityGroupId ? [a.compatibilityGroupId] : [])),
+  );
+  for (const groupId of groupIds) await purgeCompatibilityGroup(fs, key, groupId);
   await purgeInsightsFor(fs, key, new Set(sends.map((a) => a.id)));
   for (const send of sends) await deleteAssignment(fs, send.id);
   await deleteQuestionnaire(fs, questionnaireId);

@@ -44,6 +44,27 @@ function makeHost(): {
   const claude: ClaudeClient = {
     send: () => Promise.resolve('ok'),
     stream: (options, onDelta) => {
+      const userText = options.messages.map((m) => m.content).join('\n');
+      // Compatibility variant personalization → a JSON array of rewritten prompts (one per question).
+      if (userText.includes('rewritten prompts')) {
+        const prompts = [...userText.matchAll(/^\d+\.\s(.+)$/gm)].map((m) => `For you: ${m[1]}`);
+        return Promise.resolve({
+          text: JSON.stringify(prompts),
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+      // Compatibility alignment → a report object (items merge by canonicalId in the service).
+      if (userText.includes('compatibility report JSON')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            summary: 'Largely aligned, with one difference.',
+            items: [],
+            crisisFlag: false,
+            facts: [{ text: 'They differ on pace.', shareable: true }],
+          }),
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
       // Dream synthesis asks for a single JSON object — return a valid DreamAnalysis draft so the
       // synthesize path can parse it; every other turn just streams a short reply.
       const wantsJson = options.messages.some((m) => m.content.includes('JSON object'));
@@ -628,6 +649,166 @@ describe('createCoreBridge', () => {
     await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
     await bridge.assignmentsDelete(target);
     expect((await bridge.assignmentsTrends(q.id)).length).toBe(0); // one point left → no trend
+  });
+
+  it('compatibility: dual-send → align → report + Insight; senderSeesAll reveal is gated + audited', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const alex = await bridge.peopleSave({ displayName: 'Alex', isSubject: true, tags: [] });
+    const bri = await bridge.peopleSave({ displayName: 'Bri', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: alex.id, roleId: 'member', pin: null });
+    await bridge.accessSetAccount({ personId: bri.id, roleId: 'member', pin: null });
+
+    const q = await bridge.questionnairesSave({
+      title: 'Compatibility check',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      questions: [
+        {
+          id: 'c1',
+          type: 'rating',
+          prompt: 'How connected?',
+          required: true,
+          scale: { min: 1, max: 5 },
+        },
+      ],
+      compatibility: { enabled: true, visibility: 'senderSeesAll' },
+    });
+
+    // Dual-send: AI personalizes a variant each, freezing two paired snapshots.
+    const sent = await bridge.assignmentsCreateCompatibility({
+      questionnaireId: q.id,
+      recipientPersonIdA: alex.id,
+      recipientPersonIdB: bri.id,
+    });
+    expect(sent.ok).toBe(true);
+
+    const groups = await bridge.assignmentsCompatibility(q.id);
+    expect(groups).toHaveLength(1);
+    const group = groups[0]!;
+    expect(group.members).toHaveLength(2);
+    expect(group.visibility).toBe('senderSeesAll');
+    expect(group.canReveal).toBe(false); // owner lacks readRaw → no reveal yet
+
+    // Each recipient answers their own variant (the prompt is personalized but the id/canonicalId align).
+    const answerAs = async (
+      personId: string,
+      assignmentId: string,
+      value: number,
+    ): Promise<void> => {
+      await bridge.sessionSetActive({ personId });
+      const detail = await bridge.assignmentsGet(assignmentId);
+      const qid = detail!.questionnaire.questions[0]!.id;
+      await bridge.assignmentsSubmit({ assignmentId, answers: [{ questionId: qid, value }] });
+      await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    };
+    for (const m of group.members) {
+      const personId = m.recipientName === 'Alex' ? alex.id : bri.id;
+      await answerAs(personId, m.assignmentId, m.recipientName === 'Alex' ? 4 : 2);
+    }
+
+    // Both answered → align into a report + a draft Insight (subject = the sender, reviewed in Memory).
+    const aligned = await bridge.assignmentsAlign(group.compatibilityGroupId);
+    expect(aligned.ok).toBe(true);
+    const after = (await bridge.assignmentsCompatibility(q.id))[0]!;
+    expect(after.bothSubmitted).toBe(true);
+    expect(after.report?.summary).toContain('aligned');
+    expect(after.analyzed).toBe(true);
+    expect((await bridge.insightsList()).some((i) => i.subjectPersonId === ownerId)).toBe(true);
+
+    // Reveal is denied without readRaw (even for the sender) and writes nothing.
+    const memberId = after.members[0]!.assignmentId;
+    expect(await bridge.assignmentsRevealRaw(memberId)).toBeNull();
+    expect(await bridge.auditList()).toEqual([]); // not super-admin → empty
+
+    // Grant the Owner the explicit break-glass readRaw → the senderSeesAll reveal works + is audited.
+    const access = await bridge.accessGet();
+    const ownerRole = access.roles.find((r) => r.id === 'owner')!;
+    await bridge.accessSaveRole({
+      ...ownerRole,
+      capabilities: { ...ownerRole.capabilities, 'questionnaires.readRaw': true },
+    });
+    const revealed = await bridge.assignmentsRevealRaw(memberId);
+    expect(revealed).not.toBeNull();
+    expect(revealed!.length).toBeGreaterThan(0);
+
+    // The audit trail is visible only in super-admin mode; the entry records a non-super-admin reveal.
+    expect(await bridge.auditList()).toEqual([]);
+    await bridge.superadminUnlock({ passphrase: 'secret-pass' });
+    const log = await bridge.auditList();
+    expect(log).toHaveLength(1);
+    expect(log[0]).toMatchObject({
+      assignmentId: memberId,
+      viaSuperAdmin: false,
+      action: 'revealRaw',
+    });
+    await bridge.superadminLock();
+
+    // readRaw does NOT unlock reveal for a non-senderSeesAll group — even for the sender who holds it.
+    const sharedQ = await bridge.questionnairesSave({
+      title: 'Shared-report check',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      questions: [
+        {
+          id: 'c1',
+          type: 'rating',
+          prompt: 'How connected?',
+          required: true,
+          scale: { min: 1, max: 5 },
+        },
+      ],
+      compatibility: { enabled: true, visibility: 'sharedReport' },
+    });
+    expect(
+      (
+        await bridge.assignmentsCreateCompatibility({
+          questionnaireId: sharedQ.id,
+          recipientPersonIdA: alex.id,
+          recipientPersonIdB: bri.id,
+        })
+      ).ok,
+    ).toBe(true);
+    const sharedGroup = (await bridge.assignmentsCompatibility(sharedQ.id))[0]!;
+    for (const m of sharedGroup.members) {
+      await answerAs(m.recipientName === 'Alex' ? alex.id : bri.id, m.assignmentId, 3);
+    }
+    // The owner still holds readRaw, but the group is sharedReport → the reveal is refused.
+    expect(await bridge.assignmentsRevealRaw(sharedGroup.members[0]!.assignmentId)).toBeNull();
+  });
+
+  it('super-admin can break-glass reveal ANY private send, writing an audit entry', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: mara.id, roleId: 'member', pin: null });
+    const q = await bridge.questionnairesSave({
+      title: 'Private check-in',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      questions: [{ id: 'c1', type: 'shortText', prompt: 'How are you?', required: true }],
+    });
+    const a = await bridge.assignmentsCreate({
+      questionnaireId: q.id,
+      recipientPersonId: mara.id,
+      privacy: 'private',
+    });
+    await bridge.sessionSetActive({ personId: mara.id });
+    await bridge.assignmentsSubmit({
+      assignmentId: a.id,
+      answers: [{ questionId: 'c1', value: 'Doing okay.' }],
+    });
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+
+    // The owner (no readRaw, not super-admin) cannot reveal a plain private send.
+    expect(await bridge.assignmentsRevealRaw(a.id)).toBeNull();
+
+    // The concealed super-admin can — any send — and it's audited (viaSuperAdmin true).
+    await bridge.superadminUnlock({ passphrase: 'secret-pass' });
+    const revealed = await bridge.assignmentsRevealRaw(a.id);
+    expect(revealed?.[0]?.answer).toBe('Doing okay.');
+    const log = await bridge.auditList();
+    expect(log).toHaveLength(1);
+    expect(log[0]).toMatchObject({ assignmentId: a.id, viaSuperAdmin: true });
   });
 
   it('saves/edits a dream, scoped to the active dreamer and gated by dreams.own', async () => {

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { CAPABILITIES, CAPABILITY_LABELS, DEFAULT_ROLES, roleAllows } from './capabilities';
+import {
+  CAPABILITIES,
+  CAPABILITY_LABELS,
+  DEFAULT_ROLES,
+  EXPLICIT_GRANT_ONLY,
+  roleAllows,
+} from './capabilities';
 import type { Role } from './schemas';
 
 describe('roleAllows', () => {
@@ -30,6 +36,36 @@ describe('roleAllows', () => {
 
   it('denies when there is no role', () => {
     expect(roleAllows(undefined, 'budgets.manage')).toBe(false);
+  });
+
+  it('does NOT auto-grant explicit-grant-only capabilities to the Owner (break-glass readRaw ships OFF)', () => {
+    const owner = DEFAULT_ROLES.find((role) => role.id === 'owner')!;
+    expect(EXPLICIT_GRANT_ONLY.has('questionnaires.readRaw')).toBe(true);
+    // The Owner has everything else, but readRaw is OFF until explicitly toggled.
+    expect(roleAllows(owner, 'questionnaires.readRaw')).toBe(false);
+    expect(owner.capabilities['questionnaires.readRaw']).toBe(false);
+  });
+
+  it('grants an explicit-grant-only capability once the stored map turns it on', () => {
+    const owner = DEFAULT_ROLES.find((role) => role.id === 'owner')!;
+    const granted: Role = {
+      ...owner,
+      capabilities: { ...owner.capabilities, 'questionnaires.readRaw': true },
+    };
+    expect(roleAllows(granted, 'questionnaires.readRaw')).toBe(true);
+    // A member who is granted it explicitly also gets it.
+    const member: Role = {
+      id: 'member',
+      name: 'Member',
+      builtin: true,
+      capabilities: { 'questionnaires.readRaw': true },
+    };
+    expect(roleAllows(member, 'questionnaires.readRaw')).toBe(true);
+  });
+
+  it('registers questionnaires.readRaw with a label', () => {
+    expect(CAPABILITIES).toContain('questionnaires.readRaw');
+    expect(CAPABILITY_LABELS['questionnaires.readRaw']).toContain('break-glass');
   });
 });
 

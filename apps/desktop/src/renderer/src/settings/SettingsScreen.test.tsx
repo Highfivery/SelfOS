@@ -4,10 +4,13 @@ import userEvent from '@testing-library/user-event';
 import './builtins';
 import { SettingsScreen } from './SettingsScreen';
 import { useSettingsStore } from './settingsStore';
+import { useSessionStore } from '../stores/sessionStore';
 import { clearMockBridge, installMockBridge } from '../test-utils/bridge';
+import { DEFAULT_ROLES } from '@shared/capabilities';
 
 afterEach(() => {
   clearMockBridge();
+  useSessionStore.setState({ activePerson: null, access: null, superAdmin: false });
   useSettingsStore.setState({
     values: {
       'appearance.theme': 'system',
@@ -18,6 +21,25 @@ afterEach(() => {
     loaded: false,
   });
 });
+
+/** Sign in as an admin (owner) so `can('settings.manage')` is true. */
+function asAdmin(): void {
+  useSessionStore.setState({
+    activePerson: {
+      id: 'owner-1',
+      schemaVersion: 1,
+      displayName: 'Ben',
+      isSubject: true,
+      tags: [],
+      createdAt: 'now',
+      updatedAt: 'now',
+    },
+    access: {
+      roles: DEFAULT_ROLES,
+      accounts: [{ personId: 'owner-1', roleId: 'owner', hasPin: false }],
+    },
+  });
+}
 
 describe('SettingsScreen', () => {
   it('renders the appearance section with the theme control', () => {
@@ -38,6 +60,21 @@ describe('SettingsScreen', () => {
       scope: 'vault',
     });
     expect(useSettingsStore.getState().values['appearance.theme']).toBe('dark');
+  });
+
+  it('hides the admin-only disclosure setting from non-admins and shows it (marked) to admins', async () => {
+    installMockBridge();
+    const { rerender } = render(<SettingsScreen />);
+    // Non-admin: the admin-only Questionnaires disclosure toggle is absent entirely.
+    await userEvent.click(screen.getByRole('button', { name: 'Questionnaires' }));
+    expect(screen.queryByText(/an admin could access answers/i)).not.toBeInTheDocument();
+
+    // Admin: it appears, carrying the "Admin only" marker.
+    asAdmin();
+    rerender(<SettingsScreen />);
+    await userEvent.click(screen.getByRole('button', { name: 'Questionnaires' }));
+    expect(screen.getByText(/an admin could access answers/i)).toBeInTheDocument();
+    expect(screen.getByText('Admin only')).toBeInTheDocument();
   });
 
   it('filters settings by search query', async () => {

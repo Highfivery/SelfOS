@@ -11,7 +11,7 @@ import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
 const renderResults = (): ReturnType<typeof render> =>
   render(
     <MemoryRouter>
-      <QuestionnaireResults questionnaireId="q1" />
+      <QuestionnaireResults questionnaireId="q1" compatibility={null} />
     </MemoryRouter>,
   );
 

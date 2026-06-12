@@ -22,6 +22,7 @@ import {
 import type {
   AnswerType,
   BranchRule,
+  CompatibilityVisibility,
   Question,
   Questionnaire,
   QuestionnaireInput,
@@ -33,6 +34,7 @@ import { QuestionnaireAiPanel } from './QuestionnaireAiPanel';
 import { QuestionnairePreview } from './QuestionnairePreview';
 import { QuestionnaireResults } from './QuestionnaireResults';
 import { QuestionnaireSendPanel } from './QuestionnaireSendPanel';
+import { CompatibilitySendPanel } from './CompatibilitySendPanel';
 import styles from './Questionnaires.module.css';
 
 type BuilderMode = 'edit' | 'preview' | 'results';
@@ -79,6 +81,25 @@ const SENSITIVITY_NOTES: Partial<Record<SensitivityTier, string>> = {
   unfiltered:
     'Recipients confirm their date of birth and consent when you send. Generated and analyzed strictly within Anthropic’s usage policy.',
 };
+
+/** Compatibility visibility options (08 §3.6). `senderSeesAll` needs `questionnaires.readRaw` to pick. */
+const VISIBILITY_OPTIONS: { value: CompatibilityVisibility; label: string; help: string }[] = [
+  {
+    value: 'sharedReport',
+    label: 'Shared report only',
+    help: 'Neither person sees the other’s raw answers — you both see a joint report.',
+  },
+  {
+    value: 'eachSeesOwn',
+    label: 'Each sees their own',
+    help: 'Each person also sees their own answers, plus the joint report.',
+  },
+  {
+    value: 'senderSeesAll',
+    label: 'You can reveal answers',
+    help: 'You can break-glass reveal raw answers (audited). Recipients are told their answers are shared with you.',
+  },
+];
 
 const TYPE_OPTIONS: { value: AnswerType; label: string }[] = [
   { value: 'shortText', label: 'Short text' },
@@ -300,6 +321,14 @@ export function QuestionnaireBuilder({
   const [sensitivity, setSensitivity] = useState<SensitivityTier>(
     questionnaire?.sensitivity ?? 'standard',
   );
+  // Compatibility (08 §3.6): goes to TWO people, AI personalizes a variant each, aligned by canonicalId.
+  const canReadRaw = useSessionStore((s) => s.can('questionnaires.readRaw'));
+  const [compatEnabled, setCompatEnabled] = useState(
+    questionnaire?.compatibility?.enabled ?? false,
+  );
+  const [visibility, setVisibility] = useState<CompatibilityVisibility>(
+    questionnaire?.compatibility?.visibility ?? 'sharedReport',
+  );
   const [drafts, setDrafts] = useState<QDraft[]>(
     questionnaire
       ? questionnaire.questions.map(fromQuestion)
@@ -410,7 +439,13 @@ export function QuestionnaireBuilder({
     title: title.trim(),
     type,
     sensitivity,
-    questions: drafts.map((d) => toQuestion(d, drafts)),
+    // When compatibility is on, stamp each question with a stable canonicalId (its own id) so the two
+    // AI-personalized variants stay aligned for the report (08 §3.6/§4.2).
+    questions: drafts.map((d) => {
+      const q = toQuestion(d, drafts);
+      return compatEnabled ? { ...q, canonicalId: q.canonicalId ?? q.id } : q;
+    }),
+    ...(compatEnabled ? { compatibility: { enabled: true as const, visibility } } : {}),
   });
 
   const onSave = async (): Promise<void> => {
@@ -502,7 +537,10 @@ export function QuestionnaireBuilder({
       </div>
 
       {mode === 'results' && questionnaire ? (
-        <QuestionnaireResults questionnaireId={questionnaire.id} />
+        <QuestionnaireResults
+          questionnaireId={questionnaire.id}
+          compatibility={questionnaire.compatibility ?? null}
+        />
       ) : mode === 'preview' ? (
         <QuestionnairePreview questions={previewQuestions} />
       ) : (
@@ -627,6 +665,59 @@ export function QuestionnaireBuilder({
 
               {SENSITIVITY_NOTES[sensitivity] ? (
                 <Banner tone="info">{SENSITIVITY_NOTES[sensitivity]}</Banner>
+              ) : null}
+
+              <div className={styles.compatRow}>
+                <div className={styles.requiredToggle}>
+                  <Switch
+                    checked={compatEnabled}
+                    onChange={(checked) => {
+                      setProblems(null);
+                      setCompatEnabled(checked);
+                    }}
+                    aria-label="Compatibility questionnaire"
+                  />
+                  <Text size="sm" weight={500}>
+                    Compatibility
+                  </Text>
+                </div>
+                <Text size="sm" tone="secondary">
+                  Send to two people at once. AI personalizes a version for each, then aligns their
+                  answers into a shared report. Requires AI to be on.
+                </Text>
+              </div>
+
+              {compatEnabled ? (
+                <Field label="Who sees what">
+                  {(props) => (
+                    <Stack gap={1}>
+                      <Select
+                        {...props}
+                        value={visibility}
+                        onChange={(event) => {
+                          setProblems(null);
+                          setVisibility(event.target.value as CompatibilityVisibility);
+                        }}
+                      >
+                        {VISIBILITY_OPTIONS.map((v) => (
+                          <option
+                            key={v.value}
+                            value={v.value}
+                            disabled={v.value === 'senderSeesAll' && !canReadRaw}
+                          >
+                            {v.label}
+                            {v.value === 'senderSeesAll' && !canReadRaw
+                              ? ' (needs permission)'
+                              : ''}
+                          </option>
+                        ))}
+                      </Select>
+                      <Text size="sm" tone="secondary">
+                        {VISIBILITY_OPTIONS.find((v) => v.value === visibility)?.help}
+                      </Text>
+                    </Stack>
+                  )}
+                </Field>
               ) : null}
             </Stack>
           </Card>
@@ -1063,15 +1154,28 @@ export function QuestionnaireBuilder({
           ) : null}
 
           {sendId ? (
-            <QuestionnaireSendPanel
-              questionnaireId={sendId}
-              title={title.trim()}
-              onCancel={() => setSendId(null)}
-              onSent={() => {
-                setSendId(null);
-                onDone();
-              }}
-            />
+            compatEnabled ? (
+              <CompatibilitySendPanel
+                questionnaireId={sendId}
+                title={title.trim()}
+                visibility={visibility}
+                onCancel={() => setSendId(null)}
+                onSent={() => {
+                  setSendId(null);
+                  onDone();
+                }}
+              />
+            ) : (
+              <QuestionnaireSendPanel
+                questionnaireId={sendId}
+                title={title.trim()}
+                onCancel={() => setSendId(null)}
+                onSent={() => {
+                  setSendId(null);
+                  onDone();
+                }}
+              />
+            )
           ) : null}
         </>
       )}

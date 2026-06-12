@@ -1,4 +1,4 @@
-import type { Question } from '../schemas';
+import type { Answer, Question, SendAnswer } from '../schemas';
 
 /**
  * Pure answering logic shared by every host that renders a questionnaire to be answered — preview /
@@ -98,4 +98,17 @@ export function formatAnswerForDisplay(question: Question, value: AnswerValue | 
     .filter((k) => value[k] !== undefined)
     .map((k) => `${k}: ${value[k]}`)
     .join(', ');
+}
+
+/**
+ * Format a whole response into display rows (prompt + formatted answer) for the surfaces that show raw
+ * answers to a permitted reader — the sender's Standard Results, the break-glass reveal, and the
+ * `eachSeesOwn` answerer's own answers (§3.6/§3.7/§8.4). One row per snapshot question, in authored order.
+ */
+export function formatResponseAnswers(questions: Question[], answers: Answer[]): SendAnswer[] {
+  const byId = new Map(answers.map((a) => [a.questionId, a.value]));
+  return questions.map((q) => ({
+    prompt: q.prompt,
+    answer: formatAnswerForDisplay(q, byId.get(q.id) as AnswerValue | undefined),
+  }));
 }

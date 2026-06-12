@@ -14,7 +14,9 @@ import { checkBudget, costOf, recordUsage } from '../usage';
 import {
   buildGenerationUserMessage,
   buildImproveUserMessage,
+  buildVariantUserMessage,
   GENERATION_SYSTEM,
+  VARIANT_SYSTEM,
 } from './aiPrompts';
 import { gatherGenerationContext, type GenerationContextRequest } from './contextProviders';
 
@@ -191,6 +193,47 @@ export async function generateQuestions(
       message: 'No usable questions came back. Try a clearer brief.',
     };
   }
+  return { ok: true, questions, usage: call.usage };
+}
+
+/**
+ * Generate one answerer's **personalized variant** of a compatibility questionnaire (08-questionnaires
+ * §3.6/§13.5d): rewrite each canonical prompt warmly for the target person, keeping the SAME answer type +
+ * `canonicalId` so the two variants stay aligned. Only prompts are personalized — the answer structure
+ * (type/options/scale/branch) is preserved from the canonical question, and the question id is kept (so a
+ * branch reference stays valid and the id doubles as the alignment key). The target context is limited to
+ * **shareable** facts (the §13.3 privacy boundary — a `targetContext` with `includeAuthor: false`).
+ */
+export async function generateVariant(
+  deps: AiDeps,
+  input: { forName: string; questions: Question[]; targetContext: GenerationContextRequest },
+): Promise<QuestionnaireGenerateResult> {
+  const context = await gatherGenerationContext(deps.fs, deps.key, input.targetContext);
+  const user = buildVariantUserMessage({
+    forName: input.forName,
+    ...(context.trim() ? { context } : {}),
+    prompts: input.questions.map((q) => q.prompt),
+  });
+  const call = await runClaude(deps, VARIANT_SYSTEM, user, 'questionnaire.generate', 1200);
+  if (!call.ok) return { ok: false, reason: call.reason, message: call.message };
+
+  const validated = z.array(z.string()).safeParse(extractJsonArray(call.text));
+  if (!validated.success || validated.data.length !== input.questions.length) {
+    return {
+      ok: false,
+      reason: 'REFUSED',
+      usage: call.usage,
+      message: 'Couldn’t personalize this questionnaire. Please try again.',
+    };
+  }
+  const questions: Question[] = input.questions.map((q, i) => {
+    const personalized = validated.data[i]?.trim();
+    return {
+      ...q,
+      canonicalId: q.canonicalId ?? q.id, // the alignment key (defaults to the canonical question id)
+      ...(personalized ? { prompt: personalized } : {}),
+    };
+  });
   return { ok: true, questions, usage: call.usage };
 }
 

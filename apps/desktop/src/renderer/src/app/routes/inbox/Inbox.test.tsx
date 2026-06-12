@@ -128,4 +128,51 @@ describe('Inbox', () => {
     expect(await screen.findByText(/submitted this questionnaire/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Submit' })).not.toBeInTheDocument();
   });
+
+  it('shows the compatibility disclosure derived from the visibility mode', async () => {
+    installMockBridge({
+      assignmentsInbox: () => Promise.resolve([item()]),
+      assignmentsGet: () =>
+        Promise.resolve(detail({ compatibility: { visibility: 'eachSeesOwn', report: null } })),
+    });
+    render(<Inbox />);
+
+    await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
+    // eachSeesOwn promises the answerer can review their own answers — derived, not hard-coded.
+    expect(await screen.findByText(/review your own answers/i)).toBeInTheDocument();
+  });
+
+  it('shows the answerer their joint report once they’ve submitted a compatibility send', async () => {
+    installMockBridge({
+      assignmentsInbox: () => Promise.resolve([item({ status: 'submitted', answerable: false })]),
+      assignmentsGet: () =>
+        Promise.resolve(
+          detail({
+            status: 'submitted',
+            answerable: false,
+            compatibility: {
+              visibility: 'sharedReport',
+              report: {
+                schemaVersion: 1,
+                compatibilityGroupId: 'g1',
+                questionnaireId: 'q1',
+                personAName: 'Alex',
+                personBName: 'Bri',
+                summary: 'You two are mostly aligned.',
+                items: [
+                  { canonicalId: 'c1', prompt: 'How connected?', agreement: 'aligned', note: '' },
+                ],
+                generatedAt: 'now',
+              },
+            },
+          }),
+        ),
+    });
+    render(<Inbox />);
+
+    await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
+    expect(await screen.findByText('Your shared report')).toBeInTheDocument();
+    expect(screen.getByText('You two are mostly aligned.')).toBeInTheDocument();
+    expect(screen.getByText('Aligned')).toBeInTheDocument();
+  });
 });

@@ -304,6 +304,12 @@
   padding-bottom: var(--space-2);
 }
 
+.compatRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
 .options {
   display: flex;
   flex-direction: column;
@@ -448,6 +454,47 @@
   margin: 0;
   color: var(--color-text-primary);
   overflow-wrap: anywhere;
+}
+
+/* Compatibility alignment items (§3.6). */
+.alignItem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.alignHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* The label text ("Aligned"/"Mixed"/"Different") carries the meaning; color is supplementary (§9). */
+.agreeBadge {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  padding: 0 var(--space-2);
+  white-space: nowrap;
+  background: var(--color-surface-alt);
+}
+
+.agreeAligned {
+  color: var(--color-success);
+}
+
+.agreeMixed {
+  color: var(--color-text-secondary);
+}
+
+.agreeDivergent {
+  color: var(--color-warning);
 }
 
 /* Mobile: one pane at a time. */

@@ -198,6 +198,13 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     assignmentsResults: () => Promise.resolve([]),
     assignmentsTrends: () => Promise.resolve([]),
     assignmentsDelete: () => Promise.resolve(),
+    assignmentsCreateCompatibility: () =>
+      Promise.resolve({ ok: true, compatibilityGroupId: 'group-1' }),
+    assignmentsCompatibility: () => Promise.resolve([]),
+    assignmentsAlign: () =>
+      Promise.resolve({ ok: false, reason: 'NOT_READY', message: 'Not ready.' }),
+    assignmentsRevealRaw: () => Promise.resolve(null),
+    auditList: () => Promise.resolve([]),
     dreamsList: () => Promise.resolve([]),
     dreamGet: () => Promise.resolve(null),
     dreamSave: (input) =>

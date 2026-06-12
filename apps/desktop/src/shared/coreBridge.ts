@@ -30,11 +30,19 @@ import {
   RoleSchema,
   SensitivityTierSchema,
   SettingsFileSchema,
+  type AlignmentResult,
   type Assignment,
+  type CompatibilityGroup,
+  type CompatibilityMember,
+  type CompatibilitySendResult,
+  type CompatibilityVisibility,
   type InboxAssignmentDetail,
+  type InboxCompatibilityView,
   type InboxItem,
   type Insight,
+  type Question,
   type QuestionTrend,
+  type RawAccessAuditEntry,
   type SendAnswer,
   type SendResult,
   type QuestionnaireAnalyzeResult,
@@ -118,12 +126,19 @@ import {
 import {
   addCustomType,
   analyzeAssignment,
+  appendAuditEntry,
   buildQuestionTrends,
   createAssignment,
+  createCompatibilitySend,
   declineAssignment,
   deleteQuestionnaireImage,
   deleteSend,
   formatAnswerForDisplay,
+  formatResponseAnswers,
+  generateAlignment,
+  generateVariant,
+  getAlignmentReport,
+  getCompatibilityGroup,
   hasSends,
   generateQuestions,
   getAssignment,
@@ -133,6 +148,7 @@ import {
   getResponse,
   improveQuestion,
   isAllowedImageMime,
+  listAuditEntries,
   isAnswerable,
   listAssignments,
   listCustomTypes,
@@ -383,6 +399,12 @@ const DeclineSchema = z.object({
   assignmentId: z.string().min(1),
   note: z.string().optional(),
 });
+const CompatibilityCreateSchema = z.object({
+  questionnaireId: z.string().min(1),
+  recipientPersonIdA: z.string().min(1),
+  recipientPersonIdB: z.string().min(1),
+});
+const GroupIdSchema = z.string().min(1);
 
 /** Build the renderer-facing `SelfosBridge` from a platform `BridgeHost`. */
 export function createCoreBridge(host: BridgeHost): SelfosBridge {
@@ -435,6 +457,16 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     const sender = await getPerson(fs, key, assignment.senderPersonId);
     return sender?.displayName ?? null;
   };
+
+  /** A send's recipient display name (person → their name; external → its displayName or "External"). */
+  const recipientDisplayName = async (
+    fs: FileSystem,
+    key: Uint8Array,
+    assignment: Assignment,
+  ): Promise<string> =>
+    assignment.recipient.kind === 'person'
+      ? ((await getPerson(fs, key, assignment.recipient.personId))?.displayName ?? 'Unknown')
+      : (assignment.recipient.displayName ?? 'External');
 
   /**
    * Resolve an assignment the active person is **allowed to answer** — they hold `questionnaires.answer`
@@ -1091,6 +1123,23 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const snapshot = await getAssignmentSnapshot(fs, key, assignment.id);
       if (!snapshot) return null;
       const draft = await getResponse(fs, key, assignment.id);
+      // For a compatibility send, surface the answerer's joint-report view per the visibility mode: the
+      // shared report (once the sender generates it) for everyone, plus their OWN answers for eachSeesOwn.
+      let compatibility: InboxCompatibilityView | undefined;
+      if (snapshot.compatibility?.enabled && assignment.compatibilityGroupId) {
+        const visibility = snapshot.compatibility.visibility;
+        const report = await getAlignmentReport(fs, key, assignment.compatibilityGroupId);
+        const submitted = draft && draft.submittedAt !== undefined ? draft : null;
+        const ownAnswers =
+          visibility === 'eachSeesOwn' && submitted
+            ? formatResponseAnswers(snapshot.questions, submitted.answers)
+            : undefined;
+        compatibility = {
+          visibility,
+          report,
+          ...(ownAnswers ? { ownAnswers } : {}),
+        };
+      }
       return {
         assignmentId: assignment.id,
         questionnaire: snapshot,
@@ -1099,6 +1148,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         senderName: await senderNameFor(fs, key, assignment),
         answers: draft?.answers ?? [],
         answerable: isAnswerable(assignment.status),
+        ...(compatibility ? { compatibility } : {}),
       };
     },
     assignmentsOpen: async (assignmentId): Promise<void> => {
@@ -1223,6 +1273,175 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         });
       }
       return buildQuestionTrends(trendSends);
+    },
+
+    // --- Compatibility (08-questionnaires §3.6/§13.5d) ---
+    assignmentsCreateCompatibility: async (input): Promise<CompatibilitySendResult> => {
+      const deps = await aiDeps('questionnaires.create');
+      if (!deps) return { ok: false, reason: 'DENIED', message: 'Not available.' };
+      const { questionnaireId, recipientPersonIdA, recipientPersonIdB } =
+        CompatibilityCreateSchema.parse(input);
+      if (recipientPersonIdA === recipientPersonIdB) {
+        return { ok: false, reason: 'INVALID', message: 'Choose two different people.' };
+      }
+      if (recipientPersonIdA === deps.personId || recipientPersonIdB === deps.personId) {
+        return {
+          ok: false,
+          reason: 'INVALID',
+          message: 'Send a compatibility check to two other people.',
+        };
+      }
+      const canonical = await getQuestionnaire(deps.fs, deps.key, questionnaireId);
+      if (!canonical?.compatibility?.enabled) {
+        return {
+          ok: false,
+          reason: 'INVALID',
+          message: 'This isn’t a compatibility questionnaire.',
+        };
+      }
+      const recipients = [recipientPersonIdA, recipientPersonIdB];
+      const people = await Promise.all(recipients.map((id) => getPerson(deps.fs, deps.key, id)));
+      if (people.some((p) => !p)) {
+        return { ok: false, reason: 'INVALID', message: 'A chosen recipient no longer exists.' };
+      }
+      // Personalize a variant per recipient (target = shareable facts only — the §13.3 boundary).
+      const variants: { personId: string; questions: Question[] }[] = [];
+      for (let i = 0; i < recipients.length; i++) {
+        const recipientId = recipients[i] as string;
+        const result = await generateVariant(deps, {
+          forName: people[i]?.displayName ?? 'them',
+          questions: canonical.questions,
+          targetContext: {
+            authorPersonId: deps.personId,
+            includeAuthor: false,
+            targetPersonId: recipientId,
+            includeTarget: true,
+            includeRelationship: true,
+          },
+        });
+        if (!result.ok || !result.questions) {
+          return {
+            ok: false,
+            reason: result.reason ?? 'ERROR',
+            message: result.message ?? 'Could not personalize.',
+          };
+        }
+        variants.push({ personId: recipientId, questions: result.questions });
+      }
+      const [a, b] = variants;
+      if (!a || !b) return { ok: false, reason: 'ERROR', message: 'Could not personalize.' };
+      const compatibilityGroupId = await createCompatibilitySend(deps.fs, deps.key, {
+        questionnaireId,
+        senderPersonId: deps.personId,
+        visibility: canonical.compatibility.visibility,
+        recipients: [a, b],
+      });
+      return { ok: true, compatibilityGroupId };
+    },
+    assignmentsCompatibility: async (questionnaireId): Promise<CompatibilityGroup[]> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.viewResults')))
+        return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      const qid = QuestionnaireIdSchema.parse(questionnaireId);
+      const canReveal = await activePersonCan(ctx.fs, ctx.key, 'questionnaires.readRaw');
+      // The active person's own compatibility sends of this questionnaire, grouped by their shared id.
+      const sends = (await listAssignments(ctx.fs, ctx.key, { senderPersonId: personId })).filter(
+        (a) => a.questionnaireId === qid && a.compatibilityGroupId,
+      );
+      const insightGroups = new Set(
+        (await listInsightsForPerson(ctx.fs, ctx.key, personId)).flatMap((i) =>
+          i.provenance.compatibilityGroupId ? [i.provenance.compatibilityGroupId] : [],
+        ),
+      );
+      const byGroup = new Map<string, Assignment[]>();
+      for (const a of sends) {
+        const gid = a.compatibilityGroupId as string;
+        byGroup.set(gid, [...(byGroup.get(gid) ?? []), a]);
+      }
+      const groups: CompatibilityGroup[] = [];
+      for (const [groupId, members] of byGroup) {
+        const memberViews: CompatibilityMember[] = [];
+        for (const a of members) {
+          memberViews.push({
+            assignmentId: a.id,
+            recipientName: await recipientDisplayName(ctx.fs, ctx.key, a),
+            status: a.status,
+            ...(a.status === 'submitted' ? { submittedAt: a.updatedAt } : {}),
+          });
+        }
+        const bothSubmitted = members.length >= 2 && members.every((a) => a.status === 'submitted');
+        const first = members[0];
+        const snapshot = first ? await getAssignmentSnapshot(ctx.fs, ctx.key, first.id) : null;
+        const visibility: CompatibilityVisibility =
+          snapshot?.compatibility?.visibility ?? 'sharedReport';
+        groups.push({
+          compatibilityGroupId: groupId,
+          questionnaireId: qid,
+          visibility,
+          members: memberViews,
+          bothSubmitted,
+          report: await getAlignmentReport(ctx.fs, ctx.key, groupId),
+          analyzed: insightGroups.has(groupId),
+          canReveal: visibility === 'senderSeesAll' && canReveal,
+        });
+      }
+      return groups;
+    },
+    assignmentsAlign: async (compatibilityGroupId): Promise<AlignmentResult> => {
+      const deps = await aiDeps('questionnaires.viewResults');
+      if (!deps) return { ok: false, reason: 'DENIED', message: 'Not available.' };
+      const groupId = GroupIdSchema.parse(compatibilityGroupId);
+      // Sender-scoped: only the person who sent the group may align it.
+      const group = await getCompatibilityGroup(deps.fs, deps.key, groupId);
+      if (group.length === 0 || group.some((a) => a.senderPersonId !== deps.personId)) {
+        return { ok: false, reason: 'DENIED', message: 'Not available.' };
+      }
+      return generateAlignment(deps, { compatibilityGroupId: groupId });
+    },
+    assignmentsRevealRaw: async (assignmentId): Promise<SendAnswer[] | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx) return null;
+      const id = AssignmentIdSchema.parse(assignmentId);
+      const assignment = await getAssignment(ctx.fs, ctx.key, id);
+      if (!assignment) return null;
+      const personId = await activePersonId();
+      const viaSuperAdmin = host.isSuperAdminActive();
+      // Read the snapshot once (server-side — the renderer can't spoof the visibility) for both the gate
+      // and the answer formatting.
+      const snapshot = await getAssignmentSnapshot(ctx.fs, ctx.key, assignment.id);
+      // Who may reveal raw answers: the concealed super-admin (any send), OR the sender of a
+      // `senderSeesAll` compatibility send holding `questionnaires.readRaw` (08 §8.4). Nothing else.
+      let permitted = viaSuperAdmin;
+      if (!permitted && assignment.senderPersonId === personId && assignment.compatibilityGroupId) {
+        permitted =
+          snapshot?.compatibility?.visibility === 'senderSeesAll' &&
+          (await activePersonCan(ctx.fs, ctx.key, 'questionnaires.readRaw'));
+      }
+      if (!permitted) return null;
+
+      const response = await getResponse(ctx.fs, ctx.key, assignment.id);
+      if (!snapshot || !response || response.submittedAt === undefined) return null;
+
+      // Audit BEFORE showing the answers — the trail is the whole point of break-glass (§8.4).
+      const entry: RawAccessAuditEntry = {
+        schemaVersion: 1,
+        at: new Date().toISOString(),
+        by: personId ?? 'super-admin',
+        viaSuperAdmin,
+        assignmentId: assignment.id,
+        recipientName: await recipientDisplayName(ctx.fs, ctx.key, assignment),
+        action: 'revealRaw',
+      };
+      await appendAuditEntry(ctx.fs, ctx.key, entry);
+      return formatResponseAnswers(snapshot.questions, response.answers);
+    },
+    auditList: async (): Promise<RawAccessAuditEntry[]> => {
+      const ctx = await host.vaultAndKey();
+      // Super-admin only — the break-glass trail is not a normal-capability surface (§8.4).
+      if (!ctx || !host.isSuperAdminActive()) return [];
+      return listAuditEntries(ctx.fs, ctx.key);
     },
 
     // --- Dreams (12-dreams) — gated by `dreams.own`, scoped to the active dreamer ---

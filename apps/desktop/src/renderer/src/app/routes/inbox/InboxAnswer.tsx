@@ -1,13 +1,27 @@
 import { useEffect, useState } from 'react';
 import { Lock } from 'lucide-react';
-import { unansweredRequired } from '@selfos/core/questionnaires';
+import {
+  ADMIN_ACCESS_DISCLOSURE,
+  compatibilityDisclosure,
+  unansweredRequired,
+} from '@selfos/core/questionnaires';
 import type { AnswerMap, AnswerValue } from '@selfos/core/questionnaires';
 import type { Answer, InboxAssignmentDetail } from '@shared/channels';
-import type { Question } from '@shared/schemas';
-import { Banner, Button, Heading, Stack, Text, Textarea } from '../../../design-system/components';
+import type { InboxCompatibilityView, Question } from '@shared/schemas';
+import {
+  Banner,
+  Button,
+  Card,
+  Heading,
+  Stack,
+  Text,
+  Textarea,
+} from '../../../design-system/components';
 import { useInboxStore } from '../../../stores/inboxStore';
+import { useSetting } from '../../../settings/useSetting';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { QuestionnaireForm } from '../questionnaires/QuestionnaireForm';
+import { AlignmentReportView, AnswerList } from '../questionnaires/AlignmentReportView';
 import styles from './Inbox.module.css';
 
 /** Decrypt an attached image for display; null (e.g. without `questionnaires.create`) renders alt text. */
@@ -44,6 +58,8 @@ export function InboxAnswer({
   const saveProgress = useInboxStore((s) => s.saveProgress);
   const submit = useInboxStore((s) => s.submit);
   const decline = useInboxStore((s) => s.decline);
+  // Whether recipients are told an admin could break-glass access answers (admin-only setting, §8.4).
+  const [discloseAdminAccess] = useSetting('questionnaires.discloseAdminAccess');
 
   const [detail, setDetail] = useState<InboxAssignmentDetail | null>(null);
   const [missing, setMissing] = useState(false);
@@ -90,6 +106,19 @@ export function InboxAnswer({
   }
 
   const asker = detail.senderName ?? 'Someone';
+  // The disclosure is DERIVED from the send (compatibility visibility, else privacy mode), so the promise
+  // shown to the recipient always matches what the system delivers (§3.2/§8.4). The admin-access line is
+  // appended only when the (admin-only) disclosure setting is on and an admin could ever reach the answers.
+  const disclosure = ((): string => {
+    if (detail.compatibility)
+      return compatibilityDisclosure(detail.compatibility.visibility, asker);
+    return detail.privacy === 'private'
+      ? 'Your answers personalize their coaching. They won’t see your individual responses — though your numeric ratings may appear in their trends over time.'
+      : 'They’ll see your answers.';
+  })();
+  const showsAdminAccess =
+    discloseAdminAccess === true && (detail.privacy === 'private' || Boolean(detail.compatibility));
+
   const onChange = (id: string, value: AnswerValue): void => {
     setSaved(false);
     setError(null);
@@ -144,7 +173,8 @@ export function InboxAnswer({
     }
   };
 
-  // Locked: already submitted or declined — no post-submit answer review (§3.3).
+  // Locked: already submitted or declined — no post-submit answer review (§3.3), EXCEPT a compatibility
+  // send shows the answerer the joint report (and, for eachSeesOwn, their own answers) per §3.6.
   if (!detail.answerable) {
     return (
       <Stack gap={3}>
@@ -154,6 +184,9 @@ export function InboxAnswer({
             ? 'You declined this questionnaire.'
             : 'You’ve submitted this questionnaire. Thanks for filling it out.'}
         </Banner>
+        {detail.status !== 'declined' && detail.compatibility ? (
+          <JointReport compatibility={detail.compatibility} asker={asker} />
+        ) : null}
         <div className={styles.footer}>
           <Button variant="secondary" onClick={onDone}>
             Back to Inbox
@@ -172,12 +205,11 @@ export function InboxAnswer({
           <span>From {asker}</span>
           <span aria-hidden="true">·</span>
           <span>
-            {detail.privacy === 'private' ? (
+            {detail.privacy === 'private' || detail.compatibility ? (
               <Lock size={12} aria-hidden="true" className={styles.privacyIcon} />
             ) : null}
-            {detail.privacy === 'private'
-              ? 'Your answers personalize their coaching. They won’t see your individual responses — though your numeric ratings may appear in their trends over time.'
-              : 'They’ll see your answers.'}
+            {disclosure}
+            {showsAdminAccess ? ` ${ADMIN_ACCESS_DISCLOSURE}` : ''}
           </span>
         </div>
       </Stack>
@@ -231,6 +263,46 @@ export function InboxAnswer({
           </div>
         </>
       )}
+    </Stack>
+  );
+}
+
+/**
+ * The answerer's view of a compatibility send after they've answered (§3.6): the shared report (once the
+ * sender generates it), plus their own submitted answers for `eachSeesOwn`. Never the other person's raw
+ * answers — only the joint report.
+ */
+function JointReport({
+  compatibility,
+  asker,
+}: {
+  compatibility: InboxCompatibilityView;
+  asker: string;
+}): JSX.Element {
+  const { report, ownAnswers } = compatibility;
+  return (
+    <Stack gap={3}>
+      {ownAnswers && ownAnswers.length > 0 ? (
+        <Card>
+          <Stack gap={2}>
+            <Heading level={3}>Your answers</Heading>
+            <AnswerList answers={ownAnswers} />
+          </Stack>
+        </Card>
+      ) : null}
+
+      <Card>
+        {report ? (
+          <Stack gap={3}>
+            <Heading level={3}>Your shared report</Heading>
+            <AlignmentReportView report={report} />
+          </Stack>
+        ) : (
+          <Text tone="secondary">
+            {asker} will share a compatibility report here once both of you have answered.
+          </Text>
+        )}
+      </Card>
     </Stack>
   );
 }

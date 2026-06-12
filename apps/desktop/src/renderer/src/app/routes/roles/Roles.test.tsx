@@ -33,6 +33,24 @@ describe('Roles', () => {
     expect(accessSaveRole).toHaveBeenCalled();
   });
 
+  it('leaves the owner toggleable for the break-glass readRaw capability (it ships OFF)', async () => {
+    const accessSaveRole = vi.fn(() => Promise.resolve({ roles: DEFAULT_ROLES, accounts: [] }));
+    installMockBridge({
+      accessSaveRole,
+      accessGet: () => Promise.resolve({ roles: DEFAULT_ROLES, accounts: [] }),
+    });
+    useSessionStore.setState({ access: { roles: DEFAULT_ROLES, accounts: [] } });
+    render(<Roles />);
+
+    const ownerReadRaw = screen.getByRole('switch', {
+      name: 'Owner: Reveal raw private answers (break-glass)',
+    });
+    expect(ownerReadRaw).not.toBeChecked(); // ships OFF even for the owner
+    expect(ownerReadRaw).not.toBeDisabled(); // …but it's togglable on the owner row
+    await userEvent.click(ownerReadRaw);
+    expect(accessSaveRole).toHaveBeenCalled();
+  });
+
   it('shows the owner column all-on even when a capability is missing from a stale stored map', () => {
     // A vault persisted before `budgets.manage` existed: the stored owner map lacks it.
     const staleRoles = [

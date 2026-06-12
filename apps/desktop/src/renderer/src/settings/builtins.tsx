@@ -14,6 +14,7 @@ declare module './types' {
     'ai.enabled': boolean;
     'ai.model': 'claude-sonnet-4-6' | 'claude-opus-4-8';
     'questionnaires.autoAnalyze': boolean;
+    'questionnaires.discloseAdminAccess': boolean;
     'dreams.memoryEnabled': boolean;
   }
 }
@@ -185,6 +186,19 @@ export function registerBuiltinSettings(): void {
       control: { type: 'switch' },
       order: 1,
       visibleWhen: aiEnabled,
+    }),
+    defineSetting({
+      key: 'questionnaires.discloseAdminAccess',
+      section: 'questionnaires',
+      label: 'Tell recipients an admin could access answers',
+      description:
+        'When on, people answering a private questionnaire are told a household owner or administrator may be able to access their answers (break-glass). Off by default, so recipients feel safe to be honest.',
+      schema: z.boolean(),
+      default: false,
+      control: { type: 'switch' },
+      scope: 'vault',
+      adminOnly: true,
+      order: 2,
     }),
     defineSetting({
       key: 'dreams.memoryEnabled',

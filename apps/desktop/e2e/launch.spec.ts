@@ -31,8 +31,9 @@ import {
   saveQuestionnaire,
   submitResponse,
 } from '@selfos/core/questionnaires';
-import { listInsightsForPerson, summarizeForContext } from '@selfos/core/insights';
+import { listInsightsForPerson, saveInsight, summarizeForContext } from '@selfos/core/insights';
 import { listDreams, saveAnalysis, saveDream } from '@selfos/core/dreams';
+import { saveConversation } from '@selfos/core/conversations';
 
 const MAIN = join(__dirname, '..', 'out', 'main', 'index.js');
 
@@ -3224,4 +3225,150 @@ test('vault: the VaultError screen offers a key-safe "Use a different vault" →
   };
   expect(state.vaultPath).toBeNull();
   await rm(userData, { recursive: true, force: true });
+});
+
+/** Seed a ready vault for the active owner, then return fs/key so a test can add per-person data. */
+async function seedHomeVault(settingsValues: Record<string, unknown> = {}): Promise<{
+  userData: string;
+  vault: string;
+  fs: ReturnType<typeof createNodeFileSystem>;
+  key: Uint8Array;
+}> {
+  const { userData, vault } = await seedReadyVault(settingsValues);
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('seedHomeVault: master key missing');
+  return { userData, vault, fs, key };
+}
+
+test('home: a brand-new person sees the getting-started state', async () => {
+  const { userData, vault } = await seedHomeVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await expect(w.getByRole('heading', { name: /welcome to selfos/i })).toBeVisible();
+    await expect(w.getByRole('button', { name: /start a session/i })).toBeVisible();
+    // No real cards yet, but the crisis affordance is always present (§7).
+    await expect(w.getByRole('heading', { name: /pick up where you left off/i })).toHaveCount(0);
+    await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('home: a seeded person sees the cards, links into them, and fits at 390px', async () => {
+  const { userData, vault, fs, key } = await seedHomeVault();
+  const now = new Date().toISOString();
+
+  // Two open sessions (one in-progress, one on-hold) + one completed (must NOT show in Continue).
+  await saveConversation(fs, key, {
+    id: 'c1',
+    schemaVersion: 1,
+    personId: 'owner-1',
+    title: 'A hard week',
+    status: 'inProgress',
+    messages: [{ role: 'user', content: 'hi', ts: now }],
+    createdAt: now,
+    updatedAt: now,
+  });
+  await saveConversation(fs, key, {
+    id: 'c2',
+    schemaVersion: 1,
+    personId: 'owner-1',
+    title: 'On the back burner',
+    status: 'onHold',
+    messages: [],
+    createdAt: now,
+    updatedAt: now,
+  });
+  await saveConversation(fs, key, {
+    id: 'c3',
+    schemaVersion: 1,
+    personId: 'owner-1',
+    title: 'Wrapped up',
+    status: 'complete',
+    messages: [],
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  // Two approved session insights with mood → the wellbeing trend (needs ≥2) + the memory card.
+  for (const [i, valence] of [-0.4, 0.5].entries()) {
+    await saveInsight(fs, key, {
+      id: `ins-${i}`,
+      schemaVersion: 1,
+      source: 'session',
+      subjectPersonId: 'owner-1',
+      summary: `Reflected on a tough patch (${i})`,
+      facts: [],
+      metrics: { moodValence: valence, moodEnergy: 0.1 },
+      confidence: 'medium',
+      approved: true,
+      provenance: { conversationId: `c${i + 1}`, at: `2026-06-0${i + 1}T00:00:00.000Z` },
+      createdAt: now,
+      updatedAt: `2026-06-0${i + 1}T00:00:00.000Z`,
+    });
+  }
+
+  // A dream → the recent-dreams card.
+  await saveDream(fs, key, {
+    id: 'd1',
+    schemaVersion: 1,
+    personId: 'owner-1',
+    title: 'The shifting city',
+    narrative: 'I was wandering through a city that kept rearranging itself.',
+    lucid: false,
+    nightmare: false,
+    tags: [],
+    people: [],
+    sensitivity: 'standard',
+    status: 'captured',
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await expect(w.getByRole('heading', { name: /tester/i, level: 1 })).toBeVisible();
+
+    // Continue card — the two open sessions, not the completed one.
+    await expect(w.getByRole('heading', { name: /pick up where you left off/i })).toBeVisible();
+    await expect(w.getByText('A hard week')).toBeVisible();
+    await expect(w.getByText('On the back burner')).toBeVisible();
+    await expect(w.getByText('Wrapped up')).toHaveCount(0);
+
+    // Wellbeing, dreams, memory all render.
+    await expect(w.getByRole('heading', { name: 'Wellbeing' })).toBeVisible();
+    await expect(w.getByRole('heading', { name: 'Recent dreams' })).toBeVisible();
+    await expect(w.getByText('The shifting city')).toBeVisible();
+    await expect(w.getByRole('heading', { name: /what the coach knows/i })).toBeVisible();
+
+    // 390px: no horizontal overflow anywhere (page-level AND no inner scrollbar).
+    await w.setViewportSize({ width: 390, height: 780 });
+    const offenders = await w.evaluate(() => {
+      const bad: string[] = [];
+      for (const el of Array.from(document.querySelectorAll('*'))) {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          bad.push(el.className || el.tagName);
+        }
+      }
+      const main = document.querySelector('main');
+      return { bad, mainOverflow: main ? main.scrollWidth - main.clientWidth : 0 };
+    });
+    expect(offenders.bad).toEqual([]);
+    expect(offenders.mainOverflow).toBeLessThanOrEqual(1);
+
+    // The Resume action opens the session in Sessions.
+    await w.setViewportSize({ width: 1100, height: 800 });
+    await w.getByRole('button', { name: 'Resume' }).first().click();
+    await expect(w).toHaveURL(/#\/sessions$/);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
 });

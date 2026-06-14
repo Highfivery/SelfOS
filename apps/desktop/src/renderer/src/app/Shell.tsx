@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { HashRouter, Route, Routes } from 'react-router-dom';
 import { AppShell } from './AppShell';
-import { Home } from './routes/Home';
+import { Home } from './routes/home/Home';
 import { Gallery } from './routes/Gallery';
 import { Sessions } from './routes/sessions/Sessions';
 import { Questionnaires } from './routes/questionnaires/Questionnaires';

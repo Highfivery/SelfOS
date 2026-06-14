@@ -1,6 +1,6 @@
 # 17 — Home dashboard (your overview)
 
-> **Status:** Review · _last updated 2026-06-12_
+> **Status:** Approved · _last updated 2026-06-14_
 >
 > The Home route (`/`) is a static placeholder today. This spec replaces it with a **living, per-person
 > overview** — what's going on right now: sessions to continue, suggested next steps, a gentle wellbeing
@@ -122,7 +122,7 @@ be added later. Either way, no new vault files, no schema changes.
 
 - **Renderer** — replace `routes/Home.tsx` (static) with a composed dashboard: a `Home` container + small
   presentational card components (`ContinueCard`, `SuggestionsCard`, `WellbeingCard`, `DreamsCard`,
-  `MemoryCard`, `InboxCard`, `UsageCard`), each self-hiding on empty. Reuse design-system primitives + the
+  `MemoryCard`, `InboxCard` — **no `UsageCard`**, §11), each self-hiding on empty. Reuse design-system primitives + the
   existing chart primitives (`LineChart`/`TrendLine`/`FrequencyBars`/`ProportionBar`); any genuinely-new card
   pattern goes to `/gallery` (DoD §12). A `homeStore` (or direct use of the existing per-person stores) loads
   what's needed, reset on `activePerson.id` change.
@@ -189,6 +189,27 @@ A/B/C have landed. It reads through the per-item shareability of `15` automatica
 
 _All resolved; the spec is build-ready pending final approval (and the A/B/C dependencies landing — §10)._
 
+## 13. Build decisions (2026-06-14)
+
+Two tensions surfaced at build (the spec's §3.3/§3.4 no-spend-on-load rule vs §11.3's gap-finder, which
+has **no cache** and always spends; and the DoD's "admin-vs-member $" with **no Usage card**). Resolved with
+the user:
+
+1. **Suggested card spend** — Home shows the **cached** guided suggestions on load (no spend). Generating /
+   refreshing guided suggestions, **and** the `08` questionnaire gap-finder (for people who can create
+   questionnaires), are **explicit-tap** affordances that spend **only on a deliberate tap** — never on load.
+   This satisfies decision #3 (both kinds, clearly labelled) without violating "no model call on load".
+2. **Dollars on Home** — the **Continue** card shows a per-session cost via the existing
+   `SessionCostIndicator` (09 §14.3): the `$` for `budgets.manage` admins (with `AdminOnlyBadge`), a
+   dollar-free budget bar for members. No other `$` on Home (the TopBar dropdown still owns usage totals).
+3. **Wellbeing read is deterministic** — the trend's plain-language read ("steadier than last week") is
+   computed from the metric points, **not** an AI call, so it always renders (no spend) and works AI-off.
+   The card self-hides until there are ≥2 analyzed session Insights; a crisis-flagged recent Insight surfaces
+   supportively, leading with resources (§7).
+4. **Cards are feature compositions, not new design-system primitives** — they reuse existing primitives
+   (Card/Stack/LineChart/FrequencyBars + `GuidedExerciseCard`/`SessionCostIndicator`/`CrisisFooter`), so no
+   new `/gallery` entry is required (the charts are already catalogued).
+
 ## 12. Changelog
 
 - 2026-06-12 — created (Draft). Package G of the 2026-06 app refresh; decisions captured in memory
@@ -197,3 +218,21 @@ _All resolved; the spec is build-ready pending final approval (and the A/B/C dep
 - 2026-06-12 — Review. Resolved §11: six cards (no Usage card — TopBar owns it); compose from existing stores
   (aggregator later if needed); suggestions = guided sessions + questionnaires; context-aware greeting.
   Build-ready pending final approval + the A/B/C dependencies.
+- 2026-06-14 — **Approved + BUILT** (Package G; on `feat/home-dashboard`, off `main`). Replaced the static
+  `routes/Home.tsx` with a per-active-person card dashboard under `routes/home/` (container + `ContinueCard` /
+  `SuggestionsCard` / `WellbeingCard` / `DreamsCard` / `MemoryCard` / `InboxCard` / `GettingStarted` + pure
+  `wellbeing.ts` / `greeting.ts`), composed **on the renderer from existing stores — no new IPC**. Two build
+  forks resolved with the user (§13): the Suggested card shows **cached** guided suggestions on load and the
+  guided generate/refresh **and** the `08` questionnaire gap-finder are **explicit-tap only** (spend on tap,
+  never on load); the Continue card shows per-session `$` via the existing `SessionCostIndicator` (admin `$` +
+  badge, member budget bar). The wellbeing read is **deterministic** (no AI). Each card self-hides on empty; a
+  brand-new person sees the warm getting-started state; `CrisisFooter` + not-medical line always present; a
+  recent crisis-flag surfaces supportively. Exported `toSeed` from `SuggestedPanel` + a router-state seed
+  pickup in `Questionnaires` so a Home gap-finder suggestion hands off to the builder. Code-reviewer **ship**
+  (applied: bound `hasRecentCrisis` to the latest 3 sessions; removed dead CSS; `overflow-wrap` on the dream
+  snippet; ready-gate to avoid an empty-grid flash; dropped the InboxCard head icon; §5 doc drift). Gate green:
+  typecheck (node + web/DOM-lib), lint, format, **340 core + 430 desktop + 8 relay** unit (+greeting/wellbeing
+  pure helpers, +5 Home RTL), **61 E2E** (+2: getting-started for a new person; a seeded person sees the cards,
+  Resume opens the session, 390px inner-scrollbar guard). Visual QA via the web preview at desktop (light +
+  dark, the 3-up card reflow) + 390px (single column, no overflow, no console errors). NOT merged (awaiting
+  user confirm). **This completes the 2026-06 app refresh (packages A–G).**

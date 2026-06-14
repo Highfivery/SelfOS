@@ -3,30 +3,6 @@
   display: inline-flex;
 }
 
-.trigger {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: none;
-  border-radius: var(--radius-md);
-  background: none;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition: background var(--motion-fast) var(--ease-standard);
-}
-
-.trigger:hover {
-  background: var(--color-surface-alt);
-  color: var(--color-text-primary);
-}
-
-.trigger:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 1px;
-}
-
 .backdrop {
   position: fixed;
   inset: 0;

@@ -41,9 +41,9 @@ export function BudgetEditor({
         <Text size="sm" weight={500}>
           {label}
         </Text>
-        {status.limitUsd !== null ? (
+        {status.limitUsd != null ? (
           <Text size="sm" tone={tone === 'ok' ? 'secondary' : 'accent'}>
-            {formatUsd(status.spentUsd)} / {formatUsd(status.limitUsd)} this {status.period}
+            {formatUsd(status.spentUsd ?? 0)} / {formatUsd(status.limitUsd)} this {status.period}
           </Text>
         ) : (
           <Text size="sm" tone="tertiary">
@@ -51,9 +51,9 @@ export function BudgetEditor({
           </Text>
         )}
       </Inline>
-      {status.limitUsd !== null ? (
+      {status.limitUsd != null ? (
         <progress
-          value={status.spentUsd}
+          value={status.spentUsd ?? 0}
           max={status.limitUsd}
           aria-label={`${label} budget used`}
         />

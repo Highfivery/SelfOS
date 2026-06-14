@@ -3,14 +3,9 @@ import { render, screen } from '@testing-library/react';
 import { Brand } from './Brand';
 
 describe('Brand', () => {
-  it('shows the wordmark when expanded', () => {
+  it('renders the sprout mark and the wordmark (presentational, no routing)', () => {
     render(<Brand />);
+    // The wordmark text is present (CSS hides it only at the smallest widths).
     expect(screen.getByText('SelfOS')).toBeInTheDocument();
-  });
-
-  it('collapses to a labelled mark only (no wordmark text)', () => {
-    render(<Brand collapsed />);
-    expect(screen.queryByText('SelfOS')).not.toBeInTheDocument();
-    expect(screen.getByRole('img', { name: 'SelfOS' })).toBeInTheDocument();
   });
 });

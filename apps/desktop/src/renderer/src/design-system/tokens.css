@@ -15,6 +15,16 @@
   --bp-lg: 1024px;
   --bp-xl: 1280px;
 
+  /* Integrated titlebar (02-app-shell §13). The header height must clear the macOS traffic-light
+     cluster; --titlebar-traffic-width reserves room for them before the brand (kept in lockstep with
+     trafficLightPosition in window.ts); --titlebar-window-controls-width reserves the Windows
+     titleBarOverlay min/max/close cluster at the right. --control-height is the shared height of every
+     titlebar control (the TitlebarControl primitive) so they align exactly. */
+  --titlebar-height: 44px;
+  --titlebar-traffic-width: 80px;
+  --titlebar-window-controls-width: 138px;
+  --control-height: 32px;
+
   /* Typography */
   --font-sans: 'Mulish Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-serif: 'Lora', Georgia, 'Times New Roman', serif;

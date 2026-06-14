@@ -1,0 +1,95 @@
+.header {
+  /* The titlebar's empty regions are the window drag handle; every control opts out with `no-drag`. */
+  -webkit-app-region: drag;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--titlebar-height);
+  padding: 0 var(--space-4);
+  /* On iOS the header clears the status bar / notch (0 on desktop/Electron — no-op there). */
+  padding-top: env(safe-area-inset-top, 0px);
+  background: var(--color-surface-alt);
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* Windows draws min/max/close into the bar at the right (titleBarOverlay) — reserve room for them. */
+.header[data-platform='win32'] {
+  padding-right: calc(var(--space-4) + var(--titlebar-window-controls-width));
+}
+
+.leadInset {
+  flex: none;
+  width: 0;
+  align-self: stretch;
+}
+
+/* The brand links Home; it opts out of the titlebar drag region so it stays clickable. */
+.brandLink {
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1);
+  margin: calc(var(--space-1) * -1);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+}
+
+.brandLink:hover {
+  background: var(--color-surface);
+}
+
+.brandLink:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 1px;
+}
+
+/* macOS traffic lights float at the top-left; reserve their width before the brand. In fullscreen
+   they hide, so the brand reclaims the space. */
+.header[data-platform='darwin']:not([data-fullscreen='true']) .leadInset {
+  width: var(--titlebar-traffic-width);
+}
+
+/* The mobile nav hamburger — hidden on desktop where the sidebar is always present. */
+.navSlot {
+  display: none;
+}
+
+.items {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-left: auto;
+  min-width: 0;
+}
+
+.syncSlot {
+  display: inline-flex;
+}
+
+/* Below --bp-sm the sync chip yields first (the in-content Banner still surfaces conflicts), so the
+   essential controls + the macOS traffic-light inset stay within the narrow titlebar. */
+@media (max-width: 479px) {
+  .syncSlot {
+    display: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .header {
+    padding-left: var(--space-3);
+    padding-right: var(--space-3);
+  }
+
+  .header[data-platform='win32'] {
+    padding-right: calc(var(--space-3) + var(--titlebar-window-controls-width));
+  }
+
+  .navSlot {
+    display: inline-flex;
+  }
+
+  .items {
+    gap: var(--space-2);
+  }
+}

@@ -222,6 +222,7 @@ function makeHost(): {
       superAdmin = active;
     },
     appVersion: '1.2.3',
+    platform: 'web',
     relay: {
       fetch: makeRelayFetch(),
       loadBundle: () => Promise.resolve({ script: 'export default {}', version: '1' }),
@@ -465,6 +466,34 @@ describe('createCoreBridge', () => {
     expect(memberCosts['m1']?.budgetRatio).toBeGreaterThanOrEqual(0);
     // A member can't see another person's sessions in their own rollup.
     expect(memberCosts['c1']).toBeUndefined();
+  });
+
+  it('returns budget $ to an admin but only a ratio to a member (budgetStatus redaction)', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    await bridge.chatStream({ conversationId: 'c1', userText: 'hello' });
+
+    // The owner (admin) sees the dollar figures + the ratio for their own budget.
+    const adminStatus = await bridge.budgetStatus();
+    expect(typeof adminStatus.person.spentUsd).toBe('number');
+    expect(adminStatus.person.limitUsd).toBe(10); // the $10/week default
+    expect(adminStatus.person.budgetRatio).toBeGreaterThanOrEqual(0);
+    expect(adminStatus.person.budgetRatio).toBeLessThanOrEqual(1);
+
+    // A member sees their own ratio + state, but NEVER the dollars (bridge-redacted), and nothing
+    // about the household app budget (the Everyone scope is admin-only).
+    const member = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: member.id, roleId: 'member', pin: null });
+    expect((await bridge.sessionSetActive({ personId: member.id })).ok).toBe(true);
+    await bridge.chatStream({ conversationId: 'm1', userText: 'hi from member' });
+    const memberStatus = await bridge.budgetStatus();
+    expect(memberStatus.person.spentUsd).toBeUndefined();
+    expect(memberStatus.person.limitUsd).toBeUndefined();
+    expect(memberStatus.person.budgetRatio).toBeGreaterThanOrEqual(0);
+    expect(memberStatus.person.state).not.toBe('none'); // they have the default budget
+    // The app (household) budget carries no spend for a member.
+    expect(memberStatus.app.spentUsd ?? 0).toBe(0);
+    expect(memberStatus.app.state).toBe('none');
   });
 
   it('denies session status + summarize to a person without sessions.own', async () => {

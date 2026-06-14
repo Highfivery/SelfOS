@@ -2,7 +2,7 @@ import { app, dialog, ipcMain, shell, type IpcMainInvokeEvent, type WebContents 
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { IpcChannels } from '../shared/channels';
+import { IpcChannels, type AppPlatform } from '../shared/channels';
 import { BootStateSchema, type BootState } from '../shared/schemas';
 import { createCoreBridge, readVaultSettingsValues, type BridgeHost } from '../shared/coreBridge';
 import { computeBootState } from './boot';
@@ -80,6 +80,12 @@ export function registerIpcHandlers(): void {
     isSuperAdminActive,
     setSuperAdminActive,
     appVersion: __APP_VERSION__,
+    // Drives the renderer titlebar layout; the renderer reads it from the preload bridge, but the
+    // host needs it to satisfy the shared shape (the coreBridge factory carries it through).
+    platform: ((): AppPlatform =>
+      process.platform === 'darwin' || process.platform === 'win32' || process.platform === 'linux'
+        ? process.platform
+        : 'unknown')(),
     relay: useFakeRelay
       ? { fetch: fakeRelayFetch(), loadBundle: fakeRelayBundle, currentVersion: RELAY_VERSION }
       : {

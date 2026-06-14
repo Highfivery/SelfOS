@@ -16,6 +16,8 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     getConflicts: () => Promise.resolve([]),
     revealVault: () => Promise.resolve(),
     onVaultChanged: () => () => {},
+    platform: 'web',
+    onFullscreenChanged: () => () => {},
     getAppVersion: () => Promise.resolve('0.0.0'),
     getSettings: () => Promise.resolve({ vault: {}, device: {} }),
     setSetting: () => Promise.resolve(),
@@ -110,8 +112,8 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     budgetSetPerson: () => Promise.resolve(),
     budgetStatus: () =>
       Promise.resolve({
-        person: { state: 'none', spentUsd: 0, limitUsd: null, period: null },
-        app: { state: 'none', spentUsd: 0, limitUsd: null, period: null },
+        person: { state: 'none', budgetRatio: 0, spentUsd: 0, limitUsd: null, period: null },
+        app: { state: 'none', budgetRatio: 0, spentUsd: 0, limitUsd: null, period: null },
       }),
     chatStream: (input) =>
       Promise.resolve({

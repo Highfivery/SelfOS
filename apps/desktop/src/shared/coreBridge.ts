@@ -12,6 +12,7 @@ import {
   type DreamImageResult,
   type DreamNarrativeResult,
   type DreamSharedImage,
+  type AppPlatform,
   type DreamShareResult,
   type DreamSynthesisResult,
   type GuidanceState,
@@ -278,6 +279,8 @@ export interface BridgeHost {
   setSuperAdminActive(active: boolean): void;
   /** The app version string (About section). */
   appVersion: string;
+  /** The host platform — drives the titlebar's window-control layout (02-app-shell §13). */
+  platform: AppPlatform;
 
   // --- Relay (external delivery, 08-questionnaires §5.2/§5.4) ---
   /** Relay host surface: outbound `fetch` (Cloudflare REST + Worker) + the built Worker bundle to deploy. */
@@ -620,6 +623,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     onVaultChanged: (listener) => host.onVaultChanged(listener),
     onChatChunk: (listener) => host.onChatChunk(listener),
     onDreamChunk: (listener) => host.onDreamChunk(listener),
+    platform: host.platform,
+    // iOS/web have no OS window chrome, so there is no fullscreen-titlebar transition to report.
+    onFullscreenChanged: () => () => {},
     getAppVersion: () => Promise.resolve(host.appVersion),
 
     // --- Settings ---
@@ -982,7 +988,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       await setPersonBudget(ctx.fs, ctx.key, personId, budget);
     },
     budgetStatus: async (): Promise<{ person: BudgetState; app: BudgetState }> => {
-      const none: BudgetState = { state: 'none', spentUsd: 0, limitUsd: null, period: null };
+      const none: BudgetState = {
+        state: 'none',
+        budgetRatio: 0,
+        spentUsd: 0,
+        limitUsd: null,
+        period: null,
+      };
       const ctx = await host.vaultAndKey();
       if (!ctx) return { person: none, app: none };
       const now = new Date();
@@ -991,7 +1003,17 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         ? await checkBudget(ctx.fs, ctx.key, { scope: 'person', personId, now })
         : none;
       const app = await checkBudget(ctx.fs, ctx.key, { scope: 'app', now });
-      return { person, app };
+      // $ is admin-only (the budgets.manage gate). A non-admin gets only `budgetRatio` (+ state/period)
+      // for their OWN budget — never the dollars over IPC — and nothing about the household app budget
+      // (the "Everyone" scope is admin-only too). Mirrors usage:summary / usage:sessionCosts redaction.
+      const canManage = await activePersonCan(ctx.fs, ctx.key, 'budgets.manage');
+      if (canManage) return { person, app };
+      const ratioOnly = (b: BudgetState): BudgetState => ({
+        state: b.state,
+        budgetRatio: b.budgetRatio,
+        period: b.period,
+      });
+      return { person: ratioOnly(person), app: none };
     },
 
     // --- Conversations + chat (05-conversations) ---

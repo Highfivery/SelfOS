@@ -145,6 +145,9 @@ function createBridgeHost(parts: HostParts): BridgeHost {
       superAdminActive = active;
     },
     appVersion: APP_VERSION,
+    // Native (Capacitor) → iOS; otherwise the browser preview → web. The titlebar renders no window
+    // controls on either (02-app-shell §13.2).
+    platform: Capacitor.isNativePlatform() ? 'ios' : 'web',
     relay: parts.relay,
     emitChatChunk: (chunk) => {
       for (const listener of chatListeners) listener(chunk);

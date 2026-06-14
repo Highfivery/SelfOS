@@ -155,7 +155,7 @@ test('boots straight to the shell when a valid vault is configured', async () =>
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    await expect(w.getByRole('complementary').getByText('SelfOS', { exact: true })).toBeVisible();
+    await expect(w.getByRole('banner').getByRole('link', { name: 'SelfOS' })).toBeVisible();
     await expect(w.getByRole('link', { name: 'Home' })).toBeVisible();
     await expect(w.getByRole('button', { name: /choose a folder/i })).toHaveCount(0);
   } finally {
@@ -2512,8 +2512,9 @@ test('settings: every section renders content without horizontal overflow', asyn
       expect(await noOverflow()).toBe(true);
     }
 
-    // Content sanity on the sections that previously had bugs.
-    await w.getByRole('button', { name: 'Vault' }).click();
+    // Content sanity on the sections that previously had bugs. (`exact` so it doesn't also match the
+    // titlebar "Vault: all synced" sync chip.)
+    await w.getByRole('button', { name: 'Vault', exact: true }).click();
     await expect(w.getByRole('button', { name: /reveal in file manager/i })).toBeVisible();
     await expect(w.getByText(vault, { exact: false })).toBeVisible(); // full path, wrapped
 
@@ -2982,12 +2983,14 @@ test('responsive: at a phone width the nav is a drawer and no screen overflows h
   }
 });
 
-test('design: the TopBar controls share a height and vertical alignment', async () => {
+test('design: the AppHeader titlebar controls share a height + vertical alignment', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    await expect(w.getByRole('link', { name: 'Home' })).toBeVisible();
+    await expect(w.getByRole('link', { name: 'Home', exact: true })).toBeVisible();
+    // Open the usage ring so it's mounted (it only renders with a person budget — always true here).
+    await expect(w.getByRole('button', { name: /AI usage/i })).toBeVisible();
     const geo = await w.evaluate(() => {
       const rect = (sel: string): { top: number; height: number } | null => {
         const el = document.querySelector(sel);
@@ -2996,19 +2999,80 @@ test('design: the TopBar controls share a height and vertical alignment', async 
         return { top: Math.round(r.top), height: Math.round(r.height) };
       };
       return {
-        appearance: rect('button[aria-label^="Appearance"]'),
+        sync: rect('button[aria-label^="Vault:"]'),
         ring: rect('button[aria-label*="AI usage"]'),
+        appearance: rect('button[aria-label^="Appearance"]'),
         account: rect('button[aria-label^="Signed in as"]'),
       };
     });
-    const items = [geo.appearance, geo.ring, geo.account];
+    const items = [geo.sync, geo.ring, geo.appearance, geo.account];
     for (const item of items) expect(item).not.toBeNull();
     const tops = items.map((i) => i?.top ?? -1);
     const heights = items.map((i) => i?.height ?? -1);
-    // The appearance toggle, usage ring, and account control must share a top edge + height
-    // (≤1px tolerance) — guards against the vertical-misalignment regression.
+    // The whole right cluster (sync chip · usage · appearance · account) shares a top edge + height
+    // (≤1px tolerance) — they all render through the one TitlebarControl primitive.
     expect(Math.max(...tops) - Math.min(...tops)).toBeLessThanOrEqual(1);
     expect(Math.max(...heights) - Math.min(...heights)).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+// macOS-only: the traffic lights are inset within the custom titlebar and the brand must start to
+// their right (reserved by --titlebar-traffic-width), never overlapping them.
+(process.platform === 'darwin' ? test : test.skip)(
+  'design (macOS): the brand clears the traffic-light inset and the usage dropdown links to /usage',
+  async () => {
+    const { userData, vault } = await seedReadyVault();
+    const app = await launch(userData);
+    try {
+      const w = await app.firstWindow();
+      const brandLink = w.getByRole('banner').getByRole('link', { name: 'SelfOS' });
+      await expect(brandLink).toBeVisible();
+
+      // The brand's left edge clears the reserved traffic-light inset (≈80px) so it never overlaps
+      // the macOS traffic lights (which occupy ~72px from the window's left edge).
+      const brandLeft = await brandLink.evaluate((el) =>
+        Math.round(el.getBoundingClientRect().left),
+      );
+      expect(brandLeft).toBeGreaterThanOrEqual(72);
+
+      // The enriched usage dropdown opens and links through to the full Usage page.
+      await w.getByRole('button', { name: /AI usage/i }).click();
+      await expect(w.getByRole('dialog', { name: 'AI usage' })).toBeVisible();
+      await w.getByRole('button', { name: 'View usage details →' }).click();
+      await expect(w.getByRole('heading', { name: 'Usage' })).toBeVisible();
+    } finally {
+      await app.close();
+      await rm(userData, { recursive: true, force: true });
+      await rm(vault, { recursive: true, force: true });
+    }
+  },
+);
+
+test('design: the brand collapses to the tile-only mark at phone width (no wordmark)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    const brandLink = w.getByRole('banner').getByRole('link', { name: 'SelfOS' });
+    await expect(brandLink).toBeVisible();
+    // At desktop width the wordmark text is visible…
+    await expect(brandLink.getByText('SelfOS')).toBeVisible();
+
+    await app.evaluate(({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows()[0];
+      if (win) {
+        win.setMinimumSize(360, 480);
+        win.setSize(390, 800);
+      }
+    });
+    await w.waitForTimeout(150);
+    // …but below --bp-sm only the tile shows; the link keeps its accessible name.
+    await expect(brandLink.getByText('SelfOS')).toBeHidden();
+    await expect(brandLink).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -3024,7 +3088,7 @@ test('vault: Change vault unlinks the current vault, routes to onboarding, and l
   try {
     const w = await app.firstWindow();
     // Boots straight into the shell (signed in as the seeded owner).
-    await expect(w.getByRole('complementary').getByText('SelfOS', { exact: true })).toBeVisible();
+    await expect(w.getByRole('banner').getByRole('link', { name: 'SelfOS' })).toBeVisible();
 
     // Settings → Vault → Change vault… → confirm.
     await w.getByRole('link', { name: 'Settings' }).click();

@@ -18,28 +18,11 @@
   white-space: nowrap;
 }
 
+/* Extends the shared TitlebarControl: cap the width so a long name ellipsizes instead of pushing the
+   other controls. */
 .trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  max-width: 180px;
-  height: 32px;
-  padding: 0 var(--space-2);
-  border: none;
-  border-radius: var(--radius-md);
-  background: none;
-  color: var(--color-text-primary);
+  max-width: 200px;
   font-size: var(--text-sm);
-  cursor: pointer;
-}
-
-.trigger:hover {
-  background: var(--color-surface-alt);
-}
-
-.trigger:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 1px;
 }
 
 .avatar {
@@ -57,12 +40,13 @@
 }
 
 .name {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* On very narrow screens the name yields to keep the TopBar uncrowded (avatar + chevron remain). */
+/* On very narrow screens the name yields to keep the titlebar uncrowded (avatar + chevron remain). */
 @media (max-width: 479px) {
   .name {
     display: none;

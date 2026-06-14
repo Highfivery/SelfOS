@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Check, Monitor, Moon, Sun, type LucideIcon } from 'lucide-react';
 import { useSetting } from '../settings/useSetting';
+import { TitlebarControl } from '../design-system/components';
 import type { Appearance } from '../design-system/theme';
 import styles from './AppearanceMenu.module.css';
 
@@ -16,7 +17,7 @@ const OPTIONS: ReadonlyArray<{ value: Appearance; label: string; icon: LucideIco
 ];
 
 /**
- * Compact appearance control for the TopBar (02-app-shell §3.5): a single icon button showing the
+ * Compact appearance control for the titlebar (02-app-shell §3.5/§13): a single icon button showing the
  * active theme, opening a popover with System / Light / Dark — mirroring the usage-ring and account
  * menus so it reads as a native top-bar control and conserves horizontal space.
  */
@@ -37,16 +38,14 @@ export function AppearanceMenu(): JSX.Element {
 
   return (
     <div className={styles.wrap}>
-      <button
-        type="button"
-        className={styles.trigger}
+      <TitlebarControl
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`Appearance: ${current.label}`}
         onClick={() => setOpen((value) => !value)}
       >
         <CurrentIcon size={18} aria-hidden="true" />
-      </button>
+      </TitlebarControl>
       {open ? (
         <>
           <button

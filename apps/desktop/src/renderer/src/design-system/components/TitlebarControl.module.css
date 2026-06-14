@@ -1,0 +1,41 @@
+.control {
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: var(--control-height);
+  min-width: var(--control-height);
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
+}
+
+.control:hover {
+  background: var(--color-surface-alt);
+  color: var(--color-text-primary);
+}
+
+.control:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 1px;
+}
+
+/* Attention state (e.g. a sync conflict). Colour is paired with an icon + text label, never on its
+   own (01-design-system §9). */
+.warning {
+  color: var(--color-warning);
+}
+
+.warning:hover {
+  color: var(--color-warning);
+  background: var(--color-surface-alt);
+}

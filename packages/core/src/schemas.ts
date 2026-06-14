@@ -71,6 +71,16 @@ export const DeviceStateSchema = z.object({
 export type DeviceState = z.infer<typeof DeviceStateSchema>;
 
 /**
+ * A device-state update patch. Like `Partial<DeviceState>`, but `vaultBookmark` (the optional iOS/web
+ * vault pointer) may be set to `undefined` to explicitly clear it — it's dropped on the JSON write
+ * (14-vault-relinking §5.1). Required-nullable fields (e.g. `vaultPath`) still take `null`, not
+ * `undefined`, so this stays sound.
+ */
+export type DeviceStatePatch = Omit<Partial<DeviceState>, 'vaultBookmark'> & {
+  vaultBookmark?: string | undefined;
+};
+
+/**
  * People, relationships, and access (04-people-roles). Person/Relationship content is written
  * encrypted at rest; these schemas validate the decrypted shape.
  */

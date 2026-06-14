@@ -239,6 +239,34 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-14 — Build (**Vault relinking slice 2 — the Settings "Change vault…" control + dialog + route-back**;
+  [14-vault-relinking](docs/specs/14-vault-relinking.md) §3/§5.3/§5.4/§13 slice 2). The first user-facing
+  surface: a **`vault.change`** custom row in Settings → Vault (no admin gate — any signed-in person, decision
+  #3) opening a hand-rolled **`ChangeVaultDialog`** (`role="dialog"`, mirrors LockScreen/SuperAdminUnlock — no
+  new design-system primitive, decision #6; Esc/scrim/Cancel = no-op, `aria-busy` on Continue, calm danger
+  Banner on failure). On Continue → **`appStore.unlink()`**: calls `unlinkVault()`, resets `sessionStore`
+  (new `reset()`) + **every** per-person store (the AppShell list **+ `resultsStore`**), then `apply(boot)` →
+  onboarding; the Shell unmounts and the existing "Choose a folder" + `HouseholdGate` take over (no new
+  routing). **Cross-platform fix found in visual QA:** the web/iOS host keys the active vault on
+  **`vaultBookmark`**, not `vaultPath`, so the factory now clears **both** pointers — added a sound
+  **`DeviceStatePatch`** type (lets the optional `vaultBookmark` be cleared to `undefined`; required-nullable
+  `vaultPath` still takes `null`) threaded through `BridgeHost.updateDeviceState` + the node & web device
+  stores. **Also closed a pre-existing gap:** `resultsStore` (sender-scoped Results/trends) now resets on an
+  active-person switch in `AppShell` too. Code-reviewer **ship** (master key still cleared first, no vault
+  bytes touched, API keys preserved, no import cycle, `DeviceStatePatch` sound; applied both should-fixes —
+  `aria-busy` + the `resultsStore` AppShell reset — and the web-host clear test). Gate green: typecheck (node +
+  web/DOM-lib), lint, format, **269 core + 358 desktop** unit (+`appStore` unlink/rethrow, +`ChangeVaultDialog`
+  6, +`customRows` 1, +`webStores` vaultBookmark-clear, +bridge vaultBookmark assertion), **+1 E2E** (Settings →
+  Change vault → Continue → onboarding; vault A `recovery.enc` **byte-identical** + device pointer cleared +
+  **re-linkable** via the recovery-phrase UnlockScreen; a 390px dialog overflow guard). **Visual QA** via the
+  web preview at desktop + 390px (the dialog reads calm/reversible — bold-led points, the amber recovery-phrase
+  caveat, bottom-aligned Continue/Cancel; the new Settings row sits cohesively under Location/Reveal; the full
+  web flow Change vault → onboarding verified end-to-end with no console errors — proving the iOS/web host gets
+  unlink via the shared factory). On `feat/vault-relinking-slice-2` off `main`. **Lesson: the active-vault
+  pointer is platform-specific — Electron `vaultPath` vs web/iOS `vaultBookmark` — so any detach must clear
+  BOTH; a fix that only cleared `vaultPath` left the web/iOS app stuck (key gone but bookmark present).**
+  **NEXT: slice 3** — the VaultError "Use a different vault" affordance (unlink-backed, key-safe; fixes the
+  latent stale-key bug in that screen's "Choose a different folder").
 - 2026-06-14 — Build (**Vault relinking slice 1 — the `vault:unlink` backend op + IPC seam**;
   [14-vault-relinking](docs/specs/14-vault-relinking.md) §5/§6/§13 slice 1). The first slice of the approved
   spec 14 (let users unlink the current vault folder + select a different one). **Backend only, no UI** — the

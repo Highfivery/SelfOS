@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { DeviceStateSchema, type DeviceState } from '../../shared/schemas';
+import { DeviceStateSchema, type DeviceState, type DeviceStatePatch } from '../../shared/schemas';
 import { pathExists, readJson, writeJsonAtomic } from '../vault/atomic';
 import { migrate, type MigrationSet } from '../vault/migrations';
 
@@ -31,7 +31,7 @@ export async function writeDeviceState(userDataDir: string, state: DeviceState):
 /** Merge a partial update into device-local state and persist it. */
 export async function updateDeviceState(
   userDataDir: string,
-  patch: Partial<DeviceState>,
+  patch: DeviceStatePatch,
 ): Promise<DeviceState> {
   const next = { ...(await readDeviceState(userDataDir)), ...patch };
   await writeDeviceState(userDataDir, next);

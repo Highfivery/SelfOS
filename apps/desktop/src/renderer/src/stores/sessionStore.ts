@@ -34,6 +34,8 @@ interface SessionState {
   lockSuperAdmin: () => void;
   /** Log out: lock to the full-screen person picker and drop any super-admin elevation. */
   lock: () => void;
+  /** Drop all session state back to its initial in-memory values (e.g. after unlinking the vault). */
+  reset: () => void;
 }
 
 export const useSessionStore = create<SessionState>((set, get) => ({
@@ -99,4 +101,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     if (get().superAdmin) void window.selfos?.superadminLock();
     set({ locked: true, superAdmin: false });
   },
+  reset: () =>
+    set({
+      status: null,
+      activePerson: null,
+      access: null,
+      loaded: false,
+      superAdmin: false,
+      unlockPromptOpen: false,
+      locked: false,
+    }),
 }));

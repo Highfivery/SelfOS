@@ -2,7 +2,13 @@ import { z } from 'zod';
 import { ClipboardList, Database, Info, Moon, Palette, Send, Sparkles } from 'lucide-react';
 import { registerSection, registerSettings } from './registry';
 import { defineSetting } from './types';
-import { AboutDisclaimer, AboutVersion, RevealVaultRow, VaultLocationValue } from './customRows';
+import {
+  AboutDisclaimer,
+  AboutVersion,
+  ChangeVaultRow,
+  RevealVaultRow,
+  VaultLocationValue,
+} from './customRows';
 import { ApiKeyControl, OpenAiKeyControl, TestConnectionControl } from './aiControls';
 import { RelaySettingsPanel } from './RelaySettingsPanel';
 import { RelayMessagesControl } from './RelayMessagesControl';
@@ -335,6 +341,16 @@ export function registerBuiltinSettings(): void {
       default: null,
       control: { type: 'custom', render: RevealVaultRow },
       order: 2,
+    }),
+    defineSetting({
+      key: 'vault.change',
+      section: 'vault',
+      label: 'Change vault',
+      description: 'Unlink this vault and switch to a different folder. Your data is not deleted.',
+      schema: z.null(),
+      default: null,
+      control: { type: 'custom', render: ChangeVaultRow },
+      order: 3,
     }),
     defineSetting({
       key: 'about.version',

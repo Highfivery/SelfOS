@@ -68,6 +68,15 @@ describe('webDeviceStore', () => {
     await webDeviceStore('A').update({ activePersonId: 'owner-1' });
     expect((await webDeviceStore('B').read()).activePersonId).toBeUndefined();
   });
+
+  it('clears the vault bookmark when patched with undefined (14-vault-relinking unlink)', async () => {
+    const store = webDeviceStore('A');
+    await store.update({ vaultBookmark: 'SelfOS' });
+    expect((await store.read()).vaultBookmark).toBe('SelfOS');
+    // Unlink clears the web/iOS vault pointer — undefined drops the key on the JSON write.
+    await store.update({ vaultBookmark: undefined });
+    expect((await store.read()).vaultBookmark).toBeUndefined();
+  });
 });
 
 describe('webDeviceSettings', () => {

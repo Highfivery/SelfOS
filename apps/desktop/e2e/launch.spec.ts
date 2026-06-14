@@ -2659,3 +2659,68 @@ test('design: the TopBar controls share a height and vertical alignment', async 
     await rm(vault, { recursive: true, force: true });
   }
 });
+
+test('vault: Change vault unlinks the current vault, routes to onboarding, and leaves data intact + re-linkable', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const recoveryBefore = await readFile(join(vault, 'config', 'recovery.enc'));
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    // Boots straight into the shell (signed in as the seeded owner).
+    await expect(w.getByRole('complementary').getByText('SelfOS', { exact: true })).toBeVisible();
+
+    // Settings → Vault → Change vault… → confirm.
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'Vault', exact: true }).click();
+    await w.getByRole('button', { name: /change vault/i }).click();
+    const dialog = w.getByRole('dialog', { name: 'Change vault' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText(/recovery phrase/i)).toBeVisible();
+
+    // The dialog fits at phone width (no horizontal overflow on the panel).
+    await app.evaluate(({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows()[0];
+      if (win) {
+        win.setMinimumSize(360, 480);
+        win.setSize(390, 800);
+      }
+    });
+    await w.waitForTimeout(150);
+    const dialogOverflow = await w.evaluate(() => {
+      const panel = document.querySelector('[role="dialog"]');
+      return panel ? panel.scrollWidth - panel.clientWidth : 0;
+    });
+    expect(dialogOverflow).toBeLessThanOrEqual(1);
+
+    await dialog.getByRole('button', { name: 'Continue' }).click();
+
+    // Lands on the onboarding "Choose a folder" screen — no shell.
+    await expect(w.getByRole('button', { name: /choose a folder/i })).toBeVisible();
+    await expect(w.getByRole('complementary')).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+
+  // No data loss: the old vault's recovery bundle is byte-identical; the device forgot the vault path.
+  const recoveryAfter = await readFile(join(vault, 'config', 'recovery.enc'));
+  expect(recoveryAfter.equals(recoveryBefore)).toBe(true);
+  const state = JSON.parse(await readFile(join(userData, 'state.json'), 'utf8')) as {
+    vaultPath: string | null;
+  };
+  expect(state.vaultPath).toBeNull();
+
+  // Re-link proof: re-point the device at the same vault and relaunch. Because the master key was
+  // cleared, the initialized vault now routes to the recovery-phrase UnlockScreen — intact + re-openable.
+  await writeJson(join(userData, 'state.json'), { schemaVersion: 1, vaultPath: vault });
+  const app2 = await launch(userData);
+  try {
+    const w2 = await app2.firstWindow();
+    await expect(w2.getByRole('heading', { name: 'This vault is already set up' })).toBeVisible();
+    await expect(w2.getByLabel('Recovery phrase')).toBeVisible();
+  } finally {
+    await app2.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});

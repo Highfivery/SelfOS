@@ -218,8 +218,13 @@ The only genuinely new backend logic. It performs, in order:
    chokidar handle keeps watching the folder we're leaving.
 2. **Clear the master key** — `secrets.clear(MASTER_KEY_ID)` via the `SecretStore` host. **The critical step**
    (§1.1 / §7.1).
-3. **Clear device-local pointers** — `updateDeviceState(userDataDir, { vaultPath: null, activePersonId: null,
-pendingJoinPersonId: null })`.
+3. **Clear device-local pointers** — `updateDeviceState({ vaultPath: null, vaultBookmark: undefined,
+activePersonId: null, pendingJoinPersonId: null })`. **Both** vault pointers are cleared: Electron keys the
+   active vault on `vaultPath`, but the **web/iOS host keys it on `vaultBookmark`** (07-mobile-platform) — each
+   host reads only its own, so clearing both keeps the detach correct on every platform. Clearing an
+   **optional** field to `undefined` needs the `DeviceStatePatch` type (a `Partial<DeviceState>` that lets
+   `vaultBookmark` be `undefined`; required-nullable `vaultPath` still takes `null`), threaded through
+   `BridgeHost.updateDeviceState` and both the node + web device stores.
 4. **Reset super-admin inspect mode** — `setSuperAdminActive(false)` /
    `host.setSuperAdminActive(false)` (`apps/desktop/src/main/people/superAdmin.ts`), so a leftover break-glass
    session can't bleed into the next vault.

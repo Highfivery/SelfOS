@@ -6,7 +6,7 @@ import type {
 } from '@selfos/core/host';
 import type { SecretStore } from '@selfos/core/host';
 import { fromBase64 } from '@selfos/core/encoding';
-import { DeviceStateSchema, type DeviceState } from '@shared/schemas';
+import { DeviceStateSchema, type DeviceState, type DeviceStatePatch } from '@shared/schemas';
 
 /**
  * Device-local stores for the **web preview** of the iOS app (07-mobile-platform §5.3, slice iii-b2),
@@ -65,7 +65,7 @@ export function scrubLegacyLocalStorageSecrets(): void {
 
 export interface WebDeviceStore {
   read(): Promise<DeviceState>;
-  update(patch: Partial<DeviceState>): Promise<DeviceState>;
+  update(patch: DeviceStatePatch): Promise<DeviceState>;
 }
 
 /** A `localStorage`-backed device-state store (active person, vault bookmark, pending join), per device. */

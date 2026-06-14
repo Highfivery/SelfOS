@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { FolderOpen } from 'lucide-react';
+import { FolderOpen, FolderSync } from 'lucide-react';
 import { Button, Text } from '../design-system/components';
 import { useAppStore } from '../stores/appStore';
 import { useSessionStore } from '../stores/sessionStore';
+import { ChangeVaultDialog } from './ChangeVaultDialog';
 
 export function VaultLocationValue(): JSX.Element {
   const vaultPath = useAppStore((s) => s.vaultPath);
@@ -19,6 +20,23 @@ export function RevealVaultRow(): JSX.Element {
       <FolderOpen size={16} aria-hidden="true" />
       Reveal in file manager
     </Button>
+  );
+}
+
+/**
+ * "Change vault…" — unlink the current vault and pick a different one (14-vault-relinking §3.1). Any
+ * signed-in person may use it (no admin gate); the confirmation dialog explains what happens.
+ */
+export function ChangeVaultRow(): JSX.Element {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button variant="secondary" onClick={() => setOpen(true)}>
+        <FolderSync size={16} aria-hidden="true" />
+        Change vault…
+      </Button>
+      {open ? <ChangeVaultDialog onClose={() => setOpen(false)} /> : null}
+    </>
   );
 }
 

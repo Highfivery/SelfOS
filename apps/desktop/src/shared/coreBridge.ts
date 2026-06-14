@@ -56,6 +56,7 @@ import {
   type Budget,
   type Conversation,
   type DeviceState,
+  type DeviceStatePatch,
   type Dream,
   type DreamAnalysis,
   type DreamPatternStats,
@@ -250,7 +251,7 @@ export interface BridgeHost {
 
   // --- Device-local state ---
   readDeviceState(): Promise<DeviceState>;
-  updateDeviceState(patch: Partial<DeviceState>): Promise<DeviceState>;
+  updateDeviceState(patch: DeviceStatePatch): Promise<DeviceState>;
   /** Device-scoped settings (`key → value`); device-local, separate from the synced vault settings. */
   readDeviceSettings(): Promise<Record<string, unknown>>;
   writeDeviceSettings(values: Record<string, unknown>): Promise<void>;
@@ -745,8 +746,11 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       await host.secrets.clear(MASTER_KEY_ID);
       // Forget the vault pointer + this device's session/join state (all device-local). Touch NOTHING
       // inside the vault on disk — the folder stays byte-intact and re-linkable via its recovery phrase.
+      // Clear BOTH pointers: `vaultPath` (Electron) and `vaultBookmark` (the web/iOS bookmark) — each
+      // host reads only its own, so clearing both keeps the detach correct on every platform.
       await host.updateDeviceState({
         vaultPath: null,
+        vaultBookmark: undefined,
         activePersonId: null,
         pendingJoinPersonId: null,
       });

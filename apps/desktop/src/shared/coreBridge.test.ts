@@ -17,6 +17,7 @@ import {
   type RelayEnv,
 } from '@selfos/core/relay';
 import { ANTHROPIC_API_KEY_ID, OPENAI_API_KEY_ID } from './channels';
+import { DeviceStateSchema } from './schemas';
 import type { BootState, DeviceState } from './schemas';
 import { createCoreBridge, type BridgeHost } from './coreBridge';
 
@@ -179,7 +180,9 @@ function makeHost(): {
     image,
     readDeviceState: () => Promise.resolve(device),
     updateDeviceState: (patch) => {
-      device = { ...device, ...patch };
+      // Mirror the real stores: re-validate the merge so a cleared optional (vaultBookmark: undefined)
+      // is dropped, keeping `device` a clean DeviceState.
+      device = DeviceStateSchema.parse({ ...device, ...patch });
       return Promise.resolve(device);
     },
     readDeviceSettings: () => Promise.resolve(deviceSettings),
@@ -266,16 +269,23 @@ describe('createCoreBridge', () => {
     // Precondition: a fully set-up, key-holding device with an active owner, a pending join, and a live
     // super-admin inspect session — every device-local thing unlink must clear.
     host.host.setSuperAdminActive(true);
-    await host.host.updateDeviceState({ pendingJoinPersonId: 'pending-x' });
+    // Set a vaultBookmark too — the web/iOS vault pointer — to prove unlink clears it cross-platform.
+    await host.host.updateDeviceState({
+      pendingJoinPersonId: 'pending-x',
+      vaultBookmark: 'bookmark-1',
+    });
     expect(await host.host.secrets.has(MASTER_KEY_ID)).toBe(true);
     expect(host.device().vaultPath).toBe('/vault');
+    expect(host.device().vaultBookmark).toBe('bookmark-1');
     expect(host.device().activePersonId).toBeTruthy();
 
     const boot = await bridge.unlinkVault();
 
-    // The master key is gone (the critical step, §7.1) and every device pointer is cleared.
+    // The master key is gone (the critical step, §7.1) and every device pointer is cleared — both the
+    // Electron `vaultPath` and the web/iOS `vaultBookmark`.
     expect(await host.host.secrets.has(MASTER_KEY_ID)).toBe(false);
     expect(host.device().vaultPath).toBeNull();
+    expect(host.device().vaultBookmark).toBeUndefined();
     expect(host.device().activePersonId).toBeNull();
     expect(host.device().pendingJoinPersonId).toBeNull();
     // Inspect session dropped; boot recomputes to onboarding ("Choose a folder").

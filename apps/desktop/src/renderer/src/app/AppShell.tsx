@@ -29,6 +29,7 @@ import { unansweredCount, useInboxStore } from '../stores/inboxStore';
 import { useDreamStore } from '../stores/dreamStore';
 import { useDreamAnalysisStore } from '../stores/dreamAnalysisStore';
 import { useDreamPatternStore } from '../stores/dreamPatternStore';
+import { useResultsStore } from '../stores/resultsStore';
 import { AccountMenu } from './AccountMenu';
 import { Switcher } from './Switcher';
 import { LockScreen } from './LockScreen';
@@ -80,6 +81,7 @@ export function AppShell(): JSX.Element {
     useDreamStore.getState().reset();
     useDreamAnalysisStore.getState().reset();
     useDreamPatternStore.getState().reset();
+    useResultsStore.getState().reset(); // sender-scoped Results/trends — per-person, must reset too
     void useConversationStore.getState().load();
     void useBudgetStore.getState().refresh();
     void useInboxStore.getState().load();

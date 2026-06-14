@@ -147,6 +147,10 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     conversationsGet: () => Promise.resolve(null),
     conversationsRename: () => Promise.resolve(),
     conversationsDelete: () => Promise.resolve(),
+    sessionsSetStatus: () => Promise.resolve(null),
+    sessionsEndAndSummarize: () =>
+      Promise.resolve({ ok: false, reason: 'ERROR', message: 'not configured' }),
+    usageSessionCosts: () => Promise.resolve({}),
     questionnairesList: () => Promise.resolve([]),
     questionnairesGet: () => Promise.resolve(null),
     questionnairesSave: (input) =>

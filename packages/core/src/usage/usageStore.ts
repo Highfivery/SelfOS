@@ -69,6 +69,24 @@ export async function queryUsage(
   return out;
 }
 
+/**
+ * Roll usage events up per `sessionId` (09-session-analysis §14.3) — the accumulated tokens + cost of each
+ * conversation (its chat turns + any `session.analyze`). Pure. The bridge redacts `costUsd` for non-admins.
+ */
+export function rollupSessionCosts(
+  events: UsageEvent[],
+): Record<string, { tokens: number; costUsd: number }> {
+  const out: Record<string, { tokens: number; costUsd: number }> = {};
+  for (const event of events) {
+    if (!event.sessionId) continue;
+    const bucket = (out[event.sessionId] ??= { tokens: 0, costUsd: 0 });
+    bucket.tokens +=
+      event.inputTokens + event.outputTokens + event.cacheWriteTokens + event.cacheReadTokens;
+    bucket.costUsd += event.costUsd;
+  }
+  return out;
+}
+
 /** Roll a set of usage events up into the dashboard summary. Pure. */
 export function summarize(events: UsageEvent[]): UsageSummary {
   const byType: Record<string, { costUsd: number; count: number }> = {};

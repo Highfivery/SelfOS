@@ -1,0 +1,179 @@
+/* Status pill ----------------------------------------------------------------- */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  padding: 0 var(--space-2);
+  height: 20px;
+  border-radius: var(--radius-pill, 999px);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-alt);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs, 0.75rem);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.inProgress {
+  color: var(--color-accent-text);
+  border-color: var(--color-accent-border, var(--color-border));
+}
+
+.onHold {
+  color: var(--color-text-secondary);
+}
+
+.complete {
+  color: var(--color-success-text, var(--color-text-secondary));
+  border-color: var(--color-success-border, var(--color-border));
+}
+
+/* Status menu (kebab) --------------------------------------------------------- */
+.menuWrap {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  border: none;
+  background: transparent;
+  cursor: default;
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  padding: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-overlay);
+}
+
+.menuItem {
+  display: block;
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menuItem:hover {
+  background: var(--color-surface-alt);
+}
+
+.menuItem:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
+}
+
+/* Cost indicator -------------------------------------------------------------- */
+.cost {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+}
+
+.bar {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  width: 56px;
+}
+
+.barTrack {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-border-strong, var(--color-border));
+  overflow: hidden;
+}
+
+.barFill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--color-accent-solid);
+}
+
+/* AI completion suggestion ---------------------------------------------------- */
+.suggestion {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  background: var(--color-accent-subtle-bg);
+}
+
+.suggestionIcon {
+  flex: none;
+  color: var(--color-accent-text);
+}
+
+.suggestionText {
+  flex: 1;
+  min-width: 0;
+  color: var(--color-text-primary);
+}
+
+/* Wrap-up card ---------------------------------------------------------------- */
+.wrapCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-alt);
+}
+
+.wrapHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.moodRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.moodChip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--space-2);
+  height: 22px;
+  border-radius: var(--radius-pill, 999px);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs, 0.75rem);
+}
+
+.factList {
+  margin: 0;
+  padding-left: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  color: var(--color-text-primary);
+}

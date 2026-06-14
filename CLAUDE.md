@@ -239,6 +239,49 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-14 — Build (**App-refresh package B — session lifecycle & analysis; SPEC 09 FULLY BUILT** [core +
+  the §14 lifecycle amendment]; [09-session-analysis](docs/specs/09-session-analysis.md), amends `05` §4.1).
+  Coaching sessions now have an explicit **lifecycle** + **memory**. **Asked first** the three unspecced UX
+  forks (all confirmed): the wrap-up card is **inline + a "View in Memory" link** (not persisted on the
+  session); status is set from a **per-row kebab**; the AI completion suggestion **re-surfaces on a later hint**
+  after dismiss. **Schema:** `Conversation.status` (`inProgress`/`onHold`/`complete`) + `endedAt`/`insightId`/
+  `insightStale` — all **additive-optional, NO schemaVersion bump** (reconciled the spec's draft "bump+migration"
+  to the dream/person additive precedent; `conversationStatus(c)` normalizes absent ⇒ `inProgress`); `wrapUpSuggested?`
+  on `ChatTurnResult`; `SessionSummaryResult`/`SessionCost` view types; `session.analyze` usage type. **Core:**
+  `sessionAnalysisService` — `endAndSummarize` reads the transcript ONCE in the subject's own process → an
+  auto-approved `Insight` (`source:'session'`, mood metrics `moodValence`/`moodEnergy` clamped −1..1, facts =
+  Theme/Goal/Follow-up/Person-mentioned), **meters BEFORE parse** (a failed-parse paid call is still billed),
+  and the **re-run/stale path reuses the insightId + carries each fact's `shareableWith` forward by text**;
+  `setSessionStatus`; `rollupSessionCosts`. The **`wrapUpSuggested` hint is turn-embedded** (no extra Claude
+  call): the coach may append a private `[[SELFOS:WRAPUP]]` marker that `chatService` strips from BOTH the saved
+  - streamed text (`stripWrapUpMarker`, partial-marker-safe), and **continuing a `complete` session flips it back
+    to `inProgress` + marks the insight stale**. Session Insights flow through the **existing** shared insight
+    provider, so the gap-finder + Memory surface pick them up with no new plumbing. **Bridge (trust boundary):**
+    `sessions:setStatus`/`:endAndSummarize` gated by `sessions.own` + active-person-scoped; `usage:sessionCosts`
+    returns per-session `{tokens, costUsd?, budgetRatio}` where **`costUsd` is included ONLY for `budgets.manage`
+    admins** (redacted in the bridge, mirroring `usage:summary`) — everyone else gets a dollar-free `budgetRatio`.
+    **Settings:** a new **Sessions** section with `sessions.memoryEnabled` (default ON — the master memory toggle)
+  - `sessions.autoSummarizeOnEnd` (default OFF — completing **asks** before spending; declining still completes).
+    **Renderer:** status pills + an All/In-progress/On-hold/Complete filter, the per-row kebab status setter, a
+    per-session cost indicator (admin `$`+`AdminOnlyBadge` else a budget bar), the inline `WrapUpCard`
+    (crisis-first if flagged, mood chips, facts, Memory link) + the dismissible `WrapUpSuggestion` chip near the
+    composer. Code-reviewer **ship** (privacy boundary + admin-$ redaction verified airtight; metering-before-parse,
+    re-run carry-forward, marker-never-persisted-or-shown all confirmed; applied both should-fixes — **every
+    summarize affordance is now gated on `sessions.memoryEnabled` so memory-off never offers a button that can only
+    fail, and the kebab "Complete & summarize" is hidden on an already-complete session** so it can't silently
+    re-spend — and the nit: wired the discarded `people` field into Person-mentioned facts). `sessions:reanalyze`
+    folded into `endAndSummarize` (the re-run path is the same call when an insight already exists — no redundant
+    seam). Gate green: typecheck (node + web/DOM-lib), lint, format, **308 core + 382 desktop + 8 relay** unit (+
+    sessionAnalysisService [13], wrapUp [3], chatService marker/reopen [3], bridge admin-$/memory-off/gating [4],
+  Sessions RTL [5], sessions-settings [3]), **+2 E2E** (complete→summarize→**decrypt the real `buildContext` and
+  assert the goal feeds a later session** + filter + reopen-flips; member sees the bar with **no $** + memory-off
+  offers no summarize affordance + no Insight). **Visual QA** via the web preview at 571px + 390px (status pills,
+  admin-$ badge, kebab menu, wrap-up card all clean; 0 overflow, no console errors). On `feat/session-analysis`
+    off `main`. **Lesson: a turn-embedded `wrapUpSuggested` hint (a private marker the coach may append, stripped
+    from saved + streamed text) gets an AI completion signal for FREE on the turn the user already paid for — no
+    second call — but every UI affordance that would SPEND on the back of it (summarize) must be gated on BOTH AI
+    config AND the memory toggle, or you ship a button whose only outcome is a calm error.** **NEXT package: C
+    (`16-guided-sessions`) — leans on B.**
 - 2026-06-14 — Build (**App-refresh package A — the unified shareability model; SPEC 15 FULLY BUILT**;
   [15-shareability](docs/specs/15-shareability.md), amends `04`/`12`/`13`). Replaced People's fixed
   shareable/private buckets AND Dreams' silent "sensitive = excluded" with **one per-item control**. **Asked

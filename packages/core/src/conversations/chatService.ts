@@ -4,6 +4,7 @@ import type { ChatTurnResult, Conversation, UsageEvent } from '../schemas';
 import { checkBudget, costOf, recordUsage } from '../usage';
 import { getConversation, saveConversation } from './conversationService';
 import { buildSystemPrompt } from './promptBuilder';
+import { WRAP_UP_INSTRUCTION, WRAP_UP_MARKER, stripWrapUpMarker } from './wrapUp';
 
 export type { ChatTurnResult };
 
@@ -60,9 +61,17 @@ export async function runChatTurn(deps: ChatTurnDeps): Promise<ChatTurnResult> {
     updatedAt: at,
     messages: [],
   };
+  // Continuing a completed session reopens it (09 §14.4) — back to in-progress, and its Insight (if any)
+  // goes stale so the next "End & summarize" re-analyzes rather than serving an out-of-date memory.
+  if (conversation.status === 'complete') {
+    conversation.status = 'inProgress';
+    delete conversation.endedAt;
+    if (conversation.insightId) conversation.insightStale = true;
+  }
   conversation.messages.push({ role: 'user', content: userText, ts: at });
 
-  const system = await buildSystemPrompt(fs, key, personId);
+  // The wrap-up instruction (chat sessions only) teaches the coach the private completion-marker convention.
+  const system = `${await buildSystemPrompt(fs, key, personId)}\n\n${WRAP_UP_INSTRUCTION}`;
   let result;
   try {
     result = await client.stream(
@@ -82,7 +91,13 @@ export async function runChatTurn(deps: ChatTurnDeps): Promise<ChatTurnResult> {
     return { ok: false, reason: 'ERROR', message: 'The coach couldn’t respond. Please try again.' };
   }
 
-  conversation.messages.push({ role: 'assistant', content: result.text, ts: at });
+  // Detect + strip the private wrap-up marker so it's never persisted or shown; surface it as a hint.
+  const wrapUpSuggested = result.text.includes(WRAP_UP_MARKER);
+  conversation.messages.push({
+    role: 'assistant',
+    content: stripWrapUpMarker(result.text),
+    ts: at,
+  });
   conversation.updatedAt = at;
   await saveConversation(fs, key, conversation);
 
@@ -107,5 +122,5 @@ export async function runChatTurn(deps: ChatTurnDeps): Promise<ChatTurnResult> {
   };
   await recordUsage(fs, key, usage);
 
-  return { ok: true, conversation, usage };
+  return { ok: true, conversation, usage, ...(wrapUpSuggested ? { wrapUpSuggested } : {}) };
 }

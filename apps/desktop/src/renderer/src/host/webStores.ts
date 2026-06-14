@@ -128,6 +128,24 @@ export function webFakeClaudeClient(): ClaudeClient {
   return {
     send: () => Promise.resolve('ok'),
     stream: (options, onDelta): Promise<ClaudeStreamResult> => {
+      const userText = options.messages.map((message) => message.content).join('\n');
+      // The session-analysis turn (09 §5) asks to "summarize this session" — return a valid
+      // SessionAnalysisDraft so the preview renders a real wrap-up card with facts + mood.
+      if (userText.includes('summarize this session')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            summary: 'A reflective check-in about a hard day, ending on a calmer note.',
+            themes: ['stress at work'],
+            goals: ['Take a short walk before bed'],
+            followUps: ['See how the week settles'],
+            people: [],
+            moodValence: -0.2,
+            moodEnergy: 0.1,
+            crisisFlag: false,
+          }),
+          usage: { inputTokens: 180, outputTokens: 70, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
       // The dream-analysis synthesis turn asks for a single JSON object (12-dreams §3.2) — return a
       // valid DreamAnalysis draft so the preview can render the full synthesis card; every other turn
       // streams the canned reflective reply.

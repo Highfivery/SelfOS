@@ -732,6 +732,134 @@ test('sessions: switching accounts immediately clears the previous person’s se
   }
 });
 
+test('sessions: complete + summarize feeds a later session; status filter + reopen (09 §14)', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Sessions' }).click();
+    await w.getByLabel('Message').fill('I had a hard day at work');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/hear you/i).first()).toBeVisible();
+
+    // A fresh session is in progress; the owner (admin) sees the per-session $ with the admin-only badge.
+    await expect(w.getByText('In progress').first()).toBeVisible();
+    await expect(w.getByText('Admin only').first()).toBeVisible();
+
+    // Complete & summarize from the per-item menu → the wrap-up card appears inline.
+    await w
+      .getByRole('button', { name: /Session options for/ })
+      .first()
+      .click();
+    await w.getByRole('menuitem', { name: 'Complete & summarize' }).click();
+    await expect(w.getByRole('heading', { name: 'Session summary' })).toBeVisible();
+    await expect(w.getByText(/calmer note/i)).toBeVisible();
+    await expect(w.getByText('Goal: Take a short walk before bed')).toBeVisible();
+    await expect(w.getByRole('button', { name: /View in Memory/i })).toBeVisible();
+
+    // The auto-approved Session Insight feeds the subject's own assembled coaching context.
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('summarize e2e: master key missing');
+    const insights = await listInsightsForPerson(fs, key, 'owner-1');
+    expect(insights.some((i) => i.source === 'session')).toBe(true);
+    const context = await buildContext(fs, key, 'owner-1');
+    expect(context).toContain('Take a short walk before bed');
+
+    // The status filter narrows the list: the now-complete session shows under Complete, not In progress.
+    const openRow = w.getByRole('button', { name: 'I had a hard day at work', exact: true });
+    await w.getByRole('button', { name: 'Complete' }).click();
+    await expect(openRow).toBeVisible();
+    await w.getByRole('button', { name: 'In progress' }).click();
+    await expect(openRow).toHaveCount(0);
+
+    // Reopening (a new turn) flips it back to in progress — it leaves the Complete filter.
+    await w.getByRole('button', { name: 'All' }).click();
+    await openRow.click();
+    await w.getByLabel('Message').fill('actually, one more thing');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/hear you/i).first()).toBeVisible();
+    await w.getByRole('button', { name: 'Complete' }).click();
+    await expect(openRow).toHaveCount(0);
+
+    await w.setViewportSize({ width: 390, height: 780 });
+    const overflow = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      return main ? main.scrollWidth - main.clientWidth : 0;
+    });
+    expect(overflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('sessions: a member sees a usage bar with no $; memory-off blocks summarizing (09 §14.3/§3.4)', async () => {
+  // Memory off + auto-summarize default off; a non-admin member runs a session.
+  const { userData, vault } = await seedReadyVault({
+    'ai.enabled': true,
+    'sessions.memoryEnabled': false,
+  });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    // Grant a member (Jordan, no PIN) and switch to them.
+    await w.getByRole('link', { name: 'People' }).click();
+    await w.getByRole('button', { name: 'Add person' }).click();
+    await w.getByLabel('Name').fill('Jordan');
+    await w.getByRole('button', { name: 'Create' }).click();
+    await w.getByText('Jordan').click();
+    await w.getByRole('button', { name: 'Access' }).click();
+    await w.getByRole('button', { name: 'Grant access' }).click();
+    await expect(w.getByText(/can sign in/i)).toBeVisible();
+    await w.getByRole('button', { name: /signed in as/i }).click();
+    await w.getByRole('menuitem', { name: 'Switch person' }).click();
+    await w
+      .getByRole('dialog', { name: /who.s here/i })
+      .getByText('Jordan')
+      .click();
+    await expect(w.getByRole('button', { name: 'Signed in as Jordan' })).toBeVisible();
+
+    await w.getByRole('link', { name: 'Sessions' }).click();
+    await w.getByLabel('Message').fill('a member session');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/hear you/i).first()).toBeVisible();
+
+    // A member NEVER sees a dollar figure — only a budget-relative bar.
+    await expect(w.getByText('Admin only')).toHaveCount(0);
+    await expect(w.getByText(/\$/)).toHaveCount(0);
+    await expect(w.getByRole('img', { name: /period allowance/i }).first()).toBeVisible();
+
+    // With session memory off, completing is allowed but NO summarize affordance is offered — neither the
+    // "Complete & summarize" menu item nor an inline "Summarize this session" button (no dead-end spend).
+    await w
+      .getByRole('button', { name: /Session options for/ })
+      .first()
+      .click();
+    await expect(w.getByRole('menuitem', { name: 'Complete & summarize' })).toHaveCount(0);
+    await w.getByRole('menuitem', { name: 'Mark complete' }).click();
+    await expect(w.getByText('Complete').first()).toBeVisible();
+    await expect(w.getByRole('button', { name: /Summarize this session/ })).toHaveCount(0);
+
+    // No session Insight is produced for anyone while memory is off.
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('memory-off e2e: master key missing');
+    for (const personId of ['owner-1']) {
+      const insights = await listInsightsForPerson(fs, key, personId);
+      expect(insights.some((i) => i.source === 'session')).toBe(false);
+    }
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('usage: the dashboard shows recorded usage and accepts a budget, without overflow', async () => {
   const { userData, vault } = await seedReadyVault();
   const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));

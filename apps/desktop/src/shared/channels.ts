@@ -48,6 +48,9 @@ import type {
   RelayStatus,
   Role,
   SensitivityTier,
+  SessionCost,
+  SessionStatus,
+  SessionSummaryResult,
   UsageEvent,
   UsageSummary,
 } from './schemas';
@@ -108,6 +111,9 @@ export const IpcChannels = {
   conversationsGet: 'conversations:get',
   conversationsRename: 'conversations:rename',
   conversationsDelete: 'conversations:delete',
+  sessionsSetStatus: 'sessions:setStatus',
+  sessionsEndAndSummarize: 'sessions:endAndSummarize',
+  usageSessionCosts: 'usage:sessionCosts',
   questionnairesList: 'questionnaires:list',
   questionnairesGet: 'questionnaires:get',
   questionnairesSave: 'questionnaires:save',
@@ -220,11 +226,12 @@ export type SetActiveResult =
 export type UsageScope = 'person' | 'app';
 export type UsagePeriod = 'week' | 'month';
 
-/** Lightweight conversation list item (05-conversations). */
+/** Lightweight conversation list item (05-conversations; 09 §14.1 adds lifecycle status). */
 export interface ConversationMeta {
   id: string;
   title: string;
   updatedAt: string;
+  status: SessionStatus; // normalized; absent ⇒ 'inProgress'
 }
 
 export interface SelfosBridge {
@@ -349,6 +356,24 @@ export interface SelfosBridge {
   conversationsRename(input: { id: string; title: string }): Promise<void>;
   /** Delete a conversation. */
   conversationsDelete(id: string): Promise<void>;
+  /**
+   * Set a session's lifecycle status (09 §14.1) — scoped to the active person, gated by `sessions.own`.
+   * Completing stamps `endedAt`. Returns the updated meta, or null if it's missing.
+   */
+  sessionsSetStatus(input: {
+    conversationId: string;
+    status: SessionStatus;
+  }): Promise<ConversationMeta | null>;
+  /**
+   * End & summarize a session into an auto-approved Session Insight (09 §3.1/§14.2). Also used for the
+   * re-run on a reopened (stale) session. Budget-gated + metered (`session.analyze`); the key stays in main.
+   */
+  sessionsEndAndSummarize(input: { conversationId: string }): Promise<SessionSummaryResult>;
+  /**
+   * Per-session accumulated AI cost for the active person (09 §14.3). `costUsd` is present **only for
+   * admins** (`budgets.manage`), redacted at the bridge; everyone gets `tokens` + a `budgetRatio`.
+   */
+  usageSessionCosts(): Promise<Record<string, SessionCost>>;
   /** The household's questionnaire definitions, newest first. Requires `questionnaires.create`. */
   questionnairesList(): Promise<Questionnaire[]>;
   /** Load one questionnaire definition; null if absent. */
@@ -637,6 +662,9 @@ export type {
   Role,
   SendAnswer,
   SendResult,
+  SessionCost,
+  SessionStatus,
+  SessionSummaryResult,
   UsageEvent,
   UsageSummary,
 };

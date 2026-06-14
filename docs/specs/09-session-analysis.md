@@ -1,6 +1,6 @@
 # 09 — Session analysis (the coach's memory)
 
-> **Status:** **Approved** (core) · **Review** (2026-06 lifecycle amendment, §14) · _last updated 2026-06-12_
+> **Status:** **Approved** (core + 2026-06 lifecycle amendment, §14) · _last updated 2026-06-14_
 >
 > When a coaching session ends, AI can **analyze and summarize** it into a durable **Insight** so the
 > coach remembers across sessions instead of re-reading transcripts. Session analysis is the **second
@@ -125,9 +125,12 @@ interface Conversation {
 `status` (§14.1) and `endedAt` move together: completing a session sets both; reopening a completed session
 returns it to `inProgress` and marks the Insight stale. Absent `status` ⇒ `inProgress` (additive-optional).
 
-Bumps `Conversation.schemaVersion` with a migration (existing transcripts: `status`/`endedAt`/`insightId`
-absent ⇒ treated as `inProgress`, `insightStale` false). All reads/writes through the vault + crypto service
-(`04` §5).
+All four new fields are **additive-optional** — an existing transcript with none of them reads as an
+`inProgress`, never-summarized session (`conversationStatus(c)` normalizes absent ⇒ `inProgress`). As built,
+this matches the project's additive-field precedent (dream `image`, person `email`/`phone`): **no
+`schemaVersion` bump and no transform are needed**, since nothing about the persisted shape changes
+destructively. (The original draft proposed a version bump + migration; reconciled here in lockstep with the
+implementation.) All reads/writes go through the vault + crypto service (`04` §5).
 
 ## 5. Architecture & modules
 
@@ -150,10 +153,13 @@ analyze → recordUsage`, charged to the **subject**. Gated by `sessions.own` + 
 
 ## 6. IPC / API contracts
 
-- `sessions:endAndSummarize({ conversationId })` → runs analysis (or a typed `BUDGET_EXCEEDED` / `NO_KEY` /
-  `MEMORY_DISABLED` envelope) and returns the wrap-up + Insight id.
-- `sessions:reanalyze({ conversationId })` → re-run on the stale path.
-- Insight read/edit/delete/promote-fact reuse `08`'s `insights:*` channels.
+- `sessions:endAndSummarize({ conversationId })` → runs analysis (or a typed `BUDGET` / `NO_KEY` /
+  `MEMORY_DISABLED` / `NOT_FOUND` / `ERROR` envelope) and returns the wrap-up Insight + usage. **As built,
+  this one channel also serves the re-run (stale) path** — when the conversation already links an Insight, the
+  same call reuses that id and carries each fact's `shareableWith` forward, so a separate `sessions:reanalyze`
+  channel was unnecessary (folded in here to avoid a redundant seam).
+- Insight read/edit/delete/promote-fact reuse `08`'s `insights:*` channels (the Memory surface — session
+  Insights are ordinary `Insight`s, so per-fact shareable promotion + edit/delete come for free there).
 - The Claude call + key stay in main (`00` §6.2); only the decrypted Insight crosses to the active person.
 
 ## 7. Safety
@@ -237,6 +243,21 @@ Confirmed with the user (2026-06-10):
   review/approval before any code.
 - 2026-06-11 — **Approved** alongside `08`/`11` (companion refs renumbered to `11`). Builds after `08`
   slice 1 lands the Insight/metrics layer.
+- 2026-06-14 — **Approved + BUILT** (package B of the 2026-06 app refresh; `feat/session-analysis`). The
+  whole spec — End & summarize → auto-approved `SessionInsight` (`source: 'session'`, mood metrics
+  `moodValence`/`moodEnergy`) feeding `buildContext` — **plus** the §14 lifecycle amendment: `Conversation.status`
+  (in-progress / on-hold / complete, additive-optional, **no schemaVersion bump** [reconciled §4]); a
+  turn-embedded `wrapUpSuggested` hint (private marker the coach may append; stripped from saved + streamed
+  text — no extra Claude call); per-session cost ($ admin-only, bridge-redacted, else a budget-relative bar);
+  Sessions list status pills + All/In-progress/On-hold/Complete filter + per-item kebab; an inline wrap-up card
+  - "View in Memory" link; the two settings (`sessions.memoryEnabled` default ON, `sessions.autoSummarizeOnEnd`
+    default OFF). Three build-time UX forks were **asked**: wrap-up card = inline + Memory link; status setter =
+    per-row kebab; the AI suggestion re-surfaces on a later hint. Session Insights flow through the existing
+    shared insight provider, so the gap-finder + Memory surface pick them up with no new plumbing. Code-reviewed;
+    gate green (typecheck node + web/DOM, lint, format, **308 core + 382 desktop + 8 relay** unit, **55 E2E** incl.
+    the admin-$-vs-member-bar bridge redaction + complete→summarize→Insight-feeds-a-later-session decrypt +
+    reopen-flips-stale + memory-off-blocks + 390px guards). `sessions:reanalyze` folded into `endAndSummarize`
+    (§6). NEXT package: C (`16-guided-sessions`).
 - 2026-06-12 — **2026-06 lifecycle amendment** added (§14, package B of the app refresh; Review): explicit
   `status` lifecycle (in&nbsp;progress / on&nbsp;hold / complete) the user sets and the AI can suggest;
   "complete" becomes the summarize trigger (AI-assisted, user-confirmed); per-session accumulated cost
@@ -307,8 +328,8 @@ still giving every user a felt sense of a session's weight.
 - **`usage:sessionCosts()`** (or a field added to the conversations list) → `Record<conversationId, { tokens:
 number; costUsd?: number }>` for the active person; **`costUsd` present only for admins** (bridge-gated, like
   the existing `usage:summary` cost redaction). The Sessions list/header reads this to annotate each session.
-- `sessions:endAndSummarize` / `:reanalyze` (§6) unchanged; completing simply calls `setStatus('complete')` then
-  (per §14.2) may invoke `endAndSummarize`.
+- `sessions:endAndSummarize` (§6) unchanged; completing simply calls `setStatus('complete')` then (per §14.2)
+  may invoke `endAndSummarize` (which also handles the stale re-run — see §6).
 
 ### 14.5 UX placement
 

@@ -5,7 +5,7 @@ import { memFileSystem } from '../host/memFileSystem';
 import type { Person } from '../schemas';
 import { savePerson } from '../people';
 import { recordUsage, setPersonBudget } from '../usage';
-import { getConversation, listConversations } from './conversationService';
+import { getConversation, listConversations, saveConversation } from './conversationService';
 import { runChatTurn } from './chatService';
 
 const key = generateMasterKey();
@@ -136,6 +136,87 @@ describe('runChatTurn', () => {
       override: true,
     });
     expect(overridden.ok).toBe(true);
+  });
+
+  it('detects + strips the wrap-up marker, surfacing wrapUpSuggested without persisting the token', async () => {
+    await base();
+    const wrapClient: ClaudeClient = {
+      send: () => Promise.resolve('ok'),
+      stream: () =>
+        Promise.resolve({
+          text: 'It sounds like you found some peace. [[SELFOS:WRAPUP]]',
+          usage: { inputTokens: 100, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        }),
+    };
+    const result = await runChatTurn({
+      fs,
+      key,
+      client: wrapClient,
+      apiKey: 'sk-test',
+      model: 'claude-sonnet-4-6',
+      personId: 'p1',
+      conversationId: 'c1',
+      userText: 'thanks, that helped',
+      onDelta: () => {},
+      now,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.wrapUpSuggested).toBe(true);
+    const conversation = await getConversation(fs, key, 'p1', 'c1');
+    expect(conversation?.messages[1]?.content).toBe('It sounds like you found some peace.');
+    expect(conversation?.messages[1]?.content).not.toContain('SELFOS:WRAPUP');
+  });
+
+  it('does not set wrapUpSuggested for an ordinary reply', async () => {
+    await base();
+    const result = await runChatTurn({
+      fs,
+      key,
+      client: fakeClient,
+      apiKey: 'sk-test',
+      model: 'claude-sonnet-4-6',
+      personId: 'p1',
+      conversationId: 'c1',
+      userText: 'hi',
+      onDelta: () => {},
+      now,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.wrapUpSuggested).toBeUndefined();
+  });
+
+  it('reopens a completed session on a new turn → inProgress + marks its insight stale', async () => {
+    await base();
+    await saveConversation(fs, key, {
+      id: 'c1',
+      schemaVersion: 1,
+      personId: 'p1',
+      title: 'Done one',
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      messages: [{ role: 'user', content: 'earlier', ts: now.toISOString() }],
+      status: 'complete',
+      endedAt: now.toISOString(),
+      insightId: 'ins-1',
+      insightStale: false,
+    });
+    const result = await runChatTurn({
+      fs,
+      key,
+      client: fakeClient,
+      apiKey: 'sk-test',
+      model: 'claude-sonnet-4-6',
+      personId: 'p1',
+      conversationId: 'c1',
+      userText: 'actually one more thing',
+      onDelta: () => {},
+      now,
+    });
+    expect(result.ok).toBe(true);
+    const conversation = await getConversation(fs, key, 'p1', 'c1');
+    expect(conversation?.status).toBe('inProgress');
+    expect(conversation?.endedAt).toBeUndefined();
+    expect(conversation?.insightStale).toBe(true);
   });
 
   it('continues an existing conversation across turns', async () => {

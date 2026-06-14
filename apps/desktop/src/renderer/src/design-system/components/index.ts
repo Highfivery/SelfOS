@@ -15,6 +15,7 @@ export { Switch } from './Switch';
 export { ShareToggle } from './ShareToggle';
 export { Slider } from './Slider';
 export { SegmentedControl, type SegmentOption } from './SegmentedControl';
+export { TitlebarControl } from './TitlebarControl';
 export { LineChart, type LineChartSeries, type LineChartPoint } from './LineChart';
 export { FrequencyBars, type FrequencyItem } from './FrequencyBars';
 export { ProportionBar } from './ProportionBar';

@@ -1,6 +1,6 @@
 # 02 — App shell
 
-> **Status:** Approved · **Review** (2026-06 chrome amendment, §13) · _last updated 2026-06-12_
+> **Status:** Approved · **§13 chrome amendment Approved** (package E, 2026-06-14) · _last updated 2026-06-14_
 >
 > **2026-06 amendment (§13, package E of the app refresh):** an **integrated custom titlebar** (the brand +
 > global controls share one cohesive top bar spanning the window, fixing the macOS brand-vs-traffic-lights
@@ -77,9 +77,10 @@ Clear, non-destructive screen: explain the vault can't be reached; offer **Retry
 
 ### 3.4 Navigation
 
-- A persistent **left sidebar**: the **brand lockup** (the SelfOS sprout mark + wordmark; a draggable
-  region on macOS), the primary nav items (from each module's `nav`, sorted by `order`), a spacer,
-  then a footer with **Settings** and a **collapse toggle**.
+- A persistent **left sidebar**, starting **below the window-spanning `AppHeader` titlebar** (§13): the
+  primary nav items (from each module's `nav`, sorted by `order`), a spacer, then a footer with
+  **Settings** and a **collapse toggle**. _(The brand lockup moved out of the sidebar into the titlebar
+  in the §13 amendment; the sidebar no longer owns it.)_
 - **Collapsible to an icon rail** on desktop: the toggle hides the labels (and the wordmark), leaving
   a narrow rail of icons with tooltips/`aria-label`s; the collapsed state is persisted device-local.
 - **Off-canvas drawer below `--bp-md` (768px):** the sidebar slides in over the content (overlay +
@@ -91,17 +92,22 @@ Clear, non-destructive screen: explain the vault can't be reached; offer **Retry
 
 ### 3.5 Global controls & session (the TopBar)
 
-The **TopBar** is a slot-based header holding global, feature-agnostic controls (not per-route):
+Global, feature-agnostic controls (not per-route) live in the right of the **`AppHeader` titlebar**
+(§13 — this replaced the old in-content TopBar strip), every one rendered through the shared
+`TitlebarControl` primitive so they align exactly:
 
+- a **vault/sync status chip** — a calm "all synced" check; on a sync conflict it turns warning-toned
+  with a count and opens the vault folder (the in-content Banner stays as the detailed explainer),
 - the **appearance menu** — a compact icon button (the active theme) opening a System/Light/Dark
-  popover (designed to match the ring/account menus and conserve horizontal space),
-- the AI-usage **ring** (06; admin-only $ in its popover), and
+  popover,
+- the AI-usage **ring** (06) opening an **enriched dropdown** (§13.4: % of allowance, session count,
+  top usage by type, admin-only $ with the AdminOnlyBadge, and a "View usage details →" link), and
 - an **account menu** — the active person (avatar + name) opening: **Switch person** (the "Who's
   here?" picker), **Lock** (logout — see §3.6), and, only while the concealed super-admin is active,
   **Lock inspect mode** plus a visible "Super-admin" badge.
 
-New global items drop into the slot without reworking the shell. Admin-only controls carry the
-"Admin only" marker (CLAUDE.md §12).
+New global items drop into the cluster without reworking the shell. Admin-only controls carry the
+"Admin only" marker (CLAUDE.md §12). See §13 for the per-platform window chrome.
 
 ### 3.6 Lock / logout
 
@@ -273,6 +279,23 @@ _No open questions remain. New questions that arise during implementation are ap
   custom titlebar (brand + global controls in one window-spanning bar; macOS `trafficLightPosition` inset,
   Windows `titleBarOverlay`), TopBar consistency + a curated item set, and an enriched global usage dropdown.
   Decisions in memory `app-refresh-plan-2026-06`. Mostly renderer + a small `window.ts`/platform-flag change.
+- 2026-06-14 — **§13 amendment BUILT + Approved (package E).** Replaced the in-content TopBar strip + the
+  sidebar brand header with one window-spanning **`AppHeader`** titlebar (brand left, controls right,
+  sidebar+content below) and a shared **`TitlebarControl`** primitive (`/gallery`) so the sync chip · usage ·
+  appearance · account cluster aligns exactly. New **`SyncStatusChip`** (calm check / warning+count → opens the
+  vault folder; collapses first below `--bp-sm`; in-content Banner kept). **Enriched the UsageRing dropdown**
+  (% allowance, session count, top usage by type, admin-only $ + AdminOnlyBadge, "View usage details →").
+  Brand is now a Home link (presentational `Brand` + a `Link` wrapper) collapsing to a tile-only mark below
+  `--bp-sm`. **Per-platform window chrome** in `window.ts`: macOS `hiddenInset` + centered
+  `trafficLightPosition` + a reserved `--titlebar-traffic-width` inset (fullscreen reclaim via a new
+  `window:fullscreenChanged` event); Windows `titleBarOverlay` + Linux default-frame are **blind/best-effort**
+  (verified on-device later, like iOS). New bridge surface `readonly platform: AppPlatform` +
+  `onFullscreenChanged()` threaded through preload (`process.platform`), coreBridge/webHost (Capacitor →
+  `'ios'`/`'web'`), the Electron host, and the test mock. New tokens `--titlebar-height` /
+  `--titlebar-traffic-width` / `--titlebar-window-controls-width` / `--control-height`. macOS fully designed +
+  verified (geometry E2E + a real-window capture). Resolved §13.6 build forks: the sync chip opens the vault
+  folder + the Banner stays; the brand links Home. Code-reviewer fix-first (the calm chip label now names its
+  action; initial fullscreen pushed once on load). 411 desktop unit (+10) · 59 E2E (+2). Updated §3.4/§3.5/§13.6.
 
 ---
 
@@ -383,4 +406,12 @@ existing `usage:summary` + budget state.
 - **Cross-platform** — **macOS fully designed + verified now**; **Windows (`titleBarOverlay`) / Linux fallback
   best-effort**, blind-written and verified on-device later (like the iOS work).
 
-_All resolved; the amendment is build-ready pending final approval._
+Confirmed at build time (2026-06-14):
+
+- **Sync/vault status chip behavior** — when conflicts exist the chip is **warning-toned and opens the vault
+  folder** (`revealVault`); the existing in-content warning **Banner stays** as the detailed explainer. When
+  there are no conflicts the chip is a calm "All synced" check.
+- **Brand** — the titlebar brand lockup is **clickable → Home** (a `<Link>` with its own `no-drag` + accessible
+  name, inside the drag region).
+
+_All resolved; the amendment is **Approved** (package E)._

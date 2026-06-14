@@ -1,5 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { IpcChannels, type SelfosBridge } from '../shared/channels';
+import { IpcChannels, type AppPlatform, type SelfosBridge } from '../shared/channels';
+
+// `process.platform` is available in the sandboxed preload (a subset of `process` is exposed). It
+// drives the titlebar's per-platform window-control layout (02-app-shell §13); anything unexpected
+// falls back to a safe no-controls state.
+const PLATFORM: AppPlatform =
+  process.platform === 'darwin' || process.platform === 'win32' || process.platform === 'linux'
+    ? process.platform
+    : 'unknown';
 
 /**
  * The only surface the renderer can reach. Exposed on `window.selfos` via contextBridge — no Node,
@@ -18,6 +26,14 @@ const bridge: SelfosBridge = {
     ipcRenderer.on(IpcChannels.vaultChanged, handler);
     return () => {
       ipcRenderer.removeListener(IpcChannels.vaultChanged, handler);
+    };
+  },
+  platform: PLATFORM,
+  onFullscreenChanged: (listener) => {
+    const handler = (_event: unknown, fullscreen: boolean): void => listener(fullscreen);
+    ipcRenderer.on(IpcChannels.fullscreenChanged, handler);
+    return () => {
+      ipcRenderer.removeListener(IpcChannels.fullscreenChanged, handler);
     };
   },
   getAppVersion: () => ipcRenderer.invoke(IpcChannels.getAppVersion),

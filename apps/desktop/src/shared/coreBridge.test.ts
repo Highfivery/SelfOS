@@ -222,6 +222,7 @@ function makeHost(): {
       superAdmin = active;
     },
     appVersion: '1.2.3',
+    platform: 'web',
     relay: {
       fetch: makeRelayFetch(),
       loadBundle: () => Promise.resolve({ script: 'export default {}', version: '1' }),

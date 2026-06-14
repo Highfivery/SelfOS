@@ -267,6 +267,45 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-14 — Build (**App-refresh package E — shell, TopBar & usage visibility; SPEC 02 §13 BUILT + Approved**;
+  [02-app-shell](docs/specs/02-app-shell.md) §13, amends §3.4/§3.5; references 06). Replaced the in-content
+  **TopBar** strip + the sidebar brand header with **ONE window-spanning `AppHeader` titlebar** (brand left,
+  global controls right, sidebar+content below) — fixing the macOS brand-vs-traffic-lights collision and putting
+  brand + controls in one cohesive bar. **Asked first** the 2 unstated UX forks (both confirmed): the **sync chip
+  opens the vault folder** on click + the in-content **Banner stays**; the **brand links Home**. **Renderer:** a
+  shared **`TitlebarControl`** primitive (one `--control-height`/hit-area/hover/focus, `no-drag`; → `/gallery`)
+  that the appearance menu, usage ring, account menu + the new **`SyncStatusChip`** all render through, so the
+  cluster (sync · usage · appearance · account) aligns exactly; the **enriched UsageRing dropdown** (% allowance,
+  session count, **top usage by type**, **admin-only $ + AdminOnlyBadge**, "View usage details →"); `Brand` is now
+  **presentational** + an `AppHeader` `Link` wrapper (so the lock screen still uses it inert), collapsing to a
+  **tile-only mark below `--bp-sm`**; the mobile hamburger moved into the titlebar; **`AppShell`** restructured to
+  header-over-(sidebar+content). **NO breadcrumb, NO global new-session button** (§13.6). **Main (`window.ts`):**
+  **per-platform window chrome** — macOS keeps `hiddenInset` + a centered **`trafficLightPosition`** + a reserved
+  **`--titlebar-traffic-width`** inset before the brand (**fullscreen reclaim** via a new **`window:fullscreenChanged`**
+  event, pushed once on load for OS-restored-fullscreen); **Windows `titleBarOverlay`** + **Linux default-frame**
+  are **blind/best-effort** (verified on-device later, like iOS). **Seam:** added `readonly platform: AppPlatform`
+  - `onFullscreenChanged()` to `SelfosBridge`, threaded through preload (`process.platform`), coreBridge + webHost
+    (Capacitor → `'ios'`/`'web'`), the Electron `ipc.ts` host, the coreBridge-test host, and the test-utils mock.
+    New tokens `--titlebar-height`/`--titlebar-traffic-width`/`--titlebar-window-controls-width`/`--control-height`.
+    Code-reviewer **fix-first** (applied both should-fixes: the **calm "all synced" chip label now names its action**
+    since it's a button that opens the folder; **initial fullscreen state is pushed once on `did-finish-load`** so an
+    OS-restored-fullscreen window doesn't reserve a dead 80px inset; deferred the pre-existing `budget:status`
+    own-$-to-non-admin-over-IPC redaction as a follow-up task — display is already gated). Gate green: typecheck
+  (node + web/DOM-lib), lint, format, **411 desktop unit** (+10: TitlebarControl [3], SyncStatusChip [3], AppHeader
+  [3], UsageRing admin-$/top-types [1]; updated Brand [now presentational/Router-free]), **59 E2E** (+2: the macOS
+    traffic-light inset measured [brand left ≥72px, skipped off-darwin] + the usage dropdown → /usage; the brand
+    collapses to tile-only at 390px; the geometry guard now covers the **whole** sync · usage · appearance · account
+    cluster). **Visual QA**: the web preview at desktop (light+dark) + 390px (tile-only brand, sync chip collapsed,
+    enriched dropdown with admin-$ + "Top usage", no overflow, no console errors) **and a real macOS Electron window
+    capture** confirming the reserved traffic-light gap clears the brand. Deleted the old `TopBar`. On
+    `feat/shell-titlebar` off `main`; NOT merged (awaiting user confirm). **Lesson: the brand's accessible name
+    must NOT contain a word another control uses — "SelfOS, Home" collided with every `getByRole('link',{name:'Home'})`
+    in the suite (Playwright substring-matches aria-labels), and the sync chip's "Vault: …" label collided with the
+    Settings "Vault" button; name the brand link just "SelfOS" (title="Home") and scope colliding queries with
+    `{exact:true}`. Also: on macOS the 80px traffic-light inset + a full control cluster overflows at phone width —
+    the sync chip + brand wordmark must collapse first (§13.5 order), and platform-native window chrome (traffic
+    lights) isn't in a Playwright page capture, so verify the inset by geometry + a real-window screenshot.** **NEXT:
+    package F (`13 §15` dream image style) or G (`17` Home — build last).**
 - 2026-06-14 — Build (**App-refresh package D — questionnaire authoring UX; SPEC 08 §15 BUILT**;
   [08-questionnaires](docs/specs/08-questionnaires.md) §15, amends §3.1/§3.6/§13.3). Renderer-heavy authoring
   refinements, **no new capabilities/IPC channels** (one IPC **field removal**). All four items: (1) a **General**

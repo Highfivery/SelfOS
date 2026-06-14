@@ -46,3 +46,10 @@
   color: var(--color-text-primary);
   white-space: nowrap;
 }
+
+/* The compact mobile mark: below --bp-sm only the tile shows (the link keeps its accessible name). */
+@media (max-width: 479px) {
+  .word {
+    display: none;
+  }
+}

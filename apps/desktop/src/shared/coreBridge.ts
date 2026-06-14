@@ -12,6 +12,7 @@ import {
   type DreamImageResult,
   type DreamNarrativeResult,
   type DreamSharedImage,
+  type AppPlatform,
   type DreamShareResult,
   type DreamSynthesisResult,
   type GuidanceState,
@@ -278,6 +279,8 @@ export interface BridgeHost {
   setSuperAdminActive(active: boolean): void;
   /** The app version string (About section). */
   appVersion: string;
+  /** The host platform — drives the titlebar's window-control layout (02-app-shell §13). */
+  platform: AppPlatform;
 
   // --- Relay (external delivery, 08-questionnaires §5.2/§5.4) ---
   /** Relay host surface: outbound `fetch` (Cloudflare REST + Worker) + the built Worker bundle to deploy. */
@@ -620,6 +623,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     onVaultChanged: (listener) => host.onVaultChanged(listener),
     onChatChunk: (listener) => host.onChatChunk(listener),
     onDreamChunk: (listener) => host.onDreamChunk(listener),
+    platform: host.platform,
+    // iOS/web have no OS window chrome, so there is no fullscreen-titlebar transition to report.
+    onFullscreenChanged: () => () => {},
     getAppVersion: () => Promise.resolve(host.appVersion),
 
     // --- Settings ---

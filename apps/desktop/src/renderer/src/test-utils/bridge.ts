@@ -16,6 +16,8 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     getConflicts: () => Promise.resolve([]),
     revealVault: () => Promise.resolve(),
     onVaultChanged: () => () => {},
+    platform: 'web',
+    onFullscreenChanged: () => () => {},
     getAppVersion: () => Promise.resolve('0.0.0'),
     getSettings: () => Promise.resolve({ vault: {}, device: {} }),
     setSetting: () => Promise.resolve(),

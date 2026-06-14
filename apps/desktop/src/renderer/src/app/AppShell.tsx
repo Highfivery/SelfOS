@@ -6,7 +6,6 @@ import {
   ClipboardList,
   House,
   Inbox,
-  Menu,
   MessageCircle,
   Moon,
   PanelLeftClose,
@@ -17,8 +16,6 @@ import {
   ShieldCheck,
   Users,
 } from 'lucide-react';
-import { AppearanceMenu } from './AppearanceMenu';
-import { Brand } from './Brand';
 import { useVaultConflicts } from './useVaultConflicts';
 import { useNavStore } from '../stores/navStore';
 import { useSessionStore } from '../stores/sessionStore';
@@ -31,12 +28,10 @@ import { useDreamAnalysisStore } from '../stores/dreamAnalysisStore';
 import { useDreamPatternStore } from '../stores/dreamPatternStore';
 import { useResultsStore } from '../stores/resultsStore';
 import { useGuidanceStore } from '../stores/guidanceStore';
-import { AccountMenu } from './AccountMenu';
+import { AppHeader } from './AppHeader';
 import { Switcher } from './Switcher';
 import { LockScreen } from './LockScreen';
 import { SuperAdminUnlock } from './SuperAdminUnlock';
-import { TopBar } from './TopBar';
-import { UsageRing } from './UsageRing';
 import { Banner } from '../design-system/components';
 import styles from './AppShell.module.css';
 
@@ -65,7 +60,6 @@ export function AppShell(): JSX.Element {
   const toggleSidebar = useNavStore((s) => s.toggle);
   const [switching, setSwitching] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth < MOBILE_BREAKPOINT);
   const drawerRef = useRef<HTMLElement>(null);
   const hamburgerRef = useRef<HTMLButtonElement>(null);
 
@@ -91,12 +85,10 @@ export function AppShell(): JSX.Element {
     void useGuidanceStore.getState().load();
   }, [activePersonId]);
 
-  // Track the mobile breakpoint; collapse any open drawer when the viewport grows back to desktop.
+  // Collapse any open drawer when the viewport grows back to desktop (where the sidebar is permanent).
   useEffect(() => {
     const onResize = (): void => {
-      const mobile = window.innerWidth < MOBILE_BREAKPOINT;
-      setIsMobile(mobile);
-      if (!mobile) setDrawerOpen(false);
+      if (window.innerWidth >= MOBILE_BREAKPOINT) setDrawerOpen(false);
     };
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
@@ -133,224 +125,212 @@ export function AppShell(): JSX.Element {
 
   return (
     <div className={styles.shell}>
-      {drawerOpen ? (
-        <button
-          type="button"
-          className={styles.scrim}
-          aria-label="Close navigation"
-          tabIndex={-1}
-          onClick={closeDrawer}
-        />
-      ) : null}
+      <AppHeader
+        conflicts={conflicts}
+        onSwitchPerson={() => setSwitching(true)}
+        onOpenNav={() => setDrawerOpen(true)}
+        navOpen={drawerOpen}
+        hamburgerRef={hamburgerRef}
+      />
 
-      <aside ref={drawerRef} className={sidebarClass} tabIndex={-1}>
-        <header className={styles.brand}>
-          <Brand collapsed={collapsed && !isMobile} />
-        </header>
-
-        <nav className={styles.nav} aria-label="Primary">
-          <NavLink
-            to="/"
-            end
-            className={navClass}
-            aria-label="Home"
-            title={tip('Home')}
-            onClick={closeDrawer}
-          >
-            <House size={18} aria-hidden="true" />
-            <span className={styles.label}>Home</span>
-          </NavLink>
-          {hasSessions ? (
-            <NavLink
-              to="/sessions"
-              className={navClass}
-              aria-label="Sessions"
-              title={tip('Sessions')}
-              onClick={closeDrawer}
-            >
-              <MessageCircle size={18} aria-hidden="true" />
-              <span className={styles.label}>Sessions</span>
-            </NavLink>
-          ) : null}
-          {canAnswerQuestionnaires ? (
-            <NavLink
-              to="/inbox"
-              className={navClass}
-              aria-label={inboxCount > 0 ? `Inbox, ${inboxCount} to answer` : 'Inbox'}
-              title={tip('Inbox')}
-              onClick={closeDrawer}
-            >
-              <Inbox size={18} aria-hidden="true" />
-              <span className={styles.label}>Inbox</span>
-              {inboxCount > 0 ? (
-                <span className={styles.navBadge} aria-hidden="true">
-                  {inboxCount}
-                </span>
-              ) : null}
-            </NavLink>
-          ) : null}
-          {canCreateQuestionnaires ? (
-            <NavLink
-              to="/questionnaires"
-              className={navClass}
-              aria-label="Questionnaires"
-              title={tip('Questionnaires')}
-              onClick={closeDrawer}
-            >
-              <ClipboardList size={18} aria-hidden="true" />
-              <span className={styles.label}>Questionnaires</span>
-            </NavLink>
-          ) : null}
-          {canViewInsights ? (
-            <NavLink
-              to="/memory"
-              className={navClass}
-              aria-label="Memory"
-              title={tip('Memory')}
-              onClick={closeDrawer}
-            >
-              <Brain size={18} aria-hidden="true" />
-              <span className={styles.label}>Memory</span>
-            </NavLink>
-          ) : null}
-          {canOwnDreams ? (
-            <NavLink
-              to="/dreams"
-              className={navClass}
-              aria-label="Dreams"
-              title={tip('Dreams')}
-              onClick={closeDrawer}
-            >
-              <Moon size={18} aria-hidden="true" />
-              <span className={styles.label}>Dreams</span>
-            </NavLink>
-          ) : null}
-          {canManagePeople ? (
-            <NavLink
-              to="/people"
-              className={navClass}
-              aria-label="People"
-              title={tip('People')}
-              onClick={closeDrawer}
-            >
-              <Users size={18} aria-hidden="true" />
-              <span className={styles.label}>People</span>
-            </NavLink>
-          ) : null}
-          {canManageRoles ? (
-            <NavLink
-              to="/roles"
-              className={navClass}
-              aria-label="Roles"
-              title={tip('Roles')}
-              onClick={closeDrawer}
-            >
-              <ShieldCheck size={18} aria-hidden="true" />
-              <span className={styles.label}>Roles</span>
-            </NavLink>
-          ) : null}
-          {hasSessions ? (
-            <NavLink
-              to="/usage"
-              className={navClass}
-              aria-label="Usage"
-              title={tip('Usage')}
-              onClick={closeDrawer}
-            >
-              <BarChart3 size={18} aria-hidden="true" />
-              <span className={styles.label}>Usage</span>
-            </NavLink>
-          ) : null}
-          {isSuperAdmin ? (
-            <NavLink
-              to="/audit"
-              className={navClass}
-              aria-label="Raw-access audit"
-              title={tip('Audit')}
-              onClick={closeDrawer}
-            >
-              <ShieldAlert size={18} aria-hidden="true" />
-              <span className={styles.label}>Audit</span>
-            </NavLink>
-          ) : null}
-          {import.meta.env.DEV ? (
-            <NavLink
-              to="/gallery"
-              className={navClass}
-              aria-label="Gallery"
-              title={tip('Gallery')}
-              onClick={closeDrawer}
-            >
-              <Shapes size={18} aria-hidden="true" />
-              <span className={styles.label}>Gallery</span>
-            </NavLink>
-          ) : null}
-        </nav>
-
-        <div className={styles.spacer} />
-
-        <footer className={styles.footer}>
-          <NavLink
-            to="/settings"
-            className={navClass}
-            aria-label="Settings"
-            title={tip('Settings')}
-            onClick={closeDrawer}
-          >
-            <Settings size={18} aria-hidden="true" />
-            <span className={styles.label}>Settings</span>
-          </NavLink>
+      <div className={styles.body}>
+        {drawerOpen ? (
           <button
             type="button"
-            className={styles.collapseToggle}
-            onClick={toggleSidebar}
-            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            aria-pressed={collapsed}
-            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            {collapsed ? (
-              <PanelLeftOpen size={18} aria-hidden="true" />
-            ) : (
-              <PanelLeftClose size={18} aria-hidden="true" />
-            )}
-            <span className={styles.label}>Collapse</span>
-          </button>
-        </footer>
-      </aside>
+            className={styles.scrim}
+            aria-label="Close navigation"
+            tabIndex={-1}
+            onClick={closeDrawer}
+          />
+        ) : null}
 
-      <main className={styles.content}>
-        <TopBar
-          left={
-            <button
-              ref={hamburgerRef}
-              type="button"
-              className={styles.hamburger}
-              aria-label="Open navigation"
-              aria-expanded={drawerOpen}
-              onClick={() => setDrawerOpen(true)}
+        <aside ref={drawerRef} className={sidebarClass} tabIndex={-1}>
+          <nav className={styles.nav} aria-label="Primary">
+            <NavLink
+              to="/"
+              end
+              className={navClass}
+              aria-label="Home"
+              title={tip('Home')}
+              onClick={closeDrawer}
             >
-              <Menu size={20} aria-hidden="true" />
+              <House size={18} aria-hidden="true" />
+              <span className={styles.label}>Home</span>
+            </NavLink>
+            {hasSessions ? (
+              <NavLink
+                to="/sessions"
+                className={navClass}
+                aria-label="Sessions"
+                title={tip('Sessions')}
+                onClick={closeDrawer}
+              >
+                <MessageCircle size={18} aria-hidden="true" />
+                <span className={styles.label}>Sessions</span>
+              </NavLink>
+            ) : null}
+            {canAnswerQuestionnaires ? (
+              <NavLink
+                to="/inbox"
+                className={navClass}
+                aria-label={inboxCount > 0 ? `Inbox, ${inboxCount} to answer` : 'Inbox'}
+                title={tip('Inbox')}
+                onClick={closeDrawer}
+              >
+                <Inbox size={18} aria-hidden="true" />
+                <span className={styles.label}>Inbox</span>
+                {inboxCount > 0 ? (
+                  <span className={styles.navBadge} aria-hidden="true">
+                    {inboxCount}
+                  </span>
+                ) : null}
+              </NavLink>
+            ) : null}
+            {canCreateQuestionnaires ? (
+              <NavLink
+                to="/questionnaires"
+                className={navClass}
+                aria-label="Questionnaires"
+                title={tip('Questionnaires')}
+                onClick={closeDrawer}
+              >
+                <ClipboardList size={18} aria-hidden="true" />
+                <span className={styles.label}>Questionnaires</span>
+              </NavLink>
+            ) : null}
+            {canViewInsights ? (
+              <NavLink
+                to="/memory"
+                className={navClass}
+                aria-label="Memory"
+                title={tip('Memory')}
+                onClick={closeDrawer}
+              >
+                <Brain size={18} aria-hidden="true" />
+                <span className={styles.label}>Memory</span>
+              </NavLink>
+            ) : null}
+            {canOwnDreams ? (
+              <NavLink
+                to="/dreams"
+                className={navClass}
+                aria-label="Dreams"
+                title={tip('Dreams')}
+                onClick={closeDrawer}
+              >
+                <Moon size={18} aria-hidden="true" />
+                <span className={styles.label}>Dreams</span>
+              </NavLink>
+            ) : null}
+            {canManagePeople ? (
+              <NavLink
+                to="/people"
+                className={navClass}
+                aria-label="People"
+                title={tip('People')}
+                onClick={closeDrawer}
+              >
+                <Users size={18} aria-hidden="true" />
+                <span className={styles.label}>People</span>
+              </NavLink>
+            ) : null}
+            {canManageRoles ? (
+              <NavLink
+                to="/roles"
+                className={navClass}
+                aria-label="Roles"
+                title={tip('Roles')}
+                onClick={closeDrawer}
+              >
+                <ShieldCheck size={18} aria-hidden="true" />
+                <span className={styles.label}>Roles</span>
+              </NavLink>
+            ) : null}
+            {hasSessions ? (
+              <NavLink
+                to="/usage"
+                className={navClass}
+                aria-label="Usage"
+                title={tip('Usage')}
+                onClick={closeDrawer}
+              >
+                <BarChart3 size={18} aria-hidden="true" />
+                <span className={styles.label}>Usage</span>
+              </NavLink>
+            ) : null}
+            {isSuperAdmin ? (
+              <NavLink
+                to="/audit"
+                className={navClass}
+                aria-label="Raw-access audit"
+                title={tip('Audit')}
+                onClick={closeDrawer}
+              >
+                <ShieldAlert size={18} aria-hidden="true" />
+                <span className={styles.label}>Audit</span>
+              </NavLink>
+            ) : null}
+            {import.meta.env.DEV ? (
+              <NavLink
+                to="/gallery"
+                className={navClass}
+                aria-label="Gallery"
+                title={tip('Gallery')}
+                onClick={closeDrawer}
+              >
+                <Shapes size={18} aria-hidden="true" />
+                <span className={styles.label}>Gallery</span>
+              </NavLink>
+            ) : null}
+          </nav>
+
+          <div className={styles.spacer} />
+
+          <footer className={styles.footer}>
+            <NavLink
+              to="/settings"
+              className={navClass}
+              aria-label="Settings"
+              title={tip('Settings')}
+              onClick={closeDrawer}
+            >
+              <Settings size={18} aria-hidden="true" />
+              <span className={styles.label}>Settings</span>
+            </NavLink>
+            <button
+              type="button"
+              className={styles.collapseToggle}
+              onClick={toggleSidebar}
+              aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              aria-pressed={collapsed}
+              title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {collapsed ? (
+                <PanelLeftOpen size={18} aria-hidden="true" />
+              ) : (
+                <PanelLeftClose size={18} aria-hidden="true" />
+              )}
+              <span className={styles.label}>Collapse</span>
             </button>
-          }
-        >
-          <AppearanceMenu />
-          <UsageRing />
-          <AccountMenu onSwitch={() => setSwitching(true)} />
-        </TopBar>
-        <div className={styles.contentInner}>
-          {conflicts.length > 0 ? (
-            <div className={styles.banner}>
-              <Banner tone="warning">
-                {conflicts.length === 1
-                  ? 'A sync conflict copy was found in your vault.'
-                  : `${conflicts.length} sync conflict copies were found in your vault.`}{' '}
-                Open the vault folder to resolve them — SelfOS won’t touch them.
-              </Banner>
-            </div>
-          ) : null}
-          <Outlet />
-        </div>
-      </main>
+          </footer>
+        </aside>
+
+        <main className={styles.content}>
+          <div className={styles.contentInner}>
+            {conflicts.length > 0 ? (
+              <div className={styles.banner}>
+                <Banner tone="warning">
+                  {conflicts.length === 1
+                    ? 'A sync conflict copy was found in your vault.'
+                    : `${conflicts.length} sync conflict copies were found in your vault.`}{' '}
+                  Open the vault folder to resolve them — SelfOS won’t touch them.
+                </Banner>
+              </div>
+            ) : null}
+            <Outlet />
+          </div>
+        </main>
+      </div>
 
       {switching ? <Switcher onClose={() => setSwitching(false)} /> : null}
       {unlockPromptOpen ? <SuperAdminUnlock /> : null}

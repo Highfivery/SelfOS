@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ChevronDown, Lock, ShieldCheck, ShieldOff, Users } from 'lucide-react';
 import { useSessionStore } from '../stores/sessionStore';
+import { TitlebarControl } from '../design-system/components';
 import styles from './AccountMenu.module.css';
 
 /** Two-letter initials from a display name (first + last word), for the avatar. */
@@ -12,7 +13,7 @@ function initials(name: string): string {
 }
 
 /**
- * The TopBar account control: avatar + active person's name. Opening it reveals the session menu —
+ * The titlebar account control: avatar + active person's name. Opening it reveals the session menu —
  * switch person, lock (logout), and, while the concealed super-admin is active, leave inspect mode.
  * A visible "Super-admin" badge marks the elevated state.
  */
@@ -43,8 +44,7 @@ export function AccountMenu({ onSwitch }: { onSwitch: () => void }): JSX.Element
           Super-admin
         </span>
       ) : null}
-      <button
-        type="button"
+      <TitlebarControl
         className={styles.trigger}
         aria-haspopup="menu"
         aria-expanded={open}
@@ -56,7 +56,7 @@ export function AccountMenu({ onSwitch }: { onSwitch: () => void }): JSX.Element
         </span>
         <span className={styles.name}>{name}</span>
         <ChevronDown size={14} aria-hidden="true" />
-      </button>
+      </TitlebarControl>
       {open ? (
         <>
           <button

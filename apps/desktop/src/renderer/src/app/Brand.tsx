@@ -18,17 +18,18 @@ function SproutMark(): JSX.Element {
 }
 
 /**
- * SelfOS brand lockup for the sidebar header: the sprout mark in a soft accent tile + the wordmark,
- * collapsing to tile-only on the icon rail. When the wordmark shows it carries the accessible name
- * (the tile is decorative); when collapsed the tile itself is labelled.
+ * The SelfOS brand lockup (02-app-shell §13.5): the sprout mark in a soft accent tile + the wordmark.
+ * Presentational only — the AppHeader wraps it in a Home link, while gates like the lock screen render
+ * it inert. Below `--bp-sm` the wordmark hides and only the tile shows (the compact mobile mark). The
+ * wordmark carries the visible name; provide an accessible name on the wrapper when used as a control.
  */
-export function Brand({ collapsed = false }: { collapsed?: boolean }): JSX.Element {
+export function Brand(): JSX.Element {
   return (
     <span className={styles.brand}>
-      <span className={styles.tile} {...(collapsed ? { role: 'img', 'aria-label': 'SelfOS' } : {})}>
+      <span className={styles.tile} aria-hidden="true">
         <SproutMark />
       </span>
-      {collapsed ? null : <span className={styles.word}>SelfOS</span>}
+      <span className={styles.word}>SelfOS</span>
     </span>
   );
 }

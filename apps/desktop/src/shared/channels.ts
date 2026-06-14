@@ -62,6 +62,13 @@ import type {
  * import from the sandboxed preload (the `BootState` import is type-only and erased at build time).
  */
 
+/**
+ * The host platform the renderer runs on — drives the integrated titlebar's window-control layout
+ * (02-app-shell §13.2): macOS reserves the traffic-light inset, Windows the `titleBarOverlay` inset,
+ * iOS/web render no window controls. `'unknown'` is a safe no-controls fallback.
+ */
+export type AppPlatform = 'darwin' | 'win32' | 'linux' | 'ios' | 'web' | 'unknown';
+
 export const IpcChannels = {
   getBootState: 'app:getBootState',
   refreshBootState: 'app:refreshBootState',
@@ -72,6 +79,7 @@ export const IpcChannels = {
   getConflicts: 'vault:getConflicts',
   revealVault: 'vault:reveal',
   vaultChanged: 'vault:changed', // main → renderer event
+  fullscreenChanged: 'window:fullscreenChanged', // main → renderer event (macOS hides traffic lights)
   getSettings: 'settings:get',
   setSetting: 'settings:set',
   resetSetting: 'settings:reset',
@@ -264,6 +272,18 @@ export interface SelfosBridge {
   revealVault(): Promise<void>;
   /** Subscribe to external vault changes; returns an unsubscribe function. */
   onVaultChanged(listener: () => void): () => void;
+  /**
+   * The host platform — drives the integrated titlebar's per-platform window-control layout
+   * (02-app-shell §13). A plain value (not a promise) so the header lays out before first paint with
+   * no flash of the wrong inset.
+   */
+  readonly platform: AppPlatform;
+  /**
+   * Subscribe to OS fullscreen transitions; returns an unsubscribe function. On macOS the traffic
+   * lights hide in fullscreen, so the titlebar reclaims their reserved inset (02-app-shell §13.5). A
+   * no-op on platforms without window chrome (iOS/web).
+   */
+  onFullscreenChanged(listener: (fullscreen: boolean) => void): () => void;
   /** The app version string (for the About section). */
   getAppVersion(): Promise<string>;
   /** Persisted setting values, by scope. */

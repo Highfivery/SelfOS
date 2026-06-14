@@ -3,29 +3,6 @@
   display: inline-flex;
 }
 
-.ringButton {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  height: 32px;
-  padding: 0 var(--space-2);
-  border: none;
-  border-radius: var(--radius-md);
-  background: none;
-  color: var(--color-text-secondary);
-  font-size: var(--text-xs);
-  cursor: pointer;
-}
-
-.ringButton:hover {
-  background: var(--color-surface-alt);
-}
-
-.ringButton:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 1px;
-}
-
 .ring {
   display: block;
   width: 26px;
@@ -78,6 +55,13 @@
   border-radius: var(--radius-md);
   background: var(--color-surface);
   box-shadow: var(--shadow-overlay);
+}
+
+.adminRow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
 }
 
 .link {

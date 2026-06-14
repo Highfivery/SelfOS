@@ -1,5 +1,14 @@
 import { useState, type ReactNode } from 'react';
-import { AlignCenter, AlignLeft, AlignRight, Check, Plus } from 'lucide-react';
+import {
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
+  Check,
+  CheckCircle2,
+  Moon,
+  Plus,
+  TriangleAlert,
+} from 'lucide-react';
 import {
   AdminOnlyBadge,
   Button,
@@ -20,6 +29,7 @@ import {
   Text,
   Textarea,
   TextInput,
+  TitlebarControl,
   TrendLine,
   type SegmentOption,
 } from '../../design-system/components';
@@ -149,6 +159,32 @@ export function Gallery(): JSX.Element {
               <Text tone="secondary" size="sm">
                 {textScale}%
               </Text>
+            </Inline>
+          </Stack>
+        </Section>
+
+        <Section title="Titlebar controls">
+          <Stack gap={2}>
+            <Text tone="secondary" size="sm">
+              The shared titlebar primitive — every AppHeader control (sync chip, usage, appearance,
+              account) renders through it, so they share one height, hit area, and hover/focus.
+            </Text>
+            <Inline gap={3} align="center">
+              <TitlebarControl aria-label="Appearance: System">
+                <Moon size={18} aria-hidden="true" />
+              </TitlebarControl>
+              <TitlebarControl aria-label="Vault: all synced">
+                <CheckCircle2 size={16} aria-hidden="true" />
+              </TitlebarControl>
+              <TitlebarControl tone="warning" aria-label="2 sync conflicts">
+                <TriangleAlert size={16} aria-hidden="true" />
+                <Text size="xs" weight={600}>
+                  2
+                </Text>
+              </TitlebarControl>
+              <TitlebarControl aria-label="Usage: 30%">
+                <Text size="xs">30%</Text>
+              </TitlebarControl>
             </Inline>
           </Stack>
         </Section>

@@ -368,7 +368,10 @@ popover, expanded) with a quick summary + a link to the full Usage page:
 - **This period** (week/month per the user's setting) — the ring + **% of allowance**, **sessions count**, and
   **top usage by type** (1–2 lines, e.g. "Sessions · Dream images").
 - **Admins** (`budgets.manage`) additionally see **$ spent / budget** (AdminOnlyBadge); non-admins never see $
-  (the established rule — memory `selfos-usage-budget-rules`).
+  (the established rule — memory `selfos-usage-budget-rules`). The boundary is the **bridge**, not the UI:
+  `budget:status` carries `spentUsd`/`limitUsd` **only** for `budgets.manage` callers and always a
+  `budgetRatio` (0..1); the ring's % renders from `budgetRatio`, so a non-admin can't read the dollars over
+  IPC (mirrors the `usage:summary` / `usage:sessionCosts` redaction).
 - A small **recent-usage sparkline** (reusing the `TrendLine` primitive) is a nice-to-have.
 - **"View usage details →"** links to `/usage`.
 

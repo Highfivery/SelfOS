@@ -49,8 +49,8 @@ describe('AppHeader', () => {
     installMockBridge({
       budgetStatus: () =>
         Promise.resolve({
-          person: { state: 'ok', spentUsd: 2, limitUsd: 10, period: 'week' },
-          app: { state: 'none', spentUsd: 0, limitUsd: null, period: null },
+          person: { state: 'ok', budgetRatio: 0.2, spentUsd: 2, limitUsd: 10, period: 'week' },
+          app: { state: 'none', budgetRatio: 0, spentUsd: 0, limitUsd: null, period: null },
         }),
     });
     useSessionStore.setState({ activePerson: alex });

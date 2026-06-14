@@ -35,7 +35,6 @@ export function UsageRing(): JSX.Element | null {
   }, [refresh]);
 
   const person = status?.person;
-  const limit = person?.limitUsd ?? null;
   const period = person?.period ?? 'week';
 
   useEffect(() => {
@@ -55,10 +54,11 @@ export function UsageRing(): JSX.Element | null {
     return () => document.removeEventListener('keydown', onKey);
   }, [open]);
 
-  if (!person || limit === null) return null;
+  // The ring shows whenever there's a budget (everyone has the default), driven by `budgetRatio` — a
+  // non-$ signal present for every caller. The dollar figures are admin-only (redacted otherwise).
+  if (!person || person.state === 'none') return null;
 
-  const ratio = limit > 0 ? Math.min(1, person.spentUsd / limit) : 0;
-  const pct = Math.round(ratio * 100);
+  const pct = Math.round(person.budgetRatio * 100);
   const periodLabel = period === 'week' ? 'this week' : 'this month';
   const arcClass =
     person.state === 'over'
@@ -99,10 +99,10 @@ export function UsageRing(): JSX.Element | null {
                 AI usage {periodLabel}
               </Text>
               <Text weight={600}>{pct}% of your allowance</Text>
-              {canCost ? (
+              {canCost && person.limitUsd != null ? (
                 <span className={styles.adminRow}>
                   <Text size="sm" tone="secondary">
-                    {formatUsd(person.spentUsd)} of {formatUsd(limit)}
+                    {formatUsd(person.spentUsd ?? 0)} of {formatUsd(person.limitUsd)}
                   </Text>
                   <AdminOnlyBadge />
                 </span>

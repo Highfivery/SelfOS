@@ -40,8 +40,8 @@ describe('person-scoped store resets', () => {
   it('budgetStore.reset clears the cached status (the usage ring)', () => {
     useBudgetStore.setState({
       status: {
-        person: { state: 'warn', spentUsd: 5, limitUsd: 10, period: 'week' },
-        app: { state: 'none', spentUsd: 0, limitUsd: null, period: null },
+        person: { state: 'warn', budgetRatio: 0.5, spentUsd: 5, limitUsd: 10, period: 'week' },
+        app: { state: 'none', budgetRatio: 0, spentUsd: 0, limitUsd: null, period: null },
       },
     });
     useBudgetStore.getState().reset();

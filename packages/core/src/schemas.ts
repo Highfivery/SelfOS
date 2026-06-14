@@ -1015,9 +1015,16 @@ export interface UsageSummary {
 export type BudgetStateKind = 'none' | 'ok' | 'warn' | 'over';
 export interface BudgetState {
   state: BudgetStateKind;
-  spentUsd: number;
-  limitUsd: number | null;
+  /**
+   * Spend as a share of the period budget, clamped 0..1 (0 when there's no budget). Always present —
+   * it's the non-$ signal everyone may see (06 §12). The actual dollars (`spentUsd`/`limitUsd`) are
+   * **admin-only**: the bridge redacts them for non-`budgets.manage` callers, so a non-admin can't read
+   * the figures over IPC, only the ratio (mirrors the `usage:summary` / `usage:sessionCosts` redaction).
+   */
+  budgetRatio: number;
   period: 'week' | 'month' | null;
+  spentUsd?: number;
+  limitUsd?: number | null;
 }
 
 export type ChatTurnResult =

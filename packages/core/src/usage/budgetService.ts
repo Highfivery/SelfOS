@@ -100,7 +100,7 @@ export async function checkBudget(
       : options.personId
         ? (budgets.perPerson[options.personId] ?? DEFAULT_BUDGET)
         : undefined;
-  if (!budget) return { state: 'none', spentUsd: 0, limitUsd: null, period: null };
+  if (!budget) return { state: 'none', budgetRatio: 0, spentUsd: 0, limitUsd: null, period: null };
 
   const from = periodStart(options.now, budget.period);
   const to = options.now.toISOString();
@@ -121,5 +121,6 @@ export async function checkBudget(
         : 'ok';
   if (state === 'over' && options.override) state = 'warn';
 
-  return { state, spentUsd, limitUsd: budget.limitUsd, period: budget.period };
+  const budgetRatio = budget.limitUsd > 0 ? Math.min(1, spentUsd / budget.limitUsd) : 0;
+  return { state, budgetRatio, spentUsd, limitUsd: budget.limitUsd, period: budget.period };
 }

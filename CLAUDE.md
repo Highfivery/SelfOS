@@ -267,6 +267,21 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-14 — Fix (**`budget:status` $-redaction — close the own-budget-$-over-IPC leak**; on `feat/shell-titlebar`,
+  the package-E follow-up the code-reviewer flagged + the user asked to do now). The renderer already gated the $
+  DISPLAY behind `budgets.manage`, but `budget:status` returned raw `spentUsd`/`limitUsd` to ALL callers (a
+  non-admin could read their own spend over IPC via devtools). Now `BudgetState` always carries a **`budgetRatio`**
+  (0..1, clamped; computed in core `checkBudget`) and `spentUsd`/`limitUsd` are **optional + bridge-redacted**:
+  `budgetStatus` returns the dollars only to `budgets.manage` callers, a member gets `{state, budgetRatio, period}`
+  for their own budget and a neutral `none` for the household **app** budget (the Everyone scope is admin-only too).
+  The **UsageRing** now renders its % from `budgetRatio` + shows whenever `state !== 'none'` (was keyed on
+  `limitUsd`), so it still works on redacted data; the admin $ line is guarded on `limitUsd != null`. Mirrors the
+  established `usage:summary` / `usage:sessionCosts` redaction (memory `selfos-usage-budget-rules` updated: **the $
+  boundary is the bridge, not the UI**). Gate green: typecheck (node + web/DOM-lib), lint, format, **412 desktop**
+  unit (+1 coreBridge: admin sees $, member gets ratio-only + no app $; UsageRing gains a redacted-status [ratio
+  only, no $] render test), **59 E2E** (the member-bar-no-$ / admin-$ / usage-dashboard paths all still green).
+  Updated 02 §13.4. **Lesson: a renderer display-gate is NOT a trust boundary — any cost/$ field must be redacted
+  in the bridge for non-`budgets.manage` callers (return a `budgetRatio`, never the dollars), or it leaks over IPC.**
 - 2026-06-14 — Build (**App-refresh package E — shell, TopBar & usage visibility; SPEC 02 §13 BUILT + Approved**;
   [02-app-shell](docs/specs/02-app-shell.md) §13, amends §3.4/§3.5; references 06). Replaced the in-content
   **TopBar** strip + the sidebar brand header with **ONE window-spanning `AppHeader` titlebar** (brand left,

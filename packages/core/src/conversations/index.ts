@@ -3,3 +3,5 @@
 export * from './conversationService';
 export * from './promptBuilder';
 export * from './chatService';
+export * from './wrapUp';
+export * from './sessionAnalysisService';

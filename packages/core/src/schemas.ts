@@ -322,6 +322,13 @@ export const ChatMessageSchema = z.object({
 });
 export type ChatMessage = z.infer<typeof ChatMessageSchema>;
 
+/**
+ * Session lifecycle status (09-session-analysis §14.1). `inProgress` is the default; `onHold` is a
+ * user-only "paused, will return" signal; `complete` is the wrapped state that offers "End & summarize".
+ */
+export const SessionStatusSchema = z.enum(['inProgress', 'onHold', 'complete']);
+export type SessionStatus = z.infer<typeof SessionStatusSchema>;
+
 export const ConversationSchema = z.object({
   id: z.string().min(1),
   schemaVersion: z.number().int().positive(),
@@ -330,8 +337,20 @@ export const ConversationSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   messages: z.array(ChatMessageSchema),
+  // Lifecycle + analysis (09-session-analysis §4/§14.1). All additive-optional — an existing transcript
+  // with none of these reads as an `inProgress`, never-summarized session, so no schemaVersion bump or
+  // transform is needed (the dreams/people additive-field precedent). `status` absent ⇒ `inProgress`.
+  status: SessionStatusSchema.optional(),
+  endedAt: z.string().optional(), // set when status → 'complete'; absent = not yet completed
+  insightId: z.string().optional(), // the current SessionInsight for this conversation
+  insightStale: z.boolean().optional(), // true after continuing past an end → re-run on next end
 });
 export type Conversation = z.infer<typeof ConversationSchema>;
+
+/** A conversation's lifecycle status, normalizing absent ⇒ `inProgress` (09 §14.1). */
+export function conversationStatus(c: Pick<Conversation, 'status'>): SessionStatus {
+  return c.status ?? 'inProgress';
+}
 
 /**
  * The shared Insight / metrics layer (08-questionnaires §4.4). A single, source-discriminated record:
@@ -997,8 +1016,39 @@ export interface BudgetState {
 }
 
 export type ChatTurnResult =
-  | { ok: true; conversation: Conversation; usage: UsageEvent }
+  | {
+      ok: true;
+      conversation: Conversation;
+      usage: UsageEvent;
+      // 09-session-analysis §14.1: a lightweight, turn-embedded hint that the session feels wrapped up.
+      // Assessed as part of the turn the user already paid for (no extra Claude call). The renderer shows a
+      // dismissible "mark complete & summarize?" prompt when set and the session isn't already complete.
+      wrapUpSuggested?: boolean;
+    }
   | { ok: false; reason: 'NO_KEY' | 'BUDGET' | 'ERROR'; message: string };
+
+/**
+ * Result of "End & summarize" (09-session-analysis §6). On success carries the produced (auto-approved)
+ * Session Insight + the metered usage; the wrap-up card renders from the Insight (summary, facts, the
+ * mood metrics, crisis flag). `MEMORY_DISABLED` when the session-memory master toggle is off.
+ */
+export type SessionSummaryResult =
+  | { ok: true; insight: Insight; usage: UsageEvent }
+  | {
+      ok: false;
+      reason: 'NO_KEY' | 'BUDGET' | 'ERROR' | 'MEMORY_DISABLED' | 'NOT_FOUND';
+      message: string;
+    };
+
+/**
+ * Per-session AI cost rollup (09-session-analysis §14.3). `costUsd` is included **only for admins**
+ * (`budgets.manage`), redacted at the bridge — everyone else sees a budget-relative bar from `tokens`.
+ */
+export interface SessionCost {
+  tokens: number;
+  costUsd?: number; // $ — admin-only (budgets.manage)
+  budgetRatio?: number; // 0..1 — the session's cost as a share of the person's period budget (no $ leaked)
+}
 
 /**
  * One Inbox row for the recipient (08-questionnaires §3.3). A **derived** view — the recipient sees the

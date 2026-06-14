@@ -85,6 +85,24 @@ export function fakeClaudeClient(): ClaudeClient {
         });
       }
 
+      // The session-analysis turn (09 §5) asks to "summarize this session" as a JSON object. Return a
+      // valid SessionAnalysisDraft so the offline End & summarize path parses + produces facts/mood.
+      if (userText.includes('summarize this session')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            summary: 'A reflective check-in about a hard day, ending on a calmer note.',
+            themes: ['stress at work'],
+            goals: ['Take a short walk before bed'],
+            followUps: ['See how the week settles'],
+            people: [],
+            moodValence: -0.2,
+            moodEnergy: 0.1,
+            crisisFlag: false,
+          }),
+          usage: { inputTokens: 180, outputTokens: 70, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+
       // The dream-analysis synthesis turn asks for a single JSON object (12-dreams §3.2). Return a valid
       // DreamAnalysis draft so the offline synthesize path parses deterministically; every other turn is
       // the reflective chat reply.

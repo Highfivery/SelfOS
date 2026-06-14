@@ -201,6 +201,9 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.conversationsGet, bridge.conversationsGet);
   handle(IpcChannels.conversationsRename, bridge.conversationsRename);
   handle(IpcChannels.conversationsDelete, bridge.conversationsDelete);
+  handle(IpcChannels.sessionsSetStatus, bridge.sessionsSetStatus);
+  handle(IpcChannels.sessionsEndAndSummarize, bridge.sessionsEndAndSummarize);
+  handle(IpcChannels.usageSessionCosts, bridge.usageSessionCosts);
   handle(IpcChannels.questionnairesList, bridge.questionnairesList);
   handle(IpcChannels.questionnairesGet, bridge.questionnairesGet);
   handle(IpcChannels.questionnairesSave, bridge.questionnairesSave);

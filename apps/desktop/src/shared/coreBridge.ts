@@ -32,7 +32,9 @@ import {
   RelationshipInputSchema,
   RoleSchema,
   SensitivityTierSchema,
+  SessionStatusSchema,
   SettingsFileSchema,
+  conversationStatus,
   type AlignmentResult,
   type Assignment,
   type CompatibilityGroup,
@@ -68,6 +70,8 @@ import {
   type Relationship,
   type RelayConfig,
   type RelayStatus,
+  type SessionCost,
+  type SessionSummaryResult,
 } from './schemas';
 import { OWNER_ROLE_ID, roleAllows, type CapabilityKey } from './capabilities';
 import { runConnectionTest } from './claudeProxy';
@@ -127,16 +131,19 @@ import {
   getBudgets,
   periodStart,
   queryUsage,
+  rollupSessionCosts,
   setAppBudget,
   setPersonBudget,
   summarize,
 } from '@selfos/core/usage';
 import {
   deleteConversation,
+  endAndSummarize,
   getConversation,
   listConversations,
   runChatTurn,
   saveConversation,
+  setSessionStatus,
 } from '@selfos/core/conversations';
 import {
   deleteInsight,
@@ -356,6 +363,11 @@ const UsageSummarySchema = z.object({
 const ChatStreamSchema = z.object({
   conversationId: z.string().min(1),
   userText: z.string().min(1),
+});
+const ChatConversationIdSchema = z.object({ conversationId: z.string().min(1) });
+const SessionSetStatusSchema = z.object({
+  conversationId: z.string().min(1),
+  status: SessionStatusSchema,
 });
 const DreamAnalyzeTurnSchema = z.object({
   dreamId: z.string().min(1),
@@ -984,6 +996,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         id: c.id,
         title: c.title,
         updatedAt: c.updatedAt,
+        status: conversationStatus(c),
       }));
     },
     conversationsGet: async (id): Promise<Conversation | null> => {
@@ -1031,6 +1044,79 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         onDelta: (text) => host.emitChatChunk(text),
         now: new Date(),
       });
+    },
+
+    // --- Session lifecycle + analysis (09-session-analysis §14) — gated by `sessions.own` ---
+    sessionsSetStatus: async (input): Promise<ConversationMeta | null> => {
+      const { conversationId, status } = SessionSetStatusSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'sessions.own')))
+        return null;
+      const updated = await setSessionStatus({
+        fs: ctx.fs,
+        key: ctx.key,
+        personId,
+        conversationId,
+        status,
+        now: new Date(),
+      });
+      return updated
+        ? {
+            id: updated.id,
+            title: updated.title,
+            updatedAt: updated.updatedAt,
+            status: conversationStatus(updated),
+          }
+        : null;
+    },
+    sessionsEndAndSummarize: async (input): Promise<SessionSummaryResult> => {
+      const { conversationId } = ChatConversationIdSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'sessions.own'))) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      // The session-memory master toggle lives in vault settings (default ON); the service refuses when off.
+      const memoryEnabled =
+        (await readVaultSettingsValues(ctx.fs))['sessions.memoryEnabled'] !== false;
+      const apiKey = await host.secrets.get(ANTHROPIC_API_KEY_ID);
+      return endAndSummarize({
+        fs: ctx.fs,
+        key: ctx.key,
+        client: host.claude,
+        apiKey,
+        model: await host.activeModel(),
+        personId,
+        conversationId,
+        memoryEnabled,
+        now: new Date(),
+      });
+    },
+    usageSessionCosts: async (): Promise<Record<string, SessionCost>> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId) return {};
+      // Lifetime usage for the active person, rolled up per session (chat turns + any session.analyze).
+      const events = await queryUsage(ctx.fs, ctx.key, {
+        from: '0000',
+        to: '9999',
+        personId,
+      });
+      const rollup = rollupSessionCosts(events);
+      // $ is admin-only (the budgets.manage gate). Everyone gets `budgetRatio` — a fraction, no $ leaked.
+      const showCost = await activePersonCan(ctx.fs, ctx.key, 'budgets.manage');
+      const budget = await effectivePersonBudget(ctx.fs, ctx.key, personId);
+      const limit = budget.limitUsd > 0 ? budget.limitUsd : null;
+      const out: Record<string, SessionCost> = {};
+      for (const [id, { tokens, costUsd }] of Object.entries(rollup)) {
+        out[id] = {
+          tokens,
+          ...(showCost ? { costUsd } : {}),
+          ...(limit !== null ? { budgetRatio: Math.min(1, costUsd / limit) } : {}),
+        };
+      }
+      return out;
     },
 
     // --- Questionnaires (08-questionnaires) — gated by `questionnaires.create` ---

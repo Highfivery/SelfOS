@@ -1,5 +1,14 @@
 import { z } from 'zod';
-import { ClipboardList, Database, Info, Moon, Palette, Send, Sparkles } from 'lucide-react';
+import {
+  ClipboardList,
+  Database,
+  Info,
+  MessagesSquare,
+  Moon,
+  Palette,
+  Send,
+  Sparkles,
+} from 'lucide-react';
 import { registerSection, registerSettings } from './registry';
 import { defineSetting } from './types';
 import {
@@ -26,6 +35,8 @@ declare module './types' {
     'appearance.reduceMotion': boolean;
     'ai.enabled': boolean;
     'ai.model': 'claude-sonnet-4-6' | 'claude-opus-4-8';
+    'sessions.memoryEnabled': boolean;
+    'sessions.autoSummarizeOnEnd': boolean;
     'questionnaires.autoAnalyze': boolean;
     'questionnaires.discloseAdminAccess': boolean;
     'questionnaires.defaultMessages': RelayMessages;
@@ -65,34 +76,41 @@ export function registerBuiltinSettings(): void {
     order: 2,
   });
   registerSection({
+    id: 'sessions',
+    title: 'Sessions',
+    description: 'How coaching sessions are remembered across the app.',
+    icon: MessagesSquare,
+    order: 3,
+  });
+  registerSection({
     id: 'questionnaires',
     title: 'Questionnaires',
     description: 'How questionnaire responses are turned into insights.',
     icon: ClipboardList,
-    order: 3,
+    order: 4,
   });
   registerSection({
     id: 'dreams',
     title: 'Dreams',
     description: 'Your dream journal and how it informs your coaching.',
     icon: Moon,
-    order: 4,
+    order: 5,
   });
   registerSection({
     id: 'relay',
     title: 'Relay',
     description: 'Send questionnaires to people without SelfOS, via a private encrypted link.',
     icon: Send,
-    order: 5,
+    order: 6,
   });
   registerSection({
     id: 'vault',
     title: 'Vault',
     description: 'Where your data is stored.',
     icon: Database,
-    order: 6,
+    order: 7,
   });
-  registerSection({ id: 'about', title: 'About', icon: Info, order: 7 });
+  registerSection({ id: 'about', title: 'About', icon: Info, order: 8 });
 
   registerSettings([
     defineSetting({
@@ -202,6 +220,31 @@ export function registerBuiltinSettings(): void {
       control: { type: 'custom', render: TestConnectionControl },
       order: 4,
       visibleWhen: aiEnabled,
+    }),
+    defineSetting({
+      key: 'sessions.memoryEnabled',
+      section: 'sessions',
+      label: 'Session memory',
+      description:
+        'When on, ending a coaching session can summarize it into a private memory that helps personalize your coaching across the app. Turn off to stop summarizing sessions and keep them out of your coaching context entirely. Existing summaries stay editable in Memory.',
+      schema: z.boolean(),
+      default: true,
+      control: { type: 'switch' },
+      scope: 'vault',
+      order: 1,
+    }),
+    defineSetting({
+      key: 'sessions.autoSummarizeOnEnd',
+      section: 'sessions',
+      label: 'Summarize automatically when a session is completed',
+      description:
+        'When on, marking a session complete summarizes it right away (using your AI allowance). Off by default, so completing a session asks before spending anything — and you can always mark something done without summarizing it.',
+      schema: z.boolean(),
+      default: false,
+      control: { type: 'switch' },
+      scope: 'vault',
+      order: 2,
+      visibleWhen: (values) => values['sessions.memoryEnabled'] !== false,
     }),
     defineSetting({
       key: 'questionnaires.autoAnalyze',

@@ -18,7 +18,7 @@ afterEach(() => {
 describe('person-scoped store resets', () => {
   it('conversationStore.reset clears the list + the open session', () => {
     useConversationStore.setState({
-      conversations: [{ id: 'a', title: 'A', updatedAt: 'now' }],
+      conversations: [{ id: 'a', title: 'A', updatedAt: 'now', status: 'inProgress' }],
       activeId: 'a',
       messages: [{ role: 'user', content: 'hi', ts: 'now' }],
       streaming: 'partial',

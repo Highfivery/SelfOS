@@ -127,6 +127,22 @@ function makeHost(): {
           usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
       }
+      // Session analysis asks to "summarize this session" → return a valid SessionAnalysisDraft.
+      if (userText.includes('summarize this session')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            summary: 'Worked through a stressful deadline at work.',
+            themes: ['work stress'],
+            goals: ['Ask for an extension'],
+            followUps: ['See how the ask went'],
+            people: [],
+            moodValence: -0.3,
+            moodEnergy: 0.1,
+            crisisFlag: false,
+          }),
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
       // Dream synthesis asks for a single JSON object — return a valid DreamAnalysis draft so the
       // synthesize path can parse it; every other turn just streams a short reply.
       const wantsJson = options.messages.some((m) => m.content.includes('JSON object'));
@@ -376,6 +392,83 @@ describe('createCoreBridge', () => {
     expect(result.ok).toBe(true);
     expect(host.chunks).toContain('hi');
     expect(await bridge.conversationsList()).toHaveLength(1);
+    // A fresh session lists as in-progress.
+    expect((await bridge.conversationsList())[0]?.status).toBe('inProgress');
+  });
+
+  it('sets session status, summarizes on complete, and feeds a later session', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    await bridge.chatStream({ conversationId: 'c1', userText: 'I had a hard day' });
+
+    // Put it on hold, then complete it.
+    const onHold = await bridge.sessionsSetStatus({ conversationId: 'c1', status: 'onHold' });
+    expect(onHold?.status).toBe('onHold');
+
+    const summary = await bridge.sessionsEndAndSummarize({ conversationId: 'c1' });
+    expect(summary.ok).toBe(true);
+    if (!summary.ok) return;
+    expect(summary.insight.source).toBe('session');
+    expect(summary.insight.approved).toBe(true);
+    expect(summary.insight.metrics?.moodValence).toBeCloseTo(-0.3);
+
+    // The conversation is now complete with the linked insight.
+    const list = await bridge.conversationsList();
+    expect(list.find((c) => c.id === 'c1')?.status).toBe('complete');
+
+    // The auto-approved Session Insight surfaces in the Memory list + grounds a later session.
+    const insights = await bridge.insightsList();
+    expect(insights.some((i) => i.source === 'session')).toBe(true);
+    const turn = await bridge.chatStream({ conversationId: 'c2', userText: 'continuing' });
+    expect(turn.ok).toBe(true);
+  });
+
+  it('refuses to summarize when session memory is disabled', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    await bridge.chatStream({ conversationId: 'c1', userText: 'hello' });
+    await bridge.setSetting({ key: 'sessions.memoryEnabled', value: false, scope: 'vault' });
+    const result = await bridge.sessionsEndAndSummarize({ conversationId: 'c1' });
+    expect(result).toMatchObject({ ok: false, reason: 'MEMORY_DISABLED' });
+  });
+
+  it('returns per-session $ to an admin but only a budget bar to a member', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+
+    // The owner (admin) sees the dollar figure + a budget ratio.
+    await bridge.chatStream({ conversationId: 'c1', userText: 'hello' });
+    const adminCosts = await bridge.usageSessionCosts();
+    expect(adminCosts['c1']?.costUsd).toBeGreaterThanOrEqual(0);
+    expect(typeof adminCosts['c1']?.costUsd).toBe('number');
+    expect(adminCosts['c1']?.tokens).toBeGreaterThan(0);
+    expect(adminCosts['c1']?.budgetRatio).toBeGreaterThanOrEqual(0);
+
+    // A member with their own session sees tokens + a budget ratio, but NEVER a $ figure (bridge-redacted).
+    const member = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: member.id, roleId: 'member', pin: null });
+    expect((await bridge.sessionSetActive({ personId: member.id })).ok).toBe(true);
+    await bridge.chatStream({ conversationId: 'm1', userText: 'hi from member' });
+    const memberCosts = await bridge.usageSessionCosts();
+    expect(memberCosts['m1']?.tokens).toBeGreaterThan(0);
+    expect(memberCosts['m1']?.costUsd).toBeUndefined();
+    expect(memberCosts['m1']?.budgetRatio).toBeGreaterThanOrEqual(0);
+    // A member can't see another person's sessions in their own rollup.
+    expect(memberCosts['c1']).toBeUndefined();
+  });
+
+  it('denies session status + summarize to a person without sessions.own', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    await bridge.chatStream({ conversationId: 'c1', userText: 'hello' });
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    expect((await bridge.sessionSetActive({ personId: guest.id })).ok).toBe(true);
+    expect(await bridge.sessionsSetStatus({ conversationId: 'c1', status: 'complete' })).toBeNull();
+    expect(await bridge.sessionsEndAndSummarize({ conversationId: 'c1' })).toMatchObject({
+      ok: false,
+      reason: 'ERROR',
+    });
   });
 
   it('creates a member invite but refuses to wrap the master key for the owner', async () => {

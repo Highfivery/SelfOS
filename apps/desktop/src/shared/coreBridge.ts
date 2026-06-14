@@ -90,6 +90,7 @@ import {
   createMasterKey,
   isVaultInitialized,
   loadMasterKey,
+  MASTER_KEY_ID,
   restoreFromRecoveryPhrase,
   storeMasterKey,
   VAULT_ALREADY_INITIALIZED,
@@ -731,6 +732,28 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!vaultDir) return { ok: false };
       const ok = await restoreFromRecoveryPhrase(host.secrets, host.fileSystem(vaultDir), phrase);
       return { ok };
+    },
+    unlinkVault: async (): Promise<BootState> => {
+      // Detach this device from the current vault (14-vault-relinking). The host-agnostic half: the
+      // Electron wrapper in ipc.ts also stops the chokidar watcher first (a platform concern, like
+      // useVault's startVaultWatcher); on iOS that step is a no-op.
+      //
+      // CLEAR THE MASTER KEY FIRST. The key is a single device-local slot, not keyed per vault — so a
+      // stale key left behind would mis-route the next folder (§7.1): a fresh folder → the desync
+      // UnlockScreen, a different existing vault → wrong-key decrypt failures. Once it is gone, the
+      // existing HouseholdGate routes correctly with no new routing code. This is why unlink == switch.
+      await host.secrets.clear(MASTER_KEY_ID);
+      // Forget the vault pointer + this device's session/join state (all device-local). Touch NOTHING
+      // inside the vault on disk — the folder stays byte-intact and re-linkable via its recovery phrase.
+      await host.updateDeviceState({
+        vaultPath: null,
+        activePersonId: null,
+        pendingJoinPersonId: null,
+      });
+      // Drop any concealed super-admin inspect session so it can't bleed into the next vault.
+      host.setSuperAdminActive(false);
+      // Recompute boot from the now-cleared device state → onboarding ("Choose a folder").
+      return host.refreshBootState();
     },
 
     // --- People + relationships ---

@@ -3,6 +3,7 @@ import type { BootState } from '@shared/schemas';
 import { DEFAULT_ROLES } from '@shared/capabilities';
 
 const READY: BootState = { phase: 'ready', vaultPath: '/vault', hasSettings: true };
+const ONBOARDING: BootState = { phase: 'onboarding', vaultPath: null, hasSettings: false };
 
 /** Install a fully-stubbed `window.selfos` bridge for tests; pass overrides for the bits you care about. */
 export function installMockBridge(overrides: Partial<SelfosBridge> = {}): SelfosBridge {
@@ -11,6 +12,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     refreshBootState: () => Promise.resolve(READY),
     selectVaultFolder: () => Promise.resolve(null),
     useVault: () => Promise.resolve(READY),
+    unlinkVault: () => Promise.resolve(ONBOARDING),
     getConflicts: () => Promise.resolve([]),
     revealVault: () => Promise.resolve(),
     onVaultChanged: () => () => {},

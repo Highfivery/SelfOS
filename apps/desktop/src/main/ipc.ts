@@ -19,7 +19,7 @@ import { loadMasterKey } from '@selfos/core/crypto';
 import { createNodeFileSystem } from './host/nodeFileSystem';
 import { loadRelayBundle, RELAY_VERSION } from './relay/relayBundle';
 import { fakeRelayBundle, fakeRelayFetch } from '../shared/relay/fakeRelay';
-import { startVaultWatcher } from './vaultWatcherManager';
+import { startVaultWatcher, stopVaultWatcher } from './vaultWatcherManager';
 
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
 const encryptor = defaultEncryptor();
@@ -276,6 +276,14 @@ export function registerIpcHandlers(): void {
     const state = await bridge.useVault(path);
     startVaultWatcher(path, event.sender);
     return state;
+  });
+
+  // unlinkVault mirrors useVault's platform-specific half: stop the chokidar watcher for the folder
+  // we're leaving (it has no host-agnostic equivalent) BEFORE the shared bridge clears the device-local
+  // key + pointers (14-vault-relinking §5.2).
+  ipcMain.handle(IpcChannels.unlinkVault, async (): Promise<BootState> => {
+    await stopVaultWatcher();
+    return bridge.unlinkVault();
   });
 
   // chatStream streams reply chunks back to the invoking window via emitChatChunk → IPC event. The

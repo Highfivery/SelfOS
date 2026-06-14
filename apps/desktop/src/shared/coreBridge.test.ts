@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { memFileSystem } from '@selfos/core/host';
-import { loadMasterKey } from '@selfos/core/crypto';
+import { loadMasterKey, MASTER_KEY_ID } from '@selfos/core/crypto';
 import { toBase64 } from '@selfos/core/encoding';
 import type { ClaudeClient, FileSystem, ImageClient, SecretStore } from '@selfos/core/host';
 import {
@@ -17,7 +17,7 @@ import {
   type RelayEnv,
 } from '@selfos/core/relay';
 import { ANTHROPIC_API_KEY_ID, OPENAI_API_KEY_ID } from './channels';
-import type { DeviceState } from './schemas';
+import type { BootState, DeviceState } from './schemas';
 import { createCoreBridge, type BridgeHost } from './coreBridge';
 
 /** A fake `fetch` that simulates BOTH the Cloudflare REST API and the deployed relay Worker, over an
@@ -161,6 +161,12 @@ function makeHost(): {
       Promise.resolve({ ok: true, image: { bytes: new Uint8Array([1, 2, 3]), mime: 'image/png' } }),
   };
   const ready = { phase: 'ready' as const, vaultPath: '/vault', hasSettings: true };
+  // Derive boot state from the device pointer (like the real `computeBootState`) so unlink — which
+  // clears `vaultPath` — recomputes to onboarding here, not a frozen `ready`.
+  const bootFromDevice = (): BootState =>
+    device.vaultPath
+      ? { phase: 'ready', vaultPath: device.vaultPath, hasSettings: true }
+      : { phase: 'onboarding', vaultPath: null, hasSettings: false };
   const host: BridgeHost = {
     vaultAndKey: async () => {
       const key = await loadMasterKey(secrets);
@@ -194,8 +200,8 @@ function makeHost(): {
     },
     emitChatChunk: (chunk) => chunks.push(chunk),
     emitDreamChunk: (chunk) => dreamChunks.push(chunk),
-    getBootState: () => Promise.resolve(ready),
-    refreshBootState: () => Promise.resolve(ready),
+    getBootState: () => Promise.resolve(bootFromDevice()),
+    refreshBootState: () => Promise.resolve(bootFromDevice()),
     selectVaultFolder: () => Promise.resolve(null),
     useVault: () => Promise.resolve(ready),
     getConflicts: () => Promise.resolve([]),
@@ -253,6 +259,69 @@ describe('createCoreBridge', () => {
     expect(people[0]?.displayName).toBe('Ben');
     expect((await bridge.getActivePerson())?.id).toBe(ownerId);
     expect(host.device().activePersonId).toBe(ownerId);
+  });
+
+  it('unlinkVault detaches the device — clears the master key, pointers, and super-admin inspect', async () => {
+    const { bridge, host } = await freshOwner();
+    // Precondition: a fully set-up, key-holding device with an active owner, a pending join, and a live
+    // super-admin inspect session — every device-local thing unlink must clear.
+    host.host.setSuperAdminActive(true);
+    await host.host.updateDeviceState({ pendingJoinPersonId: 'pending-x' });
+    expect(await host.host.secrets.has(MASTER_KEY_ID)).toBe(true);
+    expect(host.device().vaultPath).toBe('/vault');
+    expect(host.device().activePersonId).toBeTruthy();
+
+    const boot = await bridge.unlinkVault();
+
+    // The master key is gone (the critical step, §7.1) and every device pointer is cleared.
+    expect(await host.host.secrets.has(MASTER_KEY_ID)).toBe(false);
+    expect(host.device().vaultPath).toBeNull();
+    expect(host.device().activePersonId).toBeNull();
+    expect(host.device().pendingJoinPersonId).toBeNull();
+    // Inspect session dropped; boot recomputes to onboarding ("Choose a folder").
+    expect(host.host.isSuperAdminActive()).toBe(false);
+    expect(boot).toEqual({ phase: 'onboarding', vaultPath: null, hasSettings: false });
+  });
+
+  it('unlinkVault leaves the vault on disk byte-untouched (no data loss)', async () => {
+    const { bridge, host } = await freshOwner();
+    const recoveryBefore = await host.fs.read('config/recovery.enc');
+    const peopleBefore = await host.fs.list('people');
+    expect(recoveryBefore).not.toBeNull();
+    expect(peopleBefore.length).toBeGreaterThan(0);
+
+    await bridge.unlinkVault();
+
+    // The vault folder is identical — recovery bundle byte-for-byte, people dir intact — so the old
+    // vault stays re-linkable via its recovery phrase.
+    expect(await host.fs.read('config/recovery.enc')).toEqual(recoveryBefore);
+    expect(await host.fs.list('people')).toEqual(peopleBefore);
+  });
+
+  it('unlinkVault is idempotent when already detached', async () => {
+    const host = makeHost();
+    const bridge = createCoreBridge(host.host);
+    await host.host.updateDeviceState({ vaultPath: null });
+    // No key, no vault — unlink must not throw and still yields onboarding.
+    const boot = await bridge.unlinkVault();
+    expect(boot.phase).toBe('onboarding');
+    expect(await host.host.secrets.has(MASTER_KEY_ID)).toBe(false);
+  });
+
+  it('unlinkVault clears the master key BEFORE the device write — a write failure stays recoverable', async () => {
+    // §6.1: the key is cleared first, so even if the device-state write fails afterward, the worst
+    // outcome is "no key, old path still recorded" — which the gate routes to Setup/Unlock, never a
+    // stale key against the wrong vault.
+    const base = await freshOwner();
+    expect(await base.host.host.secrets.has(MASTER_KEY_ID)).toBe(true);
+    const failingHost: BridgeHost = {
+      ...base.host.host,
+      updateDeviceState: () => Promise.reject(new Error('disk full')),
+    };
+    const bridge = createCoreBridge(failingHost);
+    await expect(bridge.unlinkVault()).rejects.toThrow('disk full');
+    // The shared `secrets` store is the same instance — the key is already gone despite the write fault.
+    expect(await base.host.host.secrets.has(MASTER_KEY_ID)).toBe(false);
   });
 
   it('routes settings to the right scope (vault file vs device store)', async () => {

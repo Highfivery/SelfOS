@@ -239,6 +239,30 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-14 — Build (**Vault relinking slice 1 — the `vault:unlink` backend op + IPC seam**;
+  [14-vault-relinking](docs/specs/14-vault-relinking.md) §5/§6/§13 slice 1). The first slice of the approved
+  spec 14 (let users unlink the current vault folder + select a different one). **Backend only, no UI** — the
+  Settings "Change vault…" control + dialog (slice 2) and the VaultError "Use a different vault" affordance
+  (slice 3) follow. New `vault:unlink` op through the full typed seam (`channels.ts` `IpcChannels.unlinkVault =
+'vault:unlink'` + `SelfosBridge.unlinkVault(): Promise<BootState>` → **`coreBridge.ts` host-agnostic detach**
+  → **`ipc.ts` platform wrapper** → preload → `test-utils/bridge` mock). The detach (host-agnostic half):
+  **clear the single-slot master key FIRST** (`secrets.clear(MASTER_KEY_ID)`) → clear device-local
+  `vaultPath`/`activePersonId`/`pendingJoinPersonId` → reset super-admin inspect → `refreshBootState()` →
+  onboarding. **Touches NO vault bytes** (the folder stays byte-intact + re-linkable via its recovery phrase).
+  The watcher-stop (`stopVaultWatcher()`) is the platform wrapper in `ipc.ts`, exactly mirroring `useVault`'s
+  `startVaultWatcher` (iOS has no chokidar → that step is a no-op; the shared factory is correct for both).
+  Improved the shared `coreBridge.test` host so `getBootState`/`refreshBootState` derive from `device.vaultPath`
+  (like the real `computeBootState`), so unlink recomputes to onboarding in tests instead of a frozen `ready`.
+  Code-reviewer verdict **ship** (detach order + clear-key-first safety verified; key never crosses IPC; no
+  vault writer invoked; typed seam complete across all 5 layers; applied the one nit — a partial-failure
+  ordering test). Gate green: typecheck (node + web/DOM-lib), lint, format, **348 desktop + 269 core** unit (+4
+  bridge: detach-clears-everything, vault-byte-untouched, idempotent-when-detached, clear-key-before-write-
+  failure-stays-recoverable). On `feat/vault-relinking-slice-1` off `main`. **Why clear the key:** it's a single
+  device slot, not keyed per vault — a stale key would mis-route the next folder (fresh → desync UnlockScreen;
+  different existing vault → wrong-key decrypt failures, §7.1). Clearing it lets the existing `HouseholdGate`
+  route the next folder with zero new routing code — which is why **unlink == switch**. **NEXT: slice 2** — the
+  Settings "Change vault…" control + hand-rolled confirmation dialog + renderer store-reset/route-back + RTL +
+  the full switch-round-trip E2E + visual QA.
 - 2026-06-12 — Build (**Dream-images slice 5 — export + per-dream image sharing; SPEC 13 IS NOW FULLY BUILT**;
   [13-dream-images](docs/specs/13-dream-images.md) §3.5/§3.6/§13.1 slice 5). The final slice. **Asked first**
   the §11.4 placement: the recipient's **"Shared with you"** lives as a **section at the top of the Dreams

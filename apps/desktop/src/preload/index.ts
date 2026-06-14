@@ -10,6 +10,7 @@ const bridge: SelfosBridge = {
   refreshBootState: () => ipcRenderer.invoke(IpcChannels.refreshBootState),
   selectVaultFolder: () => ipcRenderer.invoke(IpcChannels.selectVaultFolder),
   useVault: (path) => ipcRenderer.invoke(IpcChannels.useVault, path),
+  unlinkVault: () => ipcRenderer.invoke(IpcChannels.unlinkVault),
   getConflicts: () => ipcRenderer.invoke(IpcChannels.getConflicts),
   revealVault: () => ipcRenderer.invoke(IpcChannels.revealVault),
   onVaultChanged: (listener) => {

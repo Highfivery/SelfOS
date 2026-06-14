@@ -63,6 +63,7 @@ export const IpcChannels = {
   getAppVersion: 'app:getVersion',
   selectVaultFolder: 'vault:selectFolder',
   useVault: 'vault:use',
+  unlinkVault: 'vault:unlink',
   getConflicts: 'vault:getConflicts',
   revealVault: 'vault:reveal',
   vaultChanged: 'vault:changed', // main → renderer event
@@ -235,6 +236,14 @@ export interface SelfosBridge {
   selectVaultFolder(): Promise<string | null>;
   /** Initialize + activate the vault at `path`, then return the recomputed boot state. */
   useVault(path: string): Promise<BootState>;
+  /**
+   * Detach this device from the current vault (14-vault-relinking): stop the watcher, clear the
+   * device-local master key + `vaultPath`/`activePersonId`/`pendingJoinPersonId`, reset super-admin
+   * inspect, and return the recomputed (onboarding) boot state. Touches **no** bytes inside the vault —
+   * the folder stays intact and re-linkable via its recovery phrase. "Unlink" and "switch" are the same
+   * operation; the caller re-enters the existing onboarding folder picker afterward.
+   */
+  unlinkVault(): Promise<BootState>;
   /** Absolute paths of any sync-conflict copies found in the active vault. */
   getConflicts(): Promise<string[]>;
   /** Open the active vault folder in the OS file manager. */

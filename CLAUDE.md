@@ -239,6 +239,31 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-14 — Build (**Vault relinking slice 3 — the VaultError "Use a different vault" affordance; SPEC 14
+  IS NOW FULLY BUILT**; [14-vault-relinking](docs/specs/14-vault-relinking.md) §7.7/§13 slice 3). The boot
+  **VaultError** screen's second action changed from a direct `chooseVault()` ("Choose a different folder") to
+  an **unlink-backed "Use a different vault"** (`appStore.unlink()`) — **fixing a latent stale-key bug**: the
+  old path re-pointed via `useVault(newPath)` while the previous vault's master key was still on the device, so
+  switching to a _different_ vault would have desync'd (fresh folder → UnlockScreen dead-end) or hit wrong-key
+  decrypt failures. Routing through `unlink` clears the key + pointer first → onboarding "Choose a folder", so
+  the switch is **key-safe**. **Retry is unchanged** (re-checks the SAME folder; the key is still valid for a
+  temporarily-offline vault, so it must NOT unlink). **Visual-QA caught a real responsive bug** the 390px guard
+  then locked: a long absolute vault path in the error message didn't wrap → horizontal overflow at phone
+  width; fixed with `overflow-wrap: anywhere` on the description (the preview missed it because it used a short
+  bookmark — the E2E's real tmpdir path surfaced it). Code-reviewer **ship** (the unlink-vs-refresh split
+  verified; `unlink` is key-safe on an unreachable vault since it touches no vault bytes; applied the one nit —
+  the spec-named 390px guard, which then found the overflow). Gate green: typecheck (node + web/DOM-lib), lint,
+  format, **269 core + 361 desktop** unit (+3 `VaultError` RTL: renders both actions, Retry→refresh-not-unlink,
+  the new button→unlink), **+1 E2E** (boot to VaultError on a missing path → "Use a different vault" →
+  onboarding + device pointer cleared + a 390px overflow guard). **Visual QA** of the VaultError screen at
+  desktop + 390px via the web preview (clean, buttons aligned; the web path clears `vaultBookmark` → onboarding
+  with no console errors). On `feat/vault-relinking-slice-3` off `main`. **Lesson: a vault path is a long
+  unbreakable string — any UI that renders it must `overflow-wrap: anywhere`, and a 390px guard that uses a
+  REAL (long) path catches it where a short fixture wouldn't.** **Spec 14 (vault relinking) is COMPLETE — all 3
+  slices on `main`: the `vault:unlink` backend op + seam (1), the Settings "Change vault…" control + dialog +
+  cross-platform `vaultBookmark` clearing (2), and the VaultError affordance (3). Users can now unlink the
+  current vault and switch to a different one, from Settings or the error screen, on both Electron and web/iOS,
+  with no data loss and a key-safe re-link.**
 - 2026-06-14 — Build (**Vault relinking slice 2 — the Settings "Change vault…" control + dialog + route-back**;
   [14-vault-relinking](docs/specs/14-vault-relinking.md) §3/§5.3/§5.4/§13 slice 2). The first user-facing
   surface: a **`vault.change`** custom row in Settings → Vault (no admin gate — any signed-in person, decision

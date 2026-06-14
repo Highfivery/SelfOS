@@ -2724,3 +2724,45 @@ test('vault: Change vault unlinks the current vault, routes to onboarding, and l
     await rm(vault, { recursive: true, force: true });
   }
 });
+
+test('vault: the VaultError screen offers a key-safe "Use a different vault" → onboarding', async () => {
+  // Boot with a recorded vault path that doesn't exist → the boot gate lands on VaultError.
+  const userData = await mkdtemp(join(tmpdir(), 'selfos-e2e-ud-'));
+  const missing = join(tmpdir(), 'selfos-e2e-gone-does-not-exist');
+  await writeJson(join(userData, 'state.json'), { schemaVersion: 1, vaultPath: missing });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await expect(w.getByRole('heading', { name: /isn’t reachable/i })).toBeVisible();
+
+    // The error screen fits at phone width (no horizontal overflow).
+    await app.evaluate(({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows()[0];
+      if (win) {
+        win.setMinimumSize(360, 480);
+        win.setSize(390, 800);
+      }
+    });
+    await w.waitForTimeout(150);
+    // Boot screens render outside `main`, so check the page itself for horizontal overflow.
+    const overflow = await w.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(1);
+
+    // "Use a different vault" routes through unlink (clears the pointer) → onboarding, never a stale
+    // re-point. Retry stays as-is (re-checks the same folder).
+    await w.getByRole('button', { name: /use a different vault/i }).click();
+    await expect(w.getByRole('button', { name: /choose a folder/i })).toBeVisible();
+  } finally {
+    await app.close();
+  }
+
+  // The device pointer was cleared (a clean detach), so a relaunch boots to onboarding, not the error.
+  const state = JSON.parse(await readFile(join(userData, 'state.json'), 'utf8')) as {
+    vaultPath: string | null;
+  };
+  expect(state.vaultPath).toBeNull();
+  await rm(userData, { recursive: true, force: true });
+});

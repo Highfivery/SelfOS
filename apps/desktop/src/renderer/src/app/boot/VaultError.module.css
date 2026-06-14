@@ -1,0 +1,5 @@
+/* A vault path can be a long, unbroken absolute path — let it wrap so it never forces horizontal
+   overflow at narrow widths (14-vault-relinking). */
+.desc {
+  overflow-wrap: anywhere;
+}

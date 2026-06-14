@@ -122,7 +122,10 @@ A slice is **not** done until **all** of these pass:
 - [ ] E2E tests for **every** new user-facing surface/section, not just the happy path (Playwright);
       include a no-horizontal-overflow / layout guard for content-heavy screens, and a geometry guard
       for fixed-size controls (e.g. a toggle must not shrink in a flex row — assert computed
-      `flex-shrink` / thumb position)
+      `flex-shrink` / thumb position). **The overflow guard must catch INNER scrollbars too** — assert NO
+      element has `scrollWidth > clientWidth` with computed `overflow-x: auto|scroll` (not just `main`);
+      and test at the **actual rendered container widths** (e.g. the narrow Sessions sidebar, ~240px),
+      not only the 390px page width — a `main`-only check missed a scrolling filter + a clipped sidebar.
 - [ ] **Docs in lockstep** — relevant spec / `CLAUDE.md` / skills updated (`sync-docs`)
 - [ ] **Self code-review** passed (`code-reviewer` agent); findings fixed or explicitly accepted
 - [ ] Accessibility check for any UI
@@ -228,6 +231,31 @@ placing anything. Specifically:
   spacing, vertical rhythm, and polish — not only "does it work." Screenshot every touched surface and
   look critically (e.g. buttons must bottom-align with the labelled fields beside them, not float
   mid-height). Catch bad-looking UI before the user does. (DoD §7.)
+- **NO horizontal scrollbars — anywhere, ever.** Not page-level and **not inner controls**. A filter row,
+  toolbar, tab strip, or `SegmentedControl` that scrolls-x to fit is a UX failure. Test it (see §7).
+- **Don't solve "it doesn't fit" by WRAPPING — wrapping a control row is lazy, not a design.** When options
+  don't fit a narrow pane, pick a **space-filling component**, not a wrapping pile of chips: a full-width
+  `Select` for a status filter, a full-width control, or a genuinely compact control — something that fills
+  the space and scales to any label length. (The Sessions status filter is a full-width `Select`, not chips;
+  catalog cards fill the row via an `auto-fit` grid.) Reserve wrapping for genuinely free-flowing content
+  (tags on a detail page), never for a primary control cluster.
+- **Design for density — cards must not waste vertical space.** A long catalog of cards must be compact and
+  scannable: tight padding, clamp blurbs (`-webkit-line-clamp`), fold secondary metadata onto one line, and
+  use a denser `auto-fit` grid so more fit per row. Don't ship tall, sparse cards (the guided-session cards
+  were 5 lines tall → compacted to ~3 with a clamped blurb + an eyebrow that carries the tag + a "Steps"
+  marker on one line).
+- **Cards & rows: never let a title fight a tag/badge for the same line.** A title + framework tag on one
+  line wraps the title a word-per-line at narrow widths — ugly. Put the tag as an **eyebrow above** the
+  title (or below); give the title the full width. Likewise, don't cram many controls into one narrow row —
+  collapse secondary actions (rename/delete) into a **kebab menu** rather than a wrapping icon cluster.
+- **Flex truncation:** any text in a flex row that should ellipsize needs `min-width: 0` on the flex item
+  (and the container) or it overflows its pane — the classic flexbox footgun. Verify narrow panes don't
+  overflow.
+- **Dropdown menus must not be clipped** by an `overflow: auto/scroll` ancestor, and a right-aligned menu
+  must not render off-screen — pin its trigger so the menu stays in view (don't let the trigger wrap to a
+  left-aligned line under a `right: 0` menu).
+- **Collapsible/accordion** content needs clear spacing between the summary and its body when open (never
+  let the first item butt up against the title).
 - **"Improve" means redesign, not relocate.** When asked to improve or move a component, actually
   redesign it for its new context — fit, density, space-conservation, cohesion with neighbours — don't
   just move the existing component. (E.g. the appearance control became a compact icon→popover in the
@@ -239,6 +267,81 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-14 — Polish round 2 + **rules update** (user: "wrapping is LAZY, not design; cards waste vertical
+  space"). Replaced the wrapping pill-chip status filter with a **full-width `Select`** (fills the sidebar,
+  scales to any label, never wraps — `combobox` "Filter sessions by status"); **redesigned the guided cards
+  to be compact** (~5 lines → ~3: tight padding, a single eyebrow row carrying the framework tag + a "Steps"
+  marker, a **2-line-clamped blurb**, a hover go-arrow, and a denser `auto-fit` minmax(190px) grid that
+  fills the row). Rules updated: CLAUDE.md §12 + memory `selfos-ui-conventions` now say **don't solve
+  "doesn't fit" by wrapping a control row — use a space-filling component (full-width `Select`/control)** and
+  **design cards for density** (clamp blurbs, fold metadata, denser grid). E2E updated for the Select filter
+  (`selectOption` instead of clicking chips) and status assertions target the pill's `data-status` (not the
+  text, which now also matches the hidden `<option>`). Gate green: typecheck/lint/format, 336 core + 389
+  desktop unit, **56 E2E**. Visual QA at 390/900/1280px (full-width Select, 3-up compact cards at desktop /
+  1-up at phone, no scrollbars, no console errors). **Lesson: when a control row doesn't fit, the answer is a
+  different COMPONENT (a Select that fills the space), never `flex-wrap` — and a text assertion like
+  `getByText('In progress')` silently starts matching a `<select>`'s hidden `<option>` once you swap to a
+  Select, so assert status pills by a stable hook (`[data-status]`), not their label text.**
+- 2026-06-14 — Polish + **rules update** (Sessions launcher UI/UX pass; user flagged avoidable flaws). Fixed:
+  (1) the status filter was a `SegmentedControl` that **scrolled-x** in the narrow sidebar → replaced with
+  **wrapping pill chips** (no scrollbar); (2) guided-session cards put the title + framework tag on one line
+  → title wrapped a word-per-line at narrow widths → **tag is now an eyebrow ABOVE a full-width title**;
+  (3) the Intimacy accordion butted its content against the title → **`details[open]` summary margin-bottom**;
+  (4) a **pre-existing flexbox bug** — the conversation title lacked `min-width:0` so it overflowed the sidebar
+  (horizontal scrollbar) → fixed; (5) the row crammed 3 pills + 3 action icons → **rename/delete collapsed into
+  the kebab menu**, leaving one clean `⋯` (also fixed a real **dropdown-clipping** bug: the wrapped lone kebab
+  went left-aligned and its `right:0` menu rendered off the sidebar's edge where `overflow` clipped it). **Rules
+  updated** per the user: CLAUDE.md **§12** (no horizontal scrollbars anywhere incl. inner controls; title never
+  shares a line with a tag; flex `min-width:0`; dropdowns not clipped; accordion spacing) + **§7 DoD** (the E2E
+  overflow guard must catch INNER scrollbars — assert no element has `scrollWidth>clientWidth` with
+  `overflow-x:auto|scroll` — and test at the ACTUAL container widths, e.g. the ~240px sidebar, not just 390px);
+  memory `selfos-ui-conventions` synced. The guided E2E now asserts **no inner scrollbar at 390px AND 900px**;
+  session kebab E2E interactions **scoped to the Conversations sidebar** (fixes a flaky race where the thread-head
+  kebab — which has no Rename — was grabbed by `.first()` before the sidebar row rendered). Gate green:
+  typecheck/lint/format, 336 core + 389 desktop unit, **56 E2E** (incl. 5 session tests ×2 for flakiness). Visual
+  QA at desktop + 390px (filter chips wrap, eyebrow-tag cards, decluttered rows, no scrollbars, no console
+  errors). **Lesson: a `main`-only overflow guard misses inner scrollbars (a scrolling SegmentedControl) and
+  pane-specific overflow (a `min-width:0`-less flex title) — the guard must scan ALL elements for
+  `overflow-x:auto|scroll` + `scrollWidth>clientWidth` and run at the real narrow container widths; and a
+  `right:0` dropdown whose trigger can wrap to a left-aligned line will render off-screen and get clipped.**
+- 2026-06-14 — Build (**App-refresh package C — guided sessions; SPEC 16 FULLY BUILT**;
+  [16-guided-sessions](docs/specs/16-guided-sessions.md), builds on `05`/`06`/`09`/`08`/`04`). The Sessions start
+  screen is now a **launcher**: free-start ("What do you want to work through?") + an AI **"Suggested for you"** row
+  - a grouped curated **catalog** (Reflective & therapy-informed · Coaching · Intimacy & connection). A guided
+    session is an **ordinary `05` Conversation carrying `guideId`** (+ `guideStep` for structured) — so streaming,
+    metering (`06`), lifecycle + End&summarize (`09`) all work with **no new machinery**. **Asked first** the three
+    unspecced build forks (all confirmed): suggestions are **explicit-first-tap** (no silent spend — `guided:getState`
+    reads the cache, `guided:suggest` spends `guided.suggest`); structured steps advance via an **AI-embedded
+    `[[SELFOS:STEP:n]]` marker** (turn-free, stripped from saved + streamed text, clamped, best-effort — never blocks
+    free input, mirroring the `09` wrap-up marker); the **18+ intimacy ack is per-person in the vault**
+    (`people/<id>/guidance/prefs.enc`, reset on switch). **Core:** `guidedCatalog.ts` (17 built-in exercises, code not
+    vault; **non-clinical group titles + per-card framework tags**; every addendum + opener leads with "self-help
+    inspired by X, **not therapy**"); `guidedSteps.ts`; `buildSystemPrompt(…, guideId?)` appends the addendum
+    **AFTER** PERSONA+SAFETY+context (boundary always leads) + the step convention for structured; `chatService`
+    advances `guideStep` + `stripCoachMarkers`; `guidedSessionService.startGuided` (stamps `guideId`, seeds the
+    **static opener** — no model call, works offline); `guidanceService` (recommender **reusing the questionnaire
+    gap-finder context-provider registry** — structured context only, **never transcripts** — + cache + ack);
+    `endAndSummarize` notes the exercise (`provenance.guideId` + a leading "Exercise: …" fact). **Schema:**
+    additive-optional `Conversation.guideId`/`guideStep` + `InsightProvenance.guideId` (**no schemaVersion bump/
+    migration**); `Guided*` cache/prefs/view schemas; `guided.suggest` usage type. **Seam:** `sessions:startGuided` /
+    `guided:getState` / `guided:suggest` / `guided:acknowledgeAdult` — gated `sessions.own` + active-person-scoped
+    **in the bridge** (the trust boundary; intimacy is excluded from suggestions host-side until acked, not just in
+    the UI); the Claude call + key stay in main. **Renderer:** the launcher (free-start composer + `SuggestedSessions`
+    explicit-first-tap row with calm AI-off/over-budget/thin-profile states + grouped collapsible `GuidedCatalog`
+    with the per-person-gated Intimacy group), `GuidedStepper` beside structured threads, `guidanceStore` (per-person,
+    reset in AppShell), `conversationStore` guide fields + `startGuided`; `/gallery` gains the card + stepper.
+    Code-reviewer **ship** (safety/privacy/gating/spend boundaries all verified airtight; applied the a11y nit — the
+    catalog group title is a styled span in a labelled `<section>`, not a heading nested in the `<summary>` button).
+    Gate green: typecheck (node + web/DOM-lib), lint, format, **336 core + 389 desktop + 8 relay** unit, **+1 E2E**
+    (start a structured guided exercise → opener + stepper → steered reply → complete & summarize → the Insight notes
+    the exercise + the goal feeds a later `buildContext`; the Intimacy group is 18+-gated; explicit-first-tap
+    suggestions; 390px overflow guard). **Visual QA** via the web preview at desktop + 390px (launcher, grouped
+    catalog with framework tags, the 18+ gate → reveal, the structured stepper + not-therapy opener; 0 overflow, no
+    console errors). On `feat/guided-sessions` off `main`. **Lesson: a guided session needs NO new machinery — it's
+    an ordinary Conversation carrying `guideId`; the only additive pieces are a code-only catalog, an addendum
+    appended AFTER (never before) PERSONA+SAFETY, and two turn-embedded markers (wrap-up + step) that cost nothing
+    extra. Every affordance that would SPEND (suggestions) is explicit-first-tap, never auto-run on view.** **NEXT
+    package: D (questionnaire UX) — per the app-refresh plan.**
 - 2026-06-14 — Build (**App-refresh package B — session lifecycle & analysis; SPEC 09 FULLY BUILT** [core +
   the §14 lifecycle amendment]; [09-session-analysis](docs/specs/09-session-analysis.md), amends `05` §4.1).
   Coaching sessions now have an explicit **lifecycle** + **memory**. **Asked first** the three unspecced UX

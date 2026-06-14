@@ -5,3 +5,7 @@ export * from './promptBuilder';
 export * from './chatService';
 export * from './wrapUp';
 export * from './sessionAnalysisService';
+export * from './guidedCatalog';
+export * from './guidedSteps';
+export * from './guidedSessionService';
+export * from './guidanceService';

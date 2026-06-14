@@ -30,6 +30,7 @@ import { useDreamStore } from '../stores/dreamStore';
 import { useDreamAnalysisStore } from '../stores/dreamAnalysisStore';
 import { useDreamPatternStore } from '../stores/dreamPatternStore';
 import { useResultsStore } from '../stores/resultsStore';
+import { useGuidanceStore } from '../stores/guidanceStore';
 import { AccountMenu } from './AccountMenu';
 import { Switcher } from './Switcher';
 import { LockScreen } from './LockScreen';
@@ -82,10 +83,12 @@ export function AppShell(): JSX.Element {
     useDreamAnalysisStore.getState().reset();
     useDreamPatternStore.getState().reset();
     useResultsStore.getState().reset(); // sender-scoped Results/trends — per-person, must reset too
+    useGuidanceStore.getState().reset(); // guided suggestions + 18+ ack are per-person (16 §4.3/§8.3)
     void useConversationStore.getState().load();
     void useBudgetStore.getState().refresh();
     void useInboxStore.getState().load();
     void useDreamStore.getState().load();
+    void useGuidanceStore.getState().load();
   }, [activePersonId]);
 
   // Track the mobile breakpoint; collapse any open drawer when the viewport grows back to desktop.

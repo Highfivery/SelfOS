@@ -203,6 +203,10 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.conversationsDelete, bridge.conversationsDelete);
   handle(IpcChannels.sessionsSetStatus, bridge.sessionsSetStatus);
   handle(IpcChannels.sessionsEndAndSummarize, bridge.sessionsEndAndSummarize);
+  handle(IpcChannels.sessionsStartGuided, bridge.sessionsStartGuided);
+  handle(IpcChannels.guidedGetState, bridge.guidedGetState);
+  handle(IpcChannels.guidedSuggest, bridge.guidedSuggest);
+  handle(IpcChannels.guidedAcknowledgeAdult, bridge.guidedAcknowledgeAdult);
   handle(IpcChannels.usageSessionCosts, bridge.usageSessionCosts);
   handle(IpcChannels.questionnairesList, bridge.questionnairesList);
   handle(IpcChannels.questionnairesGet, bridge.questionnairesGet);

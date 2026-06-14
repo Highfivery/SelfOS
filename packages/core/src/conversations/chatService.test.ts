@@ -239,3 +239,82 @@ describe('runChatTurn', () => {
     expect((await listConversations(fs, key, 'p1')).length).toBe(1);
   });
 });
+
+describe('runChatTurn — guided sessions (16)', () => {
+  function markerClient(text: string): ClaudeClient {
+    return {
+      send: () => Promise.resolve('ok'),
+      stream: (_options, onDelta) => {
+        onDelta('');
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 80, outputTokens: 12, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+  }
+
+  it('advances guideStep from the coach marker and strips it from the saved reply (structured)', async () => {
+    await base();
+    await saveConversation(fs, key, {
+      id: 'g1',
+      schemaVersion: 1,
+      personId: 'p1',
+      title: 'Thought Record',
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      status: 'inProgress',
+      guideId: 'cbt-thought-record',
+      guideStep: 0,
+      messages: [{ role: 'assistant', content: 'opener', ts: now.toISOString() }],
+    });
+    const result = await runChatTurn({
+      fs,
+      key,
+      client: markerClient("Let's look at the evidence. [[SELFOS:STEP:3]]"),
+      apiKey: 'sk-test',
+      model: 'claude-sonnet-4-6',
+      personId: 'p1',
+      conversationId: 'g1',
+      userText: 'here is my situation',
+      onDelta: () => {},
+      now,
+    });
+    expect(result.ok).toBe(true);
+    const conversation = await getConversation(fs, key, 'p1', 'g1');
+    expect(conversation?.guideStep).toBe(3);
+    const lastMessage = conversation?.messages.at(-1)?.content;
+    expect(lastMessage).toBe("Let's look at the evidence.");
+    expect(lastMessage).not.toContain('SELFOS:STEP');
+  });
+
+  it('clamps an out-of-range step to the exercise step count', async () => {
+    await base();
+    await saveConversation(fs, key, {
+      id: 'g2',
+      schemaVersion: 1,
+      personId: 'p1',
+      title: 'GROW',
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      guideId: 'grow-goal-setting',
+      guideStep: 0,
+      messages: [],
+    });
+    await runChatTurn({
+      fs,
+      key,
+      client: markerClient('Way ahead. [[SELFOS:STEP:99]]'),
+      apiKey: 'sk-test',
+      model: 'claude-sonnet-4-6',
+      personId: 'p1',
+      conversationId: 'g2',
+      userText: 'go',
+      onDelta: () => {},
+      now,
+    });
+    const conversation = await getConversation(fs, key, 'p1', 'g2');
+    // GROW has 4 steps → max index 3.
+    expect(conversation?.guideStep).toBe(3);
+  });
+});

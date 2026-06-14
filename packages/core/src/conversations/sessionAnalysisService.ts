@@ -14,6 +14,7 @@ import { checkBudget, costOf, recordUsage } from '../usage';
 import { getInsight, saveInsight } from '../insights';
 import { getConversation, saveConversation } from './conversationService';
 import { PERSONA, SAFETY } from './promptBuilder';
+import { getExercise } from './guidedCatalog';
 
 /**
  * Session-analysis service (09-session-analysis §5). When a coaching session is completed, AI reads the
@@ -165,7 +166,14 @@ export async function endAndSummarize(deps: EndAndSummarizeDeps): Promise<Sessio
 
   const at = now.toISOString();
   const context = await buildContext(fs, key, personId);
-  const system = [PERSONA, SAFETY, SESSION_ANALYSIS_GUIDANCE, context].filter(Boolean).join('\n\n');
+  // If this was a guided exercise (16-guided-sessions §3.5), tell the analyzer so the summary reflects it.
+  const exercise = conversation.guideId ? getExercise(conversation.guideId) : undefined;
+  const guideNote = exercise
+    ? `This session was a guided self-help exercise: "${exercise.title}" (inspired by ${exercise.framework}). Reflect that in the summary where relevant.`
+    : '';
+  const system = [PERSONA, SAFETY, SESSION_ANALYSIS_GUIDANCE, guideNote, context]
+    .filter(Boolean)
+    .join('\n\n');
   const messages = [
     ...conversation.messages.map((m) => ({ role: m.role, content: m.content })),
     { role: 'user' as const, content: ANALYSIS_INSTRUCTION },
@@ -227,6 +235,17 @@ export async function endAndSummarize(deps: EndAndSummarizeDeps): Promise<Sessio
   // People the person mentioned become facts too — each one is then shareable-promotable to that person's
   // own coaching context via the Memory surface (the per-fact opt-in sharing, 09 §3.3).
   addFacts('Person mentioned', draft.people);
+  // A guided session's Insight notes which exercise produced it (16 §3.5), as a leading fact.
+  if (exercise) {
+    const labelled = `Exercise: ${exercise.title} (${exercise.framework})`;
+    const carried = priorShares.get(labelled);
+    facts.unshift({
+      id: uuid(),
+      text: labelled,
+      shareable: false,
+      ...(carried && carried.length > 0 ? { shareableWith: carried } : {}),
+    });
+  }
 
   const insight: Insight = {
     id: insightId,
@@ -238,7 +257,11 @@ export async function endAndSummarize(deps: EndAndSummarizeDeps): Promise<Sessio
     metrics: { moodValence: clampUnit(draft.moodValence), moodEnergy: clampUnit(draft.moodEnergy) },
     confidence: 'medium',
     approved: true, // session insights auto-enter the subject's own context (09 §11.2), no approve-step
-    provenance: { conversationId, at },
+    provenance: {
+      conversationId,
+      at,
+      ...(conversation.guideId ? { guideId: conversation.guideId } : {}),
+    },
     ...(draft.crisisFlag !== undefined ? { crisisFlag: draft.crisisFlag } : {}),
     createdAt: prior?.createdAt ?? at,
     updatedAt: at,

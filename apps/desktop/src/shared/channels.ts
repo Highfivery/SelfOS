@@ -26,6 +26,8 @@ import type {
   DreamShareResult,
   DreamShareTarget,
   DreamSynthesisResult,
+  GuidanceState,
+  GuidedSuggestResult,
   InboxAssignmentDetail,
   InboxItem,
   InviteSummary,
@@ -113,6 +115,10 @@ export const IpcChannels = {
   conversationsDelete: 'conversations:delete',
   sessionsSetStatus: 'sessions:setStatus',
   sessionsEndAndSummarize: 'sessions:endAndSummarize',
+  sessionsStartGuided: 'sessions:startGuided',
+  guidedGetState: 'guided:getState',
+  guidedSuggest: 'guided:suggest',
+  guidedAcknowledgeAdult: 'guided:acknowledgeAdult',
   usageSessionCosts: 'usage:sessionCosts',
   questionnairesList: 'questionnaires:list',
   questionnairesGet: 'questionnaires:get',
@@ -232,6 +238,7 @@ export interface ConversationMeta {
   title: string;
   updatedAt: string;
   status: SessionStatus; // normalized; absent ⇒ 'inProgress'
+  guideId?: string; // set when the session was started from a guided exercise (16-guided-sessions §4.2)
 }
 
 export interface SelfosBridge {
@@ -369,6 +376,24 @@ export interface SelfosBridge {
    * re-run on a reopened (stale) session. Budget-gated + metered (`session.analyze`); the key stays in main.
    */
   sessionsEndAndSummarize(input: { conversationId: string }): Promise<SessionSummaryResult>;
+  /**
+   * Start a guided session (16-guided-sessions §6): create + seed a conversation stamped with `guideId`,
+   * returning its id. Gated `sessions.own`, scoped to the active person; rejects an unknown `guideId`. No
+   * model call — the static opener is seeded, so it works with AI off.
+   */
+  sessionsStartGuided(input: { guideId: string }): Promise<{ conversationId: string } | null>;
+  /**
+   * The launcher's no-spend read (16 §6): cached "Suggested for you" (if any) + the 18+ ack state. Gated
+   * `sessions.own`.
+   */
+  guidedGetState(): Promise<GuidanceState>;
+  /**
+   * Generate/refresh "Suggested for you" (16 §3.4) — budget-gated + metered (`guided.suggest`); caches the
+   * result. Gated `sessions.own`; reads the gap-finder context-provider registry. Key stays in main.
+   */
+  guidedSuggest(): Promise<GuidedSuggestResult>;
+  /** Record the one-time 18+ acknowledgement for the Intimacy group (16 §8.3); returns the new state. */
+  guidedAcknowledgeAdult(): Promise<GuidanceState>;
   /**
    * Per-session accumulated AI cost for the active person (09 §14.3). `costUsd` is present **only for
    * admins** (`budgets.manage`), redacted at the bridge; everyone gets `tokens` + a `budgetRatio`.
@@ -646,6 +671,8 @@ export type {
   DreamShareResult,
   DreamShareTarget,
   DreamSynthesisResult,
+  GuidanceState,
+  GuidedSuggestResult,
   InboxAssignmentDetail,
   InboxItem,
   Insight,

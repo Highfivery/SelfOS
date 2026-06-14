@@ -1,6 +1,6 @@
 # 16 — Guided sessions (starters & structured exercises)
 
-> **Status:** Review · _last updated 2026-06-12_
+> **Status:** Approved · **Built** · _last updated 2026-06-14_
 >
 > A session ([`05`](05-conversations.md)) starts from a blank page today. This spec turns the Sessions
 > start screen into a **launcher**: the user can still free-start ("think out loud"), or pick a **guided
@@ -321,3 +321,37 @@ build (not a blocking decision)._
 - 2026-06-12 — Review. Resolved §11: soft group names + framework tags; structured set = Thought Record / GROW
   / Weekly Review / Decision Clarifier; intimacy = 18+ ack only; static opener; suggestions cached in vault.
   Build-ready pending final approval.
+- 2026-06-14 — **Approved + FULLY BUILT** (Package C). Three build-time forks **asked + confirmed**: suggestions
+  are **explicit-first-tap** (no silent spend on launcher open — `guided:getState` reads the cache, `guided:suggest`
+  spends); structured steps advance via an **AI-embedded `[[SELFOS:STEP:n]]` marker** (turn-free, stripped from
+  saved + streamed text, clamped, best-effort — never blocks free input, mirroring the wrap-up marker); the 18+
+  intimacy ack is stored **per-person in the vault** (`people/<id>/guidance/prefs.enc`, reset on switch). **Core:**
+  `guidedCatalog.ts` (17 built-in exercises across 3 groups; non-clinical group titles + per-card framework tags;
+  every addendum + opener leads with "self-help inspired by X, not therapy"); `guidedSteps.ts` (marker parse/strip/
+  `stripCoachMarkers`); `buildSystemPrompt(…, guideId?)` appends the addendum **after** PERSONA+SAFETY+context (+ the
+  step-marker convention for structured); `chatService` advances `guideStep` + strips both markers;
+  `guidedSessionService.startGuided` (stamps `guideId`/`guideStep:0`, seeds the **static opener** — no model call,
+  works offline); `guidanceService` (recommender reusing the questionnaire **gap-finder context-provider registry** —
+  structured context only, never transcripts — + cache + 18+ ack); `endAndSummarize` notes the exercise
+  (`provenance.guideId` + a leading "Exercise: …" fact). **Schema:** additive-optional `Conversation.guideId`/
+  `guideStep` + `InsightProvenance.guideId` (no schemaVersion bump/migration); `Guided*` cache/prefs/view schemas;
+  `guided.suggest` usage type. **Seam:** `sessions:startGuided` / `guided:getState` / `guided:suggest` /
+  `guided:acknowledgeAdult` — all gated `sessions.own` + active-person-scoped in the bridge (the trust boundary);
+  the Claude call + key stay in main. **Renderer:** the launcher replaces the Sessions start state (free-start
+  framing + composer, `SuggestedSessions` explicit-first-tap row with calm AI-off/over-budget/thin-profile states,
+  grouped collapsible `GuidedCatalog` with the per-person-gated Intimacy group); `GuidedStepper` beside structured
+  threads; `guidanceStore` (per-person, reset in AppShell); `conversationStore` guide fields + `startGuided`;
+  `/gallery` gains the card + stepper. Code-reviewer **ship** (safety/privacy/gating/spend boundaries all verified;
+  applied the a11y nit — the catalog group title is a styled span in a labelled `<section>`, not a heading nested in
+  the `<summary>` button). Gate green: typecheck (node + web/DOM-lib), lint, format, **336 core + 389 desktop + 8
+  relay** unit (+ guidedCatalog/guidedSteps/guidedSessionService/guidanceService, promptBuilder addendum-ordering,
+  chatService step-advance/clamp, endAndSummarize guideId-note, the bridge guided round-trip + guest-denial, the
+  SessionLauncher/SuggestedSessions/GuidedStepper RTL), **+1 E2E** (start a structured guided exercise → opener +
+  stepper → steered reply → complete & summarize → the Insight notes the exercise [`provenance.guideId`] + the goal
+  feeds a later `buildContext`; the Intimacy group is 18+-gated; explicit-first-tap suggestions; 390px overflow guard).
+  Visual QA via the web preview at desktop + 390px (the launcher, the grouped catalog with framework tags, the 18+
+  gate → reveal, the structured stepper + not-therapy opener; 0 overflow, no console errors). On
+  `feat/guided-sessions` off `main`. **Lesson: a guided session needs NO new machinery — it's an ordinary
+  Conversation carrying `guideId`, so streaming/metering/lifecycle/summarize all work unchanged; the only additive
+  pieces are a code-only catalog, an addendum appended after (never before) PERSONA+SAFETY, and two turn-embedded
+  markers (wrap-up + step) that cost nothing extra.**

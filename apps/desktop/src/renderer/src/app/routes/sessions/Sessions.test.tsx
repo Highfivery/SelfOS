@@ -38,12 +38,14 @@ afterEach(() => {
 });
 
 describe('Sessions', () => {
-  it('prompts to set up AI when not configured, with a Settings shortcut + crisis footer', async () => {
+  it('shows the launcher with a calm connect state when AI is off, plus the catalog + crisis footer', async () => {
     installMockBridge({ secretHas: () => Promise.resolve(false) });
     setAiEnabled(false);
     renderSessions();
-    expect(await screen.findByText('Connect Claude to start')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Open Settings' })).toBeInTheDocument();
+    // The launcher renders even with AI off — the catalog browses; only chatting needs AI.
+    expect(await screen.findByText('What do you want to work through?')).toBeInTheDocument();
+    expect(screen.getByText(/to start talking/i)).toBeInTheDocument();
+    expect(screen.getByText('Reflective & therapy-informed')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /get help now/i })).toBeInTheDocument();
   });
 
@@ -70,7 +72,11 @@ describe('Sessions', () => {
     });
     setAiEnabled(true);
     renderSessions();
-    await userEvent.click(await screen.findByRole('button', { name: 'Rename Old title' }));
+    // Rename lives in the per-session kebab now (no standalone icon clutter).
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Session options for Old title' }),
+    );
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Rename' }));
     const input = screen.getByLabelText('Session title');
     await userEvent.clear(input);
     await userEvent.type(input, 'New title{Enter}');
@@ -98,12 +104,15 @@ describe('Sessions', () => {
 
     expect(await screen.findByRole('button', { name: 'Active one' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Done one' })).toBeInTheDocument();
-    // Status pills (plus the matching filter buttons) render their state as text, not colour alone.
+    // Status pills render their state as text, not colour alone.
     expect(screen.getAllByText('In progress').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Complete').length).toBeGreaterThanOrEqual(1);
 
-    // Filter to Complete → the in-progress session drops out.
-    await userEvent.click(screen.getByRole('button', { name: 'Complete' }));
+    // Filter to Complete (via the status Select) → the in-progress session drops out.
+    await userEvent.selectOptions(
+      screen.getByRole('combobox', { name: 'Filter sessions by status' }),
+      'complete',
+    );
     expect(screen.queryByRole('button', { name: 'Active one' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Done one' })).toBeInTheDocument();
   });

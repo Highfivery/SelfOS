@@ -4,7 +4,9 @@ import type { ChatTurnResult, Conversation, UsageEvent } from '../schemas';
 import { checkBudget, costOf, recordUsage } from '../usage';
 import { getConversation, saveConversation } from './conversationService';
 import { buildSystemPrompt } from './promptBuilder';
-import { WRAP_UP_INSTRUCTION, WRAP_UP_MARKER, stripWrapUpMarker } from './wrapUp';
+import { WRAP_UP_INSTRUCTION, WRAP_UP_MARKER } from './wrapUp';
+import { getExercise } from './guidedCatalog';
+import { parseLatestStep, stripCoachMarkers } from './guidedSteps';
 
 export type { ChatTurnResult };
 
@@ -70,8 +72,9 @@ export async function runChatTurn(deps: ChatTurnDeps): Promise<ChatTurnResult> {
   }
   conversation.messages.push({ role: 'user', content: userText, ts: at });
 
-  // The wrap-up instruction (chat sessions only) teaches the coach the private completion-marker convention.
-  const system = `${await buildSystemPrompt(fs, key, personId)}\n\n${WRAP_UP_INSTRUCTION}`;
+  // The wrap-up instruction teaches the coach the private completion-marker convention; the guided
+  // addendum (if `guideId` is set) steers the turn after persona+safety+context (16 §5).
+  const system = `${await buildSystemPrompt(fs, key, personId, conversation.guideId)}\n\n${WRAP_UP_INSTRUCTION}`;
   let result;
   try {
     result = await client.stream(
@@ -91,13 +94,21 @@ export async function runChatTurn(deps: ChatTurnDeps): Promise<ChatTurnResult> {
     return { ok: false, reason: 'ERROR', message: 'The coach couldn’t respond. Please try again.' };
   }
 
-  // Detect + strip the private wrap-up marker so it's never persisted or shown; surface it as a hint.
+  // Detect + strip the private coach markers (wrap-up + step) so they're never persisted or shown.
   const wrapUpSuggested = result.text.includes(WRAP_UP_MARKER);
   conversation.messages.push({
     role: 'assistant',
-    content: stripWrapUpMarker(result.text),
+    content: stripCoachMarkers(result.text),
     ts: at,
   });
+  // For a structured guided exercise, advance the stepper to the step the coach declared this turn
+  // (best-effort orientation — never blocks free input). Clamp to the exercise's real step range.
+  const exercise = conversation.guideId ? getExercise(conversation.guideId) : undefined;
+  if (exercise?.kind === 'structured' && exercise.steps) {
+    const step = parseLatestStep(result.text);
+    if (step !== null)
+      conversation.guideStep = Math.max(0, Math.min(step, exercise.steps.length - 1));
+  }
   conversation.updatedAt = at;
   await saveConversation(fs, key, conversation);
 

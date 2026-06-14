@@ -1,5 +1,7 @@
 import type { FileSystem } from '../host';
 import { buildContext } from '../people';
+import { getExercise } from './guidedCatalog';
+import { buildStepInstruction } from './guidedSteps';
 
 /** The fixed v1 coach voice (05-conversations §11.5). Warm, reflective, non-clinical. */
 export const PERSONA = `You are SelfOS — a warm, reflective wellness companion and life coach. \
@@ -16,12 +18,26 @@ respond with warmth and care, take them seriously, and clearly encourage them to
 professional help right now — local emergency services or a crisis line — rather than relying on you \
 alone. Do not attempt to manage a crisis by yourself.`;
 
-/** Assemble the system prompt: persona + safety + the person's consented context. */
+/**
+ * Assemble the system prompt: persona + safety + the person's consented context. When the session is a
+ * guided exercise (16-guided-sessions §5), the exercise's steering addendum is appended **after** persona,
+ * safety, and context — it steers, it never replaces them (the boundary always leads). For a structured
+ * exercise the step-marker convention is taught too. An unknown/retired `guideId` simply adds nothing (§7).
+ */
 export async function buildSystemPrompt(
   fs: FileSystem,
   key: Uint8Array,
   personId: string,
+  guideId?: string,
 ): Promise<string> {
   const context = await buildContext(fs, key, personId);
-  return [PERSONA, SAFETY, context].filter(Boolean).join('\n\n');
+  const parts = [PERSONA, SAFETY, context];
+  const exercise = guideId ? getExercise(guideId) : undefined;
+  if (exercise) {
+    parts.push(exercise.systemPromptAddendum);
+    if (exercise.kind === 'structured' && exercise.steps) {
+      parts.push(buildStepInstruction(exercise.steps));
+    }
+  }
+  return parts.filter(Boolean).join('\n\n');
 }

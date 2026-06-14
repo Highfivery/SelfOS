@@ -10,6 +10,10 @@ interface ConversationState {
   activeStatus: SessionStatus;
   activeInsightId: string | null;
   activeInsightStale: boolean;
+  /** The guided exercise this session was started from (16-guided-sessions §4.2); null = free session. */
+  activeGuideId: string | null;
+  /** Current step index for a structured guided exercise; null otherwise. */
+  activeGuideStep: number | null;
   messages: ChatMessage[];
   streaming: string;
   sending: boolean;
@@ -25,6 +29,8 @@ interface ConversationState {
   error: string | null;
   load: () => Promise<void>;
   newConversation: () => void;
+  /** Start a guided session from a catalog exercise (16 §3.3); opens it. Returns the new id, or null. */
+  startGuided: (guideId: string) => Promise<string | null>;
   open: (id: string) => Promise<void>;
   send: (text: string) => Promise<void>;
   rename: (id: string, title: string) => Promise<void>;
@@ -45,6 +51,8 @@ const EMPTY = {
   activeStatus: 'inProgress' as SessionStatus,
   activeInsightId: null,
   activeInsightStale: false,
+  activeGuideId: null,
+  activeGuideStep: null,
   messages: [] as ChatMessage[],
   streaming: '',
   sending: false,
@@ -71,6 +79,8 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       activeStatus: 'inProgress',
       activeInsightId: null,
       activeInsightStale: false,
+      activeGuideId: null,
+      activeGuideStep: null,
       messages: [],
       streaming: '',
       runningCostUsd: 0,
@@ -79,6 +89,13 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       wrapUp: null,
       error: null,
     }),
+  startGuided: async (guideId) => {
+    const result = await window.selfos?.sessionsStartGuided({ guideId });
+    if (!result) return null;
+    await get().open(result.conversationId);
+    await get().load();
+    return result.conversationId;
+  },
   open: async (id) => {
     const conversation = (await window.selfos?.conversationsGet(id)) ?? null;
     set({
@@ -86,6 +103,8 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       activeStatus: conversation?.status ?? 'inProgress',
       activeInsightId: conversation?.insightId ?? null,
       activeInsightStale: conversation?.insightStale ?? false,
+      activeGuideId: conversation?.guideId ?? null,
+      activeGuideStep: conversation?.guideStep ?? null,
       messages: conversation?.messages ?? [],
       streaming: '',
       runningCostUsd: 0,
@@ -122,6 +141,9 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
         // A continued turn reopens a completed session (chatService flips status server-side).
         activeStatus: result.conversation.status ?? 'inProgress',
         activeInsightStale: result.conversation.insightStale ?? false,
+        // Structured guided exercises advance the stepper server-side (16 §3.3).
+        activeGuideId: result.conversation.guideId ?? null,
+        activeGuideStep: result.conversation.guideStep ?? null,
         // A fresh hint un-dismisses the suggestion so it can re-surface (decision: re-surface on a later hint).
         wrapUpSuggested: result.wrapUpSuggested ?? false,
         suggestionDismissed: result.wrapUpSuggested ? false : state.suggestionDismissed,

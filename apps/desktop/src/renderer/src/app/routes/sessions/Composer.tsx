@@ -7,9 +7,13 @@ import styles from './Sessions.module.css';
 export function Composer({
   disabled,
   onSend,
+  placeholder = 'Write a message…',
+  autoFocus = true,
 }: {
   disabled: boolean;
   onSend: (text: string) => void;
+  placeholder?: string;
+  autoFocus?: boolean;
 }): JSX.Element {
   const [text, setText] = useState('');
 
@@ -32,10 +36,10 @@ export function Composer({
       <textarea
         className={styles.textarea}
         aria-label="Message"
-        placeholder="Write a message…"
+        placeholder={placeholder}
         value={text}
         rows={2}
-        autoFocus
+        autoFocus={autoFocus}
         disabled={disabled}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={onKeyDown}

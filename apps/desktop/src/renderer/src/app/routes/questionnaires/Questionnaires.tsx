@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { ArrowLeft, ClipboardList, Plus, Sparkles } from 'lucide-react';
 import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
 import { Button, Card, Heading, Stack, Text } from '../../../design-system/components';
@@ -18,7 +19,12 @@ export function Questionnaires(): JSX.Element {
   const loaded = useQuestionnaireStore((s) => s.loaded);
   const load = useQuestionnaireStore((s) => s.load);
   const loadTypes = useQuestionnaireStore((s) => s.loadTypes);
-  const [selection, setSelection] = useState<Selection>({ mode: 'none' });
+  // Home's "Suggested next steps" card can hand off a gap-finder suggestion as a builder seed (17 §3.1).
+  const location = useLocation();
+  const handoffSeed = (location.state as { seed?: BuilderSeed } | null)?.seed;
+  const [selection, setSelection] = useState<Selection>(
+    handoffSeed ? { mode: 'new', seed: handoffSeed } : { mode: 'none' },
+  );
 
   useEffect(() => {
     void load();

@@ -12,7 +12,7 @@ import styles from './Questionnaires.module.css';
 const genId = (): string => `q-${Math.random().toString(36).slice(2, 10)}`;
 
 /** A gap-finder suggestion → a builder seed (its sample questions become editable drafts). */
-function toSeed(suggestion: QuestionnaireSuggestion): BuilderSeed {
+export function toSeed(suggestion: QuestionnaireSuggestion): BuilderSeed {
   const questions: Question[] = suggestion.questions.map((q) => ({
     id: genId(),
     type: q.type,

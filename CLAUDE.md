@@ -267,6 +267,40 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-14 — Build (**App-refresh package G — the Home dashboard; SPEC 17 APPROVED + BUILT — the 2026-06
+  app refresh (A–G) is COMPLETE**; [17-home-dashboard](docs/specs/17-home-dashboard.md) §13). Replaced the
+  static `routes/Home.tsx` with a **per-active-person card dashboard** under `routes/home/` (a `Home`
+  container + `ContinueCard` / `SuggestionsCard` / `WellbeingCard` / `DreamsCard` / `MemoryCard` /
+  `InboxCard` / `GettingStarted` + pure `wellbeing.ts` / `greeting.ts` + one CSS module), **composed on the
+  renderer from the existing per-person stores — NO new IPC** (conversation/dream/dreamPattern/insight/inbox
+  /guidance). Each card **self-hides when empty**; a brand-new person sees a warm **getting-started** state
+  instead of a wall of empties; loads run on mount + `activePerson.id` change (the per-person rule). **Asked
+  first** the two genuine build forks (spec §13): (1) the Suggested card shows 16's **cached** guided
+  suggestions on load (NO spend) and the guided generate/refresh **and** the `08` questionnaire gap-finder
+  are **explicit-tap only** (spend on tap, never on load — honoring §3.4); (2) the Continue card shows
+  per-session `$` via the existing **`SessionCostIndicator`** (admin `$` + `AdminOnlyBadge`, member a
+  dollar-free budget bar — the established redaction-at-the-bridge rule). The **wellbeing read is
+  deterministic** ("steadier/heavier/lifting", computed from the metric points, no AI → always works, no
+  spend); a context-aware **greeting** (time-of-day + name + one status line). **Safety (§7):**
+  `CrisisFooter` + the not-medical line are always present; the wellbeing trend is framed gently; a **recent**
+  crisis-flag (bounded to the latest 3 analyzed sessions) surfaces a supportive resources-first Banner.
+  Reuses `LineChart` (mood + energy, −1..1) + `FrequencyBars` (the dream pattern highlight) + the launcher's
+  `GuidedExerciseCard` — **no new design-system primitive, so no `/gallery` change**. Threaded a Home→builder
+  handoff: exported `toSeed` from `SuggestedPanel` + a **router-state seed pickup** in `Questionnaires`.
+  Code-reviewer **ship** (per-person isolation, no-spend-on-load, and admin-$ redaction all verified airtight;
+  applied: bound `hasRecentCrisis` to the latest 3 sessions [was unbounded → a stale flag stuck forever];
+  removed dead CSS; `overflow-wrap` on the dream snippet; a `ready`-gate to kill the empty-grid flash; dropped
+  the InboxCard head icon; the §5 `UsageCard` doc drift). Gate green: typecheck (node + web/DOM-lib), lint,
+  format, **340 core + 430 desktop + 8 relay** unit (+greeting/wellbeing pure-helper tests, +5 Home RTL —
+  getting-started, self-hide, the ≥2-session wellbeing gate, admin-vs-member $, AI-off hides Suggested),
+  **61 E2E** (+2: brand-new → getting-started; a seeded person sees the cards + Resume opens the session +
+  390px inner-scrollbar guard). **Visual QA** via the web preview at desktop (light + dark — the 3-up card
+  reflow with Continue/Suggested full-width) + 390px (single column, 0 overflow, no console errors). On
+  `feat/home-dashboard` off `main`; NOT merged (awaiting user confirm). **Lesson: when one card's data lives
+  in an all-people store (`insightStore`, no per-person `reset()`), per-person isolation is the CONSUMER's
+  `subjectPersonId` filter, not a store reset — and it holds across the AppShell-reset-vs-Home-load effect
+  race because Home's async `load()`s resolve AFTER AppShell's synchronous resets. Also: a "recent" crisis
+  surface must be bounded (latest N sessions), or a single old flag keeps the supportive banner up forever.**
 - 2026-06-14 — Build (**App-refresh package F — richer dream image style; SPEC 13 §15 APPROVED + BUILT**;
   [13-dream-images](docs/specs/13-dream-images.md) §15, amends §5.3/§6). Renderer + settings + one core
   prompt-builder param — **no schema, IPC, provider, or metering change**. Nothing was unstated (all forks

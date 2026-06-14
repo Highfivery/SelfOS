@@ -8,7 +8,7 @@ import { ANTHROPIC_API_KEY_ID } from '@shared/channels';
 import type { SessionStatus } from '@shared/schemas';
 import { getExercise, stripCoachMarkers } from '@selfos/core/conversations';
 import { useGuidanceStore } from '../../../stores/guidanceStore';
-import { Banner, Button, Stack, Text, TextInput } from '../../../design-system/components';
+import { Banner, Button, Select, Stack, Text, TextInput } from '../../../design-system/components';
 import { Composer } from './Composer';
 import { CrisisFooter } from './CrisisFooter';
 import { SessionLauncher } from './SessionLauncher';
@@ -170,23 +170,18 @@ export function Sessions(): JSX.Element {
           <Plus size={16} aria-hidden="true" />
           New session
         </Button>
-        <div className={styles.filterRow} role="group" aria-label="Filter sessions by status">
+        <Select
+          className={styles.filterSelect}
+          aria-label="Filter sessions by status"
+          value={filter}
+          onChange={(event) => setFilter(event.target.value as Filter)}
+        >
           {filterOptions.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              aria-pressed={filter === option.value}
-              className={
-                filter === option.value
-                  ? `${styles.filterChip} ${styles.filterChipActive}`
-                  : styles.filterChip
-              }
-              onClick={() => setFilter(option.value as Filter)}
-            >
-              {option.label}
-            </button>
+            <option key={option.value} value={option.value}>
+              {option.value === 'all' ? 'All sessions' : option.label}
+            </option>
           ))}
-        </div>
+        </Select>
         <Stack gap={1}>
           {filtered.map((conversation) => (
             <div

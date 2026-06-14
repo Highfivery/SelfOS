@@ -232,9 +232,18 @@ placing anything. Specifically:
   look critically (e.g. buttons must bottom-align with the labelled fields beside them, not float
   mid-height). Catch bad-looking UI before the user does. (DoD §7.)
 - **NO horizontal scrollbars — anywhere, ever.** Not page-level and **not inner controls**. A filter row,
-  toolbar, tab strip, or `SegmentedControl` that scrolls-x to fit is a UX failure: make it **wrap** (flex
-  pill chips) or use a compact control (Select). The "SegmentedControl scrolls-x when it can't fit" pattern
-  is **banned for primary filters** in narrow panes (e.g. the Sessions sidebar). Test it (see §7).
+  toolbar, tab strip, or `SegmentedControl` that scrolls-x to fit is a UX failure. Test it (see §7).
+- **Don't solve "it doesn't fit" by WRAPPING — wrapping a control row is lazy, not a design.** When options
+  don't fit a narrow pane, pick a **space-filling component**, not a wrapping pile of chips: a full-width
+  `Select` for a status filter, a full-width control, or a genuinely compact control — something that fills
+  the space and scales to any label length. (The Sessions status filter is a full-width `Select`, not chips;
+  catalog cards fill the row via an `auto-fit` grid.) Reserve wrapping for genuinely free-flowing content
+  (tags on a detail page), never for a primary control cluster.
+- **Design for density — cards must not waste vertical space.** A long catalog of cards must be compact and
+  scannable: tight padding, clamp blurbs (`-webkit-line-clamp`), fold secondary metadata onto one line, and
+  use a denser `auto-fit` grid so more fit per row. Don't ship tall, sparse cards (the guided-session cards
+  were 5 lines tall → compacted to ~3 with a clamped blurb + an eyebrow that carries the tag + a "Steps"
+  marker on one line).
 - **Cards & rows: never let a title fight a tag/badge for the same line.** A title + framework tag on one
   line wraps the title a word-per-line at narrow widths — ugly. Put the tag as an **eyebrow above** the
   title (or below); give the title the full width. Likewise, don't cram many controls into one narrow row —
@@ -258,6 +267,21 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-14 — Polish round 2 + **rules update** (user: "wrapping is LAZY, not design; cards waste vertical
+  space"). Replaced the wrapping pill-chip status filter with a **full-width `Select`** (fills the sidebar,
+  scales to any label, never wraps — `combobox` "Filter sessions by status"); **redesigned the guided cards
+  to be compact** (~5 lines → ~3: tight padding, a single eyebrow row carrying the framework tag + a "Steps"
+  marker, a **2-line-clamped blurb**, a hover go-arrow, and a denser `auto-fit` minmax(190px) grid that
+  fills the row). Rules updated: CLAUDE.md §12 + memory `selfos-ui-conventions` now say **don't solve
+  "doesn't fit" by wrapping a control row — use a space-filling component (full-width `Select`/control)** and
+  **design cards for density** (clamp blurbs, fold metadata, denser grid). E2E updated for the Select filter
+  (`selectOption` instead of clicking chips) and status assertions target the pill's `data-status` (not the
+  text, which now also matches the hidden `<option>`). Gate green: typecheck/lint/format, 336 core + 389
+  desktop unit, **56 E2E**. Visual QA at 390/900/1280px (full-width Select, 3-up compact cards at desktop /
+  1-up at phone, no scrollbars, no console errors). **Lesson: when a control row doesn't fit, the answer is a
+  different COMPONENT (a Select that fills the space), never `flex-wrap` — and a text assertion like
+  `getByText('In progress')` silently starts matching a `<select>`'s hidden `<option>` once you swap to a
+  Select, so assert status pills by a stable hook (`[data-status]`), not their label text.**
 - 2026-06-14 — Polish + **rules update** (Sessions launcher UI/UX pass; user flagged avoidable flaws). Fixed:
   (1) the status filter was a `SegmentedControl` that **scrolled-x** in the narrow sidebar → replaced with
   **wrapping pill chips** (no scrollbar); (2) guided-session cards put the title + framework tag on one line

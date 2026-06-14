@@ -754,7 +754,7 @@ test('sessions: complete + summarize feeds a later session; status filter + reop
     await expect(w.getByText(/hear you/i).first()).toBeVisible();
 
     // A fresh session is in progress; the owner (admin) sees the per-session $ with the admin-only badge.
-    await expect(w.getByText('In progress').first()).toBeVisible();
+    await expect(w.locator('[data-status="inProgress"]').first()).toBeVisible();
     await expect(w.getByText('Admin only').first()).toBeVisible();
 
     // Complete & summarize from the per-item menu → the wrap-up card appears inline.
@@ -778,20 +778,21 @@ test('sessions: complete + summarize feeds a later session; status filter + reop
     const context = await buildContext(fs, key, 'owner-1');
     expect(context).toContain('Take a short walk before bed');
 
-    // The status filter narrows the list: the now-complete session shows under Complete, not In progress.
+    // The status filter (a Select) narrows the list: the now-complete session shows under Complete.
     const openRow = w.getByRole('button', { name: 'I had a hard day at work', exact: true });
-    await w.getByRole('button', { name: 'Complete' }).click();
+    const statusFilter = w.getByRole('combobox', { name: 'Filter sessions by status' });
+    await statusFilter.selectOption('complete');
     await expect(openRow).toBeVisible();
-    await w.getByRole('button', { name: 'In progress' }).click();
+    await statusFilter.selectOption('inProgress');
     await expect(openRow).toHaveCount(0);
 
     // Reopening (a new turn) flips it back to in progress — it leaves the Complete filter.
-    await w.getByRole('button', { name: 'All' }).click();
+    await statusFilter.selectOption('all');
     await openRow.click();
     await w.getByLabel('Message').fill('actually, one more thing');
     await w.getByRole('button', { name: 'Send' }).click();
     await expect(w.getByText(/hear you/i).first()).toBeVisible();
-    await w.getByRole('button', { name: 'Complete' }).click();
+    await statusFilter.selectOption('complete');
     await expect(openRow).toHaveCount(0);
 
     await w.setViewportSize({ width: 390, height: 780 });
@@ -945,7 +946,7 @@ test('sessions: a member sees a usage bar with no $; memory-off blocks summarizi
       .click();
     await expect(w.getByRole('menuitem', { name: 'Complete & summarize' })).toHaveCount(0);
     await w.getByRole('menuitem', { name: 'Mark complete' }).click();
-    await expect(w.getByText('Complete').first()).toBeVisible();
+    await expect(w.locator('[data-status="complete"]').first()).toBeVisible();
     await expect(w.getByRole('button', { name: /Summarize this session/ })).toHaveCount(0);
 
     // No session Insight is produced for anyone while memory is off.

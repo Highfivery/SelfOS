@@ -104,12 +104,15 @@ describe('Sessions', () => {
 
     expect(await screen.findByRole('button', { name: 'Active one' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Done one' })).toBeInTheDocument();
-    // Status pills (plus the matching filter buttons) render their state as text, not colour alone.
+    // Status pills render their state as text, not colour alone.
     expect(screen.getAllByText('In progress').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Complete').length).toBeGreaterThanOrEqual(1);
 
-    // Filter to Complete → the in-progress session drops out.
-    await userEvent.click(screen.getByRole('button', { name: 'Complete' }));
+    // Filter to Complete (via the status Select) → the in-progress session drops out.
+    await userEvent.selectOptions(
+      screen.getByRole('combobox', { name: 'Filter sessions by status' }),
+      'complete',
+    );
     expect(screen.queryByRole('button', { name: 'Active one' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Done one' })).toBeInTheDocument();
   });

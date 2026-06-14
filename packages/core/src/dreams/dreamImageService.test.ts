@@ -150,6 +150,26 @@ describe('generateDreamImage', () => {
     expect(usage.find((u) => u.type === 'dream.image')?.costUsd).toBeCloseTo(0.17);
   });
 
+  it('threads the chosen style + Settings style notes into the distillation input (§15.2)', async () => {
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1', narrative: 'a quiet shoreline' }));
+    const result = await generateDreamImage(
+      deps({ style: 'cinematic', styleNotes: 'muted earth tones, golden-hour light' }),
+    );
+    expect(result.ok).toBe(true);
+    expect(claudeCaptured.input).toContain('Visual style: cinematic.');
+    expect(claudeCaptured.input).toContain(
+      'Additional style direction: muted earth tones, golden-hour light.',
+    );
+    expect(claudeCaptured.input?.toLowerCase()).toContain('non-photorealistic');
+  });
+
+  it('omits the style-direction line when no style notes are set', async () => {
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1', narrative: 'a quiet shoreline' }));
+    await generateDreamImage(deps({ style: 'pastel' }));
+    expect(claudeCaptured.input).toContain('Visual style: pastel.');
+    expect(claudeCaptured.input).not.toContain('Additional style direction:');
+  });
+
   it('sends OpenAI ONLY the Claude-distilled prompt — never the narrative or a real name', async () => {
     await saveDream(
       fs,
@@ -430,7 +450,7 @@ describe('isDreamImagePath', () => {
 });
 
 describe('buildImagePromptInput (pure, name-free)', () => {
-  it('includes the narrative, name-free depiction notes, style, and dreamlike framing', () => {
+  it('includes the narrative, name-free depiction notes, style, and non-photorealistic framing', () => {
     const out = buildImagePromptInput({
       narrative: 'a long corridor',
       depictionNotes: ['a figure — appearance: tall, gender: female, age 30'],
@@ -438,8 +458,8 @@ describe('buildImagePromptInput (pure, name-free)', () => {
     });
     expect(out).toContain('a long corridor');
     expect(out).toContain('a figure — appearance: tall');
-    expect(out).toContain('watercolor');
-    expect(out.toLowerCase()).toContain('dreamlike');
+    expect(out).toContain('Visual style: watercolor.');
+    expect(out.toLowerCase()).toContain('non-photorealistic');
     expect(out).toContain('NEVER by name');
   });
 
@@ -450,6 +470,42 @@ describe('buildImagePromptInput (pure, name-free)', () => {
       style: 's',
     });
     expect(out).not.toContain('Figures that appeared');
+  });
+
+  it('appends the free-text style direction when styleNotes are present (§15.2)', () => {
+    const out = buildImagePromptInput({
+      narrative: 'a meadow',
+      depictionNotes: [],
+      style: 'cinematic',
+      styleNotes: 'muted earth tones, soft focus, golden-hour light',
+    });
+    expect(out).toContain('Visual style: cinematic.');
+    expect(out).toContain(
+      'Additional style direction: muted earth tones, soft focus, golden-hour light.',
+    );
+    // The baseline non-photorealistic framing still follows (and still wins) even for a non-dreamlike preset.
+    expect(out.toLowerCase()).toContain('non-photorealistic');
+    // Order: the direction sits after the style line and before the framing.
+    expect(out.indexOf('Visual style:')).toBeLessThan(out.indexOf('Additional style direction:'));
+    expect(out.indexOf('Additional style direction:')).toBeLessThan(
+      out.toLowerCase().indexOf('non-photorealistic'),
+    );
+  });
+
+  it('omits the direction line entirely when styleNotes are blank or absent (§15.4)', () => {
+    const blank = buildImagePromptInput({
+      narrative: 'a meadow',
+      depictionNotes: [],
+      style: 'pastel',
+      styleNotes: '   ',
+    });
+    const absent = buildImagePromptInput({
+      narrative: 'a meadow',
+      depictionNotes: [],
+      style: 'pastel',
+    });
+    expect(blank).not.toContain('Additional style direction:');
+    expect(absent).not.toContain('Additional style direction:');
   });
 });
 

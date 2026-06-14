@@ -26,6 +26,7 @@ import {
   RelayMessagesSchema,
   type RelayMessages,
 } from '../app/routes/questionnaires/relayMessages';
+import { DEFAULT_IMAGE_STYLE, IMAGE_STYLE_PRESETS } from '../app/routes/dreams/imageStyles';
 
 declare module './types' {
   interface SettingsTypeMap {
@@ -43,7 +44,8 @@ declare module './types' {
     'dreams.memoryEnabled': boolean;
     'dreams.imageGenerationEnabled': boolean;
     'dreams.imageModel': 'gpt-image-2' | 'gpt-image-1';
-    'dreams.imageStyle': 'dreamlike' | 'painterly' | 'watercolor' | 'realistic';
+    'dreams.imageStyle': string; // a free string — an IMAGE_STYLE_PRESETS value, growable without migration
+    'dreams.imageStyleNotes': string;
   }
 }
 
@@ -331,19 +333,29 @@ export function registerBuiltinSettings(): void {
       section: 'dreams',
       label: 'Default image style',
       description: 'The look used for new dream images. You can override it per image.',
-      schema: z.enum(['dreamlike', 'painterly', 'watercolor', 'realistic']),
-      default: 'dreamlike',
-      control: {
-        type: 'select',
-        options: [
-          { value: 'dreamlike', label: 'Dreamlike' },
-          { value: 'painterly', label: 'Painterly' },
-          { value: 'watercolor', label: 'Watercolor' },
-          { value: 'realistic', label: 'Realistic' },
-        ],
-      },
+      schema: z.string().min(1),
+      default: DEFAULT_IMAGE_STYLE,
+      control: { type: 'select', groups: IMAGE_STYLE_PRESETS },
       scope: 'vault',
       order: 4,
+      visibleWhen: dreamImagesEnabled,
+    }),
+    defineSetting({
+      key: 'dreams.imageStyleNotes',
+      section: 'dreams',
+      label: 'Style notes (optional)',
+      description:
+        'Describe the look in your own words — e.g. “muted earth tones, soft focus, golden-hour light.” Applies to every dream image, on top of the style above. It never adds anyone’s name or private details.',
+      schema: z.string().max(300),
+      default: '',
+      control: {
+        type: 'textarea',
+        rows: 3,
+        maxLength: 300,
+        placeholder: 'muted earth tones, soft focus, golden-hour light…',
+      },
+      scope: 'vault',
+      order: 5,
       visibleWhen: dreamImagesEnabled,
     }),
     defineSetting({
@@ -354,7 +366,7 @@ export function registerBuiltinSettings(): void {
       default: null,
       control: { type: 'custom', render: OpenAiKeyControl },
       adminOnly: true,
-      order: 5,
+      order: 6,
       visibleWhen: dreamImagesEnabled,
     }),
     defineSetting({

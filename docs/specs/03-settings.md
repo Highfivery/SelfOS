@@ -63,6 +63,8 @@ type SettingControl =
   | { type: 'number'; min?: number; max?: number; step?: number; variant?: 'input' | 'slider' }
   | {
       type: 'select';
+      // `options` OR family-grouped `groups: { label; options }[]` (rendered as native `<optgroup>`s) — e.g.
+      // the dream-image style picker, 13 §15.1. A free-string select also renders a legacy/unknown stored value.
       options: ReadonlyArray<{ value: string; label: string }>;
       variant?: 'dropdown' | 'segmented' | 'radio';
     }

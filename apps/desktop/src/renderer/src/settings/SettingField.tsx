@@ -8,6 +8,7 @@ import {
   Slider,
   Switch,
   Text,
+  Textarea,
   TextInput,
 } from '../design-system/components';
 import { useSettingsStore } from './settingsStore';
@@ -32,20 +33,36 @@ function renderControl(
           aria-label={def.label}
         />
       );
-    case 'select':
+    case 'select': {
+      const current = String(value);
+      // A persisted free-string value not present in any option still renders (a removed/legacy/custom
+      // value), so a controlled select never silently displays the wrong option (the panel mirrors this).
+      const allValues = new Set(
+        'groups' in control
+          ? control.groups.flatMap((group) => group.options.map((o) => o.value))
+          : control.options.map((o) => o.value),
+      );
       return (
-        <Select
-          value={String(value)}
-          aria-label={def.label}
-          onChange={(event) => onChange(event.target.value)}
-        >
-          {control.options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
+        <Select value={current} aria-label={def.label} onChange={(e) => onChange(e.target.value)}>
+          {allValues.has(current) ? null : <option value={current}>{current}</option>}
+          {'groups' in control
+            ? control.groups.map((group) => (
+                <optgroup key={group.label} label={group.label}>
+                  {group.options.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ))
+            : control.options.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
         </Select>
       );
+    }
     case 'slider': {
       const num = Number(value);
       return (
@@ -73,6 +90,17 @@ function renderControl(
           onChange={(event) => onChange(event.target.value)}
         />
       );
+    case 'textarea':
+      return (
+        <Textarea
+          value={String(value ?? '')}
+          placeholder={control.placeholder}
+          rows={control.rows}
+          maxLength={control.maxLength}
+          aria-label={def.label}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      );
     case 'custom': {
       const Render = control.render;
       return <Render />;
@@ -89,15 +117,25 @@ export function SettingField({ def }: { def: SettingDefinition }): JSX.Element |
 
   const value = values[def.key];
   const onChange = (next: unknown): void => void setValue(def.key, next);
+  const isDefault = JSON.stringify(value) === JSON.stringify(def.default);
 
-  // Custom rows (info, actions, long content) render full-width and stacked so text wraps instead of
-  // overflowing the fixed control column.
-  if (def.control.type === 'custom') {
+  // Custom rows (info, actions, long content) and multiline textareas render full-width and stacked so the
+  // content has room to wrap instead of being crushed into the fixed control column. A textarea keeps the
+  // reset affordance (custom rows manage their own state).
+  if (def.control.type === 'custom' || def.control.type === 'textarea') {
+    const isTextarea = def.control.type === 'textarea';
     return (
       <div className={styles.stacked}>
-        <Inline gap={2}>
-          <Text weight={500}>{def.label}</Text>
-          {def.adminOnly ? <AdminOnlyBadge /> : null}
+        <Inline gap={2} justify="space-between">
+          <Inline gap={2}>
+            <Text weight={500}>{def.label}</Text>
+            {def.adminOnly ? <AdminOnlyBadge /> : null}
+          </Inline>
+          {isTextarea && !isDefault ? (
+            <IconButton aria-label={`Reset ${def.label}`} onClick={() => void resetValue(def.key)}>
+              <RotateCcw size={15} aria-hidden="true" />
+            </IconButton>
+          ) : null}
         </Inline>
         {def.description ? (
           <Text size="sm" tone="secondary">
@@ -109,7 +147,6 @@ export function SettingField({ def }: { def: SettingDefinition }): JSX.Element |
     );
   }
 
-  const isDefault = JSON.stringify(value) === JSON.stringify(def.default);
   return (
     <div className={styles.row}>
       <div className={styles.info}>

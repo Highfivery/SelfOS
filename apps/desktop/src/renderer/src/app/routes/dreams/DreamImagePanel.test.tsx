@@ -32,6 +32,7 @@ afterEach(() => {
       ...s.values,
       'ai.enabled': false,
       'dreams.imageGenerationEnabled': false,
+      'dreams.imageStyle': 'dreamlike',
     },
   }));
 });
@@ -85,6 +86,29 @@ describe('DreamImagePanel', () => {
     installMockBridge({ secretHas: () => Promise.resolve(false) });
     renderPanel();
     expect(await screen.findByText(/add your openai key in settings/i)).toBeInTheDocument();
+  });
+
+  it('offers the expanded, family-grouped style presets in the entry picker (§15.1)', async () => {
+    enable();
+    installMockBridge({ secretHas: () => Promise.resolve(true) });
+    renderPanel();
+    const select = await screen.findByRole('combobox', { name: 'Style' });
+    // Expanded presets beyond the original four are present…
+    expect(screen.getByRole('option', { name: 'Gouache' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Ukiyo-e' })).toBeInTheDocument();
+    // …grouped by family as native optgroups.
+    const groups = [...select.querySelectorAll('optgroup')].map((g) => g.label);
+    expect(groups).toEqual(['Painted', 'Drawn', 'Stylized', 'Photographic-ish']);
+  });
+
+  it('renders a legacy/custom stored style as a selectable option (§15.4)', async () => {
+    enable();
+    useSettingsStore.setState((s) => ({
+      values: { ...s.values, 'dreams.imageStyle': 'daguerreotype' },
+    }));
+    installMockBridge({ secretHas: () => Promise.resolve(true) });
+    renderPanel();
+    expect(await screen.findByRole('option', { name: 'daguerreotype' })).toBeInTheDocument();
   });
 
   it('generates an image from the entry state and shows the admin cost', async () => {

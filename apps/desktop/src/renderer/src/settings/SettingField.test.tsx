@@ -1,9 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { z } from 'zod';
+import { Info } from 'lucide-react';
 import { SettingField } from './SettingField';
 import { defineSetting } from './types';
 import { useSettingsStore } from './settingsStore';
+import { __resetRegistry, registerSection, registerSettings } from './registry';
 
 function CustomBody(): JSX.Element {
   return <p>custom-content-here</p>;
@@ -55,5 +58,69 @@ describe('SettingField', () => {
     });
     render(<SettingField def={def} />);
     expect(screen.queryByRole('button', { name: /reset flag/i })).not.toBeInTheDocument();
+  });
+
+  it('renders a textarea control full-width and persists typed input', async () => {
+    __resetRegistry();
+    registerSection({ id: 's', title: 'S', description: '', icon: Info, order: 1 });
+    const def = defineSetting({
+      key: 'x.notes',
+      section: 's',
+      label: 'Notes',
+      schema: z.string().max(300),
+      default: '',
+      control: { type: 'textarea', maxLength: 300 },
+    });
+    registerSettings([def]);
+    useSettingsStore.setState({ values: { 'x.notes': '' } });
+    render(<SettingField def={def} />);
+    const box = screen.getByRole('textbox', { name: 'Notes' });
+    expect(box.tagName).toBe('TEXTAREA');
+    await userEvent.type(box, 'golden-hour light');
+    expect(useSettingsStore.getState().values['x.notes']).toBe('golden-hour light');
+    // Once non-default, the reset affordance appears.
+    expect(screen.getByRole('button', { name: /reset notes/i })).toBeInTheDocument();
+    __resetRegistry();
+  });
+
+  it('renders a grouped select as native optgroups', () => {
+    useSettingsStore.setState({ values: { 'x.style': 'dreamlike' } });
+    const def = defineSetting({
+      key: 'x.style',
+      section: 's',
+      label: 'Style',
+      schema: z.string(),
+      default: 'dreamlike',
+      control: {
+        type: 'select',
+        groups: [
+          { label: 'Painted', options: [{ value: 'watercolor', label: 'Watercolor' }] },
+          { label: 'Stylized', options: [{ value: 'dreamlike', label: 'Dreamlike (surreal)' }] },
+        ],
+      },
+    });
+    const { container } = render(<SettingField def={def} />);
+    const groups = container.querySelectorAll('optgroup');
+    expect([...groups].map((g) => g.label)).toEqual(['Painted', 'Stylized']);
+    expect(screen.getByRole('option', { name: 'Watercolor' })).toBeInTheDocument();
+  });
+
+  it('renders a legacy/unknown stored value as a fallback option in a grouped select', () => {
+    useSettingsStore.setState({ values: { 'x.style': 'daguerreotype' } });
+    const def = defineSetting({
+      key: 'x.style',
+      section: 's',
+      label: 'Style',
+      schema: z.string(),
+      default: 'dreamlike',
+      control: {
+        type: 'select',
+        groups: [{ label: 'Stylized', options: [{ value: 'dreamlike', label: 'Dreamlike' }] }],
+      },
+    });
+    render(<SettingField def={def} />);
+    const select = screen.getByRole('combobox', { name: 'Style' }) as HTMLSelectElement;
+    expect(select.value).toBe('daguerreotype');
+    expect(screen.getByRole('option', { name: 'daguerreotype' })).toBeInTheDocument();
   });
 });

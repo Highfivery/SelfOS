@@ -32,7 +32,7 @@ import {
   submitResponse,
 } from '@selfos/core/questionnaires';
 import { listInsightsForPerson, summarizeForContext } from '@selfos/core/insights';
-import { saveAnalysis, saveDream } from '@selfos/core/dreams';
+import { listDreams, saveAnalysis, saveDream } from '@selfos/core/dreams';
 
 const MAIN = join(__dirname, '..', 'out', 'main', 'index.js');
 
@@ -1898,11 +1898,21 @@ test('dreams: visualize a dream — sensitive warning, generate, encrypted round
     // Reopen the saved dream → the image panel sits on the detail.
     await w.getByRole('button', { name: /Visualize me/ }).click();
 
+    // Pick an expanded, family-grouped preset (beyond the original four) for this image.
+    await w.getByRole('combobox', { name: 'Style' }).selectOption({ label: 'Watercolor' });
+
     // A non-standard tier warns before sending to OpenAI; Continue proceeds.
     await w.getByRole('button', { name: /visualize this dream/i }).click();
     await expect(w.getByText(/this is a sensitive dream/i)).toBeVisible();
     await w.getByRole('button', { name: 'Continue' }).click();
     await expect(w.getByRole('img')).toBeVisible();
+
+    // The chosen preset is stamped onto the dream's image descriptor on disk.
+    const key = await loadMasterKey(secrets);
+    if (!key) throw new Error('master key missing');
+    const fs = createNodeFileSystem(vault);
+    const dreams = await listDreams(fs, key, 'owner-1');
+    expect(dreams[0]?.image?.style).toBe('watercolor');
 
     // The image is stored ENCRYPTED at rest (image.enc is an AES-GCM envelope, not the raw PNG).
     const imgPath = await findFileNamed(vault, 'image.enc');
@@ -2464,18 +2474,47 @@ test('dreams: enabling image generation reveals the model, style, and admin-only
     await w.getByRole('link', { name: 'Settings' }).click();
     await w.getByRole('button', { name: 'Dreams', exact: true }).click();
 
-    // Consent on → the model, style, and OpenAI key controls are revealed.
+    // Consent on → the model, style, style notes, and OpenAI key controls are revealed.
     await expect(w.getByLabel('Image model')).toBeVisible();
     await expect(w.getByLabel('Default image style')).toBeVisible();
+    await expect(w.getByLabel('Style notes (optional)')).toBeVisible();
     await expect(w.getByLabel('OpenAI API key')).toBeVisible();
 
     // The image model + key are admin-only — marked so admins know normal users don't see them.
     await expect(w.getByText('Admin only').first()).toBeVisible();
 
+    // The expanded, family-grouped presets are available (an option beyond the original four).
+    await w.getByLabel('Default image style').selectOption({ label: 'Gouache' });
+    // The free-text style notes (§15.2) persist through the new textarea control.
+    await w.getByLabel('Style notes (optional)').fill('muted earth tones, golden-hour light');
+
+    const settingsFile = join(vault, 'config', 'settings.json');
+    await expect
+      .poll(async () => {
+        const parsed = JSON.parse(await readFile(settingsFile, 'utf8')) as {
+          values: Record<string, unknown>;
+        };
+        return [parsed.values['dreams.imageStyle'], parsed.values['dreams.imageStyleNotes']];
+      })
+      .toEqual(['gouache', 'muted earth tones, golden-hour light']);
+
     // The OpenAI key is write-only — saving it reports configured (the value never returns to the renderer).
     await w.getByLabel('OpenAI API key').fill('sk-openai-e2e');
     await w.getByRole('button', { name: /save key/i }).click();
     await expect(w.getByText(/key is configured/i)).toBeVisible();
+
+    // At phone width the expanded select + the multiline notes textarea fit — the content area and the
+    // document don't overflow horizontally. (The Settings section nav is an intentional horizontal pill
+    // scroller, so this mirrors the section-sweep guard rather than flagging that by-design scroller.)
+    await w.setViewportSize({ width: 390, height: 780 });
+    await w.waitForTimeout(50);
+    const overflow = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      const mainOverflow = main ? main.scrollWidth - main.clientWidth : 0;
+      const docOverflow = document.documentElement.scrollWidth - window.innerWidth;
+      return Math.max(mainOverflow, docOverflow);
+    });
+    expect(overflow).toBeLessThanOrEqual(1);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

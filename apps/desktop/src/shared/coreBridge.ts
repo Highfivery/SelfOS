@@ -2165,6 +2165,11 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         typeof settings['dreams.imageStyle'] === 'string'
           ? settings['dreams.imageStyle']
           : 'dreamlike';
+      // Settings-only free-text style direction (§15.2); blank ⇒ omitted so the prompt is unchanged.
+      const styleNotes =
+        typeof settings['dreams.imageStyleNotes'] === 'string'
+          ? settings['dreams.imageStyleNotes'].trim()
+          : '';
       const result = await generateDreamImage({
         fs: ctx.fs,
         key: ctx.key,
@@ -2176,6 +2181,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         claudeModel: await host.activeModel(),
         imageModel,
         style: style ?? defaultStyle,
+        ...(styleNotes ? { styleNotes } : {}),
         personId,
         dreamId,
         now: new Date(),

@@ -45,20 +45,31 @@ export function isDreamImagePath(path: string): boolean {
   return /^people\/[^/]+\/dreams\/[^/]+\/image\.enc$/.test(path) && !path.includes('..');
 }
 
+// The baseline safety framing applied to EVERY prompt regardless of preset (§8.2/§15.1): a figure may
+// resemble a real person from name-free depiction notes, so the image must never read as a photoreal
+// likeness. Softened from "dreamlike" to "evocative, non-photorealistic" so it blends with a non-dreamlike
+// preset (e.g. cinematic/realistic → filmic / painterly-realistic) rather than contradicting it — but the
+// non-photorealism guarantee is non-negotiable.
 const DREAMLIKE_FRAMING =
-  'Render it dreamlike and non-photorealistic — soft, surreal, evocative, clearly an artistic ' +
-  'interpretation rather than a literal photograph. Keep everything within content policy.';
+  'Render it as an evocative, non-photorealistic artwork in the chosen style — clearly an artistic ' +
+  'interpretation rather than a literal photograph, and never a photoreal likeness of any real person. ' +
+  'Keep everything within content policy.';
 
 /**
  * Assemble the **distillation input** handed to Claude (13 §5.3) — pure, so it is unit-tested in isolation.
  * It injects **no person's name**: the narrative is the dreamer's own words, and the depiction notes
  * (`buildDepictionNote`) are already name-free + private-free. A free-name dream person contributes nothing
- * here (it's already in the narrative). The chosen style + the dreamlike framing are always present.
+ * here (it's already in the narrative). The chosen style + the non-photorealistic framing are always present.
+ * Optional `styleNotes` (the dreamer's free-text style direction, §15.2) augments — never replaces — the
+ * preset, appended after the style line and before the baseline framing (which still wins). Blank/absent
+ * notes add no line (§15.4); style notes are visual direction only and pass through the same name-free
+ * distillation, so the §5.3/§8 privacy guarantees are unchanged.
  */
 export function buildImagePromptInput(input: {
   narrative: string;
   depictionNotes: string[];
   style: string;
+  styleNotes?: string;
 }): string {
   const lines: string[] = [`Dream narrative:\n"${input.narrative}"`];
   const notes = input.depictionNotes.map((n) => n.trim()).filter(Boolean);
@@ -67,6 +78,8 @@ export function buildImagePromptInput(input: {
     for (const note of notes) lines.push(`- ${note}`);
   }
   lines.push(`Visual style: ${input.style}.`);
+  const styleNotes = input.styleNotes?.trim();
+  if (styleNotes) lines.push(`Additional style direction: ${styleNotes}.`);
   lines.push(DREAMLIKE_FRAMING);
   return lines.join('\n\n');
 }
@@ -74,9 +87,10 @@ export function buildImagePromptInput(input: {
 const DISTILLATION_INSTRUCTION =
   'You turn a dream description into a SINGLE vivid visual prompt for an image generator. Output ONLY the ' +
   'prompt — one tight paragraph, no preamble, no quotes, no lists. NEVER include any person’s name; ' +
-  'describe any figure only by the generic physical descriptions provided. Keep it dreamlike and ' +
-  'non-photorealistic, and strictly within content policy — never produce explicit, violent, or disallowed ' +
-  'imagery, and add nothing designed to evade a content policy.';
+  'describe any figure only by the generic physical descriptions provided. Keep it evocative and ' +
+  'non-photorealistic — an artistic interpretation, never a photoreal likeness of a real person — and ' +
+  'strictly within content policy — never produce explicit, violent, or disallowed imagery, and add ' +
+  'nothing designed to evade a content policy.';
 
 const DISTILL_MAX_TOKENS = 400;
 
@@ -91,6 +105,7 @@ export interface GenerateDreamImageDeps {
   claudeModel: string;
   imageModel: string;
   style: string; // per-image override or the Settings default
+  styleNotes?: string; // dreams.imageStyleNotes — Settings-only free-text style direction (§15.2)
   personId: string;
   dreamId: string;
   now: Date;
@@ -204,7 +219,12 @@ export async function generateDreamImage(
     const note = await buildDepictionNote(fs, key, ref.personId, now);
     if (note) depictionNotes.push(note);
   }
-  const promptInput = buildImagePromptInput({ narrative: dream.narrative, depictionNotes, style });
+  const promptInput = buildImagePromptInput({
+    narrative: dream.narrative,
+    depictionNotes,
+    style,
+    ...(deps.styleNotes ? { styleNotes: deps.styleNotes } : {}),
+  });
 
   // 2. Distill via Claude. A pre-generation failure here makes no OpenAI call and is not metered.
   let distilled;

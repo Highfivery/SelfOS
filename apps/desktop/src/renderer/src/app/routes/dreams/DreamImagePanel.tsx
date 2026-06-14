@@ -17,6 +17,7 @@ import {
   Switch,
   Text,
 } from '../../../design-system/components';
+import { DEFAULT_IMAGE_STYLE, IMAGE_STYLE_PRESETS, isKnownStyle, styleLabel } from './imageStyles';
 import styles from './Dreams.module.css';
 
 interface DreamImagePanelProps {
@@ -25,13 +26,6 @@ interface DreamImagePanelProps {
 
 type Confirm = 'sensitive' | 'regen' | 'delete' | null;
 type LoadedImage = { mime: string; dataBase64: string; costUsd?: number };
-
-const STYLE_OPTIONS = [
-  { value: 'dreamlike', label: 'Dreamlike' },
-  { value: 'painterly', label: 'Painterly' },
-  { value: 'watercolor', label: 'Watercolor' },
-  { value: 'realistic', label: 'Realistic' },
-];
 
 /**
  * Visualize a dream as one AI image (13-dream-images §3). Rendered identically in both the dream
@@ -56,7 +50,7 @@ export function DreamImagePanel({ dream }: DreamImagePanelProps): JSX.Element | 
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<Confirm>(null);
   // Seeds from the Settings default (synchronously hydrated here); the user can override per image.
-  const [style, setStyle] = useState<string>(defaultStyle ?? 'dreamlike');
+  const [style, setStyle] = useState<string>(defaultStyle ?? DEFAULT_IMAGE_STYLE);
   const [shareTargets, setShareTargets] = useState<DreamShareTarget[]>([]);
   const [sharedWith, setSharedWith] = useState<string[]>([]);
   const [showShare, setShowShare] = useState(false);
@@ -201,10 +195,16 @@ export function DreamImagePanel({ dream }: DreamImagePanelProps): JSX.Element | 
     <Field label="Style">
       {(p) => (
         <Select {...p} value={style} disabled={busy} onChange={(e) => setStyle(e.target.value)}>
-          {STYLE_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
+          {/* A legacy/custom value not in the current presets still renders (§15.4). */}
+          {isKnownStyle(style) ? null : <option value={style}>{styleLabel(style)}</option>}
+          {IMAGE_STYLE_PRESETS.map((group) => (
+            <optgroup key={group.label} label={group.label}>
+              {group.options.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </Select>
       )}

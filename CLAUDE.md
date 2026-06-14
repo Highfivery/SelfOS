@@ -267,6 +267,39 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-14 — Build (**App-refresh package F — richer dream image style; SPEC 13 §15 APPROVED + BUILT**;
+  [13-dream-images](docs/specs/13-dream-images.md) §15, amends §5.3/§6). Renderer + settings + one core
+  prompt-builder param — **no schema, IPC, provider, or metering change**. Nothing was unstated (all forks
+  resolved in §15.5), so no new questions. **Expanded `dreams.imageStyle`** from a 4-value enum to **~20
+  family-grouped presets** (Painted / Drawn / Stylized / Photographic-ish) sharing **ONE
+  `IMAGE_STYLE_PRESETS` constant** (new `app/routes/dreams/imageStyles.ts`) used by **both** the Settings
+  select and the `DreamImagePanel` picker — both render native `<optgroup>`s; the schema field stays a **free
+  string** (the four original values retained, so pre-expansion dreams still resolve to a label), and a
+  legacy/unknown stored value renders as a **fallback option** in both surfaces (§15.4). **Added Settings-only
+  `dreams.imageStyleNotes`** (textarea, max 300, default empty) — the dreamer's free-text style direction —
+  threaded through `buildImagePromptInput`'s new optional **`styleNotes`** param (appends
+  `Additional style direction: …` after the style line, before the framing; **blank ⇒ no line**) and read
+  host-side in `coreBridge.dreamGenerateImage`. **NO per-image notes** — the `dreams:generateImage` IPC is
+  unchanged. **Softened** the baseline `DREAMLIKE_FRAMING` + `DISTILLATION_INSTRUCTION` to **"evocative,
+  non-photorealistic"** so it blends with a non-dreamlike preset (cinematic/realistic = filmic /
+  painterly-realistic) while keeping the §8.2 **never-a-photoreal-likeness** guarantee — applied to **every**
+  prompt regardless of preset; the name-free / no-private-field privacy boundary is unchanged (style notes are
+  visual direction only, through the same distillation). **Added a reusable `textarea` settings control type**
+  - a **grouped `select`** variant to the registry (`settings/types.ts` + `SettingField.tsx`; textarea reuses
+    the design-system `Textarea`, renders full-width/stacked with a reset; **no new `/gallery` primitive** —
+    `Textarea` is already catalogued). Code-reviewer **ship** (applied the one nit: the Settings grouped-select
+    now renders a legacy/unknown value as a fallback option, matching the panel's §15.4 handling). Gate green:
+    typecheck (node + web/DOM-lib), lint, format, **340 core + 417 desktop + 8 relay** unit (+ prompt
+    include/omit-direction-line + always-keeps-framing, a distillation-input capture asserting notes reach the
+    Claude pass, textarea-persists + grouped-optgroups + legacy-fallback RTL, panel expanded-preset + legacy
+    RTL), **59 E2E** (settings reveal sets an expanded preset + notes → both persist to `settings.json`;
+    visualize stamps the chosen preset on `Dream.image.style`; 390px guard). **Visual QA** via the web preview
+    at desktop + 390px (grouped Default-image-style select [4 families, 21 options], full-width style-notes
+    textarea, the panel picker — 0 overflow, no console errors). On `feat/dream-image-style` off `main`; NOT
+    merged (awaiting user confirm). **Lesson: one shared `IMAGE_STYLE_PRESETS` constant keeps a grouped picker
+    identical across Settings and a feature panel — render it via native `<optgroup>` children (the design-system
+    `Select` already takes children), and since the stored value is a free string, both surfaces must render a
+    fallback `<option>` for an unlisted value or a controlled select silently shows the wrong one.**
 - 2026-06-14 — Fix (**`budget:status` $-redaction — close the own-budget-$-over-IPC leak**; on `feat/shell-titlebar`,
   the package-E follow-up the code-reviewer flagged + the user asked to do now). The renderer already gated the $
   DISPLAY behind `budgets.manage`, but `budget:status` returned raw `spentUsd`/`limitUsd` to ALL callers (a

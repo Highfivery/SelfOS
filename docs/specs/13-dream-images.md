@@ -1,6 +1,6 @@
 # 13 — Dream images (AI image generation of a dream)
 
-> **Status:** **Built** (all 5 slices shipped to `main`) · **Review** (2026-06 style amendment, §15) · _last updated 2026-06-12_
+> **Status:** **Built** (all 5 slices shipped to `main`) · **Approved** (2026-06 style amendment, §15) · _last updated 2026-06-14_
 >
 > **2026-06 amendment (§15, package F of the app refresh):** a richer **default image style** picker (more
 > presets) plus a **free-text style description** so the dreamer can refine the look in their own words — both in
@@ -495,8 +495,11 @@ The bridge **re-enforces** all gates server-side (consent + key + `dreams.genera
 - `dreams.imageModel` (select, **admin-only** — `adminOnly` like the questionnaires relay model, marked
   "Admin only", §12) — the OpenAI image model; options **`gpt-image-2` (default) + `gpt-image-1`** (exact ids
   confirmed at build, §11.1).
-- `dreams.imageStyle` (select) — the default style (e.g. dreamlike / painterly / watercolor / realistic), with
-  a per-image override on the panel (§3.2).
+- `dreams.imageStyle` (grouped select) — the default style, chosen from the ~20 family-grouped
+  `IMAGE_STYLE_PRESETS` (Painted / Drawn / Stylized / Photographic-ish), with a per-image override on the
+  panel (§3.2). A **free string** so the set can grow without migration (§15.1).
+- `dreams.imageStyleNotes` (textarea, max 300, default empty) — **Settings-only** free-text style direction
+  that augments the preset on every image; threaded host-side into `buildImagePromptInput` (§15.2).
 - An **OpenAI key control** (admin-only custom control, mirroring the `ai.apiKey` `ApiKeyControl` — write-only
   to the renderer; `secret:setOpenAiKey` / a `has` check, never a `get`).
 
@@ -792,6 +795,25 @@ Confirmed with the user (2026-06-11) — encoded above, **not** to be re-opened:
 
 ## 14. Changelog
 
+- 2026-06-14 — **§15 amendment APPROVED + BUILT (package F).** Status → Approved (§15.6). Expanded
+  `dreams.imageStyle` to **~20 family-grouped presets** (Painted / Drawn / Stylized / Photographic-ish)
+  sharing **one `IMAGE_STYLE_PRESETS` constant** (new `app/routes/dreams/imageStyles.ts`) used by the
+  Settings select **and** the `DreamImagePanel` picker — both render native `<optgroup>`s and a fallback
+  option for a legacy/unknown stored value (§15.4); the schema field stays a **free string** (the four
+  original values retained, so pre-expansion dreams still resolve). Added **Settings-only**
+  `dreams.imageStyleNotes` (textarea, max 300) threaded through `buildImagePromptInput`'s new optional
+  `styleNotes` param (appends `Additional style direction: …` after the style line, before the framing;
+  blank ⇒ omitted) and read host-side in `coreBridge.dreamGenerateImage`; the `dreams:generateImage` IPC is
+  **unchanged** (no per-image notes). Softened the baseline `DREAMLIKE_FRAMING` + `DISTILLATION_INSTRUCTION`
+  to **"evocative, non-photorealistic"** so it blends with a non-dreamlike preset while keeping the §8.2
+  never-a-photoreal-likeness guarantee. Added a reusable **`textarea`** settings control type + a grouped
+  **`select`** variant to the registry. No schema/IPC/metering change. Synced §6 + `03` §4.1. Gate green:
+  typecheck, lint, format, **340 core + 417 desktop + 8 relay** unit (+ prompt include/omit/framing + a
+  distillation-capture assertion + textarea/grouped-select/legacy-fallback RTL + panel preset RTL), **59
+  E2E** (settings reveal sets an expanded preset + notes → persists to `settings.json`; visualize stamps
+  the chosen preset on `Dream.image.style`; 390px guard). Visual QA at desktop + 390px (grouped select,
+  full-width notes textarea, panel picker — no overflow, no console errors). Code-reviewer **ship** (the
+  Settings legacy-fallback nit applied so it matches the panel's §15.4 handling). On `feat/dream-image-style`.
 - 2026-06-12 — **2026-06 style amendment added (§15, package F of the app refresh; Review).** Expands the
   `dreams.imageStyle` presets and adds a **free-text style description** (`dreams.imageStyleNotes`) so the
   dreamer can refine the look in their own words; threads it through `buildImagePromptInput` while keeping the
@@ -1016,4 +1038,5 @@ single default you set once in Settings.
 
 ### 15.6 Open questions (amendment)
 
-_All resolved (2026-06-12) — see §15.5. The amendment is build-ready pending final approval._
+_All resolved (2026-06-12) — see §15.5. **Approved 2026-06-14** (package F of the app refresh); built on
+`feat/dream-image-style`._

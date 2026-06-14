@@ -10,12 +10,21 @@ export interface SelectOption {
   label: string;
 }
 
+/** A labelled group of options, rendered as a native `<optgroup>` so a long list stays scannable. */
+export interface SelectOptionGroup {
+  label: string;
+  options: ReadonlyArray<SelectOption>;
+}
+
 export type SettingControl =
   | { type: 'switch' }
   | { type: 'segmented'; options: ReadonlyArray<SelectOption> }
+  // A select takes flat `options` OR family-grouped `groups` (rendered as `<optgroup>`s) — exactly one.
   | { type: 'select'; options: ReadonlyArray<SelectOption> }
+  | { type: 'select'; groups: ReadonlyArray<SelectOptionGroup> }
   | { type: 'slider'; min: number; max: number; step: number; format?: (value: number) => string }
   | { type: 'text'; placeholder?: string }
+  | { type: 'textarea'; placeholder?: string; rows?: number; maxLength?: number }
   | { type: 'custom'; render: ComponentType };
 
 /** One declarative setting — the single source of truth (03-settings §4.1). */

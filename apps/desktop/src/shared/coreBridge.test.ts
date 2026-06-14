@@ -575,7 +575,6 @@ describe('createCoreBridge', () => {
     const req = {
       type: 'role-feedback',
       sensitivity: 'standard' as const,
-      includeAuthor: true,
       includeTarget: false,
       includeRelationship: false,
       existingPrompts: [],

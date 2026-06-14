@@ -1075,9 +1075,8 @@ test('questionnaires: custom type, sensitivity, matrix + branching round-trip', 
     await w.getByRole('button', { name: 'Add', exact: true }).click();
     await expect(w.getByLabel('Type', { exact: true })).toHaveValue('Date night');
 
-    // A sensitive tier shows the author note (the actual gates apply at send time).
-    await w.getByLabel('Sensitivity').selectOption('explicit');
-    await expect(w.getByText(/date of birth and consent/i)).toBeVisible();
+    // A custom type can't carry sensitivity (§15.2) — the picker is hidden and the value is standard.
+    await expect(w.getByLabel('Sensitivity')).toHaveCount(0);
 
     // Q1: single choice (a valid branch trigger).
     await w.getByLabel('Question 1', { exact: true }).fill('Are you partnered?');
@@ -1103,7 +1102,7 @@ test('questionnaires: custom type, sensitivity, matrix + branching round-trip', 
     // Reopen and confirm everything round-tripped through the encrypted vault.
     await w.getByRole('button', { name: /Date-night check-in/ }).click();
     await expect(w.getByLabel('Type', { exact: true })).toHaveValue('Date night');
-    await expect(w.getByLabel('Sensitivity')).toHaveValue('explicit');
+    await expect(w.getByLabel('Sensitivity')).toHaveCount(0);
     await expect(w.getByLabel('Row 1', { exact: true })).toHaveValue('Trust');
     await expect(w.getByLabel('…equals')).toHaveValue('Yes');
 
@@ -1131,7 +1130,7 @@ test('questionnaires: preview / test-on-self renders the form, gates Finish, sav
     await w.getByLabel('Answer type').selectOption({ label: 'Rating' });
 
     // Switch to Preview — the answering form + crisis footer render exactly as the recipient sees them.
-    await w.getByRole('button', { name: 'Preview' }).click();
+    await w.getByRole('button', { name: 'Preview', exact: true }).click();
     await expect(w.getByText(/exactly what your recipient sees/i)).toBeVisible();
     await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible();
 
@@ -1152,6 +1151,70 @@ test('questionnaires: preview / test-on-self renders the form, gates Finish, sav
       return main ? main.scrollWidth - main.clientWidth : 0;
     });
     expect(overflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('questionnaires: General default + intimacy-only sensitivity + live inline preview (08 §15)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await w.getByRole('button', { name: 'New' }).click();
+
+    // §15.1: a new questionnaire defaults to General, which can't carry sensitivity (§15.2) — no picker.
+    await expect(w.getByLabel('Type', { exact: true })).toHaveValue('general');
+    await expect(w.getByLabel('Sensitivity')).toHaveCount(0);
+
+    await w.getByLabel('Title').fill('Check-in');
+    await w.getByLabel('Question 1', { exact: true }).fill('How are you, really?');
+    await w.getByLabel('Answer type').selectOption({ label: 'Rating' });
+
+    // §15.5: the edited question's inline preview is expanded and renders the real answering control —
+    // a 1→5 rating scale. (The "Hide preview" toggle confirms the inline preview panel is present.)
+    await expect(w.getByRole('button', { name: 'Hide preview' })).toBeVisible();
+    await expect(w.getByRole('radio', { name: '3', exact: true })).toBeVisible();
+
+    // …and it matches the full Preview render (the same shared @selfos/answering renderer).
+    await w.getByRole('button', { name: 'Preview', exact: true }).click();
+    await expect(w.getByRole('radio', { name: '3', exact: true })).toBeVisible();
+    await w.getByRole('button', { name: 'Edit', exact: true }).click();
+
+    // §15.2: switching to Intimacy reveals the picker with intimacy tiers only (no Standard), and the
+    // author note. It seeds Intimacy — General.
+    await w.getByLabel('Type', { exact: true }).selectOption('intimacy');
+    await expect(w.getByLabel('Sensitivity')).toHaveValue('intimacyGeneral');
+    await expect(w.getByLabel('Sensitivity').getByRole('option', { name: 'Standard' })).toHaveCount(
+      0,
+    );
+    await w.getByLabel('Sensitivity').selectOption('explicit');
+    await expect(w.getByText(/date of birth and consent/i)).toBeVisible();
+
+    // Save → reopen: the intimacy type + escalated tier round-trip through the encrypted vault.
+    await w.getByRole('button', { name: 'Create' }).click();
+    await w.getByRole('button', { name: /Check-in/ }).click();
+    await expect(w.getByLabel('Type', { exact: true })).toHaveValue('intimacy');
+    await expect(w.getByLabel('Sensitivity')).toHaveValue('explicit');
+
+    // No horizontal overflow at phone width — page-level AND no inner horizontal scrollbar anywhere.
+    await w.setViewportSize({ width: 390, height: 780 });
+    const offenders = await w.evaluate(() => {
+      const bad: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          bad.push(el.className?.toString?.() ?? el.tagName);
+        }
+      });
+      const main = document.querySelector('main');
+      return { bad, mainOverflow: main ? main.scrollWidth - main.clientWidth : 0 };
+    });
+    expect(offenders.bad).toEqual([]);
+    expect(offenders.mainOverflow).toBeLessThanOrEqual(1);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -1191,12 +1254,13 @@ test('questionnaires: attach an encrypted image, require alt, round-trip + show 
     await w.getByRole('button', { name: 'Create' }).click();
 
     // Reopen: the alt text round-tripped through the encrypted vault and the image still loads.
+    // (The editor thumbnail AND the open inline preview both render it, so scope to the first.)
     await w.getByRole('button', { name: /Photo prompt/ }).click();
     await expect(w.getByLabel('Image description (alt text)')).toHaveValue('A test image');
-    await expect(w.getByRole('img', { name: 'A test image' })).toBeVisible();
+    await expect(w.getByRole('img', { name: 'A test image' }).first()).toBeVisible();
 
     // It also renders in the recipient-facing preview.
-    await w.getByRole('button', { name: 'Preview' }).click();
+    await w.getByRole('button', { name: 'Preview', exact: true }).click();
     await expect(w.getByRole('img', { name: 'A test image' })).toBeVisible();
 
     const overflow = await w.evaluate(() => {
@@ -1269,9 +1333,9 @@ test('questionnaires: the AI draft panel + Suggested surface fit at phone width'
     // shrink to 390px just to measure that the rendered surface fits.
     await w.getByRole('link', { name: 'Questionnaires' }).click();
     await w.getByRole('button', { name: 'New' }).click();
-    // The "Draft with AI" panel is ready; expanding it shows the context toggles (a flex row).
+    // The "Draft with AI" panel is ready; expanding it reveals the brief + Generate (no author toggle, §15.4).
     await w.getByRole('button', { name: /draft with ai/i }).click();
-    await expect(w.getByText('Use my information')).toBeVisible();
+    await expect(w.getByRole('button', { name: /generate questions/i })).toBeVisible();
     await resize(390);
     await w.waitForTimeout(150);
     expect(await overflow()).toBeLessThanOrEqual(1);
@@ -2857,7 +2921,7 @@ test('responsive: at a phone width the nav is a drawer and no screen overflows h
         await w.waitForTimeout(120);
         expect(await noOverflow()).toBe(true); // the branch row wraps, no overflow
         // The preview / answering form (matrix scale, branch-aware) must also fit at phone width.
-        await w.getByRole('button', { name: 'Preview' }).click();
+        await w.getByRole('button', { name: 'Preview', exact: true }).click();
         await w.waitForTimeout(120);
         expect(await noOverflow()).toBe(true);
         await w.getByRole('button', { name: 'Questionnaires' }).click(); // back to the list

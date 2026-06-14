@@ -448,7 +448,6 @@ const GenerateSchema = z.object({
   sensitivity: SensitivityTierSchema,
   brief: z.string().optional(),
   targetPersonId: z.string().min(1).optional(),
-  includeAuthor: z.boolean(),
   includeTarget: z.boolean(),
   includeRelationship: z.boolean(),
   existingPrompts: z.array(z.string()),
@@ -1289,7 +1288,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         ...(p.brief !== undefined ? { brief: p.brief } : {}),
         context: {
           authorPersonId: deps.personId,
-          includeAuthor: p.includeAuthor,
+          // The author's own shareable data always feeds their own generation (§15.4).
+          includeAuthor: true,
           ...(p.targetPersonId !== undefined ? { targetPersonId: p.targetPersonId } : {}),
           includeTarget: p.includeTarget,
           includeRelationship: p.includeRelationship,

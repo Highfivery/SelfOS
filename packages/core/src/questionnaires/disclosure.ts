@@ -14,11 +14,11 @@ export function compatibilityDisclosure(
 ): string {
   switch (visibility) {
     case 'sharedReport':
-      return `Your individual answers stay private — neither you nor ${askerName} sees the other's raw answers. You'll both see a shared compatibility report.`;
+      return `Your individual answers stay private — neither you nor ${askerName} sees the other's answers. You'll both get one combined report.`;
     case 'eachSeesOwn':
-      return `Your individual answers stay private to you; ${askerName} won't see them. You'll both see a shared compatibility report, and you can review your own answers.`;
+      return `Your individual answers stay private to you; ${askerName} won't see them. You'll both get a combined report, and you can review your own answers.`;
     case 'senderSeesAll':
-      return `Your answers will be shared with ${askerName}, and you'll both see a shared compatibility report.`;
+      return `Your answers will be shared with ${askerName}, and you'll both get a combined report.`;
   }
 }
 

@@ -428,7 +428,7 @@ export interface SelfosBridge {
     sensitivity: SensitivityTier;
     brief?: string;
     targetPersonId?: string;
-    includeAuthor: boolean;
+    // The author's own shareable data is always used (§15.4); only a *target* person's context is optional.
     includeTarget: boolean;
     includeRelationship: boolean;
     existingPrompts: string[];

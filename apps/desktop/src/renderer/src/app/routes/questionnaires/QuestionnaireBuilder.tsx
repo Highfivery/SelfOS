@@ -30,7 +30,15 @@ import type {
 } from '@shared/schemas';
 import { QuestionImage } from '@selfos/answering';
 import { useSessionStore } from '../../../stores/sessionStore';
+import {
+  DEFAULT_TYPE,
+  QUESTIONNAIRE_TYPES,
+  effectiveSensitivity as computeEffectiveSensitivity,
+  seedSensitivityForType,
+  sensitivityConfigFor,
+} from './questionnaireTypes';
 import { QuestionnaireAiPanel } from './QuestionnaireAiPanel';
+import { QuestionPreview } from './QuestionPreview';
 import { QuestionnairePreview } from './QuestionnairePreview';
 import { QuestionnaireResults } from './QuestionnaireResults';
 import { QuestionnaireSendPanel } from './QuestionnaireSendPanel';
@@ -53,26 +61,6 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-/** A small starter taxonomy (custom types are added by the user and persist in the vault). */
-const QUESTIONNAIRE_TYPES: { value: string; label: string }[] = [
-  { value: 'role-feedback', label: 'How am I doing in this role?' },
-  { value: 'blind-spots', label: 'Honest outside view / blind spots' },
-  { value: 'appreciation', label: 'Appreciation, strengths & weaknesses' },
-  { value: 'perspective', label: 'Perspective on a recent event' },
-  { value: 'fill-gaps', label: 'Fill the gaps' },
-  { value: 'scenario', label: 'Scenario-based' },
-  { value: 'intimacy', label: 'Intimacy' },
-  { value: 'science', label: 'Science-informed' },
-];
-
-/** Sensitivity tiers (08 §4.2). The age/consent gates are applied recipient-side at send (§3.2/§8.3). */
-const SENSITIVITY_OPTIONS: { value: SensitivityTier; label: string }[] = [
-  { value: 'standard', label: 'Standard' },
-  { value: 'intimacyGeneral', label: 'Intimacy — General' },
-  { value: 'explicit', label: 'Intimacy — Explicit' },
-  { value: 'unfiltered', label: 'Intimacy — Unfiltered' },
-];
-
 /** Author-facing note for the sensitive tiers — the actual gates apply when you send. */
 const SENSITIVITY_NOTES: Partial<Record<SensitivityTier, string>> = {
   intimacyGeneral: 'Recipients confirm they’re 18+ when you send.',
@@ -82,24 +70,31 @@ const SENSITIVITY_NOTES: Partial<Record<SensitivityTier, string>> = {
     'Recipients confirm their date of birth and consent when you send. Generated and analyzed strictly within Anthropic’s usage policy.',
 };
 
-/** Compatibility visibility options (08 §3.6). `senderSeesAll` needs `questionnaires.readRaw` to pick. */
+/**
+ * Compatibility visibility options (08 §3.6/§15.3) — author-facing labels + help, in plain language (no
+ * "break-glass"/"audited" jargon). `senderSeesAll` needs `questionnaires.readRaw` to pick; when chosen, a
+ * plain "a record is kept…" line is shown (the readRaw + audit mechanism itself is unchanged, §8.4).
+ */
 const VISIBILITY_OPTIONS: { value: CompatibilityVisibility; label: string; help: string }[] = [
   {
     value: 'sharedReport',
     label: 'Shared report only',
-    help: 'Neither person sees the other’s raw answers — you both see a joint report.',
+    help: 'Neither of you sees the other’s answers — you both get one combined report.',
   },
   {
     value: 'eachSeesOwn',
-    label: 'Each sees their own',
-    help: 'Each person also sees their own answers, plus the joint report.',
+    label: 'Shared report + your own answers',
+    help: 'You both get the combined report, and each person can also look back at their own answers. Neither sees the other’s.',
   },
   {
     value: 'senderSeesAll',
-    label: 'You can reveal answers',
-    help: 'You can break-glass reveal raw answers (audited). Recipients are told their answers are shared with you.',
+    label: 'You see their answers',
+    help: 'You’ll see their individual answers and you both get the combined report. They’re clearly told their answers are shared with you.',
   },
 ];
+
+/** Plain, jargon-free acknowledgement of the audit trail shown when `senderSeesAll` is selected (§15.3). */
+const SENDER_SEES_ALL_RECORD_NOTE = 'A record is kept each time you open their answers.';
 
 const TYPE_OPTIONS: { value: AnswerType; label: string }[] = [
   { value: 'shortText', label: 'Short text' },
@@ -317,10 +312,17 @@ export function QuestionnaireBuilder({
   const aiReady = aiEnabled === true && hasAiKey;
 
   const [title, setTitle] = useState(questionnaire?.title ?? seed?.title ?? '');
-  const [type, setType] = useState(questionnaire?.type ?? seed?.type ?? 'role-feedback');
+  const [type, setType] = useState(questionnaire?.type ?? seed?.type ?? DEFAULT_TYPE);
   const [sensitivity, setSensitivity] = useState<SensitivityTier>(
     questionnaire?.sensitivity ?? 'standard',
   );
+
+  // Sensitivity is only meaningful for the types in SENSITIVITY_TYPES (intimacy/scenario, §15.2). For any
+  // other type the picker is hidden and the value is `standard`; `effectiveSensitivity` is the value that
+  // is shown, fed to AI generation, and saved — clamped so a stale tier on a non-sensitivity type (or an
+  // invalid tier for the current type) can never leak through.
+  const sensitivityConfig = sensitivityConfigFor(type);
+  const effectiveSensitivity = computeEffectiveSensitivity(type, sensitivity);
   // Compatibility (08 §3.6): goes to TWO people, AI personalizes a variant each, aligned by canonicalId.
   const canReadRaw = useSessionStore((s) => s.can('questionnaires.readRaw'));
   const [compatEnabled, setCompatEnabled] = useState(
@@ -338,6 +340,10 @@ export function QuestionnaireBuilder({
   );
   const [problems, setProblems] = useState<string[] | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // The one question whose inline preview is expanded (§15.5): the question being edited (focusing a
+  // card's controls expands it), the rest collapsed. Each is independently toggleable via its header.
+  const [openPreviewId, setOpenPreviewId] = useState<string | null>(() => drafts[0]?.id ?? null);
 
   // Adding a custom type (an inline name field revealed by "New type").
   const [addingType, setAddingType] = useState(false);
@@ -384,6 +390,8 @@ export function QuestionnaireBuilder({
     }
     await addType(name);
     setType(name);
+    // A custom type can't carry sensitivity (it's not in SENSITIVITY_TYPES) — drop to standard.
+    setSensitivity(seedSensitivityForType(name, sensitivity));
     setProblems(null);
     setAddingType(false);
     setNewType('');
@@ -438,7 +446,7 @@ export function QuestionnaireBuilder({
     ...(questionnaire ? { id: questionnaire.id } : {}),
     title: title.trim(),
     type,
-    sensitivity,
+    sensitivity: effectiveSensitivity,
     // When compatibility is on, stamp each question with a stable canonicalId (its own id) so the two
     // AI-personalized variants stay aligned for the report (08 §3.6/§4.2).
     questions: drafts.map((d) => {
@@ -561,7 +569,7 @@ export function QuestionnaireBuilder({
                 )}
               </Field>
 
-              <div className={styles.metaRow}>
+              <div className={styles.metaRow} data-cols={sensitivityConfig ? 'two' : 'one'}>
                 <Field label="Type">
                   {(props) => (
                     <div className={styles.typePicker}>
@@ -570,7 +578,11 @@ export function QuestionnaireBuilder({
                         value={type}
                         onChange={(event) => {
                           setProblems(null);
-                          setType(event.target.value);
+                          const next = event.target.value;
+                          setType(next);
+                          // Reset/seed sensitivity for the new type (§15.2): standard for a type that
+                          // can't carry it, the type's default otherwise (keeping a still-valid tier).
+                          setSensitivity(seedSensitivityForType(next, sensitivity));
                         }}
                       >
                         <optgroup label="Starter">
@@ -605,24 +617,26 @@ export function QuestionnaireBuilder({
                   )}
                 </Field>
 
-                <Field label="Sensitivity">
-                  {(props) => (
-                    <Select
-                      {...props}
-                      value={sensitivity}
-                      onChange={(event) => {
-                        setProblems(null);
-                        setSensitivity(event.target.value as SensitivityTier);
-                      }}
-                    >
-                      {SENSITIVITY_OPTIONS.map((s) => (
-                        <option key={s.value} value={s.value}>
-                          {s.label}
-                        </option>
-                      ))}
-                    </Select>
-                  )}
-                </Field>
+                {sensitivityConfig ? (
+                  <Field label="Sensitivity">
+                    {(props) => (
+                      <Select
+                        {...props}
+                        value={effectiveSensitivity}
+                        onChange={(event) => {
+                          setProblems(null);
+                          setSensitivity(event.target.value as SensitivityTier);
+                        }}
+                      >
+                        {sensitivityConfig.options.map((s) => (
+                          <option key={s.value} value={s.value}>
+                            {s.label}
+                          </option>
+                        ))}
+                      </Select>
+                    )}
+                  </Field>
+                ) : null}
               </div>
 
               {addingType ? (
@@ -663,8 +677,8 @@ export function QuestionnaireBuilder({
                 </p>
               ) : null}
 
-              {SENSITIVITY_NOTES[sensitivity] ? (
-                <Banner tone="info">{SENSITIVITY_NOTES[sensitivity]}</Banner>
+              {SENSITIVITY_NOTES[effectiveSensitivity] ? (
+                <Banner tone="info">{SENSITIVITY_NOTES[effectiveSensitivity]}</Banner>
               ) : null}
 
               <div className={styles.compatRow}>
@@ -715,6 +729,11 @@ export function QuestionnaireBuilder({
                       <Text size="sm" tone="secondary">
                         {VISIBILITY_OPTIONS.find((v) => v.value === visibility)?.help}
                       </Text>
+                      {visibility === 'senderSeesAll' ? (
+                        <Text size="sm" tone="tertiary">
+                          {SENDER_SEES_ALL_RECORD_NOTE}
+                        </Text>
+                      ) : null}
                     </Stack>
                   )}
                 </Field>
@@ -725,7 +744,7 @@ export function QuestionnaireBuilder({
           <QuestionnaireAiPanel
             aiReady={aiReady}
             type={type}
-            sensitivity={sensitivity}
+            sensitivity={effectiveSensitivity}
             existingPrompts={drafts.map((d) => d.prompt.trim()).filter(Boolean)}
             onGenerated={appendGenerated}
           />
@@ -747,7 +766,11 @@ export function QuestionnaireBuilder({
               const branchOnId = branchRef ? branchRef.draft.id : '';
 
               return (
-                <div key={d.id} className={styles.question}>
+                <div
+                  key={d.id}
+                  className={styles.question}
+                  onFocusCapture={() => setOpenPreviewId(d.id)}
+                >
                   {d.aiDrafted ? (
                     <span className={styles.aiBadge}>
                       <Sparkles size={12} aria-hidden="true" />
@@ -1078,6 +1101,13 @@ export function QuestionnaireBuilder({
                       ) : null}
                     </div>
                   ) : null}
+
+                  <QuestionPreview
+                    question={d.prompt.trim() !== '' ? toQuestion(d, drafts) : null}
+                    open={openPreviewId === d.id}
+                    onToggle={() => setOpenPreviewId((cur) => (cur === d.id ? null : d.id))}
+                    loadImage={getImage}
+                  />
                 </div>
               );
             })}
@@ -1169,7 +1199,7 @@ export function QuestionnaireBuilder({
               <QuestionnaireSendPanel
                 questionnaireId={sendId}
                 title={title.trim()}
-                sensitivity={sensitivity}
+                sensitivity={effectiveSensitivity}
                 onCancel={() => setSendId(null)}
                 onSent={() => {
                   setSendId(null);

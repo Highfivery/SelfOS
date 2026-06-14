@@ -87,9 +87,9 @@ describe('Questionnaires', () => {
     expect(screen.queryByLabelText('Who sees what')).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('switch', { name: 'Compatibility questionnaire' }));
     const visibility = await screen.findByLabelText('Who sees what');
-    // Without `questionnaires.readRaw`, the senderSeesAll option is not selectable.
+    // Without `questionnaires.readRaw`, the senderSeesAll option is not selectable (§15.3 reworded copy).
     const senderSeesAll = screen.getByRole('option', {
-      name: /You can reveal answers/,
+      name: /You see their answers/,
     }) as HTMLOptionElement;
     expect(senderSeesAll.disabled).toBe(true);
     await userEvent.selectOptions(visibility, 'eachSeesOwn');
@@ -146,6 +146,8 @@ describe('Questionnaires', () => {
     await openNewBuilder();
 
     expect(screen.queryByText(/date of birth and consent/i)).not.toBeInTheDocument();
+    // The Sensitivity picker only appears once the type can carry it (§15.2) — switch to Intimacy.
+    await userEvent.selectOptions(screen.getByLabelText('Type'), 'intimacy');
     await userEvent.selectOptions(screen.getByLabelText('Sensitivity'), 'explicit');
     expect(screen.getByText(/date of birth and consent/i)).toBeInTheDocument();
   });
@@ -466,5 +468,129 @@ describe('Questionnaires', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
     expect(questionnairesDelete).toHaveBeenCalledWith('q1');
+  });
+
+  // --- 2026-06 authoring-UX amendment (§15) ---
+
+  it('defaults a new questionnaire to General with no Sensitivity picker (§15.1/§15.2)', async () => {
+    installMockBridge({ questionnairesList: () => Promise.resolve([]) });
+    await openNewBuilder();
+
+    expect(screen.getByLabelText('Type')).toHaveValue('general');
+    // General can't carry sensitivity — the picker is hidden.
+    expect(screen.queryByLabelText('Sensitivity')).not.toBeInTheDocument();
+  });
+
+  it('shows intimacy tiers only (no Standard) and seeds intimacyGeneral (§15.2)', async () => {
+    const save = saveSpy();
+    installMockBridge({ questionnairesList: () => Promise.resolve([]), questionnairesSave: save });
+    await openNewBuilder();
+
+    await userEvent.type(screen.getByLabelText('Title'), 'Closeness');
+    await userEvent.type(screen.getByLabelText('Question 1'), 'How connected do you feel?');
+    await userEvent.selectOptions(screen.getByLabelText('Type'), 'intimacy');
+
+    const sensitivity = screen.getByLabelText('Sensitivity');
+    // No Standard option for an intimacy questionnaire; it seeds to Intimacy — General.
+    expect(screen.queryByRole('option', { name: 'Standard' })).not.toBeInTheDocument();
+    expect(sensitivity).toHaveValue('intimacyGeneral');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ sensitivity: 'intimacyGeneral' }));
+  });
+
+  it('lets Scenario stay Standard but escalate to a tier (§15.2)', async () => {
+    const save = saveSpy();
+    installMockBridge({ questionnairesList: () => Promise.resolve([]), questionnairesSave: save });
+    await openNewBuilder();
+
+    await userEvent.type(screen.getByLabelText('Title'), 'A tricky moment');
+    await userEvent.type(screen.getByLabelText('Question 1'), 'What happened?');
+    await userEvent.selectOptions(screen.getByLabelText('Type'), 'scenario');
+
+    const sensitivity = screen.getByLabelText('Sensitivity');
+    // Scenario keeps Standard as the default but offers the intimacy tiers to escalate.
+    expect(sensitivity).toHaveValue('standard');
+    expect(screen.getByRole('option', { name: 'Standard' })).toBeInTheDocument();
+    await userEvent.selectOptions(sensitivity, 'explicit');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ sensitivity: 'explicit' }));
+  });
+
+  it('forces sensitivity back to standard when leaving a sensitive type (§15.2/§15.6)', async () => {
+    const save = saveSpy();
+    installMockBridge({ questionnairesList: () => Promise.resolve([]), questionnairesSave: save });
+    await openNewBuilder();
+
+    await userEvent.type(screen.getByLabelText('Title'), 'Switcheroo');
+    await userEvent.type(screen.getByLabelText('Question 1'), 'How are things?');
+    await userEvent.selectOptions(screen.getByLabelText('Type'), 'intimacy');
+    await userEvent.selectOptions(screen.getByLabelText('Sensitivity'), 'explicit');
+    // Switch to a type that can't carry sensitivity — the picker disappears and the value resets.
+    await userEvent.selectOptions(screen.getByLabelText('Type'), 'role-feedback');
+    expect(screen.queryByLabelText('Sensitivity')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ sensitivity: 'standard' }));
+  });
+
+  it('uses plain visibility copy + the "a record is kept" line for senderSeesAll (§15.3)', async () => {
+    // Grant readRaw via super-admin so senderSeesAll is selectable.
+    useSessionStore.setState({ superAdmin: true });
+    installMockBridge({ questionnairesList: () => Promise.resolve([]) });
+    await openNewBuilder();
+
+    await userEvent.click(screen.getByRole('switch', { name: 'Compatibility questionnaire' }));
+    const visibility = await screen.findByLabelText('Who sees what');
+    // Reworded labels (no "break-glass"/"audited"; "each sees their own" → explicit added thing).
+    expect(screen.getByRole('option', { name: 'Shared report only' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('option', { name: 'Shared report + your own answers' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/break-glass|audited/i)).not.toBeInTheDocument();
+
+    await userEvent.selectOptions(visibility, 'senderSeesAll');
+    expect(
+      screen.getByText(/a record is kept each time you open their answers/i),
+    ).toBeInTheDocument();
+  });
+
+  it('drops the "Use my information" toggle; generation still uses author context (§15.4)', async () => {
+    enableAi();
+    const generate = vi.fn<
+      (input: Record<string, unknown>) => Promise<{ ok: boolean; questions: never[] }>
+    >(() => Promise.resolve({ ok: true, questions: [] }));
+    installMockBridge({
+      questionnairesList: () => Promise.resolve([]),
+      secretHas: () => Promise.resolve(true),
+      questionnairesGenerate: generate,
+    });
+    await openNewBuilder();
+
+    await userEvent.click(await screen.findByRole('button', { name: /draft with ai/i }));
+    expect(screen.queryByLabelText('Use my information')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /generate questions/i }));
+
+    expect(generate).toHaveBeenCalledTimes(1);
+    // The author flag is gone from the payload (the bridge always includes author context now).
+    expect(generate.mock.calls[0]?.[0]).not.toHaveProperty('includeAuthor');
+  });
+
+  it('shows a live inline per-question preview that updates with the answer type (§15.5)', async () => {
+    installMockBridge({ questionnairesList: () => Promise.resolve([]) });
+    await openNewBuilder();
+
+    await userEvent.type(screen.getByLabelText('Question 1'), 'Are you happy?');
+    // The first question's preview is expanded by default — its control mirrors the answer type.
+    expect(screen.getByLabelText('Are you happy?')).toBeInTheDocument(); // shortText input
+    await userEvent.selectOptions(screen.getByLabelText('Answer type'), 'yesNo');
+    // The preview now renders Yes/No pills (only the preview has these — the editor doesn't).
+    expect(screen.getByRole('radio', { name: 'Yes' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'No' })).toBeInTheDocument();
+
+    // It's collapsible — hiding it removes the preview control.
+    await userEvent.click(screen.getByRole('button', { name: 'Hide preview' }));
+    expect(screen.queryByRole('radio', { name: 'Yes' })).not.toBeInTheDocument();
   });
 });

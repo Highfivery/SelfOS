@@ -267,6 +267,41 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-14 — Build (**App-refresh package D — questionnaire authoring UX; SPEC 08 §15 BUILT**;
+  [08-questionnaires](docs/specs/08-questionnaires.md) §15, amends §3.1/§3.6/§13.3). Renderer-heavy authoring
+  refinements, **no new capabilities/IPC channels** (one IPC **field removal**). All four items: (1) a **General**
+  type added to the starter taxonomy + made the **default for new questionnaires**; (2) **sensitivity is
+  intimacy/scenario-only** via a new pure single-source-of-truth module `questionnaireTypes.ts` (`SENSITIVITY_TYPES`):
+  **intimacy** shows the tiers only (no Standard, seeds `intimacyGeneral`), **scenario** shows Standard default +
+  escalatable tiers, **every other type hides the picker and forces `standard`** — `effectiveSensitivity(type,tier)`
+  clamps on display **and on save** (so a stale/seeded non-standard tier on a non-sensitivity type or existing
+  questionnaire can't leak), `seedSensitivityForType` (a delegate of the same clamp) reseeds on type-change/custom-type-add;
+  the `.metaRow[data-cols]` grid collapses Type to full-width when the picker is hidden; (3) **reworded the
+  compatibility "who sees what" copy** — dropped "break-glass"/"audited" jargon, "Each sees their own" →
+  **"Shared report + your own answers"**, plus a plain **"A record is kept each time you open their answers"** line for
+  `senderSeesAll` (the `readRaw` + audit mechanism is **unchanged**); light pass on core `disclosure.ts` ("shared
+  compatibility report" → "combined report"); (4) **removed the "Use my information" AI toggle** — author context is
+  always used, so `includeAuthor` was **dropped from the renderer-facing `questionnairesGenerate` IPC** (channels +
+  `GenerateSchema`) and **hardcoded `true` in `coreBridge`**, while the **core context-provider registry KEEPS
+  `includeAuthor`** (compatibility/target-context legitimately passes `false` — the §13.3 shareable-only boundary is
+  intact); (5) a **live inline per-question preview** (`QuestionPreview.tsx`) reusing the shared **`@selfos/answering`**
+  `QuestionnaireForm` — byte-identical to the recipient view, **expanded for the focused question, collapsed for the
+  rest** (`onFocusCapture` sets the open id; per-card "Show/Hide preview" toggle), non-interactive (local throwaway
+  answers), crisis footer suppressed inline (the full Preview mode still shows it). Code-reviewer **ship** (sensitivity
+  clamp airtight on save + existing/seeded questionnaires; the `includeAuthor` IPC narrowing keeps the author-always /
+  target-optional boundary; the inline toggle's `aria-label="Show/Hide preview"` overrides its visible "Preview" text so
+  it never collides with the mode "Preview" button — fixed the 3 E2E mode clicks to `{exact:true}`; applied the DRY nit
+  — `seedSensitivityForType` now delegates to `effectiveSensitivity`). Gate green: typecheck (node + web/DOM-lib), lint,
+  format, **336 core + 402 desktop + 8 relay** unit (+`questionnaireTypes` [6], +6 RTL §15, updated the compat-label +
+  sensitive-note tests), **57 E2E** (+1: General default [no picker] → inline rating preview matches full Preview →
+  Intimacy tiers + note → save/reopen round-trip + 390px inner-scrollbar guard). **Visual QA** via the web preview at
+  390px (General full-width Type/no picker, Intimacy tiers + consent note, inline preview live-updating shortText→Yes/No,
+  reworded visibility copy — 0 overflow, no console errors). **Deferred (captured in §15.8):** "break-glass" still
+  appears in `RelaySendPanel` + the admin disclosure setting (out of §15.3 scope — a future light copy pass). On
+  `feat/questionnaire-authoring-ux` off `main`; NOT merged (awaiting user confirm). **Lesson: when a build serves a
+  prebuilt `dist-web` (hashed assets) rather than live `/src`, source edits won't appear in the web preview until you
+  re-run `build:web` — and the inline-preview reuse of `@selfos/answering` duplicates a question's accessible elements
+  (img alt, "Preview"), so scope E2E queries (`.first()`, `{exact:true}`) accordingly.**
 - 2026-06-14 — Polish round 2 + **rules update** (user: "wrapping is LAZY, not design; cards waste vertical
   space"). Replaced the wrapping pill-chip status filter with a **full-width `Select`** (fills the sidebar,
   scales to any label, never wraps — `combobox` "Filter sessions by status"); **redesigned the guided cards

@@ -45,7 +45,6 @@ export function QuestionnaireAiPanel({
   const [open, setOpen] = useState(false);
   const [brief, setBrief] = useState('');
   const [targetPersonId, setTargetPersonId] = useState('');
-  const [includeAuthor, setIncludeAuthor] = useState(true);
   const [includeTarget, setIncludeTarget] = useState(true);
   const [includeRelationship, setIncludeRelationship] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -78,7 +77,6 @@ export function QuestionnaireAiPanel({
         sensitivity,
         ...(brief.trim() ? { brief: brief.trim() } : {}),
         ...(targetPersonId ? { targetPersonId } : {}),
-        includeAuthor,
         includeTarget: Boolean(targetPersonId) && includeTarget,
         includeRelationship: Boolean(targetPersonId) && includeRelationship,
         existingPrompts,
@@ -142,36 +140,28 @@ export function QuestionnaireAiPanel({
             )}
           </Field>
 
-          <div className={styles.aiToggles}>
-            <label className={styles.aiToggle}>
-              <Switch
-                checked={includeAuthor}
-                onChange={setIncludeAuthor}
-                aria-label="Use my information"
-              />
-              <Text size="sm">Use my information</Text>
-            </label>
-            {targetPersonId ? (
-              <>
-                <label className={styles.aiToggle}>
-                  <Switch
-                    checked={includeTarget}
-                    onChange={setIncludeTarget}
-                    aria-label={`Use ${targetName ?? 'their'} shareable info`}
-                  />
-                  <Text size="sm">Use {targetName ?? 'their'} shareable info</Text>
-                </label>
-                <label className={styles.aiToggle}>
-                  <Switch
-                    checked={includeRelationship}
-                    onChange={setIncludeRelationship}
-                    aria-label="Use our relationship"
-                  />
-                  <Text size="sm">Use our relationship</Text>
-                </label>
-              </>
-            ) : null}
-          </div>
+          {/* Your own shareable data is always used to personalise generation (§15.4) — no toggle. The
+              optional toggles below pull in a *different* person's context (the §13.3 shareable boundary). */}
+          {targetPersonId ? (
+            <div className={styles.aiToggles}>
+              <label className={styles.aiToggle}>
+                <Switch
+                  checked={includeTarget}
+                  onChange={setIncludeTarget}
+                  aria-label={`Use ${targetName ?? 'their'} shareable info`}
+                />
+                <Text size="sm">Use {targetName ?? 'their'} shareable info</Text>
+              </label>
+              <label className={styles.aiToggle}>
+                <Switch
+                  checked={includeRelationship}
+                  onChange={setIncludeRelationship}
+                  aria-label="Use our relationship"
+                />
+                <Text size="sm">Use our relationship</Text>
+              </label>
+            </div>
+          ) : null}
 
           {notice ? <Banner tone={notice.tone}>{notice.text}</Banner> : null}
 

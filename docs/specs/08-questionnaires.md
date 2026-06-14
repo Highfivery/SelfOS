@@ -1,6 +1,6 @@
 # 08 — Questionnaires & the Insight / metrics layer
 
-> **Status:** **Approved** (built) · **Review** (2026-06 authoring-UX amendment, §15) · _last updated 2026-06-12_
+> **Status:** **Approved** (built) · **Approved** (2026-06 authoring-UX amendment, §15) · _last updated 2026-06-14_
 >
 > **2026-06 amendment (§15, package D of the app refresh):** authoring-experience refinements on the
 > already-built feature — a **General** type; **sensitivity tiers shown only for Intimacy/Scenario** types (other
@@ -1397,4 +1397,10 @@ inline preview is per-question while authoring; the full mode is the end-to-end 
 
 ### 15.8 Open questions (amendment)
 
-_All resolved (2026-06-12) — see §15.7. The amendment is build-ready pending final approval._
+_All resolved (2026-06-12) — see §15.7. **Approved 2026-06-14** and built on `feat/questionnaire-authoring-ux`._
+
+**Deferred follow-up (out of §15.3 scope):** the de-jargoning in §15.3 applied **only** to the compatibility
+"who sees what" picker. The word "break-glass" still appears in two other user-facing surfaces — the relay
+external-send privacy note (`RelaySendPanel`) and the admin `questionnaires.discloseAdminAccess` setting copy
+(`settings/builtins.tsx`). A future light copy pass should replace it with plain language there too (the
+`readRaw` + audit mechanism is unchanged).

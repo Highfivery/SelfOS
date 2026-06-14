@@ -1,0 +1,38 @@
+.toggle {
+  display: inline-flex;
+  flex: none; /* fixed control — never compress in a flex row (the standing toggle-shrink rule) */
+  align-items: center;
+  gap: var(--space-1);
+  height: 24px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard);
+}
+
+.shared {
+  border-color: var(--color-accent);
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+}
+
+.private {
+  background: var(--color-surface-alt);
+  color: var(--color-text-secondary);
+}
+
+.toggle:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+.toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

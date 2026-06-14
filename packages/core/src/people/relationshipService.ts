@@ -2,6 +2,7 @@ import type { FileSystem } from '../host';
 import { uuid } from '../id';
 import { RelationshipSchema, type Relationship, type RelationshipInput } from '../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
+import { RELATIONSHIP_SCHEMA_VERSION, migrateRelationshipRaw } from './migrations';
 
 const RELATIONSHIPS_DIR = 'relationships';
 
@@ -22,7 +23,8 @@ export async function listRelationships(fs: FileSystem, key: Uint8Array): Promis
   for (const name of await fs.list(RELATIONSHIPS_DIR)) {
     if (!name.endsWith('.enc')) continue;
     const raw = await readEncryptedJson(fs, `${RELATIONSHIPS_DIR}/${name}`, key);
-    if (raw !== null) relationships.push(RelationshipSchema.parse(raw));
+    // Read-time notes-merge migration (15-shareability §4.3b) before validation.
+    if (raw !== null) relationships.push(RelationshipSchema.parse(migrateRelationshipRaw(raw)));
   }
   return relationships;
 }
@@ -41,7 +43,7 @@ export async function upsertRelationship(
   }
   const relationship: Relationship = {
     id: input.id ?? uuid(),
-    schemaVersion: 1,
+    schemaVersion: RELATIONSHIP_SCHEMA_VERSION,
     fromPersonId: input.fromPersonId,
     toPersonId: input.toPersonId,
     type: input.type,
@@ -50,8 +52,8 @@ export async function upsertRelationship(
     ...(input.label !== undefined ? { label: input.label } : {}),
     ...(input.closeness !== undefined ? { closeness: input.closeness } : {}),
     ...(input.since !== undefined ? { since: input.since } : {}),
-    ...(input.publicNotes !== undefined ? { publicNotes: input.publicNotes } : {}),
-    ...(input.privateNotes !== undefined ? { privateNotes: input.privateNotes } : {}),
+    ...(input.notes !== undefined ? { notes: input.notes } : {}),
+    ...(input.notesShared !== undefined ? { notesShared: input.notesShared } : {}),
   };
   await saveRelationship(fs, key, relationship);
   return relationship;

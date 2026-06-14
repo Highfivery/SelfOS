@@ -1,5 +1,5 @@
 import type { FileSystem } from '../host';
-import { InsightSchema, type Insight } from '../schemas';
+import { DreamSchema, InsightSchema, type Insight } from '../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 
 /**
@@ -102,6 +102,43 @@ export async function updateInsight(
 }
 
 /**
+ * Whether an insight may feed coaching context at all (15-shareability §4.2). Every non-dream insight
+ * does; a dream-sourced insight is suppressed when its dream's `informsContext` is off — so toggling a
+ * dream to "private journal entry" non-destructively withholds its approved insight from BOTH the
+ * dreamer's own context and related people's (the per-fact `shareableWith` targets too, since the whole
+ * insight is dropped). Reads the dream file directly (not via the dreams module) to avoid an
+ * insights↔dreams import cycle — the same tactic `listAllInsights` uses to dodge the people↔insights cycle.
+ */
+export async function insightFeedsContext(
+  fs: FileSystem,
+  key: Uint8Array,
+  insight: Insight,
+): Promise<boolean> {
+  if (insight.source !== 'dream' || !insight.provenance.dreamId) return true;
+  const path = `people/${insight.subjectPersonId}/dreams/${insight.provenance.dreamId}/dream.enc`;
+  const raw = await readEncryptedJson(fs, path, key);
+  if (raw === null) return true; // dream gone but insight lingering — fail open (delete paths clean both)
+  const parsed = DreamSchema.safeParse(raw);
+  // A present-but-malformed dream is treated as unreadable, NOT silently shared (15-shareability §7) — so
+  // a deliberately-muted dream whose bytes corrupt can never leak its insight back into context.
+  if (!parsed.success) return false;
+  return parsed.data.informsContext !== false;
+}
+
+/** Filter a list of insights to those that may currently feed context (15-shareability §4.2). */
+async function feedableInsights(
+  fs: FileSystem,
+  key: Uint8Array,
+  insights: Insight[],
+): Promise<Insight[]> {
+  const out: Insight[] = [];
+  for (const insight of insights) {
+    if (await insightFeedsContext(fs, key, insight)) out.push(insight);
+  }
+  return out;
+}
+
+/**
  * Caps for how much Insight content feeds a single coaching context (08 §4.4). Prioritization is
  * recency-first (§11.7 leaves the exact weighting open to tune); these keep the system prompt bounded.
  */
@@ -123,9 +160,13 @@ export async function summarizeForContext(
 ): Promise<string> {
   const lines: string[] = [];
 
-  const own = (await listInsightsForPerson(fs, key, personId))
-    .filter((insight) => insight.approved)
-    .slice(0, MAX_OWN_INSIGHTS);
+  const own = (
+    await feedableInsights(
+      fs,
+      key,
+      (await listInsightsForPerson(fs, key, personId)).filter((insight) => insight.approved),
+    )
+  ).slice(0, MAX_OWN_INSIGHTS);
   if (own.length > 0) {
     lines.push('What you understand about them so far:');
     for (const insight of own) {
@@ -135,8 +176,12 @@ export async function summarizeForContext(
   }
 
   for (const other of related) {
-    const shared = (await listInsightsForPerson(fs, key, other.id))
-      .filter((insight) => insight.approved)
+    const otherApproved = await feedableInsights(
+      fs,
+      key,
+      (await listInsightsForPerson(fs, key, other.id)).filter((insight) => insight.approved),
+    );
+    const shared = otherApproved
       // A related person's fact reaches THIS person's context if it's broadcast-shareable OR targeted
       // specifically at them (12-dreams §3.4 per-person sharing). Others' untargeted private facts never do.
       .flatMap((insight) =>

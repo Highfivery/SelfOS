@@ -2,6 +2,7 @@ import type { FileSystem } from '../host';
 import { uuid } from '../id';
 import { PersonSchema, type Person, type PersonInput } from '../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
+import { PERSON_SCHEMA_VERSION, migratePersonRaw } from './migrations';
 
 const PEOPLE_DIR = 'people';
 
@@ -15,7 +16,9 @@ export async function getPerson(
   id: string,
 ): Promise<Person | null> {
   const raw = await readEncryptedJson(fs, profilePath(id), key);
-  return raw === null ? null : PersonSchema.parse(raw);
+  // Run the read-time notes-merge migration (15-shareability §4.3) before validation so legacy
+  // `publicNotes`/`privateNotes` records parse into the merged `notes` shape.
+  return raw === null ? null : PersonSchema.parse(migratePersonRaw(raw));
 }
 
 export async function savePerson(fs: FileSystem, key: Uint8Array, person: Person): Promise<void> {
@@ -41,7 +44,7 @@ export async function upsertPerson(
   const now = new Date().toISOString();
   const person: Person = {
     id: existing?.id ?? input.id ?? uuid(),
-    schemaVersion: 1,
+    schemaVersion: PERSON_SCHEMA_VERSION,
     displayName: input.displayName,
     isSubject: input.isSubject,
     tags: input.tags,
@@ -50,8 +53,7 @@ export async function upsertPerson(
     ...(input.pronouns !== undefined ? { pronouns: input.pronouns } : {}),
     ...(input.birthday !== undefined ? { birthday: input.birthday } : {}),
     ...(existing?.avatarPath ? { avatarPath: existing.avatarPath } : {}),
-    ...(input.publicNotes !== undefined ? { publicNotes: input.publicNotes } : {}),
-    ...(input.privateNotes !== undefined ? { privateNotes: input.privateNotes } : {}),
+    ...(input.notes !== undefined ? { notes: input.notes } : {}),
     ...(input.email !== undefined ? { email: input.email } : {}),
     ...(input.phone !== undefined ? { phone: input.phone } : {}),
     // Descriptive profile fields (13-dream-images §4.6) — additive-optional, conditionally spread so a
@@ -73,6 +75,11 @@ export async function upsertPerson(
     ...(input.importantDates !== undefined ? { importantDates: input.importantDates } : {}),
     ...(input.healthNotes !== undefined ? { healthNotes: input.healthNotes } : {}),
     ...(input.faith !== undefined ? { faith: input.faith } : {}),
+    // The per-field lock-set (15-shareability §4.1) — drop it entirely when empty so a person with nothing
+    // locked stays clean (matches the other conditional spreads under exactOptionalPropertyTypes).
+    ...(input.privateFields && input.privateFields.length > 0
+      ? { privateFields: input.privateFields }
+      : {}),
   };
   await savePerson(fs, key, person);
   return person;

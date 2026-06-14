@@ -10,9 +10,11 @@ interface DreamShareControlsProps {
 }
 
 /**
- * Per-dream sharing controls (12-dreams §3.4), shown on an approved, non-sensitive analysis. Pick one of
- * the dreamer's related people, then tick which insight facts reach that person's coaching context. Each
- * fact shows who it's currently shared with. Self-hides when the dreamer has no related people to share with.
+ * Per-dream sharing controls (12-dreams §3.4), shown on an approved analysis whose dream may inform context
+ * (15-shareability §3.2 — available for every sensitivity tier now, gated only by the dream-level
+ * `informsContext` switch). Pick one of the dreamer's related people, then tick which insight facts reach
+ * that person's coaching context. Each fact shows who it's shared with. Self-hides when there's no one to
+ * share with.
  */
 export function DreamShareControls({
   facts,

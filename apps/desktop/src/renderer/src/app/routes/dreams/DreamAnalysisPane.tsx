@@ -138,21 +138,19 @@ export function DreamAnalysisPane({ dream, onBack }: DreamAnalysisPaneProps): JS
             onRemoveFromContext={() => void removeFromContext()}
           />
           {analysis.insightId && canShare ? (
-            dream.sensitivity === 'standard' ? (
-              insight ? (
-                <DreamShareControls
-                  facts={insight.facts}
-                  targets={shareTargets}
-                  onSetShare={(factId, withPersonId, share) =>
-                    void setFactShare(factId, withPersonId, share)
-                  }
-                />
-              ) : null
-            ) : (
+            dream.informsContext === false ? (
               <Text size="xs" tone="tertiary">
-                This dream is marked sensitive, so it’s kept out of shared context.
+                This dream is kept as a private journal entry, so it won’t inform coaching context.
               </Text>
-            )
+            ) : insight ? (
+              <DreamShareControls
+                facts={insight.facts}
+                targets={shareTargets}
+                onSetShare={(factId, withPersonId, share) =>
+                  void setFactShare(factId, withPersonId, share)
+                }
+              />
+            ) : null
           ) : null}
           {/* Visualize the dream alongside the written reflection (13-dream-images §3.1). */}
           <DreamImagePanel dream={dream} />

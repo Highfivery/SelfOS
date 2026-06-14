@@ -151,9 +151,9 @@ describe('dreamInsightService (per-dream sharing)', () => {
     expect(p2ctx).not.toContain('Feels protective of their partner.');
   });
 
-  it('refuses to share a sensitive-tier dream', async () => {
+  it('now SHARES a sensitive-tier dream (sensitivity no longer excludes — 15 §3.2)', async () => {
     const fs = await seed();
-    await saveDream(fs, key, dream('d2', 'explicit'));
+    await saveDream(fs, key, dream('d2', 'explicit')); // informsContext defaults on
     await saveInsight(fs, key, { ...insight('i2'), provenance: { dreamId: 'd2', at: 'now' } });
     await saveAnalysis(fs, key, analysis('d2', 'i2'));
     const res = await setDreamFactShare({
@@ -166,7 +166,28 @@ describe('dreamInsightService (per-dream sharing)', () => {
       share: true,
       now,
     });
-    expect(res).toEqual({ ok: false, reason: 'SENSITIVE' });
+    expect(res).toEqual({ ok: true });
+    expect((await getDreamInsight(fs, key, 'p1', 'd2'))?.facts[0]?.shareableWith).toEqual(['p2']);
+  });
+
+  it('refuses to share when the dream’s informsContext is off, and hides its insight', async () => {
+    const fs = await seed();
+    await saveDream(fs, key, { ...dream('d3'), informsContext: false });
+    await saveInsight(fs, key, { ...insight('i3'), provenance: { dreamId: 'd3', at: 'now' } });
+    await saveAnalysis(fs, key, analysis('d3', 'i3'));
+    const res = await setDreamFactShare({
+      fs,
+      key,
+      personId: 'p1',
+      dreamId: 'd3',
+      factId: 'f1',
+      withPersonId: 'p2',
+      share: true,
+      now,
+    });
+    expect(res).toEqual({ ok: false, reason: 'NOT_ALLOWED' });
+    // The share controls disappear: getDreamInsight returns null for a muted dream.
+    expect(await getDreamInsight(fs, key, 'p1', 'd3')).toBeNull();
   });
 
   it('refuses to share with a non-related person', async () => {

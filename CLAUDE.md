@@ -239,6 +239,47 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-14 — Build (**App-refresh package A — the unified shareability model; SPEC 15 FULLY BUILT**;
+  [15-shareability](docs/specs/15-shareability.md), amends `04`/`12`/`13`). Replaced People's fixed
+  shareable/private buckets AND Dreams' silent "sensitive = excluded" with **one per-item control**. **Asked
+  first** the two unspecced UX forks (both confirmed): `pronouns`/`birthday` get inline `ShareToggle`s on the
+  Profile tab too, and ONE "Share all / Lock all" lives in the About header flipping **every** controllable
+  field. **Schema:** `Person.privateFields` (opt-out list of locked field keys; absent ⇒ shared) +
+  `PersonFieldKeySchema`/`PERSON_FIELD_KEYS` + the single gate `isPersonFieldShared`; **merged**
+  `publicNotes`+`privateNotes` → one `notes` on **both Person AND Relationship** (+ `Relationship.notesShared`)
+  — the **one schemaVersion bump** (v1→v2) with an **idempotent read-time migration**
+  (`people/migrations.ts`, wired into `getPerson`/`listRelationships`); `Dream.informsContext` (default on)
+  replacing the sensitivity exclusion. **Default = everything shared, literal flip, no grandfathering**
+  (pre-release). **Core:** `buildContext` refactored to `profileLines(person, audience)` (own = all fields;
+  others = only `isPersonFieldShared`); `buildDepictionNote` gates **each** depiction part (so a locked
+  appearance/gender/ethnicity/birthday is withheld from the image too); **`insightFeedsContext`**
+  (insights/insightStore) suppresses a **dream-sourced insight from ALL context** when its dream's
+  `informsContext` is off — reads the dream file **directly** to dodge the insights↔dreams cycle (the
+  `listAllInsights` precedent), **fail-closed** on a malformed dream (§7 "not silently shared"); health/faith
+  - relationship notes + questionnaire `contextProviders` all moved onto the per-field gate;
+    `dreamInsightService` dropped the SENSITIVE guard (sensitive dreams now shareable when `informsContext` on).
+    **Renderer:** a new **`ShareToggle`** primitive (icon + text, `aria-pressed`, state-as-text — added to
+    `/gallery`); a `Field.labelAction` slot; `PersonEditor` per-field toggles + bulk Share/Lock-all + merged
+    Notes + dissolved About/Private split; `RelationshipsEditor` merged Notes + share toggle; `DreamComposer`
+    informsContext switch + revised sensitivity help; `DreamAnalysisPane` gates share controls on
+    `informsContext` (not tier). Code-reviewer **ship** (privacy invariant verified airtight on **every** traced
+    path; migration idempotent + lossless; cycle-free gate; applied both nits — future-proofed the relationship
+    notes-save to not drop `closeness`/`since`/`label`, and made the malformed-dream gate fail-closed). Gate
+    green: typecheck (node + web/DOM-lib), lint, format, **289 core + 370 desktop + 8 relay** unit (+ the §10
+    per-key privacy-boundary truth table, the notes-merge migration [person+relationship], `informsContext`
+    on/off exclusion, sensitive-now-shares, `ShareToggle` RTL, PersonEditor toggle/Lock-all/removed-copy,
+    DreamComposer switch), **+1 E2E** (UI-driven lock of `healthNotes` on a related person → **decrypt the real
+    assembled `buildContext` and assert the locked note is ABSENT while a shared field is PRESENT** + an
+    informsContext round-trip + a 390px About-editor overflow guard). **Visual QA** via the web preview at
+    desktop + 390px (toggles end-aligned with labels, Share/Lock-all in the header, the §3.1 inline explainer,
+    Lock-all → Private state distinct by icon+text not colour, merged Notes, the dream switch + revised
+    sensitivity help; 0 overflow, no console errors). Synced the amended specs (`04` §3.4/§4.1/§4.2/§8, `12`
+    §3.1/§3.4/§8.3, `13` §3.7/§4.6/§8.2) to cross-reference 15. On `feat/shareability` off `main`. **Lesson: a
+    ShareToggle's accessible name containing "may inform PEOPLE you relate to" collides with Playwright's
+    substring `getByRole('button', {name:'People'})` and `getByLabel('Occupation')` (Playwright matches
+    aria-label substrings; Testing-Library getByLabelText doesn't) — use `{exact:true}` on label/role matchers
+    that share a word with a toggle's verbose accessible name.** **Package A is the foundational privacy refactor
+    the rest of the 2026-06 refresh (B–G) builds on.**
 - 2026-06-14 — Build (**Vault relinking slice 3 — the VaultError "Use a different vault" affordance; SPEC 14
   IS NOW FULLY BUILT**; [14-vault-relinking](docs/specs/14-vault-relinking.md) §7.7/§13 slice 3). The boot
   **VaultError** screen's second action changed from a direct `chooseVault()` ("Choose a different folder") to

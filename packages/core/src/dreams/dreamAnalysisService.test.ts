@@ -350,8 +350,9 @@ describe('dreamAnalysisService', () => {
       displayName: 'Robin',
       isSubject: true,
       tags: [],
-      publicNotes: 'Alex’s sister, a teacher',
-      privateNotes: 'ROBIN-PRIVATE-NOTE',
+      notes: 'Alex’s sister, a teacher', // shared by default → reaches the linked-people context
+      healthNotes: 'ROBIN-PRIVATE-NOTE',
+      privateFields: ['healthNotes'], // locked → must never reach a related person's prompt (15 §5)
       createdAt: 'now',
       updatedAt: 'now',
     });
@@ -386,7 +387,7 @@ describe('dreamAnalysisService', () => {
     expect(captured).toContain('appeared in this dream');
     expect(captured).toContain('Robin');
     expect(captured).toContain('(sibling)');
-    expect(captured).toContain('Alex’s sister, a teacher'); // shareable public notes
-    expect(captured).not.toContain('ROBIN-PRIVATE-NOTE'); // private notes never reach the prompt
+    expect(captured).toContain('Alex’s sister, a teacher'); // shared notes reach the prompt
+    expect(captured).not.toContain('ROBIN-PRIVATE-NOTE'); // a LOCKED field never reaches the prompt
   });
 });

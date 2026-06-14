@@ -26,7 +26,7 @@ function person(id: string, name: string, extra: Partial<Person> = {}): Person {
 
 describe('buildSystemPrompt', () => {
   it('includes the persona, the safety boundary, and the person context', async () => {
-    await savePerson(fs, key, person('p1', 'Alex', { publicNotes: 'enjoys hiking' }));
+    await savePerson(fs, key, person('p1', 'Alex', { notes: 'enjoys hiking' }));
     const prompt = await buildSystemPrompt(fs, key, 'p1');
     expect(prompt).toContain('wellness'); // persona/safety
     expect(prompt.toLowerCase()).toContain('not medical'); // safety boundary

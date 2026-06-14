@@ -4,14 +4,17 @@ import { usePeopleStore } from '../../../stores/peopleStore';
 import {
   Button,
   Card,
+  Field,
   Heading,
   IconButton,
   Inline,
   Select,
+  ShareToggle,
   Stack,
   Text,
+  Textarea,
 } from '../../../design-system/components';
-import type { Person } from '@shared/channels';
+import type { Person, Relationship, RelationshipInput } from '@shared/channels';
 import type { RelationshipType } from '@shared/schemas';
 
 const TYPES: { value: RelationshipType; label: string }[] = [
@@ -26,6 +29,93 @@ const TYPES: { value: RelationshipType; label: string }[] = [
 ];
 
 const LABELS = new Map(TYPES.map((t) => [t.value, t.label]));
+
+/**
+ * One existing relationship: its type + the other person, a removable affordance, and an inline merged
+ * **Notes** field with a per-relationship `ShareToggle` (15-shareability §3.3). The toggle governs whether
+ * the coach may surface these notes about this relationship in the OTHER person's context. Notes default
+ * to shared; a Save action appears only when the row is dirty.
+ */
+function RelationshipRow({
+  relationship,
+  otherName,
+  typeLabel,
+  onSave,
+  onRemove,
+}: {
+  relationship: Relationship;
+  otherName: string;
+  typeLabel: string;
+  onSave: (input: RelationshipInput) => Promise<void>;
+  onRemove: () => void;
+}): JSX.Element {
+  const [notes, setNotes] = useState(relationship.notes ?? '');
+  const [shared, setShared] = useState(relationship.notesShared !== false);
+  const [saving, setSaving] = useState(false);
+
+  const dirty =
+    notes !== (relationship.notes ?? '') || shared !== (relationship.notesShared !== false);
+
+  const save = async (): Promise<void> => {
+    setSaving(true);
+    try {
+      await onSave({
+        id: relationship.id,
+        fromPersonId: relationship.fromPersonId,
+        toPersonId: relationship.toPersonId,
+        type: relationship.type,
+        // Carry the existing structural fields forward — upsertRelationship rebuilds from input, so
+        // omitting them would wipe them (none have an editor yet, but this future-proofs the notes save).
+        ...(relationship.label !== undefined ? { label: relationship.label } : {}),
+        ...(relationship.closeness !== undefined ? { closeness: relationship.closeness } : {}),
+        ...(relationship.since !== undefined ? { since: relationship.since } : {}),
+        ...(notes.trim() ? { notes: notes.trim() } : {}),
+        notesShared: shared,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <Stack gap={2}>
+        <Inline gap={2} justify="between">
+          <Text size="sm" weight={500}>
+            {typeLabel} — {otherName}
+          </Text>
+          <IconButton aria-label={`Remove relationship with ${otherName}`} onClick={onRemove}>
+            <X size={14} aria-hidden="true" />
+          </IconButton>
+        </Inline>
+        <Field
+          label="Notes"
+          help="What the coach may say about this relationship to the other person."
+          labelAction={
+            <ShareToggle shared={shared} onChange={setShared} label="Relationship notes" />
+          }
+        >
+          {(p) => (
+            <Textarea
+              {...p}
+              value={notes}
+              rows={2}
+              placeholder="e.g. together five years; navigating a move"
+              onChange={(event) => setNotes(event.target.value)}
+            />
+          )}
+        </Field>
+        {dirty ? (
+          <Inline>
+            <Button variant="secondary" onClick={() => void save()} disabled={saving}>
+              Save notes
+            </Button>
+          </Inline>
+        ) : null}
+      </Stack>
+    </Card>
+  );
+}
 
 /** Lists and edits the relationships a person has to other people in the household. */
 export function RelationshipsEditor({ person }: { person: Person }): JSX.Element {
@@ -60,24 +150,21 @@ export function RelationshipsEditor({ person }: { person: Person }): JSX.Element
             No relationships yet.
           </Text>
         ) : (
-          <Stack gap={2}>
+          <Stack gap={3}>
             {mine.map((relationship) => {
               const otherId =
                 relationship.fromPersonId === person.id
                   ? relationship.toPersonId
                   : relationship.fromPersonId;
               return (
-                <Inline key={relationship.id} gap={2} justify="between">
-                  <Text size="sm">
-                    {LABELS.get(relationship.type)} — {nameOf(otherId)}
-                  </Text>
-                  <IconButton
-                    aria-label={`Remove relationship with ${nameOf(otherId)}`}
-                    onClick={() => void removeRelationship(relationship.id)}
-                  >
-                    <X size={14} aria-hidden="true" />
-                  </IconButton>
-                </Inline>
+                <RelationshipRow
+                  key={relationship.id}
+                  relationship={relationship}
+                  otherName={nameOf(otherId)}
+                  typeLabel={LABELS.get(relationship.type) ?? relationship.type}
+                  onSave={saveRelationship}
+                  onRemove={() => void removeRelationship(relationship.id)}
+                />
               );
             })}
           </Stack>

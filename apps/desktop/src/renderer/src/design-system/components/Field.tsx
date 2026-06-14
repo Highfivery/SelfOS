@@ -11,6 +11,11 @@ interface FieldProps {
   label: string;
   help?: string;
   error?: string;
+  /**
+   * An optional control rendered beside the label (e.g. a per-field `ShareToggle`, 15-shareability §3.1).
+   * It sits at the end of the label row and wraps under the label on narrow widths.
+   */
+  labelAction?: ReactNode;
   children: (props: FieldRenderProps) => ReactNode;
 }
 
@@ -18,7 +23,7 @@ interface FieldProps {
  * Wraps a control with an associated label and optional help/error text, wiring `htmlFor`,
  * `aria-describedby`, and `aria-invalid` via a render prop so the control stays accessible.
  */
-export function Field({ label, help, error, children }: FieldProps): JSX.Element {
+export function Field({ label, help, error, labelAction, children }: FieldProps): JSX.Element {
   const id = useId();
   const helpId = help ? `${id}-help` : undefined;
   const errorId = error ? `${id}-error` : undefined;
@@ -26,9 +31,18 @@ export function Field({ label, help, error, children }: FieldProps): JSX.Element
 
   return (
     <div className={styles.field}>
-      <label htmlFor={id} className={styles.label}>
-        {label}
-      </label>
+      {labelAction ? (
+        <div className={styles.labelRow}>
+          <label htmlFor={id} className={styles.label}>
+            {label}
+          </label>
+          {labelAction}
+        </div>
+      ) : (
+        <label htmlFor={id} className={styles.label}>
+          {label}
+        </label>
+      )}
       {children({ id, 'aria-describedby': describedBy, 'aria-invalid': error ? true : undefined })}
       {help ? (
         <p id={helpId} className={styles.help}>

@@ -1,46 +1,52 @@
 import type { FileSystem } from '../host';
-import { listInsightsForPerson, summarizeForContext } from '../insights';
-import type { Person } from '../schemas';
+import { insightFeedsContext, listInsightsForPerson, summarizeForContext } from '../insights';
+import { isPersonFieldShared, type Person, type PersonFieldKey } from '../schemas';
 import { getPerson, listPeople } from './peopleService';
 import { listRelationships } from './relationshipService';
 
 /**
- * The SHAREABLE descriptive profile fields (13-dream-images §4.6) formatted as "Label: value" lines — the
- * same "may feed others' AI" bucket as `publicNotes` (04 §3.4). Used both for the person's own context and
- * for the people they relate to. `birthday` is intentionally NOT surfaced here (it's reused for the
- * image-depiction's exact age, 13 §5.2, not narrated into chat context).
+ * A person's descriptive profile fields (13-dream-images §4.6) formatted as "Label: value" lines, gated by
+ * per-item shareability (15-shareability §4.1/§5). `audience: 'self'` emits every populated field (it's
+ * their own coaching context — all their data is used); `'others'` emits only fields the owner has left
+ * **shared** (`isPersonFieldShared`). `pronouns` (in the name line) and `birthday` (depiction-only age, 13
+ * §5.2) are handled by the callers, not here.
  */
-export function shareableProfileLines(person: Person): string[] {
+export function profileLines(person: Person, audience: 'self' | 'others'): string[] {
   const lines: string[] = [];
-  const add = (label: string, value: string | undefined): void => {
+  const shows = (key: PersonFieldKey): boolean =>
+    audience === 'self' || isPersonFieldShared(person, key);
+  const add = (key: PersonFieldKey, label: string, value: string | undefined): void => {
     const trimmed = value?.trim();
-    if (trimmed) lines.push(`${label}: ${trimmed}`);
+    if (trimmed && shows(key)) lines.push(`${label}: ${trimmed}`);
   };
-  add('Gender', person.gender);
-  add('Appearance', person.appearanceDescription);
-  add('Ethnicity', person.ethnicity);
-  add('Occupation', person.occupation);
-  if (person.interests?.length) add('Interests', person.interests.join(', '));
-  add('Location', person.location);
-  add('Goals', person.goals);
-  add('Communication style', person.communicationStyle);
-  if (person.values?.length) add('Values', person.values.join(', '));
-  if (person.languages?.length) add('Languages', person.languages.join(', '));
-  if (person.importantDates?.length)
-    add('Important dates', person.importantDates.map((d) => `${d.label} (${d.date})`).join(', '));
+  const addList = (key: PersonFieldKey, label: string, values: string[] | undefined): void => {
+    if (values?.length && shows(key)) lines.push(`${label}: ${values.join(', ')}`);
+  };
+  add('gender', 'Gender', person.gender);
+  add('appearanceDescription', 'Appearance', person.appearanceDescription);
+  add('ethnicity', 'Ethnicity', person.ethnicity);
+  add('occupation', 'Occupation', person.occupation);
+  addList('interests', 'Interests', person.interests);
+  add('location', 'Location', person.location);
+  add('goals', 'Goals', person.goals);
+  add('communicationStyle', 'Communication style', person.communicationStyle);
+  addList('values', 'Values', person.values);
+  addList('languages', 'Languages', person.languages);
+  if (person.importantDates?.length && shows('importantDates'))
+    lines.push(
+      `Important dates: ${person.importantDates.map((d) => `${d.label} (${d.date})`).join(', ')}`,
+    );
+  add('notes', 'Notes', person.notes);
+  add('healthNotes', 'Health notes', person.healthNotes);
+  add('faith', 'Faith', person.faith);
   return lines;
 }
 
-/**
- * The PRIVATE descriptive fields (13-dream-images §4.6) — surfaced ONLY in the person's own context block,
- * never about a related/linked person (the shareable-vs-private boundary, like `privateNotes`). Never sent
- * to the image provider (13 §8.2).
- */
-export function privateProfileLines(person: Person): string[] {
-  const lines: string[] = [];
-  if (person.healthNotes?.trim()) lines.push(`Health notes: ${person.healthNotes.trim()}`);
-  if (person.faith?.trim()) lines.push(`Faith: ${person.faith.trim()}`);
-  return lines;
+/** A related person's shared pronouns suffix for their context line, or '' (locked / unset). */
+function sharedPronouns(person: Person): string {
+  return person.pronouns?.trim() && isPersonFieldShared(person, 'pronouns')
+    ? ` [${person.pronouns.trim()}]`
+    : '';
 }
 
 /**
@@ -64,12 +70,9 @@ export async function buildContext(
   lines.push(
     `You are supporting ${person.displayName}${person.pronouns ? ` (${person.pronouns})` : ''}.`,
   );
-  if (person.publicNotes) lines.push(`About them: ${person.publicNotes}`);
-  // Their own shareable descriptive fields (13 §4.6) — part of their own full profile.
-  for (const line of shareableProfileLines(person)) lines.push(`  ${line}`);
-  if (person.privateNotes) lines.push(`Private (their own): ${person.privateNotes}`);
-  // Their own private descriptive fields — only in their own context, never about a related person.
-  for (const line of privateProfileLines(person)) lines.push(`  ${line}`);
+  // Their own full profile — every populated field, including ones they've locked from others (it's their
+  // own coaching context). Notes/health/faith are now part of `profileLines` (15-shareability §4.1/§4.3).
+  for (const line of profileLines(person, 'self')) lines.push(`  ${line}`);
 
   const theirs = relationships.filter(
     (relationship) =>
@@ -86,12 +89,14 @@ export async function buildContext(
       const other = byId.get(otherId);
       if (!other) continue;
       related.push({ id: other.id, displayName: other.displayName });
-      // Only shareable data about others — never their private notes.
-      const about = other.publicNotes ? ` — ${other.publicNotes}` : '';
-      const aboutRel = relationship.publicNotes ? ` (${relationship.publicNotes})` : '';
-      lines.push(`- ${other.displayName} (${relationship.type})${about}${aboutRel}`);
-      // Their shareable descriptive fields (13 §4.6) — never their private health/faith.
-      for (const line of shareableProfileLines(other)) lines.push(`  · ${line}`);
+      // Only data the owner has left SHARED reaches a related person's context (15-shareability §5). The
+      // relationship's notes flow only when `notesShared !== false`.
+      const relNote =
+        other && relationship.notes && relationship.notesShared !== false
+          ? ` (${relationship.notes})`
+          : '';
+      lines.push(`- ${other.displayName} (${relationship.type})${sharedPronouns(other)}${relNote}`);
+      for (const line of profileLines(other, 'others')) lines.push(`  · ${line}`);
     }
   }
 
@@ -146,8 +151,10 @@ export function ageFromBirthday(birthday: string, now: Date): number | null {
  * (appearance + gender + ethnicity + exact age from `birthday`) — the single place the dream-image
  * depiction subset is assembled (13-dream-images §5.2/§8.2). It NEVER includes the person's name, their
  * notes, or any private field (`privateNotes`/`healthNotes`/`faith`), so a figure can resemble someone the
- * dreamer knows without naming or exposing them. Returns '' when there's nothing depictable (or the person
- * is unknown). The name-exclusion is structural: the displayName is never read into the returned string.
+ * dreamer knows without naming or exposing them. Each depiction part is gated by per-field shareability
+ * (15-shareability §3.4/§5): a locked appearance/gender/ethnicity/birthday is withheld from the image too.
+ * Returns '' when there's nothing depictable (or the person is unknown). The name-exclusion is structural:
+ * the displayName is never read into the returned string.
  */
 export async function buildDepictionNote(
   fs: FileSystem,
@@ -158,14 +165,16 @@ export async function buildDepictionNote(
   const person = (await listPeople(fs, key)).find((candidate) => candidate.id === personId);
   if (!person) return '';
   const parts: string[] = [];
-  if (person.appearanceDescription?.trim())
+  if (person.appearanceDescription?.trim() && isPersonFieldShared(person, 'appearanceDescription'))
     parts.push(`appearance: ${person.appearanceDescription.trim()}`);
-  if (person.gender?.trim()) parts.push(`gender: ${person.gender.trim()}`);
-  if (person.birthday) {
+  if (person.gender?.trim() && isPersonFieldShared(person, 'gender'))
+    parts.push(`gender: ${person.gender.trim()}`);
+  if (person.birthday && isPersonFieldShared(person, 'birthday')) {
     const age = ageFromBirthday(person.birthday, now);
     if (age !== null) parts.push(`age ${age}`);
   }
-  if (person.ethnicity?.trim()) parts.push(`ethnicity: ${person.ethnicity.trim()}`);
+  if (person.ethnicity?.trim() && isPersonFieldShared(person, 'ethnicity'))
+    parts.push(`ethnicity: ${person.ethnicity.trim()}`);
   return parts.length > 0 ? `a figure — ${parts.join(', ')}` : '';
 }
 
@@ -204,14 +213,21 @@ export async function buildLinkedPeopleContext(
         (r.fromPersonId === id && r.toPersonId === viewerId),
     );
     const relType = relationship ? ` (${relationship.type})` : '';
-    const about = person.publicNotes ? ` — ${person.publicNotes}` : '';
-    const aboutRel = relationship?.publicNotes ? ` (${relationship.publicNotes})` : '';
-    lines.push(`- ${person.displayName}${relType}${about}${aboutRel}`);
-    // Their shareable descriptive fields (13 §4.6) — never their private health/faith.
-    for (const line of shareableProfileLines(person)) lines.push(`  · ${line}`);
-    // Only shareable facts about them — never their private/non-shareable facts (the privacy boundary).
-    const facts = (await listInsightsForPerson(fs, key, id))
-      .filter((insight) => insight.approved)
+    const relNote =
+      relationship?.notes && relationship.notesShared !== false ? ` (${relationship.notes})` : '';
+    lines.push(`- ${person.displayName}${relType}${sharedPronouns(person)}${relNote}`);
+    // Only the fields the owner has left SHARED (15-shareability §5) — never a locked field.
+    for (const line of profileLines(person, 'others')) lines.push(`  · ${line}`);
+    // Only shareable facts about them, and only from insights that still feed context (a dream with
+    // `informsContext` off is suppressed, 15-shareability §4.2) — never their private facts.
+    const approved = (await listInsightsForPerson(fs, key, id)).filter(
+      (insight) => insight.approved,
+    );
+    const feedable: typeof approved = [];
+    for (const insight of approved) {
+      if (await insightFeedsContext(fs, key, insight)) feedable.push(insight);
+    }
+    const facts = feedable
       .flatMap((insight) =>
         insight.facts.filter(
           (fact) => fact.shareable || (fact.shareableWith?.includes(viewerId) ?? false),

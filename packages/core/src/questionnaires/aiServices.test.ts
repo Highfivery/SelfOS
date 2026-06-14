@@ -38,26 +38,30 @@ function fakeClient(text: string): ClaudeClient {
   };
 }
 
-async function seedHousehold(fs: FileSystem): Promise<{ author: string; target: string }> {
+async function seedHousehold(
+  fs: FileSystem,
+  opts: { lockTarget?: boolean } = {},
+): Promise<{ author: string; target: string }> {
   const author = await upsertPerson(fs, key, {
     displayName: 'Ben',
     isSubject: true,
     tags: ['journaling'],
-    publicNotes: 'Loves hiking.',
-    privateNotes: 'AUTHOR-PRIVATE-SECRET',
+    notes: 'Loves hiking.',
   });
   const target = await upsertPerson(fs, key, {
     displayName: 'Mara',
     isSubject: true,
     tags: [],
-    publicNotes: 'Enjoys cooking together.',
-    privateNotes: 'TARGET-PRIVATE-SECRET',
+    notes: 'Enjoys cooking together.',
+    // When locked, the target's notes must NOT feed generation (15-shareability §5 per-field gate).
+    ...(opts.lockTarget ? { privateFields: ['notes'] as const } : {}),
   });
   await upsertRelationship(fs, key, {
     fromPersonId: author.id,
     toPersonId: target.id,
     type: 'partner',
-    publicNotes: 'Together 5 years.',
+    notes: 'Together 5 years.',
+    ...(opts.lockTarget ? { notesShared: false } : {}),
   });
   await saveInsight(fs, key, {
     id: 'i1',
@@ -82,7 +86,7 @@ function deps(fs: FileSystem, client: ClaudeClient, personId: string, apiKey = '
 afterEach(() => resetContextProviders());
 
 describe('contextProviders', () => {
-  it('includes author + (toggled) target + relationship, never the target’s private notes', async () => {
+  it('includes author + (toggled) target + relationship notes when shared', async () => {
     const fs = memFileSystem();
     const { author, target } = await seedHousehold(fs);
     const ctx = await gatherGenerationContext(fs, key, {
@@ -92,12 +96,25 @@ describe('contextProviders', () => {
       includeTarget: true,
       includeRelationship: true,
     });
-    expect(ctx).toContain('Loves hiking.'); // author shareable
-    expect(ctx).toContain('AUTHOR-PRIVATE-SECRET'); // author's OWN private notes are fair game
-    expect(ctx).toContain('Enjoys cooking together.'); // target shareable
-    expect(ctx).toContain('Together 5 years.'); // relationship
+    expect(ctx).toContain('Loves hiking.'); // author's own notes always feed
+    expect(ctx).toContain('Enjoys cooking together.'); // target notes, shared by default
+    expect(ctx).toContain('Together 5 years.'); // relationship notes, shared by default
     expect(ctx).toContain('Values quality time.'); // author insight
-    expect(ctx).not.toContain('TARGET-PRIVATE-SECRET'); // never the target's private notes
+  });
+
+  it('excludes a target’s LOCKED notes and an unshared relationship note (15 §5)', async () => {
+    const fs = memFileSystem();
+    const { author, target } = await seedHousehold(fs, { lockTarget: true });
+    const ctx = await gatherGenerationContext(fs, key, {
+      authorPersonId: author,
+      includeAuthor: true,
+      targetPersonId: target,
+      includeTarget: true,
+      includeRelationship: true,
+    });
+    expect(ctx).toContain('Loves hiking.'); // author still feeds
+    expect(ctx).not.toContain('Enjoys cooking together.'); // target notes locked → excluded
+    expect(ctx).not.toContain('Together 5 years.'); // relationship notes unshared → excluded
   });
 
   it('omits the target + relationship when not toggled', async () => {

@@ -127,9 +127,11 @@ A new **Dreams** feature module registers a nav entry (gated by `dreams.own`) an
      person carries a `personId` (rendered as a distinct "linked" chip); a free name is text only. Linking
      lets the analysis draw on that person's **shareable** context (§5.1) and resolves people-frequency
      patterns (§3.5) to real people. Powers per-dream sharing (§3.4).
-3. **Sensitivity** — a per-dream **sensitivity tier** (reusing `SensitivityTier`), default `standard`; a
-   sensitive tier keeps the dream out of shared context (§8.3/§8.4). It **never blocks the person analyzing
-   their own dream**.
+3. **Sensitivity** — a per-dream **sensitivity tier** (reusing `SensitivityTier`), default `standard`; the
+   tier drives honest handling + the image-generation warning, **not** exclusion. Whether the dream feeds
+   shared context is governed by the per-dream **`informsContext`** switch (default on,
+   [`15-shareability.md`](15-shareability.md) §3.2/§4.2). It **never blocks the person analyzing their own
+   dream**.
 4. A saved, un-analyzed dream is a complete, useful journal entry. Analysis is always a later, explicit
    choice.
 
@@ -168,7 +170,10 @@ A new **Dreams** feature module registers a nav entry (gated by `dreams.own`) an
   **relationship-graph relations** (sharing with anyone else would never reach their context). Default
   **off** — dreams are private; sharing is a deliberate per-fact, per-person act, gated by
   **`dreams.shareContext`**.
-- Sensitive-tier dreams (§3.1) are **excluded from sharing** to avoid leaking intimate content.
+- Sharing is gated by the dream-level **`informsContext`** switch (default on); when off, the dream stays a
+  private journal entry and shares nothing. It is available for **every** sensitivity tier — a sensitive
+  dream is shareable when `informsContext` is on (superseded the old tier-based exclusion; see
+  [`15-shareability.md`](15-shareability.md) §3.2/§4.2).
 - **Editing keeps sharing.** A dream insight's facts use a **stable per-field id**, so re-approving after
   an edit (§3.6) **preserves** who each fact is shared with (re-wording a section keeps its shares, with the
   updated text). Re-_synthesizing_ (a wholly new analysis) drops the prior Insight, resetting sharing.
@@ -453,9 +458,11 @@ analysis. The not-medical line is visible on the analysis surfaces.
 ### 8.3 Sensitive content
 
 Dreams can be intimate, sexual, or traumatic. Each dream carries a **sensitivity tier** (reusing
-`SensitivityTier`, `08` §4.2). A sensitive tier (a) drives honest handling, and (b) **excludes the dream
-from per-dream sharing** (§3.4) so intimate content can't leak into another person's context. The
-sensitivity tier **never blocks a person analyzing their own dream**. Trauma/nightmare content is a
+`SensitivityTier`, `08` §4.2). A sensitive tier (a) drives honest handling, and (b) drives the
+image-generation warning (13 §3.2). Per-dream insight-fact sharing is governed by the dream-level
+**`informsContext`** switch, **not** the tier — a sensitive dream is shareable when it's on (see
+[`15-shareability.md`](15-shareability.md) §3.2). The sensitivity tier **never blocks a person analyzing
+their own dream**. Trauma/nightmare content is a
 **separate, orthogonal** dimension captured by the `nightmare` flag + crisis routing (§8.2), not the
 intimacy-oriented sensitivity tier. All AI runs **within Anthropic's usage policy** (graceful refusal
 handling, never circumvented).
@@ -546,7 +553,8 @@ Confirmed with the user (2026-06-11):
 7. **People & privacy** — dreams are **private to the dreamer by default**; the dreamer can **share a
    specific dream's insight per-person** into a related person's context (off by default).
 8. **Sensitivity** — a **per-dream sensitivity tier** (reusing `SensitivityTier`); drives honest handling +
-   keeps sensitive dreams out of shared context; never blocks analyzing one's own dream.
+   the image-gen warning; never blocks analyzing one's own dream. Whether a dream feeds shared context is
+   the separate per-dream **`informsContext`** switch (15-shareability §3.2), not the tier.
 9. **Break-glass** — Owner/super-admin can reach dreams via the existing inspect mode; **no audit log in
    v1**.
 10. **Sessions list** — dream-analysis conversations live **only inside Dreams**, never in the main Sessions

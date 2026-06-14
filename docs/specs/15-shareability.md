@@ -1,6 +1,6 @@
 # 15 — Unified shareability: per-item "may inform others" control
 
-> **Status:** Review · _last updated 2026-06-12_
+> **Status:** Approved · _last updated 2026-06-14_
 >
 > Today, what one person's data the AI may use in **another** related person's coaching context is decided by
 > **fixed buckets** — People split notes/fields into a hard-coded "shareable" vs "private" set, and Dreams are
@@ -313,3 +313,7 @@ All open questions are resolved; the spec is build-ready pending final approval.
 - 2026-06-12 — Review. Resolved migration (literal flip), dream-own-context (analyze→approve path), heads-up
   (dropped — pre-release), notes (merge into one field), inline per-field toggle + bulk, and relationship notes
   (included). All open questions resolved; build-ready pending final approval.
+- 2026-06-14 — Approved + built (package A). Two build-time UX decisions confirmed with the user: (1) `pronouns`
+  and `birthday` get inline per-field `ShareToggle`s on the Profile tab too (they're controllable keys), and
+  (2) one "Lock all / Share all" bulk control lives in the About section header and flips **every** controllable
+  field across tabs. Built on `feat/shareability` off `main`.

@@ -13,6 +13,7 @@ import {
   ProportionBar,
   SegmentedControl,
   Select,
+  ShareToggle,
   Slider,
   Stack,
   Switch,
@@ -47,6 +48,7 @@ function Section({ title, children }: { title: string; children: ReactNode }): J
  */
 export function Gallery(): JSX.Element {
   const [toggle, setToggle] = useState(true);
+  const [share, setShare] = useState(true);
   const [align, setAlign] = useState<Align>('center');
   const [textScale, setTextScale] = useState(100);
 
@@ -120,6 +122,12 @@ export function Gallery(): JSX.Element {
             <Inline gap={4}>
               <Switch checked={toggle} onChange={setToggle} aria-label="Demo toggle" />
               <Text tone="secondary">{toggle ? 'On' : 'Off'}</Text>
+            </Inline>
+            <Inline gap={3} align="center">
+              <ShareToggle shared={share} onChange={setShare} label="Occupation" />
+              <Text tone="secondary" size="sm">
+                Per-item shareability — {share ? 'shared with related people' : 'kept private'}
+              </Text>
             </Inline>
             <SegmentedControl
               options={ALIGN_OPTIONS}

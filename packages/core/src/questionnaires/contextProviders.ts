@@ -1,5 +1,6 @@
 import type { FileSystem } from '../host';
 import { summarizeForContext } from '../insights';
+import { isPersonFieldShared } from '../schemas';
 import { getPerson, listPeople } from '../people/peopleService';
 import { listRelationships } from '../people/relationshipService';
 
@@ -43,8 +44,8 @@ const profilesProvider: ContextProvider = {
         lines.push(
           `The questionnaire is created by ${nameOf(author.displayName, author.pronouns)}.`,
         );
-        if (author.publicNotes) lines.push(`About them: ${author.publicNotes}`);
-        if (author.privateNotes) lines.push(`Their own private notes: ${author.privateNotes}`);
+        // The author's OWN notes always feed their own generation (their data, their context).
+        if (author.notes) lines.push(`About them: ${author.notes}`);
         if (author.tags.length > 0) lines.push(`Their tags: ${author.tags.join(', ')}`);
       }
     }
@@ -52,8 +53,9 @@ const profilesProvider: ContextProvider = {
       const target = await getPerson(fs, key, req.targetPersonId);
       if (target) {
         lines.push(`It is about ${nameOf(target.displayName, target.pronouns)}.`);
-        // Shareable facts only — a target person's private notes never feed generation.
-        if (target.publicNotes) lines.push(`About ${target.displayName}: ${target.publicNotes}`);
+        // Shared notes only — a target person's notes feed generation only when left shared (15 §5).
+        if (target.notes && isPersonFieldShared(target, 'notes'))
+          lines.push(`About ${target.displayName}: ${target.notes}`);
       }
     }
     return lines.join('\n');
@@ -77,7 +79,7 @@ const relationshipsProvider: ContextProvider = {
     const target = byId.get(req.targetPersonId);
     return between
       .map((r) => {
-        const note = r.publicNotes ? ` — ${r.publicNotes}` : '';
+        const note = r.notes && r.notesShared !== false ? ` — ${r.notes}` : '';
         return `Their relationship with ${target?.displayName ?? 'them'}: ${r.type}${note}`;
       })
       .join('\n');

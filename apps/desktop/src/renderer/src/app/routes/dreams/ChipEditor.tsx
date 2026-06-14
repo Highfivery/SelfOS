@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from 'react';
+import { useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Plus, X } from 'lucide-react';
 import { Button, Field, TextInput } from '../../../design-system/components';
 import styles from './ChipEditor.module.css';
@@ -8,10 +8,18 @@ interface ChipEditorProps {
   values: string[];
   onChange: (next: string[]) => void;
   placeholder?: string;
+  /** Optional control beside the label (e.g. a per-field ShareToggle, 15-shareability §3.1). */
+  labelAction?: ReactNode;
 }
 
 /** A label + removable chips + an inline add input — used for a dream's tags and people present. */
-export function ChipEditor({ label, values, onChange, placeholder }: ChipEditorProps): JSX.Element {
+export function ChipEditor({
+  label,
+  values,
+  onChange,
+  placeholder,
+  labelAction,
+}: ChipEditorProps): JSX.Element {
   const [draft, setDraft] = useState('');
 
   const add = (): void => {
@@ -28,7 +36,7 @@ export function ChipEditor({ label, values, onChange, placeholder }: ChipEditorP
   };
 
   return (
-    <Field label={label}>
+    <Field label={label} {...(labelAction ? { labelAction } : {})}>
       {(p) => (
         <div>
           {values.length > 0 ? (

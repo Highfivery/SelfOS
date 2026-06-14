@@ -101,6 +101,13 @@
   gap: var(--space-3);
 }
 
+/* The "let this dream inform coaching context" switch (15-shareability §3.2) + its help text. */
+.informsContext {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
 .detailsGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;

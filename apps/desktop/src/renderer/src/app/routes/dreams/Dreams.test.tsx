@@ -95,8 +95,26 @@ describe('Dreams', () => {
         nightmare: false,
         mood: 0.5,
         sensitivity: 'standard',
+        informsContext: true, // default on (15-shareability §3.2)
       }),
     );
+  });
+
+  it('lets a dream be kept a private journal entry (informsContext off)', async () => {
+    const save = saveSpy();
+    installMockBridge({ dreamsList: () => Promise.resolve([]), dreamSave: save });
+    renderDreams();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Log a dream' }));
+    await userEvent.type(screen.getByLabelText('What happened?'), 'A private dream.');
+    // The sensitivity help no longer claims sensitive dreams are excluded from sharing.
+    expect(screen.queryByText(/kept out of any shared context/i)).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole('switch', { name: 'Let this dream inform coaching context' }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ informsContext: false }));
   });
 
   it('links a household person to a dream (the payload carries a personId)', async () => {

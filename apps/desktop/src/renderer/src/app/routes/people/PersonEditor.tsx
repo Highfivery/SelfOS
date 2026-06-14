@@ -12,6 +12,7 @@ import {
   Inline,
   SegmentedControl,
   Select,
+  ShareToggle,
   Stack,
   Switch,
   Text,
@@ -25,6 +26,7 @@ import { AccessSection } from './AccessSection';
 import { PersonBudgetEditor } from './PersonBudgetEditor';
 import styles from './PersonEditor.module.css';
 import type { Person } from '@shared/channels';
+import { PERSON_FIELD_KEYS, type PersonFieldKey } from '@shared/schemas';
 
 type Tab = 'profile' | 'about' | 'notes' | 'relationships' | 'access' | 'budget';
 
@@ -36,9 +38,10 @@ type ImportantDate = { label: string; date: string };
 
 /**
  * Create or edit a person. Organized into tabs so person-scoped settings can grow without becoming
- * one long page; relationships/access/budget appear only once the person exists. The About tab carries
- * the descriptive profile fields (13-dream-images §4.6) split into a shared group (feeds others' AI
- * context + the image-depiction subset) and a private group (own coaching context only).
+ * one long page; relationships/access/budget appear only once the person exists. Every controllable
+ * field carries a per-item `ShareToggle` (15-shareability §3.1): shared by default — informing the
+ * coaching of people they relate to — and individually lockable to this person's own coaching. The
+ * About header's "Share all / Lock all" flips every controllable field at once.
  */
 export function PersonEditor({
   person,
@@ -55,8 +58,27 @@ export function PersonEditor({
   const [isSubject, setIsSubject] = useState(person?.isSubject ?? false);
   const [pronouns, setPronouns] = useState(person?.pronouns ?? '');
   const [birthday, setBirthday] = useState(person?.birthday ?? '');
-  const [sharedNotes, setSharedNotes] = useState(person?.publicNotes ?? '');
-  const [privateNotes, setPrivateNotes] = useState(person?.privateNotes ?? '');
+  const [notes, setNotes] = useState(person?.notes ?? '');
+
+  // The per-field lock-set (15-shareability §4.1): keys here are kept to this person's own coaching only.
+  // Absent ⇒ shared (the default), so we track only the opt-OUTs.
+  const [privateFields, setPrivateFields] = useState<Set<PersonFieldKey>>(
+    () => new Set(person?.privateFields ?? []),
+  );
+  const isShared = (k: PersonFieldKey): boolean => !privateFields.has(k);
+  const setShared = (k: PersonFieldKey, shared: boolean): void =>
+    setPrivateFields((prev) => {
+      const next = new Set(prev);
+      if (shared) next.delete(k);
+      else next.add(k);
+      return next;
+    });
+  const lockAll = (): void => setPrivateFields(new Set(PERSON_FIELD_KEYS));
+  const shareAll = (): void => setPrivateFields(new Set());
+  /** A `ShareToggle` bound to a controllable field key — placed beside that field's label. */
+  const toggle = (k: PersonFieldKey, label: string): JSX.Element => (
+    <ShareToggle shared={isShared(k)} onChange={(s) => setShared(k, s)} label={label} />
+  );
 
   // About — shared descriptive fields.
   const initialGender = person?.gender ?? '';
@@ -111,6 +133,7 @@ export function PersonEditor({
         .map((d) => ({ label: d.label.trim(), date: d.date.trim() }))
         .filter((d) => d.label && d.date);
       const gender = resolvedGender();
+      const lockedFields = PERSON_FIELD_KEYS.filter((k) => privateFields.has(k));
       await savePerson({
         ...(person ? { id: person.id } : {}),
         displayName: displayName.trim(),
@@ -118,9 +141,10 @@ export function PersonEditor({
         tags: person?.tags ?? [],
         ...(pronouns.trim() ? { pronouns: pronouns.trim() } : {}),
         ...(birthday.trim() ? { birthday: birthday.trim() } : {}),
-        ...(sharedNotes.trim() ? { publicNotes: sharedNotes.trim() } : {}),
-        ...(privateNotes.trim() ? { privateNotes: privateNotes.trim() } : {}),
-        // About — shared.
+        ...(notes.trim() ? { notes: notes.trim() } : {}),
+        // Per-field shareability locks (15-shareability §4.1) — only the opt-OUTs.
+        ...(lockedFields.length ? { privateFields: lockedFields } : {}),
+        // About.
         ...(gender ? { gender } : {}),
         ...(appearance.trim() ? { appearanceDescription: appearance.trim() } : {}),
         ...(ethnicity.trim() ? { ethnicity: ethnicity.trim() } : {}),
@@ -132,7 +156,6 @@ export function PersonEditor({
         ...(values.length ? { values } : {}),
         ...(languages.length ? { languages } : {}),
         ...(cleanDates.length ? { importantDates: cleanDates } : {}),
-        // About — private.
         ...(healthNotes.trim() ? { healthNotes: healthNotes.trim() } : {}),
         ...(faith.trim() ? { faith: faith.trim() } : {}),
       });
@@ -186,7 +209,7 @@ export function PersonEditor({
                 </Text>
               </Stack>
             </Inline>
-            <Field label="Pronouns">
+            <Field label="Pronouns" labelAction={toggle('pronouns', 'Pronouns')}>
               {(props) => (
                 <TextInput
                   {...props}
@@ -196,7 +219,11 @@ export function PersonEditor({
                 />
               )}
             </Field>
-            <Field label="Birthday" help="Used for age in coaching context and dream imagery.">
+            <Field
+              label="Birthday"
+              help="Used for age in coaching context and dream imagery."
+              labelAction={toggle('birthday', 'Birthday')}
+            >
               {(props) => (
                 <TextInput
                   {...props}
@@ -211,189 +238,194 @@ export function PersonEditor({
       ) : null}
 
       {tab === 'about' ? (
-        <Stack gap={4}>
-          <Card>
-            <Stack gap={4}>
-              <Stack gap={1}>
+        <Card>
+          <Stack gap={4}>
+            <Stack gap={2}>
+              <div className={styles.aboutHeader}>
                 <Heading level={3}>About</Heading>
-                <Text size="xs" tone="secondary">
-                  Descriptive context others’ AI may use — keep it shareable. Appearance, gender,
-                  ethnicity, and age can inform a dream’s generated image.
-                </Text>
-              </Stack>
-              <Field label="Gender">
-                {(props) => (
-                  <Select
-                    {...props}
-                    value={genderPreset}
-                    onChange={(event) => setGenderPreset(event.target.value)}
-                  >
-                    <option value="">—</option>
-                    {GENDER_PRESETS.map((g) => (
-                      <option key={g} value={g}>
-                        {g}
-                      </option>
-                    ))}
-                    <option value={GENDER_OTHER}>Other…</option>
-                  </Select>
-                )}
-              </Field>
-              {genderPreset === GENDER_OTHER ? (
-                <Field label="Gender (describe)">
-                  {(props) => (
-                    <TextInput
-                      {...props}
-                      value={genderOther}
-                      placeholder="e.g. genderfluid"
-                      onChange={(event) => setGenderOther(event.target.value)}
-                    />
-                  )}
-                </Field>
-              ) : null}
-              <Field
-                label="Appearance"
-                help="Hair, build, distinctive features — describes how they look."
-              >
-                {(props) => (
-                  <Textarea
-                    {...props}
-                    value={appearance}
-                    rows={3}
-                    placeholder="e.g. tall, dark curly hair, glasses"
-                    onChange={(event) => setAppearance(event.target.value)}
-                  />
-                )}
-              </Field>
-              <Field label="Ethnicity">
-                {(props) => (
-                  <TextInput
-                    {...props}
-                    value={ethnicity}
-                    placeholder="e.g. Korean"
-                    onChange={(event) => setEthnicity(event.target.value)}
-                  />
-                )}
-              </Field>
-              <Field label="Occupation">
-                {(props) => (
-                  <TextInput
-                    {...props}
-                    value={occupation}
-                    placeholder="e.g. nurse"
-                    onChange={(event) => setOccupation(event.target.value)}
-                  />
-                )}
-              </Field>
-              <ChipEditor
-                label="Interests"
-                values={interests}
-                onChange={setInterests}
-                placeholder="Add an interest"
-              />
-              <Field label="Location">
-                {(props) => (
-                  <TextInput
-                    {...props}
-                    value={location}
-                    placeholder="e.g. Seattle"
-                    onChange={(event) => setLocation(event.target.value)}
-                  />
-                )}
-              </Field>
-              <Field label="Goals">
-                {(props) => (
-                  <Textarea
-                    {...props}
-                    value={goals}
-                    rows={3}
-                    placeholder="What they’re working toward"
-                    onChange={(event) => setGoals(event.target.value)}
-                  />
-                )}
-              </Field>
-              <Field label="Communication style">
-                {(props) => (
-                  <TextInput
-                    {...props}
-                    value={communicationStyle}
-                    placeholder="e.g. direct, prefers written"
-                    onChange={(event) => setCommunicationStyle(event.target.value)}
-                  />
-                )}
-              </Field>
-              <ChipEditor
-                label="Values"
-                values={values}
-                onChange={setValues}
-                placeholder="Add a value"
-              />
-              <ChipEditor
-                label="Languages"
-                values={languages}
-                onChange={setLanguages}
-                placeholder="Add a language"
-              />
-              <ImportantDatesEditor value={importantDates} onChange={setImportantDates} />
+                <Inline gap={1} align="center">
+                  <Button variant="secondary" onClick={shareAll}>
+                    Share all
+                  </Button>
+                  <Button variant="secondary" onClick={lockAll}>
+                    Lock all
+                  </Button>
+                </Inline>
+              </div>
+              <Text size="xs" tone="secondary">
+                By default, what you note here can inform the coaching of people you relate to. Lock
+                any item to keep it to this person only. Appearance, gender, ethnicity, and age can
+                also inform a dream’s generated image while shared.
+              </Text>
             </Stack>
-          </Card>
-
-          <Card>
-            <Stack gap={4}>
-              <Stack gap={1}>
-                <Heading level={3}>Private</Heading>
-                <Text size="xs" tone="secondary">
-                  Only ever used in this person’s own coaching context — never shared with anyone
-                  else’s AI, and never sent to an image provider.
-                </Text>
-              </Stack>
-              <Field label="Health notes">
-                {(props) => (
-                  <Textarea
-                    {...props}
-                    value={healthNotes}
-                    rows={3}
-                    placeholder="Anything health-related to keep in mind"
-                    onChange={(event) => setHealthNotes(event.target.value)}
-                  />
-                )}
-              </Field>
-              <Field label="Faith">
+            <Field label="Gender" labelAction={toggle('gender', 'Gender')}>
+              {(props) => (
+                <Select
+                  {...props}
+                  value={genderPreset}
+                  onChange={(event) => setGenderPreset(event.target.value)}
+                >
+                  <option value="">—</option>
+                  {GENDER_PRESETS.map((g) => (
+                    <option key={g} value={g}>
+                      {g}
+                    </option>
+                  ))}
+                  <option value={GENDER_OTHER}>Other…</option>
+                </Select>
+              )}
+            </Field>
+            {genderPreset === GENDER_OTHER ? (
+              <Field label="Gender (describe)">
                 {(props) => (
                   <TextInput
                     {...props}
-                    value={faith}
-                    placeholder="e.g. Buddhist"
-                    onChange={(event) => setFaith(event.target.value)}
+                    value={genderOther}
+                    placeholder="e.g. genderfluid"
+                    onChange={(event) => setGenderOther(event.target.value)}
                   />
                 )}
               </Field>
-            </Stack>
-          </Card>
-        </Stack>
+            ) : null}
+            <Field
+              label="Appearance"
+              help="Hair, build, distinctive features — describes how they look."
+              labelAction={toggle('appearanceDescription', 'Appearance')}
+            >
+              {(props) => (
+                <Textarea
+                  {...props}
+                  value={appearance}
+                  rows={3}
+                  placeholder="e.g. tall, dark curly hair, glasses"
+                  onChange={(event) => setAppearance(event.target.value)}
+                />
+              )}
+            </Field>
+            <Field label="Ethnicity" labelAction={toggle('ethnicity', 'Ethnicity')}>
+              {(props) => (
+                <TextInput
+                  {...props}
+                  value={ethnicity}
+                  placeholder="e.g. Korean"
+                  onChange={(event) => setEthnicity(event.target.value)}
+                />
+              )}
+            </Field>
+            <Field label="Occupation" labelAction={toggle('occupation', 'Occupation')}>
+              {(props) => (
+                <TextInput
+                  {...props}
+                  value={occupation}
+                  placeholder="e.g. nurse"
+                  onChange={(event) => setOccupation(event.target.value)}
+                />
+              )}
+            </Field>
+            <ChipEditor
+              label="Interests"
+              values={interests}
+              onChange={setInterests}
+              placeholder="Add an interest"
+              labelAction={toggle('interests', 'Interests')}
+            />
+            <Field label="Location" labelAction={toggle('location', 'Location')}>
+              {(props) => (
+                <TextInput
+                  {...props}
+                  value={location}
+                  placeholder="e.g. Seattle"
+                  onChange={(event) => setLocation(event.target.value)}
+                />
+              )}
+            </Field>
+            <Field label="Goals" labelAction={toggle('goals', 'Goals')}>
+              {(props) => (
+                <Textarea
+                  {...props}
+                  value={goals}
+                  rows={3}
+                  placeholder="What they’re working toward"
+                  onChange={(event) => setGoals(event.target.value)}
+                />
+              )}
+            </Field>
+            <Field
+              label="Communication style"
+              labelAction={toggle('communicationStyle', 'Communication style')}
+            >
+              {(props) => (
+                <TextInput
+                  {...props}
+                  value={communicationStyle}
+                  placeholder="e.g. direct, prefers written"
+                  onChange={(event) => setCommunicationStyle(event.target.value)}
+                />
+              )}
+            </Field>
+            <ChipEditor
+              label="Values"
+              values={values}
+              onChange={setValues}
+              placeholder="Add a value"
+              labelAction={toggle('values', 'Values')}
+            />
+            <ChipEditor
+              label="Languages"
+              values={languages}
+              onChange={setLanguages}
+              placeholder="Add a language"
+              labelAction={toggle('languages', 'Languages')}
+            />
+            <ImportantDatesEditor
+              value={importantDates}
+              onChange={setImportantDates}
+              shareToggle={toggle('importantDates', 'Important dates')}
+            />
+            <Field
+              label="Health notes"
+              help="Health context that can inform coaching — defaults to shared; lock it to keep it to this person."
+              labelAction={toggle('healthNotes', 'Health notes')}
+            >
+              {(props) => (
+                <Textarea
+                  {...props}
+                  value={healthNotes}
+                  rows={3}
+                  placeholder="Anything health-related to keep in mind"
+                  onChange={(event) => setHealthNotes(event.target.value)}
+                />
+              )}
+            </Field>
+            <Field label="Faith" labelAction={toggle('faith', 'Faith')}>
+              {(props) => (
+                <TextInput
+                  {...props}
+                  value={faith}
+                  placeholder="e.g. Buddhist"
+                  onChange={(event) => setFaith(event.target.value)}
+                />
+              )}
+            </Field>
+          </Stack>
+        </Card>
       ) : null}
 
       {tab === 'notes' ? (
         <Card>
           <Stack gap={4}>
-            <Field label="Shared notes" help="Context others’ AI may use — keep it shareable.">
+            <Text size="xs" tone="secondary">
+              By default these notes can inform the coaching of people you relate to. Lock them to
+              keep them to this person’s own sessions.
+            </Text>
+            <Field label="Notes" labelAction={toggle('notes', 'Notes')}>
               {(props) => (
                 <Textarea
                   {...props}
-                  value={sharedNotes}
-                  rows={5}
+                  value={notes}
+                  rows={6}
                   placeholder="e.g. loves hiking; works in nursing"
-                  onChange={(event) => setSharedNotes(event.target.value)}
-                />
-              )}
-            </Field>
-            <Field label="Private notes" help="Never shared with anyone else’s AI.">
-              {(props) => (
-                <Textarea
-                  {...props}
-                  value={privateNotes}
-                  rows={5}
-                  placeholder="Just for this person’s own sessions"
-                  onChange={(event) => setPrivateNotes(event.target.value)}
+                  onChange={(event) => setNotes(event.target.value)}
                 />
               )}
             </Field>
@@ -445,18 +477,23 @@ export function PersonEditor({
 function ImportantDatesEditor({
   value,
   onChange,
+  shareToggle,
 }: {
   value: ImportantDate[];
   onChange: (next: ImportantDate[]) => void;
+  shareToggle: JSX.Element;
 }): JSX.Element {
   const update = (index: number, patch: Partial<ImportantDate>): void => {
     onChange(value.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   };
   return (
     <Stack gap={2}>
-      <Text size="sm" weight={500}>
-        Important dates
-      </Text>
+      <div className={styles.datesHeader}>
+        <Text size="sm" weight={500}>
+          Important dates
+        </Text>
+        {shareToggle}
+      </div>
       {value.map((row, index) => (
         <Inline key={index} gap={2} align="end" wrap>
           <div className={styles.dateLabel}>

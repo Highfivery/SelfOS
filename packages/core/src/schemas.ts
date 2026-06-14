@@ -85,6 +85,34 @@ export type DeviceStatePatch = Omit<Partial<DeviceState>, 'vaultBookmark'> & {
  * encrypted at rest; these schemas validate the decrypted shape.
  */
 
+/**
+ * The controllable person fields the owner can lock to own-context-only (15-shareability §4.1) — the
+ * single source of truth shared by the editor, `buildContext`, and `buildDepictionNote`. `displayName`
+ * (identity) is always shared; `email`/`phone` are delivery-only and never in context, so neither is
+ * controllable. `birthday`'s only sharing effect is the dream-image depiction age (it's not narrated).
+ */
+export const PersonFieldKeySchema = z.enum([
+  'pronouns',
+  'birthday',
+  'gender',
+  'appearanceDescription',
+  'ethnicity',
+  'occupation',
+  'interests',
+  'location',
+  'goals',
+  'communicationStyle',
+  'values',
+  'languages',
+  'importantDates',
+  'notes',
+  'healthNotes',
+  'faith',
+]);
+export type PersonFieldKey = z.infer<typeof PersonFieldKeySchema>;
+/** Every controllable key, in editor/context order (derived from the schema so the two can't drift). */
+export const PERSON_FIELD_KEYS = PersonFieldKeySchema.options;
+
 export const PersonSchema = z.object({
   id: z.string().min(1),
   schemaVersion: z.number().int().positive(),
@@ -94,18 +122,19 @@ export const PersonSchema = z.object({
   birthday: z.string().optional(),
   avatarPath: z.string().optional(),
   tags: z.array(z.string()),
-  publicNotes: z.string().optional(),
-  privateNotes: z.string().optional(),
+  // The single merged notes field (15-shareability §4.3) — `publicNotes` + `privateNotes` collapsed into
+  // one. Shareability is now per-field (`privateFields`), not bucket-by-name. Feeds the person's own
+  // context always, and related people's context when `'notes'` is not in `privateFields`.
+  notes: z.string().optional(),
   // Contact details (08-questionnaires) — used to prefill questionnaire delivery (mailto:/SMS). Encrypted
   // with the rest of the profile; intentionally excluded from `buildContext` (operational, not coaching
   // data). Additive-optional, so person files written before this parse unchanged (no migration needed).
   email: z.string().optional(),
   phone: z.string().optional(),
-  // Descriptive profile fields (13-dream-images §4.6). Additive-optional — existing person files parse
-  // unchanged, no schemaVersion bump (the email/phone precedent). The SHAREABLE set feeds `buildContext`
-  // for the person AND related people (the "may feed others' AI" bucket, like `publicNotes`, 04 §3.4); the
-  // depiction subset (appearanceDescription + gender + ethnicity + exact age from `birthday`) also feeds the
-  // dream-image prompt (13 §8.2). `birthday` (above) is reused for age — not duplicated.
+  // Descriptive profile fields (13-dream-images §4.6). The depiction subset (appearanceDescription +
+  // gender + ethnicity + exact age from `birthday`) feeds the dream-image prompt (13 §8.2). Each is a
+  // controllable key (above): it feeds related people's context (and the depiction) only while NOT locked
+  // (15-shareability §4.1). `birthday` (above) is reused for age — not duplicated.
   gender: z.string().optional(), // small enum (female/male/non-binary/prefer-not-to-say) + free-text "other"
   appearanceDescription: z.string().optional(),
   ethnicity: z.string().optional(),
@@ -119,14 +148,28 @@ export const PersonSchema = z.object({
   importantDates: z
     .array(z.object({ label: z.string().min(1), date: z.string().min(1) }))
     .optional(),
-  // PRIVATE — own coaching context only; never shared with other people's coach, never sent to the image
-  // provider (13 §8.2). Encrypted with the rest of the profile, like `privateNotes`.
+  // Formerly always-private (health/faith); now controllable like every other field, defaulting to shared
+  // (15-shareability §3.1). Still never sent to the image provider (only the depiction subset is, 13 §8.2).
   healthNotes: z.string().optional(),
   faith: z.string().optional(),
+  // The controllable field keys the owner has locked to own-context-only (15-shareability §4.1). Absent or
+  // not listed ⇒ shareable (the default). Storing only the opt-OUTs keeps it minimal + additive-optional.
+  privateFields: z.array(PersonFieldKeySchema).optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
 export type Person = z.infer<typeof PersonSchema>;
+
+/**
+ * The one shareability gate (15-shareability §4.1): a controllable person field is shared unless the owner
+ * has locked it. Used by `buildContext` (related-person block), `buildDepictionNote`, and the editor.
+ */
+export function isPersonFieldShared(
+  person: Pick<Person, 'privateFields'>,
+  key: PersonFieldKey,
+): boolean {
+  return !(person.privateFields?.includes(key) ?? false);
+}
 
 export const RelationshipTypeSchema = z.enum([
   'partner',
@@ -149,8 +192,11 @@ export const RelationshipSchema = z.object({
   label: z.string().optional(),
   closeness: z.number().int().min(1).max(5).optional(),
   since: z.string().optional(),
-  publicNotes: z.string().optional(),
-  privateNotes: z.string().optional(),
+  // The single merged notes field (15-shareability §4.3b) — `publicNotes` + `privateNotes` collapsed into
+  // one, with one share flag. `notesShared` absent ⇒ shared (the default); `false` keeps the notes out of
+  // the OTHER person's context. The relationship `type` is structural and always shown.
+  notes: z.string().optional(),
+  notesShared: z.boolean().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -200,8 +246,7 @@ export const PersonInputSchema = z.object({
   pronouns: z.string().optional(),
   birthday: z.string().optional(),
   tags: z.array(z.string()).default([]),
-  publicNotes: z.string().optional(),
-  privateNotes: z.string().optional(),
+  notes: z.string().optional(),
   email: z.string().optional(),
   phone: z.string().optional(),
   // Descriptive profile fields (13-dream-images §4.6) — mirror PersonSchema; main owns id/version/timestamps.
@@ -220,6 +265,8 @@ export const PersonInputSchema = z.object({
     .optional(),
   healthNotes: z.string().optional(),
   faith: z.string().optional(),
+  // Per-field shareability locks (15-shareability §4.1) — the keys the owner locked to own-context-only.
+  privateFields: z.array(PersonFieldKeySchema).optional(),
 });
 export type PersonInput = z.infer<typeof PersonInputSchema>;
 
@@ -231,8 +278,8 @@ export const RelationshipInputSchema = z.object({
   label: z.string().optional(),
   closeness: z.number().int().min(1).max(5).optional(),
   since: z.string().optional(),
-  publicNotes: z.string().optional(),
-  privateNotes: z.string().optional(),
+  notes: z.string().optional(),
+  notesShared: z.boolean().optional(),
 });
 export type RelationshipInput = z.infer<typeof RelationshipInputSchema>;
 
@@ -821,6 +868,9 @@ export const DreamSchema = z.object({
   tags: z.array(z.string()),
   people: z.array(DreamPersonRefSchema),
   sensitivity: SensitivityTierSchema, // reuse 08's tier (12 §8.3); default 'standard'
+  // Whether this dream may inform coaching context at all — own + shareable-to-related (15-shareability
+  // §4.2). Default true; replaces the old sensitivity-based auto-exclusion. Additive-optional; absent ⇒ true.
+  informsContext: z.boolean().optional(),
   status: DreamStatusSchema,
   analysisId: z.string().optional(), // the canonical DreamAnalysis, once created
   image: DreamImageDescriptorSchema.optional(), // the generated image's metadata (13 §4.2); bytes in image.enc
@@ -894,6 +944,9 @@ export const DreamInputSchema = z.object({
   tags: z.array(z.string()).default([]),
   people: z.array(DreamPersonRefSchema).default([]),
   sensitivity: SensitivityTierSchema.default('standard'),
+  // Whether this dream may inform coaching context (15-shareability §4.2). Optional so legacy callers /
+  // tests omit it; the composer always sends it. Absent ⇒ true everywhere it's read.
+  informsContext: z.boolean().optional(),
 });
 export type DreamInput = z.infer<typeof DreamInputSchema>;
 
@@ -1173,8 +1226,16 @@ export type DreamImageResult =
       message: string;
     };
 
-/** The result of sharing/unsharing a dream-insight fact with a related person (12 §3.4). */
-export type DreamShareResult = { ok: true } | { ok: false; reason: 'SENSITIVE' | 'NOT_FOUND' };
+/**
+ * The result of a dream sharing toggle (shared by two paths). For **insight-fact** sharing (12 §3.4),
+ * `NOT_ALLOWED` = the dream's `informsContext` is off — sensitive dreams are now shareable when it's on
+ * (15-shareability §3.2 replaced the old `SENSITIVE` refusal there). For **dream-image** sharing
+ * (13-dream-images §3.6, a separate consent path left unchanged by 15), `SENSITIVE` still refuses a
+ * sensitive-tier image. `NOT_FOUND` = the dream/fact is missing or the target isn't a related person.
+ */
+export type DreamShareResult =
+  | { ok: true }
+  | { ok: false; reason: 'NOT_ALLOWED' | 'SENSITIVE' | 'NOT_FOUND' };
 
 /**
  * One dream image shared **with** the viewer by a related person (13-dream-images §3.6) — for the

@@ -1,8 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { generateMasterKey } from '../crypto';
 import { memFileSystem } from '../host/memFileSystem';
-import type { Insight, Person, Relationship } from '../schemas';
+import {
+  isPersonFieldShared,
+  type Dream,
+  type Insight,
+  type Person,
+  type PersonFieldKey,
+  type Relationship,
+} from '../schemas';
 import { saveInsight } from '../insights';
+import { saveDream } from '../dreams/dreamService';
 import { savePerson } from './peopleService';
 import { saveRelationship } from './relationshipService';
 import {
@@ -17,10 +25,23 @@ const key = generateMasterKey();
 function person(id: string, displayName: string, extra: Partial<Person> = {}): Person {
   return {
     id,
-    schemaVersion: 1,
+    schemaVersion: 2,
     displayName,
     isSubject: true,
     tags: [],
+    createdAt: 'now',
+    updatedAt: 'now',
+    ...extra,
+  };
+}
+
+function relationship(extra: Partial<Relationship> = {}): Relationship {
+  return {
+    id: 'r1',
+    schemaVersion: 2,
+    fromPersonId: 'a',
+    toPersonId: 'b',
+    type: 'partner',
     createdAt: 'now',
     updatedAt: 'now',
     ...extra,
@@ -44,53 +65,102 @@ function insight(id: string, subjectPersonId: string, over: Partial<Insight> = {
   };
 }
 
+function dream(id: string, personId: string, extra: Partial<Dream> = {}): Dream {
+  return {
+    id,
+    schemaVersion: 1,
+    personId,
+    narrative: 'a dream',
+    lucid: false,
+    nightmare: false,
+    tags: [],
+    people: [],
+    sensitivity: 'standard',
+    status: 'analyzed',
+    createdAt: 'now',
+    updatedAt: 'now',
+    ...extra,
+  };
+}
+
+describe('isPersonFieldShared', () => {
+  it('is shared unless the key is in privateFields (absent ⇒ shared)', () => {
+    expect(isPersonFieldShared({}, 'notes')).toBe(true);
+    expect(isPersonFieldShared({ privateFields: [] }, 'notes')).toBe(true);
+    expect(isPersonFieldShared({ privateFields: ['notes'] }, 'notes')).toBe(false);
+    expect(isPersonFieldShared({ privateFields: ['notes'] }, 'occupation')).toBe(true);
+    expect(isPersonFieldShared({ privateFields: ['healthNotes', 'faith'] }, 'faith')).toBe(false);
+  });
+});
+
 describe('buildContext', () => {
-  it("includes own notes and others' shareable notes, but never others' private notes", async () => {
+  it('includes the subject’s own full profile — every populated field, even locked ones', async () => {
     const fs = memFileSystem();
     await savePerson(
       fs,
       key,
-      person('a', 'Alex', { publicNotes: 'likes hiking', privateNotes: 'anxious about work' }),
+      person('a', 'Alex', {
+        notes: 'likes hiking',
+        occupation: 'nurse',
+        healthNotes: 'OWN-HEALTH',
+        faith: 'OWN-FAITH',
+        // Locking a field hides it from OTHERS, never from the person's own coaching context.
+        privateFields: ['healthNotes', 'faith', 'notes'],
+      }),
     );
-    await savePerson(
-      fs,
-      key,
-      person('b', 'Sam', { publicNotes: 'a nurse', privateNotes: 'SECRET-SAM' }),
-    );
-    const rel: Relationship = {
-      id: 'r1',
-      schemaVersion: 1,
-      fromPersonId: 'a',
-      toPersonId: 'b',
-      type: 'partner',
-      createdAt: 'now',
-      updatedAt: 'now',
-    };
-    await saveRelationship(fs, key, rel);
 
     const ctx = await buildContext(fs, key, 'a');
     expect(ctx).toContain('Alex');
-    expect(ctx).toContain('likes hiking'); // own shareable
-    expect(ctx).toContain('anxious about work'); // own private — it's their own session
-    expect(ctx).toContain('Sam'); // related person
-    expect(ctx).toContain('a nurse'); // related person's shareable
-    expect(ctx).not.toContain('SECRET-SAM'); // related person's private — excluded
+    expect(ctx).toContain('Notes: likes hiking'); // own — locked or not
+    expect(ctx).toContain('Occupation: nurse');
+    expect(ctx).toContain('OWN-HEALTH');
+    expect(ctx).toContain('OWN-FAITH');
+  });
+
+  it('includes a related person’s SHARED fields but never a LOCKED one (privacy boundary)', async () => {
+    const fs = memFileSystem();
+    await savePerson(fs, key, person('a', 'Alex'));
+    // Sam has every category populated; some shared, some locked.
+    await savePerson(
+      fs,
+      key,
+      person('b', 'Sam', {
+        notes: 'SAM-NOTES',
+        occupation: 'SAM-OCCUPATION',
+        healthNotes: 'SAM-HEALTH',
+        faith: 'SAM-FAITH',
+        appearanceDescription: 'SAM-APPEARANCE',
+        privateFields: ['notes', 'healthNotes', 'faith'],
+      }),
+    );
+    await saveRelationship(fs, key, relationship({ notes: 'married five years' }));
+
+    const ctx = await buildContext(fs, key, 'a');
+    expect(ctx).toContain('Sam');
+    expect(ctx).toContain('(married five years)'); // relationship notes shared by default
+    expect(ctx).toContain('SAM-OCCUPATION'); // shared field reaches a related person
+    expect(ctx).toContain('SAM-APPEARANCE');
+    expect(ctx).not.toContain('SAM-NOTES'); // locked
+    expect(ctx).not.toContain('SAM-HEALTH'); // locked (health is now controllable, default shared)
+    expect(ctx).not.toContain('SAM-FAITH'); // locked
+  });
+
+  it('keeps a related person’s notes out when their relationship note is unshared', async () => {
+    const fs = memFileSystem();
+    await savePerson(fs, key, person('a', 'Alex'));
+    await savePerson(fs, key, person('b', 'Sam'));
+    await saveRelationship(fs, key, relationship({ notes: 'REL-SECRET', notesShared: false }));
+
+    const ctx = await buildContext(fs, key, 'a');
+    expect(ctx).toContain('Sam');
+    expect(ctx).not.toContain('REL-SECRET'); // notesShared: false → withheld from the other's context
   });
 
   it("appends own approved insights and related people's shareable facts (not their private)", async () => {
     const fs = memFileSystem();
     await savePerson(fs, key, person('a', 'Alex'));
     await savePerson(fs, key, person('b', 'Sam'));
-    const rel: Relationship = {
-      id: 'r1',
-      schemaVersion: 1,
-      fromPersonId: 'a',
-      toPersonId: 'b',
-      type: 'partner',
-      createdAt: 'now',
-      updatedAt: 'now',
-    };
-    await saveRelationship(fs, key, rel);
+    await saveRelationship(fs, key, relationship());
 
     await saveInsight(fs, key, insight('i1', 'a', { summary: 'Alex values clear communication' }));
     await saveInsight(
@@ -105,56 +175,47 @@ describe('buildContext', () => {
     );
 
     const ctx = await buildContext(fs, key, 'a');
-    expect(ctx).toContain('Alex values clear communication'); // own approved insight
-    expect(ctx).toContain('Sam just got promoted'); // shareable fact about a related person
-    expect(ctx).not.toContain('SAM-PRIVATE'); // never a related person's private fact
+    expect(ctx).toContain('Alex values clear communication');
+    expect(ctx).toContain('Sam just got promoted');
+    expect(ctx).not.toContain('SAM-PRIVATE');
   });
 
-  it('surfaces shareable descriptive fields (own + related) but private ones only for the person themself', async () => {
+  it('excludes a dream-sourced insight from own context when the dream’s informsContext is off', async () => {
     const fs = memFileSystem();
-    await savePerson(
+    await savePerson(fs, key, person('a', 'Alex'));
+    // The dream is muted from context (a private journal entry).
+    await saveDream(fs, key, dream('d1', 'a', { informsContext: false }));
+    await saveInsight(
       fs,
       key,
-      person('a', 'Alex', {
-        occupation: 'nurse',
-        interests: ['hiking', 'pottery'],
-        healthNotes: 'ALEX-HEALTH-SECRET',
-        faith: 'ALEX-FAITH-SECRET',
+      insight('i1', 'a', {
+        source: 'dream',
+        summary: 'DREAM-INSIGHT-SUMMARY',
+        facts: [{ id: 'f1', text: 'DREAM-FACT', shareable: false }],
+        provenance: { at: 'now', dreamId: 'd1' },
       }),
     );
-    await savePerson(
-      fs,
-      key,
-      person('b', 'Sam', {
-        appearanceDescription: 'tall with curly hair',
-        ethnicity: 'Korean',
-        healthNotes: 'SAM-HEALTH-SECRET',
-        faith: 'SAM-FAITH-SECRET',
-      }),
-    );
-    const rel: Relationship = {
-      id: 'r1',
-      schemaVersion: 1,
-      fromPersonId: 'a',
-      toPersonId: 'b',
-      type: 'partner',
-      createdAt: 'now',
-      updatedAt: 'now',
-    };
-    await saveRelationship(fs, key, rel);
 
     const ctx = await buildContext(fs, key, 'a');
-    // Own shareable + own private descriptive fields both appear (their own session).
-    expect(ctx).toContain('Occupation: nurse');
-    expect(ctx).toContain('Interests: hiking, pottery');
-    expect(ctx).toContain('ALEX-HEALTH-SECRET'); // own private — allowed in their own block
-    expect(ctx).toContain('ALEX-FAITH-SECRET');
-    // A related person's shareable descriptive fields appear...
-    expect(ctx).toContain('tall with curly hair');
-    expect(ctx).toContain('Ethnicity: Korean');
-    // ...but a related person's PRIVATE descriptive fields never do.
-    expect(ctx).not.toContain('SAM-HEALTH-SECRET');
-    expect(ctx).not.toContain('SAM-FAITH-SECRET');
+    expect(ctx).not.toContain('DREAM-INSIGHT-SUMMARY'); // suppressed — informsContext off
+    expect(ctx).not.toContain('DREAM-FACT');
+  });
+
+  it('includes a dream-sourced insight when informsContext is on (default)', async () => {
+    const fs = memFileSystem();
+    await savePerson(fs, key, person('a', 'Alex'));
+    await saveDream(fs, key, dream('d1', 'a', { informsContext: true }));
+    await saveInsight(
+      fs,
+      key,
+      insight('i1', 'a', {
+        source: 'dream',
+        summary: 'DREAM-INSIGHT-SUMMARY',
+        provenance: { at: 'now', dreamId: 'd1' },
+      }),
+    );
+    const ctx = await buildContext(fs, key, 'a');
+    expect(ctx).toContain('DREAM-INSIGHT-SUMMARY');
   });
 
   it('returns empty for an unknown person', async () => {
@@ -162,26 +223,45 @@ describe('buildContext', () => {
   });
 });
 
+// One privacy-boundary assertion per controllable category that narrates into context: a LOCKED value on a
+// related person must never appear in any related-person path (15-shareability §10).
+describe('buildContext — locked-field privacy boundary, per key', () => {
+  const cases: { key: PersonFieldKey; field: Partial<Person>; marker: string }[] = [
+    { key: 'occupation', field: { occupation: 'LOCKED-OCCUPATION' }, marker: 'LOCKED-OCCUPATION' },
+    { key: 'location', field: { location: 'LOCKED-LOCATION' }, marker: 'LOCKED-LOCATION' },
+    { key: 'goals', field: { goals: 'LOCKED-GOALS' }, marker: 'LOCKED-GOALS' },
+    { key: 'notes', field: { notes: 'LOCKED-NOTES' }, marker: 'LOCKED-NOTES' },
+    { key: 'healthNotes', field: { healthNotes: 'LOCKED-HEALTH' }, marker: 'LOCKED-HEALTH' },
+    { key: 'faith', field: { faith: 'LOCKED-FAITH' }, marker: 'LOCKED-FAITH' },
+    { key: 'interests', field: { interests: ['LOCKED-INTEREST'] }, marker: 'LOCKED-INTEREST' },
+  ];
+  for (const { key: fieldKey, field, marker } of cases) {
+    it(`withholds a locked ${fieldKey} from a related person's block`, async () => {
+      const fs = memFileSystem();
+      await savePerson(fs, key, person('a', 'Alex'));
+      await savePerson(fs, key, person('b', 'Sam', { ...field, privateFields: [fieldKey] }));
+      await saveRelationship(fs, key, relationship());
+      const ctx = await buildContext(fs, key, 'a');
+      expect(ctx).toContain('Sam');
+      expect(ctx).not.toContain(marker);
+    });
+  }
+});
+
 describe('buildLinkedPeopleContext', () => {
-  it("includes a linked person's shareable data and relationship, never their private notes/facts", async () => {
+  it("includes a linked person's shared data + relationship, never a locked field/private fact", async () => {
     const fs = memFileSystem();
     await savePerson(fs, key, person('a', 'Alex'));
     await savePerson(
       fs,
       key,
-      person('b', 'Sam', { publicNotes: 'a nurse', privateNotes: 'SAM-PRIVATE-NOTE' }),
+      person('b', 'Sam', {
+        occupation: 'a nurse',
+        healthNotes: 'SAM-HEALTH',
+        privateFields: ['healthNotes'],
+      }),
     );
-    const rel: Relationship = {
-      id: 'r1',
-      schemaVersion: 1,
-      fromPersonId: 'a',
-      toPersonId: 'b',
-      type: 'partner',
-      publicNotes: 'married five years',
-      createdAt: 'now',
-      updatedAt: 'now',
-    };
-    await saveRelationship(fs, key, rel);
+    await saveRelationship(fs, key, relationship({ notes: 'married five years' }));
     await saveInsight(
       fs,
       key,
@@ -197,47 +277,49 @@ describe('buildLinkedPeopleContext', () => {
     expect(ctx).toContain('appeared in this dream');
     expect(ctx).toContain('Sam');
     expect(ctx).toContain('(partner)'); // the relationship type
-    expect(ctx).toContain('married five years'); // relationship public notes
-    expect(ctx).toContain('a nurse'); // their public notes
-    expect(ctx).toContain('Sam just got promoted'); // their shareable fact
-    expect(ctx).not.toContain('SAM-PRIVATE-NOTE'); // their private notes — excluded
-    expect(ctx).not.toContain('SAM-PRIVATE-FACT'); // their non-shareable fact — excluded
+    expect(ctx).toContain('married five years'); // relationship notes (shared)
+    expect(ctx).toContain('a nurse'); // a shared field
+    expect(ctx).toContain('Sam just got promoted'); // a shareable fact
+    expect(ctx).not.toContain('SAM-HEALTH'); // a locked field — excluded
+    expect(ctx).not.toContain('SAM-PRIVATE-FACT'); // a non-shareable fact — excluded
   });
 
-  it('surfaces a linked NON-relation (public notes only), still excluding private data', async () => {
+  it('excludes a linked person’s dream-sourced fact when that dream is muted from context', async () => {
+    const fs = memFileSystem();
+    await savePerson(fs, key, person('a', 'Alex'));
+    await savePerson(fs, key, person('b', 'Sam'));
+    await saveDream(fs, key, dream('d1', 'b', { informsContext: false }));
+    await saveInsight(
+      fs,
+      key,
+      insight('i2', 'b', {
+        source: 'dream',
+        facts: [{ id: 'f1', text: 'MUTED-DREAM-FACT', shareable: false, shareableWith: ['a'] }],
+        provenance: { at: 'now', dreamId: 'd1' },
+      }),
+    );
+    const ctx = await buildLinkedPeopleContext(fs, key, 'a', ['b']);
+    expect(ctx).not.toContain('MUTED-DREAM-FACT');
+  });
+
+  it('surfaces a linked NON-relation (shared fields only), still excluding locked data', async () => {
     const fs = memFileSystem();
     await savePerson(fs, key, person('a', 'Alex'));
     await savePerson(
       fs,
       key,
-      person('c', 'Casey', { publicNotes: 'an old colleague', privateNotes: 'CASEY-PRIVATE' }),
+      person('c', 'Casey', {
+        occupation: 'an old colleague',
+        notes: 'CASEY-LOCKED',
+        privateFields: ['notes'],
+      }),
     );
     // No relationship between a and c — but "all household people" are linkable (12 §3.1 decision).
     const ctx = await buildLinkedPeopleContext(fs, key, 'a', ['c']);
     expect(ctx).toContain('Casey');
     expect(ctx).toContain('an old colleague');
-    expect(ctx).not.toContain('('); // no relationship type parenthetical when there's no relationship
-    expect(ctx).not.toContain('CASEY-PRIVATE');
-  });
-
-  it("surfaces a linked person's shareable descriptive fields, never their private health/faith", async () => {
-    const fs = memFileSystem();
-    await savePerson(fs, key, person('a', 'Alex'));
-    await savePerson(
-      fs,
-      key,
-      person('b', 'Sam', {
-        appearanceDescription: 'tall with curly hair',
-        ethnicity: 'Korean',
-        healthNotes: 'SAM-HEALTH-SECRET',
-        faith: 'SAM-FAITH-SECRET',
-      }),
-    );
-    const ctx = await buildLinkedPeopleContext(fs, key, 'a', ['b']);
-    expect(ctx).toContain('tall with curly hair'); // shareable depiction field
-    expect(ctx).toContain('Ethnicity: Korean');
-    expect(ctx).not.toContain('SAM-HEALTH-SECRET'); // private — never about a linked person
-    expect(ctx).not.toContain('SAM-FAITH-SECRET');
+    expect(ctx).not.toContain('(partner)'); // no relationship type parenthetical
+    expect(ctx).not.toContain('CASEY-LOCKED');
   });
 
   it('honors per-person targeted (shareableWith) facts and skips unknown ids', async () => {
@@ -290,7 +372,7 @@ describe('buildDepictionNote', () => {
         gender: 'female',
         ethnicity: 'Korean',
         birthday: '1990-01-01',
-        privateNotes: 'PRIV',
+        notes: 'PRIV',
         healthNotes: 'HEALTH',
         faith: 'FAITH',
       }),
@@ -304,6 +386,27 @@ describe('buildDepictionNote', () => {
     expect(note).not.toContain('PRIV');
     expect(note).not.toContain('HEALTH');
     expect(note).not.toContain('FAITH');
+  });
+
+  it('withholds each depiction part the owner has locked (appearance/gender/ethnicity/age)', async () => {
+    const fs = memFileSystem();
+    await savePerson(
+      fs,
+      key,
+      person('b', 'Alexandra', {
+        appearanceDescription: 'tall with curly hair',
+        gender: 'female',
+        ethnicity: 'Korean',
+        birthday: '1990-01-01',
+        // Lock appearance + birthday: those parts must drop; gender + ethnicity remain.
+        privateFields: ['appearanceDescription', 'birthday'],
+      }),
+    );
+    const note = await buildDepictionNote(fs, key, 'b', now);
+    expect(note).not.toContain('tall with curly hair'); // locked appearance withheld
+    expect(note).not.toContain('age 36'); // locked birthday → no age
+    expect(note).toContain('female'); // still shared
+    expect(note).toContain('Korean');
   });
 
   it("returns '' when there is nothing depictable, or the person is unknown", async () => {

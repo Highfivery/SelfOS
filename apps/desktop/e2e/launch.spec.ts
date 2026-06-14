@@ -13,6 +13,7 @@ import type { Encryptor } from '../src/main/secrets/encryptor';
 import { createNodeFileSystem } from '../src/main/host/nodeFileSystem';
 import { createNodeSecretStore } from '../src/main/host/nodeSecretStore';
 import {
+  buildContext,
   createInvite,
   getAccessConfig,
   savePerson,
@@ -264,7 +265,7 @@ test('people: add a person and link a relationship', async () => {
   }
 });
 
-test('people: shared and private notes persist', async () => {
+test('people: the merged Notes field persists with a share lock (15 §4.3)', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);
   try {
@@ -272,15 +273,16 @@ test('people: shared and private notes persist', async () => {
     await w.getByRole('link', { name: 'People' }).click();
     await w.getByRole('button', { name: 'Tester Subject' }).click();
     await w.getByRole('button', { name: 'Notes' }).click();
-    await w.getByLabel('Shared notes').fill('enjoys cycling');
-    await w.getByLabel('Private notes').fill('processing a tough week');
+    await w.getByLabel('Notes', { exact: true }).fill('enjoys cycling');
+    // Lock the notes to this person only via the per-field ShareToggle.
+    await w.getByRole('button', { name: /Notes: shared/i }).click();
     await w.getByRole('button', { name: 'Save' }).click();
 
-    // Reopen and confirm both fields round-tripped through encryption.
+    // Reopen and confirm the merged field + the lock round-tripped through encryption.
     await w.getByRole('button', { name: 'Tester Subject' }).click();
     await w.getByRole('button', { name: 'Notes' }).click();
-    await expect(w.getByLabel('Shared notes')).toHaveValue('enjoys cycling');
-    await expect(w.getByLabel('Private notes')).toHaveValue('processing a tough week');
+    await expect(w.getByLabel('Notes', { exact: true })).toHaveValue('enjoys cycling');
+    await expect(w.getByRole('button', { name: /Notes: private/i })).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -288,7 +290,7 @@ test('people: shared and private notes persist', async () => {
   }
 });
 
-test('people: descriptive About fields persist, splitting shareable from private', async () => {
+test('people: descriptive About fields persist (health/faith now inline)', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);
   try {
@@ -296,21 +298,72 @@ test('people: descriptive About fields persist, splitting shareable from private
     await w.getByRole('link', { name: 'People' }).click();
     await w.getByRole('button', { name: 'Tester Subject' }).click();
     await w.getByRole('button', { name: 'About', exact: true }).click();
-    await w.getByLabel('Gender').selectOption('Non-binary');
+    await w.getByLabel('Gender', { exact: true }).selectOption('Non-binary');
     await w.getByLabel('Appearance', { exact: true }).fill('tall, curly hair');
-    await w.getByLabel('Occupation').fill('nurse');
-    await w.getByLabel('Health notes').fill('manages asthma');
-    await w.getByLabel('Faith').fill('Buddhist');
+    await w.getByLabel('Occupation', { exact: true }).fill('nurse');
+    await w.getByLabel('Health notes', { exact: true }).fill('manages asthma');
+    await w.getByLabel('Faith', { exact: true }).fill('Buddhist');
     await w.getByRole('button', { name: 'Save' }).click();
 
     // Reopen and confirm every field round-tripped through the encrypted profile.
     await w.getByRole('button', { name: 'Tester Subject' }).click();
     await w.getByRole('button', { name: 'About', exact: true }).click();
-    await expect(w.getByLabel('Gender')).toHaveValue('Non-binary');
+    await expect(w.getByLabel('Gender', { exact: true })).toHaveValue('Non-binary');
     await expect(w.getByLabel('Appearance', { exact: true })).toHaveValue('tall, curly hair');
-    await expect(w.getByLabel('Occupation')).toHaveValue('nurse');
-    await expect(w.getByLabel('Health notes')).toHaveValue('manages asthma');
-    await expect(w.getByLabel('Faith')).toHaveValue('Buddhist');
+    await expect(w.getByLabel('Occupation', { exact: true })).toHaveValue('nurse');
+    await expect(w.getByLabel('Health notes', { exact: true })).toHaveValue('manages asthma');
+    await expect(w.getByLabel('Faith', { exact: true })).toHaveValue('Buddhist');
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('shareability: a locked field never reaches a related person’s assembled context (15 §8)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'People' }).click();
+
+    // Add Robin (related to the subject Tester); give them a shared occupation + a LOCKED health note.
+    await w.getByRole('button', { name: 'Add person' }).click();
+    await w.getByLabel('Name').fill('Robin');
+    await w.getByRole('button', { name: 'Create' }).click();
+    await w.getByText('Robin').click();
+    await w.getByRole('button', { name: 'About', exact: true }).click();
+    await w.getByLabel('Occupation', { exact: true }).fill('SHARED-NURSE');
+    await w.getByLabel('Health notes', { exact: true }).fill('LOCKED-ASTHMA');
+    await w.getByRole('button', { name: /Health notes: shared/i }).click(); // lock it
+    await w.getByRole('button', { name: 'Save' }).click();
+
+    // Relate Robin to the subject so Robin's SHARED data flows into the subject's context.
+    await w.getByText('Robin').click();
+    await w.getByRole('button', { name: 'Relationships' }).click();
+    await w.getByLabel('Related person').selectOption({ label: 'Tester' });
+    await w.getByRole('button', { name: 'Add', exact: true }).click();
+    await expect(w.getByText(/Friend — Tester/)).toBeVisible();
+
+    // Decrypt + assemble the subject's coaching context and assert the boundary holds.
+    const secrets = createNodeSecretStore(userData, passthrough);
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(secrets);
+    if (!key) throw new Error('master key missing');
+    const context = await buildContext(fs, key, 'owner-1');
+    expect(context).toContain('SHARED-NURSE'); // a shared field reaches the related person's block
+    expect(context).not.toContain('LOCKED-ASTHMA'); // a LOCKED field never does
+
+    // The reworked About editor (every field + its ShareToggle + the bulk control) fits at phone width.
+    // Robin's editor is already open (on Relationships); just resize and switch to the About tab.
+    await w.setViewportSize({ width: 390, height: 780 });
+    await w.getByRole('button', { name: 'About', exact: true }).click();
+    await expect(w.getByRole('button', { name: 'Lock all' })).toBeVisible();
+    const overflow = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      return main ? main.scrollWidth - main.clientWidth : 0;
+    });
+    expect(overflow).toBeLessThanOrEqual(1);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -1493,6 +1546,8 @@ test('dreams: log a dream, persist through the encrypted vault, reopen, no overf
     await w.getByRole('switch', { name: 'Lucid dream' }).click();
     await w.getByLabel('Waking mood').selectOption({ label: 'Good' });
     await w.getByLabel('Vividness').selectOption('5');
+    // Keep it a private journal entry (15-shareability §3.2) — informsContext defaults on, toggle it off.
+    await w.getByRole('switch', { name: 'Let this dream inform coaching context' }).click();
     await w.getByRole('button', { name: 'Save' }).click();
 
     // It appears in the journal.
@@ -1509,6 +1564,10 @@ test('dreams: log a dream, persist through the encrypted vault, reopen, no overf
       'aria-checked',
       'true',
     );
+    // The informsContext switch round-tripped off through the encrypted vault.
+    await expect(
+      w.getByRole('switch', { name: 'Let this dream inform coaching context' }),
+    ).toHaveAttribute('aria-checked', 'false');
 
     const overflow = await w.evaluate(() => {
       const main = document.querySelector('main');
@@ -2589,7 +2648,8 @@ test('responsive: at a phone width the nav is a drawer and no screen overflows h
         await w.getByRole('button', { name: 'Add date' }).click();
         await w.waitForTimeout(120);
         expect(await noOverflow()).toBe(true);
-        await w.getByRole('button', { name: 'People' }).click(); // back to the list
+        // exact: the ShareToggle aria-labels contain "people you relate to" (a substring of "People").
+        await w.getByRole('button', { name: 'People', exact: true }).click(); // back to the list
       }
       if (name === 'Roles') {
         // The role cards must STACK (one column), not sit in a scrolling row — assert two role

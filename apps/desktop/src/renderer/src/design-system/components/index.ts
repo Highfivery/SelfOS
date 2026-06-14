@@ -12,6 +12,7 @@ export { TextInput } from './TextInput';
 export { Textarea } from './Textarea';
 export { Select } from './Select';
 export { Switch } from './Switch';
+export { ShareToggle } from './ShareToggle';
 export { Slider } from './Slider';
 export { SegmentedControl, type SegmentOption } from './SegmentedControl';
 export { LineChart, type LineChartSeries, type LineChartPoint } from './LineChart';

@@ -198,17 +198,15 @@ The panel resolves to exactly one state, mirroring the AI-off / over-budget / re
 
 ### 3.7 People-profile fields (the prerequisite, §4.6/§13.1)
 
-In the tabbed **`PersonEditor`** (`04` §6.2), the new descriptive fields are surfaced in two groups:
-
-- **About** (shareable) — gender, appearance, ethnicity, occupation, interests, location, goals, communication
-  style, values, languages, important dates. These feed `buildContext` (own + related people) like
-  `publicNotes`; the depiction subset (appearance + gender + ethnicity + exact age from `birthday`) also feeds
-  image prompts.
-- **Private** (own coaching context only) — health notes, faith. Never shared with other people's coach, never
-  sent to OpenAI (§8.2).
+In the tabbed **`PersonEditor`** (`04` §6.2), the descriptive fields (gender, appearance, ethnicity,
+occupation, interests, location, goals, communication style, values, languages, important dates, **health
+notes, faith**) are each **individually lockable** and default to **shared**
+([`15-shareability.md`](15-shareability.md) §4.1) — health/faith are no longer always-private. They feed
+`buildContext` (own always; related people only when not locked); the depiction subset (appearance + gender +
+ethnicity + exact age from `birthday`) feeds image prompts only for the fields not locked (§8.2).
 
 These are independent of images (a dreamer with no images still benefits in chat); the image feature simply
-**reads** the shareable depiction subset.
+**reads** the shared depiction subset.
 
 ## 4. Data model
 
@@ -306,9 +304,9 @@ bump, no migration** (the `email`/`phone` precedent). **`birthday` already exist
 for DOB/age — **not duplicated**. Proposed shapes (field-type calls noted in §11 where genuinely open):
 
 ```ts
-// SHAREABLE descriptive fields — feed buildContext for the person AND for related people (like publicNotes).
-// The depiction subset (appearanceDescription + gender + ethnicity + exact age from birthday) also feeds the
-// image prompt (§8.2).
+// Descriptive fields — each individually lockable via privateFields, defaulting to SHARED (15-shareability
+// §4.1); healthNotes/faith are no longer always-private. The depiction subset (appearanceDescription +
+// gender + ethnicity + exact age from birthday) feeds the image prompt only when not locked (§8.2).
 gender: z.string().optional(); // small enum (female/male/non-binary/prefer-not-to-say) + free-text "other" (§11.3)
 appearanceDescription: z.string().optional(); // free text — hair, build, distinctive features, etc.
 ethnicity: z.string().optional(); // free text (self-described; not an enum — see §11)
@@ -320,17 +318,15 @@ communicationStyle: z.string().optional(); // free text
 values: z.array(z.string()).optional(); // chip list
 languages: z.array(z.string()).optional(); // chip list
 importantDates: z.array(z.object({ label: z.string().min(1), date: z.string().min(1) })).optional();
-
-// PRIVATE fields — own coaching context only; never shared with others' coach, never sent to OpenAI (§8.2).
-healthNotes: z.string().optional(); // free text (multiline)
-faith: z.string().optional(); // free text
+healthNotes: z.string().optional(); // free text (multiline) — defaults shared, lockable (15 §4.1)
+faith: z.string().optional(); // free text — defaults shared, lockable (15 §4.1)
 ```
 
 `buildContext` (`04` §3.4 / `packages/core/src/people/buildContext.ts`) and `buildLinkedPeopleContext`
-(`12` §5.1) are extended to surface the **shareable** descriptive fields (own + related people), and the
-**private** ones **only** in the person's own context block — the same shareable-vs-private split already
-applied to `publicNotes`/`privateNotes`. The image-depiction subset = `appearanceDescription` + `gender` +
-`ethnicity` + the **exact age** computed from `birthday` (§12.8).
+(`12` §5.1) surface each descriptive field in a related person's context **only when not locked**
+(`isPersonFieldShared`), and always in the person's own context block — the unified per-field model
+([`15-shareability.md`](15-shareability.md) §4.1). The image-depiction subset = `appearanceDescription` +
+`gender` + `ethnicity` + the **exact age** computed from `birthday` (§12.8), each gated the same way.
 
 ### 4.7 Ownership
 
@@ -568,13 +564,16 @@ figure resemble the dreamer's real people" vs. "never generate a real person's l
   only by **Claude** during distillation (the coach model, which already has this context); the **distilled
   prompt that reaches OpenAI is stripped of names** (§5.3) and describes any figure generically ("a figure: …").
 - **Appearance, gender, ethnicity, and exact age MAY be used** — but **only** the dreamer's **own
-  descriptions** of a People-graph-linked person (the shareable depiction subset, §4.6), assembled by
-  `buildDepictionNote`. This lets a figure resemble that person without naming them.
-- **Private fields are never sent** to either provider: `privateNotes`, `healthNotes`, `faith`, and any
-  non-depiction field. The depiction is **text-only** — **no reference image or photo** is ever sent.
-- The depiction is the **shareable** subset, consistent with the `04` §3.4 shareable-vs-private boundary (the
-  dreamer is describing their own view of someone, which is already the "may inform the AI" bucket). It is
-  one-directional — the linked person learns nothing about the dream from the prompt.
+  descriptions** of a People-graph-linked person, and **only for each field the dreamer has NOT locked**
+  (`isPersonFieldShared`, [`15-shareability.md`](15-shareability.md) §4.1; a locked appearance/gender/
+  ethnicity/birthday is withheld), assembled by `buildDepictionNote`. This lets a figure resemble that person
+  without naming them.
+- **Locked + non-depiction fields are never sent** to either provider: any field the dreamer has locked, plus
+  all non-depiction fields (`notes`, `healthNotes` and `faith` when locked, etc.). The depiction is
+  **text-only** — **no reference image or photo** is ever sent.
+- The depiction is the per-field **shared** subset (15-shareability §4.1) — the dreamer is describing their
+  own view of someone, which is the "may inform the AI" data. It is one-directional — the linked person learns
+  nothing about the dream from the prompt.
 
 ### 8.3 Image visibility (dreamer-controlled), sharing & sensitive content
 

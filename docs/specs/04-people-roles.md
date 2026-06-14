@@ -73,9 +73,11 @@ rest**.
 
 ### 3.4 Sharing context
 
-- Per person/relationship, the owner (or the person themselves) marks fields as **shareable** vs
-  **private**. Shareable data is what other subjects' AI may use; private data never leaves that
-  person's own sessions.
+- Per person/relationship, the owner (or the person themselves) **locks individual fields** to
+  own-context-only; everything else is shared with the AI of related people. Shared data is what other
+  subjects' AI may use; a locked field never leaves that person's own sessions. See
+  [`15-shareability.md`](15-shareability.md) §4.1/§4.3 for the unified per-field model
+  (`Person.privateFields`, `Relationship.notesShared`) that supersedes the old shareable-vs-private buckets.
 
 ## 4. Data model
 
@@ -94,14 +96,14 @@ interface Person {
   birthday?: string; // ISO date
   avatarPath?: string; // within the vault
   tags: string[];
-  publicNotes?: string; // shareable
-  privateNotes?: string; // encrypted, owner/self only
+  notes?: string; // merged (was publicNotes + privateNotes); per-field share via privateFields (15 §4.3)
   email?: string; // encrypted; prefills questionnaire delivery (08); excluded from buildContext
   phone?: string; // encrypted; prefills questionnaire delivery (08); excluded from buildContext
 
-  // Descriptive profile fields (13-dream-images §4.6). SHAREABLE — feed `buildContext` for the person AND
-  // for related people (like `publicNotes`); the depiction subset (appearanceDescription + gender +
-  // ethnicity + approx age derived from `birthday`) also feeds the dream-image prompt (13 §8.2).
+  // Descriptive profile fields (13-dream-images §4.6). Each is individually lockable via `privateFields`
+  // and defaults to SHARED (15-shareability §3.1/§4.1) — incl. healthNotes + faith. The depiction subset
+  // (appearanceDescription + gender + ethnicity + approx age from `birthday`) feeds the dream-image prompt
+  // only when not locked (13 §8.2).
   gender?: string;
   appearanceDescription?: string;
   ethnicity?: string;
@@ -113,11 +115,10 @@ interface Person {
   values?: string[];
   languages?: string[];
   importantDates?: { label: string; date: string }[];
-  // PRIVATE — own coaching context only; never shared with other people's coach, never sent to the image
-  // provider (13 §8.2). Encrypted with the rest of the profile.
   healthNotes?: string;
   faith?: string;
 
+  privateFields?: PersonFieldKey[]; // fields locked to own-context-only; absent ⇒ all shared (15 §4.1)
   createdAt: string;
   updatedAt: string;
 }
@@ -146,6 +147,12 @@ interface Person {
 > field groups; `gender` = the §11.3 preset enum + free-text "Other"; `interests`/`values`/`languages` via
 > `ChipEditor`; an `importantDates` label+date row editor). The depiction subset that feeds the image prompt
 > lands with 13 slice 2.
+>
+> **Superseded by [`15-shareability.md`](15-shareability.md)** (built 2026-06-14): `publicNotes` + `privateNotes`
+> merged into one `notes` field (schemaVersion v1→v2 + read-time migration), and **every** descriptive field —
+> including `healthNotes`/`faith` — is now individually lockable via `privateFields`, defaulting to shared,
+> rather than two fixed buckets. The `PersonEditor` About/Private split is dissolved into one group of
+> per-field `ShareToggle`s. The depiction subset feeds the image prompt only for fields not locked.
 
 ### 4.2 Relationship (the graph edge)
 
@@ -159,8 +166,8 @@ interface Relationship {
   label?: string; // free-text refinement, e.g. "wife"
   closeness?: 1 | 2 | 3 | 4 | 5;
   since?: string;
-  publicNotes?: string;
-  privateNotes?: string;
+  notes?: string; // merged (was publicNotes + privateNotes); schemaVersion v1→v2 (15 §4.3b)
+  notesShared?: boolean; // absent ⇒ shared with the other person's coach (15-shareability §4.3b)
   createdAt: string;
   updatedAt: string;
 }
@@ -282,8 +289,9 @@ Typed channels (declared in `src/shared`, validated both sides):
   install owner, via secret passphrase) can decrypt and inspect everything for verification/debugging
   and is never surfaced to other users. This is a deliberate owner prerogative over their own install
   and device; the spec records it so the privacy claim is honest rather than overstated.
-- **Consent & sharing:** a person controls what's shareable; private therapy data never feeds another
-  person's AI. Shareable context is curated and consented.
+- **Consent & sharing:** a person controls what's shareable via per-field locks (see
+  [`15-shareability.md`](15-shareability.md) §4.1); a locked field never feeds another person's AI.
+  Shareable context is curated and consented.
 - **Wellness boundary:** unchanged — SelfOS is wellness/self-help, not medical (per
   [`CLAUDE.md`](../../CLAUDE.md)); conversational/crisis behavior lives in the chat spec.
 - **PINs/passphrase** are salted-hashed (scrypt), never stored plaintext; rate-limit verification.

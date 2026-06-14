@@ -126,7 +126,7 @@ describe('DreamAnalysisPane sharing', () => {
     });
   });
 
-  it('keeps a sensitive dream out of sharing, with a note', async () => {
+  it('now shows share controls for a SENSITIVE dream when informsContext is on (15 §3.2)', async () => {
     useSessionStore.setState({ superAdmin: true });
     installMockBridge({
       secretHas: () => Promise.resolve(true),
@@ -134,9 +134,23 @@ describe('DreamAnalysisPane sharing', () => {
       dreamGetInsight: () => Promise.resolve(insightFixture),
       dreamShareTargets: () => Promise.resolve(partner),
     });
-    renderPane({ ...baseDream, sensitivity: 'explicit' });
+    renderPane({ ...baseDream, sensitivity: 'explicit' }); // informsContext undefined ⇒ on
+    expect(await screen.findByText('Share with someone in your life')).toBeInTheDocument();
+  });
+
+  it('hides sharing with a private-journal note when informsContext is off', async () => {
+    useSessionStore.setState({ superAdmin: true });
+    installMockBridge({
+      secretHas: () => Promise.resolve(true),
+      dreamGetAnalysis: () => Promise.resolve(approvedAnalysis),
+      dreamGetInsight: () => Promise.resolve(null), // a muted dream returns no insight
+      dreamShareTargets: () => Promise.resolve(partner),
+    });
+    renderPane({ ...baseDream, informsContext: false });
     expect(
-      await screen.findByText(/marked sensitive, so it.s kept out of shared context/i),
+      await screen.findByText(
+        /kept as a private journal entry, so it.+won.t inform coaching context/i,
+      ),
     ).toBeInTheDocument();
     expect(screen.queryByText('Share with someone in your life')).not.toBeInTheDocument();
   });

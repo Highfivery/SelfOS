@@ -55,6 +55,7 @@ export function DreamComposer({ dream, onDone }: DreamComposerProps): JSX.Elemen
   const [lucid, setLucid] = useState(dream?.lucid ?? false);
   const [nightmare, setNightmare] = useState(dream?.nightmare ?? false);
   const [sensitivity, setSensitivity] = useState<SensitivityTier>(dream?.sensitivity ?? 'standard');
+  const [informsContext, setInformsContext] = useState(dream?.informsContext !== false);
   const [tags, setTags] = useState<string[]>(dream?.tags ?? []);
   const [people, setPeople] = useState<DreamPersonRef[]>(dream?.people ?? []);
   const [saving, setSaving] = useState(false);
@@ -80,6 +81,7 @@ export function DreamComposer({ dream, onDone }: DreamComposerProps): JSX.Elemen
       tags,
       people,
       sensitivity,
+      informsContext,
     };
     try {
       await save(input);
@@ -189,7 +191,10 @@ export function DreamComposer({ dream, onDone }: DreamComposerProps): JSX.Elemen
       <ChipEditor label="Tags" values={tags} onChange={setTags} placeholder="Add a tag" />
       <DreamPeopleEditor values={people} onChange={setPeople} people={selectablePeople} />
 
-      <Field label="Sensitivity" help="Sensitive dreams are kept out of any shared context.">
+      <Field
+        label="Sensitivity"
+        help="Sets the framing for analysis and the warning before any dream-image generation."
+      >
         {(p) => (
           <Select
             {...p}
@@ -203,6 +208,22 @@ export function DreamComposer({ dream, onDone }: DreamComposerProps): JSX.Elemen
           </Select>
         )}
       </Field>
+
+      <div className={styles.informsContext}>
+        <div className={styles.toggleRow}>
+          <Switch
+            checked={informsContext}
+            onChange={setInformsContext}
+            aria-label="Let this dream inform coaching context"
+          />
+          <Text weight={500}>Let this dream inform coaching context</Text>
+        </div>
+        <Text size="xs" tone="tertiary">
+          {informsContext
+            ? 'This dream’s reflections can inform your coaching, and (once you analyze and approve it) be shared with people you relate to.'
+            : 'Off: it stays a private journal entry — it won’t inform your coaching or be shareable.'}
+        </Text>
+      </div>
 
       {error ? (
         <p className={styles.error} role="alert">

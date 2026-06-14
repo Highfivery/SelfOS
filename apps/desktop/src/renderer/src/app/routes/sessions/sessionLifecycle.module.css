@@ -81,6 +81,16 @@
   outline-offset: -2px;
 }
 
+.menuItemDanger {
+  color: var(--color-danger);
+}
+
+.menuDivider {
+  height: 1px;
+  margin: var(--space-1) 0;
+  background: var(--color-border);
+}
+
 /* Cost indicator -------------------------------------------------------------- */
 .cost {
   display: inline-flex;

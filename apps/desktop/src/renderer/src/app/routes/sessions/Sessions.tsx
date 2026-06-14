@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, MessageCircle, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { ArrowLeft, MessageCircle, Plus, Sparkles } from 'lucide-react';
 import { useConversationStore } from '../../../stores/conversationStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useSetting } from '../../../settings/useSetting';
@@ -8,15 +8,7 @@ import { ANTHROPIC_API_KEY_ID } from '@shared/channels';
 import type { SessionStatus } from '@shared/schemas';
 import { getExercise, stripCoachMarkers } from '@selfos/core/conversations';
 import { useGuidanceStore } from '../../../stores/guidanceStore';
-import {
-  Banner,
-  Button,
-  IconButton,
-  SegmentedControl,
-  Stack,
-  Text,
-  TextInput,
-} from '../../../design-system/components';
+import { Banner, Button, Stack, Text, TextInput } from '../../../design-system/components';
 import { Composer } from './Composer';
 import { CrisisFooter } from './CrisisFooter';
 import { SessionLauncher } from './SessionLauncher';
@@ -178,12 +170,23 @@ export function Sessions(): JSX.Element {
           <Plus size={16} aria-hidden="true" />
           New session
         </Button>
-        <SegmentedControl
-          aria-label="Filter sessions by status"
-          options={filterOptions}
-          value={filter}
-          onChange={(value) => setFilter(value as Filter)}
-        />
+        <div className={styles.filterRow} role="group" aria-label="Filter sessions by status">
+          {filterOptions.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={filter === option.value}
+              className={
+                filter === option.value
+                  ? `${styles.filterChip} ${styles.filterChipActive}`
+                  : styles.filterChip
+              }
+              onClick={() => setFilter(option.value as Filter)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
         <Stack gap={1}>
           {filtered.map((conversation) => (
             <div
@@ -217,29 +220,25 @@ export function Sessions(): JSX.Element {
                     <span className={styles.convTitle}>{conversation.title}</span>
                   </button>
                   <div className={styles.convMeta}>
-                    <SessionStatusPill status={conversation.status} />
-                    <SessionCostIndicator cost={sessionCosts[conversation.id]} isAdmin={isAdmin} />
-                    <span className={styles.convSpacer} />
-                    <SessionStatusMenu
-                      title={conversation.title}
-                      status={conversation.status}
-                      onSetStatus={(status) => handleSetStatus(conversation.id, status)}
-                      {...(canCompleteAndSummarize(conversation.status)
-                        ? { onCompleteAndSummarize: () => completeAndSummarize(conversation.id) }
-                        : {})}
-                    />
-                    <IconButton
-                      aria-label={`Rename ${conversation.title}`}
-                      onClick={() => setRenamingId(conversation.id)}
-                    >
-                      <Pencil size={14} aria-hidden="true" />
-                    </IconButton>
-                    <IconButton
-                      aria-label={`Delete ${conversation.title}`}
-                      onClick={() => void remove(conversation.id)}
-                    >
-                      <Trash2 size={14} aria-hidden="true" />
-                    </IconButton>
+                    <span className={styles.convInfo}>
+                      <SessionStatusPill status={conversation.status} />
+                      <SessionCostIndicator
+                        cost={sessionCosts[conversation.id]}
+                        isAdmin={isAdmin}
+                      />
+                    </span>
+                    <span className={styles.convActions}>
+                      <SessionStatusMenu
+                        title={conversation.title}
+                        status={conversation.status}
+                        onSetStatus={(status) => handleSetStatus(conversation.id, status)}
+                        {...(canCompleteAndSummarize(conversation.status)
+                          ? { onCompleteAndSummarize: () => completeAndSummarize(conversation.id) }
+                          : {})}
+                        onRename={() => setRenamingId(conversation.id)}
+                        onDelete={() => void remove(conversation.id)}
+                      />
+                    </span>
                   </div>
                 </>
               )}

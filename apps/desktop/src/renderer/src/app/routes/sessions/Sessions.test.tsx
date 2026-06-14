@@ -72,7 +72,11 @@ describe('Sessions', () => {
     });
     setAiEnabled(true);
     renderSessions();
-    await userEvent.click(await screen.findByRole('button', { name: 'Rename Old title' }));
+    // Rename lives in the per-session kebab now (no standalone icon clutter).
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Session options for Old title' }),
+    );
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Rename' }));
     const input = screen.getByLabelText('Session title');
     await userEvent.clear(input);
     await userEvent.type(input, 'New title{Enter}');

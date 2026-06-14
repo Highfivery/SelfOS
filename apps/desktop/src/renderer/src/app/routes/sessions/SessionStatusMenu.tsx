@@ -11,6 +11,10 @@ interface SessionStatusMenuProps {
   onSetStatus: (status: SessionStatus) => void;
   /** Offered only when AI is configured: complete the session AND summarize it in one action. */
   onCompleteAndSummarize?: () => void;
+  /** Rename the session (list rows only) — keeps the row uncluttered (no standalone icon buttons). */
+  onRename?: () => void;
+  /** Delete the session (list rows only). */
+  onDelete?: () => void;
 }
 
 /**
@@ -22,6 +26,8 @@ export function SessionStatusMenu({
   status,
   onSetStatus,
   onCompleteAndSummarize,
+  onRename,
+  onDelete,
 }: SessionStatusMenuProps): JSX.Element {
   const [open, setOpen] = useState(false);
 
@@ -79,6 +85,27 @@ export function SessionStatusMenu({
                 onClick={() => choose(onCompleteAndSummarize)}
               >
                 Complete &amp; summarize
+              </button>
+            ) : null}
+            {onRename || onDelete ? <div className={styles.menuDivider} role="separator" /> : null}
+            {onRename ? (
+              <button
+                type="button"
+                role="menuitem"
+                className={styles.menuItem}
+                onClick={() => choose(onRename)}
+              >
+                Rename
+              </button>
+            ) : null}
+            {onDelete ? (
+              <button
+                type="button"
+                role="menuitem"
+                className={`${styles.menuItem} ${styles.menuItemDanger}`}
+                onClick={() => choose(onDelete)}
+              >
+                Delete
               </button>
             ) : null}
           </div>

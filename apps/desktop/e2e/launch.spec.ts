@@ -663,8 +663,13 @@ test('sessions: send a message, stream a reply, and show the usage header + cris
     await expect(w.getByText(/This session:/)).toHaveCount(0); // no cost in sessions
     await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible(); // crisis footer
 
-    // Rename the conversation.
-    await w.getByRole('button', { name: /^Rename / }).click();
+    // Rename the conversation (via the per-session kebab — no standalone icon buttons).
+    await w
+      .getByRole('complementary', { name: 'Conversations' })
+      .getByRole('button', { name: /Session options for/ })
+      .first()
+      .click();
+    await w.getByRole('menuitem', { name: 'Rename' }).click();
     const titleInput = w.getByLabel('Session title');
     await titleInput.fill('My week');
     await titleInput.press('Enter');
@@ -694,7 +699,12 @@ test('sessions: switching accounts immediately clears the previous person’s se
     await w.getByLabel('Message').fill('owner private note');
     await w.getByRole('button', { name: 'Send' }).click();
     await expect(w.getByText(/hear you/i).first()).toBeVisible();
-    await w.getByRole('button', { name: /^Rename / }).click();
+    await w
+      .getByRole('complementary', { name: 'Conversations' })
+      .getByRole('button', { name: /Session options for/ })
+      .first()
+      .click();
+    await w.getByRole('menuitem', { name: 'Rename' }).click();
     const title = w.getByLabel('Session title');
     await title.fill('OWNER-ONLY SESSION');
     await title.press('Enter');
@@ -749,6 +759,7 @@ test('sessions: complete + summarize feeds a later session; status filter + reop
 
     // Complete & summarize from the per-item menu → the wrap-up card appears inline.
     await w
+      .getByRole('complementary', { name: 'Conversations' })
       .getByRole('button', { name: /Session options for/ })
       .first()
       .click();
@@ -829,6 +840,7 @@ test('guided sessions: start a guided exercise → steered reply → complete & 
 
     // Complete & summarize → the wrap-up card; the Insight notes the exercise + feeds later context.
     await w
+      .getByRole('complementary', { name: 'Conversations' })
       .getByRole('button', { name: /Session options for/ })
       .first()
       .click();
@@ -850,13 +862,35 @@ test('guided sessions: start a guided exercise → steered reply → complete & 
     await w.getByRole('button', { name: /get personalized suggestions/i }).click();
     await expect(w.getByText('A grounding place to start.')).toBeVisible();
 
-    // No horizontal overflow at phone width.
+    // No horizontal overflow at phone width — AND no INNER horizontal scrollbar anywhere (a filter/toolbar
+    // that scrolls-x is a UX failure the `main`-only guard misses; see the guided-sessions polish pass).
     await w.setViewportSize({ width: 390, height: 780 });
-    const overflow = await w.evaluate(() => {
+    const noInnerScrollbars = await w.evaluate(() => {
+      const offenders: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          offenders.push(`${el.tagName}.${el.className}`);
+        }
+      });
       const main = document.querySelector('main');
-      return main ? main.scrollWidth - main.clientWidth : 0;
+      return { offenders, mainOverflow: main ? main.scrollWidth - main.clientWidth : 0 };
     });
-    expect(overflow).toBeLessThanOrEqual(1);
+    expect(noInnerScrollbars.offenders).toEqual([]);
+    expect(noInnerScrollbars.mainOverflow).toBeLessThanOrEqual(1);
+    // The desktop sidebar is narrow too — re-check there's no horizontal scrollbar at a small desktop width.
+    await w.setViewportSize({ width: 900, height: 800 });
+    const desktopOffenders = await w.evaluate(() => {
+      const offenders: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          offenders.push(`${el.tagName}.${el.className}`);
+        }
+      });
+      return offenders;
+    });
+    expect(desktopOffenders).toEqual([]);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -905,6 +939,7 @@ test('sessions: a member sees a usage bar with no $; memory-off blocks summarizi
     // With session memory off, completing is allowed but NO summarize affordance is offered — neither the
     // "Complete & summarize" menu item nor an inline "Summarize this session" button (no dead-end spend).
     await w
+      .getByRole('complementary', { name: 'Conversations' })
       .getByRole('button', { name: /Session options for/ })
       .first()
       .click();

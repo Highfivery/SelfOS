@@ -122,7 +122,10 @@ A slice is **not** done until **all** of these pass:
 - [ ] E2E tests for **every** new user-facing surface/section, not just the happy path (Playwright);
       include a no-horizontal-overflow / layout guard for content-heavy screens, and a geometry guard
       for fixed-size controls (e.g. a toggle must not shrink in a flex row — assert computed
-      `flex-shrink` / thumb position)
+      `flex-shrink` / thumb position). **The overflow guard must catch INNER scrollbars too** — assert NO
+      element has `scrollWidth > clientWidth` with computed `overflow-x: auto|scroll` (not just `main`);
+      and test at the **actual rendered container widths** (e.g. the narrow Sessions sidebar, ~240px),
+      not only the 390px page width — a `main`-only check missed a scrolling filter + a clipped sidebar.
 - [ ] **Docs in lockstep** — relevant spec / `CLAUDE.md` / skills updated (`sync-docs`)
 - [ ] **Self code-review** passed (`code-reviewer` agent); findings fixed or explicitly accepted
 - [ ] Accessibility check for any UI
@@ -228,6 +231,22 @@ placing anything. Specifically:
   spacing, vertical rhythm, and polish — not only "does it work." Screenshot every touched surface and
   look critically (e.g. buttons must bottom-align with the labelled fields beside them, not float
   mid-height). Catch bad-looking UI before the user does. (DoD §7.)
+- **NO horizontal scrollbars — anywhere, ever.** Not page-level and **not inner controls**. A filter row,
+  toolbar, tab strip, or `SegmentedControl` that scrolls-x to fit is a UX failure: make it **wrap** (flex
+  pill chips) or use a compact control (Select). The "SegmentedControl scrolls-x when it can't fit" pattern
+  is **banned for primary filters** in narrow panes (e.g. the Sessions sidebar). Test it (see §7).
+- **Cards & rows: never let a title fight a tag/badge for the same line.** A title + framework tag on one
+  line wraps the title a word-per-line at narrow widths — ugly. Put the tag as an **eyebrow above** the
+  title (or below); give the title the full width. Likewise, don't cram many controls into one narrow row —
+  collapse secondary actions (rename/delete) into a **kebab menu** rather than a wrapping icon cluster.
+- **Flex truncation:** any text in a flex row that should ellipsize needs `min-width: 0` on the flex item
+  (and the container) or it overflows its pane — the classic flexbox footgun. Verify narrow panes don't
+  overflow.
+- **Dropdown menus must not be clipped** by an `overflow: auto/scroll` ancestor, and a right-aligned menu
+  must not render off-screen — pin its trigger so the menu stays in view (don't let the trigger wrap to a
+  left-aligned line under a `right: 0` menu).
+- **Collapsible/accordion** content needs clear spacing between the summary and its body when open (never
+  let the first item butt up against the title).
 - **"Improve" means redesign, not relocate.** When asked to improve or move a component, actually
   redesign it for its new context — fit, density, space-conservation, cohesion with neighbours — don't
   just move the existing component. (E.g. the appearance control became a compact icon→popover in the
@@ -239,6 +258,28 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-14 — Polish + **rules update** (Sessions launcher UI/UX pass; user flagged avoidable flaws). Fixed:
+  (1) the status filter was a `SegmentedControl` that **scrolled-x** in the narrow sidebar → replaced with
+  **wrapping pill chips** (no scrollbar); (2) guided-session cards put the title + framework tag on one line
+  → title wrapped a word-per-line at narrow widths → **tag is now an eyebrow ABOVE a full-width title**;
+  (3) the Intimacy accordion butted its content against the title → **`details[open]` summary margin-bottom**;
+  (4) a **pre-existing flexbox bug** — the conversation title lacked `min-width:0` so it overflowed the sidebar
+  (horizontal scrollbar) → fixed; (5) the row crammed 3 pills + 3 action icons → **rename/delete collapsed into
+  the kebab menu**, leaving one clean `⋯` (also fixed a real **dropdown-clipping** bug: the wrapped lone kebab
+  went left-aligned and its `right:0` menu rendered off the sidebar's edge where `overflow` clipped it). **Rules
+  updated** per the user: CLAUDE.md **§12** (no horizontal scrollbars anywhere incl. inner controls; title never
+  shares a line with a tag; flex `min-width:0`; dropdowns not clipped; accordion spacing) + **§7 DoD** (the E2E
+  overflow guard must catch INNER scrollbars — assert no element has `scrollWidth>clientWidth` with
+  `overflow-x:auto|scroll` — and test at the ACTUAL container widths, e.g. the ~240px sidebar, not just 390px);
+  memory `selfos-ui-conventions` synced. The guided E2E now asserts **no inner scrollbar at 390px AND 900px**;
+  session kebab E2E interactions **scoped to the Conversations sidebar** (fixes a flaky race where the thread-head
+  kebab — which has no Rename — was grabbed by `.first()` before the sidebar row rendered). Gate green:
+  typecheck/lint/format, 336 core + 389 desktop unit, **56 E2E** (incl. 5 session tests ×2 for flakiness). Visual
+  QA at desktop + 390px (filter chips wrap, eyebrow-tag cards, decluttered rows, no scrollbars, no console
+  errors). **Lesson: a `main`-only overflow guard misses inner scrollbars (a scrolling SegmentedControl) and
+  pane-specific overflow (a `min-width:0`-less flex title) — the guard must scan ALL elements for
+  `overflow-x:auto|scroll` + `scrollWidth>clientWidth` and run at the real narrow container widths; and a
+  `right:0` dropdown whose trigger can wrap to a left-aligned line will render off-screen and get clipped.**
 - 2026-06-14 — Build (**App-refresh package C — guided sessions; SPEC 16 FULLY BUILT**;
   [16-guided-sessions](docs/specs/16-guided-sessions.md), builds on `05`/`06`/`09`/`08`/`04`). The Sessions start
   screen is now a **launcher**: free-start ("What do you want to work through?") + an AI **"Suggested for you"** row

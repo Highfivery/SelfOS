@@ -127,6 +127,16 @@ function makeHost(): {
           usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
       }
+      // Guided "Suggested for you" → return a JSON array of catalog ids (16 §3.4).
+      if (userText.includes('exercises fit them') || userText.includes('starter exercises')) {
+        return Promise.resolve({
+          text: JSON.stringify([
+            { guideId: 'values-clarification', reason: 'A grounding start.' },
+            { guideId: 'grow-goal-setting', reason: 'You named a goal.' },
+          ]),
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
       // Session analysis asks to "summarize this session" → return a valid SessionAnalysisDraft.
       if (userText.includes('summarize this session')) {
         return Promise.resolve({
@@ -469,6 +479,44 @@ describe('createCoreBridge', () => {
       ok: false,
       reason: 'ERROR',
     });
+  });
+
+  it('starts a guided session (stamps guideId + opener), suggests (cached), and gates by sessions.own', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+
+    // Start a guided chat: a conversation is created with the guideId + a seeded opener.
+    const started = await bridge.sessionsStartGuided({ guideId: 'cbt-thought-record' });
+    expect(started).not.toBeNull();
+    const conversation = await bridge.conversationsGet(started!.conversationId);
+    expect(conversation?.guideId).toBe('cbt-thought-record');
+    expect(conversation?.guideStep).toBe(0);
+    expect(conversation?.messages).toHaveLength(1);
+    const list = await bridge.conversationsList();
+    expect(list.find((c) => c.id === started!.conversationId)?.guideId).toBe('cbt-thought-record');
+
+    // An unknown id is rejected.
+    expect(await bridge.sessionsStartGuided({ guideId: 'nope' })).toBeNull();
+
+    // Suggestions: generate (spends), then the launcher's no-spend read returns the cache.
+    const suggest = await bridge.guidedSuggest();
+    expect(suggest.ok).toBe(true);
+    if (suggest.ok) expect(suggest.suggestions.length).toBeGreaterThan(0);
+    const state = await bridge.guidedGetState();
+    expect(state.cache?.suggestions.length).toBeGreaterThan(0);
+    expect(state.adultAcknowledged).toBe(false);
+
+    // 18+ ack flips the per-person flag.
+    const acked = await bridge.guidedAcknowledgeAdult();
+    expect(acked.adultAcknowledged).toBe(true);
+
+    // A guest (no sessions.own) is denied all guided ops.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+    expect(await bridge.sessionsStartGuided({ guideId: 'reflective-session' })).toBeNull();
+    expect(await bridge.guidedGetState()).toEqual({ cache: null, adultAcknowledged: false });
+    expect(await bridge.guidedSuggest()).toMatchObject({ ok: false, reason: 'DENIED' });
   });
 
   it('creates a member invite but refuses to wrap the master key for the owner', async () => {

@@ -14,6 +14,8 @@ import {
   type DreamSharedImage,
   type DreamShareResult,
   type DreamSynthesisResult,
+  type GuidanceState,
+  type GuidedSuggestResult,
   type HouseholdStatus,
   type InviteSummary,
   type SelfosBridge,
@@ -137,13 +139,18 @@ import {
   summarize,
 } from '@selfos/core/usage';
 import {
+  acknowledgeAdult,
   deleteConversation,
   endAndSummarize,
   getConversation,
+  getGuidancePrefs,
+  getGuidanceState,
   listConversations,
   runChatTurn,
   saveConversation,
   setSessionStatus,
+  startGuided,
+  suggestGuidedSessions,
 } from '@selfos/core/conversations';
 import {
   deleteInsight,
@@ -365,6 +372,7 @@ const ChatStreamSchema = z.object({
   userText: z.string().min(1),
 });
 const ChatConversationIdSchema = z.object({ conversationId: z.string().min(1) });
+const StartGuidedSchema = z.object({ guideId: z.string().min(1) });
 const SessionSetStatusSchema = z.object({
   conversationId: z.string().min(1),
   status: SessionStatusSchema,
@@ -997,6 +1005,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         title: c.title,
         updatedAt: c.updatedAt,
         status: conversationStatus(c),
+        ...(c.guideId ? { guideId: c.guideId } : {}),
       }));
     },
     conversationsGet: async (id): Promise<Conversation | null> => {
@@ -1092,6 +1101,41 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         memoryEnabled,
         now: new Date(),
       });
+    },
+    // --- Guided sessions (16-guided-sessions §6) — gated by `sessions.own` ---
+    sessionsStartGuided: async (input): Promise<{ conversationId: string } | null> => {
+      const { guideId } = StartGuidedSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'sessions.own'))) {
+        return null;
+      }
+      return startGuided({ fs: ctx.fs, key: ctx.key, personId, guideId, now: new Date() });
+    },
+    guidedGetState: async (): Promise<GuidanceState> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'sessions.own'))) {
+        return { cache: null, adultAcknowledged: false };
+      }
+      return getGuidanceState(ctx.fs, ctx.key, personId);
+    },
+    guidedSuggest: async (): Promise<GuidedSuggestResult> => {
+      // Reuses the gap-finder deps (budget + metering + key-in-main), gated on `sessions.own`.
+      const deps = await aiDeps('sessions.own');
+      if (!deps) return { ok: false, reason: 'DENIED', message: 'Not available.' };
+      // The Intimacy group is excluded from suggestions until the 18+ ack (§8.3).
+      const prefs = await getGuidancePrefs(deps.fs, deps.key, deps.personId);
+      return suggestGuidedSessions(deps, { adultAllowed: prefs.adultAcknowledged === true });
+    },
+    guidedAcknowledgeAdult: async (): Promise<GuidanceState> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'sessions.own'))) {
+        return { cache: null, adultAcknowledged: false };
+      }
+      await acknowledgeAdult(ctx.fs, ctx.key, personId);
+      return getGuidanceState(ctx.fs, ctx.key, personId);
     },
     usageSessionCosts: async (): Promise<Record<string, SessionCost>> => {
       const ctx = await host.vaultAndKey();

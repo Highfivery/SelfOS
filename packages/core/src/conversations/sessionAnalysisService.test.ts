@@ -135,6 +135,15 @@ describe('endAndSummarize', () => {
     await saveConversation(fs, key, conversation('c1', 'p1'));
   });
 
+  it('notes the guided exercise on the Insight (provenance + a leading Exercise fact) (16 §3.5)', async () => {
+    await saveConversation(fs, key, conversation('g1', 'p1', { guideId: 'cbt-thought-record' }));
+    const result = await endAndSummarize(deps({ conversationId: 'g1' }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.insight.provenance.guideId).toBe('cbt-thought-record');
+    expect(result.insight.facts[0]?.text).toBe('Exercise: Thought Record (CBT)');
+  });
+
   it('produces an auto-approved SessionInsight with mood metrics + completes the session', async () => {
     const result = await endAndSummarize(deps());
     expect(result.ok).toBe(true);

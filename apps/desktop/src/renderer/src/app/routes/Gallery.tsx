@@ -23,6 +23,8 @@ import {
   TrendLine,
   type SegmentOption,
 } from '../../design-system/components';
+import { GuidedExerciseCard } from './sessions/GuidedExerciseCard';
+import { GuidedStepper } from './sessions/GuidedStepper';
 import styles from './Gallery.module.css';
 
 type Align = 'left' | 'center' | 'right';
@@ -238,6 +240,56 @@ export function Gallery(): JSX.Element {
                 aria-label="Example mood trend"
               />
             </div>
+          </Stack>
+        </Section>
+
+        <Section title="Guided sessions (16)">
+          <Stack gap={5} className={styles.column}>
+            <Text size="sm" weight={600} tone="secondary">
+              GuidedExerciseCard — catalog + suggestion (with personalized reason)
+            </Text>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+                gap: 'var(--space-3)',
+              }}
+            >
+              <GuidedExerciseCard
+                exercise={{
+                  id: 'demo-chat',
+                  title: 'Values Clarification',
+                  framework: 'ACT',
+                  blurb: 'Reconnect with what matters most to you.',
+                  kind: 'chat',
+                }}
+                onPick={() => {}}
+              />
+              <GuidedExerciseCard
+                exercise={{
+                  id: 'demo-structured',
+                  title: 'Thought Record',
+                  framework: 'CBT',
+                  blurb: 'Examine a difficult thought and find a more balanced perspective.',
+                  kind: 'structured',
+                }}
+                reason="You mentioned a worry that keeps looping — this can help untangle it."
+                onPick={() => {}}
+              />
+            </div>
+            <Text size="sm" weight={600} tone="secondary">
+              GuidedStepper — current step marked (not colour alone)
+            </Text>
+            <GuidedStepper
+              steps={[
+                'Situation',
+                'Feelings',
+                'Automatic thoughts',
+                'Evidence',
+                'Balanced reframe',
+              ]}
+              current={2}
+            />
           </Stack>
         </Section>
       </Stack>

@@ -99,6 +99,11 @@ service (AES-256-GCM, master key). Zod-validated on read; `schemaVersion` + migr
 > **`insightStale?`** to `Conversation` for the session lifecycle + "End & summarize" flow. All four are
 > **additive-optional**: an existing transcript with none of them reads as an in-progress, never-summarized
 > session, so **no `schemaVersion` bump or migration** is needed (09 §4).
+>
+> **Amended by [`16-guided-sessions.md`](16-guided-sessions.md) (Approved + built)** — adds **`guideId?`** (the
+> guided exercise that seeded the session; absent ⇒ a free session) and **`guideStep?`** (current step index, for
+> structured exercises only). Also additive-optional → **no `schemaVersion` bump** (16 §4.2). When `guideId` is
+> set, the system prompt appends the exercise's steering addendum **after** PERSONA + SAFETY + context (16 §5).
 
 ## 5. Architecture & modules
 

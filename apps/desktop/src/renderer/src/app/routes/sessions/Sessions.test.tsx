@@ -38,12 +38,14 @@ afterEach(() => {
 });
 
 describe('Sessions', () => {
-  it('prompts to set up AI when not configured, with a Settings shortcut + crisis footer', async () => {
+  it('shows the launcher with a calm connect state when AI is off, plus the catalog + crisis footer', async () => {
     installMockBridge({ secretHas: () => Promise.resolve(false) });
     setAiEnabled(false);
     renderSessions();
-    expect(await screen.findByText('Connect Claude to start')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Open Settings' })).toBeInTheDocument();
+    // The launcher renders even with AI off — the catalog browses; only chatting needs AI.
+    expect(await screen.findByText('What do you want to work through?')).toBeInTheDocument();
+    expect(screen.getByText(/to start talking/i)).toBeInTheDocument();
+    expect(screen.getByText('Reflective & therapy-informed')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /get help now/i })).toBeInTheDocument();
   });
 

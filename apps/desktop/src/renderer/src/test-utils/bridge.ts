@@ -150,6 +150,11 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     sessionsSetStatus: () => Promise.resolve(null),
     sessionsEndAndSummarize: () =>
       Promise.resolve({ ok: false, reason: 'ERROR', message: 'not configured' }),
+    sessionsStartGuided: () => Promise.resolve(null),
+    guidedGetState: () => Promise.resolve({ cache: null, adultAcknowledged: false }),
+    guidedSuggest: () =>
+      Promise.resolve({ ok: false, reason: 'DENIED', message: 'not configured' }),
+    guidedAcknowledgeAdult: () => Promise.resolve({ cache: null, adultAcknowledged: true }),
     usageSessionCosts: () => Promise.resolve({}),
     questionnairesList: () => Promise.resolve([]),
     questionnairesGet: () => Promise.resolve(null),

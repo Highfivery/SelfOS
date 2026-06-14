@@ -1,0 +1,207 @@
+.launcher {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding-right: var(--space-2);
+}
+
+.freeStart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-alt);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.sectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+/* Grid of exercise cards — reflows to one column on phones (§9). */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  text-align: left;
+  min-width: 0;
+}
+
+.card:hover:not(:disabled) {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-alt);
+}
+
+.card:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.card:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.cardTitle {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.cardTag {
+  flex: none;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.cardBlurb {
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.cardKind {
+  color: var(--color-text-tertiary);
+  font-size: var(--text-xs);
+}
+
+/* Collapsible catalog groups (native <details>). */
+.group {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
+}
+
+.groupSummary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  list-style: none;
+}
+
+.groupSummary::-webkit-details-marker {
+  display: none;
+}
+
+.groupTitle {
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.groupSummary:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.adultTag {
+  flex: none;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+}
+
+.muted {
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.linkButton {
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--color-accent-text);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* Suggested cards carry the AI's personalized reason in place of the static blurb. */
+.reason {
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  font-style: italic;
+}
+
+/* Structured-exercise stepper, shown beside the thread. */
+.stepper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.stepActive {
+  border-color: var(--color-accent-solid);
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+  font-weight: 600;
+}
+
+.stepDone {
+  color: var(--color-text-tertiary);
+}
+
+.stepIndex {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-surface-alt);
+  font-size: var(--text-xs);
+  flex: none;
+}
+
+.stepActive .stepIndex {
+  background: var(--color-accent-solid);
+  color: var(--color-accent-solid-text);
+}

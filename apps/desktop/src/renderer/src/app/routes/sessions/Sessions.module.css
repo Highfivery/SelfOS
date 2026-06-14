@@ -116,6 +116,16 @@
   padding-right: var(--space-2);
 }
 
+.connectLink {
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--color-accent-text);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
 .empty {
   display: flex;
   align-items: center;

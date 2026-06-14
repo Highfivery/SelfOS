@@ -85,6 +85,18 @@ export function fakeClaudeClient(): ClaudeClient {
         });
       }
 
+      // The guided "Suggested for you" turn (16 §3.4) asks which catalog exercises fit. Return a JSON
+      // array of real catalog ids so the offline suggest path parses + validates deterministically.
+      if (userText.includes('exercises fit them') || userText.includes('starter exercises')) {
+        return Promise.resolve({
+          text: JSON.stringify([
+            { guideId: 'values-clarification', reason: 'A grounding place to start.' },
+            { guideId: 'grow-goal-setting', reason: 'You mentioned a goal to move forward.' },
+          ]),
+          usage: { inputTokens: 120, outputTokens: 50, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+
       // The session-analysis turn (09 §5) asks to "summarize this session" as a JSON object. Return a
       // valid SessionAnalysisDraft so the offline End & summarize path parses + produces facts/mood.
       if (userText.includes('summarize this session')) {

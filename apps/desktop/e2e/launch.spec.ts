@@ -796,6 +796,74 @@ test('sessions: complete + summarize feeds a later session; status filter + reop
   }
 });
 
+test('guided sessions: start a guided exercise → steered reply → complete & summarize; intimacy gated; suggestions (16)', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Sessions' }).click();
+
+    // The launcher is the start state: framing + the grouped catalog.
+    await expect(w.getByText('What do you want to work through?')).toBeVisible();
+    await expect(w.getByText('Reflective & therapy-informed')).toBeVisible();
+
+    // The Intimacy group is gated behind a one-time 18+ ack (§8.3): expand it, the cards are hidden.
+    await w.getByText('Intimacy & connection').click();
+    await expect(w.getByRole('button', { name: /Start Sensate Focus/ })).toHaveCount(0);
+    await w.getByRole('button', { name: /18 or older/i }).click();
+    await expect(w.getByRole('button', { name: /Start Sensate Focus/ }).first()).toBeVisible();
+
+    // Start a structured exercise (Thought Record) → the static opener seeds + the stepper appears.
+    await w
+      .getByRole('button', { name: /Start Thought Record/ })
+      .first()
+      .click();
+    await expect(w.getByText(/work through a Thought Record/i)).toBeVisible();
+    await expect(w.getByText('Situation', { exact: true })).toBeVisible(); // the stepper's first step
+
+    // A steered turn streams a reply.
+    await w.getByLabel('Message').fill('Here is the situation that upset me');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/hear you/i).first()).toBeVisible();
+
+    // Complete & summarize → the wrap-up card; the Insight notes the exercise + feeds later context.
+    await w
+      .getByRole('button', { name: /Session options for/ })
+      .first()
+      .click();
+    await w.getByRole('menuitem', { name: 'Complete & summarize' }).click();
+    await expect(w.getByRole('heading', { name: 'Session summary' })).toBeVisible();
+
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('guided e2e: master key missing');
+    const insights = await listInsightsForPerson(fs, key, 'owner-1');
+    const session = insights.find((i) => i.source === 'session');
+    expect(session?.provenance.guideId).toBe('cbt-thought-record');
+    expect(session?.facts.some((f) => f.text === 'Exercise: Thought Record (CBT)')).toBe(true);
+    const context = await buildContext(fs, key, 'owner-1');
+    expect(context).toContain('Take a short walk before bed');
+
+    // Back to the launcher → explicit-first-tap suggestions (no silent spend) generate catalog picks.
+    await w.getByRole('button', { name: 'New session' }).click();
+    await w.getByRole('button', { name: /get personalized suggestions/i }).click();
+    await expect(w.getByText('A grounding place to start.')).toBeVisible();
+
+    // No horizontal overflow at phone width.
+    await w.setViewportSize({ width: 390, height: 780 });
+    const overflow = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      return main ? main.scrollWidth - main.clientWidth : 0;
+    });
+    expect(overflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('sessions: a member sees a usage bar with no $; memory-off blocks summarizing (09 §14.3/§3.4)', async () => {
   // Memory off + auto-summarize default off; a non-admin member runs a session.
   const { userData, vault } = await seedReadyVault({

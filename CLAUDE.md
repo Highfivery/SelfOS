@@ -239,6 +239,44 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-14 — Build (**App-refresh package C — guided sessions; SPEC 16 FULLY BUILT**;
+  [16-guided-sessions](docs/specs/16-guided-sessions.md), builds on `05`/`06`/`09`/`08`/`04`). The Sessions start
+  screen is now a **launcher**: free-start ("What do you want to work through?") + an AI **"Suggested for you"** row
+  - a grouped curated **catalog** (Reflective & therapy-informed · Coaching · Intimacy & connection). A guided
+    session is an **ordinary `05` Conversation carrying `guideId`** (+ `guideStep` for structured) — so streaming,
+    metering (`06`), lifecycle + End&summarize (`09`) all work with **no new machinery**. **Asked first** the three
+    unspecced build forks (all confirmed): suggestions are **explicit-first-tap** (no silent spend — `guided:getState`
+    reads the cache, `guided:suggest` spends `guided.suggest`); structured steps advance via an **AI-embedded
+    `[[SELFOS:STEP:n]]` marker** (turn-free, stripped from saved + streamed text, clamped, best-effort — never blocks
+    free input, mirroring the `09` wrap-up marker); the **18+ intimacy ack is per-person in the vault**
+    (`people/<id>/guidance/prefs.enc`, reset on switch). **Core:** `guidedCatalog.ts` (17 built-in exercises, code not
+    vault; **non-clinical group titles + per-card framework tags**; every addendum + opener leads with "self-help
+    inspired by X, **not therapy**"); `guidedSteps.ts`; `buildSystemPrompt(…, guideId?)` appends the addendum
+    **AFTER** PERSONA+SAFETY+context (boundary always leads) + the step convention for structured; `chatService`
+    advances `guideStep` + `stripCoachMarkers`; `guidedSessionService.startGuided` (stamps `guideId`, seeds the
+    **static opener** — no model call, works offline); `guidanceService` (recommender **reusing the questionnaire
+    gap-finder context-provider registry** — structured context only, **never transcripts** — + cache + ack);
+    `endAndSummarize` notes the exercise (`provenance.guideId` + a leading "Exercise: …" fact). **Schema:**
+    additive-optional `Conversation.guideId`/`guideStep` + `InsightProvenance.guideId` (**no schemaVersion bump/
+    migration**); `Guided*` cache/prefs/view schemas; `guided.suggest` usage type. **Seam:** `sessions:startGuided` /
+    `guided:getState` / `guided:suggest` / `guided:acknowledgeAdult` — gated `sessions.own` + active-person-scoped
+    **in the bridge** (the trust boundary; intimacy is excluded from suggestions host-side until acked, not just in
+    the UI); the Claude call + key stay in main. **Renderer:** the launcher (free-start composer + `SuggestedSessions`
+    explicit-first-tap row with calm AI-off/over-budget/thin-profile states + grouped collapsible `GuidedCatalog`
+    with the per-person-gated Intimacy group), `GuidedStepper` beside structured threads, `guidanceStore` (per-person,
+    reset in AppShell), `conversationStore` guide fields + `startGuided`; `/gallery` gains the card + stepper.
+    Code-reviewer **ship** (safety/privacy/gating/spend boundaries all verified airtight; applied the a11y nit — the
+    catalog group title is a styled span in a labelled `<section>`, not a heading nested in the `<summary>` button).
+    Gate green: typecheck (node + web/DOM-lib), lint, format, **336 core + 389 desktop + 8 relay** unit, **+1 E2E**
+    (start a structured guided exercise → opener + stepper → steered reply → complete & summarize → the Insight notes
+    the exercise + the goal feeds a later `buildContext`; the Intimacy group is 18+-gated; explicit-first-tap
+    suggestions; 390px overflow guard). **Visual QA** via the web preview at desktop + 390px (launcher, grouped
+    catalog with framework tags, the 18+ gate → reveal, the structured stepper + not-therapy opener; 0 overflow, no
+    console errors). On `feat/guided-sessions` off `main`. **Lesson: a guided session needs NO new machinery — it's
+    an ordinary Conversation carrying `guideId`; the only additive pieces are a code-only catalog, an addendum
+    appended AFTER (never before) PERSONA+SAFETY, and two turn-embedded markers (wrap-up + step) that cost nothing
+    extra. Every affordance that would SPEND (suggestions) is explicit-first-tap, never auto-run on view.** **NEXT
+    package: D (questionnaire UX) — per the app-refresh plan.**
 - 2026-06-14 — Build (**App-refresh package B — session lifecycle & analysis; SPEC 09 FULLY BUILT** [core +
   the §14 lifecycle amendment]; [09-session-analysis](docs/specs/09-session-analysis.md), amends `05` §4.1).
   Coaching sessions now have an explicit **lifecycle** + **memory**. **Asked first** the three unspecced UX

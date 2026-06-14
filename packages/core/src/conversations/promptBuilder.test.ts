@@ -3,7 +3,8 @@ import { generateMasterKey } from '../crypto';
 import { memFileSystem } from '../host/memFileSystem';
 import { savePerson } from '../people';
 import type { Person } from '../schemas';
-import { buildSystemPrompt } from './promptBuilder';
+import { buildSystemPrompt, PERSONA, SAFETY } from './promptBuilder';
+import { getExercise } from './guidedCatalog';
 
 const key = generateMasterKey();
 let fs: ReturnType<typeof memFileSystem>;
@@ -33,5 +34,37 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('crisis'); // crisis routing
     expect(prompt).toContain('Alex'); // context
     expect(prompt).toContain('enjoys hiking'); // shareable context
+  });
+
+  it('does not append a guided addendum for a free session', async () => {
+    await savePerson(fs, key, person('p1', 'Alex'));
+    const prompt = await buildSystemPrompt(fs, key, 'p1');
+    expect(prompt).not.toContain('SELFOS:STEP');
+    expect(prompt).not.toContain(getExercise('grow-goal-setting')!.systemPromptAddendum);
+  });
+
+  it('appends the exercise addendum AFTER persona+safety for a guided session', async () => {
+    await savePerson(fs, key, person('p1', 'Alex'));
+    const prompt = await buildSystemPrompt(fs, key, 'p1', 'cbt-thought-record');
+    const addendum = getExercise('cbt-thought-record')!.systemPromptAddendum;
+    expect(prompt).toContain(addendum);
+    // Persona + safety still lead — they appear before the addendum.
+    expect(prompt.indexOf(PERSONA)).toBeLessThan(prompt.indexOf(addendum));
+    expect(prompt.indexOf(SAFETY)).toBeLessThan(prompt.indexOf(addendum));
+  });
+
+  it('teaches the step-marker convention only for a structured exercise', async () => {
+    await savePerson(fs, key, person('p1', 'Alex'));
+    const structured = await buildSystemPrompt(fs, key, 'p1', 'grow-goal-setting');
+    expect(structured).toContain('[[SELFOS:STEP:n]]');
+    const chat = await buildSystemPrompt(fs, key, 'p1', 'reflective-session');
+    expect(chat).not.toContain('[[SELFOS:STEP:n]]');
+  });
+
+  it('adds nothing for an unknown/retired guideId (§7)', async () => {
+    await savePerson(fs, key, person('p1', 'Alex'));
+    const guided = await buildSystemPrompt(fs, key, 'p1', 'retired-exercise');
+    const free = await buildSystemPrompt(fs, key, 'p1');
+    expect(guided).toBe(free);
   });
 });

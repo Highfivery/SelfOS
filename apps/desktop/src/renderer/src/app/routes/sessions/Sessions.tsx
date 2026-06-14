@@ -6,11 +6,11 @@ import { useSessionStore } from '../../../stores/sessionStore';
 import { useSetting } from '../../../settings/useSetting';
 import { ANTHROPIC_API_KEY_ID } from '@shared/channels';
 import type { SessionStatus } from '@shared/schemas';
-import { stripWrapUpMarker } from '@selfos/core/conversations';
+import { getExercise, stripCoachMarkers } from '@selfos/core/conversations';
+import { useGuidanceStore } from '../../../stores/guidanceStore';
 import {
   Banner,
   Button,
-  Heading,
   IconButton,
   SegmentedControl,
   Stack,
@@ -19,6 +19,8 @@ import {
 } from '../../../design-system/components';
 import { Composer } from './Composer';
 import { CrisisFooter } from './CrisisFooter';
+import { SessionLauncher } from './SessionLauncher';
+import { GuidedStepper } from './GuidedStepper';
 import { SessionStatusPill } from './SessionStatusPill';
 import { SessionStatusMenu } from './SessionStatusMenu';
 import { SessionCostIndicator } from './SessionCostIndicator';
@@ -43,6 +45,8 @@ export function Sessions(): JSX.Element {
   const activeStatus = useConversationStore((s) => s.activeStatus);
   const activeInsightId = useConversationStore((s) => s.activeInsightId);
   const activeInsightStale = useConversationStore((s) => s.activeInsightStale);
+  const activeGuideId = useConversationStore((s) => s.activeGuideId);
+  const activeGuideStep = useConversationStore((s) => s.activeGuideStep);
   const messages = useConversationStore((s) => s.messages);
   const streaming = useConversationStore((s) => s.streaming);
   const sending = useConversationStore((s) => s.sending);
@@ -53,8 +57,10 @@ export function Sessions(): JSX.Element {
   const error = useConversationStore((s) => s.error);
   const load = useConversationStore((s) => s.load);
   const newConversation = useConversationStore((s) => s.newConversation);
+  const startGuided = useConversationStore((s) => s.startGuided);
   const open = useConversationStore((s) => s.open);
   const send = useConversationStore((s) => s.send);
+  const loadGuidance = useGuidanceStore((s) => s.load);
   const remove = useConversationStore((s) => s.remove);
   const rename = useConversationStore((s) => s.rename);
   const setStatus = useConversationStore((s) => s.setStatus);
@@ -79,10 +85,22 @@ export function Sessions(): JSX.Element {
     newConversation();
     setView('thread');
   };
+  // Free-start from the launcher: send creates the conversation, then the pane flips to the thread.
+  const startFree = (text: string): void => {
+    setView('thread');
+    void send(text);
+  };
+  // Pick a guided exercise from the launcher/suggestions → start it and open the thread.
+  const startGuidedSession = (guideId: string): void => {
+    void startGuided(guideId).then((id) => {
+      if (id) setView('thread');
+    });
+  };
 
   useEffect(() => {
     void load();
-  }, [load]);
+    void loadGuidance();
+  }, [load, loadGuidance]);
   useEffect(() => window.selfos?.onChatChunk(appendChunk), [appendChunk]);
   useEffect(() => {
     void (async () => {
@@ -97,8 +115,14 @@ export function Sessions(): JSX.Element {
   // Summarizing is only meaningful when AI is configured AND session memory is on (the service refuses
   // otherwise) — so every summarize affordance is gated on both, never offering a button that can only fail.
   const summarizeReady = configured && memoryEnabled !== false;
-  // When unconfigured, keep the detail pane (the connect CTA) in view on mobile.
-  const effectiveView = configured ? view : 'thread';
+  const effectiveView = view;
+  // In a session thread once there's an active/seeded session or a turn in flight; otherwise the launcher
+  // (16 §3.1) is the start state. The launcher renders even with AI off (catalog + static guided openers).
+  const inThread = activeId !== null || messages.length > 0 || sending || streaming;
+  // A structured guided exercise shows its stepper beside the thread (16 §3.3).
+  const activeExercise = activeGuideId ? getExercise(activeGuideId) : undefined;
+  const stepperSteps =
+    activeExercise?.kind === 'structured' && activeExercise.steps ? activeExercise.steps : null;
 
   // Completing is the trigger for summarize (09 §14.2): with auto-summarize off (default), completing
   // just completes — the thread then offers summarize so the user confirms before any spend.
@@ -232,22 +256,16 @@ export function Sessions(): JSX.Element {
       </aside>
 
       <section className={styles.main}>
-        {configured ? (
-          <button type="button" className={styles.back} onClick={() => setView('list')}>
-            <ArrowLeft size={16} aria-hidden="true" />
-            Conversations
-          </button>
-        ) : null}
-        {!configured ? (
-          <div className={styles.empty}>
-            <Stack gap={3} align="center">
-              <Heading level={3}>Connect Claude to start</Heading>
-              <Text tone="secondary">Enable AI and add your key to begin a session.</Text>
-              <Button variant="primary" onClick={() => navigate('/settings')}>
-                Open Settings
-              </Button>
-            </Stack>
-          </div>
+        <button type="button" className={styles.back} onClick={() => setView('list')}>
+          <ArrowLeft size={16} aria-hidden="true" />
+          Conversations
+        </button>
+        {!inThread ? (
+          <SessionLauncher
+            configured={configured}
+            onStartFree={startFree}
+            onPickGuided={startGuidedSession}
+          />
         ) : (
           <>
             {activeId !== null ? (
@@ -265,6 +283,8 @@ export function Sessions(): JSX.Element {
               </div>
             ) : null}
 
+            {stepperSteps ? <GuidedStepper steps={stepperSteps} current={activeGuideStep} /> : null}
+
             <div className={styles.thread} ref={threadRef} aria-live="polite" aria-busy={sending}>
               {messages.length === 0 && !streaming && !sending ? (
                 <div className={styles.empty}>
@@ -281,7 +301,7 @@ export function Sessions(): JSX.Element {
                     </div>
                   ))}
                   {streaming ? (
-                    <div className={styles.coachMsg}>{stripWrapUpMarker(streaming)}</div>
+                    <div className={styles.coachMsg}>{stripCoachMarkers(streaming)}</div>
                   ) : null}
                   {sending && !streaming ? (
                     <div className={`${styles.coachMsg} ${styles.thinking}`}>
@@ -319,7 +339,21 @@ export function Sessions(): JSX.Element {
 
             {error ? <Banner tone="warning">{error}</Banner> : null}
 
-            <Composer disabled={sending} onSend={(text) => void send(text)} />
+            {configured ? (
+              <Composer disabled={sending} onSend={(text) => void send(text)} />
+            ) : (
+              <Banner tone="info">
+                Connect Claude in{' '}
+                <button
+                  type="button"
+                  className={styles.connectLink}
+                  onClick={() => navigate('/settings')}
+                >
+                  Settings
+                </button>{' '}
+                to continue this session.
+              </Banner>
+            )}
           </>
         )}
       </section>

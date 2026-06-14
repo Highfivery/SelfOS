@@ -72,6 +72,10 @@ const bridge: SelfosBridge = {
   sessionsSetStatus: (input) => ipcRenderer.invoke(IpcChannels.sessionsSetStatus, input),
   sessionsEndAndSummarize: (input) =>
     ipcRenderer.invoke(IpcChannels.sessionsEndAndSummarize, input),
+  sessionsStartGuided: (input) => ipcRenderer.invoke(IpcChannels.sessionsStartGuided, input),
+  guidedGetState: () => ipcRenderer.invoke(IpcChannels.guidedGetState),
+  guidedSuggest: () => ipcRenderer.invoke(IpcChannels.guidedSuggest),
+  guidedAcknowledgeAdult: () => ipcRenderer.invoke(IpcChannels.guidedAcknowledgeAdult),
   usageSessionCosts: () => ipcRenderer.invoke(IpcChannels.usageSessionCosts),
   questionnairesList: () => ipcRenderer.invoke(IpcChannels.questionnairesList),
   questionnairesGet: (id) => ipcRenderer.invoke(IpcChannels.questionnairesGet, id),

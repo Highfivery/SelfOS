@@ -344,6 +344,10 @@ export const ConversationSchema = z.object({
   endedAt: z.string().optional(), // set when status → 'complete'; absent = not yet completed
   insightId: z.string().optional(), // the current SessionInsight for this conversation
   insightStale: z.boolean().optional(), // true after continuing past an end → re-run on next end
+  // Guided sessions (16-guided-sessions §4.2). Additive-optional — absent `guideId` ⇒ a free session
+  // (today's behaviour). `guideStep` is the current step index for structured exercises only.
+  guideId: z.string().optional(),
+  guideStep: z.number().int().nonnegative().optional(),
 });
 export type Conversation = z.infer<typeof ConversationSchema>;
 
@@ -388,6 +392,7 @@ export const InsightSchema = z.object({
     conversationId: z.string().optional(),
     dreamId: z.string().optional(), // set for dream-sourced insights (12-dreams §4.4)
     compatibilityGroupId: z.string().optional(), // set for compatibility alignment insights (08 §13.5d)
+    guideId: z.string().optional(), // set when the session was a guided exercise (16-guided-sessions §3.5)
     at: z.string(),
   }),
   crisisFlag: z.boolean().optional(),
@@ -1049,6 +1054,53 @@ export interface SessionCost {
   costUsd?: number; // $ — admin-only (budgets.manage)
   budgetRatio?: number; // 0..1 — the session's cost as a share of the person's period budget (no $ leaked)
 }
+
+/**
+ * Guided sessions (16-guided-sessions §4.3). The AI recommender picks catalog exercises that fit the
+ * person right now; each pick carries the exercise id + a one-line reason. Cached per-person in the vault.
+ */
+export const GuidedSuggestionSchema = z.object({
+  guideId: z.string().min(1),
+  reason: z.string(),
+});
+export type GuidedSuggestion = z.infer<typeof GuidedSuggestionSchema>;
+
+/** The per-person cached "Suggested for you" row (16 §4.3) — `people/<id>/guidance/suggestions.enc`. */
+export const GuidedSuggestionsCacheSchema = z.object({
+  schemaVersion: z.number().int().positive(),
+  generatedAt: z.string(),
+  suggestions: z.array(GuidedSuggestionSchema),
+});
+export type GuidedSuggestionsCache = z.infer<typeof GuidedSuggestionsCacheSchema>;
+
+/** Per-person guidance preferences (16 §8.3) — `people/<id>/guidance/prefs.enc`. The 18+ ack lives here. */
+export const GuidancePrefsSchema = z.object({
+  schemaVersion: z.number().int().positive(),
+  adultAcknowledged: z.boolean().optional(), // one-time 18+ acknowledgement for the Intimacy group
+});
+export type GuidancePrefs = z.infer<typeof GuidancePrefsSchema>;
+
+/**
+ * What the launcher reads on open (16 §6) — cached suggestions (no spend) + the 18+ ack state. `cache`
+ * is null until the person taps "Get personalized suggestions" (explicit-first-tap, no silent spend).
+ */
+export interface GuidanceState {
+  cache: { generatedAt: string; suggestions: GuidedSuggestion[] } | null;
+  adultAcknowledged: boolean;
+}
+
+/**
+ * Result of generating/refreshing suggestions (16 §6). On success carries the freshly cached row; on
+ * failure a calm typed envelope (the catalog still works regardless). `REFUSED` ⇒ nothing useful came back.
+ */
+export type GuidedSuggestResult =
+  | { ok: true; generatedAt: string; suggestions: GuidedSuggestion[]; usage: UsageEvent }
+  | {
+      ok: false;
+      reason: 'NO_KEY' | 'BUDGET' | 'ERROR' | 'REFUSED' | 'DENIED';
+      message: string;
+      usage?: UsageEvent;
+    };
 
 /**
  * One Inbox row for the recipient (08-questionnaires §3.3). A **derived** view — the recipient sees the

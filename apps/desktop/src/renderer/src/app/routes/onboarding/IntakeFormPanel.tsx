@@ -103,49 +103,47 @@ export function IntakeFormPanel({
           footer={<></>}
         />
 
-        {/* Optional "Tell me more →" — a brief AI chat to elaborate, only on sections that invite depth. */}
-        {meta.canDeepen ? (
-          <div className={styles.section}>
-            {deepening ? (
-              <>
-                <div className={styles.thread} aria-live="polite" aria-busy={running}>
-                  <div className={`${styles.turn} ${styles.coachMsg}`}>
-                    Anything you’d like to add or go a little deeper on here? Say as much or as
-                    little as you like.
-                  </div>
-                  {(section?.messages ?? []).map((m, i) => (
-                    <div
-                      key={i}
-                      className={`${styles.turn} ${m.role === 'user' ? styles.userMsg : styles.coachMsg}`}
-                    >
-                      {m.content}
-                    </div>
-                  ))}
-                  {running ? (
-                    streaming ? (
-                      <div className={`${styles.turn} ${styles.coachMsg}`}>
-                        {stripIntakeFieldMarkers(streaming)}
-                      </div>
-                    ) : (
-                      <div className={styles.thinking}>Listening…</div>
-                    )
-                  ) : null}
+        {/* Optional "Tell me more →" — a brief AI chat to elaborate. Available on every form section. */}
+        <div className={styles.section}>
+          {deepening ? (
+            <>
+              <div className={styles.thread} aria-live="polite" aria-busy={running}>
+                <div className={`${styles.turn} ${styles.coachMsg}`}>
+                  Anything you’d like to add or go a little deeper on here? Say as much or as little
+                  as you like.
                 </div>
-                <Composer
-                  disabled={running}
-                  onSend={(text) => void runTurn(meta.id, text)}
-                  placeholder="Tell me more…"
-                  autoFocus={false}
-                />
-              </>
-            ) : (
-              <Button variant="ghost" onClick={() => setDeepening(true)}>
-                <MessageCircle size={16} aria-hidden="true" />
-                Tell me more
-              </Button>
-            )}
-          </div>
-        ) : null}
+                {(section?.messages ?? []).map((m, i) => (
+                  <div
+                    key={i}
+                    className={`${styles.turn} ${m.role === 'user' ? styles.userMsg : styles.coachMsg}`}
+                  >
+                    {m.content}
+                  </div>
+                ))}
+                {running ? (
+                  streaming ? (
+                    <div className={`${styles.turn} ${styles.coachMsg}`}>
+                      {stripIntakeFieldMarkers(streaming)}
+                    </div>
+                  ) : (
+                    <div className={styles.thinking}>Listening…</div>
+                  )
+                ) : null}
+              </div>
+              <Composer
+                disabled={running}
+                onSend={(text) => void runTurn(meta.id, text)}
+                placeholder="Tell me more…"
+                autoFocus={false}
+              />
+            </>
+          ) : (
+            <Button variant="ghost" onClick={() => setDeepening(true)}>
+              <MessageCircle size={16} aria-hidden="true" />
+              Tell me more
+            </Button>
+          )}
+        </div>
 
         <div className={styles.controls}>
           <Button

@@ -21,8 +21,6 @@ export interface IntakeFormQuestion {
   private?: boolean;
   /** A sensitive answer (intimacy/trauma) → a `restricted` Insight fact, own-context-only (§8.4). */
   restricted?: boolean;
-  /** Offer an optional "Tell me more →" chat on this question (§14.3) — never on trivial facts. */
-  deepen?: boolean;
 }
 
 export interface IntakeSectionDef {
@@ -266,9 +264,6 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           'What does a typical weekday look like for you?',
           'Walk me through a normal day, start to finish.',
         ),
-        {
-          deepen: true,
-        },
       ),
       f(
         multi('hobbies', 'How do you spend your free time?', [
@@ -466,9 +461,6 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           'One specific goal right now',
           'e.g. run a 10k, change careers, feel calmer',
         ),
-        {
-          deepen: true,
-        },
       ),
       f(longText('goodLife', 'What does a good life look like to you?')),
       f(longText('fiveYears', 'Where do you want to be in five years?')),
@@ -616,7 +608,6 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           {
             field: 'healthNotes',
             private: true,
-            deepen: true,
           },
         ),
       ]),
@@ -702,9 +693,6 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'A pattern you notice in your relationships',
             'e.g. I pull away when things get serious',
           ),
-          {
-            deepen: true,
-          },
         ),
         f(longText('relationshipChallenge', 'Your biggest relationship challenge')),
       ]),
@@ -1559,7 +1547,6 @@ export function intakeSectionMeta(): IntakeSectionMeta[] {
     opener: s.opener,
     ...(s.contentNote !== undefined ? { contentNote: s.contentNote } : {}),
     ...(s.questions ? { questions: s.questions.map((x) => x.q) } : {}),
-    ...(s.questions?.some((x) => x.deepen) ? { canDeepen: true } : {}),
   }));
 }
 

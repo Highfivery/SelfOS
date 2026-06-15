@@ -433,9 +433,10 @@ revealRestricted` (gated + active-person-scoped; restricted facts redacted from 
   (`summarizeForContext`/`buildLinkedPeopleContext`) is unchanged. Synced §3/§5/§6/§8.4/§10/§11.
 - 2026-06-15 — **Hybrid form/chat redesign added (§14, Review).** User feedback: the all-chat interview is slow
   for simple facts, the open prompts are too generic (people abandon them), and the single free-text intimacy
-  question gets skipped. §14 restructures the intake into **quick forms** (factual/structured, no AI), **forms
-  with a selective "go deeper"** chat, and **AI chat** reserved for the deep open topics (family, story, what
-  weighs on you), with **specific concrete questions everywhere** and an **explicit structured intimacy block**.
+  question gets skipped. §14 restructures the intake into **quick forms** (factual/structured, no AI) — each
+  with an optional section-level **"Tell me more →"** chat — and **AI chat** reserved for the deep open topics
+  (family, story, what weighs on you), with **specific concrete questions everywhere** and an **explicit
+  structured intimacy block**.
   Four design decisions resolved ask-first (§14.13): a **short `core` gates first-run** while deep/sensitive
   sections are **`invited` anytime** (completion + trust); **promote** useful answers to real `Person` fields;
   the **Owner can see** intimacy data; **reuse the questionnaire engine** (answer-branching for the sensitive
@@ -448,8 +449,8 @@ revealRestricted` (gated + active-person-scoped; restricted facts redacted from 
   `Person` fields, no AI), the 5 promoted additive `Person` fields, synthesis weaving in form answers
   (restricted sections → restricted facts via a trusted-catalog lookup), `intake:submitForm` IPC (adult-gate
   enforced in the bridge). Slice 2 (renderer): `IntakeFormPanel` (forms via `@selfos/answering`), the
-  core-then-invited Onboarding surface (gated walk → "See my portrait" → "Go deeper" grid), selective go-deeper
-  chat, the People-editor surfacing of the promoted fields. Slice 3 (§15 freshness): the
+  core-then-invited Onboarding surface (gated walk → "See my portrait" → "Go deeper" grid), the section-level
+  go-deeper chat on every form, the People-editor surfacing of the promoted fields. Slice 3 (§15 freshness): the
   `ProfileUpdateSuggestion` model + `@selfos/core/profile` service + the session-analysis producer (emits
   `profileSuggestions`, no extra spend) + the `profile:*` IPC + the Home "Keep your profile fresh" card; dreams/
   questionnaires producers follow the same pattern (deferred). Gate green: typecheck (node + web/DOM-lib), lint,
@@ -496,40 +497,40 @@ This protects **completion** (the gate is a few quick forms) and **trust** (trau
 on a first-run stranger — they're an invitation, on the person's terms). The portrait is a **living document**:
 a starter portrait from core, enriched each time an invited section is added.
 
-### 14.3 Three section modes
+### 14.3 Section modes
 
 Independently of tier, each section declares a **`mode`**:
 
 1. **`form`** — **structured questions** (single/multi-select, scale, short/long text, date), rendered as a
-   quick form. **No AI call** → instant and free. Answer (or skip) → **Continue**.
-2. **`form` + selective go-deeper** — the same form, but **specific questions** carry an optional **"Tell me
-   more →"** opening a brief AI chat to elaborate that one thing. **Never on trivial facts** (gender, pronouns,
-   birthday, languages) — a per-question `allowDeepen` flag set only where elaboration adds value.
-3. **`chat`** — the existing AI-guided adaptive interview (§3.2), driven by a **specific topic checklist**
+   quick form. **No AI call** → instant and free. Answer (or skip) → **Continue**. Every form section also
+   offers an optional **section-level "Tell me more →"** (§14.7): a brief AI chat to elaborate on anything in
+   that section in the person's own words. It's purely optional — the form is complete without it.
+2. **`chat`** — the existing AI-guided adaptive interview (§3.2), driven by a **specific topic checklist**
    (`focus`) instead of one broad prompt. Reserved for the deep open topics: **Family & upbringing**, **Your
    story**, **What weighs on you**.
 
-A `form` section with **no** `allowDeepen` question spends **nothing** and works offline; only go-deeper chats,
+A `form` section spends **nothing** to fill out and works offline; only the optional go-deeper chat,
 `chat` sections, and synthesis call Claude. **Net effect: the gated first-run is mostly free + fast.**
 
 ### 14.4 The restructured catalog (specific questions)
 
 Code-defined (`intakeCatalog.ts`). Indicative set (wording tuned at build). "→field" promotes the answer to a
 real owner-only `Person` field (§14.6); unmapped answers feed synthesis; `restricted` answers feed only the
-person's own context.
+person's own context. **Every `form` section offers an optional section-level "Tell me more →" go-deeper**
+(§14.7) — there is no per-question deepen flag.
 
-| Section                                      | Tier    | Mode        | Specific questions                                                                                                                                                                  |
-| -------------------------------------------- | ------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **The basics**                               | core    | form        | pronouns→`pronouns`, gender→`gender`, birthday(date)→`birthday`, location→`location`, languages(multi)→`languages`, ethnicity→`ethnicity`, occupation→`occupation`. _No go-deeper._ |
-| **Your life now**                            | core    | form+deepen | living situation→`livingSituation`, relationship status→`relationshipStatus`, children→`parentalStatus`, "what fills your days"(text, **deepen**).                                  |
-| **Values & identity**                        | core    | form        | core values(multi)→`values`, faith(single+other)→`faith`, communication style→`communicationStyle`, identity descriptors(multi, optional).                                          |
-| **What you want**                            | core    | form+deepen | growth areas(multi)→`goals`, "a specific goal"(text, **deepen**).                                                                                                                   |
-| **Health & wellbeing** _(private)_           | invited | form+deepen | sleep/energy/stress(scales), movement(single), "anything to keep in mind"(text, **deepen**)→`healthNotes`(private).                                                                 |
-| **Relationships**                            | invited | form+deepen | attachment pattern(single), conflict style(single), what you need(multi), "how you show up when it's hard"(text, **deepen**); infers `communicationStyle`.                          |
-| **Family & upbringing**                      | invited | chat        | checklist: who raised you, siblings, family relationships now, traditions/culture, hard parts, what you carry.                                                                      |
-| **Your story**                               | invited | chat        | checklist: formative chapters, turning points, proudest moments, hardest moments, what shaped you.                                                                                  |
-| **What weighs on you** _(restricted)_        | invited | chat        | checklist (trauma-informed, person sets depth): current stressors, grief/loss, recurring worries, stuck patterns, past trauma — never dig for specifics.                            |
-| **Intimacy & sexuality** _(18+, restricted)_ | invited | form+deepen | see §14.5.                                                                                                                                                                          |
+| Section                                      | Tier    | Mode | Specific questions                                                                                                                                                  |
+| -------------------------------------------- | ------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **The basics**                               | core    | form | pronouns→`pronouns`, gender→`gender`, birthday(date)→`birthday`, location→`location`, languages(multi)→`languages`, ethnicity→`ethnicity`, occupation→`occupation`. |
+| **Your life now**                            | core    | form | living situation→`livingSituation`, relationship status→`relationshipStatus`, children→`parentalStatus`, "what fills your days"(text).                              |
+| **Values & identity**                        | core    | form | core values(multi)→`values`, faith(single+other)→`faith`, communication style→`communicationStyle`, identity descriptors(multi, optional).                          |
+| **What you want**                            | core    | form | growth areas(multi)→`goals`, "a specific goal"(text).                                                                                                               |
+| **Health & wellbeing** _(private)_           | invited | form | sleep/energy/stress(scales), movement(single), "anything to keep in mind"(text)→`healthNotes`(private).                                                             |
+| **Relationships**                            | invited | form | attachment pattern(single), conflict style(single), what you need(multi), "how you show up when it's hard"(text); infers `communicationStyle`.                      |
+| **Family & upbringing**                      | invited | chat | checklist: who raised you, siblings, family relationships now, traditions/culture, hard parts, what you carry.                                                      |
+| **Your story**                               | invited | chat | checklist: formative chapters, turning points, proudest moments, hardest moments, what shaped you.                                                                  |
+| **What weighs on you** _(restricted)_        | invited | chat | checklist (trauma-informed, person sets depth): current stressors, grief/loss, recurring worries, stuck patterns, past trauma — never dig for specifics.            |
+| **Intimacy & sexuality** _(18+, restricted)_ | invited | form | see §14.5.                                                                                                                                                          |
 
 ### 14.4a Full per-section question bank (non-intimacy)
 
@@ -542,9 +543,9 @@ gender identity(single+other)→`gender` · birthday(date)→`birthday` · where
 where you grew up(text) · languages you speak(multi)→`languages` · cultural / ethnic background(text)→`ethnicity` ·
 what you do for work(text)→`occupation` · education level(single) · morning person or night owl(single).
 
-**Your life now** _(core, form+deepen)_ — living situation(single)→`livingSituation` ·
+**Your life now** _(core, form)_ — living situation(single)→`livingSituation` ·
 relationship status(single)→`relationshipStatus` · children / parental status(single)→`parentalStatus` ·
-pets(multi) · what a typical weekday looks like(text, **deepen**) · how you spend your free time / hobbies
+pets(multi) · what a typical weekday looks like(text) · how you spend your free time / hobbies
 (multi)→`interests` · how satisfied with work(scale) · financial situation / money stress(scale) ·
 how socially connected you feel(scale) · biggest current stressor(multi: work/money/relationship/health/family/
 purpose/loneliness/other) · biggest current source of joy(text) · a recent big life change(text) ·
@@ -558,14 +559,13 @@ optional) · personality(multi: introvert↔extrovert, planner↔spontaneous, th
 what you'd never compromise on(text) · who you look up to / a role model(text) · what you want to be remembered
 for(text) · a belief or principle that guides you(text).
 
-**What you want** _(core, form+deepen)_ — growth areas(multi)→`goals` · one specific goal right now(text,
-**deepen**) · what a good life looks like to you(text) · where you want to be in 5 years(text) · a habit you
+**What you want** _(core, form)_ — growth areas(multi)→`goals` · one specific goal right now(text) · what a good life looks like to you(text) · where you want to be in 5 years(text) · a habit you
 want to build(text) · a habit you want to break(text) · what's holding you back(multi/text) · what you keep
 avoiding(text) · what would you do with unlimited time & money(text) · your biggest fear about the future(text) ·
 how you want SelfOS to support you(multi: accountability / reflection / advice / just listen / challenge me /
 track progress) · how you like to be coached(single: gently / directly / challenged / data-driven).
 
-**Health & wellbeing** _(invited, form+deepen, private)_ — sleep quality(scale) · usual sleep schedule(single) ·
+**Health & wellbeing** _(invited, form, private)_ — sleep quality(scale) · usual sleep schedule(single) ·
 energy through the day(scale) · stress level(scale) · how you move / exercise(single) · eating patterns(single) ·
 caffeine(single) · alcohol(single) · smoking / vaping(single) · recreational substances(single, optional,
 private) · in therapy now or in the past(single) · diagnosed physical conditions(text, optional, private) ·
@@ -573,15 +573,15 @@ mental-health diagnoses(text, optional, private) · neurodivergence — ADHD / a
 private) · medications that affect mood or energy(text, optional, private) · chronic pain or illness(text,
 optional, private) · disability or accessibility needs(text, optional, private) · relationship with food /
 any eating-disorder history(text, optional, private) · relationship with your body(scale) · anything else to
-keep in mind(text, **deepen**)→`healthNotes`(private).
+keep in mind(text)→`healthNotes`(private).
 
-**Relationships** _(invited, form+deepen)_ — attachment style(single: secure / anxious / avoidant / mixed, with
+**Relationships** _(invited, form)_ — attachment style(single: secure / anxious / avoidant / mixed, with
 a plain-language helper) · how you handle conflict(single: avoid / accommodate / confront / collaborate) ·
 what you need most from others(multi) · how you express love(multi: words / touch / time / gifts / acts) · how
 you best receive love(multi) · how easily you trust(scale) · how easily you open up(scale) · how you handle
 jealousy(single/text) · your relationship deal-breakers(text) · number of close friends(single) · satisfaction
 with your friendships(scale) · who you turn to in a crisis(text) · loneliness(scale) · how you show up as a
-partner / friend / parent(text) · a recurring pattern you notice in your relationships(text, **deepen**) ·
+partner / friend / parent(text) · a recurring pattern you notice in your relationships(text) ·
 your biggest relationship challenge(text).
 
 **Family & upbringing** _(invited, chat — structured primers, then go deep)_ — primers: who raised you(multi) ·
@@ -725,11 +725,12 @@ footer remain. _(The exact wording + option lists are tuned at build; this inven
   `Person` fields directly** (no AI marker — markers were only for chat; multi → list fields; `private` →
   `privateFields`), persists unmapped answers, and marks the section complete.
 
-### 14.7 Selective go-deeper
+### 14.7 Go-deeper (every form section)
 
-A `deepen` question shows **"Tell me more →"** → a short AI chat **scoped to that one question** (the `chat`
-machinery + `05` `Composer`/stream), seeded with the structured answer. **Optional** (the form is complete
-without it) and **only where `allowDeepen` is set** — never on pure facts. Meters `intake.interview` per turn.
+Every **form** section shows a **"Tell me more →"** affordance below its questions → a short AI chat **scoped
+to that section** (the `chat` machinery + `05` `Composer`/stream). **Optional** (the form is complete without
+it) — the person can elaborate on anything in their own words wherever they like, not only on pre-chosen
+questions. Meters `intake.interview` per turn.
 
 ### 14.8 Synthesis — a living portrait
 
@@ -781,8 +782,8 @@ without it) and **only where `allowDeepen` is set** — never on pure facts. Met
   → `restricted` facts; orientation/style → private fields; branch hides irrelevant Qs; the gate predicate keys
   on **core** only; `buildContext` carries the new shareable fields but not the private/restricted ones to
   others.
-- **Component (RTL):** a core form renders its controls + Continue/Skip; a `deepen` question shows "Tell me
-  more", a pure fact doesn't; the invited intimacy block is 18+-gated → branched structured controls; the
+- **Component (RTL):** a core form renders its controls + Continue/Skip; every form section shows the optional
+  "Tell me more" go-deeper; the invited intimacy block is 18+-gated → branched structured controls; the
   Onboarding surface shows core-then-invited; a `chat` section is unchanged.
 - **E2E:** finish the **core** forms (no AI) → fields decrypt onto the `Person` → starter portrait → **gate
   releases**; later add the invited intimacy block (18+) → a `restricted` fact is owner-visible but redacted for

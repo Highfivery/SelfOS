@@ -14,7 +14,6 @@ const formMeta: IntakeSectionMeta = {
   tier: 'core',
   mode: 'form',
   opener: 'A few quick things.',
-  canDeepen: true,
   questions: [
     {
       id: 'pronouns',
@@ -137,7 +136,7 @@ describe('IntakeFormPanel', () => {
     );
   });
 
-  it('offers an optional "Tell me more" go-deeper chat when the section invites it', async () => {
+  it('offers an optional "Tell me more" go-deeper chat on every form section', async () => {
     const intakeRunTurn = vi.fn(() =>
       Promise.resolve({ ok: true as const, session: {} as never, usage: {} as never }),
     );

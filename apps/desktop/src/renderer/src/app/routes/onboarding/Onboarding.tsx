@@ -261,8 +261,9 @@ export function Onboarding(): JSX.Element {
           <div className={styles.sectionHead}>
             <Heading level={2}>Go deeper</Heading>
             <Text tone="secondary">
-              Add to or update any of these whenever you’re ready — you don’t need to do it all at
-              once. The more you share, the more SelfOS understands you.
+              Add to or update any of these whenever you’re ready — there’s no rush, and you can
+              come back and revisit any section anytime. The more you share, the more SelfOS
+              understands you.
             </Text>
           </div>
           {progressBar}

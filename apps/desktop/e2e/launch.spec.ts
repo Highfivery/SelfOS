@@ -3550,7 +3550,9 @@ test('onboarding: intimacy conditionals reveal under their trigger (penis/vulva/
     await expect(w.getByText('Penis length you’re drawn to')).toBeVisible();
     await expect(w.getByText('Penis girth you like')).toBeVisible();
 
-    // Vulva specifics reveal the same way.
+    // Only vulva-relevant specifics are gated on the vulva question — breast preference is a general body
+    // preference and stays visible regardless (it must NOT be tied to "attracted to a vulva").
+    await expect(w.getByText('Breast size you’re drawn to on a partner')).toBeVisible();
     await expect(w.getByText('Labia you’re drawn to on a partner')).toHaveCount(0);
     await w
       .getByRole('radiogroup', { name: 'Are you attracted to partners with a vulva?' })

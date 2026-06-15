@@ -3175,15 +3175,6 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         }),
         f(
           single(
-            'breastPref',
-            'Breast size you prefer on a partner',
-            ['No preference', 'Smaller', 'Average', 'Larger', 'Other'],
-            when('attractedVulva', true),
-          ),
-          { restricted: true },
-        ),
-        f(
-          single(
             'vulvaLabiaPref',
             'Labia you’re drawn to on a partner',
             [
@@ -3759,6 +3750,16 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'Curvy',
             'Bigger',
             'No preference',
+            'Other',
+          ]),
+          { restricted: true },
+        ),
+        f(
+          single('breastPref', 'Breast size you’re drawn to on a partner', [
+            'No preference',
+            'Smaller',
+            'Average',
+            'Larger',
             'Other',
           ]),
           { restricted: true },

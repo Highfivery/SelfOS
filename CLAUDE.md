@@ -126,6 +126,12 @@ A slice is **not** done until **all** of these pass:
       element has `scrollWidth > clientWidth` with computed `overflow-x: auto|scroll` (not just `main`);
       and test at the **actual rendered container widths** (e.g. the narrow Sessions sidebar, ~240px),
       not only the 390px page width — a `main`-only check missed a scrolling filter + a clipped sidebar.
+      **Assert the FULL surface renders to the bottom — not just "no overflow".** For any content
+      form/section, scroll to the end and assert the LAST element actually shows: every question is visible
+      (no input hidden in a default-collapsed accordion — assert no `<details>` is `!open`), and the trailing
+      affordances (e.g. the onboarding "Tell me more" go-deeper + Continue/Skip) are visible. A passing
+      overflow guard does **not** prove the content is present — a collapsed accordion silently swallowed the
+      last group's questions and every prior check (overflow, screenshots of the top) missed it.
 - [ ] **Docs in lockstep** — relevant spec / `CLAUDE.md` / skills updated (`sync-docs`)
 - [ ] **Self code-review** passed (`code-reviewer` agent); findings fixed or explicitly accepted
 - [ ] Accessibility check for any UI
@@ -255,7 +261,12 @@ placing anything. Specifically:
   must not render off-screen — pin its trigger so the menu stays in view (don't let the trigger wrap to a
   left-aligned line under a `right: 0` menu).
 - **Collapsible/accordion** content needs clear spacing between the summary and its body when open (never
-  let the first item butt up against the title).
+  let the first item butt up against the title). **Never default-COLLAPSE form inputs** — accordion grouping
+  on a form/intake is for optional tidying only, so every group renders **open by default** (still
+  user-collapsible). A group collapsed by default silently hides the questions inside it at the bottom of a
+  section, so a person never sees or answers them (the onboarding "Your circle" group hid four questions; the
+  shared `@selfos/answering` form now opens all groups). Grouped-content forms get the §7 "full surface
+  renders to the bottom" E2E guard.
 - **"Improve" means redesign, not relocate.** When asked to improve or move a component, actually
   redesign it for its new context — fit, density, space-conservation, cohesion with neighbours — don't
   just move the existing component. (E.g. the appearance control became a compact icon→popover in the

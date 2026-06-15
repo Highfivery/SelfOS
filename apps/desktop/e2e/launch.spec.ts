@@ -3428,6 +3428,62 @@ test('onboarding: resumes mid-intake to the saved transcript (18 §3.1)', async 
   }
 });
 
+// Guard: a grouped form section must render EVERY question to the bottom (no group collapsed by default) and
+// always show the section-level "Tell me more" go-deeper above Continue/Skip. This is the regression that kept
+// recurring — a collapsed accordion silently hid the last group's questions at the end of the section.
+test('onboarding: a grouped form section shows every group + the go-deeper (nothing collapsed)', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  {
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('grouped-form e2e: master key missing');
+    // Core resolved so the invited grid is reachable; Relationships (a grouped form) is the section under test.
+    await writeEncryptedJson(
+      fs,
+      'people/owner-1/intake/session.enc',
+      {
+        id: 'intake-grouped',
+        schemaVersion: 1,
+        personId: 'owner-1',
+        status: 'inProgress',
+        sections: ['basics', 'life-now', 'values', 'want', 'relationships'].map((id) => ({
+          id,
+          status: id === 'relationships' ? 'notStarted' : 'skipped',
+          restricted: false,
+          messages: [],
+          answers: {},
+        })),
+        startedAt: 'now',
+        updatedAt: 'now',
+      },
+      key,
+    );
+  }
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: /Onboarding/ }).click();
+    await w.getByRole('button', { name: /Relationships/ }).click();
+
+    // A question in the FIRST group is visible (open)...
+    await expect(w.getByText('Your relationship deal-breakers')).toBeVisible();
+    // ...AND a question in the LAST group ('Your circle') is visible too — i.e. no group is collapsed.
+    await expect(w.getByText('How lonely do you feel?')).toBeVisible();
+    // The section-level go-deeper sits at the end of every form section.
+    await expect(w.getByRole('button', { name: /Tell me more/ })).toBeVisible();
+    // Belt-and-braces: assert no accordion <details> is collapsed (every group open by default).
+    const collapsed = await w.evaluate(
+      () => [...document.querySelectorAll('details')].filter((d) => !d.open).length,
+    );
+    expect(collapsed).toBe(0);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('onboarding: a Member is hard-gated into onboarding until they finish (18 §3.1)', async () => {
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
   await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');

@@ -559,8 +559,10 @@ export function QuestionnaireForm({
     />
   );
 
-  // Long forms can group questions into collapsible accordions (18 §14.3). Ungrouped questions render first;
-  // grouped ones follow as <details> in first-seen group order, with the first group open.
+  // Long forms can group questions under collapsible headings (18 §14.3). Ungrouped questions render first;
+  // grouped ones follow as <details> in first-seen group order. Every group is **open by default** — the
+  // accordion is for optional tidying, never for hiding questions (a collapsed group would silently swallow
+  // inputs at the bottom of a section, so a person never sees them). They stay user-collapsible.
   const ungrouped = visible.filter((q) => !q.group);
   const groupOrder: string[] = [];
   for (const q of visible) if (q.group && !groupOrder.includes(q.group)) groupOrder.push(q.group);
@@ -574,12 +576,8 @@ export function QuestionnaireForm({
           {ungrouped.map(field)}
           {groupOrder.length > 0 ? (
             <div className={styles.groups}>
-              {groupOrder.map((name, i) => (
-                <details
-                  key={name}
-                  className={styles.group}
-                  open={i === 0 && ungrouped.length === 0}
-                >
+              {groupOrder.map((name) => (
+                <details key={name} className={styles.group} open>
                   <summary className={styles.groupSummary}>{name}</summary>
                   <div className={styles.groupBody}>
                     {visible.filter((q) => q.group === name).map(field)}

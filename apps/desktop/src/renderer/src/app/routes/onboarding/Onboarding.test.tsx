@@ -183,6 +183,18 @@ describe('Onboarding', () => {
     expect(localStorage.getItem('selfos:onboarding:section:owner-1')).toBe('weighs');
   });
 
+  it('shows the "Go deeper" navigator on an opened section so you can jump straight to another', async () => {
+    localStorage.setItem('selfos:onboarding:section:owner-1', 'weighs');
+    installMockBridge({ intakeGetState: () => Promise.resolve(state()) });
+    renderOnboarding();
+    // On the opened 'weighs' section, the "Go deeper" navigator is present alongside the section...
+    expect(await screen.findByText('Anything weighing on you?')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Go deeper' })).toBeInTheDocument();
+    // ...and a DIFFERENT section opens directly from it (no Back first).
+    fireEvent.click(screen.getByRole('button', { name: /Intimacy & sexuality/ }));
+    expect(await screen.findByRole('button', { name: /18 or older/ })).toBeInTheDocument();
+  });
+
   it('ignores a stale persisted section id and falls back to the core walk', async () => {
     localStorage.setItem('selfos:onboarding:section:owner-1', 'no-such-section');
     installMockBridge({ intakeGetState: () => Promise.resolve(state()) });

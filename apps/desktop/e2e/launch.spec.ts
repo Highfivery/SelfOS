@@ -3477,6 +3477,16 @@ test('onboarding: a grouped form section shows every group + the go-deeper (noth
       () => [...document.querySelectorAll('details')].filter((d) => !d.open).length,
     );
     expect(collapsed).toBe(0);
+
+    // The "Go deeper" section navigator is ALSO present at the bottom of an opened section (not only on the
+    // core steps), so the person can jump STRAIGHT to another section without going Back first (18 §3.1).
+    await expect(w.getByRole('heading', { name: 'Go deeper' })).toBeVisible();
+    await w.getByRole('button', { name: /Health & wellbeing/ }).click();
+    await expect(w.getByText('How well do you sleep?')).toBeVisible();
+    // And from Health, the navigator is still there to jump onward (e.g. back to Relationships).
+    await expect(w.getByRole('heading', { name: 'Go deeper' })).toBeVisible();
+    await w.getByRole('button', { name: /Relationships/ }).click();
+    await expect(w.getByText('Your relationship deal-breakers')).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

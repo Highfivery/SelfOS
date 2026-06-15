@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Check, Lock, Sparkles } from 'lucide-react';
 import type { IntakeSectionMeta } from '@shared/channels';
@@ -57,6 +57,11 @@ export function Onboarding(): JSX.Element {
     [storageKey],
   );
   const [revisiting, setRevisiting] = useState(false);
+  // Switching sections from the bottom "Go deeper" grid loads the new section at the top — bring it into view.
+  const topRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (activeId) topRef.current?.scrollIntoView?.({ block: 'start' });
+  }, [activeId]);
 
   useEffect(() => window.selfos?.onIntakeChunk(appendChunk), [appendChunk]);
   useEffect(() => {
@@ -161,11 +166,13 @@ export function Onboarding(): JSX.Element {
         <div className={styles.invitedGrid}>
           {invited.map((m) => {
             const done = isResolved(m.id);
+            const current = m.id === activeId;
             return (
               <button
                 key={m.id}
                 type="button"
                 className={styles.invitedCard}
+                aria-current={current ? 'true' : undefined}
                 onClick={() => setActiveId(m.id)}
               >
                 <div className={styles.invitedCardHead}>
@@ -179,7 +186,9 @@ export function Onboarding(): JSX.Element {
                     className={`${styles.invitedTag} ${done ? styles.invitedTagDone : ''}`}
                     aria-hidden="true"
                   >
-                    {statusOf.get(m.id) === 'complete' ? (
+                    {current ? (
+                      'Current'
+                    ) : statusOf.get(m.id) === 'complete' ? (
                       <Check size={14} />
                     ) : statusOf.get(m.id) === 'skipped' ? (
                       'Skipped'
@@ -198,7 +207,7 @@ export function Onboarding(): JSX.Element {
   );
 
   return (
-    <div className={styles.onboarding}>
+    <div className={styles.onboarding} ref={topRef}>
       <header className={styles.header}>
         <Heading level={1}>
           <Sparkles size={20} aria-hidden="true" /> Getting to know you
@@ -213,12 +222,14 @@ export function Onboarding(): JSX.Element {
       {error ? <Banner tone="danger">{error}</Banner> : null}
 
       {openSection ? (
-        // An explicitly-opened (invited) section — show a back affordance to the overview.
+        // An explicitly-opened section — a back affordance, the section, then the "Go deeper" navigator so
+        // the person can jump straight to any other section without going Back first (18 §3.1).
         <>
           <button type="button" className={styles.back} onClick={() => setActiveId(null)}>
             <ArrowLeft size={14} aria-hidden="true" /> Back
           </button>
           {renderPanel(openSection)}
+          <InvitedGrid />
         </>
       ) : !complete ? (
         // The gated first-run: walk the core forms, then offer the portrait.

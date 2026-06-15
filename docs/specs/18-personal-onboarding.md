@@ -92,6 +92,11 @@ views** — shown directly only to a holder of `intake.readRestricted` (the Owne
   remaining and an estimate. The **last-opened section is remembered device-local** (per person), so a reload
   or app restart reopens that section rather than bouncing back to the first unfinished core step; reopening a
   section with an in-progress go-deeper chat shows that transcript directly.
+- **The "Go deeper" section navigator is shown at the bottom of EVERY section** (core steps AND any opened
+  invited section) — the grid of all the deeper sections (Health & wellbeing, Relationships, Family, Your
+  story, What weighs on you, Intimacy & sexuality, each with an Add/Skipped/done/**Current** state). From any
+  section the person can jump **straight** to another without going Back first; switching scrolls the new
+  section to the top.
 
 ### 3.2 The interview (hybrid: structured sections + live AI depth)
 

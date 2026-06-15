@@ -543,11 +543,15 @@ call Claude. **Net effect: the gated first-run is mostly free + fast.** (The `mo
 Code-defined (`intakeCatalog.ts`). Indicative set (wording tuned at build). "→field" promotes the answer to a
 real owner-only `Person` field (§14.6); unmapped answers feed synthesis; `restricted` answers feed only the
 person's own context. **Every `form` section offers an optional section-level "Tell me more →" go-deeper**
-(§14.7) — there is no per-question deepen flag. **12 sections** total; the non-intimacy sections are
-substantial (~15–30 questions each — incl. the two **Work & money** and **Joy & play** sections) so the intake
-is a rounded picture of the whole person, not weighted toward sexuality. Every question is optional/skippable;
+(§14.7) — there is no per-question deepen flag. **12 sections, ~490 questions** total; the non-intimacy
+sections are **deep** (the invited ones run ~40–60 questions each — comparable to the ~95-question intimacy
+block — incl. the two **Work & money** and **Joy & play** sections; "What weighs on you" is kept lighter and
+gentle), so the intake is a rounded picture of the whole person, not weighted toward sexuality. The core
+sections stay quick (~13–17) since they gate first-run. Every question is optional/skippable — the UI makes
+clear you don't do it all at once (you can revisit, add more, and regenerate the portrait anytime, §3.6);
 genuinely sensitive content is own-coaching-only (all intake facts default un-shared) and the heaviest is
-routed to the **restricted** "What weighs on you" section.
+routed to the **restricted** "What weighs on you" section. The table below is **indicative** — the catalog is
+the source of truth.
 
 | Section                                      | Tier    | Mode | Specific questions                                                                                                                                                                |
 | -------------------------------------------- | ------- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

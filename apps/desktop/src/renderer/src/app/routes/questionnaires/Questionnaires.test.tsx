@@ -6,7 +6,7 @@ import { Questionnaires } from './Questionnaires';
 import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useSettingsStore } from '../../../settings/settingsStore';
-import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
+import { clearMockBridge, elevateToOwner, installMockBridge } from '../../../test-utils/bridge';
 
 /** The screen uses `useNavigate` (the AI panel links to Settings), so render inside a router. */
 const renderApp = (): ReturnType<typeof render> =>
@@ -20,7 +20,7 @@ afterEach(() => {
   clearMockBridge();
   useQuestionnaireStore.setState({ questionnaires: [], loaded: false, customTypes: [] });
   useSettingsStore.setState({ values: {} });
-  useSessionStore.setState({ superAdmin: false });
+  useSessionStore.setState({});
 });
 
 /** Turn AI on for the renderer (settings flag + a stubbed key) so the AI surfaces become ready. */
@@ -414,7 +414,7 @@ describe('Questionnaires', () => {
   });
 
   it('offers a Results tab on a saved questionnaire (gated by viewResults)', async () => {
-    useSessionStore.setState({ superAdmin: true }); // grants every capability incl. viewResults
+    elevateToOwner();
     installMockBridge({
       questionnairesList: () =>
         Promise.resolve([
@@ -535,9 +535,9 @@ describe('Questionnaires', () => {
     expect(save).toHaveBeenCalledWith(expect.objectContaining({ sensitivity: 'standard' }));
   });
 
-  it('uses plain visibility copy + the "a record is kept" line for senderSeesAll (§15.3)', async () => {
-    // Grant readRaw via super-admin so senderSeesAll is selectable.
-    useSessionStore.setState({ superAdmin: true });
+  it('uses plain visibility copy + the raw-answers note for senderSeesAll (§15.3)', async () => {
+    // The Owner has readRaw, so senderSeesAll is selectable.
+    elevateToOwner();
     installMockBridge({ questionnairesList: () => Promise.resolve([]) });
     await openNewBuilder();
 
@@ -551,9 +551,7 @@ describe('Questionnaires', () => {
     expect(screen.queryByText(/break-glass|audited/i)).not.toBeInTheDocument();
 
     await userEvent.selectOptions(visibility, 'senderSeesAll');
-    expect(
-      screen.getByText(/a record is kept each time you open their answers/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/read their raw answers/i)).toBeInTheDocument();
   });
 
   it('drops the "Use my information" toggle; generation still uses author context (§15.4)', async () => {

@@ -12,10 +12,10 @@
 
 New feature. Builds on [`05`](05-conversations.md)/[`06`](06-ai-usage-and-budgets.md) (the streaming chat +
 metering it reuses), [`09`](09-session-analysis.md) (analysis → Insight pattern), [`08`](08-questionnaires.md)
-(the shared Insight/metrics layer + the **break-glass/audit** model it reuses), [`15`](15-shareability.md)
+(the shared Insight/metrics layer + the **restricted-fact redaction** model it reuses), [`15`](15-shareability.md)
 (per-item shareability — sensitive data defaults locked), [`16`](16-guided-sessions.md) (the
 guided/structured-interview machinery), and [`04`](04-people-roles.md) (people, capabilities, the
-owner/super-admin model, `buildContext`). References [`00`](00-architecture.md) and [`01`](01-design-system.md).
+owner full-access model, `buildContext`). References [`00`](00-architecture.md) and [`01`](01-design-system.md).
 
 ---
 
@@ -27,7 +27,7 @@ adaptive interview about who they are. Two things come out of it:
 
 1. **The (owner/AI-facing) profile auto-fills** — direct questions map straight to `Person` fields
    ([`04`](04-people-roles.md)/[`15`](15-shareability.md)); the member never sees those raw fields (profile
-   management stays `people.manage` = owner/super-admin only), so the fill is **automatic, no member review**.
+   management stays `people.manage` = owner only), so the fill is **automatic, no member review**.
 2. **A comprehensive portrait** — on synthesis, AI distils the interview into an **Insight (`source:
 'intake'`)** that feeds the person's **own** coaching context everywhere, plus a member-facing "here's what
    I've come to understand about you" summary.
@@ -39,8 +39,8 @@ across sittings and **never a hard lock** (§3.1). It's **AI-driven** (a live, a
 
 **Held with care.** This is the most sensitive data in the app. The interview is warm and trauma-informed;
 heavy and intimate sections are clearly flagged, fully skippable, and gated (§8). The most sensitive
-categories (trauma, sexuality) **default to the person's own context only** and are **not shown in the
-owner's normal views** — reachable only via an **audited break-glass** (§8.4).
+categories (trauma, sexuality) **default to the person's own context only** and are **redacted from normal
+views** — shown directly only to a holder of `intake.readRestricted` (the Owner) (§8.4).
 
 ## 2. Goals / Non-goals
 
@@ -59,7 +59,7 @@ owner's normal views** — reachable only via an **audited break-glass** (§8.4)
 
 - **Auto-creating People/relationships** from family/relationship answers — v1 is **self only**; populating
   the people graph (the mother/partner/ex they mention) is a clearly-flagged phase 2.
-- **A member-facing view of the raw profile fields** — those stay owner/super-admin only.
+- **A member-facing view of the raw profile fields** — those stay owner only.
 - **Clinical assessment, diagnosis, or treatment** — explicitly not this (§8); it's reflective self-knowledge.
 - **An AI-free intake** — the interview is AI-driven by design; when AI is unavailable it can't run (§7).
 - **Voice** — deferred, but nothing here precludes it.
@@ -75,7 +75,7 @@ owner's normal views** — reachable only via an **audited break-glass** (§8.4)
   header stays (so they can still switch person / lock); the crisis "Get help now" resources are always
   present, so it's a gate, not a dead-end. On completion the gate releases and they land on the portrait (now
   with the sidebar), with the Onboarding nav entry available to revisit it.
-- **The Owner and the concealed super-admin are exempt** from the gate — the Owner sets up the household + AI
+- **The Owner is exempt** from the gate — the Owner sets up the household + AI
   (and the intake _requires_ AI, so a gated owner with no key would be trapped). The Owner instead gets the
   **persistent nudge** (a Home card + the nav affordance + an "unfinished" dot) until they do it voluntarily.
 - Because the intake is **AI-driven**, it checks **AI availability** (key configured + online + budget). If AI
@@ -111,7 +111,7 @@ Onboarding is organized into **sections** (§4.2). Within a section, the AI cond
 
 ### 3.4 Auto-fill (silent, owner/AI-facing)
 
-As the person answers, **direct questions write straight to the `Person` profile** (owner/super-admin-only).
+As the person answers, **direct questions write straight to the `Person` profile** (owner-only).
 The member sees **no** profile fields and **no** "review the extracted fields" step. Inferred fields (values,
 communication style, goals) are filled by the **synthesis** pass (§3.5). Sensitive-category outputs follow the
 privacy defaults in §8.3/§8.4.
@@ -146,7 +146,7 @@ All per-person, encrypted, via the vault/crypto service (no direct `fs`).
 - **The portrait** is an **`Insight` (`source: 'intake'`)** stored in the existing
   `people/<id>/insights/…` (the [`08`](08-questionnaires.md) layer), `approved: true`, `provenance` carrying
   an `intakeSection?`. Its facts carry the existing `shareable`/`shareableWith` ([`15`](15-shareability.md))
-  - a new **`restricted?: boolean`** marking break-glass-only facts (§8.4).
+  - a new **`restricted?: boolean`** marking `intake.readRestricted`-only facts (§8.4).
 - **Profile fills** write to the existing `Person` (no new file). Sensitive direct fields (e.g. health) are
   auto-added to `Person.privateFields` (own-context-only) per §8.3.
 
@@ -157,7 +157,7 @@ InsightSource = 'questionnaire' | 'session' | 'dream' | 'intake';
 interface IntakeSection {
   id: string; // e.g. 'family', 'intimacy'
   status: 'notStarted' | 'inProgress' | 'skipped' | 'complete';
-  restricted: boolean; // heavy/intimate → break-glass-only in owner views (§8.4)
+  restricted: boolean; // heavy/intimate → only a holder of intake.readRestricted (the Owner) sees it (§8.4)
   messages: ChatMessage[]; // the adaptive interview transcript for this section
   answers: Record<string, unknown>; // structured/direct answers (field-mapped)
 }
@@ -213,15 +213,16 @@ Final per-section wording + the exact direct-field map are tuned at build (§11)
 - **Metering ([`06`](06-ai-usage-and-budgets.md))** — interview turns meter as a new **`intake.interview`**
   type; synthesis as **`intake.synthesize`**. Normal budget rules apply (no special cap, §round-3); over
   budget pauses the interview gracefully (resume later).
-- **Break-glass/audit ([`08`](08-questionnaires.md) reuse)** — a new **EXPLICIT_GRANT_ONLY** capability
-  **`intake.readRestricted`** (ships OFF even for the Owner; super-admin break-glass always works) gates
-  viewing `restricted` sections/facts in owner surfaces; every reveal writes to the existing **`auditService`**
-  log (§8.4).
+- **Restricted-fact gating ([`08`](08-questionnaires.md) reuse)** — a new **EXPLICIT_GRANT_ONLY** capability
+  **`intake.readRestricted`** (ships OFF for non-owner roles; the **Owner always has it**) gates
+  viewing `restricted` sections/facts in owner surfaces; a holder sees them directly via `insights:list`,
+  redacted for everyone else — **no reveal ceremony, no audit log** (§8.4).
 - **Renderer** — an onboarding **flow surface** (the sectioned interview: streamed Q&A via the [`05`](05-conversations.md)
   `Composer`/stream + the `CrisisFooter`; section progress; skip/deeper controls; the 18+ gate; the closing
   portrait), a persistent **nudge** (Home card + nav), and a per-person **`intakeStore`** (reset on
   `activePerson.id` change). No member-facing profile editor (unchanged: owner-only). The owner's
-  People/Memory views render `restricted` content only behind the break-glass.
+  People/Memory views render `restricted` content only to a holder of `intake.readRestricted` (the Owner),
+  redacted otherwise.
 - **No new nav for the profile** — profile stays in People (owner). A new `/onboarding` route (or the Home
   nudge) hosts the member's intake.
 
@@ -236,8 +237,9 @@ stays in main.
 - `intake:skipSection({ sectionId })`, `intake:acknowledgeAdult()`.
 - `intake:synthesize({ sectionId? })` → runs the portrait pass (consented by doing it), returns the
   member-facing summary; updates the Insight + fields.
-- Owner break-glass reuses the [`08`](08-questionnaires.md) `assignments:revealRaw`-style audited path,
-  generalized for intake (`intake.readRestricted` / super-admin) → writes the audit entry **before** returning.
+- Restricted facts are redacted from `insights:list` for callers **without** `intake.readRestricted`; a
+  holder (the Owner) receives them directly. There is **no** `intake:revealRestricted` channel and no audit
+  entry (both removed 2026-06-14).
 
 ## 7. States & edge cases
 
@@ -285,16 +287,16 @@ categories default own-context-only** (their Insight facts `shareable: false`; m
 `privateFields`); everything else follows the app's "shared" default. The **owner can fine-tune per-item** in
 the People editor afterward.
 
-### 8.4 Owner visibility & audited break-glass (the most sensitive data)
+### 8.4 Owner visibility of the most sensitive data
 
 The **restricted** sections (§4.2: "what weighs on you", "intimacy & sexuality") and their derived facts are
-**not shown in the owner's normal People/Memory views**. They live only in the encrypted intake + the person's
-**own** coaching context. An owner/super-admin can reach them only via an **explicit, audited break-glass**
-(the [`08`](08-questionnaires.md) §8.4 model, generalized): the **EXPLICIT_GRANT_ONLY `intake.readRestricted`**
-capability (off even for the Owner) **or** the concealed super-admin, each writing a **vault-stored audit
-entry before** the content is returned. So the most intimate data is **accessible but accountable**, never
-casually browsable. (Consistent with [`04`](04-people-roles.md) §8 / [`10`](10-multi-device-vault.md): the
-vault isn't zero-knowledge from the owner; restriction is enforced at the app/UX layer + audit, like all RBAC.)
+**redacted from normal Memory/People views** for anyone **without** the `intake.readRestricted` capability.
+They live in the encrypted intake + the person's **own** coaching context. The **EXPLICIT_GRANT_ONLY
+`intake.readRestricted`** capability gates them: it ships **OFF for non-owner roles**, and a holder (the
+**Owner**, who has full access) sees the restricted facts **directly** in Memory (marked "sensitive") via the
+normal `insights:list` — there is **no reveal ceremony and no audit log** (the audited break-glass was
+removed 2026-06-14). (Consistent with [`04`](04-people-roles.md) §8: the vault isn't zero-knowledge from the
+owner; restriction is enforced at the app/UX layer, like all RBAC.)
 
 **Two structural invariants enforce this (verified in code review):** (1) a `restricted` fact is **always
 own-context-only** — `summarizeForContext`/`buildLinkedPeopleContext` exclude it from any **other** person's
@@ -324,16 +326,15 @@ closing portrait are keyboard-operable + screen-reader friendly. Responsive ~360
 'intake'`) with **sensitive facts `shareable: false` and restricted facts flagged**; re-synthesis reuses the
   id + carries shareable choices forward; metering emits `intake.interview`/`intake.synthesize`; budget/no-key
   envelopes; the interviewer addendum is appended **after** PERSONA + SAFETY.
-- **Break-glass (core/bridge):** `restricted` facts are **excluded** from the owner's normal Insight/profile
-  reads; `intake.readRestricted`/super-admin reveal returns them **and writes the audit entry first**; a normal
+- **Redaction (core/bridge):** `restricted` facts are **redacted** from `insights:list` for a caller without
+  `intake.readRestricted`; a holder (the Owner) receives them directly (marked "sensitive"); a normal
   owner without the grant cannot read them.
 - **Component (RTL):** the sectioned flow (stream, skip, go-deeper), the AI-unavailable state (owner vs member
   copy), the 18+ gate on the intimacy block, the persistent nudge, the closing portrait, resume.
 - **E2E (Playwright, `SELFOS_FAKE_CLAUDE`):** new person → onboarding nudge → run an interview turn → a direct
   answer fills a profile field (decrypt to assert) → skip the intimacy block → synthesize → the portrait
-  Insight feeds a later session's `buildContext` (decrypt) → a restricted fact is absent from the owner's
-  normal Memory view but reachable via audited break-glass (audit row written); resume mid-intake; 390px +
-  control-geometry guards.
+  Insight feeds a later session's `buildContext` (decrypt) → a restricted fact is redacted from a non-owner's
+  Memory view but shown directly to the Owner; resume mid-intake; 390px + control-geometry guards.
 - Vault + Claude mocked as established; run `pnpm typecheck` after tests (memory `vitest-does-not-typecheck`).
 
 ## 11. Open questions
@@ -346,10 +347,10 @@ tunings below were resolved at build (2026-06-14, see §12 "Build-time decisions
    1:1, with a `private` flag for sensitive ones), and `restricted`/`adult` flags. Direct fields are filled
    immediately during the interview via an AI-embedded `[[SELFOS:FIELD:key=value]]` marker (the wrap-up /
    step-marker precedent), stripped from saved + streamed text; inferred fields are filled at synthesis.
-2. **Break-glass capability shape** — RESOLVED: a generalized `RawAccessAuditEntry` (the `action` field is now
-   an enum `revealRaw | revealRestricted`; `assignmentId` is optional; `subjectPersonId`/`subjectName` added)
-   - the shared `auditService`. A new `intake:revealRestricted` bridge op writes the audit entry **before**
-     returning the restricted facts, exactly like `assignments:revealRaw`.
+2. **Restricted-fact capability shape** — RESOLVED (amended 2026-06-14): a `restricted` fact is **redacted
+   from `insights:list`** for a caller without `intake.readRestricted`; a holder (the Owner) receives it
+   directly (no `intake:revealRestricted` op, no `RawAccessAuditEntry`, no `auditService` — the audited
+   reveal was removed).
 3. **Closing-portrait depth** — RESOLVED: a **light per-section reflection** auto-runs when a section
    completes (a small `intake.synthesize` spend, the per-section payoff) **and** a **richer final portrait**
    the person taps once to generate (the explicit, bigger `intake.synthesize` pass that builds the Insight +
@@ -370,8 +371,8 @@ tunings below were resolved at build (2026-06-14, see §12 "Build-time decisions
   when unavailable, a clear "connect AI" state + persistent nudge, never a dead-end.
 - **Budget** — **normal budget rules**, no special cap; over-budget pauses → resume.
 - **Living profile** — **editable + re-synthesizable** over time.
-- **Owner visibility of intimate/trauma data** — **audited break-glass only** (not in normal owner views);
-  reuses the [`08`](08-questionnaires.md) readRaw/audit model via `intake.readRestricted` / super-admin.
+- **Owner visibility of intimate/trauma data** — gated by `intake.readRestricted` (the Owner has it;
+  redacted for everyone else); shown directly in Memory marked "sensitive", **no audit log**.
 - **Closing portrait** — a **member-facing** warm summary.
 
 ### Build-time decisions (2026-06-14, at implementation)
@@ -411,11 +412,17 @@ revealRestricted` (gated + active-person-scoped; restricted facts redacted from 
   desktop + 390px (0 overflow, no console errors).
 - 2026-06-15 — **Onboarding made a hard requirement for Members** (user feedback: the dismissible
   auto-route felt buggy; "a person MUST go through it first"). Replaced the auto-route-once + nudge with a
-  **full-screen gate** in `AppShell`: a Member (`intake.own`, not Owner, not super-admin) is taken over by
+  **full-screen gate** in `AppShell`: a Member (`intake.own`, not the Owner) is taken over by
   onboarding on every login until `status === 'complete'` (the portrait is generated). The header stays
   (switch person / lock) + crisis resources are always present (not a dead-end); `AppHeader` gained a
-  `hideNav` prop to drop the hamburger during the takeover. The **Owner + super-admin are exempt** (the
-  Owner sets up AI, which the intake requires) and get the existing nudge. On completion the gate releases
+  `hideNav` prop to drop the hamburger during the takeover. The **Owner is exempt** (the
+  Owner sets up AI, which the intake requires) and gets the existing nudge. On completion the gate releases
   and the finish navigates to `/onboarding` so the just-written portrait stays on screen (now with the
   sidebar). §3.1 / §12 first-run-entry updated. Gate green: typecheck, lint, format, **442 desktop** unit,
   **64 E2E** (+1: a Member is hard-gated [no app nav] → finishes → the gate releases).
+- 2026-06-14 — **super-admin removed; restricted-fact reveal de-ceremonied.** With the concealed super-admin
+  and the break-glass audit log gone (see [`04`](04-people-roles.md) §8), `restricted` intake facts are now
+  **redacted from `insights:list`** for callers without `intake.readRestricted` and shown **directly** (marked
+  "sensitive") to a holder (the **Owner**, full-access) — no `intake:revealRestricted` op, no `RawAccessAuditEntry`,
+  no `auditService`. The defense-in-depth exclusion of restricted facts from every other person's context
+  (`summarizeForContext`/`buildLinkedPeopleContext`) is unchanged. Synced §3/§5/§6/§8.4/§10/§11.

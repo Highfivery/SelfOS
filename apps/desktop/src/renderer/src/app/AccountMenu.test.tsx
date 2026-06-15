@@ -15,7 +15,7 @@ const alex: Person = {
   updatedAt: 'now',
 };
 
-afterEach(() => useSessionStore.setState({ activePerson: null, superAdmin: false, locked: false }));
+afterEach(() => useSessionStore.setState({ activePerson: null, locked: false }));
 
 describe('AccountMenu', () => {
   it('shows the active person and opens the session menu', async () => {
@@ -41,17 +41,5 @@ describe('AccountMenu', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Signed in as Alex' }));
     await userEvent.click(screen.getByRole('menuitem', { name: 'Lock' }));
     expect(useSessionStore.getState().locked).toBe(true);
-  });
-
-  it('only marks + offers inspect-lock when the super-admin is elevated', async () => {
-    useSessionStore.setState({ activePerson: alex, superAdmin: false });
-    const { rerender } = render(<AccountMenu onSwitch={() => {}} />);
-    expect(screen.queryByText('Super-admin')).not.toBeInTheDocument();
-
-    useSessionStore.setState({ superAdmin: true });
-    rerender(<AccountMenu onSwitch={() => {}} />);
-    expect(screen.getByText('Super-admin')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Signed in as Alex' }));
-    expect(screen.getByRole('menuitem', { name: 'Lock inspect mode' })).toBeInTheDocument();
   });
 });

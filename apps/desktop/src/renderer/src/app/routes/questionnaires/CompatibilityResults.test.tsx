@@ -118,7 +118,7 @@ describe('CompatibilityResults', () => {
     enableAi();
     renderResults();
     const revealBtn = await screen.findByRole('button', { name: /Reveal Alex’s answers/ });
-    expect(screen.getByText(/recorded in the audit log/)).toBeInTheDocument();
+    expect(screen.getByText(/treat them with care/)).toBeInTheDocument();
     await userEvent.click(revealBtn);
     expect(assignmentsRevealRaw).toHaveBeenCalledWith('a1');
     await waitFor(() => expect(screen.getByText('4')).toBeInTheDocument());

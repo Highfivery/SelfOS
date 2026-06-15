@@ -6,7 +6,6 @@ import { listAllInsights } from '../insights';
 import type { Question } from '../schemas';
 import { generateAlignment, getAlignmentReport, purgeCompatibilityGroup } from './alignmentService';
 import { getAssignment, getAssignmentSnapshot, listAssignments } from './assignmentService';
-import { appendAuditEntry, listAuditEntries } from './auditService';
 import { createCompatibilitySend } from './compatibilityService';
 import { deleteSend } from './deletionService';
 import { compatibilityDisclosure } from './disclosure';
@@ -265,33 +264,6 @@ describe('generateAlignment', () => {
     await purgeCompatibilityGroup(fs, key, groupId);
     expect(await getAlignmentReport(fs, key, groupId)).toBeNull();
     expect((await listAllInsights(fs, key)).length).toBe(0);
-  });
-});
-
-describe('auditService', () => {
-  it('appends and lists raw-access entries newest first', async () => {
-    const fs = memFileSystem();
-    await appendAuditEntry(fs, key, {
-      schemaVersion: 1,
-      at: '2026-06-11T10:00:00.000Z',
-      by: 'super-admin',
-      viaSuperAdmin: true,
-      assignmentId: 'a1',
-      recipientName: 'Alex',
-      action: 'revealRaw',
-    });
-    await appendAuditEntry(fs, key, {
-      schemaVersion: 1,
-      at: '2026-06-11T11:00:00.000Z',
-      by: 'sender',
-      viaSuperAdmin: false,
-      assignmentId: 'a2',
-      action: 'revealRaw',
-    });
-    const entries = await listAuditEntries(fs, key);
-    expect(entries).toHaveLength(2);
-    expect(entries[0]?.assignmentId).toBe('a2'); // newest first
-    expect(entries[0]?.viaSuperAdmin).toBe(false);
   });
 });
 

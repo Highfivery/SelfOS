@@ -172,8 +172,8 @@ analyze → recordUsage`, charged to the **subject**. Gated by `sessions.own` + 
   per-fact promotion (§3.3). The master **memory toggle** lets a user opt out entirely. Raw transcripts are
   read by analysis **in the subject's own process** (their own data) and never sent to the coach wholesale —
   the derived Insight is.
-- **Honesty** — encryption protects against file-browsing/other members/cloud, not the device owner/
-  super-admin (`04` §8); no new exposure beyond the existing model.
+- **Honesty** — encryption protects against file-browsing/other members/cloud, not the device
+  Owner (`04` §8); no new exposure beyond the existing model.
 
 ## 8. Accessibility
 

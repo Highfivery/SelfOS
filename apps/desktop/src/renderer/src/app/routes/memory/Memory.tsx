@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Brain, Lock, Trash2, Unlock } from 'lucide-react';
+import { Brain, Lock, ShieldAlert, Trash2, Unlock } from 'lucide-react';
 import type { Insight, InsightFact } from '@shared/schemas';
 import { useInsightStore } from '../../../stores/insightStore';
 import { usePeopleStore } from '../../../stores/peopleStore';
@@ -39,9 +39,6 @@ function InsightCard({
   const [facts, setFacts] = useState<InsightFact[]>(insight.facts);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Break-glass reveal of restricted onboarding facts (18-personal-onboarding §8.4). `undefined` = not yet
-  // attempted; `null` = not permitted; an array = the revealed facts (the bridge wrote the audit entry).
-  const [revealed, setRevealed] = useState<InsightFact[] | null | undefined>(undefined);
   const isIntake = insight.source === 'intake';
   const sourceLabel =
     insight.source === 'intake'
@@ -188,50 +185,19 @@ function InsightCard({
                   <Text size="sm" tone="secondary">
                     {fact.text}
                   </Text>
+                  {fact.restricted ? (
+                    <span className={styles.sensitiveTag} title="Sensitive onboarding content">
+                      <ShieldAlert size={12} aria-hidden="true" /> sensitive
+                    </span>
+                  ) : null}
                 </div>
               ))}
             </Stack>
             {isIntake ? (
-              <Stack gap={2}>
-                <Text size="xs" tone="tertiary">
-                  Sensitive onboarding content (what weighs on them, intimacy) is kept private to
-                  their own coaching and isn’t shown here.
-                </Text>
-                {revealed === undefined ? (
-                  <div>
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        void window.selfos
-                          ?.intakeRevealRestricted({ subjectPersonId: insight.subjectPersonId })
-                          .then((r) => setRevealed(r ?? null));
-                      }}
-                    >
-                      <Unlock size={14} aria-hidden="true" />
-                      Reveal restricted content (audited)
-                    </Button>
-                  </div>
-                ) : revealed === null ? (
-                  <Banner tone="warning">
-                    You don’t have permission to reveal restricted onboarding content.
-                  </Banner>
-                ) : revealed.length === 0 ? (
-                  <Text size="sm" tone="secondary">
-                    No restricted content was recorded.
-                  </Text>
-                ) : (
-                  <Stack gap={1}>
-                    {revealed.map((fact) => (
-                      <div key={fact.id} className={styles.factRow}>
-                        <Lock size={14} aria-hidden="true" className={styles.factIcon} />
-                        <Text size="sm" tone="secondary">
-                          {fact.text}
-                        </Text>
-                      </div>
-                    ))}
-                  </Stack>
-                )}
-              </Stack>
+              <Text size="xs" tone="tertiary">
+                Sensitive onboarding content (what weighs on them, intimacy) is private to their own
+                coaching — only an owner sees it here.
+              </Text>
             ) : null}
             <div>
               <Button variant="secondary" onClick={() => setEditing(true)}>

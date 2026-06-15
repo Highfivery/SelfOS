@@ -7,12 +7,17 @@ import styles from './PersonPicker.module.css';
 /**
  * The "who's here?" account list with inline PIN entry, shared by the in-app {@link Switcher} (modal)
  * and the full-screen {@link LockScreen} gate. Switching the active person verifies the PIN in main;
- * on success it calls `onResolved` (and clears the locked state via `switchTo`).
+ * on success it calls `onResolved` (and clears the locked state via `switchTo`). The **Owner** (the
+ * full-access role) switches to anyone **without** a PIN prompt — the bridge skips PIN verification when
+ * leaving the Owner. This bypass applies only in the Switcher (an active session); on the **LockScreen**
+ * (`locked`) it does NOT, since locking is a deliberate re-auth gate, so PINs always apply there.
  */
 export function PersonPicker({ onResolved }: { onResolved?: () => void }): JSX.Element {
   const access = useSessionStore((s) => s.access);
   const activePerson = useSessionStore((s) => s.activePerson);
   const switchTo = useSessionStore((s) => s.switchTo);
+  const isOwner = useSessionStore((s) => s.isOwner);
+  const locked = useSessionStore((s) => s.locked);
   const people = usePeopleStore((s) => s.people);
   const loadPeople = usePeopleStore((s) => s.load);
 
@@ -29,13 +34,16 @@ export function PersonPicker({ onResolved }: { onResolved?: () => void }): JSX.E
     people.find((candidate) => candidate.id === id)?.displayName ?? 'Someone';
 
   const choose = async (personId: string, hasPin: boolean): Promise<void> => {
-    if (hasPin && pinFor !== personId) {
+    // The Owner switches to anyone with no PIN (the bridge skips PIN verification when leaving the
+    // Owner) — but NOT from the LockScreen, where re-auth is the whole point. Everyone else enters the PIN.
+    const needsPin = hasPin && !(isOwner() && !locked);
+    if (needsPin && pinFor !== personId) {
       setPinFor(personId);
       setPin('');
       setError(null);
       return;
     }
-    const result = await switchTo(personId, hasPin ? pin : undefined);
+    const result = await switchTo(personId, needsPin ? pin : undefined);
     if (result.ok) onResolved?.();
     else setError('That PIN didn’t match.');
   };

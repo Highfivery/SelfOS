@@ -608,11 +608,11 @@ content. No dream content reaches OpenAI without the dreamer having turned conse
 Generate. **Export** (§3.5) writes a local file the dreamer chooses — no third party — but the exported bytes
 leave the encrypted vault, which the export note makes plain.
 
-### 8.6 Break-glass
+### 8.6 Owner access
 
-Consistent with `04` §8 / `12` §8.4, the vault is not zero-knowledge from the device owner / super-admin (one
-master key decrypts everything). The super-admin inspect mode can therefore reach a dream's image, as it can
-the dream. No new exposure beyond the existing model; no image-access audit log in v1 (the `12` §8.4 posture).
+Consistent with `04` §8 / `12` §8.4, the vault is not zero-knowledge from the device owner (one master key
+decrypts everything). The **Owner** (the full-access role) can therefore reach a dream's image, as it can the
+dream. No new exposure beyond the existing model; no image-access audit log in v1 (the `12` §8.4 posture).
 
 ## 9. Accessibility
 

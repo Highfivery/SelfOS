@@ -6,7 +6,7 @@ import type { Dream } from '@shared/channels';
 import { DreamImagePanel } from './DreamImagePanel';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useSettingsStore } from '../../../settings/settingsStore';
-import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
+import { clearMockBridge, elevateToOwner, installMockBridge } from '../../../test-utils/bridge';
 
 const dream: Dream = {
   id: 'd1',
@@ -26,7 +26,7 @@ const dream: Dream = {
 
 afterEach(() => {
   clearMockBridge();
-  useSessionStore.setState({ superAdmin: false });
+  useSessionStore.setState({ activePerson: null, access: null });
   useSettingsStore.setState((s) => ({
     values: {
       ...s.values,
@@ -37,9 +37,9 @@ afterEach(() => {
   }));
 });
 
-/** superAdmin grants every capability (dreams.generateImage + budgets.manage); set the gate settings. */
+/** The Owner has every capability (dreams.generateImage + budgets.manage); set the gate settings. */
 function enable({ consent = true, ai = true }: { consent?: boolean; ai?: boolean } = {}): void {
-  useSessionStore.setState({ superAdmin: true });
+  elevateToOwner();
   useSettingsStore.setState((s) => ({
     values: { ...s.values, 'ai.enabled': ai, 'dreams.imageGenerationEnabled': consent },
   }));
@@ -55,7 +55,7 @@ function renderPanel(d: Dream = dream): void {
 
 describe('DreamImagePanel', () => {
   it('renders nothing without the dreams.generateImage capability', () => {
-    // Default session (no superAdmin, no access) → can() is false.
+    // Default session (no active person, no access) → can() is false.
     installMockBridge({ secretHas: () => Promise.resolve(true) });
     const { container } = render(
       <MemoryRouter>

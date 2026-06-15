@@ -25,6 +25,20 @@
   color: var(--color-text-tertiary);
 }
 
+/* Marks a break-glass "restricted" intake fact (visible only to the owner, 18-personal-onboarding §8.4). */
+.sensitiveTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  margin-left: auto;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-alt);
+  color: var(--color-text-tertiary);
+  font-size: var(--text-xs);
+}
+
 .actions {
   display: flex;
   gap: var(--space-2);

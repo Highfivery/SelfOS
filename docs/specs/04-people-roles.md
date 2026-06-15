@@ -1,10 +1,13 @@
 # 04 — People, relationships, roles & encryption
 
-> **Status:** Approved · _last updated 2026-06-09_
+> **Status:** Approved · _last updated 2026-06-14_ · **Amended 2026-06-14:** the concealed
+> **super-admin** role/passphrase and the break-glass audit log were **removed**; the **Owner is now the
+> single full-access role** (the super-admin's powers fold into the Owner). Every "super-admin" reference
+> below should read "Owner"; `config/superadmin.enc` and `superadmin:*` IPC no longer exist.
 >
 > The household model: SelfOS serves a graph of **people** — some are **subjects** with their own
 > coaching experience, all are connected by **relationships** that are themselves data-bearing.
-> Access is governed by **capability-based roles** plus a concealed **super-admin**, and private data
+> Access is governed by **capability-based roles** with the **Owner as the full-access role**, and private data
 > is **encrypted at rest** with a device-held master key so it can't be read by browsing the vault.
 > This is the second-most-important feature in SelfOS and the substrate for conversations,
 > questionnaires, and AI context.
@@ -26,7 +29,7 @@ relationship questionnaire, an "about us" chat).
 At any moment one person is the **active person**; the app scopes to them. When a subject has a
 session, the AI is enriched with context they've **consented to share** about the people they mention
 — without exposing anyone's private therapy data. Who can do what is governed by **roles** (bundles
-of capabilities), with a hidden **super-admin** for the owner. All private content is **encrypted at
+of capabilities), with the **Owner** as the full-access role. All private content is **encrypted at
 rest**.
 
 ## 2. Goals / Non-goals
@@ -36,7 +39,7 @@ rest**.
 - A `Person` + `Relationship` data model (a relationship graph), each data-bearing.
 - **Active-person** selection ("Who's here?") + optional per-person PIN; capability-gated UI.
 - **Capability-based, configurable roles** (Owner / Member / Guest defaults) + a registry features
-  extend, plus a concealed all-access **super-admin** unlocked by a secret passphrase.
+  extend; the **Owner is the full-access role** (every capability, including the explicit-grant-only ones).
 - **Encryption at rest** of private data via a device-keychain master key (opaque to file-browsing,
   other household members, and cloud sync).
 - A **shareable-vs-private** model so consented context can feed the AI without leaking private data.
@@ -45,7 +48,7 @@ rest**.
 
 - Live multi-device sync of encrypted data — v1 is single-device, but a **recovery phrase** is built
   now (§5) so the master key can be restored after keychain loss or on a future device.
-- Zero-knowledge privacy from the owner/app (incompatible with the required super-admin — see §8).
+- Zero-knowledge privacy from the owner/app (the Owner holds the master key and can decrypt — see §8).
 - Questionnaires and per-person/relationship chat surfaces (separate later specs that build on this).
 - Remote/per-device person access (post-sync concern).
 
@@ -54,7 +57,7 @@ rest**.
 ### 3.1 Who's here? (active person)
 
 - A **switcher** (launch and on-demand) lists people who have **access** (an account). Pick one →
-  if a PIN is set, enter it → that person becomes active. The Owner can switch freely.
+  if a PIN is set, enter it → that person becomes active. The **Owner switches to anyone with no PIN** (the Owner is trusted); switching **back to the Owner** still requires the Owner's PIN.
 - The active person's **role** gates nav and actions; their sessions/journal/questionnaires scope to
   them; switching away locks the prior person's private views.
 
@@ -65,11 +68,11 @@ rest**.
   (Owner/Admin) their access/role + PIN reset.
 - **Relationships**: create a typed link between two people; edit attributes; open relationship data.
 
-### 3.3 Concealed super-admin
+### 3.3 Owner full access
 
-- Entered via a **non-obvious action** (e.g. long-press the version in About) → a **passphrase**
-  prompt → on success, an **inspect-all** mode for the session. Never shown in normal UI, never in
-  the switcher; other people are unaware it exists (§8).
+- The **Owner** is the single full-access role: it holds every capability (including the
+  `EXPLICIT_GRANT_ONLY` break-glass capabilities) and can decrypt and inspect everything. There is no
+  separate concealed elevation. _(The previous concealed super-admin was removed 2026-06-14.)_
 
 ### 3.4 Sharing context
 
@@ -198,13 +201,14 @@ interface Account {
   `people.manage`, `people.viewOthers`, `relationships.manage`, `settings.manage`, `users.manage`,
   `roles.manage`, `budgets.manage`, `sessions.own`, plus the questionnaires set
   (`questionnaires.create` / `.answer` / `.viewResults` / `.sendExternal`, registered in `08` slice 1;
-  `questionnaires.readRaw` is deferred to the break-glass slice and ships OFF even for the Owner).
+  `questionnaires.readRaw` is an `EXPLICIT_GRANT_ONLY` capability — it ships OFF for **non-owner** roles
+  and is granted only via the Roles matrix; the **Owner always has it**).
   (Feature-specific capabilities are added only when that feature is actually specced and built; we do not
   pre-register capabilities for unbuilt features.)
-- **Default roles**: **Owner** (all visible capabilities), **Member** (own data + own relationships +
+- **Default roles**: **Owner** (the full-access role — **every** capability, including ones added after
+  the vault was created and the `EXPLICIT_GRANT_ONLY` ones), **Member** (own data + own relationships +
   their own sessions), **Guest** (no capabilities yet — a login slot with nothing enabled until a
-  Guest purpose is specced). Owner-editable matrix.
-- **Super-admin** is **not** a normal role — it's a concealed elevation above all roles (§8).
+  Guest purpose is specced). Owner-editable matrix; the Owner column is locked all-on.
 
 ### 4.4 Vault layout
 
@@ -222,8 +226,8 @@ vault/
     <rel-id>.enc           # encrypted Relationship
 ```
 
-Device-local (`userData`, never synced): the **master key** (keychain), the **super-admin passphrase
-hash**, and the **active person** + session lock.
+Device-local (`userData`, never synced): the **master key** (keychain) and the **active person** +
+session lock.
 
 ## 5. Encryption (at rest)
 
@@ -239,11 +243,10 @@ hash**, and the **active person** + session lock.
 - **Recovery phrase (built now).** At setup a human-readable **recovery phrase** is generated and
   shown once. A key-encryption key derived from it (scrypt) **wraps** the master key; the wrapped
   master key is stored in the vault (`config/recovery.enc`, syncable). If the keychain key is lost (or
-  on a future device), entering the phrase unwraps and restores the master key; the phrase can also
-  reset the super-admin passphrase. The phrase itself is never stored — losing both the keychain key
-  and the phrase means the data is unrecoverable.
+  on a future device), entering the phrase unwraps and restores the master key. The phrase itself is
+  never stored — losing both the keychain key and the phrase means the data is unrecoverable.
 - **Consequence:** browsing the vault folder, other household members, and cloud providers see only
-  ciphertext. It is **not** zero-knowledge — the app (and the super-admin) hold the master key and
+  ciphertext. It is **not** zero-knowledge — the app (and the Owner) hold the master key and
   can decrypt (§8). Encrypted data is no longer human-readable.
 
 ## 6. Architecture & modules
@@ -255,7 +258,6 @@ hash**, and the **active person** + session lock.
 - **peopleService / relationshipService** — CRUD over encrypted vault files; list/get/save/archive;
   Zod-validated + migrated.
 - **accessService** — roles + accounts (encrypted `access.enc`); PIN hash/verify; capability lookups.
-- **superAdminService** — passphrase hash/verify; elevation state (per app session, in-memory).
 - Reuses the vault service (atomic writes, watching) and migration runner from 00/03.
 
 ### 6.2 Renderer
@@ -263,9 +265,9 @@ hash**, and the **active person** + session lock.
 - **capabilityRegistry** — declarative capability definitions (key, label, group), features register
   into it (mirrors the settings registry).
 - **peopleStore / relationshipStore** (Zustand) — loaded lists + selected entity.
-- **sessionStore** — active person + their role + `can(capability)` selector + super-admin flag.
+- **sessionStore** — active person + their role + `can(capability)` selector.
 - **Screens**: People list/detail/edit, Relationship editor, "Who's here?" switcher, Roles &
-  capabilities matrix (Owner), concealed super-admin unlock. Built on the design-system primitives;
+  capabilities matrix (Owner). Built on the design-system primitives;
   nav entries are capability-gated.
 - A `<Gated capability="…">` guard + `useCan()` hook gate UI uniformly.
 
@@ -278,37 +280,35 @@ Typed channels (declared in `src/shared`, validated both sides):
 - `access:get` (roles + accounts, redacted: no pin hashes to renderer) / `access:saveRole` /
   `access:setAccount` / `access:verifyPin({ personId, pin })`
 - `session:listAccounts` / `session:setActive({ personId, pin? })` / `session:getActive`
-- `superadmin:setup({ passphrase })` / `superadmin:unlock({ passphrase })` / `superadmin:lock`
 - Crypto and the master key are **never** exposed over IPC; only decrypted domain objects cross the
   boundary, and only per the active person's permissions.
 
-## 8. Safety, privacy & the super-admin
+## 8. Safety, privacy & the Owner
 
 - **Privacy guarantee (stated plainly):** encryption protects private data from **other household
-  members, file-browsing, and cloud** — _not_ from the app/owner. The concealed **super-admin** (the
-  install owner, via secret passphrase) can decrypt and inspect everything for verification/debugging
-  and is never surfaced to other users. This is a deliberate owner prerogative over their own install
-  and device; the spec records it so the privacy claim is honest rather than overstated.
+  members, file-browsing, and cloud** — _not_ from the app/owner. The **Owner** (the full-access role)
+  holds the master key and can decrypt and inspect everything. This is a deliberate owner prerogative
+  over their own install and device; the spec records it so the privacy claim is honest rather than
+  overstated.
 - **Consent & sharing:** a person controls what's shareable via per-field locks (see
   [`15-shareability.md`](15-shareability.md) §4.1); a locked field never feeds another person's AI.
   Shareable context is curated and consented.
 - **Wellness boundary:** unchanged — SelfOS is wellness/self-help, not medical (per
   [`CLAUDE.md`](../../CLAUDE.md)); conversational/crisis behavior lives in the chat spec.
-- **PINs/passphrase** are salted-hashed (scrypt), never stored plaintext; rate-limit verification.
+- **PINs** are salted-hashed (scrypt), never stored plaintext; rate-limit verification.
 
 ## 9. Accessibility
 
 Per [`01-design-system.md`](01-design-system.md) §9: the switcher, people/relationship forms, and the
-roles matrix are fully keyboard-operable, labeled, and screen-reader friendly; the super-admin unlock
-is reachable but unobtrusive.
+roles matrix are fully keyboard-operable, labeled, and screen-reader friendly.
 
 ## 10. Testing strategy
 
 - **Unit (node):** cryptoService (encrypt→decrypt round-trip with an injected key; tamper → fails),
   people/relationship/access services against a temp vault (encrypted round-trip, migrations,
-  archive), PIN + passphrase hash/verify, capability resolution per role, super-admin elevation.
+  archive), PIN hash/verify, capability resolution per role (Owner = all capabilities).
 - **Component (RTL):** people list/detail/edit; relationship editor; the switcher (PIN gate); the
-  roles matrix; `<Gated>`/`useCan` behavior; super-admin unlock prompt.
+  roles matrix; `<Gated>`/`useCan` behavior.
 - **E2E (Playwright):** create a person, link a relationship, set roles, switch active person with a
   PIN, confirm capability-gated nav, and (with a test master key) confirm vault files are ciphertext.
   Uses the existing `SELFOS_FAKE_*` determinism hooks where needed.
@@ -319,8 +319,8 @@ is reachable but unobtrusive.
    schemas + IPC; capability registry + default roles; active-person store. Minimal/no new UI.
 2. **People & relationships UI** — people list/detail/edit, relationship editor, the "Who's here?"
    switcher + PIN, capability-gated nav.
-3. **Roles matrix + super-admin + sharing** — Owner-editable role×capability matrix, concealed
-   super-admin unlock, shareable/private flags + the AI-context assembly hook.
+3. **Roles matrix + sharing** — Owner-editable role×capability matrix, shareable/private flags + the
+   AI-context assembly hook.
 
 (Questionnaires and per-person/relationship chat are later specs that consume this foundation.)
 
@@ -329,17 +329,17 @@ is reachable but unobtrusive.
 Confirmed with the user (2026-06-09):
 
 1. **First-run** — onboarding becomes: choose vault → create the **owner** (Person #1, Owner account)
-   → set the **super-admin passphrase** → show the **recovery phrase** (write it down). One guided
-   flow (extends 02-app-shell onboarding).
+   → show the **recovery phrase** (write it down). One guided flow (extends 02-app-shell onboarding).
+   _(Amended 2026-06-14: the super-admin passphrase step was removed.)_
 2. **Default capability matrix** — **Owner** = all capabilities; **Member** = manage their own
    profile + their own relationships + have their own sessions (no access to others' private data, no
    household management); **Guest** = no capabilities yet (a login slot, nothing enabled until a Guest
    purpose is specced). _Updated 2026-06-10: the questionnaires capabilities were removed as unbuilt
    scaffolding; updated 2026-06-11: questionnaires is now specced + built (`08` slice 1), so **Member** also
    gains `questionnaires.create/answer/viewResults/sendExternal`; `readRaw` stays deferred + OFF._
-3. **Recovery** — build a **recovery phrase** now (§5): the super-admin can reset any person's PIN;
-   the recovery phrase restores the master key and can reset the super-admin passphrase; losing both
-   the keychain key and the phrase = unrecoverable data.
+3. **Recovery** — build a **recovery phrase** now (§5): the Owner can reset any person's PIN; the
+   recovery phrase restores the master key; losing both the keychain key and the phrase =
+   unrecoverable data.
 4. **Avatars** — stored as a plain image file in the vault (not encrypted) for v1; revisit if image
    privacy becomes a concern.
 5. **"Self"** — a normal `Person` (Person #1) holding the Owner account; no distinguished record type.
@@ -347,7 +347,7 @@ Confirmed with the user (2026-06-09):
 ## 13. Changelog
 
 - 2026-06-09 — created (draft) after a design brainstorm: household model, relationship graph,
-  capability roles + concealed super-admin, master-key encryption at rest.
+  capability roles (Owner = full access), master-key encryption at rest.
 - 2026-06-09 — resolved open questions (first-run owner+passphrase+recovery-phrase, capability
   defaults, recovery phrase in scope, plain avatars, self = Person #1) and added the recovery-phrase
   design to §5; marked Approved.
@@ -356,3 +356,12 @@ Confirmed with the user (2026-06-09):
   for unbuilt features." Member now defaults to own profile + own relationships + own sessions; Guest
   defaults to no capabilities. Questionnaires stays on the roadmap (still referenced as a future
   surface throughout); its capabilities return when it is specced.
+- 2026-06-14 — **removed the concealed super-admin entirely; the Owner is now the single full-access role.**
+  Deleted the super-admin passphrase + `config/superadmin.enc` + `superadmin:*` IPC + the concealed unlock
+  gesture, and the break-glass raw-access audit log. `roleAllows` now returns `true` for any capability when
+  `role.id === 'owner'` (including the `EXPLICIT_GRANT_ONLY` ones); `EXPLICIT_GRANT_ONLY` capabilities still
+  ship OFF for non-owner roles and need an explicit Roles-matrix toggle. The Owner switches to any person
+  with no PIN (returning to the Owner still needs the Owner's PIN). Added auto-Member accounts for subjects
+  (`ensureMemberAccounts`) + read-time built-in-role reconciliation (`reconcileRole`) so existing Members
+  pick up newly-added default capabilities without a migration. Updated §1/§2/§3/§4.3/§4.4/§5/§6/§7/§8/§9/
+  §10/§11/§12 throughout.

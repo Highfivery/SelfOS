@@ -267,6 +267,43 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-14 — Refactor + bug fixes (**super-admin removed → the Owner is the full-access role; +
+  per-person login & onboarding-gate fixes**; user flagged 4 issues). **(#3, the big one)** The concealed
+  **super-admin** (passphrase + in-memory inspect flag + the long-press-version unlock + `config/superadmin.enc`
+  - `superadmin:*` IPC) and the **break-glass raw-access audit log** (`auditService`, the
+    `RawAccessAuditEntry`/`RawAccessAuditLog` schemas + `config/raw-access-audit.enc`, the `/audit` route+nav+viewer,
+    `audit:list` + `intake:revealRestricted`, the reveal "ceremony") are **deleted**. `roleAllows(role, cap)` now
+    returns `true` for **any** capability (incl. the `EXPLICIT_GRANT_ONLY` `questionnaires.readRaw` /
+    `intake.readRestricted`) when `role.id === 'owner'` — the **Owner is the super admin**; the Owner column in the
+    Roles matrix is locked all-on; `EXPLICIT_GRANT_ONLY` caps still ship OFF for non-owner roles and need an explicit
+    toggle. Restricted intake facts + `senderSeesAll` raw answers now surface **directly** to the Owner (via the
+    normal `insights:list` / `assignments:revealRaw`, no audit) and stay **redacted** for everyone else — and the
+    defense-in-depth exclusion of restricted facts from every _other_ person's `buildContext` is unchanged. Decisions
+    (AskUserQuestion): "Full access" for the Owner + "remove the audit log entirely" (reconciled to no-ceremony,
+    no-log) + "auto-give each person a Member login." **(#3 also)** The **Owner switches to any person with no PIN**
+    (`session:setActive` skips PIN when leaving the Owner; returning _to_ the Owner still needs the Owner's PIN).
+    **(#1 + #2)** Two bugs that motivated this: a previously-created person wasn't gated into onboarding and a
+    newly-created person didn't appear in the switcher — both root-caused to (a) **stale built-in role maps** (vaults
+    freeze role→capability at creation, so `intake.own` added later wasn't granted) → fixed with read-time
+    **`reconcileRole`** in `getAccessConfig`, and (b) **no login account** for new subjects → fixed with
+    **`ensureMemberAccounts`** (idempotent no-PIN Member accounts, in `peopleSave` for new + `accessGet` backfill).
+    **(#4)** The `basics` intake section now asks each profile field one at a time (pronouns/gender/birthday/location/
+    languages/ethnicity/occupation) so onboarding auto-fills the profile. New test helper `elevateToOwner()` replaces
+    the removed `superAdmin:true` renderer-test bypass. **Code-reviewer fix-first** (2 should-fixes: the
+    owner-PIN-free switch was implemented at the bridge but not wired into the **`PersonPicker`** UI — now it
+    skips the PIN prompt when the active person is the Owner **and not on the LockScreen** (`locked` is a
+    deliberate re-auth gate, so PINs always apply there); + a no-op `DreamImagePanel` test `afterEach`; plus nits:
+    dropped the dead `superAdminPassphraseHash` schema field, collapsed the now-redundant `roleAllows` branch,
+    freshened stale "audited" comments). Gate green: typecheck (node + web/DOM-lib), lint, format,
+    **361 core + 437 desktop + 8 relay** unit (incl. a new bridge test: a non-owner `senderSeesAll` sender reveals
+    ONLY with granted `readRaw`; owner-PIN-free-switch bridge + Switcher UI tests; owner full-access), **61 E2E**
+    (all green, incl. the owner→member switch, the LockScreen still requires the owner's PIN, + the Member
+    onboarding hard-gate). Synced specs `04` (the model rewrite) / `08` / `18` / `02` /
+    `10` (+ `06`/`07`/`09`/`11`/`12`/`13`/`14` incidental). On `refactor/owner-full-access` off `main`; NOT merged
+    (awaiting user confirm). **Lesson: a vault freezes each built-in role's capability map at creation, so a
+    capability added to code defaults later is NOT granted to existing non-owner roles — reconcile built-in roles at
+    READ time (fill missing default keys, preserve explicit toggles) rather than migrating; and storage scoping isn't
+    enough for a person to be switch-to-able — they need an actual login account, so auto-create one for every subject.**
 - 2026-06-15 — Change + feedback (**onboarding is now a HARD requirement for Members**, spec 18 §3.1; user:
   the dismissible auto-route "felt buggy" — "a person MUST go through it first… directed to fill it out").
   Replaced the auto-route-once + nudge with a **full-screen onboarding gate** in `AppShell`: a Member

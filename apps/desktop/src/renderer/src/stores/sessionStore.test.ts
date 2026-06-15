@@ -21,7 +21,6 @@ afterEach(() => {
     activePerson: null,
     access: null,
     loaded: false,
-    superAdmin: false,
     locked: false,
   });
 });
@@ -55,19 +54,25 @@ describe('sessionStore.can', () => {
     expect(useSessionStore.getState().can('relationships.manage')).toBe(false);
   });
 
-  it('super-admin bypasses all capability checks', () => {
-    useSessionStore.setState({ superAdmin: true });
-    expect(useSessionStore.getState().can('people.manage')).toBe(true);
-    expect(useSessionStore.getState().can('roles.manage')).toBe(true);
+  it('grants the owner the break-glass (EXPLICIT_GRANT_ONLY) capabilities too — full access', () => {
+    useSessionStore.setState({
+      activePerson: owner,
+      access: {
+        roles: DEFAULT_ROLES,
+        accounts: [{ personId: 'owner-1', roleId: 'owner', hasPin: false }],
+      },
+    });
+    expect(useSessionStore.getState().can('intake.readRestricted')).toBe(true);
+    expect(useSessionStore.getState().can('questionnaires.readRaw')).toBe(true);
+    expect(useSessionStore.getState().isOwner()).toBe(true);
   });
 });
 
 describe('sessionStore.lock', () => {
-  it('locks to the picker and drops super-admin elevation', () => {
-    useSessionStore.setState({ superAdmin: true, locked: false });
+  it('locks to the picker', () => {
+    useSessionStore.setState({ locked: false });
     useSessionStore.getState().lock();
     expect(useSessionStore.getState().locked).toBe(true);
-    expect(useSessionStore.getState().superAdmin).toBe(false);
   });
 
   it('switching a person clears the locked state on success', async () => {

@@ -110,7 +110,8 @@ A new **Questionnaires** feature module registers a nav entry (gated by `questio
 > 2026-06-11, [§13](#13-build-slices) slice 5 / §13.5a). The sender-side **Results** view + the live
 > Analyze trigger + `questionnaires.autoAnalyze` are built (2026-06-11, §13.5b); per-question trends +
 > deletion/purge are built (2026-06-11, §13.5c); compatibility (variants + alignment + the 3 visibility
-> modes + the break-glass `readRaw` capability + the raw-access audit log) is built (2026-06-11, §13.5d).
+> modes + the explicit-grant `readRaw` capability) is built (2026-06-11, §13.5d; the audit log was later
+> removed 2026-06-14 — the Owner is now the full-access role, see [`04`](04-people-roles.md) §8).
 
 - **My Questionnaires** — the sender's created questionnaires (drafts + sent history), each **re-sendable**
   (for trends). _(No template library — questionnaires are created fresh.)_
@@ -251,7 +252,7 @@ Per-household **bring-your-own Cloudflare**, provisioned + deployed from the app
 > response + derived Insights — and, for a compatibility send, the `questionnaires/compat/<groupId>/
 report.enc` + the group's derived Insight, §13.5d) + `deleteSend` + `hasSends`; `Questionnaire.creatorPersonId` is main-stamped
 > on create (preserved on edit, never back-filled onto a legacy def). `questionnaires:delete` is role-aware
-> — Owner/super-admin (`people.manage`) purge at any stage; a non-owner **creator** deletes their own
+> — the Owner (`people.manage`) purges at any stage; a non-owner **creator** deletes their own
 > **only while unsent**. Per-send delete is `assignments:delete` (sender/admin-only). Inline "Are you sure?"
 > confirms in the builder + each Results send card. **Built §13.6:** the relay-link **revoke** before an
 > external send's teardown, and **question-image garbage collection** — `purgeQuestionnaire`/`deleteSend`
@@ -259,7 +260,7 @@ report.enc` + the group's derived Insight, §13.5d) + `deleteSend` + `hasSends`;
 > live definition or send snapshot (an image still frozen in a sent snapshot is kept until that send is
 > also gone).
 
-- **Owner / super-admin** delete **any** questionnaire at any stage → **purge everything** (questionnaire +
+- **Owner** deletes **any** questionnaire at any stage → **purge everything** (questionnaire +
   relay link + raw responses + Insights) after a clear confirmation; the relay link is revoked.
 - **Creator** (incl. a Member) deletes **their own** questionnaire **only while unsent**, which also revokes
   any preview relay link.
@@ -276,7 +277,6 @@ written through the vault service (`00` §4). Private content is encrypted (AES-
 vault/
   config/
     relay.enc                      # encrypted: relay endpoint + drain secret + Cloudflare token
-    raw-access-audit.enc           # encrypted: break-glass raw-access trail (cross-device)
     questionnaires.json            # plain: default message templates, custom types, non-secret prefs
   questionnaires/
     defs/<questionnaire-id>.enc    # a created Questionnaire (versioned; re-sendable)
@@ -293,13 +293,12 @@ vault/
 ```
 
 **Multi-device / single-vault.** All questionnaire data — created definitions, sends, responses, Insights,
-the relay config (incl. the encrypted Cloudflare token), and the raw-access **audit log** — lives **in the
-vault**, so every install pointing at the same folder shares it; this feature stores **no per-device
-state**. Device-local `userData` holds only the cross-cutting items owned by `00`/`04` (the keychain master
-key, window/session + active-person state, logs). The **super-admin is a per-vault identity** — its
-passphrase hash lives in the vault at `config/superadmin.enc`, with the raw-access audit log alongside it
-(per [`10-multi-device-vault.md`](10-multi-device-vault.md), now built), so break-glass access is captured
-the same way from every device.
+and the relay config (incl. the encrypted Cloudflare token) — lives **in the vault**, so every install
+pointing at the same folder shares it; this feature stores **no per-device state**. Device-local `userData`
+holds only the cross-cutting items owned by `00`/`04` (the keychain master key, window/session +
+active-person state, logs). The **Owner is the full-access role** — raw-answer access is permitted to the
+Owner (any Private send) or a `senderSeesAll` sender holding `questionnaires.readRaw`; the previous
+break-glass audit log was removed 2026-06-14 (per [`04-people-roles.md`](04-people-roles.md) §8).
 
 ### 4.2 Questionnaire & Question
 
@@ -462,7 +461,7 @@ vocabulary and the dashboards. Adding a metric is data, not a schema change. `bu
 from related people's Insights, **prioritized by recency + relevance and capped by a per-person token
 budget**.
 
-### 4.5 ConsentReceipt, RelayConfig, audit, Settings & Person additions
+### 4.5 ConsentReceipt, RelayConfig, Settings & Person additions
 
 ```ts
 interface ConsentReceipt {
@@ -481,19 +480,9 @@ interface RelayConfig {
   drainSecret: string; // app-level secret the Worker checks for drain/manage
   cloudflare: { accountId: string; apiToken: string; relayVersion: string };
 }
-
-interface RawAccessAuditEntry {
-  // appended to a RawAccessAuditLog { schemaVersion, entries[] } in config/raw-access-audit.enc
-  // (encrypted, cross-device)
-  schemaVersion: number;
-  at: string;
-  by: string; // the active person id (or 'super-admin' when no person is signed in)
-  viaSuperAdmin: boolean; // true = concealed super-admin break-glass; false = a senderSeesAll readRaw sender
-  assignmentId: string;
-  recipientName?: string;
-  action: 'revealRaw';
-}
 ```
+
+_(The raw-answer reveal writes **no audit record** — the break-glass audit log was removed 2026-06-14.)_
 
 - **Settings (schema-driven, `03`)** — `questionnaires.discloseAdminAccess` (admin-only, **default OFF**),
   `questionnaires.autoAnalyze` (**default OFF**, `visibleWhen` AI is enabled — auto-runs analysis when the
@@ -538,7 +527,6 @@ interface RawAccessAuditEntry {
 - **cloudflareDeployer** — provisions KV/D1/R2 + deploys/updates/tears down the Worker via the Cloudflare
   REST API; writes `RelayConfig`. (iOS uses the same REST calls — feasibility flagged §11.)
 - **relayClient** — POST/drain/revoke against the deployed Worker (drain authed by `drainSecret`).
-- **auditService** — appends raw-access audit entries to the vault (§8.4).
 - Wires core services to `nodeFileSystem` / `nodeSecretStore` / `anthropicClient` and registers IPC.
 
 ### 5.3 Renderer
@@ -572,7 +560,7 @@ Typed channels (`src/shared`, Zod-validated both sides; the API key + Cloudflare
 renderer):
 
 - **Authoring** — `questionnaires:list` / `:get` / `:save` (main stamps `creatorPersonId` on create) /
-  `:delete` (**role-aware purge §13.5c** — Owner/super-admin purge any stage; a non-owner creator deletes
+  `:delete` (**role-aware purge §13.5c** — the Owner purges any stage; a non-owner creator deletes
   own-while-unsent) / `:validate` (→ `problems[]`) /
   `:generate({type, targetId, brief?, useData})` (→ schema-validated draft) / `:improveQuestion` /
   `:listTypes` / `:addType` / `:storeImage({base64, mime})` (→ `{imagePath, mime}`) / `:getImage(path)` /
@@ -586,13 +574,13 @@ renderer):
   `questionnaires.viewResults` (built §13.5b)_; `assignments:trends(questionnaireId)` returns per-question
   rating-over-time trends — _sender-scoped + gated `questionnaires.viewResults`, **includes Private sends'
   numeric values** (numbers only); built §13.5c_; `assignments:delete(assignmentId)` deletes one send + its
-  derived Insight (_sender or Owner/super-admin only; built §13.5c_); `assignments:createCompatibility`
+  derived Insight (_sender or Owner only; built §13.5c_); `assignments:createCompatibility`
   (the dual send — AI personalizes a variant per answerer, freezing the paired snapshots) /
   `:compatibility(questionnaireId)` (the sender's compatibility groups — paired members + the alignment
   report) / `:align(compatibilityGroupId)` (generate/regenerate the alignment report + a draft Insight;
-  budget-gated as `questionnaire.analyze`) / `:revealRaw(assignmentId)` (a `senderSeesAll` sender holding
-  `questionnaires.readRaw` — or the super-admin, any send — reveals raw answers; writes an audit entry
-  first) — _all sender-scoped/gated, built §13.5d_; `:list` / `:createRelayLink` /
+  budget-gated as `questionnaire.analyze`) / `:revealRaw(assignmentId)` (the **Owner** (any send) — or a
+  `senderSeesAll` sender holding `questionnaires.readRaw` — reveals raw answers; **no audit entry is
+  written**) — _all sender-scoped/gated, built §13.5d_; `:list` / `:createRelayLink` /
   `:drain` / `:revoke` land with the relay slice.
 - **Answer** — `assignments:saveProgress` / `:submit` / `:decline({ note? })` _(in-app — wired; gated by
   `questionnaires.answer`, recipient-scoped in the bridge)_; the relay page talks to the **Worker** directly
@@ -602,8 +590,6 @@ renderer):
   budget-gated + metered as `questionnaire.analyze`. The live `Analyze` action runs from the Results view;
   the **`autoAnalyze`** setting auto-runs it when Results opens for any new responses — built §13.5b.)_
 - **Relay admin** — `relay:status` / `relay:connect` / `relay:deploy` / `relay:update` / `relay:teardown`.
-- **Super-admin** — `assignments:revealRaw({assignmentId})` (break-glass; writes an audit entry, §8.4) +
-  `audit:list` (the break-glass raw-access audit trail; super-admin only; built §13.5d).
 - **Claude** — generation/analysis/suggest run the `06` path: `checkBudget → call → recordUsage` with
   `type` ∈ {`questionnaire.generate`, `questionnaire.suggest`, `questionnaire.analyze`}; cost charged to the
   **active person**; caching on the stable prefix. New labels registered in `usageTypes`.
@@ -658,25 +644,23 @@ generation/analysis runs **within Anthropic's usage policy** — refusals handle
 circumvented. **iOS/App-Store risk** for explicit tiers is recorded (§11) with mitigations (17+ rating, the
 gate, store-guideline compliance, remote disable).
 
-### 8.4 The break-glass privacy model (private mode)
+### 8.4 The private-mode privacy model
 
 - **Promise to the recipient:** in **Private** mode the recipient is told their answers are _"used only to
   personalize coaching."_ In normal operation that is true: **no UI exposes the raw/prose answers**, and the
-  `questionnaires.readRaw` capability ships **OFF** (even for the Owner). _Since §13.5c the disclosure also
+  `questionnaires.readRaw` capability ships **OFF for non-owner roles**. _Since §13.5c the disclosure also
   states that the recipient's **numeric ratings may appear in the sender's trends over time** (the
   rating-over-time charts include Private sends' numbers — never the prose answers); the copy is kept
-  consistent across the send panel + the recipient Inbox so the promise stays honest (§3.2)._ Since
-  §13.5d, `questionnaires.readRaw` is **registered as an explicit-grant-only capability**: it ships OFF
-  even for the Owner (the Owner's auto-grant in `roleAllows` skips it) and is enabled only by an explicit
-  toggle in the Roles matrix.
-- **Raw answers can be revealed two ways** (each via `assignments:revealRaw`, which **writes an audit
-  entry** `{ at, by, viaSuperAdmin, assignmentId, recipientName?, action }` to a **vault-stored (encrypted)**
-  log viewable in super-admin mode **from any device**): the concealed **super-admin break-glass** (any
-  Private send — the developer's debug door), or the **sender of a `senderSeesAll` compatibility send**
-  holding `questionnaires.readRaw` (§3.6/§13.5d). Nothing else exposes the prose answers.
+  consistent across the send panel + the recipient Inbox so the promise stays honest (§3.2)._
+  `questionnaires.readRaw` is an **explicit-grant-only** capability: it ships OFF for non-owner roles and is
+  enabled only by an explicit toggle in the Roles matrix. The **Owner is the full-access role and always
+  holds it.**
+- **Raw answers can be revealed two ways** (each via `assignments:revealRaw`, which writes **no audit
+  entry** — the break-glass audit log was removed 2026-06-14): the **Owner** (any Private send), or the
+  **sender of a `senderSeesAll` compatibility send** holding `questionnaires.readRaw` (§3.6/§13.5d).
+  Nothing else exposes the prose answers.
 - **Disclosure toggle** — `questionnaires.discloseAdminAccess` (admin-only, **default OFF**) controls whether
-  the recipient is told an owner/super-admin could ever access answers; default keeps them feeling safe to be
-  honest.
+  the recipient is told the Owner could ever access answers; default keeps them feeling safe to be honest.
 - **Honesty guard** — the recipient's disclosure text is **derived from the configured visibility/privacy
   mode**, so no configuration can promise more privacy than the system delivers.
 - **Not zero-knowledge from the owner** — consistent with `04` §8 and `10-multi-device-vault` §2/§8 (one
@@ -719,7 +703,7 @@ fallback message). Responsive ~360px→desktop everywhere, including the relay p
 - **E2E (Playwright):** author (type + own Qs + AI) → send in-app → recipient answers → analyze → approve →
   Insight + metric appear in a later session's context (with `SELFOS_FAKE_CLAUDE`); the **relay flow against a
   fake Worker** (PIN gate, derived disclosure, age gate, question image, submit, thank-you, drain, withdraw,
-  expiry/revoke); break-glass writes an audit entry; deletion purges + revokes. No-overflow +
+  expiry/revoke); the Owner reveals a Private send's raw answers; deletion purges + revokes. No-overflow +
   control-geometry guards on every surface **and a mobile-width (390px) pass incl. the relay page**.
 - The Cloudflare deployer + Claude client are **interfaces with fakes** (no real account/network).
 
@@ -765,8 +749,9 @@ Confirmed with the user (2026-06-10):
 7. **Relay hosting** — **per-household BYO Cloudflare**; free `*.workers.dev`; relay config (endpoint + drain
    secret + **encrypted least-privilege Cloudflare token**) stored **in the vault**; if unconfigured,
    in-app/household sends still work.
-8. **Privacy** — **break-glass**; `readRaw` OFF by default; super-admin break-glass + **vault-stored audit
-   log (cross-device)**; **disclosure toggle default OFF**; recipient disclosure **derived from visibility**.
+8. **Privacy** — `readRaw` OFF for non-owner roles (the **Owner** always has it); the Owner (any Private
+   send) or a `senderSeesAll` sender with `readRaw` reveals raw answers, **no audit log** (removed
+   2026-06-14); **disclosure toggle default OFF**; recipient disclosure **derived from visibility**.
 9. **Sensitive content** — Intimacy incl. **Explicit/Unfiltered in v1**, **tiered age + consent**, strictly
    **within Anthropic policy**; explicit **included on iOS** (risk + mitigations recorded).
 10. **Answer format** — forms + simple conditional branching (no conversational/adaptive in v1).
@@ -782,9 +767,9 @@ Confirmed with the user (2026-06-10):
     assignment, contact prefilled; **PIN included by default** (per-send opt-out). _(QR was considered and
     cut — it needs a local QR encoder to keep the link off a third-party service, and copy/mailto/SMS/share
     cover delivery.)_
-18. **Deletion** — Owner/super-admin any stage → **purge everything** (+ revoke link); creator only while
+18. **Deletion** — the Owner at any stage → **purge everything** (+ revoke link); creator only while
     unsent.
-19. **Capabilities** — `questionnaires.create` / `.answer` / `.viewResults` / `.readRaw` (OFF) / **`.sendExternal`
+19. **Capabilities** — `questionnaires.create` / `.answer` / `.viewResults` / `.readRaw` (OFF for non-owners) / **`.sendExternal`
     (default ON for Member)**; relay **configuration** is admin-only. _(No `manageTemplates` — templates were
     cut.)_
 20. **Person** — add encrypted `email` / `phone` (excluded from coaching context); amends `04`.
@@ -792,8 +777,8 @@ Confirmed with the user (2026-06-10):
     charged to the sender; gap-finder respects budget.
 22. **Gap-finder data** — structured context + prior answers/Insights (via the registry; incl. session
     Insights once `09` ships); **never raw transcripts**.
-23. **Multi-device / single-vault** — all data lives in the vault; no per-device state; super-admin is a
-    per-vault identity (passphrase + audit log in the vault, aligning with `04`).
+23. **Multi-device / single-vault** — all data lives in the vault; no per-device state; the **Owner** is
+    the per-vault full-access identity (aligning with `04`).
 24. **Companions** — **`09`** = session analysis (mood = valence + energy, as metrics); **`11`** =
     relationship/intimacy dashboard + metric trends + intimacy/encounter check-in & log. **Recurring/scheduled
     check-ins deferred** (schema re-ask-ready).
@@ -1016,6 +1001,12 @@ compatibilityGroupId`, each with its own frozen variant snapshot); blocked when 
 
 ## 14. Changelog
 
+- 2026-06-14 — **super-admin removed; the Owner is the full-access role; the break-glass audit log removed.**
+  `assignments:revealRaw` now writes **no audit entry** and is permitted for the **Owner** (any Private send)
+  or a `senderSeesAll` sender holding `questionnaires.readRaw` (still `EXPLICIT_GRANT_ONLY`, OFF for non-owner
+  roles). Deleted `auditService`, the `RawAccessAuditEntry`/`RawAccessAuditLog` schemas + `config/raw-access-audit.enc`,
+  `audit:list`, and the `/audit` viewer/nav. Synced §4.1/§4.2/§4.5/§6/§8.4/§12 + the §15.3 reveal copy
+  (see [`04-people-roles.md`](04-people-roles.md) §8 for the overall change).
 - 2026-06-12 — **2026-06 authoring-UX amendment added (§15, package D of the app refresh; Review).** On the
   already-built feature: a **General** type; **sensitivity gated to Intimacy/Scenario types** (hidden + forced
   Standard elsewhere); **reworded "who sees what" copy** (no "break-glass"/"audited"; clearer "each sees their own");
@@ -1328,16 +1319,17 @@ to drop jargon the user flagged ("break-glass", "audited", the redundant-soundin
 | `eachSeesOwn`   | **Shared report + your own answers** | "You both get the combined report, and each person can also look back at their **own** answers. Neither sees the other's."                  |
 | `senderSeesAll` | **You see their answers**            | "You'll see [recipient]'s individual answers and you both get the combined report. They're clearly told their answers are shared with you." |
 
-When `senderSeesAll` is selected, a plain secondary line is shown to the author: _"A record is kept each time you
-open their answers."_ — honest about the audit trail (§8.4) without the "audited"/"break-glass" jargon.
+When `senderSeesAll` is selected, a plain secondary line is shown to the author. _(Amended 2026-06-14: now that
+the audit log is removed (§8.4), this line reads "You'll be able to read their raw answers (a household owner can
+too) — let them know." — honest about who can see the answers, with no audit-trail language.)_
 
 Notes:
 
 - "Each sees their own" → **"Shared report + your own answers"** makes the _added_ thing explicit (you can review
   your own responses), removing the "obviously I see my own" redundancy.
 - **"break-glass" / "audited" disappear from user copy.** The `senderSeesAll` reveal still requires
-  `questionnaires.readRaw` and still **writes an audit entry** (§8.4) — that accountability is real and unchanged;
-  it's surfaced to the author as the plain "a record is kept…" line above, not as jargon.
+  `questionnaires.readRaw` (the **Owner** always has it). _(Amended 2026-06-14: the audit log was removed —
+  there is no audit entry; the author is simply told their recipient's raw answers will be readable.)_
 - The recipient-facing **disclosure** text (`compatibilityDisclosure`, §3.6) is already plain and honesty-derived;
   it gets a light pass for consistency with the labels above but its guarantees don't change.
 

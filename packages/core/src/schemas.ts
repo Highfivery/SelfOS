@@ -55,11 +55,6 @@ export const DeviceStateSchema = z.object({
   window: WindowBoundsSchema.optional(),
   activePersonId: z.string().nullable().optional(),
   /**
-   * @deprecated Migration source only (10-multi-device-vault §6.4). The super-admin hash now lives in
-   * the vault (`config/superadmin.enc`); this device-local copy is read once to seed it, then unused.
-   */
-  superAdminPassphraseHash: z.string().optional(),
-  /**
    * A member who redeemed an invite but hasn't yet set their PIN (10-multi-device-vault §5.4). Persisted
    * so a crash between redeem and finish resumes the "Set your PIN" step on next boot rather than
    * dropping into an open person picker. Cleared once the join completes.
@@ -547,7 +542,7 @@ export const QuestionnaireSchema = z.object({
   version: z.number().int().positive(), // immutable-snapshot version; bumps on edit
   // Who authored it — set by main on create from the active person, never the renderer. Gates "a creator
   // may delete their own questionnaire only while unsent" (§3.9). Additive-optional (legacy defs lack it →
-  // only Owner/super-admin can delete those); no schemaVersion bump.
+  // only the Owner can delete those); no schemaVersion bump.
   creatorPersonId: z.string().optional(),
   title: z.string().min(1),
   description: z.string().optional(),
@@ -710,35 +705,6 @@ export const ResponseSetSchema = z.object({
   submittedAt: z.string().optional(),
 });
 export type ResponseSet = z.infer<typeof ResponseSetSchema>;
-
-/**
- * The break-glass raw-access audit trail (08-questionnaires §4.5/§8.4; generalized for intake in
- * 18-personal-onboarding §8.4). Appended to the encrypted, cross-device `config/raw-access-audit.enc` every
- * time someone reveals data behind a break-glass: a Private send's raw answers (`revealRaw` — the
- * super-admin, or a `senderSeesAll` sender holding `questionnaires.readRaw`) OR a person's restricted intake
- * facts (`revealRestricted` — the super-admin, or a holder of `intake.readRestricted`). The log is viewable
- * only in super-admin mode, from any device. `assignmentId` is set for `revealRaw`;
- * `subjectPersonId`/`subjectName` for `revealRestricted` — both optional so each action carries only what
- * applies (existing `revealRaw` entries parse unchanged).
- */
-export const RawAccessAuditEntrySchema = z.object({
-  schemaVersion: z.number().int().positive(),
-  at: z.string(),
-  by: z.string(), // the active person id (or 'super-admin' when no person is signed in)
-  viaSuperAdmin: z.boolean(), // true = the concealed super-admin break-glass; false = a capability holder
-  assignmentId: z.string().min(1).optional(), // revealRaw: which send's answers were revealed
-  recipientName: z.string().optional(), // revealRaw: the send's recipient
-  subjectPersonId: z.string().optional(), // revealRestricted: whose intake was revealed
-  subjectName: z.string().optional(), // revealRestricted: that person's display name
-  action: z.enum(['revealRaw', 'revealRestricted']),
-});
-export type RawAccessAuditEntry = z.infer<typeof RawAccessAuditEntrySchema>;
-
-export const RawAccessAuditLogSchema = z.object({
-  schemaVersion: z.number().int().positive(),
-  entries: z.array(RawAccessAuditEntrySchema),
-});
-export type RawAccessAuditLog = z.infer<typeof RawAccessAuditLogSchema>;
 
 // ── Relay: external zero-knowledge delivery (08-questionnaires §3.4/§4.5/§5.4/§8.6) ──────────────────
 // The Worker stores ONLY ciphertext. Questions (+ author images) are sealed under a symmetric content

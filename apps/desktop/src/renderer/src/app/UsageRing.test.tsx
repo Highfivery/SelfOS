@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { UsageRing } from './UsageRing';
-import { clearMockBridge, installMockBridge } from '../test-utils/bridge';
+import { clearMockBridge, elevateToOwner, installMockBridge } from '../test-utils/bridge';
 import { useBudgetStore } from '../stores/budgetStore';
 import { useSessionStore } from '../stores/sessionStore';
 
@@ -18,7 +18,7 @@ function renderRing(): void {
 afterEach(() => {
   clearMockBridge();
   useBudgetStore.setState({ status: null });
-  useSessionStore.setState({ superAdmin: false, activePerson: null, access: null });
+  useSessionStore.setState({ activePerson: null, access: null });
 });
 
 describe('UsageRing', () => {
@@ -56,7 +56,7 @@ describe('UsageRing', () => {
   });
 
   it('shows admin $ with the Admin only badge + the top usage types', async () => {
-    useSessionStore.setState({ superAdmin: true }); // bypasses gating → budgets.manage
+    elevateToOwner();
     installMockBridge({
       budgetStatus: () =>
         Promise.resolve({

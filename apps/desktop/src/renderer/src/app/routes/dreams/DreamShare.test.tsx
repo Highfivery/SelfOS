@@ -8,12 +8,12 @@ import { DreamAnalysisPane } from './DreamAnalysisPane';
 import { useDreamAnalysisStore } from '../../../stores/dreamAnalysisStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useSettingsStore } from '../../../settings/settingsStore';
-import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
+import { clearMockBridge, elevateToOwner, installMockBridge } from '../../../test-utils/bridge';
 
 afterEach(() => {
   clearMockBridge();
   useDreamAnalysisStore.getState().reset();
-  useSessionStore.setState({ superAdmin: false });
+  useSessionStore.setState({ activePerson: null, access: null });
   useSettingsStore.setState((s) => ({ values: { ...s.values, 'ai.enabled': false } }));
 });
 
@@ -106,7 +106,7 @@ function renderPane(dream: Dream = baseDream): void {
 
 describe('DreamAnalysisPane sharing', () => {
   it('shows the share controls on an approved, standard dream and toggles a fact', async () => {
-    useSessionStore.setState({ superAdmin: true }); // grants dreams.shareContext
+    elevateToOwner();
     const setShare = vi.fn(() => Promise.resolve({ ok: true as const }));
     installMockBridge({
       secretHas: () => Promise.resolve(true),
@@ -127,7 +127,7 @@ describe('DreamAnalysisPane sharing', () => {
   });
 
   it('now shows share controls for a SENSITIVE dream when informsContext is on (15 §3.2)', async () => {
-    useSessionStore.setState({ superAdmin: true });
+    elevateToOwner();
     installMockBridge({
       secretHas: () => Promise.resolve(true),
       dreamGetAnalysis: () => Promise.resolve(approvedAnalysis),
@@ -139,7 +139,7 @@ describe('DreamAnalysisPane sharing', () => {
   });
 
   it('hides sharing with a private-journal note when informsContext is off', async () => {
-    useSessionStore.setState({ superAdmin: true });
+    elevateToOwner();
     installMockBridge({
       secretHas: () => Promise.resolve(true),
       dreamGetAnalysis: () => Promise.resolve(approvedAnalysis),

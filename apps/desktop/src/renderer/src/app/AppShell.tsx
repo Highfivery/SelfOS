@@ -13,7 +13,6 @@ import {
   PanelLeftOpen,
   Settings,
   Shapes,
-  ShieldAlert,
   ShieldCheck,
   Sparkles,
   Users,
@@ -35,7 +34,6 @@ import { Onboarding } from './routes/onboarding/Onboarding';
 import { AppHeader } from './AppHeader';
 import { Switcher } from './Switcher';
 import { LockScreen } from './LockScreen';
-import { SuperAdminUnlock } from './SuperAdminUnlock';
 import { Banner } from '../design-system/components';
 import styles from './AppShell.module.css';
 
@@ -61,16 +59,14 @@ export function AppShell(): JSX.Element {
   const intakeState = useIntakeStore((s) => s.state);
   const intakeIncomplete =
     canDoIntake && intakeState !== null && intakeState.session.status !== 'complete';
-  const isSuperAdmin = useSessionStore((s) => s.superAdmin);
-  // The active person's role is the Owner (the household setter-upper) — the gate exempts them (decision
-  // 2026-06-15: onboarding is a hard requirement for Members only, never the Owner / super-admin).
+  // The active person's role is the Owner (the household setter-upper) — the onboarding gate exempts them
+  // (decision 2026-06-15: onboarding is a hard requirement for Members only, never the Owner).
   const isOwner = useSessionStore((s) => {
     if (!s.activePerson || !s.access) return false;
     const account = s.access.accounts.find((a) => a.personId === s.activePerson?.id);
     return account?.roleId === OWNER_ROLE_ID;
   });
   const locked = useSessionStore((s) => s.locked);
-  const unlockPromptOpen = useSessionStore((s) => s.unlockPromptOpen);
   const activePersonId = useSessionStore((s) => s.activePerson?.id ?? null);
   const collapsed = useNavStore((s) => s.collapsed);
   const toggleSidebar = useNavStore((s) => s.toggle);
@@ -135,11 +131,11 @@ export function AppShell(): JSX.Element {
 
   // Onboarding is a hard requirement for Members (18-personal-onboarding §3.1, decision 2026-06-15): a
   // Member who hasn't finished onboarding is taken straight into a full-screen takeover (no sidebar / other
-  // screens) until their portrait is generated (`status === 'complete'`). The Owner + super-admin are exempt
-  // (the Owner sets up AI; intake requires AI). The header stays so they can still switch person / lock /
-  // (members can't reach AI settings — when AI is off they see the calm "ask your owner" state). We gate
-  // until we KNOW it's complete (treating not-yet-loaded as incomplete) to avoid flashing the app first.
-  const mustOnboard = canDoIntake && !isOwner && !isSuperAdmin;
+  // screens) until their portrait is generated (`status === 'complete'`). The Owner is exempt (they set up
+  // AI, which the intake requires). The header stays so they can still switch person / lock (members can't
+  // reach AI settings — when AI is off they see the calm "ask your owner" state). We gate until we KNOW it's
+  // complete (treating not-yet-loaded as incomplete) to avoid flashing the app first.
+  const mustOnboard = canDoIntake && !isOwner;
   const intakeGated = mustOnboard && (!intakeLoaded || intakeState?.session.status !== 'complete');
   if (intakeGated) {
     return (
@@ -160,7 +156,6 @@ export function AppShell(): JSX.Element {
           </main>
         </div>
         {switching ? <Switcher onClose={() => setSwitching(false)} /> : null}
-        {unlockPromptOpen ? <SuperAdminUnlock /> : null}
       </div>
     );
   }
@@ -321,18 +316,6 @@ export function AppShell(): JSX.Element {
                 <span className={styles.label}>Usage</span>
               </NavLink>
             ) : null}
-            {isSuperAdmin ? (
-              <NavLink
-                to="/audit"
-                className={navClass}
-                aria-label="Raw-access audit"
-                title={tip('Audit')}
-                onClick={closeDrawer}
-              >
-                <ShieldAlert size={18} aria-hidden="true" />
-                <span className={styles.label}>Audit</span>
-              </NavLink>
-            ) : null}
             {import.meta.env.DEV ? (
               <NavLink
                 to="/gallery"
@@ -396,7 +379,6 @@ export function AppShell(): JSX.Element {
       </div>
 
       {switching ? <Switcher onClose={() => setSwitching(false)} /> : null}
-      {unlockPromptOpen ? <SuperAdminUnlock /> : null}
     </div>
   );
 }

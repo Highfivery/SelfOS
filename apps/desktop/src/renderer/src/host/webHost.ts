@@ -76,7 +76,6 @@ function createBridgeHost(parts: HostParts): BridgeHost {
     return fs;
   };
 
-  let superAdminActive = false;
   const chatListeners = new Set<(delta: string) => void>();
   const dreamListeners = new Set<(delta: string) => void>();
   const intakeListeners = new Set<(delta: string) => void>();
@@ -140,10 +139,6 @@ function createBridgeHost(parts: HostParts): BridgeHost {
       if (!id) return DEFAULT_MODEL;
       const model = (await readVaultSettingsValues(fileSystem(id)))['ai.model'];
       return typeof model === 'string' ? model : DEFAULT_MODEL;
-    },
-    isSuperAdminActive: () => superAdminActive,
-    setSuperAdminActive: (active) => {
-      superAdminActive = active;
     },
     appVersion: APP_VERSION,
     // Native (Capacitor) → iOS; otherwise the browser preview → web. The titlebar renders no window

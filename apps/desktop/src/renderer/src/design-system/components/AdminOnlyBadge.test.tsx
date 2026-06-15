@@ -12,7 +12,7 @@ describe('AdminOnlyBadge', () => {
     render(<AdminOnlyBadge />);
     expect(screen.getByText('Admin only')).toHaveAttribute(
       'title',
-      'Only Owners and the super-admin can see this.',
+      'Only the household owner can see this.',
     );
   });
 });

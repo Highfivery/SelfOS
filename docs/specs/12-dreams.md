@@ -14,7 +14,7 @@
 Builds on [`00-architecture.md`](00-architecture.md) (vault, IPC, security, feature-module registry),
 [`01-design-system.md`](01-design-system.md), [`03-settings.md`](03-settings.md) (settings registry),
 [`04-people-roles.md`](04-people-roles.md) (people, relationships, capabilities, encryption,
-`buildContext`, shareable-vs-private, super-admin honesty model),
+`buildContext`, shareable-vs-private, owner-access honesty model),
 [`05-conversations.md`](05-conversations.md) (the streaming chat engine + crisis/not-medical safety this
 reuses), [`06-ai-usage-and-budgets.md`](06-ai-usage-and-budgets.md) (every AI call is metered +
 budget-gated), and **`08`/`09`** (the shared Insight/metrics layer + the per-fact shareable promotion model
@@ -96,9 +96,9 @@ optional `dreamId` (§4). These amend `08` and are synced there via `sync-docs` 
   but v1 is text. No architectural choice precludes it.
 - **Scheduled morning reminders / notifications** — out of scope (the user opted out for v1; would need
   Electron + iOS notification plumbing).
-- **Dream-access break-glass auditing** — v1 relies on the existing super-admin inspect reveal with **no
-  audit log** (§8.4); extending `08`'s `raw-access-audit.enc` infrastructure to dream access is a future
-  enhancement.
+- **Dream-access auditing** — the Owner (full-access role) can decrypt dreams with **no
+  audit log** (§8.4); there is no raw-access audit infrastructure (removed 2026-06-14). A future audit is a
+  possible enhancement.
 
 ## 3. UX & flows
 
@@ -467,7 +467,7 @@ their own dream**. Trauma/nightmare content is a
 intimacy-oriented sensitivity tier. All AI runs **within Anthropic's usage policy** (graceful refusal
 handling, never circumvented).
 
-### 8.4 Privacy & the owner/super-admin honesty model
+### 8.4 Privacy & the owner-access honesty model
 
 - **Dreamer-only in normal use** — a person's dreams, transcripts, and analyses are theirs; there is **no
   "view others' dreams" capability**. They feed only **that** person's coach (cross-person sharing is the
@@ -479,11 +479,11 @@ handling, never circumvented).
   shareable-vs-private boundary `buildContext` enforces (`04` §3.4). This holds even for a linked person the
   dreamer has no relationship with (any household person is linkable, §3.1): public notes feed, private data
   does not. The flow is one-directional — a linked person learns nothing about the dream.
-- **Break-glass (v1)** — consistent with `04` §8 and `08` §8.4, the vault is **not zero-knowledge from the
-  device owner / super-admin** (one master key decrypts the whole vault; RBAC is an app-layer concern).
-  The concealed **super-admin inspect** mode can therefore reach dreams. **v1 ships no dream-access audit
-  log** — a deliberate simplification (the user's call). The `08` `raw-access-audit.enc` infrastructure
-  exists and could be extended to dream access later (§11); this is recorded so the privacy posture is
+- **Owner access (v1)** — consistent with `04` §8 and `08` §8.4, the vault is **not zero-knowledge from the
+  device owner** (one master key decrypts the whole vault; RBAC is an app-layer concern). The **Owner**
+  (the full-access role) can therefore reach dreams. **v1 ships no dream-access audit
+  log** — a deliberate simplification (the user's call). There is no raw-access audit infrastructure
+  (removed 2026-06-14); this is recorded so the privacy posture is
   documented, not silently assumed.
 - **Encryption** protects against file-browsing, other household members, and the cloud — not the device
   owner; no new exposure beyond the existing model.
@@ -555,7 +555,7 @@ Confirmed with the user (2026-06-11):
 8. **Sensitivity** — a **per-dream sensitivity tier** (reusing `SensitivityTier`); drives honest handling +
    the image-gen warning; never blocks analyzing one's own dream. Whether a dream feeds shared context is
    the separate per-dream **`informsContext`** switch (15-shareability §3.2), not the tier.
-9. **Break-glass** — Owner/super-admin can reach dreams via the existing inspect mode; **no audit log in
+9. **Owner access** — the Owner (full-access role) can reach dreams; **no audit log in
    v1**.
 10. **Sessions list** — dream-analysis conversations live **only inside Dreams**, never in the main Sessions
     list.

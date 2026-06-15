@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import '../../../settings/builtins';
 import { Sessions } from './Sessions';
-import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
+import { clearMockBridge, elevateToOwner, installMockBridge } from '../../../test-utils/bridge';
 import { useConversationStore } from '../../../stores/conversationStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useSettingsStore } from '../../../settings/settingsStore';
@@ -33,7 +33,7 @@ function renderSessions(): void {
 afterEach(() => {
   clearMockBridge();
   useConversationStore.getState().reset();
-  useSessionStore.setState({ superAdmin: false });
+  useSessionStore.setState({ activePerson: null, access: null });
   setAiEnabled(false);
 });
 
@@ -146,7 +146,7 @@ describe('Sessions', () => {
     setAiEnabled(true);
 
     // Admin: dollars + the Admin only badge.
-    useSessionStore.setState({ superAdmin: true });
+    elevateToOwner();
     renderSessions();
     expect(await screen.findByText('$0.42')).toBeInTheDocument();
     expect(screen.getByText('Admin only')).toBeInTheDocument();

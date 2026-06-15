@@ -39,7 +39,7 @@ export interface SettingDefinition<T = unknown> {
   scope?: SettingScope; // default 'vault'
   order?: number;
   visibleWhen?: (values: Readonly<Record<string, unknown>>) => boolean;
-  /** Visible only to an Owner / super-admin, and rendered with an "Admin only" marker (CLAUDE.md §12). */
+  /** Visible only to the Owner (full-access role), and rendered with an "Admin only" marker (§12). */
   adminOnly?: boolean;
   tags?: string[];
 }

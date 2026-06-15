@@ -12,8 +12,6 @@ afterEach(() => {
 
 async function fillValidForm(): Promise<void> {
   await userEvent.type(screen.getByLabelText('Your name'), 'Alex');
-  await userEvent.type(screen.getByLabelText('Super-admin passphrase'), 'hunter2');
-  await userEvent.type(screen.getByLabelText('Confirm passphrase'), 'hunter2');
   await userEvent.type(screen.getByLabelText('Your PIN'), '1234');
   await userEvent.type(screen.getByLabelText('Confirm PIN'), '1234');
 }
@@ -32,9 +30,7 @@ describe('Setup', () => {
     installMockBridge();
     render(<Setup />);
     await userEvent.type(screen.getByLabelText('Your name'), 'Alex');
-    await userEvent.type(screen.getByLabelText('Super-admin passphrase'), 'hunter2');
-    await userEvent.type(screen.getByLabelText('Confirm passphrase'), 'hunter2');
-    // Everything but the PIN — still blocked.
+    // Name but no PIN — still blocked.
     expect(screen.getByRole('button', { name: /create profile/i })).toBeDisabled();
     await userEvent.type(screen.getByLabelText('Your PIN'), '1234');
     await userEvent.type(screen.getByLabelText('Confirm PIN'), '1234');
@@ -57,19 +53,7 @@ describe('Setup', () => {
     render(<Setup />);
     await fillValidForm();
     await userEvent.click(screen.getByRole('button', { name: /create profile/i }));
-    expect(householdSetup).toHaveBeenCalledWith({
-      ownerName: 'Alex',
-      passphrase: 'hunter2',
-      pin: '1234',
-    });
+    expect(householdSetup).toHaveBeenCalledWith({ ownerName: 'Alex', pin: '1234' });
     expect(await screen.findByText('AAAA-BBBB-CCCC')).toBeInTheDocument();
-  });
-
-  it('flags a passphrase mismatch', async () => {
-    installMockBridge();
-    render(<Setup />);
-    await userEvent.type(screen.getByLabelText('Super-admin passphrase'), 'hunter2');
-    await userEvent.type(screen.getByLabelText('Confirm passphrase'), 'hunterX');
-    expect(screen.getByText(/passphrases don.t match/i)).toBeInTheDocument();
   });
 });

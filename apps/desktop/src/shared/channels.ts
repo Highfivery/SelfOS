@@ -40,7 +40,6 @@ import type {
   IntakeSynthesisResult,
   IntakeTurnResult,
   Person,
-  RawAccessAuditEntry,
   SendAnswer,
   SendResult,
   PersonInput,
@@ -114,8 +113,6 @@ export const IpcChannels = {
   invitesRedeem: 'invites:redeem',
   invitesCompleteJoin: 'invites:completeJoin',
   sessionSetActive: 'session:setActive',
-  superadminUnlock: 'superadmin:unlock',
-  superadminLock: 'superadmin:lock',
   usageSummary: 'usage:summary',
   budgetGet: 'budget:get',
   budgetGetPerson: 'budget:getPerson',
@@ -174,7 +171,6 @@ export const IpcChannels = {
   relayConnect: 'relay:connect',
   relayUpdate: 'relay:update',
   relayTeardown: 'relay:teardown',
-  auditList: 'audit:list',
   dreamsList: 'dreams:list',
   dreamGet: 'dreams:get',
   dreamSave: 'dreams:save',
@@ -209,7 +205,6 @@ export const IpcChannels = {
   intakeSkipSection: 'intake:skipSection',
   intakeAcknowledgeAdult: 'intake:acknowledgeAdult',
   intakeSynthesize: 'intake:synthesize',
-  intakeRevealRestricted: 'intake:revealRestricted',
   getSidebarCollapsed: 'ui:getSidebarCollapsed',
   setSidebarCollapsed: 'ui:setSidebarCollapsed',
 } as const;
@@ -275,8 +270,8 @@ export interface SelfosBridge {
   useVault(path: string): Promise<BootState>;
   /**
    * Detach this device from the current vault (14-vault-relinking): stop the watcher, clear the
-   * device-local master key + `vaultPath`/`activePersonId`/`pendingJoinPersonId`, reset super-admin
-   * inspect, and return the recomputed (onboarding) boot state. Touches **no** bytes inside the vault —
+   * device-local master key + `vaultPath`/`activePersonId`/`pendingJoinPersonId`, and return the
+   * recomputed (onboarding) boot state. Touches **no** bytes inside the vault —
    * the folder stays intact and re-linkable via its recovery phrase. "Unlink" and "switch" are the same
    * operation; the caller re-enters the existing onboarding folder picker afterward.
    */
@@ -317,10 +312,9 @@ export interface SelfosBridge {
   claudeTest(): Promise<ClaudeTestResult>;
   /** Whether the household is set up (master key + owner) and who is active. */
   householdStatus(): Promise<HouseholdStatus>;
-  /** First-run setup: create the owner (with a login PIN), set the super-admin passphrase, return the recovery phrase. */
+  /** First-run setup: create the owner (with a login PIN) and return the recovery phrase. */
   householdSetup(input: {
     ownerName: string;
-    passphrase: string;
     pin: string;
   }): Promise<{ recoveryPhrase: string; ownerId: string }>;
   /** Join/recover this device: restore the master key from the recovery phrase. No owner is created. */
@@ -361,12 +355,11 @@ export interface SelfosBridge {
   invitesRedeem(input: { code: string }): Promise<{ ok: boolean; displayName?: string }>;
   /** Finish joining after a redeem: set the member's own PIN and sign them in. */
   invitesCompleteJoin(input: { pin: string }): Promise<{ ok: boolean }>;
-  /** Switch the active person, verifying their PIN if set. */
+  /**
+   * Switch the active person. The Owner (full-access role) may switch to ANY household person with no PIN;
+   * everyone else must pass the target's PIN if one is set (roles refactor 2026-06-15).
+   */
   sessionSetActive(input: { personId: string; pin?: string }): Promise<SetActiveResult>;
-  /** Verify the concealed super-admin passphrase; on success, main enters inspect-everything mode. */
-  superadminUnlock(input: { passphrase: string }): Promise<boolean>;
-  /** Leave super-admin inspect mode (clears the main-process bypass). */
-  superadminLock(): Promise<void>;
   /**
    * Rolled-up usage. Non-admins always get their own. Admins (`budgets.manage`) get the whole app
    * (`scope: 'app'`) or, with `personId`, a single chosen person.
@@ -532,7 +525,7 @@ export interface SelfosBridge {
   assignmentsTrends(questionnaireId: string): Promise<QuestionTrend[]>;
   /**
    * Delete one send (its snapshot + assignment + response + any derived Insight). Allowed for the send's
-   * sender or an Owner / super-admin. Requires `questionnaires.viewResults`.
+   * sender or the Owner. Requires `questionnaires.viewResults`.
    */
   assignmentsDelete(assignmentId: string): Promise<void>;
   /**
@@ -556,9 +549,9 @@ export interface SelfosBridge {
    */
   assignmentsAlign(compatibilityGroupId: string): Promise<AlignmentResult>;
   /**
-   * Break-glass reveal of a Private send's raw answers (08-questionnaires §8.4) — writes an audit entry
-   * first. Permitted only for the concealed super-admin (any send) or the sender of a `senderSeesAll`
-   * compatibility send holding `questionnaires.readRaw`. Returns null if not permitted / absent.
+   * Reveal a Private send's raw answers (08-questionnaires §8.4). Permitted only for the Owner (full
+   * access, any send) or the sender of a `senderSeesAll` compatibility send holding
+   * `questionnaires.readRaw`. Returns null if not permitted / absent.
    */
   assignmentsRevealRaw(assignmentId: string): Promise<SendAnswer[] | null>;
   /**
@@ -589,8 +582,6 @@ export interface SelfosBridge {
   relayUpdate(): Promise<RelayStatus>;
   /** Tear down + forget the relay (admin-only). */
   relayTeardown(): Promise<RelayStatus>;
-  /** The break-glass raw-access audit trail, newest first. Super-admin only. */
-  auditList(): Promise<RawAccessAuditEntry[]>;
   /** The active person's dreams, newest first (12-dreams). Requires `dreams.own`. */
   dreamsList(): Promise<Dream[]>;
   /** Load one of the active person's dreams; null if absent. Requires `dreams.own`. */
@@ -692,12 +683,6 @@ export interface SelfosBridge {
    * portrait (→ the portrait Insight + inferred field fills + completion). Requires `intake.own`.
    */
   intakeSynthesize(input: { sectionId?: string }): Promise<IntakeSynthesisResult>;
-  /**
-   * Break-glass: reveal a person's restricted intake facts ("what weighs on you" / intimacy), writing a
-   * vault audit entry BEFORE returning (§8.4). Permitted only for `intake.readRestricted` or the concealed
-   * super-admin; null otherwise.
-   */
-  intakeRevealRestricted(input: { subjectPersonId: string }): Promise<InsightFact[] | null>;
   /** Whether the desktop sidebar is collapsed to an icon rail (device-local). */
   getSidebarCollapsed(): Promise<boolean>;
   /** Persist the sidebar collapsed/expanded state (device-local). */
@@ -750,7 +735,6 @@ export type {
   Questionnaire,
   QuestionnaireInput,
   QuestionTrend,
-  RawAccessAuditEntry,
   Relationship,
   RelationshipInput,
   Role,

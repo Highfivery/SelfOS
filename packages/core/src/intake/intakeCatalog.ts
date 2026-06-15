@@ -48,7 +48,11 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
     opener:
       "Let's start simple. What should I call you, and what are your pronouns? Share whatever feels comfortable.",
     focus:
-      'The simple facts: pronouns, gender, birthday, where they live, the languages they speak, their cultural/ethnic background, and what they do for work. Ask lightly and only capture what they volunteer.',
+      'Gather the simple profile facts, ONE at a time, in a warm and natural way — do not interrogate. Make ' +
+      'sure to ask about each of these before moving on (skip any the person would rather not share): their ' +
+      'pronouns, their gender, their birthday (or age), where they live, the languages they speak, their ' +
+      'cultural or ethnic background, and what they do for work. After each answer, record it with the field ' +
+      'marker, then move to the next one you still need.',
     directFields: [
       { key: 'pronouns' },
       { key: 'gender' },

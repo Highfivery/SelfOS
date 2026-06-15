@@ -1,6 +1,7 @@
 # 08 — Questionnaires & the Insight / metrics layer
 
-> **Status:** **Approved** (built) · **Approved** (2026-06 authoring-UX amendment, §15) · _last updated 2026-06-14_
+> **Status:** **Approved** (built) · **Approved** (§15 authoring-UX) · **Review** (2026-06-15 audit fixes &
+> enhancements, §16) · _last updated 2026-06-15_
 >
 > **2026-06 amendment (§15, package D of the app refresh):** authoring-experience refinements on the
 > already-built feature — a **General** type; **sensitivity tiers shown only for Intimacy/Scenario** types (other
@@ -1001,6 +1002,14 @@ compatibilityGroupId`, each with its own frozen variant snapshot); blocked when 
 
 ## 14. Changelog
 
+- 2026-06-15 — **2026-06-15 audit fixes & enhancements added (§16; Review).** A full audit of the built
+  feature found a compatibility participant-model mismatch (the sender can't be one of the two compared
+  people — yet that's the primary couples case), a confusing Create/Send workflow, and tier-blind intimacy
+  generation (explicit/unfiltered produce identical tame output). §16 reworks compatibility to **sender +
+  someone else** (keeping two-others), adds a **context-only** visibility mode (no report, feeds both
+  participants' context), a clear **Save-draft → Send** two-step, the **Title moved below Draft-with-AI + an
+  AI-generated title**, **tier-distinct explicit generation** within the consensual-adult boundary, polish,
+  and a **comprehensive E2E expansion**. Decisions in memory `app-refresh-plan-2026-06`-adjacent. Asked-first.
 - 2026-06-14 — **super-admin removed; the Owner is the full-access role; the break-glass audit log removed.**
   `assignments:revealRaw` now writes **no audit entry** and is permitted for the **Owner** (any Private send)
   or a `senderSeesAll` sender holding `questionnaires.readRaw` (still `EXPLICIT_GRANT_ONLY`, OFF for non-owner
@@ -1396,3 +1405,193 @@ _All resolved (2026-06-12) — see §15.7. **Approved 2026-06-14** and built on 
 external-send privacy note (`RelaySendPanel`) and the admin `questionnaires.discloseAdminAccess` setting copy
 (`settings/builtins.tsx`). A future light copy pass should replace it with plain language there too (the
 `readRaw` + audit mechanism is unchanged).
+
+---
+
+## 16. 2026-06-15 amendment — audit fixes & enhancements
+
+A full audit of the built feature (the compatibility send flow, the authoring workflow, AI generation by
+tier, and test coverage) found three real problems plus the three enhancements the user asked for. This
+section specifies all of them. Layers on §1–§15 (which remain accurate). All decisions were asked-first.
+
+### 16.1 Compatibility participant model — the sender can be a participant (the core fix)
+
+**Problem.** Compatibility today assumes the **sender is a neutral third party** comparing **two other**
+people (the bridge rejects the sender being a participant — "Send a compatibility check to two other
+people."). But the obvious couples case is "compare **me** with my partner." A user authoring "Sexy Time"
+and picking themselves + their partner hits a confusing late rejection, and the disclosure copy
+(`compatibilityDisclosure(visibility, senderName)`) names the **sender** as one of the two answerers
+("neither you nor [sender]…"), which is also shown to the recipients — wrong on both counts.
+
+**Resolution (decision: "you + someone else", keep two-others).** Compatibility supports **both**:
+
+- **You + someone else** (the primary, default case): the **sender is one of the two participants**; the
+  other person answers their personalized variant; the report/insight follows the visibility mode.
+- **Two other people** (retained): the sender compares two others and is the report's audience.
+
+Changes:
+
+- **Backend** — `createCompatibilitySend` + the bridge guard accept the sender as a participant; the
+  invalid case becomes "the **same** person picked twice," not "sender is a participant." The two paired
+  assignments are built for the two **participants** (which may include the sender). `alignmentService`
+  aligns the two participants (not "two others"); insight routing per §16.2.
+- **Disclosure (`disclosure.ts`)** — `compatibilityDisclosure` is reworked to describe the **two actual
+  participants by the relationship in play**, never the sender-as-third-party. When the sender is a
+  participant it reads naturally ("Your individual answers stay private — neither you nor **Angel** sees
+  the other's; you'll both get one combined report."). The function takes the **participant context** it
+  needs (e.g. the other participant's name + whether the viewer is a participant) instead of just
+  `senderName`. The honesty guard (same text shown to recipients) is preserved.
+- **UI (`CompatibilitySendPanel`)** — relabel to "**You + someone else**" vs "**Two other people**"
+  (a small mode toggle, defaulting to you+someone-else with the sender pre-selected as the first
+  participant); the picker disables only the already-chosen person; the live disclosure preview reflects
+  the real participants. The invalid-send state is now unconstructable in the common path.
+
+### 16.2 Context-only visibility mode (new) — no report, feeds both contexts
+
+**Decision.** Add a **fourth** compatibility visibility option,
+`CompatibilityVisibility += 'contextOnly'`: both people answer their variants, but **no report is generated
+or shown to anyone and no raw answers are shared** — the answers are distilled into Insight(s) that
+**inform both participants' own coaching contexts**. Recipients are told exactly this (a derived disclosure
+line). It is the most private mode (analysis with zero human-facing output).
+
+- **Analysis** — `alignmentService` (or a sibling) runs the distillation but produces **no `AlignmentReport`
+  surface**; instead it writes a distilled, own-context Insight for **each participant** (their own coaching
+  context is enriched by the compatibility answers; one participant's **raw** answers are never exposed to
+  the other — only the distilled understanding). Facts default own-context-only (no cross-person raw share),
+  consistent with [`15`](15-shareability.md). Budget-gated like the existing analyze (§3.7).
+- **Picker** — `contextOnly` joins the §15.3 "who sees what" list with plain copy: _"No report — answers
+  just help each of you be better understood by your own coach."_ No `readRaw` needed (nothing is revealed).
+
+### 16.3 Create → Send: a clear two-step workflow
+
+**Problem.** The builder shows **Create/Save** and **Send** side-by-side, both gated by the same `canSave`,
+both terminal — but "Create" saves **and closes the builder** (so you can't Send after it) while "Send"
+**auto-saves internally** then opens the send panel. "Create then Send" looks like a sequence but isn't.
+
+**Resolution (decision: "Save draft → Send from the saved questionnaire").**
+
+- While editing, the primary action is **Save** (creates/updates the draft and **keeps you on the saved
+  questionnaire**, not closing the builder). A clear saved/dirty state distinguishes "new draft" from
+  "saved."
+- **Send** is a distinct step available **on a saved questionnaire** (its own button on the saved
+  detail/list row), not a co-equal of Save in the edit footer. Sending still validates first; if the draft
+  has unsaved edits it prompts/saves them. This makes the flow read **create → then send**.
+- Remove the strand where Create closes the builder and leaves no path to Send.
+
+### 16.4 Title below "Draft with AI" + an AI-generated title
+
+**Decision.** Move the **Title** field from the top card to **below the `QuestionnaireAiPanel` ("Draft with
+AI") and above the first question**, and have AI generation **also produce a title**:
+
+- `QuestionnaireGenerateResult` gains an optional **`title?: string`**; `generationService` asks for a short
+  title alongside the questions; the IPC result carries it.
+- `QuestionnaireAiPanel` surfaces the title (e.g. an `onTitle` callback or via `onGenerated`); the builder
+  sets `title` from it **only when the title field is empty** (never clobbers author input).
+- The builder layout detaches Title from the Type/Sensitivity/Compatibility card and re-places it after the
+  AI panel.
+
+### 16.5 Tier-distinct explicit generation (within the consensual-adult boundary)
+
+**Problem.** Generation is **tier-blind**: `GENERATION_SYSTEM` never mentions the tier and is conservative
+("supportive voice… stay strictly within policy… return [] if in doubt"); `explicit` and `unfiltered` map to
+**byte-identical, tame** one-liners in `SENSITIVITY_NOTE`. Nothing ever **instructs** explicitness, so the
+model defaults to tasteful — the user's "unfiltered" produced emotional-closeness questions.
+
+**Resolution (decision: match the intake bar; distinct tiers).** Bring questionnaire generation up to the
+explicitness the **intake** intimacy block already ships, within the **same** consensual-adult boundary:
+
+- In `packages/core/src/questionnaires/aiPrompts.ts`, make `explicit` and `unfiltered` **distinct** and give
+  each **positive, escalating** content direction. For the **intimacy** type at these tiers (18+),
+  generation is **instructed** to write genuinely explicit, specific questions — acts, body/grooming,
+  fantasies (incl. taboo fantasies **as roleplay**, e.g. CNC framed as pre-agreed), porn, history — with
+  **`unfiltered` the most graphic / no-holds-barred within the boundary** and `explicit` a notch below.
+- Add a **tier-aware intimacy generation framing** (a dedicated system clause or string used when the tier
+  is `explicit`/`unfiltered`) that **positively permits and requests** explicit content — rather than the
+  current refusal-default — and seed the user message with an in-policy topic inventory (mirroring the
+  intake catalog's `ACTIVITIES`/`commonFantasies`), so the model has concrete subject matter.
+- **The boundary is unchanged and explicit in the prompt** (CLAUDE.md; the intake `contentNote`):
+  consensual-adult sexuality only; taboo **fantasies** in as fantasy/roleplay with advance consent; **never**
+  minors, real non-consent, or illegal acts; stays within Anthropic's usage policy (refuse → `[]` only when
+  genuinely out of policy, not merely because it's explicit). The shared `SAFETY` prefix used by the
+  gap-finder/analysis/variant/alignment prompts is **not** loosened globally — only the intimacy-generation
+  path gains the explicit framing. The 18+/consent gate stays recipient-side at send (§8.3).
+
+### 16.5a Owner-extensible intimacy topic inventory (shared with the intake)
+
+The in-policy topic inventory that seeds generation (and that the **intake** intimacy block already uses as its
+`ACTIVITIES`/`commonFantasies` lists, [`18`](18-personal-onboarding.md)) becomes **one shared, owner-extensible
+source of truth**:
+
+- **Shared built-in constant** — extract the built-in activities + fantasies into a single shared constant
+  (e.g. `@selfos/core` `INTIMACY_TOPICS = { activities: [...], fantasies: [...] }`) that **both** the intake
+  catalog and questionnaire generation import. (Resolves §16.9.2 — one source of truth, no drift.)
+- **Owner-managed custom additions** — the Owner can **add/remove custom `activities` and custom `fantasies`**
+  (mirroring the two built-in lists), persisted **vault-side, household-wide** (a new prefs file, the
+  `config/questionnaires.json` custom-types precedent). The **merged** inventory (built-in + custom) is what
+  feeds **both** the intake intimacy form and questionnaire generation.
+- **Two entry points (decision)** — a dedicated **owner-only Settings** surface (18+, marked, vault-scoped) to
+  manage the lists, **and** a quick **inline "add a topic"** in the intimacy questionnaire builder that writes
+  to the same shared custom list. Both edit one inventory.
+- **Boundary (decision: trust owner + model-enforced policy + a clear note)** — additions are free text; the
+  Owner is the full-access role, so additions aren't keyword-filtered. The generation prompt + Claude still
+  enforce Anthropic's usage policy and the consensual-adult boundary (minors/real-non-consent/illegal never
+  become activities, even if typed). A clear note states additions must be **consensual-adult and within
+  policy**. Custom topics inherit the same 18+/restricted handling as the built-ins.
+- **Cross-spec** — this touches [`18`](18-personal-onboarding.md): the intake intimacy block reads the **merged**
+  inventory instead of a hard-coded local list (sync 18 when built).
+
+### 16.6 Polish (smaller audit findings)
+
+- **Custom-type duplicate is silently dropped** — show a small inline notice when an added type collides
+  (case-insensitive) with a starter/custom type, instead of nothing.
+- **Send-time validation clarity** — a questionnaire can be **saved** structurally invalid (validation is at
+  send). Keep that, but make the send-time failure message specific (which question/field is invalid) rather
+  than generic.
+- A light copy pass on any remaining "break-glass"/"audited" wording the §15.8 follow-up flagged
+  (`RelaySendPanel`, the admin disclosure setting), now that the audit log is gone (§14, 2026-06-14).
+
+### 16.7 Tests — comprehensive audit-driven expansion
+
+The audit found strong unit coverage but **E2E gaps**. Add (priority order):
+
+- **Compatibility full round-trip E2E** — author a compatibility questionnaire (you + someone else), send,
+  **both** answer in their inboxes, generate the alignment report + Insight; plus a **`contextOnly`** variant
+  asserting **no report** is produced and **both** participants' contexts are enriched (decrypt to verify),
+  and a **two-others** variant.
+- **Create → Send workflow E2E** — save a draft (stays saved, no strand), then send it from the saved
+  questionnaire; assert the two-step.
+- **AI generation E2E (mocked Claude)** — generate questions **and a title**; assert the title fills only
+  when empty; assert the intimacy `unfiltered` tier reaches the prompt with the explicit framing (assert the
+  generation **input** carries the tier-distinct explicit instruction via the fake client capture — not by
+  asserting model output).
+- **Disclosure correctness** — assert the reworked `compatibilityDisclosure` never names the sender as the
+  "other" answerer and matches what the recipient sees.
+- Fill the high-value gaps the audit listed: relay recipient answer→drain round-trip, the decline flow,
+  image size/MIME rejection, and the explicit-tier send-through (recipient 18+/consent gate).
+- Unit: the reworked participant model + `contextOnly` insight routing + the tier-distinct
+  `SENSITIVITY_NOTE`/framing. Run `pnpm typecheck` after tests (memory `vitest-does-not-typecheck`).
+
+### 16.8 Resolved decisions (2026-06-15)
+
+- **Compatibility participants** — **you + someone else** (default; sender is a participant) **and** keep
+  two-others. Disclosure reworked to the real participants; sender no longer named as the "other."
+- **Context-only mode** — new `contextOnly` visibility: no report, no raw sharing; a **per-participant**
+  distillation (each framed for that person, own-context-only) feeds **both** participants' own contexts.
+- **Intimacy topic inventory** — one **shared, owner-extensible** inventory (built-in `INTIMACY_TOPICS`
+  imported by intake + questionnaires); the Owner adds/removes custom **activities + fantasies** via **both**
+  an owner-only Settings surface **and** an inline builder add; vault-scoped; trust-owner + model-enforced
+  policy + a clear consensual-adult note (no keyword filter). (§16.5a)
+- **Create/Send** — **Save-draft → Send** from the saved questionnaire (two clear steps; no strand).
+- **Title** — moved **below Draft-with-AI, above the first question**; AI generation also produces a title
+  (fills only when empty).
+- **Explicit generation** — tier-distinct; `explicit` & `unfiltered` genuinely explicit (unfiltered most
+  graphic) within the **same consensual-adult boundary** the intake holds; 18+/consent gate unchanged.
+- **Tests** — comprehensive E2E expansion (compatibility round-trip + context-only, create→send, AI
+  generate+title, disclosure, relay drain, decline, image rejection).
+
+### 16.9 Open questions (amendment)
+
+_All resolved (2026-06-15) — see §16.8. Context-only = per-participant distillation; topic inventory = one
+shared owner-extensible constant; compat default = you + someone else. The amendment is build-ready pending
+final approval. Remaining are build-time tunings (exact explicit-prompt wording, the Settings placement of the
+intimacy-topics surface), not blockers._

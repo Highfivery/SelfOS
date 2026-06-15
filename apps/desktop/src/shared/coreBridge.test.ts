@@ -81,6 +81,7 @@ function makeHost(): {
   fs: FileSystem;
   chunks: string[];
   dreamChunks: string[];
+  intakeChunks: string[];
   device: () => DeviceState;
   deviceSettings: () => Record<string, unknown>;
 } {
@@ -103,6 +104,7 @@ function makeHost(): {
   let superAdmin = false;
   const chunks: string[] = [];
   const dreamChunks: string[] = [];
+  const intakeChunks: string[] = [];
   const claude: ClaudeClient = {
     send: () => Promise.resolve('ok'),
     stream: (options, onDelta) => {
@@ -230,6 +232,7 @@ function makeHost(): {
     },
     emitChatChunk: (chunk) => chunks.push(chunk),
     emitDreamChunk: (chunk) => dreamChunks.push(chunk),
+    emitIntakeChunk: (chunk) => intakeChunks.push(chunk),
     getBootState: () => Promise.resolve(bootFromDevice()),
     refreshBootState: () => Promise.resolve(bootFromDevice()),
     selectVaultFolder: () => Promise.resolve(null),
@@ -240,12 +243,14 @@ function makeHost(): {
     onVaultChanged: () => () => {},
     onChatChunk: () => () => {},
     onDreamChunk: () => () => {},
+    onIntakeChunk: () => () => {},
   };
   return {
     host,
     fs,
     chunks,
     dreamChunks,
+    intakeChunks,
     device: () => device,
     deviceSettings: () => deviceSettings,
   };
@@ -1637,5 +1642,71 @@ describe('createCoreBridge', () => {
         share: true,
       }),
     ).toMatchObject({ ok: false });
+  });
+
+  it('intake: a direct answer fills the profile; restricted facts are hidden until an audited break-glass reveal', async () => {
+    const { bridge, host, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    // A claude that fills `occupation` on a basics turn and returns a portrait with one restricted fact.
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        const last = options.messages.at(-1)?.content ?? '';
+        let text: string;
+        if (last.includes('closing portrait')) {
+          text = JSON.stringify({
+            portrait: 'You care deeply and carry a lot.',
+            facts: [
+              { text: 'Works as a nurse', section: 'basics' },
+              { text: 'Carries grief from a loss', section: 'weighs' },
+            ],
+            crisisFlag: false,
+          });
+        } else {
+          text = 'Lovely to meet you. [[SELFOS:FIELD:occupation=nurse]]';
+        }
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+
+    // A direct answer in the basics section fills the owner-only profile field.
+    expect(
+      (await bridge.intakeRunTurn({ sectionId: 'basics', userText: 'I am a nurse.' })).ok,
+    ).toBe(true);
+    expect((await bridge.peopleList()).find((p) => p.id === ownerId)?.occupation).toBe('nurse');
+    expect(host.intakeChunks.join('')).toContain('Lovely to meet you');
+
+    // Synthesize the portrait → an intake Insight with a restricted ('weighs') fact.
+    const synth = await bridge.intakeSynthesize({});
+    expect(synth.ok).toBe(true);
+
+    // The owner's NORMAL Memory view redacts the restricted fact (kept out of casual browsing, §8.4).
+    const ownerView = await bridge.insightsList();
+    const intakeInsight = ownerView.find((i) => i.source === 'intake');
+    expect(intakeInsight?.facts.some((f) => f.text.includes('nurse'))).toBe(true);
+    expect(intakeInsight?.facts.some((f) => f.text.includes('grief'))).toBe(false);
+
+    // A normal owner (no readRestricted) is refused the reveal — and nothing is audited.
+    expect(await bridge.intakeRevealRestricted({ subjectPersonId: ownerId })).toBeNull();
+
+    // The concealed super-admin can reveal restricted facts — and the reveal is audited BEFORE returning.
+    host.host.setSuperAdminActive(true);
+    expect(await bridge.auditList()).toEqual([]); // the denied owner reveal above wrote NOTHING
+    const revealed = await bridge.intakeRevealRestricted({ subjectPersonId: ownerId });
+    expect(revealed?.some((f) => f.text.includes('grief'))).toBe(true);
+    // Super-admin's Memory view is unredacted (privileged).
+    const adminView = await bridge.insightsList();
+    expect(
+      adminView.find((i) => i.source === 'intake')?.facts.some((f) => f.text.includes('grief')),
+    ).toBe(true);
+    // The audit trail recorded the restricted reveal.
+    const audit = await bridge.auditList();
+    expect(
+      audit.some((e) => e.action === 'revealRestricted' && e.subjectPersonId === ownerId),
+    ).toBe(true);
   });
 });

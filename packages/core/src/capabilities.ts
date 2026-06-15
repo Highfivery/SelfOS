@@ -30,6 +30,12 @@ export const CAPABILITIES = [
   'dreams.shareContext',
   // Generate an AI image of one's own dream (13-dream-images §6). Default ON for Member, like `dreams.own`.
   'dreams.generateImage',
+  // Personal onboarding (18-personal-onboarding §5). `intake.own` = run one's own getting-to-know-you
+  // intake (Member default ON). `intake.readRestricted` is EXPLICIT_GRANT_ONLY (below): the audited
+  // break-glass that lets an owner view a person's restricted intake facts ("what weighs on you" /
+  // intimacy) — ships OFF even for the Owner; the concealed super-admin reveal works independently.
+  'intake.own',
+  'intake.readRestricted',
 ] as const;
 
 export type CapabilityKey = (typeof CAPABILITIES)[number];
@@ -52,6 +58,8 @@ export const CAPABILITY_LABELS: Record<CapabilityKey, string> = {
   'dreams.own': 'Log & analyze their own dreams',
   'dreams.shareContext': 'Share a dream insight into a relationship',
   'dreams.generateImage': 'Generate an AI image of their own dream',
+  'intake.own': 'Do their own getting-to-know-you onboarding',
+  'intake.readRestricted': 'Reveal restricted intake content (break-glass)',
 };
 
 /**
@@ -62,6 +70,7 @@ export const CAPABILITY_LABELS: Record<CapabilityKey, string> = {
  */
 export const EXPLICIT_GRANT_ONLY: ReadonlySet<CapabilityKey> = new Set<CapabilityKey>([
   'questionnaires.readRaw',
+  'intake.readRestricted',
 ]);
 
 function capabilityMap(enabled: readonly CapabilityKey[]): Record<string, boolean> {
@@ -100,6 +109,7 @@ export const DEFAULT_ROLES: Role[] = [
       'dreams.own',
       'dreams.shareContext',
       'dreams.generateImage',
+      'intake.own',
     ]),
   },
   {

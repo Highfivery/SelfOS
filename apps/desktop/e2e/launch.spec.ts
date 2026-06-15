@@ -16,6 +16,7 @@ import {
   buildContext,
   createInvite,
   getAccessConfig,
+  getPerson,
   savePerson,
   saveRelationship,
   setAccount,
@@ -28,9 +29,11 @@ import {
   getAlignmentReport,
   getResponse,
   listAssignments,
+  listAuditEntries,
   saveQuestionnaire,
   submitResponse,
 } from '@selfos/core/questionnaires';
+import { getIntakeSession } from '@selfos/core/intake';
 import { listInsightsForPerson, saveInsight, summarizeForContext } from '@selfos/core/insights';
 import { listDreams, saveAnalysis, saveDream } from '@selfos/core/dreams';
 import { saveConversation } from '@selfos/core/conversations';
@@ -1778,7 +1781,7 @@ test('audit: super-admin sees the raw-access audit surface (empty until a reveal
     // The Audit nav entry appears only in super-admin mode; the surface shows its empty state.
     await w.getByRole('link', { name: 'Raw-access audit' }).click();
     await expect(w.getByRole('heading', { name: 'Raw-access audit' })).toBeVisible();
-    await expect(w.getByText('No raw answers have ever been revealed.')).toBeVisible();
+    await expect(w.getByText('Nothing has ever been revealed.')).toBeVisible();
 
     const overflow = await w.evaluate(() => {
       const main = document.querySelector('main');
@@ -3246,6 +3249,8 @@ test('home: a brand-new person sees the getting-started state', async () => {
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
+    // A no-intake person is auto-routed to onboarding (18 §3.1); navigate back to Home for this test.
+    await w.getByRole('link', { name: 'Home' }).click();
     await expect(w.getByRole('heading', { name: /welcome to selfos/i })).toBeVisible();
     await expect(w.getByRole('button', { name: /start a session/i })).toBeVisible();
     // No real cards yet, but the crisis affordance is always present (§7).
@@ -3332,6 +3337,8 @@ test('home: a seeded person sees the cards, links into them, and fits at 390px',
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
+    // A no-intake person is auto-routed to onboarding (18 §3.1); navigate back to Home for this test.
+    await w.getByRole('link', { name: 'Home' }).click();
     await expect(w.getByRole('heading', { name: /tester/i, level: 1 })).toBeVisible();
 
     // Continue card — the two open sessions, not the completed one.
@@ -3366,6 +3373,181 @@ test('home: a seeded person sees the cards, links into them, and fits at 390px',
     await w.setViewportSize({ width: 1100, height: 800 });
     await w.getByRole('button', { name: 'Resume' }).first().click();
     await expect(w).toHaveURL(/#\/sessions$/);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('onboarding: nudge → turn fills a field → skip intimacy → portrait feeds context → restricted via audited break-glass (18)', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  // Seed an in-progress intake with the middle sections already skipped, so the flow is deterministic:
+  // do `basics` (fills a field), then reach `intimacy` (the 18+ gate), then finish.
+  {
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('onboarding e2e: master key missing');
+    const order = [
+      'basics',
+      'life-now',
+      'family',
+      'story',
+      'health',
+      'weighs',
+      'relationships',
+      'values',
+      'want',
+      'intimacy',
+    ];
+    await writeEncryptedJson(
+      fs,
+      'people/owner-1/intake/session.enc',
+      {
+        id: 'intake-flow',
+        schemaVersion: 1,
+        personId: 'owner-1',
+        status: 'inProgress',
+        sections: order.map((id) => ({
+          id,
+          status: id === 'basics' || id === 'intimacy' ? 'notStarted' : 'skipped',
+          restricted: id === 'weighs' || id === 'intimacy',
+          messages: [],
+          answers: {},
+        })),
+        startedAt: 'now',
+        updatedAt: 'now',
+      },
+      key,
+    );
+  }
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Home' }).waitFor();
+
+    // The Home nudge (§3.1) prompts the person to continue onboarding.
+    await w.getByRole('link', { name: 'Home' }).click();
+    await w.getByRole('button', { name: /Start onboarding|Continue onboarding/ }).click();
+
+    // The basics section is active; a direct answer fills the owner-only profile via the field marker.
+    await expect(w.getByText(/What should I call you/)).toBeVisible();
+    await w.getByLabel('Message').fill('I’m Sam and I work as a nurse.');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText('Thank you for sharing that with me.')).toBeVisible();
+    await w.getByRole('button', { name: /That.s enough on this/ }).click();
+
+    // The intimacy block is gated behind the shared 18+ acknowledgement (§3.3) — reached next; skip it.
+    await expect(w.getByRole('button', { name: /18 or older/ })).toBeVisible();
+    await w.getByRole('button', { name: 'Skip this section' }).click();
+
+    // Everything is now done → synthesize the portrait.
+    const cta = w.getByRole('button', { name: /See my portrait/ });
+    await expect(cta).toBeVisible();
+    await cta.click();
+    await expect(w.getByText(/come to understand about you/)).toBeVisible();
+
+    // Decrypt the vault: the direct answer filled the owner-only profile, and the portrait + its restricted
+    // fact feed the person's OWN coaching context (restricted facts are own-context-only, never redacted there).
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('onboarding e2e: master key missing');
+    await expect
+      .poll(async () => (await getIntakeSession(fs, key, 'owner-1'))?.status)
+      .toBe('complete');
+    expect((await getPerson(fs, key, 'owner-1'))?.occupation).toBe('nurse');
+    const context = await buildContext(fs, key, 'owner-1');
+    expect(context).toContain('thoughtful and steady'); // the portrait summary feeds own context
+    expect(context).toContain('grief'); // a restricted fact still feeds the person's OWN coaching
+
+    // The owner's NORMAL Memory view redacts the restricted fact (§8.4) — and a non-privileged reveal fails.
+    await w.getByRole('link', { name: 'Memory' }).click();
+    await expect(w.getByText(/thoughtful and steady/)).toBeVisible();
+    await expect(w.getByText(/Carries grief/)).toHaveCount(0);
+    await w.getByRole('button', { name: /Reveal restricted content/ }).click();
+    await expect(w.getByText(/don.t have permission/)).toBeVisible();
+
+    // The concealed super-admin can break-glass — the reveal writes an audit entry before showing the fact.
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'About' }).click();
+    await longPressVersion(w);
+    const dialog = w.getByRole('dialog', { name: 'Unlock' });
+    await dialog.getByLabel('Passphrase').fill('superpass');
+    await dialog.getByRole('button', { name: 'Unlock' }).click();
+    await w.getByRole('link', { name: 'Memory' }).click();
+    await w.getByRole('button', { name: /Reveal restricted content/ }).click();
+    await expect(w.getByText(/Carries grief/)).toBeVisible();
+
+    const audit = await listAuditEntries(fs, key);
+    expect(
+      audit.some((e) => e.action === 'revealRestricted' && e.subjectPersonId === 'owner-1'),
+    ).toBe(true);
+
+    // No horizontal overflow (page or inner controls) at phone width on the onboarding flow.
+    await w.getByRole('link', { name: /Onboarding/ }).click();
+    await w.setViewportSize({ width: 390, height: 780 });
+    const guard = await w.evaluate(() => {
+      const offenders: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          offenders.push(`${el.tagName}.${String(el.className)}`);
+        }
+      });
+      const main = document.querySelector('main');
+      return { offenders, mainOverflow: main ? main.scrollWidth - main.clientWidth : 0 };
+    });
+    expect(guard.offenders).toEqual([]);
+    expect(guard.mainOverflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('onboarding: resumes mid-intake to the saved transcript (18 §3.1)', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  // Seed an in-progress intake with one section already underway.
+  {
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('resume e2e: master key missing');
+    await writeEncryptedJson(
+      fs,
+      'people/owner-1/intake/session.enc',
+      {
+        id: 'intake-resume',
+        schemaVersion: 1,
+        personId: 'owner-1',
+        status: 'inProgress',
+        sections: [
+          {
+            id: 'basics',
+            status: 'inProgress',
+            restricted: false,
+            messages: [
+              { role: 'user', content: 'My name is Sam.', ts: 'now' },
+              { role: 'assistant', content: 'Lovely to meet you, Sam.', ts: 'now' },
+            ],
+            answers: {},
+          },
+        ],
+        startedAt: 'now',
+        updatedAt: 'now',
+      },
+      key,
+    );
+  }
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: /Onboarding/ }).click();
+    // The saved transcript resumes exactly where it left off.
+    await expect(w.getByText('My name is Sam.')).toBeVisible();
+    await expect(w.getByText('Lovely to meet you, Sam.')).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

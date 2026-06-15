@@ -360,10 +360,10 @@ export function conversationStatus(c: Pick<Conversation, 'status'>): SessionStat
  * The shared Insight / metrics layer (08-questionnaires §4.4). A single, source-discriminated record:
  * questionnaires produce them now; session analysis (09), the tracking dashboards (11), and dreams (12)
  * build on the same shape. Stored encrypted per subject person; `metrics` is the extensible basis for
- * every trend. `'dream'` is the third producer (12-dreams §1.1) — additive, so existing Insights parse
- * unchanged.
+ * every trend. `'dream'` is the third producer (12-dreams §1.1) and `'intake'` the fourth
+ * (18-personal-onboarding §4.1) — both additive, so existing Insights parse unchanged.
  */
-export const InsightSourceSchema = z.enum(['questionnaire', 'session', 'dream']);
+export const InsightSourceSchema = z.enum(['questionnaire', 'session', 'dream', 'intake']);
 export type InsightSource = z.infer<typeof InsightSourceSchema>;
 
 export const InsightFactSchema = z.object({
@@ -373,6 +373,10 @@ export const InsightFactSchema = z.object({
   // Per-person targeted sharing (12-dreams §3.4): person ids this fact is shared with, in addition to the
   // broadcast `shareable` boolean. Additive-optional — existing facts parse unchanged, no migration.
   shareableWith: z.array(z.string()).optional(),
+  // Break-glass-only (18-personal-onboarding §8.4): a fact derived from a `restricted` intake section
+  // ("what weighs on you" / intimacy). It still feeds the subject's OWN coaching context, but is withheld
+  // from the owner's normal People/Memory views — reachable only via the audited reveal. Additive-optional.
+  restricted: z.boolean().optional(),
 });
 export type InsightFact = z.infer<typeof InsightFactSchema>;
 
@@ -393,6 +397,7 @@ export const InsightSchema = z.object({
     dreamId: z.string().optional(), // set for dream-sourced insights (12-dreams §4.4)
     compatibilityGroupId: z.string().optional(), // set for compatibility alignment insights (08 §13.5d)
     guideId: z.string().optional(), // set when the session was a guided exercise (16-guided-sessions §3.5)
+    intakeSection: z.string().optional(), // set for intake-sourced facts (18-personal-onboarding §4.1)
     at: z.string(),
   }),
   crisisFlag: z.boolean().optional(),
@@ -400,6 +405,51 @@ export const InsightSchema = z.object({
   updatedAt: z.string(),
 });
 export type Insight = z.infer<typeof InsightSchema>;
+
+/**
+ * Personal onboarding — the "getting to know you" intake (18-personal-onboarding §4.1). An AI-guided,
+ * resumable self-interview across sections, stored encrypted under the person at
+ * `people/<id>/intake/session.enc` (never in the Sessions list). The interview transcript per section lives
+ * here; the synthesized portrait is an `Insight` (`source: 'intake'`) in the shared layer. The 18+ ack for
+ * the intimacy block is NOT stored here — it reuses the shared `guidance/prefs.enc` `adultAcknowledged`
+ * flag (16-guided-sessions), so acking once anywhere unlocks both surfaces.
+ */
+export const IntakeSectionStatusSchema = z.enum([
+  'notStarted',
+  'inProgress',
+  'skipped',
+  'complete',
+]);
+export type IntakeSectionStatus = z.infer<typeof IntakeSectionStatusSchema>;
+
+export const IntakeSectionSchema = z.object({
+  id: z.string().min(1),
+  status: IntakeSectionStatusSchema,
+  // heavy/intimate sections → break-glass-only in owner views (§8.4). Mirrors the catalog (the catalog is
+  // the source of truth; this is stamped at section creation so a read knows it without the catalog).
+  restricted: z.boolean(),
+  messages: z.array(ChatMessageSchema), // the adaptive interview transcript (excludes the static opener)
+  answers: z.record(z.string(), z.string()), // direct/structured answers captured 1:1 (field key → value)
+  reflection: z.string().optional(), // the light per-section member-facing reflection (§11.3)
+});
+export type IntakeSection = z.infer<typeof IntakeSectionSchema>;
+
+export const IntakeSessionStatusSchema = z.enum(['inProgress', 'complete']);
+export type IntakeSessionStatus = z.infer<typeof IntakeSessionStatusSchema>;
+
+export const IntakeSessionSchema = z.object({
+  id: z.string().min(1),
+  schemaVersion: z.number().int().positive(),
+  personId: z.string().min(1),
+  status: IntakeSessionStatusSchema,
+  sections: z.array(IntakeSectionSchema),
+  insightId: z.string().optional(), // the portrait Insight (set once synthesized)
+  portrait: z.string().optional(), // the member-facing closing portrait summary (set at final synthesis)
+  startedAt: z.string(),
+  updatedAt: z.string(),
+  completedAt: z.string().optional(),
+});
+export type IntakeSession = z.infer<typeof IntakeSessionSchema>;
 
 /**
  * Questionnaires (08-questionnaires §4.2/§4.3). Created fresh (no templates), sent as an immutable
@@ -662,19 +712,25 @@ export const ResponseSetSchema = z.object({
 export type ResponseSet = z.infer<typeof ResponseSetSchema>;
 
 /**
- * The break-glass raw-access audit trail (08-questionnaires §4.5/§8.4). Appended to the encrypted,
- * cross-device `config/raw-access-audit.enc` every time someone reveals a Private send's raw answers —
- * either the super-admin (any send) or the sender of a `senderSeesAll` compatibility send holding
- * `questionnaires.readRaw`. The log is viewable only in super-admin mode, from any device.
+ * The break-glass raw-access audit trail (08-questionnaires §4.5/§8.4; generalized for intake in
+ * 18-personal-onboarding §8.4). Appended to the encrypted, cross-device `config/raw-access-audit.enc` every
+ * time someone reveals data behind a break-glass: a Private send's raw answers (`revealRaw` — the
+ * super-admin, or a `senderSeesAll` sender holding `questionnaires.readRaw`) OR a person's restricted intake
+ * facts (`revealRestricted` — the super-admin, or a holder of `intake.readRestricted`). The log is viewable
+ * only in super-admin mode, from any device. `assignmentId` is set for `revealRaw`;
+ * `subjectPersonId`/`subjectName` for `revealRestricted` — both optional so each action carries only what
+ * applies (existing `revealRaw` entries parse unchanged).
  */
 export const RawAccessAuditEntrySchema = z.object({
   schemaVersion: z.number().int().positive(),
   at: z.string(),
   by: z.string(), // the active person id (or 'super-admin' when no person is signed in)
-  viaSuperAdmin: z.boolean(), // true = the concealed super-admin break-glass; false = a readRaw sender
-  assignmentId: z.string().min(1),
-  recipientName: z.string().optional(),
-  action: z.literal('revealRaw'),
+  viaSuperAdmin: z.boolean(), // true = the concealed super-admin break-glass; false = a capability holder
+  assignmentId: z.string().min(1).optional(), // revealRaw: which send's answers were revealed
+  recipientName: z.string().optional(), // revealRaw: the send's recipient
+  subjectPersonId: z.string().optional(), // revealRestricted: whose intake was revealed
+  subjectName: z.string().optional(), // revealRestricted: that person's display name
+  action: z.enum(['revealRaw', 'revealRestricted']),
 });
 export type RawAccessAuditEntry = z.infer<typeof RawAccessAuditEntrySchema>;
 
@@ -1108,6 +1164,56 @@ export type GuidedSuggestResult =
       message: string;
       usage?: UsageEvent;
     };
+
+/**
+ * Catalog metadata for one intake section (18-personal-onboarding §4.2), sent to the renderer — the catalog
+ * itself is host-only code, so the renderer renders section structure + the static opener from this.
+ */
+export interface IntakeSectionMeta {
+  id: string;
+  title: string;
+  blurb: string;
+  restricted: boolean;
+  adult: boolean;
+  opener: string; // the static opening question (no spend — works offline like guided openers)
+  contentNote?: string; // a kind heads-up shown before a heavy/intimate section (§3.3)
+}
+
+/**
+ * What `intake:getState` returns (§6): the resumable session, the catalog meta, and availability. The
+ * intake is AI-driven, so `aiAvailable` (key configured + AI enabled) gates whether it can run at all (§7).
+ */
+export interface IntakeState {
+  session: IntakeSession;
+  sections: IntakeSectionMeta[];
+  aiAvailable: boolean;
+  adultAcknowledged: boolean; // the shared 18+ ack (16-guided-sessions) — gates the intimacy block
+}
+
+/**
+ * One adaptive interview turn (§6). Streams the interviewer reply via `onIntakeChunk`; resolves with the
+ * updated session and which `Person` fields were filled this turn (direct `[[SELFOS:FIELD:…]]` markers).
+ */
+export type IntakeTurnResult =
+  | { ok: true; session: IntakeSession; usage: UsageEvent; filledFields?: string[] }
+  | { ok: false; reason: 'NO_KEY' | 'BUDGET' | 'ERROR'; message: string };
+
+/**
+ * Result of a synthesis pass (§6/§11.3). With a `sectionId`: a light per-section reflection (sets
+ * `reflection`). Without one: the richer final portrait (sets `portrait` + `insightId`, fills inferred
+ * fields, and completes the session). Both meter `intake.synthesize`.
+ */
+export type IntakeSynthesisResult =
+  | {
+      ok: true;
+      session: IntakeSession;
+      reflection?: string;
+      portrait?: string;
+      insightId?: string;
+      // Absent when a section completes with no AI spend (best-effort reflection skipped, §11.3).
+      usage?: UsageEvent;
+    }
+  | { ok: false; reason: 'NO_KEY' | 'BUDGET' | 'ERROR'; message: string };
 
 /**
  * One Inbox row for the recipient (08-questionnaires §3.3). A **derived** view — the recipient sees the

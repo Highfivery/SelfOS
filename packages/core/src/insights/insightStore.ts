@@ -96,7 +96,22 @@ export async function updateInsight(
 ): Promise<Insight | null> {
   const existing = await getInsight(fs, key, personId, insightId);
   if (!existing) return null;
-  const updated: Insight = { ...existing, ...patch, updatedAt: new Date().toISOString() };
+  // A `facts` patch from the renderer only carries `{id, text, shareable}` — the server-owned `restricted`
+  // (18-personal-onboarding §8.4) and `shareableWith` (12-dreams §3.4) flags are NOT in it. Merge by id so
+  // editing/approving a fact in Memory can never silently strip the break-glass restriction or per-person
+  // sharing off it (which would leak a restricted intake fact into the owner's normal view + others' context).
+  const mergedFacts = patch.facts
+    ? patch.facts.map((fact) => {
+        const prior = existing.facts.find((p) => p.id === fact.id);
+        return prior ? { ...prior, ...fact } : fact;
+      })
+    : undefined;
+  const updated: Insight = {
+    ...existing,
+    ...patch,
+    ...(mergedFacts ? { facts: mergedFacts } : {}),
+    updatedAt: new Date().toISOString(),
+  };
   await saveInsight(fs, key, updated);
   return updated;
 }
@@ -184,9 +199,13 @@ export async function summarizeForContext(
     const shared = otherApproved
       // A related person's fact reaches THIS person's context if it's broadcast-shareable OR targeted
       // specifically at them (12-dreams §3.4 per-person sharing). Others' untargeted private facts never do.
+      // A `restricted` intake fact (18-personal-onboarding §8.4) is own-context-only and NEVER broadcasts,
+      // regardless of `shareable`/`shareableWith` — defense in depth so it can't leak into another's context.
       .flatMap((insight) =>
         insight.facts.filter(
-          (fact) => fact.shareable || (fact.shareableWith?.includes(personId) ?? false),
+          (fact) =>
+            fact.restricted !== true &&
+            (fact.shareable || (fact.shareableWith?.includes(personId) ?? false)),
         ),
       )
       .slice(0, MAX_SHARED_FACTS_PER_PERSON);

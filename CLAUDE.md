@@ -267,6 +267,51 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-14 — Build (**Personal onboarding — the "getting to know you" intake; SPEC 18 BUILT**;
+  [18-personal-onboarding](docs/specs/18-personal-onboarding.md)). The **4th Insight producer** — an AI-guided,
+  resumable self-interview across 10 sections that **auto-fills the owner-only `Person` profile** as the person
+  answers and synthesizes a member-facing **portrait `Insight` (`source:'intake'`)** feeding their OWN
+  `buildContext`. Reuses `05` streaming + `06` metering, the `09` analysis→Insight + meter-before-parse pattern,
+  `15` per-field shareability, the `16` 18+ ack, and the `08` break-glass/audit. **Asked first** the 3 build
+  forks: (1) synthesis cadence = **light per-section reflection (auto on section complete) + an explicit final
+  portrait** (tap to generate, never auto-spend); (2) the intimacy block's 18+ ack is **SHARED** with guided
+  sessions (`guidance/prefs.enc adultAcknowledged` — acking once anywhere unlocks both); (3) a brand-new person
+  is **auto-routed once** to `/onboarding`, dismissible, with a persistent Home nudge + nav dot until complete.
+  **Core** `@selfos/core/intake`: `intakeCatalog` (10 sections, static openers, a `directFields` map, the
+  interviewer addendum appended **AFTER** PERSONA+SAFETY+context, §8.1) + `intakeService` (runTurn streams +
+  meters `intake.interview`; direct answers fill the owner-only profile mid-interview via an embedded
+  **`[[SELFOS:FIELD:key=value]]`** marker — stripped from saved+streamed text, **only catalog-declared keys
+  honored**, sensitive ones → `privateFields`; synthesize = section reflection or the full portrait, metering
+  `intake.synthesize` before parse, re-synth reuses the insight id + carries shareable choices forward).
+  **Schema** (all additive, **no schemaVersion bump**): `InsightSource += 'intake'`, `InsightFact.restricted?`,
+  `Insight.provenance.intakeSection?`, generalized `RawAccessAuditEntry` (action enum + optional
+  `assignmentId`/`subjectPersonId`/`subjectName`), new `IntakeSession`/`IntakeSection`. **Capabilities:**
+  `intake.own` (Member ON) + `intake.readRestricted` (**EXPLICIT_GRANT_ONLY** — off even for the Owner).
+  **Seam:** `intake:getState/runTurn(stream)/skipSection/acknowledgeAdult/synthesize/revealRestricted` — gated
+  `intake.own` + active-person-scoped in the bridge; the **restricted sections** ("what weighs on you" +
+  intimacy) and their facts are **redacted from the owner's normal Memory reads** (`insightsList`) and
+  reachable only via the **audited `intake:revealRestricted`** (writes the audit entry **before** returning,
+  super-admin OR `intake.readRestricted` only). API key host-side; dedicated `intake:chunk` stream.
+  **Renderer:** the sectioned onboarding flow (reuses Sessions `Composer`+`CrisisFooter`, skip/"go deeper"
+  controls, the 18+ gate, per-section reflection, the closing portrait, resume), the per-person `intakeStore`
+  (reset on `activePerson.id`), the Home `OnboardingCard` nudge, the auto-route, the AuditLog `revealRestricted`
+  row, and the Memory **audited reveal** affordance for intake insights. Code-reviewer **fix-first** (one
+  **blocker**): a Memory edit→save dropped `restricted`/`shareableWith` off facts (the renderer patch carries
+  only `{id,text,shareable}`) → `updateInsight` now **merges by id** to carry them forward, AND
+  `summarizeForContext`/`buildLinkedPeopleContext` now **exclude restricted facts from EVERY other person's
+  context** regardless of `shareable` (defense in depth) — so a restricted fact is structurally own-context-only
+  and can't be un-restricted by an edit. Gate green: typecheck (node + web/DOM-lib), lint, format, **362 core +
+  442 desktop + 8 relay** unit (+intakeService/intakeCatalog, +bridge intake round-trip incl. break-glass,
+  +Onboarding/OnboardingCard RTL, +audit `revealRestricted`), **63 E2E** (+2: new person → nudge → turn →
+  direct-answer-fills-a-field [decrypt] → skip the 18+ intimacy block → portrait feeds a later `buildContext`
+  [decrypt] → restricted fact absent from the owner's Memory but reachable via audited break-glass [audit row
+  written]; resume mid-intake; 390px overflow guard). **Visual QA** via the web preview at desktop + 390px
+  (onboarding flow, chat bubbles, section chips, the Home nudge — 0 overflow, no console errors). On
+  `feat/personal-onboarding` off `main`; NOT merged (awaiting user confirm). **Lesson: a fact's break-glass
+  `restricted` flag is a server-owned invariant — a renderer edit payload only carries `{id,text,shareable}`, so
+  `updateInsight` MUST merge by id to preserve `restricted`/`shareableWith`, and the context builders must
+  exclude `restricted` facts from others' context independently of `shareable`, or one Memory edit silently
+  re-opens the §8.4 leak.**
 - 2026-06-14 — Build (**App-refresh package G — the Home dashboard; SPEC 17 APPROVED + BUILT — the 2026-06
   app refresh (A–G) is COMPLETE**; [17-home-dashboard](docs/specs/17-home-dashboard.md) §13). Replaced the
   static `routes/Home.tsx` with a **per-active-person card dashboard** under `routes/home/` (a `Home`

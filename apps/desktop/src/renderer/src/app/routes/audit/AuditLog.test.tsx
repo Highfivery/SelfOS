@@ -21,7 +21,7 @@ describe('AuditLog', () => {
   it('shows the empty state + the admin-only marker when nothing was ever revealed', async () => {
     installMockBridge({ auditList: () => Promise.resolve([]) });
     render(<AuditLog />);
-    expect(await screen.findByText('No raw answers have ever been revealed.')).toBeInTheDocument();
+    expect(await screen.findByText('Nothing has ever been revealed.')).toBeInTheDocument();
     expect(screen.getByText('Admin only')).toBeInTheDocument();
   });
 
@@ -34,5 +34,25 @@ describe('AuditLog', () => {
     await waitFor(() => expect(screen.getAllByText('Revealed raw answers')).toHaveLength(2));
     expect(screen.getByText('Super-admin')).toBeInTheDocument();
     expect(screen.getByText('Sender (readRaw)')).toBeInTheDocument();
+  });
+
+  it('renders a restricted-onboarding reveal entry distinctly', async () => {
+    installMockBridge({
+      auditList: () =>
+        Promise.resolve([
+          entry({
+            action: 'revealRestricted',
+            assignmentId: undefined,
+            recipientName: undefined,
+            subjectPersonId: 'p1',
+            subjectName: 'Sam',
+            viaSuperAdmin: false,
+          }),
+        ]),
+    });
+    render(<AuditLog />);
+    expect(await screen.findByText('Revealed restricted onboarding content')).toBeInTheDocument();
+    expect(screen.getByText('readRestricted')).toBeInTheDocument();
+    expect(screen.getByText(/Sam’s onboarding/)).toBeInTheDocument();
   });
 });

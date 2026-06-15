@@ -39,6 +39,18 @@ function InsightCard({
   const [facts, setFacts] = useState<InsightFact[]>(insight.facts);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Break-glass reveal of restricted onboarding facts (18-personal-onboarding §8.4). `undefined` = not yet
+  // attempted; `null` = not permitted; an array = the revealed facts (the bridge wrote the audit entry).
+  const [revealed, setRevealed] = useState<InsightFact[] | null | undefined>(undefined);
+  const isIntake = insight.source === 'intake';
+  const sourceLabel =
+    insight.source === 'intake'
+      ? 'onboarding'
+      : insight.source === 'session'
+        ? 'a session'
+        : insight.source === 'dream'
+          ? 'a dream'
+          : 'a questionnaire';
 
   // Collapse to the read view once an insight becomes approved (the card is reused across reloads by
   // `key`, so the initial `useState` doesn't re-run — sync it here).
@@ -97,7 +109,7 @@ function InsightCard({
           <div>
             <Text weight={600}>About {subjectName}</Text>
             <Text size="xs" tone="tertiary">
-              From a questionnaire · {formatDate(insight.updatedAt)} ·{' '}
+              From {sourceLabel} · {formatDate(insight.updatedAt)} ·{' '}
               {insight.approved ? 'approved' : 'awaiting your review'}
             </Text>
           </div>
@@ -179,6 +191,48 @@ function InsightCard({
                 </div>
               ))}
             </Stack>
+            {isIntake ? (
+              <Stack gap={2}>
+                <Text size="xs" tone="tertiary">
+                  Sensitive onboarding content (what weighs on them, intimacy) is kept private to
+                  their own coaching and isn’t shown here.
+                </Text>
+                {revealed === undefined ? (
+                  <div>
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        void window.selfos
+                          ?.intakeRevealRestricted({ subjectPersonId: insight.subjectPersonId })
+                          .then((r) => setRevealed(r ?? null));
+                      }}
+                    >
+                      <Unlock size={14} aria-hidden="true" />
+                      Reveal restricted content (audited)
+                    </Button>
+                  </div>
+                ) : revealed === null ? (
+                  <Banner tone="warning">
+                    You don’t have permission to reveal restricted onboarding content.
+                  </Banner>
+                ) : revealed.length === 0 ? (
+                  <Text size="sm" tone="secondary">
+                    No restricted content was recorded.
+                  </Text>
+                ) : (
+                  <Stack gap={1}>
+                    {revealed.map((fact) => (
+                      <div key={fact.id} className={styles.factRow}>
+                        <Lock size={14} aria-hidden="true" className={styles.factIcon} />
+                        <Text size="sm" tone="secondary">
+                          {fact.text}
+                        </Text>
+                      </div>
+                    ))}
+                  </Stack>
+                )}
+              </Stack>
+            ) : null}
             <div>
               <Button variant="secondary" onClick={() => setEditing(true)}>
                 Edit
@@ -218,7 +272,7 @@ export function Memory(): JSX.Element {
       <Stack gap={2}>
         <Heading level={2}>Memory</Heading>
         <Text tone="secondary">
-          What the coach has learned about the people in your life, from questionnaire answers.
+          What the coach has learned — from questionnaire answers, sessions, dreams, and onboarding.
           Approve an insight to let it inform future sessions.
         </Text>
       </Stack>

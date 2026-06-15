@@ -140,10 +140,25 @@ export function IntakeFormPanel({
               />
             </>
           ) : (
-            <Button variant="ghost" onClick={() => setDeepening(true)}>
-              <MessageCircle size={16} aria-hidden="true" />
-              Tell me more
-            </Button>
+            <button
+              type="button"
+              className={styles.deepenPrompt}
+              onClick={() => setDeepening(true)}
+            >
+              <span className={styles.deepenPromptText}>
+                <span className={styles.deepenPromptTitle}>
+                  <MessageCircle size={18} aria-hidden="true" />
+                  Want to go deeper?
+                </span>
+                <span className={styles.deepenPromptHint}>
+                  Tell me more about this in your own words — as much or as little as you like.
+                </span>
+              </span>
+              <span className={styles.deepenPromptCta}>
+                Tell me more
+                <ArrowRight size={16} aria-hidden="true" />
+              </span>
+            </button>
           )}
         </div>
 

@@ -171,7 +171,7 @@ export function Onboarding(): JSX.Element {
               <button
                 key={m.id}
                 type="button"
-                className={styles.invitedCard}
+                className={`${styles.invitedCard} ${current ? styles.invitedCardCurrent : ''}`}
                 aria-current={current ? 'true' : undefined}
                 onClick={() => setActiveId(m.id)}
               >
@@ -183,7 +183,11 @@ export function Onboarding(): JSX.Element {
                     {m.title}
                   </span>
                   <span
-                    className={`${styles.invitedTag} ${done ? styles.invitedTagDone : ''}`}
+                    className={
+                      current
+                        ? styles.invitedTagCurrent
+                        : `${styles.invitedTag} ${done ? styles.invitedTagDone : ''}`
+                    }
                     aria-hidden="true"
                   >
                     {current ? (

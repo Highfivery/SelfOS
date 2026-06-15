@@ -442,6 +442,20 @@ revealRestricted` (gated + active-person-scoped; restricted facts redacted from 
   block). Plus **§15 — a self-maintaining profile**: a drift-detection system that piggybacks on the existing
   session/dream/questionnaire analysis passes (no extra AI spend) to **notice likely-stale answers and invite
   updates** (confirm-before-apply). Amends §3.1/§3.2/§4.1/§4.2; build in 3 slices (core → renderer → freshness).
+- 2026-06-15 — **§14/§15 BUILT (3 slices, on `feat/onboarding-redesign`).** Slice 1 (core): the rewritten
+  catalog (~180 questions — quick `core` forms + `invited` deep/sensitive sections incl. the explicit branched
+  18+ intimacy block; reuses the questionnaire `Question` shape), `submitSectionForm` (fills mapped
+  `Person` fields, no AI), the 5 promoted additive `Person` fields, synthesis weaving in form answers
+  (restricted sections → restricted facts via a trusted-catalog lookup), `intake:submitForm` IPC (adult-gate
+  enforced in the bridge). Slice 2 (renderer): `IntakeFormPanel` (forms via `@selfos/answering`), the
+  core-then-invited Onboarding surface (gated walk → "See my portrait" → "Go deeper" grid), selective go-deeper
+  chat, the People-editor surfacing of the promoted fields. Slice 3 (§15 freshness): the
+  `ProfileUpdateSuggestion` model + `@selfos/core/profile` service + the session-analysis producer (emits
+  `profileSuggestions`, no extra spend) + the `profile:*` IPC + the Home "Keep your profile fresh" card; dreams/
+  questionnaires producers follow the same pattern (deferred). Gate green: typecheck (node + web/DOM-lib), lint,
+  format, **371 core + 447 desktop + 8 relay** unit, **61 E2E** (the 3 onboarding E2E reworked for the form
+  flow). Visual QA at desktop + 390px (forms, the explicit intimacy form, the Go deeper grid; 0 overflow, no
+  console errors). Not merged (awaiting user review).
 
 ---
 
@@ -791,6 +805,13 @@ without it) and **only where `allowDeepen` is set** — never on pure facts. Met
 ---
 
 ## 15. Keeping the profile fresh — drift detection & update invitations
+
+> **Built 2026-06-15 (sessions producer):** the model (`ProfileUpdateSuggestion`), the
+> `@selfos/core/profile` service (record/list/accept/dismiss with dedup + no-re-nag), the **session-analysis**
+> producer wiring (it emits `profileSuggestions` on the pass that already runs — no extra AI spend), the
+> `profile:suggestions`/`acceptSuggestion`/`dismissSuggestion` IPC (own-scoped, gated `intake.own`), and the
+> Home **"Keep your profile fresh"** card. The **dreams + questionnaires producers** follow the same pattern
+> (deferred, §15.8).
 
 A profile is only useful if it stays **current**. As the person does sessions, dreams, and questionnaires,
 life changes — a new job, a breakup, a goal that shifts, a mood trend — and the intake answers silently go

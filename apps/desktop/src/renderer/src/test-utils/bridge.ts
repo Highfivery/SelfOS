@@ -447,6 +447,9 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         aiAvailable: false,
         adultAcknowledged: false,
       }),
+    profileSuggestions: () => Promise.resolve([]),
+    profileAcceptSuggestion: () => Promise.resolve([]),
+    profileDismissSuggestion: () => Promise.resolve([]),
     intakeAcknowledgeAdult: () =>
       Promise.resolve({
         session: {

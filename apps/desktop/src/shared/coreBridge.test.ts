@@ -439,6 +439,68 @@ describe('createCoreBridge', () => {
     expect(turn.ok).toBe(true);
   });
 
+  it('session analysis emits a profile-update suggestion; accept writes the field, dismiss is own-scoped', async () => {
+    const { bridge, host, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    // A claude that streams a chat reply, then returns a session analysis proposing an occupation change.
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        const last = options.messages.at(-1)?.content ?? '';
+        if (last.includes('summarize this session')) {
+          const text = JSON.stringify({
+            summary: 'A check-in about a new job.',
+            themes: ['work'],
+            goals: [],
+            followUps: [],
+            people: [],
+            moodValence: 0.2,
+            moodEnergy: 0.1,
+            profileSuggestions: [
+              {
+                field: 'occupation',
+                observed: 'teacher',
+                current: 'nurse',
+                rationale: 'started teaching',
+              },
+            ],
+          });
+          return Promise.resolve({
+            text,
+            usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+          });
+        }
+        onDelta('ok');
+        return Promise.resolve({
+          text: 'ok',
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    await bridge.peopleSave({
+      id: ownerId,
+      displayName: 'Alex',
+      isSubject: true,
+      tags: [],
+      occupation: 'nurse',
+    });
+    await bridge.chatStream({ conversationId: 'c1', userText: 'I started a teaching job' });
+    expect((await bridge.sessionsEndAndSummarize({ conversationId: 'c1' })).ok).toBe(true);
+
+    // The suggestion surfaces (own-scoped); accepting writes the profile field.
+    const pending = await bridge.profileSuggestions();
+    expect(pending).toHaveLength(1);
+    expect(pending[0]).toMatchObject({ field: 'occupation', observed: 'teacher' });
+    const after = await bridge.profileAcceptSuggestion(pending[0]!.id);
+    expect(after).toHaveLength(0);
+    expect((await bridge.peopleList()).find((p) => p.id === ownerId)?.occupation).toBe('teacher');
+
+    // A different person sees only their OWN suggestions (none) — own-scoped in the bridge.
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.sessionSetActive({ personId: mara.id });
+    expect(await bridge.profileSuggestions()).toHaveLength(0);
+  });
+
   it('refuses to summarize when session memory is disabled', async () => {
     const { bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });

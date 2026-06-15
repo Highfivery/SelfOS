@@ -221,3 +221,25 @@
   flex-wrap: wrap;
   gap: var(--space-3);
 }
+
+/* Profile-freshness suggestions (§15) */
+.freshnessItem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.freshnessItem:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.freshnessActions {
+  display: flex;
+  gap: var(--space-2);
+  flex: none;
+}

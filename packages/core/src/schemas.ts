@@ -424,6 +424,45 @@ export const InsightSchema = z.object({
 export type Insight = z.infer<typeof InsightSchema>;
 
 /**
+ * A profile-update suggestion (18-personal-onboarding §15) — the self-maintaining-profile signal. Produced as
+ * a by-product of the session/dream/questionnaire analysis passes that already run (no extra AI spend): when
+ * the analysis sees a fact that contradicts or extends a known profile/intake answer, it proposes an update.
+ * It is a **proposal, never an edit** — the field/answer changes only when the person accepts. Stored
+ * per-subject at `people/<id>/profile-suggestions/<id>.enc`. A `restricted`-derived suggestion (intimacy/
+ * trauma) is itself restricted (own-context-only, owner-visible — §8.4).
+ */
+export const ProfileSuggestionStatusSchema = z.enum(['pending', 'accepted', 'dismissed']);
+export type ProfileSuggestionStatus = z.infer<typeof ProfileSuggestionStatusSchema>;
+
+export const ProfileUpdateSuggestionSchema = z.object({
+  id: z.string().min(1),
+  schemaVersion: z.number().int().positive(),
+  subjectPersonId: z.string().min(1),
+  kind: z.enum(['field', 'intakeSection']),
+  field: PersonFieldKeySchema.optional(), // set for kind 'field'
+  sectionId: z.string().optional(), // set for kind 'intakeSection'
+  observed: z.string().min(1), // what the recent activity implies the new value is
+  current: z.string().optional(), // the known value it would replace, if any
+  rationale: z.string(), // a short, human reason ("a recent session mentioned a new job")
+  sourceInsightId: z.string().min(1),
+  sourceKind: z.enum(['session', 'dream', 'questionnaire', 'intake']),
+  restricted: z.boolean(),
+  status: ProfileSuggestionStatusSchema,
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type ProfileUpdateSuggestion = z.infer<typeof ProfileUpdateSuggestionSchema>;
+
+/** The raw shape an analysis pass emits (model output) — validated before it's trusted (§15.6). */
+export const RawProfileSuggestionSchema = z.object({
+  field: z.string(),
+  observed: z.string().min(1),
+  current: z.string().optional(),
+  rationale: z.string().default(''),
+});
+export type RawProfileSuggestion = z.infer<typeof RawProfileSuggestionSchema>;
+
+/**
  * Personal onboarding — the "getting to know you" intake (18-personal-onboarding §4.1). An AI-guided,
  * resumable self-interview across sections, stored encrypted under the person at
  * `people/<id>/intake/session.enc` (never in the Sessions list). The interview transcript per section lives

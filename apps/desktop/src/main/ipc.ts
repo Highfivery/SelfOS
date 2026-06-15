@@ -285,6 +285,9 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.intakeSubmitForm, bridge.intakeSubmitForm);
   handle(IpcChannels.intakeAcknowledgeAdult, bridge.intakeAcknowledgeAdult);
   handle(IpcChannels.intakeSynthesize, bridge.intakeSynthesize);
+  handle(IpcChannels.profileSuggestions, bridge.profileSuggestions);
+  handle(IpcChannels.profileAcceptSuggestion, bridge.profileAcceptSuggestion);
+  handle(IpcChannels.profileDismissSuggestion, bridge.profileDismissSuggestion);
   handle(IpcChannels.getSidebarCollapsed, bridge.getSidebarCollapsed);
   handle(IpcChannels.setSidebarCollapsed, bridge.setSidebarCollapsed);
 

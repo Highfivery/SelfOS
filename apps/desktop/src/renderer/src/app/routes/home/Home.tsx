@@ -11,6 +11,7 @@ import { useIntakeStore } from '../../../stores/intakeStore';
 import { useSetting } from '../../../settings/useSetting';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { OnboardingCard } from './OnboardingCard';
+import { ProfileFreshnessCard } from './ProfileFreshnessCard';
 import { ContinueCard } from './ContinueCard';
 import { SuggestionsCard } from './SuggestionsCard';
 import { WellbeingCard } from './WellbeingCard';
@@ -110,6 +111,7 @@ export function Home(): JSX.Element {
       </header>
 
       {ready ? <OnboardingCard /> : null}
+      {ready ? <ProfileFreshnessCard /> : null}
 
       {!ready ? null : isNew ? (
         <GettingStarted

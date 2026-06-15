@@ -268,9 +268,32 @@ describe('generateAlignment', () => {
 });
 
 describe('compatibilityDisclosure', () => {
-  it('derives honest recipient text per visibility mode', () => {
-    expect(compatibilityDisclosure('sharedReport', 'Sam')).toContain('stay private');
-    expect(compatibilityDisclosure('eachSeesOwn', 'Sam')).toContain('your own answers');
-    expect(compatibilityDisclosure('senderSeesAll', 'Sam')).toContain('shared with Sam');
+  // The viewer is the partner (a non-sender participant); the sender is Sam, the other participant Sam.
+  const asPartner = { otherParticipantName: 'Sam', senderName: 'Sam', viewerIsSender: false };
+
+  it('derives honest recipient text per visibility mode, naming the OTHER participant', () => {
+    expect(compatibilityDisclosure('sharedReport', asPartner)).toContain('neither you nor Sam');
+    expect(compatibilityDisclosure('eachSeesOwn', asPartner)).toContain('your own answers');
+    expect(compatibilityDisclosure('senderSeesAll', asPartner)).toContain('shared with Sam');
+  });
+
+  it('names the OTHER participant, never the sender as a neutral third party (§16.1)', () => {
+    // Two-others mode: viewer is Alex, the other participant is Bri, the sender is a third party (Sam).
+    const text = compatibilityDisclosure('sharedReport', {
+      otherParticipantName: 'Bri',
+      senderName: 'Sam',
+      viewerIsSender: false,
+    });
+    expect(text).toContain('neither you nor Bri');
+    expect(text).not.toContain('Sam'); // the sender is never named as the "other" answerer
+  });
+
+  it('reads naturally when the sender is a participant (senderSeesAll, viewerIsSender)', () => {
+    const text = compatibilityDisclosure('senderSeesAll', {
+      otherParticipantName: 'Angel',
+      senderName: 'You',
+      viewerIsSender: true,
+    });
+    expect(text).toContain('both your own answers and Angel');
   });
 });

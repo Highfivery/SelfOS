@@ -133,13 +133,24 @@ describe('Inbox', () => {
     installMockBridge({
       assignmentsInbox: () => Promise.resolve([item()]),
       assignmentsGet: () =>
-        Promise.resolve(detail({ compatibility: { visibility: 'eachSeesOwn', report: null } })),
+        Promise.resolve(
+          detail({
+            compatibility: {
+              visibility: 'eachSeesOwn',
+              report: null,
+              otherParticipantName: 'Bri',
+              viewerIsSender: false,
+            },
+          }),
+        ),
     });
     render(<Inbox />);
 
     await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
-    // eachSeesOwn promises the answerer can review their own answers — derived, not hard-coded.
+    // eachSeesOwn promises the answerer can review their own answers, and names the OTHER participant
+    // (§16.1), not the sender as a neutral third party — derived, not hard-coded.
     expect(await screen.findByText(/review your own answers/i)).toBeInTheDocument();
+    expect(screen.getByText(/Bri won't see them/i)).toBeInTheDocument();
   });
 
   it('shows the answerer their joint report once they’ve submitted a compatibility send', async () => {
@@ -152,6 +163,8 @@ describe('Inbox', () => {
             answerable: false,
             compatibility: {
               visibility: 'sharedReport',
+              otherParticipantName: 'Bri',
+              viewerIsSender: false,
               report: {
                 schemaVersion: 1,
                 compatibilityGroupId: 'g1',

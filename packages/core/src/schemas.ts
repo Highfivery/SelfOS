@@ -1294,6 +1294,10 @@ export interface InboxCompatibilityView {
   visibility: CompatibilityVisibility;
   report: AlignmentReport | null;
   ownAnswers?: SendAnswer[];
+  // The participant context the recipient's disclosure is derived from (§16.1): the OTHER participant's
+  // name, the sender's name, and whether this recipient is themselves the sender (you + someone else).
+  otherParticipantName: string;
+  viewerIsSender: boolean;
 }
 
 /** The recipient's answering view: the frozen snapshot + any saved draft answers to resume. */

@@ -111,7 +111,11 @@ export function InboxAnswer({
   // appended only when the (admin-only) disclosure setting is on and an admin could ever reach the answers.
   const disclosure = ((): string => {
     if (detail.compatibility)
-      return compatibilityDisclosure(detail.compatibility.visibility, asker);
+      return compatibilityDisclosure(detail.compatibility.visibility, {
+        otherParticipantName: detail.compatibility.otherParticipantName,
+        senderName: asker,
+        viewerIsSender: detail.compatibility.viewerIsSender,
+      });
     return detail.privacy === 'private'
       ? 'Your answers personalize their coaching. They won’t see your individual responses — though your numeric ratings may appear in their trends over time.'
       : 'They’ll see your answers.';

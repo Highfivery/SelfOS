@@ -1,7 +1,7 @@
 # 08 — Questionnaires & the Insight / metrics layer
 
-> **Status:** **Approved** (built) · **Approved** (§15 authoring-UX) · **Review** (2026-06-15 audit fixes &
-> enhancements, §16) · _last updated 2026-06-15_
+> **Status:** **Approved** (built) · **Approved** (§15 authoring-UX) · **Approved** (2026-06-15 audit fixes &
+> enhancements, §16 — building on `feat/questionnaire-audit-fixes`) · _last updated 2026-06-15_
 >
 > **2026-06 amendment (§15, package D of the app refresh):** authoring-experience refinements on the
 > already-built feature — a **General** type; **sensitivity tiers shown only for Intimacy/Scenario** types (other

@@ -1111,6 +1111,60 @@ describe('createCoreBridge', () => {
     expect((await bridge.assignmentsTrends(q.id)).length).toBe(0); // one point left → no trend
   });
 
+  it('compatibility (§16.1): the sender can be a participant (you + someone else); same person twice is rejected', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const partner = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: partner.id, roleId: 'member', pin: null });
+    const q = await bridge.questionnairesSave({
+      title: 'Sexy time',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      questions: [
+        {
+          id: 'c1',
+          type: 'rating',
+          prompt: 'Connected?',
+          required: true,
+          scale: { min: 1, max: 5 },
+        },
+      ],
+      compatibility: { enabled: true, visibility: 'sharedReport' },
+    });
+
+    // The same person twice is the ONLY invalid pairing now.
+    const dup = await bridge.assignmentsCreateCompatibility({
+      questionnaireId: q.id,
+      participantPersonIdA: ownerId,
+      participantPersonIdB: ownerId,
+    });
+    expect(dup).toMatchObject({ ok: false, reason: 'INVALID' });
+
+    // You + someone else: the owner (sender) is one participant — previously rejected, now allowed.
+    const sent = await bridge.assignmentsCreateCompatibility({
+      questionnaireId: q.id,
+      participantPersonIdA: ownerId,
+      participantPersonIdB: partner.id,
+    });
+    expect(sent.ok).toBe(true);
+
+    const group = (await bridge.assignmentsCompatibility(q.id))[0]!;
+    expect(group.members).toHaveLength(2);
+    const ownMember = group.members.find((m) => m.recipientName !== 'Angel')!;
+    // The sender answers their OWN variant in their Inbox; the disclosure reads as "you" (viewerIsSender)
+    // and names the OTHER participant, never the sender as a third party (§16.1).
+    const detail = await bridge.assignmentsGet(ownMember.assignmentId);
+    expect(detail!.compatibility!.viewerIsSender).toBe(true);
+    expect(detail!.compatibility!.otherParticipantName).toBe('Angel');
+
+    // The partner's view names the sender as the other participant, not as a neutral asker.
+    await bridge.sessionSetActive({ personId: partner.id });
+    const partnerMember = group.members.find((m) => m.recipientName === 'Angel')!;
+    const partnerDetail = await bridge.assignmentsGet(partnerMember.assignmentId);
+    expect(partnerDetail!.compatibility!.viewerIsSender).toBe(false);
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+  });
+
   it('compatibility: dual-send → align → report + Insight; the Owner can reveal a senderSeesAll send', async () => {
     const { bridge, ownerId } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
@@ -1138,8 +1192,8 @@ describe('createCoreBridge', () => {
     // Dual-send: AI personalizes a variant each, freezing two paired snapshots.
     const sent = await bridge.assignmentsCreateCompatibility({
       questionnaireId: q.id,
-      recipientPersonIdA: alex.id,
-      recipientPersonIdB: bri.id,
+      participantPersonIdA: alex.id,
+      participantPersonIdB: bri.id,
     });
     expect(sent.ok).toBe(true);
 
@@ -1258,8 +1312,8 @@ describe('createCoreBridge', () => {
     });
     const sent = await bridge.assignmentsCreateCompatibility({
       questionnaireId: q.id,
-      recipientPersonIdA: alex.id,
-      recipientPersonIdB: bri.id,
+      participantPersonIdA: alex.id,
+      participantPersonIdB: bri.id,
     });
     expect(sent.ok).toBe(true);
 

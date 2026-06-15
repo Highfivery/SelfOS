@@ -48,6 +48,10 @@ import {
   type InboxCompatibilityView,
   type InboxItem,
   type Insight,
+  type InsightFact,
+  type IntakeState,
+  type IntakeSynthesisResult,
+  type IntakeTurnResult,
   type Question,
   type QuestionTrend,
   type RawAccessAuditEntry,
@@ -234,6 +238,15 @@ import {
   synthesizeAnalysis,
   updateAnalysis,
 } from '@selfos/core/dreams';
+import {
+  ensureIntakeSession,
+  intakeSectionMeta,
+  listRestrictedIntakeFacts,
+  redactRestrictedFacts,
+  runIntakeTurn,
+  skipIntakeSection,
+  synthesizeIntake,
+} from '@selfos/core/intake';
 import { fromBase64, toBase64 } from '@selfos/core/encoding';
 
 /**
@@ -297,6 +310,8 @@ export interface BridgeHost {
   emitChatChunk(chunk: string): void;
   /** Deliver a dream-analysis reply chunk to the renderer (separate channel from chat). */
   emitDreamChunk(chunk: string): void;
+  /** Deliver an intake interview reply chunk to the renderer (separate channel from chat/dreams). */
+  emitIntakeChunk(chunk: string): void;
 
   // --- Platform-specific surface, forwarded verbatim to the renderer-facing bridge ---
   getBootState(): Promise<BootState>;
@@ -316,6 +331,8 @@ export interface BridgeHost {
   onChatChunk(listener: (delta: string) => void): () => void;
   /** Subscribe to streamed dream-analysis chunks; the counterpart to `emitDreamChunk`. */
   onDreamChunk(listener: (delta: string) => void): () => void;
+  /** Subscribe to streamed intake interview chunks; the counterpart to `emitIntakeChunk`. */
+  onIntakeChunk(listener: (delta: string) => void): () => void;
 }
 
 /** Vault-relative path of the plain-JSON, vault-scoped settings file (02-app-shell). */
@@ -490,6 +507,11 @@ const InsightEditSchema = z.object({
   facts: z.array(InsightFactInputSchema).optional(),
 });
 const InsightIdSchema = z.object({ subjectPersonId: z.string().min(1), id: z.string().min(1) });
+// Personal onboarding (18-personal-onboarding §6).
+const IntakeRunTurnSchema = z.object({ sectionId: z.string().min(1), userText: z.string() });
+const IntakeSectionIdSchema = z.object({ sectionId: z.string().min(1) });
+const IntakeSynthesizeSchema = z.object({ sectionId: z.string().min(1).optional() });
+const IntakeRevealSchema = z.object({ subjectPersonId: z.string().min(1) });
 const AssignmentIdSchema = z.string().min(1);
 const QuestionnaireIdSchema = z.string().min(1);
 const AnswersSchema = z.object({
@@ -612,6 +634,40 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     return { fs: ctx.fs, key: ctx.key, assignment };
   };
 
+  /** Assemble the renderer-facing intake state (§6): the resumable session + catalog meta + availability. */
+  const buildIntakeState = async (
+    fs: FileSystem,
+    key: Uint8Array,
+    personId: string,
+  ): Promise<IntakeState> => {
+    const session = await ensureIntakeSession(fs, key, personId, new Date());
+    const apiKey = await host.secrets.get(ANTHROPIC_API_KEY_ID);
+    const aiEnabled = (await readVaultSettingsValues(fs))['ai.enabled'] === true;
+    const prefs = await getGuidancePrefs(fs, key, personId);
+    return {
+      session,
+      sections: intakeSectionMeta(),
+      aiAvailable: Boolean(apiKey) && aiEnabled,
+      adultAcknowledged: prefs.adultAcknowledged === true,
+    };
+  };
+
+  /** A benign, non-nudging intake state for an unpermitted / signed-out caller (renderer renders nothing). */
+  const emptyIntakeState = (personId: string): IntakeState => ({
+    session: {
+      id: 'none',
+      schemaVersion: 1,
+      personId,
+      status: 'complete',
+      sections: [],
+      startedAt: '',
+      updatedAt: '',
+    },
+    sections: intakeSectionMeta(),
+    aiAvailable: false,
+    adultAcknowledged: false,
+  });
+
   return {
     // --- Platform-specific (forwarded to the host) ---
     getBootState: () => host.getBootState(),
@@ -623,6 +679,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     onVaultChanged: (listener) => host.onVaultChanged(listener),
     onChatChunk: (listener) => host.onChatChunk(listener),
     onDreamChunk: (listener) => host.onDreamChunk(listener),
+    onIntakeChunk: (listener) => host.onIntakeChunk(listener),
     platform: host.platform,
     // iOS/web have no OS window chrome, so there is no fullscreen-titlebar transition to report.
     onFullscreenChanged: () => () => {},
@@ -1336,7 +1393,14 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const ctx = await host.vaultAndKey();
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.viewResults')))
         return [];
-      return listAllInsights(ctx.fs, ctx.key);
+      const all = await listAllInsights(ctx.fs, ctx.key);
+      // Restricted intake facts (§8.4) are withheld from the owner's NORMAL Memory view — they reach the
+      // person's OWN coaching context (a different path) but are browsable here only via the audited
+      // break-glass. A privileged caller (intake.readRestricted or the concealed super-admin) sees them.
+      const privileged =
+        host.isSuperAdminActive() ||
+        (await activePersonCan(ctx.fs, ctx.key, 'intake.readRestricted'));
+      return privileged ? all : all.map(redactRestrictedFacts);
     },
     insightsAnalyze: async (input): Promise<QuestionnaireAnalyzeResult> => {
       const deps = await aiDeps('questionnaires.viewResults');
@@ -2262,6 +2326,104 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const viewerId = ctx ? await activePersonId() : null;
       if (!ctx || !viewerId) return [];
       return listImagesSharedWith(ctx.fs, ctx.key, viewerId);
+    },
+
+    // --- Personal onboarding (18-personal-onboarding §6) — gated by `intake.own`, active-person-scoped ---
+    intakeGetState: async (): Promise<IntakeState> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'intake.own'))) {
+        return emptyIntakeState(personId ?? '');
+      }
+      return buildIntakeState(ctx.fs, ctx.key, personId);
+    },
+    intakeRunTurn: async (input): Promise<IntakeTurnResult> => {
+      const { sectionId, userText } = IntakeRunTurnSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'intake.own'))) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      // The API key is read host-side and never crosses to the renderer; deltas go to the dedicated intake
+      // sink so they never mix with the Sessions / Dreams streams.
+      const apiKey = await host.secrets.get(ANTHROPIC_API_KEY_ID);
+      return runIntakeTurn({
+        fs: ctx.fs,
+        key: ctx.key,
+        client: host.claude,
+        apiKey,
+        model: await host.activeModel(),
+        personId,
+        sectionId,
+        userText,
+        onDelta: (text) => host.emitIntakeChunk(text),
+        now: new Date(),
+      });
+    },
+    intakeSkipSection: async (input): Promise<IntakeState> => {
+      const { sectionId } = IntakeSectionIdSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'intake.own'))) {
+        return emptyIntakeState(personId ?? '');
+      }
+      await skipIntakeSection(ctx.fs, ctx.key, personId, sectionId, new Date());
+      return buildIntakeState(ctx.fs, ctx.key, personId);
+    },
+    intakeAcknowledgeAdult: async (): Promise<IntakeState> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'intake.own'))) {
+        return emptyIntakeState(personId ?? '');
+      }
+      // The 18+ ack is shared with guided sessions (16) — acking here unlocks both surfaces (§3.3 decision).
+      await acknowledgeAdult(ctx.fs, ctx.key, personId);
+      return buildIntakeState(ctx.fs, ctx.key, personId);
+    },
+    intakeSynthesize: async (input): Promise<IntakeSynthesisResult> => {
+      const { sectionId } = IntakeSynthesizeSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'intake.own'))) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      const apiKey = await host.secrets.get(ANTHROPIC_API_KEY_ID);
+      return synthesizeIntake({
+        fs: ctx.fs,
+        key: ctx.key,
+        client: host.claude,
+        apiKey,
+        model: await host.activeModel(),
+        personId,
+        ...(sectionId !== undefined ? { sectionId } : {}),
+        now: new Date(),
+      });
+    },
+    intakeRevealRestricted: async (input): Promise<InsightFact[] | null> => {
+      const { subjectPersonId } = IntakeRevealSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx) return null;
+      const personId = await activePersonId();
+      const viaSuperAdmin = host.isSuperAdminActive();
+      // Break-glass: the concealed super-admin OR a holder of the EXPLICIT_GRANT_ONLY `intake.readRestricted`
+      // capability — nothing else (§8.4). The renderer isn't the trust boundary; this is.
+      const permitted =
+        viaSuperAdmin || (await activePersonCan(ctx.fs, ctx.key, 'intake.readRestricted'));
+      if (!permitted) return null;
+      const facts = await listRestrictedIntakeFacts(ctx.fs, ctx.key, subjectPersonId);
+      // Audit BEFORE returning — the trail is the whole point. Recorded even when there's nothing to show,
+      // so every attempt is accountable.
+      const subject = await getPerson(ctx.fs, ctx.key, subjectPersonId);
+      await appendAuditEntry(ctx.fs, ctx.key, {
+        schemaVersion: 1,
+        at: new Date().toISOString(),
+        by: personId ?? 'super-admin',
+        viaSuperAdmin,
+        subjectPersonId,
+        subjectName: subject?.displayName ?? 'Unknown',
+        action: 'revealRestricted',
+      });
+      return facts;
     },
 
     // --- UI state (device-local) ---

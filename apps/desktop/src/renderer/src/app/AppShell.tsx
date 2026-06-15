@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   BarChart3,
   Brain,
@@ -14,6 +14,7 @@ import {
   Shapes,
   ShieldAlert,
   ShieldCheck,
+  Sparkles,
   Users,
 } from 'lucide-react';
 import { useVaultConflicts } from './useVaultConflicts';
@@ -28,6 +29,7 @@ import { useDreamAnalysisStore } from '../stores/dreamAnalysisStore';
 import { useDreamPatternStore } from '../stores/dreamPatternStore';
 import { useResultsStore } from '../stores/resultsStore';
 import { useGuidanceStore } from '../stores/guidanceStore';
+import { useIntakeStore } from '../stores/intakeStore';
 import { AppHeader } from './AppHeader';
 import { Switcher } from './Switcher';
 import { LockScreen } from './LockScreen';
@@ -36,6 +38,10 @@ import { Banner } from '../design-system/components';
 import styles from './AppShell.module.css';
 
 const MOBILE_BREAKPOINT = 768; // --bp-md: below this the sidebar is an off-canvas drawer
+
+// Person ids already auto-routed to onboarding this app session — so a brand-new person is taken straight
+// in once (18-personal-onboarding §3.1) but is never re-routed mid-session as they navigate away.
+const autoRoutedToOnboarding = new Set<string>();
 
 function navClass({ isActive }: { isActive: boolean }): string {
   return isActive ? `${styles.navItem} ${styles.navItemActive}` : (styles.navItem ?? '');
@@ -52,7 +58,14 @@ export function AppShell(): JSX.Element {
   const inboxItems = useInboxStore((s) => s.items);
   const inboxCount = unansweredCount(inboxItems);
   const canOwnDreams = useSessionStore((s) => s.can('dreams.own'));
+  const canDoIntake = useSessionStore((s) => s.can('intake.own'));
+  const intakeLoaded = useIntakeStore((s) => s.loaded);
+  const intakeState = useIntakeStore((s) => s.state);
+  const intakeIncomplete =
+    canDoIntake && intakeState !== null && intakeState.session.status !== 'complete';
   const isSuperAdmin = useSessionStore((s) => s.superAdmin);
+  const navigate = useNavigate();
+  const location = useLocation();
   const locked = useSessionStore((s) => s.locked);
   const unlockPromptOpen = useSessionStore((s) => s.unlockPromptOpen);
   const activePersonId = useSessionStore((s) => s.activePerson?.id ?? null);
@@ -78,12 +91,25 @@ export function AppShell(): JSX.Element {
     useDreamPatternStore.getState().reset();
     useResultsStore.getState().reset(); // sender-scoped Results/trends — per-person, must reset too
     useGuidanceStore.getState().reset(); // guided suggestions + 18+ ack are per-person (16 §4.3/§8.3)
+    useIntakeStore.getState().reset(); // the intake is per-person (18-personal-onboarding §7)
     void useConversationStore.getState().load();
     void useBudgetStore.getState().refresh();
     void useInboxStore.getState().load();
     void useDreamStore.getState().load();
     void useGuidanceStore.getState().load();
+    void useIntakeStore.getState().load();
   }, [activePersonId]);
+
+  // Take a person who hasn't finished onboarding straight into it — once per session per person, only from
+  // Home, and never as a hard lock (they can navigate away; the nudge persists, 18-personal-onboarding §3.1).
+  useEffect(() => {
+    if (!canDoIntake || !intakeLoaded || !intakeState) return;
+    if (intakeState.session.status === 'complete') return;
+    const id = activePersonId ?? '';
+    if (autoRoutedToOnboarding.has(id)) return;
+    autoRoutedToOnboarding.add(id);
+    if (location.pathname === '/') navigate('/onboarding');
+  }, [canDoIntake, intakeLoaded, intakeState, activePersonId, location.pathname, navigate]);
 
   // Collapse any open drawer when the viewport grows back to desktop (where the sidebar is permanent).
   useEffect(() => {
@@ -157,6 +183,19 @@ export function AppShell(): JSX.Element {
               <House size={18} aria-hidden="true" />
               <span className={styles.label}>Home</span>
             </NavLink>
+            {canDoIntake ? (
+              <NavLink
+                to="/onboarding"
+                className={navClass}
+                aria-label={intakeIncomplete ? 'Onboarding, not finished' : 'Onboarding'}
+                title={tip('Onboarding')}
+                onClick={closeDrawer}
+              >
+                <Sparkles size={18} aria-hidden="true" />
+                <span className={styles.label}>Onboarding</span>
+                {intakeIncomplete ? <span className={styles.navDot} aria-hidden="true" /> : null}
+              </NavLink>
+            ) : null}
             {hasSessions ? (
               <NavLink
                 to="/sessions"

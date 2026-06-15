@@ -230,7 +230,10 @@ export async function buildLinkedPeopleContext(
     const facts = feedable
       .flatMap((insight) =>
         insight.facts.filter(
-          (fact) => fact.shareable || (fact.shareableWith?.includes(viewerId) ?? false),
+          (fact) =>
+            // A `restricted` intake fact is own-context-only — never surfaced to a linked viewer (18 §8.4).
+            fact.restricted !== true &&
+            (fact.shareable || (fact.shareableWith?.includes(viewerId) ?? false)),
         ),
       )
       .slice(0, MAX_LINKED_FACTS_PER_PERSON);

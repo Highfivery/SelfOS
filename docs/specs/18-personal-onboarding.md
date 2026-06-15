@@ -1,6 +1,6 @@
 # 18 — Personal onboarding ("Getting to know you")
 
-> **Status:** Review · _last updated 2026-06-14_
+> **Status:** Approved · _last updated 2026-06-14_
 >
 > A warm, AI-guided onboarding that helps a person tell SelfOS who they are — their life now, their
 > history, family, health, what weighs on them, relationships, values, what they want to work on, and
@@ -289,6 +289,13 @@ entry before** the content is returned. So the most intimate data is **accessibl
 casually browsable. (Consistent with [`04`](04-people-roles.md) §8 / [`10`](10-multi-device-vault.md): the
 vault isn't zero-knowledge from the owner; restriction is enforced at the app/UX layer + audit, like all RBAC.)
 
+**Two structural invariants enforce this (verified in code review):** (1) a `restricted` fact is **always
+own-context-only** — `summarizeForContext`/`buildLinkedPeopleContext` exclude it from any **other** person's
+context regardless of `shareable`/`shareableWith`, so it can never broadcast even if a flag is toggled; and
+(2) editing/approving a fact in Memory **carries the `restricted` flag (and `shareableWith`) forward** —
+`updateInsight` merges the renderer's `{id,text,shareable}` patch onto the stored fact by id, so a Memory
+edit can never silently strip the restriction and surface it in the owner's normal view.
+
 ### 8.5 Transparency & consent
 
 The intake opens with a plain note: what it's for, that it's AI-guided (answers are processed by Claude to
@@ -324,17 +331,23 @@ closing portrait are keyboard-operable + screen-reader friendly. Responsive ~360
 
 ## 11. Open questions
 
-_All major product decisions resolved across the 2026-06-14 planning rounds (see §12). Remaining are
-build-time tunings, not blockers:_
+_All major product decisions resolved across the 2026-06-14 planning rounds (see §12). The build-time
+tunings below were resolved at build (2026-06-14, see §12 "Build-time decisions"):_
 
-1. **Section wording + the exact direct-field map** — final per-section questions and which map 1:1 to which
-   `Person` field (vs. inferred at synthesis). Tuned at build.
-2. **Break-glass capability shape** — reuse a generalized `assignments:revealRaw` path vs. a parallel
-   `intake:revealRestricted` + the shared `auditService`. Proposed: a shared audited-reveal helper both use.
-3. **Closing-portrait depth** — a single end-of-intake portrait vs. a short per-section reflection too.
-   Proposed: a per-section reflection + a richer final portrait.
-4. **Nudge persistence** — device-local vs. vault for "intake incomplete." Proposed: derive from the
-   `IntakeSession.status` (vault), so it's correct across devices.
+1. **Section wording + the exact direct-field map** — RESOLVED. The catalog (`intakeCatalog.ts`) defines the
+   final 10 sections, each with a static opener, a `directFields` map (which `PersonFieldKey` each captures
+   1:1, with a `private` flag for sensitive ones), and `restricted`/`adult` flags. Direct fields are filled
+   immediately during the interview via an AI-embedded `[[SELFOS:FIELD:key=value]]` marker (the wrap-up /
+   step-marker precedent), stripped from saved + streamed text; inferred fields are filled at synthesis.
+2. **Break-glass capability shape** — RESOLVED: a generalized `RawAccessAuditEntry` (the `action` field is now
+   an enum `revealRaw | revealRestricted`; `assignmentId` is optional; `subjectPersonId`/`subjectName` added)
+   - the shared `auditService`. A new `intake:revealRestricted` bridge op writes the audit entry **before**
+     returning the restricted facts, exactly like `assignments:revealRaw`.
+3. **Closing-portrait depth** — RESOLVED: a **light per-section reflection** auto-runs when a section
+   completes (a small `intake.synthesize` spend, the per-section payoff) **and** a **richer final portrait**
+   the person taps once to generate (the explicit, bigger `intake.synthesize` pass that builds the Insight +
+   inferred fills). The final portrait is never auto-run (honors the guided-sessions "never auto-spend" rule).
+4. **Nudge persistence** — RESOLVED: derived from `IntakeSession.status` (vault), correct across devices.
 
 ## 12. Resolved decisions (2026-06-14)
 
@@ -354,9 +367,37 @@ build-time tunings, not blockers:_
   reuses the [`08`](08-questionnaires.md) readRaw/audit model via `intake.readRestricted` / super-admin.
 - **Closing portrait** — a **member-facing** warm summary.
 
+### Build-time decisions (2026-06-14, at implementation)
+
+- **Synthesis cadence** — light per-section reflection auto-runs on section completion; the richer final
+  portrait is explicit (tap to generate). Both meter `intake.synthesize` (§11.3).
+- **18+ acknowledgement** — **shared** with guided sessions (`16`): the existing per-person
+  `guidance/prefs.enc` `adultAcknowledged` flag gates both the intimacy guided exercises **and** the intimacy
+  intake block; `intake:acknowledgeAdult` writes the same flag. Acking once anywhere unlocks both.
+- **First-run entry** — a brand-new person is **auto-routed once** to `/onboarding` (dismissible — they can
+  navigate away), with a persistent Home nudge card + a nav badge until `IntakeSession.status === 'complete'`.
+- **Insight-fact sharing default** — **all** intake Insight facts default `shareable: false` (own-context-only),
+  matching the session/dream precedent; restricted-section facts are additionally `restricted: true`. §8.3's
+  "shared default for everything else" governs the **mapped `Person` fields** (not locked → shared); the owner
+  can still promote individual facts per-person in Memory. This is the safe reading (no surprise broadcast of a
+  person's intake into others' coaching).
+
 ## 13. Changelog
 
 - 2026-06-14 — created (Review). Decisions resolved ask-first across four question rounds; build-ready pending
   final approval. The fourth Insight producer; reuses [`05`](05-conversations.md)/[`09`](09-session-analysis.md)
   chat+analysis, [`15`](15-shareability.md) shareability, [`16`](16-guided-sessions.md) interview machinery, and
   [`08`](08-questionnaires.md) break-glass/audit.
+- 2026-06-14 — **Approved + built** (`feat/personal-onboarding`). Build-time tunings resolved (§11 / §12
+  Build-time decisions). Core `intakeService` + `intakeCatalog`; `InsightSource += 'intake'`,
+  `InsightFact.restricted?`, `Insight.provenance.intakeSection?`, generalized `RawAccessAuditEntry` (all
+  additive); `intake.own` (Member ON) + `intake.readRestricted` (EXPLICIT_GRANT_ONLY); `intake.interview` /
+  `intake.synthesize` metering. IPC `intake:getState/runTurn/skipSection/acknowledgeAdult/synthesize/
+revealRestricted` (gated + active-person-scoped; restricted facts redacted from the owner's normal Memory
+  reads, revealed only via the audited break-glass). Renderer onboarding flow + nudge + auto-route.
+  Code-reviewer **fix-first** (one blocker resolved): a Memory edit→save dropped the `restricted`/`shareableWith`
+  flags off facts (the renderer patch carries only `{id,text,shareable}`) — `updateInsight` now **merges by id**
+  to carry them forward, and `summarizeForContext`/`buildLinkedPeopleContext` now **exclude restricted facts
+  from every other person's context** regardless of `shareable` (defense in depth, §8.4). Gate green: typecheck
+  (node + web/DOM-lib), lint, format, **362 core + 442 desktop + 8 relay** unit, **63 E2E**; visual QA at
+  desktop + 390px (0 overflow, no console errors).

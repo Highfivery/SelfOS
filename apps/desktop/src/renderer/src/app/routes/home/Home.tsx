@@ -7,8 +7,10 @@ import { useDreamPatternStore } from '../../../stores/dreamPatternStore';
 import { useInsightStore } from '../../../stores/insightStore';
 import { unansweredCount, useInboxStore } from '../../../stores/inboxStore';
 import { useGuidanceStore } from '../../../stores/guidanceStore';
+import { useIntakeStore } from '../../../stores/intakeStore';
 import { useSetting } from '../../../settings/useSetting';
 import { CrisisFooter } from '../sessions/CrisisFooter';
+import { OnboardingCard } from './OnboardingCard';
 import { ContinueCard } from './ContinueCard';
 import { SuggestionsCard } from './SuggestionsCard';
 import { WellbeingCard } from './WellbeingCard';
@@ -63,6 +65,7 @@ export function Home(): JSX.Element {
       useInsightStore.getState().load(),
       useInboxStore.getState().load(),
       useGuidanceStore.getState().load(),
+      useIntakeStore.getState().load(),
     ]).then(() => {
       if (!cancelled) setReady(true);
     });
@@ -105,6 +108,8 @@ export function Home(): JSX.Element {
         <h1 className={styles.greeting}>{greeting}</h1>
         {statusLine ? <p className={styles.status}>{statusLine}</p> : null}
       </header>
+
+      {ready ? <OnboardingCard /> : null}
 
       {!ready ? null : isNew ? (
         <GettingStarted

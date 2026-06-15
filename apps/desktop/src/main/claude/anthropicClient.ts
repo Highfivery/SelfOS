@@ -115,6 +115,52 @@ export function fakeClaudeClient(): ClaudeClient {
         });
       }
 
+      // Personal onboarding (18-personal-onboarding §5) — the interviewer turns, per-section reflections,
+      // and the closing portrait. Detected by the interviewer system addendum so it can't collide with the
+      // generic "JSON object" dream/session branches below.
+      if (
+        (options.system ?? '').includes('getting to know you') ||
+        userText.includes('closing portrait')
+      ) {
+        // The closing portrait → a valid PortraitDraft with one restricted ('weighs') fact (§3.5/§8.4).
+        if (userText.includes('closing portrait')) {
+          return Promise.resolve({
+            text: JSON.stringify({
+              portrait:
+                'You come across as thoughtful and steady — someone who cares about honesty and shows up for the people you love.',
+              facts: [
+                { text: 'Works as a nurse', section: 'basics' },
+                { text: 'Carries grief from a recent loss', section: 'weighs' },
+              ],
+              metrics: { valence: 0.1 },
+              inferred: { communicationStyle: 'warm and direct' },
+              crisisFlag: false,
+            }),
+            usage: { inputTokens: 200, outputTokens: 90, cacheWriteTokens: 0, cacheReadTokens: 0 },
+          });
+        }
+        // A per-section reflection (§11.3).
+        if (userText.includes('brief, warm reflection')) {
+          return Promise.resolve({
+            text: JSON.stringify({
+              reflection: 'Thank you for trusting me with that — it helps me understand you.',
+            }),
+            usage: { inputTokens: 60, outputTokens: 20, cacheWriteTokens: 0, cacheReadTokens: 0 },
+          });
+        }
+        // An interview turn → a warm reply, with a direct field marker only in the basics section so the
+        // owner-only profile fills (the marker is stripped from saved/streamed text).
+        const marker = userText.includes('What should I call you')
+          ? ' [[SELFOS:FIELD:occupation=nurse]]'
+          : '';
+        const visible = 'Thank you for sharing that with me.';
+        for (const word of visible.split(' ')) onDelta(`${word} `);
+        return Promise.resolve({
+          text: `${visible}${marker}`,
+          usage: { inputTokens: 120, outputTokens: 20, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+
       // The dream-analysis synthesis turn asks for a single JSON object (12-dreams §3.2). Return a valid
       // DreamAnalysis draft so the offline synthesize path parses deterministically; every other turn is
       // the reflective chat reply.

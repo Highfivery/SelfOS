@@ -52,6 +52,7 @@ export function registerIpcHandlers(): void {
   const secrets = createNodeSecretStore(userDataDir(), encryptor);
   let chatSender: WebContents | undefined;
   let dreamSender: WebContents | undefined;
+  let intakeSender: WebContents | undefined;
   // E2E/dev: a deterministic in-memory relay (no real Cloudflare account/network), like SELFOS_FAKE_CLAUDE.
   const useFakeRelay = Boolean(process.env['SELFOS_FAKE_RELAY']);
 
@@ -106,6 +107,11 @@ export function registerIpcHandlers(): void {
         dreamSender.send(IpcChannels.dreamChunk, chunk);
       }
     },
+    emitIntakeChunk: (chunk) => {
+      if (intakeSender && !intakeSender.isDestroyed()) {
+        intakeSender.send(IpcChannels.intakeChunk, chunk);
+      }
+    },
     getBootState: currentBootState,
     refreshBootState: currentBootState,
     selectVaultFolder: async () => {
@@ -148,6 +154,7 @@ export function registerIpcHandlers(): void {
     onVaultChanged: () => () => {},
     onChatChunk: () => () => {},
     onDreamChunk: () => () => {},
+    onIntakeChunk: () => () => {},
   };
 
   const bridge = createCoreBridge(host);
@@ -279,6 +286,11 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.dreamSetImageShare, bridge.dreamSetImageShare);
   handle(IpcChannels.dreamGetSharedImage, bridge.dreamGetSharedImage);
   handle(IpcChannels.dreamListSharedImages, bridge.dreamListSharedImages);
+  handle(IpcChannels.intakeGetState, bridge.intakeGetState);
+  handle(IpcChannels.intakeSkipSection, bridge.intakeSkipSection);
+  handle(IpcChannels.intakeAcknowledgeAdult, bridge.intakeAcknowledgeAdult);
+  handle(IpcChannels.intakeSynthesize, bridge.intakeSynthesize);
+  handle(IpcChannels.intakeRevealRestricted, bridge.intakeRevealRestricted);
   handle(IpcChannels.getSidebarCollapsed, bridge.getSidebarCollapsed);
   handle(IpcChannels.setSidebarCollapsed, bridge.setSidebarCollapsed);
 
@@ -318,6 +330,17 @@ export function registerIpcHandlers(): void {
       return await bridge.dreamAnalyzeTurn(raw as { dreamId: string; userText: string });
     } finally {
       dreamSender = undefined;
+    }
+  });
+
+  // intakeRunTurn streams the interviewer reply on its own channel (kept separate from chat/dreams). Same
+  // per-turn sender binding + reset as chatStream (18-personal-onboarding §6).
+  ipcMain.handle(IpcChannels.intakeRunTurn, async (event, raw: unknown) => {
+    intakeSender = event.sender;
+    try {
+      return await bridge.intakeRunTurn(raw as { sectionId: string; userText: string });
+    } finally {
+      intakeSender = undefined;
     }
   });
 }

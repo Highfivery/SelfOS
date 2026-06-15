@@ -32,6 +32,13 @@ import type {
   InboxItem,
   InviteSummary,
   Insight,
+  InsightFact,
+  IntakeSection,
+  IntakeSectionMeta,
+  IntakeSession,
+  IntakeState,
+  IntakeSynthesisResult,
+  IntakeTurnResult,
   Person,
   RawAccessAuditEntry,
   SendAnswer,
@@ -195,6 +202,14 @@ export const IpcChannels = {
   dreamSetImageShare: 'dreams:setImageShare',
   dreamGetSharedImage: 'dreams:getSharedImage',
   dreamListSharedImages: 'dreams:listSharedImages',
+  // Personal onboarding (18-personal-onboarding §6).
+  intakeGetState: 'intake:getState',
+  intakeRunTurn: 'intake:runTurn',
+  intakeChunk: 'intake:chunk', // main → renderer event
+  intakeSkipSection: 'intake:skipSection',
+  intakeAcknowledgeAdult: 'intake:acknowledgeAdult',
+  intakeSynthesize: 'intake:synthesize',
+  intakeRevealRestricted: 'intake:revealRestricted',
   getSidebarCollapsed: 'ui:getSidebarCollapsed',
   setSidebarCollapsed: 'ui:setSidebarCollapsed',
 } as const;
@@ -658,6 +673,31 @@ export interface SelfosBridge {
   }): Promise<{ mime: string; dataBase64: string } | null>;
   /** Every dream image currently shared WITH the active person — the "Shared with you" surface (§3.6). */
   dreamListSharedImages(): Promise<DreamSharedImage[]>;
+  // --- Personal onboarding (18-personal-onboarding §6) — gated by `intake.own`, active-person-scoped ---
+  /** The active person's resumable intake (session + catalog meta + AI/ack availability). Requires `intake.own`. */
+  intakeGetState(): Promise<IntakeState>;
+  /**
+   * One adaptive interview turn: streams the interviewer reply via `onIntakeChunk`, persists the turn +
+   * any direct field fills (the transcript lives under the person, never in Sessions). Requires `intake.own`.
+   */
+  intakeRunTurn(input: { sectionId: string; userText: string }): Promise<IntakeTurnResult>;
+  /** Subscribe to streamed intake interview chunks; returns an unsubscribe function. */
+  onIntakeChunk(listener: (delta: string) => void): () => void;
+  /** Skip a whole intake section (never blocks completion). Requires `intake.own`. */
+  intakeSkipSection(input: { sectionId: string }): Promise<IntakeState>;
+  /** The one-time 18+ acknowledgement for the intimacy block (shared with guided sessions). Requires `intake.own`. */
+  intakeAcknowledgeAdult(): Promise<IntakeState>;
+  /**
+   * Run a synthesis pass: with a `sectionId` a light per-section reflection; without one the richer final
+   * portrait (→ the portrait Insight + inferred field fills + completion). Requires `intake.own`.
+   */
+  intakeSynthesize(input: { sectionId?: string }): Promise<IntakeSynthesisResult>;
+  /**
+   * Break-glass: reveal a person's restricted intake facts ("what weighs on you" / intimacy), writing a
+   * vault audit entry BEFORE returning (§8.4). Permitted only for `intake.readRestricted` or the concealed
+   * super-admin; null otherwise.
+   */
+  intakeRevealRestricted(input: { subjectPersonId: string }): Promise<InsightFact[] | null>;
   /** Whether the desktop sidebar is collapsed to an icon rail (device-local). */
   getSidebarCollapsed(): Promise<boolean>;
   /** Persist the sidebar collapsed/expanded state (device-local). */
@@ -696,6 +736,13 @@ export type {
   InboxAssignmentDetail,
   InboxItem,
   Insight,
+  InsightFact,
+  IntakeSection,
+  IntakeSectionMeta,
+  IntakeSession,
+  IntakeState,
+  IntakeSynthesisResult,
+  IntakeTurnResult,
   InviteSummary,
   Person,
   PersonInput,

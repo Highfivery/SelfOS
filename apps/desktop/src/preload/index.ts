@@ -180,6 +180,19 @@ const bridge: SelfosBridge = {
   dreamSetImageShare: (input) => ipcRenderer.invoke(IpcChannels.dreamSetImageShare, input),
   dreamGetSharedImage: (input) => ipcRenderer.invoke(IpcChannels.dreamGetSharedImage, input),
   dreamListSharedImages: () => ipcRenderer.invoke(IpcChannels.dreamListSharedImages),
+  intakeGetState: () => ipcRenderer.invoke(IpcChannels.intakeGetState),
+  intakeRunTurn: (input) => ipcRenderer.invoke(IpcChannels.intakeRunTurn, input),
+  onIntakeChunk: (listener) => {
+    const handler = (_event: unknown, delta: string): void => listener(delta);
+    ipcRenderer.on(IpcChannels.intakeChunk, handler);
+    return () => {
+      ipcRenderer.removeListener(IpcChannels.intakeChunk, handler);
+    };
+  },
+  intakeSkipSection: (input) => ipcRenderer.invoke(IpcChannels.intakeSkipSection, input),
+  intakeAcknowledgeAdult: () => ipcRenderer.invoke(IpcChannels.intakeAcknowledgeAdult),
+  intakeSynthesize: (input) => ipcRenderer.invoke(IpcChannels.intakeSynthesize, input),
+  intakeRevealRestricted: (input) => ipcRenderer.invoke(IpcChannels.intakeRevealRestricted, input),
   getSidebarCollapsed: () => ipcRenderer.invoke(IpcChannels.getSidebarCollapsed),
   setSidebarCollapsed: (collapsed) =>
     ipcRenderer.invoke(IpcChannels.setSidebarCollapsed, collapsed),

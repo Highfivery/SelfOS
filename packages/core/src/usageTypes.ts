@@ -13,6 +13,8 @@ export const USAGE_TYPE_LABELS: Record<string, string> = {
   'dream.patterns': 'Dream patterns',
   'dream.imagePrompt': 'Dream image — prompt',
   'dream.image': 'Dream image',
+  'intake.interview': 'Onboarding — interview',
+  'intake.synthesize': 'Onboarding — portrait',
 };
 
 export function usageTypeLabel(type: string): string {

@@ -9,6 +9,7 @@ import { Inbox } from './routes/inbox/Inbox';
 import { Memory } from './routes/memory/Memory';
 import { Dreams } from './routes/dreams/Dreams';
 import { DreamPatterns } from './routes/dreams/DreamPatterns';
+import { Onboarding } from './routes/onboarding/Onboarding';
 import { People } from './routes/people/People';
 import { Roles } from './routes/roles/Roles';
 import { AuditLog } from './routes/audit/AuditLog';
@@ -29,6 +30,7 @@ export function Shell(): JSX.Element {
       <Routes>
         <Route element={<AppShell />}>
           <Route index element={<Home />} />
+          <Route path="onboarding" element={<Onboarding />} />
           <Route path="sessions" element={<Sessions />} />
           <Route path="questionnaires" element={<Questionnaires />} />
           <Route path="inbox" element={<Inbox />} />

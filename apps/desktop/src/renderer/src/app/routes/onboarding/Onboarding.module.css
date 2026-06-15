@@ -1,0 +1,157 @@
+.onboarding {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  max-width: 760px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* Section progress strip */
+.progress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  min-height: 36px;
+}
+
+.chip:hover {
+  border-color: var(--color-border-strong);
+}
+
+.chipActive {
+  border-color: var(--color-accent-solid);
+  background: var(--color-accent-soft);
+}
+
+.chipDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: none;
+  background: var(--color-border-strong);
+}
+
+.chipDotComplete {
+  background: var(--color-accent-solid);
+}
+
+.chipDotSkipped {
+  background: transparent;
+  border: 1px solid var(--color-border-strong);
+}
+
+.lock {
+  flex: none;
+  color: var(--color-text-secondary);
+}
+
+/* Section panel */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.sectionHead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.thread {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.turn {
+  max-width: 88%;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.coachMsg {
+  align-self: flex-start;
+  background: var(--color-surface-alt);
+  color: var(--color-text);
+}
+
+.userMsg {
+  align-self: flex-end;
+  background: var(--color-accent-solid);
+  color: var(--color-accent-solid-text);
+}
+
+.thinking {
+  align-self: flex-start;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.reflection {
+  border-left: 3px solid var(--color-accent-solid);
+}
+
+/* 18+ gate */
+.gate {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+/* Closing portrait */
+.portraitBody {
+  white-space: pre-wrap;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.reflections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.reflectionItem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.center {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: flex-start;
+}

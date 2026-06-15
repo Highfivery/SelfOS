@@ -267,6 +267,28 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-15 — Build (**onboarding intake redesign — hybrid form/chat + self-maintaining profile; SPEC 18
+  §14–§15 BUILT** on `feat/onboarding-redesign`, NOT merged). User: the all-chat intake is slow for simple
+  facts, the open prompts are too generic (people abandon), the intimacy question gets skipped — and "the more
+  info the AI has the better." Reworked into a **hybrid**: a short gated **`core`** of quick structured **forms**
+  - **`invited`** deeper/sensitive sections, with **AI `chat`** reserved for family / your story / what weighs on
+    you. **~180 specific questions** (broad prompts gone), incl. a **comprehensive, explicit, branched 18+ intimacy
+    block** (orientation, full sexual history, current partner, acts & specifics, body/grooming, fantasies/porn,
+    wellbeing, boundaries). **Asked-first** (2 deep rounds): the 4 forks (§14.13 — short-core-gates / promote-useful-
+    answers-to-real-fields / owner-sees-intimacy / reuse-the-questionnaire-engine) + the comprehensive question
+    inventory reviewed before coding. **Boundary held:** consensual-adult sexuality only — taboo _fantasies_ (CNC,
+    etc.) are in as fantasy/roleplay; minors / real non-consent / illegal are never presented as activities. Reuses
+    the questionnaire `Question` shape + `@selfos/answering` renderer (branching). **5 promoted additive `Person`
+    fields** (relationshipStatus/parentalStatus/livingSituation shared; sexualOrientation/relationshipStyle private-
+    by-default). **§15 self-maintaining profile:** drift detection **rides the session/dream/questionnaire analysis
+    passes (no extra AI spend)** → confirm-before-apply `ProfileUpdateSuggestion`s + a Home "Keep your profile
+    fresh" card (sessions producer built; dreams/questionnaires deferred, same pattern). 3 slices (core → renderer →
+    freshness) + 2 follow-ups (go-deeper chat, People-editor fields). Gate green each slice: typecheck (node +
+    web/DOM-lib), lint, format, **371 core + 447 desktop + 8 relay** unit, **61 E2E** (the 3 onboarding E2E reworked
+    for the form flow); visual QA at desktop + 390px. **Lesson: `submitSectionForm` fills fields from forms with NO
+    AI — the old chat `[[SELFOS:FIELD]]` marker machinery is gone; a form section spends nothing, so the gated
+    first-run is fast + cheap. Restricted (intimacy/trauma) facts are flagged at synthesis from the TRUSTED catalog
+    (`sectionRefRestricted`), never the model, so a sensitive fact can't leak past §8.4 by a model mislabel.**
 - 2026-06-14 — Refactor + bug fixes (**super-admin removed → the Owner is the full-access role; +
   per-person login & onboarding-gate fixes**; user flagged 4 issues). **(#3, the big one)** The concealed
   **super-admin** (passphrase + in-memory inspect flag + the long-press-version unlock + `config/superadmin.enc`

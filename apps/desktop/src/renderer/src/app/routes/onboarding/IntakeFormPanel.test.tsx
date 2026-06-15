@@ -24,6 +24,13 @@ const formMeta: IntakeSectionMeta = {
       options: ['she/her', 'he/him'],
     },
     { id: 'occupation', type: 'shortText', prompt: 'What do you do for work?', required: false },
+    {
+      id: 'likes',
+      type: 'multiChoice',
+      prompt: 'What you like',
+      required: false,
+      options: ['Music', 'Sport', 'Other'],
+    },
   ],
 };
 
@@ -95,6 +102,39 @@ describe('IntakeFormPanel', () => {
       }),
     );
     await waitFor(() => expect(onAdvance).toHaveBeenCalled());
+  });
+
+  it('renders choices as toggle pills and captures an "Other" write-in into the submit', async () => {
+    const intakeSubmitForm = vi.fn(() =>
+      Promise.resolve({
+        session: {} as never,
+        sections: [],
+        aiAvailable: true,
+        adultAcknowledged: false,
+      }),
+    );
+    installMockBridge({ intakeSubmitForm });
+    render(
+      <IntakeFormPanel
+        meta={formMeta}
+        section={section()}
+        adultAcknowledged={false}
+        onAdvance={() => {}}
+      />,
+    );
+    // A preset pill (a button, not a checkbox) + the Other write-in.
+    fireEvent.click(screen.getByRole('button', { name: 'Music' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Other' }));
+    fireEvent.change(screen.getByLabelText('What you like — other'), {
+      target: { value: 'cooking' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
+    await waitFor(() =>
+      expect(intakeSubmitForm).toHaveBeenCalledWith({
+        sectionId: 'basics',
+        answers: { likes: ['Music', 'cooking'] },
+      }),
+    );
   });
 
   it('offers an optional "Tell me more" go-deeper chat when the section invites it', async () => {

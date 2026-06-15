@@ -557,6 +557,8 @@ export const QuestionSchema = z.object({
   prompt: z.string().min(1),
   help: z.string().optional(),
   required: z.boolean(),
+  placeholder: z.string().optional(), // example/hint text for free-text answers (additive)
+  group: z.string().optional(), // optional accordion group heading for long forms (18 §14.3, additive)
   media: z
     .object({ imagePath: z.string().min(1), alt: z.string(), mime: z.string().min(1) })
     .optional(), // author-attached image (encrypted; ZK on relay). `mime` builds the display data URL.

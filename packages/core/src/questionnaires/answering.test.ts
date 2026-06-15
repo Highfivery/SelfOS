@@ -31,6 +31,18 @@ describe('answering — branch visibility', () => {
     expect(isQuestionVisible(q1, {})).toBe(true);
   });
 
+  it('shows an equalsAny-branched question when the answer is any of the listed values', () => {
+    const q3 = q({
+      id: 'q3',
+      type: 'shortText',
+      branch: { whenQuestionId: 'q1', equalsAny: ['Love it', 'Sometimes'], action: 'show' },
+    });
+    expect(isQuestionVisible(q3, {})).toBe(false);
+    expect(isQuestionVisible(q3, { q1: 'Not for me' })).toBe(false);
+    expect(isQuestionVisible(q3, { q1: 'Sometimes' })).toBe(true);
+    expect(isQuestionVisible(q3, { q1: 'Love it' })).toBe(true);
+  });
+
   it('filters the list to visible questions in order', () => {
     expect(visibleQuestions([q1, q2], {}).map((x) => x.id)).toEqual(['q1']);
     expect(visibleQuestions([q1, q2], { q1: 'Yes' }).map((x) => x.id)).toEqual(['q1', 'q2']);

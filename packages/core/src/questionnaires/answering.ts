@@ -15,7 +15,9 @@ export type AnswerMap = Record<string, AnswerValue>;
 /** Whether a question is shown given current answers — a branch hides it until its trigger matches. */
 export function isQuestionVisible(question: Question, answers: AnswerMap): boolean {
   if (!question.branch) return true;
-  return answers[question.branch.whenQuestionId] === question.branch.equals;
+  const answer = answers[question.branch.whenQuestionId];
+  if (question.branch.equalsAny) return question.branch.equalsAny.includes(answer as never);
+  return answer === question.branch.equals;
 }
 
 /** The questions currently shown, in order (branch-hidden ones removed). */

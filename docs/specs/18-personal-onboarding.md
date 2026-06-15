@@ -664,10 +664,17 @@ Replaces the single free-text box with a **comprehensive, concrete, explicit, br
 intake questions — direct and graphic where the person wants depth, handled as the most sensitive data (18+ ack,
 `restricted`, owner-visible / everyone-else-redacted, excluded from the dream-image depiction, §14.10). It is
 **`invited`** (never first-run-gated) and **opt-in** behind the shared 18+ acknowledgement; **every question is
-optional and skippable**. **Smart branching** keeps it relevant and gender/orientation/anatomy-aware (the
-anatomy, oral, and "where do you like your partner to cum" questions appear only by who you're drawn to and what
-fits; the partner group appears only if you have a partner). The free-text prompts invite as much graphic detail
-as the person wants to give.
+optional and skippable**. **Smart branching** keeps it relevant and gender/orientation/anatomy-aware — and now
+supports **`equalsAny`** (show follow-ups unless the answer was e.g. "Not for me"): the penis length/girth +
+vulva (labia/clit) specifics appear only when you're drawn to that anatomy; the dirty-talk follow-ups hide if
+it's "not for me"; porn genres/role appear only if you watch porn; the erotica-type question only if you read/
+listen; and partner-specific questions appear only if you have one. Intensity-style questions ("how rough?",
+"how big a part of life?", body confidence, etc.) use a **sleek slider with example anchors at the start,
+middle, and end** (seeded to the neutral middle). The wording is **casual, not clinical** ("Do you like giving
+blowjobs?" not "Do you give oral sex on a penis?"); orientation/attraction options are **inclusive** (trans
+women / trans men / other); **every choice list has an "Other" write-in**; toys are split into **own vs. want**;
+and every free-text prompt has an example placeholder. The prompts invite as much graphic detail as the person
+wants to give.
 
 **Scope boundary (the only one):** questions cover the person's own **consensual adult** sexuality — including
 explicit acts, kinks, and **taboo _fantasies_** (CNC / "ravishment" roleplay, etc., framed as fantasy/roleplay

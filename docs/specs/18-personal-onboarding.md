@@ -665,16 +665,19 @@ intake questions — direct and graphic where the person wants depth, handled as
 `restricted`, owner-visible / everyone-else-redacted, excluded from the dream-image depiction, §14.10). It is
 **`invited`** (never first-run-gated) and **opt-in** behind the shared 18+ acknowledgement; **every question is
 optional and skippable**. **Smart branching** keeps it relevant and gender/orientation/anatomy-aware — and now
-supports **`equalsAny`** (show follow-ups unless the answer was e.g. "Not for me"): the penis length/girth +
-vulva (labia/clit) specifics appear only when you're drawn to that anatomy; the dirty-talk follow-ups hide if
-it's "not for me"; porn genres/role appear only if you watch porn; the erotica-type question only if you read/
-listen; and partner-specific questions appear only if you have one. Intensity-style questions ("how rough?",
+supports **`equalsAny`** (show follow-ups unless the answer was e.g. "Not for me"). **Every conditional question
+is placed directly beneath the question that gates it** so the reveal lands where you'd expect it: the penis
+length/girth + vulva labia/clit specifics sit right under their "are you attracted to…" Yes/No; the dirty-talk
+follow-ups under the dirty-talk question; porn genres/role under "do you watch porn"; erotica-type under "do you
+read/listen"; partner-specific questions under "do you have a partner". Intensity-style questions ("how rough?",
 "how big a part of life?", body confidence, etc.) use a **sleek slider with example anchors at the start,
 middle, and end** (seeded to the neutral middle). The wording is **casual, not clinical** ("Do you like giving
 blowjobs?" not "Do you give oral sex on a penis?"); orientation/attraction options are **inclusive** (trans
-women / trans men / other); **every choice list has an "Other" write-in**; toys are split into **own vs. want**;
-and every free-text prompt has an example placeholder. The prompts invite as much graphic detail as the person
-wants to give.
+women / trans men / other); **every choice list has an "Other" write-in**; toys are split into **own vs. want**
+and drawn from a **comprehensive ~40-item `TOYS` set** (the modern app/remote-controlled range plus the broader
+categories); and every free-text prompt has an example placeholder. An **E2E test asserts the conditionals
+reveal** (penis/vulva specifics + dirty-talk) under their triggers. The prompts invite as much graphic detail
+as the person wants to give.
 
 **Scope boundary (the only one):** questions cover the person's own **consensual adult** sexuality — including
 explicit acts, kinks, and **taboo _fantasies_** (CNC / "ravishment" roleplay, etc., framed as fantasy/roleplay

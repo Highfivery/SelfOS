@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Check, Lock, Sparkles, Users } from 'lucide-react';
+import type { AnswerMap } from '@selfos/core/questionnaires';
 import type { IntakeSectionMeta } from '@shared/channels';
-import { Banner, Button, Card, Heading, Text } from '../../../design-system/components';
+import {
+  Banner,
+  Button,
+  Card,
+  Heading,
+  ProportionBar,
+  Text,
+} from '../../../design-system/components';
 import { useIntakeStore } from '../../../stores/intakeStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { Switcher } from '../../Switcher';
@@ -10,6 +18,7 @@ import { CrisisFooter } from '../sessions/CrisisFooter';
 import { IntakeSectionPanel } from './IntakeSectionPanel';
 import { IntakeFormPanel } from './IntakeFormPanel';
 import { ClosingPortrait } from './ClosingPortrait';
+import { overallProgress, sectionProgress } from './progress';
 import styles from './Onboarding.module.css';
 
 type SectionStatus = 'notStarted' | 'inProgress' | 'skipped' | 'complete';
@@ -110,6 +119,14 @@ export function Onboarding(): JSX.Element {
   );
   const switcherOverlay = switching ? <Switcher onClose={() => setSwitching(false)} /> : null;
 
+  // Overall progress, by section (a section counts once it's finished). Shown in the page header AND the
+  // "Go deeper" block so it's clear how much is done / left (18 §3.1).
+  const progress = overallProgress(sections, (id) => statusOf.get(id));
+  const progressBar =
+    sections.length > 0 ? (
+      <ProportionBar label="Your progress" value={progress.completed} total={progress.total} />
+    ) : null;
+
   if (!loaded || !state) return <div className={styles.onboarding} aria-busy="true" />;
 
   // AI is required to run the chat sections + synthesis (§7). Show a calm "connect AI" state, never a dead-end.
@@ -178,19 +195,32 @@ export function Onboarding(): JSX.Element {
         <div className={styles.sectionHead}>
           <Heading level={2}>Go deeper</Heading>
           <Text tone="secondary">
-            Optional — add any of these whenever you’re ready. The more you share, the more SelfOS
-            understands you.
+            Add to or update any of these whenever you’re ready — the more you share, the more
+            SelfOS understands you.
           </Text>
         </div>
+        {progressBar}
         <div className={styles.invitedGrid}>
           {invited.map((m) => {
-            const done = isResolved(m.id);
+            const status = statusOf.get(m.id);
             const current = m.id === activeId;
+            const isDone = status === 'complete';
+            const { answered, total } = sectionProgress(
+              m,
+              (findSection(m.id)?.answers ?? {}) as AnswerMap,
+            );
+            const cardClass = [
+              styles.invitedCard,
+              current ? styles.invitedCardCurrent : '',
+              isDone && !current ? styles.invitedCardDone : '',
+            ]
+              .filter(Boolean)
+              .join(' ');
             return (
               <button
                 key={m.id}
                 type="button"
-                className={`${styles.invitedCard} ${current ? styles.invitedCardCurrent : ''}`}
+                className={cardClass}
                 aria-current={current ? 'true' : undefined}
                 onClick={() => setActiveId(m.id)}
               >
@@ -201,26 +231,26 @@ export function Onboarding(): JSX.Element {
                     ) : null}
                     {m.title}
                   </span>
-                  <span
-                    className={
-                      current
-                        ? styles.invitedTagCurrent
-                        : `${styles.invitedTag} ${done ? styles.invitedTagDone : ''}`
-                    }
-                    aria-hidden="true"
-                  >
-                    {current ? (
-                      'Current'
-                    ) : statusOf.get(m.id) === 'complete' ? (
-                      <Check size={14} />
-                    ) : statusOf.get(m.id) === 'skipped' ? (
-                      'Skipped'
-                    ) : (
-                      'Add'
-                    )}
-                  </span>
+                  {current ? (
+                    <span className={styles.invitedTagCurrent} aria-hidden="true">
+                      Current
+                    </span>
+                  ) : isDone ? (
+                    <span className={styles.invitedTagDone} aria-hidden="true">
+                      <Check size={13} aria-hidden="true" /> Update
+                    </span>
+                  ) : (
+                    <span className={styles.invitedTag} aria-hidden="true">
+                      {status === 'skipped' ? 'Skipped' : 'Add'}
+                    </span>
+                  )}
                 </div>
                 <span className={styles.invitedBlurb}>{m.blurb}</span>
+                {total > 0 ? (
+                  <span className={styles.invitedCount} aria-hidden="true">
+                    {answered} of {total} answered
+                  </span>
+                ) : null}
               </button>
             );
           })}
@@ -243,6 +273,7 @@ export function Onboarding(): JSX.Element {
           A warm, private space so SelfOS understands you. Everything is encrypted and yours, you
           can skip anything, and your most sensitive answers stay private to your own coaching.
         </Text>
+        {progressBar}
       </header>
 
       {error ? <Banner tone="danger">{error}</Banner> : null}

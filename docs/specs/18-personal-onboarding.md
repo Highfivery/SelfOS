@@ -90,14 +90,18 @@ views** — shown directly only to a holder of `intake.readRestricted` (the Owne
   AI; a gated **member** (who can't configure AI) is told their household owner needs to enable AI first and
   stays gated (no progress is lost). The owner enables AI in their own (ungated) session.
 - **Save & resume** is first-class: progress is saved continuously (per answer + per section); the person can
-  leave anytime and return to exactly where they were, across days. A progress indicator shows sections done /
-  remaining and an estimate. The **last-opened section is remembered device-local** (per person), so a reload
+  leave anytime and return to exactly where they were, across days. A **progress bar** (a reused `ProportionBar`,
+  measured **by section** — completed of total — shown in BOTH the page header and the "Go deeper" block) makes
+  it clear how much is done / left, and each "Go deeper" card carries its own **answered / total** count.
+  The **last-opened section is remembered device-local** (per person), so a reload
   or app restart reopens that section rather than bouncing back to the first unfinished core step; reopening a
   section with an in-progress go-deeper chat shows that transcript directly.
 - **The "Go deeper" section navigator is shown at the bottom of EVERY section** (core steps AND any opened
   invited section) — the grid of all the deeper sections (Health & wellbeing, Relationships, Family, Your
-  story, What weighs on you, Intimacy & sexuality, each with an Add/Skipped/done/**Current** state). From any
-  section the person can jump **straight** to another without going Back first; switching scrolls the new
+  story, What weighs on you, Intimacy & sexuality). A card reads **Add** (untouched), **Skipped**, **Current**
+  (the one you're on, accent), or — once finished — a **success-green ✓ "Update"** done treatment (you can
+  reopen to revise). From any section the person can jump **straight** to another without going Back first;
+  switching scrolls the new
   section to the top.
 
 ### 3.2 The interview (hybrid: structured sections + live AI depth)

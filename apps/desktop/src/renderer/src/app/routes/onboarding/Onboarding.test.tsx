@@ -222,6 +222,20 @@ describe('Onboarding', () => {
     expect(await screen.findByRole('dialog', { name: /Who.s here/ })).toBeInTheDocument();
   });
 
+  it('shows overall progress and marks a finished section "Update" in the Go deeper grid', async () => {
+    const s = state();
+    s.session.sections = s.session.sections.map((sec) =>
+      sec.id === 'basics' || sec.id === 'weighs' ? { ...sec, status: 'complete' as const } : sec,
+    );
+    installMockBridge({ intakeGetState: () => Promise.resolve(s) });
+    renderOnboarding();
+    // The progress bar appears (page header + the Go deeper block).
+    expect((await screen.findAllByText('Your progress')).length).toBeGreaterThanOrEqual(1);
+    // A finished invited section reads "Update" (not "Add"); an untouched one still reads "Add".
+    expect(screen.getByText('Update')).toBeInTheDocument();
+    expect(screen.getByText('Add')).toBeInTheDocument();
+  });
+
   it('always shows the crisis footer and the not-medical line', async () => {
     installMockBridge({ intakeGetState: () => Promise.resolve(state()) });
     renderOnboarding();

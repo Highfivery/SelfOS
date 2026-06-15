@@ -3487,6 +3487,13 @@ test('onboarding: a grouped form section shows every group + the go-deeper (noth
     await expect(w.getByRole('heading', { name: 'Go deeper' })).toBeVisible();
     await w.getByRole('button', { name: /Relationships/ }).click();
     await expect(w.getByText('Your relationship deal-breakers')).toBeVisible();
+
+    // Progress is shown (a bar in the header + the Go deeper block) and each card carries an answered count.
+    await expect(w.getByText(/Your progress/).first()).toBeVisible();
+    await expect(w.getByText(/of \d+ answered/).first()).toBeVisible();
+    // Finishing a section marks it done in the grid: the card flips from "Add" to "Update".
+    await w.getByRole('button', { name: 'Continue', exact: true }).click();
+    await expect(w.getByText('Update')).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

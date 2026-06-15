@@ -91,6 +91,11 @@ const VISIBILITY_OPTIONS: { value: CompatibilityVisibility; label: string; help:
     label: 'You see their answers',
     help: 'You’ll see their individual answers and you both get the combined report. They’re clearly told their answers are shared with you.',
   },
+  {
+    value: 'contextOnly',
+    label: 'No report — just inform each coach',
+    help: 'No report and no one sees the answers. Each person’s answers quietly help their own coach understand them better. The most private option.',
+  },
 ];
 
 /** Plain, honest note shown when `senderSeesAll` is selected — you (and a household owner) can read the

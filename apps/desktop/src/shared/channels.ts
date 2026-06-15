@@ -10,6 +10,7 @@ import type {
   ChatTurnResult,
   CompatibilityGroup,
   CompatibilitySendResult,
+  ContextOnlyResult,
   Conversation,
   Dream,
   DreamAnalysis,
@@ -165,6 +166,7 @@ export const IpcChannels = {
   assignmentsCreateCompatibility: 'assignments:createCompatibility',
   assignmentsCompatibility: 'assignments:compatibility',
   assignmentsAlign: 'assignments:align',
+  assignmentsDistillContextOnly: 'assignments:distillContextOnly',
   assignmentsRevealRaw: 'assignments:revealRaw',
   assignmentsCreateRelayLink: 'assignments:createRelayLink',
   assignmentsDrain: 'assignments:drain',
@@ -556,6 +558,13 @@ export interface SelfosBridge {
    */
   assignmentsAlign(compatibilityGroupId: string): Promise<AlignmentResult>;
   /**
+   * Run a **context-only** compatibility distillation (08-questionnaires §16.2): each participant's own
+   * answers become an auto-approved, own-context Insight feeding their own coach — no report, no cross-
+   * sharing. Both must have submitted. Budget-gated + metered; sender-scoped; requires
+   * `questionnaires.viewResults`.
+   */
+  assignmentsDistillContextOnly(compatibilityGroupId: string): Promise<ContextOnlyResult>;
+  /**
    * Reveal a Private send's raw answers (08-questionnaires §8.4). Permitted only for the Owner (full
    * access, any send) or the sender of a `senderSeesAll` compatibility send holding
    * `questionnaires.readRaw`. Returns null if not permitted / absent.
@@ -723,6 +732,7 @@ export type {
   ChatTurnResult,
   CompatibilityGroup,
   CompatibilitySendResult,
+  ContextOnlyResult,
   Conversation,
   Dream,
   DreamAnalysis,

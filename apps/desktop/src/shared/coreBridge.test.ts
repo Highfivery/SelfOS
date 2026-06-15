@@ -1243,6 +1243,90 @@ describe('createCoreBridge', () => {
     await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
   });
 
+  it('compatibility contextOnly (§16.2): distils per-participant, auto-approves into each context, no report, align denied', async () => {
+    const { host, bridge, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const alex = await bridge.peopleSave({ displayName: 'Alex', isSubject: true, tags: [] });
+    const bri = await bridge.peopleSave({ displayName: 'Bri', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: alex.id, roleId: 'member', pin: null });
+    await bridge.accessSetAccount({ personId: bri.id, roleId: 'member', pin: null });
+
+    const q = await bridge.questionnairesSave({
+      title: 'Closeness',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      questions: [
+        {
+          id: 'c1',
+          type: 'rating',
+          prompt: 'Connected?',
+          required: true,
+          scale: { min: 1, max: 5 },
+        },
+      ],
+      compatibility: { enabled: true, visibility: 'contextOnly' },
+    });
+    const sent = await bridge.assignmentsCreateCompatibility({
+      questionnaireId: q.id,
+      participantPersonIdA: alex.id,
+      participantPersonIdB: bri.id,
+    });
+    expect(sent.ok).toBe(true);
+
+    const group = (await bridge.assignmentsCompatibility(q.id))[0]!;
+    for (const m of group.members) {
+      const personId = m.recipientName === 'Alex' ? alex.id : bri.id;
+      await bridge.sessionSetActive({ personId });
+      const detail = await bridge.assignmentsGet(m.assignmentId);
+      // The recipient is told there's no report (§16.2).
+      const qid = detail!.questionnaire.questions[0]!.id;
+      await bridge.assignmentsSubmit({
+        assignmentId: m.assignmentId,
+        answers: [{ questionId: qid, value: 4 }],
+      });
+    }
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+
+    // A Claude that returns valid analysis JSON — note shareable:true; the service forces own-context-only.
+    host.host.claude = {
+      send: () => Promise.resolve('{}'),
+      stream: (_options, onDelta) => {
+        const json = JSON.stringify({
+          summary: 'Values steady connection.',
+          facts: [{ text: 'Feels close through shared time.', shareable: true }],
+          confidence: 'medium',
+        });
+        onDelta(json);
+        return Promise.resolve({
+          text: json,
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+
+    // The sender distils → each participant's own context is enriched; align is denied (no report).
+    const distilled = await bridge.assignmentsDistillContextOnly(group.compatibilityGroupId);
+    expect(distilled).toMatchObject({ ok: true, updated: 2 });
+    expect(await bridge.assignmentsAlign(group.compatibilityGroupId)).toMatchObject({
+      ok: false,
+      reason: 'DENIED',
+    });
+    const after = (await bridge.assignmentsCompatibility(q.id))[0]!;
+    expect(after.report).toBeNull();
+    expect(after.analyzed).toBe(true); // both contexts processed
+
+    // The group's Insights are subject = each PARTICIPANT (alex/bri), auto-approved, own-context-only —
+    // and the sender (a non-participant here) is never a subject. (insightsList is full-access for the
+    // owner, so it returns everyone's; we assert by subject, not presence.)
+    const groupInsights = (await bridge.insightsList()).filter(
+      (i) => i.provenance.compatibilityGroupId === group.compatibilityGroupId,
+    );
+    expect(groupInsights.map((i) => i.subjectPersonId).sort()).toEqual([alex.id, bri.id].sort());
+    expect(groupInsights.every((i) => i.approved)).toBe(true); // auto-approved → feeds each own context
+    expect(groupInsights.every((i) => i.facts.every((f) => f.shareable === false))).toBe(true);
+    expect(groupInsights.some((i) => i.subjectPersonId === ownerId)).toBe(false); // sender isn't a subject
+  });
+
   it('the Owner can read ANY private send’s raw answers directly (no break-glass ceremony)', async () => {
     const { bridge, ownerId } = await freshOwner();
     const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });

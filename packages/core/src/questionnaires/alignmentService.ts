@@ -8,10 +8,19 @@ import {
   type AlignmentItem,
   type AlignmentReport,
   type AlignmentResult,
+  type ContextOnlyResult,
   type Insight,
+  type Questionnaire,
+  type ResponseSet,
+  type UsageEvent,
 } from '../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
-import { ALIGNMENT_SYSTEM, buildAlignmentUserMessage } from './aiPrompts';
+import {
+  ALIGNMENT_SYSTEM,
+  ANALYSIS_SYSTEM,
+  buildAlignmentUserMessage,
+  buildAnalysisUserMessage,
+} from './aiPrompts';
 import { extractJsonObject } from './analysisService';
 import { formatAnswerForDisplay } from './answering';
 import { getAssignmentSnapshot, listAssignments } from './assignmentService';
@@ -199,6 +208,93 @@ export async function generateAlignment(
     deps.key,
   );
   return { ok: true, report, usage: call.usage };
+}
+
+const ContextOnlyDistillSchema = z.object({
+  summary: z.string().min(1),
+  facts: z.array(z.object({ text: z.string().min(1) })),
+  confidence: z.enum(['low', 'medium', 'high']).optional(),
+  crisisFlag: z.boolean().optional(),
+});
+
+/**
+ * Context-only distillation (08-questionnaires §16.2): for a `contextOnly` group, distill **each
+ * participant's own answers** into an own-context Insight (subject = that participant) that **auto-approves**
+ * into their own coaching context. No report, no cross-person sharing — one participant's raw answers are
+ * never read into the other's Insight (each is distilled from their own response alone), and every fact is
+ * own-context-only (`shareable: false`). The triggering sender pays + must own the group (enforced in the
+ * bridge). Re-running reuses each participant's Insight (dedup by group + subject).
+ */
+export async function distillContextOnly(
+  deps: AiDeps,
+  input: { compatibilityGroupId: string },
+): Promise<ContextOnlyResult> {
+  const group = await getCompatibilityGroup(deps.fs, deps.key, input.compatibilityGroupId);
+  const notReady = {
+    ok: false as const,
+    reason: 'NOT_READY' as const,
+    message: 'Both people need to answer before their coaches can use this.',
+  };
+  if (group.length < 2) return notReady;
+
+  // Pre-validate EVERY member up front — like `generateAlignment` — so a half-answered group returns
+  // NOT_READY before any billed Claude call or saved Insight (no partial spend, no half-written state).
+  const ready: { subjectPersonId: string; snapshot: Questionnaire; response: ResponseSet }[] = [];
+  for (const member of group) {
+    if (member.recipient.kind !== 'person') return notReady;
+    const snapshot = await getAssignmentSnapshot(deps.fs, deps.key, member.id);
+    const response = await getResponse(deps.fs, deps.key, member.id);
+    if (!snapshot || !response || response.submittedAt === undefined) return notReady;
+    ready.push({ subjectPersonId: member.recipient.personId, snapshot, response });
+  }
+
+  const usages: UsageEvent[] = [];
+  for (const { subjectPersonId, snapshot, response } of ready) {
+    // Distill from THIS participant's own answers only — never the other's (no cross-exposure).
+    const byId = new Map(snapshot.questions.map((q) => [q.id, q]));
+    const qa = response.answers.flatMap((a) => {
+      const q = byId.get(a.questionId);
+      return q ? [{ prompt: q.prompt, answer: formatAnswerForDisplay(q, a.value) }] : [];
+    });
+
+    const call = await runClaude(
+      deps,
+      ANALYSIS_SYSTEM,
+      buildAnalysisUserMessage({ title: snapshot.title, qa }),
+      'questionnaire.analyze',
+      800,
+    );
+    if (!call.ok) return { ok: false, reason: call.reason, message: call.message };
+
+    const validated = ContextOnlyDistillSchema.safeParse(extractJsonObject(call.text));
+    if (!validated.success) {
+      return { ok: false, reason: 'REFUSED', message: 'Couldn’t distil those answers.' };
+    }
+    usages.push(call.usage);
+
+    const at = deps.now.toISOString();
+    const prior = (await listInsightsForPerson(deps.fs, deps.key, subjectPersonId)).find(
+      (i) => i.provenance.compatibilityGroupId === input.compatibilityGroupId,
+    );
+    const insight: Insight = {
+      id: prior?.id ?? uuid(),
+      schemaVersion: 1,
+      source: 'questionnaire',
+      subjectPersonId, // the participant's OWN coaching context (§16.2)
+      summary: validated.data.summary,
+      // Own-context-only: never cross-shared with another person (§15/§16.2).
+      facts: validated.data.facts.map((f) => ({ id: uuid(), text: f.text, shareable: false })),
+      confidence: validated.data.confidence ?? 'medium',
+      approved: true, // auto-approved: the participant's own data feeds their own context (decision §16.2)
+      provenance: { compatibilityGroupId: input.compatibilityGroupId, at },
+      createdAt: prior?.createdAt ?? at,
+      updatedAt: at,
+      ...(validated.data.crisisFlag ? { crisisFlag: true } : {}),
+    };
+    await saveInsight(deps.fs, deps.key, insight);
+  }
+
+  return { ok: true, updated: ready.length, usage: usages };
 }
 
 /** Tear down a compatibility group's report folder + its drafted Insight (used on delete/purge, §3.9). */

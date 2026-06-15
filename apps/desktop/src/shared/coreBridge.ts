@@ -44,6 +44,7 @@ import {
   type CompatibilityMember,
   type CompatibilitySendResult,
   type CompatibilityVisibility,
+  type ContextOnlyResult,
   type InboxAssignmentDetail,
   type InboxCompatibilityView,
   type InboxItem,
@@ -170,6 +171,7 @@ import {
   declineAssignment,
   deleteQuestionnaireImage,
   deleteSend,
+  distillContextOnly,
   formatAnswerForDisplay,
   formatResponseAnswers,
   generateAlignment,
@@ -1749,8 +1751,11 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const sends = (await listAssignments(ctx.fs, ctx.key, { senderPersonId: personId })).filter(
         (a) => a.questionnaireId === qid && a.compatibilityGroupId,
       );
+      // "Processed" groups: a report Insight (subject = sender) for the report modes, OR the per-participant
+      // context Insights for a `contextOnly` group (subject = each participant) — so scan ALL insights for
+      // the group id, not just the sender's (§16.2). These are the sender's own groups, so no privacy gap.
       const insightGroups = new Set(
-        (await listInsightsForPerson(ctx.fs, ctx.key, personId)).flatMap((i) =>
+        (await listAllInsights(ctx.fs, ctx.key)).flatMap((i) =>
           i.provenance.compatibilityGroupId ? [i.provenance.compatibilityGroupId] : [],
         ),
       );
@@ -1797,7 +1802,29 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (group.length === 0 || group.some((a) => a.senderPersonId !== deps.personId)) {
         return { ok: false, reason: 'DENIED', message: 'Not available.' };
       }
+      // A contextOnly group produces NO report — it's distilled per-participant via the dedicated path.
+      const first = group[0];
+      const snapshot = first ? await getAssignmentSnapshot(deps.fs, deps.key, first.id) : null;
+      if (snapshot?.compatibility?.visibility === 'contextOnly') {
+        return { ok: false, reason: 'DENIED', message: 'This is a context-only send.' };
+      }
       return generateAlignment(deps, { compatibilityGroupId: groupId });
+    },
+    assignmentsDistillContextOnly: async (compatibilityGroupId): Promise<ContextOnlyResult> => {
+      const deps = await aiDeps('questionnaires.viewResults');
+      if (!deps) return { ok: false, reason: 'DENIED', message: 'Not available.' };
+      const groupId = GroupIdSchema.parse(compatibilityGroupId);
+      // Sender-scoped: only the sender of the group may run the distillation (they pay for it).
+      const group = await getCompatibilityGroup(deps.fs, deps.key, groupId);
+      if (group.length === 0 || group.some((a) => a.senderPersonId !== deps.personId)) {
+        return { ok: false, reason: 'DENIED', message: 'Not available.' };
+      }
+      const first = group[0];
+      const snapshot = first ? await getAssignmentSnapshot(deps.fs, deps.key, first.id) : null;
+      if (snapshot?.compatibility?.visibility !== 'contextOnly') {
+        return { ok: false, reason: 'DENIED', message: 'This isn’t a context-only send.' };
+      }
+      return distillContextOnly(deps, { compatibilityGroupId: groupId });
     },
     assignmentsRevealRaw: async (assignmentId): Promise<SendAnswer[] | null> => {
       const ctx = await host.vaultAndKey();

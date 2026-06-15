@@ -598,15 +598,17 @@ export const SensitivityTierSchema = z.enum([
 export type SensitivityTier = z.infer<typeof SensitivityTierSchema>;
 
 /**
- * Compatibility visibility (08-questionnaires §3.6) — the author's choice that **derives the recipient's
- * disclosure**: `sharedReport` (joint report only, raw hidden both ways), `eachSeesOwn` (each answerer
- * also sees their own answers), `senderSeesAll` (the sender may break-glass reveal raw — needs
- * `questionnaires.readRaw`).
+ * Compatibility visibility (08-questionnaires §3.6/§16.2) — the author's choice that **derives the
+ * recipient's disclosure**: `sharedReport` (joint report only, raw hidden both ways), `eachSeesOwn` (each
+ * answerer also sees their own answers), `senderSeesAll` (the sender may reveal raw — needs
+ * `questionnaires.readRaw`), `contextOnly` (NO report or raw sharing — each participant's own answers are
+ * distilled into an own-context Insight that quietly informs their own coach; the most private mode).
  */
 export const CompatibilityVisibilitySchema = z.enum([
   'sharedReport',
   'senderSeesAll',
   'eachSeesOwn',
+  'contextOnly',
 ]);
 export type CompatibilityVisibility = z.infer<typeof CompatibilityVisibilitySchema>;
 
@@ -1389,6 +1391,19 @@ export interface CompatibilityGroup {
 /** The result of generating a compatibility alignment report (→ report + draft Insight, 08 §13.5d). */
 export type AlignmentResult =
   | { ok: true; report: AlignmentReport; usage: UsageEvent }
+  | {
+      ok: false;
+      reason: 'NO_KEY' | 'DENIED' | 'BUDGET' | 'REFUSED' | 'ERROR' | 'NOT_READY';
+      message: string;
+    };
+
+/**
+ * The result of a **context-only** compatibility distillation (08-questionnaires §16.2): each participant's
+ * own answers are distilled into an own-context Insight (auto-approved, never cross-shared). No report —
+ * `updated` is how many participants' coaching contexts were enriched.
+ */
+export type ContextOnlyResult =
+  | { ok: true; updated: number; usage: UsageEvent[] }
   | {
       ok: false;
       reason: 'NO_KEY' | 'DENIED' | 'BUDGET' | 'REFUSED' | 'ERROR' | 'NOT_READY';

@@ -188,4 +188,36 @@ describe('Inbox', () => {
     expect(screen.getByText('You two are mostly aligned.')).toBeInTheDocument();
     expect(screen.getByText('Aligned')).toBeInTheDocument();
   });
+
+  it('contextOnly (§16.2): the recipient is told there is no report, before and after submitting', async () => {
+    const compatibility = {
+      visibility: 'contextOnly' as const,
+      report: null,
+      otherParticipantName: 'Bri',
+      viewerIsSender: false,
+    };
+    // Before submitting: the disclosure promises no report + no one sees the answers.
+    installMockBridge({
+      assignmentsInbox: () => Promise.resolve([item()]),
+      assignmentsGet: () => Promise.resolve(detail({ compatibility })),
+    });
+    const { unmount } = render(<Inbox />);
+    await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
+    expect(
+      await screen.findByText(/no one in this exchange sees your answers/i),
+    ).toBeInTheDocument();
+    unmount();
+    useInboxStore.setState({ items: [], loaded: false });
+
+    // After submitting: still no report — just the "helps your own coach" note.
+    installMockBridge({
+      assignmentsInbox: () => Promise.resolve([item({ status: 'submitted', answerable: false })]),
+      assignmentsGet: () =>
+        Promise.resolve(detail({ status: 'submitted', answerable: false, compatibility })),
+    });
+    render(<Inbox />);
+    await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
+    expect(await screen.findByText(/there’s no report for this one/i)).toBeInTheDocument();
+    expect(screen.queryByText('Your shared report')).not.toBeInTheDocument();
+  });
 });

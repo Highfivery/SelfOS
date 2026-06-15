@@ -38,6 +38,8 @@ export function compatibilityDisclosure(
       return viewerIsSender
         ? `You'll be able to see both your own answers and ${other}'s, and you'll both get a combined report.`
         : `Your answers will be shared with ${senderName}, and you'll both get a combined report.`;
+    case 'contextOnly':
+      return `There's no report, and no one in this exchange sees your answers — they just help your own coach understand you a little better.`;
   }
 }
 

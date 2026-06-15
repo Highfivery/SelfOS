@@ -284,7 +284,18 @@ function JointReport({
   compatibility: InboxCompatibilityView;
   asker: string;
 }): JSX.Element {
-  const { report, ownAnswers } = compatibility;
+  const { report, ownAnswers, visibility } = compatibility;
+  // Context-only sends never produce a report — the answers just inform each person's own coach (§16.2).
+  if (visibility === 'contextOnly') {
+    return (
+      <Card>
+        <Text tone="secondary">
+          Thanks — there’s no report for this one. Your answers just help your own coach understand
+          you a little better.
+        </Text>
+      </Card>
+    );
+  }
   return (
     <Stack gap={3}>
       {ownAnswers && ownAnswers.length > 0 ? (

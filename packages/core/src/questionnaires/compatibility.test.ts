@@ -4,14 +4,21 @@ import { memFileSystem } from '../host/memFileSystem';
 import type { ClaudeClient, FileSystem } from '../host';
 import { listAllInsights } from '../insights';
 import type { Question } from '../schemas';
-import { generateAlignment, getAlignmentReport, purgeCompatibilityGroup } from './alignmentService';
+import {
+  distillContextOnly,
+  generateAlignment,
+  getAlignmentReport,
+  purgeCompatibilityGroup,
+} from './alignmentService';
 import { getAssignment, getAssignmentSnapshot, listAssignments } from './assignmentService';
 import { createCompatibilitySend } from './compatibilityService';
 import { deleteSend } from './deletionService';
 import { compatibilityDisclosure } from './disclosure';
 import { generateVariant, type AiDeps } from './generationService';
+import { listInsightsForPerson } from '../insights';
 import { saveQuestionnaire } from './questionnaireService';
 import { saveResponse } from './responseService';
+import type { CompatibilityVisibility } from '../schemas';
 
 const key = generateMasterKey();
 const now = new Date('2026-06-11T12:00:00.000Z');
@@ -47,7 +54,7 @@ const canonicalQuestions: Question[] = [
 /** A compatibility questionnaire definition, ready to send. */
 async function seedCompatQuestionnaire(
   fs: FileSystem,
-  visibility: 'sharedReport' | 'senderSeesAll' | 'eachSeesOwn' = 'sharedReport',
+  visibility: CompatibilityVisibility = 'sharedReport',
 ): Promise<string> {
   const q = await saveQuestionnaire(fs, key, {
     title: 'Compatibility check',
@@ -62,7 +69,7 @@ async function seedCompatQuestionnaire(
 /** Send to two people, then submit both their responses (each answers their variant). */
 async function seedAnsweredGroup(
   fs: FileSystem,
-  visibility: 'sharedReport' | 'senderSeesAll' | 'eachSeesOwn' = 'sharedReport',
+  visibility: CompatibilityVisibility = 'sharedReport',
 ): Promise<{ groupId: string; aId: string; bId: string }> {
   const questionnaireId = await seedCompatQuestionnaire(fs, visibility);
   const variant = (label: string): Question[] =>
@@ -267,6 +274,80 @@ describe('generateAlignment', () => {
   });
 });
 
+describe('distillContextOnly (§16.2)', () => {
+  // The distillation distils each member's OWN answers into an own-context Insight (a JSON object).
+  const DISTILL = JSON.stringify({
+    summary: 'They value steady connection and clear communication.',
+    facts: [{ text: 'Feels most connected through shared time.' }],
+    confidence: 'medium',
+    crisisFlag: false,
+  });
+
+  it('auto-approves an own-context Insight for EACH participant; no report; facts never cross-shared', async () => {
+    const fs = memFileSystem();
+    const { groupId } = await seedAnsweredGroup(fs, 'contextOnly');
+    const result = await distillContextOnly(deps(fs, fakeClient(DISTILL)), {
+      compatibilityGroupId: groupId,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.updated).toBe(2);
+    expect(result.usage).toHaveLength(2);
+
+    // No alignment report is produced for a context-only group.
+    expect(await getAlignmentReport(fs, key, groupId)).toBeNull();
+
+    // Each participant gets their OWN auto-approved Insight (subject = themselves), own-context-only.
+    for (const subject of ['alex', 'bri']) {
+      const insight = (await listInsightsForPerson(fs, key, subject)).find(
+        (i) => i.provenance.compatibilityGroupId === groupId,
+      );
+      expect(insight, `insight for ${subject}`).toBeDefined();
+      expect(insight?.subjectPersonId).toBe(subject);
+      expect(insight?.approved).toBe(true); // auto-approved → feeds their own context
+      expect(insight?.facts.every((f) => f.shareable === false)).toBe(true); // never cross-shared
+    }
+    // The sender gets no insight (they're not a participant in this two-others group).
+    expect(
+      (await listInsightsForPerson(fs, key, 'sender')).some(
+        (i) => i.provenance.compatibilityGroupId === groupId,
+      ),
+    ).toBe(false);
+  });
+
+  it('re-running reuses each participant’s Insight (no duplicates)', async () => {
+    const fs = memFileSystem();
+    const { groupId } = await seedAnsweredGroup(fs, 'contextOnly');
+    await distillContextOnly(deps(fs, fakeClient(DISTILL)), { compatibilityGroupId: groupId });
+    await distillContextOnly(deps(fs, fakeClient(DISTILL)), { compatibilityGroupId: groupId });
+    for (const subject of ['alex', 'bri']) {
+      const insights = (await listInsightsForPerson(fs, key, subject)).filter(
+        (i) => i.provenance.compatibilityGroupId === groupId,
+      );
+      expect(insights).toHaveLength(1);
+    }
+  });
+
+  it('is NOT_READY until both have submitted, with NO partial spend or saved Insight', async () => {
+    const fs = memFileSystem();
+    const { groupId, bId } = await seedAnsweredGroup(fs, 'contextOnly');
+    await fs.remove(`questionnaires/sends/${bId}/response.enc`);
+    expect(
+      await distillContextOnly(deps(fs, fakeClient(DISTILL)), { compatibilityGroupId: groupId }),
+    ).toMatchObject({ ok: false, reason: 'NOT_READY' });
+    // Pre-validation means A's (still-submitted) answers were NOT distilled before discovering B is absent.
+    expect((await listAllInsights(fs, key)).length).toBe(0);
+  });
+
+  it('purging a context-only group tears down both participants’ Insights', async () => {
+    const fs = memFileSystem();
+    const { groupId } = await seedAnsweredGroup(fs, 'contextOnly');
+    await distillContextOnly(deps(fs, fakeClient(DISTILL)), { compatibilityGroupId: groupId });
+    await purgeCompatibilityGroup(fs, key, groupId);
+    expect((await listAllInsights(fs, key)).length).toBe(0);
+  });
+});
+
 describe('compatibilityDisclosure', () => {
   // The viewer is the partner (a non-sender participant); the sender is Sam, the other participant Sam.
   const asPartner = { otherParticipantName: 'Sam', senderName: 'Sam', viewerIsSender: false };
@@ -295,5 +376,11 @@ describe('compatibilityDisclosure', () => {
       viewerIsSender: true,
     });
     expect(text).toContain('both your own answers and Angel');
+  });
+
+  it('contextOnly promises no report and no one sees the answers (§16.2)', () => {
+    const text = compatibilityDisclosure('contextOnly', asPartner);
+    expect(text).toMatch(/no report/i);
+    expect(text).toMatch(/no one in this exchange sees your answers/i);
   });
 });

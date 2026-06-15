@@ -81,11 +81,17 @@ function rating(id: string, prompt: string, minLabel: string, maxLabel: string):
 function yesno(id: string, prompt: string): Question {
   return { id, type: 'yesNo', prompt, required: false };
 }
-function longText(id: string, prompt: string, branch?: BranchRule): Question {
-  return { id, type: 'longText', prompt, required: false, ...(branch ? { branch } : {}) };
+function longText(id: string, prompt: string, placeholder?: string): Question {
+  return { id, type: 'longText', prompt, required: false, ...(placeholder ? { placeholder } : {}) };
 }
-function shortText(id: string, prompt: string): Question {
-  return { id, type: 'shortText', prompt, required: false };
+function shortText(id: string, prompt: string, placeholder?: string): Question {
+  return {
+    id,
+    type: 'shortText',
+    prompt,
+    required: false,
+    ...(placeholder ? { placeholder } : {}),
+  };
 }
 function dateQ(id: string, prompt: string): Question {
   return { id, type: 'date', prompt, required: false };
@@ -97,6 +103,11 @@ function when(questionId: string, value: string | boolean): BranchRule {
 /** Wrap a question with its intake mapping. */
 function f(q: Question, m: Omit<IntakeFormQuestion, 'q'> = {}): IntakeFormQuestion {
   return { q, ...m };
+}
+
+/** Tag a batch of form questions with an accordion group heading (18 §14.3). */
+function grouped(group: string, items: IntakeFormQuestion[]): IntakeFormQuestion[] {
+  return items.map((it) => ({ ...it, q: { ...it.q, group } }));
 }
 
 // Shared option sets reused across questions.
@@ -249,11 +260,31 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         { field: 'parentalStatus' },
       ),
       f(multi('pets', 'Any pets?', ['Dog', 'Cat', 'Other', 'None'])),
-      f(longText('typicalDay', 'What does a typical weekday look like for you?'), { deepen: true }),
-      f(multi('hobbies', 'How do you spend your free time?', ['Other']), {
-        field: 'interests',
-        list: true,
-      }),
+      f(
+        longText(
+          'typicalDay',
+          'What does a typical weekday look like for you?',
+          'Walk me through a normal day, start to finish.',
+        ),
+        {
+          deepen: true,
+        },
+      ),
+      f(
+        multi('hobbies', 'How do you spend your free time?', [
+          'Reading',
+          'Fitness / sport',
+          'Music',
+          'Gaming',
+          'Cooking',
+          'Outdoors / hiking',
+          'Art / making',
+          'Travel',
+          'Movies / TV',
+          'Other',
+        ]),
+        { field: 'interests', list: true },
+      ),
       f(
         rating(
           'workSatisfaction',
@@ -283,9 +314,27 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           'Other',
         ]),
       ),
-      f(longText('joy', "What's bringing you joy lately?")),
-      f(longText('recentChange', 'Any big recent change in your life?')),
-      f(longText('perfectDay', 'What would a perfect day look like for you?')),
+      f(
+        longText(
+          'joy',
+          "What's bringing you joy lately?",
+          'e.g. my kids, a new hobby, weekends away',
+        ),
+      ),
+      f(
+        longText(
+          'recentChange',
+          'Any big recent change in your life?',
+          'e.g. a move, a new job, a breakup, a loss',
+        ),
+      ),
+      f(
+        longText(
+          'perfectDay',
+          'What would a perfect day look like for you?',
+          'From waking up to bed.',
+        ),
+      ),
       f(rating('mood', 'Your overall mood lately', 'Low', 'Great')),
     ],
   },
@@ -318,7 +367,13 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         ]),
         { field: 'values', list: true },
       ),
-      f(longText('meaning', 'What gives your life meaning?')),
+      f(
+        longText(
+          'meaning',
+          'What gives your life meaning?',
+          'e.g. family, faith, making a difference, creating things',
+        ),
+      ),
       f(
         single('faith', 'Faith or spirituality', [
           'Christian',
@@ -349,7 +404,13 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         ]),
       ),
       f(rating('riskTolerance', 'Your appetite for risk', 'Cautious', 'Bold')),
-      f(shortText('selfDescribe', 'Describe yourself in a few words')),
+      f(
+        shortText(
+          'selfDescribe',
+          'Describe yourself in a few words',
+          'e.g. curious, loyal, a bit anxious',
+        ),
+      ),
       f(
         single('communicationStyle', 'How do you prefer to communicate?', [
           'Direct',
@@ -363,7 +424,13 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
       f(longText('proudOf', 'What are you most proud of?')),
       f(longText('insecureAbout', 'What do you feel most insecure about?')),
       f(longText('neverCompromise', 'What would you never compromise on?')),
-      f(shortText('roleModel', 'Someone you look up to')),
+      f(
+        shortText(
+          'roleModel',
+          'Someone you look up to',
+          'e.g. a parent, a mentor, a public figure',
+        ),
+      ),
       f(longText('remembered', 'What do you want to be remembered for?')),
     ],
   },
@@ -393,11 +460,26 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         ]),
         { field: 'goals' },
       ),
-      f(longText('specificGoal', 'One specific goal right now'), { deepen: true }),
+      f(
+        longText(
+          'specificGoal',
+          'One specific goal right now',
+          'e.g. run a 10k, change careers, feel calmer',
+        ),
+        {
+          deepen: true,
+        },
+      ),
       f(longText('goodLife', 'What does a good life look like to you?')),
       f(longText('fiveYears', 'Where do you want to be in five years?')),
-      f(shortText('habitBuild', 'A habit you want to build')),
-      f(shortText('habitBreak', 'A habit you want to break')),
+      f(shortText('habitBuild', 'A habit you want to build', 'e.g. daily walks, journaling')),
+      f(
+        shortText(
+          'habitBreak',
+          'A habit you want to break',
+          'e.g. doomscrolling, late-night snacking',
+        ),
+      ),
       f(longText('avoiding', 'What do you keep avoiding?')),
       f(longText('unlimited', 'What would you do with unlimited time and money?')),
       f(longText('futureFear', 'Your biggest fear about the future')),
@@ -434,85 +516,110 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
     opener: 'How you’re doing in body and mind. This stays private to your own coaching.',
     contentNote: 'Everything here stays private to your own coaching. Share only what you want to.',
     questions: [
-      f(rating('sleep', 'How well do you sleep?', 'Poorly', 'Great')),
-      f(
-        single('sleepSchedule', 'Your usual sleep schedule', [
-          'Early to bed / early up',
-          'Late nights',
-          'Irregular',
-          'Shift work',
-        ]),
-      ),
-      f(rating('energy', 'Your energy through the day', 'Drained', 'Energized')),
-      f(rating('stress', 'Your stress level lately', 'Calm', 'Overwhelmed')),
-      f(
-        single('exercise', 'How often do you move or exercise?', [
-          'Rarely',
-          '1–2× a week',
-          '3–4× a week',
-          'Most days',
-          'Daily',
-        ]),
-      ),
-      f(
-        single('eating', 'How would you describe your eating?', [
-          'Healthy',
-          'Average',
-          'Irregular',
-          'A struggle',
-        ]),
-      ),
-      f(single('caffeine', 'Caffeine', ['None', 'A little', 'Moderate', 'A lot'])),
-      f(single('alcohol', 'Alcohol', ['None', 'Occasionally', 'Weekly', 'Most days', 'Daily'])),
-      f(single('smoking', 'Smoking / vaping', ['No', 'Occasionally', 'Daily'])),
-      f(
-        single('substances', 'Recreational substances', [
-          'No',
-          'Occasionally',
-          'Regularly',
-          'Prefer not to say',
-        ]),
-        {
+      ...grouped('Sleep & energy', [
+        f(rating('sleep', 'How well do you sleep?', 'Poorly', 'Great')),
+        f(
+          single('sleepSchedule', 'Your usual sleep schedule', [
+            'Early to bed / early up',
+            'Late nights',
+            'Irregular',
+            'Shift work',
+          ]),
+        ),
+        f(rating('energy', 'Your energy through the day', 'Drained', 'Energized')),
+        f(rating('stress', 'Your stress level lately', 'Calm', 'Overwhelmed')),
+      ]),
+      ...grouped('Lifestyle', [
+        f(
+          single('exercise', 'How often do you move or exercise?', [
+            'Rarely',
+            '1–2× a week',
+            '3–4× a week',
+            'Most days',
+            'Daily',
+          ]),
+        ),
+        f(
+          single('eating', 'How would you describe your eating?', [
+            'Healthy',
+            'Average',
+            'Irregular',
+            'A struggle',
+          ]),
+        ),
+        f(single('caffeine', 'Caffeine', ['None', 'A little', 'Moderate', 'A lot'])),
+        f(single('alcohol', 'Alcohol', ['None', 'Occasionally', 'Weekly', 'Most days', 'Daily'])),
+        f(single('smoking', 'Smoking / vaping', ['No', 'Occasionally', 'Daily'])),
+        f(
+          single('substances', 'Recreational substances', [
+            'No',
+            'Occasionally',
+            'Regularly',
+            'Prefer not to say',
+          ]),
+          { restricted: true },
+        ),
+      ]),
+      ...grouped('Mind & body', [
+        f(
+          single('therapy', 'Therapy or counseling', [
+            'Currently',
+            'In the past',
+            'Never',
+            'Want to',
+          ]),
+        ),
+        f(
+          longText(
+            'physicalConditions',
+            'Any physical conditions to keep in mind?',
+            'e.g. asthma, a recent injury, a chronic condition…',
+          ),
+          { field: 'healthNotes', private: true },
+        ),
+        f(
+          longText(
+            'mentalConditions',
+            'Any mental-health diagnoses?',
+            'e.g. anxiety, depression, ADHD — only if you want to share',
+          ),
+          {
+            restricted: true,
+          },
+        ),
+        f(
+          multi('neurodivergence', 'Do any of these apply?', [
+            'ADHD',
+            'Autism',
+            'Dyslexia',
+            'Other',
+            'None',
+            'Prefer not to say',
+          ]),
+          { restricted: true },
+        ),
+        f(longText('medications', 'Medications that affect your mood or energy?'), {
           restricted: true,
-        },
-      ),
-      f(
-        single('therapy', 'Therapy or counseling', [
-          'Currently',
-          'In the past',
-          'Never',
-          'Want to',
-        ]),
-      ),
-      f(longText('physicalConditions', 'Any physical conditions to keep in mind?'), {
-        field: 'healthNotes',
-        private: true,
-      }),
-      f(longText('mentalConditions', 'Any mental-health diagnoses?'), { restricted: true }),
-      f(
-        multi('neurodivergence', 'Do any of these apply?', [
-          'ADHD',
-          'Autism',
-          'Dyslexia',
-          'None',
-          'Prefer not to say',
-        ]),
-        { restricted: true },
-      ),
-      f(longText('medications', 'Medications that affect your mood or energy?'), {
-        restricted: true,
-      }),
-      f(longText('chronicPain', 'Chronic pain or illness?'), { restricted: true }),
-      f(longText('disability', 'Any disability or accessibility needs?'), { restricted: true }),
-      f(longText('eatingHistory', 'Your relationship with food (any history)?'), {
-        restricted: true,
-      }),
-      f(rating('bodyRelationship', 'How you feel about your body', 'Critical', 'At peace')),
-      f(longText('healthOther', 'Anything else to keep in mind?'), {
-        field: 'healthNotes',
-        private: true,
-        deepen: true,
-      }),
+        }),
+        f(longText('chronicPain', 'Chronic pain or illness?'), { restricted: true }),
+        f(longText('disability', 'Any disability or accessibility needs?'), { restricted: true }),
+        f(longText('eatingHistory', 'Your relationship with food (any history)?'), {
+          restricted: true,
+        }),
+        f(rating('bodyRelationship', 'How you feel about your body', 'Critical', 'At peace')),
+        f(
+          longText(
+            'healthOther',
+            'Anything else to keep in mind?',
+            'Anything that helps SelfOS support you well.',
+          ),
+          {
+            field: 'healthNotes',
+            private: true,
+            deepen: true,
+          },
+        ),
+      ]),
     ],
   },
   {
@@ -525,79 +632,108 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
     adult: false,
     opener: 'How you connect with the people in your life.',
     questions: [
-      f(
-        single('attachment', 'Which attachment style fits you best?', [
-          'Secure — comfortable with closeness',
-          'Anxious — crave closeness, fear abandonment',
-          'Avoidant — value independence, wary of closeness',
-          'Mixed / not sure',
-        ]),
-      ),
-      f(
-        single('conflictStyle', 'When conflict comes up, you tend to…', [
-          'Avoid it',
-          'Accommodate / give in',
-          'Confront it head-on',
-          'Work it through together',
-        ]),
-      ),
-      f(
-        multi('needs', 'What do you need most from people close to you?', [
-          'Reassurance',
-          'Space',
-          'Quality time',
-          'Honesty',
-          'Affection',
-          'Reliability',
-          'To be understood',
-        ]),
-      ),
-      f(
-        multi('expressLove', 'How do you express love?', [
-          'Words',
-          'Touch',
-          'Quality time',
-          'Gifts',
-          'Acts of service',
-        ]),
-      ),
-      f(
-        multi('receiveLove', 'How do you best receive love?', [
-          'Words',
-          'Touch',
-          'Quality time',
-          'Gifts',
-          'Acts of service',
-        ]),
-      ),
-      f(rating('trust', 'How easily do you trust people?', 'Slowly', 'Easily')),
-      f(rating('openUp', 'How easily do you open up?', 'Guarded', 'Open book')),
-      f(
-        single('jealousy', 'How do you handle jealousy?', [
-          'Rarely feel it',
-          'Feel it but manage',
-          'It gets to me',
-        ]),
-      ),
-      f(longText('dealBreakers', 'Your relationship deal-breakers')),
-      f(
-        single('closeFriends', 'How many close friends do you have?', ['None', '1–2', '3–5', '6+']),
-      ),
-      f(
-        rating(
-          'friendshipSatisfaction',
-          'Satisfaction with your friendships',
-          'Lonely',
-          'Fulfilled',
+      ...grouped('How you connect', [
+        f(
+          single('attachment', 'Which attachment style fits you best?', [
+            'Secure — comfortable with closeness',
+            'Anxious — crave closeness, fear abandonment',
+            'Avoidant — value independence, wary of closeness',
+            'Mixed / not sure',
+          ]),
         ),
-      ),
-      f(shortText('crisisPerson', 'Who do you turn to in a crisis?')),
-      f(rating('loneliness', 'How lonely do you feel?', 'Never', 'Often')),
-      f(longText('showUp', 'How do you show up as a partner, friend, or parent?')),
-      f(longText('relationshipPattern', 'A pattern you notice in your relationships'), {
-        deepen: true,
-      }),
-      f(longText('relationshipChallenge', 'Your biggest relationship challenge')),
+        f(
+          single('conflictStyle', 'When conflict comes up, you tend to…', [
+            'Avoid it',
+            'Accommodate / give in',
+            'Confront it head-on',
+            'Work it through together',
+          ]),
+        ),
+        f(
+          multi('needs', 'What do you need most from people close to you?', [
+            'Reassurance',
+            'Space',
+            'Quality time',
+            'Honesty',
+            'Affection',
+            'Reliability',
+            'To be understood',
+            'Other',
+          ]),
+        ),
+        f(
+          multi('expressLove', 'How do you express love?', [
+            'Words',
+            'Touch',
+            'Quality time',
+            'Gifts',
+            'Acts of service',
+          ]),
+        ),
+        f(
+          multi('receiveLove', 'How do you best receive love?', [
+            'Words',
+            'Touch',
+            'Quality time',
+            'Gifts',
+            'Acts of service',
+          ]),
+        ),
+        f(rating('trust', 'How easily do you trust people?', 'Slowly', 'Easily')),
+        f(rating('openUp', 'How easily do you open up?', 'Guarded', 'Open book')),
+        f(
+          single('jealousy', 'How do you handle jealousy?', [
+            'Rarely feel it',
+            'Feel it but manage',
+            'It gets to me',
+          ]),
+        ),
+        f(
+          longText(
+            'dealBreakers',
+            'Your relationship deal-breakers',
+            'e.g. dishonesty, no ambition, poor communication…',
+          ),
+        ),
+        f(longText('showUp', 'How do you show up as a partner, friend, or parent?')),
+        f(
+          longText(
+            'relationshipPattern',
+            'A pattern you notice in your relationships',
+            'e.g. I pull away when things get serious',
+          ),
+          {
+            deepen: true,
+          },
+        ),
+        f(longText('relationshipChallenge', 'Your biggest relationship challenge')),
+      ]),
+      ...grouped('Your circle', [
+        f(
+          single('closeFriends', 'How many close friends do you have?', [
+            'None',
+            '1–2',
+            '3–5',
+            '6+',
+          ]),
+        ),
+        f(
+          rating(
+            'friendshipSatisfaction',
+            'Satisfaction with your friendships',
+            'Lonely',
+            'Fulfilled',
+          ),
+        ),
+        f(
+          shortText(
+            'crisisPerson',
+            'Who do you turn to in a crisis?',
+            'e.g. my sister, my best friend, my partner',
+          ),
+        ),
+        f(rating('loneliness', 'How lonely do you feel?', 'Never', 'Often')),
+      ]),
     ],
   },
   {
@@ -665,552 +801,742 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
     contentNote:
       'This block is entirely optional and only for adults (18+). Everything here stays private to your own coaching, is never shared with anyone else, and every question is skippable. It covers your own consensual adult sexuality — including fantasies; real limits are yours to set at the end.',
     questions: [
-      // --- A. Orientation & identity ---
-      f(
-        multi('sexualOrientation', 'Your sexual orientation', [
-          'Straight',
-          'Gay',
-          'Lesbian',
-          'Bisexual',
-          'Pansexual',
-          'Asexual',
-          'Demisexual',
-          'Queer',
-          'Questioning',
-          'Other',
-        ]),
-        { field: 'sexualOrientation', private: true },
-      ),
-      f(
-        multi('drawnTo', 'Who are you drawn to?', [
-          'Men',
-          'Women',
-          'Non-binary people',
-          'Everyone',
-        ]),
-        { restricted: true },
-      ),
-      f(yesno('attractedPenis', 'Are you attracted to partners with a penis?'), {
-        restricted: true,
-      }),
-      f(yesno('attractedVulva', 'Are you attracted to partners with a vulva?'), {
-        restricted: true,
-      }),
-      f(
-        single('relationshipStyle', 'Your relationship style', [
-          'Monogamous',
-          'Open',
-          'Polyamorous',
-          'Exploring',
-          'Other',
-        ]),
-        { field: 'relationshipStyle', private: true },
-      ),
-      f(
-        rating(
-          'intimacyImportance',
-          'How big a part of life is intimacy for you?',
-          'Small',
-          'Huge',
+      ...grouped('Orientation & identity', [
+        f(
+          multi('sexualOrientation', 'Your sexual orientation', [
+            'Straight',
+            'Gay',
+            'Lesbian',
+            'Bisexual',
+            'Pansexual',
+            'Asexual',
+            'Demisexual',
+            'Queer',
+            'Questioning',
+            'Other',
+          ]),
+          { field: 'sexualOrientation', private: true },
         ),
-        {
-          restricted: true,
-        },
-      ),
-      f(single('libido', 'Your sex drive', ['Very low', 'Low', 'Moderate', 'High', 'Very high']), {
-        restricted: true,
-      }),
-      f(shortText('sexualityWord', 'Describe your sexuality in a word or phrase'), {
-        restricted: true,
-      }),
-      // --- B. Your sexual story ---
-      f(single('firstMasturbatedAge', 'How old were you when you first masturbated?', AGE_RANGES), {
-        restricted: true,
-      }),
-      f(single('firstOrgasmAge', 'How old were you at your first orgasm?', AGE_RANGES), {
-        restricted: true,
-      }),
-      f(
-        single('firstPartneredAge', 'How old were you at your first partnered experience?', [
-          ...AGE_RANGES.slice(0, -1),
-          "Haven't yet",
-          'Prefer not to say',
-        ]),
-        { restricted: true },
-      ),
-      f(
-        single('partnerCount', 'How many sexual partners have you had?', [
-          '0',
-          '1',
-          '2–5',
-          '6–10',
-          '11–20',
-          '20+',
-          'Prefer not to say',
-        ]),
-        { restricted: true },
-      ),
-      f(longText('discoveredMasturbation', 'How did you first discover masturbation?'), {
-        restricted: true,
-      }),
-      f(longText('firstExperience', 'Your first sexual experience, in your own words'), {
-        restricted: true,
-      }),
-      f(longText('bestExperience', 'Your best or most memorable experience'), { restricted: true }),
-      f(longText('embarrassingExperience', 'Your most awkward or embarrassing moment'), {
-        restricted: true,
-      }),
-      f(longText('sexualRegret', 'Anything you regret?'), { restricted: true }),
-      f(longText('sexualityEvolved', 'How has your sexuality changed over time?'), {
-        restricted: true,
-      }),
-      f(longText('messagesGrowingUp', 'What messages about sex did you absorb growing up?'), {
-        restricted: true,
-      }),
-      f(longText('sexualShame', 'Any sexual shame or hang-ups you carry?'), { restricted: true }),
-      // --- C. Current partner & sex life (branch on hasPartner) ---
-      f(yesno('hasPartner', 'Do you have a sexual partner right now?'), { restricted: true }),
-      f(rating('sexSatisfaction', 'Satisfaction with your sex life', 'Unhappy', 'Thrilled'), {
-        restricted: true,
-      }),
-      f(single('sexFrequency', 'How often are you intimate now?', FREQ, when('hasPartner', true)), {
-        restricted: true,
-      }),
-      f(
-        single(
-          'desiredFrequency',
-          'How often would you like to be?',
-          FREQ,
-          when('hasPartner', true),
+        f(
+          multi('drawnTo', 'Who are you drawn to?', [
+            'Men',
+            'Women',
+            'Non-binary people',
+            'Everyone',
+          ]),
+          {
+            restricted: true,
+          },
         ),
-        {
+        f(yesno('attractedPenis', 'Are you attracted to partners with a penis?'), {
           restricted: true,
-        },
-      ),
-      f(
-        single(
-          'initiates',
-          'Who usually initiates?',
-          ['Me', 'My partner', 'Both equally', 'Neither, much'],
-          when('hasPartner', true),
+        }),
+        f(yesno('attractedVulva', 'Are you attracted to partners with a vulva?'), {
+          restricted: true,
+        }),
+        f(
+          single('relationshipStyle', 'Your relationship style', [
+            'Monogamous',
+            'Open',
+            'Polyamorous',
+            'Swinging',
+            'Exploring',
+            'Other',
+          ]),
+          { field: 'relationshipStyle', private: true },
         ),
-        { restricted: true },
-      ),
-      f(
-        single(
-          'orgasmTogether',
-          'How often do you orgasm together?',
-          ['Rarely', 'Sometimes', 'Usually', 'Almost always'],
-          when('hasPartner', true),
+        f(
+          rating(
+            'intimacyImportance',
+            'How big a part of life is intimacy for you?',
+            'Small',
+            'Huge',
+          ),
+          {
+            restricted: true,
+          },
         ),
-        { restricted: true },
-      ),
-      f(rating('talkAboutSex', 'How easily can you talk about sex with them?', 'Hard', 'Easy'), {
-        restricted: true,
-      }),
-      f(yesno('sharedFantasies', 'Have you shared your fantasies with them?'), {
-        restricted: true,
-      }),
-      f(longText('unspokenWant', 'Something you want but haven’t asked for'), { restricted: true }),
-      f(longText('sexWorking', "What's working well?"), { restricted: true }),
-      f(longText('sexDifferent', 'What do you wish were different?'), { restricted: true }),
-      f(longText('partnerAttractive', 'What do you find most attractive about them?'), {
-        restricted: true,
-      }),
-      // --- D. Arousal & what you like ---
-      f(multi('turnOns', 'Your turn-ons', ['Other']), { restricted: true }),
-      f(multi('turnOffs', 'Your turn-offs', ['Other']), { restricted: true }),
-      f(
-        multi('inTheMood', 'What gets you in the mood?', [
-          'Touch',
-          'Words / dirty talk',
-          'Anticipation',
-          'Visuals',
-          'Scent',
-          'Romance',
-          'A few drinks',
-          'Stress relief',
-        ]),
-        { restricted: true },
-      ),
-      f(
-        multi('touchAreas', 'Where do you most like to be touched?', [
-          'Neck',
-          'Ears',
-          'Lips',
-          'Chest / nipples',
-          'Back',
-          'Thighs',
-          'Genitals',
-          'Butt',
-          'All over',
-        ]),
-        { restricted: true },
-      ),
-      f(
-        multi('positions', 'Favorite positions', [
-          'Missionary',
-          'Doggy',
-          'On top / riding',
-          'Spooning',
-          'Standing',
-          'Oral (giving)',
-          'Oral (receiving)',
-          '69',
-          'Other',
-        ]),
-        { restricted: true },
-      ),
-      f(
-        single('paceIntensity', 'Preferred pace & intensity', [
-          'Slow & sensual',
-          'In between',
-          'Rough & intense',
-        ]),
-        {
-          restricted: true,
-        },
-      ),
-      f(
-        single('domSub', 'Dominant or submissive?', [
-          'Dominant',
-          'Submissive',
-          'Switch',
-          'Vanilla',
-        ]),
-        {
-          restricted: true,
-        },
-      ),
-      f(multi('intoIt', 'What are you into?', ACTIVITIES), { restricted: true }),
-      f(multi('curiousToTry', 'What are you curious to try?', ACTIVITIES), { restricted: true }),
-      f(multi('hardLimits', "What's off the table for you?", ACTIVITIES), { restricted: true }),
-      f(
-        single('dirtyTalk', 'How do you feel about dirty talk?', [
-          'Love it',
-          'Sometimes',
-          'Not for me',
-        ]),
-        {
-          restricted: true,
-        },
-      ),
-      f(
-        multi('toys', 'Toys you own or want', [
-          'Vibrator',
-          'Dildo',
-          'Butt plug',
-          'Cock ring',
-          'Restraints',
-          'None',
-        ]),
-        { restricted: true },
-      ),
-      f(
-        single('sessionLength', 'Quickies or long sessions?', [
-          'Quickies',
-          'Long sessions',
-          'Both',
-        ]),
-        {
-          restricted: true,
-        },
-      ),
-      f(longText('kinks', 'Kinks or fetishes, in your own words'), { restricted: true }),
-      // --- D2. Acts & specifics (explicit, branched) ---
-      f(yesno('givesOralPenis', 'Do you give oral sex on a penis?'), { restricted: true }),
-      f(
-        single(
-          'swallowSpit',
-          'When you give a blowjob, do you swallow or spit?',
-          ['Swallow', 'Spit', 'Either', 'Depends'],
-          when('givesOralPenis', true),
+        f(
+          single('libido', 'Your sex drive', ['Very low', 'Low', 'Moderate', 'High', 'Very high']),
+          {
+            restricted: true,
+          },
         ),
-        { restricted: true },
-      ),
-      f(yesno('swallowTurnsOn', 'Does swallowing turn you on?'), { restricted: true }),
-      f(
-        multi('cumWhere', 'Where do you like your partner to cum?', [
-          'In my mouth',
-          'On my face',
-          'On my chest / body',
-          'On my ass',
-          'Inside me (vaginal)',
-          'Inside me (anal)',
-          'Wherever they want',
-          "I don't have a preference",
-        ]),
-        { restricted: true },
-      ),
-      f(
-        single('assPlay', 'Do you like having your ass fingered or played with during sex?', [
-          'Love it',
-          'Sometimes',
-          'Not for me',
-          'Curious',
-        ]),
-        {
-          restricted: true,
-        },
-      ),
-      f(
-        single('analPref', 'How do you feel about anal?', [
-          'Give',
-          'Receive',
-          'Both',
-          'Not for me',
-          'Curious',
-        ]),
-        {
-          restricted: true,
-        },
-      ),
-      f(
-        single('choking', 'Do you like choking or being choked?', [
-          'Being choked',
-          'Doing the choking',
-          'Both',
-          'Neither',
-          'Curious',
-        ]),
-        { restricted: true },
-      ),
-      f(rating('roughness', 'How rough do you like it?', 'Gentle', 'Very rough'), {
-        restricted: true,
-      }),
-      f(
-        single('degradePraise', 'Do you like to be degraded or praised?', [
-          'Degradation',
-          'Praise',
-          'Both',
-          'Neither',
-        ]),
-        {
-          restricted: true,
-        },
-      ),
-      f(single('loudQuiet', 'Loud or quiet?', ['Loud', 'Quiet', 'In between']), {
-        restricted: true,
-      }),
-      f(single('lights', 'Lights on or off?', ['On', 'Off', 'No preference']), {
-        restricted: true,
-      }),
-      f(
-        longText(
-          'idealEncounter',
-          'Describe your ideal sexual encounter, start to finish, in as much detail as you like',
+        f(
+          shortText(
+            'sexualityWord',
+            'Describe your sexuality in a word or phrase',
+            'e.g. adventurous, shy, passionate',
+          ),
+          { restricted: true },
         ),
-        {
-          restricted: true,
-        },
-      ),
-      // --- E. Body & physical preferences (branched on attraction) ---
-      f(
-        single(
-          'penisSizePref',
-          'Penis size you prefer on a partner',
-          ['No preference', 'On the smaller side', 'Average', 'Large', 'Very large'],
-          when('attractedPenis', true),
+      ]),
+      ...grouped('Your sexual story', [
+        f(
+          single('firstMasturbatedAge', 'How old were you when you first masturbated?', AGE_RANGES),
+          {
+            restricted: true,
+          },
         ),
-        { restricted: true },
-      ),
-      f(
-        single(
-          'breastPref',
-          'Breast size you prefer on a partner',
-          ['No preference', 'Smaller', 'Average', 'Larger'],
-          when('attractedVulva', true),
+        f(single('firstOrgasmAge', 'How old were you at your first orgasm?', AGE_RANGES), {
+          restricted: true,
+        }),
+        f(
+          single('firstPartneredAge', 'How old were you at your first partnered experience?', [
+            ...AGE_RANGES.slice(0, -1),
+            "Haven't yet",
+            'Prefer not to say',
+          ]),
+          { restricted: true },
         ),
-        { restricted: true },
-      ),
-      f(
-        multi('bodyTypePref', "Body types you're drawn to", [
-          'Slim',
-          'Athletic',
-          'Average',
-          'Curvy',
-          'Bigger',
-          'No preference',
-        ]),
-        {
-          restricted: true,
-        },
-      ),
-      f(
-        single('partnerGrooming', 'Pubic hair you prefer on a partner', [
-          'Shaved / bare',
-          'Trimmed',
-          'Natural / grown out',
-          'No preference',
-        ]),
-        { restricted: true },
-      ),
-      f(
-        single('ownGrooming', 'How do you keep your own grooming?', [
-          'Shaved / bare',
-          'Trimmed',
-          'Natural',
-          'Varies',
-        ]),
-        {
-          restricted: true,
-        },
-      ),
-      f(
-        rating(
-          'bodyConfidence',
-          'How confident do you feel in your own body?',
-          'Self-conscious',
-          'Very confident',
+        f(
+          single('partnerCount', 'How many sexual partners have you had?', [
+            '0',
+            '1',
+            '2–5',
+            '6–10',
+            '11–20',
+            '20+',
+            'Prefer not to say',
+          ]),
+          { restricted: true },
         ),
-        {
-          restricted: true,
-        },
-      ),
-      f(
-        multi('erogenousZones', 'Your most sensitive spots', [
-          'Neck',
-          'Ears',
-          'Nipples',
-          'Inner thighs',
-          'Genitals',
-          'Butt',
-          'Lower back',
-        ]),
-        { restricted: true },
-      ),
-      f(
-        longText(
-          'bodyFeelings',
-          'Anything about your body you love or feel self-conscious about sexually?',
+        f(
+          longText(
+            'discoveredMasturbation',
+            'How did you first discover masturbation?',
+            'Share as much or as little as you like.',
+          ),
+          { restricted: true },
         ),
-        {
-          restricted: true,
-        },
-      ),
-      // --- F. Fantasies & media ---
-      f(longText('wildestFantasy', 'Your wildest fantasy, in as much detail as you like'), {
-        restricted: true,
-      }),
-      f(longText('fantasiesToTry', "Fantasies you'd actually like to try"), { restricted: true }),
-      f(
-        multi('commonFantasies', 'Which of these appeal to you?', [
-          'Threesome / group',
-          'Voyeurism',
-          'Exhibitionism',
-          'Domination',
-          'Submission',
-          'CNC / "ravishment" roleplay',
-          'Bondage',
-          'Being watched',
-          'Strangers / one-night roleplay',
-          'Boss / employee',
-          'Teacher / student roleplay',
-          'Cheating roleplay',
-          'Gangbang',
-        ]),
-        { restricted: true },
-      ),
-      f(longText('neverActOn', "A fantasy you'd love but would never actually do"), {
-        restricted: true,
-      }),
-      f(
-        single(
-          'cncInterest',
-          'Any consensual-non-consent (CNC) / "ravishment" roleplay interest?',
-          ['Yes', 'Curious', 'No'],
+        f(
+          longText(
+            'firstExperience',
+            'Your first sexual experience, in your own words',
+            'Who, when, how it felt — only what you want to share.',
+          ),
+          { restricted: true },
         ),
-        { restricted: true },
-      ),
-      f(
-        single('watchPorn', 'Do you watch porn?', [
-          'Never',
-          'Rarely',
-          'Sometimes',
-          'Often',
-          'Daily',
-        ]),
-        {
-          restricted: true,
-        },
-      ),
-      f(multi('pornGenres', 'What kind do you like?', ['Other'], when('watchPorn', 'Sometimes')), {
-        restricted: true,
-      }),
-      f(longText('pornRole', 'How does porn fit into your life?'), { restricted: true }),
-      f(single('erotica', 'Do you read or listen to erotica?', ['Never', 'Sometimes', 'Often']), {
-        restricted: true,
-      }),
-      f(single('sexting', 'Do you sext or share nudes?', ['Never', 'Sometimes', 'Often']), {
-        restricted: true,
-      }),
-      f(
-        single('recording', 'Are you into recording yourselves having sex or you masturbating?', [
-          'Love it',
-          'Sometimes',
-          'Curious',
-          'Not for me',
-        ]),
-        { restricted: true },
-      ),
-      f(
-        single('broadcasting', 'Would you ever broadcast / livestream (cam) yourself?', [
-          'I do already',
-          'Want to',
-          'Curious',
-          'No',
-        ]),
-        { restricted: true },
-      ),
-      f(
-        single('mirror', 'Do you like watching yourself in a mirror or on camera?', [
-          'Yes',
-          'Sometimes',
-          'No',
-        ]),
-        {
-          restricted: true,
-        },
-      ),
-      f(longText('recurringDreams', 'Any recurring sexual dreams?'), { restricted: true }),
-      // --- G. Sexual wellbeing (private) ---
-      f(
-        multi('difficulties', "Anything you'd want support with?", [
-          'Getting aroused',
-          'Reaching orgasm',
-          'Pain during sex',
-          'Erectile difficulty',
-          'Dryness',
-          'Mismatched desire',
-          'None',
-        ]),
-        { restricted: true },
-      ),
-      f(rating('performanceAnxiety', 'Performance anxiety', 'None', 'A lot'), { restricted: true }),
-      f(longText('moodLibido', 'How does your mood affect your libido?'), { restricted: true }),
-      f(longText('sexWellbeing', 'How does sex affect your overall wellbeing?'), {
-        restricted: true,
-      }),
-      // --- H. Boundaries, consent & meaning ---
-      f(longText('boundaries', 'Consent, safety, or boundaries SelfOS should always hold'), {
-        restricted: true,
-      }),
-      f(shortText('safeword', 'A safeword or signal you use')),
-      f(longText('feelSafe', 'What makes you feel safe and present during sex?'), {
-        restricted: true,
-      }),
-      f(longText('closenessMeaning', 'What does great intimacy or closeness mean to you?'), {
-        restricted: true,
-      }),
-      f(
-        longText(
-          'understandSexuality',
-          'What do you most want SelfOS to understand about your sexuality?',
+        f(
+          longText(
+            'bestExperience',
+            'Your best or most memorable experience',
+            'What made it so good?',
+          ),
+          { restricted: true },
         ),
-        {
+        f(
+          longText(
+            'embarrassingExperience',
+            'Your most awkward or embarrassing moment',
+            'We all have one — only if you want to share.',
+          ),
+          { restricted: true },
+        ),
+        f(longText('sexualRegret', 'Anything you regret?'), { restricted: true }),
+        f(longText('sexualityEvolved', 'How has your sexuality changed over time?'), {
           restricted: true,
-        },
-      ),
+        }),
+        f(
+          longText(
+            'messagesGrowingUp',
+            'What messages about sex did you absorb growing up?',
+            'From family, faith, culture, friends…',
+          ),
+          { restricted: true },
+        ),
+        f(longText('sexualShame', 'Any sexual shame or hang-ups you carry?'), { restricted: true }),
+      ]),
+      ...grouped('Your current partner', [
+        f(yesno('hasPartner', 'Do you have a sexual partner right now?'), { restricted: true }),
+        f(rating('sexSatisfaction', 'Satisfaction with your sex life', 'Unhappy', 'Thrilled'), {
+          restricted: true,
+        }),
+        f(
+          single('sexFrequency', 'How often are you intimate now?', FREQ, when('hasPartner', true)),
+          {
+            restricted: true,
+          },
+        ),
+        f(
+          single(
+            'desiredFrequency',
+            'How often would you like to be?',
+            FREQ,
+            when('hasPartner', true),
+          ),
+          {
+            restricted: true,
+          },
+        ),
+        f(
+          single(
+            'initiates',
+            'Who usually initiates?',
+            ['Me', 'My partner', 'Both equally', 'Neither, much'],
+            when('hasPartner', true),
+          ),
+          { restricted: true },
+        ),
+        f(
+          single(
+            'orgasmTogether',
+            'How often do you orgasm together?',
+            ['Rarely', 'Sometimes', 'Usually', 'Almost always'],
+            when('hasPartner', true),
+          ),
+          { restricted: true },
+        ),
+        f(rating('talkAboutSex', 'How easily can you talk about sex with them?', 'Hard', 'Easy'), {
+          restricted: true,
+        }),
+        f(yesno('sharedFantasies', 'Have you shared your fantasies with them?'), {
+          restricted: true,
+        }),
+        f(
+          longText(
+            'unspokenWant',
+            'Something you want but haven’t asked for',
+            'What would you ask for if it were easy?',
+          ),
+          { restricted: true },
+        ),
+        f(longText('sexWorking', "What's working well?"), { restricted: true }),
+        f(longText('sexDifferent', 'What do you wish were different?'), { restricted: true }),
+        f(longText('partnerAttractive', 'What do you find most attractive about them?'), {
+          restricted: true,
+        }),
+      ]),
+      ...grouped('What you like', [
+        f(
+          multi('turnOns', 'Your turn-ons', [
+            'Kissing',
+            'Foreplay',
+            'Dirty talk',
+            'Being teased',
+            'Lingerie',
+            'Oral',
+            'Sensual massage',
+            'Confidence',
+            'Romance',
+            'Spontaneity',
+            'Roleplay',
+            'Being desired',
+            'A partner taking control',
+            'Other',
+          ]),
+          { restricted: true },
+        ),
+        f(
+          multi('turnOffs', 'Your turn-offs', [
+            'Bad hygiene',
+            'Rushing',
+            'Pressure',
+            'Lack of confidence',
+            'Too rough',
+            'Too gentle',
+            'Distractions / phones',
+            'Silence',
+            'Selfishness',
+            'Bad breath',
+            'Other',
+          ]),
+          { restricted: true },
+        ),
+        f(
+          multi('inTheMood', 'What gets you in the mood?', [
+            'Touch',
+            'Words / dirty talk',
+            'Anticipation',
+            'Visuals',
+            'Scent',
+            'Romance',
+            'A few drinks',
+            'Stress relief',
+            'Other',
+          ]),
+          { restricted: true },
+        ),
+        f(
+          multi('touchAreas', 'Where do you most like to be touched?', [
+            'Neck',
+            'Ears',
+            'Lips',
+            'Chest / nipples',
+            'Back',
+            'Thighs',
+            'Genitals',
+            'Butt',
+            'All over',
+          ]),
+          { restricted: true },
+        ),
+        f(
+          multi('positionsPenetrative', 'Favorite positions — penetrative', [
+            'Missionary',
+            'Doggy style',
+            'Cowgirl / on top',
+            'Reverse cowgirl',
+            'Spooning',
+            'Standing',
+            'Legs on shoulders',
+            'Edge of the bed',
+            'Other',
+          ]),
+          { restricted: true },
+        ),
+        f(
+          multi('positionsOral', 'Favorite positions — oral', [
+            'Giving oral (to a vulva)',
+            'Giving oral (to a penis)',
+            'Receiving oral',
+            '69',
+            'Face-sitting',
+            'Other',
+          ]),
+          { restricted: true },
+        ),
+        f(
+          multi('positionsAnal', 'Favorite positions — anal', [
+            'Doggy style',
+            'Missionary',
+            'On top / riding',
+            'Spooning',
+            'Not into anal',
+            'Other',
+          ]),
+          { restricted: true },
+        ),
+        f(
+          multi('positionsNonPen', 'Favorite — non-penetrative', [
+            'Making out',
+            'Grinding / dry humping',
+            'Mutual masturbation',
+            'Sensual massage',
+            'Frottage',
+            'Other',
+          ]),
+          { restricted: true },
+        ),
+        f(
+          single('paceIntensity', 'Preferred pace & intensity', [
+            'Slow & sensual',
+            'In between',
+            'Rough & intense',
+          ]),
+          {
+            restricted: true,
+          },
+        ),
+        f(
+          single('domSub', 'Dominant or submissive?', [
+            'Dominant',
+            'Submissive',
+            'Switch',
+            'Vanilla',
+          ]),
+          {
+            restricted: true,
+          },
+        ),
+        f(multi('intoIt', 'What are you into?', ACTIVITIES), { restricted: true }),
+        f(multi('curiousToTry', 'What are you curious to try?', ACTIVITIES), { restricted: true }),
+        f(multi('hardLimits', "What's off the table for you?", ACTIVITIES), { restricted: true }),
+        f(
+          single('dirtyTalk', 'How do you feel about dirty talk?', [
+            'Love it',
+            'Sometimes',
+            'Not for me',
+          ]),
+          {
+            restricted: true,
+          },
+        ),
+        f(
+          longText(
+            'dirtyTalkLikes',
+            'Dirty talk — things you love to hear',
+            'e.g. praise, being told what to do, descriptions of what they want to do to you…',
+          ),
+          { restricted: true },
+        ),
+        f(
+          longText(
+            'dirtyTalkDislikes',
+            'Dirty talk — words or talk that turn you off',
+            'e.g. certain names or terms that pull you out of the moment',
+          ),
+          { restricted: true },
+        ),
+        f(
+          multi('toys', 'Toys you own or want', [
+            'Vibrator',
+            'Dildo',
+            'Butt plug',
+            'Cock ring',
+            'Restraints',
+            'Anal beads',
+            'Strap-on',
+            'Other',
+            'None',
+          ]),
+          { restricted: true },
+        ),
+        f(
+          single('sessionLength', 'Quickies or long sessions?', [
+            'Quickies',
+            'Long sessions',
+            'Both',
+          ]),
+          {
+            restricted: true,
+          },
+        ),
+        f(
+          longText(
+            'kinks',
+            'Kinks or fetishes, in your own words',
+            'e.g. specific scenarios, materials, sensations, dynamics…',
+          ),
+          {
+            restricted: true,
+          },
+        ),
+      ]),
+      ...grouped('Acts & specifics', [
+        f(yesno('givesOralPenis', 'Do you give oral sex on a penis?'), { restricted: true }),
+        f(
+          single(
+            'swallowSpit',
+            'When you give a blowjob, do you swallow or spit?',
+            ['Swallow', 'Spit', 'Either', 'Depends'],
+            when('givesOralPenis', true),
+          ),
+          { restricted: true },
+        ),
+        f(yesno('swallowTurnsOn', 'Does swallowing turn you on?'), { restricted: true }),
+        f(
+          multi('cumWhere', 'Where do you like your partner to cum?', [
+            'In my mouth',
+            'On my face',
+            'On my chest / body',
+            'On my ass',
+            'Inside me (vaginal)',
+            'Inside me (anal)',
+            'Wherever they want',
+            "I don't have a preference",
+          ]),
+          { restricted: true },
+        ),
+        f(
+          single('assPlay', 'Do you like having your ass fingered or played with during sex?', [
+            'Love it',
+            'Sometimes',
+            'Not for me',
+            'Curious',
+          ]),
+          { restricted: true },
+        ),
+        f(
+          single('analPref', 'How do you feel about anal?', [
+            'Give',
+            'Receive',
+            'Both',
+            'Not for me',
+            'Curious',
+          ]),
+          {
+            restricted: true,
+          },
+        ),
+        f(
+          single('choking', 'Do you like choking or being choked?', [
+            'Being choked',
+            'Doing the choking',
+            'Both',
+            'Neither',
+            'Curious',
+          ]),
+          { restricted: true },
+        ),
+        f(rating('roughness', 'How rough do you like it?', 'Gentle', 'Very rough'), {
+          restricted: true,
+        }),
+        f(
+          single('degradePraise', 'Do you like to be degraded or praised?', [
+            'Degradation',
+            'Praise',
+            'Both',
+            'Neither',
+          ]),
+          {
+            restricted: true,
+          },
+        ),
+        f(
+          single('squirting', 'Squirting?', ['Into it', 'Curious', 'Not for me', "Doesn't apply"]),
+          {
+            restricted: true,
+          },
+        ),
+        f(single('loudQuiet', 'Loud or quiet?', ['Loud', 'Quiet', 'In between']), {
+          restricted: true,
+        }),
+        f(single('lights', 'Lights on or off?', ['On', 'Off', 'No preference']), {
+          restricted: true,
+        }),
+        f(
+          longText(
+            'idealEncounter',
+            'Describe your ideal sexual encounter, start to finish, in as much detail as you like',
+            'From the first touch to the end — paint the picture.',
+          ),
+          { restricted: true },
+        ),
+      ]),
+      ...grouped('Body & preferences', [
+        f(
+          single(
+            'penisSizePref',
+            'Penis size you prefer on a partner',
+            ['No preference', 'On the smaller side', 'Average', 'Large', 'Very large'],
+            when('attractedPenis', true),
+          ),
+          { restricted: true },
+        ),
+        f(
+          single(
+            'breastPref',
+            'Breast size you prefer on a partner',
+            ['No preference', 'Smaller', 'Average', 'Larger'],
+            when('attractedVulva', true),
+          ),
+          { restricted: true },
+        ),
+        f(
+          multi('bodyTypePref', "Body types you're drawn to", [
+            'Slim',
+            'Athletic',
+            'Average',
+            'Curvy',
+            'Bigger',
+            'No preference',
+          ]),
+          { restricted: true },
+        ),
+        f(
+          single('partnerGrooming', 'Pubic hair you prefer on a partner', [
+            'Shaved / bare',
+            'Trimmed',
+            'Natural / grown out',
+            'No preference',
+          ]),
+          { restricted: true },
+        ),
+        f(
+          single('ownGrooming', 'How do you keep your own grooming?', [
+            'Shaved / bare',
+            'Trimmed',
+            'Natural',
+            'Varies',
+          ]),
+          {
+            restricted: true,
+          },
+        ),
+        f(
+          rating(
+            'bodyConfidence',
+            'How confident do you feel in your own body?',
+            'Self-conscious',
+            'Very confident',
+          ),
+          {
+            restricted: true,
+          },
+        ),
+        f(
+          multi('erogenousZones', 'Your most sensitive spots', [
+            'Neck',
+            'Ears',
+            'Nipples',
+            'Inner thighs',
+            'Genitals',
+            'Butt',
+            'Lower back',
+          ]),
+          { restricted: true },
+        ),
+        f(
+          longText(
+            'bodyFeelings',
+            'Anything about your body you love or feel self-conscious about sexually?',
+          ),
+          {
+            restricted: true,
+          },
+        ),
+      ]),
+      ...grouped('Fantasies & media', [
+        f(
+          longText(
+            'wildestFantasy',
+            'Your wildest fantasy, in as much detail as you like',
+            'Set the scene — no judgment.',
+          ),
+          {
+            restricted: true,
+          },
+        ),
+        f(longText('fantasiesToTry', "Fantasies you'd actually like to try"), { restricted: true }),
+        f(
+          multi('commonFantasies', 'Which of these appeal to you?', [
+            'Threesome / group',
+            'Voyeurism',
+            'Exhibitionism',
+            'Domination',
+            'Submission',
+            'Consensual non-consent (CNC) roleplay',
+            'Bondage',
+            'Being watched',
+            'Strangers / one-night roleplay',
+            'Boss / employee roleplay',
+            'Teacher / student roleplay',
+            'Cheating roleplay',
+            'Gangbang',
+            'Other',
+          ]),
+          { restricted: true },
+        ),
+        f(longText('neverActOn', "A fantasy you'd love but would never actually do"), {
+          restricted: true,
+        }),
+        f(
+          single(
+            'cncInterest',
+            'Any interest in consensual non-consent (CNC) — a “forced” roleplay where both people fully agree in advance?',
+            ['Yes', 'Curious', 'No'],
+          ),
+          { restricted: true },
+        ),
+        f(
+          single('watchPorn', 'Do you watch porn?', [
+            'Never',
+            'Rarely',
+            'Sometimes',
+            'Often',
+            'Daily',
+          ]),
+          {
+            restricted: true,
+          },
+        ),
+        f(
+          multi('pornGenres', 'What kind of porn are you into?', [
+            'Amateur',
+            'Professional',
+            'Lesbian',
+            'Gay',
+            'Threesome / group',
+            'POV',
+            'BDSM / kink',
+            'Romantic / passionate',
+            'Rough',
+            'Hentai / animated',
+            'Fetish-specific',
+            'Audio / erotica',
+            'Other',
+          ]),
+          { restricted: true },
+        ),
+        f(longText('pornRole', 'How does porn fit into your life?'), { restricted: true }),
+        f(single('erotica', 'Do you read or listen to erotica?', ['Never', 'Sometimes', 'Often']), {
+          restricted: true,
+        }),
+        f(single('sexting', 'Do you sext or share nudes?', ['Never', 'Sometimes', 'Often']), {
+          restricted: true,
+        }),
+        f(
+          single('recording', 'Are you into recording yourselves having sex or you masturbating?', [
+            'Love it',
+            'Sometimes',
+            'Curious',
+            'Not for me',
+          ]),
+          { restricted: true },
+        ),
+        f(
+          single('broadcasting', 'Would you ever broadcast / livestream (cam) yourself?', [
+            'I do already',
+            'Want to',
+            'Curious',
+            'No',
+          ]),
+          { restricted: true },
+        ),
+        f(
+          single('mirror', 'Do you like watching yourself in a mirror or on camera?', [
+            'Yes',
+            'Sometimes',
+            'No',
+          ]),
+          {
+            restricted: true,
+          },
+        ),
+        f(longText('recurringDreams', 'Any recurring sexual dreams?'), { restricted: true }),
+      ]),
+      ...grouped('Sexual wellbeing', [
+        f(
+          multi('difficulties', "Anything you'd want support with?", [
+            'Getting aroused',
+            'Reaching orgasm',
+            'Orgasming too quickly',
+            'Lasting longer',
+            'Pain during sex',
+            'Erectile difficulty',
+            'Dryness',
+            'Low desire',
+            'Mismatched desire with a partner',
+            'Learning to squirt',
+            'Body confidence',
+            'Performance anxiety',
+            'None',
+          ]),
+          { restricted: true },
+        ),
+        f(rating('performanceAnxiety', 'Performance anxiety', 'None', 'A lot'), {
+          restricted: true,
+        }),
+        f(longText('moodLibido', 'How does your mood affect your libido?'), { restricted: true }),
+        f(longText('sexWellbeing', 'How does sex affect your overall wellbeing?'), {
+          restricted: true,
+        }),
+      ]),
+      ...grouped('Boundaries & meaning', [
+        f(
+          longText(
+            'boundaries',
+            'Consent, safety, or boundaries SelfOS should always hold',
+            'Anything that should always be respected.',
+          ),
+          { restricted: true },
+        ),
+        f(shortText('safeword', 'A safeword or signal you use', 'e.g. “red”')),
+        f(longText('feelSafe', 'What makes you feel safe and present during sex?'), {
+          restricted: true,
+        }),
+        f(longText('closenessMeaning', 'What does great intimacy or closeness mean to you?'), {
+          restricted: true,
+        }),
+        f(
+          longText(
+            'understandSexuality',
+            'What do you most want SelfOS to understand about your sexuality?',
+          ),
+          { restricted: true },
+        ),
+      ]),
     ],
   },
 ];

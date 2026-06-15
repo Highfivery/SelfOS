@@ -28,14 +28,15 @@ import {
 } from './intakeCatalog';
 
 /**
- * Personal-onboarding intake service (18-personal-onboarding §5). An AI-guided, resumable self-interview:
- * `runIntakeTurn` reuses `05`'s streaming + `06`'s metering (`intake.interview`) but stores the transcript
- * UNDER the person (never in Sessions); direct answers fill the owner-only `Person` profile mid-interview
- * via an embedded `[[SELFOS:FIELD:…]]` marker. `synthesizeIntake` distils a section (a light reflection) or
- * the whole intake (the portrait `Insight`, `source: 'intake'`, + inferred field fills) — metering
- * `intake.synthesize` before parse (`09` pattern). Sensitive direct fields lock to own-context-only; facts
- * from `restricted` sections are flagged so they show only to the Owner (`intake.readRestricted`), redacted
- * for everyone else (§8.4). The API key never leaves the host.
+ * Personal-onboarding intake service (18-personal-onboarding §5/§14). A hybrid, resumable self-onboarding:
+ * `submitSectionForm` handles structured **form** sections (instant, NO AI) — it fills the mapped owner-only
+ * `Person` fields (sensitive ones locked own-context-only) and persists the answers; `runIntakeTurn` handles
+ * **chat** sections + go-deeper, reusing `05`'s streaming + `06`'s metering (`intake.interview`) and storing
+ * the transcript UNDER the person (never in Sessions). `synthesizeIntake` distils a section (a light
+ * reflection) or the whole intake (the portrait `Insight`, `source: 'intake'`, weaving in BOTH the chat
+ * transcripts and the form answers) — metering `intake.synthesize` before parse (`09` pattern). Facts from
+ * `restricted` sections are flagged from the trusted catalog (never the model) so they show only to the Owner
+ * (`intake.readRestricted`), redacted for everyone else (§8.4). The API key never leaves the host.
  */
 
 const SCHEMA_VERSION = 1;

@@ -1,6 +1,11 @@
 # 18 — Personal onboarding ("Getting to know you")
 
-> **Status:** Approved · _last updated 2026-06-14_
+> **Status:** Approved · _last updated 2026-06-15_ · **Amended 2026-06-15 (§14–§15, building):** the all-chat
+> interview is being reworked into a **hybrid form/chat intake** — a short gated `core` of quick forms +
+> `invited` deep/sensitive sections, specific questions everywhere, an explicit branched intimacy block, useful
+> answers promoted to real `Person` fields, the questionnaire engine reused (§14) — plus a **self-maintaining
+> profile** that detects stale answers from ongoing activity and invites updates (§15). §1–§13 describe the
+> as-first-built v1; §14–§15 are the active redesign.
 >
 > A warm, AI-guided onboarding that helps a person tell SelfOS who they are — their life now, their
 > history, family, health, what weighs on them, relationships, values, what they want to work on, and
@@ -426,3 +431,302 @@ revealRestricted` (gated + active-person-scoped; restricted facts redacted from 
   "sensitive") to a holder (the **Owner**, full-access) — no `intake:revealRestricted` op, no `RawAccessAuditEntry`,
   no `auditService`. The defense-in-depth exclusion of restricted facts from every other person's context
   (`summarizeForContext`/`buildLinkedPeopleContext`) is unchanged. Synced §3/§5/§6/§8.4/§10/§11.
+- 2026-06-15 — **Hybrid form/chat redesign added (§14, Review).** User feedback: the all-chat interview is slow
+  for simple facts, the open prompts are too generic (people abandon them), and the single free-text intimacy
+  question gets skipped. §14 restructures the intake into **quick forms** (factual/structured, no AI), **forms
+  with a selective "go deeper"** chat, and **AI chat** reserved for the deep open topics (family, story, what
+  weighs on you), with **specific concrete questions everywhere** and an **explicit structured intimacy block**.
+  Four design decisions resolved ask-first (§14.13): a **short `core` gates first-run** while deep/sensitive
+  sections are **`invited` anytime** (completion + trust); **promote** useful answers to real `Person` fields;
+  the **Owner can see** intimacy data; **reuse the questionnaire engine** (answer-branching for the sensitive
+  block). Plus **§15 — a self-maintaining profile**: a drift-detection system that piggybacks on the existing
+  session/dream/questionnaire analysis passes (no extra AI spend) to **notice likely-stale answers and invite
+  updates** (confirm-before-apply). Amends §3.1/§3.2/§4.1/§4.2; build in 3 slices (core → renderer → freshness).
+
+---
+
+## 14. 2026-06-15 redesign — specific, hybrid form/chat intake
+
+Layers on §1–§13 (the producer/synthesis/safety model is unchanged). This replaces the "every section is an
+AI chat" model (§3.2) with a **hybrid**: most sections are **fast structured forms**, AI chat is **reserved
+for the few deep open topics**, and **every** question is **specific and concrete** rather than broad.
+
+### 14.1 Why
+
+- **Speed for facts.** "What are your pronouns / birthday / languages?" should be a tap or a field, not a
+  back-and-forth. Today they're asked conversationally (the AI emits a `[[SELFOS:FIELD]]` marker) — slow and
+  spendy for zero added insight.
+- **Generic prompts get abandoned.** "What matters most to you?" as an open box is daunting; a pick-list of
+  values with an optional "anything else" is finished in seconds and yields cleaner data.
+- **The intimacy block gets skipped.** One blank "tell me what intimacy means to you" box is awkward and
+  exposing. Concrete, opt-in multiple-choice (orientation, turn-ons, kinks, …) with optional notes is easier to
+  engage and produces **far richer** personalization — the whole point of the intake.
+- **More specific data ⇒ better coaching.** The guiding principle for the rewrite (the user's words): **the
+  more concrete the questions, the more personalized SelfOS can be.** Broad questions are out, everywhere.
+
+### 14.2 Required core vs. invited deep (the gate)
+
+The biggest risk isn't tone, it's **completion**: a long, heavy intake behind a hard Member gate makes people
+skip-spam to escape, yielding a hollow profile. So sections carry a **`tier`**:
+
+- **`core` (gates first-run).** A **short, fast, non-threatening** set of mostly-form sections — enough for a
+  useful starter portrait. The Member gate (§3.1) releases once the **core** sections are worked through
+  **and the starter portrait is generated**. Proposed core (tunable): **The basics**, **Your life now**,
+  **Values & identity**, **What you want**.
+- **`invited` (anytime, never gates).** Everything richer or more sensitive — surfaced **after** the gate
+  releases, as cards on the Onboarding surface + a gentle Home nudge, each addable when the person is ready and
+  **re-synthesizing** the portrait when added. Ordered easy→sensitive: **Health & wellbeing**, **Relationships**,
+  **Family & upbringing**, **Your story**, **What weighs on you**, **Intimacy & sexuality**.
+
+This protects **completion** (the gate is a few quick forms) and **trust** (trauma + intimacy are never sprung
+on a first-run stranger — they're an invitation, on the person's terms). The portrait is a **living document**:
+a starter portrait from core, enriched each time an invited section is added.
+
+### 14.3 Three section modes
+
+Independently of tier, each section declares a **`mode`**:
+
+1. **`form`** — **structured questions** (single/multi-select, scale, short/long text, date), rendered as a
+   quick form. **No AI call** → instant and free. Answer (or skip) → **Continue**.
+2. **`form` + selective go-deeper** — the same form, but **specific questions** carry an optional **"Tell me
+   more →"** opening a brief AI chat to elaborate that one thing. **Never on trivial facts** (gender, pronouns,
+   birthday, languages) — a per-question `allowDeepen` flag set only where elaboration adds value.
+3. **`chat`** — the existing AI-guided adaptive interview (§3.2), driven by a **specific topic checklist**
+   (`focus`) instead of one broad prompt. Reserved for the deep open topics: **Family & upbringing**, **Your
+   story**, **What weighs on you**.
+
+A `form` section with **no** `allowDeepen` question spends **nothing** and works offline; only go-deeper chats,
+`chat` sections, and synthesis call Claude. **Net effect: the gated first-run is mostly free + fast.**
+
+### 14.4 The restructured catalog (specific questions)
+
+Code-defined (`intakeCatalog.ts`). Indicative set (wording tuned at build). "→field" promotes the answer to a
+real owner-only `Person` field (§14.6); unmapped answers feed synthesis; `restricted` answers feed only the
+person's own context.
+
+| Section                                      | Tier    | Mode        | Specific questions                                                                                                                                                                  |
+| -------------------------------------------- | ------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **The basics**                               | core    | form        | pronouns→`pronouns`, gender→`gender`, birthday(date)→`birthday`, location→`location`, languages(multi)→`languages`, ethnicity→`ethnicity`, occupation→`occupation`. _No go-deeper._ |
+| **Your life now**                            | core    | form+deepen | living situation→`livingSituation`, relationship status→`relationshipStatus`, children→`parentalStatus`, "what fills your days"(text, **deepen**).                                  |
+| **Values & identity**                        | core    | form        | core values(multi)→`values`, faith(single+other)→`faith`, communication style→`communicationStyle`, identity descriptors(multi, optional).                                          |
+| **What you want**                            | core    | form+deepen | growth areas(multi)→`goals`, "a specific goal"(text, **deepen**).                                                                                                                   |
+| **Health & wellbeing** _(private)_           | invited | form+deepen | sleep/energy/stress(scales), movement(single), "anything to keep in mind"(text, **deepen**)→`healthNotes`(private).                                                                 |
+| **Relationships**                            | invited | form+deepen | attachment pattern(single), conflict style(single), what you need(multi), "how you show up when it's hard"(text, **deepen**); infers `communicationStyle`.                          |
+| **Family & upbringing**                      | invited | chat        | checklist: who raised you, siblings, family relationships now, traditions/culture, hard parts, what you carry.                                                                      |
+| **Your story**                               | invited | chat        | checklist: formative chapters, turning points, proudest moments, hardest moments, what shaped you.                                                                                  |
+| **What weighs on you** _(restricted)_        | invited | chat        | checklist (trauma-informed, person sets depth): current stressors, grief/loss, recurring worries, stuck patterns, past trauma — never dig for specifics.                            |
+| **Intimacy & sexuality** _(18+, restricted)_ | invited | form+deepen | see §14.5.                                                                                                                                                                          |
+
+### 14.5 The intimacy & sexuality block (explicit, structured, branched, opt-in)
+
+Replaces the single free-text box with a **structured, concrete, branched** set — easy to answer, far more
+useful, and handled as the most sensitive data (18+ ack, `restricted`, owner-visible / everyone-else-redacted,
+excluded from the dream-image depiction, §14.10). It is **`invited`** (never first-run-gated) and **opt-in**
+behind the shared 18+ acknowledgement; **every question is optional and skippable**. **Answer-branching** hides
+irrelevant questions (e.g. "asexual" or low-importance hides the turn-ons/positions detail). Indicative:
+
+- **Orientation** (multi-select: straight, gay, lesbian, bisexual, pansexual, asexual, queer, questioning,
+  other + free text) → `sexualOrientation` (private-by-default field, §14.6).
+- **Relationship style** (single: monogamous, open, polyamorous, exploring, other) → `relationshipStyle`
+  (private-by-default field).
+- **How important intimacy is to you** (scale) — `restricted` fact. _(Branch: low/none → skip the detail below.)_
+- **Turn-ons** · **Turn-offs / hard limits** · **Favorite positions** · **Kinks & interests** (multi-select tag
+  lists, each + optional note) — `restricted` facts.
+- **Fantasies** (optional long text) · **Porn preferences** (multi-select + note) · **Masturbation** (frequency
+  single + note) · **Boundaries & consent** (long text) — `restricted` facts.
+- **What closeness/desire means to you** (optional long text — the one open prompt, last, not the whole block).
+
+These are **adult sexual-wellness self-knowledge** the person records about themselves (or a consenting
+household adult), stored **encrypted** + **18+-gated**. The detailed answers become **`restricted` Insight
+facts** feeding **only the person's own** `buildContext` — never another person's context, never an image
+prompt; the coach surfaces them **only in clearly relevant contexts** (§14.11). Orientation + relationship
+style are promoted to **private-by-default `Person` fields** (own-context, owner-visible). Tone is
+matter-of-fact and non-judgmental; the not-medical line + crisis footer remain.
+
+### 14.6 Form engine reuse, field promotion & new `Person` fields
+
+- **Reuse the questionnaire engine.** Form sections define their questions as the existing **`Question`** shape
+  and render through the shared **`@selfos/answering` `QuestionnaireForm`** — so we inherit multi-select / scale
+  / date / **answer-branching** / validation / the crisis footer with little new code. A small **code-side
+  mapping** (`questionId → { field?, list?, private?, restricted? }`) layers the intake semantics on top; the
+  questionnaire vault/Assignment machinery is **not** used (intake answers live in the intake, §14.9).
+- **Promote the useful answers to real `Person` fields** (decision: more usable than prose). New
+  **additive-optional** fields on `PersonSchema`/`PersonInputSchema` (no `schemaVersion` bump — the
+  `email`/`phone` precedent): `relationshipStatus`, `parentalStatus`, `livingSituation` (shareable like other
+  profile facts) + `sexualOrientation`, `relationshipStyle` (**private-by-default** → added to `privateFields`
+  when filled). They flow through `buildContext` (the shareable set feeds related people; the private two feed
+  only own context), the People editor (owner view/edit + per-field share toggles, `15`), and stay **out of**
+  `buildDepictionNote` (never an image input). The **granular sexual data** (turn-ons/kinks/positions/fantasies/
+  porn/masturbation) is **not** a profile field — it stays a `restricted` Insight fact (too granular + too
+  sensitive for the profile schema).
+- **Field fill on submit.** `submitSectionForm` validates the answers against the catalog, **fills mapped
+  `Person` fields directly** (no AI marker — markers were only for chat; multi → list fields; `private` →
+  `privateFields`), persists unmapped answers, and marks the section complete.
+
+### 14.7 Selective go-deeper
+
+A `deepen` question shows **"Tell me more →"** → a short AI chat **scoped to that one question** (the `chat`
+machinery + `05` `Composer`/stream), seeded with the structured answer. **Optional** (the form is complete
+without it) and **only where `allowDeepen` is set** — never on pure facts. Meters `intake.interview` per turn.
+
+### 14.8 Synthesis — a living portrait
+
+- **Starter portrait** — when the **core** sections are done, the person taps to generate the portrait
+  (`intake.synthesize`), which **releases the Member gate** (§3.1). Built from core's structured `answers` +
+  any go-deeper transcripts.
+- **Enrichment** — each time an **invited** section is later added, it offers to **re-synthesize** (reusing the
+  same `insightId`, carrying shareable choices forward, §3.6) so the portrait grows over time. Per-section
+  reflections (auto, light) are unchanged. Sexual/trauma facts stay `restricted`.
+
+### 14.9 Schema & service changes (additive)
+
+- **New `Person` fields** (§14.6): `relationshipStatus` / `parentalStatus` / `livingSituation` /
+  `sexualOrientation` / `relationshipStyle` — all optional, **no `schemaVersion` bump**; added to
+  `PERSON_FIELD_KEYS`; the latter two default into `privateFields` when filled from intake.
+- **`IntakeSectionMeta`** gains `tier: 'core' | 'invited'`, `mode: 'form' | 'chat'`, and for form sections a
+  `questions: Question[]` (+ the per-question intake mapping) — renderer-facing, derived from the code catalog.
+- **`IntakeSession`/`IntakeSection`** — `answers` already exists (additive use). The gate-release predicate
+  becomes "**core** sections resolved **and** portrait generated" (was: all sections); pre-redesign sessions
+  still parse (a tier-less section is treated as `invited`, so an in-flight one isn't suddenly re-gated — TBD
+  reconcile at build, the `reconcileRole` precedent).
+- **`intakeService`** gains `submitSectionForm(sectionId, answers)`; `runTurn` now serves `chat` sections +
+  go-deeper; `skipSection`/`synthesize` unchanged. **IPC** adds `intake:submitForm`.
+
+### 14.10 Safety (explicit content)
+
+- **18+ gate** (shared `adultAcknowledged`, §12), **`restricted`** + **owner-visible / everyone-else-redacted**,
+  **excluded from `buildDepictionNote`** — unchanged from §8.4; the structured sexual answers ride the **same**
+  rails as the old free-text one.
+- **Not medical / crisis** — the not-medical line + `CrisisFooter` stay on every onboarding surface; the
+  `weighs`/intimacy `chat`/deepen turns keep the trauma-informed + crisis-routing guidance (§8.1/§8.2).
+- **Consent & skippability** — every question optional + skippable; the intimacy block opt-in; no dark patterns.
+
+### 14.11 How the data is used, living profile & versioning
+
+- **Relevance-gated surfacing.** The coach references intimacy/trauma facts **only in clearly relevant
+  contexts** (an intimacy or relationship session, not a budgeting chat) — a prompt-level instruction, never
+  unprompted. Restricted facts are own-context-only regardless.
+- **Living, editable profile.** Because most answers are structured, the Onboarding surface doubles as an
+  **editable profile** the person can revisit and update anytime (re-synthesize to refresh the portrait) —
+  unlike a write-once chat transcript.
+- **Versioning by invitation.** When we add new questions/sections later, they appear as gentle **"want to add
+  this?"** invitations (a new card / nudge), **never a forced redo** of a completed intake.
+
+### 14.12 Testing
+
+- **Unit (core):** form questions validate; `submitSectionForm` fills mapped `Person` fields (incl. the new
+  ones; `private` → `privateFields`), persists unmapped answers, runs **no AI** for a pure form; intimacy detail
+  → `restricted` facts; orientation/style → private fields; branch hides irrelevant Qs; the gate predicate keys
+  on **core** only; `buildContext` carries the new shareable fields but not the private/restricted ones to
+  others.
+- **Component (RTL):** a core form renders its controls + Continue/Skip; a `deepen` question shows "Tell me
+  more", a pure fact doesn't; the invited intimacy block is 18+-gated → branched structured controls; the
+  Onboarding surface shows core-then-invited; a `chat` section is unchanged.
+- **E2E:** finish the **core** forms (no AI) → fields decrypt onto the `Person` → starter portrait → **gate
+  releases**; later add the invited intimacy block (18+) → a `restricted` fact is owner-visible but redacted for
+  a member, orientation lands as a private field, re-synthesis enriches the portrait. 390px guard.
+
+### 14.13 Resolved decisions (2026-06-15)
+
+- **First-run scope** — a **short `core` gates**; deep/sensitive sections are **`invited` anytime** (protects
+  completion + trust). Core = basics / life-now / values / what-you-want (tunable).
+- **Data model** — **promote** the useful structured answers to real `Person` fields (relationship status,
+  parental status, living situation, orientation, relationship style); granular sexual data stays `restricted`
+  facts.
+- **Intimacy visibility** — the **Owner can see it** (consistent with the full-access model, `04` §8); redacted
+  for everyone else.
+- **Form engine** — **reuse** the questionnaire `Question` schema + `@selfos/answering` renderer (gets
+  answer-branching for the sensitive block) rather than bespoke forms.
+- **Design notes adopted** — coach surfaces sensitive facts only in relevant contexts; the intake doubles as a
+  living editable profile; new questions arrive as invitations, never a forced redo.
+
+---
+
+## 15. Keeping the profile fresh — drift detection & update invitations
+
+A profile is only useful if it stays **current**. As the person does sessions, dreams, and questionnaires,
+life changes — a new job, a breakup, a goal that shifts, a mood trend — and the intake answers silently go
+stale. §15 adds a **smart, low-cost system that notices likely-stale answers from ongoing activity and invites
+the person to update them** (never silently rewriting). This makes §14.11's "living profile" **self-maintaining**.
+
+### 15.1 Mechanism — piggyback on the analysis already running (no extra spend)
+
+Every producer already runs a **metered AI analysis pass with the person's profile in context**: sessions
+(`09 endAndSummarize`), dreams (`13` analysis), questionnaires (`08 analyzeAssignment`), and the intake's own
+synthesis. We **extend that same pass's output contract** to optionally emit **profile-update suggestions**
+when the conversation contains a fact that **contradicts or extends a known profile/intake answer** — the
+model already has both the transcript and the current profile, so it just reports the delta. **No new AI call,
+no new metering** — the suggestion rides the pass that already happened (the `09` "one marker, free signal"
+precedent, like `wrapUpSuggested`). A pass that finds nothing emits nothing.
+
+The suggestion is a **proposal, never an edit**: the field/answer changes only when the person confirms.
+
+### 15.2 The suggestion model
+
+A new per-person **`ProfileUpdateSuggestion`** (stored under the person, encrypted): `{ id, kind: 'field' |
+'intakeSection', field?: PersonFieldKey, sectionId?, observed: string (what the activity implies),
+current?: string (the known value), rationale: string, sourceInsightId, sourceKind: 'session'|'dream'|
+'questionnaire', restricted: boolean, status: 'pending'|'accepted'|'dismissed', createdAt }`.
+
+- **Dedup** — a new suggestion for the same `field`/`sectionId` supersedes a prior `pending` one (don't stack
+  three "update occupation" cards); a `dismissed` signal for the same observed delta doesn't immediately
+  re-fire (no nagging).
+- **Restricted** — a suggestion derived from a `restricted` fact (intimacy/trauma) is itself `restricted`
+  (own-context-only; owner-visible per `04` §8) and never surfaces in another person's view.
+
+### 15.3 Surfacing & review
+
+- **A gentle nudge** — a Home card ("**Keep your profile fresh** — N things may be out of date") + a count on
+  the Onboarding nav, shown only when ≥1 `pending`. Calm, never a blocking interrupt.
+- **Review** — each pending suggestion shows _what changed_ + _the current value_ with one-tap **Update**
+  (applies to the `Person` field, or opens the intake question prefilled with the observed value to confirm/edit)
+  or **Dismiss** (sticks — won't re-nag for the same delta). Accepting a field update re-uses the §14.6 fill
+  path; accepting an intake-section update re-opens that section's form/question.
+- **Living-profile home** — the Onboarding surface (the editable profile, §14.11) shows pending suggestions
+  inline beside the relevant section, so "review" and "edit" are the same place.
+
+### 15.4 A periodic checkup (light)
+
+Beyond event-driven detection, a gentle time-based **"profile checkup"** nudge (e.g. it's been a while since
+you reviewed your profile) invites a glance — derived from the intake's `updatedAt`, **no AI**. Dismissable;
+never nags.
+
+### 15.5 Privacy & safety
+
+- **Own-scoped** — suggestions derive from the person's **own** activity about themselves; they live in the
+  person's own context, and `restricted`-derived ones inherit `restricted` (owner-visible, everyone-else
+  redacted). The cross-person leak rules (§8.4) are unchanged.
+- **Confirm-before-apply** — the system **never** silently changes a profile field or intake answer; it only
+  proposes. Dismiss is durable (no nagging). Not-medical/crisis framing unchanged.
+
+### 15.6 Schema, service & IPC
+
+- **Schema** — add `ProfileUpdateSuggestionSchema` (per-person, encrypted at
+  `people/<id>/profile-suggestions/<id>.enc`). The producers' analysis **result types gain an optional
+  `profileSuggestions?: RawProfileSuggestion[]`** (additive); the analysis prompt contract gains the
+  "report deltas vs. the known profile" instruction.
+- **Service** — a small **`profileSuggestionService`** (`list`/`accept`/`dismiss`/`recordFromAnalysis`),
+  consumed by each producer's analysis path (which already runs in the subject's own process). Accept routes to
+  the §14.6 field-fill or re-opens the intake section.
+- **IPC** — `profile:suggestions` (list, own-scoped + gated `intake.own`) / `profile:acceptSuggestion` /
+  `profile:dismissSuggestion`.
+
+### 15.7 Testing
+
+- **Unit (core):** an analysis pass that observes a changed fact emits a `profileSuggestion`; one that doesn't,
+  emits none; **no extra metering event** is recorded for the suggestion; accept applies to the field /
+  re-opens the section; dismiss is durable + dedups; a `restricted`-derived suggestion is `restricted` and
+  own-scoped.
+- **Component (RTL):** the Home "keep fresh" card shows the count; review accepts/dismisses; a `restricted`
+  suggestion shows for the owner, not a member.
+- **E2E:** do a session that implies a new occupation → a pending suggestion appears → **Update** writes the
+  `Person` field (decrypt to assert) → dismiss a second one and confirm it doesn't re-nag. 390px guard.
+
+### 15.8 Resolved / defaults
+
+- **Detection rides the existing analysis passes** (no new AI spend) — the chosen mechanism over a dedicated
+  periodic scan.
+- **Always confirm** — suggestions never auto-apply; dismiss is durable.
+- **Surfacing** — a calm Home card + Onboarding nudge + inline on the living-profile surface.
+- **Scope note** — wiring every producer (`08`/`09`/`13`) to emit suggestions is its own **slice 3** (after the
+  core + renderer slices); the model + one producer (sessions) land first, the rest follow the same pattern.

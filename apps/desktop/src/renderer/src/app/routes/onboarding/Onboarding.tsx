@@ -1,21 +1,34 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, Sparkles } from 'lucide-react';
-import { Banner, Button, Card, Heading, Text } from '../../../design-system/components';
+import { ArrowLeft, Check, Lock, Sparkles, Users } from 'lucide-react';
+import type { AnswerMap } from '@selfos/core/questionnaires';
+import { portraitStaleness } from '@selfos/core/intake';
+import type { IntakeSectionMeta } from '@shared/channels';
+import {
+  Banner,
+  Button,
+  Card,
+  Heading,
+  ProportionBar,
+  Text,
+} from '../../../design-system/components';
 import { useIntakeStore } from '../../../stores/intakeStore';
 import { useSessionStore } from '../../../stores/sessionStore';
+import { Switcher } from '../../Switcher';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { IntakeSectionPanel } from './IntakeSectionPanel';
+import { IntakeFormPanel } from './IntakeFormPanel';
 import { ClosingPortrait } from './ClosingPortrait';
+import { overallProgress, sectionProgress } from './progress';
 import styles from './Onboarding.module.css';
 
 type SectionStatus = 'notStarted' | 'inProgress' | 'skipped' | 'complete';
 
 /**
- * Personal onboarding — the "getting to know you" intake surface (18-personal-onboarding §3). An AI-guided,
- * resumable interview that auto-fills the (owner-only) profile and produces a member-facing portrait. AI is
- * required to run (§7); when it isn't ready a calm "connect AI" state shows (owner vs member copy). The
- * crisis footer + not-medical line are always present (§8.2).
+ * Personal onboarding — the "getting to know you" intake surface (18-personal-onboarding §3/§14). A hybrid of
+ * quick structured **forms** and AI **chat**: a short gated `core` of forms produces a starter portrait that
+ * releases the Member gate, while deeper/sensitive `invited` sections are offered anytime afterward. AI is
+ * required for the chat sections + synthesis (§7); the crisis footer + not-medical line are always present.
  */
 export function Onboarding(): JSX.Element {
   const navigate = useNavigate();
@@ -26,11 +39,45 @@ export function Onboarding(): JSX.Element {
   const finishIntake = useIntakeStore((s) => s.finishIntake);
   const finalizing = useIntakeStore((s) => s.finalizing);
   const displayName = useSessionStore((s) => s.activePerson?.displayName ?? null);
+  const activePersonId = useSessionStore((s) => s.activePerson?.id ?? null);
   // "Owner" here = someone who can turn on AI (settings.manage); drives the AI-unavailable copy (§7).
   const canManageAi = useSessionStore((s) => s.can('settings.manage'));
 
-  const [activeId, setActiveId] = useState<string | null>(null);
+  // The opened section is persisted device-local (per person) so a reload/restart returns you to where you
+  // were instead of bouncing to the first unfinished core step. It's transient UI nav state — never content.
+  const storageKey = activePersonId ? `selfos:onboarding:section:${activePersonId}` : null;
+  const [activeId, setActiveIdState] = useState<string | null>(() => {
+    if (!storageKey) return null;
+    try {
+      return window.localStorage.getItem(storageKey);
+    } catch {
+      return null;
+    }
+  });
+  const setActiveId = useCallback(
+    (id: string | null): void => {
+      setActiveIdState(id);
+      if (!storageKey) return;
+      try {
+        if (id) window.localStorage.setItem(storageKey, id);
+        else window.localStorage.removeItem(storageKey);
+      } catch {
+        /* localStorage unavailable — keep the in-memory value only */
+      }
+    },
+    [storageKey],
+  );
   const [revisiting, setRevisiting] = useState(false);
+  // A person can switch accounts from within onboarding (esp. the full-screen gated takeover, where the
+  // sidebar is hidden) — not only via the titlebar account menu. Owner switches PIN-free; others enter a PIN.
+  const [switching, setSwitching] = useState(false);
+  // The "See my portrait" confirmation modal (a chance to add more before generating, §15).
+  const [confirmPortrait, setConfirmPortrait] = useState(false);
+  // Switching sections from the bottom "Go deeper" grid loads the new section at the top — bring it into view.
+  const topRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (activeId) topRef.current?.scrollIntoView?.({ block: 'start' });
+  }, [activeId]);
 
   useEffect(() => window.selfos?.onIntakeChunk(appendChunk), [appendChunk]);
   useEffect(() => {
@@ -44,29 +91,56 @@ export function Onboarding(): JSX.Element {
     return map;
   }, [state?.session.sections]);
 
-  const pending = sections.filter(
-    (m) => (statusOf.get(m.id) ?? 'notStarted') !== 'complete' && statusOf.get(m.id) !== 'skipped',
-  );
-  const allDone = pending.length === 0;
-  const activeMeta = sections.find((m) => m.id === activeId) ?? pending[0] ?? null;
-
-  const advance = (): void => {
-    const fresh = useIntakeStore.getState().state;
-    const next = fresh?.sections.find((m) => {
-      const st = fresh.session.sections.find((s) => s.id === m.id)?.status ?? 'notStarted';
-      return st !== 'complete' && st !== 'skipped';
-    });
-    setActiveId(next?.id ?? null);
+  const isResolved = (id: string): boolean => {
+    const st = statusOf.get(id) ?? 'notStarted';
+    return st === 'complete' || st === 'skipped';
   };
+  const core = sections.filter((m) => m.tier === 'core');
+  const invited = sections.filter((m) => m.tier === 'invited');
+  const pendingCore = core.filter((m) => !isResolved(m.id));
+  const complete = state?.session.status === 'complete';
+
+  // The explicitly-opened section (an invited or revisited one). A persisted id that no longer resolves
+  // (e.g. a section removed/renamed across a release) is dropped so we fall back to the normal flow.
+  const openSection: IntakeSectionMeta | null = activeId
+    ? (sections.find((m) => m.id === activeId) ?? null)
+    : null;
+  useEffect(() => {
+    if (activeId && !openSection && sections.length > 0) setActiveId(null);
+  }, [activeId, openSection, sections.length, setActiveId]);
+  // The gated first-run walks the next pending core section (core → core → portrait); keyed by id so each
+  // panel re-seeds its form state.
+  const nextCore: IntakeSectionMeta | null = !complete ? (pendingCore[0] ?? null) : null;
+
+  // A "Switch person" affordance available in every onboarding state (reachable in the gated takeover where
+  // the sidebar/titlebar are the only other path), + the shared switcher overlay it opens.
+  const switchPersonButton = (
+    <Button variant="ghost" onClick={() => setSwitching(true)}>
+      <Users size={16} aria-hidden="true" />
+      Switch person
+    </Button>
+  );
+  const switcherOverlay = switching ? <Switcher onClose={() => setSwitching(false)} /> : null;
+
+  // Overall progress, by section (a section counts once it's finished). Shown in the page header AND the
+  // "Go deeper" block so it's clear how much is done / left (18 §3.1).
+  const progress = overallProgress(sections, (id) => statusOf.get(id));
+  const progressBar =
+    sections.length > 0 ? (
+      <ProportionBar label="Your progress" value={progress.completed} total={progress.total} />
+    ) : null;
 
   if (!loaded || !state) return <div className={styles.onboarding} aria-busy="true" />;
 
-  // AI is required to run the interview (§7). Show a calm "connect AI" state, never a dead-end.
+  // AI is required to run the chat sections + synthesis (§7). Show a calm "connect AI" state, never a dead-end.
   if (!state.aiAvailable) {
     return (
       <div className={styles.onboarding}>
         <header className={styles.header}>
-          <Heading level={1}>Getting to know you</Heading>
+          <div className={styles.headerTop}>
+            <Heading level={1}>Getting to know you</Heading>
+            {switchPersonButton}
+          </div>
         </header>
         <Card>
           <div className={styles.center}>
@@ -75,8 +149,8 @@ export function Onboarding(): JSX.Element {
             {canManageAi ? (
               <>
                 <Text tone="secondary">
-                  Onboarding is a guided conversation, so it needs AI turned on. Add your Claude API
-                  key and enable AI in Settings to start.
+                  Onboarding uses AI to bring everything together into your portrait, so it needs AI
+                  turned on. Add your Claude API key and enable AI in Settings to start.
                 </Text>
                 <Button variant="primary" onClick={() => navigate('/settings')}>
                   Open Settings
@@ -84,111 +158,275 @@ export function Onboarding(): JSX.Element {
               </>
             ) : (
               <Text tone="secondary">
-                Onboarding is a guided conversation, so it needs AI turned on. Ask your household
-                owner to enable AI, then come back here — nothing you’ve done is lost.
+                Onboarding uses AI to build your portrait, so it needs AI turned on. Ask your
+                household owner to enable AI, then come back here — nothing you’ve done is lost.
               </Text>
             )}
           </div>
         </Card>
         <CrisisFooter />
+        {switcherOverlay}
       </div>
     );
   }
 
-  const complete = state.session.status === 'complete';
+  const findSection = (id: string): (typeof state.session.sections)[number] | undefined =>
+    state.session.sections.find((s) => s.id === id);
+
+  const renderPanel = (meta: IntakeSectionMeta): JSX.Element =>
+    meta.mode === 'form' ? (
+      <IntakeFormPanel
+        key={meta.id}
+        meta={meta}
+        section={findSection(meta.id)}
+        adultAcknowledged={state.adultAcknowledged}
+        onAdvance={() => setActiveId(null)}
+      />
+    ) : (
+      <IntakeSectionPanel
+        key={meta.id}
+        meta={meta}
+        section={findSection(meta.id)}
+        adultAcknowledged={state.adultAcknowledged}
+        onAdvance={() => setActiveId(null)}
+      />
+    );
+
+  const sectionCard = (m: IntakeSectionMeta): JSX.Element => {
+    const status = statusOf.get(m.id);
+    const current = m.id === activeId;
+    const isDone = status === 'complete';
+    const { answered, total } = sectionProgress(m, (findSection(m.id)?.answers ?? {}) as AnswerMap);
+    const cardClass = [
+      styles.invitedCard,
+      current ? styles.invitedCardCurrent : '',
+      isDone && !current ? styles.invitedCardDone : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+    return (
+      <button
+        key={m.id}
+        type="button"
+        className={cardClass}
+        aria-current={current ? 'true' : undefined}
+        onClick={() => setActiveId(m.id)}
+      >
+        <div className={styles.invitedCardHead}>
+          <span className={styles.invitedTitle}>
+            {m.adult || m.restricted ? (
+              <Lock size={13} aria-hidden="true" className={styles.lock} />
+            ) : null}
+            {m.title}
+          </span>
+          {current ? (
+            <span className={styles.invitedTagCurrent} aria-hidden="true">
+              Current
+            </span>
+          ) : isDone ? (
+            <span className={styles.invitedTagDone} aria-hidden="true">
+              <Check size={13} aria-hidden="true" /> Update
+            </span>
+          ) : (
+            <span className={styles.invitedTag} aria-hidden="true">
+              {status === 'skipped' ? 'Skipped' : 'Add'}
+            </span>
+          )}
+        </div>
+        <span className={styles.invitedBlurb}>{m.blurb}</span>
+        {total > 0 ? (
+          <span className={styles.invitedCount} aria-hidden="true">
+            {answered} of {total} answered
+          </span>
+        ) : null}
+      </button>
+    );
+  };
+
+  // Both the "The essentials" (core) and "Go deeper" (invited) grids — so EVERY section, core included, is
+  // revisitable from one place (18 §3.1). The overall progress bar rides on the "Go deeper" block.
+  const Grids = (): JSX.Element => (
+    <>
+      <Card>
+        <div className={styles.section}>
+          <div className={styles.sectionHead}>
+            <Heading level={2}>The essentials</Heading>
+            <Text tone="secondary">The quick basics — revisit or update any of these anytime.</Text>
+          </div>
+          <div className={styles.invitedGrid}>{core.map(sectionCard)}</div>
+        </div>
+      </Card>
+      <Card>
+        <div className={styles.section}>
+          <div className={styles.sectionHead}>
+            <Heading level={2}>Go deeper</Heading>
+            <Text tone="secondary">
+              Add to or update any of these whenever you’re ready — there’s no rush, and you can
+              come back and revisit any section anytime. The more you share, the more SelfOS
+              understands you.
+            </Text>
+          </div>
+          {progressBar}
+          <div className={styles.invitedGrid}>{invited.map(sectionCard)}</div>
+        </div>
+      </Card>
+    </>
+  );
+
+  // How much has been filled in across the whole intake (for the portrait modal + the "you've shared a
+  // little so far" nudge), and whether the existing portrait is now out of date (§15).
+  const answeredTotals = sections.reduce(
+    (acc, m) => {
+      const p = sectionProgress(m, (findSection(m.id)?.answers ?? {}) as AnswerMap);
+      return { answered: acc.answered + p.answered, total: acc.total + p.total };
+    },
+    { answered: 0, total: 0 },
+  );
+  const lightlyFilled = answeredTotals.answered < 25;
+  const staleness = portraitStaleness(state.session);
+
+  // Generate (or refresh) the portrait, closing the confirm modal and landing on the result.
+  const generatePortrait = (): void => {
+    void finishIntake().then((ok) => {
+      setConfirmPortrait(false);
+      if (!ok) return;
+      setRevisiting(false);
+      navigate('/onboarding');
+    });
+  };
+
+  const portraitModal = confirmPortrait ? (
+    <div
+      className={styles.modalOverlay}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Ready for your portrait?"
+    >
+      <Card className={styles.modalPanel}>
+        <div className={styles.section}>
+          <Heading level={2}>Ready for your portrait?</Heading>
+          <Text tone="secondary">
+            You’ve answered {answeredTotals.answered} of {answeredTotals.total} questions, across{' '}
+            {progress.completed} of {progress.total} sections.
+          </Text>
+          {lightlyFilled ? (
+            <Banner tone="info">
+              You’ve shared just a little so far. Even a few more minutes makes your portrait
+              noticeably richer — and you can always come back, add more, and refresh it anytime.
+            </Banner>
+          ) : (
+            <Text tone="secondary">
+              The more you share, the more personal your portrait. You don’t have to do it all now —
+              you can come back, add more, and refresh it anytime.
+            </Text>
+          )}
+          <div className={styles.controls}>
+            <Button variant="primary" disabled={finalizing} onClick={generatePortrait}>
+              <Sparkles size={16} aria-hidden="true" />
+              {finalizing ? 'Writing your portrait…' : 'Generate my portrait'}
+            </Button>
+            <Button variant="ghost" disabled={finalizing} onClick={() => setConfirmPortrait(false)}>
+              Keep adding
+            </Button>
+          </div>
+        </div>
+      </Card>
+    </div>
+  ) : null;
 
   return (
-    <div className={styles.onboarding}>
+    <div className={styles.onboarding} ref={topRef}>
       <header className={styles.header}>
-        <Heading level={1}>
-          <Sparkles size={20} aria-hidden="true" /> Getting to know you
-          {displayName ? `, ${displayName}` : ''}
-        </Heading>
+        <div className={styles.headerTop}>
+          <Heading level={1}>
+            <Sparkles size={20} aria-hidden="true" /> Getting to know you
+            {displayName ? `, ${displayName}` : ''}
+          </Heading>
+          {switchPersonButton}
+        </div>
         <Text tone="secondary">
-          A warm, private conversation so SelfOS understands you. Everything is encrypted and yours,
-          you can skip anything, and your most sensitive answers stay private to your own coaching.
+          A warm, private space so SelfOS understands you. Everything is encrypted and yours, you
+          can skip anything, and your most sensitive answers stay private to your own coaching.
         </Text>
+        {progressBar}
       </header>
 
       {error ? <Banner tone="danger">{error}</Banner> : null}
 
-      {complete && !revisiting ? (
-        <ClosingPortrait
-          session={state.session}
-          sections={sections}
-          onRevisit={() => {
-            setRevisiting(true);
-            setActiveId(null);
-          }}
-        />
-      ) : (
+      {openSection ? (
+        // An explicitly-opened section — a back affordance, the section, then the "Go deeper" navigator so
+        // the person can jump straight to any other section without going Back first (18 §3.1).
         <>
-          <div className={styles.progress} role="group" aria-label="Onboarding sections">
-            {sections.map((m) => {
-              const st = statusOf.get(m.id) ?? 'notStarted';
-              const dotClass =
-                st === 'complete'
-                  ? `${styles.chipDot} ${styles.chipDotComplete}`
-                  : st === 'skipped'
-                    ? `${styles.chipDot} ${styles.chipDotSkipped}`
-                    : styles.chipDot;
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  className={`${styles.chip} ${activeMeta?.id === m.id ? styles.chipActive : ''}`}
-                  aria-current={activeMeta?.id === m.id ? 'true' : undefined}
-                  onClick={() => setActiveId(m.id)}
-                >
-                  <span className={dotClass} aria-hidden="true" />
-                  {m.title}
-                  {m.restricted ? (
-                    <Lock size={12} aria-hidden="true" className={styles.lock} />
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
-
-          {allDone ? (
+          <button type="button" className={styles.back} onClick={() => setActiveId(null)}>
+            <ArrowLeft size={14} aria-hidden="true" /> Back
+          </button>
+          {renderPanel(openSection)}
+          <Grids />
+        </>
+      ) : !complete ? (
+        // The gated first-run: walk the core forms, then offer the portrait.
+        nextCore ? (
+          <>
+            <Text className={styles.stepCount}>
+              Step {core.length - pendingCore.length + 1} of {core.length}
+            </Text>
+            {renderPanel(nextCore)}
+            <Grids />
+          </>
+        ) : (
+          <>
             <Card>
               <div className={styles.center}>
-                <Heading level={2}>That’s everything — thank you</Heading>
+                <Heading level={2}>That’s the essentials — thank you</Heading>
                 <Text tone="secondary">
                   When you’re ready, I’ll bring it together into a portrait of what I’ve come to
-                  understand about you.
+                  understand about you. You can keep adding more below anytime.
                 </Text>
                 <Button
                   variant="primary"
                   disabled={finalizing}
-                  onClick={() => {
-                    void finishIntake().then((ok) => {
-                      if (!ok) return;
-                      setRevisiting(false);
-                      // Completing flips the session to `complete`, which releases the Member onboarding
-                      // gate (AppShell). Land on /onboarding so the just-written portrait stays on screen
-                      // (now with the sidebar) instead of snapping to Home (18-personal-onboarding §3.1).
-                      navigate('/onboarding');
-                    });
-                  }}
+                  onClick={() => setConfirmPortrait(true)}
                 >
                   <Sparkles size={16} aria-hidden="true" />
-                  {finalizing ? 'Writing your portrait…' : 'See my portrait'}
+                  See my portrait
                 </Button>
               </div>
             </Card>
-          ) : activeMeta ? (
-            <IntakeSectionPanel
-              meta={activeMeta}
-              section={state.session.sections.find((s) => s.id === activeMeta.id)}
-              adultAcknowledged={state.adultAcknowledged}
-              onAdvance={advance}
-            />
+            <Grids />
+          </>
+        )
+      ) : revisiting ? (
+        // Post-completion, an invited section can be opened from the grid; the grid is the landing.
+        <Grids />
+      ) : (
+        <>
+          <ClosingPortrait
+            session={state.session}
+            sections={sections}
+            onRevisit={() => {
+              setRevisiting(true);
+              setActiveId(null);
+            }}
+          />
+          {staleness.stale ? (
+            <Banner tone="info">
+              You’ve added or changed about {staleness.pct}% since your last portrait — refresh it
+              so your coaching stays up to date.
+            </Banner>
           ) : null}
+          <Grids />
+          <div className={styles.controls}>
+            <Button variant="secondary" disabled={finalizing} onClick={() => void finishIntake()}>
+              <Sparkles size={16} aria-hidden="true" />
+              {finalizing ? 'Refreshing…' : 'Refresh my portrait'}
+            </Button>
+          </div>
         </>
       )}
 
       <CrisisFooter />
+      {switcherOverlay}
+      {portraitModal}
     </div>
   );
 }

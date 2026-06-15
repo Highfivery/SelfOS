@@ -234,6 +234,22 @@ describe('buildContext — locked-field privacy boundary, per key', () => {
     { key: 'healthNotes', field: { healthNotes: 'LOCKED-HEALTH' }, marker: 'LOCKED-HEALTH' },
     { key: 'faith', field: { faith: 'LOCKED-FAITH' }, marker: 'LOCKED-FAITH' },
     { key: 'interests', field: { interests: ['LOCKED-INTEREST'] }, marker: 'LOCKED-INTEREST' },
+    // Promoted intake life-facts (18 §14.6) honor the same per-field lock.
+    {
+      key: 'relationshipStatus',
+      field: { relationshipStatus: 'LOCKED-RELSTATUS' },
+      marker: 'LOCKED-RELSTATUS',
+    },
+    {
+      key: 'sexualOrientation',
+      field: { sexualOrientation: 'LOCKED-ORIENTATION' },
+      marker: 'LOCKED-ORIENTATION',
+    },
+    {
+      key: 'relationshipStyle',
+      field: { relationshipStyle: 'LOCKED-RELSTYLE' },
+      marker: 'LOCKED-RELSTYLE',
+    },
   ];
   for (const { key: fieldKey, field, marker } of cases) {
     it(`withholds a locked ${fieldKey} from a related person's block`, async () => {

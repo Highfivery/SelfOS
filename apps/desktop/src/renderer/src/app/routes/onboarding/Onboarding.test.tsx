@@ -33,6 +33,8 @@ const META: IntakeSectionMeta[] = [
     blurb: 'Simple things.',
     restricted: false,
     adult: false,
+    tier: 'core',
+    mode: 'chat',
     opener: 'What should I call you?',
   },
   {
@@ -41,6 +43,8 @@ const META: IntakeSectionMeta[] = [
     blurb: 'The heavier things.',
     restricted: true,
     adult: false,
+    tier: 'invited',
+    mode: 'chat',
     opener: 'Anything weighing on you?',
     contentNote: 'Go as light as you like.',
   },
@@ -50,6 +54,8 @@ const META: IntakeSectionMeta[] = [
     blurb: 'Optional, 18+.',
     restricted: true,
     adult: true,
+    tier: 'invited',
+    mode: 'chat',
     opener: 'What does closeness mean to you?',
     contentNote: 'Optional and adults-only.',
   },
@@ -91,7 +97,10 @@ beforeEach(() => {
   signIn('owner');
   useIntakeStore.getState().reset();
 });
-afterEach(() => clearMockBridge());
+afterEach(() => {
+  clearMockBridge();
+  localStorage.clear();
+});
 
 describe('Onboarding', () => {
   it('shows the owner "connect AI" state when AI is unavailable', async () => {
@@ -121,13 +130,14 @@ describe('Onboarding', () => {
   });
 
   it('gates the intimacy section behind an 18+ acknowledgement', async () => {
-    // Make intimacy the only pending section so it's the active one.
+    // Core (basics) done → the invited grid offers intimacy; opening it shows the 18+ gate.
     const s = state();
     s.session.sections = s.session.sections.map((sec) =>
-      sec.id === 'intimacy' ? sec : { ...sec, status: 'complete' as const },
+      sec.id === 'basics' ? { ...sec, status: 'complete' as const } : sec,
     );
     installMockBridge({ intakeGetState: () => Promise.resolve(s) });
     renderOnboarding();
+    fireEvent.click(await screen.findByRole('button', { name: /Intimacy & sexuality/ }));
     expect(await screen.findByRole('button', { name: /18 or older/ })).toBeInTheDocument();
     // No composer while the gate is up.
     expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
@@ -153,6 +163,47 @@ describe('Onboarding', () => {
     expect(screen.getByText('That sounds meaningful — tell me more.')).toBeInTheDocument();
   });
 
+  it('restores the previously-open section from device-local storage on mount', async () => {
+    localStorage.setItem('selfos:onboarding:section:owner-1', 'weighs');
+    installMockBridge({ intakeGetState: () => Promise.resolve(state()) });
+    renderOnboarding();
+    // The reopened section is shown directly (with a Back affordance) rather than the core flow.
+    expect(await screen.findByText('Anything weighing on you?')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Back/ })).toBeInTheDocument();
+  });
+
+  it('persists the opened section so a reload returns to it', async () => {
+    const s = state();
+    s.session.sections = s.session.sections.map((sec) =>
+      sec.id === 'basics' ? { ...sec, status: 'complete' as const } : sec,
+    );
+    installMockBridge({ intakeGetState: () => Promise.resolve(s) });
+    renderOnboarding();
+    fireEvent.click(await screen.findByRole('button', { name: /What weighs on you/ }));
+    expect(localStorage.getItem('selfos:onboarding:section:owner-1')).toBe('weighs');
+  });
+
+  it('shows the "Go deeper" navigator on an opened section so you can jump straight to another', async () => {
+    localStorage.setItem('selfos:onboarding:section:owner-1', 'weighs');
+    installMockBridge({ intakeGetState: () => Promise.resolve(state()) });
+    renderOnboarding();
+    // On the opened 'weighs' section, the "Go deeper" navigator is present alongside the section...
+    expect(await screen.findByText('Anything weighing on you?')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Go deeper' })).toBeInTheDocument();
+    // ...and a DIFFERENT section opens directly from it (no Back first).
+    fireEvent.click(screen.getByRole('button', { name: /Intimacy & sexuality/ }));
+    expect(await screen.findByRole('button', { name: /18 or older/ })).toBeInTheDocument();
+  });
+
+  it('ignores a stale persisted section id and falls back to the core walk', async () => {
+    localStorage.setItem('selfos:onboarding:section:owner-1', 'no-such-section');
+    installMockBridge({ intakeGetState: () => Promise.resolve(state()) });
+    renderOnboarding();
+    // A removed/renamed id must not short-circuit to the portrait offer — the first core section shows.
+    expect(await screen.findByText('What should I call you?')).toBeInTheDocument();
+    expect(screen.queryByText('That’s the essentials — thank you')).not.toBeInTheDocument();
+  });
+
   it('shows the closing portrait when the intake is complete', async () => {
     const s = state();
     s.session.status = 'complete';
@@ -161,6 +212,57 @@ describe('Onboarding', () => {
     renderOnboarding();
     expect(await screen.findByText('What I’ve come to understand about you')).toBeInTheDocument();
     expect(screen.getByText('You carry a lot with quiet grace.')).toBeInTheDocument();
+  });
+
+  it('offers a "Switch person" affordance that opens the account switcher', async () => {
+    installMockBridge({ intakeGetState: () => Promise.resolve(state()) });
+    renderOnboarding();
+    await screen.findByText('What should I call you?');
+    fireEvent.click(screen.getByRole('button', { name: 'Switch person' }));
+    expect(await screen.findByRole('dialog', { name: /Who.s here/ })).toBeInTheDocument();
+  });
+
+  it('shows overall progress and marks a finished section "Update" in the Go deeper grid', async () => {
+    const s = state();
+    s.session.sections = s.session.sections.map((sec) =>
+      sec.id === 'basics' || sec.id === 'weighs' ? { ...sec, status: 'complete' as const } : sec,
+    );
+    installMockBridge({ intakeGetState: () => Promise.resolve(s) });
+    renderOnboarding();
+    // The progress bar appears (page header + the Go deeper block).
+    expect((await screen.findAllByText('Your progress')).length).toBeGreaterThanOrEqual(1);
+    // Finished sections read "Update" (not "Add") — basics (essentials) + weighs (go deeper); an untouched
+    // one still reads "Add".
+    expect(screen.getAllByText('Update').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('Add')).toBeInTheDocument();
+  });
+
+  it('confirms before generating the portrait via a modal that encourages adding more', async () => {
+    const s = state();
+    s.session.sections = s.session.sections.map((sec) =>
+      sec.id === 'basics' ? { ...sec, status: 'complete' as const } : sec,
+    );
+    installMockBridge({ intakeGetState: () => Promise.resolve(s) });
+    renderOnboarding();
+    fireEvent.click(await screen.findByRole('button', { name: /See my portrait/ }));
+    expect(
+      await screen.findByRole('dialog', { name: /Ready for your portrait/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Generate my portrait/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Keep adding' })).toBeInTheDocument();
+  });
+
+  it('can revisit the core "essentials" sections from the grid (not just the invited ones)', async () => {
+    const s = state();
+    s.session.sections = s.session.sections.map((sec) =>
+      sec.id === 'basics' ? { ...sec, status: 'complete' as const } : sec,
+    );
+    installMockBridge({ intakeGetState: () => Promise.resolve(s) });
+    renderOnboarding();
+    // The "The essentials" grid lists the core section so it can be reopened like the invited ones.
+    expect(await screen.findByRole('heading', { name: 'The essentials' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /The basics/ }));
+    expect(await screen.findByText('What should I call you?')).toBeInTheDocument();
   });
 
   it('always shows the crisis footer and the not-medical line', async () => {

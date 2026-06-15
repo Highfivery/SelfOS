@@ -26,6 +26,11 @@ export function profileLines(person: Person, audience: 'self' | 'others'): strin
   add('appearanceDescription', 'Appearance', person.appearanceDescription);
   add('ethnicity', 'Ethnicity', person.ethnicity);
   add('occupation', 'Occupation', person.occupation);
+  add('relationshipStatus', 'Relationship status', person.relationshipStatus);
+  add('parentalStatus', 'Children', person.parentalStatus);
+  add('livingSituation', 'Living situation', person.livingSituation);
+  add('sexualOrientation', 'Sexual orientation', person.sexualOrientation);
+  add('relationshipStyle', 'Relationship style', person.relationshipStyle);
   addList('interests', 'Interests', person.interests);
   add('location', 'Location', person.location);
   add('goals', 'Goals', person.goals);

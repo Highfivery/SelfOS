@@ -187,8 +187,12 @@ const bridge: SelfosBridge = {
     };
   },
   intakeSkipSection: (input) => ipcRenderer.invoke(IpcChannels.intakeSkipSection, input),
+  intakeSubmitForm: (input) => ipcRenderer.invoke(IpcChannels.intakeSubmitForm, input),
   intakeAcknowledgeAdult: () => ipcRenderer.invoke(IpcChannels.intakeAcknowledgeAdult),
   intakeSynthesize: (input) => ipcRenderer.invoke(IpcChannels.intakeSynthesize, input),
+  profileSuggestions: () => ipcRenderer.invoke(IpcChannels.profileSuggestions),
+  profileAcceptSuggestion: (id) => ipcRenderer.invoke(IpcChannels.profileAcceptSuggestion, id),
+  profileDismissSuggestion: (id) => ipcRenderer.invoke(IpcChannels.profileDismissSuggestion, id),
   getSidebarCollapsed: () => ipcRenderer.invoke(IpcChannels.getSidebarCollapsed),
   setSidebarCollapsed: (collapsed) =>
     ipcRenderer.invoke(IpcChannels.setSidebarCollapsed, collapsed),

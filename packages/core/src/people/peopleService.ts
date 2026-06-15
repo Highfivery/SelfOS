@@ -75,6 +75,18 @@ export async function upsertPerson(
     ...(input.importantDates !== undefined ? { importantDates: input.importantDates } : {}),
     ...(input.healthNotes !== undefined ? { healthNotes: input.healthNotes } : {}),
     ...(input.faith !== undefined ? { faith: input.faith } : {}),
+    // Promoted intake life-facts (18 §14.6) — additive-optional, same conditional-spread pattern.
+    ...(input.relationshipStatus !== undefined
+      ? { relationshipStatus: input.relationshipStatus }
+      : {}),
+    ...(input.parentalStatus !== undefined ? { parentalStatus: input.parentalStatus } : {}),
+    ...(input.livingSituation !== undefined ? { livingSituation: input.livingSituation } : {}),
+    ...(input.sexualOrientation !== undefined
+      ? { sexualOrientation: input.sexualOrientation }
+      : {}),
+    ...(input.relationshipStyle !== undefined
+      ? { relationshipStyle: input.relationshipStyle }
+      : {}),
     // The per-field lock-set (15-shareability §4.1) — drop it entirely when empty so a person with nothing
     // locked stays clean (matches the other conditional spreads under exactOptionalPropertyTypes).
     ...(input.privateFields && input.privateFields.length > 0

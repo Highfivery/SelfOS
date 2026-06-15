@@ -103,6 +103,14 @@ export const PersonFieldKeySchema = z.enum([
   'notes',
   'healthNotes',
   'faith',
+  // Promoted from the onboarding intake (18 §14.6) — structured life facts the coach can use directly.
+  // relationshipStatus/parentalStatus/livingSituation default shared; sexualOrientation/relationshipStyle
+  // default private (the intake adds them to `privateFields` when filled).
+  'relationshipStatus',
+  'parentalStatus',
+  'livingSituation',
+  'sexualOrientation',
+  'relationshipStyle',
 ]);
 export type PersonFieldKey = z.infer<typeof PersonFieldKeySchema>;
 /** Every controllable key, in editor/context order (derived from the schema so the two can't drift). */
@@ -147,6 +155,14 @@ export const PersonSchema = z.object({
   // (15-shareability §3.1). Still never sent to the image provider (only the depiction subset is, 13 §8.2).
   healthNotes: z.string().optional(),
   faith: z.string().optional(),
+  // Promoted intake life-facts (18 §14.6) — additive-optional, no schemaVersion bump (the email/phone
+  // precedent). The first three default shared; the last two are added to `privateFields` when the intake
+  // fills them. None feed `buildDepictionNote` (never an image input).
+  relationshipStatus: z.string().optional(),
+  parentalStatus: z.string().optional(),
+  livingSituation: z.string().optional(),
+  sexualOrientation: z.string().optional(),
+  relationshipStyle: z.string().optional(),
   // The controllable field keys the owner has locked to own-context-only (15-shareability §4.1). Absent or
   // not listed ⇒ shareable (the default). Storing only the opt-OUTs keeps it minimal + additive-optional.
   privateFields: z.array(PersonFieldKeySchema).optional(),
@@ -260,6 +276,12 @@ export const PersonInputSchema = z.object({
     .optional(),
   healthNotes: z.string().optional(),
   faith: z.string().optional(),
+  // Promoted intake life-facts (18 §14.6) — mirror PersonSchema.
+  relationshipStatus: z.string().optional(),
+  parentalStatus: z.string().optional(),
+  livingSituation: z.string().optional(),
+  sexualOrientation: z.string().optional(),
+  relationshipStyle: z.string().optional(),
   // Per-field shareability locks (15-shareability §4.1) — the keys the owner locked to own-context-only.
   privateFields: z.array(PersonFieldKeySchema).optional(),
 });
@@ -402,6 +424,45 @@ export const InsightSchema = z.object({
 export type Insight = z.infer<typeof InsightSchema>;
 
 /**
+ * A profile-update suggestion (18-personal-onboarding §15) — the self-maintaining-profile signal. Produced as
+ * a by-product of the session/dream/questionnaire analysis passes that already run (no extra AI spend): when
+ * the analysis sees a fact that contradicts or extends a known profile/intake answer, it proposes an update.
+ * It is a **proposal, never an edit** — the field/answer changes only when the person accepts. Stored
+ * per-subject at `people/<id>/profile-suggestions/<id>.enc`. A `restricted`-derived suggestion (intimacy/
+ * trauma) is itself restricted (own-context-only, owner-visible — §8.4).
+ */
+export const ProfileSuggestionStatusSchema = z.enum(['pending', 'accepted', 'dismissed']);
+export type ProfileSuggestionStatus = z.infer<typeof ProfileSuggestionStatusSchema>;
+
+export const ProfileUpdateSuggestionSchema = z.object({
+  id: z.string().min(1),
+  schemaVersion: z.number().int().positive(),
+  subjectPersonId: z.string().min(1),
+  kind: z.enum(['field', 'intakeSection']),
+  field: PersonFieldKeySchema.optional(), // set for kind 'field'
+  sectionId: z.string().optional(), // set for kind 'intakeSection'
+  observed: z.string().min(1), // what the recent activity implies the new value is
+  current: z.string().optional(), // the known value it would replace, if any
+  rationale: z.string(), // a short, human reason ("a recent session mentioned a new job")
+  sourceInsightId: z.string().min(1),
+  sourceKind: z.enum(['session', 'dream', 'questionnaire', 'intake']),
+  restricted: z.boolean(),
+  status: ProfileSuggestionStatusSchema,
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type ProfileUpdateSuggestion = z.infer<typeof ProfileUpdateSuggestionSchema>;
+
+/** The raw shape an analysis pass emits (model output) — validated before it's trusted (§15.6). */
+export const RawProfileSuggestionSchema = z.object({
+  field: z.string(),
+  observed: z.string().min(1),
+  current: z.string().optional(),
+  rationale: z.string().default(''),
+});
+export type RawProfileSuggestion = z.infer<typeof RawProfileSuggestionSchema>;
+
+/**
  * Personal onboarding — the "getting to know you" intake (18-personal-onboarding §4.1). An AI-guided,
  * resumable self-interview across sections, stored encrypted under the person at
  * `people/<id>/intake/session.enc` (never in the Sessions list). The interview transcript per section lives
@@ -417,14 +478,28 @@ export const IntakeSectionStatusSchema = z.enum([
 ]);
 export type IntakeSectionStatus = z.infer<typeof IntakeSectionStatusSchema>;
 
+/**
+ * A structured intake answer value (18 §14). Widened from a bare string (the chat-era direct fills) to cover
+ * the form answer types reused from the questionnaire engine: single-choice/short/long text (string),
+ * multi-select/ranking (string[]), rating/slider (number), yes/no (boolean). Additive — existing string
+ * answers still parse, so no schemaVersion bump.
+ */
+export const IntakeAnswerValueSchema = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.array(z.string()),
+]);
+export type IntakeAnswerValue = z.infer<typeof IntakeAnswerValueSchema>;
+
 export const IntakeSectionSchema = z.object({
   id: z.string().min(1),
   status: IntakeSectionStatusSchema,
-  // heavy/intimate sections → break-glass-only in owner views (§8.4). Mirrors the catalog (the catalog is
-  // the source of truth; this is stamped at section creation so a read knows it without the catalog).
+  // heavy/intimate sections → restricted in owner views (§8.4). Mirrors the catalog (the catalog is the
+  // source of truth; this is stamped at section creation so a read knows it without the catalog).
   restricted: z.boolean(),
-  messages: z.array(ChatMessageSchema), // the adaptive interview transcript (excludes the static opener)
-  answers: z.record(z.string(), z.string()), // direct/structured answers captured 1:1 (field key → value)
+  messages: z.array(ChatMessageSchema), // the chat transcript (chat sections + go-deeper); excludes the opener
+  answers: z.record(z.string(), IntakeAnswerValueSchema), // structured form answers, keyed by question id
   reflection: z.string().optional(), // the light per-section member-facing reflection (§11.3)
 });
 export type IntakeSection = z.infer<typeof IntakeSectionSchema>;
@@ -440,6 +515,9 @@ export const IntakeSessionSchema = z.object({
   sections: z.array(IntakeSectionSchema),
   insightId: z.string().optional(), // the portrait Insight (set once synthesized)
   portrait: z.string().optional(), // the member-facing closing portrait summary (set at final synthesis)
+  // Per-answer signature (sectionId.questionId → cheap hash) snapshotted at the LAST portrait synthesis, so a
+  // deterministic "your portrait is X% out of date" nudge can detect added/edited/cleared answers since (§15).
+  portraitAnswerSig: z.record(z.string(), z.number()).optional(),
   startedAt: z.string(),
   updatedAt: z.string(),
   completedAt: z.string().optional(),
@@ -482,6 +560,8 @@ export const QuestionSchema = z.object({
   prompt: z.string().min(1),
   help: z.string().optional(),
   required: z.boolean(),
+  placeholder: z.string().optional(), // example/hint text for free-text answers (additive)
+  group: z.string().optional(), // optional accordion group heading for long forms (18 §14.3, additive)
   media: z
     .object({ imagePath: z.string().min(1), alt: z.string(), mime: z.string().min(1) })
     .optional(), // author-attached image (encrypted; ZK on relay). `mime` builds the display data URL.
@@ -1141,8 +1221,15 @@ export interface IntakeSectionMeta {
   blurb: string;
   restricted: boolean;
   adult: boolean;
-  opener: string; // the static opening question (no spend — works offline like guided openers)
+  // Whether this section gates first-run (`core`) or is offered anytime afterward (`invited`), and whether it's
+  // a structured `form` or an AI `chat` (18 §14.2/§14.3). The renderer renders forms from `questions`.
+  tier: 'core' | 'invited';
+  mode: 'form' | 'chat';
+  opener: string; // chat: the static opening question (no spend). form: a short intro line.
   contentNote?: string; // a kind heads-up shown before a heavy/intimate section (§3.3)
+  // Form sections only: the renderer-facing questions (reused questionnaire `Question` shape, with branching).
+  // The host-side field/restricted mapping is NOT sent to the renderer (it's applied in `submitSectionForm`).
+  questions?: Question[];
 }
 
 /**

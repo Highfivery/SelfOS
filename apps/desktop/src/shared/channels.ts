@@ -33,6 +33,7 @@ import type {
   InviteSummary,
   Insight,
   InsightFact,
+  IntakeAnswerValue,
   IntakeSection,
   IntakeSectionMeta,
   IntakeSession,
@@ -40,6 +41,7 @@ import type {
   IntakeSynthesisResult,
   IntakeTurnResult,
   Person,
+  ProfileUpdateSuggestion,
   SendAnswer,
   SendResult,
   PersonInput,
@@ -203,8 +205,12 @@ export const IpcChannels = {
   intakeRunTurn: 'intake:runTurn',
   intakeChunk: 'intake:chunk', // main → renderer event
   intakeSkipSection: 'intake:skipSection',
+  intakeSubmitForm: 'intake:submitForm',
   intakeAcknowledgeAdult: 'intake:acknowledgeAdult',
   intakeSynthesize: 'intake:synthesize',
+  profileSuggestions: 'profile:suggestions',
+  profileAcceptSuggestion: 'profile:acceptSuggestion',
+  profileDismissSuggestion: 'profile:dismissSuggestion',
   getSidebarCollapsed: 'ui:getSidebarCollapsed',
   setSidebarCollapsed: 'ui:setSidebarCollapsed',
 } as const;
@@ -676,6 +682,15 @@ export interface SelfosBridge {
   onIntakeChunk(listener: (delta: string) => void): () => void;
   /** Skip a whole intake section (never blocks completion). Requires `intake.own`. */
   intakeSkipSection(input: { sectionId: string }): Promise<IntakeState>;
+  /**
+   * Submit a structured **form** section's answers (18 §14.6): fills the mapped owner-only `Person` fields,
+   * persists the answers, and marks the section complete. No AI spend. Adult sections need the 18+ ack
+   * (enforced in main). Requires `intake.own`; active-person-scoped.
+   */
+  intakeSubmitForm(input: {
+    sectionId: string;
+    answers: Record<string, IntakeAnswerValue>;
+  }): Promise<IntakeState>;
   /** The one-time 18+ acknowledgement for the intimacy block (shared with guided sessions). Requires `intake.own`. */
   intakeAcknowledgeAdult(): Promise<IntakeState>;
   /**
@@ -683,6 +698,13 @@ export interface SelfosBridge {
    * portrait (→ the portrait Insight + inferred field fills + completion). Requires `intake.own`.
    */
   intakeSynthesize(input: { sectionId?: string }): Promise<IntakeSynthesisResult>;
+  // --- Self-maintaining profile (18-personal-onboarding §15) — own-scoped, gated `intake.own` ---
+  /** The active person's pending profile-update suggestions (stale answers noticed by analysis, §15). */
+  profileSuggestions(): Promise<ProfileUpdateSuggestion[]>;
+  /** Accept a suggestion → write the profile field; returns the remaining pending suggestions. */
+  profileAcceptSuggestion(id: string): Promise<ProfileUpdateSuggestion[]>;
+  /** Dismiss a suggestion (durable, no re-nag); returns the remaining pending suggestions. */
+  profileDismissSuggestion(id: string): Promise<ProfileUpdateSuggestion[]>;
   /** Whether the desktop sidebar is collapsed to an icon rail (device-local). */
   getSidebarCollapsed(): Promise<boolean>;
   /** Persist the sidebar collapsed/expanded state (device-local). */
@@ -722,6 +744,7 @@ export type {
   InboxItem,
   Insight,
   InsightFact,
+  IntakeAnswerValue,
   IntakeSection,
   IntakeSectionMeta,
   IntakeSession,
@@ -729,6 +752,7 @@ export type {
   IntakeSynthesisResult,
   IntakeTurnResult,
   InviteSummary,
+  ProfileUpdateSuggestion,
   Person,
   PersonInput,
   PrivacyMode,

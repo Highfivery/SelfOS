@@ -3,7 +3,7 @@ import type { ClaudeClient, FileSystem } from '../host';
 import { uuid } from '../id';
 import {
   IntakeSessionSchema,
-  PERSON_FIELD_KEYS,
+  type IntakeAnswerValue,
   type Insight,
   type IntakeSession,
   type IntakeSection,
@@ -19,22 +19,25 @@ import { buildContext, getPerson, savePerson } from '../people';
 import { PERSONA, SAFETY } from '../conversations/promptBuilder';
 import { checkBudget, costOf, recordUsage } from '../usage';
 import { getInsight, saveInsight } from '../insights';
+import { isAnswered } from '../questionnaires/answering';
 import {
   INTAKE_CATALOG,
   buildInterviewerAddendum,
   getIntakeSection,
-  type IntakeDirectField,
+  type IntakeFormQuestion,
 } from './intakeCatalog';
+import { intakeAnswerHashes } from './portraitFreshness';
 
 /**
- * Personal-onboarding intake service (18-personal-onboarding §5). An AI-guided, resumable self-interview:
- * `runIntakeTurn` reuses `05`'s streaming + `06`'s metering (`intake.interview`) but stores the transcript
- * UNDER the person (never in Sessions); direct answers fill the owner-only `Person` profile mid-interview
- * via an embedded `[[SELFOS:FIELD:…]]` marker. `synthesizeIntake` distils a section (a light reflection) or
- * the whole intake (the portrait `Insight`, `source: 'intake'`, + inferred field fills) — metering
- * `intake.synthesize` before parse (`09` pattern). Sensitive direct fields lock to own-context-only; facts
- * from `restricted` sections are flagged so they show only to the Owner (`intake.readRestricted`), redacted
- * for everyone else (§8.4). The API key never leaves the host.
+ * Personal-onboarding intake service (18-personal-onboarding §5/§14). A hybrid, resumable self-onboarding:
+ * `submitSectionForm` handles structured **form** sections (instant, NO AI) — it fills the mapped owner-only
+ * `Person` fields (sensitive ones locked own-context-only) and persists the answers; `runIntakeTurn` handles
+ * **chat** sections + go-deeper, reusing `05`'s streaming + `06`'s metering (`intake.interview`) and storing
+ * the transcript UNDER the person (never in Sessions). `synthesizeIntake` distils a section (a light
+ * reflection) or the whole intake (the portrait `Insight`, `source: 'intake'`, weaving in BOTH the chat
+ * transcripts and the form answers) — metering `intake.synthesize` before parse (`09` pattern). Facts from
+ * `restricted` sections are flagged from the trusted catalog (never the model) so they show only to the Owner
+ * (`intake.readRestricted`), redacted for everyone else (§8.4). The API key never leaves the host.
  */
 
 const SCHEMA_VERSION = 1;
@@ -113,57 +116,54 @@ export async function ensureIntakeSession(
   return reconciled;
 }
 
-// --- Field markers (direct auto-fill) ---
+// --- Streaming markers (chat) ---
 
 const FIELD_MARKER = /\[\[SELFOS:FIELD:([a-zA-Z]+)=([^\]]*)\]\]/g;
-const FIELD_KEY_SET = new Set<string>(PERSON_FIELD_KEYS);
 
 /**
- * Strip the hidden `[[SELFOS:FIELD:…]]` markers (+ any now-empty trailing lines) from a reply. Also strips a
- * trailing UNCLOSED marker fragment (e.g. `[[SELFOS:FI`) so a marker arriving in stream chunks never flashes
- * in the live view before its closing `]]` lands (the renderer calls this on the streaming buffer).
+ * Strip any hidden `[[SELFOS:FIELD:…]]` markers (+ now-empty trailing lines / an unclosed trailing fragment)
+ * from a reply. The redesign fills fields from forms (§14.6), so chat replies no longer carry markers — but the
+ * renderer still calls this on the streaming buffer, so it stays a safe no-op-when-clean strip.
  */
 export function stripIntakeFieldMarkers(text: string): string {
-  return (
-    text
-      .replace(FIELD_MARKER, '')
-      // A trailing, not-yet-closed marker fragment (the prefix has landed, the value is still streaming).
-      .replace(/\[\[SELFOS:FIELD:[^\]]*$/, '')
-      .replace(/[ \t]+$/gm, '')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim()
-  );
+  return text
+    .replace(FIELD_MARKER, '')
+    .replace(/\[\[SELFOS:FIELD:[^\]]*$/, '')
+    .replace(/[ \t]+$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
-/** Parse `key → value` from the markers in a reply, keeping only known `Person` field keys. */
-function parseFieldMarkers(text: string): Map<string, string> {
-  const out = new Map<string, string>();
-  for (const match of text.matchAll(FIELD_MARKER)) {
-    const rawKey = match[1];
-    const rawValue = (match[2] ?? '').trim();
-    if (rawKey && rawValue && FIELD_KEY_SET.has(rawKey)) out.set(rawKey, rawValue);
+// --- Form sections (structured answers → profile + intake, §14.6) ---
+
+/** Coerce an answer to a display string (single/text passthrough; multi joined; bool/number stringified). */
+function answerToString(value: IntakeAnswerValue | undefined): string {
+  if (value === undefined) return '';
+  if (Array.isArray(value)) {
+    return value
+      .map((s) => String(s).trim())
+      .filter(Boolean)
+      .join(', ');
   }
-  return out;
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  return String(value).trim();
 }
 
-/** Apply one direct field to a person object (mutating a working copy); returns whether it changed. */
-function applyField(person: Person, field: IntakeDirectField, value: string): boolean {
-  const trimmed = value.trim();
-  if (!trimmed) return false;
-  const key = field.key;
-  // List fields (interests/values/languages) are captured comma-separated.
-  if (field.list) {
-    const items = trimmed
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
+/** Apply one form question's answer to a working `Person` copy; returns whether it changed. */
+function applyFormField(person: Person, m: IntakeFormQuestion, value: IntakeAnswerValue): boolean {
+  const key = m.field;
+  if (!key) return false;
+  if (m.list) {
+    const items = Array.isArray(value) ? value.map((s) => String(s).trim()).filter(Boolean) : [];
     if (items.length === 0) return false;
     (person as Record<string, unknown>)[key] = items;
   } else {
-    (person as Record<string, unknown>)[key] = trimmed;
+    const str = answerToString(value);
+    if (!str) return false;
+    (person as Record<string, unknown>)[key] = str;
   }
-  // Sensitive direct fields (e.g. healthNotes) lock to own-context-only (§8.3).
-  if (field.private) {
+  // Sensitive promoted fields (e.g. sexualOrientation/relationshipStyle/healthNotes) lock own-context-only.
+  if (m.private) {
     const locked = new Set(person.privateFields ?? []);
     locked.add(key);
     person.privateFields = [...locked];
@@ -172,32 +172,52 @@ function applyField(person: Person, field: IntakeDirectField, value: string): bo
 }
 
 /**
- * Apply the section's direct field markers to the owner-only `Person` profile (§3.4). Only keys declared as
- * `directFields` for THIS section are honored (the AI can't fill arbitrary fields); sensitive ones lock to
- * private. Returns the list of field keys actually filled. Reads + writes the person once.
+ * Submit a structured **form** section (§14.6): keep only answers for THIS section's catalog questions that
+ * are actually answered (the trust boundary — the renderer can't fill arbitrary fields), persist them under
+ * the person, fill any mapped owner-only `Person` fields (sensitive ones locked own-context-only), and mark
+ * the section complete. **No AI call** — forms are instant + free; the portrait synthesis later weaves the
+ * answers in (restricted ones → restricted facts, §14.8). A chat section is ignored.
  */
-async function applyDirectFields(
+export async function submitSectionForm(
   fs: FileSystem,
   key: Uint8Array,
   personId: string,
   sectionId: string,
-  markers: Map<string, string>,
+  answers: Record<string, IntakeAnswerValue>,
   now: Date,
-): Promise<string[]> {
+): Promise<IntakeSession> {
   const def = getIntakeSection(sectionId);
-  if (!def || def.directFields.length === 0 || markers.size === 0) return [];
-  const allowed = new Map(def.directFields.map((f) => [f.key as string, f]));
-  const person = await getPerson(fs, key, personId);
-  if (!person) return [];
-  const filled: string[] = [];
-  for (const [k, v] of markers) {
-    const field = allowed.get(k);
-    if (!field) continue;
-    if (applyField(person, field, v)) filled.push(k);
+  const session = await ensureIntakeSession(fs, key, personId, now);
+  const section = session.sections.find((s) => s.id === sectionId);
+  if (!def || !def.questions || !section) return session; // not a form section
+  const at = now.toISOString();
+
+  const byId = new Map(def.questions.map((m) => [m.q.id, m]));
+  const clean: Record<string, IntakeAnswerValue> = {};
+  for (const [qid, value] of Object.entries(answers)) {
+    const m = byId.get(qid);
+    if (!m) continue; // ignore anything not in this section's catalog
+    if (!isAnswered(m.q, value)) continue; // skip blanks / unanswered
+    clean[qid] = value;
   }
-  if (filled.length === 0) return [];
-  await savePerson(fs, key, { ...person, updatedAt: now.toISOString() });
-  return filled;
+
+  const person = await getPerson(fs, key, personId);
+  if (person) {
+    let changed = false;
+    for (const m of def.questions) {
+      if (!m.field) continue;
+      const value = clean[m.q.id];
+      if (value === undefined) continue;
+      if (applyFormField(person, m, value)) changed = true;
+    }
+    if (changed) await savePerson(fs, key, { ...person, updatedAt: at });
+  }
+
+  section.answers = { ...section.answers, ...clean };
+  if (section.status !== 'skipped') section.status = 'complete';
+  session.updatedAt = at;
+  await writeEncryptedJson(fs, intakePath(personId), session, key);
+  return session;
 }
 
 // --- Budget helper ---
@@ -325,15 +345,7 @@ export async function runIntakeTurn(deps: IntakeTurnDeps): Promise<IntakeTurnRes
   const usage = buildUsage('intake.interview', model, session.id, personId, at, result.usage);
   await recordUsage(fs, key, usage);
 
-  // Direct field markers → the owner-only profile (sensitive ones locked); strip from the saved/shown text.
-  const filledFields = await applyDirectFields(
-    fs,
-    key,
-    personId,
-    sectionId,
-    parseFieldMarkers(result.text),
-    now,
-  );
+  // Chat replies no longer carry field markers (forms fill fields, §14.6); strip defensively anyway.
   const clean = stripIntakeFieldMarkers(result.text);
 
   section.messages.push({ role: 'user', content: userText, ts: at });
@@ -342,12 +354,7 @@ export async function runIntakeTurn(deps: IntakeTurnDeps): Promise<IntakeTurnRes
   session.updatedAt = at;
   await writeEncryptedJson(fs, intakePath(personId), session, key);
 
-  return {
-    ok: true,
-    session,
-    usage,
-    ...(filledFields.length > 0 ? { filledFields } : {}),
-  };
+  return { ok: true, session, usage };
 }
 
 // --- Skip ---
@@ -416,14 +423,23 @@ said; do not invent. This is reflective, not clinical. Respond with ONLY a singl
 
 const PORTRAIT_INSTRUCTION = `Now write the closing portrait of this person from everything they shared \
 across the whole intake. Be warm, specific, and faithful — never invent. This is reflective self-knowledge, \
-not a clinical assessment. Respond with ONLY a single JSON object (no markdown fences) with these keys:
-- "portrait": a warm, member-facing 1-2 paragraph "here's what I've come to understand about you" summary (string)
-- "facts": structured memory facts to remember about them (array of {"text": short fact, "section": the section id it came from})
+not a clinical assessment.
+
+This portrait is the AI's lasting memory of this person — it personalizes their coaching, dream analysis, and \
+everything else across the app — so be COMPREHENSIVE. Capture the FULL picture, not just highlights.
+
+Respond with ONLY a single JSON object (no markdown fences) with these keys:
+- "portrait": a warm, member-facing "here's what I've come to understand about you" summary, 3-5 rich paragraphs (string)
+- "facts": a THOROUGH set of structured memory facts — cover EVERY area they shared (identity & basics, life now, \
+values, goals & what they want, work & money, health & wellbeing, relationships, family & upbringing, their story, \
+joy & play, what weighs on them, and intimacy if shared). Capture every concrete, specific detail worth \
+remembering — names, preferences, patterns, goals, struggles, history — not just a handful. Prefer many precise \
+facts over a few vague ones. Each: {"text": a short specific fact, "section": the section id it came from} (array)
 - "metrics": optional normalized signals for trends, e.g. {"valence": -1.0..1.0} (object)
 - "inferred": optional fields to fill from the whole picture: {"communicationStyle": string, "values": [..], "goals": string, "faith": string}
 - "crisisFlag": true ONLY if self-harm, suicide, or acute crisis was disclosed (boolean)`;
 
-/** All non-empty, worked-through section transcripts as model messages for synthesis. */
+/** All non-empty `chat` section transcripts as model messages for synthesis (labeled with the section id). */
 function transcriptMessages(
   session: IntakeSession,
 ): { role: 'user' | 'assistant'; content: string }[] {
@@ -431,10 +447,39 @@ function transcriptMessages(
   for (const def of INTAKE_CATALOG) {
     const section = session.sections.find((s) => s.id === def.id);
     if (!section || section.messages.length === 0) continue;
-    out.push({ role: 'user', content: `--- Section: ${def.title} ---` });
+    out.push({ role: 'user', content: `--- Section: ${def.title} (id: ${def.id}) ---` });
     for (const m of section.messages) out.push({ role: m.role, content: m.content });
   }
   return out;
+}
+
+/** All `form` section structured answers as labeled model messages, so synthesis weaves them into the
+ * portrait + facts (a restricted section's answers → restricted facts, §14.8). */
+function formAnswersMessages(session: IntakeSession): { role: 'user'; content: string }[] {
+  const out: { role: 'user'; content: string }[] = [];
+  for (const def of INTAKE_CATALOG) {
+    if (!def.questions) continue;
+    const section = session.sections.find((s) => s.id === def.id);
+    if (!section || Object.keys(section.answers).length === 0) continue;
+    const lines = [`--- Section: ${def.title} (id: ${def.id}) ---`];
+    for (const m of def.questions) {
+      const str = answerToString(section.answers[m.q.id]);
+      if (str) lines.push(`${m.q.prompt}: ${str}`);
+    }
+    if (lines.length > 1) out.push({ role: 'user', content: lines.join('\n') });
+  }
+  return out;
+}
+
+/** Whether a section ref returned by the model (id or title) belongs to a `restricted` section (§8.4). The
+ * `restricted` flag is decided here from the trusted catalog — never the model — so an intimacy/trauma fact is
+ * always caught even if the model echoes the title instead of the id. */
+function sectionRefRestricted(ref: string | undefined): boolean {
+  if (!ref) return false;
+  const norm = ref.trim().toLowerCase();
+  return INTAKE_CATALOG.some(
+    (d) => d.restricted && (d.id.toLowerCase() === norm || d.title.toLowerCase() === norm),
+  );
 }
 
 /**
@@ -575,8 +620,13 @@ async function synthesizePortrait(deps: IntakeSynthesizeDeps): Promise<IntakeSyn
         apiKey,
         model,
         system,
-        messages: [...transcriptMessages(session), { role: 'user', content: PORTRAIT_INSTRUCTION }],
-        maxTokens: 2000,
+        messages: [
+          ...transcriptMessages(session),
+          ...formAnswersMessages(session),
+          { role: 'user', content: PORTRAIT_INSTRUCTION },
+        ],
+        // A comprehensive portrait + a thorough fact set across ~12 sections needs room (§15).
+        maxTokens: 8000,
       },
       () => {},
     );
@@ -613,7 +663,7 @@ async function synthesizePortrait(deps: IntakeSynthesizeDeps): Promise<IntakeSyn
     const text = f.text.trim();
     if (!text) continue;
     // The `restricted` flag is decided server-side from the (trusted) section catalog — never the AI.
-    const restricted = f.section ? getIntakeSection(f.section)?.restricted === true : false;
+    const restricted = sectionRefRestricted(f.section);
     const carried = priorByText.get(text);
     facts.push({
       id: uuid(),
@@ -656,6 +706,8 @@ async function synthesizePortrait(deps: IntakeSynthesizeDeps): Promise<IntakeSyn
   session.completedAt = at;
   session.insightId = insightId;
   session.portrait = draft.portrait;
+  // Snapshot the answers this portrait was built from, so the app can later show "X% out of date" (§15).
+  session.portraitAnswerSig = intakeAnswerHashes(session);
   session.updatedAt = at;
   await writeEncryptedJson(fs, intakePath(personId), session, key);
 

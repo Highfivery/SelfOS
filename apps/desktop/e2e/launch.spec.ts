@@ -3308,21 +3308,20 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
     await w.getByRole('link', { name: 'Home' }).click();
     await w.getByRole('button', { name: /Start onboarding|Continue onboarding/ }).click();
 
-    // The basics section is active; a direct answer fills the owner-only profile via the field marker.
-    await expect(w.getByText(/What should I call you/)).toBeVisible();
-    await w.getByLabel('Message').fill('I’m Sam and I work as a nurse.');
-    await w.getByRole('button', { name: 'Send' }).click();
-    await expect(w.getByText('Thank you for sharing that with me.')).toBeVisible();
-    await w.getByRole('button', { name: /That.s enough on this/ }).click();
+    // The basics section is a structured FORM; a form answer fills the owner-only profile (no AI).
+    await expect(w.getByRole('heading', { name: 'The basics' })).toBeVisible();
+    await w.getByLabel('What do you do for work?').fill('nurse');
+    await w.getByRole('button', { name: /Continue/ }).click();
 
-    // The intimacy block is gated behind the shared 18+ acknowledgement (§3.3) — reached next; skip it.
+    // Core done → the invited grid offers the deeper sections. Opening intimacy shows the shared 18+ gate.
+    await w.getByRole('button', { name: /Intimacy & sexuality/ }).click();
     await expect(w.getByRole('button', { name: /18 or older/ })).toBeVisible();
     await w.getByRole('button', { name: 'Skip this section' }).click();
 
-    // Everything is now done → synthesize the portrait.
-    const cta = w.getByRole('button', { name: /See my portrait/ });
-    await expect(cta).toBeVisible();
-    await cta.click();
+    // Generate the portrait → a confirm modal (encourages adding more) → it releases the gate (§14.2/§15)
+    // and feeds the person's own context.
+    await w.getByRole('button', { name: /See my portrait/ }).click();
+    await w.getByRole('button', { name: 'Generate my portrait' }).click();
     await expect(w.getByText(/come to understand about you/)).toBeVisible();
 
     // Decrypt the vault: the direct answer filled the owner-only profile, and the portrait + its restricted
@@ -3384,9 +3383,15 @@ test('onboarding: resumes mid-intake to the saved transcript (18 §3.1)', async 
         schemaVersion: 1,
         personId: 'owner-1',
         status: 'inProgress',
+        // Core sections done so the overview shows the invited grid; a form section ('family') has an
+        // in-progress "Tell me more" go-deeper transcript that should resume on open.
         sections: [
+          { id: 'basics', status: 'complete', restricted: false, messages: [], answers: {} },
+          { id: 'life-now', status: 'skipped', restricted: false, messages: [], answers: {} },
+          { id: 'values', status: 'skipped', restricted: false, messages: [], answers: {} },
+          { id: 'want', status: 'skipped', restricted: false, messages: [], answers: {} },
           {
-            id: 'basics',
+            id: 'family',
             status: 'inProgress',
             restricted: false,
             messages: [
@@ -3406,9 +3411,89 @@ test('onboarding: resumes mid-intake to the saved transcript (18 §3.1)', async 
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: /Onboarding/ }).click();
-    // The saved transcript resumes exactly where it left off.
+    // Open the in-progress section from the "Go deeper" grid → its go-deeper transcript auto-expands.
+    await w.getByRole('button', { name: /Family & upbringing/ }).click();
     await expect(w.getByText('My name is Sam.')).toBeVisible();
     await expect(w.getByText('Lovely to meet you, Sam.')).toBeVisible();
+    // Reloading returns to the same section (device-local), not back to the core flow: reopening
+    // Onboarding lands directly on Family & upbringing (its transcript) without re-clicking the grid card.
+    await w.reload();
+    await w.getByRole('link', { name: /Onboarding/ }).click();
+    await expect(w.getByText('My name is Sam.')).toBeVisible();
+    await expect(w.getByRole('button', { name: /^Back$/ })).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+// Guard: a grouped form section must render EVERY question to the bottom (no group collapsed by default) and
+// always show the section-level "Tell me more" go-deeper above Continue/Skip. This is the regression that kept
+// recurring — a collapsed accordion silently hid the last group's questions at the end of the section.
+test('onboarding: a grouped form section shows every group + the go-deeper (nothing collapsed)', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  {
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('grouped-form e2e: master key missing');
+    // Core resolved so the invited grid is reachable; Relationships (a grouped form) is the section under test.
+    await writeEncryptedJson(
+      fs,
+      'people/owner-1/intake/session.enc',
+      {
+        id: 'intake-grouped',
+        schemaVersion: 1,
+        personId: 'owner-1',
+        status: 'inProgress',
+        sections: ['basics', 'life-now', 'values', 'want', 'relationships'].map((id) => ({
+          id,
+          status: id === 'relationships' ? 'notStarted' : 'skipped',
+          restricted: false,
+          messages: [],
+          answers: {},
+        })),
+        startedAt: 'now',
+        updatedAt: 'now',
+      },
+      key,
+    );
+  }
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: /Onboarding/ }).click();
+    await w.getByRole('button', { name: /Relationships/ }).click();
+
+    // A question in the FIRST group is visible (open)...
+    await expect(w.getByText('Your relationship deal-breakers')).toBeVisible();
+    // ...AND a question in the LAST group ('Your circle') is visible too — i.e. no group is collapsed.
+    await expect(w.getByText('How lonely do you feel?')).toBeVisible();
+    // The section-level go-deeper sits at the end of every form section.
+    await expect(w.getByRole('button', { name: /Tell me more/ })).toBeVisible();
+    // Belt-and-braces: assert no accordion <details> is collapsed (every group open by default).
+    const collapsed = await w.evaluate(
+      () => [...document.querySelectorAll('details')].filter((d) => !d.open).length,
+    );
+    expect(collapsed).toBe(0);
+
+    // The "Go deeper" section navigator is ALSO present at the bottom of an opened section (not only on the
+    // core steps), so the person can jump STRAIGHT to another section without going Back first (18 §3.1).
+    await expect(w.getByRole('heading', { name: 'Go deeper' })).toBeVisible();
+    await w.getByRole('button', { name: /Health & wellbeing/ }).click();
+    await expect(w.getByText('How well do you sleep?')).toBeVisible();
+    // And from Health, the navigator is still there to jump onward (e.g. back to Relationships).
+    await expect(w.getByRole('heading', { name: 'Go deeper' })).toBeVisible();
+    await w.getByRole('button', { name: /Relationships/ }).click();
+    await expect(w.getByText('Your relationship deal-breakers')).toBeVisible();
+
+    // Progress is shown (a bar in the header + the Go deeper block) and each card carries an answered count.
+    await expect(w.getByText(/Your progress/).first()).toBeVisible();
+    await expect(w.getByText(/of \d+ answered/).first()).toBeVisible();
+    // Finishing a section marks it done in the grid: the card flips from "Add" to "Update".
+    await w.getByRole('button', { name: 'Continue', exact: true }).click();
+    await expect(w.getByText('Update', { exact: true }).first()).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -3485,15 +3570,19 @@ test('onboarding: a Member is hard-gated into onboarding until they finish (18 �
     // But it's not a dead-end — the crisis resources are always present.
     await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible();
 
-    // Finish: the one open section, then generate the portrait → the gate releases.
-    await expect(w.getByText(/What should I call you/)).toBeVisible();
-    await w.getByLabel('Message').fill('I’m Mara.');
-    await w.getByRole('button', { name: 'Send' }).click();
-    await expect(w.getByText('Thank you for sharing that with me.')).toBeVisible();
-    await w.getByRole('button', { name: /That.s enough on this/ }).click();
-    const cta = w.getByRole('button', { name: /See my portrait/ });
-    await expect(cta).toBeVisible();
-    await cta.click();
+    // And not a trap: the gated Member can switch accounts straight from the onboarding screen (not only
+    // the titlebar menu) — the in-screen "Switch person" opens the account switcher.
+    await w.getByRole('button', { name: 'Switch person' }).click();
+    await expect(w.getByRole('dialog', { name: /Who.s here/ })).toBeVisible();
+    await w.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(w.getByRole('dialog', { name: /Who.s here/ })).toHaveCount(0);
+
+    // Finish: complete the open core form, then generate the portrait → the gate releases.
+    await expect(w.getByRole('heading', { name: 'The basics' })).toBeVisible();
+    await w.getByLabel('What do you do for work?').fill('nurse');
+    await w.getByRole('button', { name: /Continue/ }).click();
+    await w.getByRole('button', { name: /See my portrait/ }).click();
+    await w.getByRole('button', { name: 'Generate my portrait' }).click();
 
     // Gate released: the portrait shows AND the app nav is now available.
     await expect(w.getByText(/come to understand about you/)).toBeVisible();

@@ -149,6 +149,57 @@
   outline-offset: 2px;
 }
 
+/* Single-/multi-choice options as toggle pills (18 §14.3) — content-sized, wrapping. */
+.pillGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.choicePill {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+/* The "Other" write-in text field shown when the Other pill is active. */
+.otherInput {
+  margin-top: var(--space-2);
+}
+
+/* Collapsible question groups (accordion) for long sections (18 §14.3). */
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.group {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.groupSummary {
+  cursor: pointer;
+  padding: var(--space-3);
+  font-weight: 500;
+  list-style: none;
+}
+
+.groupSummary::-webkit-details-marker {
+  display: none;
+}
+
+.group[open] .groupSummary {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.groupBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-3);
+}
+
 /* Radio / checkbox option lists for single- + multi-choice. */
 .optionList {
   display: flex;

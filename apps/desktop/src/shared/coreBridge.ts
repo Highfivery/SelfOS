@@ -48,7 +48,9 @@ import {
   type InboxCompatibilityView,
   type InboxItem,
   type Insight,
+  IntakeAnswerValueSchema,
   type IntakeState,
+  type ProfileUpdateSuggestion,
   type IntakeSynthesisResult,
   type IntakeTurnResult,
   type Question,
@@ -234,12 +236,15 @@ import {
 } from '@selfos/core/dreams';
 import {
   ensureIntakeSession,
+  getIntakeSection,
   intakeSectionMeta,
   redactRestrictedFacts,
   runIntakeTurn,
   skipIntakeSection,
+  submitSectionForm,
   synthesizeIntake,
 } from '@selfos/core/intake';
+import { acceptSuggestion, dismissSuggestion, listPendingSuggestions } from '@selfos/core/profile';
 import { fromBase64, toBase64 } from '@selfos/core/encoding';
 
 /**
@@ -499,6 +504,11 @@ const InsightIdSchema = z.object({ subjectPersonId: z.string().min(1), id: z.str
 const IntakeRunTurnSchema = z.object({ sectionId: z.string().min(1), userText: z.string() });
 const IntakeSectionIdSchema = z.object({ sectionId: z.string().min(1) });
 const IntakeSynthesizeSchema = z.object({ sectionId: z.string().min(1).optional() });
+const IntakeSubmitFormSchema = z.object({
+  sectionId: z.string().min(1),
+  answers: z.record(z.string(), IntakeAnswerValueSchema),
+});
+const ProfileSuggestionIdSchema = z.string().min(1);
 const AssignmentIdSchema = z.string().min(1);
 const QuestionnaireIdSchema = z.string().min(1);
 const AnswersSchema = z.object({
@@ -2344,6 +2354,23 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       await skipIntakeSection(ctx.fs, ctx.key, personId, sectionId, new Date());
       return buildIntakeState(ctx.fs, ctx.key, personId);
     },
+    intakeSubmitForm: async (input): Promise<IntakeState> => {
+      const { sectionId, answers } = IntakeSubmitFormSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'intake.own'))) {
+        return emptyIntakeState(personId ?? '');
+      }
+      // An adult-gated section (intimacy) requires the shared 18+ acknowledgement — enforced HERE (the bridge
+      // is the trust boundary, not the renderer). Without it, the submit is a no-op.
+      const def = getIntakeSection(sectionId);
+      if (def?.adult) {
+        const prefs = await getGuidancePrefs(ctx.fs, ctx.key, personId);
+        if (prefs.adultAcknowledged !== true) return buildIntakeState(ctx.fs, ctx.key, personId);
+      }
+      await submitSectionForm(ctx.fs, ctx.key, personId, sectionId, answers, new Date());
+      return buildIntakeState(ctx.fs, ctx.key, personId);
+    },
     intakeAcknowledgeAdult: async (): Promise<IntakeState> => {
       const ctx = await host.vaultAndKey();
       const personId = ctx ? await activePersonId() : null;
@@ -2372,6 +2399,40 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         ...(sectionId !== undefined ? { sectionId } : {}),
         now: new Date(),
       });
+    },
+    // Self-maintaining profile (18 §15) — own-scoped + gated `intake.own`. The list/accept/dismiss return the
+    // updated PENDING set so the renderer re-renders from one round-trip.
+    profileSuggestions: async (): Promise<ProfileUpdateSuggestion[]> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'intake.own'))) return [];
+      return listPendingSuggestions(ctx.fs, ctx.key, personId);
+    },
+    profileAcceptSuggestion: async (id): Promise<ProfileUpdateSuggestion[]> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'intake.own'))) return [];
+      await acceptSuggestion(
+        ctx.fs,
+        ctx.key,
+        personId,
+        ProfileSuggestionIdSchema.parse(id),
+        new Date(),
+      );
+      return listPendingSuggestions(ctx.fs, ctx.key, personId);
+    },
+    profileDismissSuggestion: async (id): Promise<ProfileUpdateSuggestion[]> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'intake.own'))) return [];
+      await dismissSuggestion(
+        ctx.fs,
+        ctx.key,
+        personId,
+        ProfileSuggestionIdSchema.parse(id),
+        new Date(),
+      );
+      return listPendingSuggestions(ctx.fs, ctx.key, personId);
     },
 
     // --- UI state (device-local) ---

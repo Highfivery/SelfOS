@@ -22,6 +22,7 @@
     "./questionnaires": "./src/questionnaires/index.ts",
     "./dreams": "./src/dreams/index.ts",
     "./intake": "./src/intake/index.ts",
+    "./profile": "./src/profile/index.ts",
     "./relay": "./src/relay/index.ts"
   },
   "scripts": {

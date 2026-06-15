@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { visibleQuestions, allocationTotal } from '@selfos/core/questionnaires';
 import type { AnswerValue, AnswerMap } from '@selfos/core/questionnaires';
 import type { Question } from '@selfos/core/schemas';
@@ -172,6 +172,179 @@ function RankingControl({
   );
 }
 
+const OTHER = 'Other';
+
+/**
+ * Single-choice as toggle pills with an "Other" write-in (18 §14.3). The answer is the chosen option, or — when
+ * "Other" is picked and text is typed — the free-text value (so downstream just sees the real value). `otherOpen`
+ * keeps the write-in visible while empty; on mount it's derived from a value that isn't a preset option.
+ */
+function SingleChoiceControl({
+  question,
+  value,
+  set,
+}: {
+  question: Question;
+  value: AnswerValue | undefined;
+  set: (value: AnswerValue) => void;
+}): JSX.Element {
+  const options = question.options ?? [];
+  const presets = options.filter((o) => o !== OTHER);
+  const hasOther = options.includes(OTHER);
+  const current = typeof value === 'string' ? value : '';
+  const isCustom = current !== '' && !presets.includes(current);
+  const [otherOpen, setOtherOpen] = useState(isCustom);
+
+  return (
+    <div>
+      <div className={styles.pillGrid} role="radiogroup" aria-label={question.prompt}>
+        {presets.map((option) => {
+          const on = !otherOpen && current === option;
+          return (
+            <button
+              key={option}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              className={
+                on
+                  ? `${styles.pill} ${styles.choicePill} ${styles.pillOn}`
+                  : `${styles.pill} ${styles.choicePill}`
+              }
+              onClick={() => {
+                setOtherOpen(false);
+                set(option);
+              }}
+            >
+              {option}
+            </button>
+          );
+        })}
+        {hasOther ? (
+          <button
+            type="button"
+            role="radio"
+            aria-checked={otherOpen || isCustom}
+            className={
+              otherOpen || isCustom
+                ? `${styles.pill} ${styles.choicePill} ${styles.pillOn}`
+                : `${styles.pill} ${styles.choicePill}`
+            }
+            onClick={() => {
+              setOtherOpen(true);
+              if (!isCustom) set('');
+            }}
+          >
+            {OTHER}
+          </button>
+        ) : null}
+      </div>
+      {otherOpen ? (
+        <input
+          type="text"
+          className={`${styles.input} ${styles.otherInput}`}
+          value={isCustom ? current : ''}
+          placeholder="Tell me more…"
+          aria-label={`${question.prompt} — other`}
+          onChange={(event) => set(event.target.value)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Multi-choice as toggle pills with an "Other" write-in (18 §14.3). The answer array holds the selected preset
+ * options PLUS any free-text the person typed (no literal "Other" stored) — so a clean round-trip: array −
+ * presets = the write-in. `otherOpen` keeps the input visible while empty.
+ */
+function MultiChoiceControl({
+  question,
+  value,
+  set,
+}: {
+  question: Question;
+  value: AnswerValue | undefined;
+  set: (value: AnswerValue) => void;
+}): JSX.Element {
+  const options = question.options ?? [];
+  const presets = options.filter((o) => o !== OTHER);
+  const hasOther = options.includes(OTHER);
+  const selected = Array.isArray(value) ? value : [];
+  const selectedPresets = selected.filter((s) => presets.includes(s));
+  const customText = selected.filter((s) => !presets.includes(s)).join(', ');
+  const [otherOpen, setOtherOpen] = useState(customText !== '');
+
+  const commit = (nextPresets: string[], customCsv: string): void => {
+    const customs = customCsv
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    set([...nextPresets, ...customs]);
+  };
+
+  return (
+    <div>
+      <div className={styles.pillGrid} role="group" aria-label={question.prompt}>
+        {presets.map((option) => {
+          const on = selectedPresets.includes(option);
+          return (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={on}
+              className={
+                on
+                  ? `${styles.pill} ${styles.choicePill} ${styles.pillOn}`
+                  : `${styles.pill} ${styles.choicePill}`
+              }
+              onClick={() =>
+                commit(
+                  on ? selectedPresets.filter((x) => x !== option) : [...selectedPresets, option],
+                  customText,
+                )
+              }
+            >
+              {option}
+            </button>
+          );
+        })}
+        {hasOther ? (
+          <button
+            type="button"
+            aria-pressed={otherOpen || customText !== ''}
+            className={
+              otherOpen || customText !== ''
+                ? `${styles.pill} ${styles.choicePill} ${styles.pillOn}`
+                : `${styles.pill} ${styles.choicePill}`
+            }
+            onClick={() => {
+              if (otherOpen) {
+                setOtherOpen(false);
+                commit(selectedPresets, '');
+              } else {
+                setOtherOpen(true);
+              }
+            }}
+          >
+            {OTHER}
+          </button>
+        ) : null}
+      </div>
+      {otherOpen ? (
+        <input
+          type="text"
+          className={`${styles.input} ${styles.otherInput}`}
+          value={customText}
+          placeholder="Add your own — separate with commas"
+          aria-label={`${question.prompt} — other`}
+          onChange={(event) => commit(selectedPresets, event.target.value)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 /** Render the control for one question's answer type. */
 function Control({
   question,
@@ -191,6 +364,7 @@ function Control({
           className={styles.input}
           value={typeof value === 'string' ? value : ''}
           aria-label={question.prompt}
+          {...(question.placeholder ? { placeholder: question.placeholder } : {})}
           onChange={(event) => set(event.target.value)}
         />
       );
@@ -201,6 +375,7 @@ function Control({
           rows={4}
           value={typeof value === 'string' ? value : ''}
           aria-label={question.prompt}
+          {...(question.placeholder ? { placeholder: question.placeholder } : {})}
           onChange={(event) => set(event.target.value)}
         />
       );
@@ -252,44 +427,9 @@ function Control({
         </div>
       );
     case 'singleChoice':
-      return (
-        <div className={styles.optionList} role="radiogroup" aria-label={question.prompt}>
-          {options.map((option) => (
-            <label key={option} className={styles.optionRow}>
-              <input
-                type="radio"
-                name={question.id}
-                checked={value === option}
-                onChange={() => set(option)}
-              />
-              <span>{option}</span>
-            </label>
-          ))}
-        </div>
-      );
-    case 'multiChoice': {
-      const selected = Array.isArray(value) ? value : [];
-      return (
-        <div className={styles.optionList} role="group" aria-label={question.prompt}>
-          {options.map((option) => (
-            <label key={option} className={styles.optionRow}>
-              <input
-                type="checkbox"
-                checked={selected.includes(option)}
-                onChange={() =>
-                  set(
-                    selected.includes(option)
-                      ? selected.filter((x) => x !== option)
-                      : [...selected, option],
-                  )
-                }
-              />
-              <span>{option}</span>
-            </label>
-          ))}
-        </div>
-      );
-    }
+      return <SingleChoiceControl question={question} value={value} set={set} />;
+    case 'multiChoice':
+      return <MultiChoiceControl question={question} value={value} set={set} />;
     case 'rating': {
       const scale = question.scale ?? { min: 1, max: 5 };
       return (
@@ -409,20 +549,44 @@ export function QuestionnaireForm({
   footer,
 }: QuestionnaireFormProps): JSX.Element {
   const visible = visibleQuestions(questions, answers);
+  const field = (question: Question): JSX.Element => (
+    <QuestionField
+      key={question.id}
+      question={question}
+      value={answers[question.id]}
+      onChange={onChange}
+      {...(loadImage ? { loadImage } : {})}
+    />
+  );
+
+  // Long forms can group questions under collapsible headings (18 §14.3). Ungrouped questions render first;
+  // grouped ones follow as <details> in first-seen group order. Every group is **open by default** — the
+  // accordion is for optional tidying, never for hiding questions (a collapsed group would silently swallow
+  // inputs at the bottom of a section, so a person never sees them). They stay user-collapsible.
+  const ungrouped = visible.filter((q) => !q.group);
+  const groupOrder: string[] = [];
+  for (const q of visible) if (q.group && !groupOrder.includes(q.group)) groupOrder.push(q.group);
+
   return (
     <div className={styles.form}>
       {visible.length === 0 ? (
         <p className={styles.empty}>Add a question with a prompt to preview it.</p>
       ) : (
-        visible.map((question) => (
-          <QuestionField
-            key={question.id}
-            question={question}
-            value={answers[question.id]}
-            onChange={onChange}
-            {...(loadImage ? { loadImage } : {})}
-          />
-        ))
+        <>
+          {ungrouped.map(field)}
+          {groupOrder.length > 0 ? (
+            <div className={styles.groups}>
+              {groupOrder.map((name) => (
+                <details key={name} className={styles.group} open>
+                  <summary className={styles.groupSummary}>{name}</summary>
+                  <div className={styles.groupBody}>
+                    {visible.filter((q) => q.group === name).map(field)}
+                  </div>
+                </details>
+              ))}
+            </div>
+          ) : null}
+        </>
       )}
       {footer ?? <CrisisFooter />}
     </div>

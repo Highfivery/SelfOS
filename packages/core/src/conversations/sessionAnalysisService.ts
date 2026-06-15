@@ -1,17 +1,19 @@
 import { z } from 'zod';
 import type { ClaudeClient, FileSystem } from '../host';
 import { uuid } from '../id';
-import type {
-  Conversation,
-  Insight,
-  InsightFact,
-  SessionStatus,
-  SessionSummaryResult,
-  UsageEvent,
+import {
+  RawProfileSuggestionSchema,
+  type Conversation,
+  type Insight,
+  type InsightFact,
+  type SessionStatus,
+  type SessionSummaryResult,
+  type UsageEvent,
 } from '../schemas';
 import { buildContext } from '../people';
 import { checkBudget, costOf, recordUsage } from '../usage';
 import { getInsight, saveInsight } from '../insights';
+import { recordSuggestionsFromAnalysis } from '../profile';
 import { getConversation, saveConversation } from './conversationService';
 import { PERSONA, SAFETY } from './promptBuilder';
 import { getExercise } from './guidedCatalog';
@@ -39,7 +41,11 @@ markdown fences, no prose outside it) with these keys:
 - "people": names of people the person mentioned (array of short strings)
 - "moodValence": overall emotional tone, -1.0 (very negative) to 1.0 (very positive) (number)
 - "moodEnergy": overall energy/activation, -1.0 (very low/flat) to 1.0 (very high/activated) (number)
-- "crisisFlag": true ONLY if self-harm, suicide, or acute crisis is disclosed (boolean)`;
+- "crisisFlag": true ONLY if self-harm, suicide, or acute crisis is disclosed (boolean)
+- "profileSuggestions": ONLY if the session clearly reveals that a known profile fact has CHANGED or is newly \
+stated — propose an update (array of {"field": one of the known profile field keys shown in your context, \
+"observed": the new value, "current": the prior value if known, "rationale": a short human reason}). Omit or \
+leave empty when nothing changed — do not guess.`;
 
 /** AI-output contract for the analysis — validated before it's trusted (the host owns ids/timestamps). */
 const SessionAnalysisDraftSchema = z.object({
@@ -51,6 +57,7 @@ const SessionAnalysisDraftSchema = z.object({
   moodValence: z.number().default(0),
   moodEnergy: z.number().default(0),
   crisisFlag: z.boolean().optional(),
+  profileSuggestions: z.array(RawProfileSuggestionSchema).default([]),
 });
 
 export interface SetSessionStatusDeps {
@@ -267,6 +274,19 @@ export async function endAndSummarize(deps: EndAndSummarizeDeps): Promise<Sessio
     updatedAt: at,
   };
   await saveInsight(fs, key, insight);
+
+  // Self-maintaining profile (§15): the same pass may have noticed a profile fact changed — record any
+  // suggestions as confirm-before-apply proposals (no extra AI spend; session facts aren't restricted).
+  await recordSuggestionsFromAnalysis(
+    fs,
+    key,
+    personId,
+    draft.profileSuggestions,
+    'session',
+    insightId,
+    false,
+    now,
+  );
 
   await saveConversation(fs, key, {
     ...conversation,

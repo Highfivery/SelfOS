@@ -76,14 +76,19 @@ describe('People', () => {
     await userEvent.selectOptions(screen.getByLabelText('Gender'), 'Non-binary');
     await userEvent.type(screen.getByLabelText('Appearance'), 'tall, curly hair');
     await userEvent.type(screen.getByLabelText('Occupation'), 'nurse');
+    // Life facts the intake also fills (18 §14.6), editable here.
+    await userEvent.type(screen.getByLabelText('Relationship status'), 'Married');
     await userEvent.type(screen.getByLabelText('Health notes'), 'manages asthma');
     await userEvent.type(screen.getByLabelText('Faith'), 'Buddhist');
+    await userEvent.type(screen.getByLabelText('Sexual orientation'), 'Bisexual');
     await userEvent.click(screen.getByRole('button', { name: 'Create' }));
     expect(peopleSave).toHaveBeenCalledWith(
       expect.objectContaining({
         gender: 'Non-binary',
         appearanceDescription: 'tall, curly hair',
         occupation: 'nurse',
+        relationshipStatus: 'Married',
+        sexualOrientation: 'Bisexual',
         healthNotes: 'manages asthma',
         faith: 'Buddhist',
       }),

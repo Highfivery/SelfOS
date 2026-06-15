@@ -879,11 +879,18 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const ctx = await host.vaultAndKey();
       if (!ctx) return { roles: [], accounts: [] };
       // Backfill a Member login for any subject person that predates auto-accounts, so every household
-      // subject is switchable by the Owner (roles refactor 2026-06-15). Idempotent + cheap after the first.
-      const subjects = (await listPeople(ctx.fs, ctx.key))
-        .filter((p) => p.isSubject)
-        .map((p) => p.id);
-      await ensureMemberAccounts(ctx.fs, ctx.key, subjects);
+      // subject is switchable by the Owner (roles refactor 2026-06-15). Idempotent + cheap after the
+      // first (writes only when an account is genuinely missing). Best-effort: a transient vault-write
+      // failure (e.g. an iCloud sync race) must NOT break a plain `access:get` read — degrade to the
+      // current view and let a later call backfill once the write succeeds.
+      try {
+        const subjects = (await listPeople(ctx.fs, ctx.key))
+          .filter((p) => p.isSubject)
+          .map((p) => p.id);
+        await ensureMemberAccounts(ctx.fs, ctx.key, subjects);
+      } catch {
+        // swallowed — the backfill retries on the next access:get
+      }
       return getAccessView(ctx.fs, ctx.key);
     },
     accessSaveRole: async (role): Promise<AccessView> => {

@@ -3,6 +3,8 @@ import { dirname, join } from 'node:path';
 import type { FileSystem } from '@selfos/core/host';
 import { notifyWrite } from '../vault/writeObserver';
 
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
 /**
  * The Electron host's `FileSystem` (07-mobile-platform §5.3): Node `fs` rooted at the vault directory.
  * Vault-relative paths resolve under `vaultDir`. Writes are atomic (temp-file + rename) and notify the
@@ -30,10 +32,26 @@ export function createNodeFileSystem(vaultDir: string): FileSystem {
     async writeAtomic(path, data) {
       const target = resolve(path);
       await mkdir(dirname(target), { recursive: true });
-      const tmp = `${target}.tmp-${process.pid}-${Date.now()}`;
-      await writeFile(tmp, data);
-      await rename(tmp, target);
-      notifyWrite(target);
+      // Atomic temp-file + rename. On an iCloud-Drive / Dropbox vault the sync daemon can evict or
+      // relocate the temp file between writeFile and rename (ENOENT on the rename SOURCE), so retry the
+      // whole sequence with a fresh temp + a short backoff. Re-throw any non-ENOENT error immediately.
+      const maxAttempts = 5;
+      let lastError: unknown;
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const tmp = `${target}.tmp-${process.pid}-${Date.now()}-${attempt}`;
+        try {
+          await writeFile(tmp, data);
+          await rename(tmp, target);
+          notifyWrite(target);
+          return;
+        } catch (error) {
+          lastError = error;
+          await rm(tmp, { force: true }).catch(() => {}); // clean up the orphaned temp, if any
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+          await sleep(25 * (attempt + 1)); // let the sync daemon settle before retrying
+        }
+      }
+      throw lastError;
     },
     async list(dir) {
       try {

@@ -101,7 +101,6 @@ function makeHost(): {
   };
   let device: DeviceState = { schemaVersion: 1, vaultPath: '/vault' };
   let deviceSettings: Record<string, unknown> = {};
-  let superAdmin = false;
   const chunks: string[] = [];
   const dreamChunks: string[] = [];
   const intakeChunks: string[] = [];
@@ -219,10 +218,6 @@ function makeHost(): {
       return Promise.resolve();
     },
     activeModel: () => Promise.resolve('claude-sonnet-4-6'),
-    isSuperAdminActive: () => superAdmin,
-    setSuperAdminActive: (active) => {
-      superAdmin = active;
-    },
     appVersion: '1.2.3',
     platform: 'web',
     relay: {
@@ -263,11 +258,7 @@ async function freshOwner(): Promise<{
 }> {
   const host = makeHost();
   const bridge = createCoreBridge(host.host);
-  const { ownerId } = await bridge.householdSetup({
-    ownerName: 'Ben',
-    passphrase: 'secret-pass',
-    pin: '1234',
-  });
+  const { ownerId } = await bridge.householdSetup({ ownerName: 'Ben', pin: '1234' });
   return { host, bridge, ownerId };
 }
 
@@ -296,11 +287,9 @@ describe('createCoreBridge', () => {
     expect(host.device().activePersonId).toBe(ownerId);
   });
 
-  it('unlinkVault detaches the device — clears the master key, pointers, and super-admin inspect', async () => {
+  it('unlinkVault detaches the device — clears the master key + every vault pointer', async () => {
     const { bridge, host } = await freshOwner();
-    // Precondition: a fully set-up, key-holding device with an active owner, a pending join, and a live
-    // super-admin inspect session — every device-local thing unlink must clear.
-    host.host.setSuperAdminActive(true);
+    // Precondition: a fully set-up, key-holding device with an active owner + a pending join.
     // Set a vaultBookmark too — the web/iOS vault pointer — to prove unlink clears it cross-platform.
     await host.host.updateDeviceState({
       pendingJoinPersonId: 'pending-x',
@@ -320,8 +309,7 @@ describe('createCoreBridge', () => {
     expect(host.device().vaultBookmark).toBeUndefined();
     expect(host.device().activePersonId).toBeNull();
     expect(host.device().pendingJoinPersonId).toBeNull();
-    // Inspect session dropped; boot recomputes to onboarding ("Choose a folder").
-    expect(host.host.isSuperAdminActive()).toBe(false);
+    // Boot recomputes to onboarding ("Choose a folder").
     expect(boot).toEqual({ phase: 'onboarding', vaultPath: null, hasSettings: false });
   });
 
@@ -380,25 +368,37 @@ describe('createCoreBridge', () => {
     expect((await bridge.getSettings()).vault['ai.model']).toBeUndefined();
   });
 
-  it('enforces admin-only capabilities, with the super-admin bypass', async () => {
-    const { bridge } = await freshOwner();
+  it('enforces admin-only capabilities; the Owner is the full-access role', async () => {
+    const { bridge, ownerId } = await freshOwner();
     // Owner has budgets.manage → setting the app cap sticks.
     await bridge.budgetSetApp({ limitUsd: 50, period: 'week', warnRatio: 0.8 });
     expect((await bridge.budgetGet()).app).toMatchObject({ limitUsd: 50 });
 
-    // Switch to a member (no budgets.manage) → the write is silently denied.
+    // The Owner switches to a member with no PIN (god-mode switching). The member lacks budgets.manage →
+    // the write is silently denied (the bridge is the trust boundary).
     const member = await bridge.peopleSave({ displayName: 'Mara', isSubject: false, tags: [] });
     await bridge.accessSetAccount({ personId: member.id, roleId: 'member', pin: null });
     expect((await bridge.sessionSetActive({ personId: member.id })).ok).toBe(true);
     await bridge.budgetSetApp({ limitUsd: 999, period: 'week', warnRatio: 0.8 });
     expect((await bridge.budgetGet()).app).toMatchObject({ limitUsd: 50 });
 
-    // Concealed super-admin unlock restores full access in the main/bridge process, not just the UI.
-    expect(await bridge.superadminUnlock({ passphrase: 'secret-pass' })).toBe(true);
+    // Back to the Owner (returning to the owner DOES need the owner PIN) → full access restored.
+    expect((await bridge.sessionSetActive({ personId: ownerId, pin: '1234' })).ok).toBe(true);
     await bridge.budgetSetApp({ limitUsd: 999, period: 'week', warnRatio: 0.8 });
     expect((await bridge.budgetGet()).app).toMatchObject({ limitUsd: 999 });
-    await bridge.superadminLock();
-    expect(await bridge.superadminUnlock({ passphrase: 'wrong' })).toBe(false);
+  });
+
+  it('lets the Owner switch to any person with no PIN, but requires the PIN to return to the Owner', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    // A created subject auto-gets a Member login; the Owner switches in with no PIN.
+    const member = await bridge.peopleSave({ displayName: 'Quinn', isSubject: true, tags: [] });
+    expect((await bridge.sessionSetActive({ personId: member.id })).ok).toBe(true);
+    // The member (not the owner) cannot return to the owner without the owner's PIN.
+    expect(await bridge.sessionSetActive({ personId: ownerId })).toMatchObject({
+      ok: false,
+      reason: 'WRONG_PIN',
+    });
+    expect((await bridge.sessionSetActive({ personId: ownerId, pin: '1234' })).ok).toBe(true);
   });
 
   it('streams a chat turn through emitChatChunk and persists the conversation', async () => {
@@ -1049,7 +1049,7 @@ describe('createCoreBridge', () => {
     expect((await bridge.assignmentsTrends(q.id)).length).toBe(0); // one point left → no trend
   });
 
-  it('compatibility: dual-send → align → report + Insight; senderSeesAll reveal is gated + audited', async () => {
+  it('compatibility: dual-send → align → report + Insight; the Owner can reveal a senderSeesAll send', async () => {
     const { bridge, ownerId } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
     const alex = await bridge.peopleSave({ displayName: 'Alex', isSubject: true, tags: [] });
@@ -1086,7 +1086,7 @@ describe('createCoreBridge', () => {
     const group = groups[0]!;
     expect(group.members).toHaveLength(2);
     expect(group.visibility).toBe('senderSeesAll');
-    expect(group.canReveal).toBe(false); // owner lacks readRaw → no reveal yet
+    expect(group.canReveal).toBe(true); // the Owner is the full-access role → can reveal
 
     // Each recipient answers their own variant (the prompt is personalized but the id/canonicalId align).
     const answerAs = async (
@@ -1114,68 +1114,20 @@ describe('createCoreBridge', () => {
     expect(after.analyzed).toBe(true);
     expect((await bridge.insightsList()).some((i) => i.subjectPersonId === ownerId)).toBe(true);
 
-    // Reveal is denied without readRaw (even for the sender) and writes nothing.
+    // The Owner is the full-access role (super-admin removed 2026-06-15) → can read any send's raw answers
+    // directly, no break-glass ceremony, no audit.
     const memberId = after.members[0]!.assignmentId;
-    expect(await bridge.assignmentsRevealRaw(memberId)).toBeNull();
-    expect(await bridge.auditList()).toEqual([]); // not super-admin → empty
-
-    // Grant the Owner the explicit break-glass readRaw → the senderSeesAll reveal works + is audited.
-    const access = await bridge.accessGet();
-    const ownerRole = access.roles.find((r) => r.id === 'owner')!;
-    await bridge.accessSaveRole({
-      ...ownerRole,
-      capabilities: { ...ownerRole.capabilities, 'questionnaires.readRaw': true },
-    });
     const revealed = await bridge.assignmentsRevealRaw(memberId);
     expect(revealed).not.toBeNull();
     expect(revealed!.length).toBeGreaterThan(0);
 
-    // The audit trail is visible only in super-admin mode; the entry records a non-super-admin reveal.
-    expect(await bridge.auditList()).toEqual([]);
-    await bridge.superadminUnlock({ passphrase: 'secret-pass' });
-    const log = await bridge.auditList();
-    expect(log).toHaveLength(1);
-    expect(log[0]).toMatchObject({
-      assignmentId: memberId,
-      viaSuperAdmin: false,
-      action: 'revealRaw',
-    });
-    await bridge.superadminLock();
-
-    // readRaw does NOT unlock reveal for a non-senderSeesAll group — even for the sender who holds it.
-    const sharedQ = await bridge.questionnairesSave({
-      title: 'Shared-report check',
-      type: 'role-feedback',
-      sensitivity: 'standard',
-      questions: [
-        {
-          id: 'c1',
-          type: 'rating',
-          prompt: 'How connected?',
-          required: true,
-          scale: { min: 1, max: 5 },
-        },
-      ],
-      compatibility: { enabled: true, visibility: 'sharedReport' },
-    });
-    expect(
-      (
-        await bridge.assignmentsCreateCompatibility({
-          questionnaireId: sharedQ.id,
-          recipientPersonIdA: alex.id,
-          recipientPersonIdB: bri.id,
-        })
-      ).ok,
-    ).toBe(true);
-    const sharedGroup = (await bridge.assignmentsCompatibility(sharedQ.id))[0]!;
-    for (const m of sharedGroup.members) {
-      await answerAs(m.recipientName === 'Alex' ? alex.id : bri.id, m.assignmentId, 3);
-    }
-    // The owner still holds readRaw, but the group is sharedReport → the reveal is refused.
-    expect(await bridge.assignmentsRevealRaw(sharedGroup.members[0]!.assignmentId)).toBeNull();
+    // A non-owner member who is NOT the sender, and lacks readRaw, can't reveal it.
+    await bridge.sessionSetActive({ personId: alex.id });
+    expect(await bridge.assignmentsRevealRaw(memberId)).toBeNull();
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
   });
 
-  it('super-admin can break-glass reveal ANY private send, writing an audit entry', async () => {
+  it('the Owner can read ANY private send’s raw answers directly (no break-glass ceremony)', async () => {
     const { bridge, ownerId } = await freshOwner();
     const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
     await bridge.accessSetAccount({ personId: mara.id, roleId: 'member', pin: null });
@@ -1197,16 +1149,88 @@ describe('createCoreBridge', () => {
     });
     await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
 
-    // The owner (no readRaw, not super-admin) cannot reveal a plain private send.
-    expect(await bridge.assignmentsRevealRaw(a.id)).toBeNull();
-
-    // The concealed super-admin can — any send — and it's audited (viaSuperAdmin true).
-    await bridge.superadminUnlock({ passphrase: 'secret-pass' });
+    // The Owner (full-access role) reads a plain private send's raw answers directly — no ceremony, no audit.
     const revealed = await bridge.assignmentsRevealRaw(a.id);
     expect(revealed?.[0]?.answer).toBe('Doing okay.');
-    const log = await bridge.auditList();
-    expect(log).toHaveLength(1);
-    expect(log[0]).toMatchObject({ assignmentId: a.id, viaSuperAdmin: true });
+
+    // A member who isn't the sender can't (no readRaw).
+    await bridge.sessionSetActive({ personId: mara.id });
+    expect(await bridge.assignmentsRevealRaw(a.id)).toBeNull();
+  });
+
+  it('a non-owner sender of a senderSeesAll send can reveal ONLY with granted readRaw', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+
+    // The sender is a Member (not the Owner), plus two recipients.
+    const sam = await bridge.peopleSave({ displayName: 'Sam', isSubject: true, tags: [] });
+    const alex = await bridge.peopleSave({ displayName: 'Alex', isSubject: true, tags: [] });
+    const bri = await bridge.peopleSave({ displayName: 'Bri', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: sam.id, roleId: 'member', pin: null });
+    await bridge.accessSetAccount({ personId: alex.id, roleId: 'member', pin: null });
+    await bridge.accessSetAccount({ personId: bri.id, roleId: 'member', pin: null });
+
+    // Grant the Member role readRaw (the explicit-grant-only Roles toggle).
+    const member = (await bridge.accessGet()).roles.find((r) => r.id === 'member')!;
+    await bridge.accessSaveRole({
+      ...member,
+      capabilities: { ...member.capabilities, 'questionnaires.readRaw': true },
+    });
+
+    // Sam (a Member) authors + dual-sends a senderSeesAll compatibility questionnaire.
+    await bridge.sessionSetActive({ personId: sam.id });
+    const q = await bridge.questionnairesSave({
+      title: 'Compat',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      questions: [
+        {
+          id: 'c1',
+          type: 'rating',
+          prompt: 'How connected?',
+          required: true,
+          scale: { min: 1, max: 5 },
+        },
+      ],
+      compatibility: { enabled: true, visibility: 'senderSeesAll' },
+    });
+    const sent = await bridge.assignmentsCreateCompatibility({
+      questionnaireId: q.id,
+      recipientPersonIdA: alex.id,
+      recipientPersonIdB: bri.id,
+    });
+    expect(sent.ok).toBe(true);
+
+    const group = (await bridge.assignmentsCompatibility(q.id))[0]!;
+    expect(group.canReveal).toBe(true); // Sam is the sender AND has readRaw
+
+    // Recipients answer their variants.
+    for (const m of group.members) {
+      const personId = m.recipientName === 'Alex' ? alex.id : bri.id;
+      await bridge.sessionSetActive({ personId });
+      const detail = await bridge.assignmentsGet(m.assignmentId);
+      const qid = detail!.questionnaire.questions[0]!.id;
+      await bridge.assignmentsSubmit({
+        assignmentId: m.assignmentId,
+        answers: [{ questionId: qid, value: 3 }],
+      });
+    }
+
+    // Sam (sender + readRaw) can reveal a member's raw answers.
+    await bridge.sessionSetActive({ personId: sam.id });
+    const revealed = await bridge.assignmentsRevealRaw(group.members[0]!.assignmentId);
+    expect(revealed).not.toBeNull();
+    expect(revealed!.length).toBeGreaterThan(0);
+
+    // Revoke readRaw → the same sender can no longer reveal (the grant is the gate).
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    const member2 = (await bridge.accessGet()).roles.find((r) => r.id === 'member')!;
+    await bridge.accessSaveRole({
+      ...member2,
+      capabilities: { ...member2.capabilities, 'questionnaires.readRaw': false },
+    });
+    await bridge.sessionSetActive({ personId: sam.id });
+    expect(await bridge.assignmentsRevealRaw(group.members[0]!.assignmentId)).toBeNull();
   });
 
   it('connects a relay, mints an external link, drains a response, and revoke-on-delete', async () => {
@@ -1644,7 +1668,7 @@ describe('createCoreBridge', () => {
     ).toMatchObject({ ok: false });
   });
 
-  it('intake: a direct answer fills the profile; restricted facts are hidden until an audited break-glass reveal', async () => {
+  it('intake: a direct answer fills the profile; the Owner sees restricted facts, a member gets them redacted', async () => {
     const { bridge, host, ownerId } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
     // A claude that fills `occupation` on a basics turn and returns a portrait with one restricted fact.
@@ -1684,29 +1708,18 @@ describe('createCoreBridge', () => {
     const synth = await bridge.intakeSynthesize({});
     expect(synth.ok).toBe(true);
 
-    // The owner's NORMAL Memory view redacts the restricted fact (kept out of casual browsing, §8.4).
+    // The Owner is the full-access role (has intake.readRestricted) → sees the restricted fact directly.
     const ownerView = await bridge.insightsList();
     const intakeInsight = ownerView.find((i) => i.source === 'intake');
     expect(intakeInsight?.facts.some((f) => f.text.includes('nurse'))).toBe(true);
-    expect(intakeInsight?.facts.some((f) => f.text.includes('grief'))).toBe(false);
+    expect(intakeInsight?.facts.some((f) => f.text.includes('grief'))).toBe(true);
 
-    // A normal owner (no readRestricted) is refused the reveal — and nothing is audited.
-    expect(await bridge.intakeRevealRestricted({ subjectPersonId: ownerId })).toBeNull();
-
-    // The concealed super-admin can reveal restricted facts — and the reveal is audited BEFORE returning.
-    host.host.setSuperAdminActive(true);
-    expect(await bridge.auditList()).toEqual([]); // the denied owner reveal above wrote NOTHING
-    const revealed = await bridge.intakeRevealRestricted({ subjectPersonId: ownerId });
-    expect(revealed?.some((f) => f.text.includes('grief'))).toBe(true);
-    // Super-admin's Memory view is unredacted (privileged).
-    const adminView = await bridge.insightsList();
-    expect(
-      adminView.find((i) => i.source === 'intake')?.facts.some((f) => f.text.includes('grief')),
-    ).toBe(true);
-    // The audit trail recorded the restricted reveal.
-    const audit = await bridge.auditList();
-    expect(
-      audit.some((e) => e.action === 'revealRestricted' && e.subjectPersonId === ownerId),
-    ).toBe(true);
+    // A member (viewResults but NOT readRestricted) gets the restricted fact redacted — the §8.4 boundary.
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    expect((await bridge.sessionSetActive({ personId: mara.id })).ok).toBe(true);
+    const memberView = await bridge.insightsList();
+    const memberIntake = memberView.find((i) => i.source === 'intake');
+    expect(memberIntake?.facts.some((f) => f.text.includes('nurse'))).toBe(true);
+    expect(memberIntake?.facts.some((f) => f.text.includes('grief'))).toBe(false);
   });
 });

@@ -17,8 +17,8 @@ import { getQuestionnaire, validateQuestionnaire } from './questionnaireService'
  * snapshot and creates the two paired Assignments, linked by a shared `compatibilityGroupId`.
  *
  * Both sends are **Private**: the sender never sees raw answers inline (the alignment report is the
- * deliverable). `senderSeesAll` additionally unlocks the explicit, audited break-glass reveal (§8.4) —
- * that's gated by `questionnaires.readRaw` in the bridge, not here.
+ * deliverable). `senderSeesAll` additionally unlocks a raw-answer reveal (§8.4) — gated by
+ * `questionnaires.readRaw` (or the Owner) in the bridge, not here; no audit log.
  */
 
 export interface CompatibilityRecipient {

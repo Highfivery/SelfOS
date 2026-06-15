@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Usage } from './Usage';
-import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
+import { clearMockBridge, elevateToOwner, installMockBridge } from '../../../test-utils/bridge';
+import { DEFAULT_ROLES } from '@shared/capabilities';
 import { useUsageStore } from '../../../stores/usageStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import type { Person, UsageSummary } from '@shared/channels';
@@ -32,9 +33,27 @@ const makePerson = (id: string, displayName: string): Person => ({
   updatedAt: 'now',
 });
 
-/** `can()` returns true for everything in super-admin mode — the simplest way to test the admin view. */
+/** The admin view = signed in as the Owner (full-access role); otherwise a plain Member. */
 function setAdmin(isAdmin: boolean): void {
-  useSessionStore.setState({ superAdmin: isAdmin });
+  if (isAdmin) {
+    elevateToOwner();
+    return;
+  }
+  useSessionStore.setState({
+    activePerson: {
+      id: 'm',
+      schemaVersion: 1,
+      displayName: 'Member',
+      isSubject: true,
+      tags: [],
+      createdAt: 'now',
+      updatedAt: 'now',
+    },
+    access: {
+      roles: DEFAULT_ROLES,
+      accounts: [{ personId: 'm', roleId: 'member', hasPin: false }],
+    },
+  });
 }
 
 afterEach(() => {
@@ -53,7 +72,6 @@ afterEach(() => {
     activePerson: null,
     access: null,
     loaded: false,
-    superAdmin: false,
   });
 });
 

@@ -1,6 +1,6 @@
 import { hashPin, verifyPin } from '../crypto';
 import type { FileSystem } from '../host';
-import { DEFAULT_ROLES } from '../capabilities';
+import { DEFAULT_ROLES, reconcileRole } from '../capabilities';
 import {
   AccessConfigSchema,
   type AccessConfig,
@@ -16,10 +16,16 @@ function defaults(): AccessConfig {
   return { schemaVersion: 1, roles: DEFAULT_ROLES, accounts: [] };
 }
 
-/** Read the access config, falling back to built-in defaults when none is written yet. */
+/**
+ * Read the access config, falling back to built-in defaults when none is written yet. Built-in roles are
+ * reconciled against the current code defaults on every read (capabilities.ts `reconcileRole`) so a role
+ * frozen in an older vault picks up capabilities added since (e.g. `intake.own`) without a migration — fixing
+ * the "existing Member isn't gated into onboarding" bug. The reconcile is in-memory; it doesn't rewrite the file.
+ */
 export async function getAccessConfig(fs: FileSystem, key: Uint8Array): Promise<AccessConfig> {
   const raw = await readEncryptedJson(fs, ACCESS_PATH, key);
-  return raw === null ? defaults() : AccessConfigSchema.parse(raw);
+  const config = raw === null ? defaults() : AccessConfigSchema.parse(raw);
+  return { ...config, roles: config.roles.map(reconcileRole) };
 }
 
 /** Renderer-safe view: roles + accounts with PIN hashes stripped to a boolean. */
@@ -78,6 +84,28 @@ export async function setAccount(
   const accounts = existing
     ? config.accounts.map((a) => (a.personId === input.personId ? account : a))
     : [...config.accounts, account];
+  return write(fs, key, { ...config, accounts });
+}
+
+/**
+ * Ensure each given (subject) person has a login account, creating a no-PIN **Member** account for any that
+ * lack one (18-personal-onboarding / roles refactor 2026-06-15). Every household subject is switchable +
+ * carries a role this way — so a freshly-created person appears in the switcher and a new Member is gated
+ * into onboarding. Idempotent: writes only when something was added. The Owner's own account is untouched.
+ */
+export async function ensureMemberAccounts(
+  fs: FileSystem,
+  key: Uint8Array,
+  subjectPersonIds: string[],
+): Promise<AccessConfig> {
+  const config = await getAccessConfig(fs, key);
+  const have = new Set(config.accounts.map((account) => account.personId));
+  const missing = subjectPersonIds.filter((id) => !have.has(id));
+  if (missing.length === 0) return config;
+  const accounts: Account[] = [
+    ...config.accounts,
+    ...missing.map((personId) => ({ personId, roleId: 'member' })),
+  ];
   return write(fs, key, { ...config, accounts });
 }
 

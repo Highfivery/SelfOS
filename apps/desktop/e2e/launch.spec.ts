@@ -30,7 +30,6 @@ import {
   getAlignmentReport,
   getResponse,
   listAssignments,
-  listAuditEntries,
   saveQuestionnaire,
   submitResponse,
 } from '@selfos/core/questionnaires';
@@ -152,20 +151,6 @@ async function findFileNamed(dir: string, name: string): Promise<string | null> 
   return null;
 }
 
-/**
- * Drive the concealed super-admin entry: a pointer-hold on the version number (a 600ms timer in
- * customRows.tsx). Dispatching pointerdown/up directly on the element is deterministic — it always
- * hits the handler regardless of mouse position — unlike `click({ delay })` or mouse-positioned holds,
- * which don't reliably drive a custom pointer-hold gesture under Electron timing.
- */
-async function longPressVersion(w: Page): Promise<void> {
-  const version = w.getByText(/^\d+\.\d+\.\d+$/);
-  await version.dispatchEvent('pointerdown');
-  await w.waitForTimeout(750); // exceed the 600ms hold threshold so the unlock prompt opens
-  await version.dispatchEvent('pointerup');
-  await expect(w.getByRole('dialog', { name: 'Unlock' })).toBeVisible();
-}
-
 test('first run shows onboarding when no vault is configured', async () => {
   const userData = await mkdtemp(join(tmpdir(), 'selfos-e2e-ud-'));
   const app = await launch(userData);
@@ -261,8 +246,6 @@ test('first-time setup creates the owner and enters the app', async () => {
     const w = await app.firstWindow();
     await expect(w.getByRole('heading', { name: 'Create your profile' })).toBeVisible();
     await w.getByLabel('Your name').fill('Alex');
-    await w.getByLabel('Super-admin passphrase').fill('hunter2');
-    await w.getByLabel('Confirm passphrase').fill('hunter2');
     await w.getByLabel('Your PIN').fill('1234'); // owner PIN is required (10-multi-device-vault §3.2)
     await w.getByLabel('Confirm PIN').fill('1234');
     await w.getByRole('button', { name: /create profile/i }).click();
@@ -469,128 +452,6 @@ test('access: grant a login, switch person, and gate the People nav', async () =
     // Now signed in as Jordan (a member) → the People nav is gated away.
     await expect(w.getByRole('button', { name: 'Signed in as Jordan' })).toBeVisible();
     await expect(w.getByRole('link', { name: 'People' })).toHaveCount(0);
-  } finally {
-    await app.close();
-    await rm(userData, { recursive: true, force: true });
-    await rm(vault, { recursive: true, force: true });
-  }
-});
-
-test('super-admin: a hidden long-press on the version unlocks inspect mode', async () => {
-  const { userData, vault } = await seedReadyVault();
-  const app = await launch(userData);
-  try {
-    const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'Settings' }).click();
-    await w.getByRole('button', { name: 'About' }).click();
-
-    // Concealed entry: long-press the version number.
-    await longPressVersion(w);
-    const dialog = w.getByRole('dialog', { name: 'Unlock' });
-    await expect(dialog).toBeVisible();
-    await dialog.getByLabel('Passphrase').fill('superpass');
-    await dialog.getByRole('button', { name: 'Unlock' }).click();
-
-    // Inspect mode is active — the (only-now-visible) super-admin badge appears in the account area.
-    await expect(w.getByText('Super-admin')).toBeVisible();
-
-    // The legacy device-local hash was migrated into the vault on unlock (10-multi-device-vault §6.4),
-    // so the super-admin secret is now one-per-directory and works on any device that opens this vault.
-    await expect(readFile(join(vault, 'config', 'superadmin.enc'), 'utf8')).resolves.toContain(
-      'alg',
-    );
-  } finally {
-    await app.close();
-    await rm(userData, { recursive: true, force: true });
-    await rm(vault, { recursive: true, force: true });
-  }
-});
-
-test('super-admin: inspect mode unlocks full budget/usage access for a non-admin', async () => {
-  // Seed an owner + a member, with the MEMBER active and a usage event owned by the owner.
-  const userData = await mkdtemp(join(tmpdir(), 'selfos-e2e-ud-'));
-  const vault = await mkdtemp(join(tmpdir(), 'selfos-e2e-vault-'));
-  const now = new Date().toISOString();
-  await writeJson(join(vault, '.selfos', 'meta.json'), {
-    schemaVersion: 1,
-    vaultId: 'e2e',
-    createdAt: now,
-    updatedAt: now,
-  });
-  await writeJson(join(vault, 'config', 'settings.json'), { schemaVersion: 1, values: {} });
-  const secrets = createNodeSecretStore(userData, passthrough);
-  const fs = createNodeFileSystem(vault);
-  await createMasterKey(secrets, fs);
-  const key = await loadMasterKey(secrets);
-  if (!key) throw new Error('super-admin e2e: master key missing');
-  await savePerson(fs, key, {
-    id: 'owner-1',
-    schemaVersion: 1,
-    displayName: 'Alex',
-    isSubject: true,
-    tags: [],
-    createdAt: now,
-    updatedAt: now,
-  });
-  await savePerson(fs, key, {
-    id: 'member-1',
-    schemaVersion: 1,
-    displayName: 'Sam',
-    isSubject: true,
-    tags: [],
-    createdAt: now,
-    updatedAt: now,
-  });
-  await setAccount(fs, key, { personId: 'owner-1', roleId: 'owner' });
-  await setAccount(fs, key, { personId: 'member-1', roleId: 'member' });
-  await seedCompletedIntake(fs, key, 'member-1'); // already onboarded, so the Member gate doesn't apply
-  await recordUsage(fs, key, {
-    id: 'u1',
-    schemaVersion: 1,
-    type: 'chat',
-    personId: 'owner-1',
-    sessionId: 'c1',
-    model: 'claude-sonnet-4-6',
-    at: now,
-    inputTokens: 1000,
-    outputTokens: 500,
-    cacheWriteTokens: 0,
-    cacheReadTokens: 0,
-    costUsd: 3,
-  });
-  await writeJson(join(userData, 'state.json'), {
-    schemaVersion: 1,
-    vaultPath: vault,
-    activePersonId: 'member-1',
-    superAdminPassphraseHash: await hashPin('superpass'),
-  });
-
-  const app = await launch(userData);
-  try {
-    const w = await app.firstWindow();
-    // As a member: no admin person picker, no People nav, no cost figure.
-    await w.getByRole('link', { name: 'Usage' }).click();
-    await expect(w.getByLabel('Whose usage')).toHaveCount(0);
-    await expect(w.getByRole('link', { name: 'People' })).toHaveCount(0);
-    await expect(w.getByRole('heading', { name: '$3.00' })).toHaveCount(0);
-    await expect(w.getByText('Admin only')).toHaveCount(0); // no admin markers for a normal user
-
-    // Unlock super-admin via the concealed long-press on the version.
-    await w.getByRole('link', { name: 'Settings' }).click();
-    await w.getByRole('button', { name: 'About' }).click();
-    await longPressVersion(w);
-    const dialog = w.getByRole('dialog', { name: 'Unlock' });
-    await dialog.getByLabel('Passphrase').fill('superpass');
-    await dialog.getByRole('button', { name: 'Unlock' }).click();
-    await expect(w.getByText('Super-admin')).toBeVisible();
-
-    // Now main grants full access: cost is shown and the owner's usage appears (app scope allowed).
-    await w.getByRole('link', { name: 'Usage' }).click();
-    await expect(w.getByLabel('Whose usage')).toBeVisible();
-    await expect(w.getByText('Admin only').first()).toBeVisible(); // markers appear once elevated
-    await expect(w.getByRole('heading', { name: '$3.00' })).toBeVisible();
-    await expect(w.getByRole('heading', { name: 'By person' })).toBeVisible();
-    await expect(w.getByRole('option', { name: 'Alex' })).toBeAttached();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -1814,36 +1675,6 @@ test('compatibility: align two answered variants into a report + draft Insight, 
   }
 });
 
-test('audit: super-admin sees the raw-access audit surface (empty until a reveal)', async () => {
-  const { userData, vault } = await seedReadyVault();
-  const app = await launch(userData);
-  try {
-    const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'Settings' }).click();
-    await w.getByRole('button', { name: 'About' }).click();
-    await longPressVersion(w);
-    const dialog = w.getByRole('dialog', { name: 'Unlock' });
-    await dialog.getByLabel('Passphrase').fill('superpass');
-    await dialog.getByRole('button', { name: 'Unlock' }).click();
-    await expect(w.getByText('Super-admin')).toBeVisible();
-
-    // The Audit nav entry appears only in super-admin mode; the surface shows its empty state.
-    await w.getByRole('link', { name: 'Raw-access audit' }).click();
-    await expect(w.getByRole('heading', { name: 'Raw-access audit' })).toBeVisible();
-    await expect(w.getByText('Nothing has ever been revealed.')).toBeVisible();
-
-    const overflow = await w.evaluate(() => {
-      const main = document.querySelector('main');
-      return main ? main.scrollWidth - main.clientWidth : 0;
-    });
-    expect(overflow).toBeLessThanOrEqual(1);
-  } finally {
-    await app.close();
-    await rm(userData, { recursive: true, force: true });
-    await rm(vault, { recursive: true, force: true });
-  }
-});
-
 test('design: a Switch never shrinks in a flex row and its thumb stays on-track', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);
@@ -2739,8 +2570,6 @@ test('multi-device: an interrupted setup (key + recovery.enc, no owner) is finis
     const w = await app.firstWindow();
     await expect(w.getByRole('heading', { name: 'Create your profile' })).toBeVisible();
     await w.getByLabel('Your name').fill('Tester');
-    await w.getByLabel('Super-admin passphrase').fill('superpass');
-    await w.getByLabel('Confirm passphrase').fill('superpass');
     await w.getByLabel('Your PIN').fill('1234');
     await w.getByLabel('Confirm PIN').fill('1234');
     await w.getByRole('button', { name: 'Create profile' }).click();
@@ -3428,7 +3257,7 @@ test('home: a seeded person sees the cards, links into them, and fits at 390px',
   }
 });
 
-test('onboarding: nudge → turn fills a field → skip intimacy → portrait feeds context → restricted via audited break-glass (18)', async () => {
+test('onboarding: nudge → turn fills a field → skip intimacy → portrait feeds context → owner sees restricted facts (18)', async () => {
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
   await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
   // Seed an in-progress intake with the middle sections already skipped, so the flow is deterministic:
@@ -3509,28 +3338,12 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
     expect(context).toContain('thoughtful and steady'); // the portrait summary feeds own context
     expect(context).toContain('grief'); // a restricted fact still feeds the person's OWN coaching
 
-    // The owner's NORMAL Memory view redacts the restricted fact (§8.4) — and a non-privileged reveal fails.
+    // The Owner is the full-access role → sees both the portrait summary AND the restricted ('grief')
+    // fact directly in Memory, marked "sensitive" (a member would get the restricted fact redacted, §8.4).
     await w.getByRole('link', { name: 'Memory' }).click();
     await expect(w.getByText(/thoughtful and steady/)).toBeVisible();
-    await expect(w.getByText(/Carries grief/)).toHaveCount(0);
-    await w.getByRole('button', { name: /Reveal restricted content/ }).click();
-    await expect(w.getByText(/don.t have permission/)).toBeVisible();
-
-    // The concealed super-admin can break-glass — the reveal writes an audit entry before showing the fact.
-    await w.getByRole('link', { name: 'Settings' }).click();
-    await w.getByRole('button', { name: 'About' }).click();
-    await longPressVersion(w);
-    const dialog = w.getByRole('dialog', { name: 'Unlock' });
-    await dialog.getByLabel('Passphrase').fill('superpass');
-    await dialog.getByRole('button', { name: 'Unlock' }).click();
-    await w.getByRole('link', { name: 'Memory' }).click();
-    await w.getByRole('button', { name: /Reveal restricted content/ }).click();
     await expect(w.getByText(/Carries grief/)).toBeVisible();
-
-    const audit = await listAuditEntries(fs, key);
-    expect(
-      audit.some((e) => e.action === 'revealRestricted' && e.subjectPersonId === 'owner-1'),
-    ).toBe(true);
+    await expect(w.getByText('sensitive').first()).toBeVisible();
 
     // No horizontal overflow (page or inner controls) at phone width on the onboarding flow.
     await w.getByRole('link', { name: /Onboarding/ }).click();

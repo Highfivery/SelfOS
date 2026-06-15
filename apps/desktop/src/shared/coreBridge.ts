@@ -48,13 +48,12 @@ import {
   type InboxCompatibilityView,
   type InboxItem,
   type Insight,
-  type InsightFact,
   type IntakeState,
   type IntakeSynthesisResult,
   type IntakeTurnResult,
   type Question,
   type QuestionTrend,
-  type RawAccessAuditEntry,
+  type Role,
   type SendAnswer,
   type SendResult,
   type QuestionnaireAnalyzeResult,
@@ -112,10 +111,10 @@ import {
   createInvite,
   deletePerson,
   deleteRelationship,
+  ensureMemberAccounts,
   getAccessConfig,
   getAccessView,
   getPerson,
-  hasSuperAdminPassphrase,
   listInvitesForPerson,
   listPeople,
   listRelationships,
@@ -124,12 +123,9 @@ import {
   savePerson,
   saveRole,
   setAccount,
-  setSuperAdminPassphrase,
-  storeSuperAdminHash,
   upsertPerson,
   upsertRelationship,
   verifyAccountPin,
-  verifySuperAdminPassphrase,
 } from '@selfos/core/people';
 import {
   checkBudget,
@@ -166,7 +162,6 @@ import {
 import {
   addCustomType,
   analyzeAssignment,
-  appendAuditEntry,
   buildQuestionTrends,
   createAssignment,
   createCompatibilitySend,
@@ -192,7 +187,6 @@ import {
   getResponse,
   improveQuestion,
   isAllowedImageMime,
-  listAuditEntries,
   isAnswerable,
   listAssignments,
   listCustomTypes,
@@ -241,7 +235,6 @@ import {
 import {
   ensureIntakeSession,
   intakeSectionMeta,
-  listRestrictedIntakeFacts,
   redactRestrictedFacts,
   runIntakeTurn,
   skipIntakeSection,
@@ -287,9 +280,6 @@ export interface BridgeHost {
   // --- Misc ---
   /** The model to use for AI calls (the host reads its own model preference + default). */
   activeModel(): Promise<string>;
-  /** Concealed super-admin inspect mode — an in-memory device-session flag, never persisted. */
-  isSuperAdminActive(): boolean;
-  setSuperAdminActive(active: boolean): void;
   /** The app version string (About section). */
   appVersion: string;
   /** The host platform — drives the titlebar's window-control layout (02-app-shell §13). */
@@ -372,7 +362,6 @@ const SecretSetSchema = z.object({ id: z.string().min(1), value: z.string() });
 const SecretIdSchema = z.object({ id: z.string().min(1) });
 const HouseholdSetupSchema = z.object({
   ownerName: z.string().min(1),
-  passphrase: z.string().min(6),
   pin: z.string().min(MIN_OWNER_PIN_LENGTH),
 });
 const UnlockWithRecoveryPhraseSchema = z.object({ phrase: z.string().min(1) });
@@ -454,7 +443,6 @@ const BudgetSetPersonSchema = z.object({
   personId: z.string().min(1),
   budget: BudgetSchema.nullable(),
 });
-const PassphraseSchema = z.object({ passphrase: z.string() });
 const AssignmentsCreateSchema = z.object({
   questionnaireId: z.string().min(1),
   recipientPersonId: z.string().min(1),
@@ -511,7 +499,6 @@ const InsightIdSchema = z.object({ subjectPersonId: z.string().min(1), id: z.str
 const IntakeRunTurnSchema = z.object({ sectionId: z.string().min(1), userText: z.string() });
 const IntakeSectionIdSchema = z.object({ sectionId: z.string().min(1) });
 const IntakeSynthesizeSchema = z.object({ sectionId: z.string().min(1).optional() });
-const IntakeRevealSchema = z.object({ subjectPersonId: z.string().min(1) });
 const AssignmentIdSchema = z.string().min(1);
 const QuestionnaireIdSchema = z.string().min(1);
 const AnswersSchema = z.object({
@@ -534,22 +521,30 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
   const activePersonId = async (): Promise<string | null> =>
     (await host.readDeviceState()).activePersonId ?? null;
 
-  /** Whether the active person's role grants a capability — enforces admin-only actions in the bridge. */
+  /** The active person's role (from the access config), or null. */
+  const activePersonRole = async (fs: FileSystem, key: Uint8Array): Promise<Role | null> => {
+    const personId = await activePersonId();
+    if (!personId) return null;
+    const access = await getAccessConfig(fs, key);
+    const account = access.accounts.find((candidate) => candidate.personId === personId);
+    return access.roles.find((candidate) => candidate.id === account?.roleId) ?? null;
+  };
+
+  /**
+   * Whether the active person's role grants a capability — enforces admin-only actions in the bridge (the
+   * trust boundary). The Owner is the full-access role (the concealed super-admin was removed 2026-06-15).
+   */
   const activePersonCan = async (
     fs: FileSystem,
     key: Uint8Array,
     capability: CapabilityKey,
   ): Promise<boolean> => {
-    // Concealed super-admin inspect mode grants everything (04-people-roles §8); the bridge (not the
-    // renderer) is the source of truth so the bypass reaches the data, not just the UI.
-    if (host.isSuperAdminActive()) return true;
-    const personId = await activePersonId();
-    if (!personId) return false;
-    const access = await getAccessConfig(fs, key);
-    const account = access.accounts.find((candidate) => candidate.personId === personId);
-    const role = access.roles.find((candidate) => candidate.id === account?.roleId);
-    return roleAllows(role, capability);
+    return roleAllows((await activePersonRole(fs, key)) ?? undefined, capability);
   };
+
+  /** Whether the active person is the household Owner (the full-access role). */
+  const activePersonIsOwner = async (fs: FileSystem, key: Uint8Array): Promise<boolean> =>
+    (await activePersonRole(fs, key))?.id === OWNER_ROLE_ID;
 
   /**
    * Best-effort revoke of the relay links for the sends matching `predicate`, before a deletion purges
@@ -771,7 +766,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       };
     },
     householdSetup: async (input): Promise<{ recoveryPhrase: string; ownerId: string }> => {
-      const { ownerName, passphrase, pin } = HouseholdSetupSchema.parse(input);
+      const { ownerName, pin } = HouseholdSetupSchema.parse(input);
       const vaultDir = await host.vaultPath();
       if (!vaultDir) throw new Error('No vault selected');
       const fs = host.fileSystem(vaultDir);
@@ -803,7 +798,6 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       };
       await savePerson(fs, key, owner);
       await setAccount(fs, key, { personId: owner.id, roleId: OWNER_ROLE_ID, pin });
-      await setSuperAdminPassphrase(fs, key, passphrase);
       await host.updateDeviceState({ activePersonId: owner.id });
       return { recoveryPhrase, ownerId: owner.id };
     },
@@ -836,8 +830,6 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         activePersonId: null,
         pendingJoinPersonId: null,
       });
-      // Drop any concealed super-admin inspect session so it can't bleed into the next vault.
-      host.setSuperAdminActive(false);
       // Recompute boot from the now-cleared device state → onboarding ("Choose a folder").
       return host.refreshBootState();
     },
@@ -856,7 +848,11 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     peopleSave: async (input): Promise<Person> => {
       const ctx = await host.vaultAndKey();
       if (!ctx) throw new Error('Household is not set up');
-      return upsertPerson(ctx.fs, ctx.key, PersonInputSchema.parse(input));
+      const person = await upsertPerson(ctx.fs, ctx.key, PersonInputSchema.parse(input));
+      // A subject person gets a no-PIN Member login by default, so they're immediately switchable by the
+      // Owner and gated into onboarding (roles refactor 2026-06-15). The Access tab refines role/PIN later.
+      if (person.isSubject) await ensureMemberAccounts(ctx.fs, ctx.key, [person.id]);
+      return person;
     },
     peopleDelete: async (id): Promise<void> => {
       const ctx = await host.vaultAndKey();
@@ -881,7 +877,21 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     // --- Access (roles + accounts) ---
     accessGet: async (): Promise<AccessView> => {
       const ctx = await host.vaultAndKey();
-      return ctx ? getAccessView(ctx.fs, ctx.key) : { roles: [], accounts: [] };
+      if (!ctx) return { roles: [], accounts: [] };
+      // Backfill a Member login for any subject person that predates auto-accounts, so every household
+      // subject is switchable by the Owner (roles refactor 2026-06-15). Idempotent + cheap after the
+      // first (writes only when an account is genuinely missing). Best-effort: a transient vault-write
+      // failure (e.g. an iCloud sync race) must NOT break a plain `access:get` read — degrade to the
+      // current view and let a later call backfill once the write succeeds.
+      try {
+        const subjects = (await listPeople(ctx.fs, ctx.key))
+          .filter((p) => p.isSubject)
+          .map((p) => p.id);
+        await ensureMemberAccounts(ctx.fs, ctx.key, subjects);
+      } catch {
+        // swallowed — the backfill retries on the next access:get
+      }
+      return getAccessView(ctx.fs, ctx.key);
     },
     accessSaveRole: async (role): Promise<AccessView> => {
       const ctx = await host.vaultAndKey();
@@ -965,36 +975,22 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       return { ok: true };
     },
 
-    // --- Session + super-admin ---
+    // --- Session ---
     sessionSetActive: async (input): Promise<SetActiveResult> => {
       const ctx = await host.vaultAndKey();
       if (!ctx) return { ok: false, reason: 'NO_ACCOUNT' };
       const { personId, pin } = SetActiveSchema.parse(input);
       const person = await getPerson(ctx.fs, ctx.key, personId);
       if (!person) return { ok: false, reason: 'NO_ACCOUNT' };
-      if (!(await verifyAccountPin(ctx.fs, ctx.key, personId, pin ?? ''))) {
-        return { ok: false, reason: 'WRONG_PIN' };
+      // The Owner (the full-access role) can switch to ANY household person with no PIN — even one whose
+      // own login has a PIN set (god-mode switching, 2026-06-15). Everyone else must pass the target's PIN.
+      if (!(await activePersonIsOwner(ctx.fs, ctx.key))) {
+        if (!(await verifyAccountPin(ctx.fs, ctx.key, personId, pin ?? ''))) {
+          return { ok: false, reason: 'WRONG_PIN' };
+        }
       }
       await host.updateDeviceState({ activePersonId: personId });
       return { ok: true, person };
-    },
-    superadminUnlock: async (input): Promise<boolean> => {
-      const { passphrase } = PassphraseSchema.parse(input);
-      // The super-admin secret lives in the vault (10-multi-device-vault §6.4). Verify against it,
-      // migrating a legacy device-local hash on first use. Requires the vault to be unlocked.
-      const ctx = await host.vaultAndKey();
-      if (!ctx) return false;
-      if (!(await hasSuperAdminPassphrase(ctx.fs))) {
-        const legacy = (await host.readDeviceState()).superAdminPassphraseHash;
-        if (legacy) await storeSuperAdminHash(ctx.fs, ctx.key, legacy);
-      }
-      const ok = await verifySuperAdminPassphrase(ctx.fs, ctx.key, passphrase);
-      if (ok) host.setSuperAdminActive(true);
-      return ok;
-    },
-    superadminLock: (): Promise<void> => {
-      host.setSuperAdminActive(false);
-      return Promise.resolve();
     },
 
     // --- Usage + budgets (06-ai-usage-and-budgets) ---
@@ -1277,7 +1273,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const ctx = await host.vaultAndKey();
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) return;
       const questionnaireId = QuestionnaireIdSchema.parse(id);
-      // Owner / super-admin (people.manage) purge a questionnaire + everything downstream at any stage
+      // Owner (people.manage) purge a questionnaire + everything downstream at any stage
       // (§3.9). A non-owner creator may delete their OWN questionnaire only while it is still unsent.
       if (await activePersonCan(ctx.fs, ctx.key, 'people.manage')) {
         await revokeRelayLinks(ctx.fs, ctx.key, (a) => a.questionnaireId === questionnaireId);
@@ -1394,12 +1390,10 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.viewResults')))
         return [];
       const all = await listAllInsights(ctx.fs, ctx.key);
-      // Restricted intake facts (§8.4) are withheld from the owner's NORMAL Memory view — they reach the
-      // person's OWN coaching context (a different path) but are browsable here only via the audited
-      // break-glass. A privileged caller (intake.readRestricted or the concealed super-admin) sees them.
-      const privileged =
-        host.isSuperAdminActive() ||
-        (await activePersonCan(ctx.fs, ctx.key, 'intake.readRestricted'));
+      // Restricted intake facts (§8.4) reach the subject's OWN coaching context (a different path) but are
+      // withheld here from a viewer WITHOUT `intake.readRestricted`. The Owner (full-access role) holds it,
+      // so the Owner sees them directly; a member without the grant gets them redacted.
+      const privileged = await activePersonCan(ctx.fs, ctx.key, 'intake.readRestricted');
       return privileged ? all : all.map(redactRestrictedFacts);
     },
     insightsAnalyze: async (input): Promise<QuestionnaireAnalyzeResult> => {
@@ -1605,7 +1599,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const id = AssignmentIdSchema.parse(assignmentId);
       const assignment = await getAssignment(ctx.fs, ctx.key, id);
       if (!assignment) return;
-      // Only the send's own sender (or an Owner / super-admin) may delete it + its derived Insight.
+      // Only the send's own sender (or the Owner) may delete it + its derived Insight.
       const personId = await activePersonId();
       if (
         assignment.senderPersonId !== personId &&
@@ -1779,13 +1773,11 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const assignment = await getAssignment(ctx.fs, ctx.key, id);
       if (!assignment) return null;
       const personId = await activePersonId();
-      const viaSuperAdmin = host.isSuperAdminActive();
-      // Read the snapshot once (server-side — the renderer can't spoof the visibility) for both the gate
-      // and the answer formatting.
       const snapshot = await getAssignmentSnapshot(ctx.fs, ctx.key, assignment.id);
-      // Who may reveal raw answers: the concealed super-admin (any send), OR the sender of a
-      // `senderSeesAll` compatibility send holding `questionnaires.readRaw` (08 §8.4). Nothing else.
-      let permitted = viaSuperAdmin;
+      // Who may read a Private send's raw answers: the Owner (full-access role — any send), OR the sender of
+      // a `senderSeesAll` compatibility send holding the granted `questionnaires.readRaw`. Nothing else.
+      // (The super-admin concept + the break-glass audit log were removed 2026-06-15.)
+      let permitted = await activePersonIsOwner(ctx.fs, ctx.key);
       if (!permitted && assignment.senderPersonId === personId && assignment.compatibilityGroupId) {
         permitted =
           snapshot?.compatibility?.visibility === 'senderSeesAll' &&
@@ -1795,25 +1787,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
 
       const response = await getResponse(ctx.fs, ctx.key, assignment.id);
       if (!snapshot || !response || response.submittedAt === undefined) return null;
-
-      // Audit BEFORE showing the answers — the trail is the whole point of break-glass (§8.4).
-      const entry: RawAccessAuditEntry = {
-        schemaVersion: 1,
-        at: new Date().toISOString(),
-        by: personId ?? 'super-admin',
-        viaSuperAdmin,
-        assignmentId: assignment.id,
-        recipientName: await recipientDisplayName(ctx.fs, ctx.key, assignment),
-        action: 'revealRaw',
-      };
-      await appendAuditEntry(ctx.fs, ctx.key, entry);
       return formatResponseAnswers(snapshot.questions, response.answers);
-    },
-    auditList: async (): Promise<RawAccessAuditEntry[]> => {
-      const ctx = await host.vaultAndKey();
-      // Super-admin only — the break-glass trail is not a normal-capability surface (§8.4).
-      if (!ctx || !host.isSuperAdminActive()) return [];
-      return listAuditEntries(ctx.fs, ctx.key);
     },
 
     // --- Relay: external delivery (08-questionnaires §3.2/§3.5/§3.8/§5.2). The Cloudflare token + drain
@@ -2398,32 +2372,6 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         ...(sectionId !== undefined ? { sectionId } : {}),
         now: new Date(),
       });
-    },
-    intakeRevealRestricted: async (input): Promise<InsightFact[] | null> => {
-      const { subjectPersonId } = IntakeRevealSchema.parse(input);
-      const ctx = await host.vaultAndKey();
-      if (!ctx) return null;
-      const personId = await activePersonId();
-      const viaSuperAdmin = host.isSuperAdminActive();
-      // Break-glass: the concealed super-admin OR a holder of the EXPLICIT_GRANT_ONLY `intake.readRestricted`
-      // capability — nothing else (§8.4). The renderer isn't the trust boundary; this is.
-      const permitted =
-        viaSuperAdmin || (await activePersonCan(ctx.fs, ctx.key, 'intake.readRestricted'));
-      if (!permitted) return null;
-      const facts = await listRestrictedIntakeFacts(ctx.fs, ctx.key, subjectPersonId);
-      // Audit BEFORE returning — the trail is the whole point. Recorded even when there's nothing to show,
-      // so every attempt is accountable.
-      const subject = await getPerson(ctx.fs, ctx.key, subjectPersonId);
-      await appendAuditEntry(ctx.fs, ctx.key, {
-        schemaVersion: 1,
-        at: new Date().toISOString(),
-        by: personId ?? 'super-admin',
-        viaSuperAdmin,
-        subjectPersonId,
-        subjectName: subject?.displayName ?? 'Unknown',
-        action: 'revealRestricted',
-      });
-      return facts;
     },
 
     // --- UI state (device-local) ---

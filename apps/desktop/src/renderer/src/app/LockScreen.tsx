@@ -6,7 +6,7 @@ import styles from './LockScreen.module.css';
 /**
  * The full-screen lock gate shown after logout (02-app-shell §3.4). It clears the active person from
  * view and requires re-picking someone — entering their PIN if they have one — to resume. This is a
- * UI reveal-gate (the master key stays in the keychain), mirroring the concealed super-admin lock.
+ * UI reveal-gate: the master key stays in the keychain; locking only hides the active person.
  */
 export function LockScreen(): JSX.Element {
   return (

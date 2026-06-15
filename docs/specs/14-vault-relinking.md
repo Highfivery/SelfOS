@@ -201,8 +201,10 @@ mutates **device-local** state that already exists, and it deliberately leaves t
 - **Device-local secret cleared** (`userData/secrets.json`, via the `SecretStore` host):
   `secrets.clear('selfos.masterKey')` (`MASTER_KEY_ID`). The personal API-key secrets (`anthropic.apiKey`,
   `openai.apiKey`) are **not** cleared (recommendation §7.4; open question §11).
-- **In-vault files:** **none read, none written, none deleted.** `config/recovery.enc`, `config/superadmin.enc`,
+- **In-vault files:** **none read, none written, none deleted.** `config/recovery.enc`,
   `people/**`, all `.enc` content remain byte-identical. The detach must not call any vault writer.
+  _(Amended 2026-06-14: the super-admin inspect flag was removed; the detach no longer resets it, and
+  `config/superadmin.enc` no longer exists.)_
 
 **Ownership:** the device-local reads/writes go through `deviceStore`/the `SecretStore` host as today; no
 direct `fs` is introduced. There is nothing the renderer persists; it only triggers the op and applies the

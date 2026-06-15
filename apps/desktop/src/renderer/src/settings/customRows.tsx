@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FolderOpen, FolderSync } from 'lucide-react';
 import { Button, Text } from '../design-system/components';
 import { useAppStore } from '../stores/appStore';
-import { useSessionStore } from '../stores/sessionStore';
 import { ChangeVaultDialog } from './ChangeVaultDialog';
 
 export function VaultLocationValue(): JSX.Element {
@@ -42,8 +41,6 @@ export function ChangeVaultRow(): JSX.Element {
 
 export function AboutVersion(): JSX.Element {
   const [version, setVersion] = useState('…');
-  const openUnlockPrompt = useSessionStore((s) => s.openUnlockPrompt);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -56,28 +53,10 @@ export function AboutVersion(): JSX.Element {
     };
   }, []);
 
-  // Concealed entry to super-admin: a long-press on the version (04-people-roles §3.3).
-  const startHold = (): void => {
-    timer.current = setTimeout(() => openUnlockPrompt(), 600);
-  };
-  const cancelHold = (): void => {
-    if (timer.current) {
-      clearTimeout(timer.current);
-      timer.current = null;
-    }
-  };
-
   return (
-    <span
-      onPointerDown={startHold}
-      onPointerUp={cancelHold}
-      onPointerLeave={cancelHold}
-      style={{ userSelect: 'none' }}
-    >
-      <Text size="sm" tone="secondary">
-        {version}
-      </Text>
-    </span>
+    <Text size="sm" tone="secondary">
+      {version}
+    </Text>
   );
 }
 

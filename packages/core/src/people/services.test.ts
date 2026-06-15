@@ -9,7 +9,14 @@ import {
   saveRelationship,
   upsertRelationship,
 } from './relationshipService';
-import { getAccessConfig, getAccessView, setAccount, verifyAccountPin } from './accessService';
+import {
+  ensureMemberAccounts,
+  getAccessConfig,
+  getAccessView,
+  saveRole,
+  setAccount,
+  verifyAccountPin,
+} from './accessService';
 
 const key = generateMasterKey();
 let fs: ReturnType<typeof memFileSystem>;
@@ -196,6 +203,33 @@ describe('accessService', () => {
     expect(await verifyAccountPin(fs, key, 'p2', 'anything')).toBe(false);
     await setAccount(fs, key, { personId: 'p2', roleId: 'member', pin: null });
     expect(await verifyAccountPin(fs, key, 'p2', 'anything')).toBe(true);
+  });
+
+  it('backfills a no-PIN Member account for subjects that lack one (switchable + gated)', async () => {
+    await setAccount(fs, key, { personId: 'owner-1', roleId: 'owner', pin: '4321' });
+    await ensureMemberAccounts(fs, key, ['owner-1', 'sub-2', 'sub-3']);
+    const config = await getAccessConfig(fs, key);
+    const byId = new Map(config.accounts.map((a) => [a.personId, a]));
+    expect(byId.get('owner-1')?.roleId).toBe('owner'); // the owner is untouched
+    expect(byId.get('sub-2')?.roleId).toBe('member'); // new subjects → Member
+    expect(byId.get('sub-3')?.roleId).toBe('member');
+    expect(byId.get('sub-2')?.pinHash).toBeUndefined(); // no PIN
+    // Idempotent: a second call with the same set adds nothing.
+    await ensureMemberAccounts(fs, key, ['owner-1', 'sub-2', 'sub-3']);
+    expect((await getAccessConfig(fs, key)).accounts).toHaveLength(3);
+  });
+
+  it('reconciles a stale built-in role on read (existing Member gains intake.own)', async () => {
+    // Persist a Member role frozen without `intake.own`, then read it back reconciled.
+    await saveRole(fs, key, {
+      id: 'member',
+      name: 'Member',
+      builtin: true,
+      capabilities: { 'sessions.own': true },
+    });
+    const config = await getAccessConfig(fs, key);
+    const member = config.roles.find((r) => r.id === 'member');
+    expect(member?.capabilities['intake.own']).toBe(true);
   });
 
   it('exposes a redacted view without pin hashes', async () => {

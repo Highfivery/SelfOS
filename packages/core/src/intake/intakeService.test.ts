@@ -10,7 +10,6 @@ import { queryUsage } from '../usage';
 import {
   ensureIntakeSession,
   getIntakeSession,
-  listRestrictedIntakeFacts,
   redactRestrictedFacts,
   runIntakeTurn,
   skipIntakeSection,
@@ -259,14 +258,12 @@ describe('intakeService', () => {
     expect(after.facts.find((f) => f.text.includes('honesty'))?.shareableWith).toEqual(['other-1']);
   });
 
-  it('exposes restricted facts only via the break-glass reader; redaction strips them', async () => {
+  it('redaction strips restricted facts for non-privileged viewers (§8.4)', async () => {
     const fs = await setup();
     await synthesizeIntake(synth(fs, fakeClient()));
-    const restricted = await listRestrictedIntakeFacts(fs, key, 'p1');
-    expect(restricted).toHaveLength(1);
-    expect(restricted[0]?.text).toContain('grief');
     const session = await getIntakeSession(fs, key, 'p1');
     const insight = (await getInsight(fs, key, 'p1', session!.insightId!)) as Insight;
+    expect(insight.facts.some((f) => f.restricted)).toBe(true); // the portrait has a restricted fact
     const redacted = redactRestrictedFacts(insight);
     expect(redacted.facts.some((f) => f.restricted)).toBe(false);
     expect(redacted.facts.length).toBe(insight.facts.length - 1);

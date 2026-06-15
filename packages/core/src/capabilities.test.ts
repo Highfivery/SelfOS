@@ -4,9 +4,40 @@ import {
   CAPABILITY_LABELS,
   DEFAULT_ROLES,
   EXPLICIT_GRANT_ONLY,
+  reconcileRole,
   roleAllows,
 } from './capabilities';
 import type { Role } from './schemas';
+
+describe('reconcileRole', () => {
+  it('adds a capability missing from a stale built-in role map (existing Member gains intake.own)', () => {
+    // A Member role frozen before `intake.own` existed — its stored map lacks the key.
+    const staleMember: Role = {
+      id: 'member',
+      name: 'Member',
+      builtin: true,
+      capabilities: { 'sessions.own': true }, // no intake.own
+    };
+    expect(roleAllows(staleMember, 'intake.own')).toBe(false); // before reconcile: denied
+    const reconciled = reconcileRole(staleMember);
+    expect(roleAllows(reconciled, 'intake.own')).toBe(true); // after reconcile: the default (on) applies
+  });
+
+  it('preserves an explicit toggle-off (does not re-enable a deliberately disabled default)', () => {
+    const member: Role = {
+      id: 'member',
+      name: 'Member',
+      builtin: true,
+      capabilities: { 'dreams.own': false }, // explicitly turned off
+    };
+    expect(reconcileRole(member).capabilities['dreams.own']).toBe(false);
+  });
+
+  it('leaves custom (non-built-in) roles untouched', () => {
+    const custom: Role = { id: 'helper', name: 'Helper', builtin: false, capabilities: {} };
+    expect(reconcileRole(custom)).toBe(custom);
+  });
+});
 
 describe('roleAllows', () => {
   it('grants the Owner every capability', () => {
@@ -38,29 +69,26 @@ describe('roleAllows', () => {
     expect(roleAllows(undefined, 'budgets.manage')).toBe(false);
   });
 
-  it('does NOT auto-grant explicit-grant-only capabilities to the Owner (break-glass readRaw ships OFF)', () => {
+  it('grants explicit-grant-only capabilities to the Owner (full-access role, super-admin removed)', () => {
     const owner = DEFAULT_ROLES.find((role) => role.id === 'owner')!;
     expect(EXPLICIT_GRANT_ONLY.has('questionnaires.readRaw')).toBe(true);
-    // The Owner has everything else, but readRaw is OFF until explicitly toggled.
-    expect(roleAllows(owner, 'questionnaires.readRaw')).toBe(false);
-    expect(owner.capabilities['questionnaires.readRaw']).toBe(false);
+    // The Owner is the full-access role — it has the break-glass capabilities too.
+    expect(roleAllows(owner, 'questionnaires.readRaw')).toBe(true);
+    expect(roleAllows(owner, 'intake.readRestricted')).toBe(true);
   });
 
-  it('grants an explicit-grant-only capability once the stored map turns it on', () => {
-    const owner = DEFAULT_ROLES.find((role) => role.id === 'owner')!;
+  it('keeps explicit-grant-only capabilities OFF for a non-owner role until the stored map turns it on', () => {
+    // A plain member does NOT get readRaw by default.
+    const member = DEFAULT_ROLES.find((role) => role.id === 'member')!;
+    expect(roleAllows(member, 'questionnaires.readRaw')).toBe(false);
+    // A member who is granted it explicitly does.
     const granted: Role = {
-      ...owner,
-      capabilities: { ...owner.capabilities, 'questionnaires.readRaw': true },
-    };
-    expect(roleAllows(granted, 'questionnaires.readRaw')).toBe(true);
-    // A member who is granted it explicitly also gets it.
-    const member: Role = {
       id: 'member',
       name: 'Member',
       builtin: true,
       capabilities: { 'questionnaires.readRaw': true },
     };
-    expect(roleAllows(member, 'questionnaires.readRaw')).toBe(true);
+    expect(roleAllows(granted, 'questionnaires.readRaw')).toBe(true);
   });
 
   it('registers questionnaires.readRaw with a label', () => {

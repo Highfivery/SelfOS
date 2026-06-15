@@ -14,16 +14,15 @@ import { useSessionStore } from '../../stores/sessionStore';
 import { MIN_OWNER_PIN_LENGTH } from '@shared/channels';
 
 /**
- * First-run household setup (04-people-roles §3.1): name the owner, set the super-admin passphrase,
- * then show the recovery phrase once. Runs after the vault is chosen, before the app.
+ * First-run household setup (04-people-roles §3.1): name the owner, set their unlock PIN, then show the
+ * recovery phrase once. The owner is the full-access role (the super-admin concept was removed 2026-06-15).
+ * Runs after the vault is chosen, before the app.
  */
 export function Setup(): JSX.Element {
   const setup = useSessionStore((s) => s.setup);
   const load = useSessionStore((s) => s.load);
 
   const [name, setName] = useState('');
-  const [passphrase, setPassphrase] = useState('');
-  const [confirm, setConfirm] = useState('');
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [busy, setBusy] = useState(false);
@@ -31,18 +30,14 @@ export function Setup(): JSX.Element {
   const [recoveryPhrase, setRecoveryPhrase] = useState<string | null>(null);
 
   const canSubmit =
-    name.trim().length > 0 &&
-    passphrase.length >= 6 &&
-    passphrase === confirm &&
-    pin.length >= MIN_OWNER_PIN_LENGTH &&
-    pin === confirmPin;
+    name.trim().length > 0 && pin.length >= MIN_OWNER_PIN_LENGTH && pin === confirmPin;
 
   const submit = async (): Promise<void> => {
     if (!canSubmit) return;
     setBusy(true);
     setError(null);
     try {
-      const phrase = await setup({ ownerName: name.trim(), passphrase, pin });
+      const phrase = await setup({ ownerName: name.trim(), pin });
       // A fresh vault returns a recovery phrase to show once; resuming an interrupted setup returns
       // none (the phrase was already issued), so go straight into the app.
       if (phrase) setRecoveryPhrase(phrase);
@@ -64,9 +59,8 @@ export function Setup(): JSX.Element {
             </Text>
             <Heading level={1}>Write this down</Heading>
             <Text tone="secondary">
-              This phrase restores your encrypted data if you lose access to this device or forget
-              your passphrase. It is shown only once and is never stored anywhere you can read it
-              later.
+              This phrase restores your encrypted data if you lose access to this device. It is
+              shown only once and is never stored anywhere you can read it later.
             </Text>
           </Stack>
           <Card>
@@ -99,8 +93,8 @@ export function Setup(): JSX.Element {
           </Text>
           <Heading level={1}>Create your profile</Heading>
           <Text tone="secondary">
-            SelfOS encrypts your data on this device. Tell us your name and set a super-admin
-            passphrase — you’ll use it to manage everyone in your household.
+            SelfOS encrypts your data on this device. Tell us your name and set a PIN — you’ll use
+            it to unlock your profile. As the owner you have full access to your household.
           </Text>
         </Stack>
         <Card>
@@ -112,29 +106,6 @@ export function Setup(): JSX.Element {
                   value={name}
                   placeholder="e.g. Alex"
                   onChange={(event) => setName(event.target.value)}
-                />
-              )}
-            </Field>
-            <Field label="Super-admin passphrase" help="At least 6 characters.">
-              {(props) => (
-                <TextInput
-                  {...props}
-                  type="password"
-                  value={passphrase}
-                  onChange={(event) => setPassphrase(event.target.value)}
-                />
-              )}
-            </Field>
-            <Field
-              label="Confirm passphrase"
-              error={confirm.length > 0 && confirm !== passphrase ? 'Passphrases don’t match.' : ''}
-            >
-              {(props) => (
-                <TextInput
-                  {...props}
-                  type="password"
-                  value={confirm}
-                  onChange={(event) => setConfirm(event.target.value)}
                 />
               )}
             </Field>

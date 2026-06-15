@@ -33,7 +33,6 @@ function signIn(roleId: 'owner' | 'member'): void {
       roles: DEFAULT_ROLES,
       accounts: [{ personId: ME.id, roleId, hasPin: false }],
     },
-    superAdmin: false,
   });
 }
 
@@ -101,7 +100,7 @@ afterEach(() => {
   useInboxStore.getState().reset();
   useGuidanceStore.getState().reset();
   useInsightStore.setState({ insights: [], loaded: false });
-  useSessionStore.setState({ activePerson: null, access: null, superAdmin: false });
+  useSessionStore.setState({ activePerson: null, access: null });
 });
 
 describe('Home', () => {

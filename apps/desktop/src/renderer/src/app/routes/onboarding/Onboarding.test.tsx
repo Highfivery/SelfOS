@@ -23,7 +23,6 @@ function signIn(roleId: 'owner' | 'member'): void {
   useSessionStore.setState({
     activePerson: ME,
     access: { roles: DEFAULT_ROLES, accounts: [{ personId: ME.id, roleId, hasPin: false }] },
-    superAdmin: false,
   });
 }
 

@@ -72,7 +72,7 @@ differ — all on iOS:
 3. **Resume / recovery.** On launch, resolve the saved bookmark. If it's **stale** (folder moved,
    renamed, deleted, or iCloud signed out), show the same calm vault-error recovery as desktop
    ([`02`](02-app-shell.md) §3.3), adapted: _"Re-select your SelfOS folder."_
-4. **Everything else** — onboarding (owner + super-admin passphrase + recovery phrase), Sessions,
+4. **Everything else** — onboarding (owner + recovery phrase), Sessions,
    People, Usage, Settings, the lock screen — is the shared UI, unchanged.
 
 ## 4. Data model (vault files & schemas)

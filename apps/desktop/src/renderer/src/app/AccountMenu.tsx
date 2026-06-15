@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ChevronDown, Lock, ShieldCheck, ShieldOff, Users } from 'lucide-react';
+import { ChevronDown, Lock, Users } from 'lucide-react';
 import { useSessionStore } from '../stores/sessionStore';
 import { TitlebarControl } from '../design-system/components';
 import styles from './AccountMenu.module.css';
@@ -14,14 +14,11 @@ function initials(name: string): string {
 
 /**
  * The titlebar account control: avatar + active person's name. Opening it reveals the session menu —
- * switch person, lock (logout), and, while the concealed super-admin is active, leave inspect mode.
- * A visible "Super-admin" badge marks the elevated state.
+ * switch person and lock (logout).
  */
 export function AccountMenu({ onSwitch }: { onSwitch: () => void }): JSX.Element | null {
   const activePerson = useSessionStore((s) => s.activePerson);
-  const superAdmin = useSessionStore((s) => s.superAdmin);
   const lock = useSessionStore((s) => s.lock);
-  const lockSuperAdmin = useSessionStore((s) => s.lockSuperAdmin);
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -38,12 +35,6 @@ export function AccountMenu({ onSwitch }: { onSwitch: () => void }): JSX.Element
 
   return (
     <div className={styles.wrap}>
-      {superAdmin ? (
-        <span className={styles.adminBadge}>
-          <ShieldCheck size={13} aria-hidden="true" />
-          Super-admin
-        </span>
-      ) : null}
       <TitlebarControl
         className={styles.trigger}
         aria-haspopup="menu"
@@ -79,20 +70,6 @@ export function AccountMenu({ onSwitch }: { onSwitch: () => void }): JSX.Element
               <Users size={16} aria-hidden="true" />
               Switch person
             </button>
-            {superAdmin ? (
-              <button
-                type="button"
-                role="menuitem"
-                className={styles.item}
-                onClick={() => {
-                  setOpen(false);
-                  lockSuperAdmin();
-                }}
-              >
-                <ShieldOff size={16} aria-hidden="true" />
-                Lock inspect mode
-              </button>
-            ) : null}
             <button
               type="button"
               role="menuitem"

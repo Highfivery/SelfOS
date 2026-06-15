@@ -33,7 +33,8 @@ import {
  * via an embedded `[[SELFOS:FIELD:…]]` marker. `synthesizeIntake` distils a section (a light reflection) or
  * the whole intake (the portrait `Insight`, `source: 'intake'`, + inferred field fills) — metering
  * `intake.synthesize` before parse (`09` pattern). Sensitive direct fields lock to own-context-only; facts
- * from `restricted` sections are flagged for the audited break-glass (§8.4). The API key never leaves the host.
+ * from `restricted` sections are flagged so they show only to the Owner (`intake.readRestricted`), redacted
+ * for everyone else (§8.4). The API key never leaves the host.
  */
 
 const SCHEMA_VERSION = 1;
@@ -661,30 +662,14 @@ async function synthesizePortrait(deps: IntakeSynthesizeDeps): Promise<IntakeSyn
   return { ok: true, session, portrait: draft.portrait, insightId, usage };
 }
 
-// --- Break-glass: restricted facts (§8.4) ---
+// --- Restricted facts (§8.4) ---
 
 /**
- * The person's restricted intake facts — the audited break-glass payload (§8.4). Returns the facts flagged
- * `restricted` on the person's portrait Insight (empty when there's no intake/insight). The reveal's
- * authorization + audit entry are enforced in the bridge (the trust boundary), exactly like the
- * questionnaire `revealRaw` path; this only assembles the data.
- */
-export async function listRestrictedIntakeFacts(
-  fs: FileSystem,
-  key: Uint8Array,
-  personId: string,
-): Promise<InsightFact[]> {
-  const session = await getIntakeSession(fs, key, personId);
-  if (!session?.insightId) return [];
-  const insight = await getInsight(fs, key, personId, session.insightId);
-  if (!insight) return [];
-  return insight.facts.filter((f) => f.restricted === true);
-}
-
-/**
- * Redact restricted facts from an insight for the owner's NORMAL views (§8.4) — strips facts flagged
- * `restricted` so they never appear in Memory/People without the audited reveal. The person's OWN coaching
- * context is a different path (`summarizeForContext`) and keeps them. Returns a shallow copy.
+ * Redact restricted facts from an insight for viewers WITHOUT `intake.readRestricted` (§8.4) — strips facts
+ * flagged `restricted` so a member browsing Memory never sees another person's trauma/intimacy intake. A
+ * holder of `intake.readRestricted` (always the Owner — the full-access role; or a non-owner role granted it)
+ * sees them directly, un-redacted, in the bridge. The person's OWN coaching context is a different path
+ * (`summarizeForContext`) and always keeps them. Returns a shallow copy.
  */
 export function redactRestrictedFacts(insight: Insight): Insight {
   if (!insight.facts.some((f) => f.restricted)) return insight;

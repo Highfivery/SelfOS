@@ -14,7 +14,6 @@ import { createNodeSecretStore } from './host/nodeSecretStore';
 import { defaultEncryptor } from './secrets/encryptor';
 import { defaultClaudeClient } from './claude/anthropicClient';
 import { defaultImageClient } from './image/openaiImageClient';
-import { isSuperAdminActive, setSuperAdminActive } from './people/superAdmin';
 import { loadMasterKey } from '@selfos/core/crypto';
 import { createNodeFileSystem } from './host/nodeFileSystem';
 import { loadRelayBundle, RELAY_VERSION } from './relay/relayBundle';
@@ -78,8 +77,6 @@ export function registerIpcHandlers(): void {
       const model = (await readVaultSettingsValues(createNodeFileSystem(vaultDir)))['ai.model'];
       return typeof model === 'string' ? model : DEFAULT_MODEL;
     },
-    isSuperAdminActive,
-    setSuperAdminActive,
     appVersion: __APP_VERSION__,
     // Drives the renderer titlebar layout; the renderer reads it from the preload bridge, but the
     // host needs it to satisfy the shared shape (the coreBridge factory carries it through).
@@ -202,8 +199,6 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.invitesRedeem, bridge.invitesRedeem);
   handle(IpcChannels.invitesCompleteJoin, bridge.invitesCompleteJoin);
   handle(IpcChannels.sessionSetActive, bridge.sessionSetActive);
-  handle(IpcChannels.superadminUnlock, bridge.superadminUnlock);
-  handle(IpcChannels.superadminLock, bridge.superadminLock);
   handle(IpcChannels.usageSummary, bridge.usageSummary);
   handle(IpcChannels.budgetGet, bridge.budgetGet);
   handle(IpcChannels.budgetGetPerson, bridge.budgetGetPerson);
@@ -260,7 +255,6 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.relayConnect, bridge.relayConnect);
   handle(IpcChannels.relayUpdate, bridge.relayUpdate);
   handle(IpcChannels.relayTeardown, bridge.relayTeardown);
-  handle(IpcChannels.auditList, bridge.auditList);
   handle(IpcChannels.dreamsList, bridge.dreamsList);
   handle(IpcChannels.dreamGet, bridge.dreamGet);
   handle(IpcChannels.dreamSave, bridge.dreamSave);
@@ -290,7 +284,6 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.intakeSkipSection, bridge.intakeSkipSection);
   handle(IpcChannels.intakeAcknowledgeAdult, bridge.intakeAcknowledgeAdult);
   handle(IpcChannels.intakeSynthesize, bridge.intakeSynthesize);
-  handle(IpcChannels.intakeRevealRestricted, bridge.intakeRevealRestricted);
   handle(IpcChannels.getSidebarCollapsed, bridge.getSidebarCollapsed);
   handle(IpcChannels.setSidebarCollapsed, bridge.setSidebarCollapsed);
 

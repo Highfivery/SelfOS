@@ -40,7 +40,7 @@ function renderHeader(overrides: Partial<Parameters<typeof AppHeader>[0]> = {}):
 
 afterEach(() => {
   clearMockBridge();
-  useSessionStore.setState({ activePerson: null, superAdmin: false, access: null, locked: false });
+  useSessionStore.setState({ activePerson: null, access: null, locked: false });
   useBudgetStore.setState({ status: null });
 });
 

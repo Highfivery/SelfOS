@@ -1,18 +1,21 @@
 # 10 — Multi-device household: vault identity, device join & recovery
 
-> **Status:** **Approved** · _last updated 2026-06-10_
+> **Status:** **Approved** · _last updated 2026-06-14_ · **Amended 2026-06-14:** the **super-admin was
+> removed entirely** (its powers fold into the **Owner**). **Slice 1b (super-admin secret → the vault,
+> `config/superadmin.enc`, the device→vault migration) is SUPERSEDED** and no longer exists; every
+> "super-admin" reference below is obsolete. The rest of the spec (key-free `vaultInitialized`, the
+> re-key/boot-gate guards in 1a, and the owner PIN in 1c) is unchanged.
 >
 > The same household opens one shared vault folder (local / iCloud / Dropbox / Drive) from multiple
 > devices, yet today the boot gate decides "first-run setup" from whether **this device's** keychain
 > holds the master key. So a second device pointed at an already-initialized vault re-runs Setup —
 > which **overwrites `config/recovery.enc` with a brand-new master key** (making all existing
-> ciphertext undecryptable) and **mints a second owner + a second super-admin**. This spec makes
+> ciphertext undecryptable) and **mints a second owner**. This spec makes
 > "is this vault initialized?" a key-free property of the **vault**, fixes the boot gate, hard-guards
-> against re-keying, moves the super-admin secret into the vault, and adds a recovery-phrase unlock so
-> a device can safely join an existing vault.
+> against re-keying, and adds a recovery-phrase unlock so a device can safely join an existing vault.
 
-Modifies the household/crypto/super-admin model in [`04-people-roles.md`](04-people-roles.md) (§5
-encryption, §8 super-admin) and the boot/onboarding flow in [`02-app-shell.md`](02-app-shell.md) §3.
+Modifies the household/crypto model in [`04-people-roles.md`](04-people-roles.md) (§5
+encryption, §8 owner access) and the boot/onboarding flow in [`02-app-shell.md`](02-app-shell.md) §3.
 It is the data-integrity prerequisite for the shared iCloud-Drive vault in
 [`07-mobile-platform.md`](07-mobile-platform.md) §5: the same detection + flows must run on Electron
 and the iOS WKWebView, so they live in `@selfos/core` behind the existing `SelfosBridge`. Inherits
@@ -125,7 +128,7 @@ where today's two-way Setup-vs-Shell decision lives.
 
 ### 3.2 First-run Setup (unchanged behavior, now guarded)
 
-The existing `Setup.tsx` wizard (name the owner → set the super-admin passphrase → show the recovery
+The existing `Setup.tsx` wizard (name the owner → set the owner PIN → show the recovery
 phrase once) is unchanged for the user. Behind it, `setupHousehold` now **refuses** to run if the
 vault is already initialized (§6.3), so it can no longer mint a second owner or overwrite the key.
 Per the §11 recommendation we also **require the owner to set a PIN** here (defense for §3.3).

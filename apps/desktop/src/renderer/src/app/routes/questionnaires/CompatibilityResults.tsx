@@ -164,7 +164,8 @@ function GroupCard({
         {group.canReveal && group.bothSubmitted ? (
           <Stack gap={2}>
             <Banner tone="warning">
-              Revealing raw answers is recorded in the audit log. Use it sparingly.
+              These are the other person’s raw answers. Open them only when you need to, and treat
+              them with care.
             </Banner>
             {group.members.map((m) =>
               revealed[m.assignmentId] ? (

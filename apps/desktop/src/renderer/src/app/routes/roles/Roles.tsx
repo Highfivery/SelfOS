@@ -1,11 +1,6 @@
 import { useEffect } from 'react';
 import { useSessionStore } from '../../../stores/sessionStore';
-import {
-  CAPABILITIES,
-  CAPABILITY_LABELS,
-  EXPLICIT_GRANT_ONLY,
-  roleAllows,
-} from '@shared/capabilities';
+import { CAPABILITIES, CAPABILITY_LABELS, roleAllows } from '@shared/capabilities';
 import {
   AdminOnlyBadge,
   Card,
@@ -31,9 +26,9 @@ export function Roles(): JSX.Element {
   const roles = access?.roles ?? [];
 
   const toggle = async (role: Role, capability: CapabilityKey): Promise<void> => {
-    // The owner is locked all-on EXCEPT explicit-grant-only capabilities (e.g. break-glass `readRaw`),
-    // which ship OFF for everyone and are togglable even on the owner row (08-questionnaires §8.4).
-    if (role.id === 'owner' && !EXPLICIT_GRANT_ONLY.has(capability)) return;
+    // The Owner is the full-access role — every capability is locked on (the super-admin concept was removed
+    // 2026-06-15, folding its powers into the Owner). Only non-owner roles are editable.
+    if (role.id === 'owner') return;
     const updated: Role = {
       ...role,
       capabilities: { ...role.capabilities, [capability]: !role.capabilities[capability] },
@@ -75,7 +70,7 @@ export function Roles(): JSX.Element {
                     </span>
                     <Switch
                       checked={roleAllows(role, capability)}
-                      disabled={isOwner && !EXPLICIT_GRANT_ONLY.has(capability)}
+                      disabled={isOwner}
                       aria-label={`${role.name}: ${CAPABILITY_LABELS[capability]}`}
                       onChange={() => void toggle(role, capability)}
                     />

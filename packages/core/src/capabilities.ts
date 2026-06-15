@@ -19,9 +19,9 @@ export const CAPABILITIES = [
   'questionnaires.answer',
   'questionnaires.viewResults',
   'questionnaires.sendExternal',
-  // `readRaw` (break-glass raw-answer access for a `senderSeesAll` compatibility send, §8.4/§13.5d) is an
-  // EXPLICIT_GRANT_ONLY capability: it ships OFF even for the Owner and is granted only by an explicit
-  // toggle in the Roles matrix. The concealed super-admin break-glass reveal works independently of it.
+  // `readRaw` (raw-answer access for a `senderSeesAll` compatibility send, §8.4/§13.5d) is an
+  // EXPLICIT_GRANT_ONLY capability: it ships OFF for non-owner roles and is granted only by an explicit
+  // toggle in the Roles matrix. The Owner (full-access) always has it.
   'questionnaires.readRaw',
   // Dreams (12-dreams §12). `dreams.own` = capture + analyze + view one's own dreams; `dreams.shareContext`
   // = promote a specific dream-insight fact into a related person's context (off by default per dream).
@@ -31,9 +31,9 @@ export const CAPABILITIES = [
   // Generate an AI image of one's own dream (13-dream-images §6). Default ON for Member, like `dreams.own`.
   'dreams.generateImage',
   // Personal onboarding (18-personal-onboarding §5). `intake.own` = run one's own getting-to-know-you
-  // intake (Member default ON). `intake.readRestricted` is EXPLICIT_GRANT_ONLY (below): the audited
-  // break-glass that lets an owner view a person's restricted intake facts ("what weighs on you" /
-  // intimacy) — ships OFF even for the Owner; the concealed super-admin reveal works independently.
+  // intake (Member default ON). `intake.readRestricted` is EXPLICIT_GRANT_ONLY (below): it lets a holder
+  // view a person's restricted intake facts ("what weighs on you" / intimacy) — ships OFF for non-owner
+  // roles; the Owner (full-access) always has it.
   'intake.own',
   'intake.readRestricted',
 ] as const;
@@ -63,10 +63,10 @@ export const CAPABILITY_LABELS: Record<CapabilityKey, string> = {
 };
 
 /**
- * Capabilities that ship OFF even for the Owner and never auto-grant — they're enabled only by an
- * explicit toggle in the Roles matrix (08-questionnaires §8.4). `roleAllows` special-cases these so the
- * Owner's automatic full-access bypass skips them, and the Roles editor leaves the Owner column toggleable
- * for exactly these. Today only the break-glass `questionnaires.readRaw` is here.
+ * Capabilities that are never default-on for NON-owner roles — a non-owner gets them only by an explicit
+ * toggle in the Roles matrix (the break-glass reveals of the most sensitive data, 08-questionnaires §8.4 /
+ * 18-personal-onboarding §8.4). The **Owner always has them** (full access). `roleAllows` checks the owner
+ * bypass first, then requires an explicit `true` for these on any other role.
  */
 export const EXPLICIT_GRANT_ONLY: ReadonlySet<CapabilityKey> = new Set<CapabilityKey>([
   'questionnaires.readRaw',
@@ -79,8 +79,8 @@ function capabilityMap(enabled: readonly CapabilityKey[]): Record<string, boolea
   return map;
 }
 
-/** Every capability except the explicit-grant-only ones — the Owner's default (so `readRaw` ships OFF). */
-const OWNER_DEFAULT_CAPABILITIES = CAPABILITIES.filter((c) => !EXPLICIT_GRANT_ONLY.has(c));
+/** The Owner is the full-access role — every capability (the super-admin's powers fold into the Owner). */
+const OWNER_DEFAULT_CAPABILITIES = CAPABILITIES;
 
 /**
  * Built-in roles (04-people-roles §12): Owner = everything; Member = own data + own relationships +
@@ -123,14 +123,39 @@ export const DEFAULT_ROLES: Role[] = [
 export const OWNER_ROLE_ID = 'owner';
 
 /**
- * Whether a role grants a capability. The **Owner always has every capability** — including ones
- * added after the role was persisted (a stored owner map can be stale, e.g. a vault created before
- * `budgets.manage` existed) — **except** the explicit-grant-only ones (e.g. break-glass `readRaw`), which
- * the Owner gets only when the stored map turns them on. For all other roles, a missing key means denied.
+ * Whether a role grants a capability. The **Owner has EVERY capability** — including ones added after the
+ * role was persisted (a stale stored map) AND the break-glass `EXPLICIT_GRANT_ONLY` ones: the Owner is the
+ * full-access role (the concealed "super-admin" was removed 2026-06-15, folding its powers into the Owner).
+ * For all other roles, a missing key means denied, and `EXPLICIT_GRANT_ONLY` capabilities require an
+ * explicit `true` in the stored map (granted via the Roles matrix) — they're never default-on for non-owners.
  */
 export function roleAllows(role: Role | undefined, capability: CapabilityKey): boolean {
   if (!role) return false;
-  if (EXPLICIT_GRANT_ONLY.has(capability)) return role.capabilities[capability] === true;
+  // The Owner is the full-access role — every capability, including the EXPLICIT_GRANT_ONLY ones. This
+  // check MUST precede the EXPLICIT_GRANT_ONLY gate below. For every other role a capability is granted
+  // only by an explicit `true` in the stored map (so EXPLICIT_GRANT_ONLY caps need a Roles-matrix toggle).
   if (role.id === OWNER_ROLE_ID) return true;
   return role.capabilities[capability] === true;
+}
+
+/**
+ * Reconcile a built-in role's stored capability map against the current code defaults — adding any
+ * capability key the stored map is MISSING (a capability introduced after the vault was created), using the
+ * default value. Preserves keys the owner has explicitly set (those already exist in the map), so a
+ * deliberate toggle-off is never re-enabled. This is why an existing Member picks up a newly-added default
+ * like `intake.own` without a destructive migration. Custom (non-built-in) roles are returned unchanged.
+ */
+export function reconcileRole(role: Role): Role {
+  if (!role.builtin) return role;
+  const def = DEFAULT_ROLES.find((d) => d.id === role.id);
+  if (!def) return role;
+  const capabilities = { ...role.capabilities };
+  let changed = false;
+  for (const [capability, value] of Object.entries(def.capabilities)) {
+    if (!(capability in capabilities)) {
+      capabilities[capability] = value;
+      changed = true;
+    }
+  }
+  return changed ? { ...role, capabilities } : role;
 }

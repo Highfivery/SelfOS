@@ -24,7 +24,7 @@ export function compatibilityDisclosure(
 
 /**
  * The extra line shown to a recipient when `questionnaires.discloseAdminAccess` is ON — the honest
- * acknowledgement that an owner/super-admin could break-glass access their answers (§8.4). Off by default,
+ * acknowledgement that a household owner could access their answers (§8.4). Off by default,
  * so recipients feel safe to be honest; on, the disclosure never over-promises.
  */
 export const ADMIN_ACCESS_DISCLOSURE =

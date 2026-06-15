@@ -10,7 +10,7 @@
 > mood signal. This is the most sensitive surface in SelfOS and is treated accordingly.
 
 Builds on [`08-questionnaires.md`](08-questionnaires.md) (the `Insight`/`metrics` layer, questionnaire
-engine, trend primitives, compatibility/both-answer model, break-glass privacy),
+engine, trend primitives, compatibility/both-answer model, owner-access privacy),
 [`09-session-analysis.md`](09-session-analysis.md) (`moodValence`/`moodEnergy`),
 [`04-people-roles.md`](04-people-roles.md) (people, relationships, encryption, capabilities, shareable-vs-private),
 and [`06-ai-usage-and-budgets.md`](06-ai-usage-and-budgets.md) (metering + budgets).
@@ -165,7 +165,7 @@ Per `00` §7: loading / empty / error / offline everywhere. Specifically:
 - **Sync conflict / migration** — `CheckIn` files follow the vault's conflict + migration handling (`00`),
   never auto-deleted.
 - **Relationship deleted/archived** — its check-ins + relationship Insights archive with it (`08` §3.9
-  semantics); Owner/super-admin purge cascades.
+  semantics); Owner purge cascades.
 
 ## 8. Safety, privacy & honesty
 
@@ -178,11 +178,11 @@ This is the most sensitive surface in SelfOS.
 - **Consent, not covert tracking.** Comparative metrics use the **both-answer / both-consent** model — each
   partner logs **their own** perception; one partner can never build a hidden record of the other's
   desire/behavior. A comparative view appears only once **both** have logged and consented.
-- **Lockable.** The Tracking tab is **lockable** behind the active person's PIN (or super-admin), so an
+- **Lockable.** The Tracking tab is **lockable** behind the active person's PIN (the Owner bypasses), so an
   unlocked device doesn't expose intimate data; it never renders until unlocked.
-- **Encryption + break-glass.** `CheckIn`s and relationship Insights are encrypted at rest (`04` §5). The
-  same **break-glass** honesty as `08` §8.4 applies: not zero-knowledge from the device owner/super-admin;
-  super-admin raw access is logged to the vault audit trail.
+- **Encryption + owner access.** `CheckIn`s and relationship Insights are encrypted at rest (`04` §5). The
+  same honesty as `08` §8.4 applies: not zero-knowledge from the device owner (the Owner is the full-access
+  role and holds the master key). **No raw-access audit log** (removed 2026-06-14).
 - **Coercion awareness.** Framing is non-judgmental and pressure-free; the feature is for mutual insight, not
   scorekeeping. No streaks/nagging that could weaponize the data.
 
@@ -232,7 +232,7 @@ Confirmed with the user (2026-06-10):
 5. **Recurring/scheduling** — **deferred**; check-ins + re-asks are **manual** in v1 (schema time-stamped +
    re-ask-ready).
 6. **Safety** — most-sensitive surface: **not medical** (notice patterns, never diagnose; route health/distress
-   to professionals), **lockable**, encrypted + break-glass honesty (`08` §8.4), coercion-aware framing.
+   to professionals), **lockable**, encrypted + owner-access honesty (`08` §8.4), coercion-aware framing.
 
 ## 13. Proposed build slices (after approval)
 

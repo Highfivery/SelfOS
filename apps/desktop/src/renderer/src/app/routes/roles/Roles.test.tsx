@@ -33,10 +33,8 @@ describe('Roles', () => {
     expect(accessSaveRole).toHaveBeenCalled();
   });
 
-  it('leaves the owner toggleable for the break-glass readRaw capability (it ships OFF)', async () => {
-    const accessSaveRole = vi.fn(() => Promise.resolve({ roles: DEFAULT_ROLES, accounts: [] }));
+  it('locks the owner all-on, including the break-glass readRaw (the Owner is the full-access role)', () => {
     installMockBridge({
-      accessSaveRole,
       accessGet: () => Promise.resolve({ roles: DEFAULT_ROLES, accounts: [] }),
     });
     useSessionStore.setState({ access: { roles: DEFAULT_ROLES, accounts: [] } });
@@ -45,10 +43,15 @@ describe('Roles', () => {
     const ownerReadRaw = screen.getByRole('switch', {
       name: 'Owner: Reveal raw private answers (break-glass)',
     });
-    expect(ownerReadRaw).not.toBeChecked(); // ships OFF even for the owner
-    expect(ownerReadRaw).not.toBeDisabled(); // …but it's togglable on the owner row
-    await userEvent.click(ownerReadRaw);
-    expect(accessSaveRole).toHaveBeenCalled();
+    expect(ownerReadRaw).toBeChecked(); // the Owner has everything now
+    expect(ownerReadRaw).toBeDisabled(); // …and the owner column is locked all-on
+
+    // A non-owner (member) keeps readRaw OFF + togglable.
+    const memberReadRaw = screen.getByRole('switch', {
+      name: 'Member: Reveal raw private answers (break-glass)',
+    });
+    expect(memberReadRaw).not.toBeChecked();
+    expect(memberReadRaw).not.toBeDisabled();
   });
 
   it('shows the owner column all-on even when a capability is missing from a stale stored map', () => {

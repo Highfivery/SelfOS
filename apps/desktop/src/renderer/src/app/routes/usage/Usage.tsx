@@ -46,7 +46,7 @@ export function Usage(): JSX.Element {
   const saveAppBudget = useUsageStore((s) => s.saveAppBudget);
   const canManage = useSessionStore((s) => s.can('budgets.manage'));
 
-  // Re-load when admin status flips too (e.g. entering/leaving super-admin inspect mode mid-view).
+  // Re-load when admin status flips too (e.g. switching to/from the Owner mid-view).
   useEffect(() => {
     void load();
   }, [load, canManage]);

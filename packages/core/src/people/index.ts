@@ -4,5 +4,4 @@ export * from './relationshipService';
 export * from './migrations';
 export * from './accessService';
 export * from './buildContext';
-export * from './superAdmin';
 export * from './inviteService';

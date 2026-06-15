@@ -5,7 +5,6 @@ export * from './relayService';
 export * from './answerService';
 export * from './compatibilityService';
 export * from './alignmentService';
-export * from './auditService';
 export * from './disclosure';
 export * from './deletionService';
 export * from './trends';

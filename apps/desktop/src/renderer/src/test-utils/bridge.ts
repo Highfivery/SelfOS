@@ -1,6 +1,7 @@
 import type { SelfosBridge } from '@shared/channels';
 import type { BootState } from '@shared/schemas';
 import { DEFAULT_ROLES } from '@shared/capabilities';
+import { useSessionStore } from '../stores/sessionStore';
 
 const READY: BootState = { phase: 'ready', vaultPath: '/vault', hasSettings: true };
 const ONBOARDING: BootState = { phase: 'onboarding', vaultPath: null, hasSettings: false };
@@ -88,8 +89,6 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
           updatedAt: 'now',
         },
       }),
-    superadminUnlock: (input) => Promise.resolve(input.passphrase === 'superpass'),
-    superadminLock: () => Promise.resolve(),
     usageSummary: () =>
       Promise.resolve({
         totalCostUsd: 0,
@@ -225,7 +224,6 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     relayConnect: () => Promise.resolve({ configured: false, updateAvailable: false }),
     relayUpdate: () => Promise.resolve({ configured: false, updateAvailable: false }),
     relayTeardown: () => Promise.resolve({ configured: false, updateAvailable: false }),
-    auditList: () => Promise.resolve([]),
     dreamsList: () => Promise.resolve([]),
     dreamGet: () => Promise.resolve(null),
     dreamSave: (input) =>
@@ -466,7 +464,6 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         portrait: 'Here is what I have come to understand about you.',
         insightId: 'intake-insight-1',
       }),
-    intakeRevealRestricted: () => Promise.resolve([]),
     getSidebarCollapsed: () => Promise.resolve(false),
     setSidebarCollapsed: () => Promise.resolve(),
     ...overrides,
@@ -477,4 +474,28 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
 
 export function clearMockBridge(): void {
   delete window.selfos;
+}
+
+/**
+ * Make the active person the Owner (the full-access role) for a test — the replacement for the removed
+ * super-admin bypass (roles refactor 2026-06-15). Reuses the existing active person id when set.
+ */
+export function elevateToOwner(): void {
+  const state = useSessionStore.getState();
+  const personId = state.activePerson?.id ?? 'owner-1';
+  useSessionStore.setState({
+    activePerson: state.activePerson ?? {
+      id: personId,
+      schemaVersion: 1,
+      displayName: 'Owner',
+      isSubject: true,
+      tags: [],
+      createdAt: 'now',
+      updatedAt: 'now',
+    },
+    access: {
+      roles: DEFAULT_ROLES,
+      accounts: [{ personId, roleId: 'owner', hasPin: false }],
+    },
+  });
 }

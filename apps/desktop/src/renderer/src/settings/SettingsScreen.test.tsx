@@ -10,7 +10,7 @@ import { DEFAULT_ROLES } from '@shared/capabilities';
 
 afterEach(() => {
   clearMockBridge();
-  useSessionStore.setState({ activePerson: null, access: null, superAdmin: false });
+  useSessionStore.setState({ activePerson: null, access: null });
   useSettingsStore.setState({
     values: {
       'appearance.theme': 'system',

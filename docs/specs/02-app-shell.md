@@ -103,8 +103,7 @@ Global, feature-agnostic controls (not per-route) live in the right of the **`Ap
 - the AI-usage **ring** (06) opening an **enriched dropdown** (§13.4: % of allowance, session count,
   top usage by type, admin-only $ with the AdminOnlyBadge, and a "View usage details →" link), and
 - an **account menu** — the active person (avatar + name) opening: **Switch person** (the "Who's
-  here?" picker), **Lock** (logout — see §3.6), and, only while the concealed super-admin is active,
-  **Lock inspect mode** plus a visible "Super-admin" badge.
+  here?" picker) and **Lock** (logout — see §3.6).
 
 New global items drop into the cluster without reworking the shell. Admin-only controls carry the
 "Admin only" marker (CLAUDE.md §12). See §13 for the per-platform window chrome.
@@ -114,8 +113,7 @@ New global items drop into the cluster without reworking the shell. Admin-only c
 **Logout locks the app to a full-screen person picker** (the lock screen): the active person is
 cleared from view and the user must re-pick someone — entering their PIN if they have one (PIN-less
 people resume immediately) — to continue. This is a **UI reveal-gate**, not data re-encryption: the
-master key stays in the keychain (mirroring the concealed super-admin lock, 04-people-roles §8).
-Locking also drops any super-admin elevation.
+master key stays in the keychain (04-people-roles §8).
 
 ## 4. Data model (vault & device-local)
 
@@ -198,7 +196,7 @@ New typed channels (declared in `src/shared`, validated both sides):
 - Events: `vault:changed` (from the watcher), `os:appearanceChanged`.
 
 Lock/logout and person-switching reuse the session channels in
-[`04-people-roles.md`](04-people-roles.md) (`session:setActive`, `superadmin:lock`); locking is a
+[`04-people-roles.md`](04-people-roles.md) (`session:setActive`); locking is a
 renderer-side state with no new channel.
 
 No Claude API usage in the shell itself.
@@ -257,7 +255,7 @@ Confirmed with the user (2026-06-10) for the shell-chrome modernization:
 8. **Logout** — **lock to a full-screen person picker**; PIN-less people resume immediately. A UI
    reveal-gate, not data re-encryption.
 9. **Global controls in the TopBar** — appearance toggle + usage ring + a single **account menu**
-   (Switch person / Lock / super-admin Lock-inspect). Removed from the sidebar footer.
+   (Switch person / Lock). Removed from the sidebar footer.
 
 _No open questions remain. New questions that arise during implementation are appended here._
 

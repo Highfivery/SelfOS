@@ -123,7 +123,7 @@ back to a conservative default and are flagged. **All displayed cost is labeled 
   → events, and `summarize(...)` → rollups (by type/model/person, totals, averages, cache savings).
 - **budgetService.ts** — `getBudgets()` / `setBudget(...)`, and `checkBudget({ personId, type })` →
   `{ state: 'ok' | 'warn' | 'over', spent, limit, period }`. Enforcement: **over** blocks unless an
-  **owner override** is active (super-admin or `users.manage`).
+  **owner override** is active (the Owner or `users.manage`).
 - **The AI proxy path** (claudeService, extended in 05) — before a call: `checkBudget`; if `over` and
   no override → return a typed `BUDGET_EXCEEDED` error. After a call: `recordUsage` from the SDK's
   `usage` (input/output/cache tokens). Sets `cache_control` on the stable system prefix.
@@ -194,7 +194,7 @@ color-only); budget bars expose value/min/max; the in-chat cost is a polite, non
 
 Confirmed with the user (2026-06-10):
 
-1. **Budget enforcement** — warn as you approach, **block at the limit**, with an **owner/super-admin
+1. **Budget enforcement** — warn as you approach, **block at the limit**, with an **owner
    override** so the owner is never stranded.
 2. **Pricing** — a **built-in maintained** per-model table; displayed cost is labeled **estimated**.
 3. **Usage storage** — in the **vault, encrypted, per person**; aggregated across people for the app

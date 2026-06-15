@@ -8,8 +8,8 @@ import {
 } from './intakeCatalog';
 
 describe('intakeCatalog', () => {
-  it('has the 10 sections with the right tier/restricted/adult flags', () => {
-    expect(INTAKE_CATALOG).toHaveLength(10);
+  it('has the 12 sections with the right tier/restricted/adult flags', () => {
+    expect(INTAKE_CATALOG).toHaveLength(12);
     expect(getIntakeSection('weighs')?.restricted).toBe(true);
     expect(getIntakeSection('intimacy')?.restricted).toBe(true);
     expect(getIntakeSection('intimacy')?.adult).toBe(true);
@@ -68,6 +68,13 @@ describe('intakeCatalog', () => {
     }
   });
 
+  it('every section has unique question ids (answers are keyed by id)', () => {
+    for (const section of INTAKE_CATALOG) {
+      const ids = (section.questions ?? []).map((m) => m.q.id);
+      expect(new Set(ids).size, `duplicate question id in section ${section.id}`).toBe(ids.length);
+    }
+  });
+
   it('every branch trigger references an EARLIER question in the same section (discrete answer)', () => {
     for (const section of INTAKE_CATALOG) {
       const ids = (section.questions ?? []).map((m) => m.q.id);
@@ -83,7 +90,7 @@ describe('intakeCatalog', () => {
 
   it('exposes renderer meta with tier/mode/questions but no host-only field mapping', () => {
     const meta = intakeSectionMeta();
-    expect(meta).toHaveLength(10);
+    expect(meta).toHaveLength(12);
     const basics = meta.find((m) => m.id === 'basics');
     expect(basics?.tier).toBe('core');
     expect(basics?.mode).toBe('form');

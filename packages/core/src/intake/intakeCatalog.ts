@@ -209,6 +209,8 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           'Somewhere between',
         ]),
       ),
+      f(shortText('nickname', 'Any nicknames?', 'What friends or family call you')),
+      f(shortText('nationality', 'Your nationality')),
     ],
   },
   {
@@ -331,6 +333,26 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         ),
       ),
       f(rating('mood', 'Your overall mood lately', 'Low', 'Great')),
+      f(
+        multi('liveWith', 'Who do you live with?', [
+          'On my own',
+          'Partner',
+          'Kids',
+          'Parents',
+          'Roommates',
+          'Pets',
+        ]),
+      ),
+      f(
+        single('workSchedule', 'Your usual schedule', [
+          'Nine-to-five',
+          'Shift work',
+          'Flexible / my own hours',
+          'Student',
+          'Not working right now',
+        ]),
+      ),
+      f(longText('typicalWeekend', 'What does a typical weekend look like for you?')),
     ],
   },
   {
@@ -427,6 +449,40 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         ),
       ),
       f(longText('remembered', 'What do you want to be remembered for?')),
+      f(
+        multi('causes', 'Causes you care about', [
+          'Environment',
+          'Equality',
+          'Animal welfare',
+          'Education',
+          'Poverty',
+          'Health',
+          'Faith',
+          'Politics',
+          'None in particular',
+          'Other',
+        ]),
+      ),
+      f(
+        single('politicalLeaning', 'Where do you sit politically?', [
+          'Left',
+          'Centre-left',
+          'Centre',
+          'Centre-right',
+          'Right',
+          'Apolitical',
+          'Prefer not to say',
+        ]),
+      ),
+      f(
+        single('decisionStyle', 'You make big decisions mostly with your…', [
+          'Head',
+          'Heart',
+          'Gut',
+          'The data',
+        ]),
+      ),
+      f(longText('success', 'What does success mean to you?')),
     ],
   },
   {
@@ -491,6 +547,35 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           'Directly',
           'Challenge me',
           'With data & structure',
+        ]),
+      ),
+      f(
+        single('topPriority', 'Your number-one priority right now', [
+          'Career',
+          'Health',
+          'Relationships',
+          'Money',
+          'Personal growth',
+          'Family',
+          'Fun & freedom',
+        ]),
+      ),
+      f(
+        shortText(
+          'learnSkill',
+          'A skill you’d love to learn',
+          'e.g. a language, an instrument, to cook',
+        ),
+      ),
+      f(
+        multi('motivates', 'What motivates you most?', [
+          'Achievement',
+          'Recognition',
+          'Security',
+          'Freedom',
+          'Impact',
+          'Connection',
+          'Mastery',
         ]),
       ),
     ],
@@ -611,6 +696,75 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           },
         ),
       ]),
+      ...grouped('Mind & mood', [
+        f(
+          single('lowMood', 'How often do you feel low or down?', [
+            'Rarely',
+            'Sometimes',
+            'Often',
+            'Most days',
+          ]),
+        ),
+        f(rating('anxietyLevel', 'How anxious do you tend to feel?', 'Calm', 'Anxious')),
+        f(
+          multi('stressRelief', 'How do you de-stress?', [
+            'Exercise',
+            'Time with people',
+            'Alone time',
+            'Hobbies',
+            'Nature',
+            'Food',
+            'A drink',
+            'Scrolling',
+            'Other',
+          ]),
+        ),
+        f(
+          multi('selfCare', 'Self-care that actually works for you', [
+            'Movement',
+            'Rest',
+            'Journaling',
+            'Therapy',
+            'Faith',
+            'Creativity',
+            'Nature',
+            'Friends',
+            'Music',
+            'None yet',
+          ]),
+        ),
+        f(rating('screenTime', 'Your screen / phone use', 'Minimal', 'Constant')),
+        f(
+          single('outdoors', 'Time outside or in nature', [
+            'Rarely',
+            'Now and then',
+            'Weekly',
+            'Most days',
+          ]),
+        ),
+        f(
+          single('lastCheckup', 'Your last health check-up', [
+            'Within a year',
+            '1–2 years ago',
+            'Longer than that',
+            'Never',
+          ]),
+        ),
+        f(
+          longText(
+            'goodHealth',
+            'What does good health mean to you?',
+            'Beyond just not being sick.',
+          ),
+        ),
+        f(
+          shortText(
+            'healthGoal',
+            'A health goal you have',
+            'e.g. sleep better, get stronger, drink less',
+          ),
+        ),
+      ]),
     ],
   },
   {
@@ -721,6 +875,217 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ),
         ),
         f(rating('loneliness', 'How lonely do you feel?', 'Never', 'Often')),
+        f(
+          single('makeFriends', 'How easily do you make new friends?', [
+            'Easily',
+            'With time',
+            'I find it hard',
+          ]),
+        ),
+        f(
+          single('groupRole', 'Your role in a group tends to be…', [
+            'The organizer',
+            'The listener',
+            'The funny one',
+            'The quiet one',
+            'The leader',
+            'It depends',
+          ]),
+        ),
+        f(rating('socialBattery', 'Your social battery', 'Drains fast', 'Always on')),
+      ]),
+      ...grouped('How you handle people', [
+        f(rating('boundaries', 'How good are you at boundaries?', 'I struggle', 'Firm')),
+        f(rating('forgiveness', 'How easily do you forgive?', 'I hold on', 'I let go')),
+        f(
+          single('beingWrong', 'When you’re in the wrong, you…', [
+            'Own it quickly',
+            'Get defensive first',
+            'Avoid it',
+            'It depends',
+          ]),
+        ),
+        f(
+          single('othersEmotions', 'When someone close is upset, you…', [
+            'Lean in',
+            'Try to fix it',
+            'Give them space',
+            'Feel overwhelmed',
+          ]),
+        ),
+      ]),
+      ...grouped('Your history', [
+        f(
+          longText(
+            'pastRelationships',
+            'Your relationship history, in brief',
+            'As much or as little as you like.',
+          ),
+        ),
+        f(longText('pastLesson', 'What past relationships taught you')),
+        f(longText('heartbreak', 'A heartbreak that shaped you', 'Only if you want to share.')),
+        f(
+          longText(
+            'repair',
+            'A relationship you wish you could repair',
+            'A rift you still think about.',
+          ),
+        ),
+      ]),
+    ],
+  },
+  {
+    id: 'work-money',
+    title: 'Work & money',
+    blurb: 'What you do, what you’re building, and how money sits with you.',
+    tier: 'invited',
+    mode: 'form',
+    restricted: false,
+    adult: false,
+    opener: 'Your work, your ambitions, and your relationship with money.',
+    focus:
+      'Their working life and finances — what they do, how they feel about it, their ambitions and ' +
+      'work–life balance, money mindset and worries, financial goals, and how money was modeled growing up. ' +
+      'Money can be sensitive — let them set the depth and never push.',
+    questions: [
+      ...grouped('Your work', [
+        f(
+          single('employmentStatus', 'Your work situation', [
+            'Employed full-time',
+            'Employed part-time',
+            'Self-employed',
+            'Business owner',
+            'Student',
+            'Unemployed',
+            'Retired',
+            'Full-time caregiver',
+            'Other',
+          ]),
+        ),
+        f(shortText('industry', 'Your field or industry')),
+        f(shortText('roleSummary', 'What you actually do day-to-day')),
+        f(rating('workEnjoy', 'How much do you enjoy your work?', 'Not at all', 'Love it')),
+        f(
+          single('workMeaning', 'Work is mostly…', [
+            'A calling',
+            'A career I care about',
+            'A paycheck',
+            'A means to an end',
+            'Still figuring it out',
+          ]),
+        ),
+        f(rating('workStress', 'How stressful is your work?', 'Calm', 'Intense')),
+      ]),
+      ...grouped('Ambition', [
+        f(
+          longText(
+            'careerGoal',
+            'Where you want your work or career to go',
+            'Next step or big picture.',
+          ),
+        ),
+        f(shortText('dreamJob', 'Your dream job or venture')),
+        f(rating('ambition', 'How ambitious do you feel right now?', 'Content as I am', 'Driven')),
+        f(rating('workLifeBalance', 'Your work–life balance', 'Out of balance', 'Healthy')),
+        f(longText('proudWork', 'Something you’ve built or achieved')),
+      ]),
+      ...grouped('Money', [
+        f(
+          single('moneySituation', 'How would you describe your finances?', [
+            'Comfortable',
+            'Getting by',
+            'Stretched',
+            'Struggling',
+            'Prefer not to say',
+          ]),
+        ),
+        f(single('moneyStyle', 'You’re more of a…', ['Saver', 'Spender', 'Somewhere in between'])),
+        f(rating('moneyWorry', 'How much does money worry you?', 'Not at all', 'A great deal')),
+        f(
+          single('moneyMeaning', 'Money mostly means…', [
+            'Security',
+            'Freedom',
+            'Status',
+            'Stress',
+            'Options',
+            'Not much to me',
+          ]),
+        ),
+        f(
+          single('debt', 'Debt — where are you?', [
+            'None',
+            'Manageable',
+            'A burden',
+            'Prefer not to say',
+          ]),
+        ),
+        f(
+          longText(
+            'financialGoal',
+            'A money goal you’re working toward',
+            'e.g. save for a home, clear debt, retire early',
+          ),
+        ),
+        f(
+          longText('moneyUpbringing', 'How money was handled growing up — and how that shaped you'),
+        ),
+      ]),
+    ],
+  },
+  {
+    id: 'joy-play',
+    title: 'Joy & play',
+    blurb: 'What lights you up — fun, hobbies, and the things that make you, you.',
+    tier: 'invited',
+    mode: 'form',
+    restricted: false,
+    adult: false,
+    opener: 'The lighter side — what you love, just because you love it.',
+    focus:
+      'What brings them joy and energy — passions, hobbies, creativity, play, what they’re curious about, ' +
+      'how they have fun alone and with others, and what’s on their wishlist. Keep it light and warm.',
+    questions: [
+      ...grouped('What you love', [
+        f(
+          multi('passions', 'What are you into?', [
+            'Music',
+            'Sports',
+            'Gaming',
+            'Reading',
+            'Cooking',
+            'Art & making',
+            'Photography',
+            'Film & TV',
+            'Travel',
+            'Fitness',
+            'Nature & outdoors',
+            'Fashion',
+            'Tech',
+            'Cars',
+            'Collecting',
+            'Dancing',
+            'Writing',
+            'Other',
+          ]),
+        ),
+        f(shortText('currentObsession', 'Something you’re a bit obsessed with right now')),
+        f(shortText('talkForHours', 'A topic you could talk about for hours')),
+        f(shortText('creativeOutlet', 'A creative outlet you have (or wish you had)')),
+      ]),
+      ...grouped('Fun & play', [
+        f(longText('idealWeekend', 'Your ideal weekend', 'From Friday night to Sunday.')),
+        f(shortText('funAlone', 'What you love doing alone')),
+        f(shortText('funWithOthers', 'What you love doing with people')),
+        f(rating('playfulness', 'How playful are you?', 'Serious', 'Goofy')),
+        f(shortText('makesYouLaugh', 'What reliably makes you laugh')),
+      ]),
+      ...grouped('Wonder & wishlist', [
+        f(shortText('travelDream', 'A place you’re dying to visit')),
+        f(longText('bucketList', 'Something on your bucket list')),
+        f(shortText('newToTry', 'Something new you want to try')),
+        f(shortText('comfortThing', 'Your comfort movie, show, album, or book')),
+        f(shortText('flowActivity', 'An activity that puts you in “flow”')),
+        f(shortText('childhoodJoy', 'Something you loved as a kid and miss')),
       ]),
     ],
   },
@@ -825,6 +1190,64 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ),
         ),
       ]),
+      ...grouped('More about your family', [
+        f(shortText('parentsWork', 'What your parents (or carers) did for work')),
+        f(
+          single('movedAround', 'Did you move around growing up?', [
+            'Stayed in one place',
+            'Moved sometimes',
+            'Moved a lot',
+          ]),
+        ),
+        f(
+          single('childhoodVibe', 'Your childhood home mostly felt…', [
+            'Warm',
+            'Tense',
+            'Chaotic',
+            'Strict',
+            'Loving but hard',
+            'Mixed',
+          ]),
+        ),
+        f(
+          single('familyMoney', 'How was money handled / talked about?', [
+            'Openly',
+            'A source of stress',
+            'Never discussed',
+            'We had little',
+            'We were comfortable',
+          ]),
+        ),
+        f(
+          single('discipline', 'How strict was your upbringing?', [
+            'Very strict',
+            'Balanced',
+            'Relaxed',
+            'Inconsistent',
+          ]),
+        ),
+        f(shortText('closestGrowingUp', 'Who were you closest to growing up?')),
+      ]),
+      ...grouped('What you carry', [
+        f(longText('favoriteMemory', 'A favorite memory from growing up')),
+        f(
+          longText(
+            'hardMemory',
+            'A harder memory from growing up',
+            'Only if you want to — skip anytime.',
+          ),
+        ),
+        f(longText('familyTradition', 'A family tradition you treasure (or wish you’d had)')),
+        f(shortText('shapedBy', 'A family member who shaped who you are')),
+        f(longText('wishDifferent', 'What you wish had been different', 'Optional.')),
+        f(
+          longText(
+            'parentingNow',
+            'If you’re a parent: same or different from how you were raised?',
+            'What you keep, and what you do differently.',
+          ),
+        ),
+      ]),
     ],
   },
   {
@@ -843,36 +1266,71 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
       'biggest failure and what it taught them, what they have survived, how they have changed, and who they ' +
       'are becoming. Held as the person chooses to share.',
     questions: [
-      f(
-        longText(
-          'chapters',
-          'If your life so far were a few chapters, what would they be?',
-          'Name the chapters, however you see them.',
+      ...grouped('Your chapters', [
+        f(shortText('childhoodWord', 'Your childhood in one word')),
+        f(
+          longText(
+            'chapters',
+            'If your life so far were a few chapters, what would they be?',
+            'Name the chapters, however you see them.',
+          ),
         ),
-      ),
-      f(
-        longText(
-          'turningPoint',
-          'A turning point that changed your direction',
-          'A moment or decision that shifted things.',
+        f(
+          longText(
+            'decadeMoments',
+            'A defining moment from each decade of your life',
+            'One that stands out for each.',
+          ),
         ),
-      ),
-      f(
-        longText(
-          'proudest',
-          'Something you’re proud of',
-          'An achievement or a moment you stood by yourself.',
+        f(longText('happiest', 'Your happiest chapter so far', 'A time you’d return to.')),
+        f(longText('hardest', 'A hard time you came through', 'Only what you want to share.')),
+      ]),
+      ...grouped('Moments that mattered', [
+        f(
+          longText(
+            'turningPoint',
+            'A turning point that changed your direction',
+            'A moment or decision that shifted things.',
+          ),
         ),
-      ),
-      f(longText('hardest', 'A hard time you came through', 'Only what you want to share.')),
-      f(
-        shortText(
-          'lifeLesson',
-          'The biggest lesson life has taught you',
-          'In a sentence, if you can.',
+        f(longText('bravest', 'The bravest thing you’ve ever done')),
+        f(longText('bestDecision', 'The best decision you ever made')),
+        f(longText('regret', 'A decision you regret', 'Only what you want to share.')),
+        f(longText('riskTaken', 'A risk you took — and how it turned out')),
+        f(
+          longText(
+            'proudest',
+            'Something you’re proud of',
+            'An achievement or a moment you stood by yourself.',
+          ),
         ),
-      ),
-      f(longText('becoming', 'Who are you becoming?', 'Where you feel yourself heading.')),
+      ]),
+      ...grouped('People & places', [
+        f(shortText('personChanged', 'A person who changed your life')),
+        f(shortText('placeMatters', 'A place that means a lot to you')),
+      ]),
+      ...grouped('How you’ve grown', [
+        f(longText('overcome', 'Something you’ve overcome')),
+        f(longText('reinvented', 'A time you reinvented yourself')),
+        f(longText('letGo', 'A dream you let go of', 'And how you feel about it now.')),
+        f(longText('changedMind', 'A belief you’ve changed your mind about')),
+        f(
+          shortText(
+            'lifeLesson',
+            'The biggest lesson life has taught you',
+            'In a sentence, if you can.',
+          ),
+        ),
+        f(longText('youngerSelf', 'What would you tell your younger self?')),
+        f(longText('becoming', 'Who are you becoming?', 'Where you feel yourself heading.')),
+        f(
+          longText(
+            'storyBecome',
+            'What do you want the rest of your story to be?',
+            'The next chapter, as you’d write it.',
+          ),
+        ),
+      ]),
     ],
   },
   {
@@ -940,6 +1398,70 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           'Share as little or as much as you like.',
         ),
       ),
+      ...grouped('How you’re carrying it', [
+        f(
+          single('anxietyRelationship', 'Your relationship with anxiety', [
+            'Rarely anxious',
+            'It comes and goes',
+            'A constant companion',
+            'Prefer not to say',
+          ]),
+        ),
+        f(
+          single('lowMoodRelationship', 'Your relationship with low mood', [
+            'Rarely',
+            'Sometimes',
+            'Often',
+            'Prefer not to say',
+          ]),
+        ),
+        f(
+          longText(
+            'whatKeepsUp',
+            'What keeps you up at night?',
+            'Only if you want to put it into words.',
+          ),
+        ),
+        f(
+          multi('copeOverwhelmed', 'When you’re overwhelmed, you tend to…', [
+            'Talk to someone',
+            'Withdraw',
+            'Keep busy',
+            'Shut down',
+            'Exercise',
+            'Numb out',
+            'Push through',
+            'Other',
+          ]),
+        ),
+        f(longText('avoidingHard', 'Something you’ve been avoiding dealing with')),
+        f(longText('fearHoldsBack', 'A fear that holds you back')),
+        f(
+          longText(
+            'guiltShame',
+            'Guilt or shame you carry',
+            'Only what you want to — this stays private to you.',
+          ),
+        ),
+      ]),
+      ...grouped('What helps', [
+        f(rating('supported', 'How supported do you feel right now?', 'Alone', 'Held')),
+        f(longText('whatHelps', 'When things get dark, what helps you?')),
+        f(
+          multi('needMore', 'What do you need more of right now?', [
+            'Rest',
+            'Support',
+            'Time',
+            'Money',
+            'Hope',
+            'Connection',
+            'Direction',
+            'Peace',
+            'Other',
+          ]),
+        ),
+        f(rating('hopeful', 'How hopeful are you that things will improve?', 'Not at all', 'Very')),
+      ]),
     ],
   },
   {

@@ -68,13 +68,20 @@ owner's normal views** — reachable only via an **audited break-glass** (§8.4)
 
 ### 3.1 Entry, "required", and resume
 
-- A new person is taken straight into onboarding and **strongly guided** to do it, with a **persistent nudge**
-  (a Home banner/card + a nav affordance) until it's complete. They are **not hard-locked** out of the app —
-  they can use it, but the nudge stays. ("Required" = the intended, prominent first path, not a wall.)
-- Because the intake is **AI-driven**, the first thing it checks is **AI availability** (key configured +
-  online + budget). If AI isn't ready, onboarding shows a clear **"connect AI to begin"** state: the **owner**
-  is routed to Settings → AI; a **member** (who can't configure AI) is told their household owner needs to
-  enable AI first. The nudge persists; nothing is lost.
+- **Members are hard-gated** (revised 2026-06-15): a Member who hasn't finished onboarding is taken straight
+  into a **full-screen takeover** of the app — no sidebar, no other screens — on every login until they
+  finish. "Finished" = the closing **portrait is generated** (`IntakeSession.status === 'complete'`); they may
+  skip individual sections/questions, but they must work through the whole flow and produce the portrait. The
+  header stays (so they can still switch person / lock); the crisis "Get help now" resources are always
+  present, so it's a gate, not a dead-end. On completion the gate releases and they land on the portrait (now
+  with the sidebar), with the Onboarding nav entry available to revisit it.
+- **The Owner and the concealed super-admin are exempt** from the gate — the Owner sets up the household + AI
+  (and the intake _requires_ AI, so a gated owner with no key would be trapped). The Owner instead gets the
+  **persistent nudge** (a Home card + the nav affordance + an "unfinished" dot) until they do it voluntarily.
+- Because the intake is **AI-driven**, it checks **AI availability** (key configured + online + budget). If AI
+  isn't ready, onboarding shows a clear **"connect AI to begin"** state: the **owner** is routed to Settings →
+  AI; a gated **member** (who can't configure AI) is told their household owner needs to enable AI first and
+  stays gated (no progress is lost). The owner enables AI in their own (ungated) session.
 - **Save & resume** is first-class: progress is saved continuously (per answer + per section); the person can
   leave anytime and return to exactly where they were, across days. A progress indicator shows sections done /
   remaining and an estimate.
@@ -374,8 +381,9 @@ tunings below were resolved at build (2026-06-14, see §12 "Build-time decisions
 - **18+ acknowledgement** — **shared** with guided sessions (`16`): the existing per-person
   `guidance/prefs.enc` `adultAcknowledged` flag gates both the intimacy guided exercises **and** the intimacy
   intake block; `intake:acknowledgeAdult` writes the same flag. Acking once anywhere unlocks both.
-- **First-run entry** — a brand-new person is **auto-routed once** to `/onboarding` (dismissible — they can
-  navigate away), with a persistent Home nudge card + a nav badge until `IntakeSession.status === 'complete'`.
+- **First-run entry** — _superseded 2026-06-15:_ originally a dismissible auto-route-once. Now a **hard gate
+  for Members** (full-screen takeover until the portrait is generated) + a **nudge for the exempt Owner** (see
+  §3.1). The auto-route was removed.
 - **Insight-fact sharing default** — **all** intake Insight facts default `shareable: false` (own-context-only),
   matching the session/dream precedent; restricted-section facts are additionally `restricted: true`. §8.3's
   "shared default for everything else" governs the **mapped `Person` fields** (not locked → shared); the owner
@@ -401,3 +409,13 @@ revealRestricted` (gated + active-person-scoped; restricted facts redacted from 
   from every other person's context** regardless of `shareable` (defense in depth, §8.4). Gate green: typecheck
   (node + web/DOM-lib), lint, format, **362 core + 442 desktop + 8 relay** unit, **63 E2E**; visual QA at
   desktop + 390px (0 overflow, no console errors).
+- 2026-06-15 — **Onboarding made a hard requirement for Members** (user feedback: the dismissible
+  auto-route felt buggy; "a person MUST go through it first"). Replaced the auto-route-once + nudge with a
+  **full-screen gate** in `AppShell`: a Member (`intake.own`, not Owner, not super-admin) is taken over by
+  onboarding on every login until `status === 'complete'` (the portrait is generated). The header stays
+  (switch person / lock) + crisis resources are always present (not a dead-end); `AppHeader` gained a
+  `hideNav` prop to drop the hamburger during the takeover. The **Owner + super-admin are exempt** (the
+  Owner sets up AI, which the intake requires) and get the existing nudge. On completion the gate releases
+  and the finish navigates to `/onboarding` so the just-written portrait stays on screen (now with the
+  sidebar). §3.1 / §12 first-run-entry updated. Gate green: typecheck, lint, format, **442 desktop** unit,
+  **64 E2E** (+1: a Member is hard-gated [no app nav] → finishes → the gate releases).

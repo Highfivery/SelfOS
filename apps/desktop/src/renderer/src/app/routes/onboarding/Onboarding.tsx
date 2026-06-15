@@ -163,7 +163,12 @@ export function Onboarding(): JSX.Element {
                   disabled={finalizing}
                   onClick={() => {
                     void finishIntake().then((ok) => {
-                      if (ok) setRevisiting(false);
+                      if (!ok) return;
+                      setRevisiting(false);
+                      // Completing flips the session to `complete`, which releases the Member onboarding
+                      // gate (AppShell). Land on /onboarding so the just-written portrait stays on screen
+                      // (now with the sidebar) instead of snapping to Home (18-personal-onboarding §3.1).
+                      navigate('/onboarding');
                     });
                   }}
                 >

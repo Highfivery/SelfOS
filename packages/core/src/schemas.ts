@@ -676,6 +676,8 @@ export type AiFailureReason = 'NO_KEY' | 'DENIED' | 'BUDGET' | 'REFUSED' | 'ERRO
 export interface QuestionnaireGenerateResult {
   ok: boolean;
   questions?: Question[];
+  // A short AI-suggested title (08 §16.4) — the builder uses it only when the title field is still empty.
+  title?: string;
   usage?: UsageEvent;
   reason?: AiFailureReason;
   message?: string;

@@ -16,11 +16,20 @@ const ANSWER_TYPE_GUIDE = `Each question is an object with:
 - "help": optional one-line clarifier.
 - "options": string[] — REQUIRED for singleChoice, multiChoice, ranking, thisOrThat (>= 2 items).
 - "scale": {"min":number,"max":number} — REQUIRED for rating and slider (e.g. 1..5).
-Do NOT use matrix or allocation. Return ONLY a JSON array, no prose, no markdown fences.`;
+Do NOT use matrix or allocation. No prose, no markdown fences.`;
 
-const SAFETY = `You draft questions for SelfOS, a wellness / self-help tool — NOT medical, NOT diagnosis, NOT treatment. Write ORIGINAL, evidence-informed questions in a supportive voice. Never reproduce or imitate copyrighted or clinical/diagnostic instruments, never score diagnostically, never ask for medical/clinical self-assessment. Stay strictly within Anthropic's usage policy. If a request would require unsafe or out-of-policy content, return an empty array [].`;
+const SAFETY = `You draft questions for SelfOS, a wellness / self-help tool — NOT medical, NOT diagnosis, NOT treatment. Write ORIGINAL, evidence-informed questions in a supportive voice. Never reproduce or imitate copyrighted or clinical/diagnostic instruments, never score diagnostically, never ask for medical/clinical self-assessment. Stay strictly within Anthropic's usage policy. If a request would require unsafe or out-of-policy content, return an empty questions array.`;
 
-export const GENERATION_SYSTEM = `${SAFETY}\n\nReturn a JSON array of questionnaire questions.\n${ANSWER_TYPE_GUIDE}`;
+// Generation returns an OBJECT so it can also propose a short title (08 §16.4). The title is advisory —
+// the builder applies it only when the author hasn't typed one.
+export const GENERATION_SYSTEM = `${SAFETY}
+
+Return ONLY a JSON object: {"title": string (a short, warm questionnaire title, <= 6 words), "questions": [ ... ]}.
+${ANSWER_TYPE_GUIDE}`;
+
+// `improveQuestion` rewrites ONE question's prompt — its own system so it isn't muddled by the
+// object/questions generation contract.
+export const IMPROVE_SYSTEM = `${SAFETY}\n\nYou rewrite a single questionnaire question's prompt on request. Return ONLY the rewritten question text — no quotes, no prose, no options, no JSON.`;
 
 // `explicit` + `unfiltered` share generation framing on purpose: the tier distinction (age/DOB +
 // consent gates) is enforced **recipient-side at send** (§8.3), not at generation time.
@@ -58,6 +67,7 @@ export function buildGenerationUserMessage(input: {
         .join('\n')}`,
     );
   }
+  parts.push(`\nReturn the JSON object with a short "title" and the "questions" array.`);
   return parts.filter((p) => p !== '').join('\n');
 }
 

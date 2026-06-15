@@ -16,6 +16,7 @@ import {
   buildImproveUserMessage,
   buildVariantUserMessage,
   GENERATION_SYSTEM,
+  IMPROVE_SYSTEM,
   VARIANT_SYSTEM,
 } from './aiPrompts';
 import { gatherGenerationContext, type GenerationContextRequest } from './contextProviders';
@@ -52,11 +53,30 @@ const GeneratedQuestionSchema = z.object({
   scale: z.object({ min: z.number(), max: z.number() }).optional(),
 });
 
+/** Generation returns an object: a short `title` (08 §16.4) + the questions array. */
+const GeneratedSetSchema = z.object({
+  title: z.string().optional(),
+  questions: z.array(GeneratedQuestionSchema),
+});
+
 /** Pull the first JSON array out of a model reply (tolerates ```json fences / surrounding prose). */
 export function extractJsonArray(text: string): unknown {
   const fenced = text.replace(/```json|```/gi, '');
   const start = fenced.indexOf('[');
   const end = fenced.lastIndexOf(']');
+  if (start === -1 || end === -1 || end < start) return null;
+  try {
+    return JSON.parse(fenced.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+}
+
+/** Pull the first JSON object out of a model reply (tolerates fences / surrounding prose). */
+function extractJsonObject(text: string): unknown {
+  const fenced = text.replace(/```json|```/gi, '');
+  const start = fenced.indexOf('{');
+  const end = fenced.lastIndexOf('}');
   if (start === -1 || end === -1 || end < start) return null;
   try {
     return JSON.parse(fenced.slice(start, end + 1));
@@ -166,9 +186,18 @@ export async function generateQuestions(
   const call = await runClaude(deps, GENERATION_SYSTEM, user, 'questionnaire.generate', 1500);
   if (!call.ok) return { ok: false, reason: call.reason, message: call.message };
 
-  const parsed = extractJsonArray(call.text);
-  const validated = z.array(GeneratedQuestionSchema).safeParse(parsed);
-  if (!validated.success) {
+  // Generation returns {title, questions}. Tolerate a legacy bare-array reply too, so an older model
+  // response still yields questions (just no title).
+  const validated = GeneratedSetSchema.safeParse(extractJsonObject(call.text));
+  const legacyArray = validated.success
+    ? null
+    : z.array(GeneratedQuestionSchema).safeParse(extractJsonArray(call.text));
+  const set = validated.success
+    ? validated.data
+    : legacyArray?.success
+      ? { questions: legacyArray.data }
+      : null;
+  if (!set) {
     return {
       ok: false,
       reason: 'REFUSED',
@@ -178,7 +207,7 @@ export async function generateQuestions(
   }
   const seen = new Set(request.existingPrompts.map(norm));
   const questions: Question[] = [];
-  for (const raw of validated.data) {
+  for (const raw of set.questions) {
     const q = toQuestion(raw);
     if (q && !seen.has(norm(q.prompt))) {
       seen.add(norm(q.prompt));
@@ -193,7 +222,8 @@ export async function generateQuestions(
       message: 'No usable questions came back. Try a clearer brief.',
     };
   }
-  return { ok: true, questions, usage: call.usage };
+  const title = 'title' in set ? set.title?.trim() : undefined;
+  return { ok: true, questions, ...(title ? { title } : {}), usage: call.usage };
 }
 
 /**
@@ -243,7 +273,7 @@ export async function improveQuestion(
   input: { prompt: string; type: string; instruction: string },
 ): Promise<ImproveResult> {
   const user = buildImproveUserMessage(input);
-  const call = await runClaude(deps, GENERATION_SYSTEM, user, 'questionnaire.generate', 200);
+  const call = await runClaude(deps, IMPROVE_SYSTEM, user, 'questionnaire.generate', 200);
   if (!call.ok) return { ok: false, reason: call.reason, message: call.message };
   const text = call.text
     .trim()

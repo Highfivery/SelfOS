@@ -3383,7 +3383,8 @@ test('onboarding: resumes mid-intake to the saved transcript (18 §3.1)', async 
         schemaVersion: 1,
         personId: 'owner-1',
         status: 'inProgress',
-        // Core sections done so the overview shows the invited grid; a chat section ('family') is mid-way.
+        // Core sections done so the overview shows the invited grid; a form section ('family') has an
+        // in-progress "Tell me more" go-deeper transcript that should resume on open.
         sections: [
           { id: 'basics', status: 'complete', restricted: false, messages: [], answers: {} },
           { id: 'life-now', status: 'skipped', restricted: false, messages: [], answers: {} },
@@ -3410,10 +3411,16 @@ test('onboarding: resumes mid-intake to the saved transcript (18 §3.1)', async 
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: /Onboarding/ }).click();
-    // Open the in-progress chat section from the "Go deeper" grid → its saved transcript resumes.
+    // Open the in-progress section from the "Go deeper" grid → its go-deeper transcript auto-expands.
     await w.getByRole('button', { name: /Family & upbringing/ }).click();
     await expect(w.getByText('My name is Sam.')).toBeVisible();
     await expect(w.getByText('Lovely to meet you, Sam.')).toBeVisible();
+    // Reloading returns to the same section (device-local), not back to the core flow: reopening
+    // Onboarding lands directly on Family & upbringing (its transcript) without re-clicking the grid card.
+    await w.reload();
+    await w.getByRole('link', { name: /Onboarding/ }).click();
+    await expect(w.getByText('My name is Sam.')).toBeVisible();
+    await expect(w.getByRole('button', { name: /^Back$/ })).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

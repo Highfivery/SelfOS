@@ -97,7 +97,10 @@ beforeEach(() => {
   signIn('owner');
   useIntakeStore.getState().reset();
 });
-afterEach(() => clearMockBridge());
+afterEach(() => {
+  clearMockBridge();
+  localStorage.clear();
+});
 
 describe('Onboarding', () => {
   it('shows the owner "connect AI" state when AI is unavailable', async () => {
@@ -158,6 +161,35 @@ describe('Onboarding', () => {
     renderOnboarding();
     expect(await screen.findByText('I work as a nurse.')).toBeInTheDocument();
     expect(screen.getByText('That sounds meaningful — tell me more.')).toBeInTheDocument();
+  });
+
+  it('restores the previously-open section from device-local storage on mount', async () => {
+    localStorage.setItem('selfos:onboarding:section:owner-1', 'weighs');
+    installMockBridge({ intakeGetState: () => Promise.resolve(state()) });
+    renderOnboarding();
+    // The reopened section is shown directly (with a Back affordance) rather than the core flow.
+    expect(await screen.findByText('Anything weighing on you?')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Back/ })).toBeInTheDocument();
+  });
+
+  it('persists the opened section so a reload returns to it', async () => {
+    const s = state();
+    s.session.sections = s.session.sections.map((sec) =>
+      sec.id === 'basics' ? { ...sec, status: 'complete' as const } : sec,
+    );
+    installMockBridge({ intakeGetState: () => Promise.resolve(s) });
+    renderOnboarding();
+    fireEvent.click(await screen.findByRole('button', { name: /What weighs on you/ }));
+    expect(localStorage.getItem('selfos:onboarding:section:owner-1')).toBe('weighs');
+  });
+
+  it('ignores a stale persisted section id and falls back to the core walk', async () => {
+    localStorage.setItem('selfos:onboarding:section:owner-1', 'no-such-section');
+    installMockBridge({ intakeGetState: () => Promise.resolve(state()) });
+    renderOnboarding();
+    // A removed/renamed id must not short-circuit to the portrait offer — the first core section shows.
+    expect(await screen.findByText('What should I call you?')).toBeInTheDocument();
+    expect(screen.queryByText('That’s the essentials — thank you')).not.toBeInTheDocument();
   });
 
   it('shows the closing portrait when the intake is complete', async () => {

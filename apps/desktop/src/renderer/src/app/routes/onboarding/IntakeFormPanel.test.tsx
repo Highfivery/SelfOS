@@ -157,6 +157,27 @@ describe('IntakeFormPanel', () => {
     );
   });
 
+  it('auto-opens the go-deeper chat when the section already has a transcript (resume)', () => {
+    installMockBridge({});
+    render(
+      <IntakeFormPanel
+        meta={formMeta}
+        section={section({
+          status: 'inProgress',
+          messages: [
+            { role: 'user', content: 'My childhood was complicated.', ts: 'now' },
+            { role: 'assistant', content: 'Thank you for trusting me with that.', ts: 'now' },
+          ],
+        })}
+        adultAcknowledged={false}
+        onAdvance={() => {}}
+      />,
+    );
+    // The saved transcript shows immediately — no need to click "Tell me more" first.
+    expect(screen.getByText('My childhood was complicated.')).toBeInTheDocument();
+    expect(screen.getByText('Thank you for trusting me with that.')).toBeInTheDocument();
+  });
+
   it('gates an adult section behind the 18+ acknowledgement (no questions until acked)', () => {
     installMockBridge({});
     render(

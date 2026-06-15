@@ -33,7 +33,9 @@ export function IntakeFormPanel({
   const runTurn = useIntakeStore((s) => s.runTurn);
   const running = useIntakeStore((s) => s.running);
   const streaming = useIntakeStore((s) => s.streaming);
-  const [deepening, setDeepening] = useState(false);
+  // Auto-open the go-deeper chat when the section already has a transcript (a resumed/ongoing "Tell me
+  // more" conversation), so reopening the section shows it rather than hiding it behind the button.
+  const [deepening, setDeepening] = useState((section?.messages?.length ?? 0) > 0);
 
   // Local answer state, seeded from any saved answers (resume / edit). The host owns it (§5.3); a Continue
   // persists it through the bridge. Re-seeds when the section identity changes (key on meta.id at the parent).

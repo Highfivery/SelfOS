@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Check, Lock, Sparkles } from 'lucide-react';
 import type { IntakeSectionMeta } from '@shared/channels';
@@ -28,10 +28,34 @@ export function Onboarding(): JSX.Element {
   const finishIntake = useIntakeStore((s) => s.finishIntake);
   const finalizing = useIntakeStore((s) => s.finalizing);
   const displayName = useSessionStore((s) => s.activePerson?.displayName ?? null);
+  const activePersonId = useSessionStore((s) => s.activePerson?.id ?? null);
   // "Owner" here = someone who can turn on AI (settings.manage); drives the AI-unavailable copy (§7).
   const canManageAi = useSessionStore((s) => s.can('settings.manage'));
 
-  const [activeId, setActiveId] = useState<string | null>(null);
+  // The opened section is persisted device-local (per person) so a reload/restart returns you to where you
+  // were instead of bouncing to the first unfinished core step. It's transient UI nav state — never content.
+  const storageKey = activePersonId ? `selfos:onboarding:section:${activePersonId}` : null;
+  const [activeId, setActiveIdState] = useState<string | null>(() => {
+    if (!storageKey) return null;
+    try {
+      return window.localStorage.getItem(storageKey);
+    } catch {
+      return null;
+    }
+  });
+  const setActiveId = useCallback(
+    (id: string | null): void => {
+      setActiveIdState(id);
+      if (!storageKey) return;
+      try {
+        if (id) window.localStorage.setItem(storageKey, id);
+        else window.localStorage.removeItem(storageKey);
+      } catch {
+        /* localStorage unavailable — keep the in-memory value only */
+      }
+    },
+    [storageKey],
+  );
   const [revisiting, setRevisiting] = useState(false);
 
   useEffect(() => window.selfos?.onIntakeChunk(appendChunk), [appendChunk]);
@@ -55,13 +79,17 @@ export function Onboarding(): JSX.Element {
   const pendingCore = core.filter((m) => !isResolved(m.id));
   const complete = state?.session.status === 'complete';
 
-  // The active section: an explicitly-opened one, else (until the portrait) the next pending core section —
-  // so the gated first-run flows core → core → portrait. Keyed by id so each panel re-seeds its form state.
-  const activeMeta: IntakeSectionMeta | null = activeId
+  // The explicitly-opened section (an invited or revisited one). A persisted id that no longer resolves
+  // (e.g. a section removed/renamed across a release) is dropped so we fall back to the normal flow.
+  const openSection: IntakeSectionMeta | null = activeId
     ? (sections.find((m) => m.id === activeId) ?? null)
-    : !complete
-      ? (pendingCore[0] ?? null)
-      : null;
+    : null;
+  useEffect(() => {
+    if (activeId && !openSection && sections.length > 0) setActiveId(null);
+  }, [activeId, openSection, sections.length, setActiveId]);
+  // The gated first-run walks the next pending core section (core → core → portrait); keyed by id so each
+  // panel re-seeds its form state.
+  const nextCore: IntakeSectionMeta | null = !complete ? (pendingCore[0] ?? null) : null;
   if (!loaded || !state) return <div className={styles.onboarding} aria-busy="true" />;
 
   // AI is required to run the chat sections + synthesis (§7). Show a calm "connect AI" state, never a dead-end.
@@ -184,22 +212,22 @@ export function Onboarding(): JSX.Element {
 
       {error ? <Banner tone="danger">{error}</Banner> : null}
 
-      {activeId && activeMeta ? (
+      {openSection ? (
         // An explicitly-opened (invited) section — show a back affordance to the overview.
         <>
           <button type="button" className={styles.back} onClick={() => setActiveId(null)}>
             <ArrowLeft size={14} aria-hidden="true" /> Back
           </button>
-          {renderPanel(activeMeta)}
+          {renderPanel(openSection)}
         </>
       ) : !complete ? (
         // The gated first-run: walk the core forms, then offer the portrait.
-        activeMeta ? (
+        nextCore ? (
           <>
             <Text className={styles.stepCount}>
               Step {core.length - pendingCore.length + 1} of {core.length}
             </Text>
-            {renderPanel(activeMeta)}
+            {renderPanel(nextCore)}
             <InvitedGrid />
           </>
         ) : (

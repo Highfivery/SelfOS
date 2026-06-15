@@ -729,52 +729,218 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
     title: 'Family & upbringing',
     blurb: 'Where you come from — family, how you were raised, what you carry.',
     tier: 'invited',
-    mode: 'chat',
+    mode: 'form',
     restricted: false,
     adult: false,
-    opener:
-      'Where did you grow up, and who was around as you were growing up? Paint me a picture of your family.',
+    opener: 'A little about where you come from. Share what feels right, and skip anything.',
+    // Kept for the section-level "Tell me more →" chat, which goes deeper than the structured prompts.
     focus:
       'Their family of origin and upbringing — who raised them, siblings and birth order, closeness with each ' +
       'parent/caregiver, how affection and conflict were handled, family faith and culture, family wounds and ' +
       'gifts, any family mental-health or addiction history (gently), the patterns they inherited, their ' +
       'relationship with family now, chosen family, and (if a parent) what they do the same or differently. ' +
       'Cover these specifically but let them set the depth; never push.',
+    questions: [
+      ...grouped('Where you come from', [
+        f(
+          single('raisedBy', 'Who mainly raised you?', [
+            'Both parents',
+            'Mostly my mother',
+            'Mostly my father',
+            'Grandparents',
+            'Other family',
+            'Adoptive parents',
+            'Foster or care system',
+            'Other',
+          ]),
+        ),
+        f(
+          single('siblings', 'Where do you fall among siblings?', [
+            'Only child',
+            'Oldest',
+            'Middle',
+            'Youngest',
+            'Twin or multiple',
+            'Other',
+          ]),
+        ),
+        f(
+          shortText(
+            'familyCulture',
+            'Your family’s faith or culture growing up',
+            'e.g. big Catholic family, secular, two cultures at home',
+          ),
+        ),
+      ]),
+      ...grouped('How your family worked', [
+        f(
+          rating(
+            'closenessMother',
+            'Closeness with your mother (or mother figure)',
+            'Distant',
+            'Very close',
+          ),
+        ),
+        f(
+          rating(
+            'closenessFather',
+            'Closeness with your father (or father figure)',
+            'Distant',
+            'Very close',
+          ),
+        ),
+        f(
+          single('affectionShown', 'How was affection shown in your family?', [
+            'Openly and often',
+            'Through actions, not words',
+            'Rarely',
+            'It was complicated',
+          ]),
+        ),
+        f(
+          single('conflictHandled', 'How was conflict handled growing up?', [
+            'Talked through calmly',
+            'Avoided or swept aside',
+            'Loud or explosive',
+            'It varied a lot',
+          ]),
+        ),
+        f(yesno('familyHistory', 'Any family history of mental-health or addiction struggles?')),
+      ]),
+      ...grouped('Family now', [
+        f(
+          single('familyNow', 'Your relationship with your family now', [
+            'Close',
+            'Friendly but distant',
+            'Complicated',
+            'Estranged',
+            'It varies',
+          ]),
+        ),
+        f(
+          longText(
+            'familyCarry',
+            'What did you take from your upbringing — the gifts and the wounds?',
+            'What shaped you, for better and worse.',
+          ),
+        ),
+      ]),
+    ],
   },
   {
     id: 'story',
     title: 'Your story',
     blurb: 'The chapters that shaped you — turning points and what you carry from them.',
     tier: 'invited',
-    mode: 'chat',
+    mode: 'form',
     restricted: false,
     adult: false,
-    opener:
-      'If you told the story of your life so far in a few chapters, what would they be? Start wherever feels right.',
+    opener: 'A few prompts about the chapters that shaped you. Take any, skip any.',
+    // Kept for the section-level "Tell me more →" chat, which goes deeper than the structured prompts.
     focus:
       'The key chapters of their life — formative experiences, turning points, their proudest achievement, ' +
       'their lowest moments, a moment that changed everything, biggest regrets, defining relationships, their ' +
       'biggest failure and what it taught them, what they have survived, how they have changed, and who they ' +
       'are becoming. Held as the person chooses to share.',
+    questions: [
+      f(
+        longText(
+          'chapters',
+          'If your life so far were a few chapters, what would they be?',
+          'Name the chapters, however you see them.',
+        ),
+      ),
+      f(
+        longText(
+          'turningPoint',
+          'A turning point that changed your direction',
+          'A moment or decision that shifted things.',
+        ),
+      ),
+      f(
+        longText(
+          'proudest',
+          'Something you’re proud of',
+          'An achievement or a moment you stood by yourself.',
+        ),
+      ),
+      f(longText('hardest', 'A hard time you came through', 'Only what you want to share.')),
+      f(
+        shortText(
+          'lifeLesson',
+          'The biggest lesson life has taught you',
+          'In a sentence, if you can.',
+        ),
+      ),
+      f(longText('becoming', 'Who are you becoming?', 'Where you feel yourself heading.')),
+    ],
   },
   {
     id: 'weighs',
     title: 'What weighs on you',
     blurb: 'The heavier things — struggles, grief, or patterns you feel stuck in.',
     tier: 'invited',
-    mode: 'chat',
+    mode: 'form',
     restricted: true,
     adult: false,
     opener:
-      'Is there anything weighing on you right now — something heavy you carry? We can go as light or as deep as you want, and skip anything.',
+      'Only if you want to — a few gentle prompts about the heavier things. Every one is skippable, and this stays private to your own coaching.',
     contentNote:
       'We can go as light or as deep as you want, and skip anything. This stays private to your own coaching. If you’re ever in crisis, please reach out to the resources below — I’m not a substitute for real help.',
+    // Kept for the section-level "Tell me more →" chat — trauma-informed, lets the person set the depth.
     focus:
       'The heavier parts of their inner life — current stressors, grief and loss, recurring worries, what keeps ' +
       'them up at night, their inner critic / self-talk, coping mechanisms (healthy and not), shame, things ' +
       'they don’t tell anyone, what they’re avoiding dealing with, and (gently, only if they offer) past ' +
       'trauma. Trauma-informed: let them set the depth, validate whatever they share, never dig for specifics. ' +
       'Watch for crisis and route to professional help per your safety guidance — never manage it alone.',
+    questions: [
+      f(
+        multi('weighsWhat', 'What’s weighing on you most right now?', [
+          'Work',
+          'Money',
+          'A relationship',
+          'Family',
+          'Health',
+          'Loneliness',
+          'Grief or loss',
+          'The future',
+          'The past',
+          'My own thoughts',
+          'Nothing much right now',
+          'Other',
+        ]),
+      ),
+      f(rating('weighsHeavy', 'How heavy has it felt lately?', 'Light', 'Heavy')),
+      f(
+        single('innerCritic', 'How do you talk to yourself when things go wrong?', [
+          'Kindly',
+          'Pretty harshly',
+          'Somewhere in between',
+        ]),
+      ),
+      f(
+        longText(
+          'recurringWorry',
+          'A worry that keeps coming back',
+          'Only what you want to put into words.',
+        ),
+      ),
+      f(
+        longText(
+          'stuckPattern',
+          'A pattern you feel stuck in',
+          'Something you keep repeating or returning to.',
+        ),
+      ),
+      f(
+        longText(
+          'weighsGrief',
+          'Any grief or loss you’re carrying',
+          'Share as little or as much as you like.',
+        ),
+      ),
+    ],
   },
   {
     id: 'intimacy',

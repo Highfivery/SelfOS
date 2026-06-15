@@ -89,7 +89,9 @@ views** — shown directly only to a holder of `intake.readRestricted` (the Owne
   stays gated (no progress is lost). The owner enables AI in their own (ungated) session.
 - **Save & resume** is first-class: progress is saved continuously (per answer + per section); the person can
   leave anytime and return to exactly where they were, across days. A progress indicator shows sections done /
-  remaining and an estimate.
+  remaining and an estimate. The **last-opened section is remembered device-local** (per person), so a reload
+  or app restart reopens that section rather than bouncing back to the first unfinished core step; reopening a
+  section with an in-progress go-deeper chat shows that transcript directly.
 
 ### 3.2 The interview (hybrid: structured sections + live AI depth)
 
@@ -499,18 +501,18 @@ a starter portrait from core, enriched each time an invited section is added.
 
 ### 14.3 Section modes
 
-Independently of tier, each section declares a **`mode`**:
+Every section is a **`form`** — **structured questions** (single/multi-select, scale, short/long text, date),
+rendered as a quick form. **No AI call** → instant and free. Answer (or skip) → **Continue**. Every section
+also offers an optional **section-level "Tell me more →"** (§14.7): a brief AI chat to elaborate on anything
+in that section in the person's own words — purely optional, the form is complete without it.
 
-1. **`form`** — **structured questions** (single/multi-select, scale, short/long text, date), rendered as a
-   quick form. **No AI call** → instant and free. Answer (or skip) → **Continue**. Every form section also
-   offers an optional **section-level "Tell me more →"** (§14.7): a brief AI chat to elaborate on anything in
-   that section in the person's own words. It's purely optional — the form is complete without it.
-2. **`chat`** — the existing AI-guided adaptive interview (§3.2), driven by a **specific topic checklist**
-   (`focus`) instead of one broad prompt. Reserved for the deep open topics: **Family & upbringing**, **Your
-   story**, **What weighs on you**.
+The deep open topics (**Family & upbringing**, **Your story**, **What weighs on you**) are forms with gentle
+structured prompts **and** keep a `focus` so their go-deeper chat stays well-guided (and trauma-informed where
+restricted). They used to be pure AI-chat sections; they're now form + go-deeper so every section is uniform.
 
-A `form` section spends **nothing** to fill out and works offline; only the optional go-deeper chat,
-`chat` sections, and synthesis call Claude. **Net effect: the gated first-run is mostly free + fast.**
+A form section spends **nothing** to fill out and works offline; only the optional go-deeper chat and synthesis
+call Claude. **Net effect: the gated first-run is mostly free + fast.** (The `mode` field still admits a
+`chat` value for future use, but no section in the catalog uses it.)
 
 ### 14.4 The restructured catalog (specific questions)
 
@@ -519,18 +521,18 @@ real owner-only `Person` field (§14.6); unmapped answers feed synthesis; `restr
 person's own context. **Every `form` section offers an optional section-level "Tell me more →" go-deeper**
 (§14.7) — there is no per-question deepen flag.
 
-| Section                                      | Tier    | Mode | Specific questions                                                                                                                                                  |
-| -------------------------------------------- | ------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **The basics**                               | core    | form | pronouns→`pronouns`, gender→`gender`, birthday(date)→`birthday`, location→`location`, languages(multi)→`languages`, ethnicity→`ethnicity`, occupation→`occupation`. |
-| **Your life now**                            | core    | form | living situation→`livingSituation`, relationship status→`relationshipStatus`, children→`parentalStatus`, "what fills your days"(text).                              |
-| **Values & identity**                        | core    | form | core values(multi)→`values`, faith(single+other)→`faith`, communication style→`communicationStyle`, identity descriptors(multi, optional).                          |
-| **What you want**                            | core    | form | growth areas(multi)→`goals`, "a specific goal"(text).                                                                                                               |
-| **Health & wellbeing** _(private)_           | invited | form | sleep/energy/stress(scales), movement(single), "anything to keep in mind"(text)→`healthNotes`(private).                                                             |
-| **Relationships**                            | invited | form | attachment pattern(single), conflict style(single), what you need(multi), "how you show up when it's hard"(text); infers `communicationStyle`.                      |
-| **Family & upbringing**                      | invited | chat | checklist: who raised you, siblings, family relationships now, traditions/culture, hard parts, what you carry.                                                      |
-| **Your story**                               | invited | chat | checklist: formative chapters, turning points, proudest moments, hardest moments, what shaped you.                                                                  |
-| **What weighs on you** _(restricted)_        | invited | chat | checklist (trauma-informed, person sets depth): current stressors, grief/loss, recurring worries, stuck patterns, past trauma — never dig for specifics.            |
-| **Intimacy & sexuality** _(18+, restricted)_ | invited | form | see §14.5.                                                                                                                                                          |
+| Section                                      | Tier    | Mode | Specific questions                                                                                                                                                         |
+| -------------------------------------------- | ------- | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **The basics**                               | core    | form | pronouns→`pronouns`, gender→`gender`, birthday(date)→`birthday`, location→`location`, languages(multi)→`languages`, ethnicity→`ethnicity`, occupation→`occupation`.        |
+| **Your life now**                            | core    | form | living situation→`livingSituation`, relationship status→`relationshipStatus`, children→`parentalStatus`, "what fills your days"(text).                                     |
+| **Values & identity**                        | core    | form | core values(multi)→`values`, faith(single+other)→`faith`, communication style→`communicationStyle`, identity descriptors(multi, optional).                                 |
+| **What you want**                            | core    | form | growth areas(multi)→`goals`, "a specific goal"(text).                                                                                                                      |
+| **Health & wellbeing** _(private)_           | invited | form | sleep/energy/stress(scales), movement(single), "anything to keep in mind"(text)→`healthNotes`(private).                                                                    |
+| **Relationships**                            | invited | form | attachment pattern(single), conflict style(single), what you need(multi), "how you show up when it's hard"(text); infers `communicationStyle`.                             |
+| **Family & upbringing**                      | invited | form | who raised you, siblings, closeness with each parent(scale), affection/conflict style, faith/culture, family history, family now, "gifts and wounds"(text) + go-deeper.    |
+| **Your story**                               | invited | form | chapters, a turning point, something you're proud of, a hard time you came through, biggest life lesson, who you're becoming (text) + go-deeper.                           |
+| **What weighs on you** _(restricted)_        | invited | form | gentle, all skippable: what's weighing on you(multi), how heavy(scale), inner critic(single), a recurring worry / stuck pattern / grief(text) + trauma-informed go-deeper. |
+| **Intimacy & sexuality** _(18+, restricted)_ | invited | form | see §14.5.                                                                                                                                                                 |
 
 ### 14.4a Full per-section question bank (non-intimacy)
 
@@ -584,24 +586,25 @@ with your friendships(scale) · who you turn to in a crisis(text) · loneliness(
 partner / friend / parent(text) · a recurring pattern you notice in your relationships(text) ·
 your biggest relationship challenge(text).
 
-**Family & upbringing** _(invited, chat — structured primers, then go deep)_ — primers: who raised you(multi) ·
-closeness with each parent / caregiver(scale each) · how affection was shown growing up(single) · how conflict
-was handled(single) · family faith / culture(text) · any family mental-health or addiction history(yesNo/text,
-optional). Then **chat**: siblings + birth order, what your upbringing was really like, family wounds and gifts,
-secrets, patterns you inherited, your relationship with family now, chosen family, and (if you're a parent) what
-you do the same or differently — with the crisis footer present.
+**Family & upbringing** _(invited, form + go-deeper)_ — who raised you(single+other) · siblings / birth
+order(single+other) · family faith / culture growing up(text) · closeness with your mother figure(scale) ·
+closeness with your father figure(scale) · how affection was shown(single) · how conflict was handled(single) ·
+any family mental-health or addiction history(yesNo) · your relationship with family now(single) · the gifts and
+wounds you took from your upbringing(text). Then the **"Tell me more →"** go-deeper for what your upbringing was
+really like, secrets, inherited patterns, chosen family, and (if a parent) what you do the same or differently —
+crisis footer present.
 
-**Your story** _(invited, chat)_ — formative chapters · turning points · proudest achievement · lowest moments ·
-a moment that changed everything · biggest regrets · defining relationships · your biggest failure and what it
-taught you · what you've survived · how you've changed · what your younger self would think of you · who you're
-becoming.
+**Your story** _(invited, form + go-deeper)_ — your life in a few chapters(text) · a turning point(text) ·
+something you're proud of(text) · a hard time you came through(text) · the biggest lesson life has taught
+you(text) · who you're becoming(text). Then the go-deeper for lowest moments, regrets, defining relationships,
+what you've survived, and how you've changed.
 
-**What weighs on you** _(invited, chat, restricted — trauma-informed)_ — an optional gentle primer ("check any
-you're comfortable naming — we'll only go where you want": loss / grief, anxiety, depression, abuse, neglect,
-assault, addiction, an eating disorder, self-harm, betrayal, none of these / rather not say), then **chat**:
-current stressors, grief, recurring worries, what keeps you up at night, your inner critic / self-talk, coping
-mechanisms (healthy and not), shame, things you don't tell anyone, what you're avoiding dealing with, and
-(gently, never dug-for) past trauma — with crisis routing always present (§8.2).
+**What weighs on you** _(invited, form + go-deeper, restricted — trauma-informed)_ — all gentle and skippable:
+what's weighing on you most right now(multi+other: work / money / a relationship / family / health / loneliness
+/ grief / the future / the past / my own thoughts / nothing much) · how heavy it's felt lately(scale) · how you
+talk to yourself when things go wrong(single) · a worry that keeps coming back(text) · a pattern you feel stuck
+in(text) · any grief or loss you're carrying(text). Then the trauma-informed go-deeper (lets the person set the
+depth, never digs for specifics) — with crisis routing always present (§8.2).
 
 ### 14.5 The intimacy & sexuality block (explicit, structured, branched, opt-in)
 

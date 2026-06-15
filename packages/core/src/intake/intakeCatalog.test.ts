@@ -35,12 +35,17 @@ describe('intakeCatalog', () => {
     }
   });
 
-  it('form sections carry questions; chat sections carry a focus', () => {
+  it('every section is a form with questions; the deep sections keep a focus for the go-deeper chat', () => {
     expect(getIntakeSection('basics')?.mode).toBe('form');
     expect(getIntakeSection('basics')?.questions?.length ?? 0).toBeGreaterThan(0);
-    expect(getIntakeSection('family')?.mode).toBe('chat');
-    expect(getIntakeSection('family')?.questions).toBeUndefined();
+    // The former chat sections are now forms with structured prompts...
+    expect(getIntakeSection('family')?.mode).toBe('form');
+    expect(getIntakeSection('family')?.questions?.length ?? 0).toBeGreaterThan(0);
+    // ...but keep a `focus` so the optional section-level "Tell me more →" chat stays well-guided.
     expect(getIntakeSection('family')?.focus?.length ?? 0).toBeGreaterThan(0);
+    expect(getIntakeSection('story')?.mode).toBe('form');
+    expect(getIntakeSection('weighs')?.mode).toBe('form');
+    expect(INTAKE_CATALOG.every((s) => s.mode === 'form')).toBe(true);
   });
 
   it('maps healthNotes + the sensitive orientation/style fields as private (own-context-only)', () => {
@@ -88,7 +93,7 @@ describe('intakeCatalog', () => {
     expect(meta.find((m) => m.id === 'health')?.contentNote).toBeTruthy();
   });
 
-  it('builds a trauma-informed interviewer addendum for restricted chat sections', () => {
+  it('builds a trauma-informed interviewer addendum for the go-deeper chat on restricted sections', () => {
     const addendum = buildInterviewerAddendum('Sam', getIntakeSection('weighs')!);
     expect(addendum).toContain('Sam');
     expect(addendum).toContain('sensitive');

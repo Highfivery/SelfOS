@@ -950,7 +950,7 @@ test('questionnaires: author a single-choice questionnaire, validate, persist, n
     // Validation should pass, then save.
     await w.getByRole('button', { name: 'Check' }).click();
     await expect(w.getByText(/ready to send/i)).toBeVisible();
-    await w.getByRole('button', { name: 'Create' }).click();
+    await w.getByRole('button', { name: 'Create draft' }).click();
 
     // The new questionnaire shows in the list with its question count.
     await expect(w.getByRole('button', { name: /Weekly check-in/ })).toBeVisible();
@@ -1010,7 +1010,7 @@ test('questionnaires: custom type, sensitivity, matrix + branching round-trip', 
     // Validate, then save.
     await w.getByRole('button', { name: 'Check' }).click();
     await expect(w.getByText(/ready to send/i)).toBeVisible();
-    await w.getByRole('button', { name: 'Create' }).click();
+    await w.getByRole('button', { name: 'Create draft' }).click();
     await expect(w.getByText('2 questions')).toBeVisible();
 
     // Reopen and confirm everything round-tripped through the encrypted vault.
@@ -1109,7 +1109,7 @@ test('questionnaires: General default + intimacy-only sensitivity + live inline 
     await expect(w.getByText(/date of birth and consent/i)).toBeVisible();
 
     // Save → reopen: the intimacy type + escalated tier round-trip through the encrypted vault.
-    await w.getByRole('button', { name: 'Create' }).click();
+    await w.getByRole('button', { name: 'Create draft' }).click();
     await w.getByRole('button', { name: /Check-in/ }).click();
     await expect(w.getByLabel('Type', { exact: true })).toHaveValue('intimacy');
     await expect(w.getByLabel('Sensitivity')).toHaveValue('explicit');
@@ -1165,7 +1165,7 @@ test('questionnaires: attach an encrypted image, require alt, round-trip + show 
     await w.getByRole('button', { name: 'Check' }).click();
     await expect(w.getByText(/ready to send/i)).toBeVisible();
 
-    await w.getByRole('button', { name: 'Create' }).click();
+    await w.getByRole('button', { name: 'Create draft' }).click();
 
     // Reopen: the alt text round-tripped through the encrypted vault and the image still loads.
     // (The editor thumbnail AND the open inline preview both render it, so scope to the first.)
@@ -1305,6 +1305,10 @@ test('inbox: send a questionnaire, answer it, submit, and round-trip through the
     await w.getByLabel('Title').fill('Weekly check-in');
     await w.getByLabel('Question 1', { exact: true }).fill('How are we doing?');
 
+    // §16.3 two-step: Save the draft first (Send only appears on a saved questionnaire), then Send.
+    await w.getByRole('button', { name: 'Create draft' }).click();
+    await expect(w.getByRole('button', { name: 'Send' })).toBeVisible();
+
     // Send it (to self — a valid self check-in). Private is the default privacy mode.
     await w.getByRole('button', { name: 'Send' }).click();
     await expect(w.getByRole('heading', { name: /Send .Weekly check-in/ })).toBeVisible();
@@ -1381,6 +1385,8 @@ test('relay: connect a household relay, then mint an external link + PIN, no ove
     await w.getByRole('button', { name: 'New' }).click();
     await w.getByLabel('Title').fill('Outside view');
     await w.getByLabel('Question 1', { exact: true }).fill('How do I come across?');
+    // §16.3: save the draft, then Send (Send only appears once saved).
+    await w.getByRole('button', { name: 'Create draft' }).click();
     await w.getByRole('button', { name: 'Send' }).click();
 
     await w.getByRole('button', { name: 'Someone else (link)' }).click();
@@ -1431,7 +1437,8 @@ test('results: a Standard response surfaces the raw answers in the sender’s Re
     await w.getByLabel('Title').fill('Weekly check-in');
     await w.getByLabel('Question 1', { exact: true }).fill('How are we doing?');
 
-    // Send it to self, switching the privacy mode from the default Private to Standard.
+    // §16.3: save the draft first, then Send it to self, switching Private → Standard.
+    await w.getByRole('button', { name: 'Create draft' }).click();
     await w.getByRole('button', { name: 'Send' }).click();
     await w.getByRole('button', { name: 'Standard' }).click();
     await w.getByLabel('Send to').selectOption({ label: 'Tester' });
@@ -1499,6 +1506,8 @@ test('results: re-asks chart a trend, a send deletes, and the questionnaire purg
       await w.getByRole('button', { name: 'Send' }).last().click();
       await w.getByRole('button', { name: 'Done' }).click();
     };
+    // §16.3: save the draft so Send appears, send once; then re-open the saved questionnaire and re-ask.
+    await w.getByRole('button', { name: 'Create draft' }).click();
     await sendToSelf();
     await w.getByRole('button', { name: /Mood check/ }).click();
     await sendToSelf();
@@ -1668,6 +1677,198 @@ test('compatibility: align two answered variants into a report + draft Insight, 
     });
     await w.waitForTimeout(150);
     expect(await overflow()).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('compatibility contextOnly (§16.2): no report; each participant’s own coach is enriched, no cross-exposure', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('expected a master key');
+  const now = new Date().toISOString();
+  for (const [id, name] of [
+    ['alex-1', 'Alex'],
+    ['bri-1', 'Bri'],
+  ]) {
+    await savePerson(fs, key, {
+      id: id!,
+      schemaVersion: 1,
+      displayName: name!,
+      isSubject: true,
+      tags: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+  // A contextOnly compatibility questionnaire, sent to two OTHERS, both answered.
+  const q = await saveQuestionnaire(
+    fs,
+    key,
+    {
+      title: 'Closeness check',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      questions: [
+        {
+          id: 'c1',
+          canonicalId: 'c1',
+          type: 'rating',
+          prompt: 'How connected do you feel?',
+          required: true,
+          scale: { min: 1, max: 5 },
+        },
+      ],
+      compatibility: { enabled: true, visibility: 'contextOnly' },
+    },
+    'owner-1',
+  );
+  const variant = (label: string) =>
+    q.questions.map((c) => ({ ...c, canonicalId: 'c1', prompt: `${label}: ${c.prompt}` }));
+  const groupId = await createCompatibilitySend(fs, key, {
+    questionnaireId: q.id,
+    senderPersonId: 'owner-1',
+    visibility: 'contextOnly',
+    recipients: [
+      { personId: 'alex-1', questions: variant('Alex') },
+      { personId: 'bri-1', questions: variant('Bri') },
+    ],
+  });
+  const members = (await listAssignments(fs, key)).filter(
+    (a) => a.compatibilityGroupId === groupId,
+  );
+  await submitResponse(fs, key, {
+    assignmentId: members[0]!.id,
+    answers: [{ questionId: 'c1', value: 4 }],
+  });
+  await submitResponse(fs, key, {
+    assignmentId: members[1]!.id,
+    answers: [{ questionId: 'c1', value: 2 }],
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await w.getByRole('button', { name: /Closeness check/ }).click();
+    await w.getByRole('button', { name: 'Results' }).click();
+
+    // Context-only: NO report is offered — the sender updates each coach instead.
+    await expect(w.getByText(/no report is produced/i)).toBeVisible();
+    await expect(w.getByRole('button', { name: /Generate alignment/ })).toHaveCount(0);
+    await w.getByRole('button', { name: /Update both coaches/ }).click();
+    await expect(w.getByText(/Both coaches updated/i)).toBeVisible();
+
+    // Decrypt the vault: NO alignment report exists; each participant has their OWN auto-approved,
+    // own-context-only Insight (subject = themselves), and the sender is NOT a subject.
+    expect(await getAlignmentReport(fs, key, groupId)).toBeNull();
+    const alex = (await listInsightsForPerson(fs, key, 'alex-1')).find(
+      (i) => i.provenance.compatibilityGroupId === groupId,
+    );
+    const bri = (await listInsightsForPerson(fs, key, 'bri-1')).find(
+      (i) => i.provenance.compatibilityGroupId === groupId,
+    );
+    expect(alex?.subjectPersonId).toBe('alex-1');
+    expect(alex?.approved).toBe(true);
+    expect(alex?.facts.every((f) => f.shareable === false)).toBe(true);
+    expect(bri?.subjectPersonId).toBe('bri-1');
+    expect(
+      (await listInsightsForPerson(fs, key, 'owner-1')).some(
+        (i) => i.provenance.compatibilityGroupId === groupId,
+      ),
+    ).toBe(false);
+
+    // Each participant's OWN coaching context is enriched by their own distilled insight (the facts are
+    // own-context-only, so they never broadcast to anyone else — the no-cross-exposure guarantee is proven
+    // structurally in the unit/bridge tests).
+    const alexContext = await summarizeForContext(fs, key, 'alex-1', []);
+    const briContext = await summarizeForContext(fs, key, 'bri-1', []);
+    expect(alexContext).toContain('steady connection');
+    expect(briContext).toContain('steady connection');
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('compatibility you+someone-else (§16.1): the send panel offers the participant-model toggle', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('expected a master key');
+  const now = new Date().toISOString();
+  await savePerson(fs, key, {
+    id: 'angel-1',
+    schemaVersion: 1,
+    displayName: 'Angel',
+    isSubject: true,
+    tags: [],
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await w.getByRole('button', { name: 'New' }).click();
+    await w.getByLabel('Title').fill('Sexy time');
+    await w.getByLabel('Question 1', { exact: true }).fill('How connected do you feel?');
+    await w.getByRole('switch', { name: 'Compatibility questionnaire' }).click();
+
+    // §16.3: save first, then Send → the participant-model send panel.
+    await w.getByRole('button', { name: 'Create draft' }).click();
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByRole('heading', { name: /Send .Sexy time/ })).toBeVisible();
+
+    // §16.1: default is "you + someone else" with the sender locked in as "You"; the other picker excludes
+    // the sender. Switching to "two other people" reveals two pickers.
+    await expect(w.getByLabel("Who's being compared?")).toHaveValue('self');
+    await expect(w.getByLabel('You', { exact: true })).toBeDisabled();
+    await w.getByLabel('Someone else').selectOption({ label: 'Angel' });
+    // The disclosure preview names the OTHER participant (the sender), never a neutral third party.
+    await expect(w.getByText(/neither you nor Tester/)).toBeVisible();
+    await w.getByLabel("Who's being compared?").selectOption('others');
+    await expect(w.getByLabel('First person')).toBeVisible();
+    await expect(w.getByLabel('Second person')).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('authoring (§16.4): AI draft fills the empty title; Save→Send is a two-step (no Send until saved)', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await w.getByRole('button', { name: 'New' }).click();
+
+    // §16.3: a brand-new draft offers "Create draft", NOT Send.
+    await expect(w.getByRole('button', { name: 'Create draft' })).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Send' })).toHaveCount(0);
+    await w.getByLabel('Question 1', { exact: true }).fill('How are we doing?');
+
+    // §16.4: Title sits below "Draft with AI"; an AI draft fills the empty title. (noWaitAfter: the
+    // Generate click flips the button to a transient "Drafting…" state Playwright would otherwise wait on.)
+    await w.getByRole('button', { name: /Draft with AI/ }).click();
+    await w.getByRole('button', { name: /Generate questions/ }).click({ noWaitAfter: true });
+    await expect(w.getByLabel('Title')).toHaveValue('A gentle weekly check-in');
+
+    // §16.3: Save keeps you here (now "Edit questionnaire") and only then offers Send.
+    await w.getByRole('button', { name: 'Create draft' }).click();
+    await expect(w.getByRole('heading', { name: 'Edit questionnaire' })).toBeVisible();
+    await expect(w.getByText(/Saved\. You can send it now/i)).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Send' })).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

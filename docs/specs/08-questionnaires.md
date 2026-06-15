@@ -1,7 +1,11 @@
 # 08 — Questionnaires & the Insight / metrics layer
 
-> **Status:** **Approved** (built) · **Approved** (§15 authoring-UX) · **Approved** (2026-06-15 audit fixes &
-> enhancements, §16 — building on `feat/questionnaire-audit-fixes`) · _last updated 2026-06-15_
+> **Status:** **Approved** (built) · **Approved** (§15 authoring-UX) · **Partially built** (2026-06-15 audit
+> fixes & enhancements, §16, on `feat/questionnaire-audit-fixes`, NOT merged): §16.1 (compat participant model),
+> §16.2 (context-only mode), §16.3/§16.4 (Save→Send + title/AI-title), and §16.7 (E2E matrix for the built
+> features) are **built**; **§16.5/§16.5a (explicit generation + shared owner-extensible `INTIMACY_TOPICS`) is
+> deferred** until the concurrent `feat/intimacy-questions` work merges (it rewrites `intakeCatalog.ts`, which
+> §16.5a must extract from). · _last updated 2026-06-15_
 >
 > **2026-06 amendment (§15, package D of the app refresh):** authoring-experience refinements on the
 > already-built feature — a **General** type; **sensitivity tiers shown only for Intimacy/Scenario** types (other
@@ -1661,3 +1665,21 @@ _All resolved (2026-06-15) — see §16.8. Context-only = per-participant distil
 shared owner-extensible constant; compat default = you + someone else. The amendment is build-ready pending
 final approval. Remaining are build-time tunings (exact explicit-prompt wording, the Settings placement of the
 intimacy-topics surface), not blockers._
+
+### 16.10 Build status (2026-06-15, `feat/questionnaire-audit-fixes`, NOT merged)
+
+- **Built:** §16.1 (compat participant model — you+someone-else + two-others; reworked `compatibilityDisclosure`
+  - UI mode toggle), §16.2 (`contextOnly` visibility — per-participant auto-approved own-context distillation,
+    no report, sender-triggered from Results), §16.3 (Save→Send two-step; Save keeps you on the saved
+    questionnaire, Send only once saved), §16.4 (Title moved below "Draft with AI"; AI generation returns a
+    `title` that fills only when the field is empty), and §16.6 (the custom-type duplicate notice + send-time
+    validation messages already shipped with §15/earlier; the "break-glass" copy pass is folded into §16.5a's
+    deferral). §16.7's E2E matrix is built **for the shipped features** (compat each participant-model ×
+    visibility incl. `contextOnly` with a decrypt assertion; Save→Send two-step; AI-title; plus the existing
+    per-answer-type / sensitivity / branching / image / relay / results / deletion / gating coverage).
+- **Deferred:** **§16.5 (tier-distinct explicit generation)** and **§16.5a (the shared owner-extensible
+  `INTIMACY_TOPICS` constant + the owner Settings surface + inline "add a topic" + the spec-18 sync)** wait
+  for the concurrent `feat/intimacy-questions` work to merge to `main` — it actively rewrites
+  `intakeCatalog.ts` (the source §16.5a must extract `ACTIVITIES`/`commonFantasies` from). Once it lands, this
+  branch rebases on it and builds §16.5/§16.5a against the final topic lists, then extends the §16.7 matrix
+  with the explicit-tier rows.

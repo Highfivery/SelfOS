@@ -85,6 +85,35 @@ export function fakeClaudeClient(): ClaudeClient {
         });
       }
 
+      // Question generation (08 §3.1/§16.4) asks for a {title, questions} JSON object. Return a small,
+      // valid set deterministically. Must come BEFORE the generic "JSON object" branch below.
+      if (userText.includes('the JSON object with a short')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            title: 'A gentle weekly check-in',
+            questions: [
+              { type: 'shortText', prompt: 'What felt hardest this week?', required: false },
+              { type: 'yesNo', prompt: 'Do you feel heard lately?', required: true },
+            ],
+          }),
+          usage: { inputTokens: 120, outputTokens: 60, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+
+      // Questionnaire analysis + the context-only distillation (08 §3.7/§13.4/§16.2) ask to "Produce the
+      // Insight JSON". Return a valid analysis object so the offline Analyze / contextOnly paths parse.
+      if (userText.includes('Produce the Insight JSON')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            summary: 'They value steady connection and want to feel more appreciated day to day.',
+            facts: [{ text: 'Feels most connected through shared time.', shareable: true }],
+            confidence: 'medium',
+            crisisFlag: false,
+          }),
+          usage: { inputTokens: 140, outputTokens: 60, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+
       // The guided "Suggested for you" turn (16 §3.4) asks which catalog exercises fit. Return a JSON
       // array of real catalog ids so the offline suggest path parses + validates deterministically.
       if (userText.includes('exercises fit them') || userText.includes('starter exercises')) {

@@ -1187,7 +1187,7 @@ export function QuestionnaireBuilder({
                 </Button>
               ) : null}
               <Button variant="secondary" onClick={onDone} disabled={busy}>
-                {saved ? 'Done' : 'Cancel'}
+                {saved ? 'Close' : 'Cancel'}
               </Button>
               {saved ? (
                 <IconButton

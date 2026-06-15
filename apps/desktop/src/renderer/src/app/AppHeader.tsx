@@ -20,6 +20,8 @@ interface AppHeaderProps {
   navOpen: boolean;
   /** Ref to the hamburger so focus can return to it when the drawer closes. */
   hamburgerRef: RefObject<HTMLButtonElement>;
+  /** Hide the nav hamburger (the onboarding gate takeover has no sidebar to open, 18-personal-onboarding §3.1). */
+  hideNav?: boolean;
 }
 
 /**
@@ -38,6 +40,7 @@ export function AppHeader({
   onOpenNav,
   navOpen,
   hamburgerRef,
+  hideNav = false,
 }: AppHeaderProps): JSX.Element {
   const platform = window.selfos?.platform ?? 'unknown';
   const [fullscreen, setFullscreen] = useState(false);
@@ -48,16 +51,18 @@ export function AppHeader({
     <header className={styles.header} data-platform={platform} data-fullscreen={fullscreen}>
       {/* Reserves the macOS traffic-light cluster so the brand never overlaps it (0-width elsewhere). */}
       <span className={styles.leadInset} aria-hidden="true" />
-      <span className={styles.navSlot}>
-        <TitlebarControl
-          ref={hamburgerRef}
-          aria-label="Open navigation"
-          aria-expanded={navOpen}
-          onClick={onOpenNav}
-        >
-          <Menu size={20} aria-hidden="true" />
-        </TitlebarControl>
-      </span>
+      {hideNav ? null : (
+        <span className={styles.navSlot}>
+          <TitlebarControl
+            ref={hamburgerRef}
+            aria-label="Open navigation"
+            aria-expanded={navOpen}
+            onClick={onOpenNav}
+          >
+            <Menu size={20} aria-hidden="true" />
+          </TitlebarControl>
+        </span>
+      )}
       <Link to="/" className={styles.brandLink} aria-label="SelfOS" title="Home">
         <Brand />
       </Link>

@@ -267,6 +267,25 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-15 — Change + feedback (**onboarding is now a HARD requirement for Members**, spec 18 §3.1; user:
+  the dismissible auto-route "felt buggy" — "a person MUST go through it first… directed to fill it out").
+  Replaced the auto-route-once + nudge with a **full-screen onboarding gate** in `AppShell`: a Member
+  (`intake.own`, **not** the Owner, **not** super-admin) is taken over by onboarding on every login until
+  `IntakeSession.status === 'complete'` (the portrait is generated; sections may be skipped but the flow must
+  be worked through). **Asked first** the 3 forks (full-screen w/ AI-escape; done = portrait generated;
+  Members-only). The header stays (switch person / lock) + the crisis footer is always present (a gate, not a
+  dead-end); `AppHeader` gained `hideNav` to drop the hamburger. The **Owner + super-admin are exempt** (the
+  Owner sets up AI, which the intake requires — gating them would trap a keyless first-run owner); they keep
+  the voluntary nudge. On completion the finish navigates to `/onboarding` so the just-written portrait stays
+  on screen (now with the sidebar); Members keep the Onboarding nav entry to revisit. Removed the auto-route
+  effect + `autoRoutedToOnboarding`. Gate green: typecheck (node + web/DOM-lib), lint, format, **442 desktop**
+  unit, **64 E2E** (+1: a Member is hard-gated [no app nav, crisis present] → finishes → the gate releases;
+  the 7 member-switch/join tests now seed a **completed** intake so they exercise the real member experience
+  instead of passing vacuously under the gate — `seedCompletedIntake`/`completeIntakeFor` helpers). On
+  `feat/personal-onboarding` (merged to `main`). **Lesson: a hard full-screen gate keyed on a per-person
+  status quietly breaks/voids EVERY E2E that signs in as that persona to test other features — they must seed
+  the gate-release state (completed onboarding) or they fail (assert a feature is reachable) or pass for the
+  wrong reason (a "nav is absent" check is vacuously true when the gate hides ALL nav).**
 - 2026-06-14 — Build (**Personal onboarding — the "getting to know you" intake; SPEC 18 BUILT**;
   [18-personal-onboarding](docs/specs/18-personal-onboarding.md)). The **4th Insight producer** — an AI-guided,
   resumable self-interview across 10 sections that **auto-fills the owner-only `Person` profile** as the person

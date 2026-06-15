@@ -17,6 +17,7 @@ import {
   createInvite,
   getAccessConfig,
   getPerson,
+  listPeople,
   savePerson,
   saveRelationship,
   setAccount,
@@ -71,6 +72,47 @@ async function seedHousehold(
   });
   await setAccount(fs, key, { personId: ownerId, roleId: 'owner' });
   return ownerId;
+}
+
+/**
+ * Mark a person's onboarding as already complete (18-personal-onboarding §3.1). Members are hard-gated into
+ * onboarding until their portrait is generated, so tests that exercise OTHER member features seed this so the
+ * member isn't gated — reflecting that in reality they'd have onboarded first.
+ */
+async function seedCompletedIntake(
+  fs: ReturnType<typeof createNodeFileSystem>,
+  key: Uint8Array,
+  personId: string,
+): Promise<void> {
+  await writeEncryptedJson(
+    fs,
+    `people/${personId}/intake/session.enc`,
+    {
+      id: `intake-${personId}`,
+      schemaVersion: 1,
+      personId,
+      status: 'complete',
+      sections: [],
+      startedAt: 'now',
+      updatedAt: 'now',
+      completedAt: 'now',
+    },
+    key,
+  );
+}
+
+/** Complete onboarding for a person created at runtime (found by display name), so the Member gate releases. */
+async function completeIntakeFor(
+  vault: string,
+  userData: string,
+  displayName: string,
+): Promise<void> {
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('completeIntakeFor: master key missing');
+  const person = (await listPeople(fs, key)).find((p) => p.displayName === displayName);
+  if (!person) throw new Error(`completeIntakeFor: ${displayName} not found`);
+  await seedCompletedIntake(fs, key, person.id);
 }
 
 // Deterministic AI: passthrough secret encryption (no keychain prompt) + offline Claude client.
@@ -414,6 +456,8 @@ test('access: grant a login, switch person, and gate the People nav', async () =
     await w.getByRole('button', { name: 'Access' }).click();
     await w.getByRole('button', { name: 'Grant access' }).click();
     await expect(w.getByText(/can sign in/i)).toBeVisible();
+    // Mark Jordan onboarded before switching, so the Member onboarding gate doesn't take over (18 §3.1).
+    await completeIntakeFor(vault, userData, 'Jordan');
 
     // Switch to Jordan via the TopBar account menu → "Switch person".
     await w.getByRole('button', { name: /signed in as/i }).click();
@@ -499,6 +543,7 @@ test('super-admin: inspect mode unlocks full budget/usage access for a non-admin
   });
   await setAccount(fs, key, { personId: 'owner-1', roleId: 'owner' });
   await setAccount(fs, key, { personId: 'member-1', roleId: 'member' });
+  await seedCompletedIntake(fs, key, 'member-1'); // already onboarded, so the Member gate doesn't apply
   await recordUsage(fs, key, {
     id: 'u1',
     schemaVersion: 1,
@@ -723,6 +768,8 @@ test('sessions: switching accounts immediately clears the previous person’s se
     await w.getByRole('button', { name: 'Access' }).click();
     await w.getByRole('button', { name: 'Grant access' }).click();
     await expect(w.getByText(/can sign in/i)).toBeVisible();
+    // Mark Jordan onboarded before switching, so the Member onboarding gate doesn't take over (18 §3.1).
+    await completeIntakeFor(vault, userData, 'Jordan');
 
     // Back on the Sessions screen as the owner — the owner's session is there.
     await w.getByRole('link', { name: 'Sessions' }).click();
@@ -923,6 +970,8 @@ test('sessions: a member sees a usage bar with no $; memory-off blocks summarizi
     await w.getByRole('button', { name: 'Access' }).click();
     await w.getByRole('button', { name: 'Grant access' }).click();
     await expect(w.getByText(/can sign in/i)).toBeVisible();
+    // Mark Jordan onboarded before switching, so the Member onboarding gate doesn't take over (18 §3.1).
+    await completeIntakeFor(vault, userData, 'Jordan');
     await w.getByRole('button', { name: /signed in as/i }).click();
     await w.getByRole('menuitem', { name: 'Switch person' }).click();
     await w
@@ -1978,6 +2027,7 @@ test('dreams: export an image to a file + share it; the recipient sees it in "Sh
     updatedAt: now,
   });
   await setAccount(fs, key, { personId: 'partner-1', roleId: 'member' });
+  await seedCompletedIntake(fs, key, 'partner-1'); // already onboarded, so the Member gate doesn't apply
 
   const saveDir = await mkdtemp(join(tmpdir(), 'selfos-e2e-export-'));
   process.env['SELFOS_FAKE_SAVE_DIR'] = saveDir;
@@ -2737,6 +2787,7 @@ test('invites: a member redeems a code on a new device, sets their own PIN, and 
   await setAccount(fs, key, { personId: 'owner-1', roleId: 'owner', pin: '9999' });
   await savePerson(fs, key, person('wife-1', 'Wife'));
   await setAccount(fs, key, { personId: 'wife-1', roleId: 'member' }); // no PIN — she sets it on redeem
+  await seedCompletedIntake(fs, key, 'wife-1'); // already onboarded, so the Member gate doesn't apply post-join
   const { code } = await createInvite(fs, key, 'wife-1', Date.now());
 
   // "Device B" (the wife's): a fresh user-data dir on the same vault, with no master key.
@@ -2808,6 +2859,7 @@ test('invites: a redeem interrupted before the PIN resumes on next boot (no open
   await setAccount(fs, key, { personId: 'owner-1', roleId: 'owner', pin: '9999' });
   await savePerson(fs, key, seedPerson('wife-1', 'Wife'));
   await setAccount(fs, key, { personId: 'wife-1', roleId: 'member' });
+  await seedCompletedIntake(fs, key, 'wife-1'); // already onboarded, so the Member gate doesn't apply post-join
   const { code } = await createInvite(fs, key, 'wife-1', Date.now());
 
   const deviceB = await mkdtemp(join(tmpdir(), 'selfos-e2e-ud-'));
@@ -3249,8 +3301,6 @@ test('home: a brand-new person sees the getting-started state', async () => {
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    // A no-intake person is auto-routed to onboarding (18 §3.1); navigate back to Home for this test.
-    await w.getByRole('link', { name: 'Home' }).click();
     await expect(w.getByRole('heading', { name: /welcome to selfos/i })).toBeVisible();
     await expect(w.getByRole('button', { name: /start a session/i })).toBeVisible();
     // No real cards yet, but the crisis affordance is always present (§7).
@@ -3337,8 +3387,6 @@ test('home: a seeded person sees the cards, links into them, and fits at 390px',
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    // A no-intake person is auto-routed to onboarding (18 §3.1); navigate back to Home for this test.
-    await w.getByRole('link', { name: 'Home' }).click();
     await expect(w.getByRole('heading', { name: /tester/i, level: 1 })).toBeVisible();
 
     // Continue card — the two open sessions, not the completed one.
@@ -3548,6 +3596,95 @@ test('onboarding: resumes mid-intake to the saved transcript (18 §3.1)', async 
     // The saved transcript resumes exactly where it left off.
     await expect(w.getByText('My name is Sam.')).toBeVisible();
     await expect(w.getByText('Lovely to meet you, Sam.')).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('onboarding: a Member is hard-gated into onboarding until they finish (18 §3.1)', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  // Seed a Member + a short, mostly-skipped intake, and make them the active person.
+  {
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('gate e2e: master key missing');
+    const now = new Date().toISOString();
+    await savePerson(fs, key, {
+      id: 'member-1',
+      schemaVersion: 1,
+      displayName: 'Mara',
+      isSubject: true,
+      tags: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await setAccount(fs, key, { personId: 'member-1', roleId: 'member' });
+    const order = [
+      'basics',
+      'life-now',
+      'family',
+      'story',
+      'health',
+      'weighs',
+      'relationships',
+      'values',
+      'want',
+      'intimacy',
+    ];
+    await writeEncryptedJson(
+      fs,
+      'people/member-1/intake/session.enc',
+      {
+        id: 'intake-member',
+        schemaVersion: 1,
+        personId: 'member-1',
+        status: 'inProgress',
+        sections: order.map((id) => ({
+          id,
+          status: id === 'basics' ? 'notStarted' : 'skipped',
+          restricted: id === 'weighs' || id === 'intimacy',
+          messages: [],
+          answers: {},
+        })),
+        startedAt: now,
+        updatedAt: now,
+      },
+      key,
+    );
+  }
+  // Point the device at the Member as the active person.
+  await writeJson(join(userData, 'state.json'), {
+    schemaVersion: 1,
+    vaultPath: vault,
+    activePersonId: 'member-1',
+    superAdminPassphraseHash: await hashPin('superpass'),
+  });
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    // Hard gate: onboarding takes over the whole app — no sidebar nav to any other screen.
+    await expect(w.getByRole('heading', { name: /Getting to know you/ })).toBeVisible();
+    await expect(w.getByRole('link', { name: 'Home' })).toHaveCount(0);
+    await expect(w.getByRole('link', { name: 'Sessions' })).toHaveCount(0);
+    // But it's not a dead-end — the crisis resources are always present.
+    await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible();
+
+    // Finish: the one open section, then generate the portrait → the gate releases.
+    await expect(w.getByText(/What should I call you/)).toBeVisible();
+    await w.getByLabel('Message').fill('I’m Mara.');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText('Thank you for sharing that with me.')).toBeVisible();
+    await w.getByRole('button', { name: /That.s enough on this/ }).click();
+    const cta = w.getByRole('button', { name: /See my portrait/ });
+    await expect(cta).toBeVisible();
+    await cta.click();
+
+    // Gate released: the portrait shows AND the app nav is now available.
+    await expect(w.getByText(/come to understand about you/)).toBeVisible();
+    await expect(w.getByRole('link', { name: 'Home' })).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

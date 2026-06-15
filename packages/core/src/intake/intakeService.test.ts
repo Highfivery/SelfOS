@@ -14,6 +14,7 @@ import {
   runIntakeTurn,
   skipIntakeSection,
   stripIntakeFieldMarkers,
+  submitSectionForm,
   synthesizeIntake,
   type IntakeSynthesizeDeps,
   type IntakeTurnDeps,
@@ -135,41 +136,76 @@ describe('intakeService', () => {
     expect(session?.sections.find((s) => s.id === 'basics')?.messages).toHaveLength(2);
   });
 
-  it('fills the mapped Person field from a direct answer marker, and strips the marker from the saved text', async () => {
+  it('submitSectionForm fills mapped Person fields, persists answers, marks complete, and runs NO AI', async () => {
     const fs = await setup();
-    const client = fakeClient({ reply: 'Lovely. [[SELFOS:FIELD:occupation=nurse]]' });
-    const res = await runIntakeTurn(turn(fs, client, 'basics', 'I am a nurse.'));
-    expect(res.ok && res.filledFields).toContain('occupation');
-    expect((await getPerson(fs, key, 'p1'))?.occupation).toBe('nurse');
-    const saved = (await getIntakeSession(fs, key, 'p1'))?.sections.find((s) => s.id === 'basics');
-    const lastAssistant = saved?.messages.at(-1)?.content ?? '';
-    expect(lastAssistant).not.toContain('SELFOS:FIELD');
-    expect(lastAssistant).toContain('Lovely.');
-  });
-
-  it('fills a list field comma-separated', async () => {
-    const fs = await setup();
-    const client = fakeClient({ reply: 'Got it. [[SELFOS:FIELD:languages=English, Spanish]]' });
-    await runIntakeTurn(turn(fs, client, 'basics', 'English and Spanish.'));
-    expect((await getPerson(fs, key, 'p1'))?.languages).toEqual(['English', 'Spanish']);
-  });
-
-  it('auto-locks a sensitive direct field to own-context-only (privateFields)', async () => {
-    const fs = await setup();
-    const client = fakeClient({ reply: 'Thank you. [[SELFOS:FIELD:healthNotes=manages anxiety]]' });
-    await runIntakeTurn(turn(fs, client, 'health', 'I have anxiety.'));
+    const session = await submitSectionForm(
+      fs,
+      key,
+      'p1',
+      'basics',
+      { occupation: 'nurse', languages: ['English', 'Spanish'], pronouns: 'she/her' },
+      NOW,
+    );
     const p = await getPerson(fs, key, 'p1');
+    expect(p?.occupation).toBe('nurse');
+    expect(p?.languages).toEqual(['English', 'Spanish']); // multi → list field
+    expect(p?.pronouns).toBe('she/her');
+    const basics = session.sections.find((s) => s.id === 'basics');
+    expect(basics?.status).toBe('complete');
+    expect(basics?.answers.occupation).toBe('nurse'); // structured answers persist under the person
+    // A form submit spends nothing.
+    const usage = await queryUsage(fs, key, { from: '2026-01-01', to: '2027-01-01' });
+    expect(usage).toHaveLength(0);
+  });
+
+  it('locks the sensitive promoted fields to own-context-only (privateFields)', async () => {
+    const fs = await setup();
+    await submitSectionForm(
+      fs,
+      key,
+      'p1',
+      'health',
+      { physicalConditions: 'manages anxiety' },
+      NOW,
+    );
+    let p = await getPerson(fs, key, 'p1');
     expect(p?.healthNotes).toBe('manages anxiety');
     expect(p?.privateFields).toContain('healthNotes');
+    // The intimacy orientation/relationship-style promotions are private too (§14.6).
+    await submitSectionForm(
+      fs,
+      key,
+      'p1',
+      'intimacy',
+      { sexualOrientation: ['Bisexual'], relationshipStyle: 'Monogamous' },
+      NOW,
+    );
+    p = await getPerson(fs, key, 'p1');
+    expect(p?.sexualOrientation).toBe('Bisexual'); // multi → joined string field
+    expect(p?.relationshipStyle).toBe('Monogamous');
+    expect(p?.privateFields).toEqual(
+      expect.arrayContaining(['healthNotes', 'sexualOrientation', 'relationshipStyle']),
+    );
   });
 
-  it('ignores a field marker whose key is not declared for the section', async () => {
+  it('ignores answers not declared for the section (the trust boundary)', async () => {
     const fs = await setup();
-    // healthNotes is not a `basics` direct field — it must be ignored there.
-    const client = fakeClient({ reply: 'Ok. [[SELFOS:FIELD:healthNotes=secret]]' });
-    const res = await runIntakeTurn(turn(fs, client, 'basics', 'hi'));
-    expect(res.ok && (res.filledFields ?? [])).not.toContain('healthNotes');
-    expect((await getPerson(fs, key, 'p1'))?.healthNotes).toBeUndefined();
+    // `healthNotes` is a real Person key but NOT a `basics` question id — it must be ignored there, and a
+    // made-up id is dropped entirely (a malicious renderer can't fill arbitrary fields).
+    await submitSectionForm(
+      fs,
+      key,
+      'p1',
+      'basics',
+      { healthNotes: 'secret', madeUpQuestion: 'x', occupation: 'nurse' },
+      NOW,
+    );
+    const p = await getPerson(fs, key, 'p1');
+    expect(p?.healthNotes).toBeUndefined();
+    expect(p?.occupation).toBe('nurse');
+    const basics = (await getIntakeSession(fs, key, 'p1'))?.sections.find((s) => s.id === 'basics');
+    expect(basics?.answers).not.toHaveProperty('healthNotes');
+    expect(basics?.answers).not.toHaveProperty('madeUpQuestion');
   });
 
   it('appends the interviewer addendum AFTER persona + safety + context', async () => {

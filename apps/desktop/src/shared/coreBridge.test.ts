@@ -1668,27 +1668,21 @@ describe('createCoreBridge', () => {
     ).toMatchObject({ ok: false });
   });
 
-  it('intake: a direct answer fills the profile; the Owner sees restricted facts, a member gets them redacted', async () => {
+  it('intake: a form submit fills the profile, the intimacy block is 18+-gated, and restricted facts redact for a member', async () => {
     const { bridge, host, ownerId } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
-    // A claude that fills `occupation` on a basics turn and returns a portrait with one restricted fact.
+    // A claude that returns a portrait with one restricted ('intimacy') fact + one normal ('basics') fact.
     host.host.claude = {
       send: () => Promise.resolve(''),
-      stream: (options, onDelta) => {
-        const last = options.messages.at(-1)?.content ?? '';
-        let text: string;
-        if (last.includes('closing portrait')) {
-          text = JSON.stringify({
-            portrait: 'You care deeply and carry a lot.',
-            facts: [
-              { text: 'Works as a nurse', section: 'basics' },
-              { text: 'Carries grief from a loss', section: 'weighs' },
-            ],
-            crisisFlag: false,
-          });
-        } else {
-          text = 'Lovely to meet you. [[SELFOS:FIELD:occupation=nurse]]';
-        }
+      stream: (_options, onDelta) => {
+        const text = JSON.stringify({
+          portrait: 'You care deeply and carry a lot.',
+          facts: [
+            { text: 'Works as a nurse', section: 'basics' },
+            { text: 'Enjoys being dominant in bed', section: 'intimacy' },
+          ],
+          crisisFlag: false,
+        });
         onDelta(text);
         return Promise.resolve({
           text,
@@ -1697,29 +1691,45 @@ describe('createCoreBridge', () => {
       },
     };
 
-    // A direct answer in the basics section fills the owner-only profile field.
-    expect(
-      (await bridge.intakeRunTurn({ sectionId: 'basics', userText: 'I am a nurse.' })).ok,
-    ).toBe(true);
+    // A structured form submit fills the owner-only profile fields — no AI spend.
+    await bridge.intakeSubmitForm({ sectionId: 'basics', answers: { occupation: 'nurse' } });
     expect((await bridge.peopleList()).find((p) => p.id === ownerId)?.occupation).toBe('nurse');
-    expect(host.intakeChunks.join('')).toContain('Lovely to meet you');
 
-    // Synthesize the portrait → an intake Insight with a restricted ('weighs') fact.
-    const synth = await bridge.intakeSynthesize({});
-    expect(synth.ok).toBe(true);
+    // The intimacy block is adult-gated IN THE BRIDGE: without the 18+ ack, the submit is a no-op.
+    await bridge.intakeSubmitForm({
+      sectionId: 'intimacy',
+      answers: { sexualOrientation: ['Bisexual'], relationshipStyle: 'Open' },
+    });
+    expect(
+      (await bridge.peopleList()).find((p) => p.id === ownerId)?.sexualOrientation,
+    ).toBeUndefined();
+
+    // After acknowledging 18+, the same submit fills the (private-by-default) orientation/style fields.
+    await bridge.intakeAcknowledgeAdult();
+    await bridge.intakeSubmitForm({
+      sectionId: 'intimacy',
+      answers: { sexualOrientation: ['Bisexual'], relationshipStyle: 'Open' },
+    });
+    const owner = (await bridge.peopleList()).find((p) => p.id === ownerId);
+    expect(owner?.sexualOrientation).toBe('Bisexual');
+    expect(owner?.relationshipStyle).toBe('Open');
+    expect(owner?.privateFields).toEqual(
+      expect.arrayContaining(['sexualOrientation', 'relationshipStyle']),
+    );
+
+    // Synthesize the portrait → an intake Insight with a restricted ('intimacy') fact.
+    expect((await bridge.intakeSynthesize({})).ok).toBe(true);
 
     // The Owner is the full-access role (has intake.readRestricted) → sees the restricted fact directly.
-    const ownerView = await bridge.insightsList();
-    const intakeInsight = ownerView.find((i) => i.source === 'intake');
+    const intakeInsight = (await bridge.insightsList()).find((i) => i.source === 'intake');
     expect(intakeInsight?.facts.some((f) => f.text.includes('nurse'))).toBe(true);
-    expect(intakeInsight?.facts.some((f) => f.text.includes('grief'))).toBe(true);
+    expect(intakeInsight?.facts.some((f) => f.text.includes('dominant'))).toBe(true);
 
-    // A member (viewResults but NOT readRestricted) gets the restricted fact redacted — the §8.4 boundary.
+    // A member (NOT readRestricted) gets the restricted fact redacted — the §8.4 boundary.
     const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
     expect((await bridge.sessionSetActive({ personId: mara.id })).ok).toBe(true);
-    const memberView = await bridge.insightsList();
-    const memberIntake = memberView.find((i) => i.source === 'intake');
+    const memberIntake = (await bridge.insightsList()).find((i) => i.source === 'intake');
     expect(memberIntake?.facts.some((f) => f.text.includes('nurse'))).toBe(true);
-    expect(memberIntake?.facts.some((f) => f.text.includes('grief'))).toBe(false);
+    expect(memberIntake?.facts.some((f) => f.text.includes('dominant'))).toBe(false);
   });
 });

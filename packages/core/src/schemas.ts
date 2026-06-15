@@ -439,14 +439,28 @@ export const IntakeSectionStatusSchema = z.enum([
 ]);
 export type IntakeSectionStatus = z.infer<typeof IntakeSectionStatusSchema>;
 
+/**
+ * A structured intake answer value (18 §14). Widened from a bare string (the chat-era direct fills) to cover
+ * the form answer types reused from the questionnaire engine: single-choice/short/long text (string),
+ * multi-select/ranking (string[]), rating/slider (number), yes/no (boolean). Additive — existing string
+ * answers still parse, so no schemaVersion bump.
+ */
+export const IntakeAnswerValueSchema = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.array(z.string()),
+]);
+export type IntakeAnswerValue = z.infer<typeof IntakeAnswerValueSchema>;
+
 export const IntakeSectionSchema = z.object({
   id: z.string().min(1),
   status: IntakeSectionStatusSchema,
-  // heavy/intimate sections → break-glass-only in owner views (§8.4). Mirrors the catalog (the catalog is
-  // the source of truth; this is stamped at section creation so a read knows it without the catalog).
+  // heavy/intimate sections → restricted in owner views (§8.4). Mirrors the catalog (the catalog is the
+  // source of truth; this is stamped at section creation so a read knows it without the catalog).
   restricted: z.boolean(),
-  messages: z.array(ChatMessageSchema), // the adaptive interview transcript (excludes the static opener)
-  answers: z.record(z.string(), z.string()), // direct/structured answers captured 1:1 (field key → value)
+  messages: z.array(ChatMessageSchema), // the chat transcript (chat sections + go-deeper); excludes the opener
+  answers: z.record(z.string(), IntakeAnswerValueSchema), // structured form answers, keyed by question id
   reflection: z.string().optional(), // the light per-section member-facing reflection (§11.3)
 });
 export type IntakeSection = z.infer<typeof IntakeSectionSchema>;
@@ -1163,8 +1177,15 @@ export interface IntakeSectionMeta {
   blurb: string;
   restricted: boolean;
   adult: boolean;
-  opener: string; // the static opening question (no spend — works offline like guided openers)
+  // Whether this section gates first-run (`core`) or is offered anytime afterward (`invited`), and whether it's
+  // a structured `form` or an AI `chat` (18 §14.2/§14.3). The renderer renders forms from `questions`.
+  tier: 'core' | 'invited';
+  mode: 'form' | 'chat';
+  opener: string; // chat: the static opening question (no spend). form: a short intro line.
   contentNote?: string; // a kind heads-up shown before a heavy/intimate section (§3.3)
+  // Form sections only: the renderer-facing questions (reused questionnaire `Question` shape, with branching).
+  // The host-side field/restricted mapping is NOT sent to the renderer (it's applied in `submitSectionForm`).
+  questions?: Question[];
 }
 
 /**

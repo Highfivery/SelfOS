@@ -282,6 +282,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.dreamListSharedImages, bridge.dreamListSharedImages);
   handle(IpcChannels.intakeGetState, bridge.intakeGetState);
   handle(IpcChannels.intakeSkipSection, bridge.intakeSkipSection);
+  handle(IpcChannels.intakeSubmitForm, bridge.intakeSubmitForm);
   handle(IpcChannels.intakeAcknowledgeAdult, bridge.intakeAcknowledgeAdult);
   handle(IpcChannels.intakeSynthesize, bridge.intakeSynthesize);
   handle(IpcChannels.getSidebarCollapsed, bridge.getSidebarCollapsed);

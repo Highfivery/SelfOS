@@ -48,6 +48,7 @@ import {
   type InboxCompatibilityView,
   type InboxItem,
   type Insight,
+  IntakeAnswerValueSchema,
   type IntakeState,
   type IntakeSynthesisResult,
   type IntakeTurnResult,
@@ -234,10 +235,12 @@ import {
 } from '@selfos/core/dreams';
 import {
   ensureIntakeSession,
+  getIntakeSection,
   intakeSectionMeta,
   redactRestrictedFacts,
   runIntakeTurn,
   skipIntakeSection,
+  submitSectionForm,
   synthesizeIntake,
 } from '@selfos/core/intake';
 import { fromBase64, toBase64 } from '@selfos/core/encoding';
@@ -499,6 +502,10 @@ const InsightIdSchema = z.object({ subjectPersonId: z.string().min(1), id: z.str
 const IntakeRunTurnSchema = z.object({ sectionId: z.string().min(1), userText: z.string() });
 const IntakeSectionIdSchema = z.object({ sectionId: z.string().min(1) });
 const IntakeSynthesizeSchema = z.object({ sectionId: z.string().min(1).optional() });
+const IntakeSubmitFormSchema = z.object({
+  sectionId: z.string().min(1),
+  answers: z.record(z.string(), IntakeAnswerValueSchema),
+});
 const AssignmentIdSchema = z.string().min(1);
 const QuestionnaireIdSchema = z.string().min(1);
 const AnswersSchema = z.object({
@@ -2342,6 +2349,23 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         return emptyIntakeState(personId ?? '');
       }
       await skipIntakeSection(ctx.fs, ctx.key, personId, sectionId, new Date());
+      return buildIntakeState(ctx.fs, ctx.key, personId);
+    },
+    intakeSubmitForm: async (input): Promise<IntakeState> => {
+      const { sectionId, answers } = IntakeSubmitFormSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'intake.own'))) {
+        return emptyIntakeState(personId ?? '');
+      }
+      // An adult-gated section (intimacy) requires the shared 18+ acknowledgement — enforced HERE (the bridge
+      // is the trust boundary, not the renderer). Without it, the submit is a no-op.
+      const def = getIntakeSection(sectionId);
+      if (def?.adult) {
+        const prefs = await getGuidancePrefs(ctx.fs, ctx.key, personId);
+        if (prefs.adultAcknowledged !== true) return buildIntakeState(ctx.fs, ctx.key, personId);
+      }
+      await submitSectionForm(ctx.fs, ctx.key, personId, sectionId, answers, new Date());
       return buildIntakeState(ctx.fs, ctx.key, personId);
     },
     intakeAcknowledgeAdult: async (): Promise<IntakeState> => {

@@ -187,6 +187,7 @@ const bridge: SelfosBridge = {
     };
   },
   intakeSkipSection: (input) => ipcRenderer.invoke(IpcChannels.intakeSkipSection, input),
+  intakeSubmitForm: (input) => ipcRenderer.invoke(IpcChannels.intakeSubmitForm, input),
   intakeAcknowledgeAdult: () => ipcRenderer.invoke(IpcChannels.intakeAcknowledgeAdult),
   intakeSynthesize: (input) => ipcRenderer.invoke(IpcChannels.intakeSynthesize, input),
   getSidebarCollapsed: () => ipcRenderer.invoke(IpcChannels.getSidebarCollapsed),

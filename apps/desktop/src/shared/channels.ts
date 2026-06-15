@@ -33,6 +33,7 @@ import type {
   InviteSummary,
   Insight,
   InsightFact,
+  IntakeAnswerValue,
   IntakeSection,
   IntakeSectionMeta,
   IntakeSession,
@@ -203,6 +204,7 @@ export const IpcChannels = {
   intakeRunTurn: 'intake:runTurn',
   intakeChunk: 'intake:chunk', // main → renderer event
   intakeSkipSection: 'intake:skipSection',
+  intakeSubmitForm: 'intake:submitForm',
   intakeAcknowledgeAdult: 'intake:acknowledgeAdult',
   intakeSynthesize: 'intake:synthesize',
   getSidebarCollapsed: 'ui:getSidebarCollapsed',
@@ -676,6 +678,15 @@ export interface SelfosBridge {
   onIntakeChunk(listener: (delta: string) => void): () => void;
   /** Skip a whole intake section (never blocks completion). Requires `intake.own`. */
   intakeSkipSection(input: { sectionId: string }): Promise<IntakeState>;
+  /**
+   * Submit a structured **form** section's answers (18 §14.6): fills the mapped owner-only `Person` fields,
+   * persists the answers, and marks the section complete. No AI spend. Adult sections need the 18+ ack
+   * (enforced in main). Requires `intake.own`; active-person-scoped.
+   */
+  intakeSubmitForm(input: {
+    sectionId: string;
+    answers: Record<string, IntakeAnswerValue>;
+  }): Promise<IntakeState>;
   /** The one-time 18+ acknowledgement for the intimacy block (shared with guided sessions). Requires `intake.own`. */
   intakeAcknowledgeAdult(): Promise<IntakeState>;
   /**

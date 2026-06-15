@@ -517,6 +517,63 @@ person's own context.
 | **What weighs on you** _(restricted)_        | invited | chat        | checklist (trauma-informed, person sets depth): current stressors, grief/loss, recurring worries, stuck patterns, past trauma — never dig for specifics.                            |
 | **Intimacy & sexuality** _(18+, restricted)_ | invited | form+deepen | see §14.5.                                                                                                                                                                          |
 
+### 14.4a Full per-section question bank (non-intimacy)
+
+The comprehensive set to build (terse; `single`/`multi`/`scale`/`yesNo`/`date`/`text`; "→field" promotes to a
+`Person` field). Each is **optional/skippable**; `core` sections stay quick (the gate), `invited` go deep.
+Wording tuned at build.
+
+**The basics** _(core, form)_ — preferred name (text) · pronouns(single+other)→`pronouns` ·
+gender identity(single+other)→`gender` · birthday(date)→`birthday` · where you live(text)→`location` ·
+where you grew up(text) · languages(multi)→`languages` · cultural/ethnic background(text)→`ethnicity` ·
+what you do for work(text)→`occupation` · education level(single).
+
+**Your life now** _(core, form+deepen)_ — living situation(single)→`livingSituation` ·
+relationship status(single)→`relationshipStatus` · children/parental status(single)→`parentalStatus` ·
+what a typical day looks like(text, **deepen**) · how satisfied with work(scale) · financial stress(scale) ·
+how socially connected you feel(scale) · biggest current stressor(multi: work/money/relationship/health/family/
+purpose/other) · biggest current source of joy(text) · overall mood lately(scale).
+
+**Values & identity** _(core, form)_ — core values(multi)→`values` · what gives your life meaning(text) ·
+faith/spirituality(single+other)→`faith` · how important faith is(scale) · personality(multi: introvert/
+extrovert, planner/spontaneous, thinker/feeler, …) · how you'd describe yourself(text) ·
+how you like to communicate(single)→`communicationStyle` · what you're most proud of(text) ·
+what you're most insecure about(text) · a belief that guides you(text).
+
+**What you want** _(core, form+deepen)_ — growth areas(multi)→`goals` · one specific goal(text, **deepen**) ·
+what a good life looks like to you(text) · where you want to be in 5 years(text) · what's holding you
+back(multi/text) · how you want SelfOS to support you(multi: accountability/reflection/advice/just listen/
+challenge me) · how you like to be coached(single: gently / directly / challenged / data-driven).
+
+**Health & wellbeing** _(invited, form+deepen, private)_ — sleep quality(scale) · energy(scale) ·
+stress(scale) · movement/exercise(single) · eating patterns(single) · anything to keep in mind(text,
+**deepen**)→`healthNotes`(private) · diagnosed conditions(text, optional, private) · medications affecting
+mood/energy(text, optional, private) · alcohol(single) · smoking/vaping(single) · recreational substances(single,
+optional, private) · in therapy now or before(single) · relationship with your body(scale) · chronic pain/
+illness(text, optional, private).
+
+**Relationships** _(invited, form+deepen)_ — attachment style(single: secure/anxious/avoidant/mixed, with a
+plain-language helper) · how you handle conflict(single) · what you need most from others(multi) ·
+how you express love(multi: words/touch/time/gifts/acts) · how you best receive love(multi) ·
+how easily you trust(scale) · how easily you open up(scale) · number of close friends(single) ·
+satisfaction with your friendships(scale) · loneliness(scale) · a recurring pattern you notice in your
+relationships(text, **deepen**) · biggest relationship challenge(text).
+
+**Family & upbringing** _(invited, chat — a few structured primers, then go deep)_ — primers: who raised
+you(multi) · closeness with each parent/caregiver(scale each) · how affection was shown growing up(single) ·
+how conflict was handled(single) · family faith/culture(text). Then **chat**: siblings + birth order, what your
+upbringing was like, family wounds and gifts, patterns you inherited, family mental-health history, what you
+carry from them.
+
+**Your story** _(invited, chat)_ — formative chapters · turning points · proudest moments · lowest moments ·
+biggest regrets · defining relationships · how you've changed · what you've survived · who you're becoming.
+
+**What weighs on you** _(invited, chat, restricted — trauma-informed)_ — an optional gentle primer ("check any
+you're comfortable naming — we'll only go where you want": loss/grief, anxiety, depression, abuse, neglect,
+assault, addiction, betrayal, none of these / rather not say), then **chat**: current stressors, grief, recurring
+worries, stuck patterns, shame, things you don't tell people, and (gently, never dug-for) past trauma — with
+crisis routing always present (§8.2).
+
 ### 14.5 The intimacy & sexuality block (explicit, structured, branched, opt-in)
 
 Replaces the single free-text box with a **comprehensive, concrete, branched** set of structured intake
@@ -527,42 +584,60 @@ skippable**. **Answer-branching** keeps it relevant (e.g. anatomy-preference que
 drawn to; the partner group appears only if you have a partner). Tone is matter-of-fact, sex-positive, and
 non-judgmental — these are profile/intake questions, not generated erotica.
 
-The full inventory (grouped; `single`=singleChoice, `multi`=multiChoice, `scale`=rating, `text`=longText):
+The full inventory (grouped; `single`=singleChoice, `multi`=multiChoice, `scale`=rating, `text`=longText). All
+optional/skippable; all consensual, legal, adult — these are intake questions about the person's own sexuality:
 
-**A. Orientation & relationship** — sexual orientation (multi → `sexualOrientation` field, private) ·
-who you're drawn to (multi: men / women / non-binary people / everyone) · relationship style
-(single → `relationshipStyle` field, private) · how big a part of life intimacy is (scale) · sex drive /
-libido (single: very low → very high).
+**A. Orientation & identity** — sexual orientation (multi → `sexualOrientation` field, private) · romantic
+orientation if different (single) · who you're drawn to (multi: men / women / non-binary people / everyone) ·
+relationship style (single → `relationshipStyle` field, private) · currently exclusive/monogamous (yesNo) ·
+how big a part of life intimacy is (scale) · sex drive / libido (single: very low → very high) · describe your
+sexuality in a word or phrase (text).
 
-**B. Your sexual story** _(reflective, all optional)_ — age you first masturbated (single age ranges +
-"prefer not to say") · age of your first partnered experience (ranges + "haven't yet") · number of partners so
-far (ranges) · how you first discovered masturbation (text) · your first sexual experience, in your words
-(text) · your best / most memorable experience (text) · your most awkward or embarrassing moment (text).
-_(An adult reflecting on their own history — standard in sex-therapy intake; never solicits graphic detail the
-person doesn't volunteer.)_
+**B. Your sexual story** _(reflective, all optional)_ — age you first masturbated (single ranges +
+"prefer not to say") · age of your first orgasm (single) · age of your first partnered experience (ranges +
+"haven't yet") · age of first intercourse (single) · number of sexual partners so far (ranges) · how you first
+discovered masturbation (text) · your first sexual experience, in your words (text) · your best / most memorable
+experience (text) · your most awkward or embarrassing moment (text) · anything you regret (text) · how your
+sexuality has changed over time (text) · messages about sex you absorbed growing up (text) · any sexual shame or
+hang-ups you carry (text). _(An adult reflecting on their own history — standard in sex-therapy intake; never
+solicits graphic detail the person doesn't volunteer.)_
 
 **C. Your current partner & sex life** _(branch on "Do you have a sexual partner right now?" yesNo)_ —
-satisfaction with your sex life together (scale) · how often you're intimate (single) · how easily you can talk
-about sex with them (scale) · what's working well (text) · what you wish were different (text) · what you find
-most attractive about them (text).
+satisfaction with your sex life (scale) · how often you're intimate now (single) · how often you'd like to be
+(single) · who usually initiates (single) · how often you orgasm together (single) · how easily you can talk
+about sex with them (scale) · have you shared your fantasies with them (yesNo) · something you want but haven't
+asked for (text) · what's working well (text) · what you wish were different (text) · what you find most
+attractive about them (text).
 
-**D. What you like** — turn-ons (multi + note) · turn-offs (multi + note) · favorite positions (multi:
-missionary / doggy / on top / spooning / standing / oral giving / oral receiving / 69 / other + note) ·
-**into it** (multi: oral, anal, rimming, toys, bondage, BDSM/kink, role-play, dirty talk, spanking, threesomes,
-group sex, exhibitionism, sexting, …) · **curious to try** (multi, same list) · **hard limits** (multi, same
-list + note) · kinks/fetishes in your words (text).
+**D. Arousal & what you like** — turn-ons (multi + note) · turn-offs (multi + note) · what gets you in the mood
+(multi: touch, words, anticipation, visuals, scent, romance, …) · where you most like to be touched (multi body
+areas) · favorite positions (multi: missionary / doggy / on top / spooning / standing / oral giving / oral
+receiving / 69 / other + note) · preferred pace & intensity (single: slow & sensual ↔ rough & intense) ·
+dominant or submissive (single: dominant / submissive / switch / vanilla) · **into it** (multi: oral, anal,
+rimming, toys, bondage, BDSM/kink, role-play, dirty talk, spanking, choking, threesomes, group sex,
+exhibitionism, voyeurism, sexting, … — consensual adult activities) · **curious to try** (multi, same list) ·
+**hard limits / not for you** (multi, same list + note) · how you feel about dirty talk (single) · toys you like
+(multi) · quickies vs. long sessions (single) · kinks or fetishes in your own words (text).
 
-**E. Body & grooming preferences** _(branched on attraction via yes/no gates)_ — _(if drawn to partners with a
+**E. Body & physical preferences** _(branched on attraction via yes/no gates)_ — _(if drawn to partners with a
 penis)_ size you prefer (single: no preference → very large) · _(if drawn to partners with a vulva/breasts)_
-breast preference (single) · pubic hair you prefer on a partner (single: shaved / trimmed / natural / no
-preference) · how you keep your own grooming (single, optional).
+breast preference (single) · body type you're drawn to (multi) · pubic hair you prefer on a partner (single:
+shaved / trimmed / natural / no preference) · how you keep your own grooming (single, optional) · how confident
+you feel in your own body (scale) · your erogenous zones (multi) · anything about your body you love or feel
+self-conscious about sexually (text).
 
-**F. Fantasies & media** — fantasies you have or want to explore (text) · do you watch porn (single: never →
-daily) · _(branch: not "never")_ what kind you like (multi genres + note) · how often you masturbate (single) ·
-what you like when you do (text, optional).
+**F. Fantasies & media** — fantasies you have or want to explore (text) · common fantasies that appeal (multi,
+consensual scenarios) · a fantasy you'd never act on (text) · do you watch porn (single: never → daily) ·
+_(branch: not "never")_ what kind you like (multi genres + note) · do you read or listen to erotica (single) ·
+sexting / sharing nudes (single) · any recurring sexual dreams (text).
 
-**G. Boundaries & meaning** — consent/safety/boundaries SelfOS should always hold (text) · what great intimacy
-or closeness means to you (text).
+**G. Sexual wellbeing** _(sensitive, optional, private)_ — any difficulties you'd want support with (multi:
+arousal, reaching orgasm, pain, erectile, dryness, mismatched desire, none — optional) · performance anxiety
+(scale) · how your mood affects your libido (text) · how sex affects your overall wellbeing (text).
+
+**H. Boundaries, consent & meaning** — consent / safety / boundaries SelfOS should always hold (text) · a
+safeword or signal you use (text) · what makes you feel safe and present during sex (text) · what great intimacy
+or closeness means to you (text) · what you most want SelfOS to understand about your sexuality (text).
 
 Everything except orientation (`sexualOrientation`) and relationship style (`relationshipStyle`, both
 private-by-default fields) becomes a **`restricted` Insight fact** feeding **only the person's own**

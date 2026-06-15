@@ -14,6 +14,7 @@ const formMeta: IntakeSectionMeta = {
   tier: 'core',
   mode: 'form',
   opener: 'A few quick things.',
+  canDeepen: true,
   questions: [
     {
       id: 'pronouns',
@@ -94,6 +95,27 @@ describe('IntakeFormPanel', () => {
       }),
     );
     await waitFor(() => expect(onAdvance).toHaveBeenCalled());
+  });
+
+  it('offers an optional "Tell me more" go-deeper chat when the section invites it', async () => {
+    const intakeRunTurn = vi.fn(() =>
+      Promise.resolve({ ok: true as const, session: {} as never, usage: {} as never }),
+    );
+    installMockBridge({ intakeRunTurn });
+    render(
+      <IntakeFormPanel
+        meta={formMeta}
+        section={section()}
+        adultAcknowledged={false}
+        onAdvance={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Tell me more/ }));
+    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'A bit more.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await waitFor(() =>
+      expect(intakeRunTurn).toHaveBeenCalledWith({ sectionId: 'basics', userText: 'A bit more.' }),
+    );
   });
 
   it('gates an adult section behind the 18+ acknowledgement (no questions until acked)', () => {

@@ -100,6 +100,14 @@ export function PersonEditor({
     person?.importantDates ?? [],
   );
 
+  // About — life facts the onboarding intake also fills (18 §14.6). The first three default shared; the last
+  // two default private (own-context-only). Editable here too.
+  const [relationshipStatus, setRelationshipStatus] = useState(person?.relationshipStatus ?? '');
+  const [parentalStatus, setParentalStatus] = useState(person?.parentalStatus ?? '');
+  const [livingSituation, setLivingSituation] = useState(person?.livingSituation ?? '');
+  const [sexualOrientation, setSexualOrientation] = useState(person?.sexualOrientation ?? '');
+  const [relationshipStyle, setRelationshipStyle] = useState(person?.relationshipStyle ?? '');
+
   // About — private descriptive fields (own coaching context only).
   const [healthNotes, setHealthNotes] = useState(person?.healthNotes ?? '');
   const [faith, setFaith] = useState(person?.faith ?? '');
@@ -149,6 +157,11 @@ export function PersonEditor({
         ...(appearance.trim() ? { appearanceDescription: appearance.trim() } : {}),
         ...(ethnicity.trim() ? { ethnicity: ethnicity.trim() } : {}),
         ...(occupation.trim() ? { occupation: occupation.trim() } : {}),
+        ...(relationshipStatus.trim() ? { relationshipStatus: relationshipStatus.trim() } : {}),
+        ...(parentalStatus.trim() ? { parentalStatus: parentalStatus.trim() } : {}),
+        ...(livingSituation.trim() ? { livingSituation: livingSituation.trim() } : {}),
+        ...(sexualOrientation.trim() ? { sexualOrientation: sexualOrientation.trim() } : {}),
+        ...(relationshipStyle.trim() ? { relationshipStyle: relationshipStyle.trim() } : {}),
         ...(interests.length ? { interests } : {}),
         ...(location.trim() ? { location: location.trim() } : {}),
         ...(goals.trim() ? { goals: goals.trim() } : {}),
@@ -322,6 +335,42 @@ export function PersonEditor({
                 />
               )}
             </Field>
+            <Field
+              label="Relationship status"
+              labelAction={toggle('relationshipStatus', 'Relationship status')}
+            >
+              {(props) => (
+                <TextInput
+                  {...props}
+                  value={relationshipStatus}
+                  placeholder="e.g. Married"
+                  onChange={(event) => setRelationshipStatus(event.target.value)}
+                />
+              )}
+            </Field>
+            <Field label="Children" labelAction={toggle('parentalStatus', 'Children')}>
+              {(props) => (
+                <TextInput
+                  {...props}
+                  value={parentalStatus}
+                  placeholder="e.g. Two young kids"
+                  onChange={(event) => setParentalStatus(event.target.value)}
+                />
+              )}
+            </Field>
+            <Field
+              label="Living situation"
+              labelAction={toggle('livingSituation', 'Living situation')}
+            >
+              {(props) => (
+                <TextInput
+                  {...props}
+                  value={livingSituation}
+                  placeholder="e.g. With a partner"
+                  onChange={(event) => setLivingSituation(event.target.value)}
+                />
+              )}
+            </Field>
             <ChipEditor
               label="Interests"
               values={interests}
@@ -404,6 +453,34 @@ export function PersonEditor({
                   value={faith}
                   placeholder="e.g. Buddhist"
                   onChange={(event) => setFaith(event.target.value)}
+                />
+              )}
+            </Field>
+            <Field
+              label="Sexual orientation"
+              help="From onboarding; kept private to their own coaching by default."
+              labelAction={toggle('sexualOrientation', 'Sexual orientation')}
+            >
+              {(props) => (
+                <TextInput
+                  {...props}
+                  value={sexualOrientation}
+                  placeholder="e.g. Bisexual"
+                  onChange={(event) => setSexualOrientation(event.target.value)}
+                />
+              )}
+            </Field>
+            <Field
+              label="Relationship style"
+              help="Kept private to their own coaching by default."
+              labelAction={toggle('relationshipStyle', 'Relationship style')}
+            >
+              {(props) => (
+                <TextInput
+                  {...props}
+                  value={relationshipStyle}
+                  placeholder="e.g. Monogamous"
+                  onChange={(event) => setRelationshipStyle(event.target.value)}
                 />
               )}
             </Field>

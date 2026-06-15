@@ -1186,6 +1186,9 @@ export interface IntakeSectionMeta {
   // Form sections only: the renderer-facing questions (reused questionnaire `Question` shape, with branching).
   // The host-side field/restricted mapping is NOT sent to the renderer (it's applied in `submitSectionForm`).
   questions?: Question[];
+  // Form sections only: true when the section has a question that invites an optional "Tell me more →" chat
+  // (18 §14.3) — never on pure-fact sections. The renderer shows a go-deeper composer when set.
+  canDeepen?: boolean;
 }
 
 /**

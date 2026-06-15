@@ -1233,6 +1233,7 @@ export function intakeSectionMeta(): IntakeSectionMeta[] {
     opener: s.opener,
     ...(s.contentNote !== undefined ? { contentNote: s.contentNote } : {}),
     ...(s.questions ? { questions: s.questions.map((x) => x.q) } : {}),
+    ...(s.questions?.some((x) => x.deepen) ? { canDeepen: true } : {}),
   }));
 }
 

@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react';
 import { QuestionnaireForm } from '@selfos/answering';
+import { stripIntakeFieldMarkers } from '@selfos/core/intake';
 import type { AnswerMap, AnswerValue } from '@selfos/core/questionnaires';
 import type { IntakeAnswerValue, IntakeSection, IntakeSectionMeta } from '@shared/channels';
-import { ArrowRight, ShieldCheck } from 'lucide-react';
+import { ArrowRight, MessageCircle, ShieldCheck } from 'lucide-react';
 import { Banner, Button, Card, Heading, Text } from '../../../design-system/components';
+import { Composer } from '../sessions/Composer';
 import { useIntakeStore } from '../../../stores/intakeStore';
 import styles from './Onboarding.module.css';
 
@@ -28,6 +30,10 @@ export function IntakeFormPanel({
   const submitForm = useIntakeStore((s) => s.submitForm);
   const skipSection = useIntakeStore((s) => s.skipSection);
   const acknowledgeAdult = useIntakeStore((s) => s.acknowledgeAdult);
+  const runTurn = useIntakeStore((s) => s.runTurn);
+  const running = useIntakeStore((s) => s.running);
+  const streaming = useIntakeStore((s) => s.streaming);
+  const [deepening, setDeepening] = useState(false);
 
   // Local answer state, seeded from any saved answers (resume / edit). The host owns it (§5.3); a Continue
   // persists it through the bridge. Re-seeds when the section identity changes (key on meta.id at the parent).
@@ -96,6 +102,50 @@ export function IntakeFormPanel({
           onChange={onChange}
           footer={<></>}
         />
+
+        {/* Optional "Tell me more →" — a brief AI chat to elaborate, only on sections that invite depth. */}
+        {meta.canDeepen ? (
+          <div className={styles.section}>
+            {deepening ? (
+              <>
+                <div className={styles.thread} aria-live="polite" aria-busy={running}>
+                  <div className={`${styles.turn} ${styles.coachMsg}`}>
+                    Anything you’d like to add or go a little deeper on here? Say as much or as
+                    little as you like.
+                  </div>
+                  {(section?.messages ?? []).map((m, i) => (
+                    <div
+                      key={i}
+                      className={`${styles.turn} ${m.role === 'user' ? styles.userMsg : styles.coachMsg}`}
+                    >
+                      {m.content}
+                    </div>
+                  ))}
+                  {running ? (
+                    streaming ? (
+                      <div className={`${styles.turn} ${styles.coachMsg}`}>
+                        {stripIntakeFieldMarkers(streaming)}
+                      </div>
+                    ) : (
+                      <div className={styles.thinking}>Listening…</div>
+                    )
+                  ) : null}
+                </div>
+                <Composer
+                  disabled={running}
+                  onSend={(text) => void runTurn(meta.id, text)}
+                  placeholder="Tell me more…"
+                  autoFocus={false}
+                />
+              </>
+            ) : (
+              <Button variant="ghost" onClick={() => setDeepening(true)}>
+                <MessageCircle size={16} aria-hidden="true" />
+                Tell me more
+              </Button>
+            )}
+          </div>
+        ) : null}
 
         <div className={styles.controls}>
           <Button

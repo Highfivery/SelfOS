@@ -515,6 +515,9 @@ export const IntakeSessionSchema = z.object({
   sections: z.array(IntakeSectionSchema),
   insightId: z.string().optional(), // the portrait Insight (set once synthesized)
   portrait: z.string().optional(), // the member-facing closing portrait summary (set at final synthesis)
+  // Per-answer signature (sectionId.questionId → cheap hash) snapshotted at the LAST portrait synthesis, so a
+  // deterministic "your portrait is X% out of date" nudge can detect added/edited/cleared answers since (§15).
+  portraitAnswerSig: z.record(z.string(), z.number()).optional(),
   startedAt: z.string(),
   updatedAt: z.string(),
   completedAt: z.string().optional(),

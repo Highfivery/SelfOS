@@ -175,13 +175,16 @@ export async function summarizeForContext(
 ): Promise<string> {
   const lines: string[] = [];
 
-  const own = (
-    await feedableInsights(
-      fs,
-      key,
-      (await listInsightsForPerson(fs, key, personId)).filter((insight) => insight.approved),
-    )
-  ).slice(0, MAX_OWN_INSIGHTS);
+  const feedable = await feedableInsights(
+    fs,
+    key,
+    (await listInsightsForPerson(fs, key, personId)).filter((insight) => insight.approved),
+  );
+  // The onboarding portrait (`source: 'intake'`) is the foundational picture of the person — PIN it so it's
+  // ALWAYS in context (and first), never aged out of the recency window by newer session/dream insights (§15).
+  const intake = feedable.filter((insight) => insight.source === 'intake');
+  const rest = feedable.filter((insight) => insight.source !== 'intake');
+  const own = [...intake, ...rest].slice(0, MAX_OWN_INSIGHTS);
   if (own.length > 0) {
     lines.push('What you understand about them so far:');
     for (const insight of own) {

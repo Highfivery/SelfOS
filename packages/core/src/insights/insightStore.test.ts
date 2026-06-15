@@ -105,6 +105,38 @@ describe('insightStore', () => {
       expect(out).not.toContain('p2 confidential');
     });
 
+    it('PINS the onboarding portrait (source intake) in context past the recency cap', async () => {
+      const fs = memFileSystem();
+      // An old intake portrait, then 14 newer session insights (> the 12 own-insight cap).
+      await saveInsight(
+        fs,
+        key,
+        insight({
+          id: 'portrait',
+          subjectPersonId: 'p1',
+          source: 'intake',
+          summary: 'the foundational portrait',
+          updatedAt: '2026-06-01T00:00:00.000Z',
+        }),
+      );
+      for (let i = 0; i < 14; i += 1) {
+        await saveInsight(
+          fs,
+          key,
+          insight({
+            id: `s${i}`,
+            subjectPersonId: 'p1',
+            source: 'session',
+            summary: `session ${i}`,
+            updatedAt: `2026-06-${String(10 + i).padStart(2, '0')}T00:00:00.000Z`,
+          }),
+        );
+      }
+      const out = await summarizeForContext(fs, key, 'p1', []);
+      // Despite being the oldest, the portrait is still in context (pinned).
+      expect(out).toContain('the foundational portrait');
+    });
+
     it('returns an empty string when there are no insights', async () => {
       const fs = memFileSystem();
       expect(await summarizeForContext(fs, key, 'p1', [])).toBe('');

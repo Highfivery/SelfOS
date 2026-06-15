@@ -26,6 +26,7 @@ import {
   getIntakeSection,
   type IntakeFormQuestion,
 } from './intakeCatalog';
+import { intakeAnswerHashes } from './portraitFreshness';
 
 /**
  * Personal-onboarding intake service (18-personal-onboarding §5/§14). A hybrid, resumable self-onboarding:
@@ -422,9 +423,18 @@ said; do not invent. This is reflective, not clinical. Respond with ONLY a singl
 
 const PORTRAIT_INSTRUCTION = `Now write the closing portrait of this person from everything they shared \
 across the whole intake. Be warm, specific, and faithful — never invent. This is reflective self-knowledge, \
-not a clinical assessment. Respond with ONLY a single JSON object (no markdown fences) with these keys:
-- "portrait": a warm, member-facing 1-2 paragraph "here's what I've come to understand about you" summary (string)
-- "facts": structured memory facts to remember about them (array of {"text": short fact, "section": the section id it came from})
+not a clinical assessment.
+
+This portrait is the AI's lasting memory of this person — it personalizes their coaching, dream analysis, and \
+everything else across the app — so be COMPREHENSIVE. Capture the FULL picture, not just highlights.
+
+Respond with ONLY a single JSON object (no markdown fences) with these keys:
+- "portrait": a warm, member-facing "here's what I've come to understand about you" summary, 3-5 rich paragraphs (string)
+- "facts": a THOROUGH set of structured memory facts — cover EVERY area they shared (identity & basics, life now, \
+values, goals & what they want, work & money, health & wellbeing, relationships, family & upbringing, their story, \
+joy & play, what weighs on them, and intimacy if shared). Capture every concrete, specific detail worth \
+remembering — names, preferences, patterns, goals, struggles, history — not just a handful. Prefer many precise \
+facts over a few vague ones. Each: {"text": a short specific fact, "section": the section id it came from} (array)
 - "metrics": optional normalized signals for trends, e.g. {"valence": -1.0..1.0} (object)
 - "inferred": optional fields to fill from the whole picture: {"communicationStyle": string, "values": [..], "goals": string, "faith": string}
 - "crisisFlag": true ONLY if self-harm, suicide, or acute crisis was disclosed (boolean)`;
@@ -615,7 +625,8 @@ async function synthesizePortrait(deps: IntakeSynthesizeDeps): Promise<IntakeSyn
           ...formAnswersMessages(session),
           { role: 'user', content: PORTRAIT_INSTRUCTION },
         ],
-        maxTokens: 2000,
+        // A comprehensive portrait + a thorough fact set across ~12 sections needs room (§15).
+        maxTokens: 8000,
       },
       () => {},
     );
@@ -695,6 +706,8 @@ async function synthesizePortrait(deps: IntakeSynthesizeDeps): Promise<IntakeSyn
   session.completedAt = at;
   session.insightId = insightId;
   session.portrait = draft.portrait;
+  // Snapshot the answers this portrait was built from, so the app can later show "X% out of date" (§15).
+  session.portraitAnswerSig = intakeAnswerHashes(session);
   session.updatedAt = at;
   await writeEncryptedJson(fs, intakePath(personId), session, key);
 

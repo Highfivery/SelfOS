@@ -103,6 +103,14 @@ export const PersonFieldKeySchema = z.enum([
   'notes',
   'healthNotes',
   'faith',
+  // Promoted from the onboarding intake (18 §14.6) — structured life facts the coach can use directly.
+  // relationshipStatus/parentalStatus/livingSituation default shared; sexualOrientation/relationshipStyle
+  // default private (the intake adds them to `privateFields` when filled).
+  'relationshipStatus',
+  'parentalStatus',
+  'livingSituation',
+  'sexualOrientation',
+  'relationshipStyle',
 ]);
 export type PersonFieldKey = z.infer<typeof PersonFieldKeySchema>;
 /** Every controllable key, in editor/context order (derived from the schema so the two can't drift). */
@@ -147,6 +155,14 @@ export const PersonSchema = z.object({
   // (15-shareability §3.1). Still never sent to the image provider (only the depiction subset is, 13 §8.2).
   healthNotes: z.string().optional(),
   faith: z.string().optional(),
+  // Promoted intake life-facts (18 §14.6) — additive-optional, no schemaVersion bump (the email/phone
+  // precedent). The first three default shared; the last two are added to `privateFields` when the intake
+  // fills them. None feed `buildDepictionNote` (never an image input).
+  relationshipStatus: z.string().optional(),
+  parentalStatus: z.string().optional(),
+  livingSituation: z.string().optional(),
+  sexualOrientation: z.string().optional(),
+  relationshipStyle: z.string().optional(),
   // The controllable field keys the owner has locked to own-context-only (15-shareability §4.1). Absent or
   // not listed ⇒ shareable (the default). Storing only the opt-OUTs keeps it minimal + additive-optional.
   privateFields: z.array(PersonFieldKeySchema).optional(),
@@ -260,6 +276,12 @@ export const PersonInputSchema = z.object({
     .optional(),
   healthNotes: z.string().optional(),
   faith: z.string().optional(),
+  // Promoted intake life-facts (18 §14.6) — mirror PersonSchema.
+  relationshipStatus: z.string().optional(),
+  parentalStatus: z.string().optional(),
+  livingSituation: z.string().optional(),
+  sexualOrientation: z.string().optional(),
+  relationshipStyle: z.string().optional(),
   // Per-field shareability locks (15-shareability §4.1) — the keys the owner locked to own-context-only.
   privateFields: z.array(PersonFieldKeySchema).optional(),
 });

@@ -1550,26 +1550,89 @@ source of truth**:
 - A light copy pass on any remaining "break-glass"/"audited" wording the §15.8 follow-up flagged
   (`RelaySendPanel`, the admin disclosure setting), now that the audit log is gone (§14, 2026-06-14).
 
-### 16.7 Tests — comprehensive audit-driven expansion
+### 16.7 Tests — the comprehensive questionnaire E2E coverage matrix
 
-The audit found strong unit coverage but **E2E gaps**. Add (priority order):
+The audit found strong unit coverage but **E2E gaps** that let a whole-feature model mismatch (the
+compatibility participant bug) ship unnoticed. This amendment establishes an **exhaustive, start-to-finish
+E2E regression suite** covering **every option/scenario** of the questionnaire feature — authoring → sending
+→ answering → viewing/results → deletion — so a future regression in any path is caught. **Goal: every
+option exercised end-to-end at least once, plus the important cross-products** (not the full cartesian
+explosion — e.g. each answer type is covered once, and each compatibility visibility × the
+send→answer→report flow is covered, but not every answer-type×type×tier combination). Where a real browser
+relay round-trip isn't feasible, drive the recipient side via the relay test utilities (the existing
+pattern). All Claude/image/relay calls use the established fakes (`SELFOS_FAKE_CLAUDE`/`SELFOS_FAKE_IMAGE`/
+`SELFOS_FAKE_RELAY`); decrypt the real vault to assert data, not just the UI. Run `pnpm typecheck` after
+tests (memory `vitest-does-not-typecheck`).
 
-- **Compatibility full round-trip E2E** — author a compatibility questionnaire (you + someone else), send,
-  **both** answer in their inboxes, generate the alignment report + Insight; plus a **`contextOnly`** variant
-  asserting **no report** is produced and **both** participants' contexts are enriched (decrypt to verify),
-  and a **two-others** variant.
-- **Create → Send workflow E2E** — save a draft (stays saved, no strand), then send it from the saved
-  questionnaire; assert the two-step.
-- **AI generation E2E (mocked Claude)** — generate questions **and a title**; assert the title fills only
-  when empty; assert the intimacy `unfiltered` tier reaches the prompt with the explicit framing (assert the
-  generation **input** carries the tier-distinct explicit instruction via the fake client capture — not by
-  asserting model output).
-- **Disclosure correctness** — assert the reworked `compatibilityDisclosure` never names the sender as the
-  "other" answerer and matches what the recipient sees.
-- Fill the high-value gaps the audit listed: relay recipient answer→drain round-trip, the decline flow,
-  image size/MIME rejection, and the explicit-tier send-through (recipient 18+/consent gate).
-- Unit: the reworked participant model + `contextOnly` insight routing + the tier-distinct
-  `SENSITIVITY_NOTE`/framing. Run `pnpm typecheck` after tests (memory `vitest-does-not-typecheck`).
+**A. Authoring (each exercised E2E):**
+
+- Each **answer type** authored + answered + round-tripped: shortText, longText, singleChoice, multiChoice,
+  rating, slider, ranking, thisOrThat, yesNo, date, matrix, allocation (incl. allocation-sums-to-100 + the
+  scale min/max + matrix rows + help text).
+- Each **questionnaire type** selectable incl. **General** default; **custom type** add → persists across an
+  app restart → reappears in the picker; duplicate custom type shows the §16.6 inline notice.
+- **Sensitivity** picker shown only for intimacy/scenario; hidden + forced `standard` elsewhere; each
+  intimacy tier (`intimacyGeneral`/`explicit`/`unfiltered`) selectable.
+- **Branching** (show-when), the **inline per-question preview**, **question images** (attach + alt required
+  - **size >5 MB rejected** + **wrong MIME rejected** + encrypted round-trip + display).
+- **AI draft** (mocked): generates **questions + a title** (title fills only when empty); **per-question
+  improve**; **gap-finder/Suggested** with a mock; plus the calm AI-off / over-budget / no-key states.
+- **Validation**: each invalid state (missing options, bad branch target, empty matrix, NaN scale) **blocks
+  Send with a specific message** (§16.6).
+- **Create → Send workflow**: Save a draft → it **stays saved** (no strand) → Send is a **separate step** on
+  the saved questionnaire (§16.3).
+
+**B. Sending (each channel × each mode):**
+
+- **In-app**, each **privacy** mode: `standard` (sender sees answers) and `private` (break-glass / analyze-
+  only) — assert the recipient is shown the correct **disclosure** text for each.
+- **Compatibility**, each **participant model** (`you + someone else`, `two others`) × each **visibility**
+  (`sharedReport`, `eachSeesOwn`, `senderSeesAll`, **`contextOnly`**) — at minimum each visibility once end-
+  to-end, and both participant models. Assert the reworked **`compatibilityDisclosure`** names the real two
+  participants and **never** the sender as the "other"; assert `senderSeesAll` is gated by `readRaw`.
+- **External/relay**: mint link + PIN; each **delivery** option (copy/mailto/SMS/share); **named vs
+  anonymous** sender; the **18+/DOB+consent** gate for explicit/unfiltered tiers on the relay page.
+
+**C. Answering (recipient):**
+
+- Inbox receive → answer → **save progress → resume** → submit; **decline** (silent + with note); **required**
+  gating; **branching** visibility on the answer side.
+- **Relay page**: unlock with PIN → decrypt → answer → seal → sender **drains** → ResponseSet persisted
+  (decrypt to verify); **wrong PIN** lockout; **revoked/expired** token denied; drain with **zero responses**
+  and **decline-only**.
+
+**D. Viewing / Results / Analysis:**
+
+- `standard` send → **raw answers shown**; `private` send → **raw hidden**, Analyze-only.
+- **Analyze** → draft Insight → **approve in Memory** → it **feeds a later session's `buildContext`**
+  (decrypt to assert); **autoAnalyze** setting on → auto-runs.
+- **Compatibility**: both submit → **alignment report** + per-question agreement; **regenerate** reuses the
+  Insight; `senderSeesAll` + `readRaw` → **reveal raw**; **`contextOnly`** → **no report produced** and
+  **both** participants' own contexts enriched per-participant (decrypt to assert, no cross-exposure).
+- **Trends**: rating/slider re-asks chart (≥2 points), **multi-recipient** aggregation.
+
+**E. Deletion / lifecycle:**
+
+- Delete a **single send** → its Insight cleaned up; **purge a whole questionnaire** → all sends + Insights +
+  orphan images cascade; delete a **compatibility member** → the group report + group Insight torn down;
+  **relay revoke** (manual + revoke-on-delete).
+
+**F. Gating / privacy / cost:**
+
+- Each capability gates the right surface: `create`, `answer`, `viewResults`, `sendExternal`, and
+  `readRaw` (EXPLICIT_GRANT_ONLY — `senderSeesAll` picker + reveal). A member **without** `sendExternal`
+  can't open the relay send; the **admin-access disclosure** setting flips the recipient disclosure;
+  **cost/$ stays admin-only**.
+
+**G. Failure / offline:**
+
+- AI off / no key / over budget → calm states across builder + Suggested + Analyze (no dead buttons);
+  corrupt/malformed ResponseSet handled (skips unknown question ids, never throws).
+
+**Unit/component** still back the matrix (the reworked participant model, `contextOnly` per-participant
+insight routing, the tier-distinct explicit framing, disclosure strings) — E2E proves the wiring, units prove
+the logic. This matrix is the **standing regression suite**; new questionnaire options must extend it (a DoD
+note for future questionnaire work).
 
 ### 16.8 Resolved decisions (2026-06-15)
 
@@ -1586,8 +1649,11 @@ The audit found strong unit coverage but **E2E gaps**. Add (priority order):
   (fills only when empty).
 - **Explicit generation** — tier-distinct; `explicit` & `unfiltered` genuinely explicit (unfiltered most
   graphic) within the **same consensual-adult boundary** the intake holds; 18+/consent gate unchanged.
-- **Tests** — comprehensive E2E expansion (compatibility round-trip + context-only, create→send, AI
-  generate+title, disclosure, relay drain, decline, image rejection).
+- **Tests** — an **exhaustive start-to-finish E2E coverage matrix** (§16.7): every option/scenario across
+  authoring → sending → answering → results → deletion exercised end-to-end at least once (each answer type,
+  each questionnaire type, each sensitivity tier, each privacy mode, each compatibility participant model ×
+  visibility incl. `contextOnly`, relay round-trip, every capability gate, error/offline states), made the
+  **standing regression suite** so a future whole-feature regression can't ship silently.
 
 ### 16.9 Open questions (amendment)
 

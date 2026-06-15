@@ -231,9 +231,38 @@ describe('Onboarding', () => {
     renderOnboarding();
     // The progress bar appears (page header + the Go deeper block).
     expect((await screen.findAllByText('Your progress')).length).toBeGreaterThanOrEqual(1);
-    // A finished invited section reads "Update" (not "Add"); an untouched one still reads "Add".
-    expect(screen.getByText('Update')).toBeInTheDocument();
+    // Finished sections read "Update" (not "Add") — basics (essentials) + weighs (go deeper); an untouched
+    // one still reads "Add".
+    expect(screen.getAllByText('Update').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Add')).toBeInTheDocument();
+  });
+
+  it('confirms before generating the portrait via a modal that encourages adding more', async () => {
+    const s = state();
+    s.session.sections = s.session.sections.map((sec) =>
+      sec.id === 'basics' ? { ...sec, status: 'complete' as const } : sec,
+    );
+    installMockBridge({ intakeGetState: () => Promise.resolve(s) });
+    renderOnboarding();
+    fireEvent.click(await screen.findByRole('button', { name: /See my portrait/ }));
+    expect(
+      await screen.findByRole('dialog', { name: /Ready for your portrait/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Generate my portrait/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Keep adding' })).toBeInTheDocument();
+  });
+
+  it('can revisit the core "essentials" sections from the grid (not just the invited ones)', async () => {
+    const s = state();
+    s.session.sections = s.session.sections.map((sec) =>
+      sec.id === 'basics' ? { ...sec, status: 'complete' as const } : sec,
+    );
+    installMockBridge({ intakeGetState: () => Promise.resolve(s) });
+    renderOnboarding();
+    // The "The essentials" grid lists the core section so it can be reopened like the invited ones.
+    expect(await screen.findByRole('heading', { name: 'The essentials' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /The basics/ }));
+    expect(await screen.findByText('What should I call you?')).toBeInTheDocument();
   });
 
   it('always shows the crisis footer and the not-medical line', async () => {

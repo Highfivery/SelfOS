@@ -3309,7 +3309,7 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
     await w.getByRole('button', { name: /Start onboarding|Continue onboarding/ }).click();
 
     // The basics section is a structured FORM; a form answer fills the owner-only profile (no AI).
-    await expect(w.getByText('The basics')).toBeVisible();
+    await expect(w.getByRole('heading', { name: 'The basics' })).toBeVisible();
     await w.getByLabel('What do you do for work?').fill('nurse');
     await w.getByRole('button', { name: /Continue/ }).click();
 
@@ -3318,10 +3318,10 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
     await expect(w.getByRole('button', { name: /18 or older/ })).toBeVisible();
     await w.getByRole('button', { name: 'Skip this section' }).click();
 
-    // Generate the portrait → it releases the gate (§14.2) and feeds the person's own context.
-    const cta = w.getByRole('button', { name: /See my portrait/ });
-    await expect(cta).toBeVisible();
-    await cta.click();
+    // Generate the portrait → a confirm modal (encourages adding more) → it releases the gate (§14.2/§15)
+    // and feeds the person's own context.
+    await w.getByRole('button', { name: /See my portrait/ }).click();
+    await w.getByRole('button', { name: 'Generate my portrait' }).click();
     await expect(w.getByText(/come to understand about you/)).toBeVisible();
 
     // Decrypt the vault: the direct answer filled the owner-only profile, and the portrait + its restricted
@@ -3493,7 +3493,7 @@ test('onboarding: a grouped form section shows every group + the go-deeper (noth
     await expect(w.getByText(/of \d+ answered/).first()).toBeVisible();
     // Finishing a section marks it done in the grid: the card flips from "Add" to "Update".
     await w.getByRole('button', { name: 'Continue', exact: true }).click();
-    await expect(w.getByText('Update')).toBeVisible();
+    await expect(w.getByText('Update', { exact: true }).first()).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -3578,12 +3578,11 @@ test('onboarding: a Member is hard-gated into onboarding until they finish (18 �
     await expect(w.getByRole('dialog', { name: /Who.s here/ })).toHaveCount(0);
 
     // Finish: complete the open core form, then generate the portrait → the gate releases.
-    await expect(w.getByText('The basics')).toBeVisible();
+    await expect(w.getByRole('heading', { name: 'The basics' })).toBeVisible();
     await w.getByLabel('What do you do for work?').fill('nurse');
     await w.getByRole('button', { name: /Continue/ }).click();
-    const cta = w.getByRole('button', { name: /See my portrait/ });
-    await expect(cta).toBeVisible();
-    await cta.click();
+    await w.getByRole('button', { name: /See my portrait/ }).click();
+    await w.getByRole('button', { name: 'Generate my portrait' }).click();
 
     // Gate released: the portrait shows AND the app nav is now available.
     await expect(w.getByText(/come to understand about you/)).toBeVisible();

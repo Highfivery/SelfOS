@@ -13,6 +13,24 @@
   gap: var(--space-1);
 }
 
+/* "Ready for your portrait?" confirmation modal (§15). */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  background: color-mix(in srgb, var(--color-bg) 70%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.modalPanel {
+  width: 100%;
+  max-width: 460px;
+}
+
 /* Title row with a right-aligned "Switch person" control; wraps the button below at narrow widths. */
 .headerTop {
   display: flex;

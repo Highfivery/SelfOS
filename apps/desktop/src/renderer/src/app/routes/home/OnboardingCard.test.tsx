@@ -74,6 +74,24 @@ describe('OnboardingCard', () => {
     expect(screen.queryByRole('button', { name: /onboarding/i })).not.toBeInTheDocument();
   });
 
+  it('nudges to refresh when the portrait is out of date (answers changed since)', async () => {
+    const st = intakeState('complete');
+    st.session.sections = [
+      {
+        id: 'basics',
+        status: 'complete',
+        restricted: false,
+        messages: [],
+        answers: { name: 'Sam' },
+      },
+    ];
+    // A snapshot hash that won't match the current answer → the portrait is stale.
+    st.session.portraitAnswerSig = { 'basics.name': 999999 };
+    installMockBridge({ intakeGetState: () => Promise.resolve(st) });
+    await renderCard();
+    expect(await screen.findByText(/Keep your portrait up to date/)).toBeInTheDocument();
+  });
+
   it('self-hides for someone without intake.own (a guest)', async () => {
     signIn('guest');
     installMockBridge({ intakeGetState: () => Promise.resolve(intakeState('inProgress')) });

@@ -96,9 +96,10 @@ views** — shown directly only to a holder of `intake.readRestricted` (the Owne
   The **last-opened section is remembered device-local** (per person), so a reload
   or app restart reopens that section rather than bouncing back to the first unfinished core step; reopening a
   section with an in-progress go-deeper chat shows that transcript directly.
-- **The "Go deeper" section navigator is shown at the bottom of EVERY section** (core steps AND any opened
-  invited section) — the grid of all the deeper sections (Health & wellbeing, Relationships, Family, Your
-  story, What weighs on you, Intimacy & sexuality). A card reads **Add** (untouched), **Skipped**, **Current**
+- **Two section navigators are shown at the bottom of EVERY section** (core steps AND any opened section): a
+  **"The essentials"** grid (the 4 core sections) so core is revisitable just like the rest, and the
+  **"Go deeper"** grid of the invited sections (Health & wellbeing, Relationships, Work & money, Joy & play,
+  Family, Your story, What weighs on you, Intimacy & sexuality). A card reads **Add** (untouched), **Skipped**, **Current**
   (the one you're on, accent), or — once finished — a **success-green ✓ "Update"** done treatment (you can
   reopen to revise). From any section the person can jump **straight** to another without going Back first;
   switching scrolls the new
@@ -138,19 +139,31 @@ privacy defaults in §8.3/§8.4.
 
 When a section (and ultimately the whole intake) completes, a **synthesis pass** distils the interview into:
 
-- a **portrait Insight (`source: 'intake'`)** — a rich summary + structured **facts** + **metrics** (e.g.
-  communication/attachment leanings, core values) — auto-approved into the person's **own** context; sensitive
-  facts default **non-shareable** (own-context-only), restricted ones excluded from owner views (§8.4);
+- a **portrait Insight (`source: 'intake'`)** — a rich summary + a **comprehensive** structured **facts** set
+  (the synthesis prompt asks the model to cover EVERY area thoroughly, not just highlights, with a large token
+  budget) + **metrics** (e.g. communication/attachment leanings, core values) — auto-approved into the
+  person's **own** context; sensitive facts default **non-shareable** (own-context-only), restricted ones
+  excluded from owner views (§8.4). The portrait is the AI's lasting picture of the person, so it is **PINNED**
+  in `summarizeForContext` — always in context across Sessions/Dreams/Questionnaires, never aged out by the
+  recency cap as newer insights accrue;
 - **inferred `Person` field** fills (values, communicationStyle, goals, faith, …);
 - a warm, member-facing **"Here's what I've come to understand about you"** summary the person can read — a
   payoff and a feeling of being seen (distinct from the raw profile fields they don't see).
+
+**Generating the portrait** is gated behind a **confirmation modal** ("Ready for your portrait?") that shows
+how much has been answered (X of N questions, across Y of Z sections) and **encourages adding more first** —
+nudging harder when little has been filled — while making clear they can always come back, add more, and
+refresh it; it never blocks.
 
 ### 3.6 Living profile (revisit, revise, re-synthesize)
 
 After completion the intake is **not frozen**: the person can reopen any section, add to or revise their
 answers, and **re-run synthesis** — which updates the portrait Insight (reusing the same insight id, carrying
 shareable choices forward, like [`09`](09-session-analysis.md)'s re-analysis) and refreshes inferred fields.
-People change; the portrait keeps up.
+A **deterministic staleness signal** (`portraitStaleness` over a per-answer signature snapshotted at the last
+synthesis — `IntakeSession.portraitAnswerSig`) detects added/edited/cleared answers since the portrait and
+surfaces a **"your portrait is ~X% out of date — refresh it"** nudge on the onboarding/portrait view AND a Home
+dashboard reminder. People change; the portrait keeps up.
 
 ## 4. Data model
 

@@ -77,9 +77,11 @@ views** — shown directly only to a holder of `intake.readRestricted` (the Owne
   into a **full-screen takeover** of the app — no sidebar, no other screens — on every login until they
   finish. "Finished" = the closing **portrait is generated** (`IntakeSession.status === 'complete'`); they may
   skip individual sections/questions, but they must work through the whole flow and produce the portrait. The
-  header stays (so they can still switch person / lock); the crisis "Get help now" resources are always
-  present, so it's a gate, not a dead-end. On completion the gate releases and they land on the portrait (now
-  with the sidebar), with the Onboarding nav entry available to revisit it.
+  header stays (so they can still switch person / lock), AND the onboarding screen itself carries a discoverable
+  **"Switch person"** button (in its header, every state) so the gated Member can switch accounts without
+  hunting in the titlebar menu; the crisis "Get help now" resources are always present, so it's a gate, not a
+  dead-end. On completion the gate releases and they land on the portrait (now with the sidebar), with the
+  Onboarding nav entry available to revisit it.
 - **The Owner is exempt** from the gate — the Owner sets up the household + AI
   (and the intake _requires_ AI, so a gated owner with no key would be trapped). The Owner instead gets the
   **persistent nudge** (a Home card + the nav affordance + an "unfinished" dot) until they do it voluntarily.

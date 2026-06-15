@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, Lock, Sparkles } from 'lucide-react';
+import { ArrowLeft, Check, Lock, Sparkles, Users } from 'lucide-react';
 import type { IntakeSectionMeta } from '@shared/channels';
 import { Banner, Button, Card, Heading, Text } from '../../../design-system/components';
 import { useIntakeStore } from '../../../stores/intakeStore';
 import { useSessionStore } from '../../../stores/sessionStore';
+import { Switcher } from '../../Switcher';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { IntakeSectionPanel } from './IntakeSectionPanel';
 import { IntakeFormPanel } from './IntakeFormPanel';
@@ -57,6 +58,9 @@ export function Onboarding(): JSX.Element {
     [storageKey],
   );
   const [revisiting, setRevisiting] = useState(false);
+  // A person can switch accounts from within onboarding (esp. the full-screen gated takeover, where the
+  // sidebar is hidden) — not only via the titlebar account menu. Owner switches PIN-free; others enter a PIN.
+  const [switching, setSwitching] = useState(false);
   // Switching sections from the bottom "Go deeper" grid loads the new section at the top — bring it into view.
   const topRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -95,6 +99,17 @@ export function Onboarding(): JSX.Element {
   // The gated first-run walks the next pending core section (core → core → portrait); keyed by id so each
   // panel re-seeds its form state.
   const nextCore: IntakeSectionMeta | null = !complete ? (pendingCore[0] ?? null) : null;
+
+  // A "Switch person" affordance available in every onboarding state (reachable in the gated takeover where
+  // the sidebar/titlebar are the only other path), + the shared switcher overlay it opens.
+  const switchPersonButton = (
+    <Button variant="ghost" onClick={() => setSwitching(true)}>
+      <Users size={16} aria-hidden="true" />
+      Switch person
+    </Button>
+  );
+  const switcherOverlay = switching ? <Switcher onClose={() => setSwitching(false)} /> : null;
+
   if (!loaded || !state) return <div className={styles.onboarding} aria-busy="true" />;
 
   // AI is required to run the chat sections + synthesis (§7). Show a calm "connect AI" state, never a dead-end.
@@ -102,7 +117,10 @@ export function Onboarding(): JSX.Element {
     return (
       <div className={styles.onboarding}>
         <header className={styles.header}>
-          <Heading level={1}>Getting to know you</Heading>
+          <div className={styles.headerTop}>
+            <Heading level={1}>Getting to know you</Heading>
+            {switchPersonButton}
+          </div>
         </header>
         <Card>
           <div className={styles.center}>
@@ -127,6 +145,7 @@ export function Onboarding(): JSX.Element {
           </div>
         </Card>
         <CrisisFooter />
+        {switcherOverlay}
       </div>
     );
   }
@@ -213,10 +232,13 @@ export function Onboarding(): JSX.Element {
   return (
     <div className={styles.onboarding} ref={topRef}>
       <header className={styles.header}>
-        <Heading level={1}>
-          <Sparkles size={20} aria-hidden="true" /> Getting to know you
-          {displayName ? `, ${displayName}` : ''}
-        </Heading>
+        <div className={styles.headerTop}>
+          <Heading level={1}>
+            <Sparkles size={20} aria-hidden="true" /> Getting to know you
+            {displayName ? `, ${displayName}` : ''}
+          </Heading>
+          {switchPersonButton}
+        </div>
         <Text tone="secondary">
           A warm, private space so SelfOS understands you. Everything is encrypted and yours, you
           can skip anything, and your most sensitive answers stay private to your own coaching.
@@ -299,6 +321,7 @@ export function Onboarding(): JSX.Element {
       )}
 
       <CrisisFooter />
+      {switcherOverlay}
     </div>
   );
 }

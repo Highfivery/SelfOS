@@ -3563,6 +3563,13 @@ test('onboarding: a Member is hard-gated into onboarding until they finish (18 �
     // But it's not a dead-end — the crisis resources are always present.
     await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible();
 
+    // And not a trap: the gated Member can switch accounts straight from the onboarding screen (not only
+    // the titlebar menu) — the in-screen "Switch person" opens the account switcher.
+    await w.getByRole('button', { name: 'Switch person' }).click();
+    await expect(w.getByRole('dialog', { name: /Who.s here/ })).toBeVisible();
+    await w.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(w.getByRole('dialog', { name: /Who.s here/ })).toHaveCount(0);
+
     // Finish: complete the open core form, then generate the portrait → the gate releases.
     await expect(w.getByText('The basics')).toBeVisible();
     await w.getByLabel('What do you do for work?').fill('nurse');

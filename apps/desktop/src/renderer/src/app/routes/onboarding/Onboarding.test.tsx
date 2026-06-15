@@ -214,6 +214,14 @@ describe('Onboarding', () => {
     expect(screen.getByText('You carry a lot with quiet grace.')).toBeInTheDocument();
   });
 
+  it('offers a "Switch person" affordance that opens the account switcher', async () => {
+    installMockBridge({ intakeGetState: () => Promise.resolve(state()) });
+    renderOnboarding();
+    await screen.findByText('What should I call you?');
+    fireEvent.click(screen.getByRole('button', { name: 'Switch person' }));
+    expect(await screen.findByRole('dialog', { name: /Who.s here/ })).toBeInTheDocument();
+  });
+
   it('always shows the crisis footer and the not-medical line', async () => {
     installMockBridge({ intakeGetState: () => Promise.resolve(state()) });
     renderOnboarding();

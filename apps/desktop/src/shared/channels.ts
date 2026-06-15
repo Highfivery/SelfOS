@@ -733,6 +733,7 @@ export type {
   InboxItem,
   Insight,
   InsightFact,
+  IntakeAnswerValue,
   IntakeSection,
   IntakeSectionMeta,
   IntakeSession,

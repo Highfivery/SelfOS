@@ -3308,18 +3308,17 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
     await w.getByRole('link', { name: 'Home' }).click();
     await w.getByRole('button', { name: /Start onboarding|Continue onboarding/ }).click();
 
-    // The basics section is active; a direct answer fills the owner-only profile via the field marker.
-    await expect(w.getByText(/What should I call you/)).toBeVisible();
-    await w.getByLabel('Message').fill('I’m Sam and I work as a nurse.');
-    await w.getByRole('button', { name: 'Send' }).click();
-    await expect(w.getByText('Thank you for sharing that with me.')).toBeVisible();
-    await w.getByRole('button', { name: /That.s enough on this/ }).click();
+    // The basics section is a structured FORM; a form answer fills the owner-only profile (no AI).
+    await expect(w.getByText('The basics')).toBeVisible();
+    await w.getByLabel('What do you do for work?').fill('nurse');
+    await w.getByRole('button', { name: /Continue/ }).click();
 
-    // The intimacy block is gated behind the shared 18+ acknowledgement (§3.3) — reached next; skip it.
+    // Core done → the invited grid offers the deeper sections. Opening intimacy shows the shared 18+ gate.
+    await w.getByRole('button', { name: /Intimacy & sexuality/ }).click();
     await expect(w.getByRole('button', { name: /18 or older/ })).toBeVisible();
     await w.getByRole('button', { name: 'Skip this section' }).click();
 
-    // Everything is now done → synthesize the portrait.
+    // Generate the portrait → it releases the gate (§14.2) and feeds the person's own context.
     const cta = w.getByRole('button', { name: /See my portrait/ });
     await expect(cta).toBeVisible();
     await cta.click();
@@ -3384,9 +3383,14 @@ test('onboarding: resumes mid-intake to the saved transcript (18 §3.1)', async 
         schemaVersion: 1,
         personId: 'owner-1',
         status: 'inProgress',
+        // Core sections done so the overview shows the invited grid; a chat section ('family') is mid-way.
         sections: [
+          { id: 'basics', status: 'complete', restricted: false, messages: [], answers: {} },
+          { id: 'life-now', status: 'skipped', restricted: false, messages: [], answers: {} },
+          { id: 'values', status: 'skipped', restricted: false, messages: [], answers: {} },
+          { id: 'want', status: 'skipped', restricted: false, messages: [], answers: {} },
           {
-            id: 'basics',
+            id: 'family',
             status: 'inProgress',
             restricted: false,
             messages: [
@@ -3406,7 +3410,8 @@ test('onboarding: resumes mid-intake to the saved transcript (18 §3.1)', async 
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: /Onboarding/ }).click();
-    // The saved transcript resumes exactly where it left off.
+    // Open the in-progress chat section from the "Go deeper" grid → its saved transcript resumes.
+    await w.getByRole('button', { name: /Family & upbringing/ }).click();
     await expect(w.getByText('My name is Sam.')).toBeVisible();
     await expect(w.getByText('Lovely to meet you, Sam.')).toBeVisible();
   } finally {
@@ -3485,12 +3490,10 @@ test('onboarding: a Member is hard-gated into onboarding until they finish (18 �
     // But it's not a dead-end — the crisis resources are always present.
     await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible();
 
-    // Finish: the one open section, then generate the portrait → the gate releases.
-    await expect(w.getByText(/What should I call you/)).toBeVisible();
-    await w.getByLabel('Message').fill('I’m Mara.');
-    await w.getByRole('button', { name: 'Send' }).click();
-    await expect(w.getByText('Thank you for sharing that with me.')).toBeVisible();
-    await w.getByRole('button', { name: /That.s enough on this/ }).click();
+    // Finish: complete the open core form, then generate the portrait → the gate releases.
+    await expect(w.getByText('The basics')).toBeVisible();
+    await w.getByLabel('What do you do for work?').fill('nurse');
+    await w.getByRole('button', { name: /Continue/ }).click();
     const cta = w.getByRole('button', { name: /See my portrait/ });
     await expect(cta).toBeVisible();
     await cta.click();

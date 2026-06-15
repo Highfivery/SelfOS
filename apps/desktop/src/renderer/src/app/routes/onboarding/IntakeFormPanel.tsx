@@ -1,0 +1,122 @@
+import { useMemo, useState } from 'react';
+import { QuestionnaireForm } from '@selfos/answering';
+import type { AnswerMap, AnswerValue } from '@selfos/core/questionnaires';
+import type { IntakeAnswerValue, IntakeSection, IntakeSectionMeta } from '@shared/channels';
+import { ArrowRight, ShieldCheck } from 'lucide-react';
+import { Banner, Button, Card, Heading, Text } from '../../../design-system/components';
+import { useIntakeStore } from '../../../stores/intakeStore';
+import styles from './Onboarding.module.css';
+
+/**
+ * A structured **form** intake section (18-personal-onboarding §14.3/§14.6) — renders the section's questions
+ * through the shared `@selfos/answering` `QuestionnaireForm` (branch-aware, the host owns the answer state),
+ * with Continue (submit, fills the profile, no AI) + Skip. The intimacy block is gated behind the one-time 18+
+ * acknowledgement first. The crisis footer lives in the container, always present.
+ */
+export function IntakeFormPanel({
+  meta,
+  section,
+  adultAcknowledged,
+  onAdvance,
+}: {
+  meta: IntakeSectionMeta;
+  section: IntakeSection | undefined;
+  adultAcknowledged: boolean;
+  onAdvance: () => void;
+}): JSX.Element {
+  const busy = useIntakeStore((s) => s.busy);
+  const submitForm = useIntakeStore((s) => s.submitForm);
+  const skipSection = useIntakeStore((s) => s.skipSection);
+  const acknowledgeAdult = useIntakeStore((s) => s.acknowledgeAdult);
+
+  // Local answer state, seeded from any saved answers (resume / edit). The host owns it (§5.3); a Continue
+  // persists it through the bridge. Re-seeds when the section identity changes (key on meta.id at the parent).
+  const [answers, setAnswers] = useState<AnswerMap>(
+    () => ({ ...(section?.answers ?? {}) }) as AnswerMap,
+  );
+  const onChange = (questionId: string, value: AnswerValue): void =>
+    setAnswers((a) => ({ ...a, [questionId]: value }));
+
+  const questions = useMemo(() => meta.questions ?? [], [meta.questions]);
+  const locked = meta.adult && !adultAcknowledged;
+  const complete = section?.status === 'complete';
+
+  // Intake questions never use matrix/allocation, so an answer is always an `IntakeAnswerValue`; drop any
+  // object-valued answer defensively so the submit payload matches the bridge contract.
+  const toSubmit = (): Record<string, IntakeAnswerValue> => {
+    const out: Record<string, IntakeAnswerValue> = {};
+    for (const [qid, value] of Object.entries(answers)) {
+      if (value !== null && typeof value === 'object' && !Array.isArray(value)) continue;
+      out[qid] = value;
+    }
+    return out;
+  };
+
+  // The intimacy block is gated behind the shared 18+ acknowledgement (§3.3/§14.5).
+  if (locked) {
+    return (
+      <Card>
+        <div className={styles.gate}>
+          <Heading level={2}>{meta.title}</Heading>
+          <Text tone="secondary">{meta.blurb}</Text>
+          {meta.contentNote ? <Banner tone="info">{meta.contentNote}</Banner> : null}
+          <div className={styles.controls}>
+            <Button variant="primary" disabled={busy} onClick={() => void acknowledgeAdult()}>
+              <ShieldCheck size={16} aria-hidden="true" />
+              I’m 18 or older — continue
+            </Button>
+            <Button
+              variant="ghost"
+              disabled={busy}
+              onClick={() => void skipSection(meta.id).then(onAdvance)}
+            >
+              Skip this section
+            </Button>
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <div className={styles.section}>
+        <div className={styles.sectionHead}>
+          <Heading level={2}>{meta.title}</Heading>
+          <Text tone="secondary" className={styles.blurb}>
+            {meta.opener}
+          </Text>
+        </div>
+
+        {meta.contentNote ? <Banner tone="info">{meta.contentNote}</Banner> : null}
+
+        <QuestionnaireForm
+          questions={questions}
+          answers={answers}
+          onChange={onChange}
+          footer={<></>}
+        />
+
+        <div className={styles.controls}>
+          <Button
+            variant="primary"
+            disabled={busy}
+            onClick={() => void submitForm(meta.id, toSubmit()).then(onAdvance)}
+          >
+            {complete ? 'Save changes' : 'Continue'}
+            <ArrowRight size={16} aria-hidden="true" />
+          </Button>
+          {!complete ? (
+            <Button
+              variant="ghost"
+              disabled={busy}
+              onClick={() => void skipSection(meta.id).then(onAdvance)}
+            >
+              Skip this section
+            </Button>
+          ) : null}
+        </div>
+      </div>
+    </Card>
+  );
+}

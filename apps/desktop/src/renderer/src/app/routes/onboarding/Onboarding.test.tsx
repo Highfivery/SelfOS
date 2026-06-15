@@ -127,13 +127,14 @@ describe('Onboarding', () => {
   });
 
   it('gates the intimacy section behind an 18+ acknowledgement', async () => {
-    // Make intimacy the only pending section so it's the active one.
+    // Core (basics) done → the invited grid offers intimacy; opening it shows the 18+ gate.
     const s = state();
     s.session.sections = s.session.sections.map((sec) =>
-      sec.id === 'intimacy' ? sec : { ...sec, status: 'complete' as const },
+      sec.id === 'basics' ? { ...sec, status: 'complete' as const } : sec,
     );
     installMockBridge({ intakeGetState: () => Promise.resolve(s) });
     renderOnboarding();
+    fireEvent.click(await screen.findByRole('button', { name: /Intimacy & sexuality/ }));
     expect(await screen.findByRole('button', { name: /18 or older/ })).toBeInTheDocument();
     // No composer while the gate is up.
     expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();

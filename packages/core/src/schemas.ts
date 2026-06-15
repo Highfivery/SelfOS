@@ -545,10 +545,15 @@ export const AnswerTypeSchema = z.enum([
 ]);
 export type AnswerType = z.infer<typeof AnswerTypeSchema>;
 
-/** Simple conditional branching (v1): show a question/section when a prior answer equals a value. */
+/**
+ * Simple conditional branching (v1): show a question/section when a prior answer matches. Either `equals`
+ * (a single value) or `equalsAny` (any of several values — e.g. show follow-ups unless the answer was "Not
+ * for me") must be set; the renderer checks whichever is present.
+ */
 export const BranchRuleSchema = z.object({
   whenQuestionId: z.string().min(1),
-  equals: z.union([z.string(), z.number(), z.boolean()]),
+  equals: z.union([z.string(), z.number(), z.boolean()]).optional(),
+  equalsAny: z.array(z.union([z.string(), z.number(), z.boolean()])).optional(),
   action: z.literal('show'),
 });
 export type BranchRule = z.infer<typeof BranchRuleSchema>;
@@ -571,6 +576,7 @@ export const QuestionSchema = z.object({
       min: z.number(),
       max: z.number(),
       minLabel: z.string().optional(),
+      midLabel: z.string().optional(), // slider only: an example anchored at the middle of the track
       maxLabel: z.string().optional(),
       step: z.number().optional(),
     })

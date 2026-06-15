@@ -284,12 +284,28 @@
 .slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  margin-top: -7px;
+  margin-top: -8px;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-solid);
+  border: 3px solid var(--color-surface);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 25%);
+}
+
+.slider::-moz-range-track {
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--color-border-strong);
+}
+
+.slider::-moz-range-thumb {
   width: 18px;
   height: 18px;
   border-radius: var(--radius-pill);
   background: var(--color-accent-solid);
-  border: 2px solid var(--color-surface);
+  border: 3px solid var(--color-surface);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 25%);
 }
 
 .slider:focus-visible {
@@ -317,6 +333,27 @@
   font-size: var(--text-sm);
   font-weight: 600;
   color: var(--color-text-primary);
+}
+
+/* Three example anchors (start / middle / end) under a labelled slider (18 §14.5). */
+.sliderTriLabels {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+
+.sliderTriLabels > :nth-child(1) {
+  text-align: left;
+}
+
+.sliderTriLabels > :nth-child(2) {
+  text-align: center;
+}
+
+.sliderTriLabels > :nth-child(3) {
+  text-align: right;
 }
 
 /* Ranking list. */

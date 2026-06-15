@@ -83,11 +83,16 @@ function SliderControl({
   set: (value: AnswerValue) => void;
 }): JSX.Element {
   const scale = question.scale ?? { min: 0, max: 10 };
-  // Seed the thumb to `min` once on mount so an untouched slider still reads as a real answer.
+  const middle = Math.round((scale.min + scale.max) / 2);
+  // Seed the thumb to the MIDDLE once on mount so an untouched slider reads as a neutral answer (not the
+  // min extreme — e.g. "How rough?" shouldn't default to "Gentle").
   useEffect(() => {
-    if (value === undefined) set(scale.min);
+    if (value === undefined) set(middle);
   }, []);
-  const current = typeof value === 'number' ? value : scale.min;
+  const current = typeof value === 'number' ? value : middle;
+  // With descriptive labels at start/middle/end (18 §14.5), anchor all three under the track and drop the
+  // raw number; otherwise keep the numeric min/value/max readout.
+  const triLabelled = scale.midLabel !== undefined;
   return (
     <div className={styles.sliderWrap}>
       <input
@@ -100,11 +105,19 @@ function SliderControl({
         aria-label={question.prompt}
         onChange={(event) => set(Number(event.target.value))}
       />
-      <div className={styles.sliderScale}>
-        <span className={styles.sliderEnd}>{scale.minLabel ?? scale.min}</span>
-        <span className={styles.sliderValue}>{current}</span>
-        <span className={styles.sliderEnd}>{scale.maxLabel ?? scale.max}</span>
-      </div>
+      {triLabelled ? (
+        <div className={styles.sliderTriLabels} aria-hidden="true">
+          <span>{scale.minLabel}</span>
+          <span>{scale.midLabel}</span>
+          <span>{scale.maxLabel}</span>
+        </div>
+      ) : (
+        <div className={styles.sliderScale}>
+          <span className={styles.sliderEnd}>{scale.minLabel ?? scale.min}</span>
+          <span className={styles.sliderValue}>{current}</span>
+          <span className={styles.sliderEnd}>{scale.maxLabel ?? scale.max}</span>
+        </div>
+      )}
     </div>
   );
 }

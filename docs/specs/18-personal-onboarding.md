@@ -519,29 +519,56 @@ person's own context.
 
 ### 14.5 The intimacy & sexuality block (explicit, structured, branched, opt-in)
 
-Replaces the single free-text box with a **structured, concrete, branched** set — easy to answer, far more
-useful, and handled as the most sensitive data (18+ ack, `restricted`, owner-visible / everyone-else-redacted,
-excluded from the dream-image depiction, §14.10). It is **`invited`** (never first-run-gated) and **opt-in**
-behind the shared 18+ acknowledgement; **every question is optional and skippable**. **Answer-branching** hides
-irrelevant questions (e.g. "asexual" or low-importance hides the turn-ons/positions detail). Indicative:
+Replaces the single free-text box with a **comprehensive, concrete, branched** set of structured intake
+questions — easy to answer, far more useful, and handled as the most sensitive data (18+ ack, `restricted`,
+owner-visible / everyone-else-redacted, excluded from the dream-image depiction, §14.10). It is **`invited`**
+(never first-run-gated) and **opt-in** behind the shared 18+ acknowledgement; **every question is optional and
+skippable**. **Answer-branching** keeps it relevant (e.g. anatomy-preference questions appear by who you're
+drawn to; the partner group appears only if you have a partner). Tone is matter-of-fact, sex-positive, and
+non-judgmental — these are profile/intake questions, not generated erotica.
 
-- **Orientation** (multi-select: straight, gay, lesbian, bisexual, pansexual, asexual, queer, questioning,
-  other + free text) → `sexualOrientation` (private-by-default field, §14.6).
-- **Relationship style** (single: monogamous, open, polyamorous, exploring, other) → `relationshipStyle`
-  (private-by-default field).
-- **How important intimacy is to you** (scale) — `restricted` fact. _(Branch: low/none → skip the detail below.)_
-- **Turn-ons** · **Turn-offs / hard limits** · **Favorite positions** · **Kinks & interests** (multi-select tag
-  lists, each + optional note) — `restricted` facts.
-- **Fantasies** (optional long text) · **Porn preferences** (multi-select + note) · **Masturbation** (frequency
-  single + note) · **Boundaries & consent** (long text) — `restricted` facts.
-- **What closeness/desire means to you** (optional long text — the one open prompt, last, not the whole block).
+The full inventory (grouped; `single`=singleChoice, `multi`=multiChoice, `scale`=rating, `text`=longText):
 
-These are **adult sexual-wellness self-knowledge** the person records about themselves (or a consenting
-household adult), stored **encrypted** + **18+-gated**. The detailed answers become **`restricted` Insight
-facts** feeding **only the person's own** `buildContext` — never another person's context, never an image
-prompt; the coach surfaces them **only in clearly relevant contexts** (§14.11). Orientation + relationship
-style are promoted to **private-by-default `Person` fields** (own-context, owner-visible). Tone is
-matter-of-fact and non-judgmental; the not-medical line + crisis footer remain.
+**A. Orientation & relationship** — sexual orientation (multi → `sexualOrientation` field, private) ·
+who you're drawn to (multi: men / women / non-binary people / everyone) · relationship style
+(single → `relationshipStyle` field, private) · how big a part of life intimacy is (scale) · sex drive /
+libido (single: very low → very high).
+
+**B. Your sexual story** _(reflective, all optional)_ — age you first masturbated (single age ranges +
+"prefer not to say") · age of your first partnered experience (ranges + "haven't yet") · number of partners so
+far (ranges) · how you first discovered masturbation (text) · your first sexual experience, in your words
+(text) · your best / most memorable experience (text) · your most awkward or embarrassing moment (text).
+_(An adult reflecting on their own history — standard in sex-therapy intake; never solicits graphic detail the
+person doesn't volunteer.)_
+
+**C. Your current partner & sex life** _(branch on "Do you have a sexual partner right now?" yesNo)_ —
+satisfaction with your sex life together (scale) · how often you're intimate (single) · how easily you can talk
+about sex with them (scale) · what's working well (text) · what you wish were different (text) · what you find
+most attractive about them (text).
+
+**D. What you like** — turn-ons (multi + note) · turn-offs (multi + note) · favorite positions (multi:
+missionary / doggy / on top / spooning / standing / oral giving / oral receiving / 69 / other + note) ·
+**into it** (multi: oral, anal, rimming, toys, bondage, BDSM/kink, role-play, dirty talk, spanking, threesomes,
+group sex, exhibitionism, sexting, …) · **curious to try** (multi, same list) · **hard limits** (multi, same
+list + note) · kinks/fetishes in your words (text).
+
+**E. Body & grooming preferences** _(branched on attraction via yes/no gates)_ — _(if drawn to partners with a
+penis)_ size you prefer (single: no preference → very large) · _(if drawn to partners with a vulva/breasts)_
+breast preference (single) · pubic hair you prefer on a partner (single: shaved / trimmed / natural / no
+preference) · how you keep your own grooming (single, optional).
+
+**F. Fantasies & media** — fantasies you have or want to explore (text) · do you watch porn (single: never →
+daily) · _(branch: not "never")_ what kind you like (multi genres + note) · how often you masturbate (single) ·
+what you like when you do (text, optional).
+
+**G. Boundaries & meaning** — consent/safety/boundaries SelfOS should always hold (text) · what great intimacy
+or closeness means to you (text).
+
+Everything except orientation (`sexualOrientation`) and relationship style (`relationshipStyle`, both
+private-by-default fields) becomes a **`restricted` Insight fact** feeding **only the person's own**
+`buildContext` — never another person's context, never an image prompt; the coach surfaces these **only in
+clearly relevant contexts** (§14.11). Stored **encrypted** + **18+-gated**; the not-medical line + crisis
+footer remain. _(The exact wording + option lists are tuned at build; this inventory is the review target.)_
 
 ### 14.6 Form engine reuse, field promotion & new `Person` fields
 

@@ -807,14 +807,6 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ]),
         ),
         f(
-          single('lastCheckup', 'Your last health check-up', [
-            'Within a year',
-            '1–2 years ago',
-            'Longer than that',
-            'Never',
-          ]),
-        ),
-        f(
           longText(
             'goodHealth',
             'What does good health mean to you?',
@@ -884,6 +876,14 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'None',
             'Prefer not to say',
             'Other',
+          ]),
+        ),
+        f(
+          single('lastCheckup', 'Your last health check-up', [
+            'Within a year',
+            '1–2 years ago',
+            'Longer than that',
+            'Never',
           ]),
         ),
       ]),
@@ -2203,24 +2203,6 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         ),
         f(yesno('familyHistory', 'Any family history of mental-health or addiction struggles?')),
       ]),
-      ...grouped('Family now', [
-        f(
-          single('familyNow', 'Your relationship with your family now', [
-            'Close',
-            'Friendly but distant',
-            'Complicated',
-            'Estranged',
-            'It varies',
-          ]),
-        ),
-        f(
-          longText(
-            'familyCarry',
-            'What did you take from your upbringing — the gifts and the wounds?',
-            'What shaped you, for better and worse.',
-          ),
-        ),
-      ]),
       ...grouped('More about your family', [
         f(shortText('parentsWork', 'What your parents (or carers) did for work')),
         f(
@@ -2271,6 +2253,13 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         f(longText('familyTradition', 'A family tradition you treasure (or wish you’d had)')),
         f(shortText('shapedBy', 'A family member who shaped who you are')),
         f(longText('wishDifferent', 'What you wish had been different', 'Optional.')),
+        f(
+          longText(
+            'familyCarry',
+            'What did you take from your upbringing — the gifts and the wounds?',
+            'What shaped you, for better and worse.',
+          ),
+        ),
         f(
           longText(
             'parentingNow',
@@ -2507,6 +2496,15 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         ),
       ]),
       ...grouped('Family now', [
+        f(
+          single('familyNow', 'Your relationship with your family now', [
+            'Close',
+            'Friendly but distant',
+            'Complicated',
+            'Estranged',
+            'It varies',
+          ]),
+        ),
         f(
           single(
             'inLawRelationship',
@@ -3147,62 +3145,6 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             restricted: true,
           },
         ),
-        f(yesno('attractedPenis', 'Are you attracted to partners with a penis?'), {
-          restricted: true,
-        }),
-        f(
-          {
-            ...slider(
-              'penisLengthPref',
-              'Penis length you’re drawn to',
-              'On the smaller side',
-              'Average',
-              'Big',
-            ),
-            branch: when('attractedPenis', true),
-          },
-          { restricted: true },
-        ),
-        f(
-          {
-            ...slider('penisGirthPref', 'Penis girth you like', 'Slim', 'Average', 'Thick'),
-            branch: when('attractedPenis', true),
-          },
-          { restricted: true },
-        ),
-        f(yesno('attractedVulva', 'Are you attracted to partners with a vulva?'), {
-          restricted: true,
-        }),
-        f(
-          single(
-            'vulvaLabiaPref',
-            'Labia you’re drawn to on a partner',
-            [
-              'No preference',
-              'Neat / tucked in',
-              'Fuller / prominent lips',
-              'I love prominent labia',
-              'Other',
-            ],
-            when('attractedVulva', true),
-          ),
-          { restricted: true },
-        ),
-        f(
-          single(
-            'vulvaClitPref',
-            'Anything you love about a partner’s clit?',
-            [
-              'No preference',
-              'On the smaller side',
-              'Larger / prominent',
-              'I love a big clit',
-              'Other',
-            ],
-            when('attractedVulva', true),
-          ),
-          { restricted: true },
-        ),
         f(
           single('relationshipStyle', 'Your relationship style', [
             'Monogamous',
@@ -3762,6 +3704,62 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'Larger',
             'Other',
           ]),
+          { restricted: true },
+        ),
+        f(yesno('attractedPenis', 'Are you attracted to partners with a penis?'), {
+          restricted: true,
+        }),
+        f(
+          {
+            ...slider(
+              'penisLengthPref',
+              'Penis length you’re drawn to',
+              'On the smaller side',
+              'Average',
+              'Big',
+            ),
+            branch: when('attractedPenis', true),
+          },
+          { restricted: true },
+        ),
+        f(
+          {
+            ...slider('penisGirthPref', 'Penis girth you like', 'Slim', 'Average', 'Thick'),
+            branch: when('attractedPenis', true),
+          },
+          { restricted: true },
+        ),
+        f(yesno('attractedVulva', 'Are you attracted to partners with a vulva?'), {
+          restricted: true,
+        }),
+        f(
+          single(
+            'vulvaLabiaPref',
+            'Labia you’re drawn to on a partner',
+            [
+              'No preference',
+              'Neat / tucked in',
+              'Fuller / prominent lips',
+              'I love prominent labia',
+              'Other',
+            ],
+            when('attractedVulva', true),
+          ),
+          { restricted: true },
+        ),
+        f(
+          single(
+            'vulvaClitPref',
+            'Anything you love about a partner’s clit?',
+            [
+              'No preference',
+              'On the smaller side',
+              'Larger / prominent',
+              'I love a big clit',
+              'Other',
+            ],
+            when('attractedVulva', true),
+          ),
           { restricted: true },
         ),
         f(

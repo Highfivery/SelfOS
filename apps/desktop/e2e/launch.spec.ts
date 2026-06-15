@@ -3501,6 +3501,82 @@ test('onboarding: a grouped form section shows every group + the go-deeper (noth
   }
 });
 
+// Guard: conditional intimacy questions must REVEAL right under the question that gates them (18 §14.5) — this
+// is the regression where penis/vulva specifics were buried in a far-down group and never seemed to appear.
+test('onboarding: intimacy conditionals reveal under their trigger (penis/vulva/dirty talk)', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  {
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('intimacy e2e: master key missing');
+    // Core resolved so the invited grid (with the Intimacy card) is reachable.
+    await writeEncryptedJson(
+      fs,
+      'people/owner-1/intake/session.enc',
+      {
+        id: 'intake-intimacy',
+        schemaVersion: 1,
+        personId: 'owner-1',
+        status: 'inProgress',
+        sections: ['basics', 'life-now', 'values', 'want', 'intimacy'].map((id) => ({
+          id,
+          status: id === 'intimacy' ? 'notStarted' : 'skipped',
+          restricted: id === 'intimacy',
+          messages: [],
+          answers: {},
+        })),
+        startedAt: 'now',
+        updatedAt: 'now',
+      },
+      key,
+    );
+  }
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: /Onboarding/ }).click();
+    await w.getByRole('button', { name: /Intimacy & sexuality/ }).click();
+    // Pass the 18+ gate into the questions.
+    await w.getByRole('button', { name: /18 or older/ }).click();
+    await expect(w.getByText('Who are you drawn to?')).toBeVisible();
+
+    // Penis length/girth are HIDDEN until "attracted to a penis" is Yes, then REVEAL.
+    await expect(w.getByText('Penis length you’re drawn to')).toHaveCount(0);
+    await w
+      .getByRole('radiogroup', { name: 'Are you attracted to partners with a penis?' })
+      .getByRole('radio', { name: 'Yes' })
+      .click();
+    await expect(w.getByText('Penis length you’re drawn to')).toBeVisible();
+    await expect(w.getByText('Penis girth you like')).toBeVisible();
+
+    // Vulva specifics reveal the same way.
+    await expect(w.getByText('Labia you’re drawn to on a partner')).toHaveCount(0);
+    await w
+      .getByRole('radiogroup', { name: 'Are you attracted to partners with a vulva?' })
+      .getByRole('radio', { name: 'Yes' })
+      .click();
+    await expect(w.getByText('Labia you’re drawn to on a partner')).toBeVisible();
+    await expect(w.getByText('Anything you love about a partner’s clit?')).toBeVisible();
+
+    // Dirty-talk follow-ups hide when "Not for me", show otherwise.
+    await w
+      .getByRole('radiogroup', { name: 'How do you feel about dirty talk?' })
+      .getByRole('radio', { name: 'Not for me' })
+      .click();
+    await expect(w.getByText('Dirty talk — things you love to hear')).toHaveCount(0);
+    await w
+      .getByRole('radiogroup', { name: 'How do you feel about dirty talk?' })
+      .getByRole('radio', { name: 'Love it' })
+      .click();
+    await expect(w.getByText('Dirty talk — things you love to hear')).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('onboarding: a Member is hard-gated into onboarding until they finish (18 §3.1)', async () => {
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
   await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');

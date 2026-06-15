@@ -165,6 +165,49 @@ const ACTIVITIES = [
   'Voyeurism',
   'Other',
 ];
+// A comprehensive sex-toy checklist, reused for "toys you own" / "toys you want" (§14.5). Covers the modern
+// app/remote-controlled range (Lovense-style) plus the broader categories; "Other"/"None" appended per use.
+const TOYS = [
+  'Bullet vibrator',
+  'Wand vibrator',
+  'Rabbit vibrator',
+  'Clitoral suction toy',
+  'G-spot vibrator',
+  'App / remote-controlled vibrator',
+  'Wearable / panty vibrator',
+  'Finger vibrator',
+  'Dildo',
+  'Realistic dildo',
+  'Glass / metal dildo',
+  'Suction-cup dildo',
+  'Thrusting toy / sex machine',
+  'Double-ended dildo',
+  'Strap-on',
+  'Butt plug',
+  'Vibrating butt plug',
+  'Anal beads',
+  'Prostate massager',
+  'Cock ring',
+  'Vibrating cock ring',
+  'Stroker / masturbator sleeve',
+  'Automatic stroker',
+  'Penis pump',
+  'Cock cage / chastity',
+  'App-controlled couples toy',
+  'Nipple clamps',
+  'Nipple suckers',
+  'Restraints / cuffs',
+  'Blindfold',
+  'Paddle / flogger',
+  'Gag',
+  'Collar & leash',
+  'Rope / bondage kit',
+  'Kegel / Ben Wa balls',
+  'Sex wedge / pillow',
+  'Sex swing',
+  'E-stim toy',
+  'Lube',
+];
 
 export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
   // ============================ CORE (gates first-run) ============================
@@ -3107,9 +3150,68 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         f(yesno('attractedPenis', 'Are you attracted to partners with a penis?'), {
           restricted: true,
         }),
+        f(
+          {
+            ...slider(
+              'penisLengthPref',
+              'Penis length you’re drawn to',
+              'On the smaller side',
+              'Average',
+              'Big',
+            ),
+            branch: when('attractedPenis', true),
+          },
+          { restricted: true },
+        ),
+        f(
+          {
+            ...slider('penisGirthPref', 'Penis girth you like', 'Slim', 'Average', 'Thick'),
+            branch: when('attractedPenis', true),
+          },
+          { restricted: true },
+        ),
         f(yesno('attractedVulva', 'Are you attracted to partners with a vulva?'), {
           restricted: true,
         }),
+        f(
+          single(
+            'breastPref',
+            'Breast size you prefer on a partner',
+            ['No preference', 'Smaller', 'Average', 'Larger', 'Other'],
+            when('attractedVulva', true),
+          ),
+          { restricted: true },
+        ),
+        f(
+          single(
+            'vulvaLabiaPref',
+            'Labia you’re drawn to on a partner',
+            [
+              'No preference',
+              'Neat / tucked in',
+              'Fuller / prominent lips',
+              'I love prominent labia',
+              'Other',
+            ],
+            when('attractedVulva', true),
+          ),
+          { restricted: true },
+        ),
+        f(
+          single(
+            'vulvaClitPref',
+            'Anything you love about a partner’s clit?',
+            [
+              'No preference',
+              'On the smaller side',
+              'Larger / prominent',
+              'I love a big clit',
+              'Other',
+            ],
+            when('attractedVulva', true),
+          ),
+          { restricted: true },
+        ),
         f(
           single('relationshipStyle', 'Your relationship style', [
             'Monogamous',
@@ -3516,34 +3618,12 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           },
           { restricted: true },
         ),
-        f(
-          multi('toysOwn', 'Toys you already own', [
-            'Vibrator',
-            'Dildo',
-            'Butt plug',
-            'Cock ring',
-            'Restraints',
-            'Anal beads',
-            'Strap-on',
-            'Other',
-            'None',
-          ]),
-          { restricted: true },
-        ),
-        f(
-          multi('toysWant', 'Toys you’d like to try', [
-            'Vibrator',
-            'Dildo',
-            'Butt plug',
-            'Cock ring',
-            'Restraints',
-            'Anal beads',
-            'Strap-on',
-            'Other',
-            'None right now',
-          ]),
-          { restricted: true },
-        ),
+        f(multi('toysOwn', 'Toys you already own', [...TOYS, 'Other', 'None']), {
+          restricted: true,
+        }),
+        f(multi('toysWant', 'Toys you’d like to try', [...TOYS, 'Other', 'None right now']), {
+          restricted: true,
+        }),
         f(
           single('sessionLength', 'Quickies or long sessions?', [
             'Quickies',
@@ -3671,65 +3751,6 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         ),
       ]),
       ...grouped('Body & preferences', [
-        f(
-          {
-            ...slider(
-              'penisLengthPref',
-              'Penis length you’re drawn to',
-              'On the smaller side',
-              'Average',
-              'Big',
-            ),
-            branch: when('attractedPenis', true),
-          },
-          { restricted: true },
-        ),
-        f(
-          {
-            ...slider('penisGirthPref', 'Penis girth you like', 'Slim', 'Average', 'Thick'),
-            branch: when('attractedPenis', true),
-          },
-          { restricted: true },
-        ),
-        f(
-          single(
-            'breastPref',
-            'Breast size you prefer on a partner',
-            ['No preference', 'Smaller', 'Average', 'Larger', 'Other'],
-            when('attractedVulva', true),
-          ),
-          { restricted: true },
-        ),
-        f(
-          single(
-            'vulvaLabiaPref',
-            'Labia you’re drawn to on a partner',
-            [
-              'No preference',
-              'Neat / tucked in',
-              'Fuller / prominent lips',
-              'I love prominent labia',
-              'Other',
-            ],
-            when('attractedVulva', true),
-          ),
-          { restricted: true },
-        ),
-        f(
-          single(
-            'vulvaClitPref',
-            'Anything you love about a partner’s clit?',
-            [
-              'No preference',
-              'On the smaller side',
-              'Larger / prominent',
-              'I love a big clit',
-              'Other',
-            ],
-            when('attractedVulva', true),
-          ),
-          { restricted: true },
-        ),
         f(
           multi('bodyTypePref', "Body types you're drawn to", [
             'Slim',

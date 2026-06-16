@@ -316,6 +316,21 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-16 — Flow-coherence fixes (**08 §17.12 — remove duplicate person-pickers; the user caught them, not
+  the tests**). A whole-flow walk found two redundant person selections left by the recipient-first model.
+  **(A)** Dropped the "About a specific person?" picker + toggles from Draft with AI — it re-asked "who is this
+  for?"; generation now auto-tailors to the bound recipient's shareable context (+ their history for de-dup),
+  the author's own data still always feeds; the generate IPC drops `targetPersonId`/`includeTarget`/
+  `includeRelationship` (the bridge derives them). **(B)** Compatibility joined the recipient-first model — it's
+  always **you + the one recipient chosen at the start step**; the Send panel's "Who's being compared?" toggle +
+  both person-pickers + the "two other people" mode are gone; `assignmentsCreateCompatibility` takes only
+  `{ questionnaireId }`. **External-recipient compatibility is the NEXT slice** (household-only for now): the
+  external recipient answers via relay, the sender answers in-app, then once both are in the sender pushes the
+  sealed outcome (per visibility — thanks / the joint report) back to the recipient's relay page from Results;
+  contextOnly hidden for external. Gate: typecheck/lint/format, 402 core + 486 desktop unit, 68 E2E; visual QA
+  of the compat start step + send panel (one clean "Compare you with" picker, no duplicate). **Lesson (now §7
+  DoD): a green test suite proves each screen FUNCTIONS, not that the FLOW is coherent — walk the complete flow
+  end-to-end and hunt for the same thing asked twice, colliding labels, and controls left stale by a change.**
 - 2026-06-16 — **REVERT + hard rule (I violated "never assume" and it cost the user real tokens).** I assumed
   the intimacy "No usable questions" failure was a Claude content-policy **refusal** and twice rewrote the
   generation prompt (ending in a weak "sexual-wellness register"), when the real cause was a **thinking-token

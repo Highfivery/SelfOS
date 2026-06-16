@@ -577,9 +577,13 @@ seeded to the neutral middle) — there are **no 1–5 button rating scales** an
 consistency with the intimacy sliders (2026-06-16).
 
 **The basics** _(core, form)_ — preferred name / nickname (text) · pronouns(single+other)→`pronouns` ·
-gender identity(single+other)→`gender` · birthday(date)→`birthday` · where you live(text)→`location` ·
-where you grew up(text) · languages you speak(multi)→`languages` · cultural / ethnic background(text)→`ethnicity` ·
+gender identity(single+other)→`gender` · birthday(date)→`birthday` · **important dates(dateList)→`importantDates`**
+(a repeatable label+date list — anniversaries, kids' birthdays) · where you live(text)→`location` · where you
+grew up(text) · languages you speak(multi)→`languages` · cultural / ethnic background(text)→`ethnicity` ·
+**how you look(text)→`appearanceDescription`** (hair/build/features — also feeds the self's dream images) ·
 what you do for work(text)→`occupation` · education level(single) · morning person or night owl(single).
+(`interests` is filled by Joy & play's "What are you into?" — not asked twice. The 2026-06-16 reconciliation
+made onboarding cover every People-editor About field + Pronouns/Birthday.)
 
 **Your life now** _(core, form)_ — a lean identity snapshot (trimmed 2026-06-16 so it no longer duplicates the
 deep sections): who you live with(multi: Partner / Children / Parents / Other family / Roommates / Pets / I live
@@ -808,7 +812,12 @@ footer remain. _(The exact wording + option lists are tuned at build; this inven
   never loses data.
 - **Field fill on submit.** `submitSectionForm` validates the answers against the catalog, **fills mapped
   `Person` fields directly** (no AI marker — markers were only for chat; multi → list fields; `private` →
-  `privateFields`), persists unmapped answers, and marks the section complete.
+  `privateFields`), persists unmapped answers, and marks the section complete. The fill (`fillPersonFields`)
+  **groups answers by target field** so multiple questions can contribute to ONE field without clobbering:
+  string fields **join** their contributors in question order (e.g. `healthNotes` = physical-conditions + the
+  "anything else" catch-all), list fields concat + dedupe, and a **`dateList`** answer fills `importantDates`
+  (incomplete label/date rows dropped). It is **idempotent** — re-submitting a section rebuilds each field from
+  the current answers (never appends a duplicate).
 
 ### 14.7 Go-deeper (every form section)
 
@@ -843,6 +852,10 @@ questions. Meters `intake.interview` per turn.
   `PERSON_FIELD_KEYS`; the latter two default into `privateFields` when filled from intake.
 - **`IntakeSectionMeta`** gains `tier: 'core' | 'invited'`, `mode: 'form' | 'chat'`, and for form sections a
   `questions: Question[]` (+ the per-question intake mapping) — renderer-facing, derived from the code catalog.
+- **`dateList` answer type** (2026-06-16) — a shared `AnswerType` whose value is `{label, date}[]` (the
+  `DateEntry` shape), rendered by `@selfos/answering` as an add/remove label+date row editor; widened the
+  `IntakeAnswerValue` + questionnaire `Answer.value` unions. Used by the basics `importantDates` question; the
+  questionnaire builder does not expose it as authorable (no half-built surface, §12).
 - **`IntakeSession`/`IntakeSection`** — `answers` already exists (additive use). The gate-release predicate
   becomes "**core** sections resolved **and** portrait generated" (was: all sections); pre-redesign sessions
   still parse (a tier-less section is treated as `invited`, so an in-flight one isn't suddenly re-gated — TBD

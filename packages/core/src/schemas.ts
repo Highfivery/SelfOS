@@ -489,6 +489,7 @@ export const IntakeAnswerValueSchema = z.union([
   z.number(),
   z.boolean(),
   z.array(z.string()),
+  z.array(z.object({ label: z.string(), date: z.string() })), // a `dateList` answer (→ importantDates)
 ]);
 export type IntakeAnswerValue = z.infer<typeof IntakeAnswerValueSchema>;
 
@@ -542,8 +543,13 @@ export const AnswerTypeSchema = z.enum([
   'date',
   'matrix',
   'allocation',
+  'dateList', // a repeatable list of {label, date} pairs (e.g. anniversaries → Person.importantDates)
 ]);
 export type AnswerType = z.infer<typeof AnswerTypeSchema>;
+
+/** One entry of a `dateList` answer — a labeled date (e.g. "Anniversary" → "2014-06-21"). */
+export const DateEntrySchema = z.object({ label: z.string(), date: z.string() });
+export type DateEntry = z.infer<typeof DateEntrySchema>;
 
 /**
  * Simple conditional branching (v1): show a question/section when a prior answer matches. Either `equals`
@@ -815,6 +821,7 @@ export const AnswerSchema = z.object({
     z.boolean(),
     z.array(z.string()),
     z.record(z.string(), z.number()),
+    z.array(z.object({ label: z.string(), date: z.string() })), // a `dateList` answer
   ]),
 });
 export type Answer = z.infer<typeof AnswerSchema>;

@@ -11,8 +11,24 @@ import type { Answer, Question, SendAnswer } from '../schemas';
  * matches when the array *includes* the branch value (e.g. show a per-substance frequency only when that
  * substance is selected).
  */
-export type AnswerValue = string | number | boolean | string[] | Record<string, number>;
+/** One entry of a `dateList` answer (a labeled date, e.g. an anniversary). */
+export type DateEntryValue = { label: string; date: string };
+export type AnswerValue =
+  | string
+  | number
+  | boolean
+  | string[]
+  | Record<string, number>
+  | DateEntryValue[];
 export type AnswerMap = Record<string, AnswerValue>;
+
+/** Whether a value is a `dateList` answer (an array of {label, date} entries, not a string list). */
+export function isDateEntryList(value: AnswerValue | undefined): value is DateEntryValue[] {
+  return (
+    Array.isArray(value) &&
+    value.every((e) => e !== null && typeof e === 'object' && 'label' in e && 'date' in e)
+  );
+}
 
 /** Whether a question is shown given current answers — a branch hides it until its trigger matches. */
 export function isQuestionVisible(question: Question, answers: AnswerMap): boolean {
@@ -59,6 +75,10 @@ export function isAnswered(question: Question, value: AnswerValue | undefined): 
     case 'multiChoice':
     case 'ranking':
       return Array.isArray(value) && value.length > 0;
+    case 'dateList':
+      return (
+        isDateEntryList(value) && value.some((e) => e.label.trim() !== '' && e.date.trim() !== '')
+      );
     case 'matrix': {
       const rows = question.matrix?.rows ?? [];
       if (
@@ -95,6 +115,13 @@ export function formatAnswerForDisplay(question: Question, value: AnswerValue | 
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
   if (typeof value === 'number') return Number.isFinite(value) ? String(value) : '';
   if (typeof value === 'string') return value.trim();
+  // dateList: labeled dates → "Anniversary: 2014-06-21, …" (kept in entry order).
+  if (isDateEntryList(value)) {
+    return value
+      .filter((e) => e.label.trim() && e.date.trim())
+      .map((e) => `${e.label.trim()}: ${e.date.trim()}`)
+      .join(', ');
+  }
   if (Array.isArray(value)) {
     // ranking carries an ordered list → number it; multiChoice is an unordered set → comma-join.
     return question.type === 'ranking'

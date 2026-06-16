@@ -86,6 +86,10 @@ function shortText(id: string, prompt: string, placeholder?: string): Question {
 function dateQ(id: string, prompt: string): Question {
   return { id, type: 'date', prompt, required: false };
 }
+/** A repeatable list of {label, date} rows (e.g. anniversaries) — maps to `Person.importantDates`. */
+function dateList(id: string, prompt: string): Question {
+  return { id, type: 'dateList', prompt, required: false };
+}
 /** A sleek 0–10 slider with example anchors at the start, middle, and end of the track (§14.5). */
 function slider(
   id: string,
@@ -220,6 +224,9 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         { field: 'gender' },
       ),
       f(dateQ('birthday', 'Your birthday'), { field: 'birthday' }),
+      f(dateList('importantDates', 'Any important dates to remember?'), {
+        field: 'importantDates',
+      }),
       f(shortText('location', 'Where do you live?'), { field: 'location' }),
       f(shortText('grewUp', 'Where did you grow up?')),
       f(multi('languages', 'Languages you speak', ['English', 'Spanish', 'French', 'Other']), {
@@ -227,6 +234,14 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         list: true,
       }),
       f(shortText('ethnicity', 'Your cultural or ethnic background'), { field: 'ethnicity' }),
+      f(
+        longText(
+          'appearanceDescription',
+          'How would you describe how you look?',
+          'Hair, build, distinctive features — helps SelfOS picture you (e.g. for dream images).',
+        ),
+        { field: 'appearanceDescription' },
+      ),
       f(shortText('occupation', 'What do you do for work?'), { field: 'occupation' }),
       f(
         single('education', 'Highest level of education', [
@@ -1904,6 +1919,7 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'Writing',
             'Other',
           ]),
+          { field: 'interests', list: true },
         ),
         f(shortText('currentObsession', 'Something you’re a bit obsessed with right now')),
         f(shortText('talkForHours', 'A topic you could talk about for hours')),

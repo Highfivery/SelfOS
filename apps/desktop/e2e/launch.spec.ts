@@ -30,6 +30,7 @@ import {
   getAlignmentReport,
   getResponse,
   listAssignments,
+  listQuestionnaires,
   readCustomIntimacyTopics,
   saveQuestionnaire,
   submitResponse,
@@ -929,6 +930,21 @@ test('usage: the dashboard shows recorded usage and accepts a budget, without ov
   }
 });
 
+/**
+ * Open the builder for a new questionnaire via the recipient-first start step (08 §17.3). Picks the first
+ * household person (the seeded owner "Tester") by default; pass `compat` for the two-participant exception.
+ */
+async function startNewQuestionnaire(w: Page, opts: { compat?: boolean } = {}): Promise<void> {
+  await w.getByRole('button', { name: 'New' }).click();
+  if (opts.compat) {
+    await w.getByLabel('This questionnaire is for').selectOption('compatibility');
+  } else {
+    await w.getByLabel('Who is this for?').selectOption({ index: 1 });
+  }
+  await w.getByRole('button', { name: 'Continue' }).click();
+  await expect(w.getByLabel('Title')).toBeVisible();
+}
+
 test('questionnaires: author a single-choice questionnaire, validate, persist, no overflow', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);
@@ -939,7 +955,7 @@ test('questionnaires: author a single-choice questionnaire, validate, persist, n
     await expect(w.getByText(/no questionnaires yet/i)).toBeVisible();
 
     // Build a questionnaire with one single-choice question and three options.
-    await w.getByRole('button', { name: 'New' }).click();
+    await startNewQuestionnaire(w);
     await w.getByLabel('Title').fill('Weekly check-in');
     await w.getByLabel('Question 1', { exact: true }).fill('How satisfied are you?');
     await w.getByLabel('Answer type').selectOption({ label: 'Single choice' });
@@ -981,7 +997,7 @@ test('questionnaires: custom type, sensitivity, matrix + branching round-trip', 
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Questionnaires' }).click();
-    await w.getByRole('button', { name: 'New' }).click();
+    await startNewQuestionnaire(w);
     await w.getByLabel('Title').fill('Date-night check-in');
 
     // A custom type the user names — it becomes the selected type and persists for next time.
@@ -1039,7 +1055,7 @@ test('questionnaires: preview / test-on-self renders the form, gates Finish, sav
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Questionnaires' }).click();
-    await w.getByRole('button', { name: 'New' }).click();
+    await startNewQuestionnaire(w);
     await w.getByLabel('Title').fill('Dry run');
     await w.getByLabel('Question 1', { exact: true }).fill('How are you feeling?');
     await w.getByLabel('Answer type').selectOption({ label: 'Rating' });
@@ -1079,7 +1095,7 @@ test('questionnaires: General default + intimacy-only sensitivity + live inline 
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Questionnaires' }).click();
-    await w.getByRole('button', { name: 'New' }).click();
+    await startNewQuestionnaire(w);
 
     // §15.1: a new questionnaire defaults to General, which can't carry sensitivity (§15.2) — no picker.
     await expect(w.getByLabel('Type', { exact: true })).toHaveValue('general');
@@ -1143,7 +1159,7 @@ test('questionnaires: attach an encrypted image, require alt, round-trip + show 
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Questionnaires' }).click();
-    await w.getByRole('button', { name: 'New' }).click();
+    await startNewQuestionnaire(w);
     await w.getByLabel('Title').fill('Photo prompt');
     await w.getByLabel('Question 1', { exact: true }).fill('What stands out?');
 
@@ -1198,7 +1214,7 @@ test('questionnaires: AI draft + Suggested surfaces show calm enable-AI states',
     await w.getByRole('link', { name: 'Questionnaires' }).click();
 
     // Builder: with AI off, the "Draft with AI" panel prompts to enable it (never an error).
-    await w.getByRole('button', { name: 'New' }).click();
+    await startNewQuestionnaire(w);
     await expect(w.getByText(/turn on ai in settings to draft questions/i)).toBeVisible();
 
     // Suggested (gap-finder) opens its own surface with the same calm state.
@@ -1247,7 +1263,7 @@ test('questionnaires: the AI draft panel + Suggested surface fit at phone width'
     // Navigate + open each surface at desktop width (the nav is a hidden drawer on phones), then
     // shrink to 390px just to measure that the rendered surface fits.
     await w.getByRole('link', { name: 'Questionnaires' }).click();
-    await w.getByRole('button', { name: 'New' }).click();
+    await startNewQuestionnaire(w);
     // The "Draft with AI" panel is ready; expanding it reveals the brief + Generate (no author toggle, §15.4).
     await w.getByRole('button', { name: /draft with ai/i }).click();
     await expect(w.getByRole('button', { name: /generate questions/i })).toBeVisible();
@@ -1302,7 +1318,7 @@ test('inbox: send a questionnaire, answer it, submit, and round-trip through the
 
     // Author a one-question questionnaire.
     await w.getByRole('link', { name: 'Questionnaires' }).click();
-    await w.getByRole('button', { name: 'New' }).click();
+    await startNewQuestionnaire(w);
     await w.getByLabel('Title').fill('Weekly check-in');
     await w.getByLabel('Question 1', { exact: true }).fill('How are we doing?');
 
@@ -1310,14 +1326,14 @@ test('inbox: send a questionnaire, answer it, submit, and round-trip through the
     await w.getByRole('button', { name: 'Create draft' }).click();
     await expect(w.getByRole('button', { name: 'Send' })).toBeVisible();
 
-    // Send it (to self — a valid self check-in). Private is the default privacy mode.
+    // Send it. The recipient is BOUND (to Tester, the self check-in picked at the start step, §17.3) — the
+    // send panel confirms it, no recipient picker. Private is the default privacy mode.
     await w.getByRole('button', { name: 'Send' }).click();
-    await expect(w.getByRole('heading', { name: /Send .Weekly check-in/ })).toBeVisible();
+    await expect(w.getByText(/This goes to/)).toContainText('Tester');
     await expect(w.getByRole('button', { name: 'Private' })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
-    await w.getByLabel('Send to').selectOption({ label: 'Tester' });
     await w.getByRole('button', { name: 'Send' }).last().click();
     await expect(w.getByText(/Sent to Tester/)).toBeVisible();
     await w.getByRole('button', { name: 'Done' }).click();
@@ -1381,17 +1397,21 @@ test('relay: connect a household relay, then mint an external link + PIN, no ove
     await expect(w.getByText(/relay connected at/i)).toBeVisible();
     await expect(w.getByText(/\.workers\.dev/i)).toBeVisible();
 
-    // Author a one-question questionnaire and send it externally via the relay.
+    // Author a one-question questionnaire bound to an EXTERNAL recipient (chosen first, §17.3) and send it
+    // via the relay.
     await w.getByRole('link', { name: 'Questionnaires' }).click();
     await w.getByRole('button', { name: 'New' }).click();
+    await w.getByLabel('Recipient').selectOption('external');
+    await w.getByLabel('Their name').fill('Alex');
+    await w.getByRole('button', { name: 'Continue' }).click();
     await w.getByLabel('Title').fill('Outside view');
     await w.getByLabel('Question 1', { exact: true }).fill('How do I come across?');
     // §16.3: save the draft, then Send (Send only appears once saved).
     await w.getByRole('button', { name: 'Create draft' }).click();
     await w.getByRole('button', { name: 'Send' }).click();
 
-    await w.getByRole('button', { name: 'Someone else (link)' }).click();
-    await w.getByLabel(/their name/i).fill('Alex');
+    // The recipient (Alex) is bound — the send panel goes straight to the relay flow (no name re-entry).
+    await expect(w.getByRole('heading', { name: /Send to Alex/i })).toBeVisible();
     await w.getByRole('button', { name: /create link/i }).click();
 
     // The link (a workers.dev URL with the content key in the fragment) + a 6-digit PIN are shown once.
@@ -1434,15 +1454,14 @@ test('results: a Standard response surfaces the raw answers in the sender’s Re
 
     // Author a one-question questionnaire.
     await w.getByRole('link', { name: 'Questionnaires' }).click();
-    await w.getByRole('button', { name: 'New' }).click();
+    await startNewQuestionnaire(w);
     await w.getByLabel('Title').fill('Weekly check-in');
     await w.getByLabel('Question 1', { exact: true }).fill('How are we doing?');
 
-    // §16.3: save the draft first, then Send it to self, switching Private → Standard.
+    // §16.3: save the draft first, then Send it to the bound recipient (self), switching Private → Standard.
     await w.getByRole('button', { name: 'Create draft' }).click();
     await w.getByRole('button', { name: 'Send' }).click();
     await w.getByRole('button', { name: 'Standard' }).click();
-    await w.getByLabel('Send to').selectOption({ label: 'Tester' });
     await w.getByRole('button', { name: 'Send' }).last().click();
     await expect(w.getByText(/Sent to Tester/)).toBeVisible();
     await w.getByRole('button', { name: 'Done' }).click();
@@ -1494,7 +1513,7 @@ test('results: re-asks chart a trend, a send deletes, and the questionnaire purg
 
     // Author a one-question rating questionnaire.
     await w.getByRole('link', { name: 'Questionnaires' }).click();
-    await w.getByRole('button', { name: 'New' }).click();
+    await startNewQuestionnaire(w);
     await w.getByLabel('Title').fill('Mood check');
     await w.getByLabel('Question 1', { exact: true }).fill('How connected do you feel?');
     await w.getByLabel('Answer type').selectOption({ label: 'Rating' });
@@ -1503,7 +1522,6 @@ test('results: re-asks chart a trend, a send deletes, and the questionnaire purg
     const sendToSelf = async (): Promise<void> => {
       await w.getByRole('button', { name: 'Send' }).click();
       await w.getByRole('button', { name: 'Standard' }).click();
-      await w.getByLabel('Send to').selectOption({ label: 'Tester' });
       await w.getByRole('button', { name: 'Send' }).last().click();
       await w.getByRole('button', { name: 'Done' }).click();
     };
@@ -1818,10 +1836,10 @@ test('compatibility you+someone-else (§16.1): the send panel offers the partici
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Questionnaires' }).click();
-    await w.getByRole('button', { name: 'New' }).click();
+    // Compatibility is chosen in the recipient-first start step now (the two-participant exception, §17.3/§17.5).
+    await startNewQuestionnaire(w, { compat: true });
     await w.getByLabel('Title').fill('Sexy time');
     await w.getByLabel('Question 1', { exact: true }).fill('How connected do you feel?');
-    await w.getByRole('switch', { name: 'Compatibility questionnaire' }).click();
 
     // §16.3: save first, then Send → the participant-model send panel.
     await w.getByRole('button', { name: 'Create draft' }).click();
@@ -1845,6 +1863,82 @@ test('compatibility you+someone-else (§16.1): the send panel offers the partici
   }
 });
 
+test('recipient-bound (§17.3): a questionnaire is bound to one recipient, chosen first; Duplicate re-targets', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('expected a master key');
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    // A second household person to re-target the duplicate to.
+    await w.getByRole('link', { name: 'People' }).click();
+    await w.getByRole('button', { name: 'Add person' }).click();
+    await w.getByLabel('Name').fill('Robin');
+    await w.getByRole('button', { name: 'Create' }).click();
+    await expect(w.getByText('Robin')).toBeVisible();
+
+    // New → the recipient-first start step.
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await w.getByRole('button', { name: 'New' }).click();
+    await expect(w.getByLabel('This questionnaire is for')).toBeVisible();
+
+    // The start step has no horizontal overflow at phone width (Selects fill the width, never scroll-x).
+    await w.setViewportSize({ width: 390, height: 800 });
+    await w.waitForTimeout(150);
+    const startOverflow = await w.evaluate(() => {
+      let bad = 0;
+      document.querySelectorAll('main *').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) bad += 1;
+      });
+      return bad;
+    });
+    expect(startOverflow).toBe(0);
+    await w.setViewportSize({ width: 1200, height: 800 });
+
+    // Bind to Tester → author → save.
+    await w.getByLabel('Who is this for?').selectOption({ label: 'Tester (you)' });
+    await w.getByRole('button', { name: 'Continue' }).click();
+    await expect(w.getByText(/For:/)).toContainText('Tester');
+    await w.getByLabel('Title').fill('Just for Tester');
+    await w.getByLabel('Question 1', { exact: true }).fill('What do you need more of?');
+    await w.getByRole('button', { name: 'Create draft' }).click();
+    await expect(w.getByText(/Saved\./)).toBeVisible();
+
+    // Decrypt the def: the recipient is persisted as the bound household person.
+    const tester = (await listPeople(fs, key)).find((p) => p.displayName === 'Tester');
+    const robin = (await listPeople(fs, key)).find((p) => p.displayName === 'Robin');
+    let defs = await listQuestionnaires(fs, key);
+    const original = defs.find((d) => d.title === 'Just for Tester');
+    expect(original?.recipient).toEqual({ kind: 'person', personId: tester?.id });
+
+    // Duplicate → start step → re-target to Robin → the questions clone, title gains "(copy)".
+    await w.getByRole('button', { name: 'Duplicate' }).click();
+    await w.getByLabel('Who is this for?').selectOption({ label: 'Robin' });
+    await w.getByRole('button', { name: 'Continue' }).click();
+    await expect(w.getByLabel('Title')).toHaveValue('Just for Tester (copy)');
+    await expect(w.getByText(/For:/)).toContainText('Robin');
+    await expect(w.getByLabel('Question 1', { exact: true })).toHaveValue(
+      'What do you need more of?',
+    );
+    await w.getByRole('button', { name: 'Create draft' }).click();
+    await expect(w.getByText(/Saved\./)).toBeVisible();
+
+    // Decrypt: the duplicate is a SEPARATE def bound to Robin with the cloned question.
+    defs = await listQuestionnaires(fs, key);
+    const copy = defs.find((d) => d.title === 'Just for Tester (copy)');
+    expect(copy?.id).not.toBe(original?.id);
+    expect(copy?.recipient).toEqual({ kind: 'person', personId: robin?.id });
+    expect(copy?.questions[0]?.prompt).toBe('What do you need more of?');
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('authoring (§16.4): AI draft fills the empty title; Save→Send is a two-step (no Send until saved)', async () => {
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
   await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
@@ -1852,7 +1946,7 @@ test('authoring (§16.4): AI draft fills the empty title; Save→Send is a two-s
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Questionnaires' }).click();
-    await w.getByRole('button', { name: 'New' }).click();
+    await startNewQuestionnaire(w);
 
     // §16.3: a brand-new draft offers "Create draft", NOT Send.
     await expect(w.getByRole('button', { name: 'Create draft' })).toBeVisible();
@@ -1905,7 +1999,7 @@ test('intimacy topics (§16.5a): the owner manages custom topics in Settings + a
     // The inline builder add (owner) writes to the SAME shared list: author an intimacy/unfiltered
     // questionnaire and add a fantasy from the AI panel.
     await w.getByRole('link', { name: 'Questionnaires' }).click();
-    await w.getByRole('button', { name: 'New' }).click();
+    await startNewQuestionnaire(w);
     await w.getByLabel('Type', { exact: true }).selectOption('intimacy');
     await w.getByLabel('Sensitivity').selectOption('unfiltered');
     await w.getByRole('button', { name: /Draft with AI/ }).click();
@@ -3092,7 +3186,7 @@ test('responsive: at a phone width the nav is a drawer and no screen overflows h
       await w.waitForTimeout(150);
       expect(await noOverflow()).toBe(true);
       if (name === 'Questionnaires') {
-        await w.getByRole('button', { name: 'New' }).click(); // open the builder (detail pane)
+        await startNewQuestionnaire(w); // open the builder (detail pane)
         await w.waitForTimeout(150);
         expect(await noOverflow()).toBe(true); // the builder stacks on mobile, doesn't overflow
         // The follow-up authoring editors must also fit at phone width:

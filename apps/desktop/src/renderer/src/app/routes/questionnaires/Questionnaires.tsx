@@ -119,6 +119,7 @@ export function Questionnaires(): JSX.Element {
             compat={selection.compat}
             {...(selection.recipient ? { initialRecipient: selection.recipient } : {})}
             {...(selection.seed ? { seed: selection.seed } : {})}
+            onDuplicate={(seed) => setSelection({ mode: 'start', seed })}
             onDone={() => setSelection({ mode: 'none' })}
           />
         ) : selected ? (

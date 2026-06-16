@@ -86,7 +86,10 @@ async function openNewCompat(): Promise<void> {
   seedPeople();
   renderApp();
   await userEvent.click(screen.getByRole('button', { name: 'New' }));
-  await userEvent.click(screen.getByRole('button', { name: 'Compatibility (two people)' }));
+  await userEvent.selectOptions(
+    await screen.findByLabelText('This questionnaire is for'),
+    'compatibility',
+  );
   await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
   await screen.findByLabelText('Title');
 }

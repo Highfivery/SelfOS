@@ -70,7 +70,7 @@ describe('NewQuestionnaireStart (§17.3)', () => {
     seed();
     const onChosen = vi.fn();
     render(<NewQuestionnaireStart onChosen={onChosen} onCancel={() => {}} />);
-    await userEvent.click(screen.getByRole('button', { name: 'Someone else (link)' }));
+    await userEvent.selectOptions(screen.getByLabelText('Recipient'), 'external');
     await userEvent.type(screen.getByLabelText('Their name'), 'Alex');
     await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
     expect(onChosen).toHaveBeenCalledWith({
@@ -83,7 +83,10 @@ describe('NewQuestionnaireStart (§17.3)', () => {
     seed();
     const onChosen = vi.fn();
     render(<NewQuestionnaireStart onChosen={onChosen} onCancel={() => {}} />);
-    await userEvent.click(screen.getByRole('button', { name: 'Compatibility (two people)' }));
+    await userEvent.selectOptions(
+      screen.getByLabelText('This questionnaire is for'),
+      'compatibility',
+    );
     await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
     expect(onChosen).toHaveBeenCalledWith({ compat: true });
   });
@@ -91,6 +94,7 @@ describe('NewQuestionnaireStart (§17.3)', () => {
   it('hides the external option without questionnaires.sendExternal', () => {
     seed(false);
     render(<NewQuestionnaireStart onChosen={() => {}} onCancel={() => {}} />);
-    expect(screen.queryByRole('button', { name: 'Someone else (link)' })).not.toBeInTheDocument();
+    // No external path at all — the Recipient picker is hidden, so household is the only option.
+    expect(screen.queryByLabelText('Recipient')).not.toBeInTheDocument();
   });
 });

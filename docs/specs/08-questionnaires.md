@@ -3,7 +3,9 @@
 > **Status:** **Approved** (built) · **Approved** (§15 authoring-UX) · **Built** (2026-06-15 audit fixes &
 > enhancements, §16 — ALL slices): §16.1–§16.4, §16.6, §16.7 **MERGED to `main`**; §16.5 explicit generation +
 > §16.5a shared owner-extensible `INTIMACY_TOPICS` (the constant + intake sync + owner Settings/inline UI)
-> built on `feat/questionnaire-explicit-gen` (NOT yet merged). See §16.10. · _last updated 2026-06-15_
+> built on `feat/questionnaire-explicit-gen` (NOT yet merged). See §16.10. **§17 (recipient-bound
+> questionnaires + in-policy explicit framing) is APPROVED + BUILT on the same branch (NOT merged) — see §17.9.**
+> · _last updated 2026-06-15_
 >
 > **2026-06 amendment (§15, package D of the app refresh):** authoring-experience refinements on the
 > already-built feature — a **General** type; **sensitivity tiers shown only for Intimacy/Scenario** types (other
@@ -1668,6 +1670,21 @@ tests (memory `vitest-does-not-typecheck`).
 - AI off / no key / over budget → calm states across builder + Suggested + Analyze (no dead buttons);
   corrupt/malformed ResponseSet handled (skips unknown question ids, never throws).
 
+**H. Recipient-bound model (§17.3/§17.4) — added with §17:**
+
+- **Recipient-first creation**: New → the start step requires a recipient before authoring (household person /
+  external / compatibility); can't author "for nobody"; the start step has **zero horizontal overflow at
+  390px** (full-width Selects, never a scrolling segment row).
+- **Binding persists**: a saved questionnaire carries its `recipient` (decrypt the def to assert); the builder
+  shows a "For: <recipient>" header; **in-app + relay sends read the BOUND recipient** (no recipient picker at
+  send) and the bridge rejects a send whose bound recipient is the wrong kind.
+- **Duplicate** clones a questionnaire's questions into a new one with a **newly-chosen recipient** (decrypt to
+  assert a separate def bound to the new person with the cloned questions).
+- **Recipient-aware de-dup**: generation feeds the bound household recipient's full history (insights + prior
+  questionnaire prompts) to the model as avoid-only grounding — covered by **unit** (the gatherer + the
+  never-reference safety clause + a bridge test that the history reaches the model **but never returns to the
+  renderer**); the wellness explicit framing (§17.2) is a prompt **capture** unit test.
+
 **Unit/component** still back the matrix (the reworked participant model, `contextOnly` per-participant
 insight routing, the tier-distinct explicit framing, disclosure strings) — E2E proves the wiring, units prove
 the logic. This matrix is the **standing regression suite**; new questionnaire options must extend it (a DoD
@@ -1870,3 +1887,35 @@ variant/alignment machinery unchanged. The "exactly one recipient" rule governs 
    clause into generation; external skips; capture test that grounding reaches the model and **output never
    echoes private content**; the "about" defaulting.
 5. **§16.7 matrix** — extend with recipient-required, de-dup, Duplicate, and the framing rows.
+
+### 17.9 Build status (2026-06-15, `feat/questionnaire-explicit-gen`, NOT merged)
+
+All five slices built (the explicit-prompt wording awaits the user's review before merge):
+
+- **Slices 1+2 (§17.2)** — deleted `intimacyStarters.ts` + the §16.5b fallback; recast the
+  `explicit`/`unfiltered` intimacy framing in `aiPrompts.ts` as a **sexual-wellness self-assessment** (health
+  register, not erotica) so the model complies in-policy; a refusal surfaces the calm error (no canned
+  questions). Capture test asserts the wellness frame + boundary reach the model.
+- **Slice 3 (§17.3)** — `Questionnaire`/`QuestionnaireInput` gain a `recipient` (reusing `RecipientSchema`); a
+  **recipient-first start step** (`NewQuestionnaireStart`, full-width Selects) precedes authoring; the builder
+  shows a "For: <recipient>" header and binds the recipient into every save; the send panels read the **bound**
+  recipient (the recipient picker left the send panel; the bridge derives the recipient from the def and
+  rejects a wrong-kind send); a **Duplicate** action clones questions into a new questionnaire with a new
+  recipient. Compatibility stays the two-participant exception (chosen in the start step). The recipient-required
+  rule is enforced at the **start step + the send path**, not in the structural `validateQuestionnaire` (which
+  `createAssignment` uses).
+- **Slice 4 (§17.4)** — `gatherRecipientHistory` assembles the bound household recipient's full content
+  host-side (profile + their Insights [intake/sessions/dreams/questionnaires] + the exact prompts of
+  questionnaires already asked of them); the bridge passes it to generation as **avoid-only grounding** with a
+  prompt clause forbidding the model from quoting/referencing it; the author never receives it (only generated
+  questions return); the AI panel defaults the "about a person" context to the recipient; external/compat skip.
+- **Slice 5** — the §16.7 matrix gains section **H** (recipient-bound model); all questionnaire E2E flows walk
+  the recipient-first start step; a new E2E binds a recipient + Duplicates + re-targets (decrypt the vault to
+  assert) + a 390px start-step overflow guard.
+
+**Gate green:** typecheck (node + web/DOM-lib), lint, format, **400 core + 8 relay + 487 desktop** unit, **68
+E2E**. Visual QA via real-app screenshots (start step desktop + 390px, the "For:" builder header) — clean, no
+overflow. **Lesson: the recipient-required rule belongs at the authoring boundary (the start step) + the send
+path, NOT in the structural `validateQuestionnaire` that `createAssignment` calls — putting it there breaks
+every core send of a recipient-less def; and a long-labelled SegmentedControl ("Compatibility (two people)")
+scrolls-x at 390px (a §12 failure), so the start step uses full-width Selects.**

@@ -9,7 +9,6 @@ import {
   Card,
   Field,
   Heading,
-  SegmentedControl,
   Select,
   Stack,
   Text,
@@ -96,18 +95,23 @@ export function NewQuestionnaireStart({
           make a new one (or duplicate this).
         </Text>
 
-        <SegmentedControl<Mode>
-          aria-label="Questionnaire kind"
-          value={mode}
-          onChange={(m) => {
-            setError(null);
-            setMode(m);
-          }}
-          options={[
-            { value: 'one', label: 'One person' },
-            { value: 'compatibility', label: 'Compatibility (two people)' },
-          ]}
-        />
+        {/* Full-width Selects (not SegmentedControls) so the long labels never scroll-x at narrow widths
+            (CLAUDE.md §12 — a space-filling control, never a scrolling segment row). */}
+        <Field label="This questionnaire is for">
+          {(props) => (
+            <Select
+              {...props}
+              value={mode}
+              onChange={(e) => {
+                setError(null);
+                setMode(e.target.value as Mode);
+              }}
+            >
+              <option value="one">One person</option>
+              <option value="compatibility">Compatibility — two people</option>
+            </Select>
+          )}
+        </Field>
 
         {mode === 'compatibility' ? (
           <Banner tone="info">
@@ -123,20 +127,23 @@ export function NewQuestionnaireStart({
           </Banner>
         ) : (
           <>
-            <SegmentedControl<Kind>
-              aria-label="Recipient kind"
-              value={kind}
-              onChange={(k) => {
-                setError(null);
-                setKind(k);
-              }}
-              options={[
-                { value: 'household', label: 'Someone in the household' },
-                ...(canSendExternal
-                  ? [{ value: 'external' as const, label: 'Someone else (link)' }]
-                  : []),
-              ]}
-            />
+            {canSendExternal ? (
+              <Field label="Recipient">
+                {(props) => (
+                  <Select
+                    {...props}
+                    value={kind}
+                    onChange={(e) => {
+                      setError(null);
+                      setKind(e.target.value as Kind);
+                    }}
+                  >
+                    <option value="household">Someone in the household</option>
+                    <option value="external">Someone else (a private link)</option>
+                  </Select>
+                )}
+              </Field>
+            ) : null}
 
             {kind === 'household' ? (
               <Field label="Who is this for?">

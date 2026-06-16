@@ -287,6 +287,25 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-16 — Fix (**intimacy generation "No usable questions" was a thinking-budget bug, NOT a refusal**; 08
+  §17.10, on `feat/questionnaire-explicit-gen`). User still hit "No usable questions came back" for intimacy
+  explicit/unfiltered **every time** after the §17.2 wellness reframing. Diagnosed against the **live** API (the
+  user supplied a key — **flagged it as now-exposed-in-transcript, rotate it**): the model does NOT refuse — it
+  returns good explicit JSON. The bug: `anthropicClient.stream` uses `thinking:{type:'adaptive'}` and
+  **`max_tokens` is the COMBINED thinking + output budget**; on **sonnet** (default) the long intimacy prompt's
+  adaptive thinking consumed the whole 1500-token budget → `stop_reason:max_tokens`, **empty output** → parse
+  fails → REFUSED. (General = short prompt → little thinking → worked; opus thinks less → worked; that's why
+  only intimacy/sonnet failed.) **Fix:** `ClaudeStreamOptions` gains `extendedThinking?` (default on — chat keeps
+  adaptive thinking); the Electron + iOS stream clients omit `thinking` when false; `runClaude`
+  (generate/improve/variant/gap-finder) disables it + generation budget → 2500; a cut-off/empty reply now reports
+  "draft was cut off, try again" distinctly from a no-JSON refusal. Verified live (sonnet, both tiers, thinking
+  off → `end_turn` + valid JSON). User chose to **skip** the earlier-requested admin-editable-prompt Settings
+  feature (its premise — "the prompt is the problem" — was wrong). Gate: typecheck/lint/format, 400 core + 487
+  desktop unit (+2). **Lesson: adaptive `thinking` shares the `max_tokens` budget — a bounded structured-JSON
+  call MUST disable it (or reserve a big budget), or heavy thinking silently truncates the JSON to empty; a
+  symptom that looks like a content refusal can be pure token starvation; and the offline fake Claude hides this
+  class of bug (always returns canned JSON) — diagnose against the LIVE model before touching the prompt.** (See
+  memory `adaptive-thinking-shares-maxtokens`.)
 - 2026-06-15 — Spec + Build (**Questionnaires SPEC 08 §17 — recipient-bound questionnaires + in-policy explicit
   framing + recipient-aware de-dup**; APPROVED + BUILT on `feat/questionnaire-explicit-gen`, NOT merged). User
   rejected my guessed §16.5b fallback ("NEVER assume… ALWAYS ASK"): I removed it, wrote a spec amendment (§17),

@@ -2027,7 +2027,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         headline: `How you and ${senderName} compare`,
         summary: report.summary,
         items: report.items,
-        generatedAt: new Date().toISOString(),
+        generatedAt: report.generatedAt,
       };
       const client = createRelayHttpClient(
         config.endpointUrl,
@@ -2035,19 +2035,28 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         host.relay.fetch,
       );
       let published = 0;
+      let unsupported = 0; // a send minted before the wrapped content key existed (can't write back)
       for (const member of externals) {
         try {
           if (await publishRelayResult(ctx.fs, ctx.key, client, member.id, result)) published += 1;
+          else unsupported += 1;
         } catch {
           // A relay the app can't reach right now is skipped; the sender can retry (idempotent).
         }
       }
       if (published === 0) {
-        return {
-          ok: false,
-          reason: 'ERROR',
-          message: 'Couldn’t reach the relay to share the results.',
-        };
+        // Distinguish "this link predates result-sharing" from a transport failure, so the message is honest.
+        return unsupported === externals.length
+          ? {
+              ok: false,
+              reason: 'INVALID',
+              message: 'This link was created before sharing results was supported.',
+            }
+          : {
+              ok: false,
+              reason: 'ERROR',
+              message: 'Couldn’t reach the relay to share the results.',
+            };
       }
       return { ok: true, published };
     },

@@ -84,4 +84,39 @@ describe('tier-distinct explicit generation framing (08 §16.5)', () => {
     expect(msg).not.toMatch(/genuinely explicit/i);
     expect(msg).not.toContain('Oral (giving)');
   });
+
+  it('intimacy generate mode directs scenarios / mix / questions (§17.12-C)', () => {
+    const scenarios = buildGenerationUserMessage({
+      ...base,
+      type: 'intimacy',
+      sensitivity: 'unfiltered',
+      intimacyMode: 'scenarios',
+    });
+    expect(scenarios).toMatch(/FORMAT — SCENARIOS/);
+    expect(scenarios).toMatch(/described situation/i);
+
+    const mix = buildGenerationUserMessage({
+      ...base,
+      type: 'intimacy',
+      sensitivity: 'unfiltered',
+      intimacyMode: 'mix',
+    });
+    expect(mix).toMatch(/FORMAT — MIX/);
+
+    // The default (questions) adds no format direction; a NON-intimacy type ignores the mode entirely.
+    const questions = buildGenerationUserMessage({
+      ...base,
+      type: 'intimacy',
+      sensitivity: 'unfiltered',
+      intimacyMode: 'questions',
+    });
+    expect(questions).not.toMatch(/FORMAT —/);
+    const nonIntimacy = buildGenerationUserMessage({
+      ...base,
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      intimacyMode: 'scenarios',
+    });
+    expect(nonIntimacy).not.toMatch(/FORMAT —/);
+  });
 });

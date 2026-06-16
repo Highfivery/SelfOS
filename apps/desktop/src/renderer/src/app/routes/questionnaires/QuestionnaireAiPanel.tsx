@@ -53,6 +53,9 @@ export function QuestionnaireAiPanel({
 
   const [open, setOpen] = useState(false);
   const [brief, setBrief] = useState('');
+  // Intimacy drafts can be direct questions, described scenarios, or a mix (08 §17.12-C).
+  const [intimacyMode, setIntimacyMode] = useState<'questions' | 'scenarios' | 'mix'>('questions');
+  const isIntimacy = type === 'intimacy';
   const [busy, setBusy] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [notice, setNotice] = useState<{ tone: 'info' | 'warning'; text: string } | null>(null);
@@ -109,6 +112,8 @@ export function QuestionnaireAiPanel({
         // The bound household recipient (08 §17.12-A): the bridge auto-tailors to their shareable context and
         // de-dups against their full history. No person-picker here — the recipient was chosen at the start.
         ...(recipientPersonId ? { recipientPersonId } : {}),
+        // Intimacy can draft questions, scenarios, or a mix (08 §17.12-C).
+        ...(isIntimacy ? { intimacyMode } : {}),
       });
       if (result.ok && result.questions && result.questions.length > 0) {
         onGenerated(result.questions);
@@ -152,6 +157,25 @@ export function QuestionnaireAiPanel({
               />
             )}
           </Field>
+
+          {/* Intimacy can draft direct questions, described scenarios to react to, or a mix (§17.12-C). */}
+          {isIntimacy ? (
+            <Field label="Generate">
+              {(props) => (
+                <Select
+                  {...props}
+                  value={intimacyMode}
+                  onChange={(e) =>
+                    setIntimacyMode(e.target.value as 'questions' | 'scenarios' | 'mix')
+                  }
+                >
+                  <option value="questions">Questions</option>
+                  <option value="scenarios">Scenarios (situations to react to)</option>
+                  <option value="mix">A mix of both</option>
+                </Select>
+              )}
+            </Field>
+          ) : null}
 
           {notice ? <Banner tone={notice.tone}>{notice.text}</Banner> : null}
 

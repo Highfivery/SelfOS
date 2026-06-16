@@ -486,6 +486,8 @@ export interface SelfosBridge {
     // what they've already covered. Their full content is gathered host-side; it never returns to the renderer.
     // There is no separate "about a person" picker anymore (§17.12-A).
     recipientPersonId?: string;
+    // Intimacy draft format (08 §17.12-C): direct questions, described scenarios, or a mix.
+    intimacyMode?: 'questions' | 'scenarios' | 'mix';
   }): Promise<QuestionnaireGenerateResult>;
   /** Reword a single question per an instruction ("warmer", "tighter"). Budget-gated + metered. */
   questionnairesImproveQuestion(input: {

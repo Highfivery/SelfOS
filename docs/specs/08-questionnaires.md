@@ -1992,6 +1992,20 @@ redundant person-pickers. The DoD now requires a whole-flow coherence walk, and 
 not the tests. Build + extend the §16.7 matrix (a compat send no longer has a participant picker; AI generation
 has no "about a person" control).
 
+**C. "Other" free-text option on choice questions + an intimacy generate-mode selector (2026-06-16).**
+
+- **"Other" (free text) on choice questions** — singleChoice/multiChoice questions get a per-question **"Allow
+  'Other'" toggle, ON by default** (author can turn it off; AI-drafted choice questions get it on). When a
+  recipient picks "Other", a free-text field appears (for multi-select, alongside their other picks); the
+  answer carries the typed text. Touches the `Question` model (an `allowOther` flag), the `@selfos/answering`
+  renderer, the `Answer` value (an additive `otherText`), results display, and the builder. **(BUILT next.)**
+- **Intimacy generate-mode selector** — when the type is **intimacy**, "Draft with AI" offers **Generate:
+  Questions / Scenarios / A mix** (§17.12-C). A **scenario** is a short described intimate situation/roleplay
+  (1–3 sentences) the person _reacts to_ (rating / yes-no / free text), vs a direct question; "mix" = both.
+  Built: `IntimacyGenerateMode` + a format direction in `buildGenerationUserMessage` (applies for the intimacy
+  type, any tier; the default "questions" adds nothing; non-intimacy ignores it), threaded through the generate
+  IPC + the AI panel selector. **(BUILT.)**
+
 **Build status (2026-06-16, `feat/questionnaire-explicit-gen`, NOT merged):** **A built** — the
 About-a-person picker + toggles removed; the generate IPC drops `targetPersonId`/`includeTarget`/
 `includeRelationship` and the bridge derives the (author + recipient) tailoring context from the bound

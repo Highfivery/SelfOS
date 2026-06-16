@@ -477,6 +477,8 @@ const GenerateSchema = z.object({
   // The bound household recipient (08 §17.12) — the bridge auto-tailors to their shareable context AND de-dups
   // against their full history. The author never receives any of it. No separate "about a person" picker.
   recipientPersonId: z.string().min(1).optional(),
+  // Intimacy draft format (08 §17.12-C): direct questions, described scenarios, or a mix.
+  intimacyMode: z.enum(['questions', 'scenarios', 'mix']).optional(),
 });
 const ImproveSchema = z.object({
   prompt: z.string().min(1),
@@ -1442,6 +1444,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         },
         existingPrompts: p.existingPrompts,
         ...(recipientHistory ? { recipientHistory } : {}),
+        ...(p.intimacyMode !== undefined ? { intimacyMode: p.intimacyMode } : {}),
       });
     },
     questionnairesImproveQuestion: async (input): Promise<QuestionnaireImproveResult> => {

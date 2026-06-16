@@ -75,6 +75,20 @@ export function intimacyExplicitFraming(
   ].join('\n');
 }
 
+/** What an intimacy "Draft with AI" should produce (08 §17.12-C). Scenarios = described situations to react to. */
+export type IntimacyGenerateMode = 'questions' | 'scenarios' | 'mix';
+
+/** Format direction for an intimacy generation (08 §17.12-C) — questions vs described scenarios vs a mix. */
+function intimacyModeDirection(mode: IntimacyGenerateMode): string {
+  if (mode === 'scenarios') {
+    return `\nFORMAT — SCENARIOS: each item is a short DESCRIBED SITUATION or roleplay (1–3 sentences) the person reacts to, NOT a direct question. Set up a concrete intimate situation, then have them react — use answer types that fit reacting: \`rating\` (e.g. how appealing, 1–5), \`yesNo\`, or \`shortText\`/\`longText\`. The scenario itself is the question \`prompt\`.`;
+  }
+  if (mode === 'mix') {
+    return `\nFORMAT — MIX: include BOTH direct questions AND described scenarios (a short situation/roleplay the person reacts to, answered with a rating, yes/no, or free text).`;
+  }
+  return '';
+}
+
 export function buildGenerationUserMessage(input: {
   type: string;
   sensitivity: SensitivityTier;
@@ -84,6 +98,8 @@ export function buildGenerationUserMessage(input: {
   count: number;
   // The merged intimacy topic inventory (built-in + owner custom) — seeds the explicit framing (§16.5a).
   intimacyTopics?: IntimacyTopics;
+  // What an intimacy draft should produce (08 §17.12-C): direct questions, described scenarios, or a mix.
+  intimacyMode?: IntimacyGenerateMode;
   // The recipient's full answered content (08 §17.4), assembled host-side. Used ONLY to AVOID overlap — the
   // model must never quote, reference, or reveal any of it in a question (the author never sees it either).
   recipientHistory?: string;
@@ -103,6 +119,10 @@ export function buildGenerationUserMessage(input: {
         )
       : SENSITIVITY_NOTE[input.sensitivity],
   );
+  // The questions/scenarios/mix format direction applies to any intimacy draft (08 §17.12-C).
+  if (input.type === INTIMACY_TYPE && input.intimacyMode && input.intimacyMode !== 'questions') {
+    parts.push(intimacyModeDirection(input.intimacyMode));
+  }
   if (input.brief?.trim()) parts.push(`\nWhat they want to explore: ${input.brief.trim()}`);
   if (input.context?.trim()) {
     parts.push(

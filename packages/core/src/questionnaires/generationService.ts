@@ -19,6 +19,7 @@ import {
   GENERATION_SYSTEM,
   IMPROVE_SYSTEM,
   VARIANT_SYSTEM,
+  type IntimacyGenerateMode,
 } from './aiPrompts';
 import { gatherGenerationContext, type GenerationContextRequest } from './contextProviders';
 import { readCustomIntimacyTopics } from './customTypeService';
@@ -179,6 +180,8 @@ export interface GenerateRequest {
   context: GenerationContextRequest;
   existingPrompts: string[];
   count?: number;
+  // Intimacy draft format (08 §17.12-C): direct questions, described scenarios, or a mix.
+  intimacyMode?: IntimacyGenerateMode;
   // The recipient's full answered content (08 §17.4), assembled host-side by the caller (bridge). Fed to the
   // model ONLY to avoid repeating what they've already covered — never surfaced to the author.
   recipientHistory?: string;
@@ -200,6 +203,7 @@ export async function generateQuestions(
     existingPrompts: request.existingPrompts,
     count: request.count ?? 5,
     intimacyTopics: mergedIntimacyTopics(await readCustomIntimacyTopics(deps.fs)),
+    ...(request.intimacyMode !== undefined ? { intimacyMode: request.intimacyMode } : {}),
     ...(request.recipientHistory !== undefined
       ? { recipientHistory: request.recipientHistory }
       : {}),

@@ -64,7 +64,7 @@ describe('Questionnaires', () => {
 
     await userEvent.type(screen.getByLabelText('Title'), 'Weekly check-in');
     await userEvent.type(screen.getByLabelText('Question 1'), 'How are we doing?');
-    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create draft' }));
 
     expect(save).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -94,7 +94,7 @@ describe('Questionnaires', () => {
     expect(senderSeesAll.disabled).toBe(true);
     await userEvent.selectOptions(visibility, 'eachSeesOwn');
 
-    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create draft' }));
     expect(save).toHaveBeenCalledWith(
       expect.objectContaining({
         compatibility: { enabled: true, visibility: 'eachSeesOwn' },
@@ -137,7 +137,7 @@ describe('Questionnaires', () => {
     // The new type is selected and now appears in the picker.
     expect(screen.getByLabelText('Type')).toHaveValue('Affair recovery');
 
-    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create draft' }));
     expect(save).toHaveBeenCalledWith(expect.objectContaining({ type: 'Affair recovery' }));
   });
 
@@ -162,7 +162,7 @@ describe('Questionnaires', () => {
     await userEvent.selectOptions(screen.getByLabelText('Answer type'), 'matrix');
     await userEvent.type(screen.getByLabelText('Row 1'), 'Mornings');
     await userEvent.type(screen.getByLabelText('Row 2'), 'Evenings');
-    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create draft' }));
 
     expect(save).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -199,7 +199,7 @@ describe('Questionnaires', () => {
     // The value picker now offers Q1's options; it defaults to the first ("Yes").
     expect(screen.getByLabelText('…equals')).toHaveValue('Yes');
 
-    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create draft' }));
     const firstCall = save.mock.calls.at(0);
     if (!firstCall) throw new Error('save was not called');
     const payload = firstCall[0];
@@ -217,6 +217,7 @@ describe('Questionnaires', () => {
       questionnairesGenerate: () =>
         Promise.resolve({
           ok: true,
+          title: 'A gentle weekly check-in',
           questions: [
             {
               id: 'g1',
@@ -234,6 +235,51 @@ describe('Questionnaires', () => {
 
     expect(await screen.findByDisplayValue('What felt hardest this week?')).toBeInTheDocument();
     expect(screen.getByText(/ai draft/i)).toBeInTheDocument();
+    // §16.4: the AI title fills the empty Title field.
+    expect(screen.getByLabelText('Title')).toHaveValue('A gentle weekly check-in');
+  });
+
+  it('keeps the author’s title when AI also returns one (§16.4: never clobbers)', async () => {
+    enableAi();
+    installMockBridge({
+      questionnairesList: () => Promise.resolve([]),
+      secretHas: () => Promise.resolve(true),
+      questionnairesGenerate: () =>
+        Promise.resolve({
+          ok: true,
+          title: 'AI title',
+          questions: [
+            { id: 'g1', type: 'shortText', prompt: 'A drafted question?', required: false },
+          ],
+        }),
+    });
+    await openNewBuilder();
+
+    await userEvent.type(screen.getByLabelText('Title'), 'My own title');
+    await userEvent.click(await screen.findByRole('button', { name: /draft with ai/i }));
+    await userEvent.click(screen.getByRole('button', { name: /generate questions/i }));
+    await screen.findByDisplayValue('A drafted question?');
+    expect(screen.getByLabelText('Title')).toHaveValue('My own title'); // unchanged
+  });
+
+  it('§16.3: Save keeps you on the saved questionnaire and only then offers Send', async () => {
+    const save = saveSpy();
+    installMockBridge({ questionnairesList: () => Promise.resolve([]), questionnairesSave: save });
+    await openNewBuilder();
+
+    // A brand-new draft offers "Create draft", NOT Send.
+    expect(screen.getByRole('button', { name: 'Create draft' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Send' })).not.toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText('Title'), 'Weekly check-in');
+    await userEvent.type(screen.getByLabelText('Question 1'), 'How are we doing?');
+    await userEvent.click(screen.getByRole('button', { name: 'Create draft' }));
+
+    // It stays on the saved questionnaire (no close), now headed "Edit questionnaire", and Send appears.
+    expect(await screen.findByText(/Saved\. You can send it now/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Edit questionnaire' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument();
   });
 
   it('rewords a question via the per-question AI assist (gated on AI being ready)', async () => {
@@ -351,7 +397,7 @@ describe('Questionnaires', () => {
     await userEvent.clear(screen.getByLabelText('Option 2'));
     expect(screen.queryByLabelText('Only show this question')).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create draft' }));
     const firstCall = save.mock.calls.at(0);
     if (!firstCall) throw new Error('save was not called');
     expect(firstCall[0].questions[1].branch).toBeUndefined();
@@ -394,8 +440,10 @@ describe('Questionnaires', () => {
     await userEvent.type(screen.getByLabelText('Title'), 'Weekly check-in');
     await userEvent.type(screen.getByLabelText('Question 1'), 'How are we doing?');
 
-    // Open the send panel (validates + saves first), pick a recipient, and send.
-    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    // §16.3 two-step: Save the draft first (Send only appears on a saved questionnaire), then Send.
+    await userEvent.click(screen.getByRole('button', { name: 'Create draft' }));
+    // Open the send panel (validates + saves any edits first), pick a recipient, and send.
+    await userEvent.click(await screen.findByRole('button', { name: 'Send' }));
     await userEvent.selectOptions(await screen.findByLabelText('Send to'), 'p-mara');
     // Private is the default privacy mode (break-glass).
     expect(screen.getByRole('button', { name: 'Private' })).toHaveAttribute('aria-pressed', 'true');
@@ -495,7 +543,7 @@ describe('Questionnaires', () => {
     expect(screen.queryByRole('option', { name: 'Standard' })).not.toBeInTheDocument();
     expect(sensitivity).toHaveValue('intimacyGeneral');
 
-    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create draft' }));
     expect(save).toHaveBeenCalledWith(expect.objectContaining({ sensitivity: 'intimacyGeneral' }));
   });
 
@@ -514,7 +562,7 @@ describe('Questionnaires', () => {
     expect(screen.getByRole('option', { name: 'Standard' })).toBeInTheDocument();
     await userEvent.selectOptions(sensitivity, 'explicit');
 
-    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create draft' }));
     expect(save).toHaveBeenCalledWith(expect.objectContaining({ sensitivity: 'explicit' }));
   });
 
@@ -531,7 +579,7 @@ describe('Questionnaires', () => {
     await userEvent.selectOptions(screen.getByLabelText('Type'), 'role-feedback');
     expect(screen.queryByLabelText('Sensitivity')).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create draft' }));
     expect(save).toHaveBeenCalledWith(expect.objectContaining({ sensitivity: 'standard' }));
   });
 

@@ -278,6 +278,32 @@ describe('generateQuestions', () => {
     });
     expect(result).toMatchObject({ ok: false, reason: 'BUDGET' });
   });
+
+  it('returns the AI-suggested title from the {title, questions} object (§16.4)', async () => {
+    const fs = memFileSystem();
+    const { author } = await seedHousehold(fs);
+    const withTitle = JSON.stringify({
+      title: 'Reconnecting after the move',
+      questions: [
+        { type: 'yesNo', prompt: 'Do you feel heard lately?', required: true },
+        { type: 'shortText', prompt: 'One thing you need more of?', required: false },
+      ],
+    });
+    const result = await generateQuestions(deps(fs, fakeClient(withTitle), author), {
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      context: {
+        authorPersonId: author,
+        includeAuthor: true,
+        includeTarget: false,
+        includeRelationship: false,
+      },
+      existingPrompts: [],
+    });
+    expect(result.ok).toBe(true);
+    expect(result.title).toBe('Reconnecting after the move');
+    expect(result.questions).toHaveLength(2);
+  });
 });
 
 describe('improveQuestion + gap-finder', () => {

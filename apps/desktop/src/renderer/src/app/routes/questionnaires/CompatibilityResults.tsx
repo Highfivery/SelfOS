@@ -87,6 +87,25 @@ function GroupCard({
   const [revealed, setRevealed] = useState<Record<string, SendAnswer[]>>({});
 
   const names = group.members.map((m) => m.recipientName).join(' & ');
+  const isContextOnly = group.visibility === 'contextOnly';
+
+  // Context-only: distil each participant's own answers into their own coach's context — no report.
+  const runDistill = async (): Promise<void> => {
+    if (aligning) return;
+    setAligning(true);
+    setMessage({ tone: 'info', text: 'Updating each coach…' });
+    try {
+      const result = await window.selfos?.assignmentsDistillContextOnly(group.compatibilityGroupId);
+      if (result?.ok) {
+        setMessage(null);
+        await onChanged();
+      } else {
+        setMessage({ tone: 'warning', text: result?.message ?? 'Couldn’t update their coaches.' });
+      }
+    } finally {
+      setAligning(false);
+    }
+  };
 
   const runAlign = async (): Promise<void> => {
     if (aligning) return;
@@ -132,8 +151,33 @@ function GroupCard({
 
         {!group.bothSubmitted ? (
           <Text tone="secondary">
-            Both people need to answer before you can align their responses.
+            {isContextOnly
+              ? 'Both people need to answer before their coaches can use this.'
+              : 'Both people need to answer before you can align their responses.'}
           </Text>
+        ) : isContextOnly ? (
+          // Context-only: no report — a private per-person distillation into each coach's context.
+          <Stack gap={2}>
+            <Text size="sm" tone="secondary">
+              Context-only — no report is produced. Each person’s answers privately inform their own
+              coach.
+            </Text>
+            {group.analyzed ? (
+              <Banner tone="info">Both coaches updated from these answers.</Banner>
+            ) : null}
+            {aiReady ? (
+              <div>
+                <Button variant="secondary" onClick={() => void runDistill()} disabled={aligning}>
+                  <Sparkles size={16} aria-hidden="true" />
+                  {aligning
+                    ? 'Updating…'
+                    : group.analyzed
+                      ? 'Update both coaches again'
+                      : 'Update both coaches'}
+                </Button>
+              </div>
+            ) : null}
+          </Stack>
         ) : group.report ? (
           <Stack gap={3}>
             <AlignmentReportView report={group.report} />
@@ -153,7 +197,7 @@ function GroupCard({
         ) : null}
 
         {/* Regenerate keeps the report fresh after a re-ask; same button once a report exists. */}
-        {group.bothSubmitted && group.report && aiReady ? (
+        {group.bothSubmitted && !isContextOnly && group.report && aiReady ? (
           <div>
             <Button variant="secondary" onClick={() => void runAlign()} disabled={aligning}>
               {aligning ? 'Aligning…' : 'Regenerate'}

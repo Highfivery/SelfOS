@@ -62,19 +62,19 @@ describe('SettingsScreen', () => {
     expect(useSettingsStore.getState().values['appearance.theme']).toBe('dark');
   });
 
-  it('hides the admin-only disclosure setting from non-admins and shows it (marked) to admins', async () => {
+  it('hides an admin-only setting from non-admins and shows it (marked) to admins', async () => {
     installMockBridge();
     const { rerender } = render(<SettingsScreen />);
-    // Non-admin: the admin-only Questionnaires disclosure toggle is absent entirely.
-    await userEvent.click(screen.getByRole('button', { name: 'Questionnaires' }));
-    expect(screen.queryByText(/an admin could access answers/i)).not.toBeInTheDocument();
+    // Non-admin: the admin-only Relay (Cloudflare) setting is absent entirely.
+    await userEvent.click(screen.getByRole('button', { name: 'Relay' }));
+    expect(screen.queryByText('Cloudflare relay')).not.toBeInTheDocument();
 
     // Admin: it appears, carrying the "Admin only" marker.
     asAdmin();
     rerender(<SettingsScreen />);
-    await userEvent.click(screen.getByRole('button', { name: 'Questionnaires' }));
-    expect(screen.getByText(/an admin could access answers/i)).toBeInTheDocument();
-    expect(screen.getByText('Admin only')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Relay' }));
+    expect(screen.getByText('Cloudflare relay')).toBeInTheDocument();
+    expect(screen.getAllByText('Admin only').length).toBeGreaterThan(0);
   });
 
   it('filters settings by search query', async () => {

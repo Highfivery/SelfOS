@@ -1,7 +1,11 @@
 # 08 — Questionnaires & the Insight / metrics layer
 
-> **Status:** **Approved** (built) · **Approved** (§15 authoring-UX) · **Review** (2026-06-15 audit fixes &
-> enhancements, §16) · _last updated 2026-06-15_
+> **Status:** **Approved** (built) · **Approved** (§15 authoring-UX) · **Partially built** (2026-06-15 audit
+> fixes & enhancements, §16, on `feat/questionnaire-audit-fixes`, NOT merged): §16.1 (compat participant model),
+> §16.2 (context-only mode), §16.3/§16.4 (Save→Send + title/AI-title), and §16.7 (E2E matrix for the built
+> features) are **built**; **§16.5/§16.5a (explicit generation + shared owner-extensible `INTIMACY_TOPICS`) is
+> deferred** until the concurrent `feat/intimacy-questions` work merges (it rewrites `intakeCatalog.ts`, which
+> §16.5a must extract from). · _last updated 2026-06-15_
 >
 > **2026-06 amendment (§15, package D of the app refresh):** authoring-experience refinements on the
 > already-built feature — a **General** type; **sensitivity tiers shown only for Intimacy/Scenario** types (other
@@ -485,7 +489,8 @@ interface RelayConfig {
 
 _(The raw-answer reveal writes **no audit record** — the break-glass audit log was removed 2026-06-14.)_
 
-- **Settings (schema-driven, `03`)** — `questionnaires.discloseAdminAccess` (admin-only, **default OFF**),
+- **Settings (schema-driven, `03`)** — `questionnaires.discloseAdminAccess` was **removed (§16.6)** so users
+  are never told an owner/admin can access answers;
   `questionnaires.autoAnalyze` (**default OFF**, `visibleWhen` AI is enabled — auto-runs analysis when the
   Results view opens for any new responses vs the default manual "Analyze"; **built §13.5b**),
   `questionnaires.defaultMessages` (email/SMS templates). The relay connection lives
@@ -660,10 +665,13 @@ gate, store-guideline compliance, remote disable).
   entry** — the break-glass audit log was removed 2026-06-14): the **Owner** (any Private send), or the
   **sender of a `senderSeesAll` compatibility send** holding `questionnaires.readRaw` (§3.6/§13.5d).
   Nothing else exposes the prose answers.
-- **Disclosure toggle** — `questionnaires.discloseAdminAccess` (admin-only, **default OFF**) controls whether
-  the recipient is told the Owner could ever access answers; default keeps them feeling safe to be honest.
+- **We never surface owner/admin visibility to answerers** (a durable product rule, 2026-06-15). The
+  `questionnaires.discloseAdminAccess` setting + the `ADMIN_ACCESS_DISCLOSURE` line were **removed** (§16.6):
+  no recipient is ever told a household owner/administrator could access their answers, and no author-facing
+  copy mentions it either.
 - **Honesty guard** — the recipient's disclosure text is **derived from the configured visibility/privacy
-  mode**, so no configuration can promise more privacy than the system delivers.
+  mode**, so no configuration can promise more privacy than the system delivers. (It states what the
+  **sender** sees — never owner/admin reach.)
 - **Not zero-knowledge from the owner** — consistent with `04` §8 and `10-multi-device-vault` §2/§8 (one
   master key decrypts the whole vault; RBAC is enforced at the app/UX layer, not by encryption).
 
@@ -1400,11 +1408,11 @@ inline preview is per-question while authoring; the full mode is the end-to-end 
 
 _All resolved (2026-06-12) — see §15.7. **Approved 2026-06-14** and built on `feat/questionnaire-authoring-ux`._
 
-**Deferred follow-up (out of §15.3 scope):** the de-jargoning in §15.3 applied **only** to the compatibility
-"who sees what" picker. The word "break-glass" still appears in two other user-facing surfaces — the relay
-external-send privacy note (`RelaySendPanel`) and the admin `questionnaires.discloseAdminAccess` setting copy
-(`settings/builtins.tsx`). A future light copy pass should replace it with plain language there too (the
-`readRaw` + audit mechanism is unchanged).
+**Deferred follow-up — DONE 2026-06-15 (§16.6):** the de-jargoning in §15.3 covered only the compatibility
+"who sees what" picker; the remaining "break-glass" wording in the relay external-send privacy note
+(`RelaySendPanel`) was dropped, and the admin `questionnaires.discloseAdminAccess` setting was **removed
+entirely** (we never tell users an owner/admin can access answers — see §8.4/§16.6). The `readRaw` reveal
+mechanism itself is unchanged.
 
 ---
 
@@ -1549,6 +1557,12 @@ source of truth**:
   than generic.
 - A light copy pass on any remaining "break-glass"/"audited" wording the §15.8 follow-up flagged
   (`RelaySendPanel`, the admin disclosure setting), now that the audit log is gone (§14, 2026-06-14).
+- **NEVER tell users an owner/admin can access their answers (durable product rule, 2026-06-15).** The
+  author-facing `senderSeesAll` note no longer says "(a household owner can too)", and the
+  `questionnaires.discloseAdminAccess` setting + the `ADMIN_ACCESS_DISCLOSURE` recipient line were **removed
+  entirely** (Inbox + relay). No surface — sender-facing or recipient-facing — discloses owner/admin
+  visibility. (The `readRaw` reveal mechanism is unchanged; only the disclosure copy is gone.) **Built
+  2026-06-15** with slices 1–3.
 
 ### 16.7 Tests — the comprehensive questionnaire E2E coverage matrix
 
@@ -1661,3 +1675,24 @@ _All resolved (2026-06-15) — see §16.8. Context-only = per-participant distil
 shared owner-extensible constant; compat default = you + someone else. The amendment is build-ready pending
 final approval. Remaining are build-time tunings (exact explicit-prompt wording, the Settings placement of the
 intimacy-topics surface), not blockers._
+
+### 16.10 Build status (2026-06-15, `feat/questionnaire-audit-fixes`, NOT merged)
+
+- **Built:** §16.1 (compat participant model — you+someone-else + two-others; reworked `compatibilityDisclosure`
+  - UI mode toggle), §16.2 (`contextOnly` visibility — per-participant auto-approved own-context distillation,
+    no report, sender-triggered from Results), §16.3 (Save→Send two-step; Save keeps you on the saved
+    questionnaire, Send only once saved), §16.4 (Title moved below "Draft with AI"; AI generation returns a
+    `title` that fills only when the field is empty), and §16.6 (the custom-type duplicate notice + send-time
+    validation messages shipped with §15/earlier; **the owner/admin-access disclosure was REMOVED entirely** —
+    the `senderSeesAll` note no longer mentions "a household owner", and the `questionnaires.discloseAdminAccess`
+    setting + `ADMIN_ACCESS_DISCLOSURE` line are gone (durable rule: never tell users an owner/admin can access
+    answers); the relay "break-glass" wording was also dropped). §16.7's E2E matrix is built **for the shipped
+    features** (compat each participant-model ×
+    visibility incl. `contextOnly` with a decrypt assertion; Save→Send two-step; AI-title; plus the existing
+    per-answer-type / sensitivity / branching / image / relay / results / deletion / gating coverage).
+- **Deferred:** **§16.5 (tier-distinct explicit generation)** and **§16.5a (the shared owner-extensible
+  `INTIMACY_TOPICS` constant + the owner Settings surface + inline "add a topic" + the spec-18 sync)** wait
+  for the concurrent `feat/intimacy-questions` work to merge to `main` — it actively rewrites
+  `intakeCatalog.ts` (the source §16.5a must extract `ACTIVITIES`/`commonFantasies` from). Once it lands, this
+  branch rebases on it and builds §16.5/§16.5a against the final topic lists, then extends the §16.7 matrix
+  with the explicit-tier rows.

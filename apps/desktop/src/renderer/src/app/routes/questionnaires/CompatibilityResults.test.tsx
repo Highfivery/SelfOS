@@ -103,6 +103,36 @@ describe('CompatibilityResults', () => {
     expect(screen.getByText(/Review it in Memory/)).toBeInTheDocument();
   });
 
+  it('contextOnly (§16.2): no report — offers "Update both coaches", then shows the done state', async () => {
+    const assignmentsDistillContextOnly = vi.fn(() =>
+      Promise.resolve({ ok: true as const, updated: 2, usage: [] }),
+    );
+    installMockBridge({
+      assignmentsCompatibility: () => Promise.resolve([group({ visibility: 'contextOnly' })]),
+      assignmentsDistillContextOnly,
+      secretHas: () => Promise.resolve(true),
+    });
+    enableAi();
+    renderResults();
+
+    expect(await screen.findByText(/no report is produced/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Generate alignment/ })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /Update both coaches/ }));
+    expect(assignmentsDistillContextOnly).toHaveBeenCalledWith('g1');
+  });
+
+  it('contextOnly: shows "Both coaches updated" once distilled', async () => {
+    installMockBridge({
+      assignmentsCompatibility: () =>
+        Promise.resolve([group({ visibility: 'contextOnly', analyzed: true })]),
+      secretHas: () => Promise.resolve(true),
+    });
+    enableAi();
+    renderResults();
+    expect(await screen.findByText(/Both coaches updated/i)).toBeInTheDocument();
+    expect(screen.queryByText('You two are largely aligned.')).not.toBeInTheDocument();
+  });
+
   it('offers an audited reveal only for a senderSeesAll group with readRaw', async () => {
     const assignmentsRevealRaw = vi.fn(() =>
       Promise.resolve([{ prompt: 'How connected?', answer: '4' }]),

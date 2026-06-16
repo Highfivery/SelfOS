@@ -10,6 +10,7 @@ import type {
   ChatTurnResult,
   CompatibilityGroup,
   CompatibilitySendResult,
+  ContextOnlyResult,
   Conversation,
   Dream,
   DreamAnalysis,
@@ -165,6 +166,7 @@ export const IpcChannels = {
   assignmentsCreateCompatibility: 'assignments:createCompatibility',
   assignmentsCompatibility: 'assignments:compatibility',
   assignmentsAlign: 'assignments:align',
+  assignmentsDistillContextOnly: 'assignments:distillContextOnly',
   assignmentsRevealRaw: 'assignments:revealRaw',
   assignmentsCreateRelayLink: 'assignments:createRelayLink',
   assignmentsDrain: 'assignments:drain',
@@ -535,14 +537,15 @@ export interface SelfosBridge {
    */
   assignmentsDelete(assignmentId: string): Promise<void>;
   /**
-   * Send a **compatibility** questionnaire to TWO household people at once: AI personalizes a variant per
-   * recipient, freezing a paired per-recipient snapshot (08-questionnaires §3.6). Budget-gated + metered;
-   * requires AI to be on. Requires `questionnaires.create`.
+   * Send a **compatibility** questionnaire comparing TWO participants — either the sender + someone else
+   * or two other people (08-questionnaires §3.6/§16.1). AI personalizes a variant per participant, freezing
+   * a paired per-participant snapshot. Budget-gated + metered; requires AI to be on and
+   * `questionnaires.create`. The only invalid pairing is the same person twice.
    */
   assignmentsCreateCompatibility(input: {
     questionnaireId: string;
-    recipientPersonIdA: string;
-    recipientPersonIdB: string;
+    participantPersonIdA: string;
+    participantPersonIdB: string;
   }): Promise<CompatibilitySendResult>;
   /**
    * The sender's compatibility sends of one questionnaire — paired members + the alignment report (null
@@ -554,6 +557,13 @@ export interface SelfosBridge {
    * must have submitted. Budget-gated + metered; requires `questionnaires.viewResults`.
    */
   assignmentsAlign(compatibilityGroupId: string): Promise<AlignmentResult>;
+  /**
+   * Run a **context-only** compatibility distillation (08-questionnaires §16.2): each participant's own
+   * answers become an auto-approved, own-context Insight feeding their own coach — no report, no cross-
+   * sharing. Both must have submitted. Budget-gated + metered; sender-scoped; requires
+   * `questionnaires.viewResults`.
+   */
+  assignmentsDistillContextOnly(compatibilityGroupId: string): Promise<ContextOnlyResult>;
   /**
    * Reveal a Private send's raw answers (08-questionnaires §8.4). Permitted only for the Owner (full
    * access, any send) or the sender of a `senderSeesAll` compatibility send holding
@@ -722,6 +732,7 @@ export type {
   ChatTurnResult,
   CompatibilityGroup,
   CompatibilitySendResult,
+  ContextOnlyResult,
   Conversation,
   Dream,
   DreamAnalysis,

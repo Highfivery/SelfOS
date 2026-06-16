@@ -604,15 +604,17 @@ export const SensitivityTierSchema = z.enum([
 export type SensitivityTier = z.infer<typeof SensitivityTierSchema>;
 
 /**
- * Compatibility visibility (08-questionnaires §3.6) — the author's choice that **derives the recipient's
- * disclosure**: `sharedReport` (joint report only, raw hidden both ways), `eachSeesOwn` (each answerer
- * also sees their own answers), `senderSeesAll` (the sender may break-glass reveal raw — needs
- * `questionnaires.readRaw`).
+ * Compatibility visibility (08-questionnaires §3.6/§16.2) — the author's choice that **derives the
+ * recipient's disclosure**: `sharedReport` (joint report only, raw hidden both ways), `eachSeesOwn` (each
+ * answerer also sees their own answers), `senderSeesAll` (the sender may reveal raw — needs
+ * `questionnaires.readRaw`), `contextOnly` (NO report or raw sharing — each participant's own answers are
+ * distilled into an own-context Insight that quietly informs their own coach; the most private mode).
  */
 export const CompatibilityVisibilitySchema = z.enum([
   'sharedReport',
   'senderSeesAll',
   'eachSeesOwn',
+  'contextOnly',
 ]);
 export type CompatibilityVisibility = z.infer<typeof CompatibilityVisibilitySchema>;
 
@@ -680,6 +682,8 @@ export type AiFailureReason = 'NO_KEY' | 'DENIED' | 'BUDGET' | 'REFUSED' | 'ERRO
 export interface QuestionnaireGenerateResult {
   ok: boolean;
   questions?: Question[];
+  // A short AI-suggested title (08 §16.4) — the builder uses it only when the title field is still empty.
+  title?: string;
   usage?: UsageEvent;
   reason?: AiFailureReason;
   message?: string;
@@ -1300,6 +1304,10 @@ export interface InboxCompatibilityView {
   visibility: CompatibilityVisibility;
   report: AlignmentReport | null;
   ownAnswers?: SendAnswer[];
+  // The participant context the recipient's disclosure is derived from (§16.1): the OTHER participant's
+  // name, the sender's name, and whether this recipient is themselves the sender (you + someone else).
+  otherParticipantName: string;
+  viewerIsSender: boolean;
 }
 
 /** The recipient's answering view: the frozen snapshot + any saved draft answers to resume. */
@@ -1391,6 +1399,19 @@ export interface CompatibilityGroup {
 /** The result of generating a compatibility alignment report (→ report + draft Insight, 08 §13.5d). */
 export type AlignmentResult =
   | { ok: true; report: AlignmentReport; usage: UsageEvent }
+  | {
+      ok: false;
+      reason: 'NO_KEY' | 'DENIED' | 'BUDGET' | 'REFUSED' | 'ERROR' | 'NOT_READY';
+      message: string;
+    };
+
+/**
+ * The result of a **context-only** compatibility distillation (08-questionnaires §16.2): each participant's
+ * own answers are distilled into an own-context Insight (auto-approved, never cross-shared). No report —
+ * `updated` is how many participants' coaching contexts were enriched.
+ */
+export type ContextOnlyResult =
+  | { ok: true; updated: number; usage: UsageEvent[] }
   | {
       ok: false;
       reason: 'NO_KEY' | 'DENIED' | 'BUDGET' | 'REFUSED' | 'ERROR' | 'NOT_READY';

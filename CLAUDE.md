@@ -22,6 +22,11 @@ stores everything as plain files the user owns.
 - Treat all user content as **highly sensitive personal data**. It never leaves the device except
   in explicit Claude API calls the user has consented to. The API key lives **only** in the
   Electron main process and is never logged, committed, or exposed to the renderer.
+- **Never tell users an owner/admin can see their data.** No user-facing copy — to answerers/recipients
+  **or** to authors — may state that a household owner or administrator can access someone's answers/content
+  (durable product rule, 2026-06-15: the questionnaire `discloseAdminAccess` setting + admin-access
+  disclosure line were removed for this reason). The owner's full-access reality (RBAC at the app layer) is
+  real, but we do not surface it as a disclosure that could make people feel surveilled.
 
 ---
 
@@ -145,6 +150,10 @@ A slice is **not** done until **all** of these pass:
 - [ ] **`/gallery` updated** when a design-system primitive is added or changed (it must showcase all of them)
 - [ ] **Admin-only UI is marked** — any control/section visible only to an Owner / super-admin carries a
       consistent "admin only" indicator (see §12)
+- [ ] **The Questionnaires E2E matrix is extended** — any **new questionnaire option** (answer type,
+      questionnaire type, sensitivity tier, privacy/visibility mode, delivery channel, capability gate, …) must
+      add an end-to-end case to the standing §16.7 matrix in `08-questionnaires.md` (the regression suite a
+      whole-feature mismatch once slipped past). Not "happy path only" — decrypt the vault to assert data.
 - [ ] **Conventional Commit** on a feature branch
 
 The `quality-gate` skill runs the automatable subset. The git hooks
@@ -278,6 +287,38 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-15 — Build (**Questionnaires audit fixes — SPEC 08 §16 slices 1–3 + 5 BUILT** on
+  `feat/questionnaire-audit-fixes` **in an isolated git worktree**, NOT merged; **slice 4 paused**). The audit
+  (memory `questionnaire-audit-fixes-2026-06-15`) found real bugs + the user's enhancements. **§16 marked
+  Approved.** Built: **(1, §16.1) compat participant model** — compatibility now supports **you + someone else**
+  (the sender IS a participant — the default; pickers exclude the sender) AND **two other people**; the only
+  invalid pairing is the same person twice (the old "sender can't be a participant" rejection is gone).
+  `compatibilityDisclosure` reworked to take participant context (`otherParticipantName`/`senderName`/
+  `viewerIsSender`) and name the **real other participant**, never the sender-as-third-party (it's shown to
+  recipients — honesty guard held); the send panel got a full-width-`Select` mode toggle (§12 — NOT a scrolling
+  SegmentedControl), sender pre-selected + locked. **(2, §16.2) `contextOnly` visibility** — a 4th mode: both
+  answer, **NO report, no raw sharing**; each participant's OWN answers distill into an **auto-approved,
+  own-context-only Insight** (subject = that participant, `shareable:false`) feeding their own coach;
+  **sender-triggered from Results** ("Update both coaches", explicit spend §3.4). `distillContextOnly`
+  pre-validates both submitted **before any spend** (code-reviewer fix). **(3, §16.3/§16.4) Save→Send + Title**
+  — the builder's **Save now keeps you on the saved questionnaire** (no close); **Send appears only once saved**
+  (create → then send, no strand); **Title moved below "Draft with AI"**; AI generation returns a `{title,
+questions}` object and the title **fills only when the field is empty** (never clobbers). **(5, §16.7) the E2E
+  matrix** for the built features — contextOnly with a **vault-decrypt** assertion (per-participant own-context
+  insights, no report, no cross-exposure), you+someone-else send-panel toggle, AI-title + Save→Send two-step;
+  **fixed every existing questionnaire E2E** for the new flow (Create→"Create draft"; Send-after-Save; footer
+  "Done"→"Close" to disambiguate from the send-panel "Done"). **Decisions (asked):** contextOnly = auto-approve
+  into each own context + sender-triggers-from-Results; **slice 4 PAUSED** (user chose) until the concurrent
+  `feat/intimacy-questions` work merges (it rewrites `intakeCatalog.ts`, which §16.5a must extract `INTIMACY_TOPICS`
+  from). Gate green each slice: typecheck (node + web/DOM-lib), lint, format, **385 core + 8 relay + 474 desktop**
+  unit, **65 E2E**; code-reviewer per slice (slice-1 ship +3 nits, slice-2 fix-first [pre-validation + disclosure
+  copy], slice-3 ship). Visual QA via the web preview (compat mode toggle, contextOnly builder option,
+  Title-below-AI, Save→Send) — 0 overflow. **Lesson 1: a concurrent agent sharing the working tree can hijack the
+  single HEAD (it switched to `feat/intimacy-questions` mid-session) — do feature work in a `git worktree` and
+  commit only your files there; when a shared file (`schemas.ts`) holds both sides' hunks, stage your hunk with a
+  `git apply --cached` patch. Lesson 2: a Playwright `click` on a button that flips to a busy state ("Drafting…")
+  hangs the default post-click wait 30s — use `{noWaitAfter:true}`; and a generated questionnaire with a still-
+  blank Question 1 leaves `canSave` false, so "Create draft" stays disabled and the next click hangs.**
 - 2026-06-15 — Build (**onboarding intake redesign — hybrid form/chat + self-maintaining profile; SPEC 18
   §14–§15 BUILT** on `feat/onboarding-redesign`, NOT merged). User: the all-chat intake is slow for simple
   facts, the open prompts are too generic (people abandon), the intimacy question gets skipped — and "the more

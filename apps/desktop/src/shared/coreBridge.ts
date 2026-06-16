@@ -44,6 +44,7 @@ import {
   type CompatibilityMember,
   type CompatibilitySendResult,
   type CompatibilityVisibility,
+  type ContextOnlyResult,
   type InboxAssignmentDetail,
   type InboxCompatibilityView,
   type InboxItem,
@@ -170,6 +171,7 @@ import {
   declineAssignment,
   deleteQuestionnaireImage,
   deleteSend,
+  distillContextOnly,
   formatAnswerForDisplay,
   formatResponseAnswers,
   generateAlignment,
@@ -521,8 +523,10 @@ const DeclineSchema = z.object({
 });
 const CompatibilityCreateSchema = z.object({
   questionnaireId: z.string().min(1),
-  recipientPersonIdA: z.string().min(1),
-  recipientPersonIdB: z.string().min(1),
+  // The two participants (§16.1) — either may be the sender ("you + someone else"); the only invalid
+  // case is the same person twice.
+  participantPersonIdA: z.string().min(1),
+  participantPersonIdB: z.string().min(1),
 });
 const GroupIdSchema = z.string().min(1);
 
@@ -1508,9 +1512,25 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           visibility === 'eachSeesOwn' && submitted
             ? formatResponseAnswers(snapshot.questions, submitted.answers)
             : undefined;
+        // The participant context for the disclosure (§16.1): this recipient is one participant; find the
+        // OTHER member of the group and whether this recipient is themselves the sender.
+        const group = (await listAssignments(fs, key)).filter(
+          (a) => a.compatibilityGroupId === assignment.compatibilityGroupId,
+        );
+        const other = group.find((a) => a.id !== assignment.id);
+        const otherParticipantName =
+          other && other.recipient.kind === 'person'
+            ? ((await getPerson(fs, key, other.recipient.personId))?.displayName ??
+              'the other person')
+            : 'the other person';
+        const viewerIsSender =
+          assignment.recipient.kind === 'person' &&
+          assignment.recipient.personId === assignment.senderPersonId;
         compatibility = {
           visibility,
           report,
+          otherParticipantName,
+          viewerIsSender,
           ...(ownAnswers ? { ownAnswers } : {}),
         };
       }
@@ -1655,17 +1675,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     assignmentsCreateCompatibility: async (input): Promise<CompatibilitySendResult> => {
       const deps = await aiDeps('questionnaires.create');
       if (!deps) return { ok: false, reason: 'DENIED', message: 'Not available.' };
-      const { questionnaireId, recipientPersonIdA, recipientPersonIdB } =
+      const { questionnaireId, participantPersonIdA, participantPersonIdB } =
         CompatibilityCreateSchema.parse(input);
-      if (recipientPersonIdA === recipientPersonIdB) {
+      // §16.1: a participant may be the sender ("you + someone else") or another person; the only invalid
+      // case is the same person picked twice.
+      if (participantPersonIdA === participantPersonIdB) {
         return { ok: false, reason: 'INVALID', message: 'Choose two different people.' };
-      }
-      if (recipientPersonIdA === deps.personId || recipientPersonIdB === deps.personId) {
-        return {
-          ok: false,
-          reason: 'INVALID',
-          message: 'Send a compatibility check to two other people.',
-        };
       }
       const canonical = await getQuestionnaire(deps.fs, deps.key, questionnaireId);
       if (!canonical?.compatibility?.enabled) {
@@ -1675,25 +1690,35 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           message: 'This isn’t a compatibility questionnaire.',
         };
       }
-      const recipients = [recipientPersonIdA, recipientPersonIdB];
-      const people = await Promise.all(recipients.map((id) => getPerson(deps.fs, deps.key, id)));
+      const participants = [participantPersonIdA, participantPersonIdB];
+      const people = await Promise.all(participants.map((id) => getPerson(deps.fs, deps.key, id)));
       if (people.some((p) => !p)) {
-        return { ok: false, reason: 'INVALID', message: 'A chosen recipient no longer exists.' };
+        return { ok: false, reason: 'INVALID', message: 'A chosen person no longer exists.' };
       }
-      // Personalize a variant per recipient (target = shareable facts only — the §13.3 boundary).
+      // Personalize a variant per participant. For another person the target context is **shareable facts
+      // only** (the §13.3 boundary); when the participant IS the sender, use their own full context (their
+      // own data, no privacy concern) so their variant reads naturally.
       const variants: { personId: string; questions: Question[] }[] = [];
-      for (let i = 0; i < recipients.length; i++) {
-        const recipientId = recipients[i] as string;
+      for (let i = 0; i < participants.length; i++) {
+        const participantId = participants[i] as string;
+        const isSender = participantId === deps.personId;
         const result = await generateVariant(deps, {
           forName: people[i]?.displayName ?? 'them',
           questions: canonical.questions,
-          targetContext: {
-            authorPersonId: deps.personId,
-            includeAuthor: false,
-            targetPersonId: recipientId,
-            includeTarget: true,
-            includeRelationship: true,
-          },
+          targetContext: isSender
+            ? {
+                authorPersonId: deps.personId,
+                includeAuthor: true,
+                includeTarget: false,
+                includeRelationship: false,
+              }
+            : {
+                authorPersonId: deps.personId,
+                includeAuthor: false,
+                targetPersonId: participantId,
+                includeTarget: true,
+                includeRelationship: true,
+              },
         });
         if (!result.ok || !result.questions) {
           return {
@@ -1702,7 +1727,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
             message: result.message ?? 'Could not personalize.',
           };
         }
-        variants.push({ personId: recipientId, questions: result.questions });
+        variants.push({ personId: participantId, questions: result.questions });
       }
       const [a, b] = variants;
       if (!a || !b) return { ok: false, reason: 'ERROR', message: 'Could not personalize.' };
@@ -1726,8 +1751,11 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const sends = (await listAssignments(ctx.fs, ctx.key, { senderPersonId: personId })).filter(
         (a) => a.questionnaireId === qid && a.compatibilityGroupId,
       );
+      // "Processed" groups: a report Insight (subject = sender) for the report modes, OR the per-participant
+      // context Insights for a `contextOnly` group (subject = each participant) — so scan ALL insights for
+      // the group id, not just the sender's (§16.2). These are the sender's own groups, so no privacy gap.
       const insightGroups = new Set(
-        (await listInsightsForPerson(ctx.fs, ctx.key, personId)).flatMap((i) =>
+        (await listAllInsights(ctx.fs, ctx.key)).flatMap((i) =>
           i.provenance.compatibilityGroupId ? [i.provenance.compatibilityGroupId] : [],
         ),
       );
@@ -1774,7 +1802,29 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (group.length === 0 || group.some((a) => a.senderPersonId !== deps.personId)) {
         return { ok: false, reason: 'DENIED', message: 'Not available.' };
       }
+      // A contextOnly group produces NO report — it's distilled per-participant via the dedicated path.
+      const first = group[0];
+      const snapshot = first ? await getAssignmentSnapshot(deps.fs, deps.key, first.id) : null;
+      if (snapshot?.compatibility?.visibility === 'contextOnly') {
+        return { ok: false, reason: 'DENIED', message: 'This is a context-only send.' };
+      }
       return generateAlignment(deps, { compatibilityGroupId: groupId });
+    },
+    assignmentsDistillContextOnly: async (compatibilityGroupId): Promise<ContextOnlyResult> => {
+      const deps = await aiDeps('questionnaires.viewResults');
+      if (!deps) return { ok: false, reason: 'DENIED', message: 'Not available.' };
+      const groupId = GroupIdSchema.parse(compatibilityGroupId);
+      // Sender-scoped: only the sender of the group may run the distillation (they pay for it).
+      const group = await getCompatibilityGroup(deps.fs, deps.key, groupId);
+      if (group.length === 0 || group.some((a) => a.senderPersonId !== deps.personId)) {
+        return { ok: false, reason: 'DENIED', message: 'Not available.' };
+      }
+      const first = group[0];
+      const snapshot = first ? await getAssignmentSnapshot(deps.fs, deps.key, first.id) : null;
+      if (snapshot?.compatibility?.visibility !== 'contextOnly') {
+        return { ok: false, reason: 'DENIED', message: 'This isn’t a context-only send.' };
+      }
+      return distillContextOnly(deps, { compatibilityGroupId: groupId });
     },
     assignmentsRevealRaw: async (assignmentId): Promise<SendAnswer[] | null> => {
       const ctx = await host.vaultAndKey();
@@ -1819,11 +1869,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const senderName = sender?.displayName ?? 'Someone';
       const privacy = parsed.privacy ?? 'private';
       const senderVisible = parsed.senderVisibleToRecipient ?? true;
-      const settings = await readVaultSettingsValues(ctx.fs);
       const disclosure = externalSendDisclosure(
         senderVisible ? senderName : 'the person who sent this',
         privacy,
-        { discloseAdminAccess: settings['questionnaires.discloseAdminAccess'] === true },
       );
       const client = createRelayHttpClient(
         config.endpointUrl,

@@ -11,18 +11,20 @@ import { assignmentPath, snapshotPath } from './paths';
 import { getQuestionnaire, validateQuestionnaire } from './questionnaireService';
 
 /**
- * Compatibility dual-send (08-questionnaires §3.6/§13.5d). A compatibility questionnaire goes to TWO
- * household people at once; the AI has already personalized a **variant** per recipient (same answer types
+ * Compatibility dual-send (08-questionnaires §3.6/§13.5d/§16.1). A compatibility questionnaire compares
+ * **two participants** — which may be the **sender + someone else** (the couples case, the default) or
+ * **two other people**. The AI has already personalized a **variant** per participant (same answer types
  * + `canonicalId`, so the answers stay aligned). This service freezes each variant as its own immutable
- * snapshot and creates the two paired Assignments, linked by a shared `compatibilityGroupId`.
+ * snapshot and creates the two paired Assignments, linked by a shared `compatibilityGroupId`. When a
+ * participant is the sender, that assignment's recipient IS the sender (they answer their own variant).
  *
- * Both sends are **Private**: the sender never sees raw answers inline (the alignment report is the
- * deliverable). `senderSeesAll` additionally unlocks a raw-answer reveal (§8.4) — gated by
- * `questionnaires.readRaw` (or the Owner) in the bridge, not here; no audit log.
+ * Both sends are **Private**: raw answers are never shown inline (the alignment report is the deliverable).
+ * `senderSeesAll` additionally unlocks a raw-answer reveal (§8.4) — gated by `questionnaires.readRaw` (or
+ * the Owner) in the bridge, not here; no audit log.
  */
 
 export interface CompatibilityRecipient {
-  personId: string;
+  personId: string; // a participant — may be the sender themselves (§16.1)
   questions: Question[]; // the personalized variant (aligned to the canonical questions by canonicalId)
 }
 

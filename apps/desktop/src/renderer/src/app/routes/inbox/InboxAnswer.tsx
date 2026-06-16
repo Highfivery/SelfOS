@@ -1,10 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Lock } from 'lucide-react';
-import {
-  ADMIN_ACCESS_DISCLOSURE,
-  compatibilityDisclosure,
-  unansweredRequired,
-} from '@selfos/core/questionnaires';
+import { compatibilityDisclosure, unansweredRequired } from '@selfos/core/questionnaires';
 import type { AnswerMap, AnswerValue } from '@selfos/core/questionnaires';
 import type { Answer, InboxAssignmentDetail } from '@shared/channels';
 import type { InboxCompatibilityView, Question } from '@shared/schemas';
@@ -18,7 +14,6 @@ import {
   Textarea,
 } from '../../../design-system/components';
 import { useInboxStore } from '../../../stores/inboxStore';
-import { useSetting } from '../../../settings/useSetting';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { QuestionnaireForm } from '@selfos/answering';
 import { AlignmentReportView, AnswerList } from '../questionnaires/AlignmentReportView';
@@ -58,8 +53,6 @@ export function InboxAnswer({
   const saveProgress = useInboxStore((s) => s.saveProgress);
   const submit = useInboxStore((s) => s.submit);
   const decline = useInboxStore((s) => s.decline);
-  // Whether recipients are told an admin could break-glass access answers (admin-only setting, §8.4).
-  const [discloseAdminAccess] = useSetting('questionnaires.discloseAdminAccess');
 
   const [detail, setDetail] = useState<InboxAssignmentDetail | null>(null);
   const [missing, setMissing] = useState(false);
@@ -111,13 +104,15 @@ export function InboxAnswer({
   // appended only when the (admin-only) disclosure setting is on and an admin could ever reach the answers.
   const disclosure = ((): string => {
     if (detail.compatibility)
-      return compatibilityDisclosure(detail.compatibility.visibility, asker);
+      return compatibilityDisclosure(detail.compatibility.visibility, {
+        otherParticipantName: detail.compatibility.otherParticipantName,
+        senderName: asker,
+        viewerIsSender: detail.compatibility.viewerIsSender,
+      });
     return detail.privacy === 'private'
       ? 'Your answers personalize their coaching. They won’t see your individual responses — though your numeric ratings may appear in their trends over time.'
       : 'They’ll see your answers.';
   })();
-  const showsAdminAccess =
-    discloseAdminAccess === true && (detail.privacy === 'private' || Boolean(detail.compatibility));
 
   const onChange = (id: string, value: AnswerValue): void => {
     setSaved(false);
@@ -209,7 +204,6 @@ export function InboxAnswer({
               <Lock size={12} aria-hidden="true" className={styles.privacyIcon} />
             ) : null}
             {disclosure}
-            {showsAdminAccess ? ` ${ADMIN_ACCESS_DISCLOSURE}` : ''}
           </span>
         </div>
       </Stack>
@@ -280,7 +274,18 @@ function JointReport({
   compatibility: InboxCompatibilityView;
   asker: string;
 }): JSX.Element {
-  const { report, ownAnswers } = compatibility;
+  const { report, ownAnswers, visibility } = compatibility;
+  // Context-only sends never produce a report — the answers just inform each person's own coach (§16.2).
+  if (visibility === 'contextOnly') {
+    return (
+      <Card>
+        <Text tone="secondary">
+          Thanks — there’s no report for this one. Your answers just help your own coach understand
+          you a little better.
+        </Text>
+      </Card>
+    );
+  }
   return (
     <Stack gap={3}>
       {ownAnswers && ownAnswers.length > 0 ? (

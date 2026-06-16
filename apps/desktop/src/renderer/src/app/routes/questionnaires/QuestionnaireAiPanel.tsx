@@ -29,12 +29,15 @@ export function QuestionnaireAiPanel({
   sensitivity,
   existingPrompts,
   onGenerated,
+  onTitle,
 }: {
   aiReady: boolean;
   type: string;
   sensitivity: SensitivityTier;
   existingPrompts: string[];
   onGenerated: (questions: Question[]) => void;
+  // A short AI-suggested title (08 §16.4); the builder applies it only when the title is still empty.
+  onTitle?: (title: string) => void;
 }): JSX.Element {
   const navigate = useNavigate();
   const generate = useQuestionnaireStore((s) => s.generate);
@@ -83,6 +86,7 @@ export function QuestionnaireAiPanel({
       });
       if (result.ok && result.questions && result.questions.length > 0) {
         onGenerated(result.questions);
+        if (result.title) onTitle?.(result.title);
         setNotice({
           tone: 'info',
           text: `Added ${result.questions.length} draft question${

@@ -73,7 +73,8 @@ const SENSITIVITY_NOTES: Partial<Record<SensitivityTier, string>> = {
 /**
  * Compatibility visibility options (08 §3.6/§15.3) — author-facing labels + help, in plain language (no
  * "break-glass"/"audited" jargon). `senderSeesAll` needs `questionnaires.readRaw` to pick; when chosen, a
- * plain note that you (and the household owner) can read their raw answers is shown (§8.4).
+ * plain note that the sender can read their raw answers is shown. We never surface owner/admin visibility
+ * to users (a durable product rule), so this copy mentions only the sender.
  */
 const VISIBILITY_OPTIONS: { value: CompatibilityVisibility; label: string; help: string }[] = [
   {
@@ -91,12 +92,16 @@ const VISIBILITY_OPTIONS: { value: CompatibilityVisibility; label: string; help:
     label: 'You see their answers',
     help: 'You’ll see their individual answers and you both get the combined report. They’re clearly told their answers are shared with you.',
   },
+  {
+    value: 'contextOnly',
+    label: 'No report — just inform each coach',
+    help: 'No report and no one sees the answers. Each person’s answers quietly help their own coach understand them better. The most private option.',
+  },
 ];
 
-/** Plain, honest note shown when `senderSeesAll` is selected — you (and a household owner) can read the
- * recipient's raw answers, so recipients should be told (the §15.3 disclosure copy). */
-const SENDER_SEES_ALL_RECORD_NOTE =
-  'You’ll be able to read their raw answers (a household owner can too) — let them know.';
+/** Plain note shown when `senderSeesAll` is selected — the sender can read the recipient's raw answers,
+ * so recipients should be told. Never mentions owner/admin visibility (durable product rule). */
+const SENDER_SEES_ALL_RECORD_NOTE = 'You’ll be able to read their raw answers — let them know.';
 
 const TYPE_OPTIONS: { value: AnswerType; label: string }[] = [
   { value: 'shortText', label: 'Short text' },
@@ -357,11 +362,17 @@ export function QuestionnaireBuilder({
   // Inline delete confirmation (the app is modal-free), so a destructive purge is never one mis-tap away.
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
+  // The persisted version (08 §16.3): the prop when editing, or null for a brand-new draft. Save creates/
+  // updates it and KEEPS us here (no close); Send is only offered once it's saved. So the flow reads
+  // create → then send, with no strand.
+  const [saved, setSaved] = useState<Questionnaire | null>(questionnaire);
+  const [justSaved, setJustSaved] = useState(false);
+
   // Edit ⇄ Preview ⇄ Results. Preview renders the live drafts as the recipient sees them; Results (only
   // for a saved questionnaire, and only with viewResults) shows its sends + per-send outcome.
   const [mode, setMode] = useState<BuilderMode>('edit');
   const canViewResults = useSessionStore((s) => s.can('questionnaires.viewResults'));
-  const showResults = questionnaire !== null && canViewResults;
+  const showResults = saved !== null && canViewResults;
   const previewQuestions = drafts
     .filter((d) => d.prompt.trim() !== '')
     .map((d) => toQuestion(d, drafts));
@@ -374,6 +385,7 @@ export function QuestionnaireBuilder({
 
   const patch = (id: string, change: Partial<QDraft>): void => {
     setProblems(null);
+    setJustSaved(false);
     setDrafts((ds) => ds.map((d) => (d.id === id ? { ...d, ...change } : d)));
   };
 
@@ -445,7 +457,7 @@ export function QuestionnaireBuilder({
   };
 
   const input = (): QuestionnaireInput => ({
-    ...(questionnaire ? { id: questionnaire.id } : {}),
+    ...(saved ? { id: saved.id } : {}),
     title: title.trim(),
     type,
     sensitivity: effectiveSensitivity,
@@ -458,12 +470,18 @@ export function QuestionnaireBuilder({
     ...(compatEnabled ? { compatibility: { enabled: true as const, visibility } } : {}),
   });
 
+  // Save creates/updates the draft and KEEPS us on the saved questionnaire (no close), so Send is then a
+  // distinct next step (08 §16.3). A new draft becomes the persisted `saved` version on success.
   const onSave = async (): Promise<void> => {
     if (!canSave) return;
     setBusy(true);
     try {
-      await save(input());
-      onDone();
+      const result = await save(input());
+      if (result) {
+        setSaved(result);
+        setJustSaved(true);
+        setProblems(null);
+      }
     } finally {
       setBusy(false);
     }
@@ -487,11 +505,13 @@ export function QuestionnaireBuilder({
   };
 
   const onCheck = async (): Promise<void> => {
+    setJustSaved(false);
     setProblems(await computeProblems());
   };
 
   // Send: a complete questionnaire must be saved (so the snapshot matches what's on screen) before the
-  // send panel can freeze it. We validate, save, then reveal the recipient/privacy picker.
+  // send panel can freeze it. We validate, save (any unsaved edits), then reveal the recipient/privacy
+  // picker (08 §16.3 — sending still saves first).
   const onOpenSend = async (): Promise<void> => {
     const found = await computeProblems();
     if (found.length > 0) {
@@ -500,23 +520,25 @@ export function QuestionnaireBuilder({
     }
     setBusy(true);
     try {
-      const saved = await save(input());
-      if (!saved) {
+      const result = await save(input());
+      if (!result) {
         setProblems(['Could not save this questionnaire before sending.']);
         return;
       }
+      setSaved(result);
+      setJustSaved(false);
       setProblems(null);
-      setSendId(saved.id);
+      setSendId(result.id);
     } finally {
       setBusy(false);
     }
   };
 
   const onRemove = async (): Promise<void> => {
-    if (!questionnaire) return;
+    if (!saved) return;
     setBusy(true);
     try {
-      await remove(questionnaire.id);
+      await remove(saved.id);
       onDone();
     } catch {
       // `questionnairesDelete` throws when you may not delete this one (not your questionnaire, or it
@@ -533,7 +555,7 @@ export function QuestionnaireBuilder({
   return (
     <Stack gap={4}>
       <div className={styles.builderHeader}>
-        <Heading level={3}>{questionnaire ? 'Edit questionnaire' : 'New questionnaire'}</Heading>
+        <Heading level={3}>{saved ? 'Edit questionnaire' : 'New questionnaire'}</Heading>
         <SegmentedControl<BuilderMode>
           aria-label="Builder mode"
           value={mode}
@@ -546,10 +568,10 @@ export function QuestionnaireBuilder({
         />
       </div>
 
-      {mode === 'results' && questionnaire ? (
+      {mode === 'results' && saved ? (
         <QuestionnaireResults
-          questionnaireId={questionnaire.id}
-          compatibility={questionnaire.compatibility ?? null}
+          questionnaireId={saved.id}
+          compatibility={saved.compatibility ?? null}
         />
       ) : mode === 'preview' ? (
         <QuestionnairePreview questions={previewQuestions} />
@@ -557,20 +579,6 @@ export function QuestionnaireBuilder({
         <>
           <Card>
             <Stack gap={4}>
-              <Field label="Title">
-                {(props) => (
-                  <TextInput
-                    {...props}
-                    value={title}
-                    placeholder="e.g. Weekly check-in"
-                    onChange={(event) => {
-                      setProblems(null);
-                      setTitle(event.target.value);
-                    }}
-                  />
-                )}
-              </Field>
-
               <div className={styles.metaRow} data-cols={sensitivityConfig ? 'two' : 'one'}>
                 <Field label="Type">
                   {(props) => (
@@ -749,7 +757,33 @@ export function QuestionnaireBuilder({
             sensitivity={effectiveSensitivity}
             existingPrompts={drafts.map((d) => d.prompt.trim()).filter(Boolean)}
             onGenerated={appendGenerated}
+            // Apply the AI-suggested title only when the author hasn't typed one (08 §16.4).
+            onTitle={(t) => {
+              if (title.trim() === '') {
+                setJustSaved(false);
+                setTitle(t);
+              }
+            }}
           />
+
+          {/* Title sits below "Draft with AI" + above the first question (08 §16.4), so a quick AI draft
+              can name it, and a hand-author sets it right before the questions. */}
+          <Card>
+            <Field label="Title">
+              {(props) => (
+                <TextInput
+                  {...props}
+                  value={title}
+                  placeholder="e.g. Weekly check-in"
+                  onChange={(event) => {
+                    setProblems(null);
+                    setJustSaved(false);
+                    setTitle(event.target.value);
+                  }}
+                />
+              )}
+            </Field>
+          </Card>
 
           <div className={styles.questions}>
             {drafts.map((d, index) => {
@@ -1132,6 +1166,8 @@ export function QuestionnaireBuilder({
                 ? 'Looks good — this questionnaire is ready to send.'
                 : problems.join(' ')}
             </Banner>
+          ) : justSaved ? (
+            <Banner tone="info">Saved. You can send it now, or keep editing.</Banner>
           ) : null}
 
           <div className={styles.footer}>
@@ -1140,16 +1176,20 @@ export function QuestionnaireBuilder({
             </Button>
             <div className={styles.footerActions}>
               <Button variant="primary" onClick={() => void onSave()} disabled={!canSave}>
-                {questionnaire ? 'Save' : 'Create'}
+                {saved ? 'Save' : 'Create draft'}
               </Button>
-              <Button variant="secondary" onClick={() => void onOpenSend()} disabled={!canSave}>
-                <Send size={16} aria-hidden="true" />
-                Send
-              </Button>
+              {/* Send is a distinct step on a SAVED questionnaire (08 §16.3), not a co-equal of Save on a
+                  brand-new draft — so it only appears once there's something saved to send. */}
+              {saved ? (
+                <Button variant="primary" onClick={() => void onOpenSend()} disabled={!canSave}>
+                  <Send size={16} aria-hidden="true" />
+                  Send
+                </Button>
+              ) : null}
               <Button variant="secondary" onClick={onDone} disabled={busy}>
-                Cancel
+                {saved ? 'Close' : 'Cancel'}
               </Button>
-              {questionnaire ? (
+              {saved ? (
                 <IconButton
                   aria-label="Delete questionnaire"
                   variant="secondary"

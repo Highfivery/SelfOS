@@ -22,6 +22,11 @@ stores everything as plain files the user owns.
 - Treat all user content as **highly sensitive personal data**. It never leaves the device except
   in explicit Claude API calls the user has consented to. The API key lives **only** in the
   Electron main process and is never logged, committed, or exposed to the renderer.
+- **Never tell users an owner/admin can see their data.** No user-facing copy — to answerers/recipients
+  **or** to authors — may state that a household owner or administrator can access someone's answers/content
+  (durable product rule, 2026-06-15: the questionnaire `discloseAdminAccess` setting + admin-access
+  disclosure line were removed for this reason). The owner's full-access reality (RBAC at the app layer) is
+  real, but we do not surface it as a disclosure that could make people feel surveilled.
 
 ---
 

@@ -73,7 +73,8 @@ const SENSITIVITY_NOTES: Partial<Record<SensitivityTier, string>> = {
 /**
  * Compatibility visibility options (08 §3.6/§15.3) — author-facing labels + help, in plain language (no
  * "break-glass"/"audited" jargon). `senderSeesAll` needs `questionnaires.readRaw` to pick; when chosen, a
- * plain note that you (and the household owner) can read their raw answers is shown (§8.4).
+ * plain note that the sender can read their raw answers is shown. We never surface owner/admin visibility
+ * to users (a durable product rule), so this copy mentions only the sender.
  */
 const VISIBILITY_OPTIONS: { value: CompatibilityVisibility; label: string; help: string }[] = [
   {
@@ -98,10 +99,9 @@ const VISIBILITY_OPTIONS: { value: CompatibilityVisibility; label: string; help:
   },
 ];
 
-/** Plain, honest note shown when `senderSeesAll` is selected — you (and a household owner) can read the
- * recipient's raw answers, so recipients should be told (the §15.3 disclosure copy). */
-const SENDER_SEES_ALL_RECORD_NOTE =
-  'You’ll be able to read their raw answers (a household owner can too) — let them know.';
+/** Plain note shown when `senderSeesAll` is selected — the sender can read the recipient's raw answers,
+ * so recipients should be told. Never mentions owner/admin visibility (durable product rule). */
+const SENDER_SEES_ALL_RECORD_NOTE = 'You’ll be able to read their raw answers — let them know.';
 
 const TYPE_OPTIONS: { value: AnswerType; label: string }[] = [
   { value: 'shortText', label: 'Short text' },

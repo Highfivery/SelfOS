@@ -27,7 +27,7 @@ import styles from './Questionnaires.module.css';
 /** The honest disclosure mirrors the relay page; the recipient sees the derived text there too (§3.2/§8.4). */
 const PRIVACY_COPY: Record<PrivacyMode, string> = {
   private:
-    'Private (break-glass): you won’t see their written answers — just the insight drawn from them. Numeric ratings may appear in your trends over time.',
+    'Private: you won’t see their written answers — just the insight drawn from them. Numeric ratings may appear in your trends over time.',
   standard: 'Standard: you’ll see their answers.',
 };
 

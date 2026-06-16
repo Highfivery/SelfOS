@@ -1869,11 +1869,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const senderName = sender?.displayName ?? 'Someone';
       const privacy = parsed.privacy ?? 'private';
       const senderVisible = parsed.senderVisibleToRecipient ?? true;
-      const settings = await readVaultSettingsValues(ctx.fs);
       const disclosure = externalSendDisclosure(
         senderVisible ? senderName : 'the person who sent this',
         privacy,
-        { discloseAdminAccess: settings['questionnaires.discloseAdminAccess'] === true },
       );
       const client = createRelayHttpClient(
         config.endpointUrl,

@@ -322,6 +322,35 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-16 — Fix + feedback (**People editor: actually REMOVE the duplicated profile questions** — user was
+  angry the About tab still showed all the fields after the prior "slim" pass; spec 18 §14.6, on
+  `feat/people-editor-cleanup`, NOT merged). The prior slice made onboarding _cover_ the People fields but left
+  them sitting in the People → About tab — the user (correctly) called that out as not the cleanup they asked
+  for. **Asked first** (2 forks — the genuine ambiguity is **contacts**: the People editor edits both Subjects
+  [who onboard] and non-Subject contacts [who never do, so the fields are their only input]): user chose **(1)**
+  "Remove it, keep dream-image fields for contacts" + **(2)** "dreams use onboarding data now." Result:
+  - a **Subject** has **NO About tab** (and Profile loses Pronouns + Birthday) — a note says their profile comes
+    from onboarding;
+  - a **non-Subject contact** keeps an About tab with **only** the visual/dream-image fields (gender, appearance,
+    ethnicity) + Notes; occupation/relationship status/children/living situation/interests/location/important
+    dates/pronouns/birthday + the deep self fields are gone.
+    The `about` tab is conditionally absent (`!isSubject`); a `useEffect` falls back to Profile if a person is
+    flipped to Subject while About is open. **Data-safety:** `save()` **carries every non-edited field through from
+    the loaded person** (incl. now-also email/phone) since `upsertPerson` rebuilds from the input — removing the UI
+    never wipes onboarding-collected data; `VISIBLE_FIELD_KEYS` (bulk Share/Lock scope) narrowed to
+    gender/appearanceDescription/ethnicity/notes so hidden fields keep their lock state. Deleted the
+    `ImportantDatesEditor` + its CSS; dropped now-unused imports. Gate green: typecheck (node + web/DOM-lib), lint,
+    format, **498 desktop** unit (reworked the 5 People About RTL tests: Subject hides About + carries fields
+    through; contact keeps only the 3 visual fields, the rest absent; single-lock + Lock-all + Share-all on the
+    reduced visible set), **69 E2E** (the People + shareability tests now use a contact for the About tab and the
+    3 visual fields; the responsive sweep checks a Subject's Notes tab since About is gone). **Visual QA in the web
+    preview** (People needs no AI, unlike onboarding): a Subject shows Profile·Notes·Relationships·Access (no
+    About) + the onboarding note; a contact's About shows only Gender/Appearance/Ethnicity + Share-all/Lock-all,
+    no console errors. **Lesson: "clean up the People page" meant REMOVE the duplicated questions from the editor,
+    not make onboarding mirror them — when one surface "owns" data, the other should stop showing it; the only
+    nuance is a second audience (contacts) that has no other input, so gate the removal on the audience
+    (`isSubject`) and carry every removed field through on save so nothing is wiped.**
+
 - 2026-06-16 — Build (**Onboarding ↔ People-editor field reconciliation; spec 18 §14.4a/§14.6/§14.9** on
   `feat/onboarding-field-coverage`, off `main`, NOT merged). Made onboarding cover **every** People-editor About
   field (+ Pronouns/Birthday) so the self's profile has one home (onboarding), no gaps, no double-asks. Cross-ref

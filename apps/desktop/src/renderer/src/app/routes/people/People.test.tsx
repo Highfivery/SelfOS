@@ -56,7 +56,7 @@ describe('People', () => {
     expect(peopleSave.mock.calls[0]?.[0]).toMatchObject({ displayName: 'Sam', isSubject: false });
   });
 
-  it('saves the contact-context About fields and no longer surfaces the onboarding-owned ones (18 §14.6)', async () => {
+  it('keeps only the visual dream-image fields in a contact About tab; everything else is gone (18 §14.6)', async () => {
     const peopleSave = vi.fn((input: { displayName: string }) =>
       Promise.resolve({
         id: 'new',
@@ -71,36 +71,47 @@ describe('People', () => {
     installMockBridge({ peopleSave });
     render(<People />);
     await userEvent.click(screen.getByRole('button', { name: 'Add person' }));
-    await userEvent.type(screen.getByLabelText('Name'), 'Sam');
+    await userEvent.type(screen.getByLabelText('Name'), 'Sam'); // a contact (not a Subject) → About shows
     await userEvent.click(screen.getByRole('button', { name: 'About' }));
     await userEvent.selectOptions(screen.getByLabelText('Gender'), 'Non-binary');
     await userEvent.type(screen.getByLabelText('Appearance'), 'tall, curly hair');
-    await userEvent.type(screen.getByLabelText('Occupation'), 'nurse');
-    await userEvent.type(screen.getByLabelText('Relationship status'), 'Married');
-    // The deeply personal self-profile fields are now owned by onboarding — not editable here.
-    expect(screen.queryByLabelText('Health notes')).toBeNull();
-    expect(screen.queryByLabelText('Faith')).toBeNull();
-    expect(screen.queryByLabelText('Sexual orientation')).toBeNull();
-    expect(screen.queryByLabelText('Relationship style')).toBeNull();
-    expect(screen.queryByLabelText('Goals')).toBeNull();
-    expect(screen.queryByLabelText('Communication style')).toBeNull();
-    expect(screen.queryByLabelText('Values')).toBeNull();
-    expect(screen.queryByLabelText('Languages')).toBeNull();
+    await userEvent.type(screen.getByLabelText('Ethnicity'), 'Korean');
+    // Only the three visual fields remain — everything else (onboarding-owned or trimmed) is gone.
+    for (const label of [
+      'Occupation',
+      'Relationship status',
+      'Children',
+      'Living situation',
+      'Interests',
+      'Location',
+      'Important dates',
+      'Pronouns',
+      'Birthday',
+      'Health notes',
+      'Faith',
+      'Sexual orientation',
+      'Relationship style',
+      'Goals',
+      'Communication style',
+      'Values',
+      'Languages',
+    ]) {
+      expect(screen.queryByLabelText(label)).toBeNull();
+    }
     await userEvent.click(screen.getByRole('button', { name: 'Create' }));
     expect(peopleSave).toHaveBeenCalledWith(
       expect.objectContaining({
         gender: 'Non-binary',
         appearanceDescription: 'tall, curly hair',
-        occupation: 'nurse',
-        relationshipStatus: 'Married',
+        ethnicity: 'Korean',
       }),
     );
     const saved = peopleSave.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(saved).not.toHaveProperty('occupation');
     expect(saved).not.toHaveProperty('healthNotes');
-    expect(saved).not.toHaveProperty('sexualOrientation');
   });
 
-  it('carries the onboarding-owned self fields through unchanged on save (18 §14.6)', async () => {
+  it('hides the About tab for a Subject and carries their onboarding-owned fields through on save (18 §14.6)', async () => {
     const peopleSave = vi.fn((input: { displayName: string }) =>
       Promise.resolve({
         id: 'p1',
@@ -121,6 +132,7 @@ describe('People', () => {
       createdAt: 'now',
       updatedAt: 'now',
       occupation: 'nurse',
+      birthday: '1990-01-01',
       sexualOrientation: 'Bisexual',
       faith: 'Buddhist',
       goals: 'be present',
@@ -129,10 +141,13 @@ describe('People', () => {
     installMockBridge({ peopleList: () => Promise.resolve([person]), peopleSave });
     render(<People />);
     await userEvent.click(await screen.findByRole('button', { name: /Me/ }));
-    await userEvent.click(screen.getByRole('button', { name: 'About' }));
+    // A Subject's profile is owned by onboarding → no About tab at all.
+    expect(screen.queryByRole('button', { name: 'About' })).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(peopleSave).toHaveBeenCalledWith(
       expect.objectContaining({
+        occupation: 'nurse',
+        birthday: '1990-01-01',
         sexualOrientation: 'Bisexual',
         faith: 'Buddhist',
         goals: 'be present',
@@ -141,7 +156,7 @@ describe('People', () => {
     );
   });
 
-  it('locks a single field via its ShareToggle → persists privateFields (15 §4.1)', async () => {
+  it('locks a single visible field via its ShareToggle → persists privateFields (15 §4.1)', async () => {
     const peopleSave = vi.fn((input: { displayName: string }) =>
       Promise.resolve({
         id: 'new',
@@ -158,17 +173,17 @@ describe('People', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Add person' }));
     await userEvent.type(screen.getByLabelText('Name'), 'Sam');
     await userEvent.click(screen.getByRole('button', { name: 'About' }));
-    await userEvent.type(screen.getByLabelText('Occupation'), 'nurse');
+    await userEvent.type(screen.getByLabelText('Ethnicity'), 'Korean');
     // Each field defaults to shared; clicking its toggle locks it.
-    await userEvent.click(screen.getByRole('button', { name: /occupation: shared/i }));
+    await userEvent.click(screen.getByRole('button', { name: /ethnicity: shared/i }));
     await userEvent.click(screen.getByRole('button', { name: 'Create' }));
     expect(peopleSave.mock.calls[0]?.[0]).toMatchObject({
-      occupation: 'nurse',
-      privateFields: expect.arrayContaining(['occupation']),
+      ethnicity: 'Korean',
+      privateFields: expect.arrayContaining(['ethnicity']),
     });
   });
 
-  it('"Lock all" locks every VISIBLE field but never touches the hidden onboarding-owned ones', async () => {
+  it('"Lock all" locks every visible field but never touches the hidden carried-through ones', async () => {
     const peopleSave = vi.fn((input: { displayName: string }) =>
       Promise.resolve({
         id: 'new',
@@ -189,48 +204,49 @@ describe('People', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Create' }));
     const locked = (peopleSave.mock.calls[0]?.[0] as { privateFields?: string[] }).privateFields;
     expect(locked).toEqual(
-      expect.arrayContaining(['notes', 'occupation', 'gender', 'pronouns', 'relationshipStatus']),
+      expect.arrayContaining(['gender', 'appearanceDescription', 'ethnicity']),
     );
-    // The hidden, onboarding-owned fields have no toggle here → Lock all must not add them.
+    // Fields with no visible toggle here are never flipped by Lock all.
+    expect(locked).not.toContain('occupation');
     expect(locked).not.toContain('healthNotes');
     expect(locked).not.toContain('sexualOrientation');
   });
 
-  it('"Share all" preserves the lock on hidden onboarding-owned fields (no silent un-privatize)', async () => {
+  it('"Share all" preserves the lock on hidden carried-through fields (no silent un-privatize)', async () => {
     const peopleSave = vi.fn((input: { displayName: string }) =>
       Promise.resolve({
         id: 'p1',
         schemaVersion: 2,
         displayName: input.displayName,
-        isSubject: true,
+        isSubject: false,
         tags: [],
         createdAt: 'now',
         updatedAt: 'now',
       }),
     );
-    // A subject whose sexual orientation is locked (private) and occupation is locked too.
+    // A contact whose (carried-through) sexualOrientation is locked, plus a visible ethnicity lock.
     const person: Person = {
       id: 'p1',
       schemaVersion: 2,
-      displayName: 'Me',
-      isSubject: true,
+      displayName: 'Robin',
+      isSubject: false,
       tags: [],
       createdAt: 'now',
       updatedAt: 'now',
-      occupation: 'nurse',
+      ethnicity: 'Korean',
       sexualOrientation: 'Bisexual',
-      privateFields: ['sexualOrientation', 'occupation'],
+      privateFields: ['sexualOrientation', 'ethnicity'],
     };
     installMockBridge({ peopleList: () => Promise.resolve([person]), peopleSave });
     render(<People />);
-    await userEvent.click(await screen.findByRole('button', { name: /Me/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /Robin/ }));
     await userEvent.click(screen.getByRole('button', { name: 'About' }));
     await userEvent.click(screen.getByRole('button', { name: 'Share all' }));
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     const saved = peopleSave.mock.calls[0]?.[0] as { privateFields?: string[] };
-    // Share all unlocked the visible 'occupation' but left the hidden 'sexualOrientation' lock intact.
+    // Share all unlocked the visible 'ethnicity' but left the hidden 'sexualOrientation' lock intact.
     expect(saved.privateFields).toContain('sexualOrientation');
-    expect(saved.privateFields ?? []).not.toContain('occupation');
+    expect(saved.privateFields ?? []).not.toContain('ethnicity');
   });
 
   it('shows the §3.1 inline explainer and not the old "never shared" private copy', async () => {
@@ -238,7 +254,7 @@ describe('People', () => {
     render(<People />);
     await userEvent.click(screen.getByRole('button', { name: 'Add person' }));
     await userEvent.click(screen.getByRole('button', { name: 'About' }));
-    expect(screen.getByText(/Lock any item to keep it to this person only/i)).toBeInTheDocument();
+    expect(screen.getByText(/Lock any item to keep it to your own coaching/i)).toBeInTheDocument();
     expect(
       screen.queryByText(
         /never shared with anyone else’s AI, and never sent to an image provider/i,

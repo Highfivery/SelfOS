@@ -801,15 +801,20 @@ footer remain. _(The exact wording + option lists are tuned at build; this inven
   only own context), and stay **out of** `buildDepictionNote` (never an image input). The **granular sexual data**
   (turn-ons/kinks/positions/fantasies/porn/masturbation) is **not** a profile field — it stays a `restricted`
   Insight fact (too granular + too sensitive for the profile schema).
-- **People editor is now contact-context only (2026-06-16).** Now that onboarding owns the self's deep profile,
-  the People editor's About tab edits only the fields you'd record about **another person** for relational
-  context / dream images (gender, appearance, ethnicity, occupation, relationship status, children, living
-  situation, interests, location, important dates) + Notes/Relationships/Access/Budget. The deeply personal
-  self-profile fields (`sexualOrientation`, `relationshipStyle`, `faith`, `healthNotes`, `goals`,
-  `communicationStyle`, `values`, `languages`) are **no longer edited there** — they're filled by the person's
-  own onboarding. The editor **carries any existing values through unchanged on save** (since `upsertPerson`
-  rebuilds the person from the input, omitting them would wipe onboarding-collected data), so slimming the UI
-  never loses data.
+- **People editor is profile-free for Subjects; visual-only for contacts (2026-06-16).** Onboarding owns the
+  self's full profile, so the People editor no longer duplicates it:
+  - a **Subject** (anyone with their own onboarding) has **no About tab at all** — the Profile tab shows just
+    their name + the Subject toggle + a note that their profile comes from onboarding; everything else
+    (pronouns, birthday, and all About fields) is gone from the editor for them.
+  - a **non-Subject contact** (who never onboards) keeps an About tab with **only the visual / dream-image
+    fields** — gender, appearance, ethnicity (the depiction set, which feeds a related person's dream image +
+    coaching context) — plus Notes. Occupation / relationship status / children / living situation / interests /
+    location / important dates / pronouns / birthday and the deeply personal self fields (`sexualOrientation`,
+    `relationshipStyle`, `faith`, `healthNotes`, `goals`, `communicationStyle`, `values`, `languages`) are **not
+    edited here** at all.
+    The editor **carries every non-edited field through unchanged on save** (since `upsertPerson` rebuilds the
+    person from the input, omitting one would wipe it) — so removing the UI never loses onboarding-collected data,
+    and the bulk Share/Lock controls only touch the visible (carried-through values keep their lock state).
 - **Field fill on submit.** `submitSectionForm` validates the answers against the catalog, **fills mapped
   `Person` fields directly** (no AI marker — markers were only for chat; multi → list fields; `private` →
   `privateFields`), persists unmapped answers, and marks the section complete. The fill (`fillPersonFields`)

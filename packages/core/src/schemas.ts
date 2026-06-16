@@ -793,6 +793,11 @@ export const AssignmentSchema = z.object({
       pinHash: z.string().min(1),
       publicKey: z.string().min(1),
       privateKeyWrapped: z.string().min(1),
+      // The symmetric content key (the one in the recipient's link fragment) wrapped under the master key,
+      // so the sender can later seal an OUTCOME the recipient can decrypt with that same fragment key —
+      // e.g. an external compatibility report pushed from Results (08 §17.12-D). Additive-optional: sends
+      // minted before this omit it (their outcome write-back is simply unavailable), no migration.
+      contentKeyWrapped: z.string().min(1).optional(),
     })
     .optional(),
   createdAt: z.string(),
@@ -901,6 +906,9 @@ export const RelayMailboxSchema = z.object({
   pinHash: z.string().min(1), // scrypt `salt:hash`; the Worker PIN-gates content release (rate-limited)
   createdAt: z.string(),
   expiresAt: z.string().optional(), // unclaimed expiry (§11.3); omitted = the 60-day default applied app-side
+  // A sealed outcome the sender pushed after both answered (08 §17.12-D) — RelayResult sealed under the
+  // content key. Released alongside the content on PIN unlock so a returning recipient sees the result.
+  sealedResult: EncryptedEnvelopeSchema.optional(),
 });
 export type RelayMailbox = z.infer<typeof RelayMailboxSchema>;
 
@@ -961,6 +969,22 @@ export const AlignmentItemSchema = z.object({
   note: z.string(),
 });
 export type AlignmentItem = z.infer<typeof AlignmentItemSchema>;
+
+/**
+ * The outcome the sender pushes back to an external recipient once both have answered (08 §17.12-D) — a
+ * compatibility report or a plain acknowledgement, sealed under the SAME content key as the questions (so
+ * the recipient opens it with the key already in their link fragment). The relay only ever holds the
+ * sealed form. `kind: 'report'` carries the shared report; `'thanks'` is an acknowledgement with no report.
+ */
+export const RelayResultSchema = z.object({
+  schemaVersion: z.number().int().positive(),
+  kind: z.enum(['report', 'thanks']),
+  headline: z.string().min(1), // the warm one-line outcome shown to the recipient
+  summary: z.string().optional(), // the report summary (report kind)
+  items: z.array(AlignmentItemSchema).optional(), // the per-question alignment (report kind)
+  generatedAt: z.string(),
+});
+export type RelayResult = z.infer<typeof RelayResultSchema>;
 
 /**
  * The AI-aligned compatibility report (08-questionnaires §3.6/§13.5d): the two answerers' responses

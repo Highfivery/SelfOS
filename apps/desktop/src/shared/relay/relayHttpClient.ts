@@ -1,5 +1,9 @@
 import type { RelayClient } from '@selfos/core/questionnaires';
-import type { RelayMailbox, RelayStoredResponse } from '@selfos/core/schemas';
+import type {
+  EncryptedEnvelopeData,
+  RelayMailbox,
+  RelayStoredResponse,
+} from '@selfos/core/schemas';
 import type { FetchLike } from './cloudflareDeployer';
 
 /**
@@ -25,6 +29,9 @@ export function createRelayHttpClient(
   return {
     putMailbox: async (mailbox: RelayMailbox) => {
       await post('/api/admin/mailbox', mailbox);
+    },
+    putResult: async (token: string, sealedResult: EncryptedEnvelopeData) => {
+      await post('/api/admin/result', { token, sealedResult });
     },
     drain: async (token: string) => {
       const json = (await post('/api/admin/drain', { token })) as {

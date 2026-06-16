@@ -10,6 +10,7 @@ import {
   openContent,
   purge as kvPurge,
   putMailbox as kvPut,
+  putResult as kvPutResult,
   respond as kvRespond,
   revoke as kvRevoke,
   sealResponse,
@@ -57,6 +58,7 @@ function makeRelayFetch(): typeof fetch {
     const path = new URL(url).pathname;
     const ops: Record<string, () => Promise<{ status: number; json: unknown }>> = {
       '/api/admin/mailbox': () => kvPut(env, body),
+      '/api/admin/result': () => kvPutResult(env, body),
       '/api/admin/drain': () => kvDrain(env, body),
       '/api/admin/purge': () => kvPurge(env, body),
       '/api/admin/revoke': () => kvRevoke(env, body),

@@ -9,6 +9,7 @@ import {
   openResponse,
   sealContent,
   sealImageBytes,
+  sealResult,
 } from '../relay';
 import {
   AssignmentSchema,
@@ -19,6 +20,7 @@ import {
   type Question,
   type RelayContent,
   type RelayMailbox,
+  type RelayResult,
   type RelayStoredResponse,
   type ResponseSet,
 } from '../schemas';
@@ -43,6 +45,7 @@ export const DEFAULT_RELAY_EXPIRY_DAYS = 60;
 /** The transport the host implements over HTTPS (drain-secret authed); core stays network-free + testable. */
 export interface RelayClient {
   putMailbox(mailbox: RelayMailbox): Promise<void>;
+  putResult(token: string, sealedResult: EncryptedEnvelopeData): Promise<void>;
   drain(token: string): Promise<RelayStoredResponse[]>;
   purge(token: string): Promise<void>;
   revoke(token: string): Promise<void>;
@@ -132,6 +135,9 @@ export async function createRelaySend(
   const pin = generatePin();
   const { publicKey, privateKey } = await generateSendKeyPair();
   const privateKeyWrapped = JSON.stringify(await encrypt(privateKey, key));
+  // Wrap the content key under the master key too, so the sender can later seal an OUTCOME the recipient
+  // decrypts with the same fragment key (external compatibility report write-back, §17.12-D).
+  const contentKeyWrapped = JSON.stringify(await encrypt(contentKey, key));
   const pinHash = await hashPin(pin);
   // Anonymous sends show "Someone" on the relay (the page renders null as such); a named send shows the
   // sending person's display name (NOT the recipient's, who is the addressee).
@@ -170,7 +176,7 @@ export async function createRelaySend(
     ...(input.compatibilityGroupId ? { compatibilityGroupId: input.compatibilityGroupId } : {}),
     status: 'sent',
     expiresAt,
-    relay: { token, pinHash, publicKey, privateKeyWrapped },
+    relay: { token, pinHash, publicKey, privateKeyWrapped, contentKeyWrapped },
     createdAt: at,
     updatedAt: at,
   };
@@ -179,9 +185,10 @@ export async function createRelaySend(
   return { assignment, link: buildRelayLink(input.endpointUrl, token, contentKey), pin };
 }
 
-function unwrapPrivateKey(privateKeyWrapped: string, key: Uint8Array): Promise<string> {
-  const parsed: unknown = JSON.parse(privateKeyWrapped);
-  if (!isEncryptedEnvelope(parsed)) throw new Error('corrupt relay private key');
+/** Unwrap a relay secret (the send private key or the content key) stored under the master key. */
+function unwrapUnderMasterKey(wrapped: string, key: Uint8Array): Promise<string> {
+  const parsed: unknown = JSON.parse(wrapped);
+  if (!isEncryptedEnvelope(parsed)) throw new Error('corrupt relay key material');
   return decrypt(parsed, key);
 }
 
@@ -208,7 +215,7 @@ export async function drainRelaySend(
   const stored = await relay.drain(assignment.relay.token);
   if (stored.length === 0) return { assignmentId, drained: 0, declined: false };
 
-  const privateKey = await unwrapPrivateKey(assignment.relay.privateKeyWrapped, key);
+  const privateKey = await unwrapUnderMasterKey(assignment.relay.privateKeyWrapped, key);
   let drained = 0;
   let declined = false;
   let nextStatus: Assignment['status'] = assignment.status;
@@ -256,6 +263,27 @@ export async function drainRelaySend(
   await writeEncryptedJson(fs, assignmentPath(assignmentId), updated, key);
   await relay.purge(assignment.relay.token);
   return { assignmentId, drained, declined };
+}
+
+/**
+ * Push a sealed outcome back to an external send's recipient (08 §17.12-D). Unwraps the stored content key,
+ * seals the `RelayResult` under it (so the recipient opens it with the key already in their link fragment),
+ * and uploads it to the mailbox. Returns false (no-op) if this send predates the wrapped content key — its
+ * outcome write-back is simply unavailable. The relay only ever holds the sealed form.
+ */
+export async function publishRelayResult(
+  fs: FileSystem,
+  key: Uint8Array,
+  relay: RelayClient,
+  assignmentId: string,
+  result: RelayResult,
+): Promise<boolean> {
+  const assignment = await getAssignment(fs, key, assignmentId);
+  if (!assignment?.relay?.contentKeyWrapped) return false;
+  const contentKey = await unwrapUnderMasterKey(assignment.relay.contentKeyWrapped, key);
+  const sealed = await sealResult(result, contentKey);
+  await relay.putResult(assignment.relay.token, sealed);
+  return true;
 }
 
 /** Revoke an external send's relay link (manual revoke + revoke-on-deletion, §3.9) and mark it revoked. */

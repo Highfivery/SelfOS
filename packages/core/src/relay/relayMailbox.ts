@@ -1,5 +1,6 @@
 import { verifyPin } from '../crypto';
 import {
+  EncryptedEnvelopeSchema,
   RelayMailboxSchema,
   SealedResponseSchema,
   type RelayMailbox,
@@ -110,6 +111,28 @@ export async function putMailbox(env: RelayEnv, body: unknown): Promise<RelayOpR
 }
 
 /**
+ * App → relay: attach a sealed outcome to an existing mailbox (08 §17.12-D, drain-secret authenticated).
+ * Patches the stored mailbox in place so the content + PIN gate are untouched; a returning recipient then
+ * receives `sealedResult` from `unlock`. No-op-safe if the mailbox is gone (expired/revoked).
+ */
+export async function putResult(env: RelayEnv, body: unknown): Promise<RelayOpResult> {
+  const token =
+    typeof (body as { token?: unknown })?.token === 'string'
+      ? (body as { token: string }).token
+      : '';
+  if (!token) return { status: 400, json: { error: 'token required' } };
+  const sealedParse = EncryptedEnvelopeSchema.safeParse(
+    (body as { sealedResult?: unknown })?.sealedResult,
+  );
+  if (!sealedParse.success) return { status: 400, json: { error: 'invalid result' } };
+  const mailbox = await loadMailbox(env, token);
+  if (!mailbox) return { status: 404, json: { error: 'unavailable' } };
+  const updated: RelayMailbox = { ...mailbox, sealedResult: sealedParse.data };
+  await env.kv.put(mailboxKey(token), JSON.stringify(updated));
+  return { status: 200, json: { ok: true } };
+}
+
+/**
  * Recipient → relay: verify the PIN (rate-limited: 5 attempts → 15-min lockout) and, on success, release
  * the sealed content for client-side decryption. Reports whether a response was already submitted so the
  * page can show the "thanks" state without leaking anything.
@@ -132,7 +155,17 @@ export async function unlock(env: RelayEnv, body: unknown): Promise<RelayOpResul
   if (!gate.ok) return gate.result;
 
   const submitted = Boolean(await env.kv.get(responseKey(token)));
-  return { status: 200, json: { ok: true, sealedContent: mailbox.sealedContent, submitted } };
+  return {
+    status: 200,
+    json: {
+      ok: true,
+      sealedContent: mailbox.sealedContent,
+      submitted,
+      // The sender's pushed outcome, if any (08 §17.12-D) — sealed under the content key, so a returning
+      // recipient who's already answered can decrypt + see the report/acknowledgement client-side.
+      ...(mailbox.sealedResult ? { sealedResult: mailbox.sealedResult } : {}),
+    },
+  };
 }
 
 function sizeBytes(value: unknown): number {

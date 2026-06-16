@@ -2,6 +2,7 @@ import {
   drain,
   purge,
   putMailbox,
+  putResult,
   respond,
   revoke,
   unlock,
@@ -17,7 +18,7 @@ import {
  * The Worker holds no key that can read questions or responses — it is a ciphertext mailbox.
  *
  *  Recipient (public, PIN-gated, rate-limited):  POST /api/unlock | /api/respond | /api/withdraw
- *  App (drain-secret authenticated):             POST /api/admin/mailbox | /drain | /purge | /revoke
+ *  App (drain-secret authenticated):             POST /api/admin/mailbox | /result | /drain | /purge | /revoke
  *  Answering page (static):                       GET  /q/<token>
  */
 
@@ -116,6 +117,8 @@ export async function handleRelayRequest(
     switch (url.pathname) {
       case '/api/admin/mailbox':
         return jsonResponse(await putMailbox(relayEnv, body));
+      case '/api/admin/result':
+        return jsonResponse(await putResult(relayEnv, body));
       case '/api/admin/drain':
         return jsonResponse(await drain(relayEnv, body));
       case '/api/admin/purge':

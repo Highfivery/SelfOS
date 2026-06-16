@@ -3,10 +3,12 @@ import { fromBase64, toBase64 } from '../encoding';
 import {
   RelayContentSchema,
   RelayResponsePayloadSchema,
+  RelayResultSchema,
   SealedResponseSchema,
   type EncryptedEnvelopeData,
   type RelayContent,
   type RelayResponsePayload,
+  type RelayResult,
   type SealedResponse,
 } from '../schemas';
 
@@ -68,6 +70,23 @@ export async function openContent(
 ): Promise<RelayContent> {
   const json = await decrypt(env, fromBase64(contentKeyB64));
   return RelayContentSchema.parse(JSON.parse(json));
+}
+
+/** Seal the sender's outcome (a compatibility report / acknowledgement) under the content key (§17.12-D). */
+export async function sealResult(
+  result: RelayResult,
+  contentKeyB64: string,
+): Promise<EncryptedEnvelopeData> {
+  return encrypt(JSON.stringify(result), fromBase64(contentKeyB64));
+}
+
+/** Open + validate the sender's outcome with the URL-fragment content key (browser side). */
+export async function openResult(
+  env: EncryptedEnvelopeData,
+  contentKeyB64: string,
+): Promise<RelayResult> {
+  const json = await decrypt(env, fromBase64(contentKeyB64));
+  return RelayResultSchema.parse(JSON.parse(json));
 }
 
 /** Seal author-image bytes under the content key (§8.6). */

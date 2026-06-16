@@ -10,9 +10,11 @@ import {
   openContent,
   openImageBytes,
   openResponse,
+  openResult,
   sealContent,
   sealImageBytes,
   sealResponse,
+  sealResult,
 } from './relayCrypto';
 
 const questionnaire: Questionnaire = {
@@ -75,6 +77,26 @@ describe('content sealing (URL-fragment content key)', () => {
     const bytes = new Uint8Array([1, 2, 3, 250, 255]);
     const env = await sealImageBytes(bytes, key);
     expect(Array.from(await openImageBytes(env, key))).toEqual([1, 2, 3, 250, 255]);
+  });
+
+  it('seals and opens a sender outcome (report) under the content key (§17.12-D)', async () => {
+    const key = generateContentKey();
+    const env = await sealResult(
+      {
+        schemaVersion: 1,
+        kind: 'report',
+        headline: 'How you and Sam line up',
+        summary: 'Mostly aligned.',
+        items: [{ canonicalId: 'a', prompt: 'Hi?', agreement: 'aligned', note: 'Both warm.' }],
+        generatedAt: '2026-06-11T02:00:00.000Z',
+      },
+      key,
+    );
+    const opened = await openResult(env, key);
+    expect(opened.kind).toBe('report');
+    expect(opened.items?.[0]?.agreement).toBe('aligned');
+    // The wrong content key can't open it.
+    await expect(openResult(env, generateContentKey())).rejects.toThrow();
   });
 });
 

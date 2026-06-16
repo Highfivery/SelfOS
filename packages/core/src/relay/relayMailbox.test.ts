@@ -9,6 +9,7 @@ import {
   drain,
   purge,
   putMailbox,
+  putResult,
   respond,
   revoke,
   unlock,
@@ -148,6 +149,29 @@ describe('relay mailbox', () => {
     await respond(env, { token: 'tok', pin: '123456', sealed });
     expect((await withdraw(env, { token: 'tok', pin: '123456' })).status).toBe(200);
     expect((await drain(env, { token: 'tok' })).json).toEqual({ responses: [] });
+  });
+
+  it('attaches a sealed outcome and releases it alongside content on a later unlock (§17.12-D)', async () => {
+    await putMailbox(env, await makeMailbox('123456'));
+    // Before any push, unlock carries no result.
+    const before = await unlock(env, { token: 'tok', pin: '123456' });
+    expect((before.json as { sealedResult?: unknown }).sealedResult).toBeUndefined();
+
+    const resultEnvelope: EncryptedEnvelopeData = { ...dummyEnvelope, data: 'RESULT' };
+    expect((await putResult(env, { token: 'tok', sealedResult: resultEnvelope })).status).toBe(200);
+
+    const after = await unlock(env, { token: 'tok', pin: '123456' });
+    expect((after.json as { sealedResult?: unknown }).sealedResult).toEqual(resultEnvelope);
+    // The content + PIN gate are untouched by the patch.
+    expect((after.json as { sealedContent: unknown }).sealedContent).toEqual(dummyEnvelope);
+  });
+
+  it('putResult validates its input and 404s a missing mailbox', async () => {
+    // No mailbox yet.
+    expect((await putResult(env, { token: 'tok', sealedResult: dummyEnvelope })).status).toBe(404);
+    await putMailbox(env, await makeMailbox('123456'));
+    expect((await putResult(env, { token: 'tok', sealedResult: { bad: true } })).status).toBe(400);
+    expect((await putResult(env, { sealedResult: dummyEnvelope })).status).toBe(400);
   });
 
   it('treats an expired mailbox as unavailable', async () => {

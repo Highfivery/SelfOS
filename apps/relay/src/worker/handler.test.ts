@@ -113,6 +113,44 @@ describe('relay worker handler', () => {
     expect(((await drained.json()) as { responses: unknown[] }).responses).toHaveLength(1);
   });
 
+  it('pushes a sealed outcome (drain-secret authed) released on a later unlock (§17.12-D)', async () => {
+    const env = memEnv();
+    await handleRelayRequest(
+      post('/api/admin/mailbox', await mailbox('tok', '123456'), auth),
+      env,
+      PAGE,
+    );
+
+    // The result endpoint is drain-secret protected like the other admin routes.
+    expect(
+      (
+        await handleRelayRequest(
+          post('/api/admin/result', { token: 'tok', sealedResult: envelope }),
+          env,
+          PAGE,
+        )
+      ).status,
+    ).toBe(401);
+
+    const result = { ...envelope, data: 'RESULT' };
+    expect(
+      (
+        await handleRelayRequest(
+          post('/api/admin/result', { token: 'tok', sealedResult: result }, auth),
+          env,
+          PAGE,
+        )
+      ).status,
+    ).toBe(200);
+
+    const unlocked = await handleRelayRequest(
+      post('/api/unlock', { token: 'tok', pin: '123456' }),
+      env,
+      PAGE,
+    );
+    expect(((await unlocked.json()) as { sealedResult: unknown }).sealedResult).toEqual(result);
+  });
+
   it('rejects a wrong PIN and returns 404 for unknown routes', async () => {
     const env = memEnv();
     await handleRelayRequest(

@@ -2,6 +2,7 @@ import {
   drain,
   purge,
   putMailbox,
+  putResult,
   respond,
   revoke,
   unlock,
@@ -48,6 +49,7 @@ export function fakeRelayFetch(): typeof fetch {
     const path = new URL(url).pathname;
     const ops: Record<string, () => Promise<{ status: number; json: unknown }>> = {
       '/api/admin/mailbox': () => putMailbox(env, body),
+      '/api/admin/result': () => putResult(env, body),
       '/api/admin/drain': () => drain(env, body),
       '/api/admin/purge': () => purge(env, body),
       '/api/admin/revoke': () => revoke(env, body),

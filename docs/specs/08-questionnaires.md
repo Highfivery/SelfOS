@@ -1498,6 +1498,10 @@ AI") and above the first question**, and have AI generation **also produce a tit
 
 ### 16.5 Tier-distinct explicit generation (within the consensual-adult boundary)
 
+> **Reframed by §17.2 (2026-06-15).** The "positively demand explicit content" direction below still got
+> refused by the live model. §17.2 keeps the tier-distinction + topic inventory but recasts the framing in a
+> **sexual-wellness self-assessment** voice (health register, not erotica) so the model complies in-policy.
+
 **Problem.** Generation is **tier-blind**: `GENERATION_SYSTEM` never mentions the tier and is conservative
 ("supportive voice… stay strictly within policy… return [] if in doubt"); `explicit` and `unfiltered` map to
 **byte-identical, tame** one-liners in `SENSITIVITY_NOTE`. Nothing ever **instructs** explicitness, so the
@@ -1546,7 +1550,11 @@ source of truth**:
 - **Cross-spec** — this touches [`18`](18-personal-onboarding.md): the intake intimacy block reads the **merged**
   inventory instead of a hard-coded local list (sync 18 when built).
 
-### 16.5b Deterministic explicit-starter fallback (no dead-end on a model refusal)
+### 16.5b Deterministic explicit-starter fallback (no dead-end on a model refusal) — **SUPERSEDED by §17**
+
+> **REMOVED (2026-06-15).** This fallback was a patch over the symptom; §17.2 replaces it by reworking the
+> per-tier framing into an in-policy sexual-wellness voice so the model complies. A refusal now surfaces the
+> calm error again — no canned questions. The text below is retained for history only.
 
 **Problem.** Even with the §16.5 explicit framing, the live Claude model **sometimes still declines** to draft
 graphic sexual content for an intimacy/`explicit`/`unfiltered` send. With no fallback the Owner hits a dead-end

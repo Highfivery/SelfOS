@@ -123,11 +123,12 @@ export function QuestionnaireAiPanel({
       if (result.ok && result.questions && result.questions.length > 0) {
         onGenerated(result.questions);
         if (result.title) onTitle?.(result.title);
-        const added = `Added ${result.questions.length} draft question${
-          result.questions.length === 1 ? '' : 's'
-        } below — review and edit them.`;
-        // A fallback (e.g. the explicit-intimacy starter set) carries its own note; prefer it.
-        setNotice({ tone: 'info', text: result.message ? `${result.message} ${added}` : added });
+        setNotice({
+          tone: 'info',
+          text: `Added ${result.questions.length} draft question${
+            result.questions.length === 1 ? '' : 's'
+          } below — review and edit them.`,
+        });
       } else {
         setNotice({ tone: 'warning', text: result.message ?? 'No questions came back.' });
       }

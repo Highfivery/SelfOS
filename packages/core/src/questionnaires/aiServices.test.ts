@@ -306,7 +306,7 @@ describe('generateQuestions', () => {
     expect(result.questions).toHaveLength(2);
   });
 
-  it('sends the explicit framing + topic inventory to the model for an intimacy/unfiltered send (§16.5)', async () => {
+  it('sends the in-policy wellness framing + topic inventory to the model for an intimacy/unfiltered send (§16.5/§17.2)', async () => {
     const fs = memFileSystem();
     const { author } = await seedHousehold(fs);
     // Add an owner custom topic so we can prove the MERGED inventory reaches the model.
@@ -339,59 +339,12 @@ describe('generateQuestions', () => {
       existingPrompts: [],
     });
     expect(result.ok).toBe(true);
-    expect(sentUserText).toMatch(/genuinely explicit/i); // the §16.5 explicit direction
-    expect(sentUserText).toMatch(/appropriate and expected/i); // the legitimate-context framing
+    expect(sentUserText).toMatch(/sexual-wellness questionnaire/i); // the in-policy wellness frame
+    expect(sentUserText).toMatch(/sexual-health intake|intimacy worksheet/i); // health register, not erotica
+    expect(sentUserText).toMatch(/not as erotica/i); // explicitly steers away from pornographic prose
     expect(sentUserText).toContain('Oral (giving)'); // a built-in topic
     expect(sentUserText).toContain('Wax play'); // the owner's custom addition (merged inventory)
     expect(sentUserText).toMatch(/never minors/i); // the boundary
-  });
-
-  it('falls back to explicit starter questions when the model refuses an intimacy send (§16.5b)', async () => {
-    const fs = memFileSystem();
-    const { author } = await seedHousehold(fs);
-    // The model declines (prose, no JSON) — for explicit intimacy this must NOT strand the Owner.
-    const result = await generateQuestions(
-      deps(fs, fakeClient("I'm not able to help with that."), author),
-      {
-        type: 'intimacy',
-        sensitivity: 'unfiltered',
-        context: {
-          authorPersonId: author,
-          includeAuthor: false,
-          includeTarget: false,
-          includeRelationship: false,
-        },
-        existingPrompts: [],
-      },
-    );
-    expect(result.ok).toBe(true);
-    expect(result.reason).toBeUndefined();
-    expect(result.questions?.length).toBeGreaterThan(0);
-    expect(result.message).toMatch(/starter questions/i);
-    // The starter set draws on the shared topic inventory (a built-in activity appears as an option).
-    expect(result.questions?.some((q) => q.options?.includes('Oral (giving)'))).toBe(true);
-    // Still charges for the refused call it made.
-    expect(result.usage?.type).toBe('questionnaire.generate');
-  });
-
-  it('still REFUSES for a non-intimacy send when the model declines (no fallback)', async () => {
-    const fs = memFileSystem();
-    const { author } = await seedHousehold(fs);
-    const result = await generateQuestions(
-      deps(fs, fakeClient('I cannot help with that.'), author),
-      {
-        type: 'intimacy',
-        sensitivity: 'standard', // standard tier → no explicit fallback
-        context: {
-          authorPersonId: author,
-          includeAuthor: false,
-          includeTarget: false,
-          includeRelationship: false,
-        },
-        existingPrompts: [],
-      },
-    );
-    expect(result).toMatchObject({ ok: false, reason: 'REFUSED' });
   });
 });
 

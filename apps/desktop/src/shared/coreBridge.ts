@@ -472,12 +472,9 @@ const GenerateSchema = z.object({
   type: z.string().min(1),
   sensitivity: SensitivityTierSchema,
   brief: z.string().optional(),
-  targetPersonId: z.string().min(1).optional(),
-  includeTarget: z.boolean(),
-  includeRelationship: z.boolean(),
   existingPrompts: z.array(z.string()),
-  // The bound household recipient (08 §17.4) — generation skips what they've already covered. The recipient's
-  // full content is gathered host-side; the author never receives it.
+  // The bound household recipient (08 §17.12) — the bridge auto-tailors to their shareable context AND de-dups
+  // against their full history. The author never receives any of it. No separate "about a person" picker.
   recipientPersonId: z.string().min(1).optional(),
 });
 const ImproveSchema = z.object({
@@ -1421,11 +1418,16 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const deps = await aiDeps();
       if (!deps) return { ok: false, reason: 'DENIED', message: 'Not available.' };
       const p = GenerateSchema.parse(input);
-      // Recipient-aware de-dup (08 §17.4): assemble the bound household recipient's full answered content
-      // host-side and pass it to the model ONLY as avoid-overlap grounding. The author never sees it; the
-      // prompt forbids the model from referencing it. External recipients have no household history → skip.
-      const recipientHistory = p.recipientPersonId
-        ? await gatherRecipientHistory(deps.fs, deps.key, p.recipientPersonId)
+      // The bound recipient (08 §17.12) drives BOTH (a) relevance — auto-tailor to the recipient's *shareable*
+      // context (their profile/relationship/shareable insights, the §13.3 boundary) so questions fit the person
+      // they're for, and (b) de-dup — their FULL answered content as avoid-only grounding (§17.4), gathered
+      // host-side, never returned to the author. Only a HOUSEHOLD recipient has this context; an external one
+      // has neither, so both are skipped. There is no separate "about a person" picker (§17.12-A).
+      const recipientIsHousehold =
+        p.recipientPersonId !== undefined &&
+        (await getPerson(deps.fs, deps.key, p.recipientPersonId)) !== null;
+      const recipientHistory = recipientIsHousehold
+        ? await gatherRecipientHistory(deps.fs, deps.key, p.recipientPersonId as string)
         : '';
       return generateQuestions(deps, {
         type: p.type,
@@ -1433,11 +1435,11 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         ...(p.brief !== undefined ? { brief: p.brief } : {}),
         context: {
           authorPersonId: deps.personId,
-          // The author's own shareable data always feeds their own generation (§15.4).
+          // The author's own shareable data always feeds (§15.4); the recipient's shareable context tailors.
           includeAuthor: true,
-          ...(p.targetPersonId !== undefined ? { targetPersonId: p.targetPersonId } : {}),
-          includeTarget: p.includeTarget,
-          includeRelationship: p.includeRelationship,
+          ...(recipientIsHousehold ? { targetPersonId: p.recipientPersonId as string } : {}),
+          includeTarget: recipientIsHousehold,
+          includeRelationship: recipientIsHousehold,
         },
         existingPrompts: p.existingPrompts,
         ...(recipientHistory ? { recipientHistory } : {}),

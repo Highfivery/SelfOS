@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { Sparkles } from 'lucide-react';
 import type { Question, SensitivityTier } from '@shared/schemas';
 import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
-import { usePeopleStore } from '../../../stores/peopleStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import {
   Banner,
@@ -11,17 +10,17 @@ import {
   Field,
   Select,
   Stack,
-  Switch,
   Text,
   Textarea,
 } from '../../../design-system/components';
 import styles from './Questionnaires.module.css';
 
 /**
- * "Draft with AI" (08-questionnaires §3.1/§13.3): generate questions from a free-text brief and/or the
- * **configured structured context** — the author's own data, an optional target person (shareable facts
- * only), and/or the relationship between them. Budget-gated + metered in main; calm states when AI is
- * off or over budget. Generated questions are appended to the draft (the caller marks them AI-drafted).
+ * "Draft with AI" (08-questionnaires §3.1/§13.3/§17.12): generate questions from a free-text brief. Generation
+ * automatically uses the author's own shareable data AND the **bound recipient's** shareable context to tailor
+ * the questions (the recipient is chosen at the start step — no second person-picker here, §17.12-A), plus the
+ * recipient's full history for de-dup (§17.4). Budget-gated + metered in main; calm states when AI is off or
+ * over budget. Generated questions are appended to the draft (the caller marks them AI-drafted).
  */
 export function QuestionnaireAiPanel({
   aiReady,
@@ -35,8 +34,8 @@ export function QuestionnaireAiPanel({
   aiReady: boolean;
   type: string;
   sensitivity: SensitivityTier;
-  // The bound household recipient (08 §17.4): generation skips what they've already covered, and the "about"
-  // context defaults to them. Undefined for an external/compatibility questionnaire.
+  // The bound household recipient (08 §17.3/§17.4): generation tailors to their shareable context and skips
+  // what they've already covered. Undefined for an external recipient (no household context).
   recipientPersonId?: string;
   existingPrompts: string[];
   onGenerated: (questions: Question[]) => void;
@@ -45,10 +44,6 @@ export function QuestionnaireAiPanel({
 }): JSX.Element {
   const navigate = useNavigate();
   const generate = useQuestionnaireStore((s) => s.generate);
-  const people = usePeopleStore((s) => s.people);
-  const peopleLoaded = usePeopleStore((s) => s.loaded);
-  const loadPeople = usePeopleStore((s) => s.load);
-  const activePerson = useSessionStore((s) => s.activePerson);
   // Owner-only inline "add a topic" for an intimacy questionnaire at an explicit tier (08 §16.5a).
   const canManageTopics = useSessionStore((s) => s.can('people.manage'));
   const showTopicAdd =
@@ -58,10 +53,6 @@ export function QuestionnaireAiPanel({
 
   const [open, setOpen] = useState(false);
   const [brief, setBrief] = useState('');
-  // The "about a person" context defaults to the bound recipient (08 §17.3), overridable below.
-  const [targetPersonId, setTargetPersonId] = useState(recipientPersonId ?? '');
-  const [includeTarget, setIncludeTarget] = useState(true);
-  const [includeRelationship, setIncludeRelationship] = useState(true);
   const [busy, setBusy] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [notice, setNotice] = useState<{ tone: 'info' | 'warning'; text: string } | null>(null);
@@ -86,10 +77,6 @@ export function QuestionnaireAiPanel({
     }
   };
 
-  useEffect(() => {
-    if (!peopleLoaded) void loadPeople();
-  }, [peopleLoaded, loadPeople]);
-
   // A live elapsed-time counter while drafting, so it's clearly working and not stuck (generation is a
   // single non-streaming call, so an honest "it's running" beats a frozen spinner).
   useEffect(() => {
@@ -98,9 +85,6 @@ export function QuestionnaireAiPanel({
     const id = setInterval(() => setElapsed((e) => e + 1), 1000);
     return () => clearInterval(id);
   }, [busy]);
-
-  const targets = people.filter((p) => p.id !== activePerson?.id);
-  const targetName = targets.find((p) => p.id === targetPersonId)?.displayName;
 
   if (!aiReady) {
     return (
@@ -121,11 +105,9 @@ export function QuestionnaireAiPanel({
         type,
         sensitivity,
         ...(brief.trim() ? { brief: brief.trim() } : {}),
-        ...(targetPersonId ? { targetPersonId } : {}),
-        includeTarget: Boolean(targetPersonId) && includeTarget,
-        includeRelationship: Boolean(targetPersonId) && includeRelationship,
         existingPrompts,
-        // De-dup against the bound household recipient's full history (08 §17.4), host-side + author-blind.
+        // The bound household recipient (08 §17.12-A): the bridge auto-tailors to their shareable context and
+        // de-dups against their full history. No person-picker here — the recipient was chosen at the start.
         ...(recipientPersonId ? { recipientPersonId } : {}),
       });
       if (result.ok && result.questions && result.questions.length > 0) {
@@ -170,46 +152,6 @@ export function QuestionnaireAiPanel({
               />
             )}
           </Field>
-
-          <Field label="About a specific person? (optional)">
-            {(props) => (
-              <Select
-                {...props}
-                value={targetPersonId}
-                onChange={(event) => setTargetPersonId(event.target.value)}
-              >
-                <option value="">No one in particular</option>
-                {targets.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.displayName}
-                  </option>
-                ))}
-              </Select>
-            )}
-          </Field>
-
-          {/* Your own shareable data is always used to personalise generation (§15.4) — no toggle. The
-              optional toggles below pull in a *different* person's context (the §13.3 shareable boundary). */}
-          {targetPersonId ? (
-            <div className={styles.aiToggles}>
-              <label className={styles.aiToggle}>
-                <Switch
-                  checked={includeTarget}
-                  onChange={setIncludeTarget}
-                  aria-label={`Use ${targetName ?? 'their'} shareable info`}
-                />
-                <Text size="sm">Use {targetName ?? 'their'} shareable info</Text>
-              </label>
-              <label className={styles.aiToggle}>
-                <Switch
-                  checked={includeRelationship}
-                  onChange={setIncludeRelationship}
-                  aria-label="Use our relationship"
-                />
-                <Text size="sm">Use our relationship</Text>
-              </label>
-            </div>
-          ) : null}
 
           {notice ? <Banner tone={notice.tone}>{notice.text}</Banner> : null}
 

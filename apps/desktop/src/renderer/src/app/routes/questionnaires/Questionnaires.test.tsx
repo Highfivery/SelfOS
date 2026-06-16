@@ -698,7 +698,7 @@ describe('Questionnaires', () => {
     expect(screen.getByText(/read their raw answers/i)).toBeInTheDocument();
   });
 
-  it('drops the "Use my information" toggle; generation still uses author context (§15.4)', async () => {
+  it('has no person-picker in Draft with AI; generation auto-tailors to the bound recipient (§17.12-A)', async () => {
     enableAi();
     const generate = vi.fn<
       (input: Record<string, unknown>) => Promise<{ ok: boolean; questions: never[] }>
@@ -708,15 +708,22 @@ describe('Questionnaires', () => {
       secretHas: () => Promise.resolve(true),
       questionnairesGenerate: generate,
     });
+    // openNewBuilder binds Mara (p-mara) as the recipient at the start step.
     await openNewBuilder();
 
     await userEvent.click(await screen.findByRole('button', { name: /draft with ai/i }));
+    // No second person-picker: the recipient was already chosen at the start step (§17.12-A).
+    expect(screen.queryByLabelText(/About a specific person/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Use my information')).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /generate questions/i }));
 
     expect(generate).toHaveBeenCalledTimes(1);
-    // The author flag is gone from the payload (the bridge always includes author context now).
-    expect(generate.mock.calls[0]?.[0]).not.toHaveProperty('includeAuthor');
+    const payload = generate.mock.calls[0]?.[0];
+    // The renderer just passes the bound recipient; the bridge derives the (author + recipient) context.
+    expect(payload).toMatchObject({ recipientPersonId: 'p-mara' });
+    expect(payload).not.toHaveProperty('includeAuthor');
+    expect(payload).not.toHaveProperty('targetPersonId');
+    expect(payload).not.toHaveProperty('includeTarget');
   });
 
   it('shows a live inline per-question preview that updates with the answer type (§15.5)', async () => {

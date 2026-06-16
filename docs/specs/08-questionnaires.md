@@ -1953,3 +1953,41 @@ assertions are restored accordingly. The consensual-adult boundary is unchanged.
 fallback removal, the §17.10 thinking-budget fix, and all of §17.3/§17.4/§17.5 (recipient binding + de-dup).
 **Process lesson enshrined in CLAUDE.md §6: never reframe a prompt (or fix any bug) on an assumed cause —
 verify against the live system first; the offline fakes hide model-call bugs.**
+
+### 17.12 Flow-coherence fixes — remove duplicate person-pickers (2026-06-16)
+
+A whole-flow walk (now a DoD step, CLAUDE.md §7) surfaced two **redundant person selections** left by the
+recipient-first model. Both are user-decided.
+
+**A. Drop "About a specific person?" from Draft with AI; auto-tailor to the recipient.** Now that the recipient
+is always chosen first, a second person-picker in the AI panel re-asked "who is this for?" (it defaulted to the
+recipient — pure overlap). **Remove** that picker and its `includeTarget`/`includeRelationship` toggles.
+Generation **automatically** uses the **recipient's shareable context** (profile + relationship + shareable
+insights — the §13.3 shareable-only boundary) to _tailor_ the questions, in addition to the recipient's full
+history for **de-dup** (§17.4). The author's own shareable data still always feeds (§15.4). The rare "ask the
+recipient _about_ a third person" case is **dropped** (decided). External recipients have no household context →
+tailoring is skipped (de-dup is too, §17.4). The `targetPersonId`/`includeTarget`/`includeRelationship` plumbing
+stays in core (the context-provider registry still uses it) — only the **AI-panel UI** is removed and the bridge
+sets the target to the bound household recipient automatically.
+
+**B. Compatibility joins the recipient-first model — you + the recipient, no Send-time participant picker.**
+Compatibility was the lone exception (it picked participants at Send via a "Who's being compared?" toggle + two
+person-pickers). Decided: a compatibility questionnaire is **always the sender + the one recipient chosen at the
+start step**. So:
+
+- The **start step** shows the recipient picker for the Compatibility mode too (household **or external** —
+  decided "allow external too"); the questionnaire binds that recipient like any other.
+- The comparison participants are **the sender (you) + the bound recipient** — the **`CompatibilitySendPanel`
+  drops the "Who's being compared?" toggle and both person-pickers entirely**; Send shows only the visibility
+  choice + the honest disclosure preview + Send. The **"two other people" mode is removed**.
+- **Household recipient** → two paired in-app assignments (sender + recipient), as today. **External recipient**
+  → the sender answers in-app + the recipient answers via the **relay** (a personalized variant each, same
+  `compatibilityGroupId`); drain collects the external response; alignment is channel-agnostic (it aligns the
+  two `ResponseSet`s by `canonicalId`). `assignmentsCreateCompatibility` derives both participants from the
+  bound recipient (sender = active person) instead of taking two person ids.
+- `compatibilityDisclosure` already names the real other participant (the sender or the recipient) — unchanged.
+
+**Process note:** these were missed by a green test suite — every screen _functioned_, but the _flow_ had two
+redundant person-pickers. The DoD now requires a whole-flow coherence walk, and this was caught by the user,
+not the tests. Build + extend the §16.7 matrix (a compat send no longer has a participant picker; AI generation
+has no "about a person" control).

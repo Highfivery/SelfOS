@@ -669,8 +669,6 @@ describe('createCoreBridge', () => {
     const req = {
       type: 'role-feedback',
       sensitivity: 'standard' as const,
-      includeTarget: false,
-      includeRelationship: false,
       existingPrompts: [],
     };
     // Owner with a key: the call runs past the gate + reaches Claude (the fake host returns non-JSON,
@@ -725,8 +723,6 @@ describe('createCoreBridge', () => {
     const result = await bridge.questionnairesGenerate({
       type: 'role-feedback',
       sensitivity: 'standard',
-      includeTarget: false,
-      includeRelationship: false,
       existingPrompts: [],
       recipientPersonId: mara.id,
     });

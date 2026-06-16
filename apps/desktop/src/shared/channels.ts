@@ -481,13 +481,10 @@ export interface SelfosBridge {
     type: string;
     sensitivity: SensitivityTier;
     brief?: string;
-    targetPersonId?: string;
-    // The author's own shareable data is always used (§15.4); only a *target* person's context is optional.
-    includeTarget: boolean;
-    includeRelationship: boolean;
     existingPrompts: string[];
-    // The bound household recipient (08 §17.4) — generation skips what they've already covered. Their full
-    // content is gathered host-side; it never returns to the renderer.
+    // The bound household recipient (08 §17.12) — the bridge auto-tailors to their shareable context AND skips
+    // what they've already covered. Their full content is gathered host-side; it never returns to the renderer.
+    // There is no separate "about a person" picker anymore (§17.12-A).
     recipientPersonId?: string;
   }): Promise<QuestionnaireGenerateResult>;
   /** Reword a single question per an instruction ("warmer", "tighter"). Budget-gated + metered. */

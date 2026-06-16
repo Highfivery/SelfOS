@@ -316,6 +316,45 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-16 — Build (**Onboarding intake + People-editor consolidation; SPEC 18 §14 amended** on
+  `feat/onboarding-people-consolidation`, off `main`, NOT merged awaiting confirm). Six user-flagged cleanups,
+  all forks **asked first** (3 AskUserQuestion rounds): (1) **all 63 `rating` 1–5 button-scale questions → 3-label
+  sliders** (start/middle/end anchors, like the intimacy ones — authored a neutral mid-label for each via a
+  scripted transform; the `rating` helper is deleted, so the intake has NO button scales left); (2) the
+  **multi-"Other" write-in space bug** — `MultiChoiceControl` committed (`.split(',').map(trim)`) on every
+  keystroke, stripping a trailing space before the next char so multi-word entries ("rock climbing") were
+  impossible; now it holds the **raw input text in local state** and renders from that, trimming only the
+  committed array; (3) **substances split** — one `multi` "which do you use" + a **per-substance frequency**
+  `single` for each (cannabis/cocaine/MDMA/psychedelics/ketamine/Rx), revealed only when selected — which
+  required extending `isQuestionVisible` so a **multiChoice branch trigger matches when the selected array
+  CONTAINS the value** (`@selfos/core/questionnaires` answering); (4) **livingSituation+liveWith merged** into one
+  `multi` "Who do you live with?" (→`livingSituation`); picking **"Children" auto-fills the Children question**
+  (in `IntakeFormPanel.onChange`, only when blank, still editable); (5) **repetition audit across ALL sections** —
+  trimmed LIFE-NOW to a 5-question identity snapshot (removed hobbies/connected/mood/workSchedule/typicalWeekend/
+  workSatisfaction/moneyStress/topStressor/joy/recentChange/perfectDay — all duplicated the deep sections),
+  removed exact/near dups (grewUpWhere, dreamDestination, closestExtendedFamily, topPriority) + Health
+  anxietyLevel/lowMood (dup of Weighs reflective versions); (6) **People-editor About tab slimmed to
+  contact-context** — dropped the editing UI for the 8 deeply-personal self fields (sexualOrientation/
+  relationshipStyle/faith/healthNotes/goals/communicationStyle/values/languages) now owned by onboarding, keeping
+  the contact-descriptive set + Notes/Relationships/Access/Budget. **Data-loss guard:** `upsertPerson` rebuilds
+  the Person from the input, so the slimmed `save()` **carries those 8 fields through from the existing person**
+  (omitting would wipe onboarding-collected self data). Code-reviewer **fix-first** (one real **privacy
+  regression** it created + I fixed: "Share all"/"Lock all" flipped the ENTIRE `PERSON_FIELD_KEYS` set incl. the
+  now-hidden private fields — so "Share all" would silently un-privatize a subject's sexual orientation/health/
+  faith with no visible toggle to counter it; now scoped to a `VISIBLE_FIELD_KEYS` subset, preserving hidden
+  keys' lock state — +test). Clarified the reviewer's 2nd finding: intake facts are **hardcoded `shareable:false`**
+  at synthesis, so the non-restricted substance facts are own-context-only (NOT a leak); the dormant per-question
+  `restricted` flag (synthesis only honors section-level) is filed as a follow-up task. Gate green: typecheck
+  (node + web/DOM-lib), lint, format, **410 core + 11 relay + 495 desktop** unit (+ multi-branch [answering core +
+  QuestionnaireForm RTL], multi-Other space RTL, People carry-through + Share-all-preserves-hidden-lock RTL),
+  **69 E2E** (+1: liveWith→Children auto-fill + substance reveals its frequency; updated the People About +
+  shareability E2E for the slimmed editor; intimacy-conditionals + grouped-form still green). Visual QA via the
+  web preview (the slimmed People About tab — contact-context fields only, Share/Lock-all, per-field toggles, no
+  overflow, no console errors); the slider rendering is the unchanged proven intimacy path (catalog data only).
+  Synced spec 18 §14.3/§14.4/§14.4a/§14.6. **Lesson: removing a field's editing UI while it stays in
+  `PERSON_FIELD_KEYS` makes a bulk "Share all" silently un-privatize it (no toggle to counter) — scope bulk
+  share/lock controls to the VISIBLE keys and preserve hidden keys' state; and since `upsertPerson` rebuilds from
+  the input, any field you stop editing must be carried through from the existing record or it's wiped.**
 - 2026-06-16 — Build (**External-compat relay-page outcome write-back — external compatibility is now COMPLETE
   end-to-end; 08 §17.12-D**; on `feat/questionnaire-explicit-gen`, NOT merged). After both have answered + the
   sender generated the alignment report, the sender pushes it back to the external recipient from Results, and

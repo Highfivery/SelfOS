@@ -48,6 +48,27 @@ describe('answering — branch visibility', () => {
     expect(visibleQuestions([q1, q2], { q1: 'Yes' }).map((x) => x.id)).toEqual(['q1', 'q2']);
   });
 
+  it('shows a question when a multiChoice trigger CONTAINS the branch value', () => {
+    const dep = q({
+      id: 'cannabisFreq',
+      type: 'singleChoice',
+      branch: { whenQuestionId: 'used', equals: 'Cannabis', action: 'show' },
+    });
+    expect(isQuestionVisible(dep, {})).toBe(false);
+    expect(isQuestionVisible(dep, { used: ['Cocaine'] })).toBe(false);
+    expect(isQuestionVisible(dep, { used: ['Cannabis', 'Cocaine'] })).toBe(true);
+  });
+
+  it('shows an equalsAny question when a multiChoice trigger contains any listed value', () => {
+    const dep = q({
+      id: 'd',
+      type: 'shortText',
+      branch: { whenQuestionId: 'used', equalsAny: ['Cannabis', 'Ketamine'], action: 'show' },
+    });
+    expect(isQuestionVisible(dep, { used: ['Cocaine'] })).toBe(false);
+    expect(isQuestionVisible(dep, { used: ['Ketamine'] })).toBe(true);
+  });
+
   it('matches a yes/no boolean trigger', () => {
     const dependent = q({
       id: 'q3',

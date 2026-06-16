@@ -56,7 +56,7 @@ describe('People', () => {
     expect(peopleSave.mock.calls[0]?.[0]).toMatchObject({ displayName: 'Sam', isSubject: false });
   });
 
-  it('saves descriptive About fields, including health/faith now inline (15 §3.1)', async () => {
+  it('saves the contact-context About fields and no longer surfaces the onboarding-owned ones (18 §14.6)', async () => {
     const peopleSave = vi.fn((input: { displayName: string }) =>
       Promise.resolve({
         id: 'new',
@@ -76,11 +76,16 @@ describe('People', () => {
     await userEvent.selectOptions(screen.getByLabelText('Gender'), 'Non-binary');
     await userEvent.type(screen.getByLabelText('Appearance'), 'tall, curly hair');
     await userEvent.type(screen.getByLabelText('Occupation'), 'nurse');
-    // Life facts the intake also fills (18 §14.6), editable here.
     await userEvent.type(screen.getByLabelText('Relationship status'), 'Married');
-    await userEvent.type(screen.getByLabelText('Health notes'), 'manages asthma');
-    await userEvent.type(screen.getByLabelText('Faith'), 'Buddhist');
-    await userEvent.type(screen.getByLabelText('Sexual orientation'), 'Bisexual');
+    // The deeply personal self-profile fields are now owned by onboarding — not editable here.
+    expect(screen.queryByLabelText('Health notes')).toBeNull();
+    expect(screen.queryByLabelText('Faith')).toBeNull();
+    expect(screen.queryByLabelText('Sexual orientation')).toBeNull();
+    expect(screen.queryByLabelText('Relationship style')).toBeNull();
+    expect(screen.queryByLabelText('Goals')).toBeNull();
+    expect(screen.queryByLabelText('Communication style')).toBeNull();
+    expect(screen.queryByLabelText('Values')).toBeNull();
+    expect(screen.queryByLabelText('Languages')).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Create' }));
     expect(peopleSave).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -88,9 +93,50 @@ describe('People', () => {
         appearanceDescription: 'tall, curly hair',
         occupation: 'nurse',
         relationshipStatus: 'Married',
+      }),
+    );
+    const saved = peopleSave.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(saved).not.toHaveProperty('healthNotes');
+    expect(saved).not.toHaveProperty('sexualOrientation');
+  });
+
+  it('carries the onboarding-owned self fields through unchanged on save (18 §14.6)', async () => {
+    const peopleSave = vi.fn((input: { displayName: string }) =>
+      Promise.resolve({
+        id: 'p1',
+        schemaVersion: 2,
+        displayName: input.displayName,
+        isSubject: true,
+        tags: [],
+        createdAt: 'now',
+        updatedAt: 'now',
+      }),
+    );
+    const person = {
+      id: 'p1',
+      schemaVersion: 2,
+      displayName: 'Me',
+      isSubject: true,
+      tags: [],
+      createdAt: 'now',
+      updatedAt: 'now',
+      occupation: 'nurse',
+      sexualOrientation: 'Bisexual',
+      faith: 'Buddhist',
+      goals: 'be present',
+      languages: ['English', 'Korean'],
+    };
+    installMockBridge({ peopleList: () => Promise.resolve([person]), peopleSave });
+    render(<People />);
+    await userEvent.click(await screen.findByRole('button', { name: /Me/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'About' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(peopleSave).toHaveBeenCalledWith(
+      expect.objectContaining({
         sexualOrientation: 'Bisexual',
-        healthNotes: 'manages asthma',
         faith: 'Buddhist',
+        goals: 'be present',
+        languages: ['English', 'Korean'],
       }),
     );
   });
@@ -122,7 +168,7 @@ describe('People', () => {
     });
   });
 
-  it('"Lock all" locks every controllable field; default save carries no privateFields', async () => {
+  it('"Lock all" locks every VISIBLE field but never touches the hidden onboarding-owned ones', async () => {
     const peopleSave = vi.fn((input: { displayName: string }) =>
       Promise.resolve({
         id: 'new',
@@ -143,8 +189,48 @@ describe('People', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Create' }));
     const locked = (peopleSave.mock.calls[0]?.[0] as { privateFields?: string[] }).privateFields;
     expect(locked).toEqual(
-      expect.arrayContaining(['notes', 'healthNotes', 'faith', 'occupation', 'gender', 'pronouns']),
+      expect.arrayContaining(['notes', 'occupation', 'gender', 'pronouns', 'relationshipStatus']),
     );
+    // The hidden, onboarding-owned fields have no toggle here → Lock all must not add them.
+    expect(locked).not.toContain('healthNotes');
+    expect(locked).not.toContain('sexualOrientation');
+  });
+
+  it('"Share all" preserves the lock on hidden onboarding-owned fields (no silent un-privatize)', async () => {
+    const peopleSave = vi.fn((input: { displayName: string }) =>
+      Promise.resolve({
+        id: 'p1',
+        schemaVersion: 2,
+        displayName: input.displayName,
+        isSubject: true,
+        tags: [],
+        createdAt: 'now',
+        updatedAt: 'now',
+      }),
+    );
+    // A subject whose sexual orientation is locked (private) and occupation is locked too.
+    const person: Person = {
+      id: 'p1',
+      schemaVersion: 2,
+      displayName: 'Me',
+      isSubject: true,
+      tags: [],
+      createdAt: 'now',
+      updatedAt: 'now',
+      occupation: 'nurse',
+      sexualOrientation: 'Bisexual',
+      privateFields: ['sexualOrientation', 'occupation'],
+    };
+    installMockBridge({ peopleList: () => Promise.resolve([person]), peopleSave });
+    render(<People />);
+    await userEvent.click(await screen.findByRole('button', { name: /Me/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'About' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Share all' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    const saved = peopleSave.mock.calls[0]?.[0] as { privateFields?: string[] };
+    // Share all unlocked the visible 'occupation' but left the hidden 'sexualOrientation' lock intact.
+    expect(saved.privateFields).toContain('sexualOrientation');
+    expect(saved.privateFields ?? []).not.toContain('occupation');
   });
 
   it('shows the §3.1 inline explainer and not the old "never shared" private copy', async () => {

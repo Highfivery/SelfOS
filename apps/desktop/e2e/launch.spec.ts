@@ -321,32 +321,35 @@ test('people: the merged Notes field persists with a share lock (15 §4.3)', asy
   }
 });
 
-test('people: contact-context About fields persist (deep self-fields owned by onboarding)', async () => {
+test('people: a Subject has no About tab; a contact keeps only the visual fields (18 §14.6)', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'People' }).click();
+    // A Subject's profile is owned by onboarding → no About tab at all.
     await w.getByRole('button', { name: 'Tester Subject' }).click();
+    await expect(w.getByRole('button', { name: 'About', exact: true })).toHaveCount(0);
+
+    // A non-Subject contact's About tab keeps ONLY the visual dream-image fields.
+    await w.getByRole('button', { name: 'Add person' }).click();
+    await w.getByLabel('Name').fill('Sam');
     await w.getByRole('button', { name: 'About', exact: true }).click();
     await w.getByLabel('Gender', { exact: true }).selectOption('Non-binary');
     await w.getByLabel('Appearance', { exact: true }).fill('tall, curly hair');
-    await w.getByLabel('Occupation', { exact: true }).fill('nurse');
-    await w.getByLabel('Relationship status', { exact: true }).fill('Married');
-    await w.getByLabel('Location', { exact: true }).fill('Seattle');
-    // The deeply personal self-profile fields are owned by onboarding now — not editable here.
+    await w.getByLabel('Ethnicity', { exact: true }).fill('Korean');
+    // The trimmed + onboarding-owned fields are gone from the People editor.
+    await expect(w.getByLabel('Occupation', { exact: true })).toHaveCount(0);
+    await expect(w.getByLabel('Relationship status', { exact: true })).toHaveCount(0);
     await expect(w.getByLabel('Health notes', { exact: true })).toHaveCount(0);
-    await expect(w.getByLabel('Sexual orientation', { exact: true })).toHaveCount(0);
-    await w.getByRole('button', { name: 'Save' }).click();
+    await w.getByRole('button', { name: 'Create' }).click();
 
-    // Reopen and confirm every kept field round-tripped through the encrypted profile.
-    await w.getByRole('button', { name: 'Tester Subject' }).click();
+    // Reopen the contact and confirm the three fields round-tripped through the encrypted profile.
+    await w.getByRole('button', { name: 'Sam' }).click();
     await w.getByRole('button', { name: 'About', exact: true }).click();
     await expect(w.getByLabel('Gender', { exact: true })).toHaveValue('Non-binary');
     await expect(w.getByLabel('Appearance', { exact: true })).toHaveValue('tall, curly hair');
-    await expect(w.getByLabel('Occupation', { exact: true })).toHaveValue('nurse');
-    await expect(w.getByLabel('Relationship status', { exact: true })).toHaveValue('Married');
-    await expect(w.getByLabel('Location', { exact: true })).toHaveValue('Seattle');
+    await expect(w.getByLabel('Ethnicity', { exact: true })).toHaveValue('Korean');
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -361,15 +364,15 @@ test('shareability: a locked field never reaches a related person’s assembled 
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'People' }).click();
 
-    // Add Robin (related to the subject Tester); give them a shared occupation + a LOCKED health note.
+    // Add Robin (a contact, related to the subject Tester); give them a SHARED ethnicity + a LOCKED appearance.
     await w.getByRole('button', { name: 'Add person' }).click();
     await w.getByLabel('Name').fill('Robin');
     await w.getByRole('button', { name: 'Create' }).click();
     await w.getByText('Robin').click();
     await w.getByRole('button', { name: 'About', exact: true }).click();
-    await w.getByLabel('Occupation', { exact: true }).fill('SHARED-NURSE');
-    await w.getByLabel('Location', { exact: true }).fill('LOCKED-CITY');
-    await w.getByRole('button', { name: /Location: shared/i }).click(); // lock it
+    await w.getByLabel('Ethnicity', { exact: true }).fill('SHARED-KOREAN');
+    await w.getByLabel('Appearance', { exact: true }).fill('LOCKED-FEATURE');
+    await w.getByRole('button', { name: /Appearance: shared/i }).click(); // lock it
     await w.getByRole('button', { name: 'Save' }).click();
 
     // Relate Robin to the subject so Robin's SHARED data flows into the subject's context.
@@ -385,8 +388,8 @@ test('shareability: a locked field never reaches a related person’s assembled 
     const key = await loadMasterKey(secrets);
     if (!key) throw new Error('master key missing');
     const context = await buildContext(fs, key, 'owner-1');
-    expect(context).toContain('SHARED-NURSE'); // a shared field reaches the related person's block
-    expect(context).not.toContain('LOCKED-CITY'); // a LOCKED field never does
+    expect(context).toContain('SHARED-KOREAN'); // a shared field reaches the related person's block
+    expect(context).not.toContain('LOCKED-FEATURE'); // a LOCKED field never does
 
     // The reworked About editor (every field + its ShareToggle + the bulk control) fits at phone width.
     // Robin's editor is already open (on Relationships); just resize and switch to the About tab.
@@ -3220,9 +3223,8 @@ test('responsive: at a phone width the nav is a drawer and no screen overflows h
         await w.getByRole('button', { name: 'Tester Subject' }).click(); // open the editor (detail)
         await w.waitForTimeout(150);
         expect(await noOverflow()).toBe(true); // the person tabs scroll, not overflow
-        // The About tab has the densest layout (the important-dates label+date+remove row must wrap).
-        await w.getByRole('button', { name: 'About', exact: true }).click();
-        await w.getByRole('button', { name: 'Add date' }).click();
+        // A Subject has no About tab (owned by onboarding); check the Notes tab's layout instead.
+        await w.getByRole('button', { name: 'Notes' }).click();
         await w.waitForTimeout(120);
         expect(await noOverflow()).toBe(true);
         // exact: the ShareToggle aria-labels contain "people you relate to" (a substring of "People").

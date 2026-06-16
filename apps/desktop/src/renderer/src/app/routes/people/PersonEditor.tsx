@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Plus, Trash2, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import { usePeopleStore } from '../../../stores/peopleStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import {
@@ -20,7 +20,6 @@ import {
   Textarea,
   type SegmentOption,
 } from '../../../design-system/components';
-import { ChipEditor } from '../dreams/ChipEditor';
 import { RelationshipsEditor } from './RelationshipsEditor';
 import { AccessSection } from './AccessSection';
 import { PersonBudgetEditor } from './PersonBudgetEditor';
@@ -35,35 +34,26 @@ const GENDER_PRESETS = ['Female', 'Male', 'Non-binary', 'Prefer not to say'] as 
 const GENDER_OTHER = '__other__';
 
 /**
- * The controllable fields this editor actually surfaces (each has a visible `ShareToggle`) — the scope of the
- * "Share all / Lock all" bulk controls. The onboarding-owned self fields (sexualOrientation, relationshipStyle,
- * healthNotes, faith, goals, communicationStyle, values, languages) are deliberately excluded: they have no
- * toggle here, default private, and must not be flipped by a bulk control the user can't counter (18 §14.6).
+ * The controllable fields this editor surfaces (each has a visible `ShareToggle`) — the scope of the
+ * "Share all / Lock all" bulk controls. Since onboarding owns the self's full profile (18 §14.6), the
+ * People editor only keeps the **dream-image / visual** fields for a non-Subject **contact** (who never
+ * onboards) — appearance, gender, ethnicity — plus Notes. Everything else (pronouns, birthday, occupation,
+ * relationship status, children, living situation, interests, location, important dates, and the deeply
+ * personal self fields) is no longer edited here; its existing value is carried through untouched on save.
  */
 const VISIBLE_FIELD_KEYS: PersonFieldKey[] = [
-  'pronouns',
-  'birthday',
   'gender',
   'appearanceDescription',
   'ethnicity',
-  'occupation',
-  'relationshipStatus',
-  'parentalStatus',
-  'livingSituation',
-  'interests',
-  'location',
-  'importantDates',
   'notes',
 ];
 
-type ImportantDate = { label: string; date: string };
-
 /**
- * Create or edit a person. Organized into tabs so person-scoped settings can grow without becoming
- * one long page; relationships/access/budget appear only once the person exists. Every controllable
- * field carries a per-item `ShareToggle` (15-shareability §3.1): shared by default — informing the
- * coaching of people they relate to — and individually lockable to this person's own coaching. The
- * About header's "Share all / Lock all" flips every controllable field at once.
+ * Create or edit a person. Organized into tabs: **Profile** (name + whether they're a Subject), **About**
+ * (a non-Subject contact's visual/dream-image fields only — hidden for Subjects, whose profile is owned by
+ * onboarding), **Notes**, and — once the person exists — Relationships / Access / Budget. Every controllable
+ * field carries a per-item `ShareToggle` (15-shareability §3.1); the About header's "Share all / Lock all"
+ * flips them at once.
  */
 export function PersonEditor({
   person,
@@ -78,8 +68,6 @@ export function PersonEditor({
 
   const [displayName, setDisplayName] = useState(person?.displayName ?? '');
   const [isSubject, setIsSubject] = useState(person?.isSubject ?? false);
-  const [pronouns, setPronouns] = useState(person?.pronouns ?? '');
-  const [birthday, setBirthday] = useState(person?.birthday ?? '');
   const [notes, setNotes] = useState(person?.notes ?? '');
 
   // The per-field lock-set (15-shareability §4.1): keys here are kept to this person's own coaching only.
@@ -95,10 +83,8 @@ export function PersonEditor({
       else next.add(k);
       return next;
     });
-  // Bulk Share/Lock only touches the fields this editor actually surfaces — NOT the hidden, onboarding-owned
-  // self fields (sexualOrientation/relationshipStyle/healthNotes/faith/goals/communicationStyle/values/
-  // languages). Those default private and have no visible toggle here, so "Share all" must never silently
-  // un-privatize them; their existing lock state is preserved (18 §14.6, 15-shareability §8.3/§8.4).
+  // Bulk Share/Lock only touches the fields this editor surfaces — never the hidden, carried-through fields
+  // (so "Share all" can't silently un-privatize something with no toggle to counter it; 15-shareability §8.3).
   const lockAll = (): void =>
     setPrivateFields((prev) => {
       const next = new Set(prev);
@@ -116,7 +102,7 @@ export function PersonEditor({
     <ShareToggle shared={isShared(k)} onChange={(s) => setShared(k, s)} label={label} />
   );
 
-  // About — shared descriptive fields.
+  // About — the visual / dream-image fields (kept only for a non-Subject contact).
   const initialGender = person?.gender ?? '';
   const genderIsPreset = (GENDER_PRESETS as readonly string[]).includes(initialGender);
   const [genderPreset, setGenderPreset] = useState(
@@ -125,31 +111,19 @@ export function PersonEditor({
   const [genderOther, setGenderOther] = useState(genderIsPreset ? '' : initialGender);
   const [appearance, setAppearance] = useState(person?.appearanceDescription ?? '');
   const [ethnicity, setEthnicity] = useState(person?.ethnicity ?? '');
-  const [occupation, setOccupation] = useState(person?.occupation ?? '');
-  const [interests, setInterests] = useState<string[]>(person?.interests ?? []);
-  const [location, setLocation] = useState(person?.location ?? '');
-  const [importantDates, setImportantDates] = useState<ImportantDate[]>(
-    person?.importantDates ?? [],
-  );
-
-  // About — life facts the onboarding intake also fills (18 §14.6).
-  const [relationshipStatus, setRelationshipStatus] = useState(person?.relationshipStatus ?? '');
-  const [parentalStatus, setParentalStatus] = useState(person?.parentalStatus ?? '');
-  const [livingSituation, setLivingSituation] = useState(person?.livingSituation ?? '');
-
-  // The deeply personal self-profile fields (sexual orientation, relationship style, faith, health, goals,
-  // communication style, values, languages) are NOT edited here anymore — they're owned by the person's own
-  // onboarding (18 §14.6). We carry any existing values through on save (below) so editing a contact never
-  // wipes data the self reported through onboarding; this editor just no longer surfaces them.
 
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<Tab>('profile');
 
-  const tabs: SegmentOption<Tab>[] = [
-    { value: 'profile', label: 'Profile' },
-    { value: 'about', label: 'About' },
-    { value: 'notes', label: 'Notes' },
-  ];
+  // The About tab exists only for a non-Subject contact; a Subject's profile is owned by onboarding. If the
+  // person is flipped to a Subject while the About tab is open, fall back to Profile so nothing renders blank.
+  useEffect(() => {
+    if (isSubject && tab === 'about') setTab('profile');
+  }, [isSubject, tab]);
+
+  const tabs: SegmentOption<Tab>[] = [{ value: 'profile', label: 'Profile' }];
+  if (!isSubject) tabs.push({ value: 'about', label: 'About' });
+  tabs.push({ value: 'notes', label: 'Notes' });
   if (person) {
     tabs.push(
       { value: 'relationships', label: 'Relationships' },
@@ -167,9 +141,6 @@ export function PersonEditor({
     if (!displayName.trim()) return;
     setBusy(true);
     try {
-      const cleanDates = importantDates
-        .map((d) => ({ label: d.label.trim(), date: d.date.trim() }))
-        .filter((d) => d.label && d.date);
       const gender = resolvedGender();
       const lockedFields = PERSON_FIELD_KEYS.filter((k) => privateFields.has(k));
       await savePerson({
@@ -177,24 +148,30 @@ export function PersonEditor({
         displayName: displayName.trim(),
         isSubject,
         tags: person?.tags ?? [],
-        ...(pronouns.trim() ? { pronouns: pronouns.trim() } : {}),
-        ...(birthday.trim() ? { birthday: birthday.trim() } : {}),
         ...(notes.trim() ? { notes: notes.trim() } : {}),
         // Per-field shareability locks (15-shareability §4.1) — only the opt-OUTs.
         ...(lockedFields.length ? { privateFields: lockedFields } : {}),
-        // About.
+        // The visual / dream-image fields edited here (also feed a related person's depiction in a dream).
         ...(gender ? { gender } : {}),
         ...(appearance.trim() ? { appearanceDescription: appearance.trim() } : {}),
         ...(ethnicity.trim() ? { ethnicity: ethnicity.trim() } : {}),
-        ...(occupation.trim() ? { occupation: occupation.trim() } : {}),
-        ...(relationshipStatus.trim() ? { relationshipStatus: relationshipStatus.trim() } : {}),
-        ...(parentalStatus.trim() ? { parentalStatus: parentalStatus.trim() } : {}),
-        ...(livingSituation.trim() ? { livingSituation: livingSituation.trim() } : {}),
-        ...(interests.length ? { interests } : {}),
-        ...(location.trim() ? { location: location.trim() } : {}),
-        ...(cleanDates.length ? { importantDates: cleanDates } : {}),
-        // Carry through the onboarding-owned self fields untouched (upsertPerson rebuilds from the input,
-        // so omitting them would WIPE values the person reported through onboarding — 18 §14.6).
+        // Everything else is owned by onboarding (or set elsewhere) and NOT edited here. `upsertPerson`
+        // rebuilds the person from the input, so each must be carried through or it would be WIPED.
+        ...(person?.pronouns !== undefined ? { pronouns: person.pronouns } : {}),
+        ...(person?.birthday !== undefined ? { birthday: person.birthday } : {}),
+        ...(person?.email !== undefined ? { email: person.email } : {}),
+        ...(person?.phone !== undefined ? { phone: person.phone } : {}),
+        ...(person?.occupation !== undefined ? { occupation: person.occupation } : {}),
+        ...(person?.relationshipStatus !== undefined
+          ? { relationshipStatus: person.relationshipStatus }
+          : {}),
+        ...(person?.parentalStatus !== undefined ? { parentalStatus: person.parentalStatus } : {}),
+        ...(person?.livingSituation !== undefined
+          ? { livingSituation: person.livingSituation }
+          : {}),
+        ...(person?.interests !== undefined ? { interests: person.interests } : {}),
+        ...(person?.location !== undefined ? { location: person.location } : {}),
+        ...(person?.importantDates !== undefined ? { importantDates: person.importantDates } : {}),
         ...(person?.goals !== undefined ? { goals: person.goals } : {}),
         ...(person?.communicationStyle !== undefined
           ? { communicationStyle: person.communicationStyle }
@@ -260,35 +237,17 @@ export function PersonEditor({
                 </Text>
               </Stack>
             </Inline>
-            <Field label="Pronouns" labelAction={toggle('pronouns', 'Pronouns')}>
-              {(props) => (
-                <TextInput
-                  {...props}
-                  value={pronouns}
-                  placeholder="e.g. she/her"
-                  onChange={(event) => setPronouns(event.target.value)}
-                />
-              )}
-            </Field>
-            <Field
-              label="Birthday"
-              help="Used for age in coaching context and dream imagery."
-              labelAction={toggle('birthday', 'Birthday')}
-            >
-              {(props) => (
-                <TextInput
-                  {...props}
-                  type="date"
-                  value={birthday}
-                  onChange={(event) => setBirthday(event.target.value)}
-                />
-              )}
-            </Field>
+            {isSubject ? (
+              <Text size="xs" tone="secondary">
+                Their profile — pronouns, appearance, life facts and more — comes from their own
+                onboarding, so it isn’t edited here.
+              </Text>
+            ) : null}
           </Stack>
         </Card>
       ) : null}
 
-      {tab === 'about' ? (
+      {tab === 'about' && !isSubject ? (
         <Card>
           <Stack gap={4}>
             <Stack gap={2}>
@@ -304,9 +263,9 @@ export function PersonEditor({
                 </Inline>
               </div>
               <Text size="xs" tone="secondary">
-                By default, what you note here can inform the coaching of people you relate to. Lock
-                any item to keep it to this person only. Appearance, gender, ethnicity, and age can
-                also inform a dream’s generated image while shared.
+                A few visual details about this contact. They can inform the coaching of people you
+                relate to and this person’s depiction in a dream’s generated image. Lock any item to
+                keep it to your own coaching. (Add anything else as a Note.)
               </Text>
             </Stack>
             <Field label="Gender" labelAction={toggle('gender', 'Gender')}>
@@ -363,74 +322,6 @@ export function PersonEditor({
                 />
               )}
             </Field>
-            <Field label="Occupation" labelAction={toggle('occupation', 'Occupation')}>
-              {(props) => (
-                <TextInput
-                  {...props}
-                  value={occupation}
-                  placeholder="e.g. nurse"
-                  onChange={(event) => setOccupation(event.target.value)}
-                />
-              )}
-            </Field>
-            <Field
-              label="Relationship status"
-              labelAction={toggle('relationshipStatus', 'Relationship status')}
-            >
-              {(props) => (
-                <TextInput
-                  {...props}
-                  value={relationshipStatus}
-                  placeholder="e.g. Married"
-                  onChange={(event) => setRelationshipStatus(event.target.value)}
-                />
-              )}
-            </Field>
-            <Field label="Children" labelAction={toggle('parentalStatus', 'Children')}>
-              {(props) => (
-                <TextInput
-                  {...props}
-                  value={parentalStatus}
-                  placeholder="e.g. Two young kids"
-                  onChange={(event) => setParentalStatus(event.target.value)}
-                />
-              )}
-            </Field>
-            <Field
-              label="Living situation"
-              labelAction={toggle('livingSituation', 'Living situation')}
-            >
-              {(props) => (
-                <TextInput
-                  {...props}
-                  value={livingSituation}
-                  placeholder="e.g. With a partner"
-                  onChange={(event) => setLivingSituation(event.target.value)}
-                />
-              )}
-            </Field>
-            <ChipEditor
-              label="Interests"
-              values={interests}
-              onChange={setInterests}
-              placeholder="Add an interest"
-              labelAction={toggle('interests', 'Interests')}
-            />
-            <Field label="Location" labelAction={toggle('location', 'Location')}>
-              {(props) => (
-                <TextInput
-                  {...props}
-                  value={location}
-                  placeholder="e.g. Seattle"
-                  onChange={(event) => setLocation(event.target.value)}
-                />
-              )}
-            </Field>
-            <ImportantDatesEditor
-              value={importantDates}
-              onChange={setImportantDates}
-              shareToggle={toggle('importantDates', 'Important dates')}
-            />
           </Stack>
         </Card>
       ) : null}
@@ -492,72 +383,6 @@ export function PersonEditor({
             <Trash2 size={16} aria-hidden="true" />
           </IconButton>
         ) : null}
-      </Inline>
-    </Stack>
-  );
-}
-
-/** Label + date pairs (e.g. an anniversary) — a small repeatable row editor for `Person.importantDates`. */
-function ImportantDatesEditor({
-  value,
-  onChange,
-  shareToggle,
-}: {
-  value: ImportantDate[];
-  onChange: (next: ImportantDate[]) => void;
-  shareToggle: JSX.Element;
-}): JSX.Element {
-  const update = (index: number, patch: Partial<ImportantDate>): void => {
-    onChange(value.map((row, i) => (i === index ? { ...row, ...patch } : row)));
-  };
-  return (
-    <Stack gap={2}>
-      <div className={styles.datesHeader}>
-        <Text size="sm" weight={500}>
-          Important dates
-        </Text>
-        {shareToggle}
-      </div>
-      {value.map((row, index) => (
-        <Inline key={index} gap={2} align="end" wrap>
-          <div className={styles.dateLabel}>
-            <Field label="Label">
-              {(props) => (
-                <TextInput
-                  {...props}
-                  value={row.label}
-                  placeholder="e.g. Anniversary"
-                  onChange={(event) => update(index, { label: event.target.value })}
-                />
-              )}
-            </Field>
-          </div>
-          <div className={styles.dateValue}>
-            <Field label="Date">
-              {(props) => (
-                <TextInput
-                  {...props}
-                  type="date"
-                  value={row.date}
-                  onChange={(event) => update(index, { date: event.target.value })}
-                />
-              )}
-            </Field>
-          </div>
-          <IconButton
-            aria-label={`Remove date ${index + 1}`}
-            variant="secondary"
-            onClick={() => onChange(value.filter((_, i) => i !== index))}
-          >
-            <X size={16} aria-hidden="true" />
-          </IconButton>
-        </Inline>
-      ))}
-      <Inline>
-        <Button variant="secondary" onClick={() => onChange([...value, { label: '', date: '' }])}>
-          <Plus size={16} aria-hidden="true" />
-          Add date
-        </Button>
       </Inline>
     </Stack>
   );

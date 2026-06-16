@@ -44,6 +44,12 @@ export function QuestionnaireAiPanel({
   const people = usePeopleStore((s) => s.people);
   const loadPeople = usePeopleStore((s) => s.load);
   const activePerson = useSessionStore((s) => s.activePerson);
+  // Owner-only inline "add a topic" for an intimacy questionnaire at an explicit tier (08 §16.5a).
+  const canManageTopics = useSessionStore((s) => s.can('people.manage'));
+  const showTopicAdd =
+    canManageTopics &&
+    type === 'intimacy' &&
+    (sensitivity === 'explicit' || sensitivity === 'unfiltered');
 
   const [open, setOpen] = useState(false);
   const [brief, setBrief] = useState('');
@@ -52,6 +58,26 @@ export function QuestionnaireAiPanel({
   const [includeRelationship, setIncludeRelationship] = useState(true);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ tone: 'info' | 'warning'; text: string } | null>(null);
+  const [topicKind, setTopicKind] = useState<'activities' | 'fantasies'>('activities');
+  const [topicDraft, setTopicDraft] = useState('');
+  const [topicBusy, setTopicBusy] = useState(false);
+  const [topicNotice, setTopicNotice] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const onAddTopic = async (): Promise<void> => {
+    const name = topicDraft.trim();
+    if (name === '' || topicBusy) return;
+    setTopicBusy(true);
+    setTopicNotice(null);
+    try {
+      await window.selfos?.questionnairesAddIntimacyTopic({ kind: topicKind, name });
+      setTopicDraft('');
+      setTopicNotice({ ok: true, text: `Added “${name}” — the AI will draw on it.` });
+    } catch {
+      setTopicNotice({ ok: false, text: 'Couldn’t add that topic.' });
+    } finally {
+      setTopicBusy(false);
+    }
+  };
 
   useEffect(() => {
     void loadPeople();
@@ -173,6 +199,46 @@ export function QuestionnaireAiPanel({
             <Sparkles size={14} aria-hidden="true" />
             {busy ? 'Drafting…' : 'Generate questions'}
           </Button>
+
+          {showTopicAdd ? (
+            <Stack gap={2}>
+              <Text size="sm" tone="secondary">
+                Add a consensual-adult topic for the AI to draw on (18+). It’s saved household-wide
+                and also feeds the personal intake — manage the full list in Settings.
+              </Text>
+              <div className={styles.topicAddRow}>
+                <Select
+                  aria-label="Topic kind"
+                  value={topicKind}
+                  onChange={(e) => setTopicKind(e.target.value as 'activities' | 'fantasies')}
+                >
+                  <option value="activities">Activity</option>
+                  <option value="fantasies">Fantasy</option>
+                </Select>
+                <input
+                  className={styles.topicAddInput}
+                  aria-label="New topic"
+                  value={topicDraft}
+                  placeholder="e.g. Wax play"
+                  onChange={(e) => setTopicDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      void onAddTopic();
+                    }
+                  }}
+                />
+                <Button variant="secondary" onClick={() => void onAddTopic()} disabled={topicBusy}>
+                  Add topic
+                </Button>
+              </div>
+              {topicNotice ? (
+                <Text size="sm" tone={topicNotice.ok ? 'secondary' : 'tertiary'}>
+                  {topicNotice.text}
+                </Text>
+              ) : null}
+            </Stack>
+          ) : null}
         </Stack>
       ) : null}
     </div>

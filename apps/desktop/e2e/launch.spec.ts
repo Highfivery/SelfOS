@@ -30,6 +30,7 @@ import {
   getAlignmentReport,
   getResponse,
   listAssignments,
+  readCustomIntimacyTopics,
   saveQuestionnaire,
   submitResponse,
 } from '@selfos/core/questionnaires';
@@ -1869,6 +1870,67 @@ test('authoring (§16.4): AI draft fills the empty title; Save→Send is a two-s
     await expect(w.getByRole('heading', { name: 'Edit questionnaire' })).toBeVisible();
     await expect(w.getByText(/Saved\. You can send it now/i)).toBeVisible();
     await expect(w.getByRole('button', { name: 'Send' })).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('intimacy topics (§16.5a): the owner manages custom topics in Settings + an inline builder add, persisted', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('expected a master key');
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    // Settings → Questionnaires → the admin-only "Intimacy topics (18+)" surface → add a custom activity.
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'Questionnaires' }).click();
+    await expect(w.getByText('Intimacy topics (18+)')).toBeVisible();
+    await expect(w.getByText(/18\+ only/i)).toBeVisible();
+    await w.getByLabel('Add a custom activity').fill('Wax play');
+    await w.getByRole('button', { name: 'Add' }).first().click();
+    await expect(w.getByText('Wax play')).toBeVisible();
+
+    // It persisted to the plain prefs file (no master key needed to read it).
+    await expect
+      .poll(async () => (await readCustomIntimacyTopics(fs)).activities)
+      .toContain('Wax play');
+
+    // The inline builder add (owner) writes to the SAME shared list: author an intimacy/unfiltered
+    // questionnaire and add a fantasy from the AI panel.
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await w.getByRole('button', { name: 'New' }).click();
+    await w.getByLabel('Type', { exact: true }).selectOption('intimacy');
+    await w.getByLabel('Sensitivity').selectOption('unfiltered');
+    await w.getByRole('button', { name: /Draft with AI/ }).click();
+    await w.getByLabel('Topic kind').selectOption('fantasies');
+    await w.getByLabel('New topic').fill('Pirate roleplay');
+    await w.getByRole('button', { name: 'Add topic' }).click();
+    await expect(w.getByText(/Added .Pirate roleplay./)).toBeVisible();
+    await expect
+      .poll(async () => (await readCustomIntimacyTopics(fs)).fantasies)
+      .toContain('Pirate roleplay');
+
+    // No inner horizontal scrollbar on the new Settings control or the inline add at phone width.
+    await w.setViewportSize({ width: 390, height: 800 });
+    await w.waitForTimeout(150);
+    const offenders = await w.evaluate(
+      () =>
+        [...document.querySelectorAll('main *')].filter((el) => {
+          const s = getComputedStyle(el);
+          return (
+            (s.overflowX === 'auto' || s.overflowX === 'scroll') &&
+            el.scrollWidth - el.clientWidth > 1
+          );
+        }).length,
+    );
+    expect(offenders).toBe(0);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

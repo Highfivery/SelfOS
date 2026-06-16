@@ -31,6 +31,7 @@ import type {
   GuidedSuggestResult,
   InboxAssignmentDetail,
   InboxItem,
+  IntimacyTopicsView,
   InviteSummary,
   Insight,
   InsightFact,
@@ -142,6 +143,9 @@ export const IpcChannels = {
   questionnairesValidate: 'questionnaires:validate',
   questionnairesListTypes: 'questionnaires:listTypes',
   questionnairesAddType: 'questionnaires:addType',
+  questionnairesIntimacyTopics: 'questionnaires:intimacyTopics',
+  questionnairesAddIntimacyTopic: 'questionnaires:addIntimacyTopic',
+  questionnairesRemoveIntimacyTopic: 'questionnaires:removeIntimacyTopic',
   questionnairesStoreImage: 'questionnaires:storeImage',
   questionnairesGetImage: 'questionnaires:getImage',
   questionnairesDeleteImage: 'questionnaires:deleteImage',
@@ -449,6 +453,20 @@ export interface SelfosBridge {
   questionnairesListTypes(): Promise<string[]>;
   /** Add a custom type (trimmed, de-duped) and return the updated list. Requires `questionnaires.create`. */
   questionnairesAddType(name: string): Promise<string[]>;
+  /**
+   * The shared intimacy topic inventory (08-questionnaires §16.5a): built-in topics + the Owner's custom
+   * additions, split so the UI shows built-ins read-only and custom as removable. Read requires
+   * `questionnaires.create`; add/remove are **owner-only** (`people.manage`).
+   */
+  questionnairesIntimacyTopics(): Promise<IntimacyTopicsView>;
+  questionnairesAddIntimacyTopic(input: {
+    kind: 'activities' | 'fantasies';
+    name: string;
+  }): Promise<IntimacyTopicsView>;
+  questionnairesRemoveIntimacyTopic(input: {
+    kind: 'activities' | 'fantasies';
+    name: string;
+  }): Promise<IntimacyTopicsView>;
   /** Encrypt + store an author-attached question image (base64 in); returns its vault path + mime. */
   questionnairesStoreImage(input: { base64: string; mime: string }): Promise<{
     imagePath: string;
@@ -753,6 +771,7 @@ export type {
   GuidedSuggestResult,
   InboxAssignmentDetail,
   InboxItem,
+  IntimacyTopicsView,
   Insight,
   InsightFact,
   IntakeAnswerValue,

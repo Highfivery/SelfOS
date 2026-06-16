@@ -741,6 +741,43 @@ describe('createCoreBridge', () => {
     await expect(bridge.questionnairesAddType('Sneaky')).rejects.toThrow(/permitted/);
   });
 
+  it('intimacy topics (§16.5a): owner adds/removes; a member reads but cannot add/remove', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    const member = await bridge.peopleSave({ displayName: 'Mem', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: member.id, roleId: 'member', pin: null });
+
+    // The Owner sees the built-in inventory + no custom yet, then adds one of each.
+    const initial = await bridge.questionnairesIntimacyTopics();
+    expect(initial.builtIn.activities.length).toBeGreaterThan(10);
+    expect(initial.custom).toEqual({ activities: [], fantasies: [] });
+    const afterAdd = await bridge.questionnairesAddIntimacyTopic({
+      kind: 'activities',
+      name: 'Wax play',
+    });
+    expect(afterAdd.custom.activities).toEqual(['Wax play']);
+    await bridge.questionnairesAddIntimacyTopic({ kind: 'fantasies', name: 'Pirate roleplay' });
+
+    // A Member can READ the merged inventory (for the builder) but CANNOT add or remove (owner-only).
+    await bridge.sessionSetActive({ personId: member.id });
+    const memberView = await bridge.questionnairesIntimacyTopics();
+    expect(memberView.custom.activities).toEqual(['Wax play']);
+    await expect(
+      bridge.questionnairesAddIntimacyTopic({ kind: 'activities', name: 'Sneaky' }),
+    ).rejects.toThrow(/permitted/);
+    await expect(
+      bridge.questionnairesRemoveIntimacyTopic({ kind: 'activities', name: 'Wax play' }),
+    ).rejects.toThrow(/permitted/);
+
+    // The Owner removes a custom topic.
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    const afterRemove = await bridge.questionnairesRemoveIntimacyTopic({
+      kind: 'activities',
+      name: 'wax PLAY', // case-insensitive
+    });
+    expect(afterRemove.custom.activities).toEqual([]);
+    expect(afterRemove.custom.fantasies).toEqual(['Pirate roleplay']);
+  });
+
   it('stores, reads back, and deletes an encrypted question image; gated + validated', async () => {
     const { bridge } = await freshOwner();
     const base64 = toBase64(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3, 4]));

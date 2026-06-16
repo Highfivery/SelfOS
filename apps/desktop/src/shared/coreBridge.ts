@@ -49,6 +49,7 @@ import {
   type InboxCompatibilityView,
   type InboxItem,
   type Insight,
+  type IntimacyTopicsView,
   IntakeAnswerValueSchema,
   type IntakeState,
   type ProfileUpdateSuggestion,
@@ -162,7 +163,9 @@ import {
   listInsightsForPerson,
   updateInsight,
 } from '@selfos/core/insights';
+import { INTIMACY_ACTIVITIES, INTIMACY_FANTASIES } from '@selfos/core/intimacy';
 import {
+  addCustomIntimacyTopic,
   addCustomType,
   analyzeAssignment,
   buildQuestionTrends,
@@ -198,6 +201,8 @@ import {
   MAX_IMAGE_BYTES,
   openAssignment,
   purgeQuestionnaire,
+  readCustomIntimacyTopics,
+  removeCustomIntimacyTopic,
   revokeRelayForDeletion,
   revokeRelaySend,
   saveProgress,
@@ -449,6 +454,10 @@ const RenameSchema = z.object({ id: z.string().min(1), title: z.string().min(1) 
 const BudgetSetPersonSchema = z.object({
   personId: z.string().min(1),
   budget: BudgetSchema.nullable(),
+});
+const IntimacyTopicSchema = z.object({
+  kind: z.enum(['activities', 'fantasies']),
+  name: z.string().min(1),
 });
 const AssignmentsCreateSchema = z.object({
   questionnaireId: z.string().min(1),
@@ -1322,6 +1331,47 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         throw new Error('Not permitted');
       }
       return addCustomType(ctx.fs, z.string().parse(name));
+    },
+
+    // --- Owner-extensible intimacy topics (08-questionnaires §16.5a). Read = any author; add/remove are
+    //     owner-only (people.manage) since the lists are household-wide. The boundary is enforced by the
+    //     generation prompt + the model (the Owner is the full-access, trusted role), not a keyword filter.
+    questionnairesIntimacyTopics: async (): Promise<IntimacyTopicsView> => {
+      const ctx = await host.vaultAndKey();
+      const empty: IntimacyTopicsView = {
+        builtIn: { activities: [], fantasies: [] },
+        custom: { activities: [], fantasies: [] },
+      };
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) return empty;
+      return {
+        builtIn: { activities: [...INTIMACY_ACTIVITIES], fantasies: [...INTIMACY_FANTASIES] },
+        custom: await readCustomIntimacyTopics(ctx.fs),
+      };
+    },
+    questionnairesAddIntimacyTopic: async (input): Promise<IntimacyTopicsView> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'people.manage'))) {
+        throw new Error('Not permitted');
+      }
+      const { kind, name } = IntimacyTopicSchema.parse(input);
+      const builtIns = kind === 'activities' ? INTIMACY_ACTIVITIES : INTIMACY_FANTASIES;
+      await addCustomIntimacyTopic(ctx.fs, kind, name, builtIns);
+      return {
+        builtIn: { activities: [...INTIMACY_ACTIVITIES], fantasies: [...INTIMACY_FANTASIES] },
+        custom: await readCustomIntimacyTopics(ctx.fs),
+      };
+    },
+    questionnairesRemoveIntimacyTopic: async (input): Promise<IntimacyTopicsView> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'people.manage'))) {
+        throw new Error('Not permitted');
+      }
+      const { kind, name } = IntimacyTopicSchema.parse(input);
+      await removeCustomIntimacyTopic(ctx.fs, kind, name);
+      return {
+        builtIn: { activities: [...INTIMACY_ACTIVITIES], fantasies: [...INTIMACY_FANTASIES] },
+        custom: await readCustomIntimacyTopics(ctx.fs),
+      };
     },
     questionnairesStoreImage: async (input): Promise<{ imagePath: string; mime: string }> => {
       const ctx = await host.vaultAndKey();

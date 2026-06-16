@@ -1,11 +1,9 @@
 # 08 — Questionnaires & the Insight / metrics layer
 
-> **Status:** **Approved** (built) · **Approved** (§15 authoring-UX) · **Mostly built** (2026-06-15 audit
-> fixes & enhancements, §16): §16.1 (compat participant model), §16.2 (context-only), §16.3/§16.4 (Save→Send +
-> title/AI-title), §16.6 (never disclose owner access), and §16.7 (E2E matrix) **MERGED to `main`**; **§16.5
-> explicit generation + the §16.5a shared `INTIMACY_TOPICS` foundation are built (slice 4a)** on
-> `feat/questionnaire-explicit-gen`; **only §16.5a's owner Settings/inline UI (slice 4b) remains.** See §16.10.
-> · _last updated 2026-06-15_
+> **Status:** **Approved** (built) · **Approved** (§15 authoring-UX) · **Built** (2026-06-15 audit fixes &
+> enhancements, §16 — ALL slices): §16.1–§16.4, §16.6, §16.7 **MERGED to `main`**; §16.5 explicit generation +
+> §16.5a shared owner-extensible `INTIMACY_TOPICS` (the constant + intake sync + owner Settings/inline UI)
+> built on `feat/questionnaire-explicit-gen` (NOT yet merged). See §16.10. · _last updated 2026-06-15_
 >
 > **2026-06 amendment (§15, package D of the app refresh):** authoring-experience refinements on the
 > already-built feature — a **General** type; **sensitivity tiers shown only for Intimacy/Scenario** types (other
@@ -1703,6 +1701,14 @@ intimacy-topics surface), not blockers._
   `config/questionnaires.json`, additive — no schemaVersion bump; `readCustomIntimacyTopics` /
   `addCustomIntimacyTopic` / `removeCustomIntimacyTopic`). Gate green: typecheck/lint/format, 397 core + 8
   relay + 474 desktop unit.
-- **Slice 4b remaining (§16.5a UI):** the **owner-only Settings surface** (18+, marked admin-only,
-  vault-scoped) to manage the custom intimacy topics + the **inline "add a topic"** in the intimacy builder,
-  both writing the shared custom lists; plus the explicit-tier E2E rows for the §16.7 matrix.
+- **Slice 4b built** (2026-06-15, same branch): the **owner-only Settings surface** —
+  `questionnaires.intimacyTopics` (admin-only, 18+, vault-scoped) → an `IntimacyTopicsControl` listing
+  built-ins read-only + the Owner's custom activities/fantasies as removable chips, with an add field each —
+  **and** an **inline "add a topic"** in the intimacy builder's "Draft with AI" panel (shown only to an
+  owner authoring an intimacy questionnaire at the explicit/unfiltered tier). Both write the same shared
+  custom lists. IPC `questionnaires:intimacyTopics` (read = `questionnaires.create`) /
+  `:addIntimacyTopic` / `:removeIntimacyTopic` (add/remove = **owner-only**, `people.manage`); the boundary
+  is enforced by the generation prompt + the model (trusted owner), not a keyword filter. Gate green:
+  typecheck/lint/format, 397 core + 8 relay + **478 desktop** unit, **67 E2E** (+1: owner manages topics in
+  Settings + the inline builder add, both persisted to the plain prefs file [decrypt-free read]). **§16 is
+  now fully built.**

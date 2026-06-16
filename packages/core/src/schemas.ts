@@ -670,6 +670,17 @@ export const QuestionnairePrefsSchema = z.object({
 });
 export type QuestionnairePrefs = z.infer<typeof QuestionnairePrefsSchema>;
 
+/** The intimacy topic inventory split into read-only built-ins + the Owner's removable custom additions
+ * (08-questionnaires §16.5a) — the shape the owner Settings surface + inline builder add render. */
+export interface IntimacyTopicGroups {
+  activities: string[];
+  fantasies: string[];
+}
+export interface IntimacyTopicsView {
+  builtIn: IntimacyTopicGroups;
+  custom: IntimacyTopicGroups;
+}
+
 /** A gap-finder proposal (08-questionnaires §3.7): a questionnaire idea + a few sample questions. */
 export const QuestionnaireSuggestionSchema = z.object({
   title: z.string().min(1),

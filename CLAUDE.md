@@ -287,6 +287,26 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-15 — Build (**Questionnaires §16 slice 4b — owner-extensible intimacy-topics UI; SPEC 08 §16 is now
+  FULLY BUILT**; on `feat/questionnaire-explicit-gen`, NOT merged). The owner manages the shared
+  `INTIMACY_TOPICS` inventory two ways (spec 08 §16.5a): an **owner-only Settings surface**
+  (`questionnaires.intimacyTopics`, **admin-only**, 18+, vault-scoped → `IntimacyTopicsControl` — built-ins
+  read-only + the Owner's custom activities/fantasies as removable chips + an add field each) **and** an
+  **inline "add a topic"** in the intimacy builder's "Draft with AI" panel (shown only to an owner authoring an
+  intimacy questionnaire at the explicit/unfiltered tier). Both write the SAME shared custom lists. **IPC seam:**
+  `questionnaires:intimacyTopics` (read = `questionnaires.create`, returns built-in + custom split) /
+  `:addIntimacyTopic` / `:removeIntimacyTopic` (add/remove = **owner-only, `people.manage`** — the lists are
+  household-wide); the consensual-adult boundary is enforced by the generation prompt + the model (trusted
+  owner, the full-access role), **not** a keyword filter. Reused existing primitives (Banner/Field/TextInput/
+  Button + chips) → no new `/gallery` primitive. Gate green: typecheck (node + web/DOM-lib), lint, format, 397
+  core + 8 relay + **478 desktop** unit (+bridge owner-adds/member-reads-only gating, +`IntimacyTopicsControl`
+  RTL [3]), **67 E2E** (+1: owner adds a topic in Settings + via the inline builder add → both persist to the
+  plain `config/questionnaires.json` [decrypt-free read]). **Visual QA** via the web preview (the admin-only
+  18+ control: chips + add rows, the inline panel add) — 0 overflow (the only x-scroll is the by-design
+  narrow-width settings section nav). **Lesson: a household-wide owner-managed list = read gated on the author
+  capability (so any author's builder/AI can use it) but add/remove gated on `people.manage` (owner-only); the
+  inline builder affordance hides for non-owners, and the boundary lives in the prompt + model, never a filter.
+  Spec 08 §16 (the 2026-06-15 audit fixes) is COMPLETE — §16.1–§16.7 all built.**
 - 2026-06-15 — Build (**Questionnaires §16 slice 4a — explicit generation + shared `INTIMACY_TOPICS`
   foundation**; spec 08 §16.5/§16.5a, on `feat/questionnaire-explicit-gen` off the **merged** `main`, NOT
   merged). After slices 1–3+5+§16.6 merged (`d4ee441`) and the concurrent `feat/intimacy-questions` work

@@ -21,6 +21,7 @@ import {
 import { ApiKeyControl, OpenAiKeyControl, TestConnectionControl } from './aiControls';
 import { RelaySettingsPanel } from './RelaySettingsPanel';
 import { RelayMessagesControl } from './RelayMessagesControl';
+import { IntimacyTopicsControl } from './IntimacyTopicsControl';
 import {
   DEFAULT_RELAY_MESSAGES,
   RelayMessagesSchema,
@@ -40,6 +41,7 @@ declare module './types' {
     'sessions.autoSummarizeOnEnd': boolean;
     'questionnaires.autoAnalyze': boolean;
     'questionnaires.defaultMessages': RelayMessages;
+    'questionnaires.intimacyTopics': null;
     'dreams.memoryEnabled': boolean;
     'dreams.imageGenerationEnabled': boolean;
     'dreams.imageModel': 'gpt-image-2' | 'gpt-image-1';
@@ -270,6 +272,19 @@ export function registerBuiltinSettings(): void {
       control: { type: 'custom', render: RelayMessagesControl },
       scope: 'vault',
       order: 3,
+    }),
+    defineSetting({
+      key: 'questionnaires.intimacyTopics',
+      section: 'questionnaires',
+      label: 'Intimacy topics (18+)',
+      description:
+        'Add or remove the consensual-adult topics that AI uses to draft intimacy questionnaires and the personal intake. Household-wide.',
+      schema: z.null(),
+      default: null,
+      control: { type: 'custom', render: IntimacyTopicsControl },
+      scope: 'vault',
+      adminOnly: true,
+      order: 4,
     }),
     defineSetting({
       key: 'dreams.memoryEnabled',

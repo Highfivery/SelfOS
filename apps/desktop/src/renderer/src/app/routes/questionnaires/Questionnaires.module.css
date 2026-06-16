@@ -608,3 +608,26 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Inline "add an intimacy topic" row in the AI panel (08 §16.5a). */
+.topicAddRow {
+  display: flex;
+  gap: var(--space-2);
+  align-items: stretch;
+}
+
+.topicAddInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+}
+
+.topicAddInput:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}

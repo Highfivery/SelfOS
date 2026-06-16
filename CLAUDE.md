@@ -287,8 +287,35 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-15 — Spec + Build (**Questionnaires SPEC 08 §17 — recipient-bound questionnaires + in-policy explicit
+  framing + recipient-aware de-dup**; APPROVED + BUILT on `feat/questionnaire-explicit-gen`, NOT merged). User
+  rejected my guessed §16.5b fallback ("NEVER assume… ALWAYS ASK"): I removed it, wrote a spec amendment (§17),
+  and asked every decision before coding. **Decisions (all user-confirmed):** (1) fix intimacy refusals by
+  **reworking the per-tier prompt**, not a fallback — recast `explicit`/`unfiltered` as a **sexual-wellness
+  self-assessment** (health register, not erotica) so the live model complies in-policy; a refusal now surfaces
+  the calm error (no canned questions). (2) **Every questionnaire is bound to ONE recipient, chosen FIRST** (a
+  new `NewQuestionnaireStart` step — full-width Selects, never a scrolling SegmentedControl §12); never several;
+  household OR external; **Duplicate** re-targets; **compatibility is exempt** (its two participants are chosen
+  at send). The recipient picker LEFT the send panels (the bridge derives the recipient from the def + rejects a
+  wrong-kind send). (3) **Recipient-aware de-dup** — generation feeds the bound household recipient's **full**
+  answered content (profile + their Insights [intake/sessions/dreams/questionnaires] + the exact prompts of
+  questionnaires already asked of them), assembled **host-side**, to Claude as **avoid-only** grounding; the
+  author **never** sees it (only generated questions return), and the prompt **forbids the model from quoting/
+  referencing** it ("steer clear, NOT mention"). User **knowingly relaxed** the own-context-only rule for this
+  generation path (output boundary preserved). External/compat skip de-dup; the "about a person" context
+  defaults to the recipient (overridable). 5 slices, each gated. **Lesson: the recipient-required rule belongs
+  at the AUTHORING boundary (the start step) + the SEND path, NOT in the structural `validateQuestionnaire` that
+  `createAssignment` calls — putting it there breaks every core send of a recipient-less compat snapshot. And a
+  long-labelled SegmentedControl ("Compatibility (two people)") scrolls-x at 390px (a §12 failure) → use
+  full-width Selects.** Code-reviewer **ship** (privacy boundary verified airtight at the output seam — the
+  recipient's private content never returns to the author; +1 stale-comment nit fixed). Gate green: typecheck
+  (node + web/DOM-lib), lint, format, **400 core + 8 relay + 487 desktop** unit, **68 E2E** (recipient-bound
+  decrypt + Duplicate + 390px start-step guard; all questionnaire flows re-pointed through the start step). Visual
+  QA via real-app screenshots (start step desktop + 390px, the "For:" builder header). Synced spec 08 §17 +
+  §16.7 matrix §H. **NOT merged — user reviews the explicit-prompt wording (§17.2/§16.5) before merge.**
 - 2026-06-15 — Build (**Questionnaires §16 slice-4 follow-ups — 4 feedback fixes + the §16.5b explicit-starter
-  fallback**; on `feat/questionnaire-explicit-gen`, NOT merged). Four user-flagged fixes: (1) the "Draft with AI"
+  fallback** [SUPERSEDED by §17 — the fallback was removed]; on `feat/questionnaire-explicit-gen`, NOT merged).
+  Four user-flagged fixes: (1) the "Draft with AI" Four user-flagged fixes: (1) the "Draft with AI"
   panel shows a **live elapsed-time progress block** (`role="status"` animated bar + "Drafting your questions… Ns")
   while drafting, not just a disabled button; (2) `appendGenerated` drops the **leading blank** generated question;
   (3) **§16.5b** — when the live Claude model **still declines** an intimacy explicit/unfiltered draft (the §16.5

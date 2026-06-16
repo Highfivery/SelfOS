@@ -650,7 +650,10 @@ export const QuestionnaireSchema = z.object({
   creatorPersonId: z.string().optional(),
   // The single recipient this questionnaire is for (08 §17.3) — chosen at creation, never several. Required
   // for non-compatibility questionnaires (a compatibility def carries its two participants at send instead,
-  // so it omits this). Optional in the shape; the non-compat requirement is enforced in validateQuestionnaire.
+  // so it omits this). Optional in the shape (a draft may be saved incomplete); the non-compat requirement is
+  // enforced at the AUTHORING boundary (the recipient-first start step) and the SEND path (the bridge derives
+  // the recipient from the def and rejects a missing/wrong-kind one) — NOT in the structural validateQuestionnaire,
+  // which createAssignment calls and must keep working for recipient-less compatibility snapshots.
   recipient: RecipientSchema.optional(),
   title: z.string().min(1),
   description: z.string().optional(),

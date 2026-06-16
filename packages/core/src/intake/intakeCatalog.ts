@@ -1,3 +1,4 @@
+import { INTIMACY_ACTIVITIES, INTIMACY_FANTASIES } from '../intimacy/topics';
 import type { BranchRule, IntakeSectionMeta, PersonFieldKey, Question } from '../schemas';
 
 /**
@@ -132,39 +133,9 @@ function grouped(group: string, items: IntakeFormQuestion[]): IntakeFormQuestion
 const AGE_RANGES = ['Under 10', '10–12', '13–15', '16–18', '19–24', '25+', 'Prefer not to say'];
 const FREQ = ['Rarely', 'A few times a month', 'Weekly', 'A few times a week', 'Daily'];
 // The consensual-adult activity checklist, reused for into-it / curious-to-try / hard-limits (§14.5 D).
-const ACTIVITIES = [
-  'Oral (giving)',
-  'Oral (receiving)',
-  'Deepthroat',
-  'Anal (giving)',
-  'Anal (receiving)',
-  'Rimming (giving)',
-  'Rimming (receiving)',
-  'Fingering',
-  'Butt plugs / anal toys',
-  'Vibrators / dildos',
-  'Bondage',
-  'Blindfolds',
-  'Spanking (giving)',
-  'Spanking (receiving)',
-  'Choking (giving)',
-  'Choking (receiving)',
-  'Hair-pulling',
-  'Biting',
-  'BDSM / dom-sub play',
-  'Role-play',
-  'Dirty talk',
-  'Sexting',
-  'Face-sitting',
-  'Squirting',
-  'Threesomes',
-  'Group sex / orgies',
-  'Swinging',
-  'Public / semi-public sex',
-  'Exhibitionism',
-  'Voyeurism',
-  'Other',
-];
+// Sourced from the SHARED `INTIMACY_TOPICS` inventory (08 §16.5a — one source of truth with questionnaire
+// generation); `'Other'` is the intake form's free-text escape, appended here.
+const ACTIVITIES = [...INTIMACY_ACTIVITIES, 'Other'];
 // A comprehensive sex-toy checklist, reused for "toys you own" / "toys you want" (§14.5). Covers the modern
 // app/remote-controlled range (Lovense-style) plus the broader categories; "Other"/"None" appended per use.
 const TOYS = [
@@ -3840,20 +3811,9 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           { restricted: true },
         ),
         f(
+          // Sourced from the SHARED `INTIMACY_TOPICS` inventory (08 §16.5a); `'Other'` is the form escape.
           multi('commonFantasies', 'Which of these appeal to you?', [
-            'Threesome / group',
-            'Voyeurism',
-            'Exhibitionism',
-            'Domination',
-            'Submission',
-            'Consensual non-consent (CNC) roleplay',
-            'Bondage',
-            'Being watched',
-            'Strangers / one-night roleplay',
-            'Boss / employee roleplay',
-            'Teacher / student roleplay',
-            'Cheating roleplay',
-            'Gangbang',
+            ...INTIMACY_FANTASIES,
             'Other',
           ]),
           { restricted: true },

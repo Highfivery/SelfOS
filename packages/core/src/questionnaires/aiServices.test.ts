@@ -7,6 +7,7 @@ import { upsertPerson } from '../people/peopleService';
 import { upsertRelationship } from '../people/relationshipService';
 import { setAppBudget } from '../usage/budgetService';
 import { queryUsage, recordUsage } from '../usage/usageStore';
+import { addCustomIntimacyTopic } from './customTypeService';
 import {
   gatherGenerationContext,
   listContextProviders,
@@ -303,6 +304,46 @@ describe('generateQuestions', () => {
     expect(result.ok).toBe(true);
     expect(result.title).toBe('Reconnecting after the move');
     expect(result.questions).toHaveLength(2);
+  });
+
+  it('sends the explicit framing + topic inventory to the model for an intimacy/unfiltered send (§16.5)', async () => {
+    const fs = memFileSystem();
+    const { author } = await seedHousehold(fs);
+    // Add an owner custom topic so we can prove the MERGED inventory reaches the model.
+    await addCustomIntimacyTopic(fs, 'activities', 'Wax play');
+    let sentUserText = '';
+    const capturing: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        sentUserText = options.messages.map((m) => m.content).join('\n');
+        const text = JSON.stringify({
+          title: 'X',
+          questions: [{ type: 'yesNo', prompt: 'Q?', required: true }],
+        });
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    const result = await generateQuestions(deps(fs, capturing, author), {
+      type: 'intimacy',
+      sensitivity: 'unfiltered',
+      context: {
+        authorPersonId: author,
+        includeAuthor: false,
+        includeTarget: false,
+        includeRelationship: false,
+      },
+      existingPrompts: [],
+    });
+    expect(result.ok).toBe(true);
+    expect(sentUserText).toContain('GENUINELY EXPLICIT'); // the §16.5 explicit direction
+    expect(sentUserText).toMatch(/graphic/i); // unfiltered intensity
+    expect(sentUserText).toContain('Oral (giving)'); // a built-in topic
+    expect(sentUserText).toContain('Wax play'); // the owner's custom addition (merged inventory)
+    expect(sentUserText).toMatch(/NEVER write anything involving minors/i); // the boundary
   });
 });
 

@@ -684,6 +684,14 @@ explicit acts, kinks, and **taboo _fantasies_** (CNC / "ravishment" roleplay, et
 with real limits captured in group H). It does **not** present minors, real non-consent, or other illegal acts
 as activities to pursue. Within that line it is fully explicit and unfiltered.
 
+> **Shared topic inventory (08 §16.5a, built 2026-06-15):** the consensual-adult **activity** checklist
+> (into-it / curious-to-try / hard-limits) and the **common-fantasies** list below are now the shared
+> `@selfos/core/intimacy` `INTIMACY_TOPICS` constant — ONE source of truth imported by both this intake block
+> and questionnaire generation (no drift). `intakeCatalog.ts` imports `INTIMACY_ACTIVITIES`/`INTIMACY_FANTASIES`
+> and appends the `'Other'` free-text escape; behaviour here is unchanged. The lists are **owner-extensible**
+> (custom additions in `config/questionnaires.json`, merged via `mergedIntimacyTopics`); the owner Settings/inline
+> UI to manage them is slice 4b.
+
 The full inventory (grouped; `single`=singleChoice, `multi`=multiChoice, `scale`=rating, `text`=longText). All
 optional/skippable:
 

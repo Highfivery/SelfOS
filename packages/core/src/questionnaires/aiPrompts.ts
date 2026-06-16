@@ -1,3 +1,4 @@
+import type { IntimacyTopics } from '../intimacy/topics';
 import type { SensitivityTier } from '../schemas';
 
 /**
@@ -31,17 +32,46 @@ ${ANSWER_TYPE_GUIDE}`;
 // object/questions generation contract.
 export const IMPROVE_SYSTEM = `${SAFETY}\n\nYou rewrite a single questionnaire question's prompt on request. Return ONLY the rewritten question text — no quotes, no prose, no options, no JSON.`;
 
-// `explicit` + `unfiltered` share generation framing on purpose: the tier distinction (age/DOB +
-// consent gates) is enforced **recipient-side at send** (§8.3), not at generation time.
 const SENSITIVITY_NOTE: Record<SensitivityTier, string> = {
   standard: '',
   intimacyGeneral:
     '\nThis is an intimacy questionnaire (general). Keep it respectful and consenting; nothing explicit.',
   explicit:
-    '\nThis is a sensitive intimacy questionnaire. Adults only; keep it consenting, respectful, and within Anthropic policy.',
+    '\nThis is a sensitive questionnaire. Adults only; keep it consenting, respectful, and within Anthropic policy.',
   unfiltered:
-    '\nThis is a sensitive intimacy questionnaire. Adults only; keep it consenting, respectful, and within Anthropic policy.',
+    '\nThis is a sensitive questionnaire. Adults only; keep it consenting, respectful, and within Anthropic policy.',
 };
+
+/** The intimacy questionnaire type key — the explicit-by-design type that the §16.5 framing applies to. */
+export const INTIMACY_TYPE = 'intimacy';
+
+/**
+ * Tier-aware explicit framing for an **intimacy** questionnaire at the `explicit`/`unfiltered` tiers
+ * (08-questionnaires §16.5). This **positively permits and requests** genuinely explicit, specific questions
+ * for consenting adults — replacing the old refusal-default that produced tasteful, emotional-closeness
+ * questions — and seeds an in-policy topic inventory so the model has concrete subject matter. `unfiltered`
+ * is the most graphic within the boundary; `explicit` a notch below. The shared `SAFETY` prefix is NOT
+ * loosened — only this one path gains the explicit direction. The 18+/DOB+consent gate stays recipient-side.
+ *
+ * BOUNDARY (stated in-prompt, same as the intake §14.5): consensual adults only; taboo content **only** as
+ * fantasy/roleplay (e.g. CNC as pre-agreed roleplay); NEVER minors, real non-consent, or illegal acts; within
+ * Anthropic's usage policy (refuse → empty array only when genuinely out of policy, not merely explicit).
+ */
+export function intimacyExplicitFraming(
+  tier: 'explicit' | 'unfiltered',
+  topics: IntimacyTopics,
+): string {
+  const intensity =
+    tier === 'unfiltered'
+      ? 'Be as direct, graphic, and specific as the subject matter calls for — plain words for bodies and sex acts, no euphemisms, no holding back, within the boundary below.'
+      : 'Be candid and specific — name acts and preferences plainly, a notch below fully no-holds-barred.';
+  return [
+    `\nThis is an intimacy questionnaire for consenting adults (18+). Write GENUINELY EXPLICIT, specific questions about sex and desire — do NOT default to tasteful or emotional-closeness questions. ${intensity}`,
+    `Draw on concrete subject matter: specific sex acts, bodies and grooming, turn-ons/turn-offs, fantasies (including taboo fantasies framed strictly as fantasy/roleplay — e.g. consensual non-consent (CNC) as pre-agreed roleplay), porn and masturbation, sexual history, frequency and desire, and boundaries.`,
+    `In-policy subject matter to draw on — acts: ${topics.activities.join(', ')}. Fantasies/roleplay: ${topics.fantasies.join(', ')}.`,
+    `BOUNDARY (hard): consensual adults only. Taboo content ONLY as fantasy/roleplay between consenting adults. NEVER write anything involving minors, real (non-roleplay) non-consent, or illegal acts. Stay within Anthropic's usage policy; if a brief would require out-of-policy content, return an empty questions array.`,
+  ].join('\n');
+}
 
 export function buildGenerationUserMessage(input: {
   type: string;
@@ -50,10 +80,24 @@ export function buildGenerationUserMessage(input: {
   context?: string;
   existingPrompts: string[];
   count: number;
+  // The merged intimacy topic inventory (built-in + owner custom) — seeds the explicit framing (§16.5a).
+  intimacyTopics?: IntimacyTopics;
 }): string {
   const parts: string[] = [];
   parts.push(`Draft ${input.count} questions for a "${input.type}" questionnaire.`);
-  parts.push(SENSITIVITY_NOTE[input.sensitivity]);
+  // For an intimacy questionnaire at an explicit tier, request genuinely explicit content (§16.5); every
+  // other type/tier keeps the conservative note.
+  const isExplicitIntimacy =
+    input.type === INTIMACY_TYPE &&
+    (input.sensitivity === 'explicit' || input.sensitivity === 'unfiltered');
+  parts.push(
+    isExplicitIntimacy && input.intimacyTopics
+      ? intimacyExplicitFraming(
+          input.sensitivity as 'explicit' | 'unfiltered',
+          input.intimacyTopics,
+        )
+      : SENSITIVITY_NOTE[input.sensitivity],
+  );
   if (input.brief?.trim()) parts.push(`\nWhat they want to explore: ${input.brief.trim()}`);
   if (input.context?.trim()) {
     parts.push(

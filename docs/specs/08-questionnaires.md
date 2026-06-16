@@ -1,11 +1,11 @@
 # 08 — Questionnaires & the Insight / metrics layer
 
-> **Status:** **Approved** (built) · **Approved** (§15 authoring-UX) · **Partially built** (2026-06-15 audit
-> fixes & enhancements, §16, on `feat/questionnaire-audit-fixes`, NOT merged): §16.1 (compat participant model),
-> §16.2 (context-only mode), §16.3/§16.4 (Save→Send + title/AI-title), and §16.7 (E2E matrix for the built
-> features) are **built**; **§16.5/§16.5a (explicit generation + shared owner-extensible `INTIMACY_TOPICS`) is
-> deferred** until the concurrent `feat/intimacy-questions` work merges (it rewrites `intakeCatalog.ts`, which
-> §16.5a must extract from). · _last updated 2026-06-15_
+> **Status:** **Approved** (built) · **Approved** (§15 authoring-UX) · **Mostly built** (2026-06-15 audit
+> fixes & enhancements, §16): §16.1 (compat participant model), §16.2 (context-only), §16.3/§16.4 (Save→Send +
+> title/AI-title), §16.6 (never disclose owner access), and §16.7 (E2E matrix) **MERGED to `main`**; **§16.5
+> explicit generation + the §16.5a shared `INTIMACY_TOPICS` foundation are built (slice 4a)** on
+> `feat/questionnaire-explicit-gen`; **only §16.5a's owner Settings/inline UI (slice 4b) remains.** See §16.10.
+> · _last updated 2026-06-15_
 >
 > **2026-06 amendment (§15, package D of the app refresh):** authoring-experience refinements on the
 > already-built feature — a **General** type; **sensitivity tiers shown only for Intimacy/Scenario** types (other
@@ -1690,9 +1690,19 @@ intimacy-topics surface), not blockers._
     features** (compat each participant-model ×
     visibility incl. `contextOnly` with a decrypt assertion; Save→Send two-step; AI-title; plus the existing
     per-answer-type / sensitivity / branching / image / relay / results / deletion / gating coverage).
-- **Deferred:** **§16.5 (tier-distinct explicit generation)** and **§16.5a (the shared owner-extensible
-  `INTIMACY_TOPICS` constant + the owner Settings surface + inline "add a topic" + the spec-18 sync)** wait
-  for the concurrent `feat/intimacy-questions` work to merge to `main` — it actively rewrites
-  `intakeCatalog.ts` (the source §16.5a must extract `ACTIVITIES`/`commonFantasies` from). Once it lands, this
-  branch rebases on it and builds §16.5/§16.5a against the final topic lists, then extends the §16.7 matrix
-  with the explicit-tier rows.
+- **Slice 4a built** (2026-06-15, `feat/questionnaire-explicit-gen` off the merged `main`, NOT merged):
+  **§16.5 tier-distinct explicit generation** — `intimacyExplicitFraming(tier, topics)` in `aiPrompts.ts`
+  positively requests genuinely explicit, specific questions for an **intimacy** questionnaire at the
+  `explicit`/`unfiltered` tiers (unfiltered = most graphic, explicit a notch below), seeds the topic
+  inventory, and states the consensual-adult boundary in-prompt; the shared `SAFETY` prefix is NOT loosened
+  and non-intimacy types/tiers keep the conservative note. **§16.5a foundation** — the shared
+  `@selfos/core/intimacy` `INTIMACY_TOPICS` (`INTIMACY_ACTIVITIES` + `INTIMACY_FANTASIES`) extracted from
+  `intakeCatalog.ts` (the intake now imports it — spec-18 sync, behaviour unchanged with `'Other'` appended),
+  imported by questionnaire generation, with `mergedIntimacyTopics(custom)` combining built-ins + the Owner's
+  custom additions (vault prefs `customIntimacyActivities`/`customIntimacyFantasies` in
+  `config/questionnaires.json`, additive — no schemaVersion bump; `readCustomIntimacyTopics` /
+  `addCustomIntimacyTopic` / `removeCustomIntimacyTopic`). Gate green: typecheck/lint/format, 397 core + 8
+  relay + 474 desktop unit.
+- **Slice 4b remaining (§16.5a UI):** the **owner-only Settings surface** (18+, marked admin-only,
+  vault-scoped) to manage the custom intimacy topics + the **inline "add a topic"** in the intimacy builder,
+  both writing the shared custom lists; plus the explicit-tier E2E rows for the §16.7 matrix.

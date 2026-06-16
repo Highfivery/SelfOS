@@ -10,6 +10,7 @@ import {
   type SensitivityTier,
   type UsageEvent,
 } from '../schemas';
+import { mergedIntimacyTopics } from '../intimacy/topics';
 import { checkBudget, costOf, recordUsage } from '../usage';
 import {
   buildGenerationUserMessage,
@@ -20,6 +21,7 @@ import {
   VARIANT_SYSTEM,
 } from './aiPrompts';
 import { gatherGenerationContext, type GenerationContextRequest } from './contextProviders';
+import { readCustomIntimacyTopics } from './customTypeService';
 
 /**
  * AI question generation + per-question improve (08-questionnaires §3.1/§13.3). Mirrors `chatService`'s
@@ -174,6 +176,8 @@ export async function generateQuestions(
   request: GenerateRequest,
 ): Promise<GenerateResult> {
   const context = await gatherGenerationContext(deps.fs, deps.key, request.context);
+  // The intimacy topic inventory (08 §16.5a) seeds the explicit framing for an intimacy questionnaire at the
+  // explicit/unfiltered tiers — the built-in topics merged with the Owner's custom additions (vault prefs).
   const user = buildGenerationUserMessage({
     type: request.type,
     sensitivity: request.sensitivity,
@@ -181,6 +185,7 @@ export async function generateQuestions(
     context,
     existingPrompts: request.existingPrompts,
     count: request.count ?? 5,
+    intimacyTopics: mergedIntimacyTopics(await readCustomIntimacyTopics(deps.fs)),
   });
 
   const call = await runClaude(deps, GENERATION_SYSTEM, user, 'questionnaire.generate', 1500);

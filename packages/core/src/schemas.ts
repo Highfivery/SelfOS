@@ -657,12 +657,16 @@ export type QuestionnaireInput = z.infer<typeof QuestionnaireInputSchema>;
 
 /**
  * Non-secret questionnaire prefs (`config/questionnaires.json` in the vault, plain JSON — §4.1).
- * Holds the user-defined **custom types** that reappear in the builder's type picker. Stored plain,
- * mirroring `config/settings.json`; default message templates land here with the relay slice.
+ * Holds the user-defined **custom types** that reappear in the builder's type picker, plus the Owner's
+ * **custom intimacy topics** (§16.5a) — household-wide additions to the shared `INTIMACY_TOPICS` inventory
+ * that feed both the intake intimacy block and questionnaire generation. Stored plain, mirroring
+ * `config/settings.json`. All fields beyond `customTypes` are additive-optional (no schemaVersion bump).
  */
 export const QuestionnairePrefsSchema = z.object({
   schemaVersion: z.number().int().positive(),
   customTypes: z.array(z.string().min(1)),
+  customIntimacyActivities: z.array(z.string().min(1)).optional(),
+  customIntimacyFantasies: z.array(z.string().min(1)).optional(),
 });
 export type QuestionnairePrefs = z.infer<typeof QuestionnairePrefsSchema>;
 

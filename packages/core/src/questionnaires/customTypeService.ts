@@ -58,3 +58,59 @@ export async function addCustomType(
   }
   return listCustomTypes(fs);
 }
+
+/**
+ * The Owner's **custom intimacy topics** (08-questionnaires §16.5a) — household-wide additions to the shared
+ * `INTIMACY_TOPICS` inventory, stored in the same plain prefs file. `mergedIntimacyTopics` combines these
+ * with the built-ins for both the intake intimacy block and questionnaire generation.
+ */
+export async function readCustomIntimacyTopics(
+  fs: FileSystem,
+): Promise<{ activities: string[]; fantasies: string[] }> {
+  const prefs = await readPrefs(fs);
+  return {
+    activities: prefs.customIntimacyActivities ?? [],
+    fantasies: prefs.customIntimacyFantasies ?? [],
+  };
+}
+
+export type IntimacyTopicKind = 'activities' | 'fantasies';
+const PREFS_KEY: Record<IntimacyTopicKind, 'customIntimacyActivities' | 'customIntimacyFantasies'> =
+  {
+    activities: 'customIntimacyActivities',
+    fantasies: 'customIntimacyFantasies',
+  };
+
+/** Add a custom intimacy topic (trimmed; case-insensitive duplicate of a custom OR built-in is a no-op). */
+export async function addCustomIntimacyTopic(
+  fs: FileSystem,
+  kind: IntimacyTopicKind,
+  name: string,
+  builtIns: readonly string[] = [],
+): Promise<string[]> {
+  const trimmed = name.trim();
+  if (trimmed === '') throw new Error('A topic needs a name.');
+  const prefs = await readPrefs(fs);
+  const key = PREFS_KEY[kind];
+  const current = prefs[key] ?? [];
+  const taken = new Set([...current, ...builtIns].map((t) => t.toLocaleLowerCase()));
+  if (!taken.has(trimmed.toLocaleLowerCase())) {
+    await writePrefs(fs, { ...prefs, [key]: [...current, trimmed] });
+  }
+  return (await readPrefs(fs))[key] ?? [];
+}
+
+/** Remove a custom intimacy topic (case-insensitive). Built-in topics are not removable. */
+export async function removeCustomIntimacyTopic(
+  fs: FileSystem,
+  kind: IntimacyTopicKind,
+  name: string,
+): Promise<string[]> {
+  const prefs = await readPrefs(fs);
+  const key = PREFS_KEY[kind];
+  const next = (prefs[key] ?? []).filter(
+    (t) => t.toLocaleLowerCase() !== name.trim().toLocaleLowerCase(),
+  );
+  await writePrefs(fs, { ...prefs, [key]: next });
+  return next;
+}

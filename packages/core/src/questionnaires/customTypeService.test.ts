@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { memFileSystem } from '../host/memFileSystem';
 import { PREFS_PATH } from './paths';
-import { addCustomType, listCustomTypes } from './customTypeService';
+import {
+  addCustomIntimacyTopic,
+  addCustomType,
+  listCustomTypes,
+  readCustomIntimacyTopics,
+  removeCustomIntimacyTopic,
+} from './customTypeService';
+import { INTIMACY_ACTIVITIES } from '../intimacy/topics';
 
 describe('customTypeService', () => {
   it('starts empty on a fresh vault', async () => {
@@ -53,5 +60,38 @@ describe('customTypeService', () => {
     expect(await listCustomTypes(fs)).toEqual([]);
     // …and a subsequent add still works (overwrites the garbage).
     expect(await addCustomType(fs, 'Recovery')).toEqual(['Recovery']);
+  });
+
+  describe('custom intimacy topics (§16.5a)', () => {
+    it('starts empty, adds activities + fantasies, and reads them back', async () => {
+      const fs = memFileSystem();
+      expect(await readCustomIntimacyTopics(fs)).toEqual({ activities: [], fantasies: [] });
+
+      await addCustomIntimacyTopic(fs, 'activities', '  Wax play  ');
+      await addCustomIntimacyTopic(fs, 'fantasies', 'Pirate roleplay');
+      expect(await readCustomIntimacyTopics(fs)).toEqual({
+        activities: ['Wax play'], // trimmed
+        fantasies: ['Pirate roleplay'],
+      });
+      // Custom types are unaffected (same prefs file, separate fields).
+      expect(await listCustomTypes(fs)).toEqual([]);
+    });
+
+    it('a case-insensitive duplicate of a built-in OR a custom topic is a no-op', async () => {
+      const fs = memFileSystem();
+      await addCustomIntimacyTopic(fs, 'activities', 'Wax play');
+      await addCustomIntimacyTopic(fs, 'activities', 'wax PLAY'); // dupe custom → no-op
+      await addCustomIntimacyTopic(fs, 'activities', 'oral (giving)', INTIMACY_ACTIVITIES); // dupe built-in → no-op
+      expect((await readCustomIntimacyTopics(fs)).activities).toEqual(['Wax play']);
+    });
+
+    it('removes a custom topic case-insensitively (built-ins are not stored here, so unaffected)', async () => {
+      const fs = memFileSystem();
+      await addCustomIntimacyTopic(fs, 'fantasies', 'Pirate roleplay');
+      await addCustomIntimacyTopic(fs, 'fantasies', 'Spy roleplay');
+      expect(await removeCustomIntimacyTopic(fs, 'fantasies', 'pirate ROLEPLAY')).toEqual([
+        'Spy roleplay',
+      ]);
+    });
   });
 });

@@ -287,6 +287,30 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-15 — Build (**Questionnaires §16 slice 4a — explicit generation + shared `INTIMACY_TOPICS`
+  foundation**; spec 08 §16.5/§16.5a, on `feat/questionnaire-explicit-gen` off the **merged** `main`, NOT
+  merged). After slices 1–3+5+§16.6 merged (`d4ee441`) and the concurrent `feat/intimacy-questions` work
+  landed, built the previously-paused slice 4: **(§16.5) tier-distinct explicit generation** — a new
+  `intimacyExplicitFraming(tier, topics)` in `aiPrompts.ts` **positively requests** genuinely explicit,
+  specific questions for an **intimacy** questionnaire at the `explicit`/`unfiltered` tiers (unfiltered = most
+  graphic, explicit a notch below), seeds the in-policy topic inventory, and states the **consensual-adult
+  boundary in-prompt** (taboo only as fantasy/roleplay; NEVER minors/real-non-consent/illegal; within Anthropic
+  policy) — fixing the user's complaint that "unfiltered" produced tame emotional-closeness questions. The
+  shared `SAFETY` prefix is **not** loosened, and non-intimacy types/tiers keep the conservative note.
+  **(§16.5a foundation)** extracted the intimacy `ACTIVITIES`/`commonFantasies` out of `intakeCatalog.ts` into
+  ONE shared `@selfos/core/intimacy` constant (`INTIMACY_TOPICS` = `INTIMACY_ACTIVITIES` + `INTIMACY_FANTASIES`)
+  imported by **both** the intake block (spec-18 sync — intake now imports it + appends `'Other'`, behaviour
+  unchanged) **and** questionnaire generation; `mergedIntimacyTopics(custom)` combines built-ins + the Owner's
+  **custom additions** (vault prefs `customIntimacyActivities`/`customIntimacyFantasies` in
+  `config/questionnaires.json`, additive-optional — no schemaVersion bump; `read`/`add`/`removeCustomIntimacyTopic`).
+  Generation reads the **merged** inventory. Gate green: typecheck (node + web/DOM-lib), lint, format, **397
+  core + 8 relay + 474 desktop** unit (+`intimacy/topics` [7: built-in/merge/dedup + the per-tier explicit
+  framing], +customTypeService intimacy [3], +an aiServices capture test proving the explicit framing + merged
+  inventory reach the model). **Slice 4b remaining:** the owner-only Settings surface (18+, admin-only) + the
+  inline builder "add a topic" to manage the custom lists, + the explicit-tier E2E rows. **Lesson: a shared
+  owner-extensible inventory is one `@selfos/core` constant + a `merged…(custom)` helper reading vault prefs —
+  the static intake catalog imports the BUILT-IN list directly (behaviour-preserving), and only the AI-generation
+  path (which already reads the vault) merges in the owner's custom additions.**
 - 2026-06-15 — Build (**Questionnaires audit fixes — SPEC 08 §16 slices 1–3 + 5 BUILT** on
   `feat/questionnaire-audit-fixes` **in an isolated git worktree**, NOT merged; **slice 4 paused**). The audit
   (memory `questionnaire-audit-fixes-2026-06-15`) found real bugs + the user's enhancements. **§16 marked

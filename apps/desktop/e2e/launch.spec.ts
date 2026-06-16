@@ -1073,12 +1073,13 @@ test('questionnaires: preview / test-on-self renders the form, gates Finish, sav
     await expect(w.getByText(/exactly what your recipient sees/i)).toBeVisible();
     await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible();
 
-    // Finish is gated on the required (and unanswered) rating.
+    // Finish is gated on the required (and untouched) rating — a required scale slider isn't auto-seeded,
+    // so it stays unanswered until moved.
     await w.getByRole('button', { name: 'Finish' }).click();
     await expect(w.getByText(/answer the 1 required question to finish/i)).toBeVisible();
 
-    // Answer it on the 1→5 scale, then Finish confirms the dry run saved nothing.
-    await w.getByRole('radio', { name: '4', exact: true }).click();
+    // Answer it on the 1→5 slider, then Finish confirms the dry run saved nothing.
+    await w.getByRole('slider', { name: 'How are you feeling?' }).fill('4');
     await w.getByRole('button', { name: 'Finish' }).click();
     await expect(w.getByText(/nothing you entered was saved/i)).toBeVisible();
 
@@ -1114,13 +1115,13 @@ test('questionnaires: General default + intimacy-only sensitivity + live inline 
     await w.getByLabel('Answer type').selectOption({ label: 'Rating' });
 
     // §15.5: the edited question's inline preview is expanded and renders the real answering control —
-    // a 1→5 rating scale. (The "Hide preview" toggle confirms the inline preview panel is present.)
+    // a 1→5 rating slider. (The "Hide preview" toggle confirms the inline preview panel is present.)
     await expect(w.getByRole('button', { name: 'Hide preview' })).toBeVisible();
-    await expect(w.getByRole('radio', { name: '3', exact: true })).toBeVisible();
+    await expect(w.getByRole('slider', { name: 'How are you, really?' })).toBeVisible();
 
     // …and it matches the full Preview render (the same shared @selfos/answering renderer).
     await w.getByRole('button', { name: 'Preview', exact: true }).click();
-    await expect(w.getByRole('radio', { name: '3', exact: true })).toBeVisible();
+    await expect(w.getByRole('slider', { name: 'How are you, really?' })).toBeVisible();
     await w.getByRole('button', { name: 'Edit', exact: true }).click();
 
     // §15.2: switching to Intimacy reveals the picker with intimacy tiers only (no Standard), and the

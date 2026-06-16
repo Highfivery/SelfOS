@@ -84,7 +84,7 @@ describe('QuestionnaireForm', () => {
         ]}
       />,
     );
-    await userEvent.click(screen.getByRole('button', { name: 'Other' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Other' }));
     const field = await screen.findByLabelText('Hobbies — other');
     // Typing a space mid-entry must NOT be trimmed away on each keystroke (the regression we fixed).
     await userEvent.type(field, 'rock climbing');
@@ -112,7 +112,8 @@ describe('QuestionnaireForm', () => {
       />,
     );
     expect(screen.queryByText('Cannabis — how often?')).toBeNull();
-    await userEvent.click(screen.getByRole('button', { name: 'Cannabis' }));
+    // Multi-choice options are now checkbox-role cards (was an implicit-role button pill).
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Cannabis' }));
     expect(screen.getByText('Cannabis — how often?')).toBeInTheDocument();
   });
 
@@ -130,15 +131,17 @@ describe('QuestionnaireForm', () => {
     expect(screen.queryByLabelText('Important dates — label 1')).toBeNull();
   });
 
-  it('picks a rating point on its min→max scale', async () => {
+  it('renders a rating question as a slider over its min→max scale (#3)', async () => {
     render(
       <Harness
         questions={[q({ id: 'a', type: 'rating', prompt: 'Rate', scale: { min: 1, max: 5 } })]}
       />,
     );
-    const four = screen.getByRole('radio', { name: '4' });
-    await userEvent.click(four);
-    expect(four).toHaveAttribute('aria-checked', 'true');
+    // Scale questions render as a labelled slider now — never a grid of number buttons.
+    const slider = screen.getByRole('slider', { name: 'Rate' });
+    expect(slider).toHaveAttribute('min', '1');
+    expect(slider).toHaveAttribute('max', '5');
+    expect(screen.queryByRole('radio', { name: '4' })).toBeNull();
   });
 
   it('renders an attached image (decrypted via loadImage) with its alt text', async () => {

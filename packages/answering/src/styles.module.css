@@ -9,7 +9,7 @@
   gap: var(--space-4);
 }
 
-/* Each question is a fieldset, reset to look like a card. */
+/* Each question is a role="group" card (NOT a fieldset — a legend bisects long wrapped prompts). */
 .question {
   display: flex;
   flex-direction: column;
@@ -149,19 +149,78 @@
   outline-offset: 2px;
 }
 
-/* Single-/multi-choice options as toggle pills (18 §14.3) — content-sized, wrapping. */
-.pillGrid {
+/* Choice options (single / multi / this-or-that) as left-aligned, full-width selectable cards. Stacks
+   vertically so long option text reads cleanly (never centred + word-per-line in a cramped pill). */
+.optionCards {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: var(--space-2);
 }
 
-.choicePill {
-  flex: 0 1 auto;
-  min-width: 0;
+.optionCard {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--motion-fast),
+    border-color var(--motion-fast);
 }
 
-/* The "Other" write-in text field shown when the Other pill is active. */
+.optionCard:hover {
+  background: var(--color-surface-alt);
+}
+
+.optionCardOn {
+  border-color: var(--color-accent);
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+}
+
+.optionCard:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+/* Leading radio (single) / checkbox (multi) indicator — fills with the accent when the card is on. */
+.optionIndicator {
+  flex-shrink: 0;
+  width: 1.15rem;
+  height: 1.15rem;
+  margin-top: 0.1rem;
+  border: 1.5px solid var(--color-border-strong);
+  background: var(--color-surface);
+}
+
+.optionIndicatorRadio {
+  border-radius: var(--radius-pill);
+}
+
+.optionIndicatorCheck {
+  border-radius: var(--radius-sm);
+}
+
+.optionCardOn .optionIndicator {
+  border-color: var(--color-accent);
+  background: var(--color-accent-solid);
+  box-shadow: inset 0 0 0 3px var(--color-surface);
+}
+
+.optionLabel {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The "Other" write-in text field shown when the Other option is active. */
 .otherInput {
   margin-top: var(--space-2);
 }
@@ -200,29 +259,7 @@
   padding: var(--space-4) var(--space-3);
 }
 
-/* Radio / checkbox option lists for single- + multi-choice. */
-.optionList {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.optionRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  cursor: pointer;
-}
-
-.optionRow input {
-  flex-shrink: 0;
-  width: 1.05rem;
-  height: 1.05rem;
-  accent-color: var(--color-accent);
-  cursor: pointer;
-}
-
-/* Numeric scale (rating + matrix cells). */
+/* Numeric scale (matrix cells only — standalone rating questions render as a slider). */
 .scale {
   display: flex;
   flex-wrap: wrap;

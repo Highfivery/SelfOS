@@ -82,12 +82,17 @@ function SliderControl({
   value: AnswerValue | undefined;
   set: (value: AnswerValue) => void;
 }): JSX.Element {
-  const scale = question.scale ?? { min: 0, max: 10 };
+  // Rating questions default to a 1–5 scale, sliders to 0–10, when the author didn't set bounds.
+  const scale =
+    question.scale ?? (question.type === 'rating' ? { min: 1, max: 5 } : { min: 0, max: 10 });
   const middle = Math.round((scale.min + scale.max) / 2);
-  // Seed the thumb to the MIDDLE once on mount so an untouched slider reads as a neutral answer (not the
-  // min extreme — e.g. "How rough?" shouldn't default to "Gentle").
+  // The thumb shows at the MIDDLE so an untouched slider reads as a neutral starting point. For an OPTIONAL
+  // question we also commit that middle once on mount (an untouched optional slider counts as a neutral
+  // answer — the §18 onboarding behaviour). A REQUIRED question is NOT auto-committed: its value stays
+  // undefined (so `isAnswered` gates it) until the person actually moves it — otherwise a required rating
+  // would silently auto-answer to the midpoint (bad data for e.g. a required intimacy rating).
   useEffect(() => {
-    if (value === undefined) set(middle);
+    if (value === undefined && !question.required) set(middle);
   }, []);
   const current = typeof value === 'number' ? value : middle;
   // With descriptive labels at start/middle/end (18 §14.5), anchor all three under the track and drop the
@@ -243,9 +248,43 @@ function DateListControl({
 const OTHER = 'Other';
 
 /**
- * Single-choice as toggle pills with an "Other" write-in (18 §14.3). The answer is the chosen option, or — when
- * "Other" is picked and text is typed — the free-text value (so downstream just sees the real value). `otherOpen`
- * keeps the write-in visible while empty; on mount it's derived from a value that isn't a preset option.
+ * One choice option as a left-aligned, full-width selectable card with a leading radio (single) / checkbox
+ * (multi) indicator. Full-width + left-aligned so long option text reads cleanly at any length.
+ */
+function OptionCard({
+  label,
+  selected,
+  multi,
+  onClick,
+}: {
+  label: string;
+  selected: boolean;
+  multi: boolean;
+  onClick: () => void;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      role={multi ? 'checkbox' : 'radio'}
+      aria-checked={selected}
+      className={selected ? `${styles.optionCard} ${styles.optionCardOn}` : styles.optionCard}
+      onClick={onClick}
+    >
+      <span
+        aria-hidden="true"
+        className={`${styles.optionIndicator} ${
+          multi ? styles.optionIndicatorCheck : styles.optionIndicatorRadio
+        }`}
+      />
+      <span className={styles.optionLabel}>{label}</span>
+    </button>
+  );
+}
+
+/**
+ * Single-choice as full-width option cards with an "Other" write-in (18 §14.3). The answer is the chosen option,
+ * or — when "Other" is picked and text is typed — the free-text value (so downstream just sees the real value).
+ * `otherOpen` keeps the write-in visible while empty; on mount it's derived from a value that isn't a preset option.
  */
 function SingleChoiceControl({
   question,
@@ -265,46 +304,29 @@ function SingleChoiceControl({
 
   return (
     <div>
-      <div className={styles.pillGrid} role="radiogroup" aria-label={question.prompt}>
-        {presets.map((option) => {
-          const on = !otherOpen && current === option;
-          return (
-            <button
-              key={option}
-              type="button"
-              role="radio"
-              aria-checked={on}
-              className={
-                on
-                  ? `${styles.pill} ${styles.choicePill} ${styles.pillOn}`
-                  : `${styles.pill} ${styles.choicePill}`
-              }
-              onClick={() => {
-                setOtherOpen(false);
-                set(option);
-              }}
-            >
-              {option}
-            </button>
-          );
-        })}
+      <div className={styles.optionCards} role="radiogroup" aria-label={question.prompt}>
+        {presets.map((option) => (
+          <OptionCard
+            key={option}
+            label={option}
+            multi={false}
+            selected={!otherOpen && current === option}
+            onClick={() => {
+              setOtherOpen(false);
+              set(option);
+            }}
+          />
+        ))}
         {hasOther ? (
-          <button
-            type="button"
-            role="radio"
-            aria-checked={otherOpen || isCustom}
-            className={
-              otherOpen || isCustom
-                ? `${styles.pill} ${styles.choicePill} ${styles.pillOn}`
-                : `${styles.pill} ${styles.choicePill}`
-            }
+          <OptionCard
+            label={OTHER}
+            multi={false}
+            selected={otherOpen || isCustom}
             onClick={() => {
               setOtherOpen(true);
               if (!isCustom) set('');
             }}
-          >
-            {OTHER}
-          </button>
+          />
         ) : null}
       </div>
       {otherOpen ? (
@@ -322,7 +344,7 @@ function SingleChoiceControl({
 }
 
 /**
- * Multi-choice as toggle pills with an "Other" write-in (18 §14.3). The answer array holds the selected preset
+ * Multi-choice as full-width option cards with an "Other" write-in (18 §14.3). The answer array holds the selected preset
  * options PLUS any free-text the person typed (no literal "Other" stored) — so a clean round-trip: array −
  * presets = the write-in. `otherOpen` keeps the input visible while empty.
  */
@@ -363,39 +385,29 @@ function MultiChoiceControl({
 
   return (
     <div>
-      <div className={styles.pillGrid} role="group" aria-label={question.prompt}>
+      <div className={styles.optionCards} role="group" aria-label={question.prompt}>
         {presets.map((option) => {
           const on = selectedPresets.includes(option);
           return (
-            <button
+            <OptionCard
               key={option}
-              type="button"
-              aria-pressed={on}
-              className={
-                on
-                  ? `${styles.pill} ${styles.choicePill} ${styles.pillOn}`
-                  : `${styles.pill} ${styles.choicePill}`
-              }
+              label={option}
+              multi
+              selected={on}
               onClick={() =>
                 commit(
                   on ? selectedPresets.filter((x) => x !== option) : [...selectedPresets, option],
                   otherText,
                 )
               }
-            >
-              {option}
-            </button>
+            />
           );
         })}
         {hasOther ? (
-          <button
-            type="button"
-            aria-pressed={otherOpen || customText !== ''}
-            className={
-              otherOpen || customText !== ''
-                ? `${styles.pill} ${styles.choicePill} ${styles.pillOn}`
-                : `${styles.pill} ${styles.choicePill}`
-            }
+          <OptionCard
+            label={OTHER}
+            multi
+            selected={otherOpen || customText !== ''}
             onClick={() => {
               if (otherOpen) {
                 setOtherOpen(false);
@@ -405,9 +417,7 @@ function MultiChoiceControl({
                 setOtherOpen(true);
               }
             }}
-          >
-            {OTHER}
-          </button>
+          />
         ) : null}
       </div>
       {otherOpen ? (
@@ -490,18 +500,15 @@ function Control({
       );
     case 'thisOrThat':
       return (
-        <div className={styles.choices} role="radiogroup" aria-label={question.prompt}>
+        <div className={styles.optionCards} role="radiogroup" aria-label={question.prompt}>
           {options.map((option) => (
-            <button
+            <OptionCard
               key={option}
-              type="button"
-              role="radio"
-              aria-checked={value === option}
-              className={value === option ? `${styles.pill} ${styles.pillOn}` : styles.pill}
+              label={option}
+              multi={false}
+              selected={value === option}
               onClick={() => set(option)}
-            >
-              {option}
-            </button>
+            />
           ))}
         </div>
       );
@@ -509,18 +516,9 @@ function Control({
       return <SingleChoiceControl question={question} value={value} set={set} />;
     case 'multiChoice':
       return <MultiChoiceControl question={question} value={value} set={set} />;
-    case 'rating': {
-      const scale = question.scale ?? { min: 1, max: 5 };
-      return (
-        <ScalePicker
-          min={scale.min}
-          max={scale.max}
-          value={typeof value === 'number' ? value : undefined}
-          onPick={set}
-          ariaLabel={question.prompt}
-        />
-      );
-    }
+    // Standalone scale questions (rating + slider) both render as a labelled slider — one consistent
+    // control, no number-button grids (matrix keeps the compact per-row ScalePicker below).
+    case 'rating':
     case 'slider':
       return <SliderControl question={question} value={value} set={set} />;
     case 'dateList':
@@ -599,9 +597,13 @@ function QuestionField({
   onChange: (questionId: string, value: AnswerValue) => void;
   loadImage?: LoadImage;
 }): JSX.Element {
+  // A plain card with a visible prompt heading — NOT <fieldset>/<legend>, whose legend renders on the card's
+  // top border and gets bisected when a long prompt wraps (the visible-overlap bug). Each control carries its
+  // own aria-label (single inputs) or radiogroup/group label (choices, matrix), so the prompt still names the
+  // control for screen readers without an aria-labelledby that would double-label and collide with it.
   return (
-    <fieldset className={styles.question}>
-      <legend className={styles.prompt}>
+    <div className={styles.question}>
+      <p className={styles.prompt}>
         {question.prompt}
         {question.required ? (
           <>
@@ -612,13 +614,13 @@ function QuestionField({
             <span className={styles.srOnly}> (required)</span>
           </>
         ) : null}
-      </legend>
+      </p>
       {question.help ? <p className={styles.help}>{question.help}</p> : null}
       {question.media && loadImage ? (
         <QuestionImage media={question.media} loadImage={loadImage} />
       ) : null}
       <Control question={question} value={value} set={(v) => onChange(question.id, v)} />
-    </fieldset>
+    </div>
   );
 }
 

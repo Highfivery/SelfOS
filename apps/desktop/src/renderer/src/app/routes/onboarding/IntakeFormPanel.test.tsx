@@ -103,7 +103,7 @@ describe('IntakeFormPanel', () => {
     await waitFor(() => expect(onAdvance).toHaveBeenCalled());
   });
 
-  it('renders choices as toggle pills and captures an "Other" write-in into the submit', async () => {
+  it('renders choices as option cards and captures an "Other" write-in into the submit', async () => {
     const intakeSubmitForm = vi.fn(() =>
       Promise.resolve({
         session: {} as never,
@@ -121,9 +121,9 @@ describe('IntakeFormPanel', () => {
         onAdvance={() => {}}
       />,
     );
-    // A preset pill (a button, not a checkbox) + the Other write-in.
-    fireEvent.click(screen.getByRole('button', { name: 'Music' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Other' }));
+    // Multi-choice options are checkbox-role cards + the Other write-in.
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Music' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Other' }));
     fireEvent.change(screen.getByLabelText('What you like — other'), {
       target: { value: 'cooking' },
     });

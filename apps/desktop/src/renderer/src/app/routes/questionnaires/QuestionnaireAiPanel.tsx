@@ -42,6 +42,7 @@ export function QuestionnaireAiPanel({
   const navigate = useNavigate();
   const generate = useQuestionnaireStore((s) => s.generate);
   const people = usePeopleStore((s) => s.people);
+  const peopleLoaded = usePeopleStore((s) => s.loaded);
   const loadPeople = usePeopleStore((s) => s.load);
   const activePerson = useSessionStore((s) => s.activePerson);
   // Owner-only inline "add a topic" for an intimacy questionnaire at an explicit tier (08 §16.5a).
@@ -81,8 +82,8 @@ export function QuestionnaireAiPanel({
   };
 
   useEffect(() => {
-    void loadPeople();
-  }, [loadPeople]);
+    if (!peopleLoaded) void loadPeople();
+  }, [peopleLoaded, loadPeople]);
 
   // A live elapsed-time counter while drafting, so it's clearly working and not stuck (generation is a
   // single non-streaming call, so an honest "it's running" beats a frozen spinner).

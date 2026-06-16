@@ -73,10 +73,18 @@ function ToggleRow({
 export function RelaySendPanel({
   questionnaireId,
   sensitivity,
+  recipientName,
+  recipientEmail,
+  recipientPhone,
   onDone,
 }: {
   questionnaireId: string;
   sensitivity: SensitivityTier;
+  // The external recipient is BOUND to the questionnaire at creation (08 §17.3) — the name isn't re-entered
+  // here; email/phone seed the delivery fields but stay editable (they're how-to-reach, not identity).
+  recipientName: string;
+  recipientEmail?: string;
+  recipientPhone?: string;
   onDone: () => void;
 }): JSX.Element {
   const status = useRelayStore((s) => s.status);
@@ -92,9 +100,8 @@ export function RelaySendPanel({
   }, [loaded, loadStatus]);
 
   const sensitive = sensitivity !== 'standard';
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState(recipientEmail ?? '');
+  const [phone, setPhone] = useState(recipientPhone ?? '');
   const [anonymous, setAnonymous] = useState(false);
   const [privacy, setPrivacy] = useState<PrivacyMode>('private');
   const [includePin, setIncludePin] = useState(!sensitive); // sensitive sends default to sharing the PIN separately
@@ -110,12 +117,6 @@ export function RelaySendPanel({
     try {
       const result = await window.selfos?.assignmentsCreateRelayLink({
         questionnaireId,
-        recipient: {
-          kind: 'external',
-          ...(name.trim() ? { displayName: name.trim() } : {}),
-          ...(email.trim() ? { email: email.trim() } : {}),
-          ...(phone.trim() ? { phone: phone.trim() } : {}),
-        },
         senderVisibleToRecipient: !anonymous,
         ...(privacy === 'standard'
           ? { privacy: 'standard' as const }
@@ -292,14 +293,11 @@ export function RelaySendPanel({
 
   return (
     <Stack gap={4}>
-      <Heading level={3}>Send to someone without SelfOS</Heading>
+      <Heading level={3}>Send to {recipientName}</Heading>
       <Text size="sm" tone="secondary">
         They’ll answer through a private, encrypted web link — no app needed.
       </Text>
 
-      <Field label="Their name (optional)">
-        {(props) => <TextInput {...props} value={name} onChange={(e) => setName(e.target.value)} />}
-      </Field>
       <Field label="Email (optional)">
         {(props) => (
           <TextInput

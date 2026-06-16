@@ -16,7 +16,14 @@ describe('RelaySendPanel', () => {
   it('prompts to connect a relay when none is configured', () => {
     installMockBridge();
     useRelayStore.setState({ status: { configured: false, updateAvailable: false }, loaded: true });
-    render(<RelaySendPanel questionnaireId="q1" sensitivity="standard" onDone={() => {}} />);
+    render(
+      <RelaySendPanel
+        questionnaireId="q1"
+        sensitivity="standard"
+        recipientName="Alex"
+        onDone={() => {}}
+      />,
+    );
     expect(screen.getByText(/set up a relay/i)).toBeInTheDocument();
   });
 
@@ -45,8 +52,16 @@ describe('RelaySendPanel', () => {
       },
     });
 
-    render(<RelaySendPanel questionnaireId="q1" sensitivity="standard" onDone={() => {}} />);
-    await userEvent.type(screen.getByLabelText(/their name/i), 'Alex');
+    render(
+      <RelaySendPanel
+        questionnaireId="q1"
+        sensitivity="standard"
+        recipientName="Alex"
+        onDone={() => {}}
+      />,
+    );
+    // The recipient name is bound (no name field); the heading names them and Create link is ready.
+    expect(screen.getByRole('heading', { name: /send to alex/i })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /create link/i }));
 
     await waitFor(() => expect(screen.getByText(/share this link/i)).toBeInTheDocument());
@@ -63,7 +78,14 @@ describe('RelaySendPanel', () => {
       status: { configured: true, endpointUrl: 'https://x.workers.dev', updateAvailable: false },
       loaded: true,
     });
-    render(<RelaySendPanel questionnaireId="q1" sensitivity="explicit" onDone={() => {}} />);
+    render(
+      <RelaySendPanel
+        questionnaireId="q1"
+        sensitivity="explicit"
+        recipientName="Alex"
+        onDone={() => {}}
+      />,
+    );
     // The sensitive note is shown on the send form before minting.
     expect(screen.getByText(/marked sensitive/i)).toBeInTheDocument();
   });

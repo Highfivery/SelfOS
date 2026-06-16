@@ -1,15 +1,19 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { ArrowLeft, ClipboardList, Plus, Sparkles } from 'lucide-react';
+import type { Recipient } from '@shared/schemas';
 import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
 import { Button, Card, Heading, Stack, Text } from '../../../design-system/components';
 import { QuestionnaireBuilder, type BuilderSeed } from './QuestionnaireBuilder';
+import { NewQuestionnaireStart } from './NewQuestionnaireStart';
 import { SuggestedPanel } from './SuggestedPanel';
 import styles from './Questionnaires.module.css';
 
 type Selection =
   | { mode: 'none' }
-  | { mode: 'new'; seed?: BuilderSeed }
+  // Step 1 of creating: choose the recipient / compatibility BEFORE authoring (08 §17.3).
+  | { mode: 'start'; seed?: BuilderSeed }
+  | { mode: 'new'; seed?: BuilderSeed; recipient?: Recipient; compat: boolean }
   | { mode: 'edit'; id: string }
   | { mode: 'suggested' };
 
@@ -23,7 +27,8 @@ export function Questionnaires(): JSX.Element {
   const location = useLocation();
   const handoffSeed = (location.state as { seed?: BuilderSeed } | null)?.seed;
   const [selection, setSelection] = useState<Selection>(
-    handoffSeed ? { mode: 'new', seed: handoffSeed } : { mode: 'none' },
+    // A handed-off gap-finder suggestion still picks a recipient first (08 §17.3).
+    handoffSeed ? { mode: 'start', seed: handoffSeed } : { mode: 'none' },
   );
 
   useEffect(() => {
@@ -45,7 +50,7 @@ export function Questionnaires(): JSX.Element {
               <Sparkles size={16} aria-hidden="true" />
               Suggested
             </Button>
-            <Button variant="primary" onClick={() => setSelection({ mode: 'new' })}>
+            <Button variant="primary" onClick={() => setSelection({ mode: 'start' })}>
               <Plus size={16} aria-hidden="true" />
               New
             </Button>
@@ -94,11 +99,25 @@ export function Questionnaires(): JSX.Element {
           Questionnaires
         </button>
         {selection.mode === 'suggested' ? (
-          <SuggestedPanel onCreate={(seed) => setSelection({ mode: 'new', seed })} />
+          <SuggestedPanel onCreate={(seed) => setSelection({ mode: 'start', seed })} />
+        ) : selection.mode === 'start' ? (
+          <NewQuestionnaireStart
+            onCancel={() => setSelection({ mode: 'none' })}
+            onChosen={(choice) =>
+              setSelection({
+                mode: 'new',
+                ...(selection.seed ? { seed: selection.seed } : {}),
+                ...(choice.recipient ? { recipient: choice.recipient } : {}),
+                compat: choice.compat,
+              })
+            }
+          />
         ) : selection.mode === 'new' ? (
           <QuestionnaireBuilder
             key={selection.seed ? 'new-seeded' : 'new'}
             questionnaire={null}
+            compat={selection.compat}
+            {...(selection.recipient ? { initialRecipient: selection.recipient } : {})}
             {...(selection.seed ? { seed: selection.seed } : {})}
             onDone={() => setSelection({ mode: 'none' })}
           />
@@ -106,6 +125,7 @@ export function Questionnaires(): JSX.Element {
           <QuestionnaireBuilder
             key={selected.id}
             questionnaire={selected}
+            onDuplicate={(seed) => setSelection({ mode: 'start', seed })}
             onDone={() => setSelection({ mode: 'none' })}
           />
         ) : (

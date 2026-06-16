@@ -637,6 +637,7 @@ describe('createCoreBridge', () => {
       title: 'Quick check-in',
       type: 'role-feedback',
       sensitivity: 'standard',
+      recipient: { kind: 'person', personId: recipient.id },
       questions: [{ id: 'q1', type: 'shortText', prompt: 'How are we doing?', required: true }],
     });
     expect(saved.version).toBe(1);
@@ -653,10 +654,7 @@ describe('createCoreBridge', () => {
       }),
     ).not.toEqual([]);
 
-    const assignment = await bridge.assignmentsCreate({
-      questionnaireId: saved.id,
-      recipientPersonId: recipient.id,
-    });
+    const assignment = await bridge.assignmentsCreate({ questionnaireId: saved.id });
     expect(assignment.status).toBe('sent');
     expect(assignment.senderPersonId).toBe(ownerId);
     expect(assignment.recipient).toEqual({ kind: 'person', personId: recipient.id });
@@ -701,12 +699,10 @@ describe('createCoreBridge', () => {
       title: 'Q',
       type: 'role-feedback',
       sensitivity: 'standard',
+      recipient: { kind: 'person', personId: recipient.id },
       questions: [{ id: 'q1', type: 'shortText', prompt: 'Hi?', required: true }],
     });
-    const a = await bridge.assignmentsCreate({
-      questionnaireId: q.id,
-      recipientPersonId: recipient.id,
-    });
+    const a = await bridge.assignmentsCreate({ questionnaireId: q.id });
 
     // Owner has viewResults; with no submitted answers yet, analyze reports NO_RESPONSE (the live
     // trigger needs §13.5's answer flow), and the Memory list is empty.
@@ -846,10 +842,13 @@ describe('createCoreBridge', () => {
     const mine = (await bridge.questionnairesStoreImage({ base64, mime: 'image/png' })).imagePath;
     const other = (await bridge.questionnairesStoreImage({ base64, mime: 'image/png' })).imagePath;
 
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: mara.id, roleId: 'member', pin: null });
     const def = await bridge.questionnairesSave({
       title: 'Has an image',
       type: 'role-feedback',
       sensitivity: 'standard',
+      recipient: { kind: 'person', personId: mara.id },
       questions: [
         {
           id: 'q1',
@@ -860,9 +859,7 @@ describe('createCoreBridge', () => {
         },
       ],
     });
-    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
-    await bridge.accessSetAccount({ personId: mara.id, roleId: 'member', pin: null });
-    await bridge.assignmentsCreate({ questionnaireId: def.id, recipientPersonId: mara.id });
+    await bridge.assignmentsCreate({ questionnaireId: def.id });
 
     // Make the member role answer-only (no create) so the recipient branch is what's exercised.
     const member = (await bridge.accessGet()).roles.find((r) => r.id === 'member')!;
@@ -892,17 +889,18 @@ describe('createCoreBridge', () => {
     expect(await bridge.questionnairesList()).toEqual([]);
   });
 
-  it('rejects an in-app send to a non-existent recipient', async () => {
+  it('rejects an in-app send when the bound recipient no longer exists', async () => {
     const { bridge } = await freshOwner();
     const saved = await bridge.questionnairesSave({
       title: 'q',
       type: 'role-feedback',
       sensitivity: 'standard',
+      recipient: { kind: 'person', personId: 'ghost' },
       questions: [{ id: 'q1', type: 'shortText', prompt: 'hi', required: true }],
     });
-    await expect(
-      bridge.assignmentsCreate({ questionnaireId: saved.id, recipientPersonId: 'ghost' }),
-    ).rejects.toThrow(/Recipient not found/);
+    await expect(bridge.assignmentsCreate({ questionnaireId: saved.id })).rejects.toThrow(
+      /Recipient not found/,
+    );
   });
 
   it('delivers a send to the recipient Inbox, answers + submits, and gates non-recipients', async () => {
@@ -914,11 +912,11 @@ describe('createCoreBridge', () => {
       title: 'Weekly check-in',
       type: 'role-feedback',
       sensitivity: 'standard',
+      recipient: { kind: 'person', personId: recipient.id },
       questions: [{ id: 'q1', type: 'shortText', prompt: 'How are we doing?', required: true }],
     });
     const assignment = await bridge.assignmentsCreate({
       questionnaireId: q.id,
-      recipientPersonId: recipient.id,
       privacy: 'private',
     });
 
@@ -978,16 +976,15 @@ describe('createCoreBridge', () => {
       title: 'Weekly check-in',
       type: 'role-feedback',
       sensitivity: 'standard',
+      recipient: { kind: 'person', personId: recipient.id },
       questions: [{ id: 'q1', type: 'shortText', prompt: 'How are we doing?', required: true }],
     });
     const standard = await bridge.assignmentsCreate({
       questionnaireId: q.id,
-      recipientPersonId: recipient.id,
       privacy: 'standard',
     });
     const priv = await bridge.assignmentsCreate({
       questionnaireId: q.id,
-      recipientPersonId: recipient.id,
       privacy: 'private',
     });
 
@@ -1053,6 +1050,7 @@ describe('createCoreBridge', () => {
       title: 'Member’s questionnaire',
       type: 'role-feedback',
       sensitivity: 'standard',
+      recipient: { kind: 'person', personId: ownerId },
       questions: [{ id: 'q1', type: 'shortText', prompt: 'How?', required: true }],
     });
     expect((await bridge.questionnairesGet(q.id))?.creatorPersonId).toBe(member.id);
@@ -1060,7 +1058,6 @@ describe('createCoreBridge', () => {
     // Sent → it now has a send, so the member-creator can no longer delete it.
     const assignment = await bridge.assignmentsCreate({
       questionnaireId: q.id,
-      recipientPersonId: ownerId,
       privacy: 'standard',
     });
     await expect(bridge.questionnairesDelete(q.id)).rejects.toThrow(/permitted/);
@@ -1100,6 +1097,7 @@ describe('createCoreBridge', () => {
       title: 'Connection check',
       type: 'role-feedback',
       sensitivity: 'standard',
+      recipient: { kind: 'person', personId: mara.id },
       questions: [
         {
           id: 'c1',
@@ -1115,7 +1113,6 @@ describe('createCoreBridge', () => {
     for (const value of [2, 4]) {
       const a = await bridge.assignmentsCreate({
         questionnaireId: q.id,
-        recipientPersonId: mara.id,
         privacy: 'private',
       });
       sends.push(a.id);
@@ -1372,11 +1369,11 @@ describe('createCoreBridge', () => {
       title: 'Private check-in',
       type: 'role-feedback',
       sensitivity: 'standard',
+      recipient: { kind: 'person', personId: mara.id },
       questions: [{ id: 'c1', type: 'shortText', prompt: 'How are you?', required: true }],
     });
     const a = await bridge.assignmentsCreate({
       questionnaireId: q.id,
-      recipientPersonId: mara.id,
       privacy: 'private',
     });
     await bridge.sessionSetActive({ personId: mara.id });
@@ -1488,11 +1485,11 @@ describe('createCoreBridge', () => {
       title: 'Outside view',
       type: 'blind-spots',
       sensitivity: 'standard',
+      recipient: { kind: 'external', displayName: 'Alex' },
       questions: [{ id: 'a', type: 'shortText', prompt: 'How do I come across?', required: true }],
     });
     const { assignmentId, link, pin } = await bridge.assignmentsCreateRelayLink({
       questionnaireId: q.id,
-      recipient: { kind: 'external', displayName: 'Alex' },
       senderVisibleToRecipient: true,
     });
     expect(pin).toMatch(/^\d{6}$/);

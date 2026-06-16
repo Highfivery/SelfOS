@@ -624,6 +624,22 @@ export const CompatibilityConfigSchema = z.object({
 });
 export type CompatibilityConfig = z.infer<typeof CompatibilityConfigSchema>;
 
+/**
+ * Who a send goes to. A **household person** (in-app Inbox) or an **external** person (relay link). Shared
+ * by the questionnaire definition (08-questionnaires §17.3 — every non-compatibility questionnaire is bound
+ * to ONE recipient, chosen at creation) and by each `Assignment` (the frozen as-sent record).
+ */
+export const RecipientSchema = z.union([
+  z.object({ kind: z.literal('person'), personId: z.string().min(1) }),
+  z.object({
+    kind: z.literal('external'),
+    displayName: z.string().optional(),
+    email: z.string().optional(),
+    phone: z.string().optional(),
+  }),
+]);
+export type Recipient = z.infer<typeof RecipientSchema>;
+
 export const QuestionnaireSchema = z.object({
   id: z.string().min(1),
   schemaVersion: z.number().int().positive(),
@@ -632,6 +648,10 @@ export const QuestionnaireSchema = z.object({
   // may delete their own questionnaire only while unsent" (§3.9). Additive-optional (legacy defs lack it →
   // only the Owner can delete those); no schemaVersion bump.
   creatorPersonId: z.string().optional(),
+  // The single recipient this questionnaire is for (08 §17.3) — chosen at creation, never several. Required
+  // for non-compatibility questionnaires (a compatibility def carries its two participants at send instead,
+  // so it omits this). Optional in the shape; the non-compat requirement is enforced in validateQuestionnaire.
+  recipient: RecipientSchema.optional(),
   title: z.string().min(1),
   description: z.string().optional(),
   type: z.string().min(1), // a starter-taxonomy key OR a user-defined custom type
@@ -650,6 +670,7 @@ export const QuestionnaireInputSchema = z.object({
   description: z.string().optional(),
   type: z.string().min(1),
   sensitivity: SensitivityTierSchema,
+  recipient: RecipientSchema.optional(),
   questions: z.array(QuestionSchema),
   compatibility: CompatibilityConfigSchema.optional(),
 });
@@ -743,17 +764,6 @@ export type AssignmentStatus = z.infer<typeof AssignmentStatusSchema>;
 
 export const PrivacyModeSchema = z.enum(['standard', 'private']);
 export type PrivacyMode = z.infer<typeof PrivacyModeSchema>;
-
-export const RecipientSchema = z.union([
-  z.object({ kind: z.literal('person'), personId: z.string().min(1) }),
-  z.object({
-    kind: z.literal('external'),
-    displayName: z.string().optional(),
-    email: z.string().optional(),
-    phone: z.string().optional(),
-  }),
-]);
-export type Recipient = z.infer<typeof RecipientSchema>;
 
 export const AssignmentSchema = z.object({
   id: z.string().min(1),

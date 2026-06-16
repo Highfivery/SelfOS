@@ -208,7 +208,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         schemaVersion: 1,
         questionnaireId: input.questionnaireId,
         senderPersonId: 'owner-1',
-        recipient: { kind: 'person' as const, personId: input.recipientPersonId },
+        recipient: { kind: 'person' as const, personId: 'recipient-1' },
         channel: 'inApp' as const,
         privacy: input.privacy ?? 'standard',
         senderVisibleToRecipient: input.senderVisibleToRecipient ?? true,

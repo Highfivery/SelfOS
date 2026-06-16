@@ -4,9 +4,31 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { Questionnaires } from './Questionnaires';
 import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
+import { usePeopleStore } from '../../../stores/peopleStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useSettingsStore } from '../../../settings/settingsStore';
 import { clearMockBridge, elevateToOwner, installMockBridge } from '../../../test-utils/bridge';
+
+/** A minimal household Person for the recipient picker (08 §17.3: a questionnaire is bound to one). */
+function person(id: string, displayName: string) {
+  return {
+    id,
+    schemaVersion: 1 as const,
+    displayName,
+    isSubject: true,
+    tags: [] as string[],
+    createdAt: 'now',
+    updatedAt: 'now',
+  };
+}
+
+/** Seed the people store so the recipient-first start step has someone to pick (loaded → no IPC reload). */
+function seedPeople(): void {
+  usePeopleStore.setState({
+    people: [person('p-mara', 'Mara'), person('p-ben', 'Ben')],
+    loaded: true,
+  });
+}
 
 /** The screen uses `useNavigate` (the AI panel links to Settings), so render inside a router. */
 const renderApp = (): ReturnType<typeof render> =>
@@ -19,6 +41,7 @@ const renderApp = (): ReturnType<typeof render> =>
 afterEach(() => {
   clearMockBridge();
   useQuestionnaireStore.setState({ questionnaires: [], loaded: false, customTypes: [] });
+  usePeopleStore.setState({ people: [], loaded: false });
   useSettingsStore.setState({ values: {} });
   useSessionStore.setState({});
 });
@@ -45,9 +68,27 @@ function saveSpy(): ReturnType<typeof vi.fn> {
   );
 }
 
+/**
+ * Open the builder for a new questionnaire by walking the recipient-first start step (08 §17.3): New →
+ * pick a household recipient → Continue. Seeds the people store so the picker has someone.
+ */
 async function openNewBuilder(): Promise<void> {
+  seedPeople();
   renderApp();
   await userEvent.click(screen.getByRole('button', { name: 'New' }));
+  await userEvent.selectOptions(await screen.findByLabelText('Who is this for?'), 'p-mara');
+  await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
+  await screen.findByLabelText('Title');
+}
+
+/** Open the builder for a new COMPATIBILITY questionnaire (the two-participant exception, no single recipient). */
+async function openNewCompat(): Promise<void> {
+  seedPeople();
+  renderApp();
+  await userEvent.click(screen.getByRole('button', { name: 'New' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Compatibility (two people)' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
+  await screen.findByLabelText('Title');
 }
 
 describe('Questionnaires', () => {
@@ -78,14 +119,12 @@ describe('Questionnaires', () => {
   it('authors a compatibility questionnaire (visibility picker + canonicalId stamping)', async () => {
     const save = saveSpy();
     installMockBridge({ questionnairesList: () => Promise.resolve([]), questionnairesSave: save });
-    await openNewBuilder();
+    // Compatibility is chosen in the recipient-first start step now (the two-participant exception).
+    await openNewCompat();
 
     await userEvent.type(screen.getByLabelText('Title'), 'Compatibility check');
     await userEvent.type(screen.getByLabelText('Question 1'), 'How connected do you feel?');
 
-    // The visibility picker is hidden until Compatibility is turned on.
-    expect(screen.queryByLabelText('Who sees what')).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('switch', { name: 'Compatibility questionnaire' }));
     const visibility = await screen.findByLabelText('Who sees what');
     // Without `questionnaires.readRaw`, the senderSeesAll option is not selectable (§15.3 reworded copy).
     const senderSeesAll = screen.getByRole('option', {
@@ -346,6 +385,7 @@ describe('Questionnaires', () => {
           ],
         }),
     });
+    seedPeople();
     renderApp();
 
     await userEvent.click(screen.getByRole('button', { name: 'Suggested' }));
@@ -353,8 +393,11 @@ describe('Questionnaires', () => {
     await userEvent.click(await screen.findByRole('button', { name: /suggest questionnaires/i }));
     expect(await screen.findByText('Partner check-in')).toBeInTheDocument();
 
+    // A suggestion still picks a recipient first (08 §17.3), then opens the builder pre-filled.
     await userEvent.click(screen.getByRole('button', { name: /create from this/i }));
-    expect(screen.getByLabelText('Title')).toHaveValue('Partner check-in');
+    await userEvent.selectOptions(await screen.findByLabelText('Who is this for?'), 'p-mara');
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(await screen.findByLabelText('Title')).toHaveValue('Partner check-in');
     expect(screen.getByDisplayValue('How was this week together?')).toBeInTheDocument();
   });
 
@@ -431,38 +474,30 @@ describe('Questionnaires', () => {
     expect(firstCall[0].questions[1].branch).toBeUndefined();
   });
 
-  it('sends to a household person from the builder, defaulting to Private', async () => {
+  it('sends to the bound household recipient from the builder, defaulting to Private (§17.3)', async () => {
     const save = saveSpy();
-    const assignmentsCreate = vi.fn((input: { recipientPersonId: string }) =>
-      Promise.resolve({
-        id: 'a1',
-        schemaVersion: 1,
-        questionnaireId: 'q1',
-        senderPersonId: 'owner-1',
-        recipient: { kind: 'person' as const, personId: input.recipientPersonId },
-        channel: 'inApp' as const,
-        privacy: 'private' as const,
-        senderVisibleToRecipient: true,
-        status: 'sent' as const,
-        createdAt: 'now',
-        updatedAt: 'now',
-      }),
+    const assignmentsCreate = vi.fn(
+      (input: { questionnaireId: string; privacy?: 'standard' | 'private' }) =>
+        Promise.resolve({
+          id: 'a1',
+          schemaVersion: 1,
+          questionnaireId: input.questionnaireId,
+          senderPersonId: 'owner-1',
+          recipient: { kind: 'person' as const, personId: 'p-mara' },
+          channel: 'inApp' as const,
+          privacy: input.privacy ?? 'private',
+          senderVisibleToRecipient: true,
+          status: 'sent' as const,
+          createdAt: 'now',
+          updatedAt: 'now',
+        }),
     );
-    const person = (id: string, displayName: string) => ({
-      id,
-      schemaVersion: 1,
-      displayName,
-      isSubject: true,
-      tags: [],
-      createdAt: 'now',
-      updatedAt: 'now',
-    });
     installMockBridge({
       questionnairesList: () => Promise.resolve([]),
       questionnairesSave: save,
-      peopleList: () => Promise.resolve([person('p-mara', 'Mara'), person('p-ben', 'Ben')]),
       assignmentsCreate,
     });
+    // openNewBuilder binds Mara as the recipient in the start step — no recipient picker at send.
     await openNewBuilder();
 
     await userEvent.type(screen.getByLabelText('Title'), 'Weekly check-in');
@@ -470,22 +505,19 @@ describe('Questionnaires', () => {
 
     // §16.3 two-step: Save the draft first (Send only appears on a saved questionnaire), then Send.
     await userEvent.click(screen.getByRole('button', { name: 'Create draft' }));
-    // Open the send panel (validates + saves any edits first), pick a recipient, and send.
+    // Open the send panel (validates + saves any edits first). The recipient is already bound to Mara.
     await userEvent.click(await screen.findByRole('button', { name: 'Send' }));
-    await userEvent.selectOptions(await screen.findByLabelText('Send to'), 'p-mara');
-    // Private is the default privacy mode (break-glass).
+    expect(await screen.findByText(/this goes to/i)).toHaveTextContent(/Mara/);
+    // Private is the default privacy mode.
     expect(screen.getByRole('button', { name: 'Private' })).toHaveAttribute('aria-pressed', 'true');
 
     const sendButtons = screen.getAllByRole('button', { name: 'Send' });
     await userEvent.click(sendButtons[sendButtons.length - 1] as HTMLElement);
 
     expect(assignmentsCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        questionnaireId: 'q1',
-        recipientPersonId: 'p-mara',
-        privacy: 'private',
-      }),
+      expect.objectContaining({ questionnaireId: 'q1', privacy: 'private' }),
     );
+    expect(assignmentsCreate.mock.calls[0]?.[0]).not.toHaveProperty('recipientPersonId');
     expect(await screen.findByText(/sent to mara/i)).toBeInTheDocument();
   });
 
@@ -513,6 +545,40 @@ describe('Questionnaires', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Results' }));
     expect(await screen.findByText(/haven’t sent this questionnaire yet/i)).toBeInTheDocument();
+  });
+
+  it('duplicates a saved questionnaire: clones the questions and re-picks a recipient (§17.3)', async () => {
+    seedPeople();
+    installMockBridge({
+      questionnairesList: () =>
+        Promise.resolve([
+          {
+            id: 'q1',
+            schemaVersion: 1,
+            version: 1,
+            title: 'Weekly check-in',
+            type: 'role-feedback',
+            sensitivity: 'standard',
+            recipient: { kind: 'person', personId: 'p-ben' },
+            questions: [
+              { id: 'qq1', type: 'shortText', prompt: 'How are we doing?', required: true },
+            ],
+            createdAt: 'now',
+            updatedAt: 'now',
+          },
+        ]),
+    });
+    renderApp();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Duplicate' }));
+    // Duplicate routes back to the recipient-first start step — pick a NEW recipient, then author.
+    await userEvent.selectOptions(await screen.findByLabelText('Who is this for?'), 'p-mara');
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    // The cloned questions + a "(copy)" title carry over; the recipient is the newly chosen one.
+    expect(await screen.findByLabelText('Title')).toHaveValue('Weekly check-in (copy)');
+    expect(screen.getByDisplayValue('How are we doing?')).toBeInTheDocument();
+    expect(screen.getByText(/For:/)).toHaveTextContent(/Mara/);
   });
 
   it('confirms before deleting a saved questionnaire', async () => {
@@ -615,9 +681,8 @@ describe('Questionnaires', () => {
     // The Owner has readRaw, so senderSeesAll is selectable.
     elevateToOwner();
     installMockBridge({ questionnairesList: () => Promise.resolve([]) });
-    await openNewBuilder();
+    await openNewCompat();
 
-    await userEvent.click(screen.getByRole('switch', { name: 'Compatibility questionnaire' }));
     const visibility = await screen.findByLabelText('Who sees what');
     // Reworded labels (no "break-glass"/"audited"; "each sees their own" → explicit added thing).
     expect(screen.getByRole('option', { name: 'Shared report only' })).toBeInTheDocument();

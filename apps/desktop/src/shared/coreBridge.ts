@@ -461,7 +461,7 @@ const IntimacyTopicSchema = z.object({
 });
 const AssignmentsCreateSchema = z.object({
   questionnaireId: z.string().min(1),
-  recipientPersonId: z.string().min(1),
+  // No recipient here — it's bound to the questionnaire at creation (08 §17.3) and read from the def.
   privacy: z.enum(['standard', 'private']).optional(),
   senderVisibleToRecipient: z.boolean().optional(),
   expiresAt: z.string().datetime().optional(),
@@ -485,12 +485,8 @@ const SuggestSchema = z.object({ targetPersonId: z.string().min(1).optional() })
 const AnalyzeSchema = z.object({ assignmentId: z.string().min(1) });
 const CreateRelayLinkSchema = z.object({
   questionnaireId: z.string().min(1),
-  recipient: z.object({
-    kind: z.literal('external'),
-    displayName: z.string().optional(),
-    email: z.string().optional(),
-    phone: z.string().optional(),
-  }),
+  // No recipient here — the external recipient is bound to the questionnaire at creation (08 §17.3); the
+  // bridge reads name/email/phone from the def.
   privacy: z.enum(['standard', 'private']).optional(),
   senderVisibleToRecipient: z.boolean().optional(),
   expiresAt: z.string().datetime().optional(),
@@ -1499,14 +1495,23 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       }
       const personId = await activePersonId();
       if (!personId) throw new Error('No active person');
-      const { questionnaireId, recipientPersonId, privacy, senderVisibleToRecipient, expiresAt } =
+      const { questionnaireId, privacy, senderVisibleToRecipient, expiresAt } =
         AssignmentsCreateSchema.parse(input);
-      // The recipient must be a real household person, so we never persist a dangling, unanswerable
-      // send (a self-send is allowed — self check-ins are a valid use). Mirrors invitesCreate's lookup.
+      // The recipient is BOUND to the questionnaire at creation (08 §17.3) — the sender never re-picks it.
+      // An in-app send requires a household recipient; an external-bound questionnaire goes via the relay.
+      const def = await getQuestionnaire(ctx.fs, ctx.key, questionnaireId);
+      if (!def) throw new Error('Questionnaire not found');
+      if (def.recipient?.kind !== 'person') {
+        throw new Error(
+          'This questionnaire is addressed to someone outside the household — use the link.',
+        );
+      }
+      const recipientPersonId = def.recipient.personId;
+      // The bound recipient must still be a real household person, so we never persist a dangling,
+      // unanswerable send (a self-send is allowed — self check-ins are a valid use).
       if (!(await getPerson(ctx.fs, ctx.key, recipientPersonId))) {
         throw new Error('Recipient not found');
       }
-      // In-app/household send only for now; the external relay channel lands with the delivery slice.
       return createAssignment(ctx.fs, ctx.key, {
         questionnaireId,
         senderPersonId: personId,
@@ -1915,6 +1920,15 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       }
       const personId = await activePersonId();
       if (!personId) throw new Error('Not permitted');
+      // The external recipient is BOUND to the questionnaire at creation (08 §17.3) — read it from the def.
+      const def = await getQuestionnaire(ctx.fs, ctx.key, parsed.questionnaireId);
+      if (!def) throw new Error('Questionnaire not found');
+      if (def.recipient?.kind !== 'external') {
+        throw new Error(
+          'This questionnaire is addressed to someone in the household — send it in-app.',
+        );
+      }
+      const bound = def.recipient;
       const sender = await getPerson(ctx.fs, ctx.key, personId);
       const senderName = sender?.displayName ?? 'Someone';
       const privacy = parsed.privacy ?? 'private';
@@ -1936,11 +1950,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         // exactOptionalPropertyTypes.
         recipient: {
           kind: 'external',
-          ...(parsed.recipient.displayName !== undefined
-            ? { displayName: parsed.recipient.displayName }
-            : {}),
-          ...(parsed.recipient.email !== undefined ? { email: parsed.recipient.email } : {}),
-          ...(parsed.recipient.phone !== undefined ? { phone: parsed.recipient.phone } : {}),
+          ...(bound.displayName !== undefined ? { displayName: bound.displayName } : {}),
+          ...(bound.email !== undefined ? { email: bound.email } : {}),
+          ...(bound.phone !== undefined ? { phone: bound.phone } : {}),
         },
         senderVisibleToRecipient: senderVisible,
         privacy,

@@ -64,6 +64,7 @@ export async function saveQuestionnaire(
     createdAt: existing?.createdAt ?? at,
     updatedAt: at,
     ...(creator !== undefined ? { creatorPersonId: creator } : {}),
+    ...(input.recipient !== undefined ? { recipient: input.recipient } : {}),
     ...(input.description !== undefined ? { description: input.description } : {}),
     ...(input.compatibility !== undefined ? { compatibility: input.compatibility } : {}),
   };

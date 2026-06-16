@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ImagePlus, Plus, Send, Sparkles, Trash2 } from 'lucide-react';
+import { Copy, ImagePlus, Plus, Send, Sparkles, Trash2 } from 'lucide-react';
 import { ALLOWED_IMAGE_MIME, MAX_IMAGE_BYTES } from '@selfos/core/questionnaires';
 import { ANTHROPIC_API_KEY_ID } from '@shared/channels';
 import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
@@ -26,8 +26,10 @@ import type {
   Question,
   Questionnaire,
   QuestionnaireInput,
+  Recipient,
   SensitivityTier,
 } from '@shared/schemas';
+import { usePeopleStore } from '../../../stores/peopleStore';
 import { QuestionImage } from '@selfos/answering';
 import { useSessionStore } from '../../../stores/sessionStore';
 import {
@@ -290,10 +292,18 @@ export interface BuilderSeed {
 export function QuestionnaireBuilder({
   questionnaire,
   seed,
+  compat,
+  initialRecipient,
+  onDuplicate,
   onDone,
 }: {
   questionnaire: Questionnaire | null;
   seed?: BuilderSeed;
+  // For a NEW questionnaire, the recipient/compatibility chosen in the start step (08 §17.3). On edit these
+  // are read from the saved questionnaire instead.
+  compat?: boolean;
+  initialRecipient?: Recipient;
+  onDuplicate?: (seed: BuilderSeed) => void;
   onDone: () => void;
 }): JSX.Element {
   const save = useQuestionnaireStore((s) => s.save);
@@ -331,13 +341,28 @@ export function QuestionnaireBuilder({
   const sensitivityConfig = sensitivityConfigFor(type);
   const effectiveSensitivity = computeEffectiveSensitivity(type, sensitivity);
   // Compatibility (08 §3.6): goes to TWO people, AI personalizes a variant each, aligned by canonicalId.
+  // The recipient + compatibility are BOUND at creation (08 §17.3) — chosen in the start step for a new
+  // questionnaire, or read from the saved one on edit. They are not changed here (use Duplicate to re-target).
   const canReadRaw = useSessionStore((s) => s.can('questionnaires.readRaw'));
-  const [compatEnabled, setCompatEnabled] = useState(
-    questionnaire?.compatibility?.enabled ?? false,
-  );
+  const compatEnabled = questionnaire?.compatibility?.enabled ?? compat ?? false;
+  const recipient: Recipient | undefined = questionnaire?.recipient ?? initialRecipient;
   const [visibility, setVisibility] = useState<CompatibilityVisibility>(
     questionnaire?.compatibility?.visibility ?? 'sharedReport',
   );
+  // Resolve a household recipient's name for the "For: …" header.
+  const people = usePeopleStore((s) => s.people);
+  const peopleLoaded = usePeopleStore((s) => s.loaded);
+  const loadPeople = usePeopleStore((s) => s.load);
+  useEffect(() => {
+    if (!peopleLoaded) void loadPeople();
+  }, [peopleLoaded, loadPeople]);
+  const recipientLabel = compatEnabled
+    ? 'Compatibility — two people'
+    : recipient?.kind === 'person'
+      ? (people.find((p) => p.id === recipient.personId)?.displayName ?? 'someone in the household')
+      : recipient?.kind === 'external'
+        ? `${recipient.displayName ?? 'someone'} (link)`
+        : 'no one yet';
   const [drafts, setDrafts] = useState<QDraft[]>(
     questionnaire
       ? questionnaire.questions.map(fromQuestion)
@@ -467,6 +492,9 @@ export function QuestionnaireBuilder({
     title: title.trim(),
     type,
     sensitivity: effectiveSensitivity,
+    // The bound recipient travels with every save (08 §17.3). Compatibility defs omit it (two participants
+    // are chosen at send instead).
+    ...(!compatEnabled && recipient ? { recipient } : {}),
     // When compatibility is on, stamp each question with a stable canonicalId (its own id) so the two
     // AI-personalized variants stay aligned for the report (08 §3.6/§4.2).
     questions: drafts.map((d) => {
@@ -561,7 +589,12 @@ export function QuestionnaireBuilder({
   return (
     <Stack gap={4}>
       <div className={styles.builderHeader}>
-        <Heading level={3}>{saved ? 'Edit questionnaire' : 'New questionnaire'}</Heading>
+        <Stack gap={1}>
+          <Heading level={3}>{saved ? 'Edit questionnaire' : 'New questionnaire'}</Heading>
+          <Text size="sm" tone="secondary">
+            For: <strong>{recipientLabel}</strong>
+          </Text>
+        </Stack>
         <SegmentedControl<BuilderMode>
           aria-label="Builder mode"
           value={mode}
@@ -696,26 +729,6 @@ export function QuestionnaireBuilder({
               {SENSITIVITY_NOTES[effectiveSensitivity] ? (
                 <Banner tone="info">{SENSITIVITY_NOTES[effectiveSensitivity]}</Banner>
               ) : null}
-
-              <div className={styles.compatRow}>
-                <div className={styles.requiredToggle}>
-                  <Switch
-                    checked={compatEnabled}
-                    onChange={(checked) => {
-                      setProblems(null);
-                      setCompatEnabled(checked);
-                    }}
-                    aria-label="Compatibility questionnaire"
-                  />
-                  <Text size="sm" weight={500}>
-                    Compatibility
-                  </Text>
-                </div>
-                <Text size="sm" tone="secondary">
-                  Send to two people at once. AI personalizes a version for each, then aligns their
-                  answers into a shared report. Requires AI to be on.
-                </Text>
-              </div>
 
               {compatEnabled ? (
                 <Field label="Who sees what">
@@ -1192,6 +1205,25 @@ export function QuestionnaireBuilder({
                   Send
                 </Button>
               ) : null}
+              {/* Duplicate (08 §17.3): clone the questions into a NEW questionnaire and pick a new
+                  recipient — the way to "ask someone else the same thing", since a questionnaire is bound
+                  to one recipient. */}
+              {saved && onDuplicate ? (
+                <Button
+                  variant="secondary"
+                  onClick={() =>
+                    onDuplicate({
+                      title: `${title.trim()} (copy)`,
+                      type,
+                      questions: drafts.map((d) => toQuestion(d, drafts)),
+                    })
+                  }
+                  disabled={busy}
+                >
+                  <Copy size={16} aria-hidden="true" />
+                  Duplicate
+                </Button>
+              ) : null}
               <Button variant="secondary" onClick={onDone} disabled={busy}>
                 {saved ? 'Close' : 'Cancel'}
               </Button>
@@ -1243,18 +1275,20 @@ export function QuestionnaireBuilder({
                   onDone();
                 }}
               />
-            ) : (
+            ) : recipient ? (
               <QuestionnaireSendPanel
                 questionnaireId={sendId}
                 title={title.trim()}
                 sensitivity={effectiveSensitivity}
+                recipient={recipient}
+                recipientLabel={recipientLabel}
                 onCancel={() => setSendId(null)}
                 onSent={() => {
                   setSendId(null);
                   onDone();
                 }}
               />
-            )
+            ) : null
           ) : null}
         </>
       )}

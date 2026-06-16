@@ -515,10 +515,12 @@ export interface SelfosBridge {
   }): Promise<Insight | null>;
   /** Delete an Insight. */
   insightsDelete(input: { subjectPersonId: string; id: string }): Promise<void>;
-  /** Send a questionnaire to a household person (in-app), freezing an immutable snapshot at send. */
+  /**
+   * Send a questionnaire to its BOUND household recipient (in-app), freezing an immutable snapshot at send.
+   * The recipient is set on the questionnaire at creation (08 §17.3) — it is NOT passed here.
+   */
   assignmentsCreate(input: {
     questionnaireId: string;
-    recipientPersonId: string;
     privacy?: PrivacyMode;
     senderVisibleToRecipient?: boolean;
     expiresAt?: string;
@@ -596,7 +598,7 @@ export interface SelfosBridge {
    */
   assignmentsCreateRelayLink(input: {
     questionnaireId: string;
-    recipient: { kind: 'external'; displayName?: string; email?: string; phone?: string };
+    // The external recipient is bound to the questionnaire at creation (08 §17.3) — not passed here.
     senderVisibleToRecipient: boolean;
     privacy?: PrivacyMode;
     expiresAt?: string;

@@ -1991,3 +1991,16 @@ start step**. So:
 redundant person-pickers. The DoD now requires a whole-flow coherence walk, and this was caught by the user,
 not the tests. Build + extend the §16.7 matrix (a compat send no longer has a participant picker; AI generation
 has no "about a person" control).
+
+**Build status (2026-06-16, `feat/questionnaire-explicit-gen`, NOT merged):** **A built** — the
+About-a-person picker + toggles removed; the generate IPC drops `targetPersonId`/`includeTarget`/
+`includeRelationship` and the bridge derives the (author + recipient) tailoring context from the bound
+household recipient. **B built for the HOUSEHOLD case** — the start step binds the recipient for compat,
+`CompatibilitySendPanel` has no participant picker (you + the bound recipient), "two other people" removed, and
+`assignmentsCreateCompatibility` takes only `{ questionnaireId }`. **External-recipient compatibility is the
+NEXT slice** (the start step limits compat to household for now): the external recipient answers via the relay,
+the sender answers in-app, and once both are in the sender pushes the sealed outcome (per visibility — thanks /
+the joint report) back to the recipient's relay page from Results; `contextOnly` will be hidden for an external
+recipient (no coach). Gate green each part: typecheck/lint/format, **402 core + 486 desktop** unit, **68 E2E**
+(the compat E2E asserts no participant picker; visual QA of the compat start step + send panel — one clean
+"Compare you with" picker, no duplicate).

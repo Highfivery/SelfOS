@@ -356,13 +356,14 @@ export function QuestionnaireBuilder({
   useEffect(() => {
     if (!peopleLoaded) void loadPeople();
   }, [peopleLoaded, loadPeople]);
-  const recipientLabel = compatEnabled
-    ? 'Compatibility — two people'
-    : recipient?.kind === 'person'
+  // The bound recipient's display name (compat compares you WITH this person, §17.12-B).
+  const recipientName =
+    recipient?.kind === 'person'
       ? (people.find((p) => p.id === recipient.personId)?.displayName ?? 'someone in the household')
       : recipient?.kind === 'external'
         ? `${recipient.displayName ?? 'someone'} (link)`
         : 'no one yet';
+  const recipientLabel = compatEnabled ? `Compatibility — you + ${recipientName}` : recipientName;
   const [drafts, setDrafts] = useState<QDraft[]>(
     questionnaire
       ? questionnaire.questions.map(fromQuestion)
@@ -492,9 +493,9 @@ export function QuestionnaireBuilder({
     title: title.trim(),
     type,
     sensitivity: effectiveSensitivity,
-    // The bound recipient travels with every save (08 §17.3). Compatibility defs omit it (two participants
-    // are chosen at send instead).
-    ...(!compatEnabled && recipient ? { recipient } : {}),
+    // The bound recipient travels with every save (08 §17.3). Compatibility binds one too now — the
+    // comparison is always you + this recipient (§17.12-B).
+    ...(recipient ? { recipient } : {}),
     // When compatibility is on, stamp each question with a stable canonicalId (its own id) so the two
     // AI-personalized variants stay aligned for the report (08 §3.6/§4.2).
     questions: drafts.map((d) => {
@@ -1265,11 +1266,12 @@ export function QuestionnaireBuilder({
           ) : null}
 
           {sendId ? (
-            compatEnabled ? (
+            compatEnabled && recipient ? (
               <CompatibilitySendPanel
                 questionnaireId={sendId}
                 title={title.trim()}
                 visibility={visibility}
+                recipientName={recipientName}
                 onCancel={() => setSendId(null)}
                 onSent={() => {
                   setSendId(null);

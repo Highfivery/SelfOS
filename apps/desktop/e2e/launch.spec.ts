@@ -937,7 +937,9 @@ test('usage: the dashboard shows recorded usage and accepts a budget, without ov
 async function startNewQuestionnaire(w: Page, opts: { compat?: boolean } = {}): Promise<void> {
   await w.getByRole('button', { name: 'New' }).click();
   if (opts.compat) {
+    // Compat is recipient-first too (§17.12-B): pick the person you're compared with (excludes you).
     await w.getByLabel('This questionnaire is for').selectOption('compatibility');
+    await w.getByLabel('Compare you with').selectOption({ index: 1 });
   } else {
     await w.getByLabel('Who is this for?').selectOption({ index: 1 });
   }
@@ -1815,7 +1817,7 @@ test('compatibility contextOnly (§16.2): no report; each participant’s own co
   }
 });
 
-test('compatibility you+someone-else (§16.1): the send panel offers the participant-model toggle', async () => {
+test('compatibility (§17.12-B): you + the bound recipient, no participant picker at send', async () => {
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
   await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
   const fs = createNodeFileSystem(vault);
@@ -1836,26 +1838,20 @@ test('compatibility you+someone-else (§16.1): the send panel offers the partici
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Questionnaires' }).click();
-    // Compatibility is chosen in the recipient-first start step now (the two-participant exception, §17.3/§17.5).
+    // Compatibility binds the one recipient (Angel) at the start step — the comparison is you + them (§17.12-B).
     await startNewQuestionnaire(w, { compat: true });
+    await expect(w.getByText(/For:/)).toContainText('Compatibility — you + Angel');
     await w.getByLabel('Title').fill('Sexy time');
     await w.getByLabel('Question 1', { exact: true }).fill('How connected do you feel?');
 
-    // §16.3: save first, then Send → the participant-model send panel.
+    // §16.3: save first, then Send → the compat send panel has NO participant picker (§17.12-B).
     await w.getByRole('button', { name: 'Create draft' }).click();
     await w.getByRole('button', { name: 'Send' }).click();
-    await expect(w.getByRole('heading', { name: /Send .Sexy time/ })).toBeVisible();
-
-    // §16.1: default is "you + someone else" with the sender locked in as "You"; the other picker excludes
-    // the sender. Switching to "two other people" reveals two pickers.
-    await expect(w.getByLabel("Who's being compared?")).toHaveValue('self');
-    await expect(w.getByLabel('You', { exact: true })).toBeDisabled();
-    await w.getByLabel('Someone else').selectOption({ label: 'Angel' });
-    // The disclosure preview names the OTHER participant (the sender), never a neutral third party.
-    await expect(w.getByText(/neither you nor Tester/)).toBeVisible();
-    await w.getByLabel("Who's being compared?").selectOption('others');
-    await expect(w.getByLabel('First person')).toBeVisible();
-    await expect(w.getByLabel('Second person')).toBeVisible();
+    await expect(w.getByText(/compares/i)).toContainText('Angel');
+    expect(await w.getByLabel("Who's being compared?").count()).toBe(0);
+    expect(await w.getByLabel('Someone else').count()).toBe(0);
+    // The recipient's disclosure names the sender as the other participant (the honesty guard).
+    await expect(w.getByText(/Angel will be told/i)).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

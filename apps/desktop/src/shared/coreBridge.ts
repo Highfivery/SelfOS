@@ -528,11 +528,9 @@ const DeclineSchema = z.object({
   note: z.string().optional(),
 });
 const CompatibilityCreateSchema = z.object({
+  // Compatibility is always the sender + the bound recipient (08 §17.12-B) — both derived from the
+  // questionnaire, so no participant ids are passed.
   questionnaireId: z.string().min(1),
-  // The two participants (§16.1) — either may be the sender ("you + someone else"); the only invalid
-  // case is the same person twice.
-  participantPersonIdA: z.string().min(1),
-  participantPersonIdB: z.string().min(1),
 });
 const GroupIdSchema = z.string().min(1);
 
@@ -1743,13 +1741,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     assignmentsCreateCompatibility: async (input): Promise<CompatibilitySendResult> => {
       const deps = await aiDeps('questionnaires.create');
       if (!deps) return { ok: false, reason: 'DENIED', message: 'Not available.' };
-      const { questionnaireId, participantPersonIdA, participantPersonIdB } =
-        CompatibilityCreateSchema.parse(input);
-      // §16.1: a participant may be the sender ("you + someone else") or another person; the only invalid
-      // case is the same person picked twice.
-      if (participantPersonIdA === participantPersonIdB) {
-        return { ok: false, reason: 'INVALID', message: 'Choose two different people.' };
-      }
+      const { questionnaireId } = CompatibilityCreateSchema.parse(input);
       const canonical = await getQuestionnaire(deps.fs, deps.key, questionnaireId);
       if (!canonical?.compatibility?.enabled) {
         return {
@@ -1758,7 +1750,25 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           message: 'This isn’t a compatibility questionnaire.',
         };
       }
-      const participants = [participantPersonIdA, participantPersonIdB];
+      // The participants are the sender + the BOUND recipient (08 §17.12-B), derived from the questionnaire.
+      // External-recipient compatibility (via the relay) is the next slice — for now it must be a household
+      // person (the start step already prevents choosing external for compatibility).
+      if (canonical.recipient?.kind !== 'person') {
+        return {
+          ok: false,
+          reason: 'INVALID',
+          message: 'Comparing with someone outside the household is coming soon.',
+        };
+      }
+      const recipientPersonId = canonical.recipient.personId;
+      if (recipientPersonId === deps.personId) {
+        return {
+          ok: false,
+          reason: 'INVALID',
+          message: 'You can’t compare yourself with yourself.',
+        };
+      }
+      const participants = [deps.personId, recipientPersonId];
       const people = await Promise.all(participants.map((id) => getPerson(deps.fs, deps.key, id)));
       if (people.some((p) => !p)) {
         return { ok: false, reason: 'INVALID', message: 'A chosen person no longer exists.' };

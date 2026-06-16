@@ -1194,41 +1194,41 @@ describe('createCoreBridge', () => {
     expect((await bridge.assignmentsTrends(q.id)).length).toBe(0); // one point left → no trend
   });
 
-  it('compatibility (§16.1): the sender can be a participant (you + someone else); same person twice is rejected', async () => {
+  it('compatibility (§17.12-B): compares you + the bound recipient; recipient = yourself is rejected', async () => {
     const { bridge, ownerId } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
     const partner = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
     await bridge.accessSetAccount({ personId: partner.id, roleId: 'member', pin: null });
-    const q = await bridge.questionnairesSave({
-      title: 'Sexy time',
-      type: 'role-feedback',
-      sensitivity: 'standard',
-      questions: [
-        {
-          id: 'c1',
-          type: 'rating',
-          prompt: 'Connected?',
-          required: true,
-          scale: { min: 1, max: 5 },
-        },
-      ],
-      compatibility: { enabled: true, visibility: 'sharedReport' },
+    const compatQ = (visibility: 'sharedReport', recipientId: string) =>
+      bridge.questionnairesSave({
+        title: 'Sexy time',
+        type: 'role-feedback',
+        sensitivity: 'standard',
+        recipient: { kind: 'person', personId: recipientId },
+        questions: [
+          {
+            id: 'c1',
+            type: 'rating',
+            prompt: 'Connected?',
+            required: true,
+            scale: { min: 1, max: 5 },
+          },
+        ],
+        compatibility: { enabled: true, visibility },
+      });
+
+    // Binding YOURSELF as the recipient is the only invalid pairing now (you can't compare you with you).
+    const qSelf = await compatQ('sharedReport', ownerId);
+    expect(
+      await bridge.assignmentsCreateCompatibility({ questionnaireId: qSelf.id }),
+    ).toMatchObject({
+      ok: false,
+      reason: 'INVALID',
     });
 
-    // The same person twice is the ONLY invalid pairing now.
-    const dup = await bridge.assignmentsCreateCompatibility({
-      questionnaireId: q.id,
-      participantPersonIdA: ownerId,
-      participantPersonIdB: ownerId,
-    });
-    expect(dup).toMatchObject({ ok: false, reason: 'INVALID' });
-
-    // You + someone else: the owner (sender) is one participant — previously rejected, now allowed.
-    const sent = await bridge.assignmentsCreateCompatibility({
-      questionnaireId: q.id,
-      participantPersonIdA: ownerId,
-      participantPersonIdB: partner.id,
-    });
+    // You + the bound recipient: no participant ids passed — derived from the questionnaire.
+    const q = await compatQ('sharedReport', partner.id);
+    const sent = await bridge.assignmentsCreateCompatibility({ questionnaireId: q.id });
     expect(sent.ok).toBe(true);
 
     const group = (await bridge.assignmentsCompatibility(q.id))[0]!;
@@ -1248,18 +1248,17 @@ describe('createCoreBridge', () => {
     await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
   });
 
-  it('compatibility: dual-send → align → report + Insight; the Owner can reveal a senderSeesAll send', async () => {
+  it('compatibility: you + recipient → align → report + Insight; the Owner can reveal a senderSeesAll send', async () => {
     const { bridge, ownerId } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
     const alex = await bridge.peopleSave({ displayName: 'Alex', isSubject: true, tags: [] });
-    const bri = await bridge.peopleSave({ displayName: 'Bri', isSubject: true, tags: [] });
     await bridge.accessSetAccount({ personId: alex.id, roleId: 'member', pin: null });
-    await bridge.accessSetAccount({ personId: bri.id, roleId: 'member', pin: null });
 
     const q = await bridge.questionnairesSave({
       title: 'Compatibility check',
       type: 'role-feedback',
       sensitivity: 'standard',
+      recipient: { kind: 'person', personId: alex.id },
       questions: [
         {
           id: 'c1',
@@ -1272,12 +1271,8 @@ describe('createCoreBridge', () => {
       compatibility: { enabled: true, visibility: 'senderSeesAll' },
     });
 
-    // Dual-send: AI personalizes a variant each, freezing two paired snapshots.
-    const sent = await bridge.assignmentsCreateCompatibility({
-      questionnaireId: q.id,
-      participantPersonIdA: alex.id,
-      participantPersonIdB: bri.id,
-    });
+    // You + the recipient: AI personalizes a variant each (sender + Alex), freezing two paired snapshots.
+    const sent = await bridge.assignmentsCreateCompatibility({ questionnaireId: q.id });
     expect(sent.ok).toBe(true);
 
     const groups = await bridge.assignmentsCompatibility(q.id);
@@ -1287,20 +1282,21 @@ describe('createCoreBridge', () => {
     expect(group.visibility).toBe('senderSeesAll');
     expect(group.canReveal).toBe(true); // the Owner is the full-access role → can reveal
 
-    // Each recipient answers their own variant (the prompt is personalized but the id/canonicalId align).
+    // Each participant answers their own variant — the sender (owner) answers theirs, Alex answers theirs.
     const answerAs = async (
       personId: string,
       assignmentId: string,
       value: number,
     ): Promise<void> => {
-      await bridge.sessionSetActive({ personId });
+      const isOwner = personId === ownerId; // the owner is already active — no PIN switch needed
+      if (!isOwner) await bridge.sessionSetActive({ personId });
       const detail = await bridge.assignmentsGet(assignmentId);
       const qid = detail!.questionnaire.questions[0]!.id;
       await bridge.assignmentsSubmit({ assignmentId, answers: [{ questionId: qid, value }] });
-      await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+      if (!isOwner) await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
     };
     for (const m of group.members) {
-      const personId = m.recipientName === 'Alex' ? alex.id : bri.id;
+      const personId = m.recipientName === 'Alex' ? alex.id : ownerId;
       await answerAs(personId, m.assignmentId, m.recipientName === 'Alex' ? 4 : 2);
     }
 
@@ -1330,14 +1326,13 @@ describe('createCoreBridge', () => {
     const { host, bridge, ownerId } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
     const alex = await bridge.peopleSave({ displayName: 'Alex', isSubject: true, tags: [] });
-    const bri = await bridge.peopleSave({ displayName: 'Bri', isSubject: true, tags: [] });
     await bridge.accessSetAccount({ personId: alex.id, roleId: 'member', pin: null });
-    await bridge.accessSetAccount({ personId: bri.id, roleId: 'member', pin: null });
 
     const q = await bridge.questionnairesSave({
       title: 'Closeness',
       type: 'role-feedback',
       sensitivity: 'standard',
+      recipient: { kind: 'person', personId: alex.id },
       questions: [
         {
           id: 'c1',
@@ -1349,26 +1344,22 @@ describe('createCoreBridge', () => {
       ],
       compatibility: { enabled: true, visibility: 'contextOnly' },
     });
-    const sent = await bridge.assignmentsCreateCompatibility({
-      questionnaireId: q.id,
-      participantPersonIdA: alex.id,
-      participantPersonIdB: bri.id,
-    });
+    const sent = await bridge.assignmentsCreateCompatibility({ questionnaireId: q.id });
     expect(sent.ok).toBe(true);
 
+    // Both participants (the sender + Alex) answer their own variant.
     const group = (await bridge.assignmentsCompatibility(q.id))[0]!;
     for (const m of group.members) {
-      const personId = m.recipientName === 'Alex' ? alex.id : bri.id;
-      await bridge.sessionSetActive({ personId });
+      const isOwner = m.recipientName !== 'Alex';
+      if (!isOwner) await bridge.sessionSetActive({ personId: alex.id });
       const detail = await bridge.assignmentsGet(m.assignmentId);
-      // The recipient is told there's no report (§16.2).
       const qid = detail!.questionnaire.questions[0]!.id;
       await bridge.assignmentsSubmit({
         assignmentId: m.assignmentId,
         answers: [{ questionId: qid, value: 4 }],
       });
+      if (!isOwner) await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
     }
-    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
 
     // A Claude that returns valid analysis JSON — note shareable:true; the service forces own-context-only.
     host.host.claude = {
@@ -1398,16 +1389,14 @@ describe('createCoreBridge', () => {
     expect(after.report).toBeNull();
     expect(after.analyzed).toBe(true); // both contexts processed
 
-    // The group's Insights are subject = each PARTICIPANT (alex/bri), auto-approved, own-context-only —
-    // and the sender (a non-participant here) is never a subject. (insightsList is full-access for the
-    // owner, so it returns everyone's; we assert by subject, not presence.)
+    // The group's Insights are subject = each PARTICIPANT (the sender + Alex now, §17.12-B), auto-approved,
+    // own-context-only. (insightsList is full-access for the owner; we assert by subject, not presence.)
     const groupInsights = (await bridge.insightsList()).filter(
       (i) => i.provenance.compatibilityGroupId === group.compatibilityGroupId,
     );
-    expect(groupInsights.map((i) => i.subjectPersonId).sort()).toEqual([alex.id, bri.id].sort());
+    expect(groupInsights.map((i) => i.subjectPersonId).sort()).toEqual([alex.id, ownerId].sort());
     expect(groupInsights.every((i) => i.approved)).toBe(true); // auto-approved → feeds each own context
     expect(groupInsights.every((i) => i.facts.every((f) => f.shareable === false))).toBe(true);
-    expect(groupInsights.some((i) => i.subjectPersonId === ownerId)).toBe(false); // sender isn't a subject
   });
 
   it('the Owner can read ANY private send’s raw answers directly (no break-glass ceremony)', async () => {
@@ -1448,10 +1437,8 @@ describe('createCoreBridge', () => {
     // The sender is a Member (not the Owner), plus two recipients.
     const sam = await bridge.peopleSave({ displayName: 'Sam', isSubject: true, tags: [] });
     const alex = await bridge.peopleSave({ displayName: 'Alex', isSubject: true, tags: [] });
-    const bri = await bridge.peopleSave({ displayName: 'Bri', isSubject: true, tags: [] });
     await bridge.accessSetAccount({ personId: sam.id, roleId: 'member', pin: null });
     await bridge.accessSetAccount({ personId: alex.id, roleId: 'member', pin: null });
-    await bridge.accessSetAccount({ personId: bri.id, roleId: 'member', pin: null });
 
     // Grant the Member role readRaw (the explicit-grant-only Roles toggle).
     const member = (await bridge.accessGet()).roles.find((r) => r.id === 'member')!;
@@ -1460,12 +1447,13 @@ describe('createCoreBridge', () => {
       capabilities: { ...member.capabilities, 'questionnaires.readRaw': true },
     });
 
-    // Sam (a Member) authors + dual-sends a senderSeesAll compatibility questionnaire.
+    // Sam (a Member) authors a senderSeesAll compatibility questionnaire bound to Alex → compares Sam + Alex.
     await bridge.sessionSetActive({ personId: sam.id });
     const q = await bridge.questionnairesSave({
       title: 'Compat',
       type: 'role-feedback',
       sensitivity: 'standard',
+      recipient: { kind: 'person', personId: alex.id },
       questions: [
         {
           id: 'c1',
@@ -1477,19 +1465,15 @@ describe('createCoreBridge', () => {
       ],
       compatibility: { enabled: true, visibility: 'senderSeesAll' },
     });
-    const sent = await bridge.assignmentsCreateCompatibility({
-      questionnaireId: q.id,
-      participantPersonIdA: alex.id,
-      participantPersonIdB: bri.id,
-    });
+    const sent = await bridge.assignmentsCreateCompatibility({ questionnaireId: q.id });
     expect(sent.ok).toBe(true);
 
     const group = (await bridge.assignmentsCompatibility(q.id))[0]!;
     expect(group.canReveal).toBe(true); // Sam is the sender AND has readRaw
 
-    // Recipients answer their variants.
+    // Both participants (Sam + Alex) answer their variants.
     for (const m of group.members) {
-      const personId = m.recipientName === 'Alex' ? alex.id : bri.id;
+      const personId = m.recipientName === 'Alex' ? alex.id : sam.id;
       await bridge.sessionSetActive({ personId });
       const detail = await bridge.assignmentsGet(m.assignmentId);
       const qid = detail!.questionnaire.questions[0]!.id;

@@ -90,6 +90,8 @@ async function openNewCompat(): Promise<void> {
     await screen.findByLabelText('This questionnaire is for'),
     'compatibility',
   );
+  // Compat is recipient-first now (§17.12-B): pick the person you're compared with.
+  await userEvent.selectOptions(await screen.findByLabelText('Compare you with'), 'p-mara');
   await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
   await screen.findByLabelText('Title');
 }

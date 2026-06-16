@@ -79,7 +79,7 @@ describe('NewQuestionnaireStart (§17.3)', () => {
     });
   });
 
-  it('resolves to a compatibility questionnaire (no single recipient)', async () => {
+  it('resolves to a compatibility questionnaire bound to the recipient (you + them, §17.12-B)', async () => {
     seed();
     const onChosen = vi.fn();
     render(<NewQuestionnaireStart onChosen={onChosen} onCancel={() => {}} />);
@@ -87,8 +87,13 @@ describe('NewQuestionnaireStart (§17.3)', () => {
       screen.getByLabelText('This questionnaire is for'),
       'compatibility',
     );
+    // Compat is recipient-first too: pick the person you're compared with (household only for now).
+    await userEvent.selectOptions(await screen.findByLabelText('Compare you with'), 'p1');
     await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
-    expect(onChosen).toHaveBeenCalledWith({ compat: true });
+    expect(onChosen).toHaveBeenCalledWith({
+      compat: true,
+      recipient: { kind: 'person', personId: 'p1' },
+    });
   });
 
   it('hides the external option without questionnaires.sendExternal', () => {

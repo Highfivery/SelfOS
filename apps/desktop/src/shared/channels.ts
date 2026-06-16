@@ -557,15 +557,13 @@ export interface SelfosBridge {
    */
   assignmentsDelete(assignmentId: string): Promise<void>;
   /**
-   * Send a **compatibility** questionnaire comparing TWO participants — either the sender + someone else
-   * or two other people (08-questionnaires §3.6/§16.1). AI personalizes a variant per participant, freezing
-   * a paired per-participant snapshot. Budget-gated + metered; requires AI to be on and
-   * `questionnaires.create`. The only invalid pairing is the same person twice.
+   * Send a **compatibility** questionnaire comparing **the sender + the bound recipient** (08-questionnaires
+   * §3.6/§17.12-B) — both derived from the questionnaire, so no participant ids are passed. AI personalizes a
+   * variant per participant, freezing a paired per-participant snapshot. Budget-gated + metered; requires AI
+   * on and `questionnaires.create`. (External-recipient compatibility, via the relay, is a later slice.)
    */
   assignmentsCreateCompatibility(input: {
     questionnaireId: string;
-    participantPersonIdA: string;
-    participantPersonIdB: string;
   }): Promise<CompatibilitySendResult>;
   /**
    * The sender's compatibility sends of one questionnaire — paired members + the alignment report (null

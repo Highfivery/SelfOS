@@ -58,17 +58,18 @@ export function NewQuestionnaireStart({
   // You can ask anyone in the household (including yourself — a self check-in is valid).
   const candidates = people;
 
+  const compat = mode === 'compatibility';
+  // Compatibility compares you with the recipient, and both answer in-app — so for now the recipient must be
+  // a household person (external compatibility, via the relay, is the next slice, 08 §17.12-B).
+  const allowExternal = canSendExternal && !compat;
+
   const onContinue = (): void => {
-    if (mode === 'compatibility') {
-      onChosen({ compat: true });
-      return;
-    }
     if (kind === 'household') {
       if (personId === '') {
         setError('Choose who this is for.');
         return;
       }
-      onChosen({ compat: false, recipient: { kind: 'person', personId } });
+      onChosen({ compat, recipient: { kind: 'person', personId } });
       return;
     }
     const name = externalName.trim();
@@ -77,7 +78,7 @@ export function NewQuestionnaireStart({
       return;
     }
     onChosen({
-      compat: false,
+      compat,
       recipient: {
         kind: 'external',
         displayName: name,
@@ -104,97 +105,96 @@ export function NewQuestionnaireStart({
               value={mode}
               onChange={(e) => {
                 setError(null);
-                setMode(e.target.value as Mode);
+                const next = e.target.value as Mode;
+                setMode(next);
+                // Compatibility is household-only for now — drop a stale external selection.
+                if (next === 'compatibility') setKind('household');
               }}
             >
               <option value="one">One person</option>
-              <option value="compatibility">Compatibility — two people</option>
+              <option value="compatibility">Compatibility — you + them</option>
             </Select>
           )}
         </Field>
 
-        {mode === 'compatibility' ? (
+        {compat ? (
           <Banner tone="info">
-            <Stack gap={1}>
-              <Text size="sm" weight={500}>
-                <Users size={14} aria-hidden="true" /> Compatibility
-              </Text>
-              <Text size="sm">
-                Goes to two people at once. AI personalizes a version for each, then aligns their
-                answers into a shared report. You’ll pick the two participants when you send.
-              </Text>
-            </Stack>
+            <Text size="sm">
+              <Users size={14} aria-hidden="true" /> You’ll be compared with the person you pick
+              below. AI personalizes a version for each of you, then aligns your answers into a
+              shared report.
+            </Text>
           </Banner>
-        ) : (
-          <>
-            {canSendExternal ? (
-              <Field label="Recipient">
-                {(props) => (
-                  <Select
-                    {...props}
-                    value={kind}
-                    onChange={(e) => {
-                      setError(null);
-                      setKind(e.target.value as Kind);
-                    }}
-                  >
-                    <option value="household">Someone in the household</option>
-                    <option value="external">Someone else (a private link)</option>
-                  </Select>
-                )}
-              </Field>
-            ) : null}
+        ) : null}
 
-            {kind === 'household' ? (
-              <Field label="Who is this for?">
-                {(props) => (
-                  <Select
-                    {...props}
-                    value={personId}
-                    onChange={(e) => {
-                      setError(null);
-                      setPersonId(e.target.value);
-                    }}
-                  >
-                    <option value="">Choose a person…</option>
-                    {candidates.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.displayName}
-                        {p.id === activePersonId ? ' (you)' : ''}
-                      </option>
-                    ))}
-                  </Select>
-                )}
-              </Field>
-            ) : (
-              <Stack gap={3}>
-                <Field label="Their name">
-                  {(props) => (
-                    <TextInput
-                      {...props}
-                      value={externalName}
-                      placeholder="e.g. Alex"
-                      onChange={(e) => {
-                        setError(null);
-                        setExternalName(e.target.value);
-                      }}
-                    />
-                  )}
-                </Field>
-                <Field label="Their email (optional)">
-                  {(props) => (
-                    <TextInput
-                      {...props}
-                      type="email"
-                      value={externalEmail}
-                      placeholder="So you can email them the link"
-                      onChange={(e) => setExternalEmail(e.target.value)}
-                    />
-                  )}
-                </Field>
-              </Stack>
+        {allowExternal ? (
+          <Field label="Recipient">
+            {(props) => (
+              <Select
+                {...props}
+                value={kind}
+                onChange={(e) => {
+                  setError(null);
+                  setKind(e.target.value as Kind);
+                }}
+              >
+                <option value="household">Someone in the household</option>
+                <option value="external">Someone else (a private link)</option>
+              </Select>
             )}
-          </>
+          </Field>
+        ) : null}
+
+        {kind === 'household' ? (
+          <Field label={compat ? 'Compare you with' : 'Who is this for?'}>
+            {(props) => (
+              <Select
+                {...props}
+                value={personId}
+                onChange={(e) => {
+                  setError(null);
+                  setPersonId(e.target.value);
+                }}
+              >
+                <option value="">Choose a person…</option>
+                {candidates
+                  .filter((p) => !compat || p.id !== activePersonId) // can't compare yourself with yourself
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.displayName}
+                      {p.id === activePersonId ? ' (you)' : ''}
+                    </option>
+                  ))}
+              </Select>
+            )}
+          </Field>
+        ) : (
+          <Stack gap={3}>
+            <Field label="Their name">
+              {(props) => (
+                <TextInput
+                  {...props}
+                  value={externalName}
+                  placeholder="e.g. Alex"
+                  onChange={(e) => {
+                    setError(null);
+                    setExternalName(e.target.value);
+                  }}
+                />
+              )}
+            </Field>
+            <Field label="Their email (optional)">
+              {(props) => (
+                <TextInput
+                  {...props}
+                  type="email"
+                  value={externalEmail}
+                  placeholder="So you can email them the link"
+                  onChange={(e) => setExternalEmail(e.target.value)}
+                />
+              )}
+            </Field>
+          </Stack>
         )}
 
         {error ? <Banner tone="warning">{error}</Banner> : null}

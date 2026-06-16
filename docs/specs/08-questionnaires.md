@@ -1742,3 +1742,123 @@ intimacy-topics surface), not blockers._
   inline topic-add controls are **textareas that add one topic at a time** (Owner-only, `people.manage`).
   Gate green: typecheck/lint/format, **399 core** + 8 relay + 480 desktop unit, 67 E2E (intimacy-topics flow
   re-pointed to the "Add an activity" label). NOT merged (awaiting user review of the explicit wording).
+
+---
+
+## 17. 2026-06-15 amendment — recipient-bound questionnaires & in-policy explicit framing
+
+> **Status: APPROVED (2026-06-15) — building on `feat/questionnaire-explicit-gen`, NOT merged.**
+> This amendment supersedes the §16.5b fallback (it is **removed**) and changes a core authoring assumption (a
+> questionnaire is now bound to **one recipient, chosen first**). All decisions were confirmed with the user
+> (2026-06-15).
+
+### 17.1 Why
+
+Two user directives:
+
+1. **The explicit tiers shouldn't fight Anthropic's policy.** The §16.5 "push harder / positively request
+   explicit" framing still gets refused by the live model, and the §16.5b deterministic fallback was a guess
+   (a patch over the symptom). Instead: **rewrite the per-tier framing in a wellness / sexual-health voice**
+   so it stays in-policy and the model actually complies — and **delete the fallback**.
+2. **Stop asking people what they've already told us.** Generated questions must not repeat — or sit
+   adjacent to — what the recipient has already answered or disclosed across **onboarding, Sessions, other
+   questionnaires, and their profile/insights**. This only makes sense if a questionnaire **knows its
+   recipient**, so every questionnaire now **requires one** (AI-generated or hand-authored).
+
+### 17.2 In-policy explicit framing (replaces §16.5b; reworks §16.5)
+
+- **Remove** `intimacyStarterQuestions` / the §16.5b fallback entirely (file, wiring, tests, the panel's
+  fallback notice). A refusal on a non-fallback path keeps surfacing the calm error.
+- **Rewrite** the `explicit` / `unfiltered` intimacy framing in `aiPrompts.ts` from "positively demand graphic
+  content" to a **clinical/wellness self-reflection** frame: this is a consenting adult reflecting on their own
+  sexual wellbeing and relationship; ask **frank, specific, candid** questions about desire, satisfaction,
+  acts, frequency, boundaries, and fantasies — in a **health-and-wellbeing register**, not pornographic prose.
+  `unfiltered` is the most candid/specific; `explicit` a notch softer. The consensual-adult boundary and the
+  topic inventory (§16.5a) stay. The shared `SAFETY` prefix is unchanged.
+- **Goal:** the model complies because the request is genuinely a sexual-wellness instrument, not because we
+  out-argue its policy. If it still refuses, that's an honest calm error — **no canned questions**.
+
+### 17.3 Recipient-bound questionnaires (the core model change)
+
+- **Every questionnaire targets exactly ONE recipient. Never several.** (Compatibility is the **only**
+  exception — see §17.5.)
+- **Recipient is chosen FIRST** — step 1 of creating any questionnaire, before authoring or AI drafting (the
+  way compatibility already picks participants first). You cannot author or save a questionnaire "for nobody."
+- The recipient is **a household person OR an external (relay) recipient**. The existing relay recipient
+  details (name/contact) move from the send panel to the create step for external recipients.
+- **Duplicate to another person** — because a questionnaire is bound to one recipient, re-asking someone else
+  is a new questionnaire. A **"Duplicate"** action clones an existing questionnaire's questions into a new one
+  where you pick the new recipient (and which re-runs de-dup for that new person if AI-drafted).
+- **Flow:** pick recipient → author (manual and/or "Draft with AI") → **Send** still dispatches (creates the
+  in-app `Assignment` or mints the relay link). The §16.3 two-step stays, but the **recipient picker leaves
+  the send panel** (it's now set at creation); Send becomes channel/privacy confirmation + dispatch.
+- **Recipient vs. "about a person" context (RESOLVED).** The **recipient** is who _answers_; the existing
+  **"about a specific person"** toggle is AI _context_. Selecting a household recipient **defaults the "about"
+  context to that person**, but it stays **overridable** (clear it, or point it at a third party) — one mental
+  model: the recipient is the subject unless you say otherwise. De-dup always keys off the **recipient**.
+
+### 17.4 Recipient-aware generation (de-dup) — full content, host-side, author-blind
+
+- When the recipient is a **household person**, generation gathers that person's **full answered content**:
+  their **onboarding intake** (incl. restricted facts), **Session** transcripts/insights, **prior
+  questionnaire** questions+answers, and **profile + approved insights** — assembled **host-side** and sent to
+  Claude **only** as de-dup grounding.
+- **Deliberate privacy-rule relaxation (confirmed).** This crosses the otherwise-strict own-context-only rule
+  (a person's private/restricted material informing another person's action). It is allowed **only** for this
+  generation path, and **only** because: (a) it runs **host-side in main**, (b) the **author never sees the raw
+  content** — only the resulting questions come back, and (c) the model is instructed to **avoid** overlapping
+  topics, **never to reference, echo, or reveal** what the recipient disclosed. **Safety requirement
+  (non-negotiable):** the prompt must forbid the model from quoting or alluding to the recipient's prior
+  content in any generated question — de-dup means _steer clear of_, not _mention_. CLAUDE.md §1's "never
+  surface private data to others" is preserved at the **output** boundary (questions reveal nothing); only the
+  model's transient input is relaxed.
+- **External recipients** have no household history → **skip de-dup** (the prompt just gets the brief + the
+  author's own context + intimacy inventory, as today).
+- **Avoid adjacency, not just exact dups** — the prompt instructs the model to skip both already-answered
+  questions and closely-related ones (same topic already covered).
+- **Manual (non-AI) authoring (RESOLVED).** The **recipient requirement** applies to manual authoring too, but
+  automated de-dup is an **AI-generation** feature — we can't rewrite hand-typed questions, and surfacing "they
+  already answered this privately" to the author would leak. So manual authoring **binds a recipient** and
+  unlocks the AI de-dup, but adds **no overlap warning** in v1 (no scaffolding).
+
+### 17.5 Compatibility stays exempt
+
+Compatibility questionnaires inherently pair **two** participants (§16.1 you+someone / two-others; §16.2
+contextOnly). They are **exempt** from the one-recipient rule and keep their existing participant model and
+variant/alignment machinery unchanged. The "exactly one recipient" rule governs every **other** type.
+
+### 17.6 Surfaces this touches (for the build, once approved)
+
+- **Schema** — `Questionnaire` gains a discriminated `recipient:
+{ kind: 'household'; personId } | { kind: 'external'; … }`, **required** for non-compatibility types (a hard
+  required field — **no legacy support needed**, pre-release). Compatibility defs are exempt (they carry their
+  participant model instead).
+- **Builder** — recipient-first step; remove the recipient picker from the send panel; Duplicate action.
+- **Generation** — a new **recipient-history context gatherer** (full content, household only) feeding
+  `generateQuestions`; the reworked intimacy framing; the avoid-not-reference safety clause; remove §16.5b.
+- **De-dup grounding** also passes the recipient's prior **questionnaire prompts** so the model won't repeat
+  them across questionnaires.
+- **Tests** — recipient-required gating; de-dup grounding reaches the model (capture test) while the **output
+  never echoes private content** (assert generated prompts don't contain seeded private markers); external
+  skips de-dup; Duplicate clones + re-targets; the explicit framing reads as wellness (capture test); the
+  §16.5b removal. Extend the §16.7 matrix.
+
+### 17.7 Resolved confirmations (2026-06-15)
+
+1. **17.3** — picking a household recipient **defaults the "about a person" AI context to them, overridable**.
+2. **17.4** — manual authoring **binds a recipient but gets no de-dup/overlap warning** in v1 (AI-only feature).
+3. **17.6 schema** — `recipient` is a **hard required field** on non-compatibility `Questionnaire`s; **no legacy
+   support** (pre-release).
+
+### 17.8 Proposed build slices (after approval)
+
+1. **Revert §16.5b** — remove `intimacyStarters.ts`, its wiring/tests, and the panel's fallback notice.
+2. **In-policy framing** — rewrite the `explicit`/`unfiltered` intimacy framing (wellness register) + capture
+   test that the framing reads as sexual-wellness self-reflection within the boundary.
+3. **Recipient model** — schema `recipient` field; recipient-first builder step (household/external picker);
+   remove the recipient picker from the send panel; **Duplicate** action; validation blocks save without a
+   recipient; gating + RTL + E2E.
+4. **Recipient-aware de-dup** — host-side full-content gatherer (household) + the avoid-not-reference safety
+   clause into generation; external skips; capture test that grounding reaches the model and **output never
+   echoes private content**; the "about" defaulting.
+5. **§16.7 matrix** — extend with recipient-required, de-dup, Duplicate, and the framing rows.

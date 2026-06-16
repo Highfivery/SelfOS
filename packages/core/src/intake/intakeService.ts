@@ -453,33 +453,77 @@ function transcriptMessages(
   return out;
 }
 
+/** The synthetic "(sensitive)" sub-section id/title for a NON-restricted section's per-question `restricted`
+ * answers (§14.8). Routing those answers under a distinct labeled block makes the model tag their derived
+ * facts with this id, so `sectionRefRestricted` flags them — honoring the per-question flag without a
+ * separate onboarding section. The id avoids special chars so the model echoes it reliably. */
+const sensitiveSectionId = (id: string): string => `${id}-sensitive`;
+const sensitiveSectionTitle = (title: string): string => `${title} — sensitive`;
+
 /** All `form` section structured answers as labeled model messages, so synthesis weaves them into the
- * portrait + facts (a restricted section's answers → restricted facts, §14.8). */
+ * portrait + facts. A whole **restricted section** is already covered by its section flag; within a
+ * **non-restricted** section, the per-question `restricted` answers are split into a "(sensitive)" block so
+ * their facts inherit restriction (§14.8). */
 function formAnswersMessages(session: IntakeSession): { role: 'user'; content: string }[] {
   const out: { role: 'user'; content: string }[] = [];
   for (const def of INTAKE_CATALOG) {
     if (!def.questions) continue;
     const section = session.sections.find((s) => s.id === def.id);
     if (!section || Object.keys(section.answers).length === 0) continue;
-    const lines = [`--- Section: ${def.title} (id: ${def.id}) ---`];
+    const normal: string[] = [];
+    const sensitive: string[] = [];
     for (const m of def.questions) {
       const str = answerToString(section.answers[m.q.id]);
-      if (str) lines.push(`${m.q.prompt}: ${str}`);
+      if (!str) continue;
+      const line = `${m.q.prompt}: ${str}`;
+      // A per-question restricted answer in a non-restricted section → the sensitive block. (In a restricted
+      // section everything is restricted already, so keep it as one block.)
+      if (m.restricted && !def.restricted) sensitive.push(line);
+      else normal.push(line);
     }
-    if (lines.length > 1) out.push({ role: 'user', content: lines.join('\n') });
+    if (normal.length > 0) {
+      out.push({
+        role: 'user',
+        content: [`--- Section: ${def.title} (id: ${def.id}) ---`, ...normal].join('\n'),
+      });
+    }
+    if (sensitive.length > 0) {
+      out.push({
+        role: 'user',
+        content: [
+          `--- Section: ${sensitiveSectionTitle(def.title)} (id: ${sensitiveSectionId(def.id)}) ---`,
+          ...sensitive,
+        ].join('\n'),
+      });
+    }
   }
   return out;
 }
 
-/** Whether a section ref returned by the model (id or title) belongs to a `restricted` section (§8.4). The
- * `restricted` flag is decided here from the trusted catalog — never the model — so an intimacy/trauma fact is
- * always caught even if the model echoes the title instead of the id. */
+/** The set of section refs (id or title, lowercased) whose facts are `restricted` (§8.4): every restricted
+ * SECTION, plus the synthetic "(sensitive)" sub-block of any non-restricted section that has a per-question
+ * `restricted` answer (§14.8). Computed once from the trusted catalog. */
+const RESTRICTED_SECTION_REFS: ReadonlySet<string> = (() => {
+  const refs = new Set<string>();
+  for (const d of INTAKE_CATALOG) {
+    if (d.restricted) {
+      refs.add(d.id.toLowerCase());
+      refs.add(d.title.toLowerCase());
+    } else if (d.questions?.some((m) => m.restricted)) {
+      refs.add(sensitiveSectionId(d.id).toLowerCase());
+      refs.add(sensitiveSectionTitle(d.title).toLowerCase());
+    }
+  }
+  return refs;
+})();
+
+/** Whether a section ref returned by the model (id or title) maps to a `restricted` fact (§8.4). The flag is
+ * decided here from the trusted catalog — never the model — so an intimacy/trauma fact (restricted section)
+ * or a sensitive-health fact (the per-question "(sensitive)" sub-block) is caught even when the model echoes
+ * the title instead of the id. */
 function sectionRefRestricted(ref: string | undefined): boolean {
   if (!ref) return false;
-  const norm = ref.trim().toLowerCase();
-  return INTAKE_CATALOG.some(
-    (d) => d.restricted && (d.id.toLowerCase() === norm || d.title.toLowerCase() === norm),
-  );
+  return RESTRICTED_SECTION_REFS.has(ref.trim().toLowerCase());
 }
 
 /**

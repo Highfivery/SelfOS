@@ -270,6 +270,61 @@ describe('intakeService', () => {
     expect(p?.communicationStyle).toBe('direct and warm');
   });
 
+  it('honors a per-question `restricted` answer in a non-restricted section via a "(sensitive)" block (§14.8)', async () => {
+    const fs = await setup();
+    // The Health section is NOT restricted, but `substancesUsed` is a per-question restricted answer; `sleep`
+    // is open. Per-question restriction must carry the substance fact but not the sleep fact.
+    await submitSectionForm(
+      fs,
+      key,
+      'p1',
+      'health',
+      { sleep: 5, substancesUsed: ['Cannabis / weed'] },
+      NOW,
+    );
+
+    const usage = { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 };
+    let captured: { role: string; content: string }[] = [];
+    const client: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        const last = options.messages.at(-1)?.content ?? '';
+        if (last.includes('closing portrait')) {
+          captured = options.messages.map((m) => ({ role: m.role, content: m.content }));
+          const text = JSON.stringify({
+            portrait: 'A thoughtful person.',
+            facts: [
+              { text: 'Uses cannabis occasionally', section: 'health-sensitive' },
+              { text: 'Sleeps reasonably well', section: 'health' },
+            ],
+            crisisFlag: false,
+          });
+          onDelta(text);
+          return Promise.resolve({ text, usage });
+        }
+        onDelta('ok');
+        return Promise.resolve({ text: 'ok', usage });
+      },
+    };
+
+    const res = await synthesizeIntake(synth(fs, client));
+    expect(res.ok).toBe(true);
+
+    // The restricted answer was routed under a distinct "(sensitive)" block; the open answer under the plain one.
+    const sensitiveBlock = captured.find((m) => m.content.includes('(id: health-sensitive)'));
+    const plainBlock = captured.find((m) => /\(id: health\)/.test(m.content));
+    expect(sensitiveBlock?.content).toContain('recreational substances');
+    expect(sensitiveBlock?.content).not.toContain('How well do you sleep');
+    expect(plainBlock?.content).toContain('How well do you sleep');
+    expect(plainBlock?.content).not.toContain('recreational substances');
+
+    // The fact from the sensitive block is flagged restricted; the plain one is not.
+    const session = await getIntakeSession(fs, key, 'p1');
+    const insight = (await getInsight(fs, key, 'p1', session!.insightId!)) as Insight;
+    expect(insight.facts.find((f) => f.text.includes('cannabis'))?.restricted).toBe(true);
+    expect(insight.facts.find((f) => f.text.includes('Sleeps'))?.restricted).toBeUndefined();
+  });
+
   it('feeds the portrait into the person’s OWN coaching context, including restricted facts', async () => {
     const fs = await setup();
     await synthesizeIntake(synth(fs, fakeClient()));

@@ -825,6 +825,16 @@ questions. Meters `intake.interview` per turn.
 - **Enrichment** — each time an **invited** section is later added, it offers to **re-synthesize** (reusing the
   same `insightId`, carrying shareable choices forward, §3.6) so the portrait grows over time. Per-section
   reflections (auto, light) are unchanged. Sexual/trauma facts stay `restricted`.
+- **Restricted facts (`restricted: true`) are decided server-side from the trusted catalog — never the model.**
+  A fact inherits restriction from the **section ref** the model tags it with (`sectionRefRestricted`): a whole
+  **restricted section** (intimacy, what-weighs) covers all its facts. For a **per-question** `restricted` answer
+  inside a **non-restricted** section (the sensitive Health items — substances + per-substance frequency, chronic
+  illness, medications, disability, eating-disorder history, etc.), synthesis routes those answers under a
+  synthetic **"(sensitive)" sub-block** (`id: <section>-sensitive`, e.g. `health-sensitive`) so their derived
+  facts get flagged restricted through the same trusted-lookup path — **no separate onboarding section, no model
+  trust for the flag itself** (2026-06-16). Restricted facts are **owner-visible, redacted for everyone else** in
+  Memory (`redactRestrictedFacts`) yet still feed the **subject's own** coaching context (`buildContext`); none
+  are ever broadcast-`shareable` (hardcoded `false` at synthesis), so they never reach another person's AI.
 
 ### 14.9 Schema & service changes (additive)
 

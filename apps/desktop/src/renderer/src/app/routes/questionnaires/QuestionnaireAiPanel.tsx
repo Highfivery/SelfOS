@@ -27,6 +27,7 @@ export function QuestionnaireAiPanel({
   aiReady,
   type,
   sensitivity,
+  recipientPersonId,
   existingPrompts,
   onGenerated,
   onTitle,
@@ -34,6 +35,9 @@ export function QuestionnaireAiPanel({
   aiReady: boolean;
   type: string;
   sensitivity: SensitivityTier;
+  // The bound household recipient (08 §17.4): generation skips what they've already covered, and the "about"
+  // context defaults to them. Undefined for an external/compatibility questionnaire.
+  recipientPersonId?: string;
   existingPrompts: string[];
   onGenerated: (questions: Question[]) => void;
   // A short AI-suggested title (08 §16.4); the builder applies it only when the title is still empty.
@@ -54,7 +58,8 @@ export function QuestionnaireAiPanel({
 
   const [open, setOpen] = useState(false);
   const [brief, setBrief] = useState('');
-  const [targetPersonId, setTargetPersonId] = useState('');
+  // The "about a person" context defaults to the bound recipient (08 §17.3), overridable below.
+  const [targetPersonId, setTargetPersonId] = useState(recipientPersonId ?? '');
   const [includeTarget, setIncludeTarget] = useState(true);
   const [includeRelationship, setIncludeRelationship] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -120,6 +125,8 @@ export function QuestionnaireAiPanel({
         includeTarget: Boolean(targetPersonId) && includeTarget,
         includeRelationship: Boolean(targetPersonId) && includeRelationship,
         existingPrompts,
+        // De-dup against the bound household recipient's full history (08 §17.4), host-side + author-blind.
+        ...(recipientPersonId ? { recipientPersonId } : {}),
       });
       if (result.ok && result.questions && result.questions.length > 0) {
         onGenerated(result.questions);

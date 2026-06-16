@@ -85,6 +85,9 @@ export function buildGenerationUserMessage(input: {
   count: number;
   // The merged intimacy topic inventory (built-in + owner custom) — seeds the explicit framing (§16.5a).
   intimacyTopics?: IntimacyTopics;
+  // The recipient's full answered content (08 §17.4), assembled host-side. Used ONLY to AVOID overlap — the
+  // model must never quote, reference, or reveal any of it in a question (the author never sees it either).
+  recipientHistory?: string;
 }): string {
   const parts: string[] = [];
   parts.push(`Draft ${input.count} questions for a "${input.type}" questionnaire.`);
@@ -112,6 +115,21 @@ export function buildGenerationUserMessage(input: {
       `\nDo NOT duplicate or closely echo these already-present questions:\n${input.existingPrompts
         .map((p) => `- ${p}`)
         .join('\n')}`,
+    );
+  }
+  // Recipient-aware de-dup (08 §17.4): avoid what they've already covered, and NEVER reference it.
+  if (input.recipientHistory?.trim()) {
+    parts.push(
+      [
+        `\nThe person who will answer has ALREADY shared the material below with the app (their onboarding,` +
+          ` past sessions, earlier questionnaires, and profile). Use it ONLY to avoid repetition: do not ask` +
+          ` anything they have already answered, and steer clear of questions closely related to topics they` +
+          ` have already covered.`,
+        `CRITICAL: never quote, restate, reference, hint at, or reveal any of this material in a question —` +
+          ` the questions must stand on their own. "Avoid overlap" means steer clear, NOT mention. If unsure,` +
+          ` ask about something else entirely.`,
+        input.recipientHistory.trim(),
+      ].join('\n'),
     );
   }
   parts.push(`\nReturn the JSON object with a short "title" and the "questions" array.`);

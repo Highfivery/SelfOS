@@ -687,6 +687,59 @@ describe('createCoreBridge', () => {
     expect(await bridge.gapfinderSuggest({})).toMatchObject({ ok: false, reason: 'DENIED' });
   });
 
+  it('feeds the bound recipient’s history into generation but never returns it to the renderer (§17.4)', async () => {
+    const { host, bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+
+    // A questionnaire ALREADY asked of Mara — a distinctive prompt the de-dup grounding must surface.
+    const prior = await bridge.questionnairesSave({
+      title: 'Earlier',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: mara.id },
+      questions: [
+        { id: 'p1', type: 'shortText', prompt: 'What is your secret codeword?', required: true },
+      ],
+    });
+    await bridge.assignmentsCreate({ questionnaireId: prior.id });
+
+    // Capture exactly what reaches the model.
+    let sentUserText = '';
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        sentUserText = options.messages.map((m) => m.content).join('\n');
+        const json = JSON.stringify({
+          title: 'X',
+          questions: [{ type: 'yesNo', prompt: 'A fresh question?', required: true }],
+        });
+        onDelta(json);
+        return Promise.resolve({
+          text: json,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+
+    const result = await bridge.questionnairesGenerate({
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      includeTarget: false,
+      includeRelationship: false,
+      existingPrompts: [],
+      recipientPersonId: mara.id,
+    });
+
+    // The recipient's prior prompt reached the MODEL as avoid-only grounding, with the safety clause…
+    expect(sentUserText).toContain('What is your secret codeword?');
+    expect(sentUserText).toMatch(/never quote, restate, reference/i);
+    // …but it is NEVER returned to the renderer — the author only gets the generated questions.
+    expect(result.ok).toBe(true);
+    expect(JSON.stringify(result.questions)).not.toContain('secret codeword');
+    expect(JSON.stringify(result)).not.toContain('secret codeword');
+  });
+
   it('gates insights/analysis on viewResults; analyze with no answers returns NO_RESPONSE', async () => {
     const { bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });

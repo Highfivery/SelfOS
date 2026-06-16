@@ -486,6 +486,9 @@ export interface SelfosBridge {
     includeTarget: boolean;
     includeRelationship: boolean;
     existingPrompts: string[];
+    // The bound household recipient (08 §17.4) — generation skips what they've already covered. Their full
+    // content is gathered host-side; it never returns to the renderer.
+    recipientPersonId?: string;
   }): Promise<QuestionnaireGenerateResult>;
   /** Reword a single question per an instruction ("warmer", "tighter"). Budget-gated + metered. */
   questionnairesImproveQuestion(input: {

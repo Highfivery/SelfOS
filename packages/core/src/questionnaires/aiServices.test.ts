@@ -346,6 +346,44 @@ describe('generateQuestions', () => {
     expect(sentUserText).toContain('Wax play'); // the owner's custom addition (merged inventory)
     expect(sentUserText).toMatch(/never minors/i); // the boundary
   });
+
+  it('feeds recipient history as avoid-only grounding with the never-reference safety clause (§17.4)', async () => {
+    const fs = memFileSystem();
+    const { author } = await seedHousehold(fs);
+    let sentUserText = '';
+    const capturing: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        sentUserText = options.messages.map((m) => m.content).join('\n');
+        const text = JSON.stringify({
+          title: 'X',
+          questions: [{ type: 'yesNo', prompt: 'Q?', required: true }],
+        });
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    const result = await generateQuestions(deps(fs, capturing, author), {
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      context: {
+        authorPersonId: author,
+        includeAuthor: true,
+        includeTarget: false,
+        includeRelationship: false,
+      },
+      existingPrompts: [],
+      recipientHistory: 'Themes they have already explored:\n- Burnout at work.',
+    });
+    expect(result.ok).toBe(true);
+    expect(sentUserText).toContain('Burnout at work.'); // the history reaches the model
+    expect(sentUserText).toMatch(/ALREADY shared/i); // the avoid framing
+    expect(sentUserText).toMatch(/never quote, restate, reference/i); // the never-reference safety clause
+    expect(sentUserText).toMatch(/steer clear, NOT mention/i);
+  });
 });
 
 describe('improveQuestion + gap-finder', () => {

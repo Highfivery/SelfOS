@@ -774,6 +774,7 @@ export function QuestionnaireBuilder({
             aiReady={aiReady}
             type={type}
             sensitivity={effectiveSensitivity}
+            {...(recipient?.kind === 'person' ? { recipientPersonId: recipient.personId } : {})}
             existingPrompts={drafts.map((d) => d.prompt.trim()).filter(Boolean)}
             onGenerated={appendGenerated}
             // Apply the AI-suggested title only when the author hasn't typed one (08 §16.4).

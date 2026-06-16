@@ -168,6 +168,9 @@ export interface GenerateRequest {
   context: GenerationContextRequest;
   existingPrompts: string[];
   count?: number;
+  // The recipient's full answered content (08 §17.4), assembled host-side by the caller (bridge). Fed to the
+  // model ONLY to avoid repeating what they've already covered — never surfaced to the author.
+  recipientHistory?: string;
 }
 
 /** Generate questions from a brief and/or the configured structured context. */
@@ -186,6 +189,9 @@ export async function generateQuestions(
     existingPrompts: request.existingPrompts,
     count: request.count ?? 5,
     intimacyTopics: mergedIntimacyTopics(await readCustomIntimacyTopics(deps.fs)),
+    ...(request.recipientHistory !== undefined
+      ? { recipientHistory: request.recipientHistory }
+      : {}),
   });
 
   const call = await runClaude(deps, GENERATION_SYSTEM, user, 'questionnaire.generate', 1500);

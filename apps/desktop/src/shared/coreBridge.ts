@@ -186,6 +186,7 @@ import {
   drainRelaySend,
   externalSendDisclosure,
   garbageCollectImages,
+  gatherRecipientHistory,
   generateQuestions,
   getAssignment,
   getAssignmentSnapshot,
@@ -475,6 +476,9 @@ const GenerateSchema = z.object({
   includeTarget: z.boolean(),
   includeRelationship: z.boolean(),
   existingPrompts: z.array(z.string()),
+  // The bound household recipient (08 §17.4) — generation skips what they've already covered. The recipient's
+  // full content is gathered host-side; the author never receives it.
+  recipientPersonId: z.string().min(1).optional(),
 });
 const ImproveSchema = z.object({
   prompt: z.string().min(1),
@@ -1417,6 +1421,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const deps = await aiDeps();
       if (!deps) return { ok: false, reason: 'DENIED', message: 'Not available.' };
       const p = GenerateSchema.parse(input);
+      // Recipient-aware de-dup (08 §17.4): assemble the bound household recipient's full answered content
+      // host-side and pass it to the model ONLY as avoid-overlap grounding. The author never sees it; the
+      // prompt forbids the model from referencing it. External recipients have no household history → skip.
+      const recipientHistory = p.recipientPersonId
+        ? await gatherRecipientHistory(deps.fs, deps.key, p.recipientPersonId)
+        : '';
       return generateQuestions(deps, {
         type: p.type,
         sensitivity: p.sensitivity,
@@ -1430,6 +1440,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           includeRelationship: p.includeRelationship,
         },
         existingPrompts: p.existingPrompts,
+        ...(recipientHistory ? { recipientHistory } : {}),
       });
     },
     questionnairesImproveQuestion: async (input): Promise<QuestionnaireImproveResult> => {

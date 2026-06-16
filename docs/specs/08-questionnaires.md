@@ -1684,6 +1684,14 @@ tests (memory `vitest-does-not-typecheck`).
   questionnaire prompts) to the model as avoid-only grounding — covered by **unit** (the gatherer + the
   never-reference safety clause + a bridge test that the history reaches the model **but never returns to the
   renderer**); the wellness explicit framing (§17.2) is a prompt **capture** unit test.
+- **External-compat outcome write-back (§17.12-D)**: the **full loop** — create an external compatibility send
+  → the recipient answers via the relay → drain → align → **publish the report** → the recipient's next unlock
+  carries the sealed result, which `openResult` decrypts (assert `kind:'report'` + the headline) — is the
+  **coreBridge integration test** (the renderer can't reach the in-main fake relay, so this is the right layer,
+  matching the existing compat/relay answer-flow coverage). The two UI surfaces are **RTL**: the "Share results"
+  button + "Shared with X" confirmation (and its **absence** for a household group), and the relay page's
+  **report** / **waiting-for-results** states. Also a unit guard that `generateAlignment` aligns an external
+  participant (named from their relay `displayName`), not only two household persons.
 
 **Unit/component** still back the matrix (the reworked participant model, `contextOnly` per-participant
 insight routing, the tier-distinct explicit framing, disclosure strings) — E2E proves the wiring, units prove
@@ -2018,11 +2026,39 @@ sender's in-app member, and `assignmentsCreateCompatibility` branches household-
 mints the recipient's relay send (their variant) + the sender's in-app member under one group, and returns the
 link + PIN (the send panel surfaces them). `contextOnly` is hidden for an external recipient (no coach). So the
 external recipient answers via the relay, the sender answers in-app, and the sender aligns in Results today.
-**Remaining (the one external-compat layer left): the recipient-facing relay-page outcome** — after both
-answer, the sender pushes the sealed outcome (per visibility — "waiting on the other" → thanks / the joint
-report) back to the recipient's relay mailbox from Results, and the relay page renders it (a new mailbox
-`result` field + a Worker push endpoint authed by the drain secret + the page states). Gate green each part:
-typecheck/lint/format, **402 core + 487 desktop** unit, **68 E2E** (compat E2E asserts no participant picker;
 
-- an external-compat bridge test: relay link/PIN + a two-member group; visual QA of the compat start step +
-  send panel).
+**D. External-compat relay-page outcome write-back (2026-06-16) — BUILT.** After both have answered and the
+sender has generated the alignment report, the sender pushes it back to the external recipient from Results,
+and the recipient sees it on their relay link. The mechanism:
+
+- **The crux — a re-sealable content key.** The content key (which decrypts everything for the recipient)
+  lives only in the recipient's link fragment. So `createRelaySend` now also stores it **wrapped under the
+  master key** (`Assignment.relay.contentKeyWrapped`), letting the sender later seal an outcome the recipient
+  opens with the same fragment key. Sends minted before this lack it and simply can't write back (no migration).
+- **A sealed `RelayResult`** (`kind: 'report' | 'thanks'`, headline + summary + per-question `items`) is sealed
+  under the content key (`sealResult`/`openResult`) and attached to the mailbox via a new drain-secret-authed
+  Worker endpoint `POST /api/admin/result` (mailbox op `putResult`, which patches the stored mailbox in place,
+  leaving the content + PIN gate untouched). `unlock` then releases `sealedResult` alongside the content.
+- **The relay page** gains outcome states: a returning recipient who's already answered sees the **report**
+  (decrypted client-side) if the sender pushed one, else a **"waiting for results"** state (a compatibility
+  submit lands there instead of the plain thank-you). Ordinary external sends are unchanged.
+- **The bridge** `assignments:publishCompatResult(groupId)` is sender-scoped (`questionnaires.viewResults`),
+  needs the report generated, and pushes it to every **external** (`channel:'relay'`) member; the
+  **"Share results"** action appears in Compatibility Results only when the group has an external member + a
+  report. Every external-eligible visibility (sharedReport / eachSeesOwn / senderSeesAll) gives the recipient
+  the combined report; `contextOnly` is never external.
+- **Real fix found in the build:** `generateAlignment` had hard-required **both** members to be
+  `recipient.kind === 'person'`, so it rejected any group with an external participant — external compatibility
+  could never align at all. It now names an external participant from their relay `displayName`. (Caught by the
+  end-to-end coreBridge test, not the unit tests — exactly the whole-flow gap the §7 coherence walk targets.)
+
+**Coverage note:** the relay round-trip (mint → answer-via-relay → drain → align → publish → recipient unlock
+decrypts the report) is covered by the **`coreBridge` integration test**, which drives the real bridge IPC
+surface + relay crypto + the in-process fake relay end-to-end — the renderer can't reach the in-main fake relay,
+so this is the right layer (the same reason the existing compat/relay answer flows are coreBridge-tested, not
+Playwright). Both UI surfaces are RTL-covered: the "Share results" button + "Shared with X" confirmation
+(and its absence for a household group), and the relay page's report / waiting states.
+
+**Build status (2026-06-16, `feat/questionnaire-explicit-gen`, NOT merged):** **A, B, C, and D all built.**
+Gate green each part: typecheck/lint/format, **408 core + 491 desktop + 11 relay** unit. The external-compat
+SEND side (B) + the OUTCOME write-back (D) complete external compatibility end-to-end.

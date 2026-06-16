@@ -316,6 +316,31 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-16 — Build (**External-compat relay-page outcome write-back — external compatibility is now COMPLETE
+  end-to-end; 08 §17.12-D**; on `feat/questionnaire-explicit-gen`, NOT merged). After both have answered + the
+  sender generated the alignment report, the sender pushes it back to the external recipient from Results, and
+  the recipient sees it on their relay link. Built in 3 committed parts: **(2a) crypto/mailbox/client** — the
+  content key (which decrypts everything for the recipient, normally only in their link fragment) is now ALSO
+  stored **wrapped under the master key** (`Assignment.relay.contentKeyWrapped`) so the sender can re-seal an
+  outcome the recipient opens with that same fragment key; a sealed **`RelayResult`** (`report`/`thanks`) +
+  `sealResult`/`openResult`; a drain-secret-authed Worker `POST /api/admin/result` (`putResult` patches the
+  mailbox in place; `unlock` releases `sealedResult`). **(2b) relay page** — a returning, already-answered
+  recipient sees the **report** (decrypted client-side) or a **"waiting for results"** state (a compatibility
+  submit lands there, not the plain thank-you). **(2c) bridge + UI** — `assignments:publishCompatResult` (sender-
+  scoped, needs the report, pushes to every external member) + a **"Share results"** action shown only when the
+  group has an external member + a report. **Real fix the end-to-end test caught:** `generateAlignment` had
+  hard-required **both** members to be `recipient.kind === 'person'`, so it **rejected any group with an external
+  participant — external compatibility could never align at all**; it now names an external participant from
+  their relay `displayName`. **Coverage:** the relay round-trip (mint→answer-via-relay→drain→align→publish→
+  recipient-unlock-decrypts-report) is the **coreBridge integration test** (the renderer can't reach the in-main
+  fake relay — the same reason existing compat/relay answer flows are coreBridge-tested, not Playwright); both UI
+  surfaces are RTL (the Share button + confirmation + its absence for a household group; the relay page report /
+  waiting states). Gate green: typecheck (node + web/DOM-lib), lint, format, **408 core + 491 desktop + 11 relay**
+  unit. Synced 08 §17.12-D + §16.7 matrix §H. **Lesson: a feature where the recipient's only key lives in their
+  link fragment can still get a server-pushed update IF you also wrap that key under the master key at send time
+  — then the sender re-seals; the relay still only ever holds ciphertext. And a guard written for the common case
+  (`recipient.kind === 'person'`) silently disables the whole feature for the new case — the end-to-end test
+  caught what the unit tests, scoped to person-pairs, structurally couldn't.**
 - 2026-06-16 — Flow-coherence fixes (**08 §17.12 — remove duplicate person-pickers; the user caught them, not
   the tests**). A whole-flow walk found two redundant person selections left by the recipient-first model.
   **(A)** Dropped the "About a specific person?" picker + toggles from Draft with AI — it re-asked "who is this

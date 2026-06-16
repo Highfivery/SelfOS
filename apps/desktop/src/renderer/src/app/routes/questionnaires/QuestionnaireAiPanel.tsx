@@ -57,6 +57,7 @@ export function QuestionnaireAiPanel({
   const [includeTarget, setIncludeTarget] = useState(true);
   const [includeRelationship, setIncludeRelationship] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
   const [notice, setNotice] = useState<{ tone: 'info' | 'warning'; text: string } | null>(null);
   const [topicKind, setTopicKind] = useState<'activities' | 'fantasies'>('activities');
   const [topicDraft, setTopicDraft] = useState('');
@@ -64,16 +65,27 @@ export function QuestionnaireAiPanel({
   const [topicNotice, setTopicNotice] = useState<{ ok: boolean; text: string } | null>(null);
 
   const onAddTopic = async (): Promise<void> => {
-    const name = topicDraft.trim();
-    if (name === '' || topicBusy) return;
+    const names = topicDraft
+      .split('\n')
+      .map((n) => n.trim())
+      .filter(Boolean);
+    if (names.length === 0 || topicBusy) return;
     setTopicBusy(true);
     setTopicNotice(null);
     try {
-      await window.selfos?.questionnairesAddIntimacyTopic({ kind: topicKind, name });
+      for (const name of names) {
+        await window.selfos?.questionnairesAddIntimacyTopic({ kind: topicKind, name });
+      }
       setTopicDraft('');
-      setTopicNotice({ ok: true, text: `Added “${name}” — the AI will draw on it.` });
+      setTopicNotice({
+        ok: true,
+        text:
+          names.length === 1
+            ? `Added “${names[0]}” — the AI will draw on it.`
+            : `Added ${names.length} topics — the AI will draw on them.`,
+      });
     } catch {
-      setTopicNotice({ ok: false, text: 'Couldn’t add that topic.' });
+      setTopicNotice({ ok: false, text: 'Couldn’t add those topics.' });
     } finally {
       setTopicBusy(false);
     }
@@ -82,6 +94,15 @@ export function QuestionnaireAiPanel({
   useEffect(() => {
     void loadPeople();
   }, [loadPeople]);
+
+  // A live elapsed-time counter while drafting, so it's clearly working and not stuck (generation is a
+  // single non-streaming call, so an honest "it's running" beats a frozen spinner).
+  useEffect(() => {
+    if (!busy) return;
+    setElapsed(0);
+    const id = setInterval(() => setElapsed((e) => e + 1), 1000);
+    return () => clearInterval(id);
+  }, [busy]);
 
   const targets = people.filter((p) => p.id !== activePerson?.id);
   const targetName = targets.find((p) => p.id === targetPersonId)?.displayName;
@@ -195,10 +216,22 @@ export function QuestionnaireAiPanel({
 
           {notice ? <Banner tone={notice.tone}>{notice.text}</Banner> : null}
 
-          <Button variant="primary" onClick={() => void onGenerate()} disabled={busy}>
-            <Sparkles size={14} aria-hidden="true" />
-            {busy ? 'Drafting…' : 'Generate questions'}
-          </Button>
+          {busy ? (
+            <div className={styles.aiProgress} role="status" aria-live="polite">
+              <div className={styles.aiProgressBar} aria-hidden="true">
+                <span />
+              </div>
+              <Text size="sm" tone="secondary">
+                Drafting your questions… {elapsed}s
+                {elapsed >= 30 ? ' — almost there, hang tight.' : ' (usually 10–30 seconds)'}
+              </Text>
+            </div>
+          ) : (
+            <Button variant="primary" onClick={() => void onGenerate()} disabled={busy}>
+              <Sparkles size={14} aria-hidden="true" />
+              Generate questions
+            </Button>
+          )}
 
           {showTopicAdd ? (
             <Stack gap={2}>
@@ -206,30 +239,28 @@ export function QuestionnaireAiPanel({
                 Add a consensual-adult topic for the AI to draw on (18+). It’s saved household-wide
                 and also feeds the personal intake — manage the full list in Settings.
               </Text>
-              <div className={styles.topicAddRow}>
-                <Select
-                  aria-label="Topic kind"
-                  value={topicKind}
-                  onChange={(e) => setTopicKind(e.target.value as 'activities' | 'fantasies')}
+              <Select
+                aria-label="Topic kind"
+                value={topicKind}
+                onChange={(e) => setTopicKind(e.target.value as 'activities' | 'fantasies')}
+              >
+                <option value="activities">Activity</option>
+                <option value="fantasies">Fantasy</option>
+              </Select>
+              <Textarea
+                aria-label="New topic"
+                rows={2}
+                value={topicDraft}
+                placeholder="One per line, e.g. Wax play"
+                onChange={(e) => setTopicDraft(e.target.value)}
+              />
+              <div>
+                <Button
+                  variant="secondary"
+                  onClick={() => void onAddTopic()}
+                  disabled={topicBusy || topicDraft.trim() === ''}
                 >
-                  <option value="activities">Activity</option>
-                  <option value="fantasies">Fantasy</option>
-                </Select>
-                <input
-                  className={styles.topicAddInput}
-                  aria-label="New topic"
-                  value={topicDraft}
-                  placeholder="e.g. Wax play"
-                  onChange={(e) => setTopicDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      void onAddTopic();
-                    }
-                  }}
-                />
-                <Button variant="secondary" onClick={() => void onAddTopic()} disabled={topicBusy}>
-                  Add topic
+                  {topicBusy ? 'Adding…' : 'Add topic'}
                 </Button>
               </div>
               {topicNotice ? (

@@ -1893,7 +1893,7 @@ test('intimacy topics (§16.5a): the owner manages custom topics in Settings + a
     await w.getByRole('button', { name: 'Questionnaires' }).click();
     await expect(w.getByText('Intimacy topics (18+)')).toBeVisible();
     await expect(w.getByText(/18\+ only/i)).toBeVisible();
-    await w.getByLabel('Add a custom activity').fill('Wax play');
+    await w.getByLabel('Add activities (one per line)').fill('Wax play');
     await w.getByRole('button', { name: 'Add' }).first().click();
     await expect(w.getByText('Wax play')).toBeVisible();
 

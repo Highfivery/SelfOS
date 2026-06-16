@@ -38,29 +38,31 @@ describe('tier-distinct explicit generation framing (08 §16.5)', () => {
     intimacyTopics: mergedIntimacyTopics(),
   };
 
-  it('intimacy + unfiltered requests GENUINELY EXPLICIT content, seeds the inventory, and is most graphic', () => {
+  it('intimacy + unfiltered requests genuinely explicit content, seeds the inventory, and is most graphic', () => {
     const msg = buildGenerationUserMessage({
       ...base,
       type: 'intimacy',
       sensitivity: 'unfiltered',
     });
-    expect(msg).toContain('GENUINELY EXPLICIT');
-    expect(msg).toMatch(/graphic/i); // the unfiltered intensity
+    expect(msg).toMatch(/genuinely explicit/i);
+    expect(msg).toMatch(/frank, plain language/i); // the unfiltered intensity
     expect(msg).toContain('Oral (giving)'); // a seeded activity
     expect(msg).toContain('Consensual non-consent (CNC) roleplay'); // a seeded fantasy
-    // The consensual-adult boundary is stated in-prompt.
+    // The legitimate-context + consensual-adult boundary is stated in-prompt.
+    expect(msg).toMatch(/appropriate and expected/i);
     expect(msg).toMatch(/consensual adults only/i);
-    expect(msg).toMatch(/NEVER write anything involving minors/i);
+    expect(msg).toMatch(/never minors/i);
   });
 
-  it('intimacy + explicit is explicit but a notch below unfiltered (no "no-holds-barred" intensity)', () => {
+  it('intimacy + explicit is explicit but a notch gentler than unfiltered', () => {
     const explicit = buildGenerationUserMessage({
       ...base,
       type: 'intimacy',
       sensitivity: 'explicit',
     });
-    expect(explicit).toContain('GENUINELY EXPLICIT');
-    expect(explicit).toMatch(/a notch below/i);
+    expect(explicit).toMatch(/genuinely explicit/i);
+    expect(explicit).toMatch(/a notch gentler/i);
+    expect(explicit).not.toMatch(/frank, plain language/i); // that's the unfiltered intensity
   });
 
   it('intimacy + general stays respectful with nothing explicit', () => {
@@ -69,7 +71,7 @@ describe('tier-distinct explicit generation framing (08 §16.5)', () => {
       type: 'intimacy',
       sensitivity: 'intimacyGeneral',
     });
-    expect(msg).not.toContain('GENUINELY EXPLICIT');
+    expect(msg).not.toMatch(/genuinely explicit/i);
     expect(msg).toMatch(/nothing explicit/i);
   });
 
@@ -79,7 +81,7 @@ describe('tier-distinct explicit generation framing (08 §16.5)', () => {
       type: 'role-feedback',
       sensitivity: 'unfiltered',
     });
-    expect(msg).not.toContain('GENUINELY EXPLICIT');
+    expect(msg).not.toMatch(/genuinely explicit/i);
     expect(msg).not.toContain('Oral (giving)');
   });
 });

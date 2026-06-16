@@ -237,6 +237,34 @@ describe('Questionnaires', () => {
     expect(screen.getByText(/ai draft/i)).toBeInTheDocument();
     // §16.4: the AI title fills the empty Title field.
     expect(screen.getByLabelText('Title')).toHaveValue('A gentle weekly check-in');
+    // The untouched starter blank is dropped, so the generated question becomes Question 1 (no leading
+    // empty question), and there's no second, blank question input.
+    expect(screen.getByLabelText('Question 1')).toHaveValue('What felt hardest this week?');
+    expect(screen.queryByLabelText('Question 2')).not.toBeInTheDocument();
+  });
+
+  it('shows live drafting progress (a status region + elapsed timer) while generating', async () => {
+    enableAi();
+    let resolveGen: (v: { ok: true; questions: never[] }) => void = () => {};
+    installMockBridge({
+      questionnairesList: () => Promise.resolve([]),
+      secretHas: () => Promise.resolve(true),
+      questionnairesGenerate: () =>
+        new Promise((res) => {
+          resolveGen = res as typeof resolveGen;
+        }),
+    });
+    await openNewBuilder();
+    await userEvent.click(await screen.findByRole('button', { name: /draft with ai/i }));
+    await userEvent.click(screen.getByRole('button', { name: /generate questions/i }));
+
+    // While the (still-pending) call runs, the button is replaced by a live status region — clearly working.
+    const status = await screen.findByRole('status');
+    expect(status).toHaveTextContent(/Drafting your questions/i);
+    expect(status).toHaveTextContent(/usually 10–30 seconds/i);
+    expect(screen.queryByRole('button', { name: /generate questions/i })).not.toBeInTheDocument();
+
+    resolveGen({ ok: true, questions: [] });
   });
 
   it('keeps the author’s title when AI also returns one (§16.4: never clobbers)', async () => {

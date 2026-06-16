@@ -440,7 +440,13 @@ export function QuestionnaireBuilder({
 
   const appendGenerated = (questions: Question[]): void => {
     setProblems(null);
-    setDrafts((ds) => [...ds, ...questions.map(fromGenerated)]);
+    setJustSaved(false);
+    // Drop any still-blank drafts (e.g. the empty starter question) so a generate doesn't leave a leading
+    // empty question — an untouched blank prompt contributes nothing and would only block Save/Send anyway.
+    setDrafts((ds) => [
+      ...ds.filter((d) => d.prompt.trim() !== ''),
+      ...questions.map(fromGenerated),
+    ]);
   };
 
   const onImprove = async (d: QDraft, instruction: string): Promise<void> => {

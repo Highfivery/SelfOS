@@ -339,11 +339,11 @@ describe('generateQuestions', () => {
       existingPrompts: [],
     });
     expect(result.ok).toBe(true);
-    expect(sentUserText).toContain('GENUINELY EXPLICIT'); // the §16.5 explicit direction
-    expect(sentUserText).toMatch(/graphic/i); // unfiltered intensity
+    expect(sentUserText).toMatch(/genuinely explicit/i); // the §16.5 explicit direction
+    expect(sentUserText).toMatch(/appropriate and expected/i); // the legitimate-context framing
     expect(sentUserText).toContain('Oral (giving)'); // a built-in topic
     expect(sentUserText).toContain('Wax play'); // the owner's custom addition (merged inventory)
-    expect(sentUserText).toMatch(/NEVER write anything involving minors/i); // the boundary
+    expect(sentUserText).toMatch(/never minors/i); // the boundary
   });
 });
 

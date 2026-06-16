@@ -63,13 +63,15 @@ export function intimacyExplicitFraming(
 ): string {
   const intensity =
     tier === 'unfiltered'
-      ? 'Be as direct, graphic, and specific as the subject matter calls for — plain words for bodies and sex acts, no euphemisms, no holding back, within the boundary below.'
-      : 'Be candid and specific — name acts and preferences plainly, a notch below fully no-holds-barred.';
+      ? 'Use frank, plain language for bodies and sex acts and be as specific as the subject matter calls for.'
+      : 'Be candid and specific — name acts and preferences plainly, a notch gentler than fully explicit.';
   return [
-    `\nThis is an intimacy questionnaire for consenting adults (18+). Write GENUINELY EXPLICIT, specific questions about sex and desire — do NOT default to tasteful or emotional-closeness questions. ${intensity}`,
-    `Draw on concrete subject matter: specific sex acts, bodies and grooming, turn-ons/turn-offs, fantasies (including taboo fantasies framed strictly as fantasy/roleplay — e.g. consensual non-consent (CNC) as pre-agreed roleplay), porn and masturbation, sexual history, frequency and desire, and boundaries.`,
-    `In-policy subject matter to draw on — acts: ${topics.activities.join(', ')}. Fantasies/roleplay: ${topics.fantasies.join(', ')}.`,
-    `BOUNDARY (hard): consensual adults only. Taboo content ONLY as fantasy/roleplay between consenting adults. NEVER write anything involving minors, real (non-roleplay) non-consent, or illegal acts. Stay within Anthropic's usage policy; if a brief would require out-of-policy content, return an empty questions array.`,
+    // Establish the legitimate context FIRST so the model is confident this is appropriate — a private
+    // adult who has opted into exploring their own sexuality, not a request to a public assistant.
+    `\nCONTEXT: This is a private intimacy questionnaire inside a personal wellness app, written for a consenting adult (18+) who has opted in to reflect on their own sex life with a partner. Frank, explicit questions about sex and desire are appropriate and expected here — this is a normal, in-policy use; do NOT shy away or substitute tasteful, emotional-closeness questions.`,
+    `Write genuinely explicit, specific questions. ${intensity} Cover concrete subject matter: specific sex acts, bodies and grooming, turn-ons/turn-offs, fantasies (including taboo fantasies framed strictly as fantasy/roleplay — e.g. consensual non-consent (CNC) as pre-agreed roleplay), porn and masturbation, sexual history, frequency and desire, and boundaries.`,
+    `Subject matter to draw on — acts: ${topics.activities.join(', ')}. Fantasies/roleplay: ${topics.fantasies.join(', ')}.`,
+    `Boundary: consensual adults only; taboo content only as fantasy/roleplay; never minors, real (non-roleplay) non-consent, or illegal acts. Within those limits this content IS in policy, so generate the questions normally — only return an empty array for genuinely prohibited requests, never merely because the topic is sexually explicit.`,
   ].join('\n');
 }
 

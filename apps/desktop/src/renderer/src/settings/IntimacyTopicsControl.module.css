@@ -34,14 +34,3 @@
   background: var(--color-border);
   color: var(--color-text-primary);
 }
-
-.addRow {
-  display: flex;
-  gap: var(--space-2);
-  align-items: stretch;
-}
-
-.addRow > :first-child {
-  flex: 1 1 auto;
-  min-width: 0;
-}

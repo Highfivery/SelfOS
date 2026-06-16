@@ -609,25 +609,44 @@
   }
 }
 
-/* Inline "add an intimacy topic" row in the AI panel (08 §16.5a). */
-.topicAddRow {
+/* AI "drafting" progress (08 §16.1 feedback): an indeterminate animated bar + a live elapsed counter. */
+.aiProgress {
   display: flex;
+  flex-direction: column;
   gap: var(--space-2);
-  align-items: stretch;
 }
 
-.topicAddInput {
-  flex: 1 1 auto;
-  min-width: 0;
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-  font: inherit;
+.aiProgressBar {
+  position: relative;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-alt);
+  overflow: hidden;
 }
 
-.topicAddInput:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
+.aiProgressBar > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+  animation: aiProgressSlide 1.4s ease-in-out infinite;
+}
+
+@keyframes aiProgressSlide {
+  0% {
+    left: -40%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aiProgressBar > span {
+    animation: none;
+    left: 0;
+    width: 100%;
+    opacity: 0.5;
+  }
 }

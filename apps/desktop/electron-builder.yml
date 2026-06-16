@@ -9,7 +9,14 @@ files:
 mac:
   category: public.app-category.healthcare-fitness
   target: dmg
+# win/linux targets stay declared but are not built by the release workflow yet (19-distribution §12).
 win:
   target: nsis
 linux:
   target: AppImage
+# Upload the built installer to GitHub Releases (19-distribution §4). The release job runs
+# `electron-builder --mac --publish always`, which attaches the .dmg to the matching tag's release.
+publish:
+  provider: github
+  owner: Highfivery
+  repo: SelfOS

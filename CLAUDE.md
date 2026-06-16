@@ -233,11 +233,17 @@ pnpm test:watch     # Vitest watch
 pnpm --filter @selfos/desktop dev     # electron-vite dev (HMR)
 pnpm --filter @selfos/desktop build   # build main/preload/renderer to out/
 pnpm --filter @selfos/desktop e2e     # build, then Playwright-Electron E2E
+pnpm --filter @selfos/desktop release:build  # electron-builder --mac --publish always (manual release build)
 ```
 
 Tests are **per-package** (`pnpm -r test`): the desktop app runs Vitest with a jsdom environment for
 component tests. E2E (Playwright + Electron) runs on demand / in CI, not on every push (it builds the
 app first).
+
+**Releases are automated** (spec [`19-distribution`](docs/specs/19-distribution.md)): merged Conventional
+Commits drive **release-please** → a "Release vX.Y.Z" PR → on merge it bumps the version, writes the root
+`CHANGELOG.md`, and creates a draft GitHub Release; a macOS Actions job builds + attaches the `.dmg`, then
+publishes it. Maintainers never hand-edit a version or tag. macOS-only + unsigned for now.
 
 ---
 
@@ -316,6 +322,36 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-16 — Build (**Distribution — versioning, release builds & the README; SPEC 19 BUILT** on
+  `feat/distribution`, off `main`, **NOT merged** — the user cuts the first real release to verify the pipeline).
+  CI/packaging/docs only, no app features. **release-please** (manifest mode): `release-please-config.json` +
+  `.release-please-manifest.json`, package keyed at the repo **root** (`.`, `release-type: node`,
+  `package-name: SelfOS`) so the changelog lands at **root `CHANGELOG.md`** while `apps/desktop/package.json`
+  (what About + electron-builder read) is bumped via an `extra-files` JSON updater — the root `package.json`
+  bumps in lockstep (NOT pinned at `0.0.0`); `include-component-in-tag: false` → `vX.Y.Z` tags;
+  `bump-minor-pre-major: true` and **NOT** `bump-patch-for-minor-pre-major` so a `feat` → minor → first release
+  **0.1.0**; `draft: true` (draft-until-asset); `bootstrap-sha` = current `main` HEAD (clean first changelog).
+  **`.github/workflows/release.yml`**: job1 release-please (ubuntu) → job2 build-macos (`if releases_created`)
+  checks out **`github.sha`** (a _draft_ release has no real git tag yet — created on publish), builds, runs
+  `electron-builder --mac --publish always` (GITHUB_TOKEN as GH_TOKEN, `SELFOS_BUILD_SHA: github.sha`), then
+  `gh release edit <tag> --draft=false`. **No extra secret, no API key/vault in the build.**
+  **electron-builder.yml**: `publish` github block (Highfivery/SelfOS) + a `release:build` script. **About
+  enrichment**: a shared `buildInfo.ts` injects `__APP_VERSION__`/`__BUILD_SHA__`/`__BUILD_DATE__` via `define`
+  across the electron-vite, web (`vite.web.config`), and `vitest` configs; `AboutVersion` shows
+  `v{version} · {sha} · {date}` (omitting a `dev`/empty SHA — **not** over IPC). **README** rewritten
+  non-technical (about + "your data is yours" + macOS install incl. the unsigned Gatekeeper bypass +
+  bring-your-own-Claude-key cost note + the crisis line verbatim); old technical README → **CONTRIBUTING.md**
+  (refreshed Status + a release-process section). **macOS-only, unsigned** for now (signing/notarization,
+  auto-update, win/linux = later phases). Code-reviewer **ship**; **doc-auditor caught a real config bug** —
+  `bump-patch-for-minor-pre-major: true` would have made the first `feat` → `0.0.1` not `0.1.0`; removed. Gate
+  green: typecheck (node + web), lint, format, **411 core + 11 relay + 497 desktop** unit (+2: the
+  `__APP_VERSION__`↔`package.json` drift guard + the enriched `AboutVersion` render); a real Electron build
+  confirmed the SHA/date land in the renderer bundle. The release pipeline can only be validated by a **real
+  first release** — after merge the user merges the release-please PR to confirm the `.dmg` builds/uploads + the
+  About version matches. **Lesson: a `define`-injected build global is the clean way to enrich the About version
+  (SHA/date) without growing the IPC payload — one shared `buildInfo.ts` keeps the Electron/web/vitest builds +
+  the drift-guard test on the same value; and release-please's pre-1.0 bump flags are a footgun
+  (`bump-patch-for-minor-pre-major` silently demotes `feat` to a patch — leave it off so `feat` → minor).**
 - 2026-06-16 — Build (**Onboarding intake + People-editor consolidation; SPEC 18 §14 amended** on
   `feat/onboarding-people-consolidation`, off `main`, NOT merged awaiting confirm). Six user-flagged cleanups,
   all forks **asked first** (3 AskUserQuestion rounds): (1) **all 63 `rating` 1–5 button-scale questions → 3-label

@@ -1,0 +1,76 @@
+name: Release
+
+# Hands-off distribution (19-distribution):
+#   1. release-please reads the Conventional Commits on `main`, keeps a "Release vX.Y.Z" PR open, and
+#      — when that PR is merged — bumps the version, writes the changelog, and creates a *draft*
+#      GitHub Release (draft-until-asset, so users never see an installer-less release).
+#   2. build-macos then builds the desktop app on a macOS runner and uploads the `.dmg` to that
+#      release, then flips it from draft to published.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    name: Release PR / draft release
+    runs-on: ubuntu-latest
+    outputs:
+      releases_created: ${{ steps.release.outputs.releases_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - name: Run release-please
+        id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  build-macos:
+    name: Build & publish macOS installer
+    needs: release-please
+    if: ${{ needs.release-please.outputs.releases_created == 'true' }}
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      # Check out the release commit by SHA, not the tag: a *draft* release has no real git tag yet
+      # (it's created when the release is published below). `github.sha` is the merged Release-PR
+      # commit that release-please just version-bumped + tagged in the draft.
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build desktop app
+        run: pnpm --filter @selfos/desktop build
+
+      # electron-builder packages the .dmg and uploads it to the matching GitHub Release (the draft
+      # release-please created) via the `publish` block in electron-builder.yml. No extra secret and
+      # no API key/vault data is in the build — only the ephemeral GITHUB_TOKEN.
+      - name: Package & publish the .dmg
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SELFOS_BUILD_SHA: ${{ github.sha }}
+        run: pnpm --filter @selfos/desktop exec electron-builder --mac --publish always
+
+      - name: Publish the release (now the installer is attached)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${{ needs.release-please.outputs.tag_name }}" --draft=false

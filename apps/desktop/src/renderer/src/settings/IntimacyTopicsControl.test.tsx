@@ -50,25 +50,19 @@ describe('IntimacyTopicsControl (§16.5a)', () => {
     expect(screen.getByText(/1 built-in topics are always included/i)).toBeInTheDocument();
   });
 
-  it('adds topics from a textarea (one per line) via the IPC', async () => {
+  it('adds a topic from the textarea via the IPC', async () => {
     asOwner();
-    const add = vi.fn(() =>
-      Promise.resolve(view({ activities: ['Wax play', 'Sensory'], fantasies: [] })),
-    );
+    const add = vi.fn(() => Promise.resolve(view({ activities: ['Wax play'], fantasies: [] })));
     installMockBridge({
       questionnairesIntimacyTopics: () => Promise.resolve(view({ activities: [], fantasies: [] })),
       questionnairesAddIntimacyTopic: add,
     });
     render(<IntimacyTopicsControl />);
 
-    await userEvent.type(
-      await screen.findByLabelText('Add activities (one per line)'),
-      'Wax play\nSensory',
-    );
+    await userEvent.type(await screen.findByLabelText('Add an activity'), 'Wax play');
     await userEvent.click(screen.getAllByRole('button', { name: 'Add' })[0] as HTMLElement);
     await waitFor(() => {
       expect(add).toHaveBeenCalledWith({ kind: 'activities', name: 'Wax play' });
-      expect(add).toHaveBeenCalledWith({ kind: 'activities', name: 'Sensory' });
     });
   });
 

@@ -65,27 +65,16 @@ export function QuestionnaireAiPanel({
   const [topicNotice, setTopicNotice] = useState<{ ok: boolean; text: string } | null>(null);
 
   const onAddTopic = async (): Promise<void> => {
-    const names = topicDraft
-      .split('\n')
-      .map((n) => n.trim())
-      .filter(Boolean);
-    if (names.length === 0 || topicBusy) return;
+    const name = topicDraft.trim();
+    if (name === '' || topicBusy) return;
     setTopicBusy(true);
     setTopicNotice(null);
     try {
-      for (const name of names) {
-        await window.selfos?.questionnairesAddIntimacyTopic({ kind: topicKind, name });
-      }
+      await window.selfos?.questionnairesAddIntimacyTopic({ kind: topicKind, name });
       setTopicDraft('');
-      setTopicNotice({
-        ok: true,
-        text:
-          names.length === 1
-            ? `Added “${names[0]}” — the AI will draw on it.`
-            : `Added ${names.length} topics — the AI will draw on them.`,
-      });
+      setTopicNotice({ ok: true, text: `Added “${name}” — the AI will draw on it.` });
     } catch {
-      setTopicNotice({ ok: false, text: 'Couldn’t add those topics.' });
+      setTopicNotice({ ok: false, text: 'Couldn’t add that topic.' });
     } finally {
       setTopicBusy(false);
     }
@@ -134,12 +123,11 @@ export function QuestionnaireAiPanel({
       if (result.ok && result.questions && result.questions.length > 0) {
         onGenerated(result.questions);
         if (result.title) onTitle?.(result.title);
-        setNotice({
-          tone: 'info',
-          text: `Added ${result.questions.length} draft question${
-            result.questions.length === 1 ? '' : 's'
-          } below — review and edit them.`,
-        });
+        const added = `Added ${result.questions.length} draft question${
+          result.questions.length === 1 ? '' : 's'
+        } below — review and edit them.`;
+        // A fallback (e.g. the explicit-intimacy starter set) carries its own note; prefer it.
+        setNotice({ tone: 'info', text: result.message ? `${result.message} ${added}` : added });
       } else {
         setNotice({ tone: 'warning', text: result.message ?? 'No questions came back.' });
       }
@@ -251,7 +239,7 @@ export function QuestionnaireAiPanel({
                 aria-label="New topic"
                 rows={2}
                 value={topicDraft}
-                placeholder="One per line, e.g. Wax play"
+                placeholder="e.g. Wax play"
                 onChange={(e) => setTopicDraft(e.target.value)}
               />
               <div>

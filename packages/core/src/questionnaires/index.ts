@@ -13,6 +13,7 @@ export * from './answering';
 export * from './imageService';
 export * from './imageGc';
 export * from './contextProviders';
+export * from './intimacyStarters';
 export * from './generationService';
 export * from './gapFinderService';
 export * from './analysisService';

@@ -345,6 +345,54 @@ describe('generateQuestions', () => {
     expect(sentUserText).toContain('Wax play'); // the owner's custom addition (merged inventory)
     expect(sentUserText).toMatch(/never minors/i); // the boundary
   });
+
+  it('falls back to explicit starter questions when the model refuses an intimacy send (§16.5b)', async () => {
+    const fs = memFileSystem();
+    const { author } = await seedHousehold(fs);
+    // The model declines (prose, no JSON) — for explicit intimacy this must NOT strand the Owner.
+    const result = await generateQuestions(
+      deps(fs, fakeClient("I'm not able to help with that."), author),
+      {
+        type: 'intimacy',
+        sensitivity: 'unfiltered',
+        context: {
+          authorPersonId: author,
+          includeAuthor: false,
+          includeTarget: false,
+          includeRelationship: false,
+        },
+        existingPrompts: [],
+      },
+    );
+    expect(result.ok).toBe(true);
+    expect(result.reason).toBeUndefined();
+    expect(result.questions?.length).toBeGreaterThan(0);
+    expect(result.message).toMatch(/starter questions/i);
+    // The starter set draws on the shared topic inventory (a built-in activity appears as an option).
+    expect(result.questions?.some((q) => q.options?.includes('Oral (giving)'))).toBe(true);
+    // Still charges for the refused call it made.
+    expect(result.usage?.type).toBe('questionnaire.generate');
+  });
+
+  it('still REFUSES for a non-intimacy send when the model declines (no fallback)', async () => {
+    const fs = memFileSystem();
+    const { author } = await seedHousehold(fs);
+    const result = await generateQuestions(
+      deps(fs, fakeClient('I cannot help with that.'), author),
+      {
+        type: 'intimacy',
+        sensitivity: 'standard', // standard tier → no explicit fallback
+        context: {
+          authorPersonId: author,
+          includeAuthor: false,
+          includeTarget: false,
+          includeRelationship: false,
+        },
+        existingPrompts: [],
+      },
+    );
+    expect(result).toMatchObject({ ok: false, reason: 'REFUSED' });
+  });
 });
 
 describe('improveQuestion + gap-finder', () => {

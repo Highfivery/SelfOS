@@ -1546,6 +1546,25 @@ source of truth**:
 - **Cross-spec** — this touches [`18`](18-personal-onboarding.md): the intake intimacy block reads the **merged**
   inventory instead of a hard-coded local list (sync 18 when built).
 
+### 16.5b Deterministic explicit-starter fallback (no dead-end on a model refusal)
+
+**Problem.** Even with the §16.5 explicit framing, the live Claude model **sometimes still declines** to draft
+graphic sexual content for an intimacy/`explicit`/`unfiltered` send. With no fallback the Owner hits a dead-end
+calm error ("No usable questions came back"), which reads as the feature being broken.
+
+**Resolution.** When generation for an **intimacy** questionnaire at `explicit`/`unfiltered` yields no usable
+questions (the model refused or returned no parseable set), don't strand the Owner — seed an **editable set of
+deterministic, frank starter questions** built from the **merged topic inventory** (§16.5a), mirroring the
+intake's static intimacy block. This is `intimacyStarterQuestions(topics, tier, count)` in
+`packages/core/src/questionnaires/intimacyStarters.ts`:
+
+- It is **templates, not model output** — no extra AI spend, always available, fully editable in the builder.
+  The consensual-adult boundary is **intrinsic**: the questions only reference the curated inventory.
+- The fallback fires **only** for the intimacy explicit/unfiltered REFUSED path. `NO_KEY`/`BUDGET`/`ERROR` and a
+  refusal on **any other** type/tier still surface the calm error (those are real states, not a model decline).
+- The result returns `ok: true` with a short note ("The AI held back on this one, so I added explicit starter
+  questions to edit."), surfaced by the builder's AI panel alongside the "Added N draft questions" line.
+
 ### 16.6 Polish (smaller audit findings)
 
 - **Custom-type duplicate is silently dropped** — show a small inline notice when an added type collides
@@ -1712,3 +1731,14 @@ intimacy-topics surface), not blockers._
   typecheck/lint/format, 397 core + 8 relay + **478 desktop** unit, **67 E2E** (+1: owner manages topics in
   Settings + the inline builder add, both persisted to the plain prefs file [decrypt-free read]). **§16 is
   now fully built.**
+- **Slice 4 follow-ups built** (2026-06-15, same branch): four feedback fixes + the **§16.5b explicit-starter
+  fallback**. (1) The "Draft with AI" panel now shows a **live elapsed-time progress block** while drafting (a
+  `role="status"` animated bar + "Drafting your questions… Ns") instead of just a disabled button. (2)
+  Generated questions no longer leave a leading blank — `appendGenerated` drops empty-prompt drafts before
+  appending. (3) **§16.5b** — when the live model declines an intimacy explicit/unfiltered draft,
+  `intimacyStarterQuestions(topics, tier, count)` seeds editable explicit starter questions from the merged
+  inventory instead of stranding the Owner on "No usable questions"; the fallback fires **only** on that
+  REFUSED path (other types/tiers + NO_KEY/BUDGET/ERROR still surface the calm error). (4) The Settings +
+  inline topic-add controls are **textareas that add one topic at a time** (Owner-only, `people.manage`).
+  Gate green: typecheck/lint/format, **399 core** + 8 relay + 480 desktop unit, 67 E2E (intimacy-topics flow
+  re-pointed to the "Add an activity" label). NOT merged (awaiting user review of the explicit wording).

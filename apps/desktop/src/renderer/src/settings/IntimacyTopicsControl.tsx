@@ -23,7 +23,7 @@ const EMPTY_VIEW: IntimacyTopicsView = {
 export function IntimacyTopicsControl(): JSX.Element {
   const canManage = useSessionStore((s) => s.can('people.manage'));
   const [view, setView] = useState<IntimacyTopicsView | null>(null);
-  // One textarea per kind — each line is a topic, so several can be added at once.
+  // One textarea per kind — the Owner types a topic and adds it; topics are added one at a time.
   const [drafts, setDrafts] = useState<Record<Kind, string>>({ activities: '', fantasies: '' });
   const [busy, setBusy] = useState<Kind | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -39,18 +39,12 @@ export function IntimacyTopicsControl(): JSX.Element {
   useEffect(load, []);
 
   const onAdd = async (kind: Kind): Promise<void> => {
-    const names = drafts[kind]
-      .split('\n')
-      .map((n) => n.trim())
-      .filter(Boolean);
-    if (names.length === 0 || busy) return;
+    const name = drafts[kind].trim();
+    if (name === '' || busy) return;
     setBusy(kind);
     setError(null);
     try {
-      let next: IntimacyTopicsView | undefined;
-      for (const name of names) {
-        next = await window.selfos?.questionnairesAddIntimacyTopic({ kind, name });
-      }
+      const next = await window.selfos?.questionnairesAddIntimacyTopic({ kind, name });
       if (next) setView(next);
       setDrafts((d) => ({ ...d, [kind]: '' }));
     } catch {
@@ -115,20 +109,14 @@ export function IntimacyTopicsControl(): JSX.Element {
           )}
 
           {canManage ? (
-            <Field
-              label={`Add ${kind === 'activities' ? 'activities' : 'fantasies'} (one per line)`}
-            >
+            <Field label={kind === 'activities' ? 'Add an activity' : 'Add a fantasy'}>
               {(props) => (
                 <Stack gap={2}>
                   <Textarea
                     {...props}
                     rows={2}
                     value={drafts[kind]}
-                    placeholder={
-                      kind === 'activities'
-                        ? 'e.g. Wax play\nSensory deprivation'
-                        : 'e.g. Pirate roleplay\nMasquerade'
-                    }
+                    placeholder={kind === 'activities' ? 'e.g. Wax play' : 'e.g. Pirate roleplay'}
                     onChange={(e) => setDrafts((d) => ({ ...d, [kind]: e.target.value }))}
                   />
                   <div>

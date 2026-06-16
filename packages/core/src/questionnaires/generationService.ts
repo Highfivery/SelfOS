@@ -18,10 +18,12 @@ import {
   buildVariantUserMessage,
   GENERATION_SYSTEM,
   IMPROVE_SYSTEM,
+  INTIMACY_TYPE,
   VARIANT_SYSTEM,
 } from './aiPrompts';
 import { gatherGenerationContext, type GenerationContextRequest } from './contextProviders';
 import { readCustomIntimacyTopics } from './customTypeService';
+import { intimacyStarterQuestions } from './intimacyStarters';
 
 /**
  * AI question generation + per-question improve (08-questionnaires §3.1/§13.3). Mirrors `chatService`'s
@@ -178,18 +180,38 @@ export async function generateQuestions(
   const context = await gatherGenerationContext(deps.fs, deps.key, request.context);
   // The intimacy topic inventory (08 §16.5a) seeds the explicit framing for an intimacy questionnaire at the
   // explicit/unfiltered tiers — the built-in topics merged with the Owner's custom additions (vault prefs).
+  const topics = mergedIntimacyTopics(await readCustomIntimacyTopics(deps.fs));
+  const count = request.count ?? 5;
+  const isExplicitIntimacy =
+    request.type === INTIMACY_TYPE &&
+    (request.sensitivity === 'explicit' || request.sensitivity === 'unfiltered');
   const user = buildGenerationUserMessage({
     type: request.type,
     sensitivity: request.sensitivity,
     ...(request.brief !== undefined ? { brief: request.brief } : {}),
     context,
     existingPrompts: request.existingPrompts,
-    count: request.count ?? 5,
-    intimacyTopics: mergedIntimacyTopics(await readCustomIntimacyTopics(deps.fs)),
+    count,
+    intimacyTopics: topics,
   });
 
   const call = await runClaude(deps, GENERATION_SYSTEM, user, 'questionnaire.generate', 1500);
   if (!call.ok) return { ok: false, reason: call.reason, message: call.message };
+
+  // Explicit intimacy fallback (08 §16.5b): if the model declines to draft graphic sexual content, don't
+  // strand the Owner — seed editable, frank starter questions from the shared topic inventory instead.
+  const intimacyFallback = (): GenerateResult => {
+    const seenF = new Set(request.existingPrompts.map(norm));
+    const fresh = intimacyStarterQuestions(topics, request.sensitivity, count).filter(
+      (sq) => !seenF.has(norm(sq.prompt)),
+    );
+    return {
+      ok: true,
+      questions: fresh,
+      usage: call.usage,
+      message: 'The AI held back on this one, so I added explicit starter questions to edit.',
+    };
+  };
 
   // Generation returns {title, questions}. Tolerate a legacy bare-array reply too, so an older model
   // response still yields questions (just no title).
@@ -203,6 +225,7 @@ export async function generateQuestions(
       ? { questions: legacyArray.data }
       : null;
   if (!set) {
+    if (isExplicitIntimacy) return intimacyFallback();
     return {
       ok: false,
       reason: 'REFUSED',
@@ -220,6 +243,7 @@ export async function generateQuestions(
     }
   }
   if (questions.length === 0) {
+    if (isExplicitIntimacy) return intimacyFallback();
     return {
       ok: false,
       reason: 'REFUSED',

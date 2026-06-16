@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { visibleQuestions, allocationTotal } from '@selfos/core/questionnaires';
+import { visibleQuestions, allocationTotal, isDateEntryList } from '@selfos/core/questionnaires';
 import type { AnswerValue, AnswerMap } from '@selfos/core/questionnaires';
 import type { Question } from '@selfos/core/schemas';
 import { CrisisFooter } from './CrisisFooter';
@@ -137,7 +137,8 @@ function RankingControl({
   useEffect(() => {
     if (value === undefined && options.length > 0) set([...options]);
   }, []);
-  const order = Array.isArray(value) ? value : options;
+  // Ranking values are always a string list (this control only renders for `ranking` questions).
+  const order: string[] = Array.isArray(value) ? (value as string[]) : options;
   const move = (index: number, delta: number): void => {
     const target = index + delta;
     if (target < 0 || target >= order.length) return;
@@ -182,6 +183,60 @@ function RankingControl({
         </li>
       ))}
     </ol>
+  );
+}
+
+/** A repeatable list of {label, date} rows (e.g. anniversaries) → a `dateList` answer. Empty rows are kept
+ * in the working value but filtered out by `isAnswered`/persistence, so an untouched list reads as blank. */
+function DateListControl({
+  question,
+  value,
+  set,
+}: {
+  question: Question;
+  value: AnswerValue | undefined;
+  set: (value: AnswerValue) => void;
+}): JSX.Element {
+  const rows = isDateEntryList(value) ? value : [];
+  const update = (i: number, patch: Partial<{ label: string; date: string }>): void =>
+    set(rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  return (
+    <div className={styles.dateList}>
+      {rows.map((row, i) => (
+        <div key={i} className={styles.dateRow}>
+          <input
+            type="text"
+            className={styles.input}
+            value={row.label}
+            placeholder="e.g. Anniversary"
+            aria-label={`${question.prompt} — label ${i + 1}`}
+            onChange={(event) => update(i, { label: event.target.value })}
+          />
+          <input
+            type="date"
+            className={styles.input}
+            value={row.date}
+            aria-label={`${question.prompt} — date ${i + 1}`}
+            onChange={(event) => update(i, { date: event.target.value })}
+          />
+          <button
+            type="button"
+            className={styles.dateRemove}
+            aria-label={`Remove ${row.label || `date ${i + 1}`}`}
+            onClick={() => set(rows.filter((_, idx) => idx !== i))}
+          >
+            ×
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        className={styles.dateAdd}
+        onClick={() => set([...rows, { label: '', date: '' }])}
+      >
+        + Add a date
+      </button>
+    </div>
   );
 }
 
@@ -283,7 +338,8 @@ function MultiChoiceControl({
   const options = question.options ?? [];
   const presets = options.filter((o) => o !== OTHER);
   const hasOther = question.allowOther === true || options.includes(OTHER);
-  const selected = Array.isArray(value) ? value : [];
+  // multiChoice values are always a string list (this control only renders for `multiChoice` questions).
+  const selected: string[] = Array.isArray(value) ? (value as string[]) : [];
   const selectedPresets = selected.filter((s) => presets.includes(s));
   const customText = selected.filter((s) => !presets.includes(s)).join(', ');
   const [otherOpen, setOtherOpen] = useState(customText !== '');
@@ -467,6 +523,8 @@ function Control({
     }
     case 'slider':
       return <SliderControl question={question} value={value} set={set} />;
+    case 'dateList':
+      return <DateListControl question={question} value={value} set={set} />;
     case 'ranking':
       return <RankingControl question={question} value={value} set={set} />;
     case 'matrix': {

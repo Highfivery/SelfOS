@@ -50,7 +50,7 @@ export function IntakeFormPanel({
       if (
         questionId === 'liveWith' &&
         Array.isArray(value) &&
-        value.includes('Children') &&
+        (value as string[]).includes('Children') &&
         !next['parentalStatus']
       ) {
         next['parentalStatus'] = 'Have young kids';

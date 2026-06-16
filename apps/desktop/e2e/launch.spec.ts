@@ -3667,6 +3667,11 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
     // The basics section is a structured FORM; a form answer fills the owner-only profile (no AI).
     await expect(w.getByRole('heading', { name: 'The basics' })).toBeVisible();
     await w.getByLabel('What do you do for work?').fill('nurse');
+    await w.getByLabel('How would you describe how you look?').fill('tall, curly hair');
+    // A structured label+date entry (the new dateList control) → Person.importantDates.
+    await w.getByRole('button', { name: '+ Add a date' }).click();
+    await w.getByLabel('Any important dates to remember? — label 1').fill('Anniversary');
+    await w.getByLabel('Any important dates to remember? — date 1').fill('2014-06-21');
     await w.getByRole('button', { name: /Continue/ }).click();
 
     // Core done → the invited grid offers the deeper sections. Opening intimacy shows the shared 18+ gate.
@@ -3688,7 +3693,10 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
     await expect
       .poll(async () => (await getIntakeSession(fs, key, 'owner-1'))?.status)
       .toBe('complete');
-    expect((await getPerson(fs, key, 'owner-1'))?.occupation).toBe('nurse');
+    const filled = await getPerson(fs, key, 'owner-1');
+    expect(filled?.occupation).toBe('nurse');
+    expect(filled?.appearanceDescription).toBe('tall, curly hair'); // new basics field
+    expect(filled?.importantDates).toEqual([{ label: 'Anniversary', date: '2014-06-21' }]); // dateList
     const context = await buildContext(fs, key, 'owner-1');
     expect(context).toContain('thoughtful and steady'); // the portrait summary feeds own context
     expect(context).toContain('grief'); // a restricted fact still feeds the person's OWN coaching

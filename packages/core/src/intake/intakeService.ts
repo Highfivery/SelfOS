@@ -25,6 +25,7 @@ import {
   buildInterviewerAddendum,
   getIntakeSection,
   type IntakeFormQuestion,
+  type IntakeSectionDef,
 } from './intakeCatalog';
 import { intakeAnswerHashes } from './portraitFreshness';
 
@@ -149,26 +150,72 @@ function answerToString(value: IntakeAnswerValue | undefined): string {
   return String(value).trim();
 }
 
-/** Apply one form question's answer to a working `Person` copy; returns whether it changed. */
-function applyFormField(person: Person, m: IntakeFormQuestion, value: IntakeAnswerValue): boolean {
-  const key = m.field;
-  if (!key) return false;
-  if (m.list) {
-    const items = Array.isArray(value) ? value.map((s) => String(s).trim()).filter(Boolean) : [];
-    if (items.length === 0) return false;
-    (person as Record<string, unknown>)[key] = items;
-  } else {
-    const str = answerToString(value);
-    if (!str) return false;
-    (person as Record<string, unknown>)[key] = str;
+/**
+ * Fill the mapped owner-only `Person` fields from a section's clean answers, **grouping by target field** so
+ * multiple questions can contribute to ONE field without clobbering (§14.6): a `list` field concatenates
+ * (deduped), a `dateList` answer fills `importantDates`, and a plain string field **joins** its contributors
+ * in question order (e.g. healthNotes = physical conditions + the "anything else" catch-all). Idempotent —
+ * re-submitting a section rebuilds each field from the current answers (never appends a duplicate). A field
+ * with any `private` contributor is locked own-context-only. Returns whether the person changed.
+ */
+function fillPersonFields(
+  person: Person,
+  def: IntakeSectionDef,
+  clean: Record<string, IntakeAnswerValue>,
+): boolean {
+  if (!def.questions) return false;
+  const groups = new Map<PersonFieldKey, IntakeFormQuestion[]>();
+  for (const m of def.questions) {
+    if (!m.field || clean[m.q.id] === undefined) continue;
+    const arr = groups.get(m.field) ?? [];
+    arr.push(m); // def.questions order is preserved → stable join order
+    groups.set(m.field, arr);
   }
-  // Sensitive promoted fields (e.g. sexualOrientation/relationshipStyle/healthNotes) lock own-context-only.
-  if (m.private) {
-    const locked = new Set(person.privateFields ?? []);
-    locked.add(key);
-    person.privateFields = [...locked];
+  let changed = false;
+  for (const [field, ms] of groups) {
+    // Branch precedence: dateList → list → string. Every Person field is single-typed today, so a field
+    // never mixes a dateList question with a string/list one; if that ever changes, the dateList branch
+    // would win and drop the others — keep one type per target field.
+    let next: unknown;
+    if (ms.some((m) => m.q.type === 'dateList')) {
+      const dates = ms
+        .flatMap((m): unknown[] => {
+          const v = clean[m.q.id];
+          return Array.isArray(v) ? v : [];
+        })
+        .filter(
+          (e): e is { label: string; date: string } =>
+            e !== null && typeof e === 'object' && 'label' in e && 'date' in e,
+        )
+        .map((e) => ({ label: String(e.label).trim(), date: String(e.date).trim() }))
+        .filter((e) => e.label && e.date);
+      if (dates.length === 0) continue;
+      next = dates;
+    } else if (ms.some((m) => m.list)) {
+      const items = ms
+        .flatMap((m) => {
+          const v = clean[m.q.id];
+          return Array.isArray(v) ? v.map((s) => String(s).trim()) : [];
+        })
+        .filter(Boolean);
+      const dedup = [...new Set(items)];
+      if (dedup.length === 0) continue;
+      next = dedup;
+    } else {
+      const parts = ms.map((m) => answerToString(clean[m.q.id])).filter(Boolean);
+      if (parts.length === 0) continue;
+      next = parts.join('\n');
+    }
+    (person as Record<string, unknown>)[field] = next;
+    changed = true;
+    // Sensitive promoted fields (e.g. sexualOrientation/healthNotes) lock own-context-only.
+    if (ms.some((m) => m.private)) {
+      const locked = new Set(person.privateFields ?? []);
+      locked.add(field);
+      person.privateFields = [...locked];
+    }
   }
-  return true;
+  return changed;
 }
 
 /**
@@ -202,15 +249,8 @@ export async function submitSectionForm(
   }
 
   const person = await getPerson(fs, key, personId);
-  if (person) {
-    let changed = false;
-    for (const m of def.questions) {
-      if (!m.field) continue;
-      const value = clean[m.q.id];
-      if (value === undefined) continue;
-      if (applyFormField(person, m, value)) changed = true;
-    }
-    if (changed) await savePerson(fs, key, { ...person, updatedAt: at });
+  if (person && fillPersonFields(person, def, clean)) {
+    await savePerson(fs, key, { ...person, updatedAt: at });
   }
 
   section.answers = { ...section.answers, ...clean };

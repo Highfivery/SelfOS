@@ -322,6 +322,37 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-16 — Build (**Onboarding ↔ People-editor field reconciliation; spec 18 §14.4a/§14.6/§14.9** on
+  `feat/onboarding-field-coverage`, off `main`, NOT merged). Made onboarding cover **every** People-editor About
+  field (+ Pronouns/Birthday) so the self's profile has one home (onboarding), no gaps, no double-asks. Cross-ref
+  found 3 gaps + 1 duplicate. **Asked first** (4 forks; user delegated the open ones to me — "no legacy/back-compat
+  needed, what do you suggest"): (1) **appearance** → added a basics `appearanceDescription` longText (feeds coaching
+  - the self's dream images); (2) **interests** → mapped Joy & play's existing `passions` "What are you into?" →
+    `{ field: 'interests', list: true }` (the old `hobbies`→interests question was removed in the trim — reuse, don't
+    re-add, so no overlap); (3) **importantDates** → the user asked to **let onboarding capture structured data**, so
+    built a **new shared `dateList` answer type** (value `{label,date}[]`, a `DateEntry`): added to `AnswerTypeSchema`,
+    widened `IntakeAnswerValue` + questionnaire `Answer.value`, a `DateListControl` (add/type/remove rows) in
+    `@selfos/answering`, and a basics `importantDates` question → `Person.importantDates`; the questionnaire builder
+    does NOT expose it as authorable (§12, no half-built surface); (4) **healthNotes double-write** (physicalConditions
+  - the "anything else" catch-all both targeted it → last-write clobber) → **fixed the proper way**: replaced
+    `applyFormField` (per-question, last wins) with **`fillPersonFields`** that **groups answers by target field** —
+    string fields JOIN contributors in question order, list fields concat+dedupe, a `dateList` fills importantDates;
+    **idempotent** on re-submit (rebuilds from current answers, never appends), and a field locks `private` if ANY
+    contributor is private. `isQuestionVisible` already handles array triggers; `isAnswered`/`formatAnswerForDisplay`
+  - an `isDateEntryList` guard handle `dateList`. Code-reviewer **ship** (idempotency / join-order / privacy-lock /
+    trust-boundary / schema-valid importantDates / widened-union-doesn't-break-relay all verified airtight; applied the
+    one should-fix — `:focus-visible` rings on the new date buttons — + a precedence-caveat docstring; left index-key
+  - cleared-field-doesn't-clear [pre-existing] as nits). Gate green: typecheck (node + web/DOM-lib), lint, format,
+    **415 core + 11 relay + 498 desktop** unit (+ dateList isAnswered/format, field-coverage [appearance/importantDates/
+    passions→interests], healthNotes-join-idempotent, DateListControl RTL), **69 E2E** (the onboarding field-fill test
+    now also enters a structured date + appearance → decrypts the vault and asserts `Person.importantDates` +
+    `appearanceDescription` round-trip). Visual QA blocked in the web preview (its fake host gates the onboarding form
+    behind `aiAvailable` even with a key set) — the new control is instead proven by the real-Electron E2E round-trip +
+    RTL. **Lesson: when onboarding owns the self's profile, every editable People field needs exactly ONE promoting
+    question — and multiple questions targeting one field must be GROUPED + joined (idempotent), never filled in a
+    per-question loop that clobbers (last-write-wins); reuse an existing question (passions→interests) before adding a
+    new one to avoid re-introducing overlap.**
+
 - 2026-06-16 — Build (**Distribution — versioning, release builds & the README; SPEC 19 BUILT** on
   `feat/distribution`, off `main`, **NOT merged** — the user cuts the first real release to verify the pipeline).
   CI/packaging/docs only, no app features. **release-please** (manifest mode): `release-please-config.json` +

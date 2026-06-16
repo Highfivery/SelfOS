@@ -109,6 +109,14 @@ describe('answering — isAnswered per type', () => {
     expect(isAnswered(matrix, { r1: 3, r2: 4 })).toBe(true);
   });
 
+  it('treats a dateList as answered only with a complete label+date row', () => {
+    const dl = q({ id: 'a', type: 'dateList' });
+    expect(isAnswered(dl, [])).toBe(false);
+    expect(isAnswered(dl, [{ label: 'Anniversary', date: '' }])).toBe(false);
+    expect(isAnswered(dl, [{ label: '', date: '2014-06-21' }])).toBe(false);
+    expect(isAnswered(dl, [{ label: 'Anniversary', date: '2014-06-21' }])).toBe(true);
+  });
+
   it('requires an allocation to total exactly 100', () => {
     const alloc = q({ id: 'a', type: 'allocation', options: ['x', 'y'] });
     expect(allocationTotal({ x: 60, y: 30 })).toBe(90);
@@ -165,6 +173,15 @@ describe('answering — formatAnswerForDisplay', () => {
         X: 0,
       }),
     ).toBe('X: 0, Y: 100');
+  });
+
+  it('renders a dateList as "label: date" pairs, dropping incomplete rows', () => {
+    expect(
+      formatAnswerForDisplay(q({ id: 'a', type: 'dateList' }), [
+        { label: 'Anniversary', date: '2014-06-21' },
+        { label: 'Incomplete', date: '' },
+      ]),
+    ).toBe('Anniversary: 2014-06-21');
   });
 
   it('returns an empty string for an unanswered value', () => {

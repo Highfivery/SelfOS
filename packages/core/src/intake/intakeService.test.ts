@@ -158,6 +158,41 @@ describe('intakeService', () => {
     expect(usage).toHaveLength(0);
   });
 
+  it('fills appearance, importantDates (dateList, incomplete rows dropped), and interests (from passions)', async () => {
+    const fs = await setup();
+    await submitSectionForm(
+      fs,
+      key,
+      'p1',
+      'basics',
+      {
+        appearanceDescription: 'tall, curly hair, glasses',
+        importantDates: [
+          { label: 'Anniversary', date: '2014-06-21' },
+          { label: 'Incomplete', date: '' },
+        ],
+      },
+      NOW,
+    );
+    await submitSectionForm(fs, key, 'p1', 'joy-play', { passions: ['Music', 'Travel'] }, NOW);
+    const p = await getPerson(fs, key, 'p1');
+    expect(p?.appearanceDescription).toBe('tall, curly hair, glasses');
+    expect(p?.importantDates).toEqual([{ label: 'Anniversary', date: '2014-06-21' }]);
+    expect(p?.interests).toEqual(['Music', 'Travel']);
+  });
+
+  it('joins multiple questions targeting one field instead of clobbering, and is idempotent (healthNotes)', async () => {
+    const fs = await setup();
+    const answers = { physicalConditions: 'asthma', healthOther: 'sensitive to caffeine' };
+    await submitSectionForm(fs, key, 'p1', 'health', answers, NOW);
+    const p = await getPerson(fs, key, 'p1');
+    expect(p?.healthNotes).toContain('asthma'); // physicalConditions — NOT clobbered
+    expect(p?.healthNotes).toContain('sensitive to caffeine'); // healthOther catch-all
+    // Re-submitting the same answers rebuilds the field (no append/duplication).
+    await submitSectionForm(fs, key, 'p1', 'health', answers, NOW);
+    expect((await getPerson(fs, key, 'p1'))?.healthNotes).toBe(p?.healthNotes);
+  });
+
   it('locks the sensitive promoted fields to own-context-only (privateFields)', async () => {
     const fs = await setup();
     await submitSectionForm(

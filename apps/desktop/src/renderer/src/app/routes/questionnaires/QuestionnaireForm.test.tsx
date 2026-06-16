@@ -116,6 +116,20 @@ describe('QuestionnaireForm', () => {
     expect(screen.getByText('Cannabis — how often?')).toBeInTheDocument();
   });
 
+  it('captures structured label+date rows for a dateList question (add, type, remove)', async () => {
+    render(<Harness questions={[q({ id: 'd', type: 'dateList', prompt: 'Important dates' })]} />);
+    // No rows until you add one.
+    expect(screen.queryByLabelText('Important dates — label 1')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: '+ Add a date' }));
+    const label = screen.getByLabelText('Important dates — label 1');
+    await userEvent.type(label, 'Wedding day'); // multi-word label types fine
+    expect(label).toHaveValue('Wedding day');
+    expect(screen.getByLabelText('Important dates — date 1')).toBeInTheDocument();
+    // Remove drops the row.
+    await userEvent.click(screen.getByRole('button', { name: /Remove Wedding day/ }));
+    expect(screen.queryByLabelText('Important dates — label 1')).toBeNull();
+  });
+
   it('picks a rating point on its min→max scale', async () => {
     render(
       <Harness

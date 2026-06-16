@@ -1,6 +1,6 @@
 # 19 — Distribution: versioning, release builds & the README
 
-> **Status:** Review · _last updated 2026-06-15_
+> **Status:** Approved · _last updated 2026-06-16_
 >
 > SelfOS has no way to be installed by a normal person yet — there's no downloadable build, no release
 > process, and the version is a hand-managed `0.0.0`. This spec adds **fully-automated versioning** (driven
@@ -111,12 +111,18 @@ Move the current technical content (tech stack, build phase status, dev commands
 No vault data, no schema. The configuration artifacts:
 
 - **Version source of truth** — `apps/desktop/package.json` `version` (read by both `__APP_VERSION__` and
-  electron-builder for the installer + `appId`). release-please manages this file. (The root `package.json`
-  version is the monorepo's and is left at `0.0.0` / kept in sync only if convenient — the **app** version is
-  what ships.)
+  electron-builder for the installer + `appId`). release-please bumps it via an `extra-files` JSON updater.
+  Because the changelog is wanted at the repo **root** (§11) and release-please writes the changelog inside the
+  package directory, the manifest **package is keyed at the repo root (`.`)**, with `release-type: node`. That
+  means release-please also bumps the **root** `package.json` (its primary versioned file), so the root + app
+  versions move **in lockstep** rather than the root staying at `0.0.0` — harmless (they stay in sync); the
+  **app** version is the one that ships.
 - **release-please config** — `release-please-config.json` + `.release-please-manifest.json` at the repo root,
-  in **manifest mode** scoped to the **single package `apps/desktop`** (`release-type: node`,
-  `package-name: SelfOS`), tagging `vX.Y.Z` and writing `apps/desktop/CHANGELOG.md` (or root — §11).
+  in **manifest mode** with the package keyed at the root (`.`) (`release-type: node`, `package-name: SelfOS`,
+  `include-component-in-tag: false` → tags `vX.Y.Z`, `bump-minor-pre-major: true` so the first `feat` → `0.1.0`,
+  `draft: true` for draft-until-asset, `bootstrap-sha` pinned to the current `main` HEAD so the first changelog
+  starts clean). The changelog is the root `CHANGELOG.md`; `apps/desktop/package.json` is bumped via
+  `extra-files`.
 - **electron-builder `publish`** — add a `publish` block to `apps/desktop/electron-builder.yml`:
   `provider: github`, `owner: Highfivery`, `repo: SelfOS` (so `--publish` uploads the `.dmg` to the matching
   Release). `mac.target` stays `dmg`; `win`/`linux` remain declared but are not built by the release matrix
@@ -128,21 +134,27 @@ No vault data, no schema. The configuration artifacts:
   1. **`release-please` job** (ubuntu, cheap): runs `googleapis/release-please-action`, which maintains the
      Release PR and, on its merge, creates the tag + GitHub Release. Outputs `releases_created` / `tag_name`.
   2. **`build-macos` job** (`runs-on: macos-latest`, **`if: needs.release-please.outputs.releases_created`**):
-     checkout the tag → `pnpm install --frozen-lockfile` → `pnpm --filter @selfos/desktop build` →
-     `pnpm --filter @selfos/desktop exec electron-builder --mac --publish always`. Uses the default
-     `GITHUB_TOKEN` (with `permissions: contents: write`) as `GH_TOKEN` to upload the `.dmg` to the Release —
-     **no extra secret** needed for same-repo publishing, and **no API key or vault data** is in the build.
+     checkout the **release commit by `github.sha`** (a _draft_ release has no real git tag yet — it's created
+     when the release is published) → `pnpm install --frozen-lockfile` → `pnpm --filter @selfos/desktop build`
+     → `pnpm --filter @selfos/desktop exec electron-builder --mac --publish always` (with
+     `SELFOS_BUILD_SHA: github.sha` so the About line shows the release commit) → finally
+     `gh release edit <tag> --draft=false` to flip the draft to published now the `.dmg` is attached. Uses the
+     default `GITHUB_TOKEN` (with `permissions: contents: write`) as `GH_TOKEN` to upload the `.dmg` to the
+     Release — **no extra secret** needed for same-repo publishing, and **no API key or vault data** is in the
+     build.
 - **`apps/desktop/package.json`** — a convenience script `"release:build": "electron-builder --mac --publish always"` (also runnable locally for an emergency manual build).
-- **About version** — unchanged code; works because the version file is bumped pre-build (§3.3). If §11's
-  enrichment is taken: inject `__BUILD_SHA__`/`__BUILD_DATE__` via electron-vite `define` (the
-  `__APP_VERSION__` pattern) and show them under the version in About.
+- **About version** — the version file is bumped pre-build (§3.3). `buildInfo.ts` injects
+  `__APP_VERSION__`/`__BUILD_SHA__`/`__BUILD_DATE__` via `define` across `electron.vite.config.ts`,
+  `vite.web.config.ts`, and `vitest.config.ts`; `AboutVersion` renders `v{version} · {sha} · {date}` (omitting
+  a `dev`/empty SHA). The release job passes `SELFOS_BUILD_SHA: github.sha` so the SHA is the release commit.
 - **Existing `ci.yml`** — unchanged (lint/typecheck/test on PRs + main); the release workflow is separate.
 - **Docs** — `README.md` rewritten (§3.4); `CONTRIBUTING.md` created from the old technical README content.
 
 ## 6. IPC / API contracts
 
-None new. The `app:version` IPC already returns `__APP_VERSION__`; About already consumes it. (If the §11
-enrichment is taken, that IPC's payload grows to include sha/date — additive.)
+None new. The `app:version` IPC already returns `__APP_VERSION__`; About consumes it. The SHA/date enrichment
+(§11) is injected as `define` globals (`__BUILD_SHA__`/`__BUILD_DATE__`) and read directly by `AboutVersion` —
+**not** added to the IPC payload.
 
 ## 7. States & edge cases
 
@@ -177,9 +189,10 @@ version display is unchanged (already accessible). N/A beyond that.
 
 ## 10. Testing strategy
 
-- **Unit (desktop):** assert `__APP_VERSION__` equals `apps/desktop/package.json` `version` (drift guard); the
-  `app:version` IPC returns it. (If §11 enrichment: the payload includes sha/date.)
-- **Component (RTL):** the About page renders the injected version (already covered; extend if enriched).
+- **Unit (desktop):** assert `__APP_VERSION__` equals `apps/desktop/package.json` `version` (drift guard, in
+  `settings/version.test.ts`). SHA/date are `define` globals, not in the IPC payload.
+- **Component (RTL):** the About page renders the injected version plus SHA + date (`AboutVersion`; covered by
+  `customRows.test.tsx`).
 - **CI validation:** the **release workflow is exercised by performing a real first release** (the pipeline
   can't be meaningfully E2E-mocked) — confirm the Release PR opens, merging it bumps the version + creates the
   Release, the macOS job builds + uploads a `.dmg`, and a downloaded build **opens and shows the matching
@@ -188,7 +201,7 @@ version display is unchanged (already accessible). N/A beyond that.
   unsigned bypass included).
 - Run `pnpm typecheck` after any test changes (memory `vitest-does-not-typecheck`).
 
-## 11. Open questions
+## 11. Resolved questions
 
 _All resolved (2026-06-15):_
 
@@ -200,7 +213,7 @@ _All resolved (2026-06-15):_
   flips to published (users never see an asset-less release).
 - **CONTRIBUTING.md** → move the current README technical content **verbatim** now; refresh later.
 
-The spec is build-ready pending final approval; only the real first-release smoke test (§10) remains.
+Built (2026-06-16); only the real first-release smoke test (§10) remains.
 
 ## 12. Resolved decisions (2026-06-15)
 
@@ -221,6 +234,32 @@ The spec is build-ready pending final approval; only the real first-release smok
 
 ## 13. Changelog
 
+- 2026-06-16 — **Approved + BUILT** (on `feat/distribution`, NOT merged — the user cuts the first real release
+  to verify the pipeline). **release-please** (manifest mode): `release-please-config.json` +
+  `.release-please-manifest.json`, package keyed at the repo **root** (`.`, `release-type: node`,
+  `package-name: SelfOS`) so the changelog lands at **root `CHANGELOG.md`**; `apps/desktop/package.json` is
+  bumped via an `extra-files` JSON updater (root `package.json` bumps in lockstep — §4 corrected, it is **not**
+  pinned at `0.0.0`); `include-component-in-tag: false` → `vX.Y.Z` tags; `bump-minor-pre-major: true` (and
+  **NOT** `bump-patch-for-minor-pre-major`, so a `feat` → minor → first release **0.1.0**); `draft: true`
+  (draft-until-asset); `bootstrap-sha` = current `main` HEAD (clean first changelog). **`release.yml`**: job1
+  release-please (ubuntu) → job2 build-macos (`if releases_created`) checks out **`github.sha`** (a draft
+  release has no real tag yet), `pnpm --filter @selfos/desktop build`, `electron-builder --mac --publish always`
+  (GITHUB_TOKEN as GH_TOKEN, `SELFOS_BUILD_SHA: github.sha`), then `gh release edit <tag> --draft=false`. No
+  extra secret, no API key/vault in the build. **electron-builder.yml**: `publish` github block
+  (Highfivery/SelfOS) + a `release:build` script. **About enrichment**: `buildInfo.ts` injects
+  `__APP_VERSION__`/`__BUILD_SHA__`/`__BUILD_DATE__` via `define` across the electron-vite, web, and vitest
+  configs; `AboutVersion` shows `v{version} · {sha} · {date}` (omitting a `dev`/empty SHA — **not** over IPC).
+  **README** rewritten non-technical (about + "your data is yours" + macOS install incl. the unsigned Gatekeeper
+  bypass + bring-your-own Claude-key cost note + crisis line verbatim); old technical README → **CONTRIBUTING.md**
+  (with a current Status line + a release-process section). Gate green: typecheck (node + web), lint, format,
+  **411 core + 11 relay + 497 desktop** unit (+2: the `__APP_VERSION__`↔package.json drift guard + the enriched
+  About render); real Electron build verified the SHA/date land in the renderer bundle. **Code-reviewer ship**;
+  **doc-auditor caught a real config bug** — `bump-patch-for-minor-pre-major: true` would have made the first
+  `feat` → `0.0.1`, not `0.1.0`; removed. **Lesson: a `define`-injected build global is the clean way to enrich
+  the About version (SHA/date) without growing the IPC payload — share one `buildInfo.ts` across the Electron,
+  web, and vitest configs so the drift-guard test sees the same value; and release-please's pre-1.0 bump flags
+  are a footgun — `bump-patch-for-minor-pre-major` silently demotes `feat` to a patch.** The release pipeline
+  itself can only be validated by a real first release (§10).
 - 2026-06-15 — created (Review). Decisions resolved ask-first. Automates versioning (release-please), adds the
   macOS release-build workflow publishing the `.dmg` to GitHub Releases, auto-updates the About version, and
   rewrites the README for non-technical users (dev docs → CONTRIBUTING.md). Build-ready pending final approval.

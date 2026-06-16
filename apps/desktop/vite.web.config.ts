@@ -1,6 +1,7 @@
 import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { buildDefines } from './buildInfo';
 
 /**
  * Standalone **web build** of the renderer for the Capacitor/iOS shell (07-mobile-platform §5.3/§5.4).
@@ -10,6 +11,8 @@ import react from '@vitejs/plugin-react';
  */
 export default defineConfig({
   root: resolve(import.meta.dirname),
+  // Version + build SHA/date globals, matching the Electron build (19-distribution §3.3/§5).
+  define: buildDefines(),
   plugins: [react()],
   resolve: {
     alias: {

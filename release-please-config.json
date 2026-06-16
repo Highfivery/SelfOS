@@ -1,0 +1,17 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "454d429fdfcbfa185c80a9a0919a5f285002f6b9",
+  "include-component-in-tag": false,
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "package-name": "SelfOS",
+      "changelog-path": "CHANGELOG.md",
+      "draft": true,
+      "bump-minor-pre-major": true,
+      "extra-files": [
+        { "type": "json", "path": "apps/desktop/package.json", "jsonpath": "$.version" }
+      ]
+    }
+  }
+}

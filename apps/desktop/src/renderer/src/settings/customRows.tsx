@@ -53,9 +53,16 @@ export function AboutVersion(): JSX.Element {
     };
   }, []);
 
+  // Build SHA + date make a specific build identifiable (19-distribution §3.3); injected at build
+  // time. A `'dev'` SHA / empty values (builds outside git) are omitted so the line reads cleanly.
+  const detail = [__BUILD_SHA__, __BUILD_DATE__]
+    .filter((part) => part && part !== 'dev')
+    .join(' · ');
+  const label = version === '…' ? version : `v${version}${detail ? ` · ${detail}` : ''}`;
+
   return (
     <Text size="sm" tone="secondary">
-      {version}
+      {label}
     </Text>
   );
 }

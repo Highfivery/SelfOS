@@ -321,7 +321,7 @@ test('people: the merged Notes field persists with a share lock (15 §4.3)', asy
   }
 });
 
-test('people: descriptive About fields persist (health/faith now inline)', async () => {
+test('people: contact-context About fields persist (deep self-fields owned by onboarding)', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);
   try {
@@ -332,18 +332,21 @@ test('people: descriptive About fields persist (health/faith now inline)', async
     await w.getByLabel('Gender', { exact: true }).selectOption('Non-binary');
     await w.getByLabel('Appearance', { exact: true }).fill('tall, curly hair');
     await w.getByLabel('Occupation', { exact: true }).fill('nurse');
-    await w.getByLabel('Health notes', { exact: true }).fill('manages asthma');
-    await w.getByLabel('Faith', { exact: true }).fill('Buddhist');
+    await w.getByLabel('Relationship status', { exact: true }).fill('Married');
+    await w.getByLabel('Location', { exact: true }).fill('Seattle');
+    // The deeply personal self-profile fields are owned by onboarding now — not editable here.
+    await expect(w.getByLabel('Health notes', { exact: true })).toHaveCount(0);
+    await expect(w.getByLabel('Sexual orientation', { exact: true })).toHaveCount(0);
     await w.getByRole('button', { name: 'Save' }).click();
 
-    // Reopen and confirm every field round-tripped through the encrypted profile.
+    // Reopen and confirm every kept field round-tripped through the encrypted profile.
     await w.getByRole('button', { name: 'Tester Subject' }).click();
     await w.getByRole('button', { name: 'About', exact: true }).click();
     await expect(w.getByLabel('Gender', { exact: true })).toHaveValue('Non-binary');
     await expect(w.getByLabel('Appearance', { exact: true })).toHaveValue('tall, curly hair');
     await expect(w.getByLabel('Occupation', { exact: true })).toHaveValue('nurse');
-    await expect(w.getByLabel('Health notes', { exact: true })).toHaveValue('manages asthma');
-    await expect(w.getByLabel('Faith', { exact: true })).toHaveValue('Buddhist');
+    await expect(w.getByLabel('Relationship status', { exact: true })).toHaveValue('Married');
+    await expect(w.getByLabel('Location', { exact: true })).toHaveValue('Seattle');
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -365,8 +368,8 @@ test('shareability: a locked field never reaches a related person’s assembled 
     await w.getByText('Robin').click();
     await w.getByRole('button', { name: 'About', exact: true }).click();
     await w.getByLabel('Occupation', { exact: true }).fill('SHARED-NURSE');
-    await w.getByLabel('Health notes', { exact: true }).fill('LOCKED-ASTHMA');
-    await w.getByRole('button', { name: /Health notes: shared/i }).click(); // lock it
+    await w.getByLabel('Location', { exact: true }).fill('LOCKED-CITY');
+    await w.getByRole('button', { name: /Location: shared/i }).click(); // lock it
     await w.getByRole('button', { name: 'Save' }).click();
 
     // Relate Robin to the subject so Robin's SHARED data flows into the subject's context.
@@ -383,7 +386,7 @@ test('shareability: a locked field never reaches a related person’s assembled 
     if (!key) throw new Error('master key missing');
     const context = await buildContext(fs, key, 'owner-1');
     expect(context).toContain('SHARED-NURSE'); // a shared field reaches the related person's block
-    expect(context).not.toContain('LOCKED-ASTHMA'); // a LOCKED field never does
+    expect(context).not.toContain('LOCKED-CITY'); // a LOCKED field never does
 
     // The reworked About editor (every field + its ShareToggle + the bulk control) fits at phone width.
     // Robin's editor is already open (on Relationships); just resize and switch to the About tab.
@@ -3925,6 +3928,70 @@ test('onboarding: intimacy conditionals reveal under their trigger (penis/vulva/
       .getByRole('radio', { name: 'Love it' })
       .click();
     await expect(w.getByText('Dirty talk — things you love to hear')).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('onboarding: living-with-children auto-fills Children, and a substance reveals its frequency', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  {
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('autofill e2e: master key missing');
+    await writeEncryptedJson(
+      fs,
+      'people/owner-1/intake/session.enc',
+      {
+        id: 'intake-autofill',
+        schemaVersion: 1,
+        personId: 'owner-1',
+        status: 'inProgress',
+        sections: ['basics', 'life-now', 'values', 'want'].map((id) => ({
+          id,
+          status: id === 'want' ? 'notStarted' : 'skipped',
+          restricted: false,
+          messages: [],
+          answers: {},
+        })),
+        startedAt: 'now',
+        updatedAt: 'now',
+      },
+      key,
+    );
+  }
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: /Onboarding/ }).click();
+
+    // "Your life now": picking "Children" in who-you-live-with auto-selects the Children question.
+    await w.getByRole('button', { name: /Your life now/ }).click();
+    const children = w.getByRole('radiogroup', { name: 'Children' });
+    await expect(children.getByRole('radio', { name: 'Have young kids' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    );
+    await w
+      .getByRole('group', { name: 'Who do you live with?' })
+      .getByRole('button', { name: 'Children' })
+      .click();
+    await expect(children.getByRole('radio', { name: 'Have young kids' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+
+    // "Health & wellbeing": a per-substance frequency reveals only once that substance is selected.
+    await w.getByRole('button', { name: /Health & wellbeing/ }).click();
+    await expect(w.getByText('Cannabis — how often?')).toHaveCount(0);
+    await w
+      .getByRole('group', { name: 'Which recreational substances do you use, if any?' })
+      .getByRole('button', { name: 'Cannabis / weed' })
+      .click();
+    await expect(w.getByText('Cannabis — how often?')).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

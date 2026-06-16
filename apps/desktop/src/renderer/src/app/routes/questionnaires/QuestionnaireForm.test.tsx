@@ -70,6 +70,52 @@ describe('QuestionnaireForm', () => {
     expect(field).toHaveValue('My own answer');
   });
 
+  it('preserves spaces while typing a multi-choice "Other" write-in (multi-word entries)', async () => {
+    render(
+      <Harness
+        questions={[
+          q({
+            id: 'a',
+            type: 'multiChoice',
+            prompt: 'Hobbies',
+            options: ['Reading'],
+            allowOther: true,
+          }),
+        ]}
+      />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Other' }));
+    const field = await screen.findByLabelText('Hobbies — other');
+    // Typing a space mid-entry must NOT be trimmed away on each keystroke (the regression we fixed).
+    await userEvent.type(field, 'rock climbing');
+    expect(field).toHaveValue('rock climbing');
+  });
+
+  it('reveals a question when a multi-choice trigger CONTAINS the branch value', async () => {
+    render(
+      <Harness
+        questions={[
+          q({
+            id: 'used',
+            type: 'multiChoice',
+            prompt: 'Which?',
+            options: ['Cannabis', 'Cocaine'],
+          }),
+          q({
+            id: 'freq',
+            type: 'singleChoice',
+            prompt: 'Cannabis — how often?',
+            options: ['Rarely', 'Daily'],
+            branch: { whenQuestionId: 'used', equals: 'Cannabis', action: 'show' },
+          }),
+        ]}
+      />,
+    );
+    expect(screen.queryByText('Cannabis — how often?')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Cannabis' }));
+    expect(screen.getByText('Cannabis — how often?')).toBeInTheDocument();
+  });
+
   it('picks a rating point on its min→max scale', async () => {
     render(
       <Harness

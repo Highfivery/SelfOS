@@ -68,15 +68,6 @@ function multi(id: string, prompt: string, options: string[], branch?: BranchRul
     ...(branch ? { branch } : {}),
   };
 }
-function rating(id: string, prompt: string, minLabel: string, maxLabel: string): Question {
-  return {
-    id,
-    type: 'rating',
-    prompt,
-    required: false,
-    scale: { min: 1, max: 5, minLabel, maxLabel },
-  };
-}
 function yesno(id: string, prompt: string): Question {
   return { id, type: 'yesNo', prompt, required: false };
 }
@@ -111,7 +102,9 @@ function slider(
     scale: { min: 0, max: 10, minLabel, midLabel, maxLabel },
   };
 }
-/** A branch: show this question only when an earlier singleChoice/yesNo answer equals `value`. */
+/** A branch: show this question only when an earlier answer equals `value`. The trigger is usually a
+ * singleChoice/yesNo (a scalar), but a multiChoice trigger also works — it matches when the selected
+ * array CONTAINS `value` (e.g. a per-substance frequency under "which substances do you use"). */
 function when(questionId: string, value: string | boolean): BranchRule {
   return { whenQuestionId: questionId, equals: value, action: 'show' };
 }
@@ -132,6 +125,15 @@ function grouped(group: string, items: IntakeFormQuestion[]): IntakeFormQuestion
 // Shared option sets reused across questions.
 const AGE_RANGES = ['Under 10', '10–12', '13–15', '16–18', '19–24', '25+', 'Prefer not to say'];
 const FREQ = ['Rarely', 'A few times a month', 'Weekly', 'A few times a week', 'Daily'];
+// Per-substance use frequency (§ health Lifestyle) — each shown only when that substance is selected.
+const SUBSTANCE_FREQ = [
+  'Rarely',
+  'Occasionally',
+  'Weekly',
+  'Most days',
+  'Daily',
+  'Prefer not to say',
+];
 // The consensual-adult activity checklist, reused for into-it / curious-to-try / hard-limits (§14.5 D).
 // Sourced from the SHARED `INTIMACY_TOPICS` inventory (08 §16.5a — one source of truth with questionnaire
 // generation); `'Other'` is the intake form's free-text escape, appended here.
@@ -258,13 +260,17 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
     adult: false,
     opener: 'A snapshot of your life right now.',
     questions: [
+      // One question for the home setup (replaces the old livingSituation + liveWith pair). Picking
+      // "Children" auto-fills the Children question below (handled in the onboarding form panel).
       f(
-        single('livingSituation', 'Your living situation', [
-          'Live alone',
-          'With a partner',
-          'With family',
-          'With roommates',
-          'With kids',
+        multi('liveWith', 'Who do you live with?', [
+          'Partner',
+          'Children',
+          'Parents',
+          'Other family',
+          'Roommates',
+          'Pets',
+          'I live alone',
           'Other',
         ]),
         { field: 'livingSituation' },
@@ -302,92 +308,6 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           'Walk me through a normal day, start to finish.',
         ),
       ),
-      f(
-        multi('hobbies', 'How do you spend your free time?', [
-          'Reading',
-          'Fitness / sport',
-          'Music',
-          'Gaming',
-          'Cooking',
-          'Outdoors / hiking',
-          'Art / making',
-          'Travel',
-          'Movies / TV',
-          'Other',
-        ]),
-        { field: 'interests', list: true },
-      ),
-      f(
-        rating(
-          'workSatisfaction',
-          'How satisfied are you with your work?',
-          'Not at all',
-          'Completely',
-        ),
-      ),
-      f(
-        rating(
-          'moneyStress',
-          'How much does money stress you right now?',
-          'Not at all',
-          'A great deal',
-        ),
-      ),
-      f(rating('connected', 'How socially connected do you feel?', 'Isolated', 'Deeply connected')),
-      f(
-        multi('topStressor', "What's weighing on you most right now?", [
-          'Work',
-          'Money',
-          'Relationship',
-          'Health',
-          'Family',
-          'Purpose',
-          'Loneliness',
-          'Other',
-        ]),
-      ),
-      f(
-        longText(
-          'joy',
-          "What's bringing you joy lately?",
-          'e.g. my kids, a new hobby, weekends away',
-        ),
-      ),
-      f(
-        longText(
-          'recentChange',
-          'Any big recent change in your life?',
-          'e.g. a move, a new job, a breakup, a loss',
-        ),
-      ),
-      f(
-        longText(
-          'perfectDay',
-          'What would a perfect day look like for you?',
-          'From waking up to bed.',
-        ),
-      ),
-      f(rating('mood', 'Your overall mood lately', 'Low', 'Great')),
-      f(
-        multi('liveWith', 'Who do you live with?', [
-          'On my own',
-          'Partner',
-          'Kids',
-          'Parents',
-          'Roommates',
-          'Pets',
-        ]),
-      ),
-      f(
-        single('workSchedule', 'Your usual schedule', [
-          'Nine-to-five',
-          'Shift work',
-          'Flexible / my own hours',
-          'Student',
-          'Not working right now',
-        ]),
-      ),
-      f(longText('typicalWeekend', 'What does a typical weekend look like for you?')),
     ],
   },
   {
@@ -442,7 +362,15 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         ]),
         { field: 'faith' },
       ),
-      f(rating('faithImportance', 'How important is faith to you?', 'Not at all', 'Central')),
+      f(
+        slider(
+          'faithImportance',
+          'How important is faith to you?',
+          'Not at all',
+          'Somewhat',
+          'Central',
+        ),
+      ),
       f(
         multi('personality', 'Which feel true of you?', [
           'Introvert',
@@ -455,7 +383,7 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           'Realist',
         ]),
       ),
-      f(rating('riskTolerance', 'Your appetite for risk', 'Cautious', 'Bold')),
+      f(slider('riskTolerance', 'Your appetite for risk', 'Cautious', 'Balanced', 'Bold')),
       f(
         shortText(
           'selfDescribe',
@@ -585,17 +513,6 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         ]),
       ),
       f(
-        single('topPriority', 'Your number-one priority right now', [
-          'Career',
-          'Health',
-          'Relationships',
-          'Money',
-          'Personal growth',
-          'Family',
-          'Fun & freedom',
-        ]),
-      ),
-      f(
         shortText(
           'learnSkill',
           'A skill you’d love to learn',
@@ -629,7 +546,7 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
     contentNote: 'Everything here stays private to your own coaching. Share only what you want to.',
     questions: [
       ...grouped('Sleep & energy', [
-        f(rating('sleep', 'How well do you sleep?', 'Poorly', 'Great')),
+        f(slider('sleep', 'How well do you sleep?', 'Poorly', 'Okay', 'Great')),
         f(
           single('sleepSchedule', 'Your usual sleep schedule', [
             'Early to bed / early up',
@@ -638,8 +555,8 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'Shift work',
           ]),
         ),
-        f(rating('energy', 'Your energy through the day', 'Drained', 'Energized')),
-        f(rating('stress', 'Your stress level lately', 'Calm', 'Overwhelmed')),
+        f(slider('energy', 'Your energy through the day', 'Drained', 'Steady', 'Energized')),
+        f(slider('stress', 'Your stress level lately', 'Calm', 'Manageable', 'Overwhelmed')),
       ]),
       ...grouped('Lifestyle', [
         f(
@@ -663,12 +580,83 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         f(single('alcohol', 'Alcohol', ['None', 'Occasionally', 'Weekly', 'Most days', 'Daily'])),
         f(single('smoking', 'Smoking / vaping', ['No', 'Occasionally', 'Daily'])),
         f(
-          single('substances', 'Recreational substances', [
-            'No',
-            'Occasionally',
-            'Regularly',
+          multi('substancesUsed', 'Which recreational substances do you use, if any?', [
+            'Cannabis / weed',
+            'Cocaine',
+            'MDMA / ecstasy',
+            'Psychedelics (LSD, mushrooms)',
+            'Ketamine',
+            'Prescription meds (recreationally)',
+            'None',
+            'Other',
             'Prefer not to say',
           ]),
+          { restricted: true },
+        ),
+        // Per-substance frequency — each appears directly below, only when that substance is selected.
+        f(
+          single(
+            'cannabisFreq',
+            'Cannabis — how often?',
+            SUBSTANCE_FREQ,
+            when('substancesUsed', 'Cannabis / weed'),
+          ),
+          { restricted: true },
+        ),
+        f(
+          single(
+            'cocaineFreq',
+            'Cocaine — how often?',
+            SUBSTANCE_FREQ,
+            when('substancesUsed', 'Cocaine'),
+          ),
+          { restricted: true },
+        ),
+        f(
+          single(
+            'mdmaFreq',
+            'MDMA / ecstasy — how often?',
+            SUBSTANCE_FREQ,
+            when('substancesUsed', 'MDMA / ecstasy'),
+          ),
+          { restricted: true },
+        ),
+        f(
+          single(
+            'psychedelicsFreq',
+            'Psychedelics — how often?',
+            SUBSTANCE_FREQ,
+            when('substancesUsed', 'Psychedelics (LSD, mushrooms)'),
+          ),
+          { restricted: true },
+        ),
+        f(
+          single(
+            'ketamineFreq',
+            'Ketamine — how often?',
+            SUBSTANCE_FREQ,
+            when('substancesUsed', 'Ketamine'),
+          ),
+          { restricted: true },
+        ),
+        f(
+          single(
+            'rxRecreationalFreq',
+            'Prescription meds (recreationally) — how often?',
+            SUBSTANCE_FREQ,
+            when('substancesUsed', 'Prescription meds (recreationally)'),
+          ),
+          { restricted: true },
+        ),
+        f(
+          {
+            ...shortText(
+              'substanceOther',
+              'Which other substance(s)?',
+              'Whatever you’d like to share',
+            ),
+            branch: when('substancesUsed', 'Other'),
+          },
           { restricted: true },
         ),
       ]),
@@ -718,7 +706,15 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         f(longText('eatingHistory', 'Your relationship with food (any history)?'), {
           restricted: true,
         }),
-        f(rating('bodyRelationship', 'How you feel about your body', 'Critical', 'At peace')),
+        f(
+          slider(
+            'bodyRelationship',
+            'How you feel about your body',
+            'Critical',
+            'Neutral',
+            'At peace',
+          ),
+        ),
         f(
           longText(
             'healthOther',
@@ -732,15 +728,6 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         ),
       ]),
       ...grouped('Mind & mood', [
-        f(
-          single('lowMood', 'How often do you feel low or down?', [
-            'Rarely',
-            'Sometimes',
-            'Often',
-            'Most days',
-          ]),
-        ),
-        f(rating('anxietyLevel', 'How anxious do you tend to feel?', 'Calm', 'Anxious')),
         f(
           multi('stressRelief', 'How do you de-stress?', [
             'Exercise',
@@ -768,7 +755,7 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'None yet',
           ]),
         ),
-        f(rating('screenTime', 'Your screen / phone use', 'Minimal', 'Constant')),
+        f(slider('screenTime', 'Your screen / phone use', 'Minimal', 'Moderate', 'Constant')),
         f(
           single('outdoors', 'Time outside or in nature', [
             'Rarely',
@@ -794,10 +781,11 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
       ]),
       ...grouped('Your body', [
         f(
-          rating(
+          slider(
             'dailyEnergy',
             'Your physical energy on a typical day',
             'Running on empty',
+            'Enough to get by',
             'Plenty to spare',
           ),
         ),
@@ -882,10 +870,11 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ]),
         ),
         f(
-          rating(
+          slider(
             'movementConfidence',
             'How confident do you feel in your body’s capability?',
             'Not at all',
+            'Fairly confident',
             'Very confident',
           ),
         ),
@@ -919,10 +908,11 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ]),
         ),
         f(
-          rating(
+          slider(
             'waterIntake',
             'How well do you stay hydrated?',
             'Barely drink',
+            'About average',
             'Always topped up',
           ),
         ),
@@ -955,10 +945,11 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ]),
         ),
         f(
-          rating(
+          slider(
             'hungerCues',
             'How tuned-in are you to hunger and fullness?',
             'Out of touch',
+            'Somewhat tuned-in',
             'Very tuned-in',
           ),
         ),
@@ -981,18 +972,20 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ]),
         ),
         f(
-          rating(
+          slider(
             'burnoutLevel',
             'How close to burnout do you feel right now?',
             'Far from it',
+            'Holding steady',
             'On the edge',
           ),
         ),
         f(
-          rating(
+          slider(
             'recoveryQuality',
             'After a hard day, how well do you bounce back?',
             'Slowly',
+            'Eventually',
             'Quickly',
           ),
         ),
@@ -1019,10 +1012,11 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
       ...grouped('Mind & focus', [
         f(yesno('meditates', 'Do you have any mindfulness or meditation practice?')),
         f(
-          rating(
+          slider(
             'focusAbility',
             'How easily can you focus when you need to?',
             'Easily scattered',
+            'It varies',
             'Laser-focused',
           ),
         ),
@@ -1035,10 +1029,11 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ]),
         ),
         f(
-          rating(
+          slider(
             'dailyMotivation',
             'How motivated do you feel to do what you care about?',
             'Flat',
+            'Steady',
             'Driven',
           ),
         ),
@@ -1110,8 +1105,8 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'Acts of service',
           ]),
         ),
-        f(rating('trust', 'How easily do you trust people?', 'Slowly', 'Easily')),
-        f(rating('openUp', 'How easily do you open up?', 'Guarded', 'Open book')),
+        f(slider('trust', 'How easily do you trust people?', 'Slowly', 'It depends', 'Easily')),
+        f(slider('openUp', 'How easily do you open up?', 'Guarded', 'Selectively', 'Open book')),
         f(
           single('jealousy', 'How do you handle jealousy?', [
             'Rarely feel it',
@@ -1146,10 +1141,11 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ]),
         ),
         f(
-          rating(
+          slider(
             'friendshipSatisfaction',
             'Satisfaction with your friendships',
             'Lonely',
+            'Doing okay',
             'Fulfilled',
           ),
         ),
@@ -1160,7 +1156,7 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'e.g. my sister, my best friend, my partner',
           ),
         ),
-        f(rating('loneliness', 'How lonely do you feel?', 'Never', 'Often')),
+        f(slider('loneliness', 'How lonely do you feel?', 'Never', 'Sometimes', 'Often')),
         f(
           single('makeFriends', 'How easily do you make new friends?', [
             'Easily',
@@ -1178,11 +1174,35 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'It depends',
           ]),
         ),
-        f(rating('socialBattery', 'Your social battery', 'Drains fast', 'Always on')),
+        f(
+          slider(
+            'socialBattery',
+            'Your social battery',
+            'Drains fast',
+            'Middle of the road',
+            'Always on',
+          ),
+        ),
       ]),
       ...grouped('How you handle people', [
-        f(rating('boundaries', 'How good are you at boundaries?', 'I struggle', 'Firm')),
-        f(rating('forgiveness', 'How easily do you forgive?', 'I hold on', 'I let go')),
+        f(
+          slider(
+            'boundaries',
+            'How good are you at boundaries?',
+            'I struggle',
+            'Working on it',
+            'Firm',
+          ),
+        ),
+        f(
+          slider(
+            'forgiveness',
+            'How easily do you forgive?',
+            'I hold on',
+            'It depends',
+            'I let go',
+          ),
+        ),
         f(
           single('beingWrong', 'When you’re in the wrong, you…', [
             'Own it quickly',
@@ -1242,10 +1262,11 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ]),
         ),
         f(
-          rating(
+          slider(
             'partnerCommunication',
             'With a partner, how easily do you talk through hard things?',
             'We avoid it',
+            'We manage',
             'We talk openly',
           ),
         ),
@@ -1303,10 +1324,11 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ),
         ),
         f(
-          rating(
+          slider(
             'loyaltyValue',
             'How central is loyalty to your idea of friendship?',
             'Not essential',
+            'Pretty important',
             'Everything',
           ),
         ),
@@ -1322,10 +1344,11 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
       ]),
       ...grouped('How you relate', [
         f(
-          rating(
+          slider(
             'peoplePleasing',
             'How often do you put others’ needs ahead of your own?',
             'Rarely',
+            'Sometimes',
             'Almost always',
           ),
         ),
@@ -1340,10 +1363,11 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ]),
         ),
         f(
-          rating(
+          slider(
             'vulnerabilityComfort',
             'How comfortable are you being emotionally vulnerable?',
             'Very guarded',
+            'Depends who',
             'Wide open',
           ),
         ),
@@ -1368,18 +1392,20 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ]),
         ),
         f(
-          rating(
+          slider(
             'independenceCloseness',
             'Independence ↔ closeness — where do you sit?',
             'Fiercely independent',
+            'A balance',
             'Deeply interconnected',
           ),
         ),
         f(
-          rating(
+          slider(
             'emotionalAvailability',
             'How emotionally available do you feel to others?',
             'Often distant',
+            'Sometimes present',
             'Fully present',
           ),
         ),
@@ -1404,10 +1430,11 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ]),
         ),
         f(
-          rating(
+          slider(
             'belonging',
             'How much do you feel part of something bigger than yourself?',
             'Not at all',
+            'Somewhat',
             'Deeply',
           ),
         ),
@@ -1460,7 +1487,15 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         ),
         f(shortText('industry', 'Your field or industry')),
         f(shortText('roleSummary', 'What you actually do day-to-day')),
-        f(rating('workEnjoy', 'How much do you enjoy your work?', 'Not at all', 'Love it')),
+        f(
+          slider(
+            'workEnjoy',
+            'How much do you enjoy your work?',
+            'Not at all',
+            "It's fine",
+            'Love it',
+          ),
+        ),
         f(
           single('workMeaning', 'Work is mostly…', [
             'A calling',
@@ -1470,7 +1505,7 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'Still figuring it out',
           ]),
         ),
-        f(rating('workStress', 'How stressful is your work?', 'Calm', 'Intense')),
+        f(slider('workStress', 'How stressful is your work?', 'Calm', 'Moderate', 'Intense')),
       ]),
       ...grouped('Ambition', [
         f(
@@ -1481,8 +1516,24 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ),
         ),
         f(shortText('dreamJob', 'Your dream job or venture')),
-        f(rating('ambition', 'How ambitious do you feel right now?', 'Content as I am', 'Driven')),
-        f(rating('workLifeBalance', 'Your work–life balance', 'Out of balance', 'Healthy')),
+        f(
+          slider(
+            'ambition',
+            'How ambitious do you feel right now?',
+            'Content as I am',
+            'Steady',
+            'Driven',
+          ),
+        ),
+        f(
+          slider(
+            'workLifeBalance',
+            'Your work–life balance',
+            'Out of balance',
+            'Getting by',
+            'Healthy',
+          ),
+        ),
         f(longText('proudWork', 'Something you’ve built or achieved')),
       ]),
       ...grouped('Money', [
@@ -1496,7 +1547,15 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ]),
         ),
         f(single('moneyStyle', 'You’re more of a…', ['Saver', 'Spender', 'Somewhere in between'])),
-        f(rating('moneyWorry', 'How much does money worry you?', 'Not at all', 'A great deal')),
+        f(
+          slider(
+            'moneyWorry',
+            'How much does money worry you?',
+            'Not at all',
+            'Some',
+            'A great deal',
+          ),
+        ),
         f(
           single('moneyMeaning', 'Money mostly means…', [
             'Security',
@@ -1582,20 +1641,30 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'Hard to say',
           ]),
         ),
-        f(rating('workPace', 'How does the pace of your work feel?', 'Too slow', 'Too frantic')),
         f(
-          rating(
+          slider(
+            'workPace',
+            'How does the pace of your work feel?',
+            'Too slow',
+            'About right',
+            'Too frantic',
+          ),
+        ),
+        f(
+          slider(
             'managerRelationship',
             'Your relationship with your manager or boss',
             'Strained',
+            'Okay',
             'Excellent',
           ),
         ),
         f(
-          rating(
+          slider(
             'coworkerConnection',
             'How connected do you feel to coworkers?',
             'Isolated',
+            'Friendly',
             'Close-knit',
           ),
         ),
@@ -1635,27 +1704,30 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         ),
         f(longText('skillsToGrow', 'Skills you most want to develop', 'Where you want to grow.')),
         f(
-          rating(
+          slider(
             'feelRecognized',
             'How recognized do you feel for your work?',
             'Overlooked',
+            'Sometimes',
             'Well appreciated',
           ),
         ),
         f(
-          rating(
+          slider(
             'feelImpact',
             'How much does your work make a difference?',
             'Very little',
+            'Some',
             'A great deal',
           ),
         ),
         f(yesno('hasSideProjects', 'Do you have side projects outside your main work?')),
         f(
-          rating(
+          slider(
             'entrepreneurialDrive',
             'How strong is your pull to build something of your own?',
             'None',
+            'A little',
             'Very strong',
           ),
         ),
@@ -1689,18 +1761,20 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ]),
         ),
         f(
-          rating(
+          slider(
             'financialConfidence',
             'How confident do you feel managing money?',
             'Lost',
+            'Getting there',
             'Very confident',
           ),
         ),
         f(
-          rating(
+          slider(
             'financialLiteracy',
             'How well do you understand finances and investing?',
             'Beginner',
+            'Comfortable',
             'Expert',
           ),
         ),
@@ -1768,18 +1842,20 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ]),
         ),
         f(
-          rating(
+          slider(
             'generosity',
             'How important is giving or generosity to you?',
             'Not a focus',
+            'Fairly important',
             'Central to me',
           ),
         ),
         f(
-          rating(
+          slider(
             'moneyAndRelationships',
             'How much does money create tension in close relationships?',
             'Never',
+            'Sometimes',
             'Often',
           ),
         ),
@@ -1837,7 +1913,7 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         f(longText('idealWeekend', 'Your ideal weekend', 'From Friday night to Sunday.')),
         f(shortText('funAlone', 'What you love doing alone')),
         f(shortText('funWithOthers', 'What you love doing with people')),
-        f(rating('playfulness', 'How playful are you?', 'Serious', 'Goofy')),
+        f(slider('playfulness', 'How playful are you?', 'Serious', 'In between', 'Goofy')),
         f(shortText('makesYouLaugh', 'What reliably makes you laugh')),
       ]),
       ...grouped('Wonder & wishlist', [
@@ -1966,7 +2042,6 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'Other',
           ]),
         ),
-        f(shortText('dreamDestination', 'Somewhere you’re dying to go', 'Your dream destination.')),
         f(
           single('soloOrGroup', 'Solo or with others?', [
             'Solo — my own pace',
@@ -1978,10 +2053,11 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ]),
         ),
         f(
-          rating(
+          slider(
             'adventurousness',
             'How adventurous are you when you travel?',
             'Comfort and familiarity',
+            'A bit of both',
             'Throw me in the deep end',
           ),
         ),
@@ -2081,10 +2157,11 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ]),
         ),
         f(
-          rating(
+          slider(
             'savorsLittleThings',
             'How easily do you savour the little things?',
             'Often rushing past them',
+            'Sometimes',
             'I really soak them in',
           ),
         ),
@@ -2141,18 +2218,20 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
       ]),
       ...grouped('How your family worked', [
         f(
-          rating(
+          slider(
             'closenessMother',
             'Closeness with your mother (or mother figure)',
             'Distant',
+            'Somewhat close',
             'Very close',
           ),
         ),
         f(
-          rating(
+          slider(
             'closenessFather',
             'Closeness with your father (or father figure)',
             'Distant',
+            'Somewhat close',
             'Very close',
           ),
         ),
@@ -2336,10 +2415,11 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
       ]),
       ...grouped('Siblings & extended family', [
         f(
-          rating(
+          slider(
             'siblingCloseness',
             'How close are you with your sibling(s) now?',
             'Not close',
+            'Fairly close',
             'Very close',
           ),
         ),
@@ -2352,16 +2432,6 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'We kept our distance',
             'Doesn’t apply',
             'Other',
-          ]),
-        ),
-        f(
-          single('closestExtendedFamily', 'Who in your extended family were you closest to?', [
-            'A grandparent',
-            'An aunt or uncle',
-            'A cousin',
-            'No one in particular',
-            'Other',
-            'Prefer not to say',
           ]),
         ),
         f(
@@ -2412,10 +2482,11 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ),
         ),
         f(
-          rating(
+          slider(
             'connectionToHeritage',
             'How connected do you feel to your heritage and roots?',
             'Not connected',
+            'Somewhat',
             'Deeply connected',
           ),
         ),
@@ -2602,7 +2673,6 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'A flash of light, a smell, a feeling — however small.',
           ),
         ),
-        f(shortText('grewUpWhere', 'Where did you grow up?', 'A town, a house, a street.')),
         f(
           longText(
             'childhoodHome',
@@ -2658,10 +2728,11 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ),
         ),
         f(
-          rating(
+          slider(
             'twentiesIntensity',
             'How turbulent were your twenties?',
             'Steady and settled',
+            'Ups and downs',
             'Wild and uncertain',
           ),
         ),
@@ -2819,7 +2890,7 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           'Other',
         ]),
       ),
-      f(rating('weighsHeavy', 'How heavy has it felt lately?', 'Light', 'Heavy')),
+      f(slider('weighsHeavy', 'How heavy has it felt lately?', 'Light', 'Moderate', 'Heavy')),
       f(
         single('innerCritic', 'How do you talk to yourself when things go wrong?', [
           'Kindly',
@@ -2895,7 +2966,7 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         ),
       ]),
       ...grouped('What helps', [
-        f(rating('supported', 'How supported do you feel right now?', 'Alone', 'Held')),
+        f(slider('supported', 'How supported do you feel right now?', 'Alone', 'Somewhat', 'Held')),
         f(longText('whatHelps', 'When things get dark, what helps you?')),
         f(
           multi('needMore', 'What do you need more of right now?', [
@@ -2910,7 +2981,15 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'Other',
           ]),
         ),
-        f(rating('hopeful', 'How hopeful are you that things will improve?', 'Not at all', 'Very')),
+        f(
+          slider(
+            'hopeful',
+            'How hopeful are you that things will improve?',
+            'Not at all',
+            'Cautiously',
+            'Very',
+          ),
+        ),
       ]),
       ...grouped('Stress & burdens', [
         f(
@@ -2971,18 +3050,20 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ),
         ),
         f(
-          rating(
+          slider(
             'comparisonWeight',
             'How much do you compare your life to others’?',
             'Rarely',
+            'Sometimes',
             'Constantly',
           ),
         ),
         f(
-          rating(
+          slider(
             'perfectionismPull',
             'How strong is the pull to get things exactly right before you feel okay?',
             'Gentle',
+            'Moderate',
             'Very strong',
           ),
         ),
@@ -3063,10 +3144,11 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ),
         ),
         f(
-          rating(
+          slider(
             'gentlerWithSelf',
             'How ready do you feel to be a little gentler with yourself?',
             'Not yet',
+            'Getting there',
             'Very ready',
           ),
         ),

@@ -43,7 +43,20 @@ export function IntakeFormPanel({
     () => ({ ...(section?.answers ?? {}) }) as AnswerMap,
   );
   const onChange = (questionId: string, value: AnswerValue): void =>
-    setAnswers((a) => ({ ...a, [questionId]: value }));
+    setAnswers((a) => {
+      const next: AnswerMap = { ...a, [questionId]: value };
+      // Auto-fill: choosing to live with children pre-selects the Children question (still editable),
+      // so the two questions stay in sync without re-asking. Only fills when Children is still blank.
+      if (
+        questionId === 'liveWith' &&
+        Array.isArray(value) &&
+        value.includes('Children') &&
+        !next['parentalStatus']
+      ) {
+        next['parentalStatus'] = 'Have young kids';
+      }
+      return next;
+    });
 
   const questions = useMemo(() => meta.questions ?? [], [meta.questions]);
   const locked = meta.adult && !adultAcknowledged;

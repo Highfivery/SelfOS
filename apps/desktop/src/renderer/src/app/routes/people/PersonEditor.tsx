@@ -34,6 +34,28 @@ type Tab = 'profile' | 'about' | 'notes' | 'relationships' | 'access' | 'budget'
 const GENDER_PRESETS = ['Female', 'Male', 'Non-binary', 'Prefer not to say'] as const;
 const GENDER_OTHER = '__other__';
 
+/**
+ * The controllable fields this editor actually surfaces (each has a visible `ShareToggle`) — the scope of the
+ * "Share all / Lock all" bulk controls. The onboarding-owned self fields (sexualOrientation, relationshipStyle,
+ * healthNotes, faith, goals, communicationStyle, values, languages) are deliberately excluded: they have no
+ * toggle here, default private, and must not be flipped by a bulk control the user can't counter (18 §14.6).
+ */
+const VISIBLE_FIELD_KEYS: PersonFieldKey[] = [
+  'pronouns',
+  'birthday',
+  'gender',
+  'appearanceDescription',
+  'ethnicity',
+  'occupation',
+  'relationshipStatus',
+  'parentalStatus',
+  'livingSituation',
+  'interests',
+  'location',
+  'importantDates',
+  'notes',
+];
+
 type ImportantDate = { label: string; date: string };
 
 /**
@@ -73,8 +95,22 @@ export function PersonEditor({
       else next.add(k);
       return next;
     });
-  const lockAll = (): void => setPrivateFields(new Set(PERSON_FIELD_KEYS));
-  const shareAll = (): void => setPrivateFields(new Set());
+  // Bulk Share/Lock only touches the fields this editor actually surfaces — NOT the hidden, onboarding-owned
+  // self fields (sexualOrientation/relationshipStyle/healthNotes/faith/goals/communicationStyle/values/
+  // languages). Those default private and have no visible toggle here, so "Share all" must never silently
+  // un-privatize them; their existing lock state is preserved (18 §14.6, 15-shareability §8.3/§8.4).
+  const lockAll = (): void =>
+    setPrivateFields((prev) => {
+      const next = new Set(prev);
+      VISIBLE_FIELD_KEYS.forEach((k) => next.add(k));
+      return next;
+    });
+  const shareAll = (): void =>
+    setPrivateFields((prev) => {
+      const next = new Set(prev);
+      VISIBLE_FIELD_KEYS.forEach((k) => next.delete(k));
+      return next;
+    });
   /** A `ShareToggle` bound to a controllable field key — placed beside that field's label. */
   const toggle = (k: PersonFieldKey, label: string): JSX.Element => (
     <ShareToggle shared={isShared(k)} onChange={(s) => setShared(k, s)} label={label} />
@@ -92,25 +128,19 @@ export function PersonEditor({
   const [occupation, setOccupation] = useState(person?.occupation ?? '');
   const [interests, setInterests] = useState<string[]>(person?.interests ?? []);
   const [location, setLocation] = useState(person?.location ?? '');
-  const [goals, setGoals] = useState(person?.goals ?? '');
-  const [communicationStyle, setCommunicationStyle] = useState(person?.communicationStyle ?? '');
-  const [values, setValues] = useState<string[]>(person?.values ?? []);
-  const [languages, setLanguages] = useState<string[]>(person?.languages ?? []);
   const [importantDates, setImportantDates] = useState<ImportantDate[]>(
     person?.importantDates ?? [],
   );
 
-  // About — life facts the onboarding intake also fills (18 §14.6). The first three default shared; the last
-  // two default private (own-context-only). Editable here too.
+  // About — life facts the onboarding intake also fills (18 §14.6).
   const [relationshipStatus, setRelationshipStatus] = useState(person?.relationshipStatus ?? '');
   const [parentalStatus, setParentalStatus] = useState(person?.parentalStatus ?? '');
   const [livingSituation, setLivingSituation] = useState(person?.livingSituation ?? '');
-  const [sexualOrientation, setSexualOrientation] = useState(person?.sexualOrientation ?? '');
-  const [relationshipStyle, setRelationshipStyle] = useState(person?.relationshipStyle ?? '');
 
-  // About — private descriptive fields (own coaching context only).
-  const [healthNotes, setHealthNotes] = useState(person?.healthNotes ?? '');
-  const [faith, setFaith] = useState(person?.faith ?? '');
+  // The deeply personal self-profile fields (sexual orientation, relationship style, faith, health, goals,
+  // communication style, values, languages) are NOT edited here anymore — they're owned by the person's own
+  // onboarding (18 §14.6). We carry any existing values through on save (below) so editing a contact never
+  // wipes data the self reported through onboarding; this editor just no longer surfaces them.
 
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<Tab>('profile');
@@ -160,17 +190,25 @@ export function PersonEditor({
         ...(relationshipStatus.trim() ? { relationshipStatus: relationshipStatus.trim() } : {}),
         ...(parentalStatus.trim() ? { parentalStatus: parentalStatus.trim() } : {}),
         ...(livingSituation.trim() ? { livingSituation: livingSituation.trim() } : {}),
-        ...(sexualOrientation.trim() ? { sexualOrientation: sexualOrientation.trim() } : {}),
-        ...(relationshipStyle.trim() ? { relationshipStyle: relationshipStyle.trim() } : {}),
         ...(interests.length ? { interests } : {}),
         ...(location.trim() ? { location: location.trim() } : {}),
-        ...(goals.trim() ? { goals: goals.trim() } : {}),
-        ...(communicationStyle.trim() ? { communicationStyle: communicationStyle.trim() } : {}),
-        ...(values.length ? { values } : {}),
-        ...(languages.length ? { languages } : {}),
         ...(cleanDates.length ? { importantDates: cleanDates } : {}),
-        ...(healthNotes.trim() ? { healthNotes: healthNotes.trim() } : {}),
-        ...(faith.trim() ? { faith: faith.trim() } : {}),
+        // Carry through the onboarding-owned self fields untouched (upsertPerson rebuilds from the input,
+        // so omitting them would WIPE values the person reported through onboarding — 18 §14.6).
+        ...(person?.goals !== undefined ? { goals: person.goals } : {}),
+        ...(person?.communicationStyle !== undefined
+          ? { communicationStyle: person.communicationStyle }
+          : {}),
+        ...(person?.values !== undefined ? { values: person.values } : {}),
+        ...(person?.languages !== undefined ? { languages: person.languages } : {}),
+        ...(person?.sexualOrientation !== undefined
+          ? { sexualOrientation: person.sexualOrientation }
+          : {}),
+        ...(person?.relationshipStyle !== undefined
+          ? { relationshipStyle: person.relationshipStyle }
+          : {}),
+        ...(person?.healthNotes !== undefined ? { healthNotes: person.healthNotes } : {}),
+        ...(person?.faith !== undefined ? { faith: person.faith } : {}),
       });
       onDone();
     } finally {
@@ -388,102 +426,11 @@ export function PersonEditor({
                 />
               )}
             </Field>
-            <Field label="Goals" labelAction={toggle('goals', 'Goals')}>
-              {(props) => (
-                <Textarea
-                  {...props}
-                  value={goals}
-                  rows={3}
-                  placeholder="What they’re working toward"
-                  onChange={(event) => setGoals(event.target.value)}
-                />
-              )}
-            </Field>
-            <Field
-              label="Communication style"
-              labelAction={toggle('communicationStyle', 'Communication style')}
-            >
-              {(props) => (
-                <TextInput
-                  {...props}
-                  value={communicationStyle}
-                  placeholder="e.g. direct, prefers written"
-                  onChange={(event) => setCommunicationStyle(event.target.value)}
-                />
-              )}
-            </Field>
-            <ChipEditor
-              label="Values"
-              values={values}
-              onChange={setValues}
-              placeholder="Add a value"
-              labelAction={toggle('values', 'Values')}
-            />
-            <ChipEditor
-              label="Languages"
-              values={languages}
-              onChange={setLanguages}
-              placeholder="Add a language"
-              labelAction={toggle('languages', 'Languages')}
-            />
             <ImportantDatesEditor
               value={importantDates}
               onChange={setImportantDates}
               shareToggle={toggle('importantDates', 'Important dates')}
             />
-            <Field
-              label="Health notes"
-              help="Health context that can inform coaching — defaults to shared; lock it to keep it to this person."
-              labelAction={toggle('healthNotes', 'Health notes')}
-            >
-              {(props) => (
-                <Textarea
-                  {...props}
-                  value={healthNotes}
-                  rows={3}
-                  placeholder="Anything health-related to keep in mind"
-                  onChange={(event) => setHealthNotes(event.target.value)}
-                />
-              )}
-            </Field>
-            <Field label="Faith" labelAction={toggle('faith', 'Faith')}>
-              {(props) => (
-                <TextInput
-                  {...props}
-                  value={faith}
-                  placeholder="e.g. Buddhist"
-                  onChange={(event) => setFaith(event.target.value)}
-                />
-              )}
-            </Field>
-            <Field
-              label="Sexual orientation"
-              help="From onboarding; kept private to their own coaching by default."
-              labelAction={toggle('sexualOrientation', 'Sexual orientation')}
-            >
-              {(props) => (
-                <TextInput
-                  {...props}
-                  value={sexualOrientation}
-                  placeholder="e.g. Bisexual"
-                  onChange={(event) => setSexualOrientation(event.target.value)}
-                />
-              )}
-            </Field>
-            <Field
-              label="Relationship style"
-              help="Kept private to their own coaching by default."
-              labelAction={toggle('relationshipStyle', 'Relationship style')}
-            >
-              {(props) => (
-                <TextInput
-                  {...props}
-                  value={relationshipStyle}
-                  placeholder="e.g. Monogamous"
-                  onChange={(event) => setRelationshipStyle(event.target.value)}
-                />
-              )}
-            </Field>
           </Stack>
         </Card>
       ) : null}

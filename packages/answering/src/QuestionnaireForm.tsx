@@ -287,6 +287,10 @@ function MultiChoiceControl({
   const selectedPresets = selected.filter((s) => presets.includes(s));
   const customText = selected.filter((s) => !presets.includes(s)).join(', ');
   const [otherOpen, setOtherOpen] = useState(customText !== '');
+  // Hold the raw write-in text locally so typing a space isn't trimmed away on each keystroke (the
+  // committed answer array still trims each comma-segment, but the visible input keeps what was typed —
+  // otherwise multi-word entries like "rock climbing" were impossible). Seeded once from the answer.
+  const [otherText, setOtherText] = useState(customText);
 
   const commit = (nextPresets: string[], customCsv: string): void => {
     const customs = customCsv
@@ -294,6 +298,11 @@ function MultiChoiceControl({
       .map((s) => s.trim())
       .filter(Boolean);
     set([...nextPresets, ...customs]);
+  };
+
+  const onOtherInput = (raw: string): void => {
+    setOtherText(raw);
+    commit(selectedPresets, raw);
   };
 
   return (
@@ -314,7 +323,7 @@ function MultiChoiceControl({
               onClick={() =>
                 commit(
                   on ? selectedPresets.filter((x) => x !== option) : [...selectedPresets, option],
-                  customText,
+                  otherText,
                 )
               }
             >
@@ -334,6 +343,7 @@ function MultiChoiceControl({
             onClick={() => {
               if (otherOpen) {
                 setOtherOpen(false);
+                setOtherText('');
                 commit(selectedPresets, '');
               } else {
                 setOtherOpen(true);
@@ -348,10 +358,10 @@ function MultiChoiceControl({
         <input
           type="text"
           className={`${styles.input} ${styles.otherInput}`}
-          value={customText}
+          value={otherText}
           placeholder="Add your own — separate with commas"
           aria-label={`${question.prompt} — other`}
-          onChange={(event) => commit(selectedPresets, event.target.value)}
+          onChange={(event) => onOtherInput(event.target.value)}
         />
       ) : null}
     </div>

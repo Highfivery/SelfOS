@@ -6,8 +6,10 @@ import type { Answer, Question, SendAnswer } from '../schemas';
  * (no DOM) so the one implementation is reused and unit-tested without a renderer.
  *
  * `matrix` and `allocation` answers are a per-key number map (row → rating, bucket → amount); every
- * other type is a primitive or a string list. Branch triggers are only `singleChoice`/`yesNo`, so a
- * branch only ever compares against a string or boolean.
+ * other type is a primitive or a string list. Branch triggers are usually `singleChoice`/`yesNo` (a
+ * string/boolean), but a `multiChoice` trigger is also supported: its answer is an array, and the branch
+ * matches when the array *includes* the branch value (e.g. show a per-substance frequency only when that
+ * substance is selected).
  */
 export type AnswerValue = string | number | boolean | string[] | Record<string, number>;
 export type AnswerMap = Record<string, AnswerValue>;
@@ -16,6 +18,12 @@ export type AnswerMap = Record<string, AnswerValue>;
 export function isQuestionVisible(question: Question, answers: AnswerMap): boolean {
   if (!question.branch) return true;
   const answer = answers[question.branch.whenQuestionId];
+  // A multiChoice trigger answers with an array → match when it CONTAINS any expected value.
+  if (Array.isArray(answer)) {
+    if (question.branch.equalsAny)
+      return question.branch.equalsAny.some((v) => answer.includes(v as never));
+    return question.branch.equals !== undefined && answer.includes(question.branch.equals as never);
+  }
   if (question.branch.equalsAny) return question.branch.equalsAny.includes(answer as never);
   return answer === question.branch.equals;
 }

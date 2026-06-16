@@ -953,6 +953,15 @@ async function startNewQuestionnaire(w: Page, opts: { compat?: boolean } = {}): 
   await expect(w.getByLabel('Title')).toBeVisible();
 }
 
+/**
+ * The builder is a focused full-width panel — the master list (and its New/Suggested header) hides while a
+ * questionnaire is open. Click the "← Questionnaires" back link to return to the list (to reopen a saved
+ * one, see the row, or reach Suggested/New).
+ */
+async function backToQuestionnaires(w: Page): Promise<void> {
+  await w.getByRole('button', { name: 'Questionnaires' }).click();
+}
+
 test('questionnaires: author a single-choice questionnaire, validate, persist, no overflow', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);
@@ -977,7 +986,8 @@ test('questionnaires: author a single-choice questionnaire, validate, persist, n
     await expect(w.getByText(/ready to send/i)).toBeVisible();
     await w.getByRole('button', { name: 'Create draft' }).click();
 
-    // The new questionnaire shows in the list with its question count.
+    // Back to the list (the builder is a focused panel) — the new questionnaire shows with its count.
+    await backToQuestionnaires(w);
     await expect(w.getByRole('button', { name: /Weekly check-in/ })).toBeVisible();
     await expect(w.getByText('1 question')).toBeVisible();
 
@@ -1036,6 +1046,7 @@ test('questionnaires: custom type, sensitivity, matrix + branching round-trip', 
     await w.getByRole('button', { name: 'Check' }).click();
     await expect(w.getByText(/ready to send/i)).toBeVisible();
     await w.getByRole('button', { name: 'Create draft' }).click();
+    await backToQuestionnaires(w);
     await expect(w.getByText('2 questions')).toBeVisible();
 
     // Reopen and confirm everything round-tripped through the encrypted vault.
@@ -1134,8 +1145,10 @@ test('questionnaires: General default + intimacy-only sensitivity + live inline 
     await w.getByLabel('Sensitivity').selectOption('explicit');
     await expect(w.getByText(/date of birth and consent/i)).toBeVisible();
 
-    // Save → reopen: the intimacy type + escalated tier round-trip through the encrypted vault.
+    // Save → reopen: the intimacy type + escalated tier round-trip through the encrypted vault. The
+    // builder is a focused full-width panel (the list hides while editing), so go back to the list first.
     await w.getByRole('button', { name: 'Create draft' }).click();
+    await w.getByRole('button', { name: 'Questionnaires' }).click();
     await w.getByRole('button', { name: /Check-in/ }).click();
     await expect(w.getByLabel('Type', { exact: true })).toHaveValue('intimacy');
     await expect(w.getByLabel('Sensitivity')).toHaveValue('explicit');
@@ -1192,6 +1205,7 @@ test('questionnaires: attach an encrypted image, require alt, round-trip + show 
     await expect(w.getByText(/ready to send/i)).toBeVisible();
 
     await w.getByRole('button', { name: 'Create draft' }).click();
+    await backToQuestionnaires(w);
 
     // Reopen: the alt text round-tripped through the encrypted vault and the image still loads.
     // (The editor thumbnail AND the open inline preview both render it, so scope to the first.)
@@ -1226,7 +1240,8 @@ test('questionnaires: AI draft + Suggested surfaces show calm enable-AI states',
     await startNewQuestionnaire(w);
     await expect(w.getByText(/turn on ai in settings to draft questions/i)).toBeVisible();
 
-    // Suggested (gap-finder) opens its own surface with the same calm state.
+    // Suggested (gap-finder) opens its own surface with the same calm state — reached from the list.
+    await backToQuestionnaires(w);
     await w.getByRole('button', { name: 'Suggested' }).click();
     await expect(w.getByRole('heading', { name: /suggested for you/i })).toBeVisible();
     await expect(w.getByText(/turn on ai in settings to get suggestions/i)).toBeVisible();
@@ -1280,8 +1295,9 @@ test('questionnaires: the AI draft panel + Suggested surface fit at phone width'
     await w.waitForTimeout(150);
     expect(await overflow()).toBeLessThanOrEqual(1);
 
-    // The Suggested (gap-finder) surface also fits — switch back to desktop to reach the list button.
+    // The Suggested (gap-finder) surface also fits — switch back to desktop, return to the list, open it.
     await resize(1100);
+    await backToQuestionnaires(w);
     await w.getByRole('button', { name: 'Suggested' }).click();
     await expect(w.getByRole('button', { name: /suggest questionnaires/i })).toBeVisible();
     await resize(390);
@@ -1536,7 +1552,7 @@ test('results: re-asks chart a trend, a send deletes, and the questionnaire purg
     };
     // §16.3: save the draft so Send appears, send once; then re-open the saved questionnaire and re-ask.
     await w.getByRole('button', { name: 'Create draft' }).click();
-    await sendToSelf();
+    await sendToSelf(); // sending returns to the list, so the saved questionnaire is visible to re-open
     await w.getByRole('button', { name: /Mood check/ }).click();
     await sendToSelf();
 
@@ -1548,7 +1564,8 @@ test('results: re-asks chart a trend, a send deletes, and the questionnaire purg
       const newItems = w.getByRole('button', { name: /Mood check/ }).filter({ hasText: 'New' });
       await expect(newItems).toHaveCount(ratings.length - i);
       await newItems.first().click();
-      await w.getByRole('radio', { name: ratings[i] }).click();
+      // Rating questions answer on a slider now (not number buttons).
+      await w.getByRole('slider', { name: 'How connected do you feel?' }).fill(ratings[i] ?? '3');
       await w.getByRole('button', { name: 'Submit', exact: true }).click();
     }
 
@@ -3988,7 +4005,7 @@ test('onboarding: living-with-children auto-fills Children, and a substance reve
     );
     await w
       .getByRole('group', { name: 'Who do you live with?' })
-      .getByRole('button', { name: 'Children' })
+      .getByRole('checkbox', { name: 'Children' })
       .click();
     await expect(children.getByRole('radio', { name: 'Have young kids' })).toHaveAttribute(
       'aria-checked',
@@ -4000,7 +4017,7 @@ test('onboarding: living-with-children auto-fills Children, and a substance reve
     await expect(w.getByText('Cannabis — how often?')).toHaveCount(0);
     await w
       .getByRole('group', { name: 'Which recreational substances do you use, if any?' })
-      .getByRole('button', { name: 'Cannabis / weed' })
+      .getByRole('checkbox', { name: 'Cannabis / weed' })
       .click();
     await expect(w.getByText('Cannabis — how often?')).toBeVisible();
   } finally {

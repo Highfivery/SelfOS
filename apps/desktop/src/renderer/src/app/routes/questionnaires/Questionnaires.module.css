@@ -83,6 +83,27 @@
   min-width: 0;
 }
 
+/* Focus mode: with a questionnaire open, the builder takes the full width as a centered panel (no narrow
+   builder cramped beside a tall, mostly-empty list column + orphaned void). The list returns via the
+   "← Questionnaires" back link. Applies at every width — the master list is for picking, not editing. */
+.layout[data-view='detail'] {
+  grid-template-columns: 1fr;
+}
+
+.layout[data-view='detail'] .list {
+  display: none;
+}
+
+.layout[data-view='detail'] .detail {
+  width: 100%;
+  max-width: 760px;
+  margin-inline: auto;
+}
+
+.layout[data-view='detail'] .back {
+  display: inline-flex;
+}
+
 .back {
   display: none;
   align-items: center;
@@ -585,7 +606,7 @@
   color: var(--color-warning);
 }
 
-/* Mobile: one pane at a time. */
+/* Mobile: the list pane is also full-width (detail-focus is already handled above at every width). */
 @media (max-width: 767px) {
   .layout {
     grid-template-columns: 1fr;
@@ -594,14 +615,6 @@
 
   .layout[data-view='list'] .detail {
     display: none;
-  }
-
-  .layout[data-view='detail'] .list {
-    display: none;
-  }
-
-  .back {
-    display: inline-flex;
   }
 
   .scaleRow {

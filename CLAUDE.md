@@ -115,6 +115,24 @@ visibility, permission, or behavior decision (defaults, who-sees-what, scope, pl
 defaults. The user has stated this forcefully and repeatedly; guessing has produced rework. Only
 proceed without asking when the choice is genuinely unambiguous from the request or already answered.
 
+**NEVER fix a bug whose cause you have only ASSUMED — diagnose the real root cause FIRST, then fix.**
+(2026-06-16, after a costly violation.) When something fails, do NOT pattern-match to a plausible cause and
+start changing code — **reproduce/verify the actual cause against the real system before touching anything.**
+Specifically:
+
+- **Never assume a Claude/model failure is a content-policy refusal.** "No output / unparseable" is far more
+  often a mechanical cause — **token-budget starvation (adaptive `thinking` shares `max_tokens` → truncated/
+  empty output), truncation, a parse/validation drop, a wrong model, a transport error**. A real example cost
+  the user a lot of tokens: I assumed intimacy generation was a refusal and rewrote the prompt to a weaker
+  "wellness" register — the real bug was the thinking budget; the prompt was fine and my change was reverted.
+- **The offline fakes (`SELFOS_FAKE_CLAUDE`, etc.) HIDE this class of bug** — they always return canned valid
+  output, so every test passes while the live app fails. When a model call fails only in the real app,
+  **diagnose against the LIVE model** (reconstruct the exact prompt from the real builders, call the API, read
+  `stop_reason` + the raw text) BEFORE changing the prompt or anything else.
+- If you cannot verify the cause yourself, **say so and ask** — do not ship a speculative fix. A fix premised
+  on an unverified guess is a guess.
+- See memory [[adaptive-thinking-shares-maxtokens]] and [[always-ask-never-assume]].
+
 ---
 
 ## 7. Definition of Done
@@ -287,6 +305,19 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-16 — **REVERT + hard rule (I violated "never assume" and it cost the user real tokens).** I assumed
+  the intimacy "No usable questions" failure was a Claude content-policy **refusal** and twice rewrote the
+  generation prompt (ending in a weak "sexual-wellness register"), when the real cause was a **thinking-token
+  budget bug** (§17.10) — the prompt was always fine. The user (rightly furious) had me **revert the §17.2
+  prompt reframe**: `intimacyExplicitFraming` is restored to the genuinely-explicit §16.5 framing ("Write
+  genuinely explicit, specific questions… frank, plain language…"), and the `topics.test.ts`/`aiServices.test.ts`
+  assertions restored. **Kept:** the §16.5b fallback removal, the §17.10 thinking fix, all of §17.3/§17.4/§17.5.
+  **New HARD rule (CLAUDE.md §6 + memory [[always-ask-never-assume]] + [[adaptive-thinking-shares-maxtokens]]):
+  NEVER fix a cause you only ASSUMED — diagnose the real root cause against the LIVE system first; never assume
+  a model failure is a content refusal (suspect token starvation/truncation/parse-drop/wrong-model first); the
+  offline fakes HIDE model-call bugs (always return canned JSON) so verify against the live model before
+  touching the prompt; if you can't verify, say so and ASK — a fix on an unverified guess IS a guess.** Gate:
+  typecheck/lint/format, 402 core + 487 desktop unit. On `feat/questionnaire-explicit-gen`.
 - 2026-06-16 — Fix (**intimacy generation "No usable questions" was a thinking-budget bug, NOT a refusal**; 08
   §17.10, on `feat/questionnaire-explicit-gen`). User still hit "No usable questions came back" for intimacy
   explicit/unfiltered **every time** after the §17.2 wellness reframing. Diagnosed against the **live** API (the

@@ -1500,9 +1500,9 @@ AI") and above the first question**, and have AI generation **also produce a tit
 
 ### 16.5 Tier-distinct explicit generation (within the consensual-adult boundary)
 
-> **Reframed by §17.2 (2026-06-15).** The "positively demand explicit content" direction below still got
-> refused by the live model. §17.2 keeps the tier-distinction + topic inventory but recasts the framing in a
-> **sexual-wellness self-assessment** voice (health register, not erotica) so the model complies in-policy.
+> **This is the live framing (§17.2's wellness reframe was REVERTED — see §17.2/§17.11).** The genuinely-
+> explicit `intimacyExplicitFraming` below is what ships. The "still refused" theory that motivated the §17.2
+> reframe was WRONG — the live model was never refusing; the real cause was a thinking-token-budget bug (§17.10).
 
 **Problem.** Generation is **tier-blind**: `GENERATION_SYSTEM` never mentions the tier and is conservative
 ("supportive voice… stay strictly within policy… return [] if in doubt"); `explicit` and `unfiltered` map to
@@ -1790,18 +1790,20 @@ Two user directives:
    questionnaires, and their profile/insights**. This only makes sense if a questionnaire **knows its
    recipient**, so every questionnaire now **requires one** (AI-generated or hand-authored).
 
-### 17.2 In-policy explicit framing (replaces §16.5b; reworks §16.5)
+### 17.2 In-policy explicit framing — **the prompt-reframe part was REVERTED (see §17.11); only the fallback removal stands**
+
+> **REVERTED (2026-06-16).** The premise here — "the model still refuses, so soften the prompt to a wellness
+> register" — was an **unverified assumption and it was WRONG**. The live model never refused; the real failure
+> was a thinking-token-budget bug (§17.10). The "sexual-wellness register" rewrite **weakened** exactly the
+> explicit/unfiltered output the user wants, so it was **reverted** to the genuinely-explicit §16.5 framing. The
+> ONLY part of this section that stands is removing the §16.5b deterministic fallback (a refusal surfaces the
+> calm error — and now rarely happens because §17.10 fixed the actual bug). **Lesson: never reframe a prompt on
+> an assumed refusal — verify the real cause against the live model first (CLAUDE.md §6).**
 
 - **Remove** `intimacyStarterQuestions` / the §16.5b fallback entirely (file, wiring, tests, the panel's
-  fallback notice). A refusal on a non-fallback path keeps surfacing the calm error.
-- **Rewrite** the `explicit` / `unfiltered` intimacy framing in `aiPrompts.ts` from "positively demand graphic
-  content" to a **clinical/wellness self-reflection** frame: this is a consenting adult reflecting on their own
-  sexual wellbeing and relationship; ask **frank, specific, candid** questions about desire, satisfaction,
-  acts, frequency, boundaries, and fantasies — in a **health-and-wellbeing register**, not pornographic prose.
-  `unfiltered` is the most candid/specific; `explicit` a notch softer. The consensual-adult boundary and the
-  topic inventory (§16.5a) stay. The shared `SAFETY` prefix is unchanged.
-- **Goal:** the model complies because the request is genuinely a sexual-wellness instrument, not because we
-  out-argue its policy. If it still refuses, that's an honest calm error — **no canned questions**.
+  fallback notice). A refusal on a non-fallback path surfaces the calm error. **(This part stands.)**
+- ~~**Rewrite** the `explicit`/`unfiltered` framing to a clinical/wellness register.~~ **REVERTED** — the
+  genuinely-explicit §16.5 framing is what ships.
 
 ### 17.3 Recipient-bound questionnaires (the core model change)
 
@@ -1892,10 +1894,9 @@ variant/alignment machinery unchanged. The "exactly one recipient" rule governs 
 
 All five slices built (the explicit-prompt wording awaits the user's review before merge):
 
-- **Slices 1+2 (§17.2)** — deleted `intimacyStarters.ts` + the §16.5b fallback; recast the
-  `explicit`/`unfiltered` intimacy framing in `aiPrompts.ts` as a **sexual-wellness self-assessment** (health
-  register, not erotica) so the model complies in-policy; a refusal surfaces the calm error (no canned
-  questions). Capture test asserts the wellness frame + boundary reach the model.
+- **Slices 1+2 (§17.2)** — deleted `intimacyStarters.ts` + the §16.5b fallback (**stands**); the
+  `explicit`/`unfiltered` prompt reframe to a wellness register was **REVERTED 2026-06-16** (§17.11) — the
+  genuinely-explicit §16.5 framing ships. The reframe was a wrong assumption; the real bug was §17.10.
 - **Slice 3 (§17.3)** — `Questionnaire`/`QuestionnaireInput` gain a `recipient` (reusing `RecipientSchema`); a
   **recipient-first start step** (`NewQuestionnaireStart`, full-width Selects) precedes authoring; the builder
   shows a "For: <recipient>" header and binds the recipient into every save; the send panels read the **bound**
@@ -1940,3 +1941,15 @@ off → `end_turn` + valid JSON). **Lesson: adaptive `thinking` shares the `max_
 structured-JSON call must disable it (or reserve a large budget), or heavy thinking silently truncates the
 output to empty; and a symptom that looks like a content refusal can be pure token starvation, so diagnose
 against the LIVE model (the offline fake hides it) before touching the prompt.**
+
+### 17.11 Revert of the §17.2 prompt reframe (2026-06-16)
+
+The §17.2 "sexual-wellness register" rewrite of `intimacyExplicitFraming` was **reverted**. It was made on an
+**unverified assumption** that the live model was refusing on content-policy grounds — which was false (§17.10:
+the failure was a thinking-token-budget bug). The reframe also **weakened** the explicit/unfiltered output the
+user explicitly wants. `intimacyExplicitFraming` is restored to the genuinely-explicit §16.5 framing ("Write
+genuinely explicit, specific questions… frank, plain language…"), and the `topics.test.ts` / `aiServices.test.ts`
+assertions are restored accordingly. The consensual-adult boundary is unchanged. **Kept from §17:** the §16.5b
+fallback removal, the §17.10 thinking-budget fix, and all of §17.3/§17.4/§17.5 (recipient binding + de-dup).
+**Process lesson enshrined in CLAUDE.md §6: never reframe a prompt (or fix any bug) on an assumed cause —
+verify against the live system first; the offline fakes hide model-call bugs.**

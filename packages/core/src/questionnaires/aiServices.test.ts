@@ -356,7 +356,7 @@ describe('generateQuestions', () => {
     expect(result.questions).toHaveLength(2);
   });
 
-  it('sends the in-policy wellness framing + topic inventory to the model for an intimacy/unfiltered send (§16.5/§17.2)', async () => {
+  it('sends the explicit framing + topic inventory to the model for an intimacy/unfiltered send (§16.5)', async () => {
     const fs = memFileSystem();
     const { author } = await seedHousehold(fs);
     // Add an owner custom topic so we can prove the MERGED inventory reaches the model.
@@ -389,9 +389,8 @@ describe('generateQuestions', () => {
       existingPrompts: [],
     });
     expect(result.ok).toBe(true);
-    expect(sentUserText).toMatch(/sexual-wellness questionnaire/i); // the in-policy wellness frame
-    expect(sentUserText).toMatch(/sexual-health intake|intimacy worksheet/i); // health register, not erotica
-    expect(sentUserText).toMatch(/not as erotica/i); // explicitly steers away from pornographic prose
+    expect(sentUserText).toMatch(/genuinely explicit/i); // the §16.5 explicit direction
+    expect(sentUserText).toMatch(/appropriate and expected/i); // the legitimate-context framing
     expect(sentUserText).toContain('Oral (giving)'); // a built-in topic
     expect(sentUserText).toContain('Wax play'); // the owner's custom addition (merged inventory)
     expect(sentUserText).toMatch(/never minors/i); // the boundary

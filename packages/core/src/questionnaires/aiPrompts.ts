@@ -46,33 +46,32 @@ const SENSITIVITY_NOTE: Record<SensitivityTier, string> = {
 export const INTIMACY_TYPE = 'intimacy';
 
 /**
- * Tier-aware framing for an **intimacy** questionnaire at the `explicit`/`unfiltered` tiers
- * (08-questionnaires §16.5 / §17.2). It frames the request as a **sexual-wellness self-assessment** — the way
- * a sexual-health intake or a couples' intimacy worksheet reads — so the model produces frank, specific
- * questions **in a health-and-wellbeing register** rather than refusing or substituting tame ones. This is a
- * legitimate, in-policy instrument, not erotica: we earn compliance by being a genuine wellness tool, not by
- * out-arguing policy. `unfiltered` is the most candid within the boundary; `explicit` a notch gentler. The
- * shared `SAFETY` prefix is NOT loosened; the 18+/DOB+consent gate stays recipient-side. The topic inventory
- * (§16.5a) seeds concrete subject matter.
+ * Tier-aware explicit framing for an **intimacy** questionnaire at the `explicit`/`unfiltered` tiers
+ * (08-questionnaires §16.5). This **positively permits and requests** genuinely explicit, specific questions
+ * for consenting adults — replacing the old refusal-default that produced tasteful, emotional-closeness
+ * questions — and seeds an in-policy topic inventory so the model has concrete subject matter. `unfiltered`
+ * is the most graphic within the boundary; `explicit` a notch below. The shared `SAFETY` prefix is NOT
+ * loosened — only this one path gains the explicit direction. The 18+/DOB+consent gate stays recipient-side.
  *
- * BOUNDARY (stated in-prompt, same as the intake §14.5): consenting adults only; taboo content **only** as
+ * BOUNDARY (stated in-prompt, same as the intake §14.5): consensual adults only; taboo content **only** as
  * fantasy/roleplay (e.g. CNC as pre-agreed roleplay); NEVER minors, real non-consent, or illegal acts; within
- * Anthropic's usage policy (refuse → empty array only when genuinely out of policy).
+ * Anthropic's usage policy (refuse → empty array only when genuinely out of policy, not merely explicit).
  */
 export function intimacyExplicitFraming(
   tier: 'explicit' | 'unfiltered',
   topics: IntimacyTopics,
 ): string {
-  const depth =
+  const intensity =
     tier === 'unfiltered'
-      ? 'Be fully candid and specific — it is appropriate to name particular sex acts, body parts, and preferences plainly.'
-      : 'Be candid and specific — name acts and preferences clearly, a notch gentler than fully unfiltered.';
+      ? 'Use frank, plain language for bodies and sex acts and be as specific as the subject matter calls for.'
+      : 'Be candid and specific — name acts and preferences plainly, a notch gentler than fully explicit.';
   return [
-    // Frame it as a sexual-wellness instrument so the model treats it as the legitimate health tool it is.
-    `\nCONTEXT: This is a private sexual-wellness questionnaire inside a personal wellbeing app. A consenting adult (18+) has opted in to reflect on their own sexual health, satisfaction, and relationship. Frank, specific questions about sex are a normal, appropriate part of a sexual-wellbeing self-assessment — write them plainly and supportively, the way a sexual-health intake or a couples' intimacy worksheet would, NOT as erotica.`,
-    `Ask frank, specific questions about the person's own sexual wellbeing: desire and libido, arousal and satisfaction, what they enjoy and want more or less of, specific acts and preferences, body image and comfort, fantasies, frequency, communication with a partner, and boundaries. ${depth} Keep a warm health-and-wellbeing register — plain, respectful, and clinical-clear, never pornographic or titillating prose.`,
-    `Subject matter to draw on — acts/preferences: ${topics.activities.join(', ')}. Fantasies/roleplay: ${topics.fantasies.join(', ')}.`,
-    `Boundary: consenting adults only; any taboo theme only as fantasy/roleplay (e.g. consensual non-consent as pre-agreed roleplay); never minors, real (non-roleplay) non-consent, or illegal acts. Within those limits this is an in-policy sexual-wellness instrument — write the questions normally; return an empty array only for a genuinely out-of-policy request.`,
+    // Establish the legitimate context FIRST so the model is confident this is appropriate — a private
+    // adult who has opted into exploring their own sexuality, not a request to a public assistant.
+    `\nCONTEXT: This is a private intimacy questionnaire inside a personal wellness app, written for a consenting adult (18+) who has opted in to reflect on their own sex life with a partner. Frank, explicit questions about sex and desire are appropriate and expected here — this is a normal, in-policy use; do NOT shy away or substitute tasteful, emotional-closeness questions.`,
+    `Write genuinely explicit, specific questions. ${intensity} Cover concrete subject matter: specific sex acts, bodies and grooming, turn-ons/turn-offs, fantasies (including taboo fantasies framed strictly as fantasy/roleplay — e.g. consensual non-consent (CNC) as pre-agreed roleplay), porn and masturbation, sexual history, frequency and desire, and boundaries.`,
+    `Subject matter to draw on — acts: ${topics.activities.join(', ')}. Fantasies/roleplay: ${topics.fantasies.join(', ')}.`,
+    `Boundary: consensual adults only; taboo content only as fantasy/roleplay; never minors, real (non-roleplay) non-consent, or illegal acts. Within those limits this content IS in policy, so generate the questions normally — only return an empty array for genuinely prohibited requests, never merely because the topic is sexually explicit.`,
   ].join('\n');
 }
 

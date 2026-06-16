@@ -165,6 +165,17 @@ A slice is **not** done until **all** of these pass:
       mid-height), even spacing/rhythm, nothing clipped, and each element looks intentional and
       cohesive with its neighbours. Fix bad-looking UI before it ships — don't rely on "the test
       passed" (see §12).
+- [ ] **Whole-flow coherence walk (not just "tests pass")** — actually walk the COMPLETE user flow
+      end-to-end (the real app / preview, every step in order) and judge whether it **makes sense as a
+      whole**, not just that each screen works. Specifically hunt for: **the same thing asked/picked more
+      than once** (e.g. selecting a person at creation AND again in a sub-panel AND at send), **labels that
+      collide or confuse** across steps (two different controls that read like the same question), **dead or
+      now-redundant controls** left behind by a model change, and steps that no longer belong. A green E2E
+      suite proves each step _functions_ — it does **not** prove the flow is coherent or non-redundant. When a
+      change alters a flow's shape (e.g. moving recipient selection to the front), **re-walk every screen that
+      touched that concept** and reconcile it. (2026-06-16: after recipient-selection moved to a start step, a
+      stale "About a specific person?" picker in the AI panel still re-asked who it's for — caught by the user,
+      not by the passing tests.)
 - [ ] **`/gallery` updated** when a design-system primitive is added or changed (it must showcase all of them)
 - [ ] **Admin-only UI is marked** — any control/section visible only to an Owner / super-admin carries a
       consistent "admin only" indicator (see §12)

@@ -287,6 +287,25 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-15 — Build (**Questionnaires §16 slice-4 follow-ups — 4 feedback fixes + the §16.5b explicit-starter
+  fallback**; on `feat/questionnaire-explicit-gen`, NOT merged). Four user-flagged fixes: (1) the "Draft with AI"
+  panel shows a **live elapsed-time progress block** (`role="status"` animated bar + "Drafting your questions… Ns")
+  while drafting, not just a disabled button; (2) `appendGenerated` drops the **leading blank** generated question;
+  (3) **§16.5b** — when the live Claude model **still declines** an intimacy explicit/unfiltered draft (the §16.5
+  context-first framing doesn't always work — a model-side policy call I can't reproduce against the offline fake),
+  `intimacyStarterQuestions(topics, tier, count)` (new `packages/core/src/questionnaires/intimacyStarters.ts`)
+  seeds **editable, frank starter questions from the merged topic inventory** instead of stranding the Owner on
+  "No usable questions came back" — fallback fires **only** on the intimacy explicit/unfiltered REFUSED path
+  (NO_KEY/BUDGET/ERROR + any other type/tier still surface the calm error; returns `ok:true` + a "the AI held back,
+  so I added explicit starter questions" note); (4) the Settings + inline topic-add controls are **textareas that
+  add ONE topic at a time** (user was explicit: "should NOT be one per line!!! … add one at a time"; owner-only,
+  `people.manage`). Gate green: typecheck (node + web/DOM-lib), lint, format, **399 core + 8 relay + 480 desktop**
+  unit (+2 core: intimacy refusal → fallback ok:true with topic-seeded options; standard-tier refusal still
+  REFUSED), **67 E2E** (intimacy-topics flow re-pointed to the "Add an activity" label). Synced spec 08 §16.5b +
+  §16.10 build status. **Lesson: the §16.5 explicit-context framing reduces but doesn't eliminate model refusals
+  for graphic sexual content — pair the prompt with a deterministic, inventory-seeded fallback so an explicit
+  intimacy questionnaire never dead-ends, and gate the fallback to the intimacy/explicit REFUSED path so a real
+  NO_KEY/BUDGET/ERROR or a non-intimacy refusal still surfaces honestly.**
 - 2026-06-15 — Build (**Questionnaires §16 slice 4b — owner-extensible intimacy-topics UI; SPEC 08 §16 is now
   FULLY BUILT**; on `feat/questionnaire-explicit-gen`, NOT merged). The owner manages the shared
   `INTIMACY_TOPICS` inventory two ways (spec 08 §16.5a): an **owner-only Settings surface**

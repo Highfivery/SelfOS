@@ -1997,10 +1997,18 @@ About-a-person picker + toggles removed; the generate IPC drops `targetPersonId`
 `includeRelationship` and the bridge derives the (author + recipient) tailoring context from the bound
 household recipient. **B built for the HOUSEHOLD case** — the start step binds the recipient for compat,
 `CompatibilitySendPanel` has no participant picker (you + the bound recipient), "two other people" removed, and
-`assignmentsCreateCompatibility` takes only `{ questionnaireId }`. **External-recipient compatibility is the
-NEXT slice** (the start step limits compat to household for now): the external recipient answers via the relay,
-the sender answers in-app, and once both are in the sender pushes the sealed outcome (per visibility — thanks /
-the joint report) back to the recipient's relay page from Results; `contextOnly` will be hidden for an external
-recipient (no coach). Gate green each part: typecheck/lint/format, **402 core + 486 desktop** unit, **68 E2E**
-(the compat E2E asserts no participant picker; visual QA of the compat start step + send panel — one clean
-"Compare you with" picker, no duplicate).
+`assignmentsCreateCompatibility` takes only `{ questionnaireId }`. **External-recipient compatibility — SEND
+side built:** the start step now allows external for compat; `createRelaySend` gained an optional `variant` +
+`compatibilityGroupId`, `writeCompatibilityMember` (extracted from `createCompatibilitySend`) writes the
+sender's in-app member, and `assignmentsCreateCompatibility` branches household-vs-external — for external it
+mints the recipient's relay send (their variant) + the sender's in-app member under one group, and returns the
+link + PIN (the send panel surfaces them). `contextOnly` is hidden for an external recipient (no coach). So the
+external recipient answers via the relay, the sender answers in-app, and the sender aligns in Results today.
+**Remaining (the one external-compat layer left): the recipient-facing relay-page outcome** — after both
+answer, the sender pushes the sealed outcome (per visibility — "waiting on the other" → thanks / the joint
+report) back to the recipient's relay mailbox from Results, and the relay page renders it (a new mailbox
+`result` field + a Worker push endpoint authed by the drain secret + the page states). Gate green each part:
+typecheck/lint/format, **402 core + 487 desktop** unit, **68 E2E** (compat E2E asserts no participant picker;
+
+- an external-compat bridge test: relay link/PIN + a two-member group; visual QA of the compat start step +
+  send panel).

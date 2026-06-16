@@ -8,6 +8,7 @@ import {
   contentKeyFromFragment,
   drain as kvDrain,
   openContent,
+  openResult,
   purge as kvPurge,
   putMailbox as kvPut,
   putResult as kvPutResult,
@@ -1503,7 +1504,7 @@ describe('createCoreBridge', () => {
   });
 
   it('external compatibility (§17.12-B): you in-app + the external recipient via the relay, one group', async () => {
-    const { bridge } = await freshOwner();
+    const { host, bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
     // Connect a relay so external sends can be minted (the fake Cloudflare host).
     expect((await bridge.relayConnect({ apiToken: 'cf', accountId: 'acct' })).configured).toBe(
@@ -1539,6 +1540,64 @@ describe('createCoreBridge', () => {
     const group = (await bridge.assignmentsCompatibility(q.id))[0]!;
     expect(group.members).toHaveLength(2);
     expect(group.compatibilityGroupId).toBe(sent.compatibilityGroupId);
+
+    // --- The full §17.12-D loop: both answer → align → publish the report back to the relay ---
+    // The sender answers their own in-app variant.
+    const inApp = group.members.find((m) => m.channel === 'inApp')!;
+    const myDetail = await bridge.assignmentsGet(inApp.assignmentId);
+    await bridge.assignmentsSubmit({
+      assignmentId: inApp.assignmentId,
+      answers: [{ questionId: myDetail!.questionnaire.questions[0]!.id, value: 3 }],
+    });
+
+    // The external recipient answers via the relay (their browser unlocks + seals to the send key).
+    const relayFetch = host.host.relay.fetch;
+    const token = sent.link!.split('/q/')[1]?.split('#')[0] ?? '';
+    const contentKey = contentKeyFromFragment(sent.link!.slice(sent.link!.indexOf('#')))!;
+    const unlocked = (await (
+      await relayFetch('https://relay/api/unlock', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ token, pin: sent.pin }),
+      })
+    ).json()) as { sealedContent: Parameters<typeof openContent>[0] };
+    const content = await openContent(unlocked.sealedContent, contentKey);
+    const sealed = await sealResponse(
+      {
+        kind: 'submit',
+        answers: [{ questionId: content.questionnaire.questions[0]!.id, value: 5 }],
+        submittedAt: '2026-06-11T01:00:00.000Z',
+      },
+      content.publicKey,
+    );
+    await relayFetch('https://relay/api/respond', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token, pin: sent.pin, sealed }),
+    });
+
+    // Drain the external answer in, then align both into a report.
+    expect((await bridge.assignmentsDrain()).drained).toBe(1);
+    expect((await bridge.assignmentsAlign(group.compatibilityGroupId)).ok).toBe(true);
+
+    // Push the report back to the external recipient's relay link.
+    expect(await bridge.assignmentsPublishCompatResult(group.compatibilityGroupId)).toEqual({
+      ok: true,
+      published: 1,
+    });
+
+    // The recipient revisits → unlock now carries the sealed outcome, decryptable with their fragment key.
+    const reUnlock = (await (
+      await relayFetch('https://relay/api/unlock', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ token, pin: sent.pin }),
+      })
+    ).json()) as { sealedResult?: Parameters<typeof openResult>[0] };
+    expect(reUnlock.sealedResult).toBeTruthy();
+    const outcome = await openResult(reUnlock.sealedResult!, contentKey);
+    expect(outcome.kind).toBe('report');
+    expect(outcome.headline).toMatch(/compare/i);
   });
 
   it('connects a relay, mints an external link, drains a response, and revoke-on-delete', async () => {

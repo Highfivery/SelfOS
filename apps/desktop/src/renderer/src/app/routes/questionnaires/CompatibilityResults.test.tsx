@@ -34,8 +34,8 @@ const group = (over: Partial<CompatibilityGroup> = {}): CompatibilityGroup => ({
   questionnaireId: 'q1',
   visibility: 'sharedReport',
   members: [
-    { assignmentId: 'a1', recipientName: 'Alex', status: 'submitted' },
-    { assignmentId: 'a2', recipientName: 'Bri', status: 'submitted' },
+    { assignmentId: 'a1', recipientName: 'Alex', channel: 'inApp', status: 'submitted' },
+    { assignmentId: 'a2', recipientName: 'Bri', channel: 'inApp', status: 'submitted' },
   ],
   bothSubmitted: true,
   report: null,
@@ -59,8 +59,8 @@ describe('CompatibilityResults', () => {
           group({
             bothSubmitted: false,
             members: [
-              { assignmentId: 'a1', recipientName: 'Alex', status: 'submitted' },
-              { assignmentId: 'a2', recipientName: 'Bri', status: 'sent' },
+              { assignmentId: 'a1', recipientName: 'Alex', channel: 'inApp', status: 'submitted' },
+              { assignmentId: 'a2', recipientName: 'Bri', channel: 'inApp', status: 'sent' },
             ],
           }),
         ]),
@@ -131,6 +131,43 @@ describe('CompatibilityResults', () => {
     renderResults();
     expect(await screen.findByText(/Both coaches updated/i)).toBeInTheDocument();
     expect(screen.queryByText('You two are largely aligned.')).not.toBeInTheDocument();
+  });
+
+  it('offers "Share results" for an external recipient + confirms once shared (§17.12-D)', async () => {
+    const assignmentsPublishCompatResult = vi.fn(() =>
+      Promise.resolve({ ok: true as const, published: 1 }),
+    );
+    installMockBridge({
+      assignmentsCompatibility: () =>
+        Promise.resolve([
+          group({
+            report: report(),
+            members: [
+              { assignmentId: 'a1', recipientName: 'You', channel: 'inApp', status: 'submitted' },
+              { assignmentId: 'a2', recipientName: 'Alex', channel: 'relay', status: 'submitted' },
+            ],
+          }),
+        ]),
+      assignmentsPublishCompatResult,
+      secretHas: () => Promise.resolve(true),
+    });
+    enableAi();
+    renderResults();
+    const shareBtn = await screen.findByRole('button', { name: /Share results/ });
+    await userEvent.click(shareBtn);
+    expect(assignmentsPublishCompatResult).toHaveBeenCalledWith('g1');
+    expect(await screen.findByText(/Shared with Alex/)).toBeInTheDocument();
+  });
+
+  it('does not offer "Share results" when both members are in-app (household)', async () => {
+    installMockBridge({
+      assignmentsCompatibility: () => Promise.resolve([group({ report: report() })]),
+      secretHas: () => Promise.resolve(true),
+    });
+    enableAi();
+    renderResults();
+    expect(await screen.findByText('You two are largely aligned.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Share results/ })).not.toBeInTheDocument();
   });
 
   it('offers an audited reveal only for a senderSeesAll group with readRaw', async () => {

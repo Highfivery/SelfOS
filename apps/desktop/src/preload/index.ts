@@ -138,6 +138,8 @@ const bridge: SelfosBridge = {
     ipcRenderer.invoke(IpcChannels.assignmentsCompatibility, questionnaireId),
   assignmentsAlign: (compatibilityGroupId) =>
     ipcRenderer.invoke(IpcChannels.assignmentsAlign, compatibilityGroupId),
+  assignmentsPublishCompatResult: (compatibilityGroupId) =>
+    ipcRenderer.invoke(IpcChannels.assignmentsPublishCompatResult, compatibilityGroupId),
   assignmentsDistillContextOnly: (compatibilityGroupId) =>
     ipcRenderer.invoke(IpcChannels.assignmentsDistillContextOnly, compatibilityGroupId),
   assignmentsRevealRaw: (assignmentId) =>

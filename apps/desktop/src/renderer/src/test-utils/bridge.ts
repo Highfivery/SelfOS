@@ -230,6 +230,8 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     assignmentsCompatibility: () => Promise.resolve([]),
     assignmentsAlign: () =>
       Promise.resolve({ ok: false, reason: 'NOT_READY', message: 'Not ready.' }),
+    assignmentsPublishCompatResult: () =>
+      Promise.resolve({ ok: false, reason: 'NOT_READY', message: 'Not ready.' }),
     assignmentsDistillContextOnly: () =>
       Promise.resolve({ ok: false, reason: 'NOT_READY', message: 'Not ready.' }),
     assignmentsRevealRaw: () => Promise.resolve(null),

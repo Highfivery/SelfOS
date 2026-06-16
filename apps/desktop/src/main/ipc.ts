@@ -250,6 +250,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.assignmentsCreateCompatibility, bridge.assignmentsCreateCompatibility);
   handle(IpcChannels.assignmentsCompatibility, bridge.assignmentsCompatibility);
   handle(IpcChannels.assignmentsAlign, bridge.assignmentsAlign);
+  handle(IpcChannels.assignmentsPublishCompatResult, bridge.assignmentsPublishCompatResult);
   handle(IpcChannels.assignmentsDistillContextOnly, bridge.assignmentsDistillContextOnly);
   handle(IpcChannels.assignmentsRevealRaw, bridge.assignmentsRevealRaw);
   handle(IpcChannels.assignmentsCreateRelayLink, bridge.assignmentsCreateRelayLink);

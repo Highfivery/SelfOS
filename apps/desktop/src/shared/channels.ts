@@ -10,6 +10,7 @@ import type {
   ChatTurnResult,
   CompatibilityGroup,
   CompatibilitySendResult,
+  CompatResultPublish,
   ContextOnlyResult,
   Conversation,
   Dream,
@@ -170,6 +171,7 @@ export const IpcChannels = {
   assignmentsCreateCompatibility: 'assignments:createCompatibility',
   assignmentsCompatibility: 'assignments:compatibility',
   assignmentsAlign: 'assignments:align',
+  assignmentsPublishCompatResult: 'assignments:publishCompatResult',
   assignmentsDistillContextOnly: 'assignments:distillContextOnly',
   assignmentsRevealRaw: 'assignments:revealRaw',
   assignmentsCreateRelayLink: 'assignments:createRelayLink',
@@ -585,6 +587,12 @@ export interface SelfosBridge {
    */
   assignmentsDistillContextOnly(compatibilityGroupId: string): Promise<ContextOnlyResult>;
   /**
+   * Push the generated alignment report back to the EXTERNAL recipient(s) of a compatibility group, sealed
+   * under their content key so the relay page shows it (08 §17.12-D). Sender-scoped; needs the report
+   * already generated; `INVALID` when the group has no external recipient. Requires `questionnaires.viewResults`.
+   */
+  assignmentsPublishCompatResult(compatibilityGroupId: string): Promise<CompatResultPublish>;
+  /**
    * Reveal a Private send's raw answers (08-questionnaires §8.4). Permitted only for the Owner (full
    * access, any send) or the sender of a `senderSeesAll` compatibility send holding
    * `questionnaires.readRaw`. Returns null if not permitted / absent.
@@ -752,6 +760,7 @@ export type {
   ChatTurnResult,
   CompatibilityGroup,
   CompatibilitySendResult,
+  CompatResultPublish,
   ContextOnlyResult,
   Conversation,
   Dream,

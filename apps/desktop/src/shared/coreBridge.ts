@@ -44,7 +44,9 @@ import {
   type CompatibilityMember,
   type CompatibilitySendResult,
   type CompatibilityVisibility,
+  type CompatResultPublish,
   type ContextOnlyResult,
+  type RelayResult,
   type InboxAssignmentDetail,
   type InboxCompatibilityView,
   type InboxItem,
@@ -202,6 +204,7 @@ import {
   listQuestionnaires,
   MAX_IMAGE_BYTES,
   openAssignment,
+  publishRelayResult,
   purgeQuestionnaire,
   readCustomIntimacyTopics,
   removeCustomIntimacyTopic,
@@ -1928,6 +1931,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           memberViews.push({
             assignmentId: a.id,
             recipientName: await recipientDisplayName(ctx.fs, ctx.key, a),
+            channel: a.channel,
             status: a.status,
             ...(a.status === 'submitted' ? { submittedAt: a.updatedAt } : {}),
           });
@@ -1982,6 +1986,70 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         return { ok: false, reason: 'DENIED', message: 'This isn’t a context-only send.' };
       }
       return distillContextOnly(deps, { compatibilityGroupId: groupId });
+    },
+    assignmentsPublishCompatResult: async (compatibilityGroupId): Promise<CompatResultPublish> => {
+      // Push the generated alignment report back to the EXTERNAL recipient(s) of a compatibility group,
+      // sealed under each one's content key so the relay page shows it (08 §17.12-D). Sender-scoped; needs
+      // the report already generated. contextOnly isn't offered for external, so it never reaches here.
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.viewResults'))) {
+        return { ok: false, reason: 'DENIED', message: 'Not available.' };
+      }
+      const personId = await activePersonId();
+      if (!personId) return { ok: false, reason: 'DENIED', message: 'Not available.' };
+      const groupId = GroupIdSchema.parse(compatibilityGroupId);
+      const group = await getCompatibilityGroup(ctx.fs, ctx.key, groupId);
+      if (group.length === 0 || group.some((a) => a.senderPersonId !== personId)) {
+        return { ok: false, reason: 'DENIED', message: 'Not available.' };
+      }
+      const externals = group.filter((a) => a.channel === 'relay' && a.relay);
+      if (externals.length === 0) {
+        return {
+          ok: false,
+          reason: 'INVALID',
+          message: 'There’s no external recipient to share with.',
+        };
+      }
+      const report = await getAlignmentReport(ctx.fs, ctx.key, groupId);
+      if (!report) {
+        return { ok: false, reason: 'NOT_READY', message: 'Generate the report first.' };
+      }
+      const config = await readRelayConfig(ctx.fs, ctx.key);
+      if (!config) {
+        return { ok: false, reason: 'INVALID', message: 'No relay is connected.' };
+      }
+      const senderName = (await getPerson(ctx.fs, ctx.key, personId))?.displayName ?? 'them';
+      // From the recipient's point of view the "other" participant is the sender. Every external-eligible
+      // visibility (sharedReport / eachSeesOwn / senderSeesAll) gives the recipient the combined report.
+      const result: RelayResult = {
+        schemaVersion: 1,
+        kind: 'report',
+        headline: `How you and ${senderName} compare`,
+        summary: report.summary,
+        items: report.items,
+        generatedAt: new Date().toISOString(),
+      };
+      const client = createRelayHttpClient(
+        config.endpointUrl,
+        config.drainSecret,
+        host.relay.fetch,
+      );
+      let published = 0;
+      for (const member of externals) {
+        try {
+          if (await publishRelayResult(ctx.fs, ctx.key, client, member.id, result)) published += 1;
+        } catch {
+          // A relay the app can't reach right now is skipped; the sender can retry (idempotent).
+        }
+      }
+      if (published === 0) {
+        return {
+          ok: false,
+          reason: 'ERROR',
+          message: 'Couldn’t reach the relay to share the results.',
+        };
+      }
+      return { ok: true, published };
     },
     assignmentsRevealRaw: async (assignmentId): Promise<SendAnswer[] | null> => {
       const ctx = await host.vaultAndKey();

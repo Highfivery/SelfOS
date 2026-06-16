@@ -8,6 +8,7 @@ import {
   type AlignmentItem,
   type AlignmentReport,
   type AlignmentResult,
+  type Assignment,
   type ContextOnlyResult,
   type Insight,
   type Questionnaire,
@@ -70,13 +71,17 @@ export async function getCompatibilityGroup(
   );
 }
 
-const recipientName = async (fs: FileSystem, key: Uint8Array, personId: string): Promise<string> =>
-  (await getPerson(fs, key, personId))?.displayName ?? 'Unknown';
+/** A participant's display name — a household person's profile name, or an external recipient's given name. */
+const participantName = async (fs: FileSystem, key: Uint8Array, a: Assignment): Promise<string> =>
+  a.recipient.kind === 'person'
+    ? ((await getPerson(fs, key, a.recipient.personId))?.displayName ?? 'Unknown')
+    : (a.recipient.displayName ?? 'them');
 
 /**
  * Generate (or regenerate) a compatibility group's alignment report. Requires both members submitted;
  * aligns their answers by `canonicalId`, produces the report + a draft Insight for the sender, and caches
- * the report. The sender must own the group (enforced in the bridge before calling).
+ * the report. Handles both household pairs and an EXTERNAL participant (who answers via the relay, §17.12-B).
+ * The sender must own the group (enforced in the bridge before calling).
  */
 export async function generateAlignment(
   deps: AiDeps,
@@ -87,12 +92,7 @@ export async function generateAlignment(
     return { ok: false, reason: 'NOT_READY', message: 'This compatibility send is incomplete.' };
   }
   const [first, second] = group;
-  if (
-    !first ||
-    !second ||
-    first.recipient.kind !== 'person' ||
-    second.recipient.kind !== 'person'
-  ) {
+  if (!first || !second) {
     return { ok: false, reason: 'NOT_READY', message: 'This compatibility send is incomplete.' };
   }
 
@@ -108,8 +108,8 @@ export async function generateAlignment(
     };
   }
 
-  const personAName = await recipientName(deps.fs, deps.key, first.recipient.personId);
-  const personBName = await recipientName(deps.fs, deps.key, second.recipient.personId);
+  const personAName = await participantName(deps.fs, deps.key, first);
+  const personBName = await participantName(deps.fs, deps.key, second);
 
   // Align the two answer sets by canonicalId (falling back to question id). Only questions present in
   // both variants can be compared, so a missing one is simply skipped.

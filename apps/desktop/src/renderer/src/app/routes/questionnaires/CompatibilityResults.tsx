@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Eye, Lock, Sparkles } from 'lucide-react';
+import { Eye, Lock, Send, Sparkles } from 'lucide-react';
 import { ANTHROPIC_API_KEY_ID } from '@shared/channels';
 import type { CompatibilityGroup, CompatibilityMember, SendAnswer } from '@shared/schemas';
 import { Banner, Button, Card, Heading, Stack, Text } from '../../../design-system/components';
@@ -85,9 +85,32 @@ function GroupCard({
   const [aligning, setAligning] = useState(false);
   const [message, setMessage] = useState<{ tone: 'info' | 'warning'; text: string } | null>(null);
   const [revealed, setRevealed] = useState<Record<string, SendAnswer[]>>({});
+  const [sharing, setSharing] = useState(false);
+  const [shared, setShared] = useState(false);
 
   const names = group.members.map((m) => m.recipientName).join(' & ');
   const isContextOnly = group.visibility === 'contextOnly';
+  // An external participant answers via a relay link and can be sent the report back (§17.12-D).
+  const externalMembers = group.members.filter((m) => m.channel === 'relay');
+
+  // Push the generated report back to the external recipient(s)' relay link.
+  const runShare = async (): Promise<void> => {
+    if (sharing) return;
+    setSharing(true);
+    setMessage(null);
+    try {
+      const result = await window.selfos?.assignmentsPublishCompatResult(
+        group.compatibilityGroupId,
+      );
+      if (result?.ok) {
+        setShared(true);
+      } else {
+        setMessage({ tone: 'warning', text: result?.message ?? 'Couldn’t share the results.' });
+      }
+    } finally {
+      setSharing(false);
+    }
+  };
 
   // Context-only: distil each participant's own answers into their own coach's context — no report.
   const runDistill = async (): Promise<void> => {
@@ -185,6 +208,27 @@ function GroupCard({
               <Banner tone="info">
                 Insight drafted from this report. <Link to="/memory">Review it in Memory →</Link>
               </Banner>
+            ) : null}
+            {externalMembers.length > 0 ? (
+              <Stack gap={2}>
+                {shared ? (
+                  <Banner tone="info">
+                    Shared with {externalMembers.map((m) => m.recipientName).join(' & ')}. They can
+                    revisit their link to see it.
+                  </Banner>
+                ) : (
+                  <Text size="sm" tone="secondary">
+                    {externalMembers.map((m) => m.recipientName).join(' & ')} answered via a link.
+                    Share this report so it shows up there too.
+                  </Text>
+                )}
+                <div>
+                  <Button variant="secondary" onClick={() => void runShare()} disabled={sharing}>
+                    <Send size={16} aria-hidden="true" />
+                    {sharing ? 'Sharing…' : shared ? 'Share again' : 'Share results'}
+                  </Button>
+                </div>
+              </Stack>
             ) : null}
           </Stack>
         ) : aiReady ? (

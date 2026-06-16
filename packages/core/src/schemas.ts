@@ -1431,6 +1431,7 @@ export interface SendResult {
 export interface CompatibilityMember {
   assignmentId: string;
   recipientName: string;
+  channel: Channel; // 'relay' = an external recipient (answers via a link; can receive a pushed outcome)
   status: AssignmentStatus;
   submittedAt?: string;
 }
@@ -1473,6 +1474,15 @@ export type ContextOnlyResult =
       reason: 'NO_KEY' | 'DENIED' | 'BUDGET' | 'REFUSED' | 'ERROR' | 'NOT_READY';
       message: string;
     };
+
+/**
+ * The result of pushing an external compatibility outcome to the recipient(s) from Results (08 §17.12-D).
+ * `published` is how many external relay members received the sealed report. `NOT_READY` until the
+ * alignment report exists; `INVALID` when the group has no external recipient to share with.
+ */
+export type CompatResultPublish =
+  | { ok: true; published: number }
+  | { ok: false; reason: 'DENIED' | 'NOT_READY' | 'INVALID' | 'ERROR'; message: string };
 
 /** The result of a dual compatibility send (generate each variant + freeze the paired snapshots). */
 export type CompatibilitySendResult =

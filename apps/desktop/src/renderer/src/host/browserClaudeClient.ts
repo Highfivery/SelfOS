@@ -31,13 +31,14 @@ export function browserClaudeClient(): ClaudeClient {
     },
 
     async stream(
-      { apiKey, model, system, messages, maxTokens },
+      { apiKey, model, system, messages, maxTokens, extendedThinking },
       onDelta,
     ): Promise<ClaudeStreamResult> {
       const stream = clientFor(apiKey).messages.stream({
         model,
         max_tokens: maxTokens,
-        thinking: { type: 'adaptive' },
+        // Disable adaptive thinking for bounded JSON calls so it can't starve the output budget (08 §17.9).
+        ...(extendedThinking === false ? {} : { thinking: { type: 'adaptive' } }),
         // cache_control on the stable system prefix → repeat turns read it at ~0.1× (06 §7).
         system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
         messages: messages.map((message) => ({ role: message.role, content: message.content })),

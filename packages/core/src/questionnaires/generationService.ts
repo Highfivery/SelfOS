@@ -137,7 +137,18 @@ export async function runClaude(
   let streamed;
   try {
     streamed = await deps.client.stream(
-      { apiKey, model, system, messages: [{ role: 'user', content: userText }], maxTokens },
+      {
+        apiKey,
+        model,
+        system,
+        messages: [{ role: 'user', content: userText }],
+        maxTokens,
+        // These are bounded structured-JSON calls — disable adaptive thinking so it can't consume the whole
+        // token budget and truncate the JSON to empty (the intimacy-generation bug, 08 §17.9). Verified live:
+        // sonnet + adaptive thinking + 1500 tokens → stop_reason `max_tokens`, empty output → "No usable
+        // questions"; with thinking off the full budget goes to the JSON.
+        extendedThinking: false,
+      },
       () => {},
     );
   } catch {
@@ -194,7 +205,9 @@ export async function generateQuestions(
       : {}),
   });
 
-  const call = await runClaude(deps, GENERATION_SYSTEM, user, 'questionnaire.generate', 1500);
+  // A generous output budget (thinking is off) — an intimacy set with long multi-choice option lists can run
+  // past 1500 tokens; 2500 leaves headroom so the JSON is never truncated.
+  const call = await runClaude(deps, GENERATION_SYSTEM, user, 'questionnaire.generate', 2500);
   if (!call.ok) return { ok: false, reason: call.reason, message: call.message };
 
   // Generation returns {title, questions}. Tolerate a legacy bare-array reply too, so an older model
@@ -209,11 +222,17 @@ export async function generateQuestions(
       ? { questions: legacyArray.data }
       : null;
   if (!set) {
+    // Diagnostic (08 §17.9): distinguish an empty/cut-off reply (the model returned nothing parseable — often
+    // a truncated draft) from a reply that came back but contained no JSON. A cut-off draft is a "try again",
+    // not a brief problem.
+    const cutOff = call.text.trim() === '';
     return {
       ok: false,
       reason: 'REFUSED',
       usage: call.usage,
-      message: 'No usable questions came back. Try a clearer brief.',
+      message: cutOff
+        ? 'The AI’s draft was cut off before it finished. Please try again.'
+        : 'No usable questions came back. Try a clearer brief.',
     };
   }
   const seen = new Set(request.existingPrompts.map(norm));

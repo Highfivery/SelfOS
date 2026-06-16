@@ -191,6 +191,56 @@ describe('generateQuestions', () => {
     expect(result.usage?.type).toBe('questionnaire.generate');
   });
 
+  it('disables extended thinking for generation so it can’t starve the JSON budget (§17.9)', async () => {
+    const fs = memFileSystem();
+    const { author } = await seedHousehold(fs);
+    let opts: { maxTokens?: number; extendedThinking?: boolean } = {};
+    const capturing: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (options) => {
+        opts = options;
+        return Promise.resolve({
+          text: valid,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    await generateQuestions(deps(fs, capturing, author), {
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      context: {
+        authorPersonId: author,
+        includeAuthor: true,
+        includeTarget: false,
+        includeRelationship: false,
+      },
+      existingPrompts: [],
+    });
+    // Adaptive thinking shares the token budget; for a bounded JSON call it must be OFF (else a long intimacy
+    // prompt truncates the output to empty → "No usable questions"). And the budget is generous.
+    expect(opts.extendedThinking).toBe(false);
+    expect(opts.maxTokens).toBeGreaterThanOrEqual(2000);
+  });
+
+  it('reports a cut-off draft distinctly from a brief problem (§17.9 diagnostic)', async () => {
+    const fs = memFileSystem();
+    const { author } = await seedHousehold(fs);
+    // An empty reply = the model returned nothing parseable (e.g. truncated) → a "try again", not a brief fix.
+    const result = await generateQuestions(deps(fs, fakeClient(''), author), {
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      context: {
+        authorPersonId: author,
+        includeAuthor: true,
+        includeTarget: false,
+        includeRelationship: false,
+      },
+      existingPrompts: [],
+    });
+    expect(result).toMatchObject({ ok: false, reason: 'REFUSED' });
+    expect(result.message).toMatch(/cut off/i);
+  });
+
   it('de-dupes against existing prompts', async () => {
     const fs = memFileSystem();
     const { author } = await seedHousehold(fs);

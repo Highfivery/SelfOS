@@ -1919,3 +1919,24 @@ overflow. **Lesson: the recipient-required rule belongs at the authoring boundar
 path, NOT in the structural `validateQuestionnaire` that `createAssignment` calls — putting it there breaks
 every core send of a recipient-less def; and a long-labelled SegmentedControl ("Compatibility (two people)")
 scrolls-x at 390px (a §12 failure), so the start step uses full-width Selects.**
+
+### 17.10 Critical fix — intimacy generation "No usable questions" was a thinking-budget bug, NOT a refusal
+
+After §17.2 shipped, intimacy `explicit`/`unfiltered` generation **still** returned "No usable questions came
+back" **every time** (General worked). Diagnosed against the **live** API (the offline fake always returns
+questions, masking it): the model was **NOT refusing**. `anthropicClient.stream` (the app's real path) sets
+`thinking: { type: 'adaptive' }`, and **`max_tokens` is the COMBINED thinking + output budget**. For the long,
+sensitive intimacy prompt, adaptive thinking on **sonnet** (the default model) consumed the entire 1500-token
+budget → `stop_reason: max_tokens` with **empty output** → `extractJsonObject` → null → REFUSED. (Opus thought
+less and fit; General's prompt is short so thinking stayed small — which is why only intimacy/sonnet failed.)
+
+**Fix:** structured one-shot JSON calls disable extended thinking. `ClaudeStreamOptions` gains
+`extendedThinking?: boolean` (default on — chat/coaching keep adaptive thinking); the Electron + iOS clients
+omit the `thinking` field when it's `false`; `runClaude` (questionnaire generate / improve / variant /
+gap-finder) passes `extendedThinking: false`, and generation's budget is raised to **2500** for long
+multi-choice option lists. **Diagnostic:** a cut-off/empty reply now reports "The AI's draft was cut off…
+Please try again" distinctly from a genuine no-JSON refusal. **Verified live** (sonnet, both tiers, thinking
+off → `end_turn` + valid JSON). **Lesson: adaptive `thinking` shares the `max_tokens` budget — a bounded
+structured-JSON call must disable it (or reserve a large budget), or heavy thinking silently truncates the
+output to empty; and a symptom that looks like a content refusal can be pure token starvation, so diagnose
+against the LIVE model (the offline fake hides it) before touching the prompt.**

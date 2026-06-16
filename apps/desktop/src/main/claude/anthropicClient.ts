@@ -21,14 +21,16 @@ export function anthropicClient(): ClaudeClient {
     },
 
     async stream(
-      { apiKey, model, system, messages, maxTokens },
+      { apiKey, model, system, messages, maxTokens, extendedThinking },
       onDelta,
     ): Promise<ClaudeStreamResult> {
       const client = new Anthropic({ apiKey });
       const stream = client.messages.stream({
         model,
         max_tokens: maxTokens,
-        thinking: { type: 'adaptive' },
+        // Adaptive thinking shares the token budget; a bounded JSON call disables it so the budget isn't
+        // starved (would truncate the JSON to empty — the questionnaire-generation bug, 08 §17.9).
+        ...(extendedThinking === false ? {} : { thinking: { type: 'adaptive' } }),
         // cache_control on the stable system prefix → repeat turns read it at ~0.1× (06 §7).
         system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
         messages: messages.map((message) => ({ role: message.role, content: message.content })),

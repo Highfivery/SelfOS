@@ -30,6 +30,11 @@ export interface ClaudeStreamOptions {
   system: string;
   messages: ClaudeMessage[];
   maxTokens: number;
+  // Adaptive extended thinking shares the `maxTokens` budget with the visible output. For a coaching chat
+  // that's fine (long budget, reasoning helps). For a bounded structured-JSON call (questionnaire generation,
+  // analysis) heavy thinking can consume the whole budget and TRUNCATE the JSON to empty — so those callers
+  // pass `false` to disable thinking and keep the full budget for the output. Defaults to on (chat behavior).
+  extendedThinking?: boolean;
 }
 
 export interface ClaudeStreamResult {

@@ -571,6 +571,10 @@ export const QuestionSchema = z.object({
     .object({ imagePath: z.string().min(1), alt: z.string(), mime: z.string().min(1) })
     .optional(), // author-attached image (encrypted; ZK on relay). `mime` builds the display data URL.
   options: z.array(z.string()).optional(), // choice/ranking/thisOrThat/allocation buckets
+  // singleChoice/multiChoice: offer an "Other" write-in (a free-text field when picked) — the answer stores
+  // the typed text alongside any preset picks (08 §17.12-C). Additive; the renderer also honors a literal
+  // 'Other' option (the intake's existing convention).
+  allowOther: z.boolean().optional(),
   scale: z
     .object({
       min: z.number(),

@@ -203,7 +203,7 @@ function SingleChoiceControl({
 }): JSX.Element {
   const options = question.options ?? [];
   const presets = options.filter((o) => o !== OTHER);
-  const hasOther = options.includes(OTHER);
+  const hasOther = question.allowOther === true || options.includes(OTHER);
   const current = typeof value === 'string' ? value : '';
   const isCustom = current !== '' && !presets.includes(current);
   const [otherOpen, setOtherOpen] = useState(isCustom);
@@ -282,7 +282,7 @@ function MultiChoiceControl({
 }): JSX.Element {
   const options = question.options ?? [];
   const presets = options.filter((o) => o !== OTHER);
-  const hasOther = options.includes(OTHER);
+  const hasOther = question.allowOther === true || options.includes(OTHER);
   const selected = Array.isArray(value) ? value : [];
   const selectedPresets = selected.filter((s) => presets.includes(s));
   const customText = selected.filter((s) => !presets.includes(s)).join(', ');

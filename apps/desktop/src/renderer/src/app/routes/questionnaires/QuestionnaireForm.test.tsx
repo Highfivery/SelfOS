@@ -49,6 +49,27 @@ describe('QuestionnaireForm', () => {
     expect(screen.getByRole('radio', { name: 'One' })).toBeChecked();
   });
 
+  it('offers an "Other" write-in when allowOther is set, and stores the typed text (§17.12-C)', async () => {
+    render(
+      <Harness
+        questions={[
+          q({
+            id: 'a',
+            type: 'singleChoice',
+            prompt: 'Pick',
+            options: ['One', 'Two'],
+            allowOther: true,
+          }),
+        ]}
+      />,
+    );
+    // The "Other" radio appears (from the flag — no literal 'Other' option), revealing a free-text field.
+    await userEvent.click(screen.getByRole('radio', { name: 'Other' }));
+    const field = await screen.findByLabelText('Pick — other');
+    await userEvent.type(field, 'My own answer');
+    expect(field).toHaveValue('My own answer');
+  });
+
   it('picks a rating point on its min→max scale', async () => {
     render(
       <Harness

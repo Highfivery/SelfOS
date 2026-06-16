@@ -161,6 +161,36 @@ describe('Questionnaires', () => {
     expect(await screen.findByText(/needs at least two options/i)).toBeInTheDocument();
   });
 
+  it('offers "Allow Other" on choice questions, ON by default, and persists it (§17.12-C)', async () => {
+    const save = saveSpy();
+    installMockBridge({ questionnairesList: () => Promise.resolve([]), questionnairesSave: save });
+    await openNewBuilder();
+
+    await userEvent.type(screen.getByLabelText('Title'), 'Picks');
+    await userEvent.type(screen.getByLabelText('Question 1'), 'Which?');
+    await userEvent.selectOptions(screen.getByLabelText('Answer type'), 'singleChoice');
+    await userEvent.type(screen.getByLabelText('Option 1', { exact: true }), 'A');
+    await userEvent.type(screen.getByLabelText('Option 2', { exact: true }), 'B');
+
+    // The toggle is present and ON by default.
+    const toggle = screen.getByRole('switch', { name: 'Question 1: allow Other' });
+    expect(toggle).toBeChecked();
+    await userEvent.click(screen.getByRole('button', { name: 'Create draft' }));
+    expect(save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        questions: [expect.objectContaining({ type: 'singleChoice', allowOther: true })],
+      }),
+    );
+
+    // Turning it off drops allowOther from the saved question.
+    await userEvent.click(toggle);
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    const last = save.mock.calls[save.mock.calls.length - 1]?.[0] as {
+      questions: { allowOther?: boolean }[];
+    };
+    expect(last.questions[0]).not.toHaveProperty('allowOther');
+  });
+
   it('adds a custom type and saves the questionnaire under it', async () => {
     const save = saveSpy();
     const addType = vi.fn((name: string) => Promise.resolve([name]));

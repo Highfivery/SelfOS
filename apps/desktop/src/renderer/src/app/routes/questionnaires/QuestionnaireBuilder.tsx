@@ -144,6 +144,7 @@ interface QDraft {
   help: string;
   required: boolean;
   options: TextRow[];
+  allowOther: boolean; // singleChoice/multiChoice: offer an "Other" free-text write-in (§17.12-C)
   rows: TextRow[];
   min: number;
   max: number;
@@ -182,6 +183,7 @@ function blankDraft(): QDraft {
     maxLabel: '',
     branch: null,
     media: null,
+    allowOther: true, // choice questions offer an "Other" write-in by default (§17.12-C)
     aiDrafted: false,
   };
 }
@@ -212,6 +214,8 @@ function fromQuestion(q: Question): QDraft {
       ? { whenQuestionId: q.branch.whenQuestionId, equals: String(q.branch.equals) }
       : null,
     media: q.media ? { ...q.media } : null,
+    // Default the "Other" write-in ON for choice questions (incl. AI-drafted ones), §17.12-C.
+    allowOther: q.allowOther ?? (q.type === 'singleChoice' || q.type === 'multiChoice'),
     aiDrafted: false,
   };
 }
@@ -258,6 +262,10 @@ function toQuestion(d: QDraft, drafts: QDraft[]): Question {
       : {}),
     ...(OPTION_TYPES.includes(d.type)
       ? { options: d.options.map((o) => o.text.trim()).filter(Boolean) }
+      : {}),
+    // The "Other" write-in is offered only on single/multi-choice (§17.12-C).
+    ...((d.type === 'singleChoice' || d.type === 'multiChoice') && d.allowOther
+      ? { allowOther: true }
       : {}),
     ...(SCALE_TYPES.includes(d.type) ? { scale: buildRange(d) } : {}),
     ...(d.type === 'matrix'
@@ -1013,6 +1021,17 @@ export function QuestionnaireBuilder({
                         <Plus size={14} aria-hidden="true" />
                         Add option
                       </Button>
+                      {/* singleChoice/multiChoice: let the answerer write in their own answer (§17.12-C). */}
+                      {d.type === 'singleChoice' || d.type === 'multiChoice' ? (
+                        <div className={styles.requiredToggle}>
+                          <Switch
+                            checked={d.allowOther}
+                            onChange={(checked) => patch(d.id, { allowOther: checked })}
+                            aria-label={`Question ${index + 1}: allow Other`}
+                          />
+                          <Text size="sm">Allow “Other” (free text)</Text>
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
 

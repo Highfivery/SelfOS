@@ -1448,7 +1448,14 @@ export type ContextOnlyResult =
 
 /** The result of a dual compatibility send (generate each variant + freeze the paired snapshots). */
 export type CompatibilitySendResult =
-  | { ok: true; compatibilityGroupId: string }
+  | {
+      ok: true;
+      compatibilityGroupId: string;
+      // For an EXTERNAL compatibility send (08 §17.12-B) the recipient answers via the relay — the link + PIN
+      // are returned once for delivery (omitted for a household send, where both answer in-app).
+      link?: string;
+      pin?: string;
+    }
   | {
       ok: false;
       reason: 'NO_KEY' | 'DENIED' | 'BUDGET' | 'REFUSED' | 'ERROR' | 'INVALID';

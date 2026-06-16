@@ -31,6 +31,7 @@ const renderPanel = (onSent = vi.fn()): ReturnType<typeof render> =>
         questionnaireId="q1"
         title="Sexy time"
         visibility="sharedReport"
+        recipient={{ kind: 'person', personId: 'angel' }}
         recipientName="Angel"
         onCancel={() => {}}
         onSent={onSent}

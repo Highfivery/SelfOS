@@ -35,7 +35,57 @@ export interface CreateCompatibilitySendInput {
   recipients: [CompatibilityRecipient, CompatibilityRecipient];
 }
 
-/** Freeze the two variant snapshots + create the paired Assignments. Returns the shared group id. */
+/**
+ * Freeze ONE in-app participant's variant snapshot + Assignment under a shared compatibility group. Used for
+ * both household members and — for an **external** compatibility send (08 §17.12-B) — the **sender's** in-app
+ * member (the external participant's side is a relay send via `createRelaySend`, sharing the same group id).
+ */
+export async function writeCompatibilityMember(
+  fs: FileSystem,
+  key: Uint8Array,
+  input: {
+    canonical: Questionnaire;
+    senderPersonId: string;
+    participantPersonId: string;
+    questions: Question[];
+    visibility: CompatibilityVisibility;
+    compatibilityGroupId: string;
+  },
+): Promise<string> {
+  // The as-sent snapshot is the canonical questionnaire with this participant's personalized variant, pinned
+  // to the chosen visibility so the report + disclosure derive from one frozen source.
+  const variant: Questionnaire = {
+    ...input.canonical,
+    questions: input.questions,
+    compatibility: { enabled: true, visibility: input.visibility },
+  };
+  const problems = validateQuestionnaire(variant);
+  if (problems.length > 0) {
+    throw new Error(`Cannot send an incomplete questionnaire: ${problems.join(' ')}`);
+  }
+  const id = uuid();
+  const at = new Date().toISOString();
+  // Snapshot first, then the assignment (the same crash-safe order as createAssignment).
+  await writeEncryptedJson(fs, snapshotPath(id), variant, key);
+  const assignment: Assignment = {
+    id,
+    schemaVersion: 1,
+    questionnaireId: input.canonical.id,
+    senderPersonId: input.senderPersonId,
+    recipient: { kind: 'person', personId: input.participantPersonId },
+    channel: 'inApp',
+    privacy: 'private', // compatibility sends never expose raw answers inline (§3.6)
+    senderVisibleToRecipient: true,
+    compatibilityGroupId: input.compatibilityGroupId,
+    status: 'sent',
+    createdAt: at,
+    updatedAt: at,
+  };
+  await writeEncryptedJson(fs, assignmentPath(id), assignment, key);
+  return id;
+}
+
+/** Freeze the two in-app variant snapshots + create the paired Assignments. Returns the shared group id. */
 export async function createCompatibilitySend(
   fs: FileSystem,
   key: Uint8Array,
@@ -48,40 +98,15 @@ export async function createCompatibilitySend(
   }
 
   const compatibilityGroupId = uuid();
-  const at = new Date().toISOString();
-
   for (const recipient of input.recipients) {
-    // The as-sent snapshot is the canonical questionnaire with this recipient's personalized variant,
-    // pinned to the chosen visibility so the report + disclosure derive from one frozen source.
-    const variant: Questionnaire = {
-      ...canonical,
-      questions: recipient.questions,
-      compatibility: { enabled: true, visibility: input.visibility },
-    };
-    const problems = validateQuestionnaire(variant);
-    if (problems.length > 0) {
-      throw new Error(`Cannot send an incomplete questionnaire: ${problems.join(' ')}`);
-    }
-
-    const id = uuid();
-    // Snapshot first, then the assignment (the same crash-safe order as createAssignment).
-    await writeEncryptedJson(fs, snapshotPath(id), variant, key);
-    const assignment: Assignment = {
-      id,
-      schemaVersion: 1,
-      questionnaireId: canonical.id,
+    await writeCompatibilityMember(fs, key, {
+      canonical,
       senderPersonId: input.senderPersonId,
-      recipient: { kind: 'person', personId: recipient.personId },
-      channel: 'inApp',
-      privacy: 'private', // compatibility sends never expose raw answers inline (§3.6)
-      senderVisibleToRecipient: true,
+      participantPersonId: recipient.personId,
+      questions: recipient.questions,
+      visibility: input.visibility,
       compatibilityGroupId,
-      status: 'sent',
-      createdAt: at,
-      updatedAt: at,
-    };
-    await writeEncryptedJson(fs, assignmentPath(id), assignment, key);
+    });
   }
-
   return compatibilityGroupId;
 }

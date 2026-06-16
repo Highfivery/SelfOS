@@ -59,9 +59,9 @@ export function NewQuestionnaireStart({
   const candidates = people;
 
   const compat = mode === 'compatibility';
-  // Compatibility compares you with the recipient, and both answer in-app — so for now the recipient must be
-  // a household person (external compatibility, via the relay, is the next slice, 08 §17.12-B).
-  const allowExternal = canSendExternal && !compat;
+  // Compatibility compares you with the recipient — household (both answer in-app) OR external (they answer
+  // via the relay, 08 §17.12-B). External needs the sendExternal capability either way.
+  const allowExternal = canSendExternal;
 
   const onContinue = (): void => {
     if (kind === 'household') {
@@ -105,10 +105,7 @@ export function NewQuestionnaireStart({
               value={mode}
               onChange={(e) => {
                 setError(null);
-                const next = e.target.value as Mode;
-                setMode(next);
-                // Compatibility is household-only for now — drop a stale external selection.
-                if (next === 'compatibility') setKind('household');
+                setMode(e.target.value as Mode);
               }}
             >
               <option value="one">One person</option>

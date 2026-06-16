@@ -16,6 +16,7 @@ import {
   type ConsentReceipt,
   type EncryptedEnvelopeData,
   type PrivacyMode,
+  type Question,
   type RelayContent,
   type RelayMailbox,
   type RelayStoredResponse,
@@ -60,6 +61,13 @@ export interface CreateRelaySendInput {
   disclosure: string;
   endpointUrl: string;
   expiresAt?: string;
+  /**
+   * External compatibility (08 §17.12-B): snapshot this personalized **variant** (aligned to the canonical
+   * questions by `canonicalId`) instead of the plain definition, and link this send to the compatibility
+   * group so the sender's in-app send + this relay send align. Omitted for an ordinary external send.
+   */
+  variant?: Question[];
+  compatibilityGroupId?: string;
 }
 
 export interface CreateRelaySendResult {
@@ -103,8 +111,11 @@ export async function createRelaySend(
   relay: RelayClient,
   input: CreateRelaySendInput,
 ): Promise<CreateRelaySendResult> {
-  const questionnaire = await getQuestionnaire(fs, key, input.questionnaireId);
-  if (!questionnaire) throw new Error(`Questionnaire not found: ${input.questionnaireId}`);
+  const def = await getQuestionnaire(fs, key, input.questionnaireId);
+  if (!def) throw new Error(`Questionnaire not found: ${input.questionnaireId}`);
+  // For an external compatibility send (08 §17.12-B) the as-sent snapshot is the recipient's personalized
+  // VARIANT, not the plain definition; otherwise it's the definition.
+  const questionnaire = input.variant ? { ...def, questions: input.variant } : def;
   const problems = validateQuestionnaire(questionnaire);
   if (problems.length > 0) {
     throw new Error(`Cannot send an incomplete questionnaire: ${problems.join(' ')}`);
@@ -156,6 +167,7 @@ export async function createRelaySend(
     channel: 'relay',
     privacy: input.privacy,
     senderVisibleToRecipient: input.senderVisibleToRecipient,
+    ...(input.compatibilityGroupId ? { compatibilityGroupId: input.compatibilityGroupId } : {}),
     status: 'sent',
     expiresAt,
     relay: { token, pinHash, publicKey, privateKeyWrapped },

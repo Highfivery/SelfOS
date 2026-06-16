@@ -55,7 +55,6 @@ import {
   type ProfileUpdateSuggestion,
   type IntakeSynthesisResult,
   type IntakeTurnResult,
-  type Question,
   type QuestionTrend,
   type Role,
   type SendAnswer,
@@ -169,8 +168,10 @@ import {
   addCustomType,
   analyzeAssignment,
   buildQuestionTrends,
+  compatibilityDisclosure,
   createAssignment,
   createCompatibilitySend,
+  writeCompatibilityMember,
   declineAssignment,
   deleteQuestionnaireImage,
   deleteSend,
@@ -1751,71 +1752,146 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         };
       }
       // The participants are the sender + the BOUND recipient (08 §17.12-B), derived from the questionnaire.
-      // External-recipient compatibility (via the relay) is the next slice — for now it must be a household
-      // person (the start step already prevents choosing external for compatibility).
-      if (canonical.recipient?.kind !== 'person') {
+      const recipient = canonical.recipient;
+      if (!recipient) {
+        return { ok: false, reason: 'INVALID', message: 'This questionnaire has no recipient.' };
+      }
+      const visibility = canonical.compatibility.visibility;
+      const senderName =
+        (await getPerson(deps.fs, deps.key, deps.personId))?.displayName ?? 'Someone';
+
+      // The sender's own variant (their own full context — no privacy concern; reads naturally).
+      const senderVariant = await generateVariant(deps, {
+        forName: senderName,
+        questions: canonical.questions,
+        targetContext: {
+          authorPersonId: deps.personId,
+          includeAuthor: true,
+          includeTarget: false,
+          includeRelationship: false,
+        },
+      });
+      if (!senderVariant.ok || !senderVariant.questions) {
         return {
           ok: false,
-          reason: 'INVALID',
-          message: 'Comparing with someone outside the household is coming soon.',
+          reason: senderVariant.reason ?? 'ERROR',
+          message: senderVariant.message ?? 'Could not personalize.',
         };
       }
-      const recipientPersonId = canonical.recipient.personId;
-      if (recipientPersonId === deps.personId) {
-        return {
-          ok: false,
-          reason: 'INVALID',
-          message: 'You can’t compare yourself with yourself.',
-        };
-      }
-      const participants = [deps.personId, recipientPersonId];
-      const people = await Promise.all(participants.map((id) => getPerson(deps.fs, deps.key, id)));
-      if (people.some((p) => !p)) {
-        return { ok: false, reason: 'INVALID', message: 'A chosen person no longer exists.' };
-      }
-      // Personalize a variant per participant. For another person the target context is **shareable facts
-      // only** (the §13.3 boundary); when the participant IS the sender, use their own full context (their
-      // own data, no privacy concern) so their variant reads naturally.
-      const variants: { personId: string; questions: Question[] }[] = [];
-      for (let i = 0; i < participants.length; i++) {
-        const participantId = participants[i] as string;
-        const isSender = participantId === deps.personId;
-        const result = await generateVariant(deps, {
-          forName: people[i]?.displayName ?? 'them',
-          questions: canonical.questions,
-          targetContext: isSender
-            ? {
-                authorPersonId: deps.personId,
-                includeAuthor: true,
-                includeTarget: false,
-                includeRelationship: false,
-              }
-            : {
-                authorPersonId: deps.personId,
-                includeAuthor: false,
-                targetPersonId: participantId,
-                includeTarget: true,
-                includeRelationship: true,
-              },
-        });
-        if (!result.ok || !result.questions) {
+
+      if (recipient.kind === 'person') {
+        // --- Household: two paired in-app sends (sender + the recipient) ---
+        const recipientPersonId = recipient.personId;
+        if (recipientPersonId === deps.personId) {
           return {
             ok: false,
-            reason: result.reason ?? 'ERROR',
-            message: result.message ?? 'Could not personalize.',
+            reason: 'INVALID',
+            message: 'You can’t compare yourself with yourself.',
           };
         }
-        variants.push({ personId: participantId, questions: result.questions });
+        const rp = await getPerson(deps.fs, deps.key, recipientPersonId);
+        if (!rp)
+          return { ok: false, reason: 'INVALID', message: 'A chosen person no longer exists.' };
+        // The recipient's variant uses their SHAREABLE context only (the §13.3 boundary).
+        const recipientVariant = await generateVariant(deps, {
+          forName: rp.displayName,
+          questions: canonical.questions,
+          targetContext: {
+            authorPersonId: deps.personId,
+            includeAuthor: false,
+            targetPersonId: recipientPersonId,
+            includeTarget: true,
+            includeRelationship: true,
+          },
+        });
+        if (!recipientVariant.ok || !recipientVariant.questions) {
+          return {
+            ok: false,
+            reason: recipientVariant.reason ?? 'ERROR',
+            message: recipientVariant.message ?? 'Could not personalize.',
+          };
+        }
+        const compatibilityGroupId = await createCompatibilitySend(deps.fs, deps.key, {
+          questionnaireId,
+          senderPersonId: deps.personId,
+          visibility,
+          recipients: [
+            { personId: deps.personId, questions: senderVariant.questions },
+            { personId: recipientPersonId, questions: recipientVariant.questions },
+          ],
+        });
+        return { ok: true, compatibilityGroupId };
       }
-      const [a, b] = variants;
-      if (!a || !b) return { ok: false, reason: 'ERROR', message: 'Could not personalize.' };
-      const compatibilityGroupId = await createCompatibilitySend(deps.fs, deps.key, {
+
+      // --- External (relay): the sender answers in-app + the recipient answers via the relay (08 §17.12-B) ---
+      if (!(await activePersonCan(deps.fs, deps.key, 'questionnaires.sendExternal'))) {
+        return { ok: false, reason: 'DENIED', message: 'You can’t send external links.' };
+      }
+      const relayConfig = await readRelayConfig(deps.fs, deps.key);
+      if (!relayConfig) {
+        return {
+          ok: false,
+          reason: 'INVALID',
+          message: 'No relay is connected. Ask an admin to set one up in Settings → Relay.',
+        };
+      }
+      // The external recipient isn't a household person, so their variant is just personalized by name.
+      const externalVariant = await generateVariant(deps, {
+        forName: recipient.displayName ?? 'them',
+        questions: canonical.questions,
+        targetContext: {
+          authorPersonId: deps.personId,
+          includeAuthor: false,
+          includeTarget: false,
+          includeRelationship: false,
+        },
+      });
+      if (!externalVariant.ok || !externalVariant.questions) {
+        return {
+          ok: false,
+          reason: externalVariant.reason ?? 'ERROR',
+          message: externalVariant.message ?? 'Could not personalize.',
+        };
+      }
+      const compatibilityGroupId = uuid();
+      // The sender's in-app member.
+      await writeCompatibilityMember(deps.fs, deps.key, {
+        canonical,
+        senderPersonId: deps.personId,
+        participantPersonId: deps.personId,
+        questions: senderVariant.questions,
+        visibility,
+        compatibilityGroupId,
+      });
+      // The external recipient's relay member — the recipient is told who's comparing (the sender).
+      const disclosure = compatibilityDisclosure(visibility, {
+        otherParticipantName: senderName,
+        senderName,
+        viewerIsSender: false,
+      });
+      const client = createRelayHttpClient(
+        relayConfig.endpointUrl,
+        relayConfig.drainSecret,
+        host.relay.fetch,
+      );
+      const { link, pin } = await createRelaySend(deps.fs, deps.key, client, {
         questionnaireId,
         senderPersonId: deps.personId,
-        visibility: canonical.compatibility.visibility,
-        recipients: [a, b],
+        senderName,
+        recipient: {
+          kind: 'external',
+          ...(recipient.displayName !== undefined ? { displayName: recipient.displayName } : {}),
+          ...(recipient.email !== undefined ? { email: recipient.email } : {}),
+          ...(recipient.phone !== undefined ? { phone: recipient.phone } : {}),
+        },
+        senderVisibleToRecipient: true,
+        privacy: 'private',
+        disclosure,
+        endpointUrl: relayConfig.endpointUrl,
+        variant: externalVariant.questions,
+        compatibilityGroupId,
       });
-      return { ok: true, compatibilityGroupId };
+      return { ok: true, compatibilityGroupId, link, pin };
     },
     assignmentsCompatibility: async (questionnaireId): Promise<CompatibilityGroup[]> => {
       const ctx = await host.vaultAndKey();

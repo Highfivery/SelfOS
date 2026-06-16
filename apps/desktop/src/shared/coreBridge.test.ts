@@ -1500,6 +1500,45 @@ describe('createCoreBridge', () => {
     expect(await bridge.assignmentsRevealRaw(group.members[0]!.assignmentId)).toBeNull();
   });
 
+  it('external compatibility (§17.12-B): you in-app + the external recipient via the relay, one group', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    // Connect a relay so external sends can be minted (the fake Cloudflare host).
+    expect((await bridge.relayConnect({ apiToken: 'cf', accountId: 'acct' })).configured).toBe(
+      true,
+    );
+
+    // A compatibility questionnaire bound to an EXTERNAL recipient → compares you + them.
+    const q = await bridge.questionnairesSave({
+      title: 'How aligned are we?',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: { kind: 'external', displayName: 'Jordan' },
+      questions: [
+        {
+          id: 'c1',
+          type: 'rating',
+          prompt: 'How connected?',
+          required: true,
+          scale: { min: 1, max: 5 },
+        },
+      ],
+      compatibility: { enabled: true, visibility: 'sharedReport' },
+    });
+
+    const sent = await bridge.assignmentsCreateCompatibility({ questionnaireId: q.id });
+    expect(sent.ok).toBe(true);
+    if (!sent.ok) throw new Error('expected ok');
+    // The external recipient gets a relay link + PIN; the sender answers their own version in-app.
+    expect(sent.link).toMatch(/\.workers\.dev\/q\/[0-9a-f]+#k=/);
+    expect(sent.pin).toMatch(/^\d{6}$/);
+
+    // The group has two members — one in-app (the sender) + one relay (the external recipient) — same group.
+    const group = (await bridge.assignmentsCompatibility(q.id))[0]!;
+    expect(group.members).toHaveLength(2);
+    expect(group.compatibilityGroupId).toBe(sent.compatibilityGroupId);
+  });
+
   it('connects a relay, mints an external link, drains a response, and revoke-on-delete', async () => {
     const { host, bridge, ownerId } = await freshOwner();
 

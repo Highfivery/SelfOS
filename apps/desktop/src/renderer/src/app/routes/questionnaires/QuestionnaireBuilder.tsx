@@ -743,18 +743,24 @@ export function QuestionnaireBuilder({
                           setVisibility(event.target.value as CompatibilityVisibility);
                         }}
                       >
-                        {VISIBILITY_OPTIONS.map((v) => (
-                          <option
-                            key={v.value}
-                            value={v.value}
-                            disabled={v.value === 'senderSeesAll' && !canReadRaw}
-                          >
-                            {v.label}
-                            {v.value === 'senderSeesAll' && !canReadRaw
-                              ? ' (needs permission)'
-                              : ''}
-                          </option>
-                        ))}
+                        {VISIBILITY_OPTIONS
+                          // contextOnly feeds each person's OWN coach — meaningless for an external recipient
+                          // (they have no SelfOS coach), so hide it for an external compatibility send (§17.12-B).
+                          .filter(
+                            (v) => v.value !== 'contextOnly' || recipient?.kind !== 'external',
+                          )
+                          .map((v) => (
+                            <option
+                              key={v.value}
+                              value={v.value}
+                              disabled={v.value === 'senderSeesAll' && !canReadRaw}
+                            >
+                              {v.label}
+                              {v.value === 'senderSeesAll' && !canReadRaw
+                                ? ' (needs permission)'
+                                : ''}
+                            </option>
+                          ))}
                       </Select>
                       <Text size="sm" tone="secondary">
                         {VISIBILITY_OPTIONS.find((v) => v.value === visibility)?.help}
@@ -1271,6 +1277,7 @@ export function QuestionnaireBuilder({
                 questionnaireId={sendId}
                 title={title.trim()}
                 visibility={visibility}
+                recipient={recipient}
                 recipientName={recipientName}
                 onCancel={() => setSendId(null)}
                 onSent={() => {

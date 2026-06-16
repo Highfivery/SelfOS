@@ -2,14 +2,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { RelayContent } from '@selfos/core/schemas';
+import type { RelayContent, RelayResult } from '@selfos/core/schemas';
 
 // Mock the relay crypto so the page flow is exercised without jsdom's partial WebCrypto (the crypto
-// itself is unit-tested in @selfos/core). openContent yields whatever the current test set up.
+// itself is unit-tested in @selfos/core). openContent/openResult yield whatever the current test set up.
 let nextContent: RelayContent;
+let nextResult: RelayResult;
 vi.mock('@selfos/core/relay', () => ({
   contentKeyFromFragment: () => 'content-key',
   openContent: () => Promise.resolve(nextContent),
+  openResult: () => Promise.resolve(nextResult),
   openImageBytes: () => Promise.resolve(new Uint8Array()),
   sealResponse: () =>
     Promise.resolve({ epk: 'E', env: { v: 1, alg: 'aes-256-gcm', iv: '', tag: '', data: '' } }),
@@ -117,5 +119,52 @@ describe('RelayApp', () => {
     await userEvent.type(screen.getByLabelText(/your pin/i), '123456');
     await userEvent.click(screen.getByRole('button', { name: /open questionnaire/i }));
     expect(await screen.findByText(/already answered/i)).toBeInTheDocument();
+  });
+
+  it('a compatibility submit lands on the "waiting for results" state (§17.12-D)', async () => {
+    nextContent = content({ compatibility: { enabled: true, visibility: 'sharedReport' } });
+    mockFetch({
+      '/api/unlock': { status: 200, body: { ok: true, sealedContent: envelope, submitted: false } },
+      '/api/respond': { status: 200, body: { ok: true } },
+    });
+    render(<RelayApp />);
+    await userEvent.type(screen.getByLabelText(/your pin/i), '123456');
+    await userEvent.click(screen.getByRole('button', { name: /open questionnaire/i }));
+    await userEvent.click(await screen.findByRole('button', { name: /continue/i }));
+    await userEvent.type(await screen.findByLabelText('One thing I do well?'), 'Listening');
+    await userEvent.click(screen.getByRole('button', { name: /^submit$/i }));
+    // Not the plain "thanks for filling this out" — the results-pending state.
+    expect(await screen.findByText(/once everyone has answered/i)).toBeInTheDocument();
+  });
+
+  it('renders the sender-pushed report on a return visit (§17.12-D)', async () => {
+    nextContent = content({ compatibility: { enabled: true, visibility: 'sharedReport' } });
+    nextResult = {
+      schemaVersion: 1,
+      kind: 'report',
+      headline: 'How you and Sam line up',
+      summary: 'Mostly aligned, a couple of differences.',
+      items: [
+        {
+          canonicalId: 'a',
+          prompt: 'One thing I do well?',
+          agreement: 'aligned',
+          note: 'Both said listening.',
+        },
+      ],
+      generatedAt: 'now',
+    };
+    mockFetch({
+      '/api/unlock': {
+        status: 200,
+        body: { ok: true, sealedContent: envelope, submitted: true, sealedResult: envelope },
+      },
+    });
+    render(<RelayApp />);
+    await userEvent.type(screen.getByLabelText(/your pin/i), '123456');
+    await userEvent.click(screen.getByRole('button', { name: /open questionnaire/i }));
+    expect(await screen.findByText('How you and Sam line up')).toBeInTheDocument();
+    expect(screen.getByText('One thing I do well?')).toBeInTheDocument();
+    expect(screen.getByText(/you agree/i)).toBeInTheDocument();
   });
 });

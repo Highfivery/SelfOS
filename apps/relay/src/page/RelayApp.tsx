@@ -4,6 +4,7 @@ import {
   contentKeyFromFragment,
   openContent,
   openImageBytes,
+  openResult,
   sealResponse,
 } from '@selfos/core/relay';
 import { unansweredRequired, visibleQuestions } from '@selfos/core/questionnaires';
@@ -14,6 +15,7 @@ import type {
   Answer,
   RelayContent,
   RelayResponsePayload,
+  RelayResult,
   SensitivityTier,
 } from '@selfos/core/schemas';
 
@@ -64,6 +66,40 @@ function Message({
       <h1 className="title">{title}</h1>
       <p className="subtitle">{body}</p>
       {children}
+      <CrisisFooter />
+    </div>
+  );
+}
+
+const AGREEMENT_LABEL: Record<string, string> = {
+  aligned: 'You agree',
+  mixed: 'Some overlap',
+  divergent: 'You differ',
+};
+
+/**
+ * The sender's pushed outcome (08 §17.12-D), shown to a returning recipient who's already answered: a
+ * combined compatibility report (kind 'report') or a plain acknowledgement (kind 'thanks'). Decrypted
+ * client-side with the recipient's fragment content key — the relay only ever held the sealed form.
+ */
+function ResultView({ result }: { result: RelayResult }): JSX.Element {
+  return (
+    <div className="card">
+      <h1 className="title">{result.headline}</h1>
+      {result.summary ? <p className="subtitle">{result.summary}</p> : null}
+      {result.kind === 'report' && result.items && result.items.length > 0 ? (
+        <ul className="resultList">
+          {result.items.map((item) => (
+            <li key={item.canonicalId} className="resultItem">
+              <p className="resultPrompt">{item.prompt}</p>
+              <span className={`resultBadge resultBadge--${item.agreement}`}>
+                {AGREEMENT_LABEL[item.agreement] ?? item.agreement}
+              </span>
+              {item.note ? <p className="muted">{item.note}</p> : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
       <CrisisFooter />
     </div>
   );
@@ -244,7 +280,7 @@ function FormScreen({
   content: RelayContent;
   contentKey: string;
   attestation: AgeAttestation | undefined;
-  onDone: (kind: 'thanks' | 'declined') => void;
+  onDone: (kind: 'thanks' | 'awaiting' | 'declined') => void;
 }): JSX.Element {
   const [answers, setAnswers] = useState<AnswerMap>({});
   const [error, setError] = useState<string | null>(null);
@@ -271,9 +307,13 @@ function FormScreen({
     ...(attestation ? { ageAttestation: attestation } : {}),
   };
 
+  // A compatibility send still owes a combined result, so its post-submit state is "waiting"; an ordinary
+  // send is simply done (§17.12-D).
+  const submittedState = content.questionnaire.compatibility?.enabled ? 'awaiting' : 'thanks';
+
   const send = async (
     payload: RelayResponsePayload,
-    done: 'thanks' | 'declined',
+    done: 'thanks' | 'awaiting' | 'declined',
   ): Promise<void> => {
     setBusy(true);
     setError(null);
@@ -283,7 +323,7 @@ function FormScreen({
       if (res.status === 200) {
         onDone(done);
       } else if (res.status === 409) {
-        onDone('thanks');
+        onDone(submittedState);
       } else {
         setError('Something went wrong sending your answers. Please try again.');
       }
@@ -309,7 +349,7 @@ function FormScreen({
         submittedAt: new Date().toISOString(),
         consent,
       },
-      'thanks',
+      submittedState,
     );
   };
 
@@ -395,6 +435,8 @@ type Phase =
   | { kind: 'consent'; content: RelayContent }
   | { kind: 'form'; content: RelayContent; attestation: AgeAttestation | undefined }
   | { kind: 'thanks' }
+  | { kind: 'awaiting' } // answered; the sender hasn't shared the combined result yet (compatibility)
+  | { kind: 'outcome'; result: RelayResult } // the sender's pushed report / acknowledgement (§17.12-D)
   | { kind: 'declined' }
   | { kind: 'withdrawn' }
   | { kind: 'alreadySubmitted' }
@@ -422,6 +464,7 @@ export function RelayApp(): JSX.Element {
       const res = await api('/api/unlock', { token, pin: entered });
       const json = res.json as {
         sealedContent?: Parameters<typeof openContent>[0];
+        sealedResult?: Parameters<typeof openResult>[0];
         submitted?: boolean;
         attemptsRemaining?: number;
         lockedUntil?: number;
@@ -429,7 +472,19 @@ export function RelayApp(): JSX.Element {
       if (res.status === 200 && json.sealedContent) {
         setPin(entered);
         if (json.submitted) {
-          setPhase({ kind: 'alreadySubmitted' });
+          // Already answered. If the sender has pushed an outcome, show it; otherwise show the right
+          // "waiting"/"thanks" state — a compatibility send still owes a combined result, an ordinary
+          // send doesn't (§17.12-D).
+          if (json.sealedResult) {
+            setPhase({ kind: 'outcome', result: await openResult(json.sealedResult, contentKey) });
+            return;
+          }
+          const answered = await openContent(json.sealedContent, contentKey);
+          setPhase(
+            answered.questionnaire.compatibility?.enabled
+              ? { kind: 'awaiting' }
+              : { kind: 'alreadySubmitted' },
+          );
           return;
         }
         const content = await openContent(json.sealedContent, contentKey);
@@ -498,6 +553,27 @@ export function RelayApp(): JSX.Element {
           </div>
         </Message>
       );
+      break;
+    case 'awaiting':
+      body = (
+        <Message
+          title="Thanks for answering."
+          body="Once everyone has answered, the results will appear here. Revisit this link with your PIN to check back."
+        >
+          <div className="row">
+            <button
+              className="button buttonSecondary"
+              type="button"
+              onClick={() => void onWithdraw()}
+            >
+              Withdraw my response
+            </button>
+          </div>
+        </Message>
+      );
+      break;
+    case 'outcome':
+      body = <ResultView result={phase.result} />;
       break;
     case 'declined':
       body = (

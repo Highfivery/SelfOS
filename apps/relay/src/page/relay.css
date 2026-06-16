@@ -197,6 +197,54 @@ body {
   font-size: var(--text-xs);
 }
 
+/* The sender's pushed compatibility outcome (§17.12-D). */
+.resultList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.resultItem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-alt);
+}
+
+.resultPrompt {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+}
+
+.resultBadge {
+  align-self: flex-start;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
+}
+
+.resultBadge--aligned {
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+  border-color: var(--color-accent);
+}
+
+.resultBadge--divergent {
+  background: var(--color-danger-subtle-bg);
+  color: var(--color-text-primary);
+  border-color: var(--color-danger);
+}
+
 .linkButton {
   background: none;
   border: none;

@@ -366,6 +366,42 @@ describe('intakeService', () => {
     expect(insight.facts.find((f) => f.text.includes('Sleeps'))?.restricted).toBeUndefined();
   });
 
+  it('persists a roster answer in the section (no Person field) and feeds it to the portrait', async () => {
+    const fs = await setup();
+    await submitSectionForm(
+      fs,
+      key,
+      'p1',
+      'life-now',
+      { children: [{ name: 'Emma', gender: 'Girl', age: '7' }] },
+      NOW,
+    );
+    // Stored in the section answers; NOT promoted to a Person field (storage is portrait/context only).
+    const session = await getIntakeSession(fs, key, 'p1');
+    expect(session?.sections.find((s) => s.id === 'life-now')?.answers.children).toEqual([
+      { name: 'Emma', gender: 'Girl', age: '7' },
+    ]);
+    expect(await getPerson(fs, key, 'p1')).not.toHaveProperty('children');
+
+    // It reaches the synthesis input (the portrait), formatted as readable text — not "[object Object]".
+    let captured = '';
+    const usage = { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 };
+    const client: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        if ((options.messages.at(-1)?.content ?? '').includes('closing portrait')) {
+          captured = options.messages.map((m) => m.content).join('\n');
+        }
+        const text = JSON.stringify({ portrait: 'p', facts: [], crisisFlag: false });
+        onDelta(text);
+        return Promise.resolve({ text, usage });
+      },
+    };
+    await synthesizeIntake(synth(fs, client));
+    expect(captured).toContain('Emma, Girl, 7');
+    expect(captured).not.toContain('[object Object]');
+  });
+
   it('feeds the portrait into the person’s OWN coaching context, including restricted facts', async () => {
     const fs = await setup();
     await synthesizeIntake(synth(fs, fakeClient()));

@@ -1,6 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { visibleQuestions, allocationTotal, isDateEntryList } from '@selfos/core/questionnaires';
-import type { AnswerValue, AnswerMap } from '@selfos/core/questionnaires';
+import {
+  visibleQuestions,
+  allocationTotal,
+  isDateEntryList,
+  isRosterList,
+} from '@selfos/core/questionnaires';
+import type { AnswerValue, AnswerMap, RosterRow } from '@selfos/core/questionnaires';
 import type { Question } from '@selfos/core/schemas';
 import { CrisisFooter } from './CrisisFooter';
 import { QuestionImage, type LoadImage } from './QuestionImage';
@@ -240,6 +245,74 @@ function DateListControl({
         onClick={() => set([...rows, { label: '', date: '' }])}
       >
         + Add a date
+      </button>
+    </div>
+  );
+}
+
+/** A repeatable list of rows with configurable columns (e.g. kids: name/gender/age; pets: name/species/gender).
+ * Each row is a small stacked card (fields stack vertically) so it never overflows at narrow widths. */
+function RosterControl({
+  question,
+  value,
+  set,
+}: {
+  question: Question;
+  value: AnswerValue | undefined;
+  set: (value: AnswerValue) => void;
+}): JSX.Element {
+  const cols = question.roster ?? [];
+  const rows: RosterRow[] = isRosterList(value) ? value : [];
+  const update = (i: number, key: string, v: string): void =>
+    set(rows.map((r, idx) => (idx === i ? { ...r, [key]: v } : r)));
+  return (
+    <div className={styles.roster}>
+      {rows.map((row, i) => (
+        <div key={i} className={styles.rosterRow}>
+          <div className={styles.rosterRowHead}>
+            <span className={styles.rosterRowNum}>#{i + 1}</span>
+            <button
+              type="button"
+              className={styles.dateRemove}
+              aria-label={`Remove #${i + 1}`}
+              onClick={() => set(rows.filter((_, idx) => idx !== i))}
+            >
+              ×
+            </button>
+          </div>
+          {cols.map((col) => (
+            <label key={col.key} className={styles.rosterField}>
+              <span className={styles.rosterLabel}>{col.label}</span>
+              {col.type === 'select' ? (
+                <select
+                  className={styles.input}
+                  value={row[col.key] ?? ''}
+                  aria-label={`${question.prompt} — ${col.label} ${i + 1}`}
+                  onChange={(event) => update(i, col.key, event.target.value)}
+                >
+                  <option value="">—</option>
+                  {(col.options ?? []).map((o) => (
+                    <option key={o} value={o}>
+                      {o}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  className={styles.input}
+                  value={row[col.key] ?? ''}
+                  aria-label={`${question.prompt} — ${col.label} ${i + 1}`}
+                  {...(col.placeholder ? { placeholder: col.placeholder } : {})}
+                  onChange={(event) => update(i, col.key, event.target.value)}
+                />
+              )}
+            </label>
+          ))}
+        </div>
+      ))}
+      <button type="button" className={styles.dateAdd} onClick={() => set([...rows, {}])}>
+        + Add
       </button>
     </div>
   );
@@ -523,6 +596,8 @@ function Control({
       return <SliderControl question={question} value={value} set={set} />;
     case 'dateList':
       return <DateListControl question={question} value={value} set={set} />;
+    case 'roster':
+      return <RosterControl question={question} value={value} set={set} />;
     case 'ranking':
       return <RankingControl question={question} value={value} set={set} />;
     case 'matrix': {

@@ -13,13 +13,16 @@ import type { Answer, Question, SendAnswer } from '../schemas';
  */
 /** One entry of a `dateList` answer (a labeled date, e.g. an anniversary). */
 export type DateEntryValue = { label: string; date: string };
+/** One row of a `roster` answer — a record of column-key → value (e.g. {name, gender, age}). */
+export type RosterRow = Record<string, string>;
 export type AnswerValue =
   | string
   | number
   | boolean
   | string[]
   | Record<string, number>
-  | DateEntryValue[];
+  | DateEntryValue[]
+  | RosterRow[];
 export type AnswerMap = Record<string, AnswerValue>;
 
 /** Whether a value is a `dateList` answer (an array of {label, date} entries, not a string list). */
@@ -27,6 +30,21 @@ export function isDateEntryList(value: AnswerValue | undefined): value is DateEn
   return (
     Array.isArray(value) &&
     value.every((e) => e !== null && typeof e === 'object' && 'label' in e && 'date' in e)
+  );
+}
+
+/** Whether a value is a `roster` answer — an array of string-keyed string records (rows). Checked AFTER
+ * `isDateEntryList` (a dateList row is also a string record, so test the more specific guard first). */
+export function isRosterList(value: AnswerValue | undefined): value is RosterRow[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (r) =>
+        r !== null &&
+        typeof r === 'object' &&
+        !Array.isArray(r) &&
+        Object.values(r).every((v) => typeof v === 'string'),
+    )
   );
 }
 
@@ -79,6 +97,16 @@ export function isAnswered(question: Question, value: AnswerValue | undefined): 
       return (
         isDateEntryList(value) && value.some((e) => e.label.trim() !== '' && e.date.trim() !== '')
       );
+    case 'roster': {
+      // Answered when ≥1 row has its FIRST column (the name) filled. The first column key is authored.
+      if (!isRosterList(value)) return false;
+      const firstKey = question.roster?.[0]?.key;
+      return value.some((row) =>
+        firstKey
+          ? (row[firstKey]?.trim() ?? '') !== ''
+          : Object.values(row).some((v) => v.trim() !== ''),
+      );
+    }
     case 'matrix': {
       const rows = question.matrix?.rows ?? [];
       if (
@@ -115,6 +143,19 @@ export function formatAnswerForDisplay(question: Question, value: AnswerValue | 
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
   if (typeof value === 'number') return Number.isFinite(value) ? String(value) : '';
   if (typeof value === 'string') return value.trim();
+  // roster: rows of configurable columns → "Emma, Girl, 7; Liam, Boy, 4" (values in authored column order).
+  if (question.type === 'roster' && isRosterList(value)) {
+    const cols = question.roster ?? [];
+    return value
+      .map((row: RosterRow) =>
+        cols
+          .map((c) => row[c.key]?.trim())
+          .filter(Boolean)
+          .join(', '),
+      )
+      .filter((s) => s !== '')
+      .join('; ');
+  }
   // dateList: labeled dates → "Anniversary: 2014-06-21, …" (kept in entry order).
   if (isDateEntryList(value)) {
     return value

@@ -579,7 +579,9 @@ consistency with the intimacy sliders (2026-06-16).
 **The basics** _(core, form)_ — preferred name / nickname (text) · pronouns(single+other)→`pronouns` ·
 gender identity(single+other)→`gender` · birthday(date)→`birthday` · **important dates(dateList)→`importantDates`**
 (a repeatable label+date list — anniversaries, kids' birthdays) · where you live(text)→`location` · where you
-grew up(text) · languages you speak(multi)→`languages` · cultural / ethnic background(text)→`ethnicity` ·
+grew up(text) · languages you speak(multi)→`languages` · cultural / ethnic background(**multi**:
+White/European, Black/African, Hispanic/Latino, East/South/Southeast Asian, MENA, Indigenous, Pacific Islander,
+Mixed, Other write-in, Prefer-not-to-say — the picks are joined into the string `ethnicity` field)→`ethnicity` ·
 **how you look(text)→`appearanceDescription`** (hair/build/features — also feeds the self's dream images) ·
 what you do for work(text)→`occupation` · education level(single) · morning person or night owl(single).
 (`interests` is filled by Joy & play's "What are you into?" — not asked twice. The 2026-06-16 reconciliation

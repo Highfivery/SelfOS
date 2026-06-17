@@ -233,7 +233,23 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         field: 'languages',
         list: true,
       }),
-      f(shortText('ethnicity', 'Your cultural or ethnic background'), { field: 'ethnicity' }),
+      f(
+        multi('ethnicity', 'Your cultural or ethnic background', [
+          'White / European',
+          'Black / African',
+          'Hispanic / Latino',
+          'East Asian',
+          'South Asian',
+          'Southeast Asian',
+          'Middle Eastern / North African',
+          'Indigenous / Native',
+          'Pacific Islander',
+          'Mixed / Multiple',
+          'Other',
+          'Prefer not to say',
+        ]),
+        { field: 'ethnicity' },
+      ),
       f(
         longText(
           'appearanceDescription',

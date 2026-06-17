@@ -1783,7 +1783,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           return { ok: false, reason: 'INVALID', message: 'A chosen person no longer exists.' };
         otherName = rp.displayName;
       } else {
-        otherName = recipient.displayName ?? 'them';
+        // An external recipient nearly always has a name; fall back to a warm placeholder, not "them".
+        otherName = recipient.displayName ?? 'your partner';
       }
 
       // The sender's own variant — written TO the sender, ABOUT the other participant; their own full context.

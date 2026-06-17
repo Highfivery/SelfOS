@@ -537,15 +537,21 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  min-width: 0;
 }
 
+/* The label input grows to fill the row… */
 .dateRow .input:first-child {
   flex: 1 1 0;
   min-width: 0;
 }
 
+/* …and the date input sizes to its own content (NOT the shared `.input` width:100%, which would otherwise
+   eat the whole row, collapse the label, and push the remove button outside the card). */
 .dateRow input[type='date'] {
   flex: 0 0 auto;
+  width: auto;
+  min-width: 0;
 }
 
 .dateRemove {

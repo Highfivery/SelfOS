@@ -4029,6 +4029,22 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
     await w.getByRole('button', { name: '+ Add a date' }).click();
     await w.getByLabel('Any important dates to remember? — label 1').fill('Anniversary');
     await w.getByLabel('Any important dates to remember? — date 1').fill('2014-06-21');
+    // Layout guard for the dateRow: the label input must FILL the row (it flexes), the date input is
+    // content-sized, and nothing overflows the card. The regression collapsed the label to ~0 and pushed
+    // the remove button outside the card — caught here by label-wider-than-date + no page overflow.
+    const dateLabelBox = await w
+      .getByLabel('Any important dates to remember? — label 1')
+      .boundingBox();
+    const dateInputBox = await w
+      .getByLabel('Any important dates to remember? — date 1')
+      .boundingBox();
+    expect(dateLabelBox!.width).toBeGreaterThan(dateInputBox!.width);
+    await expect(w.getByRole('button', { name: /Remove Anniversary/ })).toBeVisible();
+    const dateRowOverflow = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      return main ? main.scrollWidth - main.clientWidth : 0;
+    });
+    expect(dateRowOverflow).toBeLessThanOrEqual(1);
     await w.getByRole('button', { name: /Continue/ }).click();
 
     // Core done → the invited grid offers the deeper sections. Opening intimacy shows the shared 18+ gate.

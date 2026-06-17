@@ -360,6 +360,17 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-17 — Fix (**no "Finish" button in the sent/locked questionnaire preview; 08 §17.14f**; on
+  `fix/questionnaire-delete-draft-sentstate-relay`, **merged to `main`** at the user's explicit instruction
+  "commit all changes to main"). User: the read-only preview of a sent questionnaire still showed the
+  test-on-yourself "Finish" button + "Answer the N required questions to finish" — confusing, since a sent
+  questionnaire is shown for reference only. `QuestionnairePreview` gains a `readOnly` prop that drops the
+  Finish button + required-validation and shortens the intro banner to "This is exactly what your recipient
+  sees."; the builder passes `readOnly` from the **locked (sent)** branch only — the **unsent** Preview mode
+  keeps the real dry-run Finish. Verified live in the web preview (sent questionnaire → no Finish). Gate green:
+  typecheck (node + web/DOM-lib), lint, format, **437 core + 11 relay + 530 desktop** unit (+1 lock-view assert
+  for no-Finish), **77 E2E**. Synced 08 §17.14f. **This is the close-out of the questionnaire send-lifecycle
+  branch — now merged to `main`.**
 - 2026-06-17 — Fix (**compatibility variant pronoun safety (options rewritten with gender) + a sleek Share
   card; 08 §17.14e**; on `fix/questionnaire-delete-draft-sentstate-relay`, NOT merged). User: a compat
   question for HIM about his FEMALE partner showed options with "him" (answers read as if she were

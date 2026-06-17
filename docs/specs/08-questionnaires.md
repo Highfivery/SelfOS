@@ -2274,3 +2274,15 @@ Two issues: (1) a compatibility question for a man about his FEMALE partner show
 - **Lesson: personalizing a compatibility question means BOTH the prompt and the OPTIONS — gendered pronouns
   live in the options, so rewriting only the prompt leaves the answers reading from the wrong person's
   perspective; give the model both participants' genders explicitly and have it rewrite options too.**
+
+### 17.14f No "Finish" in the sent (locked) preview (2026-06-17) — BUILT
+
+The sent/locked questionnaire's read-only preview still showed the test-on-yourself **"Finish"** button (with
+its required-question validation), which confused — there is nothing to finish on a sent questionnaire, it is
+shown only for reference.
+
+- `QuestionnairePreview` gains a **`readOnly`** prop. When set, the test-on-yourself **"Finish"** button and
+  its required-validation banner are dropped, and the intro banner shortens to "This is exactly what your
+  recipient sees." The builder passes `readOnly` from the **sent/locked** branch only; the **unsent** Preview
+  mode keeps the interactive Finish (a real dry-run on a draft). Test: the lock-view test asserts no `Finish`
+  button is present.

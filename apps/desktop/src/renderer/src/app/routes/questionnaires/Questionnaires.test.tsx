@@ -804,6 +804,8 @@ describe('Questionnaires', () => {
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
     expect(screen.getByText(/its questions are locked/i)).toBeInTheDocument();
     expect(screen.queryByLabelText('Question 1')).not.toBeInTheDocument();
+    // The read-only preview has NO test-on-yourself "Finish" — that only confused on a sent item (§17.14f).
+    expect(screen.queryByRole('button', { name: 'Finish' })).not.toBeInTheDocument();
     // Re-send is offered but disabled until the cooldown elapses, with a timing notice.
     expect(screen.getByRole('button', { name: /send again/i })).toBeDisabled();
     expect(screen.getByText(/Ask again in/i)).toBeInTheDocument();

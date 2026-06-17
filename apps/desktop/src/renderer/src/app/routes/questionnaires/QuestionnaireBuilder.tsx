@@ -817,7 +817,7 @@ export function QuestionnaireBuilder({
             )}
             {shareMsg ? <Banner tone="warning">{shareMsg}</Banner> : null}
           </div>
-          <QuestionnairePreview questions={previewQuestions} />
+          <QuestionnairePreview questions={previewQuestions} readOnly />
           {problems !== null && problems.length > 0 ? (
             <Banner tone="warning">{problems.join(' ')}</Banner>
           ) : null}

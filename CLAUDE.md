@@ -336,6 +336,25 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-17 — Fix + build (**two onboarding-form follow-ups from a user screenshot; spec 18 §14.6**, landed on
+  `main` via worktrees while a concurrent agent held the shared tree). **(1) Important-dates row was visually
+  broken** (user flagged: label collapsed to nothing, the × remove button shoved outside the card). Cause: the
+  shared `.input { width: 100% }` beat the date input's `flex: 0 0 auto`, so the date input ate the whole row.
+  Fix: `.dateRow input[type='date'] { width: auto; min-width: 0 }` so it sizes to content and the label fills.
+  Added an **E2E geometry guard** (label box wider than the date box + no page overflow) and **proved it FAILS on
+  the old CSS, passes on the fix** — the test that should have caught it. **(2) "Your cultural or ethnic
+  background"** changed from a free-text field to a **multi-select** (White/European, Black/African,
+  Hispanic/Latino, East/South/Southeast Asian, MENA, Indigenous, Pacific Islander, Mixed, Other write-in,
+  Prefer-not-to-say) → the picks join into the string `ethnicity` field via `fillPersonFields` (a multi → joined
+  string, like a contact's free text; NOT a list). **Asked first** (single vs multi → user chose multi for mixed
+  heritage). Gate green (in the worktree): typecheck, lint, format, unit (+ethnicity-joins-to-string in the
+  field-fill test), E2E (+ ethnicity multi-pick in the onboarding field-fill test → decrypts the vault, asserts
+  the joined string). **Process lesson (recurred): a concurrent agent switched the SHARED working tree onto their
+  branch with uncommitted WIP — committing there would land my work on their branch + risk staging their files.
+  The fix is a `git worktree add -b <branch> /tmp/x main` (pnpm install in the worktree is ~4s on a warm store),
+  do + gate + commit + merge entirely in the isolated worktree, then revert my stray edits in the shared tree so
+  the agent's branch stays clean. Don't `git checkout main` in the shared tree — it would drag the agent's
+  uncommitted WIP onto main.**
 - 2026-06-16 — Build (**Memory dashboard — SLICE 3: the dashboard UI; SPEC 20 FULLY BUILT**;
   [20-memory-dashboard](docs/specs/20-memory-dashboard.md) §3/§8/§9, on `feat/memory-dashboard` **worktree**,
   NOT merged). Rebuilt `routes/memory/Memory.tsx` into the living dashboard: header (search + Refresh memory +

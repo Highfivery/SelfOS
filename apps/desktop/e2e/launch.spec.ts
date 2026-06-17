@@ -4025,6 +4025,10 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
     await expect(w.getByRole('heading', { name: 'The basics' })).toBeVisible();
     await w.getByLabel('What do you do for work?').fill('nurse');
     await w.getByLabel('How would you describe how you look?').fill('tall, curly hair');
+    // Ethnicity is now a multi-select (pick one or more) → joined into the string `ethnicity` field.
+    // Multi options render as role="checkbox" cards; `exact` avoids "East Asian" matching "Southeast Asian".
+    await w.getByRole('checkbox', { name: 'East Asian', exact: true }).click();
+    await w.getByRole('checkbox', { name: 'Mixed / Multiple', exact: true }).click();
     // A structured label+date entry (the new dateList control) → Person.importantDates.
     await w.getByRole('button', { name: '+ Add a date' }).click();
     await w.getByLabel('Any important dates to remember? — label 1').fill('Anniversary');
@@ -4069,6 +4073,8 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
     const filled = await getPerson(fs, key, 'owner-1');
     expect(filled?.occupation).toBe('nurse');
     expect(filled?.appearanceDescription).toBe('tall, curly hair'); // new basics field
+    expect(filled?.ethnicity).toContain('East Asian'); // multi-select → joined string
+    expect(filled?.ethnicity).toContain('Mixed / Multiple');
     expect(filled?.importantDates).toEqual([{ label: 'Anniversary', date: '2014-06-21' }]); // dateList
     const context = await buildContext(fs, key, 'owner-1');
     expect(context).toContain('thoughtful and steady'); // the portrait summary feeds own context

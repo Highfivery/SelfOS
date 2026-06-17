@@ -143,13 +143,19 @@ describe('intakeService', () => {
       key,
       'p1',
       'basics',
-      { occupation: 'nurse', languages: ['English', 'Spanish'], pronouns: 'she/her' },
+      {
+        occupation: 'nurse',
+        languages: ['English', 'Spanish'],
+        pronouns: 'she/her',
+        ethnicity: ['East Asian', 'Mixed / Multiple'],
+      },
       NOW,
     );
     const p = await getPerson(fs, key, 'p1');
     expect(p?.occupation).toBe('nurse');
     expect(p?.languages).toEqual(['English', 'Spanish']); // multi → list field
     expect(p?.pronouns).toBe('she/her');
+    expect(p?.ethnicity).toBe('East Asian, Mixed / Multiple'); // multi → joined STRING field (not a list)
     const basics = session.sections.find((s) => s.id === 'basics');
     expect(basics?.status).toBe('complete');
     expect(basics?.answers.occupation).toBe('nurse'); // structured answers persist under the person

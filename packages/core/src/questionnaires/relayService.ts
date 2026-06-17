@@ -27,7 +27,7 @@ import {
 import type { FileSystem } from '../host';
 import { writeEncryptedJson } from '../vault';
 import { assignmentPath, consentPath, snapshotPath } from './paths';
-import { getAssignment } from './assignmentService';
+import { getAssignment, getAssignmentSnapshot } from './assignmentService';
 import { getQuestionnaireImage } from './imageService';
 import { saveResponse } from './responseService';
 import { getQuestionnaire, validateQuestionnaire } from './questionnaireService';
@@ -103,6 +103,59 @@ async function buildContent(
 }
 
 /**
+ * Mint the relay link material for one send: a fresh ECDH keypair + content key + PIN, with the
+ * sealed-content ciphertext mailbox uploaded. Shared by minting an external send AND attaching a link to an
+ * in-app (household) send (08 §17.13). The content key lives only in the returned link's fragment.
+ */
+async function mintRelay(
+  fs: FileSystem,
+  key: Uint8Array,
+  relay: RelayClient,
+  input: {
+    snapshot: RelayContent['questionnaire'];
+    senderName: string | null; // already resolved: null = anonymous
+    disclosure: string;
+    endpointUrl: string;
+    createdAt: string;
+    expiresAt: string;
+  },
+): Promise<{ relay: NonNullable<Assignment['relay']>; link: string; pin: string }> {
+  const token = generateRelayToken();
+  const contentKey = generateContentKey();
+  const pin = generatePin();
+  const { publicKey, privateKey } = await generateSendKeyPair();
+  const privateKeyWrapped = JSON.stringify(await encrypt(privateKey, key));
+  // Wrap the content key under the master key too, so the sender can later seal an OUTCOME the recipient
+  // decrypts with the same fragment key (compatibility report write-back, §17.12-D).
+  const contentKeyWrapped = JSON.stringify(await encrypt(contentKey, key));
+  const pinHash = await hashPin(pin);
+  const content = await buildContent(
+    fs,
+    key,
+    input.snapshot,
+    publicKey,
+    input.senderName,
+    input.disclosure,
+    contentKey,
+  );
+  const sealedContent = await sealContent(content, contentKey);
+  const mailbox: RelayMailbox = {
+    schemaVersion: 1,
+    token,
+    sealedContent,
+    pinHash,
+    createdAt: input.createdAt,
+    expiresAt: input.expiresAt,
+  };
+  await relay.putMailbox(mailbox);
+  return {
+    relay: { token, pinHash, publicKey, privateKeyWrapped, contentKeyWrapped },
+    link: buildRelayLink(input.endpointUrl, token, contentKey),
+    pin,
+  };
+}
+
+/**
  * Mint an external (relay) send: snapshot the validated questionnaire, generate a per-send ECDH keypair +
  * content key + PIN, seal the content (incl. images) under the content key, upload the ciphertext mailbox,
  * and persist the Assignment with its relay material (the private key wrapped under the master key). The
@@ -130,39 +183,18 @@ export async function createRelaySend(
   // to listAssignments; an assignment with no snapshot would be an unanswerable send.
   await writeEncryptedJson(fs, snapshotPath(id), questionnaire, key);
 
-  const token = generateRelayToken();
-  const contentKey = generateContentKey();
-  const pin = generatePin();
-  const { publicKey, privateKey } = await generateSendKeyPair();
-  const privateKeyWrapped = JSON.stringify(await encrypt(privateKey, key));
-  // Wrap the content key under the master key too, so the sender can later seal an OUTCOME the recipient
-  // decrypts with the same fragment key (external compatibility report write-back, §17.12-D).
-  const contentKeyWrapped = JSON.stringify(await encrypt(contentKey, key));
-  const pinHash = await hashPin(pin);
   // Anonymous sends show "Someone" on the relay (the page renders null as such); a named send shows the
   // sending person's display name (NOT the recipient's, who is the addressee).
   const senderName = input.senderVisibleToRecipient ? input.senderName : null;
-
-  const content = await buildContent(
-    fs,
-    key,
-    questionnaire,
-    publicKey,
-    senderName,
-    input.disclosure,
-    contentKey,
-  );
-  const sealedContent = await sealContent(content, contentKey);
   const expiresAt = input.expiresAt ?? defaultExpiry();
-  const mailbox: RelayMailbox = {
-    schemaVersion: 1,
-    token,
-    sealedContent,
-    pinHash,
+  const minted = await mintRelay(fs, key, relay, {
+    snapshot: questionnaire,
+    senderName,
+    disclosure: input.disclosure,
+    endpointUrl: input.endpointUrl,
     createdAt: at,
     expiresAt,
-  };
-  await relay.putMailbox(mailbox);
+  });
 
   const assignment: Assignment = {
     id,
@@ -176,13 +208,57 @@ export async function createRelaySend(
     ...(input.compatibilityGroupId ? { compatibilityGroupId: input.compatibilityGroupId } : {}),
     status: 'sent',
     expiresAt,
-    relay: { token, pinHash, publicKey, privateKeyWrapped, contentKeyWrapped },
+    relay: minted.relay,
     createdAt: at,
     updatedAt: at,
   };
   await writeEncryptedJson(fs, assignmentPath(id), assignment, key);
 
-  return { assignment, link: buildRelayLink(input.endpointUrl, token, contentKey), pin };
+  return { assignment, link: minted.link, pin: minted.pin };
+}
+
+/**
+ * Attach a relay link to an EXISTING in-app (household) send (08 §17.13) so the recipient can answer in
+ * their Inbox OR open the link anywhere. Mints relay material for the send's frozen snapshot, uploads the
+ * mailbox, and stores `assignment.relay` (+ the shared expiry). Returns the link + PIN, shown once. The
+ * sender drains the link the same way as an external send; the first submission (either surface) wins.
+ */
+export async function attachRelayLink(
+  fs: FileSystem,
+  key: Uint8Array,
+  relay: RelayClient,
+  assignmentId: string,
+  input: {
+    senderName: string;
+    senderVisibleToRecipient: boolean;
+    disclosure: string;
+    endpointUrl: string;
+    expiresAt?: string;
+  },
+): Promise<{ link: string; pin: string }> {
+  const assignment = await getAssignment(fs, key, assignmentId);
+  if (!assignment) throw new Error(`Assignment not found: ${assignmentId}`);
+  const snapshot = await getAssignmentSnapshot(fs, key, assignmentId);
+  if (!snapshot) throw new Error(`No snapshot for assignment: ${assignmentId}`);
+
+  const senderName = input.senderVisibleToRecipient ? input.senderName : null;
+  const expiresAt = input.expiresAt ?? assignment.expiresAt ?? defaultExpiry();
+  const minted = await mintRelay(fs, key, relay, {
+    snapshot,
+    senderName,
+    disclosure: input.disclosure,
+    endpointUrl: input.endpointUrl,
+    createdAt: assignment.createdAt,
+    expiresAt,
+  });
+  const updated: Assignment = {
+    ...assignment,
+    relay: minted.relay,
+    expiresAt,
+    updatedAt: new Date().toISOString(),
+  };
+  await writeEncryptedJson(fs, assignmentPath(assignmentId), updated, key);
+  return { link: minted.link, pin: minted.pin };
 }
 
 /** Unwrap a relay secret (the send private key or the content key) stored under the master key. */
@@ -211,6 +287,13 @@ export async function drainRelaySend(
 ): Promise<DrainResult> {
   const assignment = await getAssignment(fs, key, assignmentId);
   if (!assignment?.relay) throw new Error(`Not a relay send: ${assignmentId}`);
+
+  // First-submission-wins (08 §17.13): a household send can be answered in the Inbox OR via the link. If
+  // it's already been answered (submitted/declined in-app), the local answer is authoritative — never let a
+  // late relay drain overwrite it.
+  if (assignment.status === 'submitted' || assignment.status === 'declined') {
+    return { assignmentId, drained: 0, declined: false };
+  }
 
   const stored = await relay.drain(assignment.relay.token);
   if (stored.length === 0) return { assignmentId, drained: 0, declined: false };

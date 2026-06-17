@@ -1539,6 +1539,18 @@ export type ContextOnlyResult =
     };
 
 /**
+ * The result of an in-app (household) send (08-questionnaires §13.5/§17.13). The recipient always gets it
+ * in their Inbox; when a relay is connected and the sender can deliver externally, a `link` + `pin` are also
+ * minted so the recipient can answer anywhere — the first submission (either surface) wins. Absent when no
+ * relay is connected (Inbox-only, the graceful fallback).
+ */
+export interface InAppSendResult {
+  assignment: Assignment;
+  link?: string;
+  pin?: string;
+}
+
+/**
  * The result of pushing an external compatibility outcome to the recipient(s) from Results (08 §17.12-D).
  * `published` is how many external relay members received the sealed report. `NOT_READY` until the
  * alignment report exists; `INVALID` when the group has no external recipient to share with.

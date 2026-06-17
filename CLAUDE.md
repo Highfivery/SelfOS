@@ -183,6 +183,13 @@ A slice is **not** done until **all** of these pass:
       about THEMSELVES instead of the OTHER participant — every screen functioned, the suite was green, but the
       content was wrong; the offline fake returned canned output that hid it. The fakes now echo the
       `aboutName`, and the test asserts the recipient's variant names the OTHER person, not themselves.)
+- [ ] **Test the feature when its PREREQUISITE is ABSENT (the common real state), not just the happy path** —
+      if a feature only works once something is set up (a relay connected, a key added, AI enabled, a person
+      granted access), write a test for the **not-set-up** path too: assert the graceful fallback AND that the
+      UI tells the user how to enable it (it must never be silently invisible). (2026-06-16: the unified-relay
+      link only mints with a connected relay; the happy-path E2E connected one first, so it never caught that —
+      with no relay — the link feature was completely silent. The user sent a household questionnaire, saw no
+      link, no explanation. Now the send panel hints "connect a relay in Settings → Relay," with a test.)
 - [ ] **`/gallery` updated** when a design-system primitive is added or changed (it must showcase all of them)
 - [ ] **Admin-only UI is marked** — any control/section visible only to an Owner / super-admin carries a
       consistent "admin only" indicator (see §12)
@@ -413,6 +420,41 @@ activePersonId`. Added a store `reset()` + wired `useInsightStore` into the AppS
   project an EXPLICIT minimal shape, never spread the whole record — `summarizeForContext` emits only a related
   person's shareable fact TEXT, so the Memory equivalent leaks `metrics`/`crisisFlag`/`provenance`/`shareableWith`
   if it spreads; the bridge is the trust boundary, so "the UI doesn't render it yet" is no defense.**
+- 2026-06-16 — Fix (**unified-relay link was invisible without a connected relay**; user: "I'm not seeing
+  anything in the UI for a relay link"). **Diagnosed against the live app (not assumed):** reproduced in the web
+  preview — `assignmentsCreate` returns `{ assignment }` (no link) when **no relay is connected**, and
+  `{ assignment, link, pin }` (the panel shows the link + PIN, screenshot-verified) when one **is**. So the code
+  was correct — a link literally requires a relay (a server) — but the feature was **silently invisible** with
+  no relay: the panel just said "it's in their Inbox", no hint a link was possible or how to enable it. The
+  happy-path E2E connected a relay first, so it never covered the **common real no-relay state** the user hit.
+  Fix: the send panel reads `relayStatus()` and, when **not connected**, shows a hint before AND after sending —
+  admin → "connect a relay in Settings → Relay to also give them a link"; member → "ask an admin." +RTL for the
+  no-relay hint; **new §7 DoD rule: test a feature with its PREREQUISITE absent (the common real state), not just
+  the happy path — assert the graceful fallback AND that the UI says how to enable it (never silently
+  invisible).** Gate green: typecheck (node + web/DOM-lib), lint, format, **417 core + 501 desktop + 11 relay**
+  unit. Synced 08 §17.13. On `feat/questionnaire-unified-relay` off `main`. **Lesson: an offline fake / a
+  happy-path E2E that SETS UP the prerequisite hides what the user actually experiences without it — reproduce
+  the no-prerequisite path against the live app.**
+- 2026-06-16 — Build (**unified questionnaire delivery — a household send ALSO mints a relay link; SPEC 08
+  §17.13 BUILT** on `feat/questionnaire-unified-relay` off `main`, NOT merged). The 6th of the user's reported
+  issues (the first 5 merged separately): the same answering workflow for internal + external, so a household
+  recipient can answer in their **Inbox** OR via a **link** anywhere — whichever they reach first. **Decision
+  (user-chosen): a link for every send + keep the Inbox; first-submission wins; Inbox-only fallback when no
+  relay is connected.** **Core:** extracted a shared `mintRelay` helper from `createRelaySend` and added
+  **`attachRelayLink`** (mints relay material for an existing in-app send + uploads the mailbox); `drainRelaySend`
+  now **skips an already-submitted/declined send** (first-wins guard). **Bridge:** `assignmentsCreate` returns
+  **`InAppSendResult { assignment, link?, pin? }`** — it mints a link ONLY when the sender can `sendExternal`
+  AND a relay is connected (else Inbox-only, the graceful no-Cloudflare fallback; the send stays `channel:
+'inApp'`); an in-app submit/decline best-effort **revokes the mailbox** (closes the link); the drain filter now
+  covers **any** send with relay material, not just `channel: 'relay'`. **UI:** the send panel surfaces the link
+  - PIN (copy rows). **Tests:** core (attach round-trip + first-wins drain), coreBridge integration (household
+    send → in Inbox AND link-answerable → drains in; in-app submit → unlock 404), send-panel RTL, + a Playwright
+    E2E (connect relay → household send → panel shows link/PIN → decrypt: in-app assignment carries relay
+    material). Gate green: typecheck (node + web/DOM-lib), lint, format, **417 core + 500 desktop + 11 relay**
+    unit, **70 E2E**; visual QA of the send panel. **Lesson: the relay-minting is reusable — one `mintRelay` helper
+    serves both an external send and a household link; the link is an ADDITIONAL surface on an in-app send (not a
+    channel change), and first-wins is two cheap guards (revoke-the-mailbox on in-app submit + skip-if-submitted
+    on drain), not a distributed transaction.** **All 6 user-reported questionnaire issues are now addressed.**
 - 2026-06-16 — Fixes (**questionnaire answering UI/UX + compatibility variant bug**, on
   `fix/questionnaire-answering-and-relay` off the merged `main`; user-reported after testing). Six issues; the
   plan was approved before coding (no backward-compat needed). **Slice 1 (answering renderer, `@selfos/answering`):**

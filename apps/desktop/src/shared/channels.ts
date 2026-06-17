@@ -30,6 +30,7 @@ import type {
   DreamSynthesisResult,
   GuidanceState,
   GuidedSuggestResult,
+  InAppSendResult,
   InboxAssignmentDetail,
   InboxItem,
   IntimacyTopicsView,
@@ -538,14 +539,16 @@ export interface SelfosBridge {
   memoryRefresh(): Promise<MemoryReconcileResult>;
   /**
    * Send a questionnaire to its BOUND household recipient (in-app), freezing an immutable snapshot at send.
-   * The recipient is set on the questionnaire at creation (08 §17.3) — it is NOT passed here.
+   * The recipient is set on the questionnaire at creation (08 §17.3) — it is NOT passed here. Returns the
+   * assignment plus, when a relay is connected, a `link` + `pin` so the recipient can answer in their Inbox
+   * OR anywhere via the link (08 §17.13, first-submission wins).
    */
   assignmentsCreate(input: {
     questionnaireId: string;
     privacy?: PrivacyMode;
     senderVisibleToRecipient?: boolean;
     expiresAt?: string;
-  }): Promise<Assignment>;
+  }): Promise<InAppSendResult>;
   /** The active person's Inbox — questionnaires sent to them, newest first. Requires `questionnaires.answer`. */
   assignmentsInbox(): Promise<InboxItem[]>;
   /**
@@ -797,6 +800,7 @@ export type {
   DreamSynthesisResult,
   GuidanceState,
   GuidedSuggestResult,
+  InAppSendResult,
   InboxAssignmentDetail,
   InboxItem,
   IntimacyTopicsView,

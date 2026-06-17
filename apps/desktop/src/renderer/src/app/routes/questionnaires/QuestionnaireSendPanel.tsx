@@ -1,15 +1,19 @@
-import { useState } from 'react';
-import { Lock, Send } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Copy, Link2, Lock, Send } from 'lucide-react';
 import type { PrivacyMode, Recipient, SensitivityTier } from '@shared/schemas';
 import {
   Banner,
   Button,
   Card,
+  Field,
   Heading,
   SegmentedControl,
   Stack,
   Text,
+  TextInput,
 } from '../../../design-system/components';
+import { useSessionStore } from '../../../stores/sessionStore';
 import { RelaySendPanel } from './RelaySendPanel';
 import styles from './Questionnaires.module.css';
 
@@ -46,6 +50,42 @@ export function QuestionnaireSendPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sentTo, setSentTo] = useState<string | null>(null);
+  // When a relay is connected, the in-app send ALSO mints a link the recipient can answer anywhere (§17.13).
+  const [link, setLink] = useState<string | null>(null);
+  const [pin, setPin] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+  // Whether a relay is connected — drives the "you'll also get a shareable link" affordance (§17.13). A link
+  // can only exist with a relay (it's a server-delivered surface); without one the send is Inbox-only.
+  const [relayConfigured, setRelayConfigured] = useState<boolean | null>(null);
+  const canManageRelay = useSessionStore((s) => s.can('settings.manage'));
+
+  useEffect(() => {
+    void window.selfos?.relayStatus().then((s) => setRelayConfigured(s.configured));
+  }, []);
+
+  const copy = async (label: string, value: string): Promise<void> => {
+    await navigator.clipboard?.writeText(value);
+    setCopied(label);
+    window.setTimeout(() => setCopied(null), 1500);
+  };
+
+  // Discoverability: a household send can ALSO carry a link, but only with a connected relay. When there's
+  // none, tell the sender how to enable it (admins can; members are pointed at an admin) so the feature
+  // isn't silently invisible.
+  const relayHint =
+    relayConfigured === false ? (
+      <Banner tone="info">
+        <Link2 size={14} aria-hidden="true" /> They’ll answer in their Inbox.{' '}
+        {canManageRelay ? (
+          <>
+            To also give them a link they can answer from any device, connect a relay in{' '}
+            <Link to="/settings">Settings → Relay</Link>.
+          </>
+        ) : (
+          <>Ask a household admin to connect a relay (Settings → Relay) to also share a link.</>
+        )}
+      </Banner>
+    ) : null;
 
   // An external-bound questionnaire is delivered by link — defer entirely to the relay panel.
   if (recipient.kind === 'external') {
@@ -69,7 +109,11 @@ export function QuestionnaireSendPanel({
     setBusy(true);
     setError(null);
     try {
-      await window.selfos?.assignmentsCreate({ questionnaireId, privacy });
+      const result = await window.selfos?.assignmentsCreate({ questionnaireId, privacy });
+      if (result?.link && result.pin) {
+        setLink(result.link);
+        setPin(result.pin);
+      }
       setSentTo(recipientLabel);
     } catch {
       setError('Could not send this questionnaire. Please try again.');
@@ -85,6 +129,38 @@ export function QuestionnaireSendPanel({
           <Banner tone="info">
             Sent to {sentTo}. It’s waiting in their Inbox the next time they’re here.
           </Banner>
+          {link && pin ? (
+            <Stack gap={3}>
+              <Text size="sm" tone="secondary">
+                They can also answer anywhere with this link + PIN — whichever they use first is the
+                one that counts. We don’t keep a copy of the PIN, so share it now.
+              </Text>
+              <Field label="Secure link">
+                {(props) => (
+                  <div className={styles.copyRow}>
+                    <TextInput {...props} readOnly value={link} />
+                    <Button variant="secondary" onClick={() => void copy('link', link)}>
+                      <Copy size={15} aria-hidden="true" />
+                      {copied === 'link' ? 'Copied' : 'Copy'}
+                    </Button>
+                  </div>
+                )}
+              </Field>
+              <Field label="PIN">
+                {(props) => (
+                  <div className={styles.copyRow}>
+                    <TextInput {...props} readOnly value={pin} className={styles.pinValue} />
+                    <Button variant="secondary" onClick={() => void copy('pin', pin)}>
+                      <Copy size={15} aria-hidden="true" />
+                      {copied === 'pin' ? 'Copied' : 'Copy'}
+                    </Button>
+                  </div>
+                )}
+              </Field>
+            </Stack>
+          ) : (
+            relayHint
+          )}
           <div className={styles.footer}>
             <Button variant="primary" onClick={() => onSent(sentTo)}>
               Done
@@ -123,6 +199,8 @@ export function QuestionnaireSendPanel({
             {PRIVACY_COPY[privacy]}
           </Text>
         </Stack>
+
+        {relayHint}
 
         {error ? <Banner tone="warning">{error}</Banner> : null}
 

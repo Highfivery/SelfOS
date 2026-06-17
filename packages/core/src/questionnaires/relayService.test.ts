@@ -23,9 +23,11 @@ import type {
   RelayStoredResponse,
 } from '../schemas';
 import { saveQuestionnaire } from './questionnaireService';
-import { getAssignment } from './assignmentService';
+import { createAssignment, getAssignment } from './assignmentService';
 import { getResponse } from './responseService';
+import { submitResponse } from './answerService';
 import {
+  attachRelayLink,
   createRelaySend,
   drainRelaySend,
   publishRelayResult,
@@ -236,6 +238,88 @@ describe('relayService', () => {
       generatedAt: '2026-06-11T02:00:00.000Z',
     });
     expect(ok).toBe(false);
+  });
+
+  it('attaches a relay link to an in-app household send — answerable via the link too (§17.13)', async () => {
+    const fs = memFileSystem();
+    const { client, env } = fakeRelay();
+    const q = await saveQuestionnaire(fs, key, input);
+    // A plain in-app household send (no relay material yet).
+    const assignment = await createAssignment(fs, key, {
+      questionnaireId: q.id,
+      senderPersonId: 'p1',
+      recipient: { kind: 'person', personId: 'p2' },
+      channel: 'inApp',
+      privacy: 'standard',
+      senderVisibleToRecipient: true,
+    });
+    expect(assignment.relay).toBeUndefined();
+
+    const { link, pin } = await attachRelayLink(fs, key, client, assignment.id, {
+      senderName: 'Sam',
+      senderVisibleToRecipient: true,
+      disclosure: 'Your answers go to Sam.',
+      endpointUrl: 'https://relay.example.dev',
+    });
+    expect(pin).toMatch(/^\d{6}$/);
+    const withLink = await getAssignment(fs, key, assignment.id);
+    expect(withLink?.channel).toBe('inApp'); // still an in-app send — just ALSO link-answerable
+    expect(withLink?.relay?.token).toBeTruthy();
+
+    // The recipient unlocks + answers via the link; the sender drains it into a ResponseSet.
+    const token = withLink!.relay!.token;
+    const contentKey = contentKeyFromFragment(link.slice(link.indexOf('#')))!;
+    await answerAsRecipient(env, token, contentKey, pin, {
+      kind: 'submit',
+      answers: [{ questionId: 'a', value: 'Answered via the link.' }],
+      submittedAt: '2026-06-11T01:00:00.000Z',
+    });
+    expect((await drainRelaySend(fs, key, client, assignment.id)).drained).toBe(1);
+    expect((await getResponse(fs, key, assignment.id))?.answers[0]?.value).toBe(
+      'Answered via the link.',
+    );
+    expect((await getAssignment(fs, key, assignment.id))?.status).toBe('submitted');
+  });
+
+  it('a drain never overwrites an in-app answer — first-submission wins (§17.13)', async () => {
+    const fs = memFileSystem();
+    const { client, env } = fakeRelay();
+    const q = await saveQuestionnaire(fs, key, input);
+    const assignment = await createAssignment(fs, key, {
+      questionnaireId: q.id,
+      senderPersonId: 'p1',
+      recipient: { kind: 'person', personId: 'p2' },
+      channel: 'inApp',
+      privacy: 'standard',
+      senderVisibleToRecipient: true,
+    });
+    const { link, pin } = await attachRelayLink(fs, key, client, assignment.id, {
+      senderName: 'Sam',
+      senderVisibleToRecipient: true,
+      disclosure: 'Private.',
+      endpointUrl: 'https://relay.example.dev',
+    });
+
+    // The recipient answers in-app FIRST (writes a ResponseSet + marks submitted)…
+    await submitResponse(fs, key, {
+      assignmentId: assignment.id,
+      answers: [{ questionId: 'a', value: 'In-app answer (wins).' }],
+    });
+    // …then someone also answers via the still-live link.
+    const token =
+      assignment.relay?.token ?? (await getAssignment(fs, key, assignment.id))!.relay!.token;
+    const contentKey = contentKeyFromFragment(link.slice(link.indexOf('#')))!;
+    await answerAsRecipient(env, token, contentKey, pin, {
+      kind: 'submit',
+      answers: [{ questionId: 'a', value: 'Link answer (loses).' }],
+      submittedAt: '2026-06-11T02:00:00.000Z',
+    });
+
+    // The drain skips the already-submitted send — the in-app answer is preserved.
+    expect((await drainRelaySend(fs, key, client, assignment.id)).drained).toBe(0);
+    expect((await getResponse(fs, key, assignment.id))?.answers[0]?.value).toBe(
+      'In-app answer (wins).',
+    );
   });
 
   it('revokes a send, marking it revoked and clearing the relay mailbox', async () => {

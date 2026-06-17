@@ -329,6 +329,38 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-16 — Build (**Memory dashboard — SLICE 1: the cross-user privacy fix; SPEC 20 Approved**;
+  [20-memory-dashboard](docs/specs/20-memory-dashboard.md) §1.1/§5.1/§6, on `feat/memory-dashboard` off `main`
+  **in an isolated git worktree**, NOT merged). Closed a **serious live leak**: `coreBridge.insightsList` called
+  `listAllInsights` (EVERY household subject) gated only on `questionnaires.viewResults` (a default Member cap)
+  and never scoped to the active person — so **any signed-in member saw every member's** onboarding portraits +
+  session/dream/questionnaire insights; plus `useInsightStore` was missing from the AppShell per-person reset
+  (insights lingered across a switch). Fix: new **`memory.own`** capability (Member ON); `insightsList` rewritten
+  to gate on `memory.own` + return the active person's **OWN** insights (full — incl. their own restricted facts,
+  their own data) **+** their relationships' **shareable, non-restricted** facts via a new core
+  **`listRelatedShareableInsights`** (mirrors the `summarizeForContext` boundary; **never `listAllInsights`** for
+  the dashboard). `insights:approve`/`update`/`delete` locked to `memory.own` + `subjectPersonId ===
+activePersonId`. Added a store `reset()` + wired `useInsightStore` into the AppShell per-person reset; re-pointed
+  the Memory nav + Home MemoryCard gating to `memory.own`. The current questionnaire-era Memory surface shows only
+  the person's **own** insights for now (related display lands with the §5.3 dashboard, slice 3) — no half-built
+  related cards / dead controls (§12). **Code-reviewer fix-first caught a real residual leak (BLOCKER, fixed):**
+  `listRelatedShareableInsights` first spread the whole Insight, so a related person's private `metrics`,
+  `crisisFlag` (the Memory UI **renders** it as a distress banner), precise `provenance` (`intakeSection`/
+  `conversationId`/`dreamId`), and a fact's `shareableWith` (who-ELSE-has-it) crossed the IPC seam — now it
+  projects an **explicit minimal shape** (only the shareable fact text + a stripped `{at}` provenance), matching
+  `summarizeForContext` exactly; + a unit test asserting the scrub, + the `memory.own` capability test, + the
+  stale "only an owner sees it here" copy reconciled. Gate green: typecheck (node + web/DOM-lib), lint, format,
+  **421 core + 500 desktop** unit (+ `listRelatedShareableInsights` [4: shareable-only/summary-stripped/scrub/
+  targeting], `memory.own` caps [2], a Memory own-only-scope RTL, the per-person bridge regression, updated the
+  contextOnly/intake/gating bridge tests off the old "owner-sees-all" assumption), **70 E2E** (+1 HARD-GATE
+  cross-user guard: member A's Memory shows only A's portrait, B's is absent + **decrypt** proves B's insight
+  exists-but-withheld, switching to B flips the view). **Follow-up flagged (NOT done):** `redactRestrictedFacts` +
+  the `intake.readRestricted` capability are now dead (their only consumer was the removed leak path) — a separate
+  cleanup. **NEXT: slice 2** (living insights engine — schema + `reconcileInsights` + flag-as-inaccurate + the
+  producer hooks) → **slice 3** (the dashboard UI). **Lesson: a "structured sibling" of a context-builder must
+  project an EXPLICIT minimal shape, never spread the whole record — `summarizeForContext` emits only a related
+  person's shareable fact TEXT, so the Memory equivalent leaks `metrics`/`crisisFlag`/`provenance`/`shareableWith`
+  if it spreads; the bridge is the trust boundary, so "the UI doesn't render it yet" is no defense.**
 - 2026-06-16 — Fixes (**questionnaire answering UI/UX + compatibility variant bug**, on
   `fix/questionnaire-answering-and-relay` off the merged `main`; user-reported after testing). Six issues; the
   plan was approved before coding (no backward-compat needed). **Slice 1 (answering renderer, `@selfos/answering`):**

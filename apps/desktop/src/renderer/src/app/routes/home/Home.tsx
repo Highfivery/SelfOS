@@ -35,7 +35,7 @@ export function Home(): JSX.Element {
   const isAdmin = useSessionStore((s) => s.can('budgets.manage'));
   const hasSessions = useSessionStore((s) => s.can('sessions.own'));
   const canCreateQuestionnaires = useSessionStore((s) => s.can('questionnaires.create'));
-  const canViewInsights = useSessionStore((s) => s.can('questionnaires.viewResults'));
+  const canViewMemory = useSessionStore((s) => s.can('memory.own'));
   const canOwnDreams = useSessionStore((s) => s.can('dreams.own'));
   const canManagePeople = useSessionStore((s) => s.can('people.manage'));
 
@@ -80,8 +80,8 @@ export function Home(): JSX.Element {
   const openSessions = conversations.filter(
     (c) => c.status === 'inProgress' || c.status === 'onHold',
   ).length;
-  // `insightStore` intentionally holds EVERY person's insights (the household Memory surface needs that);
-  // per-person isolation on Home is this filter, not a store reset — keep it on every consumption.
+  // `insightStore` now holds only the ACTIVE person's memory (own + relationships' shareable facts —
+  // 20-memory-dashboard §5.1); this filter keeps Home's cards to the person's OWN approved insights.
   const approvedInsights = insights.filter(
     (i) => i.approved && i.subjectPersonId === activePersonId,
   );
@@ -134,7 +134,7 @@ export function Home(): JSX.Element {
           ) : null}
           <WellbeingCard points={moodPoints} crisis={crisis} />
           <DreamsCard dreams={dreams} stats={patternStats} />
-          <MemoryCard insights={approvedInsights} canView={canViewInsights} />
+          <MemoryCard insights={approvedInsights} canView={canViewMemory} />
           <InboxCard count={inboxCount} />
         </div>
       )}

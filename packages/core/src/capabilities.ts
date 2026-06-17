@@ -36,6 +36,10 @@ export const CAPABILITIES = [
   // roles; the Owner (full-access) always has it.
   'intake.own',
   'intake.readRestricted',
+  // Memory (20-memory-dashboard §4.2). `memory.own` = view + edit + flag + refresh one's OWN memory
+  // dashboard (own insights + relationships' shareable facts). Member default ON. The Memory surface no
+  // longer borrows `questionnaires.viewResults` (which now only gates the questionnaire Results surface).
+  'memory.own',
 ] as const;
 
 export type CapabilityKey = (typeof CAPABILITIES)[number];
@@ -60,6 +64,7 @@ export const CAPABILITY_LABELS: Record<CapabilityKey, string> = {
   'dreams.generateImage': 'Generate an AI image of their own dream',
   'intake.own': 'Do their own getting-to-know-you onboarding',
   'intake.readRestricted': 'Reveal restricted intake content (break-glass)',
+  'memory.own': 'View & manage their own memory',
 };
 
 /**
@@ -110,6 +115,7 @@ export const DEFAULT_ROLES: Role[] = [
       'dreams.shareContext',
       'dreams.generateImage',
       'intake.own',
+      'memory.own',
     ]),
   },
   {

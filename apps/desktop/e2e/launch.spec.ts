@@ -103,6 +103,47 @@ async function seedCompletedIntake(
   );
 }
 
+/**
+ * Seed a member (person + member login + completed onboarding) with an approved onboarding-portrait Insight
+ * carrying a private fact — the fixture for the cross-user Memory scoping guard (spec 20 §1.1/§10).
+ */
+async function seedMemberWithPortrait(
+  vault: string,
+  userData: string,
+  id: string,
+  name: string,
+  secretFact: string,
+): Promise<void> {
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('seedMemberWithPortrait: master key missing');
+  const now = new Date().toISOString();
+  await savePerson(fs, key, {
+    id,
+    schemaVersion: 1,
+    displayName: name,
+    isSubject: true,
+    tags: [],
+    createdAt: now,
+    updatedAt: now,
+  });
+  await setAccount(fs, key, { personId: id, roleId: 'member' });
+  await seedCompletedIntake(fs, key, id);
+  await saveInsight(fs, key, {
+    id: `intake-${id}`,
+    schemaVersion: 1,
+    source: 'intake',
+    subjectPersonId: id,
+    summary: `${name}'s onboarding portrait`,
+    facts: [{ id: 'f1', text: secretFact, shareable: false }],
+    confidence: 'medium',
+    approved: true,
+    provenance: { intakeSection: 'your-story', at: now },
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
 /** Complete onboarding for a person created at runtime (found by display name), so the Member gate releases. */
 async function completeIntakeFor(
   vault: string,
@@ -1329,6 +1370,57 @@ test('memory: the Insights surface shows its empty state + crisis affordance', a
       return main ? main.scrollWidth - main.clientWidth : 0;
     });
     expect(overflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('memory: a member sees only their OWN insights, never another member’s (the cross-user leak fix, spec 20 §1.1)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  await seedMemberWithPortrait(vault, userData, 'ana-1', 'Ana', 'Ana keeps a private journal');
+  await seedMemberWithPortrait(vault, userData, 'bo-1', 'Bo', 'Bo is afraid of heights');
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    // Switch from the owner to Ana (owner switching is PIN-free).
+    await w.getByRole('button', { name: /signed in as/i }).click();
+    await w.getByRole('menuitem', { name: 'Switch person' }).click();
+    await w
+      .getByRole('dialog', { name: /who.s here/i })
+      .getByText('Ana')
+      .click();
+    await expect(w.getByRole('button', { name: 'Signed in as Ana' })).toBeVisible();
+
+    // Ana's Memory shows HER portrait — and NEVER Bo's (the closed cross-user leak).
+    await w.getByRole('link', { name: 'Memory' }).click();
+    await expect(w.getByText(/Ana's onboarding portrait/)).toBeVisible();
+    await expect(w.getByText(/Ana keeps a private journal/)).toBeVisible();
+    await expect(w.getByText(/Bo's onboarding portrait/)).toHaveCount(0);
+    await expect(w.getByText(/Bo is afraid of heights/)).toHaveCount(0);
+
+    // Decrypt-level proof: Bo's insight DOES exist on disk — it's withheld by scoping, not merely missing.
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('master key missing');
+    const boInsights = await listInsightsForPerson(fs, key, 'bo-1');
+    expect(boInsights.some((i) => i.facts.some((f) => f.text === 'Bo is afraid of heights'))).toBe(
+      true,
+    );
+
+    // Switching to Bo flips the view entirely — Ana's portrait is gone, Bo's appears (per-person reset).
+    await w.getByRole('button', { name: 'Signed in as Ana' }).click();
+    await w.getByRole('menuitem', { name: 'Switch person' }).click();
+    await w
+      .getByRole('dialog', { name: /who.s here/i })
+      .getByText('Bo')
+      .click();
+    await expect(w.getByRole('button', { name: 'Signed in as Bo' })).toBeVisible();
+    await w.getByRole('link', { name: 'Memory' }).click();
+    await expect(w.getByText(/Bo's onboarding portrait/)).toBeVisible();
+    await expect(w.getByText(/Ana's onboarding portrait/)).toHaveCount(0);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

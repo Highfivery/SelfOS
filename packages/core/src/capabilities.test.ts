@@ -117,3 +117,20 @@ describe('dreams capabilities (12-dreams)', () => {
     expect(roleAllows(guest, 'dreams.shareContext')).toBe(false);
   });
 });
+
+describe('memory capability (20-memory-dashboard)', () => {
+  const owner = DEFAULT_ROLES.find((role) => role.id === 'owner')!;
+  const member = DEFAULT_ROLES.find((role) => role.id === 'member')!;
+  const guest = DEFAULT_ROLES.find((role) => role.id === 'guest')!;
+
+  it('registers memory.own with a label', () => {
+    expect(CAPABILITIES).toContain('memory.own');
+    expect(CAPABILITY_LABELS['memory.own']).toBeTruthy();
+  });
+
+  it('grants memory.own to Owner + Member by default, but not Guest', () => {
+    expect(roleAllows(owner, 'memory.own')).toBe(true);
+    expect(roleAllows(member, 'memory.own')).toBe(true);
+    expect(roleAllows(guest, 'memory.own')).toBe(false);
+  });
+});

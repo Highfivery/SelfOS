@@ -6,6 +6,7 @@ import {
   deleteInsight,
   getInsight,
   listInsightsForPerson,
+  listRelatedShareableInsights,
   saveInsight,
   summarizeForContext,
 } from './insightStore';
@@ -140,6 +141,105 @@ describe('insightStore', () => {
     it('returns an empty string when there are no insights', async () => {
       const fs = memFileSystem();
       expect(await summarizeForContext(fs, key, 'p1', [])).toBe('');
+    });
+  });
+
+  describe('listRelatedShareableInsights (the Memory dashboard view, spec 20 §5.1)', () => {
+    const related = [{ id: 'p2', displayName: 'Sam' }];
+
+    it("surfaces a related person's shareable facts only, with the summary stripped", async () => {
+      const fs = memFileSystem();
+      await saveInsight(
+        fs,
+        key,
+        insight({
+          id: 'i1',
+          subjectPersonId: 'p2',
+          summary: 'SAMS PRIVATE SUMMARY',
+          facts: [
+            { id: 'f1', text: 'p2 started a new job', shareable: true },
+            { id: 'f2', text: 'p2 confidential', shareable: false },
+          ],
+        }),
+      );
+      const out = await listRelatedShareableInsights(fs, key, 'p1', related);
+      expect(out).toHaveLength(1);
+      expect(out[0]!.subjectPersonId).toBe('p2');
+      expect(out[0]!.summary).toBe(''); // a related person's summary is private to them — never crosses over
+      expect(out[0]!.facts.map((f) => f.text)).toEqual(['p2 started a new job']);
+      expect(out[0]!.facts.some((f) => f.text === 'p2 confidential')).toBe(false);
+    });
+
+    it("scrubs a related person's private envelope (metrics, crisisFlag, precise provenance, shareableWith)", async () => {
+      const fs = memFileSystem();
+      await saveInsight(
+        fs,
+        key,
+        insight({
+          id: 'i1',
+          subjectPersonId: 'p2',
+          summary: 'SAMS PRIVATE SUMMARY',
+          metrics: { moodValence: -0.8, moodEnergy: -0.5 },
+          crisisFlag: true,
+          provenance: { intakeSection: 'what-weighs-on-you', conversationId: 'conv-99', at: 'now' },
+          facts: [
+            { id: 'f1', text: 'p2 likes hiking', shareable: true, shareableWith: ['pX', 'p1'] },
+          ],
+        }),
+      );
+      const [related] = await listRelatedShareableInsights(fs, key, 'p1', [
+        { id: 'p2', displayName: 'Sam' },
+      ]);
+      expect(related).toBeDefined();
+      expect(related!.metrics).toBeUndefined(); // private wellbeing signals never cross over
+      expect(related!.crisisFlag).toBeUndefined(); // their crisis state is their own
+      expect(related!.provenance).toEqual({ at: 'now' }); // precise origin (section/conversation) stripped
+      expect(related!.summary).toBe('');
+      // The shared fact crosses with text only — `shareableWith` (who ELSE has it) does not.
+      expect(related!.facts).toEqual([{ id: 'f1', text: 'p2 likes hiking', shareable: true }]);
+    });
+
+    it('honors per-person targeting (shareableWith) and never exposes a restricted fact', async () => {
+      const fs = memFileSystem();
+      await saveInsight(
+        fs,
+        key,
+        insight({
+          id: 'i1',
+          subjectPersonId: 'p2',
+          facts: [
+            { id: 'f1', text: 'targeted at p1', shareable: false, shareableWith: ['p1'] },
+            { id: 'f2', text: 'targeted at someone else', shareable: false, shareableWith: ['pX'] },
+            { id: 'f3', text: 'restricted yet shareable', shareable: true, restricted: true },
+          ],
+        }),
+      );
+      const out = await listRelatedShareableInsights(fs, key, 'p1', related);
+      expect(out[0]!.facts.map((f) => f.text)).toEqual(['targeted at p1']);
+    });
+
+    it('excludes a related draft (unapproved) insight and drops insights with no shareable fact', async () => {
+      const fs = memFileSystem();
+      await saveInsight(
+        fs,
+        key,
+        insight({
+          id: 'draft',
+          subjectPersonId: 'p2',
+          approved: false,
+          facts: [{ id: 'f1', text: 'unapproved but shareable', shareable: true }],
+        }),
+      );
+      await saveInsight(
+        fs,
+        key,
+        insight({
+          id: 'allPrivate',
+          subjectPersonId: 'p2',
+          facts: [{ id: 'f1', text: 'all private', shareable: false }],
+        }),
+      );
+      expect(await listRelatedShareableInsights(fs, key, 'p1', related)).toEqual([]);
     });
   });
 });

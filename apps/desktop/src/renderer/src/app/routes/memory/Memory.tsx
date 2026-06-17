@@ -3,6 +3,7 @@ import { Brain, Lock, ShieldAlert, Trash2, Unlock } from 'lucide-react';
 import type { Insight, InsightFact } from '@shared/schemas';
 import { useInsightStore } from '../../../stores/insightStore';
 import { usePeopleStore } from '../../../stores/peopleStore';
+import { useSessionStore } from '../../../stores/sessionStore';
 import {
   Banner,
   Button,
@@ -195,8 +196,8 @@ function InsightCard({
             </Stack>
             {isIntake ? (
               <Text size="xs" tone="tertiary">
-                Sensitive onboarding content (what weighs on them, intimacy) is private to their own
-                coaching — only an owner sees it here.
+                Sensitive onboarding content (what weighs on you, intimacy) stays private to your
+                own coaching — it’s shown here only to you, and never to anyone else.
               </Text>
             ) : null}
             <div>
@@ -214,10 +215,11 @@ function InsightCard({
 }
 
 /**
- * "Memory" — the what-the-coach-knows surface (08-questionnaires §3.7/§13.4). Lists every Insight, with
- * the inline approve-step for drafts (edit the summary, choose which facts are shareable). Crisis-flagged
- * Insights lead with concern + resources (§8.2). The live producer (Analyze on a received answer) wires
- * up with the Inbox/Results in §13.5.
+ * "Memory" — the active person's OWN view of what SelfOS has learned about them (20-memory-dashboard
+ * §5.1). The bridge scopes the list to their own insights (+ relationships' shareable facts, rendered in
+ * the §5.3 dashboard rebuild — slice 3); this surface shows only their own. Drafts get the inline
+ * approve-step (edit the summary, choose which facts are shareable); crisis-flagged insights lead with
+ * concern + resources (§8.2).
  */
 export function Memory(): JSX.Element {
   const insights = useInsightStore((s) => s.insights);
@@ -225,6 +227,7 @@ export function Memory(): JSX.Element {
   const load = useInsightStore((s) => s.load);
   const people = usePeopleStore((s) => s.people);
   const loadPeople = usePeopleStore((s) => s.load);
+  const activePersonId = useSessionStore((s) => s.activePerson?.id ?? null);
 
   useEffect(() => {
     void load();
@@ -232,6 +235,12 @@ export function Memory(): JSX.Element {
   }, [load, loadPeople]);
 
   const nameOf = (id: string): string => people.find((p) => p.id === id)?.displayName ?? 'someone';
+
+  // The bridge scopes `insights` to the active person's OWN insights + their relationships' shareable
+  // facts (spec 20 §5.1). This surface (the questionnaire-era card list) shows only the person's OWN
+  // insights for now; rendering related people's shareable facts under their subject is the §5.3
+  // dashboard rebuild (slice 3) — so no half-built related cards or dead controls here (CLAUDE.md §12).
+  const ownInsights = insights.filter((insight) => insight.subjectPersonId === activePersonId);
 
   return (
     <div className={styles.layout}>
@@ -243,19 +252,19 @@ export function Memory(): JSX.Element {
         </Text>
       </Stack>
 
-      {loaded && insights.length === 0 ? (
+      {loaded && ownInsights.length === 0 ? (
         <Card>
           <Stack gap={2} align="center">
             <Brain size={24} aria-hidden="true" />
             <Text tone="secondary">
-              Nothing here yet. When you analyze a questionnaire’s answers, what the coach learns
-              shows up here for you to review.
+              Nothing here yet. As you have sessions, log dreams, and answer questionnaires, what
+              SelfOS learns about you shows up here.
             </Text>
           </Stack>
         </Card>
       ) : (
         <Stack gap={3}>
-          {insights.map((insight) => (
+          {ownInsights.map((insight) => (
             <InsightCard
               key={insight.id}
               insight={insight}

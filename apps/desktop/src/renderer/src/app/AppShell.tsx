@@ -25,6 +25,7 @@ import { useBudgetStore } from '../stores/budgetStore';
 import { useUsageStore } from '../stores/usageStore';
 import { unansweredCount, useInboxStore } from '../stores/inboxStore';
 import { useDreamStore } from '../stores/dreamStore';
+import { useInsightStore } from '../stores/insightStore';
 import { useDreamAnalysisStore } from '../stores/dreamAnalysisStore';
 import { useDreamPatternStore } from '../stores/dreamPatternStore';
 import { useResultsStore } from '../stores/resultsStore';
@@ -50,7 +51,7 @@ export function AppShell(): JSX.Element {
   const hasSessions = useSessionStore((s) => s.can('sessions.own'));
   const canCreateQuestionnaires = useSessionStore((s) => s.can('questionnaires.create'));
   const canAnswerQuestionnaires = useSessionStore((s) => s.can('questionnaires.answer'));
-  const canViewInsights = useSessionStore((s) => s.can('questionnaires.viewResults'));
+  const canViewMemory = useSessionStore((s) => s.can('memory.own'));
   const inboxItems = useInboxStore((s) => s.items);
   const inboxCount = unansweredCount(inboxItems);
   const canOwnDreams = useSessionStore((s) => s.can('dreams.own'));
@@ -91,12 +92,14 @@ export function AppShell(): JSX.Element {
     useResultsStore.getState().reset(); // sender-scoped Results/trends — per-person, must reset too
     useGuidanceStore.getState().reset(); // guided suggestions + 18+ ack are per-person (16 §4.3/§8.3)
     useIntakeStore.getState().reset(); // the intake is per-person (18-personal-onboarding §7)
+    useInsightStore.getState().reset(); // Memory is per-person — own + relationships only (20 §5.1)
     void useConversationStore.getState().load();
     void useBudgetStore.getState().refresh();
     void useInboxStore.getState().load();
     void useDreamStore.getState().load();
     void useGuidanceStore.getState().load();
     void useIntakeStore.getState().load();
+    void useInsightStore.getState().load();
   }, [activePersonId]);
 
   // Collapse any open drawer when the viewport grows back to desktop (where the sidebar is permanent).
@@ -256,7 +259,7 @@ export function AppShell(): JSX.Element {
                 <span className={styles.label}>Questionnaires</span>
               </NavLink>
             ) : null}
-            {canViewInsights ? (
+            {canViewMemory ? (
               <NavLink
                 to="/memory"
                 className={navClass}

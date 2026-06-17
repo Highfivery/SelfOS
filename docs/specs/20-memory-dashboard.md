@@ -1,6 +1,6 @@
 # 20 — Memory: the living insights dashboard
 
-> **Status:** Review · _last updated 2026-06-16_
+> **Status:** Approved — building (slice 1 of 3 built) · _last updated 2026-06-16_
 >
 > Memory is meant to be the person's window into **what SelfOS has learned about them** — yet today it
 > (1) **leaks every household member's insights to whoever is logged in** (a serious privacy bug), and
@@ -328,6 +328,22 @@ The spec is build-ready pending final approval.
 
 ## 13. Changelog
 
+- 2026-06-16 — **Slice 1 built (the privacy fix, §1.1/§5.1/§6).** Added the `memory.own` capability (Member
+  default ON); rewrote `coreBridge.insightsList` to gate on `memory.own` + scope to the active person's OWN
+  insights + their relationships' **shareable, non-restricted** facts (new core
+  `listRelatedShareableInsights`, mirroring the `summarizeForContext` boundary — strips the related summary
+  **and** projects out `metrics`/`crisisFlag`/precise `provenance`/`relationshipId`/a fact's `shareableWith`
+  so only the shareable fact text crosses the IPC seam; excludes drafts/restricted/dream-muted; drops empty);
+  **never** `listAllInsights` for the dashboard. Locked `insights:approve`/`update`/`delete` to `memory.own`
+  - `subjectPersonId === activePersonId`. Added `useInsightStore` to the AppShell per-person reset (+ a store
+    `reset()`); re-pointed the Memory nav + Home MemoryCard gating to `memory.own`. The current
+    (questionnaire-era) Memory surface shows only the person's OWN insights for now (related display lands with
+    the §5.3 dashboard, slice 3) — no half-built related cards or dead controls. Cross-user **regression guard**:
+    a bridge unit test + an E2E (member A's `insights:list` returns only A's own; B's portrait is absent;
+    decrypt the vault to prove B's insight exists but is withheld; switching to B flips the view). Status →
+    Approved. **Follow-up flagged:** `redactRestrictedFacts` + the `intake.readRestricted` capability are now
+    dead (their only consumer was the removed leak path) — a separate cleanup, not folded into the privacy fix.
+    **NEXT: slice 2** (the living insights engine) → **slice 3** (the dashboard UI).
 - 2026-06-16 — created (Review). Decisions resolved ask-first across two rounds. Fixes the cross-user insight
   leak (bridge scoping + per-person reset) and rebuilds Memory as a living, life-area-organized insights
   dashboard with AI confidence that self-updates, flag-as-inaccurate feedback, provenance navigation, trends,

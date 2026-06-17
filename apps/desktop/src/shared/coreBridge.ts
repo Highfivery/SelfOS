@@ -122,6 +122,7 @@ import {
   getPerson,
   listInvitesForPerson,
   listPeople,
+  listRelatedPeople,
   listRelationships,
   redeemInvite,
   removeAccount,
@@ -162,6 +163,7 @@ import {
   deleteInsight,
   listAllInsights,
   listInsightsForPerson,
+  listRelatedShareableInsights,
   updateInsight,
 } from '@selfos/core/insights';
 import { INTIMACY_ACTIVITIES, INTIMACY_FANTASIES } from '@selfos/core/intimacy';
@@ -250,7 +252,6 @@ import {
   ensureIntakeSession,
   getIntakeSection,
   intakeSectionMeta,
-  redactRestrictedFacts,
   runIntakeTurn,
   skipIntakeSection,
   submitSectionForm,
@@ -1462,17 +1463,28 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       return suggestQuestionnaires(deps, targetPersonId !== undefined ? { targetPersonId } : {});
     },
 
-    // --- Insights / analysis (08-questionnaires §13.4) — gated by `questionnaires.viewResults` ---
+    // --- Memory / insights (20-memory-dashboard §5.1/§6) — gated by `memory.own`, active-person-scoped.
+    // The trust boundary (spec 20 §1.1): the dashboard returns ONLY the active person's own insights +
+    // their relationships' shareable, non-restricted facts — NEVER `listAllInsights` (the cross-user leak). ---
     insightsList: async (): Promise<Insight[]> => {
       const ctx = await host.vaultAndKey();
-      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.viewResults')))
-        return [];
-      const all = await listAllInsights(ctx.fs, ctx.key);
-      // Restricted intake facts (§8.4) reach the subject's OWN coaching context (a different path) but are
-      // withheld here from a viewer WITHOUT `intake.readRestricted`. The Owner (full-access role) holds it,
-      // so the Owner sees them directly; a member without the grant gets them redacted.
-      const privileged = await activePersonCan(ctx.fs, ctx.key, 'intake.readRestricted');
-      return privileged ? all : all.map(redactRestrictedFacts);
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'memory.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      // Own insights in full — the user sees ALL their own facts, INCLUDING their own `restricted` intake
+      // facts (their own data). Never another member's insights.
+      const own = await listInsightsForPerson(ctx.fs, ctx.key, personId);
+      // Related people contribute ONLY their shareable, non-restricted facts (the `summarizeForContext`
+      // boundary, re-gated at read via `listRelatedPeople`); their summaries + private/restricted facts
+      // never cross over.
+      const related = await listRelatedPeople(ctx.fs, ctx.key, personId);
+      const relatedShareable = await listRelatedShareableInsights(
+        ctx.fs,
+        ctx.key,
+        personId,
+        related,
+      );
+      return [...own, ...relatedShareable];
     },
     insightsAnalyze: async (input): Promise<QuestionnaireAnalyzeResult> => {
       const deps = await aiDeps('questionnaires.viewResults');
@@ -1481,9 +1493,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     },
     insightsApprove: async (input): Promise<Insight | null> => {
       const ctx = await host.vaultAndKey();
-      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.viewResults')))
-        return null;
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'memory.own'))) return null;
       const p = InsightEditSchema.parse(input);
+      // A person can only ever approve/edit their OWN insight (the subject is always the active person —
+      // the sender for a questionnaire/compatibility draft, the dreamer/intaker otherwise). Reject any other
+      // subject so a member can't reach into another's memory by passing their id (spec 20 §6).
+      if (p.subjectPersonId !== (await activePersonId())) return null;
       return updateInsight(ctx.fs, ctx.key, p.subjectPersonId, p.id, {
         approved: true,
         ...(p.summary !== undefined ? { summary: p.summary } : {}),
@@ -1492,9 +1507,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     },
     insightsUpdate: async (input): Promise<Insight | null> => {
       const ctx = await host.vaultAndKey();
-      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.viewResults')))
-        return null;
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'memory.own'))) return null;
       const p = InsightEditSchema.parse(input);
+      if (p.subjectPersonId !== (await activePersonId())) return null;
       return updateInsight(ctx.fs, ctx.key, p.subjectPersonId, p.id, {
         ...(p.summary !== undefined ? { summary: p.summary } : {}),
         ...(p.facts !== undefined ? { facts: p.facts } : {}),
@@ -1502,8 +1517,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     },
     insightsDelete: async (input): Promise<void> => {
       const ctx = await host.vaultAndKey();
-      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.viewResults'))) return;
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'memory.own'))) return;
       const { subjectPersonId, id } = InsightIdSchema.parse(input);
+      if (subjectPersonId !== (await activePersonId())) return;
       await deleteInsight(ctx.fs, subjectPersonId, id);
     },
     assignmentsCreate: async (input): Promise<Assignment> => {

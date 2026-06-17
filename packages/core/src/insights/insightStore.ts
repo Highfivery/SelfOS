@@ -219,3 +219,58 @@ export async function summarizeForContext(
 
   return lines.join('\n');
 }
+
+/**
+ * The Memory dashboard's view of a viewer's RELATED people (20-memory-dashboard §5.1): each related
+ * person's **approved** insights reduced to ONLY the facts shareable to the viewer — the exact
+ * `summarizeForContext` boundary (broadcast-shareable OR targeted at the viewer; never `restricted`;
+ * dream-muted insights excluded). The **summary is stripped** (`summary: ''`) because a related person's
+ * summary is private to them (context never surfaces it either) — only their shareable facts cross over.
+ * Insights left with no shareable fact are dropped. Re-gated on every read (via `listRelatedPeople` +
+ * per-fact share state), so a removed relationship or un-shared fact disappears immediately — no stale
+ * access. This is the structured sibling of `summarizeForContext`; they must stay in lockstep.
+ *
+ * `related` is passed in (the same shape `summarizeForContext` takes) so the insights module never imports
+ * the people module — avoiding the people↔insights cycle (the bridge resolves `listRelatedPeople`).
+ */
+export async function listRelatedShareableInsights(
+  fs: FileSystem,
+  key: Uint8Array,
+  viewerId: string,
+  related: { id: string; displayName: string }[],
+): Promise<Insight[]> {
+  const out: Insight[] = [];
+  for (const other of related) {
+    const approved = (await listInsightsForPerson(fs, key, other.id)).filter(
+      (insight) => insight.approved,
+    );
+    for (const insight of await feedableInsights(fs, key, approved)) {
+      const shareableFacts = insight.facts.filter(
+        (fact) =>
+          fact.restricted !== true &&
+          (fact.shareable || (fact.shareableWith?.includes(viewerId) ?? false)),
+      );
+      if (shareableFacts.length === 0) continue;
+      // Project an EXPLICIT minimal shape — never spread the whole Insight. A related person's `metrics`
+      // (private wellbeing signals), `crisisFlag` (their crisis state), precise `provenance`
+      // (intakeSection/conversationId/dreamId — what they did), `relationshipId`, and a fact's
+      // `shareableWith` (who ELSE it's shared with) must NOT cross over — only the shareable facts' text,
+      // exactly like `summarizeForContext`. The summary stays stripped (private to them).
+      out.push({
+        id: insight.id,
+        schemaVersion: insight.schemaVersion,
+        source: insight.source,
+        subjectPersonId: insight.subjectPersonId,
+        summary: '',
+        facts: shareableFacts.map((fact) => ({ id: fact.id, text: fact.text, shareable: true })),
+        confidence: insight.confidence,
+        approved: insight.approved,
+        provenance: { at: insight.provenance.at },
+        createdAt: insight.createdAt,
+        updatedAt: insight.updatedAt,
+      });
+    }
+  }
+  out.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0));
+  return out;
+}

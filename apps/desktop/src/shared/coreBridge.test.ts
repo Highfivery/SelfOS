@@ -18,9 +18,10 @@ import {
   unlock as kvUnlock,
   type RelayEnv,
 } from '@selfos/core/relay';
+import { saveInsight } from '@selfos/core/insights';
 import { ANTHROPIC_API_KEY_ID, OPENAI_API_KEY_ID } from './channels';
 import { DeviceStateSchema } from './schemas';
-import type { BootState, DeviceState } from './schemas';
+import type { BootState, DeviceState, Insight } from './schemas';
 import { createCoreBridge, type BridgeHost } from './coreBridge';
 
 /** A fake `fetch` that simulates BOTH the Cloudflare REST API and the deployed relay Worker, over an
@@ -744,7 +745,7 @@ describe('createCoreBridge', () => {
     expect(JSON.stringify(result)).not.toContain('secret codeword');
   });
 
-  it('gates insights/analysis on viewResults; analyze with no answers returns NO_RESPONSE', async () => {
+  it('gates analyze on viewResults + memory list on memory.own; analyze with no answers returns NO_RESPONSE', async () => {
     const { bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
     const recipient = await bridge.peopleSave({
@@ -761,15 +762,15 @@ describe('createCoreBridge', () => {
     });
     const a = await bridge.assignmentsCreate({ questionnaireId: q.id });
 
-    // Owner has viewResults; with no submitted answers yet, analyze reports NO_RESPONSE (the live
-    // trigger needs §13.5's answer flow), and the Memory list is empty.
+    // Owner has viewResults + memory.own; with no submitted answers yet, analyze reports NO_RESPONSE (the
+    // live trigger needs §13.5's answer flow), and the Memory list is empty.
     expect(await bridge.insightsAnalyze({ assignmentId: a.id })).toMatchObject({
       ok: false,
       reason: 'NO_RESPONSE',
     });
     expect(await bridge.insightsList()).toEqual([]);
 
-    // A Guest (no viewResults) is denied.
+    // A Guest (no memory.own, no viewResults) is denied both.
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
     await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
     expect((await bridge.sessionSetActive({ personId: guest.id })).ok).toBe(true);
@@ -778,6 +779,49 @@ describe('createCoreBridge', () => {
       ok: false,
       reason: 'DENIED',
     });
+  });
+
+  it('Memory is per-person scoped: member A never sees member B insights; own + relationships only (spec 20 §1.1/§5.1)', async () => {
+    const { bridge, host, ownerId } = await freshOwner();
+    const ctx = (await host.host.vaultAndKey())!;
+
+    // Two members, A and B, each with their own onboarding-portrait Insight written directly to the vault.
+    const a = await bridge.peopleSave({ displayName: 'Ana', isSubject: true, tags: [] });
+    const b = await bridge.peopleSave({ displayName: 'Bo', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: a.id, roleId: 'member', pin: null });
+    await bridge.accessSetAccount({ personId: b.id, roleId: 'member', pin: null });
+
+    const portrait = (subject: string, name: string): Insight => ({
+      id: `intake-${subject}`,
+      schemaVersion: 1,
+      source: 'intake',
+      subjectPersonId: subject,
+      summary: `${name}'s onboarding portrait`,
+      facts: [{ id: 'f1', text: `${name} secret fact`, shareable: false }],
+      confidence: 'medium',
+      approved: true,
+      provenance: { intakeSection: 'your-story', at: new Date().toISOString() },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    await saveInsight(ctx.fs, ctx.key, portrait(a.id, 'Ana'));
+    await saveInsight(ctx.fs, ctx.key, portrait(b.id, 'Bo'));
+
+    // Signed in as A: Memory shows ONLY A's own portrait — B's is absent (the closed leak). Decrypt-level
+    // assertion: B's insight file exists on disk, but never reaches A's list.
+    expect((await bridge.sessionSetActive({ personId: a.id })).ok).toBe(true);
+    const seenByA = await bridge.insightsList();
+    expect(seenByA.map((i) => i.subjectPersonId)).toEqual([a.id]);
+    expect(seenByA.some((i) => i.subjectPersonId === b.id)).toBe(false);
+    expect(seenByA.some((i) => i.facts.some((f) => f.text.includes('Bo secret')))).toBe(false);
+    // The owner's own insights (if any) are also not A's — A only ever sees A's.
+    expect(seenByA.some((i) => i.subjectPersonId === ownerId)).toBe(false);
+
+    // Switching to B flips the view entirely — A's portrait is gone, B's appears.
+    expect((await bridge.sessionSetActive({ personId: b.id })).ok).toBe(true);
+    const seenByB = await bridge.insightsList();
+    expect(seenByB.map((i) => i.subjectPersonId)).toEqual([b.id]);
+    expect(seenByB.some((i) => i.subjectPersonId === a.id)).toBe(false);
   });
 
   it('persists custom types for the picker, gated by questionnaires.create', async () => {
@@ -1408,13 +1452,24 @@ describe('createCoreBridge', () => {
     expect(after.analyzed).toBe(true); // both contexts processed
 
     // The group's Insights are subject = each PARTICIPANT (the sender + Alex now, §17.12-B), auto-approved,
-    // own-context-only. (insightsList is full-access for the owner; we assert by subject, not presence.)
-    const groupInsights = (await bridge.insightsList()).filter(
+    // own-context-only. Memory is now per-person scoped (spec 20 §5.1), so the sender sees ONLY their OWN
+    // contextOnly insight here — Alex's is absent (Alex is a compat participant, not a relationship).
+    const ownerGroupInsights = (await bridge.insightsList()).filter(
       (i) => i.provenance.compatibilityGroupId === group.compatibilityGroupId,
     );
-    expect(groupInsights.map((i) => i.subjectPersonId).sort()).toEqual([alex.id, ownerId].sort());
-    expect(groupInsights.every((i) => i.approved)).toBe(true); // auto-approved → feeds each own context
-    expect(groupInsights.every((i) => i.facts.every((f) => f.shareable === false))).toBe(true);
+    expect(ownerGroupInsights.map((i) => i.subjectPersonId)).toEqual([ownerId]);
+    expect(ownerGroupInsights.every((i) => i.approved)).toBe(true); // auto-approved → feeds own context
+    expect(ownerGroupInsights.every((i) => i.facts.every((f) => f.shareable === false))).toBe(true);
+
+    // Alex's own contextOnly insight (subject = Alex) appears in ALEX's scoped Memory, and was NOT visible
+    // to the owner above — the per-person scoping holds both ways (spec 20 §1.1).
+    await bridge.sessionSetActive({ personId: alex.id });
+    const alexGroupInsights = (await bridge.insightsList()).filter(
+      (i) => i.provenance.compatibilityGroupId === group.compatibilityGroupId,
+    );
+    expect(alexGroupInsights.map((i) => i.subjectPersonId)).toEqual([alex.id]);
+    expect(alexGroupInsights.every((i) => i.facts.every((f) => f.shareable === false))).toBe(true);
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
   });
 
   it('the Owner can read ANY private send’s raw answers directly (no break-glass ceremony)', async () => {
@@ -2054,7 +2109,7 @@ describe('createCoreBridge', () => {
     ).toMatchObject({ ok: false });
   });
 
-  it('intake: a form submit fills the profile, the intimacy block is 18+-gated, and restricted facts redact for a member', async () => {
+  it('intake: a form submit fills the profile, the intimacy block is 18+-gated, and another member never sees the owner intake insight (scoped Memory)', async () => {
     const { bridge, host, ownerId } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
     // A claude that returns a portrait with one restricted ('intimacy') fact + one normal ('basics') fact.
@@ -2106,16 +2161,17 @@ describe('createCoreBridge', () => {
     // Synthesize the portrait → an intake Insight with a restricted ('intimacy') fact.
     expect((await bridge.intakeSynthesize({})).ok).toBe(true);
 
-    // The Owner is the full-access role (has intake.readRestricted) → sees the restricted fact directly.
+    // In their OWN Memory, the person sees their own intake insight IN FULL — including their own
+    // `restricted` facts (their own data; spec 20 §5.1 — no break-glass needed for one's own memory).
     const intakeInsight = (await bridge.insightsList()).find((i) => i.source === 'intake');
     expect(intakeInsight?.facts.some((f) => f.text.includes('nurse'))).toBe(true);
     expect(intakeInsight?.facts.some((f) => f.text.includes('dominant'))).toBe(true);
 
-    // A member (NOT readRestricted) gets the restricted fact redacted — the §8.4 boundary.
+    // A DIFFERENT member sees ONLY their own memory — the owner's intake insight is absent entirely (not
+    // merely redacted). Memory is per-person scoped now (spec 20 §1.1/§5.1): the cross-user leak is closed.
     const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
     expect((await bridge.sessionSetActive({ personId: mara.id })).ok).toBe(true);
-    const memberIntake = (await bridge.insightsList()).find((i) => i.source === 'intake');
-    expect(memberIntake?.facts.some((f) => f.text.includes('nurse'))).toBe(true);
-    expect(memberIntake?.facts.some((f) => f.text.includes('dominant'))).toBe(false);
+    expect((await bridge.insightsList()).some((i) => i.source === 'intake')).toBe(false);
+    expect(await bridge.insightsList()).toEqual([]); // brand-new member: nothing in their own memory yet
   });
 });

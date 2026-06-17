@@ -143,6 +143,7 @@ export const IpcChannels = {
   usageSessionCosts: 'usage:sessionCosts',
   questionnairesList: 'questionnaires:list',
   questionnairesSendStates: 'questionnaires:sendStates',
+  questionnairesShareLink: 'questionnaires:shareLink',
   questionnairesGet: 'questionnaires:get',
   questionnairesSave: 'questionnaires:save',
   questionnairesDelete: 'questionnaires:delete',
@@ -457,6 +458,12 @@ export interface SelfosBridge {
    * their questionnaires have gone out. Sender-scoped; requires `questionnaires.create`.
    */
   questionnairesSendStates(): Promise<Record<string, QuestionnaireSendState>>;
+  /**
+   * Get a fresh shareable link + PIN for a SENT questionnaire's latest open send (08 §17.14c) — for the
+   * "Share link" affordance on the sent preview + list kebab. Mints a new link (the PIN is never stored) for
+   * the recipient's send; null if there's no relay, no open send, or the mint fails. Requires `sendExternal`.
+   */
+  questionnairesShareLink(questionnaireId: string): Promise<RelayLinkResult | null>;
   /** Load one questionnaire definition; null if absent. */
   questionnairesGet(id: string): Promise<Questionnaire | null>;
   /** Create or update a questionnaire definition (editing bumps its version); returns the saved record. */

@@ -2205,3 +2205,29 @@ After the user STILL saw no link on a compat household send **with a relay conne
   second send via the bridge (the in-UI re-send is cooldown-gated).
 - **Lesson: a `catch` that falls back to a "still works" state (Inbox-only) MUST record WHY it fell back — a
   silent fallback on a connected relay is indistinguishable from "the feature is broken." Surface the error.**
+
+### 17.14c Relay versioning fix + link reachable after sending (2026-06-17) — BUILT
+
+The user's surfaced error was a real-Cloudflare **404 on `POST /api/admin/mailbox`** with a relay connected:
+the **deployed Worker was stale** (an older build under the same version label), so the upload route was
+missing. The current `apps/relay/dist/worker.js` HAS the route, but nothing prompted the user to push it.
+
+- **Relay version bumped `1 → 2`** (`apps/relay/scripts/build.mjs` + `apps/desktop/src/main/relay/
+relayBundle.ts`, kept in sync) and the bundle rebuilt. `relayStatusOf` computes
+  `updateAvailable = config.relayVersion !== currentVersion`, so an already-deployed v1 relay now shows the
+  **"Update relay"** button in Settings → Relay → one click re-uploads the current Worker (reusing the KV +
+  drain secret), fixing the 404 without re-provisioning. **Bumping `RELAY_VERSION` is now required whenever the
+  Worker's routes/behaviour change** — otherwise an old deploy reads as current and silently lacks new routes.
+- **The link is reachable AFTER sending** (the user: "see it still after sent at the top of preview + under the
+  3 dots"). New **`questionnaires:shareLink`** IPC re-mints the latest open send's recipient link (never the
+  sender's own member), surfaced two ways: a **"Share a link"** button at the **top of the sent (locked)
+  preview**, and a **"Share link"** item in the **list-row kebab** (above Delete, shown only when sent) that
+  opens the questionnaire and auto-fetches it. Both open the shared `RelayLinkDelivery` (link + PIN + editable
+  message + Email/Text/Copy). The reshare/share-link mint is factored into one `reshareLink` helper.
+- **Tests:** coreBridge (`questionnairesShareLink` re-mints the latest send's link; null before any send),
+  RTL (the kebab "Share link" opens + fetches the delivery; the locked preview's "Share a link" button), the
+  relay-version bump. **Verified LIVE** (screenshots): the sent compat questionnaire's preview → "Share a link"
+  → Secure link + PIN + prefilled Message + Email/Text/Copy; the kebab shows "Share link".
+- **Lesson: a deploy-version constant that doesn't bump when the deployed CODE changes is a silent-staleness
+  trap — the app thinks the old deploy is current, so its "update" prompt never fires and newer routes 404.
+  Bump the version on every Worker change.**

@@ -11,9 +11,12 @@ import styles from './Questionnaires.module.css';
  */
 export function QuestionnaireRowMenu({
   title,
+  onShare,
   onDelete,
 }: {
   title: string;
+  /** Shown only for a SENT questionnaire (§17.14c) — opens it + fetches a fresh shareable link. */
+  onShare?: () => void;
   onDelete: () => void;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
@@ -47,6 +50,19 @@ export function QuestionnaireRowMenu({
             onClick={() => setOpen(false)}
           />
           <div className={styles.menu} role="menu">
+            {onShare ? (
+              <button
+                type="button"
+                role="menuitem"
+                className={styles.menuItem}
+                onClick={() => {
+                  setOpen(false);
+                  onShare();
+                }}
+              >
+                Share link
+              </button>
+            ) : null}
             <button
               type="button"
               role="menuitem"

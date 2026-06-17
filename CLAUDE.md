@@ -360,6 +360,26 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-17 — Fix (**THE relay-link root cause: stale deployed Worker (404) + bump version + link reachable
+  after sending; 08 §17.14c**; on `fix/questionnaire-delete-draft-sentstate-relay`, NOT merged). The §17.14b
+  "loud failure" surfaced the actual bug: a real-Cloudflare **404 on `POST /api/admin/mailbox`** — the user's
+  **deployed Worker was stale** (older code under the same `relayVersion '1'` label), missing the upload route.
+  The current `dist/worker.js` HAS the route, but nothing prompted a redeploy because
+  `updateAvailable = config.relayVersion !== currentVersion` and BOTH were '1'. Fix: **bump RELAY_VERSION 1→2**
+  (build.mjs + relayBundle.ts, kept in sync) + rebuild the bundle → an already-deployed v1 relay now shows the
+  **"Update relay"** button (one click re-uploads the current Worker, reusing KV + secret → fixes the 404, no
+  re-provision). **Standing rule: bump RELAY_VERSION on EVERY Worker route/behaviour change**, or an old deploy
+  reads as current + silently 404s new routes. **Link reachable after sending** (user: "see it still after sent
+  at the top of preview + under the 3 dots"): new **`questionnaires:shareLink`** IPC re-mints the latest open
+  send's RECIPIENT link (factored with reshare into one `reshareLink` helper), surfaced as a **"Share a link"**
+  button at the **top of the sent (locked) preview** + a **"Share link"** kebab item (above Delete, sent-only)
+  that opens + auto-fetches it → the shared `RelayLinkDelivery` (link + PIN + message + Email/Text/Copy).
+  **VERIFIED LIVE with screenshots** (sent compat → Share a link → Secure link `…workers.dev/q/…` + PIN +
+  prefilled message + Email/Text/Copy; kebab shows "Share link"). Gate: typecheck (node + web/DOM-lib), lint,
+  format, **434 core + 11 relay + 530 desktop** unit (+ shareLink coreBridge, 2 Share RTL), **77 E2E**. Synced
+  08 §17.14c. **Lesson: a deploy-version constant that doesn't bump when the deployed CODE changes is a
+  silent-staleness trap — the "update available" prompt never fires, so the user's stale Worker keeps 404ing
+  new routes; bump it on every change. The §17.14b loud-failure change is what made this diagnosable at all.**
 - 2026-06-17 — Fix (**relay-mint failures made LOUD + sent questionnaires LOCKED; 08 §17.14b**; on
   `fix/questionnaire-delete-draft-sentstate-relay`, NOT merged). User STILL saw no link on a compat household
   send **with a relay connected** — root cause: both `assignmentsCreate` AND `assignmentsCreateCompatibility`

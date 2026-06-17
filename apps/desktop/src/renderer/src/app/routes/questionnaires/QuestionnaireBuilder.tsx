@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Copy, ImagePlus, Plus, Send, Sparkles, Trash2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Copy, ImagePlus, Link2, Plus, Send, Sparkles, Trash2 } from 'lucide-react';
 import { ALLOWED_IMAGE_MIME, MAX_IMAGE_BYTES } from '@selfos/core/questionnaires';
 import { ANTHROPIC_API_KEY_ID } from '@shared/channels';
 import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
@@ -27,6 +27,7 @@ import type {
   Questionnaire,
   QuestionnaireInput,
   Recipient,
+  RelayLinkResult,
   SensitivityTier,
 } from '@shared/schemas';
 import { usePeopleStore } from '../../../stores/peopleStore';
@@ -44,6 +45,7 @@ import { QuestionPreview } from './QuestionPreview';
 import { QuestionnairePreview } from './QuestionnairePreview';
 import { QuestionnaireResults } from './QuestionnaireResults';
 import { QuestionnaireSendPanel } from './QuestionnaireSendPanel';
+import { RelayLinkDelivery } from './RelayLinkDelivery';
 import { formatSentDate, resendStatus } from './sentState';
 import { CompatibilitySendPanel } from './CompatibilitySendPanel';
 import styles from './Questionnaires.module.css';
@@ -303,6 +305,7 @@ export function QuestionnaireBuilder({
   seed,
   compat,
   initialRecipient,
+  initialShare,
   onDuplicate,
   onDone,
 }: {
@@ -312,6 +315,8 @@ export function QuestionnaireBuilder({
   // are read from the saved questionnaire instead.
   compat?: boolean;
   initialRecipient?: Recipient;
+  // Opened via the list "Share link" kebab action (§17.14c) — auto-fetch the shareable link on mount.
+  initialShare?: boolean;
   onDuplicate?: (seed: BuilderSeed) => void;
   onDone: () => void;
 }): JSX.Element {
@@ -412,6 +417,40 @@ export function QuestionnaireBuilder({
   // re-send cooldown elapses.
   const isSent = sentState !== undefined;
   const resend = sentState ? resendStatus(sentState.lastSentAt) : null;
+  // "Share link" on a sent questionnaire (§17.14c): re-mint the latest send's link for delivery, surfaced at
+  // the top of the locked preview + reachable from the list kebab. Distinct from "Send again" (a re-ask).
+  const [shareLink, setShareLink] = useState<RelayLinkResult | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const [shareMsg, setShareMsg] = useState<string | null>(null);
+  const senderName = useSessionStore((s) => s.activePerson?.displayName ?? 'Someone');
+
+  const runShareLink = async (): Promise<void> => {
+    if (sharing || !saved) return;
+    setSharing(true);
+    setShareMsg(null);
+    try {
+      const result = await window.selfos?.questionnairesShareLink(saved.id);
+      if (result) setShareLink(result);
+      else
+        setShareMsg(
+          'Couldn’t create a link. Make sure a relay is connected — and up to date — in Settings → Relay, then try again.',
+        );
+    } catch {
+      setShareMsg('Couldn’t create a link. Please try again.');
+    } finally {
+      setSharing(false);
+    }
+  };
+
+  // Opened from the list "Share link" kebab → fetch the link once on mount.
+  const sharePrimed = useRef(false);
+  useEffect(() => {
+    if (initialShare && isSent && !sharePrimed.current) {
+      sharePrimed.current = true;
+      void runShareLink();
+    }
+    // runShareLink isn't memoized; isSent/initialShare are the real triggers (mirrors the autoAnalyze pattern).
+  }, [initialShare, isSent]);
 
   // Edit ⇄ Preview ⇄ Results. Preview renders the live drafts as the recipient sees them; Results (only
   // for a saved questionnaire, and only with viewResults) shows its sends + per-send outcome. A SENT
@@ -737,6 +776,26 @@ export function QuestionnaireBuilder({
             This questionnaire has been sent, so its questions are locked. To change it, use{' '}
             <strong>Duplicate</strong> to start a new copy.
           </Banner>
+          {/* Share link (§17.14c): re-mint + show the recipient's link + Email/Text, reachable any time
+              after sending (also opened by the list "Share link" kebab). */}
+          {shareLink ? (
+            <RelayLinkDelivery
+              link={shareLink.link}
+              pin={shareLink.pin}
+              senderName={senderName}
+              sensitive={effectiveSensitivity !== 'standard'}
+              note="A fresh link + PIN to share by email or text — the previous link no longer works. We don’t keep a copy of the PIN."
+              onDone={() => setShareLink(null)}
+            />
+          ) : (
+            <div>
+              <Button variant="secondary" onClick={() => void runShareLink()} disabled={sharing}>
+                <Link2 size={16} aria-hidden="true" />
+                {sharing ? 'Getting link…' : 'Share a link'}
+              </Button>
+            </div>
+          )}
+          {shareMsg ? <Banner tone="warning">{shareMsg}</Banner> : null}
           <QuestionnairePreview questions={previewQuestions} />
           {problems !== null && problems.length > 0 ? (
             <Banner tone="warning">{problems.join(' ')}</Banner>

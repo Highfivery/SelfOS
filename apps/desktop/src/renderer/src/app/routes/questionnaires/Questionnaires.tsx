@@ -24,7 +24,7 @@ type Selection =
   // Step 1 of creating: choose the recipient / compatibility BEFORE authoring (08 §17.3).
   | { mode: 'start'; seed?: BuilderSeed }
   | { mode: 'new'; seed?: BuilderSeed; recipient?: Recipient; compat: boolean }
-  | { mode: 'edit'; id: string }
+  | { mode: 'edit'; id: string; share?: boolean }
   | { mode: 'suggested' };
 
 /** Author questionnaires: a list of your definitions (left) with a builder pane (right). */
@@ -130,6 +130,9 @@ export function Questionnaires(): JSX.Element {
                     </button>
                     <QuestionnaireRowMenu
                       title={q.title}
+                      {...(sent
+                        ? { onShare: () => setSelection({ mode: 'edit', id: q.id, share: true }) }
+                        : {})}
                       onDelete={() => setConfirmDeleteId(q.id)}
                     />
                   </div>
@@ -197,6 +200,7 @@ export function Questionnaires(): JSX.Element {
           <QuestionnaireBuilder
             key={selected.id}
             questionnaire={selected}
+            {...(selection.mode === 'edit' && selection.share ? { initialShare: true } : {})}
             onDuplicate={(seed) => setSelection({ mode: 'start', seed })}
             onDone={() => setSelection({ mode: 'none' })}
           />

@@ -811,6 +811,84 @@ describe('Questionnaires', () => {
     expect(screen.getByRole('button', { name: 'Duplicate' })).toBeInTheDocument();
   });
 
+  it('Share link: the list kebab opens a sent questionnaire and fetches the link + delivery (§17.14c)', async () => {
+    const questionnairesShareLink = vi.fn(() =>
+      Promise.resolve({ link: 'https://x.workers.dev/q/shr#k=key', pin: '424242' }),
+    );
+    installMockBridge({
+      questionnairesList: () =>
+        Promise.resolve([
+          {
+            id: 'q1',
+            schemaVersion: 1,
+            version: 1,
+            title: 'Weekly check-in',
+            type: 'general',
+            sensitivity: 'standard',
+            recipient: { kind: 'person', personId: 'p-mara' },
+            questions: [
+              { id: 'qq1', type: 'shortText', prompt: 'How are we doing?', required: true },
+            ],
+            createdAt: 'now',
+            updatedAt: 'now',
+          },
+        ]),
+      questionnairesSendStates: () =>
+        Promise.resolve({ q1: { lastSentAt: new Date().toISOString(), total: 1 } }),
+      questionnairesShareLink,
+    });
+    renderApp();
+
+    // The kebab on a SENT row offers "Share link" → opens the questionnaire + auto-fetches the link.
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Options for Weekly check-in/ }),
+    );
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Share link' }));
+    expect(questionnairesShareLink).toHaveBeenCalledWith('q1');
+    expect(
+      await screen.findByDisplayValue('https://x.workers.dev/q/shr#k=key'),
+    ).toBeInTheDocument();
+    expect(screen.getByDisplayValue('424242')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^email$/i })).toBeInTheDocument();
+  });
+
+  it('Share a link: a sent questionnaire’s preview offers it at the top (§17.14c)', async () => {
+    const questionnairesShareLink = vi.fn(() =>
+      Promise.resolve({ link: 'https://x.workers.dev/q/top#k=key', pin: '999111' }),
+    );
+    installMockBridge({
+      questionnairesList: () =>
+        Promise.resolve([
+          {
+            id: 'q1',
+            schemaVersion: 1,
+            version: 1,
+            title: 'Weekly check-in',
+            type: 'general',
+            sensitivity: 'standard',
+            recipient: { kind: 'person', personId: 'p-mara' },
+            questions: [
+              { id: 'qq1', type: 'shortText', prompt: 'How are we doing?', required: true },
+            ],
+            createdAt: 'now',
+            updatedAt: 'now',
+          },
+        ]),
+      questionnairesSendStates: () =>
+        Promise.resolve({ q1: { lastSentAt: new Date().toISOString(), total: 1 } }),
+      questionnairesShareLink,
+    });
+    renderApp();
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Weekly check-in/ }));
+    // Opening it (not via the kebab) shows a "Share a link" button at the top of the locked preview.
+    await userEvent.click(await screen.findByRole('button', { name: /share a link/i }));
+    expect(questionnairesShareLink).toHaveBeenCalledWith('q1');
+    expect(
+      await screen.findByDisplayValue('https://x.workers.dev/q/top#k=key'),
+    ).toBeInTheDocument();
+  });
+
   it('enables "Send again" on a sent questionnaire once the cooldown has elapsed (§17.14a)', async () => {
     installMockBridge({
       questionnairesList: () =>

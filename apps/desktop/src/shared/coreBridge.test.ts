@@ -2043,6 +2043,27 @@ describe('createCoreBridge', () => {
     expect(sent.linkError).toBeTruthy();
   });
 
+  it('questionnairesShareLink (§17.14c): re-mints the latest send’s link for a sent questionnaire', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.relayConnect({ apiToken: 'cf', accountId: 'acct' });
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: mara.id, roleId: 'member', pin: null });
+    const q = await bridge.questionnairesSave({
+      title: 'Check-in',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: mara.id },
+      questions: [{ id: 'a', type: 'shortText', prompt: 'How?', required: true }],
+    });
+    // Before any send there's nothing to share.
+    expect(await bridge.questionnairesShareLink(q.id)).toBeNull();
+    // After sending, the link is reachable again (a fresh mint) without going through Results.
+    await bridge.assignmentsCreate({ questionnaireId: q.id, privacy: 'standard' });
+    const shared = await bridge.questionnairesShareLink(q.id);
+    expect(shared?.link).toMatch(/\.workers\.dev\/q\//);
+    expect(shared?.pin).toMatch(/^\d{6}$/);
+  });
+
   it('saves/edits a dream, scoped to the active dreamer and gated by dreams.own', async () => {
     const { bridge, ownerId } = await freshOwner();
 

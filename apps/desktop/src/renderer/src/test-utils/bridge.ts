@@ -159,6 +159,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     usageSessionCosts: () => Promise.resolve({}),
     questionnairesList: () => Promise.resolve([]),
     questionnairesSendStates: () => Promise.resolve({}),
+    questionnairesShareLink: () => Promise.resolve(null),
     questionnairesGet: () => Promise.resolve(null),
     questionnairesSave: (input) =>
       Promise.resolve({

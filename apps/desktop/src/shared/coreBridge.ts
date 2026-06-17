@@ -554,6 +554,46 @@ const CompatibilityCreateSchema = z.object({
 });
 const GroupIdSchema = z.string().min(1);
 
+/**
+ * Mint a FRESH relay link + PIN for an existing, already-validated shareable send (08 §17.14a/c): revoke the
+ * old mailbox, derive the disclosure (compat vs external), re-upload. Shared by `assignmentsReshare` (by id)
+ * and `questionnairesShareLink` (the latest send of a questionnaire). Returns null if the upload fails.
+ */
+async function reshareLink(
+  fs: FileSystem,
+  key: Uint8Array,
+  client: ReturnType<typeof createRelayHttpClient>,
+  endpointUrl: string,
+  assignment: Assignment,
+): Promise<RelayLinkResult | null> {
+  if (assignment.relay) await revokeRelayForDeletion(fs, key, client, assignment.id);
+  const senderName =
+    (await getPerson(fs, key, assignment.senderPersonId))?.displayName ?? 'Someone';
+  const snapshot = await getAssignmentSnapshot(fs, key, assignment.id);
+  const compat = snapshot?.compatibility;
+  const disclosure = compat?.enabled
+    ? compatibilityDisclosure(compat.visibility, {
+        otherParticipantName: senderName,
+        senderName,
+        viewerIsSender: false,
+      })
+    : externalSendDisclosure(
+        assignment.senderVisibleToRecipient ? senderName : 'the person who sent this',
+        assignment.privacy,
+      );
+  try {
+    return await attachRelayLink(fs, key, client, assignment.id, {
+      senderName,
+      senderVisibleToRecipient: assignment.senderVisibleToRecipient,
+      disclosure,
+      endpointUrl,
+    });
+  } catch {
+    // Mint failed after the old mailbox was revoked: the send keeps its stale relay; the user can retry.
+    return null;
+  }
+}
+
 /** Build the renderer-facing `SelfosBridge` from a platform `BridgeHost`. */
 export function createCoreBridge(host: BridgeHost): SelfosBridge {
   const activePersonId = async (): Promise<string | null> =>
@@ -2441,35 +2481,37 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         config.drainSecret,
         host.relay.fetch,
       );
-      // Kill the old mailbox (best-effort, no status change) before minting the fresh one.
-      if (assignment.relay) await revokeRelayForDeletion(ctx.fs, ctx.key, client, id);
-      // The disclosure names the send's ORIGINAL sender (not whoever reshares it).
-      const senderName =
-        (await getPerson(ctx.fs, ctx.key, assignment.senderPersonId))?.displayName ?? 'Someone';
-      const snapshot = await getAssignmentSnapshot(ctx.fs, ctx.key, id);
-      const compat = snapshot?.compatibility;
-      const disclosure = compat?.enabled
-        ? compatibilityDisclosure(compat.visibility, {
-            otherParticipantName: senderName,
-            senderName,
-            viewerIsSender: false,
-          })
-        : externalSendDisclosure(
-            assignment.senderVisibleToRecipient ? senderName : 'the person who sent this',
-            assignment.privacy,
-          );
-      try {
-        return await attachRelayLink(ctx.fs, ctx.key, client, id, {
-          senderName,
-          senderVisibleToRecipient: assignment.senderVisibleToRecipient,
-          disclosure,
-          endpointUrl: config.endpointUrl,
-        });
-      } catch {
-        // Mint failed after the old mailbox was already revoked: the send keeps its stale `relay` (old
-        // token), so a later drain just skips it (per-send try/catch) and the user can reshare again.
+      return reshareLink(ctx.fs, ctx.key, client, config.endpointUrl, assignment);
+    },
+    questionnairesShareLink: async (questionnaireId): Promise<RelayLinkResult | null> => {
+      // Get a fresh shareable link + PIN for a SENT questionnaire (08 §17.14c) — surfaced at the top of the
+      // sent (locked) preview + the list kebab, so the link stays reachable after sending without going to
+      // Results. Reshares the latest still-open send to the RECIPIENT (never the sender's own member).
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.sendExternal')))
         return null;
-      }
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const qid = QuestionnaireIdSchema.parse(questionnaireId);
+      const open = ['sent', 'opened', 'inProgress'];
+      const candidate = (await listAssignments(ctx.fs, ctx.key, { senderPersonId: personId }))
+        .filter(
+          (a) =>
+            a.questionnaireId === qid &&
+            open.includes(a.status) &&
+            // The shareable member is the RECIPIENT, never the sender's own (self) compat member.
+            !(a.recipient.kind === 'person' && a.recipient.personId === a.senderPersonId),
+        )
+        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0];
+      if (!candidate) return null;
+      const config = await readRelayConfig(ctx.fs, ctx.key);
+      if (!config) return null;
+      const client = createRelayHttpClient(
+        config.endpointUrl,
+        config.drainSecret,
+        host.relay.fetch,
+      );
+      return reshareLink(ctx.fs, ctx.key, client, config.endpointUrl, candidate);
     },
     relayStatus: async (): Promise<RelayStatus> => {
       const ctx = await host.vaultAndKey();

@@ -773,6 +773,74 @@ describe('Questionnaires', () => {
     expect(screen.getByText(/For:/)).toHaveTextContent(/Sent .*\(2 times\)/);
   });
 
+  it('locks a SENT questionnaire to read-only preview — no Edit, with Send again + Duplicate (§17.14a)', async () => {
+    installMockBridge({
+      questionnairesList: () =>
+        Promise.resolve([
+          {
+            id: 'q1',
+            schemaVersion: 1,
+            version: 1,
+            title: 'Weekly check-in',
+            type: 'general',
+            sensitivity: 'standard',
+            recipient: { kind: 'person', personId: 'p-mara' },
+            questions: [
+              { id: 'qq1', type: 'shortText', prompt: 'How are we doing?', required: true },
+            ],
+            createdAt: 'now',
+            updatedAt: 'now',
+          },
+        ]),
+      // A recent send (today) → within the cooldown, so "Send again" is disabled with a notice.
+      questionnairesSendStates: () =>
+        Promise.resolve({ q1: { lastSentAt: new Date().toISOString(), total: 1 } }),
+    });
+    renderApp();
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Weekly check-in/ }));
+    // Locked: no Edit toggle; the questions are shown read-only (no prompt input), with a lock notice.
+    expect(screen.queryByRole('tab', { name: 'Edit' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+    expect(screen.getByText(/its questions are locked/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Question 1')).not.toBeInTheDocument();
+    // Re-send is offered but disabled until the cooldown elapses, with a timing notice.
+    expect(screen.getByRole('button', { name: /send again/i })).toBeDisabled();
+    expect(screen.getByText(/Ask again in/i)).toBeInTheDocument();
+    // Duplicate (to make changes) is available.
+    expect(screen.getByRole('button', { name: 'Duplicate' })).toBeInTheDocument();
+  });
+
+  it('enables "Send again" on a sent questionnaire once the cooldown has elapsed (§17.14a)', async () => {
+    installMockBridge({
+      questionnairesList: () =>
+        Promise.resolve([
+          {
+            id: 'q1',
+            schemaVersion: 1,
+            version: 1,
+            title: 'Weekly check-in',
+            type: 'general',
+            sensitivity: 'standard',
+            recipient: { kind: 'person', personId: 'p-mara' },
+            questions: [
+              { id: 'qq1', type: 'shortText', prompt: 'How are we doing?', required: true },
+            ],
+            createdAt: 'now',
+            updatedAt: 'now',
+          },
+        ]),
+      // Sent well beyond the cooldown → "Send again" is enabled + the list shows "Ready to re-send".
+      questionnairesSendStates: () =>
+        Promise.resolve({ q1: { lastSentAt: '2026-01-01T00:00:00.000Z', total: 1 } }),
+    });
+    renderApp();
+
+    expect(await screen.findByText(/Ready to re-send/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /^Weekly check-in/ }));
+    expect(screen.getByRole('button', { name: /send again/i })).toBeEnabled();
+  });
+
   it('deletes a questionnaire from the list row after confirming (§3.9)', async () => {
     const questionnairesDelete = vi.fn(() => Promise.resolve());
     installMockBridge({

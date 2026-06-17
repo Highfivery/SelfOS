@@ -1864,18 +1864,35 @@ test('results: re-asks chart a trend, a send deletes, and the questionnaire purg
     await w.getByLabel('Question 1', { exact: true }).fill('How connected do you feel?');
     await w.getByLabel('Answer type').selectOption({ label: 'Rating' });
 
-    // Send it to self twice (a re-ask), answering each with a different rating.
-    const sendToSelf = async (): Promise<void> => {
-      await w.getByRole('button', { name: 'Send' }).click();
-      await w.getByRole('button', { name: 'Standard' }).click();
-      await w.getByRole('button', { name: 'Send' }).last().click();
-      await w.getByRole('button', { name: 'Done' }).click();
-    };
-    // §16.3: save the draft so Send appears, send once; then re-open the saved questionnaire and re-ask.
+    // §16.3: save the draft so Send appears, then send once via the UI.
     await w.getByRole('button', { name: 'Create draft' }).click();
-    await sendToSelf(); // sending returns to the list, so the saved questionnaire is visible to re-open
-    await w.getByRole('button', { name: /^Mood check/ }).click();
-    await sendToSelf();
+    await w.getByRole('button', { name: 'Send' }).click();
+    await w.getByRole('button', { name: 'Standard' }).click();
+    await w.getByRole('button', { name: 'Send' }).last().click();
+    await w.getByRole('button', { name: 'Done' }).click();
+    // The re-ask: a SENT questionnaire is locked + the in-UI "Send again" is disabled until the re-send
+    // cooldown (§17.14a), so drive the second send through the bridge (a re-ask is still valid) to get the
+    // two submitted responses a trend needs — without waiting out the cooldown.
+    const qid = await w.evaluate(async () => {
+      const sel = (
+        window as unknown as { selfos: { questionnairesList: () => Promise<{ id: string }[]> } }
+      ).selfos;
+      const list = await sel.questionnairesList();
+      return list[0]?.id ?? '';
+    });
+    await w.evaluate((id) => {
+      const sel = (
+        window as unknown as {
+          selfos: {
+            assignmentsCreate: (i: {
+              questionnaireId: string;
+              privacy: string;
+            }) => Promise<unknown>;
+          };
+        }
+      ).selfos;
+      return sel.assignmentsCreate({ questionnaireId: id, privacy: 'standard' });
+    }, qid);
 
     // Answer both from the Inbox with ratings 2 then 5. Pick the still-unanswered "New" item, waiting
     // for the list to settle after each submit (else the just-submitted row is still briefly "New").
@@ -1906,9 +1923,11 @@ test('results: re-asks chart a trend, a send deletes, and the questionnaire purg
     await w.getByRole('button', { name: 'Delete', exact: true }).click();
     await expect(w.getByRole('button', { name: /Delete this send/ })).toHaveCount(1);
 
-    // Delete the whole questionnaire — confirm purge, back to an empty list.
-    await w.getByRole('button', { name: 'Edit' }).click();
-    await w.getByRole('button', { name: 'Delete questionnaire' }).click();
+    // Delete the whole questionnaire from the list row (it's SENT → locked, so no Edit-tab delete). Go
+    // back to the list first — the detail view hides it.
+    await w.getByRole('button', { name: 'Questionnaires' }).first().click();
+    await w.getByRole('button', { name: /Options for Mood check/ }).click();
+    await w.getByRole('menuitem', { name: 'Delete' }).click();
     await w.getByRole('button', { name: 'Delete', exact: true }).click();
     await expect(w.getByRole('button', { name: /^Mood check/ })).toHaveCount(0);
     await expect(w.getByText(/no questionnaires yet/i)).toBeVisible();
@@ -2054,6 +2073,112 @@ test('compatibility household (§17.14a): the send mints the recipient a link + 
     // The relay assignment landed with relay material (the recipient's variant is link-answerable).
     const assignments = await listAssignments(fs, key);
     expect(assignments.some((a) => a.compatibilityGroupId && a.relay?.token)).toBe(true);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+// §17.14a delivery matrix: every send type/recipient that can carry a link must show the SAME delivery UI
+// (link + PIN + Email + Text + Copy). Asserting one path with a relay connected once masked the others.
+test('delivery matrix (§17.14a): one-person household + external both show link + Email/Text', async () => {
+  const { userData, vault } = await seedReadyVault();
+  // A household partner so a one-person household send has a real recipient.
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('expected a master key');
+  await savePerson(fs, key, {
+    id: 'mara-1',
+    schemaVersion: 1,
+    displayName: 'Mara',
+    isSubject: true,
+    tags: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    // Connect the relay.
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'Relay' }).click();
+    await w.getByLabel(/cloudflare account id/i).fill('acct');
+    await w.getByLabel(/cloudflare api token/i).fill('cf');
+    await w.getByRole('button', { name: /connect & deploy/i }).click();
+    await expect(w.getByText(/relay connected at/i)).toBeVisible();
+
+    const assertDelivery = async (): Promise<void> => {
+      expect(await w.getByLabel('Secure link').inputValue()).toMatch(/\.workers\.dev\/q\//);
+      expect(await w.getByLabel('PIN', { exact: true }).inputValue()).toMatch(/^\d{6}$/);
+      await expect(w.getByRole('button', { name: /^Email$/ })).toBeVisible();
+      await expect(w.getByRole('button', { name: /^Text$/ })).toBeVisible();
+      await expect(w.getByRole('button', { name: /copy message/i })).toBeVisible();
+    };
+
+    // (1) ONE-PERSON HOUSEHOLD: a relay is connected, so the in-app send also mints a link + delivery.
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await startNewQuestionnaire(w); // recipient index 1 = the household partner
+    await w.getByLabel('Title').fill('Household check');
+    await w.getByLabel('Question 1', { exact: true }).fill('How are we doing?');
+    await w.getByRole('button', { name: 'Create draft' }).click();
+    await w.getByRole('button', { name: 'Send' }).click();
+    await w.getByRole('button', { name: 'Standard' }).click();
+    await w.getByRole('button', { name: 'Send' }).last().click();
+    await assertDelivery();
+    await w.getByRole('button', { name: 'Done' }).click();
+
+    // (2) ONE-PERSON EXTERNAL: a private link send shows the same delivery.
+    await w.getByRole('button', { name: 'New' }).click();
+    await w.getByLabel('Recipient').selectOption('external');
+    await w.getByLabel('Their name').fill('Sam');
+    await w.getByRole('button', { name: 'Continue' }).click();
+    await w.getByLabel('Title').fill('Outside view');
+    await w.getByLabel('Question 1', { exact: true }).fill('How do I come across?');
+    await w.getByRole('button', { name: 'Create draft' }).click();
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByRole('heading', { name: /Send to Sam/i })).toBeVisible();
+    await w.getByRole('button', { name: /create link/i }).click();
+    await assertDelivery();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('delivery matrix (§17.14a): no relay → a household send shows the connect-a-relay hint, no link', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('expected a master key');
+  await savePerson(fs, key, {
+    id: 'mara-1',
+    schemaVersion: 1,
+    displayName: 'Mara',
+    isSubject: true,
+    tags: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    // NO relay connected — a household send is Inbox-only, but the panel must SAY a link needs a relay
+    // (never silently linkless). The hint is actionable, not a dead end.
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await startNewQuestionnaire(w);
+    await w.getByLabel('Title').fill('Quiet check');
+    await w.getByLabel('Question 1', { exact: true }).fill('How are we doing?');
+    await w.getByRole('button', { name: 'Create draft' }).click();
+    await w.getByRole('button', { name: 'Send' }).click();
+    await w.getByRole('button', { name: 'Standard' }).click();
+    await w.getByRole('button', { name: 'Send' }).last().click();
+    // No link is minted, but a clear hint tells the sender how to enable one — and there's no Secure link.
+    await expect(w.getByText(/connect a relay in Settings → Relay/i)).toBeVisible();
+    await expect(w.getByLabel('Secure link')).toHaveCount(0);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

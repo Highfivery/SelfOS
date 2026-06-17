@@ -52,6 +52,8 @@ export function QuestionnaireSendPanel({
   // When a relay is connected, the in-app send ALSO mints a link the recipient can answer anywhere (§17.13).
   const [link, setLink] = useState<string | null>(null);
   const [pin, setPin] = useState<string | null>(null);
+  // Set when a relay IS connected but the link mint failed — shown instead of the no-relay hint (§17.14a).
+  const [linkError, setLinkError] = useState<string | null>(null);
   const senderName = useSessionStore((s) => s.activePerson?.displayName ?? 'Someone');
   // Whether a relay is connected — drives the "you'll also get a shareable link" affordance (§17.13). A link
   // can only exist with a relay (it's a server-delivered surface); without one the send is Inbox-only.
@@ -106,6 +108,8 @@ export function QuestionnaireSendPanel({
       if (result?.link && result.pin) {
         setLink(result.link);
         setPin(result.pin);
+      } else if (result?.linkError) {
+        setLinkError(result.linkError);
       }
       setSentTo(recipientLabel);
     } catch {
@@ -133,7 +137,16 @@ export function QuestionnaireSendPanel({
             />
           ) : (
             <>
-              {relayHint}
+              {linkError ? (
+                // A relay IS connected but the link couldn't be minted — surface it + point to the retry.
+                <Banner tone="warning">
+                  We couldn’t create a share link just now ({linkError}). It’s in {sentTo}’s Inbox;
+                  to also send a link by email or text, open <strong>Results</strong> and choose{' '}
+                  <strong>Resend link</strong>.
+                </Banner>
+              ) : (
+                relayHint
+              )}
               <div className={styles.footer}>
                 <Button variant="primary" onClick={() => onSent(sentTo)}>
                   Done

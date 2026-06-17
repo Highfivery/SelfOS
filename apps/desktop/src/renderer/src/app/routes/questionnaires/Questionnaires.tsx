@@ -16,7 +16,7 @@ import { QuestionnaireBuilder, type BuilderSeed } from './QuestionnaireBuilder';
 import { QuestionnaireRowMenu } from './QuestionnaireRowMenu';
 import { NewQuestionnaireStart } from './NewQuestionnaireStart';
 import { SuggestedPanel } from './SuggestedPanel';
-import { formatSentDate } from './sentState';
+import { formatSentDate, resendStatus } from './sentState';
 import styles from './Questionnaires.module.css';
 
 type Selection =
@@ -121,6 +121,10 @@ export function Questionnaires(): JSX.Element {
                           <span className={styles.rowSent}>
                             · Sent {formatSentDate(sent.lastSentAt)}
                           </span>
+                        ) : null}
+                        {/* Once the re-send cooldown has elapsed, nudge that it's time to ask again. */}
+                        {sent && resendStatus(sent.lastSentAt).ready ? (
+                          <span className={styles.rowResend}>· Ready to re-send</span>
                         ) : null}
                       </span>
                     </button>

@@ -44,7 +44,7 @@ import { QuestionPreview } from './QuestionPreview';
 import { QuestionnairePreview } from './QuestionnairePreview';
 import { QuestionnaireResults } from './QuestionnaireResults';
 import { QuestionnaireSendPanel } from './QuestionnaireSendPanel';
-import { formatSentDate } from './sentState';
+import { formatSentDate, resendStatus } from './sentState';
 import { CompatibilitySendPanel } from './CompatibilitySendPanel';
 import styles from './Questionnaires.module.css';
 
@@ -407,10 +407,18 @@ export function QuestionnaireBuilder({
   // Whether this questionnaire has been sent (08 §17.14) — drives the header "Sent · <date>" line so a
   // reopened, already-sent questionnaire is clearly distinct from one that's still a draft.
   const sentState = saved ? sendStates[saved.id] : undefined;
+  // A SENT questionnaire is LOCKED (§17.14a): its questions are frozen (the snapshot is what went out), so
+  // it opens read-only (Preview), no Edit — you Duplicate to change it, or Send again (re-ask) once the
+  // re-send cooldown elapses.
+  const isSent = sentState !== undefined;
+  const resend = sentState ? resendStatus(sentState.lastSentAt) : null;
 
   // Edit ⇄ Preview ⇄ Results. Preview renders the live drafts as the recipient sees them; Results (only
-  // for a saved questionnaire, and only with viewResults) shows its sends + per-send outcome.
-  const [mode, setMode] = useState<BuilderMode>('edit');
+  // for a saved questionnaire, and only with viewResults) shows its sends + per-send outcome. A SENT
+  // questionnaire opens read-only, so it starts on Preview (Edit isn't offered).
+  const [mode, setMode] = useState<BuilderMode>(() =>
+    questionnaire && sendStates[questionnaire.id] ? 'preview' : 'edit',
+  );
   const canViewResults = useSessionStore((s) => s.can('questionnaires.viewResults'));
   const showResults = saved !== null && canViewResults;
   const previewQuestions = drafts
@@ -608,11 +616,54 @@ export function QuestionnaireBuilder({
     }
   };
 
+  // Duplicate (08 §17.3): clone the questions into a NEW questionnaire + pick a new recipient — the way to
+  // "ask someone else the same thing", and the only way to CHANGE a sent (locked) questionnaire. Shared by
+  // the editor footer + the sent-locked view.
+  const duplicateButton =
+    saved && onDuplicate ? (
+      <Button
+        variant="secondary"
+        disabled={busy}
+        onClick={() =>
+          onDuplicate({
+            title: `${title.trim()} (copy)`,
+            type,
+            questions: drafts.map((d) => toQuestion(d, drafts)),
+          })
+        }
+      >
+        <Copy size={16} aria-hidden="true" />
+        Duplicate
+      </Button>
+    ) : null;
+
+  // The inline delete confirm — shared by the editor footer + the sent-locked view.
+  const deleteConfirmBanner = confirmingDelete ? (
+    <Banner tone="warning">
+      <Stack gap={2}>
+        <Text>
+          Delete “{title.trim()}”? This permanently removes the questionnaire and every response and
+          insight from it. This can’t be undone.
+        </Text>
+        <Inline gap={2}>
+          <Button variant="primary" onClick={() => void onRemove()} disabled={busy}>
+            Delete
+          </Button>
+          <Button variant="secondary" onClick={() => setConfirmingDelete(false)} disabled={busy}>
+            Cancel
+          </Button>
+        </Inline>
+      </Stack>
+    </Banner>
+  ) : null;
+
   return (
     <Stack gap={4}>
       <div className={styles.builderHeader}>
         <Stack gap={1}>
-          <Heading level={3}>{saved ? 'Edit questionnaire' : 'New questionnaire'}</Heading>
+          <Heading level={3}>
+            {saved ? (isSent ? 'Questionnaire' : 'Edit questionnaire') : 'New questionnaire'}
+          </Heading>
           <Text size="sm" tone="secondary">
             For: <strong>{recipientLabel}</strong>
             {sentState ? (
@@ -631,22 +682,16 @@ export function QuestionnaireBuilder({
             value={mode}
             onChange={setMode}
             options={[
-              { value: 'edit', label: 'Edit' },
-              { value: 'preview', label: 'Preview' },
+              // A sent questionnaire is read-only — no Edit, just Preview (+ Results).
+              ...(isSent ? [] : [{ value: 'edit' as const, label: 'Edit' }]),
+              { value: 'preview' as const, label: 'Preview' },
               ...(showResults ? [{ value: 'results' as const, label: 'Results' }] : []),
             ]}
           />
         )}
       </div>
 
-      {mode === 'results' && saved ? (
-        <QuestionnaireResults
-          questionnaireId={saved.id}
-          compatibility={saved.compatibility ?? null}
-        />
-      ) : mode === 'preview' ? (
-        <QuestionnairePreview questions={previewQuestions} />
-      ) : sendId ? (
+      {sendId ? (
         // Sending REPLACES the editor with a focused send → delivery step (08 §17.14) — so there's no
         // lingering Send button + no tall empty editor beneath a short confirmation.
         compatEnabled && recipient ? (
@@ -679,6 +724,58 @@ export function QuestionnaireBuilder({
             }}
           />
         ) : null
+      ) : mode === 'results' && saved ? (
+        <QuestionnaireResults
+          questionnaireId={saved.id}
+          compatibility={saved.compatibility ?? null}
+        />
+      ) : isSent ? (
+        // A SENT questionnaire is LOCKED (§17.14a): read-only preview + Send-again (gated by the re-send
+        // cooldown) + Duplicate + Delete. No editing the frozen questions.
+        <Stack gap={3}>
+          <Banner tone="info">
+            This questionnaire has been sent, so its questions are locked. To change it, use{' '}
+            <strong>Duplicate</strong> to start a new copy.
+          </Banner>
+          <QuestionnairePreview questions={previewQuestions} />
+          {problems !== null && problems.length > 0 ? (
+            <Banner tone="warning">{problems.join(' ')}</Banner>
+          ) : null}
+          {sentState && resend ? (
+            <Text size="sm" tone="secondary">
+              Sent {formatSentDate(sentState.lastSentAt)}
+              {sentState.total > 1 ? ` (${sentState.total} times)` : ''}.{' '}
+              {resend.ready ? 'You can ask again now.' : `${resend.message}.`}
+            </Text>
+          ) : null}
+          <div className={styles.footer}>
+            <div className={styles.footerActions}>
+              <Button
+                variant="primary"
+                onClick={() => void onOpenSend()}
+                disabled={busy || !(resend?.ready ?? true)}
+              >
+                <Send size={16} aria-hidden="true" />
+                Send again
+              </Button>
+              {duplicateButton}
+              <Button variant="secondary" onClick={onDone} disabled={busy}>
+                Close
+              </Button>
+              <IconButton
+                aria-label="Delete questionnaire"
+                variant="secondary"
+                onClick={() => setConfirmingDelete(true)}
+                disabled={busy}
+              >
+                <Trash2 size={16} aria-hidden="true" />
+              </IconButton>
+            </div>
+          </div>
+          {deleteConfirmBanner}
+        </Stack>
+      ) : mode === 'preview' ? (
+        <QuestionnairePreview questions={previewQuestions} />
       ) : (
         <>
           <Card>
@@ -1288,25 +1385,7 @@ export function QuestionnaireBuilder({
                   Send
                 </Button>
               ) : null}
-              {/* Duplicate (08 §17.3): clone the questions into a NEW questionnaire and pick a new
-                  recipient — the way to "ask someone else the same thing", since a questionnaire is bound
-                  to one recipient. */}
-              {saved && onDuplicate ? (
-                <Button
-                  variant="secondary"
-                  onClick={() =>
-                    onDuplicate({
-                      title: `${title.trim()} (copy)`,
-                      type,
-                      questions: drafts.map((d) => toQuestion(d, drafts)),
-                    })
-                  }
-                  disabled={busy}
-                >
-                  <Copy size={16} aria-hidden="true" />
-                  Duplicate
-                </Button>
-              ) : null}
+              {duplicateButton}
               <Button variant="secondary" onClick={onDone} disabled={busy}>
                 {saved ? 'Close' : 'Cancel'}
               </Button>
@@ -1323,28 +1402,7 @@ export function QuestionnaireBuilder({
             </div>
           </div>
 
-          {confirmingDelete ? (
-            <Banner tone="warning">
-              <Stack gap={2}>
-                <Text>
-                  Delete “{title.trim()}”? This permanently removes the questionnaire and every
-                  response and insight from it. This can’t be undone.
-                </Text>
-                <Inline gap={2}>
-                  <Button variant="primary" onClick={() => void onRemove()} disabled={busy}>
-                    Delete
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => setConfirmingDelete(false)}
-                    disabled={busy}
-                  >
-                    Cancel
-                  </Button>
-                </Inline>
-              </Stack>
-            </Banner>
-          ) : null}
+          {deleteConfirmBanner}
         </>
       )}
     </Stack>

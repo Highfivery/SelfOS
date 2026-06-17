@@ -1566,6 +1566,10 @@ export interface InAppSendResult {
   assignment: Assignment;
   link?: string;
   pin?: string;
+  // Set when a relay IS connected but minting the link failed (e.g. the relay is unreachable). The send
+  // still stands (Inbox), but this is surfaced — NOT silently swallowed — so the sender knows the link
+  // didn't go out and can retry from Results. Absent when no relay is connected (Inbox-only by design).
+  linkError?: string;
 }
 
 /** A freshly minted (or re-minted) relay link + its one-time PIN — for delivery / re-share (08 §17.14). */
@@ -1593,6 +1597,9 @@ export type CompatibilitySendResult =
       // (§17.14a) — they answer in their Inbox OR via the link. Omitted when no relay is connected.
       link?: string;
       pin?: string;
+      // Set when a relay IS connected but minting the recipient's link failed — surfaced, not swallowed,
+      // so the sender knows the link didn't go out and can retry from Results (§17.14a). Absent = no relay.
+      linkError?: string;
     }
   | {
       ok: false;

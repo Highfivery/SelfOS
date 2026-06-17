@@ -52,6 +52,14 @@ export function CompatibilitySendPanel({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [minted, setMinted] = useState<{ link: string; pin: string } | null>(null);
+  // Set when a relay IS connected but the link mint failed — shown in the done state (not swallowed).
+  const [linkError, setLinkError] = useState<string | null>(null);
+  // Whether a relay is connected — drives the no-link hint (connect one vs the mint-failed message).
+  const [relayConfigured, setRelayConfigured] = useState<boolean | null>(null);
+  const canManageRelay = useSessionStore((s) => s.can('settings.manage'));
+  useEffect(() => {
+    void window.selfos?.relayStatus().then((s) => setRelayConfigured(s.configured));
+  }, []);
 
   // What the recipient is told (the honesty guard) — written from their point of view, naming the sender as
   // the other participant (§16.1). The sender authored it, so no disclosure is shown to them.
@@ -71,9 +79,13 @@ export function CompatibilitySendPanel({
         setError(result?.message ?? 'Could not send this questionnaire. Please try again.');
         return;
       }
-      // An external recipient answers via the relay — show the link + PIN once for delivery.
+      // The recipient's link (household with a relay, OR external) → show delivery. Otherwise it's Inbox-
+      // only: either the relay mint failed (surface it) or no relay is connected (the done state hints how).
       if (result.link && result.pin) setMinted({ link: result.link, pin: result.pin });
-      else setDone(true);
+      else {
+        if (result.linkError) setLinkError(result.linkError);
+        setDone(true);
+      }
     } catch {
       setError('Could not send this questionnaire. Please try again.');
     } finally {
@@ -110,6 +122,28 @@ export function CompatibilitySendPanel({
             Sent. You and {displayName} each get a personalized version in your Inbox; once you’ve
             both answered, you can align your responses in Results.
           </Banner>
+          {linkError ? (
+            // A relay IS connected but the link couldn't be minted — say so + point to the retry, never
+            // leave the sender wondering where the link is.
+            <Banner tone="warning">
+              We couldn’t create {displayName}’s share link just now ({linkError}). It’s in their
+              Inbox; to also send a link by email or text, open <strong>Results</strong> and choose{' '}
+              <strong>Resend link</strong>.
+            </Banner>
+          ) : relayConfigured === false ? (
+            // No relay connected — a link needs one. Tell the sender how to enable it (never silent).
+            <Banner tone="info">
+              They’ll answer in their Inbox.{' '}
+              {canManageRelay ? (
+                <>
+                  To also send them a link by email or text, connect a relay in{' '}
+                  <Link to="/settings">Settings → Relay</Link>.
+                </>
+              ) : (
+                <>Ask a household admin to connect a relay (Settings → Relay) to share a link.</>
+              )}
+            </Banner>
+          ) : null}
           <div className={styles.footer}>
             <Button variant="primary" onClick={onSent}>
               Done

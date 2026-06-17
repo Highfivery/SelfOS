@@ -209,6 +209,18 @@ A slice is **not** done until **all** of these pass:
       questionnaire type, sensitivity tier, privacy/visibility mode, delivery channel, capability gate, …) must
       add an end-to-end case to the standing §16.7 matrix in `08-questionnaires.md` (the regression suite a
       whole-feature mismatch once slipped past). Not "happy path only" — decrypt the vault to assert data.
+- [ ] **A change to questionnaire SENDING/DELIVERY is verified across EVERY type × recipient × relay-state —
+      not one path.** A send goes out through more than one code path: **one-person** (`assignmentsCreate`) AND
+      **compatibility** (`assignmentsCreateCompatibility`), each to a **household** OR **external** recipient,
+      each **with** a relay connected OR **without** one. Fixing/testing ONE path (e.g. one-person household
+      with a relay) says NOTHING about the others — the user tests the path you didn't. For any delivery change,
+      run E2E for **all** of: one-person household (relay → link + Email/Text delivery; no relay → the
+      "connect a relay" hint, never silent), one-person external, compatibility household (relay), compatibility
+      external; assert the **link + the Email/Text/Copy delivery actually render** (or the hint), and that a
+      mint failure **surfaces** (never a silent Inbox-only fallback). (2026-06-17: a household COMPATIBILITY
+      send minted no link + showed no hint — the unified-delivery work was wired only into `assignmentsCreate`,
+      and the compat path's `catch` silently swallowed the failure; verifying compat-with-a-relay live would
+      have caught it. Twice the user hit "no link" on a path the tests never drove.)
 - [ ] **Conventional Commit** on a feature branch
 
 The `quality-gate` skill runs the automatable subset. The git hooks
@@ -348,6 +360,32 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-17 — Fix (**relay-mint failures made LOUD + sent questionnaires LOCKED; 08 §17.14b**; on
+  `fix/questionnaire-delete-draft-sentstate-relay`, NOT merged). User STILL saw no link on a compat household
+  send **with a relay connected** — root cause: both `assignmentsCreate` AND `assignmentsCreateCompatibility`
+  **silently swallowed** a `putMailbox` failure in a `catch` and returned the Inbox-only result, so a
+  connected-but-unreachable/stale relay looked like "the feature is broken." Both result types gain
+  **`linkError?`**; a mint failure now surfaces ("We couldn't create the link ({reason}) — open Results →
+  Resend") distinct from the no-relay hint; a coreBridge test forces the relay unreachable and asserts
+  `linkError` (proven). **Asked first** the 2 forks: relay-status (user: connected → it's a real bug; this
+  surfacing is the fix + diagnosis) and the lock behavior. **Lock (user: "once sent it should just show the
+  preview"):** a SENT questionnaire opens **read-only Preview** (no Edit, frozen questions, "use Duplicate to
+  change it" notice) + a footer of Send-again / Duplicate / Delete / Close; **Send again is disabled until a
+  re-send cooldown** (`RESEND_COOLDOWN_DAYS=7`) with a notice, and the list row shows **"Ready to re-send"** once
+  due. **Full delivery E2E matrix** (the user's "test ALL types" demand → new §7 DoD rule): one-person household
+  (relay → link + Email/Text; no relay → connect-a-relay hint, no link), one-person external, compat household,
+  compat external — assert the link + Email/Text/Copy delivery render (or the hint). **Verified LIVE** (preview:
+  compat household with a relay → link + editable message + Email/Text; sent questionnaire → locked read-only,
+  Send-again disabled "Ask again in 7 days", Duplicate/Delete, no Edit). Gate green: typecheck (node +
+  web/DOM-lib), lint, format, **526 desktop + 434 core + 11 relay** unit (+ linkError-surfaced, lock view, cooldown,
+  delivery-matrix), **77 E2E** (+2 delivery matrix; the re-asks trend E2E now seeds its 2nd send via the bridge,
+  since the in-UI re-send is cooldown-gated). Synced 08 §17.14b. **NEW HARD RULE (§7 DoD): a SENDING/DELIVERY
+  change is verified across EVERY type × recipient × relay-state — one-person AND compatibility, household AND
+  external, relay AND none — never one path; a `catch` that falls back to a "still works" state MUST record WHY
+  (surface the error), because a silent fallback on a connected relay is indistinguishable from broken.** **Lesson:
+  the "unified delivery" feature had a third hidden gap beyond the two send paths — the `catch` that hid the
+  real-relay failure; the user's bug was the swallowed error, not a logic bug, and only surfacing it (+ testing
+  the failure path) makes it diagnoseable.**
 - 2026-06-17 — Build (**Compatibility unified delivery + re-publish/resend — the COMPAT path the prior fix never
   touched; 08 §17.14a**; on `fix/questionnaire-delete-draft-sentstate-relay`, NOT merged). The user (furious) was
   testing a **compatibility** send (you + Angel) — a separate path from the standard household send fixed in

@@ -1640,9 +1640,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           link,
           pin,
         };
-      } catch {
-        // The relay is unreachable right now — the in-app send still stands (Inbox-only).
-        return { assignment };
+      } catch (e) {
+        // A relay IS connected but minting failed — surface it (don't swallow): the in-app send stands,
+        // but the sender should know the link didn't go out and can retry from Results (§17.14a).
+        return {
+          assignment,
+          linkError: e instanceof Error ? e.message : 'The relay couldn’t be reached.',
+        };
       }
     },
 
@@ -1988,7 +1992,15 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
             a.recipient.kind === 'person' &&
             a.recipient.personId === recipientPersonId,
         );
-        if (!recipientMember) return { ok: true, compatibilityGroupId };
+        if (!recipientMember) {
+          // A relay is connected but we can't find the recipient's just-created member to attach a link —
+          // surface it (don't fall back to a silent no-link), matching the mint-failure path below.
+          return {
+            ok: true,
+            compatibilityGroupId,
+            linkError: 'Couldn’t prepare the share link. Open Results to add one.',
+          };
+        }
         const client = createRelayHttpClient(
           config.endpointUrl,
           config.drainSecret,
@@ -2013,9 +2025,15 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
             },
           );
           return { ok: true, compatibilityGroupId, link, pin };
-        } catch {
-          // The relay is unreachable right now — the in-app paired sends still stand (Inbox-only).
-          return { ok: true, compatibilityGroupId };
+        } catch (e) {
+          // A relay IS connected but minting failed (e.g. the relay is unreachable / its deploy is stale).
+          // The in-app paired sends still stand, but DON'T swallow it: surface a linkError so the sender
+          // sees the link didn't go out and can retry from Results, instead of a silent Inbox-only state.
+          return {
+            ok: true,
+            compatibilityGroupId,
+            linkError: e instanceof Error ? e.message : 'The relay couldn’t be reached.',
+          };
         }
       }
 

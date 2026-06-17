@@ -2176,3 +2176,32 @@ focused step; "re-publish" **re-mints** a fresh link + PIN (the PIN is never sto
   **Lesson: a "unified delivery" feature has TWO send paths (standard `assignmentsCreate` AND
   `assignmentsCreateCompatibility`) — fixing one leaves the other silently broken; the user tests the path you
   didn't. Verify the ACTUAL path the user is on (compatibility), live, before claiming a fix.**
+
+### 17.14b Mint failures are loud + sent questionnaires are locked (2026-06-17) — BUILT
+
+After the user STILL saw no link on a compat household send **with a relay connected**, two more gaps:
+
+- **A link-mint failure is never silent.** Both `assignmentsCreate` and `assignmentsCreateCompatibility`
+  swallowed a `putMailbox` failure in a `catch` and returned the Inbox-only result with no link — so with a
+  connected-but-unreachable/stale relay the sender just saw "it's in their Inbox" and no explanation. Both
+  result types gain **`linkError?`**; on a mint failure the send still stands (Inbox) but reports the error,
+  and the send panels surface it ("We couldn't create the link ({reason}) — open Results → Resend link"),
+  distinct from the no-relay hint. A coreBridge test forces the relay unreachable and asserts `linkError` is
+  set (not a silent no-link). **This is the most likely cause of the user's "relay connected but no link": the
+  real Cloudflare upload was failing and the `catch` hid it.**
+- **A full delivery E2E matrix.** A delivery change must now be E2E-verified across **every** type × recipient
+  × relay-state (CLAUDE.md §7 DoD): one-person household (relay → link + Email/Text; no relay → the
+  connect-a-relay hint, no link), one-person external, compatibility household, compatibility external —
+  asserting the link + the Email/Text/Copy delivery actually render (or the hint). New `delivery matrix`
+  Playwright tests cover the one-person household + external delivery and the no-relay hint.
+- **A SENT questionnaire is LOCKED (the user: "once sent… it should just show the preview").** Opening a sent
+  questionnaire opens **read-only Preview** — no Edit toggle, the questions are frozen — with a "locked, use
+  Duplicate to change it" notice. The footer offers **Send again** (re-ask), **Duplicate**, **Delete**, Close.
+  Re-asking is gated by a **re-send cooldown** (`RESEND_COOLDOWN_DAYS = 7`): "Send again" is disabled until the
+  cooldown elapses ("Sent {date} ({n} times). Ask again in N days."), and the list row shows a **"Ready to
+  re-send"** nudge once it's due. (Editing questions in place is gone — Duplicate makes a fresh copy. Re-asks
+  drive trends, so the cooldown is a nudge/gate, not removal.) RTL covers the locked view (no Edit, disabled
+  Send-again + notice, Duplicate) + the cooldown-elapsed enabled state; the `re-asks` trend E2E now seeds its
+  second send via the bridge (the in-UI re-send is cooldown-gated).
+- **Lesson: a `catch` that falls back to a "still works" state (Inbox-only) MUST record WHY it fell back — a
+  silent fallback on a connected relay is indistinguishable from "the feature is broken." Surface the error.**

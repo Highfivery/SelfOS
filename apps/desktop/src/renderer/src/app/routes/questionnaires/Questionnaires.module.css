@@ -107,6 +107,12 @@
   font-weight: 500;
 }
 
+/* "Ready to re-send" nudge — shown once the re-send cooldown has elapsed (§17.14a). */
+.rowResend {
+  color: var(--color-success, var(--color-accent));
+  font-weight: 500;
+}
+
 /* Per-row kebab menu (mirrors the Sessions list menu). */
 .menuWrap {
   position: relative;

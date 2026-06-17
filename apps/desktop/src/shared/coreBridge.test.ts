@@ -1987,6 +1987,62 @@ describe('createCoreBridge', () => {
     expect(await bridge.assignmentsReshare(selfMember.assignmentId)).toBeNull();
   });
 
+  it('compatibility household (§17.14a): a relay-mint failure surfaces linkError — never a silent Inbox-only', async () => {
+    const ctx = await freshOwner();
+    const { bridge } = ctx;
+    await bridge.relayConnect({ apiToken: 'cf', accountId: 'acct' });
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const angel = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: angel.id, roleId: 'member', pin: null });
+    const q = await bridge.questionnairesSave({
+      title: 'Closeness',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: angel.id },
+      questions: [
+        {
+          id: 'c1',
+          type: 'rating',
+          prompt: 'How connected?',
+          required: true,
+          scale: { min: 1, max: 5 },
+        },
+      ],
+      compatibility: { enabled: true, visibility: 'sharedReport' },
+    });
+
+    // A relay IS connected, but make it unreachable for the mailbox upload (a stale/down deploy). The mint
+    // must NOT be silently swallowed — the send still stands (Inbox) but reports a linkError the UI surfaces.
+    ctx.host.host.relay.fetch = () => Promise.reject(new Error('relay unreachable'));
+    const sent = await bridge.assignmentsCreateCompatibility({ questionnaireId: q.id });
+    expect(sent.ok).toBe(true);
+    if (!sent.ok) throw new Error('expected ok');
+    expect(sent.link).toBeUndefined();
+    expect(sent.pin).toBeUndefined();
+    expect(sent.linkError).toBeTruthy(); // surfaced, not swallowed — the user learns the link didn't go out
+  });
+
+  it('one-person household (§17.14a): a relay-mint failure surfaces linkError too', async () => {
+    const ctx = await freshOwner();
+    const { bridge } = ctx;
+    await bridge.relayConnect({ apiToken: 'cf', accountId: 'acct' });
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: mara.id, roleId: 'member', pin: null });
+    const q = await bridge.questionnairesSave({
+      title: 'Check-in',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: mara.id },
+      questions: [{ id: 'a', type: 'shortText', prompt: 'How?', required: true }],
+    });
+    // Relay connected but unreachable for the upload → the in-app send stands, but linkError is surfaced.
+    ctx.host.host.relay.fetch = () => Promise.reject(new Error('relay unreachable'));
+    const sent = await bridge.assignmentsCreate({ questionnaireId: q.id, privacy: 'standard' });
+    expect(sent.assignment.id).toBeTruthy();
+    expect(sent.link).toBeUndefined();
+    expect(sent.linkError).toBeTruthy();
+  });
+
   it('saves/edits a dream, scoped to the active dreamer and gated by dreams.own', async () => {
     const { bridge, ownerId } = await freshOwner();
 

@@ -1,6 +1,7 @@
 node_modules
 dist
 out
+release
 build
 coverage
 playwright-report
@@ -10,3 +11,5 @@ pnpm-lock.yaml
 *.tsbuildinfo
 dist-web
 ios
+# release-please owns CHANGELOG.md formatting
+CHANGELOG.md

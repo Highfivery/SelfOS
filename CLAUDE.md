@@ -360,6 +360,26 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-17 — Fix (**relay Worker bundle missing in the packaged macOS app**; spec 19 §5/§13, on
+  `fix/relay-bundle-packaging`). User hit "The relay Worker bundle is missing. Build it first: pnpm --filter
+  @selfos/relay build" connecting the Cloudflare relay in the **built** app. Root cause (diagnosed, not
+  assumed): the release workflow only ran `pnpm --filter @selfos/desktop build` so `apps/relay/dist/worker.js`
+  was **never built** in CI; electron-builder's `files` packaged only `out/**` + `package.json` (the relay dist
+  lives at `apps/relay/dist`, outside `out/`); and `loadRelayBundle`'s candidate paths assumed the repo layout,
+  which doesn't exist inside a packaged `.app`. Fix (3 parts): (1) **build the relay in CI** — a
+  `pnpm --filter @selfos/relay build` step in `release.yml` before packaging (+ the `release:build` script
+  builds it first for local parity); (2) **package it** — electron-builder `extraResources` copies
+  `../relay/dist` → `Contents/Resources/relay`; (3) **find it at runtime** — `loadRelayBundle` checks
+  `process.resourcesPath/relay` as the highest-priority candidate (dev still falls through to the
+  workspace/repo-relative candidates). Also ignore the `release/` electron-builder output in eslint + prettier,
+  and `CHANGELOG.md` in prettier (release-please owns it — otherwise format:check fights the generated file).
+  **Verified end-to-end** by running `electron-builder --mac --dir` and confirming `worker.js` (479 KB) +
+  `meta.json` land in `SelfOS.app/Contents/Resources/relay/`. Code-reviewer **ship**. Gate green: typecheck
+  (node + web), lint, format, **441 core + 11 relay + 532 desktop** unit (+1 relayBundle resourcesPath test).
+  Rolls into the pending `0.2.0` release. **Lesson: an electron-builder app only ships what's in `files` /
+  `extraResources` — a separately-built sibling-package artifact (the relay Worker `worker.js`) must be built
+  in CI _before_ packaging AND copied in via `extraResources`, then located at runtime via
+  `process.resourcesPath`, never a repo-relative path that exists only in the dev tree.**
 - 2026-06-17 — Build (**onboarding: kids & pets conditional rosters — a new shared `roster` answer type; spec 18
   §14.6/§14.9**, landed on `main` via a worktree). User: "if they mark they have kids, a conditional field should
   option to select how many, the names and genders. Same with pets." **Asked first** (4 forks): trigger = when

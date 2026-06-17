@@ -360,6 +360,20 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-17 — Fix (**dev vs installed app share `userData` → fresh install skips setup**; on
+  `fix/dev-userdata-separation`). User noticed the **built** app booted straight into their dev vault instead of
+  first-run setup. Cause (diagnosed): the vault pointer + master key + settings live device-local in Electron's
+  `userData`, whose path derives from the app **name**; `index.ts` called `app.setName('SelfOS')`
+  unconditionally and electron-builder's `productName` is also `SelfOS`, so dev and the packaged app resolved to
+  the **same** `~/Library/Application Support/SelfOS` — the packaged app read the dev session's device state and
+  skipped setup. (Real end-users are unaffected — no dev env writes there.) Fix:
+  `app.setName(app.isPackaged ? 'SelfOS' : 'SelfOS Dev')` so a dev run gets its own `userData`, independent of
+  the installed app. One-line Electron-runtime change (no meaningful unit test). **Note:** after this a dev run
+  uses `SelfOS Dev` (re-links the vault once — data is safe); the packaged app keeps `SelfOS`, so to see its true
+  first-run, clear the leftover `~/Library/Application Support/SelfOS` once. **Lesson: Electron `userData` is
+  keyed by the app NAME — if dev and the packaged build share a name they share device state (vault pointer,
+  master key), so a fresh install on a dev machine silently inherits the dev vault; gate the name on
+  `app.isPackaged`.**
 - 2026-06-17 — Fix (**relay Worker bundle missing in the packaged macOS app**; spec 19 §5/§13, on
   `fix/relay-bundle-packaging`). User hit "The relay Worker bundle is missing. Build it first: pnpm --filter
   @selfos/relay build" connecting the Cloudflare relay in the **built** app. Root cause (diagnosed, not

@@ -131,6 +131,35 @@ describe('QuestionnaireForm', () => {
     expect(screen.queryByLabelText('Important dates — label 1')).toBeNull();
   });
 
+  it('captures roster rows with configurable columns (add, fill text + select, remove)', async () => {
+    render(
+      <Harness
+        questions={[
+          q({
+            id: 'kids',
+            type: 'roster',
+            prompt: 'Your kids',
+            roster: [
+              { key: 'name', label: 'Name', type: 'text', placeholder: 'e.g. Emma' },
+              { key: 'gender', label: 'Gender', type: 'select', options: ['Girl', 'Boy'] },
+              { key: 'age', label: 'Age', type: 'text' },
+            ],
+          }),
+        ]}
+      />,
+    );
+    expect(screen.queryByLabelText('Your kids — Name 1')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: '+ Add' }));
+    const name = screen.getByLabelText('Your kids — Name 1');
+    await userEvent.type(name, 'Emma');
+    expect(name).toHaveValue('Emma');
+    await userEvent.selectOptions(screen.getByLabelText('Your kids — Gender 1'), 'Girl');
+    expect(screen.getByLabelText('Your kids — Gender 1')).toHaveValue('Girl');
+    await userEvent.type(screen.getByLabelText('Your kids — Age 1'), '7');
+    await userEvent.click(screen.getByRole('button', { name: 'Remove #1' }));
+    expect(screen.queryByLabelText('Your kids — Name 1')).toBeNull();
+  });
+
   it('renders a rating question as a slider over its min→max scale (#3)', async () => {
     render(
       <Harness

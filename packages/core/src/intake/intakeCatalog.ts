@@ -1,5 +1,11 @@
 import { INTIMACY_ACTIVITIES, INTIMACY_FANTASIES } from '../intimacy/topics';
-import type { BranchRule, IntakeSectionMeta, PersonFieldKey, Question } from '../schemas';
+import type {
+  BranchRule,
+  IntakeSectionMeta,
+  PersonFieldKey,
+  Question,
+  RosterColumn,
+} from '../schemas';
 
 /**
  * The built-in intake catalog (18-personal-onboarding §14) — code, not vault (like the `16-guided-sessions`
@@ -89,6 +95,22 @@ function dateQ(id: string, prompt: string): Question {
 /** A repeatable list of {label, date} rows (e.g. anniversaries) — maps to `Person.importantDates`. */
 function dateList(id: string, prompt: string): Question {
   return { id, type: 'dateList', prompt, required: false };
+}
+/** A repeatable list of rows with configurable columns (e.g. kids: name/gender/age; pets). */
+function roster(
+  id: string,
+  prompt: string,
+  columns: RosterColumn[],
+  branch?: BranchRule,
+): Question {
+  return {
+    id,
+    type: 'roster',
+    prompt,
+    required: false,
+    roster: columns,
+    ...(branch ? { branch } : {}),
+  };
 }
 /** A sleek 0–10 slider with example anchors at the start, middle, and end of the track (§14.5). */
 function slider(
@@ -338,7 +360,48 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         ]),
         { field: 'parentalStatus' },
       ),
+      // Shown when they have kids (incl. via the liveWith→Children auto-fill). Portrait/context only.
+      f(
+        roster(
+          'children',
+          'Tell me about your kids',
+          [
+            { key: 'name', label: 'Name', type: 'text', placeholder: 'e.g. Emma' },
+            {
+              key: 'gender',
+              label: 'Gender',
+              type: 'select',
+              options: ['Girl', 'Boy', 'Non-binary', 'Prefer not to say'],
+            },
+            { key: 'age', label: 'Age', type: 'text', placeholder: 'e.g. 7' },
+          ],
+          whenAny('parentalStatus', ['Have young kids', 'Have grown kids']),
+        ),
+      ),
       f(multi('pets', 'Any pets?', ['Dog', 'Cat', 'Other', 'None'])),
+      // Shown when a pet is selected above. Portrait/context only.
+      f(
+        roster(
+          'petsDetail',
+          'Tell me about your pets',
+          [
+            { key: 'name', label: 'Name', type: 'text', placeholder: 'e.g. Rex' },
+            {
+              key: 'species',
+              label: 'Species',
+              type: 'select',
+              options: ['Dog', 'Cat', 'Bird', 'Fish', 'Reptile', 'Small animal', 'Other'],
+            },
+            {
+              key: 'gender',
+              label: 'Gender',
+              type: 'select',
+              options: ['Female', 'Male', 'Unknown'],
+            },
+          ],
+          whenAny('pets', ['Dog', 'Cat', 'Other']),
+        ),
+      ),
       f(
         longText(
           'typicalDay',

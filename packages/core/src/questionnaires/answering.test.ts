@@ -117,6 +117,20 @@ describe('answering — isAnswered per type', () => {
     expect(isAnswered(dl, [{ label: 'Anniversary', date: '2014-06-21' }])).toBe(true);
   });
 
+  it('treats a roster as answered only when ≥1 row has its first column (name) filled', () => {
+    const r = q({
+      id: 'kids',
+      type: 'roster',
+      roster: [
+        { key: 'name', label: 'Name', type: 'text' },
+        { key: 'gender', label: 'Gender', type: 'select', options: ['Girl', 'Boy'] },
+      ],
+    });
+    expect(isAnswered(r, [])).toBe(false);
+    expect(isAnswered(r, [{ gender: 'Girl' }])).toBe(false); // name (first column) empty
+    expect(isAnswered(r, [{ name: 'Emma', gender: 'Girl' }])).toBe(true);
+  });
+
   it('requires an allocation to total exactly 100', () => {
     const alloc = q({ id: 'a', type: 'allocation', options: ['x', 'y'] });
     expect(allocationTotal({ x: 60, y: 30 })).toBe(90);
@@ -173,6 +187,25 @@ describe('answering — formatAnswerForDisplay', () => {
         X: 0,
       }),
     ).toBe('X: 0, Y: 100');
+  });
+
+  it('renders a roster as "v, v; v, v" rows in authored column order', () => {
+    const r = q({
+      id: 'kids',
+      type: 'roster',
+      roster: [
+        { key: 'name', label: 'Name', type: 'text' },
+        { key: 'gender', label: 'Gender', type: 'select', options: ['Girl', 'Boy'] },
+        { key: 'age', label: 'Age', type: 'text' },
+      ],
+    });
+    expect(
+      formatAnswerForDisplay(r, [
+        { name: 'Emma', gender: 'Girl', age: '7' },
+        { name: 'Liam', gender: 'Boy', age: '' },
+        { name: '', gender: '', age: '' },
+      ]),
+    ).toBe('Emma, Girl, 7; Liam, Boy');
   });
 
   it('renders a dateList as "label: date" pairs, dropping incomplete rows', () => {

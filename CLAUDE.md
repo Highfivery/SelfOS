@@ -336,6 +336,28 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-17 — Build (**onboarding: kids & pets conditional rosters — a new shared `roster` answer type; spec 18
+  §14.6/§14.9**, landed on `main` via a worktree). User: "if they mark they have kids, a conditional field should
+  option to select how many, the names and genders. Same with pets." **Asked first** (4 forks): trigger = when
+  they have kids (have-young/grown-kids; the liveWith→Children auto-fill flows in too); per child = **name +
+  gender + age**; per pet = **name + species + gender**; storage = **portrait/context only** (no Person field).
+  Built a generic **`roster` `AnswerType`** — `Question.roster` declares the per-row columns
+  (`{key,label,type:'text'|'select',options?,placeholder?}`), value is `Record<string,string>[]`. Rendered by
+  `@selfos/answering` as **stacked per-row cards** (fields stack vertically, so a roster row can NEVER overflow
+  horizontally — the dateRow lesson taken further). Two rosters in **Your life now**: `children` (branched on the
+  Children single-choice) + `petsDetail` (branched on a pet in the "Any pets?" multi, via array-includes
+  branching). `answerToString` now formats object-row arrays ("Emma, Girl, 7; Liam, Boy, 4") — also fixed a latent
+  dateList "[object Object]" in the portrait. Widened `IntakeAnswerValue` + `Answer.value` + added
+  `RosterColumnSchema`. Roster **text** columns also carry placeholders (the placeholder guard now covers them).
+  Gate green (worktree): typecheck, lint, format, **438 core + 11 relay + 514 desktop** unit (+roster isAnswered/
+  format, +roster-persists-no-PersonField-and-feeds-portrait, +roster RTL add/fill/remove), **73 E2E** (the
+  life-now test now adds a child [name/gender/age] + reveals the pets roster, with a roster no-overflow geometry
+  check). Visual QA caveat: the web preview gates the onboarding form behind `aiAvailable`, so the roster is
+  verified by the E2E (real Chromium: reveal + fill + geometry) + RTL rather than a screenshot; the stacked-card
+  layout is overflow-safe by construction. On `feat/kids-pets-roster` off `main`, merged. **Lesson: a generic
+  `roster` answer type (configurable columns) is the clean way to capture repeatable structured sub-data (kids,
+  pets) without per-feature controls; render rows as STACKED cards so they're overflow-safe at any width, and
+  teach `answerToString` to format object-row arrays or the portrait gets "[object Object]".**
 - 2026-06-17 — Fix + feedback (**onboarding: ALL free-text questions must have placeholders + drop a redundant
   decisionStyle option; spec 18 §14.6**, landed on `main` via a worktree). User (frustrated, repeat): "im STILL
   seeing text fields with no placeholders, THEY MUST ALL HAVE PLACEHOLDERS." Audited the catalog — **57** of 211

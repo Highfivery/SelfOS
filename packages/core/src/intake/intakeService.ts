@@ -142,6 +142,20 @@ export function stripIntakeFieldMarkers(text: string): string {
 function answerToString(value: IntakeAnswerValue | undefined): string {
   if (value === undefined) return '';
   if (Array.isArray(value)) {
+    // Object-row arrays (dateList {label,date} / roster {col→value}) → each row's values joined by ", ",
+    // rows by "; " (e.g. "Emma, Girl, 7; Liam, Boy, 4") — so the portrait reads them, not "[object Object]".
+    if (value.some((it) => it !== null && typeof it === 'object')) {
+      return value
+        .map((row) =>
+          Object.values(row as Record<string, string>)
+            .map((v) => String(v).trim())
+            .filter(Boolean)
+            .join(', '),
+        )
+        .filter(Boolean)
+        .join('; ');
+    }
+    // String list (multi) → comma-join (preserves the ethnicity/gender etc. string-field behavior).
     return value
       .map((s) => String(s).trim())
       .filter(Boolean)

@@ -532,6 +532,7 @@ export const IntakeAnswerValueSchema = z.union([
   z.boolean(),
   z.array(z.string()),
   z.array(z.object({ label: z.string(), date: z.string() })), // a `dateList` answer (→ importantDates)
+  z.array(z.record(z.string(), z.string())), // a `roster` answer (repeatable rows of {column → value})
 ]);
 export type IntakeAnswerValue = z.infer<typeof IntakeAnswerValueSchema>;
 
@@ -586,8 +587,19 @@ export const AnswerTypeSchema = z.enum([
   'matrix',
   'allocation',
   'dateList', // a repeatable list of {label, date} pairs (e.g. anniversaries → Person.importantDates)
+  'roster', // a repeatable list of rows with configurable columns (e.g. kids: name/gender/age; pets)
 ]);
 export type AnswerType = z.infer<typeof AnswerTypeSchema>;
+
+/** A `roster` column definition — a labeled per-row field, either free text or a select with options. */
+export const RosterColumnSchema = z.object({
+  key: z.string().min(1),
+  label: z.string().min(1),
+  type: z.enum(['text', 'select']),
+  options: z.array(z.string()).optional(), // for type: 'select'
+  placeholder: z.string().optional(), // example text for a 'text' column
+});
+export type RosterColumn = z.infer<typeof RosterColumnSchema>;
 
 /** One entry of a `dateList` answer — a labeled date (e.g. "Anniversary" → "2014-06-21"). */
 export const DateEntrySchema = z.object({ label: z.string(), date: z.string() });
@@ -643,6 +655,7 @@ export const QuestionSchema = z.object({
     })
     .optional(),
   metricKey: z.string().optional(), // rating/slider/matrix → populates Insight.metrics
+  roster: z.array(RosterColumnSchema).optional(), // for type: 'roster' — the per-row columns (kids, pets…)
   branch: BranchRuleSchema.optional(),
 });
 export type Question = z.infer<typeof QuestionSchema>;
@@ -878,6 +891,7 @@ export const AnswerSchema = z.object({
     z.array(z.string()),
     z.record(z.string(), z.number()),
     z.array(z.object({ label: z.string(), date: z.string() })), // a `dateList` answer
+    z.array(z.record(z.string(), z.string())), // a `roster` answer
   ]),
 });
 export type Answer = z.infer<typeof AnswerSchema>;

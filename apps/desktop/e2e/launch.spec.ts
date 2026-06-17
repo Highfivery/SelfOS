@@ -4371,6 +4371,26 @@ test('onboarding: living-with-children auto-fills Children, and a substance reve
       'true',
     );
 
+    // Having kids reveals the children roster (name / gender / age per child).
+    await expect(w.getByText('Tell me about your kids')).toBeVisible();
+    await w.getByRole('button', { name: '+ Add', exact: true }).click(); // only the children roster is shown yet
+    await w.getByLabel('Tell me about your kids — Name 1').fill('Emma');
+    await w.getByLabel('Tell me about your kids — Gender 1').selectOption('Girl');
+    await w.getByLabel('Tell me about your kids — Age 1').fill('7');
+    // The roster row stacks its fields — no horizontal overflow.
+    const rosterOverflow = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      return main ? main.scrollWidth - main.clientWidth : 0;
+    });
+    expect(rosterOverflow).toBeLessThanOrEqual(1);
+
+    // Selecting a pet reveals the pets roster (name / species / gender).
+    await w
+      .getByRole('group', { name: 'Any pets?' })
+      .getByRole('checkbox', { name: 'Dog' })
+      .click();
+    await expect(w.getByText('Tell me about your pets')).toBeVisible();
+
     // "Health & wellbeing": a per-substance frequency reveals only once that substance is selected.
     await w.getByRole('button', { name: /Health & wellbeing/ }).click();
     await expect(w.getByText('Cannabis — how often?')).toHaveCount(0);

@@ -107,13 +107,19 @@ describe('intakeCatalog', () => {
     expect(getIntakeSection('family')?.focus).toBeTruthy();
   });
 
-  it('EVERY free-text question (shortText / longText) has a non-empty placeholder', () => {
+  it('EVERY free-text input has a non-empty placeholder (shortText / longText + roster text columns)', () => {
     const missing: string[] = [];
     for (const section of INTAKE_CATALOG) {
       for (const m of section.questions ?? []) {
-        if (m.q.type !== 'shortText' && m.q.type !== 'longText') continue;
-        if (!m.q.placeholder || m.q.placeholder.trim() === '')
-          missing.push(`${section.id}.${m.q.id}`);
+        if (m.q.type === 'shortText' || m.q.type === 'longText') {
+          if (!m.q.placeholder || m.q.placeholder.trim() === '')
+            missing.push(`${section.id}.${m.q.id}`);
+        }
+        // A roster's free-text columns must also carry a placeholder (selects don't need one).
+        for (const col of m.q.roster ?? []) {
+          if (col.type === 'text' && (!col.placeholder || col.placeholder.trim() === ''))
+            missing.push(`${section.id}.${m.q.id}.${col.key}`);
+        }
       }
     }
     expect(missing).toEqual([]);

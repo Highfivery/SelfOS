@@ -2076,3 +2076,25 @@ sender**. The shareable-only context boundary (§13.3) is unchanged — only the
 coreBridge integration test + a Playwright E2E **decrypt each participant's frozen variant and assert it names
 the OTHER person, not themselves** — a green "it sent / it rendered" flow never proved the content was right
 (now a §7 DoD item).
+
+## 17.13 Unified delivery — a household send also mints a relay link (2026-06-16) — BUILT
+
+The same answering workflow for both internal and external recipients, so a household recipient can answer in
+their **Inbox** OR via a **relay link** anywhere — whichever they reach first. Decided: a link for every send
+(keep the Inbox), first-submission wins, Inbox-only fallback when no relay is connected.
+
+- **Mint on the in-app send.** `assignmentsCreate` now returns **`InAppSendResult { assignment, link?, pin? }`**.
+  After freezing the in-app assignment it ALSO mints relay material for it (a new `attachRelayLink` core fn over
+  a shared `mintRelay` helper extracted from `createRelaySend`) — **only** when the sender can
+  `questionnaires.sendExternal` AND a relay is connected; otherwise the send is **Inbox-only** (the graceful
+  fallback — the app works without Cloudflare). The send stays `channel: 'inApp'`; the link is an _additional_
+  surface. The send panel surfaces the link + PIN (copy rows).
+- **Dual-surface answering + first-submission wins.** An in-app submit/decline best-effort **revokes the relay
+  mailbox** (the link then shows "unavailable"), and `drainRelaySend` **skips an already-submitted/declined
+  send** so a late link answer can never overwrite the in-app one. The drain now covers **any** send carrying
+  relay material (not just `channel: 'relay'`), so a household send's link drains in like an external one.
+- **Tests:** core (`attachRelayLink` round-trip + the first-wins drain guard), coreBridge integration (a
+  household send mints a link, is in the Inbox AND answerable via the link → drains in; an in-app submit closes
+  the link → unlock 404), a send-panel RTL (the link + PIN surface), and a Playwright E2E (connect relay →
+  household send → the panel shows the link + PIN → decrypt: the in-app assignment carries relay material).
+  Gate green: typecheck (node + web/DOM-lib), lint, format, **417 core + 500 desktop + 11 relay** unit, **70 E2E**.

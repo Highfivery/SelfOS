@@ -1472,6 +1472,52 @@ test('relay: connect a household relay, then mint an external link + PIN, no ove
   }
 });
 
+test('unified delivery (§17.13): a household send also mints a link the recipient can answer anywhere', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    // Admin connects the relay (fake Cloudflare).
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'Relay' }).click();
+    await w.getByLabel(/cloudflare account id/i).fill('acct-123');
+    await w.getByLabel(/cloudflare api token/i).fill('cf-token');
+    await w.getByRole('button', { name: /connect & deploy/i }).click();
+    await expect(w.getByText(/relay connected at/i)).toBeVisible();
+
+    // Author a HOUSEHOLD-recipient questionnaire (a self check-in to Tester) and send it in-app.
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await startNewQuestionnaire(w); // binds the owner (Tester) as the recipient
+    await w.getByLabel('Title').fill('Self check-in');
+    await w.getByLabel('Question 1', { exact: true }).fill('How am I doing?');
+    await w.getByRole('button', { name: 'Create draft' }).click();
+    await w.getByRole('button', { name: 'Send' }).click();
+    // Wait for the send panel to render before clicking its confirm (else .last() races the builder's Send).
+    await expect(w.getByRole('heading', { name: /Send .Self check-in/ })).toBeVisible();
+    await w.getByRole('button', { name: 'Send' }).last().click({ noWaitAfter: true });
+
+    // §17.13: it landed in the Inbox AND minted a relay link + PIN (answer on either surface).
+    await expect(w.getByText(/Sent to Tester/)).toBeVisible();
+    const link = await w.getByLabel('Secure link').inputValue();
+    expect(link).toMatch(/\.workers\.dev\/q\/[0-9a-f]+#k=/);
+    expect(await w.getByLabel('PIN', { exact: true }).inputValue()).toMatch(/^\d{6}$/);
+
+    // Decrypt the vault: the send is an IN-APP assignment that ALSO carries relay material.
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('expected a master key');
+    const send = (await listAssignments(fs, key)).find(
+      (a) => a.channel === 'inApp' && a.relay?.token,
+    );
+    expect(send).toBeTruthy();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('results: a Standard response surfaces the raw answers in the sender’s Results view', async () => {
   const { userData, vault } = await seedReadyVault(); // AI off → analysis is gated behind a calm prompt
   const app = await launch(userData);

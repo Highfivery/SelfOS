@@ -329,6 +329,26 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-16 — Build (**unified questionnaire delivery — a household send ALSO mints a relay link; SPEC 08
+  §17.13 BUILT** on `feat/questionnaire-unified-relay` off `main`, NOT merged). The 6th of the user's reported
+  issues (the first 5 merged separately): the same answering workflow for internal + external, so a household
+  recipient can answer in their **Inbox** OR via a **link** anywhere — whichever they reach first. **Decision
+  (user-chosen): a link for every send + keep the Inbox; first-submission wins; Inbox-only fallback when no
+  relay is connected.** **Core:** extracted a shared `mintRelay` helper from `createRelaySend` and added
+  **`attachRelayLink`** (mints relay material for an existing in-app send + uploads the mailbox); `drainRelaySend`
+  now **skips an already-submitted/declined send** (first-wins guard). **Bridge:** `assignmentsCreate` returns
+  **`InAppSendResult { assignment, link?, pin? }`** — it mints a link ONLY when the sender can `sendExternal`
+  AND a relay is connected (else Inbox-only, the graceful no-Cloudflare fallback; the send stays `channel:
+'inApp'`); an in-app submit/decline best-effort **revokes the mailbox** (closes the link); the drain filter now
+  covers **any** send with relay material, not just `channel: 'relay'`. **UI:** the send panel surfaces the link
+  - PIN (copy rows). **Tests:** core (attach round-trip + first-wins drain), coreBridge integration (household
+    send → in Inbox AND link-answerable → drains in; in-app submit → unlock 404), send-panel RTL, + a Playwright
+    E2E (connect relay → household send → panel shows link/PIN → decrypt: in-app assignment carries relay
+    material). Gate green: typecheck (node + web/DOM-lib), lint, format, **417 core + 500 desktop + 11 relay**
+    unit, **70 E2E**; visual QA of the send panel. **Lesson: the relay-minting is reusable — one `mintRelay` helper
+    serves both an external send and a household link; the link is an ADDITIONAL surface on an in-app send (not a
+    channel change), and first-wins is two cheap guards (revoke-the-mailbox on in-app submit + skip-if-submitted
+    on drain), not a distributed transaction.** **All 6 user-reported questionnaire issues are now addressed.**
 - 2026-06-16 — Fixes (**questionnaire answering UI/UX + compatibility variant bug**, on
   `fix/questionnaire-answering-and-relay` off the merged `main`; user-reported after testing). Six issues; the
   plan was approved before coding (no backward-compat needed). **Slice 1 (answering renderer, `@selfos/answering`):**

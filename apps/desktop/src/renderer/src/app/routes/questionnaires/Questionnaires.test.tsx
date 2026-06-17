@@ -514,17 +514,22 @@ describe('Questionnaires', () => {
     const assignmentsCreate = vi.fn(
       (input: { questionnaireId: string; privacy?: 'standard' | 'private' }) =>
         Promise.resolve({
-          id: 'a1',
-          schemaVersion: 1,
-          questionnaireId: input.questionnaireId,
-          senderPersonId: 'owner-1',
-          recipient: { kind: 'person' as const, personId: 'p-mara' },
-          channel: 'inApp' as const,
-          privacy: input.privacy ?? 'private',
-          senderVisibleToRecipient: true,
-          status: 'sent' as const,
-          createdAt: 'now',
-          updatedAt: 'now',
+          assignment: {
+            id: 'a1',
+            schemaVersion: 1,
+            questionnaireId: input.questionnaireId,
+            senderPersonId: 'owner-1',
+            recipient: { kind: 'person' as const, personId: 'p-mara' },
+            channel: 'inApp' as const,
+            privacy: input.privacy ?? 'private',
+            senderVisibleToRecipient: true,
+            status: 'sent' as const,
+            createdAt: 'now',
+            updatedAt: 'now',
+          },
+          // §17.13: a connected relay also mints a link the recipient can answer anywhere.
+          link: 'https://demo.workers.dev/q/abc123#k=key',
+          pin: '482915',
         }),
     );
     installMockBridge({
@@ -554,6 +559,11 @@ describe('Questionnaires', () => {
     );
     expect(assignmentsCreate.mock.calls[0]?.[0]).not.toHaveProperty('recipientPersonId');
     expect(await screen.findByText(/sent to mara/i)).toBeInTheDocument();
+    // §17.13: the minted link + PIN are surfaced so the recipient can also answer anywhere.
+    expect(screen.getByLabelText('Secure link')).toHaveValue(
+      'https://demo.workers.dev/q/abc123#k=key',
+    );
+    expect(screen.getByLabelText('PIN')).toHaveValue('482915');
   });
 
   it('offers a Results tab on a saved questionnaire (gated by viewResults)', async () => {

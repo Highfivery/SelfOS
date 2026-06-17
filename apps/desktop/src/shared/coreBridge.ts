@@ -46,6 +46,7 @@ import {
   type CompatibilityVisibility,
   type CompatResultPublish,
   type ContextOnlyResult,
+  type InAppSendResult,
   type RelayResult,
   type InboxAssignmentDetail,
   type InboxCompatibilityView,
@@ -169,6 +170,7 @@ import {
   addCustomIntimacyTopic,
   addCustomType,
   analyzeAssignment,
+  attachRelayLink,
   buildQuestionTrends,
   compatibilityDisclosure,
   createAssignment,
@@ -1506,7 +1508,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const { subjectPersonId, id } = InsightIdSchema.parse(input);
       await deleteInsight(ctx.fs, subjectPersonId, id);
     },
-    assignmentsCreate: async (input): Promise<Assignment> => {
+    assignmentsCreate: async (input): Promise<InAppSendResult> => {
       const ctx = await host.vaultAndKey();
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) {
         throw new Error('Not permitted');
@@ -1530,15 +1532,50 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!(await getPerson(ctx.fs, ctx.key, recipientPersonId))) {
         throw new Error('Recipient not found');
       }
-      return createAssignment(ctx.fs, ctx.key, {
+      const senderVisible = senderVisibleToRecipient ?? true;
+      const assignment = await createAssignment(ctx.fs, ctx.key, {
         questionnaireId,
         senderPersonId: personId,
         recipient: { kind: 'person' as const, personId: recipientPersonId },
         channel: 'inApp',
         privacy: privacy ?? 'standard',
-        senderVisibleToRecipient: senderVisibleToRecipient ?? true,
+        senderVisibleToRecipient: senderVisible,
         ...(expiresAt !== undefined ? { expiresAt } : {}),
       });
+
+      // 08 §17.13 — unified delivery: ALSO mint a relay link so the recipient can answer in their Inbox OR
+      // anywhere via the link. Only when the sender can deliver externally AND a relay is connected;
+      // otherwise the send is Inbox-only (the graceful fallback — the app works without Cloudflare).
+      const config = (await activePersonCan(ctx.fs, ctx.key, 'questionnaires.sendExternal'))
+        ? await readRelayConfig(ctx.fs, ctx.key)
+        : null;
+      if (!config) return { assignment };
+      const senderName = (await getPerson(ctx.fs, ctx.key, personId))?.displayName ?? 'Someone';
+      const client = createRelayHttpClient(
+        config.endpointUrl,
+        config.drainSecret,
+        host.relay.fetch,
+      );
+      try {
+        const { link, pin } = await attachRelayLink(ctx.fs, ctx.key, client, assignment.id, {
+          senderName,
+          senderVisibleToRecipient: senderVisible,
+          disclosure: externalSendDisclosure(
+            senderVisible ? senderName : 'the person who sent this',
+            privacy ?? 'standard',
+          ),
+          endpointUrl: config.endpointUrl,
+          ...(expiresAt !== undefined ? { expiresAt } : {}),
+        });
+        return {
+          assignment: (await getAssignment(ctx.fs, ctx.key, assignment.id)) ?? assignment,
+          link,
+          pin,
+        };
+      } catch {
+        // The relay is unreachable right now — the in-app send still stands (Inbox-only).
+        return { assignment };
+      }
     },
 
     // --- Inbox / answering (08-questionnaires §13.5) — gated by `questionnaires.answer` + recipient-scoped ---
@@ -1636,6 +1673,20 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const resolved = await recipientAssignment(assignmentId);
       if (!resolved) throw new Error('Not permitted');
       await submitResponse(resolved.fs, resolved.key, { assignmentId, answers });
+      // 08 §17.13 first-wins: if this send also has a relay link, close its mailbox so the link can't be
+      // answered again on the other surface (best-effort; the drain guard is the backstop).
+      const assignment = await getAssignment(resolved.fs, resolved.key, assignmentId);
+      if (assignment?.relay) {
+        const config = await readRelayConfig(resolved.fs, resolved.key);
+        if (config) {
+          const client = createRelayHttpClient(
+            config.endpointUrl,
+            config.drainSecret,
+            host.relay.fetch,
+          );
+          await revokeRelayForDeletion(resolved.fs, resolved.key, client, assignmentId);
+        }
+      }
     },
     assignmentsDecline: async (input): Promise<void> => {
       const { assignmentId, note } = DeclineSchema.parse(input);
@@ -1645,6 +1696,19 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         assignmentId,
         ...(note !== undefined ? { note } : {}),
       });
+      // Close the relay link too, if any (§17.13) — a declined send shouldn't stay answerable via the link.
+      const assignment = await getAssignment(resolved.fs, resolved.key, assignmentId);
+      if (assignment?.relay) {
+        const config = await readRelayConfig(resolved.fs, resolved.key);
+        if (config) {
+          const client = createRelayHttpClient(
+            config.endpointUrl,
+            config.drainSecret,
+            host.relay.fetch,
+          );
+          await revokeRelayForDeletion(resolved.fs, resolved.key, client, assignmentId);
+        }
+      }
     },
     assignmentsResults: async (questionnaireId): Promise<SendResult[]> => {
       const ctx = await host.vaultAndKey();
@@ -2167,11 +2231,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         config.drainSecret,
         host.relay.fetch,
       );
-      // Drain only the active person's still-open external sends; submitted/declined/revoked/expired
-      // ones are already drained or done, so re-draining them is wasted relay round-trips.
+      // Drain the active person's still-open sends that carry relay material — external links AND the
+      // links attached to in-app household sends (08 §17.13). Submitted/declined/revoked/expired ones are
+      // already drained or done, so re-draining them is wasted relay round-trips.
       const open = ['sent', 'opened', 'inProgress'];
       const sends = (await listAssignments(ctx.fs, ctx.key, { senderPersonId: personId })).filter(
-        (a) => a.channel === 'relay' && a.relay && open.includes(a.status),
+        (a) => a.relay && open.includes(a.status),
       );
       let drained = 0;
       let declined = 0;

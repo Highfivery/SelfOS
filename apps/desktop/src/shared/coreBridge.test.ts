@@ -662,7 +662,7 @@ describe('createCoreBridge', () => {
       }),
     ).not.toEqual([]);
 
-    const assignment = await bridge.assignmentsCreate({ questionnaireId: saved.id });
+    const { assignment } = await bridge.assignmentsCreate({ questionnaireId: saved.id });
     expect(assignment.status).toBe('sent');
     expect(assignment.senderPersonId).toBe(ownerId);
     expect(assignment.recipient).toEqual({ kind: 'person', personId: recipient.id });
@@ -759,7 +759,7 @@ describe('createCoreBridge', () => {
       recipient: { kind: 'person', personId: recipient.id },
       questions: [{ id: 'q1', type: 'shortText', prompt: 'Hi?', required: true }],
     });
-    const a = await bridge.assignmentsCreate({ questionnaireId: q.id });
+    const { assignment: a } = await bridge.assignmentsCreate({ questionnaireId: q.id });
 
     // Owner has viewResults; with no submitted answers yet, analyze reports NO_RESPONSE (the live
     // trigger needs §13.5's answer flow), and the Memory list is empty.
@@ -972,7 +972,7 @@ describe('createCoreBridge', () => {
       recipient: { kind: 'person', personId: recipient.id },
       questions: [{ id: 'q1', type: 'shortText', prompt: 'How are we doing?', required: true }],
     });
-    const assignment = await bridge.assignmentsCreate({
+    const { assignment } = await bridge.assignmentsCreate({
       questionnaireId: q.id,
       privacy: 'private',
     });
@@ -1036,11 +1036,11 @@ describe('createCoreBridge', () => {
       recipient: { kind: 'person', personId: recipient.id },
       questions: [{ id: 'q1', type: 'shortText', prompt: 'How are we doing?', required: true }],
     });
-    const standard = await bridge.assignmentsCreate({
+    const { assignment: standard } = await bridge.assignmentsCreate({
       questionnaireId: q.id,
       privacy: 'standard',
     });
-    const priv = await bridge.assignmentsCreate({
+    const { assignment: priv } = await bridge.assignmentsCreate({
       questionnaireId: q.id,
       privacy: 'private',
     });
@@ -1113,7 +1113,7 @@ describe('createCoreBridge', () => {
     expect((await bridge.questionnairesGet(q.id))?.creatorPersonId).toBe(member.id);
 
     // Sent → it now has a send, so the member-creator can no longer delete it.
-    const assignment = await bridge.assignmentsCreate({
+    const { assignment } = await bridge.assignmentsCreate({
       questionnaireId: q.id,
       privacy: 'standard',
     });
@@ -1168,7 +1168,7 @@ describe('createCoreBridge', () => {
     // The owner sends a PRIVATE questionnaire to Mara twice (a re-ask).
     const sends: string[] = [];
     for (const value of [2, 4]) {
-      const a = await bridge.assignmentsCreate({
+      const { assignment: a } = await bridge.assignmentsCreate({
         questionnaireId: q.id,
         privacy: 'private',
       });
@@ -1428,7 +1428,7 @@ describe('createCoreBridge', () => {
       recipient: { kind: 'person', personId: mara.id },
       questions: [{ id: 'c1', type: 'shortText', prompt: 'How are you?', required: true }],
     });
-    const a = await bridge.assignmentsCreate({
+    const { assignment: a } = await bridge.assignmentsCreate({
       questionnaireId: q.id,
       privacy: 'private',
     });
@@ -1689,6 +1689,97 @@ describe('createCoreBridge', () => {
       body: JSON.stringify({ token, pin }),
     });
     expect(after.status).toBe(404);
+  });
+
+  it('unified delivery (§17.13): a household send ALSO mints a link; answerable via the link, drained in', async () => {
+    const { host, bridge, ownerId } = await freshOwner();
+    await bridge.relayConnect({ apiToken: 'cf', accountId: 'acct' });
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: mara.id, roleId: 'member', pin: null });
+    const q = await bridge.questionnairesSave({
+      title: 'Weekly check-in',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: mara.id },
+      questions: [{ id: 'a', type: 'shortText', prompt: 'How are we doing?', required: true }],
+    });
+
+    // The in-app send to Mara ALSO mints a relay link + PIN, but stays an in-app send.
+    const sent = await bridge.assignmentsCreate({ questionnaireId: q.id, privacy: 'standard' });
+    expect(sent.assignment.channel).toBe('inApp');
+    expect(sent.link).toMatch(/\.workers\.dev\/q\/[0-9a-f]+#k=/);
+    expect(sent.pin).toMatch(/^\d{6}$/);
+
+    // It's in Mara's Inbox (the in-app surface)…
+    await bridge.sessionSetActive({ personId: mara.id });
+    expect(
+      (await bridge.assignmentsInbox()).some((i) => i.assignmentId === sent.assignment.id),
+    ).toBe(true);
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+
+    // …AND answerable via the link: the recipient's browser unlocks + seals; the sender drains it in.
+    const relayFetch = host.host.relay.fetch;
+    const token = sent.link!.split('/q/')[1]?.split('#')[0] ?? '';
+    const contentKey = contentKeyFromFragment(sent.link!.slice(sent.link!.indexOf('#')))!;
+    const unlocked = (await (
+      await relayFetch('https://relay/api/unlock', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ token, pin: sent.pin }),
+      })
+    ).json()) as { sealedContent: Parameters<typeof openContent>[0] };
+    const content = await openContent(unlocked.sealedContent, contentKey);
+    const sealed = await sealResponse(
+      {
+        kind: 'submit',
+        answers: [{ questionId: 'a', value: 'Answered via the link.' }],
+        submittedAt: '2026-06-11T01:00:00.000Z',
+      },
+      content.publicKey,
+    );
+    await relayFetch('https://relay/api/respond', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token, pin: sent.pin, sealed }),
+    });
+    expect((await bridge.assignmentsDrain()).drained).toBe(1);
+    const results = await bridge.assignmentsResults(q.id);
+    expect(results.find((r) => r.assignmentId === sent.assignment.id)?.status).toBe('submitted');
+    expect(results.find((r) => r.assignmentId === sent.assignment.id)?.answers?.[0]?.answer).toBe(
+      'Answered via the link.',
+    );
+  });
+
+  it('unified delivery (§17.13): an in-app submit closes the relay link (first-submission wins)', async () => {
+    const { host, bridge, ownerId } = await freshOwner();
+    await bridge.relayConnect({ apiToken: 'cf', accountId: 'acct' });
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: mara.id, roleId: 'member', pin: null });
+    const q = await bridge.questionnairesSave({
+      title: 'Quick one',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: mara.id },
+      questions: [{ id: 'a', type: 'shortText', prompt: 'One word?', required: true }],
+    });
+    const sent = await bridge.assignmentsCreate({ questionnaireId: q.id, privacy: 'standard' });
+    const token = sent.link!.split('/q/')[1]?.split('#')[0] ?? '';
+
+    // Mara answers in the Inbox first.
+    await bridge.sessionSetActive({ personId: mara.id });
+    await bridge.assignmentsSubmit({
+      assignmentId: sent.assignment.id,
+      answers: [{ questionId: 'a', value: 'Done' }],
+    });
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+
+    // The link is now closed — a recipient can no longer unlock it (the in-app answer wins).
+    const res = await host.host.relay.fetch('https://relay/api/unlock', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token, pin: sent.pin }),
+    });
+    expect(res.status).toBe(404);
   });
 
   it('saves/edits a dream, scoped to the active dreamer and gated by dreams.own', async () => {

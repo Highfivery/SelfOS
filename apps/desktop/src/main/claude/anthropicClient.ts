@@ -63,10 +63,14 @@ export function fakeClaudeClient(): ClaudeClient {
     stream: (options, onDelta) => {
       const userText = options.messages.map((message) => message.content).join('\n');
 
-      // Compatibility variant personalization (08 §3.6) asks for a JSON array of rewritten prompts, one
-      // per question. Echo each numbered prompt back (prefixed) so the count matches deterministically.
+      // Compatibility variant personalization (08 §3.6/§17.12) asks for a JSON array of rewritten prompts,
+      // one per question. Echo each numbered prompt back, tagged with the OTHER participant the user message
+      // names ("compares X with Y") — so a test can verify each person is asked ABOUT the other, not themselves.
       if (userText.includes('rewritten prompts')) {
-        const prompts = [...userText.matchAll(/^\d+\.\s(.+)$/gm)].map((m) => `For you: ${m[1]}`);
+        const about = /compares .+? with (.+?)\./.exec(userText)?.[1] ?? 'them';
+        const prompts = [...userText.matchAll(/^\d+\.\s(.+)$/gm)].map(
+          (m) => `${m[1]} — about ${about}`,
+        );
         return Promise.resolve({
           text: JSON.stringify(prompts),
           usage: { inputTokens: 80, outputTokens: 40, cacheWriteTokens: 0, cacheReadTokens: 0 },

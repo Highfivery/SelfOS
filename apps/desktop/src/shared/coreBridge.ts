@@ -1766,9 +1766,30 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const senderName =
         (await getPerson(deps.fs, deps.key, deps.personId))?.displayName ?? 'Someone';
 
-      // The sender's own variant (their own full context — no privacy concern; reads naturally).
+      // Resolve the OTHER participant up front: each person's variant must ask about the OTHER one (08
+      // §17.12 — the recipient was being asked about themselves, not the sender). For a household person,
+      // validate it exists + isn't the sender; for an external recipient, it's their given name.
+      let otherName: string;
+      if (recipient.kind === 'person') {
+        if (recipient.personId === deps.personId) {
+          return {
+            ok: false,
+            reason: 'INVALID',
+            message: 'You can’t compare yourself with yourself.',
+          };
+        }
+        const rp = await getPerson(deps.fs, deps.key, recipient.personId);
+        if (!rp)
+          return { ok: false, reason: 'INVALID', message: 'A chosen person no longer exists.' };
+        otherName = rp.displayName;
+      } else {
+        otherName = recipient.displayName ?? 'them';
+      }
+
+      // The sender's own variant — written TO the sender, ABOUT the other participant; their own full context.
       const senderVariant = await generateVariant(deps, {
         forName: senderName,
+        aboutName: otherName,
         questions: canonical.questions,
         targetContext: {
           authorPersonId: deps.personId,
@@ -1788,19 +1809,10 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (recipient.kind === 'person') {
         // --- Household: two paired in-app sends (sender + the recipient) ---
         const recipientPersonId = recipient.personId;
-        if (recipientPersonId === deps.personId) {
-          return {
-            ok: false,
-            reason: 'INVALID',
-            message: 'You can’t compare yourself with yourself.',
-          };
-        }
-        const rp = await getPerson(deps.fs, deps.key, recipientPersonId);
-        if (!rp)
-          return { ok: false, reason: 'INVALID', message: 'A chosen person no longer exists.' };
-        // The recipient's variant uses their SHAREABLE context only (the §13.3 boundary).
+        // The recipient's variant — written TO them, ABOUT the sender; their SHAREABLE context only (§13.3).
         const recipientVariant = await generateVariant(deps, {
-          forName: rp.displayName,
+          forName: otherName,
+          aboutName: senderName,
           questions: canonical.questions,
           targetContext: {
             authorPersonId: deps.personId,
@@ -1841,9 +1853,10 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           message: 'No relay is connected. Ask an admin to set one up in Settings → Relay.',
         };
       }
-      // The external recipient isn't a household person, so their variant is just personalized by name.
+      // The external recipient's variant — written TO them, ABOUT the sender (no household context to draw on).
       const externalVariant = await generateVariant(deps, {
-        forName: recipient.displayName ?? 'them',
+        forName: otherName,
+        aboutName: senderName,
         questions: canonical.questions,
         targetContext: {
           authorPersonId: deps.personId,

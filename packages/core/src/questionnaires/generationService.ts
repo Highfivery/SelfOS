@@ -262,19 +262,27 @@ export async function generateQuestions(
 
 /**
  * Generate one answerer's **personalized variant** of a compatibility questionnaire (08-questionnaires
- * §3.6/§13.5d): rewrite each canonical prompt warmly for the target person, keeping the SAME answer type +
- * `canonicalId` so the two variants stay aligned. Only prompts are personalized — the answer structure
+ * §3.6/§13.5d/§17.12): rewrite each canonical prompt so it asks `forName` (the answerer) about THEIR
+ * experience with `aboutName` (the OTHER participant) — so each person is asked about the other, not about
+ * themselves. Keeps the SAME answer type + `canonicalId` so the two variants stay aligned. Only prompts are
+ * personalized — the answer structure
  * (type/options/scale/branch) is preserved from the canonical question, and the question id is kept (so a
  * branch reference stays valid and the id doubles as the alignment key). The target context is limited to
  * **shareable** facts (the §13.3 privacy boundary — a `targetContext` with `includeAuthor: false`).
  */
 export async function generateVariant(
   deps: AiDeps,
-  input: { forName: string; questions: Question[]; targetContext: GenerationContextRequest },
+  input: {
+    forName: string;
+    aboutName: string;
+    questions: Question[];
+    targetContext: GenerationContextRequest;
+  },
 ): Promise<QuestionnaireGenerateResult> {
   const context = await gatherGenerationContext(deps.fs, deps.key, input.targetContext);
   const user = buildVariantUserMessage({
     forName: input.forName,
+    aboutName: input.aboutName,
     ...(context.trim() ? { context } : {}),
     prompts: input.questions.map((q) => q.prompt),
   });

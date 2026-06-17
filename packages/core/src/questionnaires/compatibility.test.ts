@@ -117,6 +117,7 @@ describe('generateVariant', () => {
     const text = JSON.stringify(['For Alex: rate connection', 'For Alex: want more time?']);
     const result = await generateVariant(deps(fs, fakeClient(text)), {
       forName: 'Alex',
+      aboutName: 'Sam',
       questions: canonicalQuestions,
       targetContext: {
         authorPersonId: 'sender',
@@ -138,6 +139,7 @@ describe('generateVariant', () => {
     const fs = memFileSystem();
     const result = await generateVariant(deps(fs, fakeClient(JSON.stringify(['only one']))), {
       forName: 'Alex',
+      aboutName: 'Sam',
       questions: canonicalQuestions,
       targetContext: {
         authorPersonId: 'sender',

@@ -176,6 +176,13 @@ A slice is **not** done until **all** of these pass:
       touched that concept** and reconcile it. (2026-06-16: after recipient-selection moved to a start step, a
       stale "About a specific person?" picker in the AI panel still re-asked who it's for — caught by the user,
       not by the passing tests.)
+- [ ] **Content-correctness check for personalized/generated content (not just "it rendered")** — when a
+      surface shows content tailored to a specific viewer (a compatibility variant, a per-person prompt, a
+      generated question), **assert the CONTENT is correct for that viewer**, not merely that the screen
+      renders. Decrypt/inspect the actual text. (2026-06-16: a compatibility recipient was asked questions
+      about THEMSELVES instead of the OTHER participant — every screen functioned, the suite was green, but the
+      content was wrong; the offline fake returned canned output that hid it. The fakes now echo the
+      `aboutName`, and the test asserts the recipient's variant names the OTHER person, not themselves.)
 - [ ] **`/gallery` updated** when a design-system primitive is added or changed (it must showcase all of them)
 - [ ] **Admin-only UI is marked** — any control/section visible only to an Owner / super-admin carries a
       consistent "admin only" indicator (see §12)
@@ -322,6 +329,30 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-16 — Fixes (**questionnaire answering UI/UX + compatibility variant bug**, on
+  `fix/questionnaire-answering-and-relay` off the merged `main`; user-reported after testing). Six issues; the
+  plan was approved before coding (no backward-compat needed). **Slice 1 (answering renderer, `@selfos/answering`):**
+  (a) long question prompts were **bisected by the card border** — a `<fieldset>`/`<legend>` renders the legend
+  ON the border; replaced with a plain card + a `<p>` heading (each control keeps its own aria-label, so no
+  double-label collision). (b) **Scale questions render as a slider** — `rating` now renders the `SliderControl`
+  (labelled 1…N), no number-button grids; a **required** scale is NOT auto-seeded (stays unanswered until moved,
+  so a required intimacy rating can't silently default to the midpoint). (c) **Choice options are left-aligned,
+  full-width cards** (single/multi/this-or-that) that stack — long option text reads cleanly; multi options are
+  now `role=checkbox` (was an implicit button). Verified live at desktop + 390px. **Slice 2 (builder layout):**
+  the builder was cramped beside a tall mostly-empty master list with an orphaned empty band below — now opening
+  a questionnaire shows a **centered full-width focused editor** (the list hides, returns via the "← Questionnaires"
+  back link, at every width). E2E updated for the focus flow (reopen via the list after going back; Suggested/New
+  reached from the list). **Slice 3 (THE serious bug — compatibility variants):** a compatibility recipient was
+  asked questions **about themselves instead of the other participant** (Angel, answering Ben's send, saw "…with
+  Angel"). `generateVariant` only personalized tone and kept the same meaning; it now takes an explicit
+  **`aboutName`** (the other participant) + a perspective instruction, and the bridge passes the right pairing —
+  the sender's variant is **about the recipient**, the recipient's (household OR external) is **about the sender**.
+  Gate green: typecheck (node + web/DOM-lib), lint, format, **415 core + 498 desktop + 11 relay** unit, **69 E2E**.
+  **Lesson (now a §7 DoD item): for personalized/generated content, assert the CONTENT is correct for the viewer
+  — not just that the screen renders. A green flow + the offline fake's canned output hid a recipient being asked
+  about themselves; the fakes now echo the `aboutName` and the coreBridge integration test + a Playwright E2E
+  decrypt each participant's frozen variant and assert it names the OTHER person, not themselves.** **NEXT
+  (slice 4): unify the relay so a household recipient can answer in the Inbox OR via a link.**
 - 2026-06-16 — Fix + feedback (**People editor: actually REMOVE the duplicated profile questions** — user was
   angry the About tab still showed all the fields after the prior "slim" pass; spec 18 §14.6, on
   `feat/people-editor-cleanup`, NOT merged). The prior slice made onboarding _cover_ the People fields but left

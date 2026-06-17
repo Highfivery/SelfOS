@@ -2062,3 +2062,17 @@ Playwright). Both UI surfaces are RTL-covered: the "Share results" button + "Sha
 **Build status (2026-06-16, `feat/questionnaire-explicit-gen`, NOT merged):** **A, B, C, and D all built.**
 Gate green each part: typecheck/lint/format, **408 core + 491 desktop + 11 relay** unit. The external-compat
 SEND side (B) + the OUTCOME write-back (D) complete external compatibility end-to-end.
+
+**E. Variant perspective correctness (2026-06-16) — BUILT (the serious bug the user hit).** A compatibility
+questionnaire's canonical questions name one partner (the bound recipient — e.g. "your sex life with Angel").
+Each participant must be asked about the **OTHER** participant, but `generateVariant` only personalized tone
+"for {forName}" and kept "the exact same meaning", so the **recipient was asked about themselves** (Angel got
+"…with Angel"). The fix gives `generateVariant` an explicit **`aboutName`** (the other participant) and a
+perspective instruction ("rewrite each question for {forName} to answer about THEIR experience with
+{aboutName} — write from {forName}'s point of view"), and the bridge passes the correct pairing for every
+variant: the sender's is **about the recipient**, the recipient's (household or external) is **about the
+sender**. The shareable-only context boundary (§13.3) is unchanged — only the perspective/name flips. **Tests
+(the depth lesson):** the offline fakes now **echo the `aboutName`** into each rewritten prompt, and the
+coreBridge integration test + a Playwright E2E **decrypt each participant's frozen variant and assert it names
+the OTHER person, not themselves** — a green "it sent / it rendered" flow never proved the content was right
+(now a §7 DoD item).

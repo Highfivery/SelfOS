@@ -193,21 +193,30 @@ export function buildAnalysisUserMessage(input: {
  */
 export const VARIANT_SYSTEM = `${SAFETY}
 
-You personalize an existing questionnaire for ONE specific person. For each question you are given, rewrite ONLY its prompt so it speaks directly and warmly to that person, keeping the exact same meaning and the same kind of answer. Do not add, drop, reorder, or merge questions. Return ONLY a JSON array of strings — the rewritten prompts, in the same order, one per input question.`;
+You personalize a compatibility questionnaire for ONE of the two people answering it. Every question is about the relationship between two partners. For each question, rewrite ONLY its prompt so it speaks directly and warmly to the ANSWERER and asks about THEIR experience with the OTHER partner: write it from the answerer's point of view, and replace any reference to a partner (a name, or "your partner") with the other partner's name. Keep the exact same meaning and the same kind of answer. Do not add, drop, reorder, or merge questions. Return ONLY a JSON array of strings — the rewritten prompts, in the same order, one per input question.`;
 
+/**
+ * Build the variant user message (08-questionnaires §17.12). The questionnaire compares `forName` (the
+ * answerer this variant is for) with `aboutName` (the other participant). Each prompt is rewritten to ask
+ * `forName` about their experience with `aboutName` — so the recipient is asked about the SENDER, not about
+ * themselves (the bug this fixes). `context` is `forName`'s shareable facts only (the §13.3 boundary).
+ */
 export function buildVariantUserMessage(input: {
   forName: string;
+  aboutName: string;
   context?: string;
   prompts: string[];
 }): string {
-  const parts: string[] = [`Personalize these questions for ${input.forName}.`];
+  const parts: string[] = [
+    `This questionnaire compares ${input.forName} with ${input.aboutName}. Rewrite each question for ${input.forName} to answer about THEIR experience with ${input.aboutName} — write from ${input.forName}'s point of view and replace any mention of the partner with "${input.aboutName}".`,
+  ];
   if (input.context?.trim()) {
     parts.push(
       `\nWhat you know about ${input.forName} (shareable facts only):\n${input.context.trim()}`,
     );
   }
   parts.push(
-    `\nQuestions (rewrite each prompt for ${input.forName}, same order, same meaning):\n${input.prompts
+    `\nQuestions (rewrite each for ${input.forName}, about ${input.aboutName}; same order, same meaning, same answer type):\n${input.prompts
       .map((p, i) => `${i + 1}. ${p}`)
       .join('\n')}`,
   );

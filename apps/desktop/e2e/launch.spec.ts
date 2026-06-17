@@ -28,6 +28,7 @@ import { writeEncryptedJson } from '@selfos/core/vault';
 import {
   createCompatibilitySend,
   getAlignmentReport,
+  getAssignmentSnapshot,
   getResponse,
   listAssignments,
   listQuestionnaires,
@@ -1876,6 +1877,22 @@ test('compatibility (§17.12-B): you + the bound recipient, no participant picke
     expect(await w.getByLabel('Someone else').count()).toBe(0);
     // The recipient's disclosure names the sender as the other participant (the honesty guard).
     await expect(w.getByText(/Angel will be told/i)).toBeVisible();
+
+    // Complete the send → AI (fake) personalizes a variant for each of us, frozen per assignment.
+    await w.getByRole('button', { name: 'Send' }).last().click({ noWaitAfter: true });
+    await expect(w.getByText(/each get a personalized version/i)).toBeVisible();
+
+    // CONTENT CORRECTNESS (§17.12 — the exact bug the user hit): decrypt the RECIPIENT's frozen variant and
+    // assert it asks Angel about TESTER (the sender), NOT about herself. A green "it sent" flow never proved
+    // this — the variant perspective has to be checked on the actual content.
+    const sends = await listAssignments(fs, key);
+    const angelSend = sends.find(
+      (a) => a.recipient.kind === 'person' && a.recipient.personId === 'angel-1',
+    );
+    if (!angelSend) throw new Error('expected a paired send to Angel');
+    const snap = await getAssignmentSnapshot(fs, key, angelSend.id);
+    expect(snap?.questions[0]?.prompt).toContain('about Tester');
+    expect(snap?.questions[0]?.prompt).not.toContain('about Angel');
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

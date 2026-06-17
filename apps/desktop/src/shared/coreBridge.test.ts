@@ -111,9 +111,14 @@ function makeHost(): {
     send: () => Promise.resolve('ok'),
     stream: (options, onDelta) => {
       const userText = options.messages.map((m) => m.content).join('\n');
-      // Compatibility variant personalization → a JSON array of rewritten prompts (one per question).
+      // Compatibility variant personalization → a JSON array of rewritten prompts (one per question), each
+      // tagged with the OTHER participant the user message names ("compares X with Y"), so a test can verify
+      // each person is asked ABOUT the other, not themselves (08 §17.12).
       if (userText.includes('rewritten prompts')) {
-        const prompts = [...userText.matchAll(/^\d+\.\s(.+)$/gm)].map((m) => `For you: ${m[1]}`);
+        const about = /compares .+? with (.+?)\./.exec(userText)?.[1] ?? 'them';
+        const prompts = [...userText.matchAll(/^\d+\.\s(.+)$/gm)].map(
+          (m) => `${m[1]} — about ${about}`,
+        );
         return Promise.resolve({
           text: JSON.stringify(prompts),
           usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
@@ -1294,6 +1299,16 @@ describe('createCoreBridge', () => {
       const isOwner = personId === ownerId; // the owner is already active — no PIN switch needed
       if (!isOwner) await bridge.sessionSetActive({ personId });
       const detail = await bridge.assignmentsGet(assignmentId);
+      // CONTENT CORRECTNESS (§17.12): each participant's variant must ask about the OTHER participant, not
+      // themselves. Alex (the recipient) must be asked about Ben (the sender) — NOT "about Alex" — and the
+      // sender's variant about Alex. This is the real bug a "did the screen render" check missed.
+      const prompt = detail!.questionnaire.questions[0]!.prompt;
+      if (isOwner) {
+        expect(prompt).toContain('about Alex');
+      } else {
+        expect(prompt).toContain('about Ben');
+        expect(prompt).not.toContain('about Alex');
+      }
       const qid = detail!.questionnaire.questions[0]!.id;
       await bridge.assignmentsSubmit({ assignmentId, answers: [{ questionId: qid, value }] });
       if (!isOwner) await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
@@ -1562,6 +1577,10 @@ describe('createCoreBridge', () => {
       })
     ).json()) as { sealedContent: Parameters<typeof openContent>[0] };
     const content = await openContent(unlocked.sealedContent, contentKey);
+    // CONTENT CORRECTNESS (§17.12): the external recipient (Jordan) is asked about the SENDER (Ben), not
+    // about themselves — the same variant-perspective fix, verified end-to-end through the relay.
+    expect(content.questionnaire.questions[0]!.prompt).toContain('about Ben');
+    expect(content.questionnaire.questions[0]!.prompt).not.toContain('about Jordan');
     const sealed = await sealResponse(
       {
         kind: 'submit',

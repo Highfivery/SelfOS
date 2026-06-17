@@ -135,14 +135,18 @@ No vault data, no schema. The configuration artifacts:
      Release PR and, on its merge, creates the tag + GitHub Release. Outputs `releases_created` / `tag_name`.
   2. **`build-macos` job** (`runs-on: macos-latest`, **`if: needs.release-please.outputs.releases_created`**):
      checkout the **release commit by `github.sha`** (a _draft_ release has no real git tag yet — it's created
-     when the release is published) → `pnpm install --frozen-lockfile` → `pnpm --filter @selfos/desktop build`
-     → `pnpm --filter @selfos/desktop exec electron-builder --mac --publish always` (with
+     when the release is published) → `pnpm install --frozen-lockfile` → **`pnpm --filter @selfos/relay build`**
+     (the relay Worker bundle lives outside the desktop build; electron-builder `extraResources` packages
+     `apps/relay/dist` into `Contents/Resources/relay`, found at runtime via `process.resourcesPath` — without
+     this the packaged app's `relay:connect` fails with "Worker bundle is missing") →
+     `pnpm --filter @selfos/desktop build` →
+     `pnpm --filter @selfos/desktop exec electron-builder --mac --publish always` (with
      `SELFOS_BUILD_SHA: github.sha` so the About line shows the release commit) → finally
      `gh release edit <tag> --draft=false` to flip the draft to published now the `.dmg` is attached. Uses the
      default `GITHUB_TOKEN` (with `permissions: contents: write`) as `GH_TOKEN` to upload the `.dmg` to the
      Release — **no extra secret** needed for same-repo publishing, and **no API key or vault data** is in the
      build.
-- **`apps/desktop/package.json`** — a convenience script `"release:build": "electron-builder --mac --publish always"` (also runnable locally for an emergency manual build).
+- **`apps/desktop/package.json`** — a convenience script `"release:build": "pnpm --filter @selfos/relay build && electron-builder --mac --publish always"` (also runnable locally for an emergency manual build; builds the relay bundle first so `extraResources` can package it).
 - **About version** — the version file is bumped pre-build (§3.3). `buildInfo.ts` injects
   `__APP_VERSION__`/`__BUILD_SHA__`/`__BUILD_DATE__` via `define` across `electron.vite.config.ts`,
   `vite.web.config.ts`, and `vitest.config.ts`; `AboutVersion` renders `v{version} · {sha} · {date}` (omitting
@@ -234,6 +238,19 @@ Built (2026-06-16); only the real first-release smoke test (§10) remains.
 
 ## 13. Changelog
 
+- 2026-06-17 — Fix (**relay Worker bundle missing in the packaged app**; on `fix/relay-bundle-packaging`).
+  The user hit "The relay Worker bundle is missing" connecting the Cloudflare relay in the **built** macOS
+  app: the release workflow only built the desktop app (so `apps/relay/dist/worker.js` was never built),
+  electron-builder's `files` packaged only `out/**` (the relay dist lives outside it), and `loadRelayBundle`'s
+  candidate paths assumed the repo layout (absent in a packaged `.app`). Fix: (1) `release.yml` + the
+  `release:build` script build the relay bundle before electron-builder; (2) `extraResources` copies
+  `apps/relay/dist` → `Contents/Resources/relay`; (3) `loadRelayBundle` checks `process.resourcesPath/relay`
+  first (dev falls through to the workspace/repo candidates). Also ignore the `release/` output dir in
+  eslint/prettier and `CHANGELOG.md` in prettier (release-please owns it). **Verified end-to-end** with
+  `electron-builder --mac --dir` — `worker.js` + `meta.json` land in the `.app`'s Resources. Gate green
+  (+1 relayBundle unit test). **Lesson: an electron-builder app only ships `files`/`extraResources` — a
+  separately-built sibling-package artifact (the relay Worker) must be built in CI before packaging AND copied
+  in via `extraResources`, then found at runtime via `process.resourcesPath`, not a repo-relative path.**
 - 2026-06-16 — **Approved + BUILT** (on `feat/distribution`, NOT merged — the user cuts the first real release
   to verify the pipeline). **release-please** (manifest mode): `release-please-config.json` +
   `.release-please-manifest.json`, package keyed at the repo **root** (`.`, `release-type: node`,

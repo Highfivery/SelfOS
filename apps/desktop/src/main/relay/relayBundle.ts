@@ -15,10 +15,18 @@ export const RELAY_VERSION = '2';
 
 const requireFromHere = createRequire(import.meta.url);
 
-/** Candidate `apps/relay/dist` locations: the resolved workspace package, then a path relative to this
- *  bundled file (`apps/desktop/out/main` → `apps/relay`). The first that holds a `worker.js` wins. */
+/** Candidate relay-bundle locations, in priority order:
+ *  1. **Packaged app** — `Contents/Resources/relay` (electron-builder `extraResources` copies
+ *     `apps/relay/dist` there; `process.resourcesPath` points at it). This is the production path —
+ *     the repo-relative candidates below don't exist inside a packaged `.app`.
+ *  2. The resolved `@selfos/relay` workspace package's `dist` (dev / monorepo).
+ *  3. A path relative to this bundled file (`apps/desktop/out/main` → `apps/relay/dist`) (dev).
+ *  The first that holds a `worker.js` wins. */
 function relayDistDirs(): string[] {
   const dirs: string[] = [];
+  // Packaged: electron-builder copies the relay dist into the app's Resources (see electron-builder.yml).
+  const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+  if (resourcesPath) dirs.push(resolve(resourcesPath, 'relay'));
   try {
     dirs.push(resolve(dirname(requireFromHere.resolve('@selfos/relay/package.json')), 'dist'));
   } catch {

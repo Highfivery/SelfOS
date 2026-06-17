@@ -18,6 +18,7 @@ export default tseslint.config(
       '**/dist/**',
       '**/dist-web/**',
       '**/out/**',
+      '**/release/**',
       '**/ios/**',
       '**/build/**',
       '**/coverage/**',

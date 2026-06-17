@@ -13,7 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "electron-vite build && playwright test",
-    "release:build": "electron-builder --mac --publish always"
+    "release:build": "pnpm --filter @selfos/relay build && electron-builder --mac --publish always"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",

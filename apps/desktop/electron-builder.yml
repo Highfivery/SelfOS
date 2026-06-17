@@ -6,6 +6,12 @@ directories:
 files:
   - out/**/*
   - package.json
+# The relay Cloudflare Worker bundle is built separately (apps/relay → dist/worker.js + meta.json) and
+# lives outside out/, so copy it into the app's Resources for the host to upload at deploy time
+# (08-questionnaires §5.4). loadRelayBundle reads it from process.resourcesPath/relay in the packaged app.
+extraResources:
+  - from: ../relay/dist
+    to: relay
 mac:
   category: public.app-category.healthcare-fitness
   target: dmg

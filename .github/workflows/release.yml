@@ -58,6 +58,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # The relay Worker bundle lives outside the desktop build; build it so electron-builder's
+      # extraResources can package it (otherwise relay:connect fails with "Worker bundle is missing").
+      - name: Build relay Worker bundle
+        run: pnpm --filter @selfos/relay build
+
       - name: Build desktop app
         run: pnpm --filter @selfos/desktop build
 

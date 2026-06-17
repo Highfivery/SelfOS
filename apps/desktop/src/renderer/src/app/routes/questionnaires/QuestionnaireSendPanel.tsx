@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { Copy, Lock, Send } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Copy, Link2, Lock, Send } from 'lucide-react';
 import type { PrivacyMode, Recipient, SensitivityTier } from '@shared/schemas';
 import {
   Banner,
@@ -12,6 +13,7 @@ import {
   Text,
   TextInput,
 } from '../../../design-system/components';
+import { useSessionStore } from '../../../stores/sessionStore';
 import { RelaySendPanel } from './RelaySendPanel';
 import styles from './Questionnaires.module.css';
 
@@ -52,12 +54,38 @@ export function QuestionnaireSendPanel({
   const [link, setLink] = useState<string | null>(null);
   const [pin, setPin] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  // Whether a relay is connected — drives the "you'll also get a shareable link" affordance (§17.13). A link
+  // can only exist with a relay (it's a server-delivered surface); without one the send is Inbox-only.
+  const [relayConfigured, setRelayConfigured] = useState<boolean | null>(null);
+  const canManageRelay = useSessionStore((s) => s.can('settings.manage'));
+
+  useEffect(() => {
+    void window.selfos?.relayStatus().then((s) => setRelayConfigured(s.configured));
+  }, []);
 
   const copy = async (label: string, value: string): Promise<void> => {
     await navigator.clipboard?.writeText(value);
     setCopied(label);
     window.setTimeout(() => setCopied(null), 1500);
   };
+
+  // Discoverability: a household send can ALSO carry a link, but only with a connected relay. When there's
+  // none, tell the sender how to enable it (admins can; members are pointed at an admin) so the feature
+  // isn't silently invisible.
+  const relayHint =
+    relayConfigured === false ? (
+      <Banner tone="info">
+        <Link2 size={14} aria-hidden="true" /> They’ll answer in their Inbox.{' '}
+        {canManageRelay ? (
+          <>
+            To also give them a link they can answer from any device, connect a relay in{' '}
+            <Link to="/settings">Settings → Relay</Link>.
+          </>
+        ) : (
+          <>Ask a household admin to connect a relay (Settings → Relay) to also share a link.</>
+        )}
+      </Banner>
+    ) : null;
 
   // An external-bound questionnaire is delivered by link — defer entirely to the relay panel.
   if (recipient.kind === 'external') {
@@ -130,7 +158,9 @@ export function QuestionnaireSendPanel({
                 )}
               </Field>
             </Stack>
-          ) : null}
+          ) : (
+            relayHint
+          )}
           <div className={styles.footer}>
             <Button variant="primary" onClick={() => onSent(sentTo)}>
               Done
@@ -169,6 +199,8 @@ export function QuestionnaireSendPanel({
             {PRIVACY_COPY[privacy]}
           </Text>
         </Stack>
+
+        {relayHint}
 
         {error ? <Banner tone="warning">{error}</Banner> : null}
 

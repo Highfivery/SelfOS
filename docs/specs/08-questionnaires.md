@@ -2093,8 +2093,17 @@ their **Inbox** OR via a **relay link** anywhere — whichever they reach first.
   mailbox** (the link then shows "unavailable"), and `drainRelaySend` **skips an already-submitted/declined
   send** so a late link answer can never overwrite the in-app one. The drain now covers **any** send carrying
   relay material (not just `channel: 'relay'`), so a household send's link drains in like an external one.
+- **Discoverability (the no-relay UX, fixed after the user couldn't find the link).** A link can ONLY exist
+  with a connected relay (it's a server-delivered surface), so without one the send is silently Inbox-only —
+  which read as "the feature is missing." The send panel now reads the relay status and, when **no relay is
+  connected**, shows a hint both before AND after sending: an admin gets "connect a relay in Settings → Relay
+  to also give them a link," a member gets "ask an admin to connect a relay." So the feature is never invisible.
 - **Tests:** core (`attachRelayLink` round-trip + the first-wins drain guard), coreBridge integration (a
   household send mints a link, is in the Inbox AND answerable via the link → drains in; an in-app submit closes
-  the link → unlock 404), a send-panel RTL (the link + PIN surface), and a Playwright E2E (connect relay →
-  household send → the panel shows the link + PIN → decrypt: the in-app assignment carries relay material).
-  Gate green: typecheck (node + web/DOM-lib), lint, format, **417 core + 500 desktop + 11 relay** unit, **70 E2E**.
+  the link → unlock 404), send-panel RTL (the link + PIN surface WITH a relay; the **connect-a-relay hint
+  WITHOUT one**), and a Playwright E2E (connect relay → household send → the panel shows the link + PIN →
+  decrypt: the in-app assignment carries relay material). Gate green: typecheck (node + web/DOM-lib), lint,
+  format, **417 core + 501 desktop + 11 relay** unit, **70 E2E**. **Lesson: test the feature when its
+  PREREQUISITE is ABSENT (the common real state) — a happy-path E2E that connects the relay first hid that, with
+  no relay, the link feature was completely silent. The user hit exactly that; now there's a no-relay hint + a
+  test for it.**

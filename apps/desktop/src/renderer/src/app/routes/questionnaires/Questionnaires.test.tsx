@@ -566,6 +566,51 @@ describe('Questionnaires', () => {
     expect(screen.getByLabelText('PIN')).toHaveValue('482915');
   });
 
+  it('§17.13: with no relay connected, a household send hints how to enable a shareable link', async () => {
+    elevateToOwner(); // an admin can connect a relay → the hint points to Settings → Relay
+    const save = saveSpy();
+    const assignmentsCreate = vi.fn((input: { questionnaireId: string }) =>
+      // No relay → no link minted (the Inbox-only fallback).
+      Promise.resolve({
+        assignment: {
+          id: 'a1',
+          schemaVersion: 1,
+          questionnaireId: input.questionnaireId,
+          senderPersonId: 'owner-1',
+          recipient: { kind: 'person' as const, personId: 'p-mara' },
+          channel: 'inApp' as const,
+          privacy: 'private' as const,
+          senderVisibleToRecipient: true,
+          status: 'sent' as const,
+          createdAt: 'now',
+          updatedAt: 'now',
+        },
+      }),
+    );
+    installMockBridge({
+      questionnairesList: () => Promise.resolve([]),
+      questionnairesSave: save,
+      assignmentsCreate,
+      relayStatus: () => Promise.resolve({ configured: false, updateAvailable: false }),
+    });
+    await openNewBuilder();
+    await userEvent.type(screen.getByLabelText('Title'), 'Weekly check-in');
+    await userEvent.type(screen.getByLabelText('Question 1'), 'How are we doing?');
+    await userEvent.click(screen.getByRole('button', { name: 'Create draft' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Send' }));
+
+    // The pre-send panel surfaces the discoverability hint (the feature isn't silently invisible).
+    expect(await screen.findByText(/connect a relay in/i)).toBeInTheDocument();
+
+    const sendButtons = screen.getAllByRole('button', { name: 'Send' });
+    await userEvent.click(sendButtons[sendButtons.length - 1] as HTMLElement);
+
+    // The confirmation: it went to the Inbox, NO link field, and the hint persists.
+    expect(await screen.findByText(/sent to mara/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Secure link')).not.toBeInTheDocument();
+    expect(screen.getByText(/connect a relay in/i)).toBeInTheDocument();
+  });
+
   it('offers a Results tab on a saved questionnaire (gated by viewResults)', async () => {
     elevateToOwner();
     installMockBridge({

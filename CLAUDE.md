@@ -183,6 +183,13 @@ A slice is **not** done until **all** of these pass:
       about THEMSELVES instead of the OTHER participant — every screen functioned, the suite was green, but the
       content was wrong; the offline fake returned canned output that hid it. The fakes now echo the
       `aboutName`, and the test asserts the recipient's variant names the OTHER person, not themselves.)
+- [ ] **Test the feature when its PREREQUISITE is ABSENT (the common real state), not just the happy path** —
+      if a feature only works once something is set up (a relay connected, a key added, AI enabled, a person
+      granted access), write a test for the **not-set-up** path too: assert the graceful fallback AND that the
+      UI tells the user how to enable it (it must never be silently invisible). (2026-06-16: the unified-relay
+      link only mints with a connected relay; the happy-path E2E connected one first, so it never caught that —
+      with no relay — the link feature was completely silent. The user sent a household questionnaire, saw no
+      link, no explanation. Now the send panel hints "connect a relay in Settings → Relay," with a test.)
 - [ ] **`/gallery` updated** when a design-system primitive is added or changed (it must showcase all of them)
 - [ ] **Admin-only UI is marked** — any control/section visible only to an Owner / super-admin carries a
       consistent "admin only" indicator (see §12)
@@ -329,6 +336,21 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-16 — Fix (**unified-relay link was invisible without a connected relay**; user: "I'm not seeing
+  anything in the UI for a relay link"). **Diagnosed against the live app (not assumed):** reproduced in the web
+  preview — `assignmentsCreate` returns `{ assignment }` (no link) when **no relay is connected**, and
+  `{ assignment, link, pin }` (the panel shows the link + PIN, screenshot-verified) when one **is**. So the code
+  was correct — a link literally requires a relay (a server) — but the feature was **silently invisible** with
+  no relay: the panel just said "it's in their Inbox", no hint a link was possible or how to enable it. The
+  happy-path E2E connected a relay first, so it never covered the **common real no-relay state** the user hit.
+  Fix: the send panel reads `relayStatus()` and, when **not connected**, shows a hint before AND after sending —
+  admin → "connect a relay in Settings → Relay to also give them a link"; member → "ask an admin." +RTL for the
+  no-relay hint; **new §7 DoD rule: test a feature with its PREREQUISITE absent (the common real state), not just
+  the happy path — assert the graceful fallback AND that the UI says how to enable it (never silently
+  invisible).** Gate green: typecheck (node + web/DOM-lib), lint, format, **417 core + 501 desktop + 11 relay**
+  unit. Synced 08 §17.13. On `feat/questionnaire-unified-relay` off `main`. **Lesson: an offline fake / a
+  happy-path E2E that SETS UP the prerequisite hides what the user actually experiences without it — reproduce
+  the no-prerequisite path against the live app.**
 - 2026-06-16 — Build (**unified questionnaire delivery — a household send ALSO mints a relay link; SPEC 08
   §17.13 BUILT** on `feat/questionnaire-unified-relay` off `main`, NOT merged). The 6th of the user's reported
   issues (the first 5 merged separately): the same answering workflow for internal + external, so a household

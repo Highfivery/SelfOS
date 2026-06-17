@@ -3,10 +3,20 @@ import { useLocation } from 'react-router-dom';
 import { ArrowLeft, ClipboardList, Plus, Sparkles } from 'lucide-react';
 import type { Recipient } from '@shared/schemas';
 import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
-import { Button, Card, Heading, Stack, Text } from '../../../design-system/components';
+import {
+  Banner,
+  Button,
+  Card,
+  Heading,
+  Inline,
+  Stack,
+  Text,
+} from '../../../design-system/components';
 import { QuestionnaireBuilder, type BuilderSeed } from './QuestionnaireBuilder';
+import { QuestionnaireRowMenu } from './QuestionnaireRowMenu';
 import { NewQuestionnaireStart } from './NewQuestionnaireStart';
 import { SuggestedPanel } from './SuggestedPanel';
+import { formatSentDate } from './sentState';
 import styles from './Questionnaires.module.css';
 
 type Selection =
@@ -20,8 +30,10 @@ type Selection =
 /** Author questionnaires: a list of your definitions (left) with a builder pane (right). */
 export function Questionnaires(): JSX.Element {
   const questionnaires = useQuestionnaireStore((s) => s.questionnaires);
+  const sendStates = useQuestionnaireStore((s) => s.sendStates);
   const loaded = useQuestionnaireStore((s) => s.loaded);
   const load = useQuestionnaireStore((s) => s.load);
+  const remove = useQuestionnaireStore((s) => s.remove);
   const loadTypes = useQuestionnaireStore((s) => s.loadTypes);
   // Home's "Suggested next steps" card can hand off a gap-finder suggestion as a builder seed (17 §3.1).
   const location = useLocation();
@@ -30,6 +42,25 @@ export function Questionnaires(): JSX.Element {
     // A handed-off gap-finder suggestion still picks a recipient first (08 §17.3).
     handoffSeed ? { mode: 'start', seed: handoffSeed } : { mode: 'none' },
   );
+  // List-row deletion (08 §3.9): confirm first (it removes any responses + insights), then delete. The
+  // bridge re-enforces permission (Owner any stage; a non-owner creator only their own + unsent) and throws
+  // otherwise — surfaced calmly here.
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const onDeleteFromList = async (id: string): Promise<void> => {
+    setConfirmDeleteId(null);
+    setDeleteError(null);
+    try {
+      await remove(id);
+      // If the deleted one was open in the builder, return to the empty list view.
+      setSelection((s) => (s.mode === 'edit' && s.id === id ? { mode: 'none' } : s));
+    } catch {
+      setDeleteError(
+        'You don’t have permission to delete that one — it may have already been sent by someone else.',
+      );
+    }
+  };
 
   useEffect(() => {
     void load();
@@ -69,20 +100,56 @@ export function Questionnaires(): JSX.Element {
           </Card>
         ) : (
           <Stack gap={2}>
+            {deleteError ? <Banner tone="warning">{deleteError}</Banner> : null}
             {questionnaires.map((q) => {
               const active = selection.mode === 'edit' && selection.id === q.id;
+              const sent = sendStates[q.id];
               return (
-                <button
-                  key={q.id}
-                  type="button"
-                  className={active ? `${styles.row} ${styles.rowActive}` : styles.row}
-                  onClick={() => setSelection({ mode: 'edit', id: q.id })}
-                >
-                  <span className={styles.rowName}>{q.title}</span>
-                  <span className={styles.rowBadge}>
-                    {q.questions.length} {q.questions.length === 1 ? 'question' : 'questions'}
-                  </span>
-                </button>
+                <Stack key={q.id} gap={1}>
+                  <div className={active ? `${styles.row} ${styles.rowActive}` : styles.row}>
+                    <button
+                      type="button"
+                      className={styles.rowOpen}
+                      onClick={() => setSelection({ mode: 'edit', id: q.id })}
+                    >
+                      <span className={styles.rowName}>{q.title}</span>
+                      <span className={styles.rowSub}>
+                        <span>
+                          {q.questions.length} {q.questions.length === 1 ? 'question' : 'questions'}
+                        </span>
+                        {sent ? (
+                          <span className={styles.rowSent}>
+                            · Sent {formatSentDate(sent.lastSentAt)}
+                          </span>
+                        ) : null}
+                      </span>
+                    </button>
+                    <QuestionnaireRowMenu
+                      title={q.title}
+                      onDelete={() => setConfirmDeleteId(q.id)}
+                    />
+                  </div>
+                  {confirmDeleteId === q.id ? (
+                    <Banner tone="warning">
+                      <Stack gap={2}>
+                        <Text>
+                          Delete “{q.title}”?{' '}
+                          {sent
+                            ? 'It removes the questionnaire, any responses, and insights drawn from them.'
+                            : 'This can’t be undone.'}
+                        </Text>
+                        <Inline gap={2}>
+                          <Button variant="primary" onClick={() => void onDeleteFromList(q.id)}>
+                            Delete
+                          </Button>
+                          <Button variant="secondary" onClick={() => setConfirmDeleteId(null)}>
+                            Cancel
+                          </Button>
+                        </Inline>
+                      </Stack>
+                    </Banner>
+                  ) : null}
+                </Stack>
               );
             })}
           </Stack>

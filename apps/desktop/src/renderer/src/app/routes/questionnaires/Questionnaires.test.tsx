@@ -40,7 +40,12 @@ const renderApp = (): ReturnType<typeof render> =>
 
 afterEach(() => {
   clearMockBridge();
-  useQuestionnaireStore.setState({ questionnaires: [], loaded: false, customTypes: [] });
+  useQuestionnaireStore.setState({
+    questionnaires: [],
+    sendStates: {},
+    loaded: false,
+    customTypes: [],
+  });
   usePeopleStore.setState({ people: [], loaded: false });
   useSettingsStore.setState({ values: {} });
   useSessionStore.setState({});
@@ -632,7 +637,7 @@ describe('Questionnaires', () => {
     });
     renderApp();
 
-    await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Weekly check-in/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Results' }));
     expect(await screen.findByText(/haven’t sent this questionnaire yet/i)).toBeInTheDocument();
   });
@@ -660,7 +665,7 @@ describe('Questionnaires', () => {
     });
     renderApp();
 
-    await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Weekly check-in/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Duplicate' }));
     // Duplicate routes back to the recipient-first start step — pick a NEW recipient, then author.
     await userEvent.selectOptions(await screen.findByLabelText('Who is this for?'), 'p-mara');
@@ -692,12 +697,109 @@ describe('Questionnaires', () => {
     });
     renderApp();
 
-    await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Weekly check-in/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Delete questionnaire' }));
     // The destructive action is gated behind an inline confirm — nothing deleted yet.
     expect(questionnairesDelete).not.toHaveBeenCalled();
     expect(screen.getByText(/can’t be undone/i)).toBeInTheDocument();
 
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    expect(questionnairesDelete).toHaveBeenCalledWith('q1');
+  });
+
+  // --- 2026-06 draft save (§16.3): save anytime, validate at send ---
+
+  it('saves a draft with only a title (incomplete questions allowed) (§16.3)', async () => {
+    const save = saveSpy();
+    installMockBridge({ questionnairesList: () => Promise.resolve([]), questionnairesSave: save });
+    await openNewBuilder();
+
+    // Title only — the starter question is left blank. "Create draft" is enabled and persists it.
+    await userEvent.type(screen.getByLabelText('Title'), 'Work in progress');
+    const saveButton = screen.getByRole('button', { name: 'Create draft' });
+    expect(saveButton).toBeEnabled();
+    await userEvent.click(saveButton);
+    expect(save).toHaveBeenCalledTimes(1);
+    // The blank-prompt starter draft is dropped (a question needs a prompt) — so the draft saves cleanly.
+    expect(save.mock.calls[0]?.[0]).toMatchObject({ title: 'Work in progress', questions: [] });
+  });
+
+  it('blocks SEND of a title-only draft until it has a question (§16.3)', async () => {
+    const save = saveSpy();
+    installMockBridge({
+      questionnairesList: () => Promise.resolve([]),
+      questionnairesSave: save,
+      questionnairesValidate: () =>
+        Promise.resolve(['A questionnaire needs at least one question.']),
+    });
+    await openNewBuilder();
+
+    // Save a title-only draft first (save-anytime), which reveals the Send button…
+    await userEvent.type(screen.getByLabelText('Title'), 'Work in progress');
+    await userEvent.click(screen.getByRole('button', { name: 'Create draft' }));
+    // …but sending validates first — the problem is surfaced, no send panel opens.
+    await userEvent.click(await screen.findByRole('button', { name: 'Send' }));
+    expect(await screen.findByText(/needs at least one question/i)).toBeInTheDocument();
+  });
+
+  // --- 2026-06 list sent-state + row delete (§17.14 / §3.9) ---
+
+  it('shows a "Sent · <date>" badge in the list for a questionnaire that has been sent (§17.14)', async () => {
+    installMockBridge({
+      questionnairesList: () =>
+        Promise.resolve([
+          {
+            id: 'q1',
+            schemaVersion: 1,
+            version: 1,
+            title: 'Weekly check-in',
+            type: 'general',
+            sensitivity: 'standard',
+            questions: [{ id: 'qq1', type: 'shortText', prompt: 'How?', required: true }],
+            createdAt: 'now',
+            updatedAt: 'now',
+          },
+        ]),
+      questionnairesSendStates: () =>
+        Promise.resolve({ q1: { lastSentAt: '2026-06-10T00:00:00.000Z', total: 2 } }),
+    });
+    renderApp();
+
+    // The list row carries a "Sent · <date>" chip so a sent questionnaire is distinct from a draft.
+    await screen.findByText(/^Weekly check-in/);
+    expect(screen.getByText(/Sent/)).toBeInTheDocument();
+    // Opening it, the builder header repeats the sent state (with the re-send count).
+    await userEvent.click(screen.getByRole('button', { name: /^Weekly check-in/ }));
+    expect(screen.getByText(/For:/)).toHaveTextContent(/Sent .*\(2 times\)/);
+  });
+
+  it('deletes a questionnaire from the list row after confirming (§3.9)', async () => {
+    const questionnairesDelete = vi.fn(() => Promise.resolve());
+    installMockBridge({
+      questionnairesList: () =>
+        Promise.resolve([
+          {
+            id: 'q1',
+            schemaVersion: 1,
+            version: 1,
+            title: 'Weekly check-in',
+            type: 'general',
+            sensitivity: 'standard',
+            questions: [{ id: 'qq1', type: 'shortText', prompt: 'How?', required: true }],
+            createdAt: 'now',
+            updatedAt: 'now',
+          },
+        ]),
+      questionnairesDelete,
+    });
+    renderApp();
+
+    await screen.findByText(/^Weekly check-in/);
+    await userEvent.click(screen.getByRole('button', { name: /Options for Weekly check-in/ }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
+    // Confirm gate — nothing deleted until "Delete" in the confirm is pressed.
+    expect(questionnairesDelete).not.toHaveBeenCalled();
+    expect(screen.getByText(/Delete .Weekly check-in/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
     expect(questionnairesDelete).toHaveBeenCalledWith('q1');
   });

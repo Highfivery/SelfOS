@@ -36,6 +36,7 @@ const send = (over: Partial<SendResult> = {}): SendResult => ({
   assignmentId: 'a1',
   recipientName: 'Mara',
   channel: 'inApp',
+  relayLinked: false,
   status: 'submitted',
   privacy: 'standard',
   createdAt: 'now',
@@ -183,7 +184,9 @@ describe('QuestionnaireResults', () => {
     let drained = false;
     installMockBridge({
       assignmentsResults: () =>
-        Promise.resolve([send({ channel: 'relay', status: 'sent', recipientName: 'Alex' })]),
+        Promise.resolve([
+          send({ channel: 'relay', relayLinked: true, status: 'sent', recipientName: 'Alex' }),
+        ]),
       assignmentsDrain: () => {
         drained = true;
         return Promise.resolve({ drained: 1, declined: 0 });
@@ -198,5 +201,46 @@ describe('QuestionnaireResults', () => {
     ).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /check for responses/i }));
     await waitFor(() => expect(drained).toBe(true));
+  });
+
+  // The #3 regression: a HOUSEHOLD ('inApp') send that ALSO minted a relay link (§17.13) must surface the
+  // same drain + revoke affordances — the bug was gating them on `channel === 'relay'`, which hid the link
+  // for household sends so a relay response could never be retrieved.
+  it('offers "Check for responses" + revoke for an open household send that minted a link', async () => {
+    let drained = false;
+    installMockBridge({
+      assignmentsResults: () =>
+        Promise.resolve([
+          send({ channel: 'inApp', relayLinked: true, status: 'sent', recipientName: 'Mara' }),
+        ]),
+      assignmentsDrain: () => {
+        drained = true;
+        return Promise.resolve({ drained: 1, declined: 0 });
+      },
+    });
+    renderResults();
+    await screen.findByText('Mara');
+    expect(screen.getByRole('button', { name: /check for responses/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /revoke the link sent to Mara/i }),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /check for responses/i }));
+    await waitFor(() => expect(drained).toBe(true));
+  });
+
+  // A household send WITHOUT a relay link (Inbox-only, no relay connected) shows no relay affordances.
+  it('shows no drain/revoke for an Inbox-only household send', async () => {
+    installMockBridge({
+      assignmentsResults: () =>
+        Promise.resolve([
+          send({ channel: 'inApp', relayLinked: false, status: 'sent', recipientName: 'Mara' }),
+        ]),
+    });
+    renderResults();
+    await screen.findByText('Mara');
+    expect(screen.queryByRole('button', { name: /check for responses/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /revoke the link sent to Mara/i }),
+    ).not.toBeInTheDocument();
   });
 });

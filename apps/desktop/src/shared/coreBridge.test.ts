@@ -1863,6 +1863,13 @@ describe('createCoreBridge', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ token, pin: sent.pin, sealed }),
     });
+    // Before draining, Results flags the household send as relay-linked so the UI shows drain/revoke
+    // (the #3 fix: the affordance keys off relay material, not `channel === 'relay'`).
+    const before = await bridge.assignmentsResults(q.id);
+    const beforeRow = before.find((r) => r.assignmentId === sent.assignment.id);
+    expect(beforeRow?.channel).toBe('inApp');
+    expect(beforeRow?.relayLinked).toBe(true);
+
     expect((await bridge.assignmentsDrain()).drained).toBe(1);
     const results = await bridge.assignmentsResults(q.id);
     expect(results.find((r) => r.assignmentId === sent.assignment.id)?.status).toBe('submitted');
@@ -1901,6 +1908,34 @@ describe('createCoreBridge', () => {
       body: JSON.stringify({ token, pin: sent.pin }),
     });
     expect(res.status).toBe(404);
+  });
+
+  it('questionnairesSendStates: latest send time + count per questionnaire; absent until sent (§17.14)', async () => {
+    const { bridge } = await freshOwner();
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: mara.id, roleId: 'member', pin: null });
+    const q = await bridge.questionnairesSave({
+      title: 'Weekly check-in',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: mara.id },
+      questions: [{ id: 'a', type: 'shortText', prompt: 'How?', required: true }],
+    });
+
+    // A never-sent questionnaire has no send state (the list shows it as a draft).
+    expect(await bridge.questionnairesSendStates()).toEqual({});
+
+    // Send it twice → the state records the count + the latest send time.
+    await bridge.assignmentsCreate({ questionnaireId: q.id, privacy: 'standard' });
+    await bridge.assignmentsCreate({ questionnaireId: q.id, privacy: 'standard' });
+    const states = await bridge.questionnairesSendStates();
+    expect(states[q.id]?.total).toBe(2);
+    expect(typeof states[q.id]?.lastSentAt).toBe('string');
+
+    // Sender-scoped: the recipient (Mara) sent nothing herself, so her own send-states are empty —
+    // the owner's send of `q` does not leak into another person's list.
+    await bridge.sessionSetActive({ personId: mara.id });
+    expect(await bridge.questionnairesSendStates()).toEqual({});
   });
 
   it('saves/edits a dream, scoped to the active dreamer and gated by dreams.own', async () => {

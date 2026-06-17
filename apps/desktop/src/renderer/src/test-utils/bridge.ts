@@ -158,6 +158,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     guidedAcknowledgeAdult: () => Promise.resolve({ cache: null, adultAcknowledged: true }),
     usageSessionCosts: () => Promise.resolve({}),
     questionnairesList: () => Promise.resolve([]),
+    questionnairesSendStates: () => Promise.resolve({}),
     questionnairesGet: () => Promise.resolve(null),
     questionnairesSave: (input) =>
       Promise.resolve({

@@ -72,7 +72,9 @@ function StandardResults({ questionnaireId }: { questionnaireId: string }): JSX.
 
   const [draining, setDraining] = useState(false);
   const [drainMsg, setDrainMsg] = useState<string | null>(null);
-  const hasExternal = results.some((r) => r.channel === 'relay');
+  // A relay-backed send is drainable whether it's an external ('relay') or a household ('inApp') send that
+  // also minted a link (§17.13) — key off the relay material, NOT the channel.
+  const hasRelayLink = results.some((r) => r.relayLinked);
 
   const runDrain = async (): Promise<void> => {
     setDraining(true);
@@ -177,7 +179,7 @@ function StandardResults({ questionnaireId }: { questionnaireId: string }): JSX.
     <Stack gap={3}>
       <div className={styles.resultsHead}>
         <Heading level={3}>Results</Heading>
-        {hasExternal ? (
+        {hasRelayLink ? (
           <Button variant="secondary" onClick={() => void runDrain()} disabled={draining}>
             <RefreshCw size={15} aria-hidden="true" />
             {draining ? 'Checking…' : 'Check for responses'}
@@ -253,9 +255,9 @@ function SendCard({
   onRevoke: () => void;
 }): JSX.Element {
   const isSubmitted = send.status === 'submitted';
-  // An external link that's still open (not answered / declined / revoked / expired) can be revoked.
-  const canRevoke =
-    send.channel === 'relay' && ['sent', 'opened', 'inProgress'].includes(send.status);
+  // A relay link that's still open (not answered / declined / revoked / expired) can be revoked — for an
+  // external send AND a household send that also minted a link (§17.13).
+  const canRevoke = send.relayLinked && ['sent', 'opened', 'inProgress'].includes(send.status);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   return (
     <Card>
@@ -288,9 +290,11 @@ function SendCard({
           </div>
         </div>
 
-        {send.channel === 'relay' ? (
+        {send.relayLinked ? (
           <Text size="sm" tone="secondary">
-            Sent via a private link.
+            {send.channel === 'relay'
+              ? 'Sent via a private link.'
+              : 'In their Inbox — also answerable via the link you shared.'}
           </Text>
         ) : null}
 

@@ -1,5 +1,10 @@
 import { create } from 'zustand';
-import type { Questionnaire, QuestionnaireInput, SelfosBridge } from '@shared/channels';
+import type {
+  Questionnaire,
+  QuestionnaireInput,
+  QuestionnaireSendState,
+  SelfosBridge,
+} from '@shared/channels';
 
 // Derive AI call shapes from the bridge contract so the store never drifts from the IPC.
 type GenerateInput = Parameters<SelfosBridge['questionnairesGenerate']>[0];
@@ -18,6 +23,8 @@ const AI_UNAVAILABLE = {
 interface QuestionnaireState {
   questionnaires: Questionnaire[];
   loaded: boolean;
+  /** Per-questionnaire send state for the author's list (keyed by id): latest send time + count. */
+  sendStates: Record<string, QuestionnaireSendState>;
   /** User-defined custom types (the starter taxonomy lives in the builder). */
   customTypes: string[];
   load: () => Promise<void>;
@@ -41,10 +48,14 @@ interface QuestionnaireState {
 export const useQuestionnaireStore = create<QuestionnaireState>((set, get) => ({
   questionnaires: [],
   loaded: false,
+  sendStates: {},
   customTypes: [],
   load: async () => {
-    const questionnaires = (await window.selfos?.questionnairesList()) ?? [];
-    set({ questionnaires, loaded: true });
+    const [questionnaires, sendStates] = await Promise.all([
+      window.selfos?.questionnairesList() ?? [],
+      window.selfos?.questionnairesSendStates() ?? {},
+    ]);
+    set({ questionnaires, sendStates, loaded: true });
   },
   loadTypes: async () => {
     set({ customTypes: (await window.selfos?.questionnairesListTypes()) ?? [] });

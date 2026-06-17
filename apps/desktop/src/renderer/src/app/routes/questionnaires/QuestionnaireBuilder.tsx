@@ -44,6 +44,7 @@ import { QuestionPreview } from './QuestionPreview';
 import { QuestionnairePreview } from './QuestionnairePreview';
 import { QuestionnaireResults } from './QuestionnaireResults';
 import { QuestionnaireSendPanel } from './QuestionnaireSendPanel';
+import { formatSentDate } from './sentState';
 import { CompatibilitySendPanel } from './CompatibilitySendPanel';
 import styles from './Questionnaires.module.css';
 
@@ -316,6 +317,8 @@ export function QuestionnaireBuilder({
 }): JSX.Element {
   const save = useQuestionnaireStore((s) => s.save);
   const remove = useQuestionnaireStore((s) => s.remove);
+  const load = useQuestionnaireStore((s) => s.load);
+  const sendStates = useQuestionnaireStore((s) => s.sendStates);
   const validate = useQuestionnaireStore((s) => s.validate);
   const customTypes = useQuestionnaireStore((s) => s.customTypes);
   const addType = useQuestionnaireStore((s) => s.addType);
@@ -401,6 +404,9 @@ export function QuestionnaireBuilder({
   // create → then send, with no strand.
   const [saved, setSaved] = useState<Questionnaire | null>(questionnaire);
   const [justSaved, setJustSaved] = useState(false);
+  // Whether this questionnaire has been sent (08 §17.14) — drives the header "Sent · <date>" line so a
+  // reopened, already-sent questionnaire is clearly distinct from one that's still a draft.
+  const sentState = saved ? sendStates[saved.id] : undefined;
 
   // Edit ⇄ Preview ⇄ Results. Preview renders the live drafts as the recipient sees them; Results (only
   // for a saved questionnaire, and only with viewResults) shows its sends + per-send outcome.
@@ -411,8 +417,9 @@ export function QuestionnaireBuilder({
     .filter((d) => d.prompt.trim() !== '')
     .map((d) => toQuestion(d, drafts));
 
-  const allPrompts = drafts.every((d) => d.prompt.trim() !== '');
-  const canSave = title.trim() !== '' && allPrompts && !busy;
+  // Save anytime: a draft persists with just a title so the author can come back and finish it (08 §16.3).
+  // Completeness (every question filled, scales valid, ≥1 question) is enforced at SEND, not save.
+  const canSave = title.trim() !== '' && !busy;
 
   const knownType = QUESTIONNAIRE_TYPES.some((t) => t.value === type) || customTypes.includes(type);
   const customList = [...customTypes, ...(knownType ? [] : [type])];
@@ -505,11 +512,15 @@ export function QuestionnaireBuilder({
     // comparison is always you + this recipient (§17.12-B).
     ...(recipient ? { recipient } : {}),
     // When compatibility is on, stamp each question with a stable canonicalId (its own id) so the two
-    // AI-personalized variants stay aligned for the report (08 §3.6/§4.2).
-    questions: drafts.map((d) => {
-      const q = toQuestion(d, drafts);
-      return compatEnabled ? { ...q, canonicalId: q.canonicalId ?? q.id } : q;
-    }),
+    // AI-personalized variants stay aligned for the report (08 §3.6/§4.2). Blank-prompt drafts are dropped
+    // (a question needs a prompt; an untouched/in-progress row carries nothing and would fail the schema) —
+    // so a half-built draft saves cleanly. `toQuestion` still sees all drafts for branch resolution.
+    questions: drafts
+      .filter((d) => d.prompt.trim() !== '')
+      .map((d) => {
+        const q = toQuestion(d, drafts);
+        return compatEnabled ? { ...q, canonicalId: q.canonicalId ?? q.id } : q;
+      }),
     ...(compatEnabled ? { compatibility: { enabled: true as const, visibility } } : {}),
   });
 
@@ -532,8 +543,10 @@ export function QuestionnaireBuilder({
 
   /** The full set of blocking problems (client-side range/alt checks + the engine's validate). */
   const computeProblems = async (): Promise<string[]> => {
-    if (!allPrompts) return ['Every question needs a prompt.'];
-    const rangeProblems = drafts
+    // Only complete (non-blank-prompt) drafts become questions — a blank in-progress row is dropped on
+    // save/send, so it never blocks. validate(input()) then catches a title-only draft (≥1 question needed).
+    const live = drafts.filter((d) => d.prompt.trim() !== '');
+    const rangeProblems = live
       .filter(
         (d) =>
           RANGE_TYPES.includes(d.type) &&
@@ -541,7 +554,7 @@ export function QuestionnaireBuilder({
       )
       .map((d) => `"${d.prompt.trim()}" needs Min below Max.`);
     // Accessibility: an attached image must carry alt text (the relay page meets the same WCAG bar).
-    const altProblems = drafts
+    const altProblems = live
       .filter((d) => d.media && d.media.alt.trim() === '')
       .map((d) => `The image on "${d.prompt.trim()}" needs a description (alt text).`);
     return [...rangeProblems, ...altProblems, ...(await validate(input()))];
@@ -602,6 +615,13 @@ export function QuestionnaireBuilder({
           <Heading level={3}>{saved ? 'Edit questionnaire' : 'New questionnaire'}</Heading>
           <Text size="sm" tone="secondary">
             For: <strong>{recipientLabel}</strong>
+            {sentState ? (
+              <>
+                {' · '}
+                <strong>Sent {formatSentDate(sentState.lastSentAt)}</strong>
+                {sentState.total > 1 ? ` (${sentState.total} times)` : ''}
+              </>
+            ) : null}
           </Text>
         </Stack>
         <SegmentedControl<BuilderMode>
@@ -1300,6 +1320,7 @@ export function QuestionnaireBuilder({
                 recipientName={recipientName}
                 onCancel={() => setSendId(null)}
                 onSent={() => {
+                  void load(); // refresh the list's "Sent · <date>" state (08 §17.14)
                   setSendId(null);
                   onDone();
                 }}
@@ -1313,6 +1334,7 @@ export function QuestionnaireBuilder({
                 recipientLabel={recipientLabel}
                 onCancel={() => setSendId(null)}
                 onSent={() => {
+                  void load(); // refresh the list's "Sent · <date>" state (08 §17.14)
                   setSendId(null);
                   onDone();
                 }}

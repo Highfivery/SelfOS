@@ -46,16 +46,13 @@
 .row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-2);
   width: 100%;
-  padding: var(--space-3) var(--space-4);
+  padding: 0 var(--space-2) 0 0;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
   color: var(--color-text-primary);
-  cursor: pointer;
-  text-align: left;
   transition: background var(--motion-fast);
 }
 
@@ -68,15 +65,103 @@
   background: var(--color-surface-alt);
 }
 
+/* The clickable title area fills the row; the kebab sits outside it (no button-in-button). */
+.rowOpen {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
 .rowName {
   font-weight: 500;
   overflow-wrap: anywhere;
+}
+
+.rowSub {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: baseline;
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
 }
 
 .rowBadge {
   flex-shrink: 0;
   font-size: 0.8125rem;
   color: var(--color-text-secondary);
+}
+
+/* "Sent · <date>" chip — distinguishes a sent questionnaire from a still-being-edited draft (§17.14). */
+.rowSent {
+  color: var(--color-accent);
+  font-weight: 500;
+}
+
+/* Per-row kebab menu (mirrors the Sessions list menu). */
+.menuWrap {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+.menuBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  border: none;
+  background: transparent;
+  cursor: default;
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  padding: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-overlay);
+}
+
+.menuItem {
+  display: block;
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menuItem:hover {
+  background: var(--color-surface-alt);
+}
+
+.menuItem:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
+}
+
+.menuItemDanger {
+  color: var(--color-danger);
 }
 
 .detail {

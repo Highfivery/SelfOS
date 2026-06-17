@@ -1481,6 +1481,10 @@ export interface SendResult {
   assignmentId: string;
   recipientName: string;
   channel: Channel; // 'relay' = an external link send (drainable / revocable); 'inApp' = household
+  // True when this send carries relay material (a link the recipient can answer from anywhere). A household
+  // ('inApp') send ALSO mints one when a relay is connected (§17.13), so relay affordances (drain / link /
+  // revoke) must key off THIS, not `channel === 'relay'`.
+  relayLinked: boolean;
   status: AssignmentStatus;
   privacy: PrivacyMode;
   createdAt: string;
@@ -1488,6 +1492,16 @@ export interface SendResult {
   declineNote?: string;
   analyzed: boolean;
   answers?: SendAnswer[]; // present only for a Standard, submitted send
+}
+
+/**
+ * Per-questionnaire send state for the author's list (08-questionnaires §17.14): the latest time the active
+ * person sent this questionnaire + how many times. Absent for a never-sent questionnaire (so the list can
+ * show a "Draft" affordance). Pure metadata — no answers, no recipient detail.
+ */
+export interface QuestionnaireSendState {
+  lastSentAt: string;
+  total: number;
 }
 
 /** One of the two paired sends of a compatibility questionnaire, as the sender sees it (08 §3.6). */

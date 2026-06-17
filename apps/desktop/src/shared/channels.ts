@@ -56,6 +56,7 @@ import type {
   QuestionnaireGenerateResult,
   QuestionnaireImproveResult,
   QuestionnaireInput,
+  QuestionnaireSendState,
   QuestionnaireSuggestResult,
   QuestionTrend,
   Relationship,
@@ -140,6 +141,7 @@ export const IpcChannels = {
   guidedAcknowledgeAdult: 'guided:acknowledgeAdult',
   usageSessionCosts: 'usage:sessionCosts',
   questionnairesList: 'questionnaires:list',
+  questionnairesSendStates: 'questionnaires:sendStates',
   questionnairesGet: 'questionnaires:get',
   questionnairesSave: 'questionnaires:save',
   questionnairesDelete: 'questionnaires:delete',
@@ -447,6 +449,12 @@ export interface SelfosBridge {
   usageSessionCosts(): Promise<Record<string, SessionCost>>;
   /** The household's questionnaire definitions, newest first. Requires `questionnaires.create`. */
   questionnairesList(): Promise<Questionnaire[]>;
+  /**
+   * Per-questionnaire send state for the active person's own sends (08 §17.14): keyed by questionnaire id,
+   * the latest send time + count. Drives the list's "Sent · <date>" badge so an author can tell which of
+   * their questionnaires have gone out. Sender-scoped; requires `questionnaires.create`.
+   */
+  questionnairesSendStates(): Promise<Record<string, QuestionnaireSendState>>;
   /** Load one questionnaire definition; null if absent. */
   questionnairesGet(id: string): Promise<Questionnaire | null>;
   /** Create or update a questionnaire definition (editing bumps its version); returns the saved record. */
@@ -820,6 +828,7 @@ export type {
   PrivacyMode,
   Questionnaire,
   QuestionnaireInput,
+  QuestionnaireSendState,
   QuestionTrend,
   Relationship,
   RelationshipInput,

@@ -1036,11 +1036,11 @@ test('questionnaires: author a single-choice questionnaire, validate, persist, n
 
     // Back to the list (the builder is a focused panel) — the new questionnaire shows with its count.
     await backToQuestionnaires(w);
-    await expect(w.getByRole('button', { name: /Weekly check-in/ })).toBeVisible();
+    await expect(w.getByRole('button', { name: /^Weekly check-in/ })).toBeVisible();
     await expect(w.getByText('1 question')).toBeVisible();
 
     // Reopen and confirm the title + options round-tripped through the encrypted vault.
-    await w.getByRole('button', { name: /Weekly check-in/ }).click();
+    await w.getByRole('button', { name: /^Weekly check-in/ }).click();
     await expect(w.getByLabel('Title')).toHaveValue('Weekly check-in');
     await expect(w.getByLabel('Option 1', { exact: true })).toHaveValue('Very');
     await expect(w.getByLabel('Option 3', { exact: true })).toHaveValue('Not at all');
@@ -1098,7 +1098,7 @@ test('questionnaires: custom type, sensitivity, matrix + branching round-trip', 
     await expect(w.getByText('2 questions')).toBeVisible();
 
     // Reopen and confirm everything round-tripped through the encrypted vault.
-    await w.getByRole('button', { name: /Date-night check-in/ }).click();
+    await w.getByRole('button', { name: /^Date-night check-in/ }).click();
     await expect(w.getByLabel('Type', { exact: true })).toHaveValue('Date night');
     await expect(w.getByLabel('Sensitivity')).toHaveCount(0);
     await expect(w.getByLabel('Row 1', { exact: true })).toHaveValue('Trust');
@@ -1197,7 +1197,7 @@ test('questionnaires: General default + intimacy-only sensitivity + live inline 
     // builder is a focused full-width panel (the list hides while editing), so go back to the list first.
     await w.getByRole('button', { name: 'Create draft' }).click();
     await w.getByRole('button', { name: 'Questionnaires' }).click();
-    await w.getByRole('button', { name: /Check-in/ }).click();
+    await w.getByRole('button', { name: /^Check-in/ }).click();
     await expect(w.getByLabel('Type', { exact: true })).toHaveValue('intimacy');
     await expect(w.getByLabel('Sensitivity')).toHaveValue('explicit');
 
@@ -1257,7 +1257,7 @@ test('questionnaires: attach an encrypted image, require alt, round-trip + show 
 
     // Reopen: the alt text round-tripped through the encrypted vault and the image still loads.
     // (The editor thumbnail AND the open inline preview both render it, so scope to the first.)
-    await w.getByRole('button', { name: /Photo prompt/ }).click();
+    await w.getByRole('button', { name: /^Photo prompt/ }).click();
     await expect(w.getByLabel('Image description (alt text)')).toHaveValue('A test image');
     await expect(w.getByRole('img', { name: 'A test image' }).first()).toBeVisible();
 
@@ -1814,14 +1814,14 @@ test('results: a Standard response surfaces the raw answers in the sender’s Re
 
     // Answer + submit it from the Inbox.
     await w.getByRole('link', { name: /Inbox/ }).click();
-    await w.getByRole('button', { name: /Weekly check-in/ }).click();
+    await w.getByRole('button', { name: /^Weekly check-in/ }).click();
     await w.getByLabel('How are we doing?').fill('Doing great');
     await w.getByRole('button', { name: 'Submit' }).click();
     await expect(w.getByText('Submitted')).toBeVisible();
 
     // Open the questionnaire's Results tab — a Standard send shows the raw answers.
     await w.getByRole('link', { name: 'Questionnaires' }).click();
-    await w.getByRole('button', { name: /Weekly check-in/ }).click();
+    await w.getByRole('button', { name: /^Weekly check-in/ }).click();
     await w.getByRole('button', { name: 'Results' }).click();
     await expect(w.getByText('How are we doing?')).toBeVisible();
     await expect(w.getByText('Doing great')).toBeVisible();
@@ -1874,7 +1874,7 @@ test('results: re-asks chart a trend, a send deletes, and the questionnaire purg
     // §16.3: save the draft so Send appears, send once; then re-open the saved questionnaire and re-ask.
     await w.getByRole('button', { name: 'Create draft' }).click();
     await sendToSelf(); // sending returns to the list, so the saved questionnaire is visible to re-open
-    await w.getByRole('button', { name: /Mood check/ }).click();
+    await w.getByRole('button', { name: /^Mood check/ }).click();
     await sendToSelf();
 
     // Answer both from the Inbox with ratings 2 then 5. Pick the still-unanswered "New" item, waiting
@@ -1892,7 +1892,7 @@ test('results: re-asks chart a trend, a send deletes, and the questionnaire purg
 
     // Results: both sends + a Trends chart for the rating question.
     await w.getByRole('link', { name: 'Questionnaires' }).click();
-    await w.getByRole('button', { name: /Mood check/ }).click();
+    await w.getByRole('button', { name: /^Mood check/ }).click();
     await w.getByRole('button', { name: 'Results' }).click();
     await expect(w.getByRole('heading', { name: 'Trends' })).toBeVisible();
     await expect(w.getByRole('img', { name: /trend over time/i })).toBeVisible();
@@ -1910,7 +1910,62 @@ test('results: re-asks chart a trend, a send deletes, and the questionnaire purg
     await w.getByRole('button', { name: 'Edit' }).click();
     await w.getByRole('button', { name: 'Delete questionnaire' }).click();
     await w.getByRole('button', { name: 'Delete', exact: true }).click();
-    await expect(w.getByRole('button', { name: /Mood check/ })).toHaveCount(0);
+    await expect(w.getByRole('button', { name: /^Mood check/ })).toHaveCount(0);
+    await expect(w.getByText(/no questionnaires yet/i)).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('lifecycle (§17.14/§16.3/§3.9): draft-save, send shows a Sent badge + drain affordance, list-row delete', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    // Connect a relay so a household send ALSO mints a link → Results surfaces the drain affordance (§17.13).
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'Relay' }).click();
+    await w.getByLabel(/cloudflare account id/i).fill('acct-123');
+    await w.getByLabel(/cloudflare api token/i).fill('cf-token');
+    await w.getByRole('button', { name: /connect & deploy/i }).click();
+    await expect(w.getByText(/relay connected at/i)).toBeVisible();
+
+    // #2 — save a draft with ONLY a title (no question yet); "Create draft" is enabled and it persists.
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await startNewQuestionnaire(w);
+    await w.getByLabel('Title').fill('Pulse check');
+    await w.getByRole('button', { name: 'Create draft' }).click();
+    // Saved → Send now appears (the two-step), and it's still a draft we can keep editing.
+    await expect(w.getByRole('button', { name: 'Send' })).toBeVisible();
+
+    // Flesh it out + re-save, then send to the bound household recipient (Standard).
+    await w.getByLabel('Question 1', { exact: true }).fill('How are we doing?');
+    await w.getByRole('button', { name: 'Save', exact: true }).click();
+    await w.getByRole('button', { name: 'Send' }).click();
+    await w.getByRole('button', { name: 'Standard' }).click();
+    await w.getByRole('button', { name: 'Send' }).last().click();
+    await w.getByRole('button', { name: 'Done' }).click();
+
+    // #4 — back at the list, the row now shows a "Sent · <date>" chip (distinct from a draft).
+    await expect(w.getByText(/Sent/).first()).toBeVisible();
+
+    // #3 — open it → Results surfaces the "Check for responses" drain button for the household relay link
+    // (the bug: it was gated on channel === 'relay', hiding the link for household sends).
+    await w.getByRole('button', { name: /^Pulse check/ }).click();
+    // The builder header repeats the sent state.
+    await expect(w.getByText(/For:/)).toContainText(/Sent/);
+    await w.getByRole('button', { name: 'Results' }).click();
+    await expect(w.getByRole('button', { name: /check for responses/i })).toBeVisible();
+
+    // #1 — delete from the list row (kebab → Delete → confirm) → the questionnaire is gone.
+    await w.getByRole('button', { name: 'Questionnaires' }).first().click(); // back affordance
+    await w.getByRole('button', { name: /Options for Pulse check/ }).click();
+    await w.getByRole('menuitem', { name: 'Delete' }).click();
+    await w.getByRole('button', { name: 'Delete', exact: true }).click();
+    await expect(w.getByRole('button', { name: /^Pulse check/ })).toHaveCount(0);
     await expect(w.getByText(/no questionnaires yet/i)).toBeVisible();
   } finally {
     await app.close();
@@ -2011,7 +2066,7 @@ test('compatibility: align two answered variants into a report + draft Insight, 
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Questionnaires' }).click();
-    await w.getByRole('button', { name: /Compatibility check/ }).click();
+    await w.getByRole('button', { name: /^Compatibility check/ }).click();
     await w.getByRole('button', { name: 'Results' }).click();
 
     // The compat Results surface shows the paired group as "Both answered" and offers to align.
@@ -2120,7 +2175,7 @@ test('compatibility contextOnly (§16.2): no report; each participant’s own co
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Questionnaires' }).click();
-    await w.getByRole('button', { name: /Closeness check/ }).click();
+    await w.getByRole('button', { name: /^Closeness check/ }).click();
     await w.getByRole('button', { name: 'Results' }).click();
 
     // Context-only: NO report is offered — the sender updates each coach instead.

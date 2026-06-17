@@ -190,6 +190,18 @@ A slice is **not** done until **all** of these pass:
       link only mints with a connected relay; the happy-path E2E connected one first, so it never caught that —
       with no relay — the link feature was completely silent. The user sent a household questionnaire, saw no
       link, no explanation. Now the send panel hints "connect a relay in Settings → Relay," with a test.)
+- [ ] **Drive the COMPLETE user-facing flow through the actual UI — never let a bridge-only test stand in for a
+      missing screen.** For any feature with a multi-step lifecycle (create → see its state → act on it →
+      delete), the E2E must walk **every step through the rendered UI**: the control that triggers each step
+      must be **present, reachable, and clicked** — not invoked by calling `window.selfos.*`/the bridge directly.
+      A coreBridge/integration test that drives the backend proves the _backend_ works; it says **nothing** about
+      whether the button that calls it exists. (2026-06-16: a household relay link could be drained by a
+      coreBridge test that called `assignmentsDrain()` directly — green — while the Results UI gated the "Check
+      for responses" button on `channel === 'relay'`, so for a household send the button **never rendered** and
+      the response was unretrievable. The user hit a dead end the passing suite couldn't see. Also surface state
+      the user relies on: after an action (send), the entity's state must be **visibly reflected** where they
+      look next — a "Sent · <date>" badge in the list + builder, not a form that looks untouched. Bridge tests
+      complement UI walks; they do not replace them.)
 - [ ] **`/gallery` updated** when a design-system primitive is added or changed (it must showcase all of them)
 - [ ] **Admin-only UI is marked** — any control/section visible only to an Owner / super-admin carries a
       consistent "admin only" indicator (see §12)
@@ -336,6 +348,30 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-17 — Build (**Questionnaire send-lifecycle fixes — 4 user-reported gaps the passing tests missed; 08
+  §17.14**; on `fix/questionnaire-delete-draft-sentstate-relay`, NOT merged). The user hit four lifecycle gaps
+  and (rightly) demanded the rules change so "glaringly obvious" things stop slipping past green suites. **Asked
+  first** the 3 UX forks: draft saving = **save anytime, validate at send**; delete = **list row + builder**;
+  sent-state = **list badge + builder header**. Built: **(#3, the serious one)** relay affordances in
+  `QuestionnaireResults` now gate on a new **`SendResult.relayLinked`** (`Boolean(assignment.relay)`), NOT
+  `channel === 'relay'` — a household send is `channel:'inApp'` even with a minted link (§17.13), so the **"Check
+  for responses" drain button never rendered** and a relay response was unretrievable; a coreBridge test that
+  drained the link by calling the bridge **directly** had stayed green while the BUTTON was missing. **(#4)** new
+  sender-scoped **`questionnaires:sendStates`** IPC → a **"Sent · <date>"** chip on the list row + the builder
+  header ("Sent <date> (N times)"); sending refreshes the store so it shows on return. **(#1)** a list-row kebab
+  (`QuestionnaireRowMenu`) → Delete → inline confirm (bridge re-enforces Owner-any-stage / creator-own-unsent).
+  **(#2)** `canSave` needs only a title; `input()` drops blank-prompt drafts so a half-built questionnaire
+  persists; **Send still validates** completeness. **Verified the COMPLETE flow live** (web preview: list chips +
+  kebab confirm + the household-send drain button + "Sent (2 times)" header). Gate green: typecheck (node +
+  web/DOM-lib), lint, format, **420 core + 520 desktop + 11 relay** unit, **74 E2E** (a new test walks the whole
+  flow through the UI: connect relay → draft-save → send → Sent badge → Results drain button → list-row delete).
+  Synced 08 §17.14. **NEW HARD RULE (CLAUDE.md §7 DoD): drive the COMPLETE user-facing flow through the actual
+  rendered UI — a bridge/integration test proves the backend, NOT that the button that calls it exists; a
+  household relay drain was bridge-tested-green while the UI gated the button on the wrong condition so it never
+  showed. Also surface state where the user looks next (a Sent badge), not a form that looks untouched.** **Lesson
+  (the §17.13 root cause): a feature flag/affordance must key off what actually enables it (relay material
+  present), not a sibling display value (the channel) — gating on `channel === 'relay'` silently disabled the
+  whole link-retrieval path for the new household-link case.**
 - 2026-06-16 — Build (**Memory dashboard — SLICE 3: the dashboard UI; SPEC 20 FULLY BUILT**;
   [20-memory-dashboard](docs/specs/20-memory-dashboard.md) §3/§8/§9, on `feat/memory-dashboard` **worktree**,
   NOT merged). Rebuilt `routes/memory/Memory.tsx` into the living dashboard: header (search + Refresh memory +

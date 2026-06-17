@@ -63,6 +63,7 @@ import {
   type Role,
   type SendAnswer,
   type SendResult,
+  type QuestionnaireSendState,
   type QuestionnaireAnalyzeResult,
   type QuestionnaireGenerateResult,
   type QuestionnaireImproveResult,
@@ -1279,6 +1280,24 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) return [];
       return listQuestionnaires(ctx.fs, ctx.key);
     },
+    questionnairesSendStates: async (): Promise<Record<string, QuestionnaireSendState>> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) return {};
+      const personId = await activePersonId();
+      if (!personId) return {};
+      // The active person's own sends, aggregated by questionnaire — latest send time + count. Pure
+      // metadata for the list's "Sent · <date>" badge (08 §17.14); no answers or recipient detail.
+      const sends = await listAssignments(ctx.fs, ctx.key, { senderPersonId: personId });
+      const states: Record<string, QuestionnaireSendState> = {};
+      for (const a of sends) {
+        const prev = states[a.questionnaireId];
+        states[a.questionnaireId] = {
+          lastSentAt: prev && prev.lastSentAt > a.createdAt ? prev.lastSentAt : a.createdAt,
+          total: (prev?.total ?? 0) + 1,
+        };
+      }
+      return states;
+    },
     questionnairesGet: async (id): Promise<Questionnaire | null> => {
       const ctx = await host.vaultAndKey();
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) return null;
@@ -1797,6 +1816,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           assignmentId: a.id,
           recipientName,
           channel: a.channel,
+          relayLinked: Boolean(a.relay),
           status: a.status,
           privacy: a.privacy,
           createdAt: a.createdAt,

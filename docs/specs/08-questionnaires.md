@@ -2107,3 +2107,35 @@ their **Inbox** OR via a **relay link** anywhere — whichever they reach first.
   PREREQUISITE is ABSENT (the common real state) — a happy-path E2E that connects the relay first hid that, with
   no relay, the link feature was completely silent. The user hit exactly that; now there's a no-relay hint + a
   test for it.**
+
+## 17.14 Send lifecycle made visible — sent-state, relay-aware Results, list-row delete, draft save (2026-06-17) — BUILT
+
+Four user-reported lifecycle gaps, found because the app showed no trace of a send and offered no way to delete
+or save-in-progress. Each fixed through the **actual UI** (the lesson: a bridge-only test can pass while the
+button that calls it is missing — see CLAUDE.md §7 DoD).
+
+- **Relay affordances key off relay MATERIAL, not the channel (the serious one).** `SendResult` gains
+  **`relayLinked: boolean`** (set in `assignmentsResults` from `Boolean(assignment.relay)`). `QuestionnaireResults`
+  now gates the **"Check for responses"** drain button + per-send revoke/relay-status on `relayLinked`, NOT
+  `channel === 'relay'`. The bug: a household send is `channel: 'inApp'` even when it minted a link (§17.13), so
+  the drain button never rendered and a relay response was **unretrievable**. A coreBridge test had drained the
+  household link by calling `assignmentsDrain()` directly — green — so it never exercised the missing button.
+- **Sent-state is visible.** A new sender-scoped **`questionnaires:sendStates`** IPC (gated `questionnaires.create`)
+  returns `Record<questionnaireId, { lastSentAt, total }>` aggregated from the active person's assignments. The
+  list row shows a **"Sent · <date>"** chip (vs a draft) and the builder header repeats it ("Sent <date> (N times)").
+  Sending refreshes the store so the badge appears on return.
+- **Delete from the list row (§3.9).** Each row carries a kebab (`QuestionnaireRowMenu`) → **Delete** → an inline
+  confirm (sent-aware copy: it removes responses + insights). Permission is re-enforced in the bridge (Owner any
+  stage; a non-owner creator only their own + unsent) and surfaced calmly on refusal. The builder's Delete stays.
+- **Save anytime, validate at send (§16.3).** `canSave` requires only a title; `input()` drops blank-prompt
+  drafts so a half-built questionnaire persists cleanly. **Send** still validates completeness (≥1 question, scales,
+  alt text) and surfaces problems before opening the send panel.
+- **Tests:** core/schemas (`relayLinked`, `QuestionnaireSendState`), coreBridge (`sendStates` count + latest;
+  a household relay send reports `relayLinked: true` before draining), Results RTL (drain/revoke shown for a
+  household relay-linked send; hidden for an Inbox-only one), list RTL (Sent badge, row-delete confirm, title-only
+  draft save, Send blocked until ≥1 question), and a Playwright E2E that **walks the whole flow through the UI**:
+  connect relay → draft-save title-only → send → Sent badge in list + builder → Results shows "Check for responses"
+  → delete from the list row. Gate green: typecheck (node + web/DOM-lib), lint, format, **420 core + 520 desktop +
+  11 relay** unit, **74 E2E**. **Lesson: drive the COMPLETE flow through the rendered UI — a bridge/integration
+  test that calls the backend proves the backend, not that the button exists; and surface the entity's state where
+  the user looks next (a Sent badge), not a form that looks untouched.**

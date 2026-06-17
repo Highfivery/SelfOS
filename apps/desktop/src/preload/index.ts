@@ -152,6 +152,8 @@ const bridge: SelfosBridge = {
   assignmentsDrain: () => ipcRenderer.invoke(IpcChannels.assignmentsDrain),
   assignmentsRevoke: (assignmentId) =>
     ipcRenderer.invoke(IpcChannels.assignmentsRevoke, assignmentId),
+  assignmentsReshare: (assignmentId) =>
+    ipcRenderer.invoke(IpcChannels.assignmentsReshare, assignmentId),
   relayStatus: () => ipcRenderer.invoke(IpcChannels.relayStatus),
   relayConnect: (input) => ipcRenderer.invoke(IpcChannels.relayConnect, input),
   relayUpdate: () => ipcRenderer.invoke(IpcChannels.relayUpdate),

@@ -1993,6 +1993,74 @@ test('roles: the owner edits the role × capability matrix', async () => {
   }
 });
 
+test('compatibility household (§17.14a): the send mints the recipient a link + delivery; Results drains + resends', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  // Seed a household partner so the compat "Compare you with" picker has someone to choose.
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('expected a master key');
+  await savePerson(fs, key, {
+    id: 'angel-1',
+    schemaVersion: 1,
+    displayName: 'Angel',
+    isSubject: true,
+    tags: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    // Connect a relay so the household compat recipient ALSO gets a shareable link (§17.14a).
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'Relay' }).click();
+    await w.getByLabel(/cloudflare account id/i).fill('acct');
+    await w.getByLabel(/cloudflare api token/i).fill('cf');
+    await w.getByRole('button', { name: /connect & deploy/i }).click();
+    await expect(w.getByText(/relay connected at/i)).toBeVisible();
+
+    // Author a compatibility questionnaire (you + Angel) and send it.
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await startNewQuestionnaire(w, { compat: true });
+    await w.getByLabel('Title').fill('Closeness');
+    await w.getByLabel('Question 1', { exact: true }).fill('How connected do you feel?');
+    await w.getByRole('button', { name: 'Create draft' }).click();
+    await w.getByRole('button', { name: 'Send' }).click();
+
+    // The focused send step REPLACES the editor (no lingering footer). Click the panel's Send → the
+    // recipient's link + the prefilled email/SMS delivery appear (the bug: a household compat send showed
+    // no link at all). The fake Claude personalizes the variants; the fake relay mints the link.
+    await w
+      .getByRole('button', { name: /^Send$/ })
+      .last()
+      .click();
+    const link = await w.getByLabel('Secure link').inputValue();
+    expect(link).toMatch(/\.workers\.dev\/q\/[0-9a-f]+#k=/);
+    expect(await w.getByLabel('PIN', { exact: true }).inputValue()).toMatch(/^\d{6}$/);
+    await expect(w.getByRole('button', { name: /^Email$/ })).toBeVisible();
+    await expect(w.getByRole('button', { name: /^Text$/ })).toBeVisible();
+    await w.getByRole('button', { name: 'Done' }).click();
+
+    // Back at the list, it reads "Sent". Open it → Results offers drain + a per-recipient "Resend" link.
+    await expect(w.getByText(/Sent/).first()).toBeVisible();
+    await w.getByRole('button', { name: /^Closeness/ }).click();
+    await w.getByRole('button', { name: 'Results' }).click();
+    await expect(w.getByRole('button', { name: /check for responses/i })).toBeVisible();
+    await expect(w.getByRole('button', { name: /Resend Angel’s link/ })).toBeVisible();
+
+    // The relay assignment landed with relay material (the recipient's variant is link-answerable).
+    const assignments = await listAssignments(fs, key);
+    expect(assignments.some((a) => a.compatibilityGroupId && a.relay?.token)).toBe(true);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('compatibility: align two answered variants into a report + draft Insight, no overflow', async () => {
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
   await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');

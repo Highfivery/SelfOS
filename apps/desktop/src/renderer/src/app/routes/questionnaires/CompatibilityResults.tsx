@@ -1,11 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Eye, Lock, Send, Sparkles } from 'lucide-react';
+import { Eye, Link2, Lock, RefreshCw, Send, Sparkles } from 'lucide-react';
 import { ANTHROPIC_API_KEY_ID } from '@shared/channels';
-import type { CompatibilityGroup, CompatibilityMember, SendAnswer } from '@shared/schemas';
+import type {
+  CompatibilityGroup,
+  CompatibilityMember,
+  RelayLinkResult,
+  SendAnswer,
+} from '@shared/schemas';
 import { Banner, Button, Card, Heading, Stack, Text } from '../../../design-system/components';
+import { useSessionStore } from '../../../stores/sessionStore';
 import { useSetting } from '../../../settings/useSetting';
 import { AlignmentReportView, AnswerList } from './AlignmentReportView';
+import { RelayLinkDelivery } from './RelayLinkDelivery';
 import styles from './Questionnaires.module.css';
 
 /**
@@ -87,11 +94,55 @@ function GroupCard({
   const [revealed, setRevealed] = useState<Record<string, SendAnswer[]>>({});
   const [sharing, setSharing] = useState(false);
   const [shared, setShared] = useState(false);
+  const senderName = useSessionStore((s) => s.activePerson?.displayName ?? 'Someone');
 
   const names = group.members.map((m) => m.recipientName).join(' & ');
   const isContextOnly = group.visibility === 'contextOnly';
   // An external participant answers via a relay link and can be sent the report back (§17.12-D).
   const externalMembers = group.members.filter((m) => m.channel === 'relay');
+  // Members the other person answers via a link (a household recipient with a minted link, or external) —
+  // the sender can drain their link answer + re-share the link (§17.14). Never the sender's own member.
+  const linkedMembers = group.members.filter((m) => m.relayLinked && !m.isSelf);
+
+  // Drain any link answers into the local vault so alignment can use them.
+  const [draining, setDraining] = useState(false);
+  const [drainMsg, setDrainMsg] = useState<string | null>(null);
+  const runDrain = async (): Promise<void> => {
+    if (draining) return;
+    setDraining(true);
+    setDrainMsg(null);
+    try {
+      const { drained } = (await window.selfos?.assignmentsDrain()) ?? { drained: 0 };
+      setDrainMsg(drained === 0 ? 'No new responses yet.' : `Collected ${drained}.`);
+      await onChanged();
+    } catch {
+      setDrainMsg('Couldn’t check for responses. Please try again.');
+    } finally {
+      setDraining(false);
+    }
+  };
+
+  // Re-publish a member's link (fresh link + PIN; the old one stops working) + inline delivery.
+  const [delivery, setDelivery] = useState<{ assignmentId: string; link: RelayLinkResult } | null>(
+    null,
+  );
+  const [resharingId, setResharingId] = useState<string | null>(null);
+  const runReshare = async (assignmentId: string): Promise<void> => {
+    if (resharingId) return;
+    setResharingId(assignmentId);
+    setMessage(null);
+    try {
+      const link = await window.selfos?.assignmentsReshare(assignmentId);
+      if (link) setDelivery({ assignmentId, link });
+      else
+        setMessage({
+          tone: 'warning',
+          text: 'Couldn’t create a link — connect a relay in Settings → Relay, then try again.',
+        });
+    } finally {
+      setResharingId(null);
+    }
+  };
 
   // Push the generated report back to the external recipient(s)' relay link.
   const runShare = async (): Promise<void> => {
@@ -171,6 +222,44 @@ function GroupCard({
             </Text>
           ))}
         </Stack>
+
+        {/* Link delivery + drain for members the other person answers via a link (§17.14). */}
+        {linkedMembers.length > 0 ? (
+          <Stack gap={2}>
+            <div className={styles.deliveryRow}>
+              <Button variant="secondary" onClick={() => void runDrain()} disabled={draining}>
+                <RefreshCw size={15} aria-hidden="true" />
+                {draining ? 'Checking…' : 'Check for responses'}
+              </Button>
+              {linkedMembers.map((m) =>
+                m.status === 'submitted' ? null : (
+                  <Button
+                    key={m.assignmentId}
+                    variant="secondary"
+                    onClick={() => void runReshare(m.assignmentId)}
+                    disabled={resharingId !== null}
+                  >
+                    <Link2 size={15} aria-hidden="true" />
+                    {resharingId === m.assignmentId
+                      ? 'Creating link…'
+                      : `Resend ${m.recipientName}’s link`}
+                  </Button>
+                ),
+              )}
+            </div>
+            {drainMsg ? <Banner tone="info">{drainMsg}</Banner> : null}
+            {delivery ? (
+              <RelayLinkDelivery
+                link={delivery.link.link}
+                pin={delivery.link.pin}
+                senderName={senderName}
+                sensitive={false}
+                note="A fresh link + PIN — the previous link no longer works. Share it now; we don’t keep a copy of the PIN."
+                onDone={() => setDelivery(null)}
+              />
+            ) : null}
+          </Stack>
+        ) : null}
 
         {!group.bothSubmitted ? (
           <Text tone="secondary">

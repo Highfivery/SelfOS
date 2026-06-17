@@ -58,6 +58,7 @@ import type {
   QuestionnaireInput,
   QuestionnaireSendState,
   QuestionnaireSuggestResult,
+  RelayLinkResult,
   QuestionTrend,
   Relationship,
   RelationshipInput,
@@ -183,6 +184,7 @@ export const IpcChannels = {
   assignmentsCreateRelayLink: 'assignments:createRelayLink',
   assignmentsDrain: 'assignments:drain',
   assignmentsRevoke: 'assignments:revoke',
+  assignmentsReshare: 'assignments:reshare',
   relayStatus: 'relay:status',
   relayConnect: 'relay:connect',
   relayUpdate: 'relay:update',
@@ -646,6 +648,12 @@ export interface SelfosBridge {
   assignmentsDrain(): Promise<{ drained: number; declined: number }>;
   /** Revoke an external send's relay link (sender or admin). Requires `questionnaires.sendExternal`. */
   assignmentsRevoke(assignmentId: string): Promise<void>;
+  /**
+   * Re-publish a send's relay link: mint a FRESH link + PIN (the old link is revoked — the PIN is never
+   * stored, so the original can't be re-shown), for delivery/resend. Returns null if not applicable (no
+   * relay, the sender's own member, an already-answered send). Requires `questionnaires.sendExternal`.
+   */
+  assignmentsReshare(assignmentId: string): Promise<RelayLinkResult | null>;
   /** The relay connection status (no secrets) for the send panel + admin Relay setup. */
   relayStatus(): Promise<RelayStatus>;
   /** Connect + deploy the household relay to Cloudflare (admin-only). Returns the new status. */
@@ -830,6 +838,7 @@ export type {
   QuestionnaireInput,
   QuestionnaireSendState,
   QuestionTrend,
+  RelayLinkResult,
   Relationship,
   RelationshipInput,
   Role,

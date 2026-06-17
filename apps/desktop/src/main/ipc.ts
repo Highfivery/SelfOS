@@ -259,6 +259,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.assignmentsCreateRelayLink, bridge.assignmentsCreateRelayLink);
   handle(IpcChannels.assignmentsDrain, bridge.assignmentsDrain);
   handle(IpcChannels.assignmentsRevoke, bridge.assignmentsRevoke);
+  handle(IpcChannels.assignmentsReshare, bridge.assignmentsReshare);
   handle(IpcChannels.relayStatus, bridge.relayStatus);
   handle(IpcChannels.relayConnect, bridge.relayConnect);
   handle(IpcChannels.relayUpdate, bridge.relayUpdate);

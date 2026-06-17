@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import type { AlignmentReport, CompatibilityGroup } from '@shared/schemas';
+import type { AlignmentReport, CompatibilityGroup, CompatibilityMember } from '@shared/schemas';
 import { CompatibilityResults } from './CompatibilityResults';
 import { useSettingsStore } from '../../../settings/settingsStore';
 import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
@@ -29,13 +29,23 @@ const report = (over: Partial<AlignmentReport> = {}): AlignmentReport => ({
   ...over,
 });
 
+const member = (over: Partial<CompatibilityMember> = {}): CompatibilityMember => ({
+  assignmentId: 'a1',
+  recipientName: 'Alex',
+  channel: 'inApp',
+  relayLinked: false,
+  isSelf: false,
+  status: 'submitted',
+  ...over,
+});
+
 const group = (over: Partial<CompatibilityGroup> = {}): CompatibilityGroup => ({
   compatibilityGroupId: 'g1',
   questionnaireId: 'q1',
   visibility: 'sharedReport',
   members: [
-    { assignmentId: 'a1', recipientName: 'Alex', channel: 'inApp', status: 'submitted' },
-    { assignmentId: 'a2', recipientName: 'Bri', channel: 'inApp', status: 'submitted' },
+    member({ assignmentId: 'a1', recipientName: 'Alex' }),
+    member({ assignmentId: 'a2', recipientName: 'Bri' }),
   ],
   bothSubmitted: true,
   report: null,
@@ -59,8 +69,8 @@ describe('CompatibilityResults', () => {
           group({
             bothSubmitted: false,
             members: [
-              { assignmentId: 'a1', recipientName: 'Alex', channel: 'inApp', status: 'submitted' },
-              { assignmentId: 'a2', recipientName: 'Bri', channel: 'inApp', status: 'sent' },
+              member({ assignmentId: 'a1', recipientName: 'Alex', status: 'submitted' }),
+              member({ assignmentId: 'a2', recipientName: 'Bri', status: 'sent' }),
             ],
           }),
         ]),
@@ -71,6 +81,52 @@ describe('CompatibilityResults', () => {
       await screen.findByText(/Both people need to answer before you can align/),
     ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Generate alignment/ })).not.toBeInTheDocument();
+  });
+
+  it('offers drain + "Resend link" for a household recipient with a minted link, and reshares (§17.14)', async () => {
+    const assignmentsReshare = vi.fn(() =>
+      Promise.resolve({ link: 'https://x.workers.dev/q/tok2#k=key2', pin: '654321' }),
+    );
+    installMockBridge({
+      assignmentsCompatibility: () =>
+        Promise.resolve([
+          group({
+            bothSubmitted: false,
+            members: [
+              member({
+                assignmentId: 'a1',
+                recipientName: 'You',
+                isSelf: true,
+                status: 'submitted',
+              }),
+              member({
+                assignmentId: 'a2',
+                recipientName: 'Angel',
+                relayLinked: true,
+                status: 'sent',
+              }),
+            ],
+          }),
+        ]),
+      assignmentsReshare,
+      secretHas: () => Promise.resolve(true),
+    });
+    enableAi();
+    renderResults();
+
+    // The recipient (Angel) answers via a link → drain + a per-member resend; the self member gets none.
+    expect(await screen.findByRole('button', { name: /check for responses/i })).toBeInTheDocument();
+    const resend = screen.getByRole('button', { name: /Resend Angel’s link/ });
+    expect(screen.queryByRole('button', { name: /Resend You’s link/ })).not.toBeInTheDocument();
+
+    await userEvent.click(resend);
+    expect(assignmentsReshare).toHaveBeenCalledWith('a2');
+    // The fresh link + PIN surface in the delivery UI.
+    expect(
+      await screen.findByDisplayValue('https://x.workers.dev/q/tok2#k=key2'),
+    ).toBeInTheDocument();
+    expect(screen.getByDisplayValue('654321')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^email$/i })).toBeInTheDocument();
   });
 
   it('generates an alignment when both have answered', async () => {
@@ -143,8 +199,19 @@ describe('CompatibilityResults', () => {
           group({
             report: report(),
             members: [
-              { assignmentId: 'a1', recipientName: 'You', channel: 'inApp', status: 'submitted' },
-              { assignmentId: 'a2', recipientName: 'Alex', channel: 'relay', status: 'submitted' },
+              member({
+                assignmentId: 'a1',
+                recipientName: 'You',
+                isSelf: true,
+                status: 'submitted',
+              }),
+              member({
+                assignmentId: 'a2',
+                recipientName: 'Alex',
+                channel: 'relay',
+                relayLinked: true,
+                status: 'submitted',
+              }),
             ],
           }),
         ]),

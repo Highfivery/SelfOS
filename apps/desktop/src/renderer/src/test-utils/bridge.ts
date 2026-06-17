@@ -244,6 +244,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
       Promise.resolve({ assignmentId: 'a1', link: 'https://relay.test/q/t#k=k', pin: '000000' }),
     assignmentsDrain: () => Promise.resolve({ drained: 0, declined: 0 }),
     assignmentsRevoke: () => Promise.resolve(),
+    assignmentsReshare: () => Promise.resolve(null),
     relayStatus: () => Promise.resolve({ configured: false, updateAvailable: false }),
     relayConnect: () => Promise.resolve({ configured: false, updateAvailable: false }),
     relayUpdate: () => Promise.resolve({ configured: false, updateAvailable: false }),

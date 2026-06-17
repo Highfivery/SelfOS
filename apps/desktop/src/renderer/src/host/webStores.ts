@@ -129,6 +129,31 @@ export function webFakeClaudeClient(): ClaudeClient {
     send: () => Promise.resolve('ok'),
     stream: (options, onDelta): Promise<ClaudeStreamResult> => {
       const userText = options.messages.map((message) => message.content).join('\n');
+      // Compatibility variant personalization (08 §3.6/§17.12) asks for a JSON array of rewritten prompts,
+      // one per question — echo each numbered prompt, tagged with the OTHER participant, so the preview can
+      // exercise the full compatibility send (matching the Electron offline fake).
+      if (userText.includes('rewritten prompts')) {
+        const about = /compares .+? with (.+?)\./.exec(userText)?.[1] ?? 'them';
+        const prompts = [...userText.matchAll(/^\d+\.\s(.+)$/gm)].map(
+          (m) => `${m[1]} — about ${about}`,
+        );
+        return Promise.resolve({
+          text: JSON.stringify(prompts),
+          usage: { inputTokens: 80, outputTokens: 40, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+      // Compatibility alignment (08 §13.5d) asks for a report JSON object.
+      if (userText.includes('compatibility report JSON')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            summary: 'You two are largely aligned, with a few differences worth talking through.',
+            items: [],
+            crisisFlag: false,
+            facts: [{ text: 'They share core values but differ on pace.', shareable: true }],
+          }),
+          usage: { inputTokens: 150, outputTokens: 60, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
       // The session-analysis turn (09 §5) asks to "summarize this session" — return a valid
       // SessionAnalysisDraft so the preview renders a real wrap-up card with facts + mood.
       if (userText.includes('summarize this session')) {

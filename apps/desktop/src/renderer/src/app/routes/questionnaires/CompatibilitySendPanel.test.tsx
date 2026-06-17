@@ -30,6 +30,7 @@ const renderPanel = (onSent = vi.fn()): ReturnType<typeof render> =>
       <CompatibilitySendPanel
         questionnaireId="q1"
         title="Sexy time"
+        sensitivity="standard"
         visibility="sharedReport"
         recipient={{ kind: 'person', personId: 'angel' }}
         recipientName="Angel"

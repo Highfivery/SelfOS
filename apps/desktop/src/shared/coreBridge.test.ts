@@ -1938,6 +1938,55 @@ describe('createCoreBridge', () => {
     expect(await bridge.questionnairesSendStates()).toEqual({});
   });
 
+  it('compatibility household (§17.14): mints a relay link for the recipient (not self) + reshare mints fresh', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.relayConnect({ apiToken: 'cf', accountId: 'acct' });
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const angel = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: angel.id, roleId: 'member', pin: null });
+    const q = await bridge.questionnairesSave({
+      title: 'Closeness',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: angel.id },
+      questions: [
+        {
+          id: 'c1',
+          type: 'rating',
+          prompt: 'How connected?',
+          required: true,
+          scale: { min: 1, max: 5 },
+        },
+      ],
+      compatibility: { enabled: true, visibility: 'sharedReport' },
+    });
+
+    // A HOUSEHOLD compatibility send now ALSO mints a relay link for the RECIPIENT's variant (§17.14) —
+    // the sender answers their own variant in-app, so no link is minted for the sender's member.
+    const sent = await bridge.assignmentsCreateCompatibility({ questionnaireId: q.id });
+    expect(sent.ok).toBe(true);
+    if (!sent.ok) throw new Error('expected ok');
+    expect(sent.link).toMatch(/\.workers\.dev\/q\/[0-9a-f]+#k=/);
+    expect(sent.pin).toMatch(/^\d{6}$/);
+
+    const members = (await bridge.assignmentsCompatibility(q.id))[0]!.members;
+    const angelMember = members.find((m) => m.recipientName === 'Angel')!;
+    const selfMember = members.find((m) => m.isSelf)!;
+    expect(angelMember.relayLinked).toBe(true); // the recipient gets a shareable link
+    expect(selfMember.relayLinked).toBe(false); // the sender answers in-app — no link
+
+    // Re-share the recipient's link → a FRESH link + PIN (the old link is revoked; PIN is never re-shown).
+    const reshared = await bridge.assignmentsReshare(angelMember.assignmentId);
+    expect(reshared?.link).toMatch(/\.workers\.dev\/q\//);
+    expect(reshared?.pin).toMatch(/^\d{6}$/);
+    expect(reshared?.link).not.toBe(sent.link); // a new token → a different link
+
+    // Re-sharing the sender's OWN member is refused (they answer in-app, never a link) — the guard keys off
+    // the send's OWN sender (`recipient.personId === senderPersonId`), NOT the active person, so an admin
+    // resharing someone else's group can't mint a link to the sender's full-context self-variant either.
+    expect(await bridge.assignmentsReshare(selfMember.assignmentId)).toBeNull();
+  });
+
   it('saves/edits a dream, scoped to the active dreamer and gated by dreams.own', async () => {
     const { bridge, ownerId } = await freshOwner();
 

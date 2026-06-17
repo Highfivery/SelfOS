@@ -228,8 +228,9 @@ describe('QuestionnaireResults', () => {
     await waitFor(() => expect(drained).toBe(true));
   });
 
-  // A household send WITHOUT a relay link (Inbox-only, no relay connected) shows no relay affordances.
-  it('shows no drain/revoke for an Inbox-only household send', async () => {
+  // A household send WITHOUT a relay link (Inbox-only, no relay connected) shows no revoke affordance, but
+  // CAN still mint a link via "Create a link" (e.g. a relay was connected after the send).
+  it('shows "Create a link" (not revoke) for an Inbox-only open household send', async () => {
     installMockBridge({
       assignmentsResults: () =>
         Promise.resolve([
@@ -238,9 +239,32 @@ describe('QuestionnaireResults', () => {
     });
     renderResults();
     await screen.findByText('Mara');
-    expect(screen.queryByRole('button', { name: /check for responses/i })).not.toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: /revoke the link sent to Mara/i }),
     ).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /create a link/i })).toBeInTheDocument();
+  });
+
+  // §17.14: an open relay-linked send can be re-shared — minting a fresh link + PIN into the delivery UI.
+  it('reshares an open send: mints a fresh link + PIN into the delivery UI', async () => {
+    const assignmentsReshare = vi.fn(() =>
+      Promise.resolve({ link: 'https://x.workers.dev/q/tok9#k=key9', pin: '112233' }),
+    );
+    installMockBridge({
+      assignmentsResults: () =>
+        Promise.resolve([
+          send({ channel: 'inApp', relayLinked: true, status: 'sent', recipientName: 'Mara' }),
+        ]),
+      assignmentsReshare,
+    });
+    renderResults();
+    await screen.findByText('Mara');
+    await userEvent.click(screen.getByRole('button', { name: /resend link/i }));
+    expect(assignmentsReshare).toHaveBeenCalledWith('a1');
+    expect(
+      await screen.findByDisplayValue('https://x.workers.dev/q/tok9#k=key9'),
+    ).toBeInTheDocument();
+    expect(screen.getByDisplayValue('112233')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^email$/i })).toBeInTheDocument();
   });
 });

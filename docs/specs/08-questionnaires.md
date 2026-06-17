@@ -2135,7 +2135,44 @@ button that calls it is missing — see CLAUDE.md §7 DoD).
   household relay-linked send; hidden for an Inbox-only one), list RTL (Sent badge, row-delete confirm, title-only
   draft save, Send blocked until ≥1 question), and a Playwright E2E that **walks the whole flow through the UI**:
   connect relay → draft-save title-only → send → Sent badge in list + builder → Results shows "Check for responses"
-  → delete from the list row. Gate green: typecheck (node + web/DOM-lib), lint, format, **420 core + 520 desktop +
-  11 relay** unit, **74 E2E**. **Lesson: drive the COMPLETE flow through the rendered UI — a bridge/integration
+  → delete from the list row. **Lesson: drive the COMPLETE flow through the rendered UI — a bridge/integration
   test that calls the backend proves the backend, not that the button exists; and surface the entity's state where
   the user looks next (a Sent badge), not a form that looks untouched.**
+
+### 17.14a Unified delivery for compatibility + re-publish/resend (2026-06-17) — BUILT
+
+The 17.14 pass fixed the STANDARD household path but the user was testing a **compatibility** send (you + a
+household partner), which is a separate path that the unified-delivery work (§17.13) had never touched: it minted
+**no** link for a household partner, the send confirmation **appended below** the still-visible editor + Send
+button (with a tall empty void), and a link — once shown — could never be re-shared. Decisions (asked):
+household compat recipients get the **same** link + email/SMS as external; sending **replaces** the editor with a
+focused step; "re-publish" **re-mints** a fresh link + PIN (the PIN is never stored).
+
+- **Household compatibility mints a link for the RECIPIENT's variant.** `assignmentsCreateCompatibility`
+  (household branch) now `attachRelayLink`s the recipient's paired assignment (sealing THEIR variant, with the
+  compatibility disclosure) when the sender can `sendExternal` AND a relay is connected — returning `{ link, pin }`.
+  The sender answers their OWN variant in-app, so **no link is minted for the sender's member**. `CompatibilityMember`
+  gains `relayLinked` + `isSelf`. The recipient's link drains in like any relay send (the existing drain covers any
+  send with relay material), so both-answered → align works whether the partner answered via Inbox or link.
+- **One shared delivery UI everywhere a link exists.** Extracted **`RelayLinkDelivery`** (link + PIN + an editable
+  message built from the `questionnaires.defaultMessages` Settings templates + editable email/phone + Email / Text /
+  Copy / Share). The external panel, the standard household panel, the compatibility panel, and Results all render
+  it — so a household partner (standard OR compat) now gets the prefilled email/SMS, not just a copy-the-link row.
+- **Sending replaces the editor with a focused step.** The builder renders the send → delivery step **instead of**
+  the editor + footer while `sendId` is set — fixing the lingering Send button and the empty void beneath a short
+  confirmation.
+- **Re-publish / resend (§17.14a).** New **`assignments:reshare`** IPC mints a FRESH link + PIN for an open send
+  (revoking the old mailbox — the PIN is stored only as a hash, so the original can't be re-shown), sender-scoped +
+  `sendExternal` + relay-gated; refused for the sender's own member or an already-answered send. Results (standard
+  - compatibility) gain a per-send **"Resend link"** (relay-linked) / **"Create a link"** (Inbox-only, relay now
+    available) that opens the shared delivery UI inline; compatibility Results also gets a group **"Check for
+    responses"** drain for link answers.
+- **Tests:** coreBridge (a household compat send mints the recipient's link [not the self member]; `reshare` mints a
+  fresh, different link + refuses the self member), Results RTL (standard reshare → fresh link in the delivery UI;
+  "Create a link" for an Inbox-only open send; compat drain + per-recipient "Resend X's link" → delivery), and a
+  Playwright E2E walking a **household compatibility** send → the link + email/SMS delivery renders → Results shows
+  drain + "Resend". Gate green: typecheck (node + web/DOM-lib), lint, format, unit + E2E. **Verified LIVE in the web
+  preview** (compat household send shows the link + editable message + Email/Text; Results shows drain + resend).
+  **Lesson: a "unified delivery" feature has TWO send paths (standard `assignmentsCreate` AND
+  `assignmentsCreateCompatibility`) — fixing one leaves the other silently broken; the user tests the path you
+  didn't. Verify the ACTUAL path the user is on (compatibility), live, before claiming a fix.**

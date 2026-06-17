@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Brain, Link2Off, Lock, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
+import { Brain, Link2, Link2Off, Lock, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 import { ANTHROPIC_API_KEY_ID } from '@shared/channels';
 import type {
   AssignmentStatus,
   CompatibilityConfig,
   QuestionTrend,
+  RelayLinkResult,
   SendResult,
 } from '@shared/schemas';
 import { CompatibilityResults } from './CompatibilityResults';
@@ -22,8 +23,12 @@ import {
   type LineChartSeries,
 } from '../../../design-system/components';
 import { useResultsStore } from '../../../stores/resultsStore';
+import { useSessionStore } from '../../../stores/sessionStore';
 import { useSetting } from '../../../settings/useSetting';
+import { RelayLinkDelivery } from './RelayLinkDelivery';
 import styles from './Questionnaires.module.css';
+
+const OPEN_STATUSES: AssignmentStatus[] = ['sent', 'opened', 'inProgress'];
 
 const STATUS_LABEL: Record<AssignmentStatus, string> = {
   draft: 'Draft',
@@ -69,6 +74,7 @@ function StandardResults({ questionnaireId }: { questionnaireId: string }): JSX.
   const drain = useResultsStore((s) => s.drain);
   const revoke = useResultsStore((s) => s.revoke);
   const reset = useResultsStore((s) => s.reset);
+  const senderName = useSessionStore((s) => s.activePerson?.displayName ?? 'Someone');
 
   const [draining, setDraining] = useState(false);
   const [drainMsg, setDrainMsg] = useState<string | null>(null);
@@ -198,6 +204,7 @@ function StandardResults({ questionnaireId }: { questionnaireId: string }): JSX.
           key={send.assignmentId}
           send={send}
           aiReady={aiReady}
+          senderName={senderName}
           analyzing={analyzing[send.assignmentId] === true}
           message={messages[send.assignmentId]}
           onAnalyze={() => void runAnalyze(send.assignmentId)}
@@ -240,6 +247,7 @@ function TrendCard({ trend }: { trend: QuestionTrend }): JSX.Element {
 function SendCard({
   send,
   aiReady,
+  senderName,
   analyzing,
   message,
   onAnalyze,
@@ -248,6 +256,7 @@ function SendCard({
 }: {
   send: SendResult;
   aiReady: boolean;
+  senderName: string;
   analyzing: boolean;
   message: { tone: 'info' | 'warning'; text: string } | undefined;
   onAnalyze: () => void;
@@ -255,10 +264,35 @@ function SendCard({
   onRevoke: () => void;
 }): JSX.Element {
   const isSubmitted = send.status === 'submitted';
+  const isOpen = OPEN_STATUSES.includes(send.status);
   // A relay link that's still open (not answered / declined / revoked / expired) can be revoked — for an
   // external send AND a household send that also minted a link (§17.13).
-  const canRevoke = send.relayLinked && ['sent', 'opened', 'inProgress'].includes(send.status);
+  const canRevoke = send.relayLinked && isOpen;
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  // Re-publish / resend (§17.14): an open send can (re-)mint a fresh link + PIN for delivery. Since the PIN
+  // is never stored, resharing always mints a NEW one; the old link stops working.
+  const [delivery, setDelivery] = useState<RelayLinkResult | null>(null);
+  const [resharing, setResharing] = useState(false);
+  const [reshareMsg, setReshareMsg] = useState<string | null>(null);
+
+  const runReshare = async (): Promise<void> => {
+    if (resharing) return;
+    setResharing(true);
+    setReshareMsg(null);
+    try {
+      const result = await window.selfos?.assignmentsReshare(send.assignmentId);
+      if (result) setDelivery(result);
+      else
+        setReshareMsg(
+          'Couldn’t create a link — connect a relay in Settings → Relay, then try again.',
+        );
+    } catch {
+      setReshareMsg('Couldn’t create a link. Please try again.');
+    } finally {
+      setResharing(false);
+    }
+  };
+
   return (
     <Card>
       <Stack gap={3}>
@@ -342,6 +376,29 @@ function SendCard({
             </Button>
           </div>
         ) : null}
+
+        {/* Share / resend a link for an OPEN send (not yet answered). Resharing mints a fresh link + PIN. */}
+        {isOpen ? (
+          delivery ? (
+            <RelayLinkDelivery
+              link={delivery.link}
+              pin={delivery.pin}
+              senderName={senderName}
+              sensitive={false}
+              note="A fresh link + PIN — the previous link no longer works. Share it now; we don’t keep a copy of the PIN."
+              onDone={() => setDelivery(null)}
+            />
+          ) : (
+            <div>
+              <Button variant="secondary" onClick={() => void runReshare()} disabled={resharing}>
+                <Link2 size={16} aria-hidden="true" />
+                {resharing ? 'Creating link…' : send.relayLinked ? 'Resend link' : 'Create a link'}
+              </Button>
+            </div>
+          )
+        ) : null}
+
+        {reshareMsg ? <Banner tone="warning">{reshareMsg}</Banner> : null}
 
         {message ? <Banner tone={message.tone}>{message.text}</Banner> : null}
 

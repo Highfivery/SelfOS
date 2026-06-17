@@ -348,6 +348,29 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-17 — Build (**Compatibility unified delivery + re-publish/resend — the COMPAT path the prior fix never
+  touched; 08 §17.14a**; on `fix/questionnaire-delete-draft-sentstate-relay`, NOT merged). The user (furious) was
+  testing a **compatibility** send (you + Angel) — a separate path from the standard household send fixed in
+  §17.14 — and it minted **no link**, appended the "Sent" confirmation **below** the still-visible editor + Send
+  button (tall empty void), and offered no re-share. Root cause: "unified delivery" (§17.13) was only wired into
+  `assignmentsCreate`, never `assignmentsCreateCompatibility`. **Asked first** the 3 forks (household compat gets
+  the SAME link + email/SMS as external; sending REPLACES the editor; re-publish RE-MINTS a fresh link+PIN since
+  the PIN is never stored). Built: **(1)** household `assignmentsCreateCompatibility` now `attachRelayLink`s the
+  RECIPIENT's variant (sender answers their own in-app — no self link) when sendExternal + relay connected,
+  returning `{link,pin}`; `CompatibilityMember += relayLinked/isSelf`. **(2)** extracted **`RelayLinkDelivery`**
+  (link + PIN + editable message from the `defaultMessages` Settings templates + editable email/phone +
+  Email/Text/Copy/Share) — now used by the external, standard-household, compat, AND Results surfaces, so a
+  household partner finally gets the prefilled email/SMS, not just a copy-link row. **(3)** the builder renders the
+  send→delivery step **instead of** the editor while `sendId` is set (kills the lingering Send + empty void).
+  **(4)** new **`assignments:reshare`** mints a fresh link+PIN for an open send (revokes the old), surfaced as
+  Results **"Resend link"** / **"Create a link"** + a compat group drain. **VERIFIED LIVE** in the web preview
+  (compat household send → link + editable message + Email/Text; Results drain + resend). Gate: typecheck (node +
+  web/DOM-lib), lint, format, unit (+coreBridge compat-household-mints-recipient-link + reshare-fresh + self-member
+  refused; +Results RTL standard reshare + compat drain/resend), E2E (+1 walking a household compat send through
+  the UI → link + Email/Text delivery → Results drain + resend; +decrypt asserts the compat assignment carries
+  relay material). Synced 08 §17.14a. **Lesson: a "unified" feature with TWO entry paths
+  (`assignmentsCreate` AND `assignmentsCreateCompatibility`) is only half-done if you wire one — the user tests the
+  path you didn't; verify the ACTUAL path they're on (compatibility), LIVE, before claiming a fix.**
 - 2026-06-17 — Build (**Questionnaire send-lifecycle fixes — 4 user-reported gaps the passing tests missed; 08
   §17.14**; on `fix/questionnaire-delete-draft-sentstate-relay`, NOT merged). The user hit four lifecycle gaps
   and (rightly) demanded the rules change so "glaringly obvious" things stop slipping past green suites. **Asked

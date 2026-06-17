@@ -624,16 +624,19 @@ export function QuestionnaireBuilder({
             ) : null}
           </Text>
         </Stack>
-        <SegmentedControl<BuilderMode>
-          aria-label="Builder mode"
-          value={mode}
-          onChange={setMode}
-          options={[
-            { value: 'edit', label: 'Edit' },
-            { value: 'preview', label: 'Preview' },
-            ...(showResults ? [{ value: 'results' as const, label: 'Results' }] : []),
-          ]}
-        />
+        {/* Hide the Edit/Preview/Results toggle during the focused send step so it can't be sidestepped. */}
+        {sendId ? null : (
+          <SegmentedControl<BuilderMode>
+            aria-label="Builder mode"
+            value={mode}
+            onChange={setMode}
+            options={[
+              { value: 'edit', label: 'Edit' },
+              { value: 'preview', label: 'Preview' },
+              ...(showResults ? [{ value: 'results' as const, label: 'Results' }] : []),
+            ]}
+          />
+        )}
       </div>
 
       {mode === 'results' && saved ? (
@@ -643,6 +646,39 @@ export function QuestionnaireBuilder({
         />
       ) : mode === 'preview' ? (
         <QuestionnairePreview questions={previewQuestions} />
+      ) : sendId ? (
+        // Sending REPLACES the editor with a focused send → delivery step (08 §17.14) — so there's no
+        // lingering Send button + no tall empty editor beneath a short confirmation.
+        compatEnabled && recipient ? (
+          <CompatibilitySendPanel
+            questionnaireId={sendId}
+            title={title.trim()}
+            sensitivity={effectiveSensitivity}
+            visibility={visibility}
+            recipient={recipient}
+            recipientName={recipientName}
+            onCancel={() => setSendId(null)}
+            onSent={() => {
+              void load(); // refresh the list's "Sent · <date>" state (08 §17.14)
+              setSendId(null);
+              onDone();
+            }}
+          />
+        ) : recipient ? (
+          <QuestionnaireSendPanel
+            questionnaireId={sendId}
+            title={title.trim()}
+            sensitivity={effectiveSensitivity}
+            recipient={recipient}
+            recipientLabel={recipientLabel}
+            onCancel={() => setSendId(null)}
+            onSent={() => {
+              void load(); // refresh the list's "Sent · <date>" state (08 §17.14)
+              setSendId(null);
+              onDone();
+            }}
+          />
+        ) : null
       ) : (
         <>
           <Card>
@@ -1308,38 +1344,6 @@ export function QuestionnaireBuilder({
                 </Inline>
               </Stack>
             </Banner>
-          ) : null}
-
-          {sendId ? (
-            compatEnabled && recipient ? (
-              <CompatibilitySendPanel
-                questionnaireId={sendId}
-                title={title.trim()}
-                visibility={visibility}
-                recipient={recipient}
-                recipientName={recipientName}
-                onCancel={() => setSendId(null)}
-                onSent={() => {
-                  void load(); // refresh the list's "Sent · <date>" state (08 §17.14)
-                  setSendId(null);
-                  onDone();
-                }}
-              />
-            ) : recipient ? (
-              <QuestionnaireSendPanel
-                questionnaireId={sendId}
-                title={title.trim()}
-                sensitivity={effectiveSensitivity}
-                recipient={recipient}
-                recipientLabel={recipientLabel}
-                onCancel={() => setSendId(null)}
-                onSent={() => {
-                  void load(); // refresh the list's "Sent · <date>" state (08 §17.14)
-                  setSendId(null);
-                  onDone();
-                }}
-              />
-            ) : null
           ) : null}
         </>
       )}

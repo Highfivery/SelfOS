@@ -1509,6 +1509,10 @@ export interface CompatibilityMember {
   assignmentId: string;
   recipientName: string;
   channel: Channel; // 'relay' = an external recipient (answers via a link; can receive a pushed outcome)
+  // True when this member carries relay material — an external recipient OR a household member that also
+  // minted a link (§17.14). Drives the per-member "Share / Resend link" + the group drain affordance.
+  relayLinked: boolean;
+  isSelf: boolean; // the sender's own member (answers in-app; never gets a link to share)
   status: AssignmentStatus;
   submittedAt?: string;
 }
@@ -1564,6 +1568,12 @@ export interface InAppSendResult {
   pin?: string;
 }
 
+/** A freshly minted (or re-minted) relay link + its one-time PIN — for delivery / re-share (08 §17.14). */
+export interface RelayLinkResult {
+  link: string;
+  pin: string;
+}
+
 /**
  * The result of pushing an external compatibility outcome to the recipient(s) from Results (08 §17.12-D).
  * `published` is how many external relay members received the sealed report. `NOT_READY` until the
@@ -1578,8 +1588,9 @@ export type CompatibilitySendResult =
   | {
       ok: true;
       compatibilityGroupId: string;
-      // For an EXTERNAL compatibility send (08 §17.12-B) the recipient answers via the relay — the link + PIN
-      // are returned once for delivery (omitted for a household send, where both answer in-app).
+      // The recipient's link + PIN, returned once for delivery: an EXTERNAL recipient always answers via
+      // the relay (08 §17.12-B), and a HOUSEHOLD recipient ALSO gets a link when a relay is connected
+      // (§17.14a) — they answer in their Inbox OR via the link. Omitted when no relay is connected.
       link?: string;
       pin?: string;
     }

@@ -35,6 +35,7 @@ async function seedSubmittedSend(fs: FileSystem, questionnaireId: string): Promi
     summary: 'derived',
     facts: [],
     confidence: 'medium',
+    categories: [],
     approved: false,
     provenance: { assignmentId: a.id, at: now },
     createdAt: now,
@@ -107,7 +108,7 @@ describe('saveQuestionnaire — creatorPersonId', () => {
 });
 
 describe('deletion + purge', () => {
-  it('deleteSend removes the send and its derived Insight', async () => {
+  it('deleteSend removes the send but KEEPS its derived Insight (spec 20 §3.7)', async () => {
     const fs = memFileSystem();
     const qid = await seedQuestionnaire(fs);
     const assignmentId = await seedSubmittedSend(fs, qid);
@@ -115,12 +116,13 @@ describe('deletion + purge', () => {
     await deleteSend(fs, key, assignmentId);
     expect(await getAssignment(fs, key, assignmentId)).toBeNull();
     expect(await getResponse(fs, key, assignmentId)).toBeNull();
-    expect((await listAllInsights(fs, key)).length).toBe(0);
+    // The Insight persists as the coach's memory — only the send/response artifacts are gone.
+    expect((await listAllInsights(fs, key)).length).toBe(1);
     // The definition itself survives a single-send delete.
     expect(await getQuestionnaire(fs, key, qid)).not.toBeNull();
   });
 
-  it('purgeQuestionnaire removes the def, every send, and all derived Insights', async () => {
+  it('purgeQuestionnaire removes the def + every send, but KEEPS derived Insights (spec 20 §3.7)', async () => {
     const fs = memFileSystem();
     const qid = await seedQuestionnaire(fs);
     const a1 = await seedSubmittedSend(fs, qid);
@@ -135,13 +137,14 @@ describe('deletion + purge', () => {
     expect(await getQuestionnaire(fs, key, qid)).toBeNull();
     expect(await getAssignment(fs, key, a1)).toBeNull();
     expect(await getAssignment(fs, key, a2)).toBeNull();
-    // Only the purged questionnaire's artifacts are gone — the other survives intact.
+    // Only the purged questionnaire's SEND artifacts are gone — the other survives intact.
     expect(await getQuestionnaire(fs, key, otherQid)).not.toBeNull();
     expect(await getAssignment(fs, key, otherSend)).not.toBeNull();
-    expect((await listAllInsights(fs, key)).map((i) => i.provenance.assignmentId)).toEqual([
-      otherSend,
-    ]);
     expect((await listAssignments(fs, key)).map((a) => a.id)).toEqual([otherSend]);
+    // ...but every derived Insight PERSISTS (the coach's memory isn't gutted by cleanup, §3.7).
+    expect((await listAllInsights(fs, key)).map((i) => i.provenance.assignmentId).sort()).toEqual(
+      [a1, a2, otherSend].sort(),
+    );
   });
 
   it('hasSends is false for an unsent questionnaire', async () => {

@@ -137,6 +137,7 @@ async function seedMemberWithPortrait(
     summary: `${name}'s onboarding portrait`,
     facts: [{ id: 'f1', text: secretFact, shareable: false }],
     confidence: 'medium',
+    categories: [],
     approved: true,
     provenance: { intakeSection: 'your-story', at: now },
     createdAt: now,

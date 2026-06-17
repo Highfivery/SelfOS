@@ -117,6 +117,40 @@ export async function updateInsight(
 }
 
 /**
+ * Set or clear a fact's `flaggedInaccurate` correction (20-memory-dashboard §3.6). `factId === null` flags
+ * (or clears) **every** fact on the insight (the "flag the whole insight" affordance). Flagging stamps
+ * `flaggedAt`; clearing removes both flag fields entirely. The fact stays stored + visible in Memory — it's
+ * only excluded from context (`summarizeForContext`) and the next reconciliation is told not to re-assert it.
+ * Returns the updated insight, or null if it's gone. The caller (bridge) scopes this to the person's OWN
+ * insights — a person can only flag their own.
+ */
+export async function flagInsightFact(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  insightId: string,
+  factId: string | null,
+  flagged: boolean,
+  now: Date,
+): Promise<Insight | null> {
+  const existing = await getInsight(fs, key, personId, insightId);
+  if (!existing) return null;
+  const at = now.toISOString();
+  const facts = existing.facts.map((fact) => {
+    if (factId !== null && fact.id !== factId) return fact;
+    if (flagged) return { ...fact, flaggedInaccurate: true, flaggedAt: at };
+    // Clear: drop the flag fields entirely (exactOptionalPropertyTypes — never store `undefined`).
+    const cleared = { ...fact };
+    delete cleared.flaggedInaccurate;
+    delete cleared.flaggedAt;
+    return cleared;
+  });
+  const updated: Insight = { ...existing, facts, updatedAt: at };
+  await saveInsight(fs, key, updated);
+  return updated;
+}
+
+/**
  * Whether an insight may feed coaching context at all (15-shareability §4.2). Every non-dream insight
  * does; a dream-sourced insight is suppressed when its dream's `informsContext` is off — so toggling a
  * dream to "private journal entry" non-destructively withholds its approved insight from BOTH the
@@ -132,7 +166,10 @@ export async function insightFeedsContext(
   if (insight.source !== 'dream' || !insight.provenance.dreamId) return true;
   const path = `people/${insight.subjectPersonId}/dreams/${insight.provenance.dreamId}/dream.enc`;
   const raw = await readEncryptedJson(fs, path, key);
-  if (raw === null) return true; // dream gone but insight lingering — fail open (delete paths clean both)
+  // Dream gone but insight kept: since 20-memory-dashboard §3.7, deleting a dream KEEPS its insight (the
+  // coach's lasting memory), so a missing dream means the insight persists and still feeds context — return
+  // true. (The dreamer removes it deliberately from Memory if they don't want it.)
+  if (raw === null) return true;
   const parsed = DreamSchema.safeParse(raw);
   // A present-but-malformed dream is treated as unreadable, NOT silently shared (15-shareability §7) — so
   // a deliberately-muted dream whose bytes corrupt can never leak its insight back into context.
@@ -188,8 +225,14 @@ export async function summarizeForContext(
   if (own.length > 0) {
     lines.push('What you understand about them so far:');
     for (const insight of own) {
+      // A fact the person flagged as inaccurate (20-memory-dashboard §3.6) is excluded from context
+      // immediately — the coach stops using it at once, even before the next reconciliation.
+      const liveFacts = insight.facts.filter((fact) => !fact.flaggedInaccurate);
+      // A WHOLLY-flagged insight (had facts, all now flagged — e.g. the user flagged the whole insight) is
+      // dropped entirely: its summary restates the corrected claim, so it must not reach the coach either.
+      if (insight.facts.length > 0 && liveFacts.length === 0) continue;
       lines.push(`- ${insight.summary}`);
-      for (const fact of insight.facts) lines.push(`  · ${fact.text}`);
+      for (const fact of liveFacts) lines.push(`  · ${fact.text}`);
     }
   }
 
@@ -208,6 +251,7 @@ export async function summarizeForContext(
         insight.facts.filter(
           (fact) =>
             fact.restricted !== true &&
+            fact.flaggedInaccurate !== true &&
             (fact.shareable || (fact.shareableWith?.includes(personId) ?? false)),
         ),
       )
@@ -248,6 +292,7 @@ export async function listRelatedShareableInsights(
       const shareableFacts = insight.facts.filter(
         (fact) =>
           fact.restricted !== true &&
+          fact.flaggedInaccurate !== true &&
           (fact.shareable || (fact.shareableWith?.includes(viewerId) ?? false)),
       );
       if (shareableFacts.length === 0) continue;
@@ -264,6 +309,8 @@ export async function listRelatedShareableInsights(
         summary: '',
         facts: shareableFacts.map((fact) => ({ id: fact.id, text: fact.text, shareable: true })),
         confidence: insight.confidence,
+        // A related person's life-area tagging is theirs — don't expose it (keep the cross-over minimal).
+        categories: [],
         approved: insight.approved,
         provenance: { at: insight.provenance.at },
         createdAt: insight.createdAt,

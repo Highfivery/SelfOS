@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { ClaudeClient, FileSystem } from '../host';
 import { uuid } from '../id';
 import {
+  LIFE_AREAS,
   RawProfileSuggestionSchema,
   type Conversation,
   type Insight,
@@ -12,7 +13,7 @@ import {
 } from '../schemas';
 import { buildContext } from '../people';
 import { checkBudget, costOf, recordUsage } from '../usage';
-import { getInsight, saveInsight } from '../insights';
+import { getInsight, normalizeCategories, saveInsight } from '../insights';
 import { recordSuggestionsFromAnalysis } from '../profile';
 import { getConversation, saveConversation } from './conversationService';
 import { PERSONA, SAFETY } from './promptBuilder';
@@ -42,6 +43,8 @@ markdown fences, no prose outside it) with these keys:
 - "moodValence": overall emotional tone, -1.0 (very negative) to 1.0 (very positive) (number)
 - "moodEnergy": overall energy/activation, -1.0 (very low/flat) to 1.0 (very high/activated) (number)
 - "crisisFlag": true ONLY if self-harm, suicide, or acute crisis is disclosed (boolean)
+- "categories": 1-2 life-area tags for this session, from EXACTLY this list: ${LIFE_AREAS.join(', ')} \
+(array of strings)
 - "profileSuggestions": ONLY if the session clearly reveals that a known profile fact has CHANGED or is newly \
 stated — propose an update (array of {"field": one of the known profile field keys shown in your context, \
 "observed": the new value, "current": the prior value if known, "rationale": a short human reason}). Omit or \
@@ -57,6 +60,7 @@ const SessionAnalysisDraftSchema = z.object({
   moodValence: z.number().default(0),
   moodEnergy: z.number().default(0),
   crisisFlag: z.boolean().optional(),
+  categories: z.array(z.string()).default([]),
   profileSuggestions: z.array(RawProfileSuggestionSchema).default([]),
 });
 
@@ -263,6 +267,7 @@ export async function endAndSummarize(deps: EndAndSummarizeDeps): Promise<Sessio
     facts,
     metrics: { moodValence: clampUnit(draft.moodValence), moodEnergy: clampUnit(draft.moodEnergy) },
     confidence: 'medium',
+    categories: normalizeCategories(draft.categories), // life-area tags, folded into this same call (no extra spend)
     approved: true, // session insights auto-enter the subject's own context (09 §11.2), no approve-step
     provenance: {
       conversationId,

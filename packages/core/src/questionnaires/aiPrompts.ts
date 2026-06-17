@@ -1,5 +1,5 @@
 import type { IntimacyTopics } from '../intimacy/topics';
-import type { SensitivityTier } from '../schemas';
+import { LIFE_AREAS, type SensitivityTier } from '../schemas';
 
 /**
  * Prompt builders for AI question generation + the gap-finder (08-questionnaires §3.1/§3.7/§5.1). The
@@ -174,7 +174,7 @@ Use the same answer types as generation. Return ONLY the JSON array.`;
 export const ANALYSIS_SYSTEM = `${SAFETY}
 
 Turn a person's questionnaire answers into a durable coaching Insight. Return ONLY a JSON object:
-{"summary": string (2-4 sentences, what this means for supporting them), "facts": [{"text": string, "shareable": boolean}] (3-6 concise facts; "shareable" = safe to share with the person the fact is about), "confidence": "low" | "medium" | "high", "crisisFlag": boolean}.
+{"summary": string (2-4 sentences, what this means for supporting them), "facts": [{"text": string, "shareable": boolean}] (3-6 concise facts; "shareable" = safe to share with the person the fact is about), "confidence": "low" | "medium" | "high", "categories": 1-2 life-area tags from EXACTLY this list: ${LIFE_AREAS.join(', ')}, "crisisFlag": boolean}.
 Set "crisisFlag": true ONLY if the answers disclose risk of self-harm, abuse, or acute crisis. Never diagnose. Do not quote the raw answers back verbatim — synthesize.`;
 
 export function buildAnalysisUserMessage(input: {

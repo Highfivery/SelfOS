@@ -54,6 +54,7 @@ function sessionInsight(id: string, valence: number): Insight {
     facts: [],
     metrics: { moodValence: valence, moodEnergy: 0.1 },
     confidence: 'medium',
+    categories: [],
     approved: true,
     provenance: { conversationId: id, at: `2026-06-0${id.slice(-1)}T00:00:00.000Z` },
     createdAt: 'now',

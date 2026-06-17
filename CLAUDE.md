@@ -329,6 +329,32 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-16 — Build (**Memory dashboard — SLICE 2: the living insights engine**;
+  [20-memory-dashboard](docs/specs/20-memory-dashboard.md) §3.5–§3.7/§4/§5.2/§5.4, on `feat/memory-dashboard`
+  **worktree**, NOT merged). **Decision asked (cost-material, spec self-contradicted):** automatic reconciliation
+  **folds 1–2 life-area `categories` into each producer's EXISTING analysis call** (no extra AI spend — the §18
+  profile-suggestion precedent), and the full AI reconcile (confidence/rationale/merge) runs **only** on a manual
+  **"Refresh memory"** (`memory:refresh`, metered `memory.reconcile`). Schema (additive, no migration):
+  `InsightFact += flaggedInaccurate?/flaggedAt?`; `Insight += categories[](.default([]))/confidenceRationale?/
+lastReconciledAt?/contributingSources?`; named `InsightProvenanceSchema` + `LIFE_AREAS` taxonomy. Built
+  `reconcileInsights` (one subject's own approved insights → set confidence+rationale, normalize categories,
+  CONSERVATIVELY merge a clear duplicate [fold non-flagged facts + append provenance to `contributingSources` +
+  delete the dup], NEVER re-assert a flagged fact; meter-before-parse, `extendedThinking:false`). **Flag-as-
+  inaccurate:** `flagInsightFact` + `insights:flag` immediately excludes a fact from EVERY context path
+  (`summarizeForContext` own+related, `listRelatedShareableInsights`) yet keeps it visible-but-marked in the
+  person's OWN Memory. **Source-deletion keeps the insight (§3.7):** removed the cascade across deletionService
+  (`deleteSend`/`purgeQuestionnaire`), compatibility (`purgeCompatibilityGroup`→`deleteCompatibilityReport` —
+  report folder only), and dreams (bridge `dreamDelete`→`deleteDream`; `purgeDream` removed). **Code-reviewer
+  fix-first (1 should-fix):** a WHOLE-insight flag dropped its facts from context but not its `summary` (which
+  restates the corrected claim) — now a wholly-flagged insight is dropped entirely from context; +test. Gate
+  green: typecheck (node + web/DOM-lib), lint, format, **431 core + 501 desktop** unit (reconcile [4], flag +
+  wholly-flagged + flagged-context-exclusion, `normalizeCategories`, a bridge flag→context + refresh round-trip +
+  guest-denial; the deletion/compat/dream tests updated off the old cascade), **70 E2E** (no new surface this
+  slice — the dashboard UI is slice 3). **Lesson: when the spec self-contradicts on a cost-material point
+  ("rides each pass, no extra spend" vs "a second call metered under the producer's type"), ASK — the user chose
+  folding categories into the one existing analysis call (the §18 profile-suggestion precedent) over a second
+  per-analysis AI call; and flag-as-inaccurate must suppress the insight SUMMARY too on a whole-insight flag, not
+  just the facts, or the corrected claim still reaches the coach.** **NEXT: slice 3** (the dashboard UI).
 - 2026-06-16 — Build (**Memory dashboard — SLICE 1: the cross-user privacy fix; SPEC 20 Approved**;
   [20-memory-dashboard](docs/specs/20-memory-dashboard.md) §1.1/§5.1/§6, on `feat/memory-dashboard` off `main`
   **in an isolated git worktree**, NOT merged). Closed a **serious live leak**: `coreBridge.insightsList` called

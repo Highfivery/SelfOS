@@ -202,6 +202,8 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     insightsApprove: () => Promise.resolve(null),
     insightsUpdate: () => Promise.resolve(null),
     insightsDelete: () => Promise.resolve(),
+    insightsFlag: () => Promise.resolve(null),
+    memoryRefresh: () => Promise.resolve({ ok: true, reconciledCount: 0, mergedCount: 0 }),
     assignmentsCreate: (input) =>
       Promise.resolve({
         id: 'new-a',

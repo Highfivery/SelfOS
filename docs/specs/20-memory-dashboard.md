@@ -1,6 +1,6 @@
 # 20 — Memory: the living insights dashboard
 
-> **Status:** Approved — building (slice 1 of 3 built) · _last updated 2026-06-16_
+> **Status:** Approved — building (slices 1–2 of 3 built) · _last updated 2026-06-16_
 >
 > Memory is meant to be the person's window into **what SelfOS has learned about them** — yet today it
 > (1) **leaks every household member's insights to whoever is logged in** (a serious privacy bug), and
@@ -328,6 +328,30 @@ The spec is build-ready pending final approval.
 
 ## 13. Changelog
 
+- 2026-06-16 — **Slice 2 built (the living insights engine, §3.5/§3.6/§3.7/§4/§5.2/§5.4).** Schema (additive,
+  no migration): `InsightFact += flaggedInaccurate?/flaggedAt?`; `Insight += categories[]` (`.default([])`),
+  `confidenceRationale?`, `lastReconciledAt?`, `contributingSources?: InsightProvenance[]`; extracted a named
+  `InsightProvenanceSchema`; added the `LIFE_AREAS` taxonomy. **Reconciliation cost decision (asked, user
+  chose):** automatic reconciliation **folds 1–2 life-area `categories` into each producer's EXISTING analysis
+  call** (no extra AI spend — the §18 profile-suggestion precedent); the full AI reconcile runs **only** on a
+  manual **"Refresh memory"** (`memory:refresh`, metered `memory.reconcile`, normal budget). Built
+  `reconcileInsights` (`@selfos/core/insights`) — over ONE subject's own approved insights, sets confidence +
+  rationale, normalizes categories, **conservatively** merges a clearly-duplicate insight into another (folds
+  non-flagged facts, appends provenance to `contributingSources`, deletes the dup), and **never re-asserts a
+  flagged fact**; budget→call→record, **meter-before-parse**, `extendedThinking:false`. **Flag-as-inaccurate:**
+  `flagInsightFact` + `insights:flag`; `summarizeForContext`/`listRelatedShareableInsights` now exclude
+  `flaggedInaccurate` facts from EVERY context (own + related) **and** drop a wholly-flagged insight's summary
+  too (a code-reviewer should-fix) — while the person's own Memory still shows flagged facts (visible-but-marked).
+  **Producers fold categories** (session/questionnaire/intake emit them; dream/alignment/patterns default).
+  **Source-deletion keeps the insight (§3.7):** removed the cascade — `deleteSend`/`purgeQuestionnaire` keep
+  insights; `purgeCompatibilityGroup`→`deleteCompatibilityReport` (removes only the joint report folder, keeps
+  insights); the bridge `dreamDelete` uses `deleteDream` (folder only); `purgeDream` deleted. Seam:
+  `insights:flag` + `memory:refresh` (gated `memory.own`, active-person-scoped). Gate green: typecheck, lint,
+  format, **431 core + 501 desktop** unit (+ `reconcileService` [4: confidence/merge/AI-OFF+NOTHING_TO_DO/
+  own-subject-only], flag + wholly-flagged + flagged-context-exclusion, `normalizeCategories`, a bridge
+  flag→context-exclusion + refresh round-trip + guest denial; updated the deletion/compat/dream tests off the
+  old cascade), **70 E2E** (no new surface this slice — the dashboard UI is slice 3). **NEXT: slice 3** (the
+  dashboard UI).
 - 2026-06-16 — **Slice 1 built (the privacy fix, §1.1/§5.1/§6).** Added the `memory.own` capability (Member
   default ON); rewrote `coreBridge.insightsList` to gate on `memory.own` + scope to the active person's OWN
   insights + their relationships' **shareable, non-restricted** facts (new core

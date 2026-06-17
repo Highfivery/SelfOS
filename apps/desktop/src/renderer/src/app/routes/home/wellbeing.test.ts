@@ -10,6 +10,7 @@ function insight(over: Partial<Insight> & { id: string }): Insight {
     summary: 's',
     facts: [],
     confidence: 'medium',
+    categories: [],
     approved: true,
     provenance: { at: '2026-06-01T00:00:00.000Z' },
     createdAt: 'now',

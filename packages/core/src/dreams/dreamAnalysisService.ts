@@ -19,7 +19,6 @@ import { buildContext, buildLinkedPeopleContext } from '../people';
 import { PERSONA, SAFETY } from '../conversations/promptBuilder';
 import { deleteInsight, getInsight, saveInsight } from '../insights';
 import {
-  deleteDream,
   getAnalysis,
   getDream,
   getDreamConversation,
@@ -425,6 +424,10 @@ export async function approveAnalysis(deps: {
     facts,
     ...(analysis.metrics !== undefined ? { metrics: analysis.metrics } : {}),
     confidence: 'medium',
+    // A dream is approved separately from synthesis, so its life-area isn't folded into an analysis call;
+    // default to the emotion/pattern area (dreams are emotion-centric) and let the manual "Refresh memory"
+    // AI-retag outliers (20-memory-dashboard §3.5).
+    categories: ['Emotions & patterns'],
     approved: true, // dreams use an explicit approve-step (12 §3.3); this IS that step
     provenance: { dreamId, at },
     ...(analysis.crisisFlag !== undefined ? { crisisFlag: analysis.crisisFlag } : {}),
@@ -434,22 +437,6 @@ export async function approveAnalysis(deps: {
   await saveInsight(fs, key, insight);
   await saveAnalysis(fs, key, { ...analysis, insightId, updatedAt: at });
   return { ok: true, insightId };
-}
-
-/**
- * Delete a dream **and** its linked Insight (12 §3.6). `dreamService.deleteDream` only purges the dream
- * folder; the approved Insight lives outside it (`people/<id>/insights/`), so deleting the folder alone
- * would orphan an Insight that keeps feeding the coach. Use this (not `deleteDream`) for the delete path.
- */
-export async function purgeDream(
-  fs: FileSystem,
-  key: Uint8Array,
-  personId: string,
-  dreamId: string,
-): Promise<void> {
-  const analysis = await getAnalysis(fs, key, personId, dreamId);
-  if (analysis?.insightId) await deleteInsight(fs, personId, analysis.insightId);
-  await deleteDream(fs, personId, dreamId);
 }
 
 /** Remove a dream's analysis from the coach's memory: delete its Insight + unlink it (12 §3.3). */

@@ -39,6 +39,7 @@ function draftInsight(over: Partial<Insight> = {}): Insight {
       { id: 'f2', text: 'Feels distant', shareable: false },
     ],
     confidence: 'high',
+    categories: [],
     approved: false,
     provenance: { assignmentId: 'a1', at: '2026-06-11T12:00:00.000Z' },
     createdAt: '2026-06-11T12:00:00.000Z',

@@ -15,6 +15,7 @@ export const USAGE_TYPE_LABELS: Record<string, string> = {
   'dream.image': 'Dream image',
   'intake.interview': 'Onboarding — interview',
   'intake.synthesize': 'Onboarding — portrait',
+  'memory.reconcile': 'Memory — refresh',
 };
 
 export function usageTypeLabel(type: string): string {

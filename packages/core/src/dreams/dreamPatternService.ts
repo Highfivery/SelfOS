@@ -378,6 +378,7 @@ export async function approvePatternNarrative(deps: {
     summary: 'What I’m noticing across recent dreams',
     facts: [{ id: uuid(), text: summary.narrative, shareable: false }],
     confidence: 'medium',
+    categories: ['Emotions & patterns'], // cross-dream patterns map to the emotion/pattern area (20-memory §3.1)
     approved: true,
     provenance: { at }, // cross-dream: no single dreamId
     createdAt: at,

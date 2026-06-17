@@ -72,6 +72,7 @@ async function seedHousehold(
     summary: 'Values quality time.',
     facts: [{ id: 'f1', text: 'Prefers weekends free.', shareable: true }],
     confidence: 'high',
+    categories: [],
     approved: true,
     provenance: { at: now.toISOString() },
     createdAt: now.toISOString(),

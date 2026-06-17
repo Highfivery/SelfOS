@@ -7,10 +7,15 @@ import { listConversations } from '../conversations';
 import { getInsight, listInsightsForPerson, saveInsight, summarizeForContext } from '../insights';
 import { savePerson, saveRelationship } from '../people';
 import { queryUsage } from '../usage';
-import { getAnalysis, getDream, getDreamConversation, saveDream } from './dreamService';
+import {
+  deleteDream,
+  getAnalysis,
+  getDream,
+  getDreamConversation,
+  saveDream,
+} from './dreamService';
 import {
   approveAnalysis,
-  purgeDream,
   removeFromContext,
   runAnalysisTurn,
   synthesizeAnalysis,
@@ -313,7 +318,7 @@ describe('dreamAnalysisService', () => {
     expect(events).toHaveLength(1); // the tokens were spent, so the call is metered regardless of parse
   });
 
-  it('purgeDream deletes the dream AND its linked insight (no orphan feeding the coach)', async () => {
+  it('deleting a dream KEEPS its linked insight (the coach’s memory persists, spec 20 §3.7)', async () => {
     const fs = memFileSystem();
     await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
     await synthesizeAnalysis(deps(fs, fakeClient()));
@@ -327,9 +332,10 @@ describe('dreamAnalysisService', () => {
     });
     expect(await listInsightsForPerson(fs, key, 'p1')).toHaveLength(1);
 
-    await purgeDream(fs, key, 'p1', 'd1');
+    // Deleting the dream removes the dream itself but leaves the insight intact — it's the coach's memory.
+    await deleteDream(fs, 'p1', 'd1');
     expect(await getDream(fs, key, 'p1', 'd1')).toBeNull();
-    expect(await listInsightsForPerson(fs, key, 'p1')).toEqual([]);
+    expect(await listInsightsForPerson(fs, key, 'p1')).toHaveLength(1);
   });
 
   it("feeds a People-graph-linked dream person's shareable context to the prompt, never their private notes", async () => {

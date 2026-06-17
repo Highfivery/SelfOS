@@ -52,6 +52,7 @@ import {
   type InboxItem,
   type Insight,
   type IntimacyTopicsView,
+  type MemoryReconcileResult,
   IntakeAnswerValueSchema,
   type IntakeState,
   type ProfileUpdateSuggestion,
@@ -161,9 +162,11 @@ import {
 } from '@selfos/core/conversations';
 import {
   deleteInsight,
+  flagInsightFact,
   listAllInsights,
   listInsightsForPerson,
   listRelatedShareableInsights,
+  reconcileInsights,
   updateInsight,
 } from '@selfos/core/insights';
 import { INTIMACY_ACTIVITIES, INTIMACY_FANTASIES } from '@selfos/core/intimacy';
@@ -239,7 +242,7 @@ import {
   getPatternSummary,
   listDreams,
   listDreamShareTargets,
-  purgeDream,
+  deleteDream,
   removeFromContext,
   removePatternNarrativeFromContext,
   runAnalysisTurn,
@@ -515,6 +518,12 @@ const InsightEditSchema = z.object({
   facts: z.array(InsightFactInputSchema).optional(),
 });
 const InsightIdSchema = z.object({ subjectPersonId: z.string().min(1), id: z.string().min(1) });
+// Flag (or clear) a fact as inaccurate (20-memory-dashboard §3.6). `factId` omitted = the whole insight.
+const InsightFlagSchema = z.object({
+  insightId: z.string().min(1),
+  factId: z.string().min(1).optional(),
+  flagged: z.boolean(),
+});
 // Personal onboarding (18-personal-onboarding §6).
 const IntakeRunTurnSchema = z.object({ sectionId: z.string().min(1), userText: z.string() });
 const IntakeSectionIdSchema = z.object({ sectionId: z.string().min(1) });
@@ -1522,6 +1531,29 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (subjectPersonId !== (await activePersonId())) return;
       await deleteInsight(ctx.fs, subjectPersonId, id);
     },
+    insightsFlag: async (input): Promise<Insight | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'memory.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const p = InsightFlagSchema.parse(input);
+      // flagInsightFact loads the ACTIVE person's own insight by id — a person can only flag their own.
+      return flagInsightFact(
+        ctx.fs,
+        ctx.key,
+        personId,
+        p.insightId,
+        p.factId ?? null,
+        p.flagged,
+        new Date(),
+      );
+    },
+    memoryRefresh: async (): Promise<MemoryReconcileResult> => {
+      // Reuse the AI-deps assembly (gates on `memory.own`, reads the key host-side, never to the renderer).
+      const deps = await aiDeps('memory.own');
+      if (!deps) return { ok: false, reason: 'DENIED', message: 'Not available.' };
+      return reconcileInsights(deps);
+    },
     assignmentsCreate: async (input): Promise<Assignment> => {
       const ctx = await host.vaultAndKey();
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) {
@@ -2327,9 +2359,10 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const ctx = await host.vaultAndKey();
       const personId = ctx ? await activePersonId() : null;
       if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) return;
-      // purgeDream (not deleteDream) so the linked Insight is removed too — else it orphans + keeps
-      // feeding the coach (12 §3.6).
-      await purgeDream(ctx.fs, ctx.key, personId, PersonIdSchema.parse(id));
+      // deleteDream removes the dream folder but KEEPS its derived Insight (20-memory-dashboard §3.7) — an
+      // insight is the coach's lasting memory and persists when its source is gone (its provenance link then
+      // shows "source removed"). To remove the insight too, the dreamer uses Memory's explicit delete.
+      await deleteDream(ctx.fs, personId, PersonIdSchema.parse(id));
     },
     dreamAnalyzeTurn: async (input): Promise<ChatTurnResult> => {
       const { dreamId, userText } = DreamAnalyzeTurnSchema.parse(input);

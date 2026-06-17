@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { FileSystem } from '../host';
 import { uuid } from '../id';
-import { deleteInsight, listAllInsights, listInsightsForPerson, saveInsight } from '../insights';
+import { listInsightsForPerson, saveInsight } from '../insights';
 import { getPerson } from '../people/peopleService';
 import {
   AlignmentReportSchema,
@@ -181,6 +181,7 @@ export async function generateAlignment(
     summary: validated.data.summary,
     facts: validated.data.facts.map((f) => ({ id: uuid(), text: f.text, shareable: f.shareable })),
     confidence: 'medium',
+    categories: ['Relationships'], // a compatibility report is inherently relational (20-memory §3.1)
     approved: false,
     provenance: { compatibilityGroupId: input.compatibilityGroupId, at },
     createdAt: prior?.createdAt ?? at,
@@ -285,6 +286,7 @@ export async function distillContextOnly(
       // Own-context-only: never cross-shared with another person (§15/§16.2).
       facts: validated.data.facts.map((f) => ({ id: uuid(), text: f.text, shareable: false })),
       confidence: validated.data.confidence ?? 'medium',
+      categories: ['Relationships'], // a compatibility insight is inherently relational (20-memory §3.1)
       approved: true, // auto-approved: the participant's own data feeds their own context (decision §16.2)
       provenance: { compatibilityGroupId: input.compatibilityGroupId, at },
       createdAt: prior?.createdAt ?? at,
@@ -297,16 +299,16 @@ export async function distillContextOnly(
   return { ok: true, updated: ready.length, usage: usages };
 }
 
-/** Tear down a compatibility group's report folder + its drafted Insight (used on delete/purge, §3.9). */
-export async function purgeCompatibilityGroup(
+/**
+ * Remove a compatibility group's joint report folder on delete/purge (08-questionnaires §3.9). The drafted
+ * Insights (the sender's report insight + any per-participant context insights) are deliberately KEPT
+ * (20-memory-dashboard §3.7) — an insight is the coach's lasting memory and persists when its source is
+ * deleted; only the joint report artifact is torn down here.
+ */
+export async function deleteCompatibilityReport(
   fs: FileSystem,
-  key: Uint8Array,
+  _key: Uint8Array,
   compatibilityGroupId: string,
 ): Promise<void> {
-  for (const insight of await listAllInsights(fs, key)) {
-    if (insight.provenance.compatibilityGroupId === compatibilityGroupId) {
-      await deleteInsight(fs, insight.subjectPersonId, insight.id);
-    }
-  }
   await fs.remove(compatDir(compatibilityGroupId));
 }

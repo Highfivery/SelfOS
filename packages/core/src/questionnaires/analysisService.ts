@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { uuid } from '../id';
-import { listInsightsForPerson, saveInsight } from '../insights';
+import { listInsightsForPerson, normalizeCategories, saveInsight } from '../insights';
 import type { AnswerValue } from './answering';
 import type { Insight, QuestionnaireAnalyzeResult } from '../schemas';
 import { ANALYSIS_SYSTEM, buildAnalysisUserMessage } from './aiPrompts';
@@ -24,6 +24,7 @@ const AnalysisSchema = z.object({
   facts: z.array(z.object({ text: z.string().min(1), shareable: z.boolean() })),
   confidence: z.enum(['low', 'medium', 'high']).optional(),
   crisisFlag: z.boolean().optional(),
+  categories: z.array(z.string()).optional(),
 });
 
 /** Pull the first JSON object out of a model reply (tolerates fences / surrounding prose). */
@@ -113,6 +114,7 @@ export async function analyzeAssignment(
     summary: validated.data.summary,
     facts: validated.data.facts.map((f) => ({ id: uuid(), text: f.text, shareable: f.shareable })),
     confidence: validated.data.confidence ?? 'medium',
+    categories: normalizeCategories(validated.data.categories ?? []),
     approved: false, // requires the approve-step before it feeds buildContext (§3.7)
     provenance: { assignmentId: assignment.id, at },
     createdAt: prior?.createdAt ?? at,

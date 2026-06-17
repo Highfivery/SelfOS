@@ -29,6 +29,7 @@ describe('gatherRecipientHistory (08 §17.4)', () => {
       summary: 'Feeling stretched at work lately.',
       facts: [{ id: 'f1', text: 'Wants more rest on weekends', shareable: true }],
       confidence: 'high',
+      categories: [],
       approved: true,
       provenance: { at: now },
       createdAt: now,

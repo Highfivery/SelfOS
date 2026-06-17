@@ -47,6 +47,7 @@ import type {
   ProfileUpdateSuggestion,
   SendAnswer,
   SendResult,
+  MemoryReconcileResult,
   PersonInput,
   PrivacyMode,
   Questionnaire,
@@ -158,6 +159,8 @@ export const IpcChannels = {
   insightsApprove: 'insights:approve',
   insightsUpdate: 'insights:update',
   insightsDelete: 'insights:delete',
+  insightsFlag: 'insights:flag',
+  memoryRefresh: 'memory:refresh',
   assignmentsCreate: 'assignments:create',
   assignmentsInbox: 'assignments:inbox',
   assignmentsGet: 'assignments:get',
@@ -499,7 +502,10 @@ export interface SelfosBridge {
   }): Promise<QuestionnaireImproveResult>;
   /** Gap-finder: propose the next questionnaires from structured context. Budget-gated + metered. */
   gapfinderSuggest(input: { targetPersonId?: string }): Promise<QuestionnaireSuggestResult>;
-  /** Every Insight across all subject people (the "what the coach knows" / Memory surface). */
+  /**
+   * The ACTIVE person's memory (20-memory-dashboard §5.1): their own insights + their relationships'
+   * shareable facts only — scoped + gated on `memory.own` in the bridge (the trust boundary).
+   */
   insightsList(): Promise<Insight[]>;
   /** Analyze a submitted assignment's answers into an UNapproved Insight. Budget-gated + metered. */
   insightsAnalyze(input: { assignmentId: string }): Promise<QuestionnaireAnalyzeResult>;
@@ -519,6 +525,17 @@ export interface SelfosBridge {
   }): Promise<Insight | null>;
   /** Delete an Insight. */
   insightsDelete(input: { subjectPersonId: string; id: string }): Promise<void>;
+  /**
+   * Flag (or clear) a fact as inaccurate (20-memory-dashboard §3.6) on one of the active person's OWN
+   * insights — `factId` omitted flags the whole insight. Excludes it from context immediately.
+   */
+  insightsFlag(input: {
+    insightId: string;
+    factId?: string;
+    flagged: boolean;
+  }): Promise<Insight | null>;
+  /** Manual "Refresh memory" — a budget-gated AI reconciliation pass over the active person's insights. */
+  memoryRefresh(): Promise<MemoryReconcileResult>;
   /**
    * Send a questionnaire to its BOUND household recipient (in-app), freezing an immutable snapshot at send.
    * The recipient is set on the questionnaire at creation (08 §17.3) — it is NOT passed here.

@@ -71,6 +71,7 @@ function insight(id: string): Insight {
       { id: 'f2', text: 'Unsettled by change.', shareable: false },
     ],
     confidence: 'medium',
+    categories: [],
     approved: true,
     provenance: { dreamId: 'd1', at: 'now' },
     createdAt: 'now',

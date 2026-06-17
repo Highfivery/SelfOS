@@ -176,6 +176,7 @@ describe('Sessions', () => {
       facts: [{ id: 'f1', text: 'Goal: rest tonight', shareable: false }],
       metrics: { moodValence: 0.4, moodEnergy: -0.2 },
       confidence: 'medium' as const,
+      categories: [] as string[],
       approved: true,
       provenance: { conversationId: 'c1', at: 'now' },
       createdAt: 'now',

@@ -19,6 +19,7 @@ import {
   type RelayEnv,
 } from '@selfos/core/relay';
 import { saveInsight } from '@selfos/core/insights';
+import { buildContext } from '@selfos/core/people';
 import { ANTHROPIC_API_KEY_ID, OPENAI_API_KEY_ID } from './channels';
 import { DeviceStateSchema } from './schemas';
 import type { BootState, DeviceState, Insight } from './schemas';
@@ -799,6 +800,7 @@ describe('createCoreBridge', () => {
       summary: `${name}'s onboarding portrait`,
       facts: [{ id: 'f1', text: `${name} secret fact`, shareable: false }],
       confidence: 'medium',
+      categories: [],
       approved: true,
       provenance: { intakeSection: 'your-story', at: new Date().toISOString() },
       createdAt: new Date().toISOString(),
@@ -822,6 +824,70 @@ describe('createCoreBridge', () => {
     const seenByB = await bridge.insightsList();
     expect(seenByB.map((i) => i.subjectPersonId)).toEqual([b.id]);
     expect(seenByB.some((i) => i.subjectPersonId === a.id)).toBe(false);
+  });
+
+  it('flags a fact (excluded from context, kept in Memory) and refreshes memory via reconciliation (spec 20 §3.5/§3.6)', async () => {
+    const { bridge, host, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const ctx = (await host.host.vaultAndKey())!;
+    const at = new Date().toISOString();
+    await saveInsight(ctx.fs, ctx.key, {
+      id: 'ins1',
+      schemaVersion: 1,
+      source: 'session',
+      subjectPersonId: ownerId,
+      summary: 'They value rest',
+      facts: [
+        { id: 'f1', text: 'Wants more sleep', shareable: false },
+        { id: 'f2', text: 'WRONG FACT', shareable: false },
+      ],
+      confidence: 'low',
+      categories: ['Other'],
+      approved: true,
+      provenance: { conversationId: 'cX', at },
+      createdAt: at,
+      updatedAt: at,
+    });
+
+    // Flag f2 → it's marked in Memory but EXCLUDED from the coach's context at once.
+    const flagged = await bridge.insightsFlag({ insightId: 'ins1', factId: 'f2', flagged: true });
+    expect(flagged?.facts.find((f) => f.id === 'f2')?.flaggedInaccurate).toBe(true);
+    // It still appears in the owner's Memory list (visible-but-marked, §3.6) ...
+    const shown = (await bridge.insightsList()).find((i) => i.id === 'ins1');
+    expect(shown?.facts.some((f) => f.id === 'f2')).toBe(true);
+    // ... but is gone from the assembled coaching context.
+    const context = await buildContext(ctx.fs, ctx.key, ownerId);
+    expect(context).toContain('Wants more sleep');
+    expect(context).not.toContain('WRONG FACT');
+
+    // Refresh memory: a reconcile-ops Claude bumps the confidence + writes a rationale.
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (_options, onDelta) => {
+        const text = JSON.stringify({
+          insights: [{ id: 'ins1', confidence: 'high', rationale: 'clear and consistent' }],
+          merges: [],
+        });
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    expect(await bridge.memoryRefresh()).toMatchObject({ ok: true, reconciledCount: 1 });
+    const after = (await bridge.insightsList()).find((i) => i.id === 'ins1');
+    expect(after?.confidence).toBe('high');
+    expect(after?.confidenceRationale).toBe('clear and consistent');
+
+    // A non-memory.own person (guest) is denied both flag + refresh.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    expect((await bridge.sessionSetActive({ personId: guest.id })).ok).toBe(true);
+    expect(
+      await bridge.insightsFlag({ insightId: 'ins1', factId: 'f1', flagged: true }),
+    ).toBeNull();
+    expect(await bridge.memoryRefresh()).toMatchObject({ ok: false, reason: 'DENIED' });
   });
 
   it('persists custom types for the picker, gated by questionnaires.create', async () => {

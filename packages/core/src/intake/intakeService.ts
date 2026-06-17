@@ -3,6 +3,7 @@ import type { ClaudeClient, FileSystem } from '../host';
 import { uuid } from '../id';
 import {
   IntakeSessionSchema,
+  LIFE_AREAS,
   type IntakeAnswerValue,
   type Insight,
   type IntakeSession,
@@ -18,7 +19,7 @@ import { readEncryptedJson, writeEncryptedJson } from '../vault';
 import { buildContext, getPerson, savePerson } from '../people';
 import { PERSONA, SAFETY } from '../conversations/promptBuilder';
 import { checkBudget, costOf, recordUsage } from '../usage';
-import { getInsight, saveInsight } from '../insights';
+import { getInsight, normalizeCategories, saveInsight } from '../insights';
 import { isAnswered } from '../questionnaires/answering';
 import {
   INTAKE_CATALOG,
@@ -442,6 +443,7 @@ const PortraitDraftSchema = z.object({
     })
     .optional(),
   crisisFlag: z.boolean().optional(),
+  categories: z.array(z.string()).default([]),
 });
 
 export interface IntakeSynthesizeDeps {
@@ -477,7 +479,8 @@ remembering — names, preferences, patterns, goals, struggles, history — not 
 facts over a few vague ones. Each: {"text": a short specific fact, "section": the section id it came from} (array)
 - "metrics": optional normalized signals for trends, e.g. {"valence": -1.0..1.0} (object)
 - "inferred": optional fields to fill from the whole picture: {"communicationStyle": string, "values": [..], "goals": string, "faith": string}
-- "crisisFlag": true ONLY if self-harm, suicide, or acute crisis was disclosed (boolean)`;
+- "crisisFlag": true ONLY if self-harm, suicide, or acute crisis was disclosed (boolean)
+- "categories": 1-2 dominant life-area tags for this person, from EXACTLY this list: ${LIFE_AREAS.join(', ')} (array of strings)`;
 
 /** All non-empty `chat` section transcripts as model messages for synthesis (labeled with the section id). */
 function transcriptMessages(
@@ -777,6 +780,7 @@ async function synthesizePortrait(deps: IntakeSynthesizeDeps): Promise<IntakeSyn
         }
       : {}),
     confidence: 'medium',
+    categories: normalizeCategories(draft.categories), // life-area tags, folded into this same call (no extra spend)
     approved: true, // the portrait auto-enters the person's OWN context (§3.5)
     provenance: { at },
     ...(draft.crisisFlag !== undefined ? { crisisFlag: draft.crisisFlag } : {}),

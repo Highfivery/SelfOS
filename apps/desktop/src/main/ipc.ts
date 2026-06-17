@@ -237,6 +237,8 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.insightsApprove, bridge.insightsApprove);
   handle(IpcChannels.insightsUpdate, bridge.insightsUpdate);
   handle(IpcChannels.insightsDelete, bridge.insightsDelete);
+  handle(IpcChannels.insightsFlag, bridge.insightsFlag);
+  handle(IpcChannels.memoryRefresh, bridge.memoryRefresh);
   handle(IpcChannels.assignmentsCreate, bridge.assignmentsCreate);
   handle(IpcChannels.assignmentsInbox, bridge.assignmentsInbox);
   handle(IpcChannels.assignmentsGet, bridge.assignmentsGet);

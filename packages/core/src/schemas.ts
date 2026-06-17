@@ -394,8 +394,48 @@ export const InsightFactSchema = z.object({
   // ("what weighs on you" / intimacy). It still feeds the subject's OWN coaching context, but is withheld
   // from the owner's normal People/Memory views — reachable only via the audited reveal. Additive-optional.
   restricted: z.boolean().optional(),
+  // The user's correction signal (20-memory-dashboard §3.6): they marked this fact inaccurate. Flagging
+  // EXCLUDES it from every context immediately (`summarizeForContext`) and tells the next reconciliation
+  // not to re-assert it. The fact stays visible-but-marked + reversible (never silently deleted).
+  flaggedInaccurate: z.boolean().optional(),
+  flaggedAt: z.string().optional(),
 });
 export type InsightFact = z.infer<typeof InsightFactSchema>;
+
+/**
+ * Where an Insight came from (20-memory-dashboard §3.3 powers deep-links). The primary `provenance` is the
+ * origin; `Insight.contributingSources` folds in extra origins on merge ("from N moments").
+ */
+export const InsightProvenanceSchema = z.object({
+  assignmentId: z.string().optional(),
+  conversationId: z.string().optional(),
+  dreamId: z.string().optional(), // set for dream-sourced insights (12-dreams §4.4)
+  compatibilityGroupId: z.string().optional(), // set for compatibility alignment insights (08 §13.5d)
+  guideId: z.string().optional(), // set when the session was a guided exercise (16-guided-sessions §3.5)
+  intakeSection: z.string().optional(), // set for intake-sourced facts (18-personal-onboarding §4.1)
+  at: z.string(),
+});
+export type InsightProvenance = z.infer<typeof InsightProvenanceSchema>;
+
+/**
+ * The fixed life-area taxonomy (20-memory-dashboard §3.1/§11). Each insight is AI-tagged with 1–2 of these
+ * (the dashboard groups by them). Producers assign them when they create the insight (no extra spend —
+ * folded into the existing analysis call); the manual "Refresh memory" reconcile may re-tag.
+ */
+export const LIFE_AREAS = [
+  'Relationships',
+  'Family',
+  'Work & purpose',
+  'Health & body',
+  'Emotions & patterns',
+  'Values & beliefs',
+  'Intimacy',
+  'Goals & growth',
+  'Money',
+  'Faith',
+  'Other',
+] as const;
+export type LifeArea = (typeof LIFE_AREAS)[number];
 
 export const InsightSchema = z.object({
   id: z.string().min(1),
@@ -407,16 +447,18 @@ export const InsightSchema = z.object({
   facts: z.array(InsightFactSchema),
   metrics: z.record(z.string(), z.number()).optional(), // named normalized signals; the basis for trends
   confidence: z.enum(['low', 'medium', 'high']),
+  // Life-area themes (1–2 from LIFE_AREAS; AI-assigned). Additive — absent on pre-20 insights ⇒ [] (no
+  // migration); the dashboard treats an untagged insight as "Other".
+  categories: z.array(z.string()).default([]),
+  // A short, human-readable basis for the confidence ("corroborated by 3 sessions"), set by reconciliation.
+  confidenceRationale: z.string().optional(),
+  // When reconciliation last touched this insight (20-memory-dashboard §4.1).
+  lastReconciledAt: z.string().optional(),
+  // Extra origin provenances folded in when reconciliation MERGES a duplicate into this one ("from N
+  // moments"). The primary `provenance` stays the origin. Additive-optional.
+  contributingSources: z.array(InsightProvenanceSchema).optional(),
   approved: z.boolean(), // questionnaire insights require approval before entering buildContext (08 §3.7)
-  provenance: z.object({
-    assignmentId: z.string().optional(),
-    conversationId: z.string().optional(),
-    dreamId: z.string().optional(), // set for dream-sourced insights (12-dreams §4.4)
-    compatibilityGroupId: z.string().optional(), // set for compatibility alignment insights (08 §13.5d)
-    guideId: z.string().optional(), // set when the session was a guided exercise (16-guided-sessions §3.5)
-    intakeSection: z.string().optional(), // set for intake-sourced facts (18-personal-onboarding §4.1)
-    at: z.string(),
-  }),
+  provenance: InsightProvenanceSchema,
   crisisFlag: z.boolean().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -756,6 +798,20 @@ export interface QuestionnaireAnalyzeResult {
   insight?: Insight;
   usage?: UsageEvent;
   reason?: AiFailureReason | 'NO_RESPONSE';
+  message?: string;
+}
+
+/**
+ * Result of the manual "Refresh memory" reconciliation (20-memory-dashboard §3.5). `AI_OFF` is the calm
+ * not-configured state (no key / AI disabled); the dashboard still renders existing insights. On success it
+ * reports how many insights were re-scored / merged so the UI can confirm what changed.
+ */
+export interface MemoryReconcileResult {
+  ok: boolean;
+  reconciledCount?: number;
+  mergedCount?: number;
+  usage?: UsageEvent;
+  reason?: AiFailureReason | 'AI_OFF' | 'NOTHING_TO_DO';
   message?: string;
 }
 

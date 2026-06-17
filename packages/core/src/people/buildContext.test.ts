@@ -57,6 +57,7 @@ function insight(id: string, subjectPersonId: string, over: Partial<Insight> = {
     summary: `summary-${id}`,
     facts: [],
     confidence: 'medium',
+    categories: [],
     approved: true,
     provenance: { at: 'now' },
     createdAt: 'now',

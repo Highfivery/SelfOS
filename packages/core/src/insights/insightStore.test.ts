@@ -4,6 +4,7 @@ import { memFileSystem } from '../host/memFileSystem';
 import type { Insight } from '../schemas';
 import {
   deleteInsight,
+  flagInsightFact,
   getInsight,
   listInsightsForPerson,
   listRelatedShareableInsights,
@@ -20,6 +21,7 @@ function insight(over: Partial<Insight> & { id: string; subjectPersonId: string 
     summary: `summary-${over.id}`,
     facts: [],
     confidence: 'medium',
+    categories: [],
     approved: true,
     provenance: { at: '2026-06-10T00:00:00.000Z' },
     createdAt: '2026-06-10T00:00:00.000Z',
@@ -240,6 +242,121 @@ describe('insightStore', () => {
         }),
       );
       expect(await listRelatedShareableInsights(fs, key, 'p1', related)).toEqual([]);
+    });
+  });
+
+  describe('flagInsightFact + flagged-fact context exclusion (spec 20 §3.6)', () => {
+    const now = new Date('2026-06-16T00:00:00.000Z');
+
+    it('flags one fact (stamps flaggedAt) and clears it (drops both fields)', async () => {
+      const fs = memFileSystem();
+      await saveInsight(
+        fs,
+        key,
+        insight({
+          id: 'i1',
+          subjectPersonId: 'p1',
+          facts: [
+            { id: 'f1', text: 'fact one', shareable: false },
+            { id: 'f2', text: 'fact two', shareable: false },
+          ],
+        }),
+      );
+      const flagged = await flagInsightFact(fs, key, 'p1', 'i1', 'f1', true, now);
+      expect(flagged?.facts.find((f) => f.id === 'f1')?.flaggedInaccurate).toBe(true);
+      expect(flagged?.facts.find((f) => f.id === 'f1')?.flaggedAt).toBe('2026-06-16T00:00:00.000Z');
+      expect(flagged?.facts.find((f) => f.id === 'f2')?.flaggedInaccurate).toBeUndefined();
+
+      const cleared = await flagInsightFact(fs, key, 'p1', 'i1', 'f1', false, now);
+      const f1 = cleared?.facts.find((f) => f.id === 'f1');
+      expect(f1 && 'flaggedInaccurate' in f1).toBe(false);
+      expect(f1 && 'flaggedAt' in f1).toBe(false);
+    });
+
+    it('flags the whole insight when factId is null', async () => {
+      const fs = memFileSystem();
+      await saveInsight(
+        fs,
+        key,
+        insight({
+          id: 'i1',
+          subjectPersonId: 'p1',
+          facts: [
+            { id: 'f1', text: 'a', shareable: false },
+            { id: 'f2', text: 'b', shareable: false },
+          ],
+        }),
+      );
+      const flagged = await flagInsightFact(fs, key, 'p1', 'i1', null, true, now);
+      expect(flagged?.facts.every((f) => f.flaggedInaccurate)).toBe(true);
+    });
+
+    it('excludes a flagged fact from OWN context immediately (summarizeForContext)', async () => {
+      const fs = memFileSystem();
+      await saveInsight(
+        fs,
+        key,
+        insight({
+          id: 'i1',
+          subjectPersonId: 'p1',
+          facts: [
+            { id: 'f1', text: 'still true', shareable: false },
+            { id: 'f2', text: 'WRONG', shareable: false, flaggedInaccurate: true },
+          ],
+        }),
+      );
+      const out = await summarizeForContext(fs, key, 'p1', []);
+      expect(out).toContain('still true');
+      expect(out).not.toContain('WRONG');
+    });
+
+    it('drops a WHOLLY-flagged insight (summary too) from own context', async () => {
+      const fs = memFileSystem();
+      await saveInsight(
+        fs,
+        key,
+        insight({
+          id: 'i1',
+          subjectPersonId: 'p1',
+          summary: 'THIS WHOLE THING IS WRONG',
+          facts: [
+            { id: 'f1', text: 'wrong a', shareable: false, flaggedInaccurate: true },
+            { id: 'f2', text: 'wrong b', shareable: false, flaggedInaccurate: true },
+          ],
+        }),
+      );
+      await saveInsight(
+        fs,
+        key,
+        insight({ id: 'i2', subjectPersonId: 'p1', summary: 'still good' }),
+      );
+      const out = await summarizeForContext(fs, key, 'p1', []);
+      expect(out).not.toContain('THIS WHOLE THING IS WRONG'); // the summary is gone too
+      expect(out).toContain('still good'); // an unflagged summary-only insight is unaffected
+    });
+
+    it('excludes a flagged fact from a RELATED person’s shared context', async () => {
+      const fs = memFileSystem();
+      await saveInsight(
+        fs,
+        key,
+        insight({
+          id: 'i1',
+          subjectPersonId: 'p2',
+          facts: [
+            { id: 'f1', text: 'shareable + true', shareable: true },
+            { id: 'f2', text: 'shareable but WRONG', shareable: true, flaggedInaccurate: true },
+          ],
+        }),
+      );
+      const out = await summarizeForContext(fs, key, 'p1', [{ id: 'p2', displayName: 'Sam' }]);
+      expect(out).toContain('shareable + true');
+      expect(out).not.toContain('WRONG');
+      // ...and from the Memory dashboard's related view too.
+      const related = await listRelatedShareableInsights(fs, key, 'p1', [
+        { id: 'p2', displayName: 'Sam' },
+      ]);
+      expect(related[0]?.facts.map((f) => f.text)).toEqual(['shareable + true']);
     });
   });
 });

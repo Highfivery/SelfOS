@@ -5,10 +5,10 @@ import type { ClaudeClient, FileSystem } from '../host';
 import { listAllInsights } from '../insights';
 import type { Question } from '../schemas';
 import {
+  deleteCompatibilityReport,
   distillContextOnly,
   generateAlignment,
   getAlignmentReport,
-  purgeCompatibilityGroup,
 } from './alignmentService';
 import { getAssignment, getAssignmentSnapshot, listAssignments } from './assignmentService';
 import { createCompatibilitySend } from './compatibilityService';
@@ -254,25 +254,27 @@ describe('generateAlignment', () => {
     expect(drafted).toHaveLength(1);
   });
 
-  it('deleting a member tears down the report + its drafted Insight', async () => {
+  it('deleting a member tears down the report + send, but KEEPS the drafted Insight (spec 20 §3.7)', async () => {
     const fs = memFileSystem();
     const { groupId, aId } = await seedAnsweredGroup(fs);
     await generateAlignment(deps(fs, fakeClient(ALIGNMENT)), { compatibilityGroupId: groupId });
     await deleteSend(fs, key, aId);
     expect(await getAlignmentReport(fs, key, groupId)).toBeNull();
+    // The sender's drafted compatibility Insight persists as the coach's memory.
     expect(
       (await listAllInsights(fs, key)).some((i) => i.provenance.compatibilityGroupId === groupId),
-    ).toBe(false);
+    ).toBe(true);
     expect(await getAssignment(fs, key, aId)).toBeNull();
   });
 
-  it('purgeCompatibilityGroup removes the report + Insight', async () => {
+  it('deleteCompatibilityReport removes the joint report but KEEPS the Insight (spec 20 §3.7)', async () => {
     const fs = memFileSystem();
     const { groupId } = await seedAnsweredGroup(fs);
     await generateAlignment(deps(fs, fakeClient(ALIGNMENT)), { compatibilityGroupId: groupId });
-    await purgeCompatibilityGroup(fs, key, groupId);
+    await deleteCompatibilityReport(fs, key, groupId);
     expect(await getAlignmentReport(fs, key, groupId)).toBeNull();
-    expect((await listAllInsights(fs, key)).length).toBe(0);
+    // The sender's derived Insight persists as the coach's memory.
+    expect((await listAllInsights(fs, key)).length).toBe(1);
   });
 });
 
@@ -341,12 +343,13 @@ describe('distillContextOnly (§16.2)', () => {
     expect((await listAllInsights(fs, key)).length).toBe(0);
   });
 
-  it('purging a context-only group tears down both participants’ Insights', async () => {
+  it('deleting a context-only group’s report KEEPS both participants’ Insights (spec 20 §3.7)', async () => {
     const fs = memFileSystem();
     const { groupId } = await seedAnsweredGroup(fs, 'contextOnly');
     await distillContextOnly(deps(fs, fakeClient(DISTILL)), { compatibilityGroupId: groupId });
-    await purgeCompatibilityGroup(fs, key, groupId);
-    expect((await listAllInsights(fs, key)).length).toBe(0);
+    await deleteCompatibilityReport(fs, key, groupId);
+    // Each participant's own-context Insight persists — only the joint report folder is removed.
+    expect((await listAllInsights(fs, key)).length).toBe(2);
   });
 });
 

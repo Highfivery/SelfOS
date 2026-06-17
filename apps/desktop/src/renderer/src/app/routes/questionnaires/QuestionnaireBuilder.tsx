@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Copy, ImagePlus, Plus, Send, Sparkles, Trash2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Copy, ImagePlus, Link2, Plus, Send, Sparkles, Trash2 } from 'lucide-react';
 import { ALLOWED_IMAGE_MIME, MAX_IMAGE_BYTES } from '@selfos/core/questionnaires';
 import { ANTHROPIC_API_KEY_ID } from '@shared/channels';
 import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
@@ -27,6 +27,7 @@ import type {
   Questionnaire,
   QuestionnaireInput,
   Recipient,
+  RelayLinkResult,
   SensitivityTier,
 } from '@shared/schemas';
 import { usePeopleStore } from '../../../stores/peopleStore';
@@ -44,6 +45,8 @@ import { QuestionPreview } from './QuestionPreview';
 import { QuestionnairePreview } from './QuestionnairePreview';
 import { QuestionnaireResults } from './QuestionnaireResults';
 import { QuestionnaireSendPanel } from './QuestionnaireSendPanel';
+import { RelayLinkDelivery } from './RelayLinkDelivery';
+import { formatSentDate, resendStatus } from './sentState';
 import { CompatibilitySendPanel } from './CompatibilitySendPanel';
 import styles from './Questionnaires.module.css';
 
@@ -302,6 +305,7 @@ export function QuestionnaireBuilder({
   seed,
   compat,
   initialRecipient,
+  initialShare,
   onDuplicate,
   onDone,
 }: {
@@ -311,11 +315,15 @@ export function QuestionnaireBuilder({
   // are read from the saved questionnaire instead.
   compat?: boolean;
   initialRecipient?: Recipient;
+  // Opened via the list "Share link" kebab action (§17.14c) — auto-fetch the shareable link on mount.
+  initialShare?: boolean;
   onDuplicate?: (seed: BuilderSeed) => void;
   onDone: () => void;
 }): JSX.Element {
   const save = useQuestionnaireStore((s) => s.save);
   const remove = useQuestionnaireStore((s) => s.remove);
+  const load = useQuestionnaireStore((s) => s.load);
+  const sendStates = useQuestionnaireStore((s) => s.sendStates);
   const validate = useQuestionnaireStore((s) => s.validate);
   const customTypes = useQuestionnaireStore((s) => s.customTypes);
   const addType = useQuestionnaireStore((s) => s.addType);
@@ -401,18 +409,69 @@ export function QuestionnaireBuilder({
   // create → then send, with no strand.
   const [saved, setSaved] = useState<Questionnaire | null>(questionnaire);
   const [justSaved, setJustSaved] = useState(false);
+  // Whether this questionnaire has been sent (08 §17.14) — drives the header "Sent · <date>" line so a
+  // reopened, already-sent questionnaire is clearly distinct from one that's still a draft.
+  const sentState = saved ? sendStates[saved.id] : undefined;
+  // A SENT questionnaire is LOCKED (§17.14a): its questions are frozen (the snapshot is what went out), so
+  // it opens read-only (Preview), no Edit — you Duplicate to change it, or Send again (re-ask) once the
+  // re-send cooldown elapses.
+  const isSent = sentState !== undefined;
+  const resend = sentState ? resendStatus(sentState.lastSentAt) : null;
+  // "Share link" on a sent questionnaire (§17.14c): re-mint the latest send's link for delivery, surfaced at
+  // the top of the locked preview + reachable from the list kebab. Distinct from "Send again" (a re-ask).
+  const [shareLink, setShareLink] = useState<RelayLinkResult | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const [refreshingLink, setRefreshingLink] = useState(false);
+  const [shareMsg, setShareMsg] = useState<string | null>(null);
+  const senderName = useSessionStore((s) => s.activePerson?.displayName ?? 'Someone');
+
+  // regenerate=false: re-show the EXISTING link/PIN (the default — clicking Share link doesn't change it).
+  // regenerate=true: the manual Refresh next to the link → mint a fresh link + PIN, revoking the old.
+  const runShareLink = async (regenerate = false): Promise<void> => {
+    if (!saved) return;
+    if (regenerate) setRefreshingLink(true);
+    else setSharing(true);
+    setShareMsg(null);
+    try {
+      const result = await window.selfos?.questionnairesShareLink(saved.id, regenerate);
+      if (result) setShareLink(result);
+      else
+        setShareMsg(
+          'Couldn’t get a link. Make sure a relay is connected — and up to date — in Settings → Relay, then try again.',
+        );
+    } catch {
+      setShareMsg('Couldn’t get a link. Please try again.');
+    } finally {
+      setSharing(false);
+      setRefreshingLink(false);
+    }
+  };
+
+  // Opened from the list "Share link" kebab → fetch the link once on mount.
+  const sharePrimed = useRef(false);
+  useEffect(() => {
+    if (initialShare && isSent && !sharePrimed.current) {
+      sharePrimed.current = true;
+      void runShareLink();
+    }
+    // runShareLink isn't memoized; isSent/initialShare are the real triggers (mirrors the autoAnalyze pattern).
+  }, [initialShare, isSent]);
 
   // Edit ⇄ Preview ⇄ Results. Preview renders the live drafts as the recipient sees them; Results (only
-  // for a saved questionnaire, and only with viewResults) shows its sends + per-send outcome.
-  const [mode, setMode] = useState<BuilderMode>('edit');
+  // for a saved questionnaire, and only with viewResults) shows its sends + per-send outcome. A SENT
+  // questionnaire opens read-only, so it starts on Preview (Edit isn't offered).
+  const [mode, setMode] = useState<BuilderMode>(() =>
+    questionnaire && sendStates[questionnaire.id] ? 'preview' : 'edit',
+  );
   const canViewResults = useSessionStore((s) => s.can('questionnaires.viewResults'));
   const showResults = saved !== null && canViewResults;
   const previewQuestions = drafts
     .filter((d) => d.prompt.trim() !== '')
     .map((d) => toQuestion(d, drafts));
 
-  const allPrompts = drafts.every((d) => d.prompt.trim() !== '');
-  const canSave = title.trim() !== '' && allPrompts && !busy;
+  // Save anytime: a draft persists with just a title so the author can come back and finish it (08 §16.3).
+  // Completeness (every question filled, scales valid, ≥1 question) is enforced at SEND, not save.
+  const canSave = title.trim() !== '' && !busy;
 
   const knownType = QUESTIONNAIRE_TYPES.some((t) => t.value === type) || customTypes.includes(type);
   const customList = [...customTypes, ...(knownType ? [] : [type])];
@@ -505,11 +564,15 @@ export function QuestionnaireBuilder({
     // comparison is always you + this recipient (§17.12-B).
     ...(recipient ? { recipient } : {}),
     // When compatibility is on, stamp each question with a stable canonicalId (its own id) so the two
-    // AI-personalized variants stay aligned for the report (08 §3.6/§4.2).
-    questions: drafts.map((d) => {
-      const q = toQuestion(d, drafts);
-      return compatEnabled ? { ...q, canonicalId: q.canonicalId ?? q.id } : q;
-    }),
+    // AI-personalized variants stay aligned for the report (08 §3.6/§4.2). Blank-prompt drafts are dropped
+    // (a question needs a prompt; an untouched/in-progress row carries nothing and would fail the schema) —
+    // so a half-built draft saves cleanly. `toQuestion` still sees all drafts for branch resolution.
+    questions: drafts
+      .filter((d) => d.prompt.trim() !== '')
+      .map((d) => {
+        const q = toQuestion(d, drafts);
+        return compatEnabled ? { ...q, canonicalId: q.canonicalId ?? q.id } : q;
+      }),
     ...(compatEnabled ? { compatibility: { enabled: true as const, visibility } } : {}),
   });
 
@@ -532,8 +595,10 @@ export function QuestionnaireBuilder({
 
   /** The full set of blocking problems (client-side range/alt checks + the engine's validate). */
   const computeProblems = async (): Promise<string[]> => {
-    if (!allPrompts) return ['Every question needs a prompt.'];
-    const rangeProblems = drafts
+    // Only complete (non-blank-prompt) drafts become questions — a blank in-progress row is dropped on
+    // save/send, so it never blocks. validate(input()) then catches a title-only draft (≥1 question needed).
+    const live = drafts.filter((d) => d.prompt.trim() !== '');
+    const rangeProblems = live
       .filter(
         (d) =>
           RANGE_TYPES.includes(d.type) &&
@@ -541,7 +606,7 @@ export function QuestionnaireBuilder({
       )
       .map((d) => `"${d.prompt.trim()}" needs Min below Max.`);
     // Accessibility: an attached image must carry alt text (the relay page meets the same WCAG bar).
-    const altProblems = drafts
+    const altProblems = live
       .filter((d) => d.media && d.media.alt.trim() === '')
       .map((d) => `The image on "${d.prompt.trim()}" needs a description (alt text).`);
     return [...rangeProblems, ...altProblems, ...(await validate(input()))];
@@ -595,32 +660,200 @@ export function QuestionnaireBuilder({
     }
   };
 
+  // Duplicate (08 §17.3): clone the questions into a NEW questionnaire + pick a new recipient — the way to
+  // "ask someone else the same thing", and the only way to CHANGE a sent (locked) questionnaire. Shared by
+  // the editor footer + the sent-locked view.
+  const duplicateButton =
+    saved && onDuplicate ? (
+      <Button
+        variant="secondary"
+        disabled={busy}
+        onClick={() =>
+          onDuplicate({
+            title: `${title.trim()} (copy)`,
+            type,
+            questions: drafts.map((d) => toQuestion(d, drafts)),
+          })
+        }
+      >
+        <Copy size={16} aria-hidden="true" />
+        Duplicate
+      </Button>
+    ) : null;
+
+  // The inline delete confirm — shared by the editor footer + the sent-locked view.
+  const deleteConfirmBanner = confirmingDelete ? (
+    <Banner tone="warning">
+      <Stack gap={2}>
+        <Text>
+          Delete “{title.trim()}”? This permanently removes the questionnaire and every response and
+          insight from it. This can’t be undone.
+        </Text>
+        <Inline gap={2}>
+          <Button variant="primary" onClick={() => void onRemove()} disabled={busy}>
+            Delete
+          </Button>
+          <Button variant="secondary" onClick={() => setConfirmingDelete(false)} disabled={busy}>
+            Cancel
+          </Button>
+        </Inline>
+      </Stack>
+    </Banner>
+  ) : null;
+
   return (
     <Stack gap={4}>
       <div className={styles.builderHeader}>
         <Stack gap={1}>
-          <Heading level={3}>{saved ? 'Edit questionnaire' : 'New questionnaire'}</Heading>
+          <Heading level={3}>
+            {saved ? (isSent ? 'Questionnaire' : 'Edit questionnaire') : 'New questionnaire'}
+          </Heading>
           <Text size="sm" tone="secondary">
             For: <strong>{recipientLabel}</strong>
+            {sentState ? (
+              <>
+                {' · '}
+                <strong>Sent {formatSentDate(sentState.lastSentAt)}</strong>
+                {sentState.total > 1 ? ` (${sentState.total} times)` : ''}
+              </>
+            ) : null}
           </Text>
         </Stack>
-        <SegmentedControl<BuilderMode>
-          aria-label="Builder mode"
-          value={mode}
-          onChange={setMode}
-          options={[
-            { value: 'edit', label: 'Edit' },
-            { value: 'preview', label: 'Preview' },
-            ...(showResults ? [{ value: 'results' as const, label: 'Results' }] : []),
-          ]}
-        />
+        {/* Hide the Edit/Preview/Results toggle during the focused send step so it can't be sidestepped. */}
+        {sendId ? null : (
+          <SegmentedControl<BuilderMode>
+            aria-label="Builder mode"
+            value={mode}
+            onChange={setMode}
+            options={[
+              // A sent questionnaire is read-only — no Edit, just Preview (+ Results).
+              ...(isSent ? [] : [{ value: 'edit' as const, label: 'Edit' }]),
+              { value: 'preview' as const, label: 'Preview' },
+              ...(showResults ? [{ value: 'results' as const, label: 'Results' }] : []),
+            ]}
+          />
+        )}
       </div>
 
-      {mode === 'results' && saved ? (
+      {sendId ? (
+        // Sending REPLACES the editor with a focused send → delivery step (08 §17.14) — so there's no
+        // lingering Send button + no tall empty editor beneath a short confirmation.
+        compatEnabled && recipient ? (
+          <CompatibilitySendPanel
+            questionnaireId={sendId}
+            title={title.trim()}
+            sensitivity={effectiveSensitivity}
+            visibility={visibility}
+            recipient={recipient}
+            recipientName={recipientName}
+            onCancel={() => setSendId(null)}
+            onSent={() => {
+              void load(); // refresh the list's "Sent · <date>" state (08 §17.14)
+              setSendId(null);
+              onDone();
+            }}
+          />
+        ) : recipient ? (
+          <QuestionnaireSendPanel
+            questionnaireId={sendId}
+            title={title.trim()}
+            sensitivity={effectiveSensitivity}
+            recipient={recipient}
+            recipientLabel={recipientLabel}
+            onCancel={() => setSendId(null)}
+            onSent={() => {
+              void load(); // refresh the list's "Sent · <date>" state (08 §17.14)
+              setSendId(null);
+              onDone();
+            }}
+          />
+        ) : null
+      ) : mode === 'results' && saved ? (
         <QuestionnaireResults
           questionnaireId={saved.id}
           compatibility={saved.compatibility ?? null}
         />
+      ) : isSent ? (
+        // A SENT questionnaire is LOCKED (§17.14a): read-only preview + Send-again (gated by the re-send
+        // cooldown) + Duplicate + Delete. No editing the frozen questions.
+        <Stack gap={3}>
+          <Banner tone="info">
+            This questionnaire has been sent, so its questions are locked. To change it, use{' '}
+            <strong>Duplicate</strong> to start a new copy.
+          </Banner>
+          {/* Share link (§17.14e): a tidy card to get the recipient's link + Email/Text, reachable any
+              time after sending (also opened by the list "Share link" kebab). Shows the EXISTING link;
+              Refresh regenerates. */}
+          <div className={styles.shareCard}>
+            <div className={styles.shareHead}>
+              <span className={styles.shareIcon} aria-hidden="true">
+                <Link2 size={18} />
+              </span>
+              <span className={styles.shareHeadText}>
+                <Text weight={600}>Share a link</Text>
+                <Text size="sm" tone="secondary">
+                  Send {recipientLabel} a private link to answer from any device — copy it, or send
+                  by email or text.
+                </Text>
+              </span>
+            </div>
+            {shareLink ? (
+              <RelayLinkDelivery
+                link={shareLink.link}
+                pin={shareLink.pin}
+                senderName={senderName}
+                sensitive={effectiveSensitivity !== 'standard'}
+                note="This is the same link each time — use Refresh to make a new one (which stops the current one working)."
+                onRefresh={() => runShareLink(true)}
+                refreshing={refreshingLink}
+              />
+            ) : (
+              <div>
+                <Button variant="primary" onClick={() => void runShareLink()} disabled={sharing}>
+                  <Link2 size={16} aria-hidden="true" />
+                  {sharing ? 'Getting link…' : 'Get the link'}
+                </Button>
+              </div>
+            )}
+            {shareMsg ? <Banner tone="warning">{shareMsg}</Banner> : null}
+          </div>
+          <QuestionnairePreview questions={previewQuestions} readOnly />
+          {problems !== null && problems.length > 0 ? (
+            <Banner tone="warning">{problems.join(' ')}</Banner>
+          ) : null}
+          {sentState && resend ? (
+            <Text size="sm" tone="secondary">
+              Sent {formatSentDate(sentState.lastSentAt)}
+              {sentState.total > 1 ? ` (${sentState.total} times)` : ''}.{' '}
+              {resend.ready ? 'You can ask again now.' : `${resend.message}.`}
+            </Text>
+          ) : null}
+          <div className={styles.footer}>
+            <div className={styles.footerActions}>
+              <Button
+                variant="primary"
+                onClick={() => void onOpenSend()}
+                disabled={busy || !(resend?.ready ?? true)}
+              >
+                <Send size={16} aria-hidden="true" />
+                Send again
+              </Button>
+              {duplicateButton}
+              <Button variant="secondary" onClick={onDone} disabled={busy}>
+                Close
+              </Button>
+              <IconButton
+                aria-label="Delete questionnaire"
+                variant="secondary"
+                onClick={() => setConfirmingDelete(true)}
+                disabled={busy}
+              >
+                <Trash2 size={16} aria-hidden="true" />
+              </IconButton>
+            </div>
+          </div>
+          {deleteConfirmBanner}
+        </Stack>
       ) : mode === 'preview' ? (
         <QuestionnairePreview questions={previewQuestions} />
       ) : (
@@ -1232,25 +1465,7 @@ export function QuestionnaireBuilder({
                   Send
                 </Button>
               ) : null}
-              {/* Duplicate (08 §17.3): clone the questions into a NEW questionnaire and pick a new
-                  recipient — the way to "ask someone else the same thing", since a questionnaire is bound
-                  to one recipient. */}
-              {saved && onDuplicate ? (
-                <Button
-                  variant="secondary"
-                  onClick={() =>
-                    onDuplicate({
-                      title: `${title.trim()} (copy)`,
-                      type,
-                      questions: drafts.map((d) => toQuestion(d, drafts)),
-                    })
-                  }
-                  disabled={busy}
-                >
-                  <Copy size={16} aria-hidden="true" />
-                  Duplicate
-                </Button>
-              ) : null}
+              {duplicateButton}
               <Button variant="secondary" onClick={onDone} disabled={busy}>
                 {saved ? 'Close' : 'Cancel'}
               </Button>
@@ -1267,58 +1482,7 @@ export function QuestionnaireBuilder({
             </div>
           </div>
 
-          {confirmingDelete ? (
-            <Banner tone="warning">
-              <Stack gap={2}>
-                <Text>
-                  Delete “{title.trim()}”? This permanently removes the questionnaire and every
-                  response and insight from it. This can’t be undone.
-                </Text>
-                <Inline gap={2}>
-                  <Button variant="primary" onClick={() => void onRemove()} disabled={busy}>
-                    Delete
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => setConfirmingDelete(false)}
-                    disabled={busy}
-                  >
-                    Cancel
-                  </Button>
-                </Inline>
-              </Stack>
-            </Banner>
-          ) : null}
-
-          {sendId ? (
-            compatEnabled && recipient ? (
-              <CompatibilitySendPanel
-                questionnaireId={sendId}
-                title={title.trim()}
-                visibility={visibility}
-                recipient={recipient}
-                recipientName={recipientName}
-                onCancel={() => setSendId(null)}
-                onSent={() => {
-                  setSendId(null);
-                  onDone();
-                }}
-              />
-            ) : recipient ? (
-              <QuestionnaireSendPanel
-                questionnaireId={sendId}
-                title={title.trim()}
-                sensitivity={effectiveSensitivity}
-                recipient={recipient}
-                recipientLabel={recipientLabel}
-                onCancel={() => setSendId(null)}
-                onSent={() => {
-                  setSendId(null);
-                  onDone();
-                }}
-              />
-            ) : null
-          ) : null}
+          {deleteConfirmBanner}
         </>
       )}
     </Stack>

@@ -1,20 +1,19 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Copy, Link2, Lock, Send } from 'lucide-react';
+import { Link2, Lock, Send } from 'lucide-react';
 import type { PrivacyMode, Recipient, SensitivityTier } from '@shared/schemas';
 import {
   Banner,
   Button,
   Card,
-  Field,
   Heading,
   SegmentedControl,
   Stack,
   Text,
-  TextInput,
 } from '../../../design-system/components';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { RelaySendPanel } from './RelaySendPanel';
+import { RelayLinkDelivery } from './RelayLinkDelivery';
 import styles from './Questionnaires.module.css';
 
 /** Per-mode disclosure copy — this is what the recipient is told, so the promise stays honest (§3.2/§8). */
@@ -53,7 +52,9 @@ export function QuestionnaireSendPanel({
   // When a relay is connected, the in-app send ALSO mints a link the recipient can answer anywhere (§17.13).
   const [link, setLink] = useState<string | null>(null);
   const [pin, setPin] = useState<string | null>(null);
-  const [copied, setCopied] = useState<string | null>(null);
+  // Set when a relay IS connected but the link mint failed — shown instead of the no-relay hint (§17.14a).
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const senderName = useSessionStore((s) => s.activePerson?.displayName ?? 'Someone');
   // Whether a relay is connected — drives the "you'll also get a shareable link" affordance (§17.13). A link
   // can only exist with a relay (it's a server-delivered surface); without one the send is Inbox-only.
   const [relayConfigured, setRelayConfigured] = useState<boolean | null>(null);
@@ -62,12 +63,6 @@ export function QuestionnaireSendPanel({
   useEffect(() => {
     void window.selfos?.relayStatus().then((s) => setRelayConfigured(s.configured));
   }, []);
-
-  const copy = async (label: string, value: string): Promise<void> => {
-    await navigator.clipboard?.writeText(value);
-    setCopied(label);
-    window.setTimeout(() => setCopied(null), 1500);
-  };
 
   // Discoverability: a household send can ALSO carry a link, but only with a connected relay. When there's
   // none, tell the sender how to enable it (admins can; members are pointed at an admin) so the feature
@@ -113,6 +108,8 @@ export function QuestionnaireSendPanel({
       if (result?.link && result.pin) {
         setLink(result.link);
         setPin(result.pin);
+      } else if (result?.linkError) {
+        setLinkError(result.linkError);
       }
       setSentTo(recipientLabel);
     } catch {
@@ -130,42 +127,33 @@ export function QuestionnaireSendPanel({
             Sent to {sentTo}. It’s waiting in their Inbox the next time they’re here.
           </Banner>
           {link && pin ? (
-            <Stack gap={3}>
-              <Text size="sm" tone="secondary">
-                They can also answer anywhere with this link + PIN — whichever they use first is the
-                one that counts. We don’t keep a copy of the PIN, so share it now.
-              </Text>
-              <Field label="Secure link">
-                {(props) => (
-                  <div className={styles.copyRow}>
-                    <TextInput {...props} readOnly value={link} />
-                    <Button variant="secondary" onClick={() => void copy('link', link)}>
-                      <Copy size={15} aria-hidden="true" />
-                      {copied === 'link' ? 'Copied' : 'Copy'}
-                    </Button>
-                  </div>
-                )}
-              </Field>
-              <Field label="PIN">
-                {(props) => (
-                  <div className={styles.copyRow}>
-                    <TextInput {...props} readOnly value={pin} className={styles.pinValue} />
-                    <Button variant="secondary" onClick={() => void copy('pin', pin)}>
-                      <Copy size={15} aria-hidden="true" />
-                      {copied === 'pin' ? 'Copied' : 'Copy'}
-                    </Button>
-                  </div>
-                )}
-              </Field>
-            </Stack>
+            <RelayLinkDelivery
+              link={link}
+              pin={pin}
+              senderName={senderName}
+              sensitive={sensitivity !== 'standard'}
+              note={`${sentTo} can also answer anywhere with this link — whichever they reach first counts. You can find this link again any time from the questionnaire’s “Share a link”.`}
+              onDone={() => onSent(sentTo)}
+            />
           ) : (
-            relayHint
+            <>
+              {linkError ? (
+                // A relay IS connected but the link couldn't be minted — surface it + point to the retry.
+                <Banner tone="warning">
+                  We couldn’t create a share link just now ({linkError}). It’s in {sentTo}’s Inbox;
+                  to also send a link by email or text, open <strong>Results</strong> and choose{' '}
+                  <strong>Resend link</strong>.
+                </Banner>
+              ) : (
+                relayHint
+              )}
+              <div className={styles.footer}>
+                <Button variant="primary" onClick={() => onSent(sentTo)}>
+                  Done
+                </Button>
+              </div>
+            </>
           )}
-          <div className={styles.footer}>
-            <Button variant="primary" onClick={() => onSent(sentTo)}>
-              Done
-            </Button>
-          </div>
         </Stack>
       </Card>
     );

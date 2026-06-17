@@ -9,7 +9,9 @@ import type { RelayBundle } from '../../shared/relay/cloudflareDeployer';
  * (`apps/relay` → `dist/worker.js`, the answering page inlined); the deployer reads it from there to
  * upload to Cloudflare. The bundled version drives the "update available" check in the Relay panel.
  */
-export const RELAY_VERSION = '1';
+// Must match apps/relay/scripts/build.mjs. Bumping it makes the Relay panel's "Update relay" prompt fire
+// for an already-deployed older relay so the user can push the current Worker (08 §17.14c).
+export const RELAY_VERSION = '2';
 
 const requireFromHere = createRequire(import.meta.url);
 

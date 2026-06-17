@@ -190,6 +190,18 @@ A slice is **not** done until **all** of these pass:
       link only mints with a connected relay; the happy-path E2E connected one first, so it never caught that —
       with no relay — the link feature was completely silent. The user sent a household questionnaire, saw no
       link, no explanation. Now the send panel hints "connect a relay in Settings → Relay," with a test.)
+- [ ] **Drive the COMPLETE user-facing flow through the actual UI — never let a bridge-only test stand in for a
+      missing screen.** For any feature with a multi-step lifecycle (create → see its state → act on it →
+      delete), the E2E must walk **every step through the rendered UI**: the control that triggers each step
+      must be **present, reachable, and clicked** — not invoked by calling `window.selfos.*`/the bridge directly.
+      A coreBridge/integration test that drives the backend proves the _backend_ works; it says **nothing** about
+      whether the button that calls it exists. (2026-06-16: a household relay link could be drained by a
+      coreBridge test that called `assignmentsDrain()` directly — green — while the Results UI gated the "Check
+      for responses" button on `channel === 'relay'`, so for a household send the button **never rendered** and
+      the response was unretrievable. The user hit a dead end the passing suite couldn't see. Also surface state
+      the user relies on: after an action (send), the entity's state must be **visibly reflected** where they
+      look next — a "Sent · <date>" badge in the list + builder, not a form that looks untouched. Bridge tests
+      complement UI walks; they do not replace them.)
 - [ ] **`/gallery` updated** when a design-system primitive is added or changed (it must showcase all of them)
 - [ ] **Admin-only UI is marked** — any control/section visible only to an Owner / super-admin carries a
       consistent "admin only" indicator (see §12)
@@ -197,6 +209,18 @@ A slice is **not** done until **all** of these pass:
       questionnaire type, sensitivity tier, privacy/visibility mode, delivery channel, capability gate, …) must
       add an end-to-end case to the standing §16.7 matrix in `08-questionnaires.md` (the regression suite a
       whole-feature mismatch once slipped past). Not "happy path only" — decrypt the vault to assert data.
+- [ ] **A change to questionnaire SENDING/DELIVERY is verified across EVERY type × recipient × relay-state —
+      not one path.** A send goes out through more than one code path: **one-person** (`assignmentsCreate`) AND
+      **compatibility** (`assignmentsCreateCompatibility`), each to a **household** OR **external** recipient,
+      each **with** a relay connected OR **without** one. Fixing/testing ONE path (e.g. one-person household
+      with a relay) says NOTHING about the others — the user tests the path you didn't. For any delivery change,
+      run E2E for **all** of: one-person household (relay → link + Email/Text delivery; no relay → the
+      "connect a relay" hint, never silent), one-person external, compatibility household (relay), compatibility
+      external; assert the **link + the Email/Text/Copy delivery actually render** (or the hint), and that a
+      mint failure **surfaces** (never a silent Inbox-only fallback). (2026-06-17: a household COMPATIBILITY
+      send minted no link + showed no hint — the unified-delivery work was wired only into `assignmentsCreate`,
+      and the compat path's `catch` silently swallowed the failure; verifying compat-with-a-relay live would
+      have caught it. Twice the user hit "no link" on a path the tests never drove.)
 - [ ] **Conventional Commit** on a feature branch
 
 The `quality-gate` skill runs the automatable subset. The git hooks
@@ -390,6 +414,144 @@ A running log of durable decisions and feedback captured into the project config
   do + gate + commit + merge entirely in the isolated worktree, then revert my stray edits in the shared tree so
   the agent's branch stays clean. Don't `git checkout main` in the shared tree — it would drag the agent's
   uncommitted WIP onto main.**
+- 2026-06-17 — Fix (**no "Finish" button in the sent/locked questionnaire preview; 08 §17.14f**; on
+  `fix/questionnaire-delete-draft-sentstate-relay`, **merged to `main`** at the user's explicit instruction
+  "commit all changes to main"). User: the read-only preview of a sent questionnaire still showed the
+  test-on-yourself "Finish" button + "Answer the N required questions to finish" — confusing, since a sent
+  questionnaire is shown for reference only. `QuestionnairePreview` gains a `readOnly` prop that drops the
+  Finish button + required-validation and shortens the intro banner to "This is exactly what your recipient
+  sees."; the builder passes `readOnly` from the **locked (sent)** branch only — the **unsent** Preview mode
+  keeps the real dry-run Finish. Verified live in the web preview (sent questionnaire → no Finish). Gate green:
+  typecheck (node + web/DOM-lib), lint, format, **437 core + 11 relay + 530 desktop** unit (+1 lock-view assert
+  for no-Finish), **77 E2E**. Synced 08 §17.14f. **This is the close-out of the questionnaire send-lifecycle
+  branch — now merged to `main`.**
+- 2026-06-17 — Fix (**compatibility variant pronoun safety (options rewritten with gender) + a sleek Share
+  card; 08 §17.14e**; on `fix/questionnaire-delete-draft-sentstate-relay`, NOT merged). User: a compat
+  question for HIM about his FEMALE partner showed options with "him" (answers read as if she were
+  answering). Root cause: `generateVariant` only rewrote PROMPTS, never OPTIONS, and was never told either
+  participant's gender. Fix: `generateVariant` now takes `forGender`/`aboutGender` (from `Person.gender`,
+  passed at all 3 compat call sites); the prompt names each participant with pronouns ("Ben (he/him)",
+  "Angel (she/her)"), forbids the wrong-gender pronoun for the other person, and rewrites each prompt **AND
+  each option** — the model returns `[{prompt, options}]`; options are applied only when the count is
+  preserved (else canonical kept — alignment safety). New `pronounHint` (female→she/her, male→he/him,
+  non-binary→they/them, else name). The offline fakes + all 3 fake-Claude hosts updated to the object shape.
+  Also: the sent-preview **Share card** redesigned (accent icon tile + heading + explainer + "Get the link",
+  link/PIN/Refresh/delivery inside) instead of a loose banner+button. Gate: typecheck (node + web/DOM-lib),
+  lint, format, **437 core + 11 relay + 530 desktop** unit (+ option-rewrite/no-wrong-pronoun, count-mismatch
+  keeps canonical, gender-plumbing message), **77 E2E**; share card verified live (screenshots).
+  **Lesson: personalizing a compatibility question means BOTH the prompt AND the options — gendered pronouns
+  live in the options, so rewriting only the prompt leaves answers in the wrong person's voice; pass both
+  participants' genders explicitly and rewrite options too. NOTE (relay-link staleness, carried from §17.14c/d):
+  the user's EXISTING sends predate `pinWrapped`, so the FIRST "Get the link" on an old send mints once (the
+  PIN was unrecoverable), then it's stable; new sends are stable from the first view.**
+- 2026-06-17 — Fix (**"Share link" re-shows the EXISTING link (stable) + a manual Refresh to regenerate; 08
+  §17.14d**; on `fix/questionnaire-delete-draft-sentstate-relay`, NOT merged). User: Share link shouldn't
+  regenerate a fresh link+PIN on every click — it should re-show the existing one (to copy/email), with a
+  Refresh next to the Secure link to regenerate manually. Required STORING the PIN (it was hash-only): added
+  **`Assignment.relay.pinWrapped`** (PIN encrypted under the master key; the relay still only holds `pinHash`),
+  set in `mintRelay`; new core **`readRelayLink`** reconstructs the existing link (token + wrapped content key)
+  - PIN with no mint/relay call. **`questionnaires:shareLink` gains `regenerate?`** — default re-shows the
+    existing (mints only if the send predates `pinWrapped`); `regenerate:true` (the manual **Refresh**) mints
+    fresh + revokes old. `RelayLinkDelivery` got a **Refresh** button beside the Secure link (only on the share
+    view, not the already-fresh send-time confirmation); the "we don't keep the PIN, share it now" copy →
+    "you can find this link again from Share a link" everywhere. **VERIFIED LIVE** (bridge: 2× Share link →
+    identical link+PIN; Refresh → different; screenshot of Refresh-beside-link). Gate: typecheck (node +
+    web/DOM-lib), lint, format, **434 core + 11 relay + 530 desktop** unit, **77 E2E**. Synced 08 §17.14d.
+    **Lesson: "re-share" ≠ "regenerate" — re-showing a stable artifact must READ stored material (store the PIN
+    encrypted), not re-mint; make regenerate an explicit action.**
+- 2026-06-17 — Fix (**THE relay-link root cause: stale deployed Worker (404) + bump version + link reachable
+  after sending; 08 §17.14c**; on `fix/questionnaire-delete-draft-sentstate-relay`, NOT merged). The §17.14b
+  "loud failure" surfaced the actual bug: a real-Cloudflare **404 on `POST /api/admin/mailbox`** — the user's
+  **deployed Worker was stale** (older code under the same `relayVersion '1'` label), missing the upload route.
+  The current `dist/worker.js` HAS the route, but nothing prompted a redeploy because
+  `updateAvailable = config.relayVersion !== currentVersion` and BOTH were '1'. Fix: **bump RELAY_VERSION 1→2**
+  (build.mjs + relayBundle.ts, kept in sync) + rebuild the bundle → an already-deployed v1 relay now shows the
+  **"Update relay"** button (one click re-uploads the current Worker, reusing KV + secret → fixes the 404, no
+  re-provision). **Standing rule: bump RELAY_VERSION on EVERY Worker route/behaviour change**, or an old deploy
+  reads as current + silently 404s new routes. **Link reachable after sending** (user: "see it still after sent
+  at the top of preview + under the 3 dots"): new **`questionnaires:shareLink`** IPC re-mints the latest open
+  send's RECIPIENT link (factored with reshare into one `reshareLink` helper), surfaced as a **"Share a link"**
+  button at the **top of the sent (locked) preview** + a **"Share link"** kebab item (above Delete, sent-only)
+  that opens + auto-fetches it → the shared `RelayLinkDelivery` (link + PIN + message + Email/Text/Copy).
+  **VERIFIED LIVE with screenshots** (sent compat → Share a link → Secure link `…workers.dev/q/…` + PIN +
+  prefilled message + Email/Text/Copy; kebab shows "Share link"). Gate: typecheck (node + web/DOM-lib), lint,
+  format, **434 core + 11 relay + 530 desktop** unit (+ shareLink coreBridge, 2 Share RTL), **77 E2E**. Synced
+  08 §17.14c. **Lesson: a deploy-version constant that doesn't bump when the deployed CODE changes is a
+  silent-staleness trap — the "update available" prompt never fires, so the user's stale Worker keeps 404ing
+  new routes; bump it on every change. The §17.14b loud-failure change is what made this diagnosable at all.**
+- 2026-06-17 — Fix (**relay-mint failures made LOUD + sent questionnaires LOCKED; 08 §17.14b**; on
+  `fix/questionnaire-delete-draft-sentstate-relay`, NOT merged). User STILL saw no link on a compat household
+  send **with a relay connected** — root cause: both `assignmentsCreate` AND `assignmentsCreateCompatibility`
+  **silently swallowed** a `putMailbox` failure in a `catch` and returned the Inbox-only result, so a
+  connected-but-unreachable/stale relay looked like "the feature is broken." Both result types gain
+  **`linkError?`**; a mint failure now surfaces ("We couldn't create the link ({reason}) — open Results →
+  Resend") distinct from the no-relay hint; a coreBridge test forces the relay unreachable and asserts
+  `linkError` (proven). **Asked first** the 2 forks: relay-status (user: connected → it's a real bug; this
+  surfacing is the fix + diagnosis) and the lock behavior. **Lock (user: "once sent it should just show the
+  preview"):** a SENT questionnaire opens **read-only Preview** (no Edit, frozen questions, "use Duplicate to
+  change it" notice) + a footer of Send-again / Duplicate / Delete / Close; **Send again is disabled until a
+  re-send cooldown** (`RESEND_COOLDOWN_DAYS=7`) with a notice, and the list row shows **"Ready to re-send"** once
+  due. **Full delivery E2E matrix** (the user's "test ALL types" demand → new §7 DoD rule): one-person household
+  (relay → link + Email/Text; no relay → connect-a-relay hint, no link), one-person external, compat household,
+  compat external — assert the link + Email/Text/Copy delivery render (or the hint). **Verified LIVE** (preview:
+  compat household with a relay → link + editable message + Email/Text; sent questionnaire → locked read-only,
+  Send-again disabled "Ask again in 7 days", Duplicate/Delete, no Edit). Gate green: typecheck (node +
+  web/DOM-lib), lint, format, **526 desktop + 434 core + 11 relay** unit (+ linkError-surfaced, lock view, cooldown,
+  delivery-matrix), **77 E2E** (+2 delivery matrix; the re-asks trend E2E now seeds its 2nd send via the bridge,
+  since the in-UI re-send is cooldown-gated). Synced 08 §17.14b. **NEW HARD RULE (§7 DoD): a SENDING/DELIVERY
+  change is verified across EVERY type × recipient × relay-state — one-person AND compatibility, household AND
+  external, relay AND none — never one path; a `catch` that falls back to a "still works" state MUST record WHY
+  (surface the error), because a silent fallback on a connected relay is indistinguishable from broken.** **Lesson:
+  the "unified delivery" feature had a third hidden gap beyond the two send paths — the `catch` that hid the
+  real-relay failure; the user's bug was the swallowed error, not a logic bug, and only surfacing it (+ testing
+  the failure path) makes it diagnoseable.**
+- 2026-06-17 — Build (**Compatibility unified delivery + re-publish/resend — the COMPAT path the prior fix never
+  touched; 08 §17.14a**; on `fix/questionnaire-delete-draft-sentstate-relay`, NOT merged). The user (furious) was
+  testing a **compatibility** send (you + Angel) — a separate path from the standard household send fixed in
+  §17.14 — and it minted **no link**, appended the "Sent" confirmation **below** the still-visible editor + Send
+  button (tall empty void), and offered no re-share. Root cause: "unified delivery" (§17.13) was only wired into
+  `assignmentsCreate`, never `assignmentsCreateCompatibility`. **Asked first** the 3 forks (household compat gets
+  the SAME link + email/SMS as external; sending REPLACES the editor; re-publish RE-MINTS a fresh link+PIN since
+  the PIN is never stored). Built: **(1)** household `assignmentsCreateCompatibility` now `attachRelayLink`s the
+  RECIPIENT's variant (sender answers their own in-app — no self link) when sendExternal + relay connected,
+  returning `{link,pin}`; `CompatibilityMember += relayLinked/isSelf`. **(2)** extracted **`RelayLinkDelivery`**
+  (link + PIN + editable message from the `defaultMessages` Settings templates + editable email/phone +
+  Email/Text/Copy/Share) — now used by the external, standard-household, compat, AND Results surfaces, so a
+  household partner finally gets the prefilled email/SMS, not just a copy-link row. **(3)** the builder renders the
+  send→delivery step **instead of** the editor while `sendId` is set (kills the lingering Send + empty void).
+  **(4)** new **`assignments:reshare`** mints a fresh link+PIN for an open send (revokes the old), surfaced as
+  Results **"Resend link"** / **"Create a link"** + a compat group drain. **VERIFIED LIVE** in the web preview
+  (compat household send → link + editable message + Email/Text; Results drain + resend). Gate: typecheck (node +
+  web/DOM-lib), lint, format, unit (+coreBridge compat-household-mints-recipient-link + reshare-fresh + self-member
+  refused; +Results RTL standard reshare + compat drain/resend), E2E (+1 walking a household compat send through
+  the UI → link + Email/Text delivery → Results drain + resend; +decrypt asserts the compat assignment carries
+  relay material). Synced 08 §17.14a. **Lesson: a "unified" feature with TWO entry paths
+  (`assignmentsCreate` AND `assignmentsCreateCompatibility`) is only half-done if you wire one — the user tests the
+  path you didn't; verify the ACTUAL path they're on (compatibility), LIVE, before claiming a fix.**
+- 2026-06-17 — Build (**Questionnaire send-lifecycle fixes — 4 user-reported gaps the passing tests missed; 08
+  §17.14**; on `fix/questionnaire-delete-draft-sentstate-relay`, NOT merged). The user hit four lifecycle gaps
+  and (rightly) demanded the rules change so "glaringly obvious" things stop slipping past green suites. **Asked
+  first** the 3 UX forks: draft saving = **save anytime, validate at send**; delete = **list row + builder**;
+  sent-state = **list badge + builder header**. Built: **(#3, the serious one)** relay affordances in
+  `QuestionnaireResults` now gate on a new **`SendResult.relayLinked`** (`Boolean(assignment.relay)`), NOT
+  `channel === 'relay'` — a household send is `channel:'inApp'` even with a minted link (§17.13), so the **"Check
+  for responses" drain button never rendered** and a relay response was unretrievable; a coreBridge test that
+  drained the link by calling the bridge **directly** had stayed green while the BUTTON was missing. **(#4)** new
+  sender-scoped **`questionnaires:sendStates`** IPC → a **"Sent · <date>"** chip on the list row + the builder
+  header ("Sent <date> (N times)"); sending refreshes the store so it shows on return. **(#1)** a list-row kebab
+  (`QuestionnaireRowMenu`) → Delete → inline confirm (bridge re-enforces Owner-any-stage / creator-own-unsent).
+  **(#2)** `canSave` needs only a title; `input()` drops blank-prompt drafts so a half-built questionnaire
+  persists; **Send still validates** completeness. **Verified the COMPLETE flow live** (web preview: list chips +
+  kebab confirm + the household-send drain button + "Sent (2 times)" header). Gate green: typecheck (node +
+  web/DOM-lib), lint, format, **420 core + 520 desktop + 11 relay** unit, **74 E2E** (a new test walks the whole
+  flow through the UI: connect relay → draft-save → send → Sent badge → Results drain button → list-row delete).
+  Synced 08 §17.14. **NEW HARD RULE (CLAUDE.md §7 DoD): drive the COMPLETE user-facing flow through the actual
+  rendered UI — a bridge/integration test proves the backend, NOT that the button that calls it exists; a
+  household relay drain was bridge-tested-green while the UI gated the button on the wrong condition so it never
+  showed. Also surface state where the user looks next (a Sent badge), not a form that looks untouched.** **Lesson
+  (the §17.13 root cause): a feature flag/affordance must key off what actually enables it (relay material
+  present), not a sibling display value (the channel) — gating on `channel === 'relay'` silently disabled the
+  whole link-retrieval path for the new household-link case.**
 - 2026-06-16 — Build (**Memory dashboard — SLICE 3: the dashboard UI; SPEC 20 FULLY BUILT**;
   [20-memory-dashboard](docs/specs/20-memory-dashboard.md) §3/§8/§9, on `feat/memory-dashboard` **worktree**,
   NOT merged). Rebuilt `routes/memory/Memory.tsx` into the living dashboard: header (search + Refresh memory +

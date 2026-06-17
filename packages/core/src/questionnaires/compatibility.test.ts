@@ -14,6 +14,7 @@ import { getAssignment, getAssignmentSnapshot, listAssignments } from './assignm
 import { createCompatibilitySend } from './compatibilityService';
 import { deleteSend } from './deletionService';
 import { compatibilityDisclosure } from './disclosure';
+import { buildVariantUserMessage } from './aiPrompts';
 import { generateVariant, type AiDeps } from './generationService';
 import { listInsightsForPerson } from '../insights';
 import { saveQuestionnaire } from './questionnaireService';
@@ -111,21 +112,26 @@ async function seedAnsweredGroup(
   return { groupId, aId: a.id, bId: b.id };
 }
 
+const targetCtx = {
+  authorPersonId: 'sender',
+  includeAuthor: false,
+  targetPersonId: 'alex',
+  includeTarget: true,
+  includeRelationship: true,
+} as const;
+
 describe('generateVariant', () => {
   it('personalizes prompts while preserving type + count + canonicalId', async () => {
     const fs = memFileSystem();
-    const text = JSON.stringify(['For Alex: rate connection', 'For Alex: want more time?']);
+    const text = JSON.stringify([
+      { prompt: 'For Alex: rate connection', options: null },
+      { prompt: 'For Alex: want more time?', options: null },
+    ]);
     const result = await generateVariant(deps(fs, fakeClient(text)), {
       forName: 'Alex',
       aboutName: 'Sam',
       questions: canonicalQuestions,
-      targetContext: {
-        authorPersonId: 'sender',
-        includeAuthor: false,
-        targetPersonId: 'alex',
-        includeTarget: true,
-        includeRelationship: true,
-      },
+      targetContext: targetCtx,
     });
     expect(result.ok).toBe(true);
     expect(result.questions).toHaveLength(2);
@@ -135,21 +141,91 @@ describe('generateVariant', () => {
     expect(result.questions?.[1]?.canonicalId).toBe('c2');
   });
 
-  it('REFUSES when the model returns the wrong number of prompts', async () => {
+  it('rewrites the OPTIONS too (gendered pronouns), keeping the count (§17.14e)', async () => {
     const fs = memFileSystem();
-    const result = await generateVariant(deps(fs, fakeClient(JSON.stringify(['only one']))), {
+    const withOptions: Question[] = [
+      {
+        id: 'c1',
+        type: 'singleChoice',
+        prompt: 'Where does desire start?',
+        required: true,
+        options: ['I want him to lead', 'I want to lead'],
+      },
+    ];
+    // The model returns rewritten options referring to the female partner as "her" (the bug was leaving the
+    // canonical "him" un-rewritten so the answers read as if the other person were answering).
+    const text = JSON.stringify([
+      {
+        prompt: 'Where does your desire start with Angel?',
+        options: ['I want her to lead', 'I want to lead'],
+      },
+    ]);
+    const result = await generateVariant(deps(fs, fakeClient(text)), {
+      forName: 'Ben',
+      forGender: 'Male',
+      aboutName: 'Angel',
+      aboutGender: 'Female',
+      questions: withOptions,
+      targetContext: targetCtx,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.questions?.[0]?.options).toEqual(['I want her to lead', 'I want to lead']);
+    expect(JSON.stringify(result.questions)).not.toContain('him'); // no wrong-gender partner pronoun
+  });
+
+  it('keeps the canonical options when the rewrite changes the option COUNT (safety)', async () => {
+    const fs = memFileSystem();
+    const withOptions: Question[] = [
+      {
+        id: 'c1',
+        type: 'singleChoice',
+        prompt: 'Pick one',
+        required: true,
+        options: ['A', 'B'],
+      },
+    ];
+    // A bad rewrite drops an option → keep the canonical options (alignment + structure must hold).
+    const text = JSON.stringify([{ prompt: 'Pick one (for Alex)', options: ['only A'] }]);
+    const result = await generateVariant(deps(fs, fakeClient(text)), {
       forName: 'Alex',
       aboutName: 'Sam',
-      questions: canonicalQuestions,
-      targetContext: {
-        authorPersonId: 'sender',
-        includeAuthor: false,
-        targetPersonId: 'alex',
-        includeTarget: true,
-        includeRelationship: true,
-      },
+      questions: withOptions,
+      targetContext: targetCtx,
     });
+    expect(result.ok).toBe(true);
+    expect(result.questions?.[0]?.options).toEqual(['A', 'B']); // canonical kept
+    expect(result.questions?.[0]?.prompt).toBe('Pick one (for Alex)'); // prompt still personalized
+  });
+
+  it('REFUSES when the model returns the wrong number of questions', async () => {
+    const fs = memFileSystem();
+    const result = await generateVariant(
+      deps(fs, fakeClient(JSON.stringify([{ prompt: 'only one', options: null }]))),
+      {
+        forName: 'Alex',
+        aboutName: 'Sam',
+        questions: canonicalQuestions,
+        targetContext: targetCtx,
+      },
+    );
     expect(result).toMatchObject({ ok: false, reason: 'REFUSED' });
+  });
+});
+
+describe('buildVariantUserMessage gender plumbing', () => {
+  it('names each participant with their pronouns + instructs not to use the wrong gender (§17.14e)', () => {
+    const msg = buildVariantUserMessage({
+      forName: 'Ben',
+      forGender: 'Male',
+      aboutName: 'Angel',
+      aboutGender: 'Female',
+      questions: [{ prompt: 'Where does desire start?', options: ['I want him to lead'] }],
+    });
+    expect(msg).toContain('Ben (he/him)');
+    expect(msg).toContain('Angel (she/her)');
+    expect(msg).toMatch(/NEVER the wrong gender's pronoun for Angel/);
+    // The options are passed through for rewriting.
+    expect(msg).toContain('I want him to lead');
   });
 });
 

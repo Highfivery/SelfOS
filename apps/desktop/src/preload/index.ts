@@ -92,6 +92,9 @@ const bridge: SelfosBridge = {
   guidedAcknowledgeAdult: () => ipcRenderer.invoke(IpcChannels.guidedAcknowledgeAdult),
   usageSessionCosts: () => ipcRenderer.invoke(IpcChannels.usageSessionCosts),
   questionnairesList: () => ipcRenderer.invoke(IpcChannels.questionnairesList),
+  questionnairesSendStates: () => ipcRenderer.invoke(IpcChannels.questionnairesSendStates),
+  questionnairesShareLink: (id, regenerate) =>
+    ipcRenderer.invoke(IpcChannels.questionnairesShareLink, id, regenerate),
   questionnairesGet: (id) => ipcRenderer.invoke(IpcChannels.questionnairesGet, id),
   questionnairesSave: (input) => ipcRenderer.invoke(IpcChannels.questionnairesSave, input),
   questionnairesDelete: (id) => ipcRenderer.invoke(IpcChannels.questionnairesDelete, id),
@@ -151,6 +154,8 @@ const bridge: SelfosBridge = {
   assignmentsDrain: () => ipcRenderer.invoke(IpcChannels.assignmentsDrain),
   assignmentsRevoke: (assignmentId) =>
     ipcRenderer.invoke(IpcChannels.assignmentsRevoke, assignmentId),
+  assignmentsReshare: (assignmentId) =>
+    ipcRenderer.invoke(IpcChannels.assignmentsReshare, assignmentId),
   relayStatus: () => ipcRenderer.invoke(IpcChannels.relayStatus),
   relayConnect: (input) => ipcRenderer.invoke(IpcChannels.relayConnect, input),
   relayUpdate: () => ipcRenderer.invoke(IpcChannels.relayUpdate),

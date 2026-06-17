@@ -193,22 +193,51 @@ export function buildAnalysisUserMessage(input: {
  */
 export const VARIANT_SYSTEM = `${SAFETY}
 
-You personalize a compatibility questionnaire for ONE of the two people answering it. Every question is about the relationship between two partners. For each question, rewrite ONLY its prompt so it speaks directly and warmly to the ANSWERER and asks about THEIR experience with the OTHER partner: write it from the answerer's point of view, and replace any reference to a partner (a name, or "your partner") with the other partner's name. Keep the exact same meaning and the same kind of answer. Do not add, drop, reorder, or merge questions. Return ONLY a JSON array of strings — the rewritten prompts, in the same order, one per input question.`;
+You personalize a compatibility questionnaire for ONE of the two people answering it ("the answerer"), about their partner ("the other person"). For EACH question, rewrite it so it speaks directly and warmly to the answerer and asks about THEIR experience with the other person:
+- Rewrite the PROMPT from the answerer's point of view (the answerer is "you"); refer to the other person by their name.
+- Rewrite EACH answer OPTION the same way: the answerer speaks in the first person ("I"…), and any reference to the partner is the OTHER PERSON — refer to them by name, or with the correct pronouns for THEIR gender.
+
+PRONOUNS ARE CRITICAL: use ONLY the other person's gender's pronouns when referring to them (e.g. a female partner is "she/her", a male partner is "he/him", a non-binary partner is "they/them"). NEVER use the wrong gender's pronoun for the other person — a question for a man about his female partner must say "her", never "him". When unsure, use the other person's name instead of a pronoun.
+
+Keep the exact same meaning, the same number of options, and the same order. Do not add, drop, reorder, or merge questions or options. Return ONLY a JSON array — one object per input question, IN ORDER: { "prompt": string, "options": string[] | null }. Set "options" to null when the question has no options; otherwise return the rewritten options in the SAME order and count.`;
+
+/** A pronoun hint for the prompt from a free-text gender string (null = unknown → use the name / they-them). */
+export function pronounHint(gender?: string): string | null {
+  const g = gender?.trim().toLowerCase() ?? '';
+  if (g === 'female' || g === 'woman' || g === 'f') return 'she/her';
+  if (g === 'male' || g === 'man' || g === 'm') return 'he/him';
+  if (g.startsWith('non-binary') || g === 'nonbinary' || g === 'enby') return 'they/them';
+  return null;
+}
+
+/** Describe a participant for the variant prompt: "Angel (she/her)" / "Angel" when gender is unknown. */
+function describeParticipant(name: string, gender?: string): string {
+  const hint = pronounHint(gender);
+  return hint ? `${name} (${hint})` : name;
+}
 
 /**
- * Build the variant user message (08-questionnaires §17.12). The questionnaire compares `forName` (the
- * answerer this variant is for) with `aboutName` (the other participant). Each prompt is rewritten to ask
- * `forName` about their experience with `aboutName` — so the recipient is asked about the SENDER, not about
- * themselves (the bug this fixes). `context` is `forName`'s shareable facts only (the §13.3 boundary).
+ * Build the variant user message (08-questionnaires §17.12/§17.14e). The questionnaire compares `forName`
+ * (the answerer this variant is for) with `aboutName` (the other participant). Each prompt AND its options
+ * are rewritten to ask `forName` about their experience with `aboutName` — from `forName`'s point of view,
+ * with the correct pronouns for each participant's gender (so a man asked about his female partner reads
+ * "her", never "him"). `context` is `forName`'s shareable facts only (the §13.3 boundary).
  */
 export function buildVariantUserMessage(input: {
   forName: string;
+  forGender?: string;
   aboutName: string;
+  aboutGender?: string;
   context?: string;
-  prompts: string[];
+  questions: { prompt: string; options?: string[] }[];
 }): string {
+  const answerer = describeParticipant(input.forName, input.forGender);
+  const other = describeParticipant(input.aboutName, input.aboutGender);
+  const aboutPronoun = pronounHint(input.aboutGender);
   const parts: string[] = [
-    `This questionnaire compares ${input.forName} with ${input.aboutName}. Rewrite each question for ${input.forName} to answer about THEIR experience with ${input.aboutName} — write from ${input.forName}'s point of view and replace any mention of the partner with "${input.aboutName}".`,
+    `The answerer is ${answerer}. The other person is ${other}. Rewrite each question for ${input.forName} to answer about THEIR experience with ${input.aboutName}: write from ${input.forName}'s point of view, and when referring to ${input.aboutName} use their name or ${
+      aboutPronoun ? `${aboutPronoun} pronouns` : '"they/them"'
+    } — NEVER the wrong gender's pronoun for ${input.aboutName}.`,
   ];
   if (input.context?.trim()) {
     parts.push(
@@ -216,12 +245,18 @@ export function buildVariantUserMessage(input: {
     );
   }
   parts.push(
-    `\nQuestions (rewrite each for ${input.forName}, about ${input.aboutName}; same order, same meaning, same answer type):\n${input.prompts
-      .map((p, i) => `${i + 1}. ${p}`)
+    `\nQuestions (rewrite each prompt + its options; same order, same count, same meaning):\n${input.questions
+      .map((q, i) => {
+        const opts =
+          q.options && q.options.length > 0
+            ? `\n   OPTIONS: ${JSON.stringify(q.options)}`
+            : '\n   OPTIONS: none';
+        return `${i + 1}. PROMPT: ${q.prompt}${opts}`;
+      })
       .join('\n')}`,
   );
   parts.push(
-    `\nReturn ONLY a JSON array of ${input.prompts.length} strings — the rewritten prompts in order.`,
+    `\nReturn ONLY a JSON array of ${input.questions.length} objects { "prompt", "options" } in order.`,
   );
   return parts.join('\n');
 }

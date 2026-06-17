@@ -1,21 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Copy, Send, Sparkles } from 'lucide-react';
+import { Send, Sparkles } from 'lucide-react';
 import { compatibilityDisclosure } from '@selfos/core/questionnaires';
 import { ANTHROPIC_API_KEY_ID } from '@shared/channels';
-import type { CompatibilityVisibility, Recipient } from '@shared/schemas';
-import {
-  Banner,
-  Button,
-  Card,
-  Field,
-  Heading,
-  Stack,
-  Text,
-  TextInput,
-} from '../../../design-system/components';
+import type { CompatibilityVisibility, Recipient, SensitivityTier } from '@shared/schemas';
+import { Banner, Button, Card, Heading, Stack, Text } from '../../../design-system/components';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useSetting } from '../../../settings/useSetting';
+import { RelayLinkDelivery } from './RelayLinkDelivery';
 import styles from './Questionnaires.module.css';
 
 /**
@@ -27,6 +19,7 @@ import styles from './Questionnaires.module.css';
 export function CompatibilitySendPanel({
   questionnaireId,
   title,
+  sensitivity,
   visibility,
   recipient,
   recipientName,
@@ -35,6 +28,7 @@ export function CompatibilitySendPanel({
 }: {
   questionnaireId: string;
   title: string;
+  sensitivity: SensitivityTier;
   visibility: CompatibilityVisibility;
   recipient: Recipient;
   recipientName: string;
@@ -58,7 +52,14 @@ export function CompatibilitySendPanel({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [minted, setMinted] = useState<{ link: string; pin: string } | null>(null);
-  const [copied, setCopied] = useState<string | null>(null);
+  // Set when a relay IS connected but the link mint failed — shown in the done state (not swallowed).
+  const [linkError, setLinkError] = useState<string | null>(null);
+  // Whether a relay is connected — drives the no-link hint (connect one vs the mint-failed message).
+  const [relayConfigured, setRelayConfigured] = useState<boolean | null>(null);
+  const canManageRelay = useSessionStore((s) => s.can('settings.manage'));
+  useEffect(() => {
+    void window.selfos?.relayStatus().then((s) => setRelayConfigured(s.configured));
+  }, []);
 
   // What the recipient is told (the honesty guard) — written from their point of view, naming the sender as
   // the other participant (§16.1). The sender authored it, so no disclosure is shown to them.
@@ -67,12 +68,6 @@ export function CompatibilitySendPanel({
     senderName,
     viewerIsSender: false,
   });
-
-  const copy = async (label: string, value: string): Promise<void> => {
-    await navigator.clipboard?.writeText(value);
-    setCopied(label);
-    window.setTimeout(() => setCopied(null), 1500);
-  };
 
   const onSend = async (): Promise<void> => {
     setBusy(true);
@@ -84,9 +79,13 @@ export function CompatibilitySendPanel({
         setError(result?.message ?? 'Could not send this questionnaire. Please try again.');
         return;
       }
-      // An external recipient answers via the relay — show the link + PIN once for delivery.
+      // The recipient's link (household with a relay, OR external) → show delivery. Otherwise it's Inbox-
+      // only: either the relay mint failed (surface it) or no relay is connected (the done state hints how).
       if (result.link && result.pin) setMinted({ link: result.link, pin: result.pin });
-      else setDone(true);
+      else {
+        if (result.linkError) setLinkError(result.linkError);
+        setDone(true);
+      }
     } catch {
       setError('Could not send this questionnaire. Please try again.');
     } finally {
@@ -97,39 +96,20 @@ export function CompatibilitySendPanel({
   if (minted) {
     return (
       <Card>
-        <Stack gap={4}>
-          <Banner tone="info">
-            Send {displayName} this private link + PIN. You answer your own version in your Inbox;
-            once you’ve both answered, align in Results — we don’t keep a copy of the PIN.
-          </Banner>
-          <Field label="Secure link">
-            {(props) => (
-              <div className={styles.copyRow}>
-                <TextInput {...props} readOnly value={minted.link} />
-                <Button variant="secondary" onClick={() => void copy('link', minted.link)}>
-                  <Copy size={15} aria-hidden="true" />
-                  {copied === 'link' ? 'Copied' : 'Copy'}
-                </Button>
-              </div>
-            )}
-          </Field>
-          <Field label="PIN">
-            {(props) => (
-              <div className={styles.copyRow}>
-                <TextInput {...props} readOnly value={minted.pin} className={styles.pinValue} />
-                <Button variant="secondary" onClick={() => void copy('pin', minted.pin)}>
-                  <Copy size={15} aria-hidden="true" />
-                  {copied === 'pin' ? 'Copied' : 'Copy'}
-                </Button>
-              </div>
-            )}
-          </Field>
-          <div className={styles.footer}>
-            <Button variant="primary" onClick={onSent}>
-              Done
-            </Button>
-          </div>
-        </Stack>
+        <RelayLinkDelivery
+          link={minted.link}
+          pin={minted.pin}
+          senderName={senderName}
+          sensitive={sensitivity !== 'standard'}
+          {...(recipient.kind === 'external' && recipient.email
+            ? { recipientEmail: recipient.email }
+            : {})}
+          {...(recipient.kind === 'external' && recipient.phone
+            ? { recipientPhone: recipient.phone }
+            : {})}
+          note={`Send ${displayName} this link. You answer your own version in your Inbox; once you’ve both answered, align in Results. You can find this link again any time from the questionnaire’s “Share a link”.`}
+          onDone={onSent}
+        />
       </Card>
     );
   }
@@ -142,6 +122,28 @@ export function CompatibilitySendPanel({
             Sent. You and {displayName} each get a personalized version in your Inbox; once you’ve
             both answered, you can align your responses in Results.
           </Banner>
+          {linkError ? (
+            // A relay IS connected but the link couldn't be minted — say so + point to the retry, never
+            // leave the sender wondering where the link is.
+            <Banner tone="warning">
+              We couldn’t create {displayName}’s share link just now ({linkError}). It’s in their
+              Inbox; to also send a link by email or text, open <strong>Results</strong> and choose{' '}
+              <strong>Resend link</strong>.
+            </Banner>
+          ) : relayConfigured === false ? (
+            // No relay connected — a link needs one. Tell the sender how to enable it (never silent).
+            <Banner tone="info">
+              They’ll answer in their Inbox.{' '}
+              {canManageRelay ? (
+                <>
+                  To also send them a link by email or text, connect a relay in{' '}
+                  <Link to="/settings">Settings → Relay</Link>.
+                </>
+              ) : (
+                <>Ask a household admin to connect a relay (Settings → Relay) to share a link.</>
+              )}
+            </Banner>
+          ) : null}
           <div className={styles.footer}>
             <Button variant="primary" onClick={onSent}>
               Done

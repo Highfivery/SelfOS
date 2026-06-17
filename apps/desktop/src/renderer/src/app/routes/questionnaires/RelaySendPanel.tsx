@@ -1,27 +1,17 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Copy, Mail, MessageSquare, Send, Share2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Send } from 'lucide-react';
 import type { PrivacyMode, SensitivityTier } from '@shared/schemas';
 import {
   Banner,
   Button,
-  Field,
   Heading,
   SegmentedControl,
   Stack,
-  Switch,
   Text,
-  TextInput,
-  Textarea,
 } from '../../../design-system/components';
 import { useRelayStore } from '../../../stores/relayStore';
 import { useSessionStore } from '../../../stores/sessionStore';
-import { useSetting } from '../../../settings/useSetting';
-import {
-  DEFAULT_RELAY_MESSAGES,
-  emailBodyFrom,
-  emailSubjectFrom,
-  smsBodyFrom,
-} from './relayMessages';
+import { RelayLinkDelivery, ToggleRow } from './RelayLinkDelivery';
 import styles from './Questionnaires.module.css';
 
 /** The honest disclosure mirrors the relay page; the recipient sees the derived text there too (§3.2/§8.4). */
@@ -34,35 +24,6 @@ const PRIVACY_COPY: Record<PrivacyMode, string> = {
 interface Minted {
   link: string;
   pin: string;
-}
-
-/** A labelled toggle row (the `Switch` primitive is the control only — the label is ours). */
-function ToggleRow({
-  label,
-  description,
-  checked,
-  onChange,
-}: {
-  label: string;
-  description?: string;
-  checked: boolean;
-  onChange: (next: boolean) => void;
-}): JSX.Element {
-  return (
-    <div className={styles.toggleRow}>
-      <div className={styles.toggleText}>
-        <Text size="sm" weight={500}>
-          {label}
-        </Text>
-        {description ? (
-          <Text size="sm" tone="secondary">
-            {description}
-          </Text>
-        ) : null}
-      </div>
-      <Switch aria-label={label} checked={checked} onChange={onChange} />
-    </div>
-  );
 }
 
 /**
@@ -92,24 +53,17 @@ export function RelaySendPanel({
   const loadStatus = useRelayStore((s) => s.load);
   const senderName = useSessionStore((s) => s.activePerson?.displayName ?? 'Someone');
   const canManageRelay = useSessionStore((s) => s.can('settings.manage'));
-  // Fall back to the defaults if the vault setting hasn't been seeded yet (e.g. a fresh vault).
-  const messages = useSetting('questionnaires.defaultMessages')[0] ?? DEFAULT_RELAY_MESSAGES;
 
   useEffect(() => {
     if (!loaded) void loadStatus();
   }, [loaded, loadStatus]);
 
   const sensitive = sensitivity !== 'standard';
-  const [email, setEmail] = useState(recipientEmail ?? '');
-  const [phone, setPhone] = useState(recipientPhone ?? '');
   const [anonymous, setAnonymous] = useState(false);
   const [privacy, setPrivacy] = useState<PrivacyMode>('private');
-  const [includePin, setIncludePin] = useState(!sensitive); // sensitive sends default to sharing the PIN separately
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [minted, setMinted] = useState<Minted | null>(null);
-  const [copied, setCopied] = useState<string | null>(null);
-  const [message, setMessage] = useState('');
 
   const onSend = async (): Promise<void> => {
     setBusy(true);
@@ -124,15 +78,6 @@ export function RelaySendPanel({
       });
       if (!result) throw new Error('No relay');
       setMinted({ link: result.link, pin: result.pin });
-      const who = anonymous ? 'Someone' : senderName;
-      setMessage(
-        emailBodyFrom(messages, {
-          sender: who,
-          link: result.link,
-          pin: result.pin,
-          includePin: !sensitive,
-        }),
-      );
     } catch (e) {
       setError(
         e instanceof Error && e.message.includes('relay')
@@ -143,14 +88,6 @@ export function RelaySendPanel({
       setBusy(false);
     }
   };
-
-  const copy = async (label: string, value: string): Promise<void> => {
-    await navigator.clipboard?.writeText(value);
-    setCopied(label);
-    window.setTimeout(() => setCopied(null), 1500);
-  };
-
-  const canShare = useMemo(() => typeof navigator !== 'undefined' && 'share' in navigator, []);
 
   if (!status?.configured) {
     return (
@@ -175,118 +112,16 @@ export function RelaySendPanel({
     return (
       <Stack gap={4}>
         <Heading level={3}>Share this link</Heading>
-        <Banner tone="info">
-          The link is ready. We don’t keep a copy of the PIN — share it now.
-        </Banner>
-
-        <Field label="Secure link">
-          {(props) => (
-            <div className={styles.copyRow}>
-              <TextInput {...props} readOnly value={minted.link} />
-              <Button variant="secondary" onClick={() => void copy('link', minted.link)}>
-                <Copy size={15} aria-hidden="true" />
-                {copied === 'link' ? 'Copied' : 'Copy'}
-              </Button>
-            </div>
-          )}
-        </Field>
-
-        <Field label="PIN">
-          {(props) => (
-            <div className={styles.copyRow}>
-              <TextInput {...props} readOnly value={minted.pin} className={styles.pinValue} />
-              <Button variant="secondary" onClick={() => void copy('pin', minted.pin)}>
-                <Copy size={15} aria-hidden="true" />
-                {copied === 'pin' ? 'Copied' : 'Copy'}
-              </Button>
-            </div>
-          )}
-        </Field>
-
-        <Stack gap={2}>
-          <ToggleRow
-            label="Include the PIN in the message"
-            checked={includePin}
-            onChange={(next) => {
-              setIncludePin(next);
-              setMessage(
-                emailBodyFrom(messages, {
-                  sender: who,
-                  link: minted.link,
-                  pin: minted.pin,
-                  includePin: next,
-                }),
-              );
-            }}
-          />
-          {sensitive ? (
-            <Text size="sm" tone="secondary">
-              This is a sensitive questionnaire — consider sharing the PIN separately.
-            </Text>
-          ) : null}
-        </Stack>
-
-        <Field label="Message">
-          {(props) => (
-            <Textarea
-              {...props}
-              rows={5}
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-            />
-          )}
-        </Field>
-
-        <div className={styles.deliveryRow}>
-          <Button
-            variant="primary"
-            onClick={() => {
-              const subject = emailSubjectFrom(messages, who);
-              window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
-            }}
-          >
-            <Mail size={15} aria-hidden="true" />
-            Email
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              const sms = smsBodyFrom(messages, {
-                sender: who,
-                link: minted.link,
-                pin: minted.pin,
-                includePin,
-              });
-              window.location.href = `sms:${encodeURIComponent(phone)}?&body=${encodeURIComponent(sms)}`;
-            }}
-          >
-            <MessageSquare size={15} aria-hidden="true" />
-            Text
-          </Button>
-          {canShare ? (
-            <Button
-              variant="secondary"
-              onClick={() =>
-                void navigator
-                  .share({ title: 'A questionnaire for you', text: message, url: minted.link })
-                  .catch(() => undefined)
-              }
-            >
-              <Share2 size={15} aria-hidden="true" />
-              Share
-            </Button>
-          ) : null}
-          <Button variant="secondary" onClick={() => void copy('message', message)}>
-            <Copy size={15} aria-hidden="true" />
-            {copied === 'message' ? 'Copied' : 'Copy message'}
-          </Button>
-        </div>
-
-        <div className={styles.footer}>
-          <Button variant="primary" onClick={onDone}>
-            Done
-          </Button>
-        </div>
+        <RelayLinkDelivery
+          link={minted.link}
+          pin={minted.pin}
+          senderName={who}
+          sensitive={sensitive}
+          {...(recipientEmail ? { recipientEmail } : {})}
+          {...(recipientPhone ? { recipientPhone } : {})}
+          note="The link is ready to share. You can find it again any time from the questionnaire’s “Share a link”."
+          onDone={onDone}
+        />
       </Stack>
     );
   }
@@ -295,29 +130,9 @@ export function RelaySendPanel({
     <Stack gap={4}>
       <Heading level={3}>Send to {recipientName}</Heading>
       <Text size="sm" tone="secondary">
-        They’ll answer through a private, encrypted web link — no app needed.
+        They’ll answer through a private, encrypted web link — no app needed. You’ll add their email
+        or phone on the next step.
       </Text>
-
-      <Field label="Email (optional)">
-        {(props) => (
-          <TextInput
-            {...props}
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        )}
-      </Field>
-      <Field label="Phone (optional)">
-        {(props) => (
-          <TextInput
-            {...props}
-            type="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-          />
-        )}
-      </Field>
 
       <ToggleRow
         label="Send anonymously"

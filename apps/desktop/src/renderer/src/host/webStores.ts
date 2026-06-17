@@ -129,6 +129,42 @@ export function webFakeClaudeClient(): ClaudeClient {
     send: () => Promise.resolve('ok'),
     stream: (options, onDelta): Promise<ClaudeStreamResult> => {
       const userText = options.messages.map((message) => message.content).join('\n');
+      // Compatibility variant personalization (08 §3.6/§17.12/§17.14e) asks for a JSON array of objects
+      // { prompt, options } — echo each prompt tagged with the OTHER participant + preserve the options, so
+      // the preview exercises the full compatibility send (matching the Electron offline fake).
+      if (userText.includes('answer about THEIR experience with')) {
+        const about = /experience with (.+?):/.exec(userText)?.[1] ?? 'them';
+        const prompts = [...userText.matchAll(/^\d+\.\s*PROMPT:\s*(.+)$/gm)].map((m) => m[1]);
+        const optionLines = [...userText.matchAll(/^\s*OPTIONS:\s*(.+)$/gm)].map((m) => m[1]);
+        const objs = prompts.map((p, i) => {
+          let options: string[] | null = null;
+          const ol = optionLines[i];
+          if (ol && ol.trim() !== 'none') {
+            try {
+              options = JSON.parse(ol) as string[];
+            } catch {
+              options = null;
+            }
+          }
+          return { prompt: `${p} — about ${about}`, options };
+        });
+        return Promise.resolve({
+          text: JSON.stringify(objs),
+          usage: { inputTokens: 80, outputTokens: 40, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+      // Compatibility alignment (08 §13.5d) asks for a report JSON object.
+      if (userText.includes('compatibility report JSON')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            summary: 'You two are largely aligned, with a few differences worth talking through.',
+            items: [],
+            crisisFlag: false,
+            facts: [{ text: 'They share core values but differ on pace.', shareable: true }],
+          }),
+          usage: { inputTokens: 150, outputTokens: 60, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
       // The session-analysis turn (09 §5) asks to "summarize this session" — return a valid
       // SessionAnalysisDraft so the preview renders a real wrap-up card with facts + mood.
       if (userText.includes('summarize this session')) {

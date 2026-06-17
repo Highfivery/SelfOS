@@ -61,8 +61,10 @@ import {
   type IntakeTurnResult,
   type QuestionTrend,
   type Role,
+  type RelayLinkResult,
   type SendAnswer,
   type SendResult,
+  type QuestionnaireSendState,
   type QuestionnaireAnalyzeResult,
   type QuestionnaireGenerateResult,
   type QuestionnaireImproveResult,
@@ -176,6 +178,7 @@ import {
   addCustomType,
   analyzeAssignment,
   attachRelayLink,
+  readRelayLink,
   buildQuestionTrends,
   compatibilityDisclosure,
   createAssignment,
@@ -551,6 +554,46 @@ const CompatibilityCreateSchema = z.object({
   questionnaireId: z.string().min(1),
 });
 const GroupIdSchema = z.string().min(1);
+
+/**
+ * Mint a FRESH relay link + PIN for an existing, already-validated shareable send (08 §17.14a/c): revoke the
+ * old mailbox, derive the disclosure (compat vs external), re-upload. Shared by `assignmentsReshare` (by id)
+ * and `questionnairesShareLink` (the latest send of a questionnaire). Returns null if the upload fails.
+ */
+async function reshareLink(
+  fs: FileSystem,
+  key: Uint8Array,
+  client: ReturnType<typeof createRelayHttpClient>,
+  endpointUrl: string,
+  assignment: Assignment,
+): Promise<RelayLinkResult | null> {
+  if (assignment.relay) await revokeRelayForDeletion(fs, key, client, assignment.id);
+  const senderName =
+    (await getPerson(fs, key, assignment.senderPersonId))?.displayName ?? 'Someone';
+  const snapshot = await getAssignmentSnapshot(fs, key, assignment.id);
+  const compat = snapshot?.compatibility;
+  const disclosure = compat?.enabled
+    ? compatibilityDisclosure(compat.visibility, {
+        otherParticipantName: senderName,
+        senderName,
+        viewerIsSender: false,
+      })
+    : externalSendDisclosure(
+        assignment.senderVisibleToRecipient ? senderName : 'the person who sent this',
+        assignment.privacy,
+      );
+  try {
+    return await attachRelayLink(fs, key, client, assignment.id, {
+      senderName,
+      senderVisibleToRecipient: assignment.senderVisibleToRecipient,
+      disclosure,
+      endpointUrl,
+    });
+  } catch {
+    // Mint failed after the old mailbox was revoked: the send keeps its stale relay; the user can retry.
+    return null;
+  }
+}
 
 /** Build the renderer-facing `SelfosBridge` from a platform `BridgeHost`. */
 export function createCoreBridge(host: BridgeHost): SelfosBridge {
@@ -1279,6 +1322,24 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) return [];
       return listQuestionnaires(ctx.fs, ctx.key);
     },
+    questionnairesSendStates: async (): Promise<Record<string, QuestionnaireSendState>> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) return {};
+      const personId = await activePersonId();
+      if (!personId) return {};
+      // The active person's own sends, aggregated by questionnaire — latest send time + count. Pure
+      // metadata for the list's "Sent · <date>" badge (08 §17.14); no answers or recipient detail.
+      const sends = await listAssignments(ctx.fs, ctx.key, { senderPersonId: personId });
+      const states: Record<string, QuestionnaireSendState> = {};
+      for (const a of sends) {
+        const prev = states[a.questionnaireId];
+        states[a.questionnaireId] = {
+          lastSentAt: prev && prev.lastSentAt > a.createdAt ? prev.lastSentAt : a.createdAt,
+          total: (prev?.total ?? 0) + 1,
+        };
+      }
+      return states;
+    },
     questionnairesGet: async (id): Promise<Questionnaire | null> => {
       const ctx = await host.vaultAndKey();
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) return null;
@@ -1620,9 +1681,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           link,
           pin,
         };
-      } catch {
-        // The relay is unreachable right now — the in-app send still stands (Inbox-only).
-        return { assignment };
+      } catch (e) {
+        // A relay IS connected but minting failed — surface it (don't swallow): the in-app send stands,
+        // but the sender should know the link didn't go out and can retry from Results (§17.14a).
+        return {
+          assignment,
+          linkError: e instanceof Error ? e.message : 'The relay couldn’t be reached.',
+        };
       }
     },
 
@@ -1797,6 +1862,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           assignmentId: a.id,
           recipientName,
           channel: a.channel,
+          relayLinked: Boolean(a.relay),
           status: a.status,
           privacy: a.privacy,
           createdAt: a.createdAt,
@@ -1875,13 +1941,17 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         return { ok: false, reason: 'INVALID', message: 'This questionnaire has no recipient.' };
       }
       const visibility = canonical.compatibility.visibility;
-      const senderName =
-        (await getPerson(deps.fs, deps.key, deps.personId))?.displayName ?? 'Someone';
+      const senderPerson = await getPerson(deps.fs, deps.key, deps.personId);
+      const senderName = senderPerson?.displayName ?? 'Someone';
+      // Each participant's gender drives the OTHER person's pronouns in their variant (§17.14e) — so a man
+      // asked about his female partner reads "her", never "him".
+      const senderGender = senderPerson?.gender;
 
       // Resolve the OTHER participant up front: each person's variant must ask about the OTHER one (08
       // §17.12 — the recipient was being asked about themselves, not the sender). For a household person,
       // validate it exists + isn't the sender; for an external recipient, it's their given name.
       let otherName: string;
+      let otherGender: string | undefined;
       if (recipient.kind === 'person') {
         if (recipient.personId === deps.personId) {
           return {
@@ -1894,6 +1964,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         if (!rp)
           return { ok: false, reason: 'INVALID', message: 'A chosen person no longer exists.' };
         otherName = rp.displayName;
+        otherGender = rp.gender;
       } else {
         // An external recipient nearly always has a name; fall back to a warm placeholder, not "them".
         otherName = recipient.displayName ?? 'your partner';
@@ -1902,7 +1973,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // The sender's own variant — written TO the sender, ABOUT the other participant; their own full context.
       const senderVariant = await generateVariant(deps, {
         forName: senderName,
+        ...(senderGender ? { forGender: senderGender } : {}),
         aboutName: otherName,
+        ...(otherGender ? { aboutGender: otherGender } : {}),
         questions: canonical.questions,
         targetContext: {
           authorPersonId: deps.personId,
@@ -1925,7 +1998,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         // The recipient's variant — written TO them, ABOUT the sender; their SHAREABLE context only (§13.3).
         const recipientVariant = await generateVariant(deps, {
           forName: otherName,
+          ...(otherGender ? { forGender: otherGender } : {}),
           aboutName: senderName,
+          ...(senderGender ? { aboutGender: senderGender } : {}),
           questions: canonical.questions,
           targetContext: {
             authorPersonId: deps.personId,
@@ -1951,7 +2026,65 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
             { personId: recipientPersonId, questions: recipientVariant.questions },
           ],
         });
-        return { ok: true, compatibilityGroupId };
+        // Unified delivery (§17.14): also mint a relay link for the RECIPIENT's variant so a household
+        // recipient can answer in their Inbox OR via a link + email/SMS — exactly like an external send.
+        // The sender answers their OWN variant in-app, so no link is minted for the sender's member. Only
+        // when the sender can deliver externally AND a relay is connected (else Inbox-only, graceful).
+        const config = (await activePersonCan(deps.fs, deps.key, 'questionnaires.sendExternal'))
+          ? await readRelayConfig(deps.fs, deps.key)
+          : null;
+        if (!config) return { ok: true, compatibilityGroupId };
+        const recipientMember = (
+          await listAssignments(deps.fs, deps.key, { senderPersonId: deps.personId })
+        ).find(
+          (a) =>
+            a.compatibilityGroupId === compatibilityGroupId &&
+            a.recipient.kind === 'person' &&
+            a.recipient.personId === recipientPersonId,
+        );
+        if (!recipientMember) {
+          // A relay is connected but we can't find the recipient's just-created member to attach a link —
+          // surface it (don't fall back to a silent no-link), matching the mint-failure path below.
+          return {
+            ok: true,
+            compatibilityGroupId,
+            linkError: 'Couldn’t prepare the share link. Open Results to add one.',
+          };
+        }
+        const client = createRelayHttpClient(
+          config.endpointUrl,
+          config.drainSecret,
+          host.relay.fetch,
+        );
+        try {
+          const { link, pin } = await attachRelayLink(
+            deps.fs,
+            deps.key,
+            client,
+            recipientMember.id,
+            {
+              senderName,
+              senderVisibleToRecipient: true,
+              // The recipient is told (from their POV) who's comparing them — the sender (§16.1).
+              disclosure: compatibilityDisclosure(visibility, {
+                otherParticipantName: senderName,
+                senderName,
+                viewerIsSender: false,
+              }),
+              endpointUrl: config.endpointUrl,
+            },
+          );
+          return { ok: true, compatibilityGroupId, link, pin };
+        } catch (e) {
+          // A relay IS connected but minting failed (e.g. the relay is unreachable / its deploy is stale).
+          // The in-app paired sends still stand, but DON'T swallow it: surface a linkError so the sender
+          // sees the link didn't go out and can retry from Results, instead of a silent Inbox-only state.
+          return {
+            ok: true,
+            compatibilityGroupId,
+            linkError: e instanceof Error ? e.message : 'The relay couldn’t be reached.',
+          };
+        }
       }
 
       // --- External (relay): the sender answers in-app + the recipient answers via the relay (08 §17.12-B) ---
@@ -1969,7 +2102,10 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // The external recipient's variant — written TO them, ABOUT the sender (no household context to draw on).
       const externalVariant = await generateVariant(deps, {
         forName: otherName,
+        // An external recipient has no stored gender → their variant refers to the sender by name/their
+        // gender, and to the external person by name (no pronoun assumed).
         aboutName: senderName,
+        ...(senderGender ? { aboutGender: senderGender } : {}),
         questions: canonical.questions,
         targetContext: {
           authorPersonId: deps.personId,
@@ -2058,6 +2194,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
             assignmentId: a.id,
             recipientName: await recipientDisplayName(ctx.fs, ctx.key, a),
             channel: a.channel,
+            relayLinked: Boolean(a.relay),
+            // The sender's own member answers in-app — never a link to share.
+            isSelf: a.recipient.kind === 'person' && a.recipient.personId === personId,
             status: a.status,
             ...(a.status === 'submitted' ? { submittedAt: a.updatedAt } : {}),
           });
@@ -2320,6 +2459,82 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         host.relay.fetch,
       );
       await revokeRelaySend(ctx.fs, ctx.key, client, id);
+    },
+    assignmentsReshare: async (assignmentId): Promise<RelayLinkResult | null> => {
+      // Re-publish a fresh link + PIN for an existing send (08 §17.14). We never store the PIN (only a
+      // hash), so the original can't be re-shown — resharing mints a NEW link + PIN and revokes the old
+      // mailbox so the previous link stops working. Sender-scoped + external-capable + relay connected.
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.sendExternal')))
+        return null;
+      const id = AssignmentIdSchema.parse(assignmentId);
+      const assignment = await getAssignment(ctx.fs, ctx.key, id);
+      if (!assignment) return null;
+      const personId = await activePersonId();
+      if (
+        assignment.senderPersonId !== personId &&
+        !(await activePersonCan(ctx.fs, ctx.key, 'people.manage'))
+      ) {
+        throw new Error('Not permitted');
+      }
+      // Never mint a link for the SENDER'S OWN member (they answer in-app), or for an already-answered
+      // send. Key off the send's own sender (NOT the active person) so an admin resharing someone else's
+      // group can't mint a link to the sender's full-context self-variant.
+      if (
+        assignment.recipient.kind === 'person' &&
+        assignment.recipient.personId === assignment.senderPersonId
+      ) {
+        return null;
+      }
+      if (assignment.status === 'submitted' || assignment.status === 'declined') return null;
+      const config = await readRelayConfig(ctx.fs, ctx.key);
+      if (!config) return null;
+      const client = createRelayHttpClient(
+        config.endpointUrl,
+        config.drainSecret,
+        host.relay.fetch,
+      );
+      return reshareLink(ctx.fs, ctx.key, client, config.endpointUrl, assignment);
+    },
+    questionnairesShareLink: async (
+      questionnaireId,
+      regenerate,
+    ): Promise<RelayLinkResult | null> => {
+      // The shareable link + PIN for a SENT questionnaire (08 §17.14d) — at the top of the sent (locked)
+      // preview + the list kebab, so the link stays reachable after sending without going to Results. By
+      // default this RE-SHOWS the EXISTING link/PIN (no regeneration); `regenerate: true` (the manual
+      // Refresh) mints a fresh one + revokes the old. Always the latest still-open RECIPIENT send (never
+      // the sender's own self member).
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.sendExternal')))
+        return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const qid = QuestionnaireIdSchema.parse(questionnaireId);
+      const open = ['sent', 'opened', 'inProgress'];
+      const candidate = (await listAssignments(ctx.fs, ctx.key, { senderPersonId: personId }))
+        .filter(
+          (a) =>
+            a.questionnaireId === qid &&
+            open.includes(a.status) &&
+            // The shareable member is the RECIPIENT, never the sender's own (self) compat member.
+            !(a.recipient.kind === 'person' && a.recipient.personId === a.senderPersonId),
+        )
+        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0];
+      if (!candidate) return null;
+      const config = await readRelayConfig(ctx.fs, ctx.key);
+      if (!config) return null;
+      // Re-show the existing link unless a refresh was asked for (or the send predates stored PIN material).
+      if (!regenerate) {
+        const existing = await readRelayLink(ctx.fs, ctx.key, candidate.id, config.endpointUrl);
+        if (existing) return existing;
+      }
+      const client = createRelayHttpClient(
+        config.endpointUrl,
+        config.drainSecret,
+        host.relay.fetch,
+      );
+      return reshareLink(ctx.fs, ctx.key, client, config.endpointUrl, candidate);
     },
     relayStatus: async (): Promise<RelayStatus> => {
       const ctx = await host.vaultAndKey();

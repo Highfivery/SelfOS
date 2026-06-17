@@ -873,6 +873,11 @@ export const AssignmentSchema = z.object({
       // e.g. an external compatibility report pushed from Results (08 §17.12-D). Additive-optional: sends
       // minted before this omit it (their outcome write-back is simply unavailable), no migration.
       contentKeyWrapped: z.string().min(1).optional(),
+      // The 6-digit PIN wrapped under the master key (08 §17.14d), so the sender can RE-SHOW the existing
+      // link + PIN later ("Share link") instead of regenerating it every time. The relay still only ever
+      // holds the `pinHash`. Additive-optional: sends minted before this omit it (their "Share link" falls
+      // back to minting a fresh one); no migration.
+      pinWrapped: z.string().min(1).optional(),
     })
     .optional(),
   createdAt: z.string(),
@@ -1495,6 +1500,10 @@ export interface SendResult {
   assignmentId: string;
   recipientName: string;
   channel: Channel; // 'relay' = an external link send (drainable / revocable); 'inApp' = household
+  // True when this send carries relay material (a link the recipient can answer from anywhere). A household
+  // ('inApp') send ALSO mints one when a relay is connected (§17.13), so relay affordances (drain / link /
+  // revoke) must key off THIS, not `channel === 'relay'`.
+  relayLinked: boolean;
   status: AssignmentStatus;
   privacy: PrivacyMode;
   createdAt: string;
@@ -1504,11 +1513,25 @@ export interface SendResult {
   answers?: SendAnswer[]; // present only for a Standard, submitted send
 }
 
+/**
+ * Per-questionnaire send state for the author's list (08-questionnaires §17.14): the latest time the active
+ * person sent this questionnaire + how many times. Absent for a never-sent questionnaire (so the list can
+ * show a "Draft" affordance). Pure metadata — no answers, no recipient detail.
+ */
+export interface QuestionnaireSendState {
+  lastSentAt: string;
+  total: number;
+}
+
 /** One of the two paired sends of a compatibility questionnaire, as the sender sees it (08 §3.6). */
 export interface CompatibilityMember {
   assignmentId: string;
   recipientName: string;
   channel: Channel; // 'relay' = an external recipient (answers via a link; can receive a pushed outcome)
+  // True when this member carries relay material — an external recipient OR a household member that also
+  // minted a link (§17.14). Drives the per-member "Share / Resend link" + the group drain affordance.
+  relayLinked: boolean;
+  isSelf: boolean; // the sender's own member (answers in-app; never gets a link to share)
   status: AssignmentStatus;
   submittedAt?: string;
 }
@@ -1562,6 +1585,16 @@ export interface InAppSendResult {
   assignment: Assignment;
   link?: string;
   pin?: string;
+  // Set when a relay IS connected but minting the link failed (e.g. the relay is unreachable). The send
+  // still stands (Inbox), but this is surfaced — NOT silently swallowed — so the sender knows the link
+  // didn't go out and can retry from Results. Absent when no relay is connected (Inbox-only by design).
+  linkError?: string;
+}
+
+/** A freshly minted (or re-minted) relay link + its one-time PIN — for delivery / re-share (08 §17.14). */
+export interface RelayLinkResult {
+  link: string;
+  pin: string;
 }
 
 /**
@@ -1578,10 +1611,14 @@ export type CompatibilitySendResult =
   | {
       ok: true;
       compatibilityGroupId: string;
-      // For an EXTERNAL compatibility send (08 §17.12-B) the recipient answers via the relay — the link + PIN
-      // are returned once for delivery (omitted for a household send, where both answer in-app).
+      // The recipient's link + PIN, returned once for delivery: an EXTERNAL recipient always answers via
+      // the relay (08 §17.12-B), and a HOUSEHOLD recipient ALSO gets a link when a relay is connected
+      // (§17.14a) — they answer in their Inbox OR via the link. Omitted when no relay is connected.
       link?: string;
       pin?: string;
+      // Set when a relay IS connected but minting the recipient's link failed — surfaced, not swallowed,
+      // so the sender knows the link didn't go out and can retry from Results (§17.14a). Absent = no relay.
+      linkError?: string;
     }
   | {
       ok: false;

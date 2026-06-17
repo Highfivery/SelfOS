@@ -113,16 +113,27 @@ function makeHost(): {
     send: () => Promise.resolve('ok'),
     stream: (options, onDelta) => {
       const userText = options.messages.map((m) => m.content).join('\n');
-      // Compatibility variant personalization → a JSON array of rewritten prompts (one per question), each
-      // tagged with the OTHER participant the user message names ("compares X with Y"), so a test can verify
-      // each person is asked ABOUT the other, not themselves (08 §17.12).
-      if (userText.includes('rewritten prompts')) {
-        const about = /compares .+? with (.+?)\./.exec(userText)?.[1] ?? 'them';
-        const prompts = [...userText.matchAll(/^\d+\.\s(.+)$/gm)].map(
-          (m) => `${m[1]} — about ${about}`,
-        );
+      // Compatibility variant personalization → a JSON array of objects { prompt, options } (one per
+      // question), each prompt tagged with the OTHER participant the user message names ("experience with
+      // Y"), so a test can verify each person is asked ABOUT the other, not themselves (08 §17.12/§17.14e).
+      if (userText.includes('answer about THEIR experience with')) {
+        const about = /experience with (.+?):/.exec(userText)?.[1] ?? 'them';
+        const prompts = [...userText.matchAll(/^\d+\.\s*PROMPT:\s*(.+)$/gm)].map((m) => m[1]);
+        const optionLines = [...userText.matchAll(/^\s*OPTIONS:\s*(.+)$/gm)].map((m) => m[1]);
+        const objs = prompts.map((p, i) => {
+          let opts: string[] | null = null;
+          const ol = optionLines[i];
+          if (ol && ol.trim() !== 'none') {
+            try {
+              opts = JSON.parse(ol) as string[];
+            } catch {
+              opts = null;
+            }
+          }
+          return { prompt: `${p} — about ${about}`, options: opts };
+        });
         return Promise.resolve({
-          text: JSON.stringify(prompts),
+          text: JSON.stringify(objs),
           usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
       }
@@ -1863,6 +1874,13 @@ describe('createCoreBridge', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ token, pin: sent.pin, sealed }),
     });
+    // Before draining, Results flags the household send as relay-linked so the UI shows drain/revoke
+    // (the #3 fix: the affordance keys off relay material, not `channel === 'relay'`).
+    const before = await bridge.assignmentsResults(q.id);
+    const beforeRow = before.find((r) => r.assignmentId === sent.assignment.id);
+    expect(beforeRow?.channel).toBe('inApp');
+    expect(beforeRow?.relayLinked).toBe(true);
+
     expect((await bridge.assignmentsDrain()).drained).toBe(1);
     const results = await bridge.assignmentsResults(q.id);
     expect(results.find((r) => r.assignmentId === sent.assignment.id)?.status).toBe('submitted');
@@ -1901,6 +1919,169 @@ describe('createCoreBridge', () => {
       body: JSON.stringify({ token, pin: sent.pin }),
     });
     expect(res.status).toBe(404);
+  });
+
+  it('questionnairesSendStates: latest send time + count per questionnaire; absent until sent (§17.14)', async () => {
+    const { bridge } = await freshOwner();
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: mara.id, roleId: 'member', pin: null });
+    const q = await bridge.questionnairesSave({
+      title: 'Weekly check-in',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: mara.id },
+      questions: [{ id: 'a', type: 'shortText', prompt: 'How?', required: true }],
+    });
+
+    // A never-sent questionnaire has no send state (the list shows it as a draft).
+    expect(await bridge.questionnairesSendStates()).toEqual({});
+
+    // Send it twice → the state records the count + the latest send time.
+    await bridge.assignmentsCreate({ questionnaireId: q.id, privacy: 'standard' });
+    await bridge.assignmentsCreate({ questionnaireId: q.id, privacy: 'standard' });
+    const states = await bridge.questionnairesSendStates();
+    expect(states[q.id]?.total).toBe(2);
+    expect(typeof states[q.id]?.lastSentAt).toBe('string');
+
+    // Sender-scoped: the recipient (Mara) sent nothing herself, so her own send-states are empty —
+    // the owner's send of `q` does not leak into another person's list.
+    await bridge.sessionSetActive({ personId: mara.id });
+    expect(await bridge.questionnairesSendStates()).toEqual({});
+  });
+
+  it('compatibility household (§17.14): mints a relay link for the recipient (not self) + reshare mints fresh', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.relayConnect({ apiToken: 'cf', accountId: 'acct' });
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const angel = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: angel.id, roleId: 'member', pin: null });
+    const q = await bridge.questionnairesSave({
+      title: 'Closeness',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: angel.id },
+      questions: [
+        {
+          id: 'c1',
+          type: 'rating',
+          prompt: 'How connected?',
+          required: true,
+          scale: { min: 1, max: 5 },
+        },
+      ],
+      compatibility: { enabled: true, visibility: 'sharedReport' },
+    });
+
+    // A HOUSEHOLD compatibility send now ALSO mints a relay link for the RECIPIENT's variant (§17.14) —
+    // the sender answers their own variant in-app, so no link is minted for the sender's member.
+    const sent = await bridge.assignmentsCreateCompatibility({ questionnaireId: q.id });
+    expect(sent.ok).toBe(true);
+    if (!sent.ok) throw new Error('expected ok');
+    expect(sent.link).toMatch(/\.workers\.dev\/q\/[0-9a-f]+#k=/);
+    expect(sent.pin).toMatch(/^\d{6}$/);
+
+    const members = (await bridge.assignmentsCompatibility(q.id))[0]!.members;
+    const angelMember = members.find((m) => m.recipientName === 'Angel')!;
+    const selfMember = members.find((m) => m.isSelf)!;
+    expect(angelMember.relayLinked).toBe(true); // the recipient gets a shareable link
+    expect(selfMember.relayLinked).toBe(false); // the sender answers in-app — no link
+
+    // Re-share the recipient's link → a FRESH link + PIN (the old link is revoked; PIN is never re-shown).
+    const reshared = await bridge.assignmentsReshare(angelMember.assignmentId);
+    expect(reshared?.link).toMatch(/\.workers\.dev\/q\//);
+    expect(reshared?.pin).toMatch(/^\d{6}$/);
+    expect(reshared?.link).not.toBe(sent.link); // a new token → a different link
+
+    // Re-sharing the sender's OWN member is refused (they answer in-app, never a link) — the guard keys off
+    // the send's OWN sender (`recipient.personId === senderPersonId`), NOT the active person, so an admin
+    // resharing someone else's group can't mint a link to the sender's full-context self-variant either.
+    expect(await bridge.assignmentsReshare(selfMember.assignmentId)).toBeNull();
+  });
+
+  it('compatibility household (§17.14a): a relay-mint failure surfaces linkError — never a silent Inbox-only', async () => {
+    const ctx = await freshOwner();
+    const { bridge } = ctx;
+    await bridge.relayConnect({ apiToken: 'cf', accountId: 'acct' });
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const angel = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: angel.id, roleId: 'member', pin: null });
+    const q = await bridge.questionnairesSave({
+      title: 'Closeness',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: angel.id },
+      questions: [
+        {
+          id: 'c1',
+          type: 'rating',
+          prompt: 'How connected?',
+          required: true,
+          scale: { min: 1, max: 5 },
+        },
+      ],
+      compatibility: { enabled: true, visibility: 'sharedReport' },
+    });
+
+    // A relay IS connected, but make it unreachable for the mailbox upload (a stale/down deploy). The mint
+    // must NOT be silently swallowed — the send still stands (Inbox) but reports a linkError the UI surfaces.
+    ctx.host.host.relay.fetch = () => Promise.reject(new Error('relay unreachable'));
+    const sent = await bridge.assignmentsCreateCompatibility({ questionnaireId: q.id });
+    expect(sent.ok).toBe(true);
+    if (!sent.ok) throw new Error('expected ok');
+    expect(sent.link).toBeUndefined();
+    expect(sent.pin).toBeUndefined();
+    expect(sent.linkError).toBeTruthy(); // surfaced, not swallowed — the user learns the link didn't go out
+  });
+
+  it('one-person household (§17.14a): a relay-mint failure surfaces linkError too', async () => {
+    const ctx = await freshOwner();
+    const { bridge } = ctx;
+    await bridge.relayConnect({ apiToken: 'cf', accountId: 'acct' });
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: mara.id, roleId: 'member', pin: null });
+    const q = await bridge.questionnairesSave({
+      title: 'Check-in',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: mara.id },
+      questions: [{ id: 'a', type: 'shortText', prompt: 'How?', required: true }],
+    });
+    // Relay connected but unreachable for the upload → the in-app send stands, but linkError is surfaced.
+    ctx.host.host.relay.fetch = () => Promise.reject(new Error('relay unreachable'));
+    const sent = await bridge.assignmentsCreate({ questionnaireId: q.id, privacy: 'standard' });
+    expect(sent.assignment.id).toBeTruthy();
+    expect(sent.link).toBeUndefined();
+    expect(sent.linkError).toBeTruthy();
+  });
+
+  it('questionnairesShareLink (§17.14d): re-shows the SAME link/PIN; regenerate mints a fresh one', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.relayConnect({ apiToken: 'cf', accountId: 'acct' });
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: mara.id, roleId: 'member', pin: null });
+    const q = await bridge.questionnairesSave({
+      title: 'Check-in',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: mara.id },
+      questions: [{ id: 'a', type: 'shortText', prompt: 'How?', required: true }],
+    });
+    // Before any send there's nothing to share.
+    expect(await bridge.questionnairesShareLink(q.id)).toBeNull();
+
+    // After sending, the link is reachable again WITHOUT going through Results — and stable.
+    await bridge.assignmentsCreate({ questionnaireId: q.id, privacy: 'standard' });
+    const first = await bridge.questionnairesShareLink(q.id);
+    expect(first?.link).toMatch(/\.workers\.dev\/q\//);
+    expect(first?.pin).toMatch(/^\d{6}$/);
+    // Clicking Share link AGAIN returns the IDENTICAL link + PIN (no regeneration — the user's ask).
+    const again = await bridge.questionnairesShareLink(q.id);
+    expect(again).toEqual(first);
+    // Only an explicit Refresh (regenerate) mints a fresh, DIFFERENT link + PIN.
+    const refreshed = await bridge.questionnairesShareLink(q.id, true);
+    expect(refreshed?.link).not.toBe(first?.link);
+    // …and the refreshed one is now what "Share link" shows from then on (stable again).
+    expect(await bridge.questionnairesShareLink(q.id)).toEqual(refreshed);
   });
 
   it('saves/edits a dream, scoped to the active dreamer and gated by dreams.own', async () => {

@@ -56,7 +56,9 @@ import type {
   QuestionnaireGenerateResult,
   QuestionnaireImproveResult,
   QuestionnaireInput,
+  QuestionnaireSendState,
   QuestionnaireSuggestResult,
+  RelayLinkResult,
   QuestionTrend,
   Relationship,
   RelationshipInput,
@@ -140,6 +142,8 @@ export const IpcChannels = {
   guidedAcknowledgeAdult: 'guided:acknowledgeAdult',
   usageSessionCosts: 'usage:sessionCosts',
   questionnairesList: 'questionnaires:list',
+  questionnairesSendStates: 'questionnaires:sendStates',
+  questionnairesShareLink: 'questionnaires:shareLink',
   questionnairesGet: 'questionnaires:get',
   questionnairesSave: 'questionnaires:save',
   questionnairesDelete: 'questionnaires:delete',
@@ -181,6 +185,7 @@ export const IpcChannels = {
   assignmentsCreateRelayLink: 'assignments:createRelayLink',
   assignmentsDrain: 'assignments:drain',
   assignmentsRevoke: 'assignments:revoke',
+  assignmentsReshare: 'assignments:reshare',
   relayStatus: 'relay:status',
   relayConnect: 'relay:connect',
   relayUpdate: 'relay:update',
@@ -447,6 +452,22 @@ export interface SelfosBridge {
   usageSessionCosts(): Promise<Record<string, SessionCost>>;
   /** The household's questionnaire definitions, newest first. Requires `questionnaires.create`. */
   questionnairesList(): Promise<Questionnaire[]>;
+  /**
+   * Per-questionnaire send state for the active person's own sends (08 §17.14): keyed by questionnaire id,
+   * the latest send time + count. Drives the list's "Sent · <date>" badge so an author can tell which of
+   * their questionnaires have gone out. Sender-scoped; requires `questionnaires.create`.
+   */
+  questionnairesSendStates(): Promise<Record<string, QuestionnaireSendState>>;
+  /**
+   * The shareable link + PIN for a SENT questionnaire's latest open send (08 §17.14d) — for the "Share link"
+   * affordance on the sent preview + list kebab. By default RE-SHOWS the existing link/PIN (no regeneration);
+   * `regenerate: true` (the manual Refresh) mints a fresh one + revokes the old. Null if there's no relay,
+   * no open send, or (on regenerate) the mint fails. Requires `questionnaires.sendExternal`.
+   */
+  questionnairesShareLink(
+    questionnaireId: string,
+    regenerate?: boolean,
+  ): Promise<RelayLinkResult | null>;
   /** Load one questionnaire definition; null if absent. */
   questionnairesGet(id: string): Promise<Questionnaire | null>;
   /** Create or update a questionnaire definition (editing bumps its version); returns the saved record. */
@@ -638,6 +659,12 @@ export interface SelfosBridge {
   assignmentsDrain(): Promise<{ drained: number; declined: number }>;
   /** Revoke an external send's relay link (sender or admin). Requires `questionnaires.sendExternal`. */
   assignmentsRevoke(assignmentId: string): Promise<void>;
+  /**
+   * Re-publish a send's relay link: mint a FRESH link + PIN (the old link is revoked — the PIN is never
+   * stored, so the original can't be re-shown), for delivery/resend. Returns null if not applicable (no
+   * relay, the sender's own member, an already-answered send). Requires `questionnaires.sendExternal`.
+   */
+  assignmentsReshare(assignmentId: string): Promise<RelayLinkResult | null>;
   /** The relay connection status (no secrets) for the send panel + admin Relay setup. */
   relayStatus(): Promise<RelayStatus>;
   /** Connect + deploy the household relay to Cloudflare (admin-only). Returns the new status. */
@@ -820,7 +847,9 @@ export type {
   PrivacyMode,
   Questionnaire,
   QuestionnaireInput,
+  QuestionnaireSendState,
   QuestionTrend,
+  RelayLinkResult,
   Relationship,
   RelationshipInput,
   Role,

@@ -1036,11 +1036,11 @@ test('questionnaires: author a single-choice questionnaire, validate, persist, n
 
     // Back to the list (the builder is a focused panel) — the new questionnaire shows with its count.
     await backToQuestionnaires(w);
-    await expect(w.getByRole('button', { name: /Weekly check-in/ })).toBeVisible();
+    await expect(w.getByRole('button', { name: /^Weekly check-in/ })).toBeVisible();
     await expect(w.getByText('1 question')).toBeVisible();
 
     // Reopen and confirm the title + options round-tripped through the encrypted vault.
-    await w.getByRole('button', { name: /Weekly check-in/ }).click();
+    await w.getByRole('button', { name: /^Weekly check-in/ }).click();
     await expect(w.getByLabel('Title')).toHaveValue('Weekly check-in');
     await expect(w.getByLabel('Option 1', { exact: true })).toHaveValue('Very');
     await expect(w.getByLabel('Option 3', { exact: true })).toHaveValue('Not at all');
@@ -1098,7 +1098,7 @@ test('questionnaires: custom type, sensitivity, matrix + branching round-trip', 
     await expect(w.getByText('2 questions')).toBeVisible();
 
     // Reopen and confirm everything round-tripped through the encrypted vault.
-    await w.getByRole('button', { name: /Date-night check-in/ }).click();
+    await w.getByRole('button', { name: /^Date-night check-in/ }).click();
     await expect(w.getByLabel('Type', { exact: true })).toHaveValue('Date night');
     await expect(w.getByLabel('Sensitivity')).toHaveCount(0);
     await expect(w.getByLabel('Row 1', { exact: true })).toHaveValue('Trust');
@@ -1197,7 +1197,7 @@ test('questionnaires: General default + intimacy-only sensitivity + live inline 
     // builder is a focused full-width panel (the list hides while editing), so go back to the list first.
     await w.getByRole('button', { name: 'Create draft' }).click();
     await w.getByRole('button', { name: 'Questionnaires' }).click();
-    await w.getByRole('button', { name: /Check-in/ }).click();
+    await w.getByRole('button', { name: /^Check-in/ }).click();
     await expect(w.getByLabel('Type', { exact: true })).toHaveValue('intimacy');
     await expect(w.getByLabel('Sensitivity')).toHaveValue('explicit');
 
@@ -1257,7 +1257,7 @@ test('questionnaires: attach an encrypted image, require alt, round-trip + show 
 
     // Reopen: the alt text round-tripped through the encrypted vault and the image still loads.
     // (The editor thumbnail AND the open inline preview both render it, so scope to the first.)
-    await w.getByRole('button', { name: /Photo prompt/ }).click();
+    await w.getByRole('button', { name: /^Photo prompt/ }).click();
     await expect(w.getByLabel('Image description (alt text)')).toHaveValue('A test image');
     await expect(w.getByRole('img', { name: 'A test image' }).first()).toBeVisible();
 
@@ -1814,14 +1814,14 @@ test('results: a Standard response surfaces the raw answers in the sender’s Re
 
     // Answer + submit it from the Inbox.
     await w.getByRole('link', { name: /Inbox/ }).click();
-    await w.getByRole('button', { name: /Weekly check-in/ }).click();
+    await w.getByRole('button', { name: /^Weekly check-in/ }).click();
     await w.getByLabel('How are we doing?').fill('Doing great');
     await w.getByRole('button', { name: 'Submit' }).click();
     await expect(w.getByText('Submitted')).toBeVisible();
 
     // Open the questionnaire's Results tab — a Standard send shows the raw answers.
     await w.getByRole('link', { name: 'Questionnaires' }).click();
-    await w.getByRole('button', { name: /Weekly check-in/ }).click();
+    await w.getByRole('button', { name: /^Weekly check-in/ }).click();
     await w.getByRole('button', { name: 'Results' }).click();
     await expect(w.getByText('How are we doing?')).toBeVisible();
     await expect(w.getByText('Doing great')).toBeVisible();
@@ -1864,18 +1864,35 @@ test('results: re-asks chart a trend, a send deletes, and the questionnaire purg
     await w.getByLabel('Question 1', { exact: true }).fill('How connected do you feel?');
     await w.getByLabel('Answer type').selectOption({ label: 'Rating' });
 
-    // Send it to self twice (a re-ask), answering each with a different rating.
-    const sendToSelf = async (): Promise<void> => {
-      await w.getByRole('button', { name: 'Send' }).click();
-      await w.getByRole('button', { name: 'Standard' }).click();
-      await w.getByRole('button', { name: 'Send' }).last().click();
-      await w.getByRole('button', { name: 'Done' }).click();
-    };
-    // §16.3: save the draft so Send appears, send once; then re-open the saved questionnaire and re-ask.
+    // §16.3: save the draft so Send appears, then send once via the UI.
     await w.getByRole('button', { name: 'Create draft' }).click();
-    await sendToSelf(); // sending returns to the list, so the saved questionnaire is visible to re-open
-    await w.getByRole('button', { name: /Mood check/ }).click();
-    await sendToSelf();
+    await w.getByRole('button', { name: 'Send' }).click();
+    await w.getByRole('button', { name: 'Standard' }).click();
+    await w.getByRole('button', { name: 'Send' }).last().click();
+    await w.getByRole('button', { name: 'Done' }).click();
+    // The re-ask: a SENT questionnaire is locked + the in-UI "Send again" is disabled until the re-send
+    // cooldown (§17.14a), so drive the second send through the bridge (a re-ask is still valid) to get the
+    // two submitted responses a trend needs — without waiting out the cooldown.
+    const qid = await w.evaluate(async () => {
+      const sel = (
+        window as unknown as { selfos: { questionnairesList: () => Promise<{ id: string }[]> } }
+      ).selfos;
+      const list = await sel.questionnairesList();
+      return list[0]?.id ?? '';
+    });
+    await w.evaluate((id) => {
+      const sel = (
+        window as unknown as {
+          selfos: {
+            assignmentsCreate: (i: {
+              questionnaireId: string;
+              privacy: string;
+            }) => Promise<unknown>;
+          };
+        }
+      ).selfos;
+      return sel.assignmentsCreate({ questionnaireId: id, privacy: 'standard' });
+    }, qid);
 
     // Answer both from the Inbox with ratings 2 then 5. Pick the still-unanswered "New" item, waiting
     // for the list to settle after each submit (else the just-submitted row is still briefly "New").
@@ -1892,7 +1909,7 @@ test('results: re-asks chart a trend, a send deletes, and the questionnaire purg
 
     // Results: both sends + a Trends chart for the rating question.
     await w.getByRole('link', { name: 'Questionnaires' }).click();
-    await w.getByRole('button', { name: /Mood check/ }).click();
+    await w.getByRole('button', { name: /^Mood check/ }).click();
     await w.getByRole('button', { name: 'Results' }).click();
     await expect(w.getByRole('heading', { name: 'Trends' })).toBeVisible();
     await expect(w.getByRole('img', { name: /trend over time/i })).toBeVisible();
@@ -1906,11 +1923,68 @@ test('results: re-asks chart a trend, a send deletes, and the questionnaire purg
     await w.getByRole('button', { name: 'Delete', exact: true }).click();
     await expect(w.getByRole('button', { name: /Delete this send/ })).toHaveCount(1);
 
-    // Delete the whole questionnaire — confirm purge, back to an empty list.
-    await w.getByRole('button', { name: 'Edit' }).click();
-    await w.getByRole('button', { name: 'Delete questionnaire' }).click();
+    // Delete the whole questionnaire from the list row (it's SENT → locked, so no Edit-tab delete). Go
+    // back to the list first — the detail view hides it.
+    await w.getByRole('button', { name: 'Questionnaires' }).first().click();
+    await w.getByRole('button', { name: /Options for Mood check/ }).click();
+    await w.getByRole('menuitem', { name: 'Delete' }).click();
     await w.getByRole('button', { name: 'Delete', exact: true }).click();
-    await expect(w.getByRole('button', { name: /Mood check/ })).toHaveCount(0);
+    await expect(w.getByRole('button', { name: /^Mood check/ })).toHaveCount(0);
+    await expect(w.getByText(/no questionnaires yet/i)).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('lifecycle (§17.14/§16.3/§3.9): draft-save, send shows a Sent badge + drain affordance, list-row delete', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    // Connect a relay so a household send ALSO mints a link → Results surfaces the drain affordance (§17.13).
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'Relay' }).click();
+    await w.getByLabel(/cloudflare account id/i).fill('acct-123');
+    await w.getByLabel(/cloudflare api token/i).fill('cf-token');
+    await w.getByRole('button', { name: /connect & deploy/i }).click();
+    await expect(w.getByText(/relay connected at/i)).toBeVisible();
+
+    // #2 — save a draft with ONLY a title (no question yet); "Create draft" is enabled and it persists.
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await startNewQuestionnaire(w);
+    await w.getByLabel('Title').fill('Pulse check');
+    await w.getByRole('button', { name: 'Create draft' }).click();
+    // Saved → Send now appears (the two-step), and it's still a draft we can keep editing.
+    await expect(w.getByRole('button', { name: 'Send' })).toBeVisible();
+
+    // Flesh it out + re-save, then send to the bound household recipient (Standard).
+    await w.getByLabel('Question 1', { exact: true }).fill('How are we doing?');
+    await w.getByRole('button', { name: 'Save', exact: true }).click();
+    await w.getByRole('button', { name: 'Send' }).click();
+    await w.getByRole('button', { name: 'Standard' }).click();
+    await w.getByRole('button', { name: 'Send' }).last().click();
+    await w.getByRole('button', { name: 'Done' }).click();
+
+    // #4 — back at the list, the row now shows a "Sent · <date>" chip (distinct from a draft).
+    await expect(w.getByText(/Sent/).first()).toBeVisible();
+
+    // #3 — open it → Results surfaces the "Check for responses" drain button for the household relay link
+    // (the bug: it was gated on channel === 'relay', hiding the link for household sends).
+    await w.getByRole('button', { name: /^Pulse check/ }).click();
+    // The builder header repeats the sent state.
+    await expect(w.getByText(/For:/)).toContainText(/Sent/);
+    await w.getByRole('button', { name: 'Results' }).click();
+    await expect(w.getByRole('button', { name: /check for responses/i })).toBeVisible();
+
+    // #1 — delete from the list row (kebab → Delete → confirm) → the questionnaire is gone.
+    await w.getByRole('button', { name: 'Questionnaires' }).first().click(); // back affordance
+    await w.getByRole('button', { name: /Options for Pulse check/ }).click();
+    await w.getByRole('menuitem', { name: 'Delete' }).click();
+    await w.getByRole('button', { name: 'Delete', exact: true }).click();
+    await expect(w.getByRole('button', { name: /^Pulse check/ })).toHaveCount(0);
     await expect(w.getByText(/no questionnaires yet/i)).toBeVisible();
   } finally {
     await app.close();
@@ -1931,6 +2005,180 @@ test('roles: the owner edits the role × capability matrix', async () => {
     await expect(memberManage).not.toBeChecked();
     await memberManage.click();
     await expect(memberManage).toBeChecked();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('compatibility household (§17.14a): the send mints the recipient a link + delivery; Results drains + resends', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  // Seed a household partner so the compat "Compare you with" picker has someone to choose.
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('expected a master key');
+  await savePerson(fs, key, {
+    id: 'angel-1',
+    schemaVersion: 1,
+    displayName: 'Angel',
+    isSubject: true,
+    tags: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    // Connect a relay so the household compat recipient ALSO gets a shareable link (§17.14a).
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'Relay' }).click();
+    await w.getByLabel(/cloudflare account id/i).fill('acct');
+    await w.getByLabel(/cloudflare api token/i).fill('cf');
+    await w.getByRole('button', { name: /connect & deploy/i }).click();
+    await expect(w.getByText(/relay connected at/i)).toBeVisible();
+
+    // Author a compatibility questionnaire (you + Angel) and send it.
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await startNewQuestionnaire(w, { compat: true });
+    await w.getByLabel('Title').fill('Closeness');
+    await w.getByLabel('Question 1', { exact: true }).fill('How connected do you feel?');
+    await w.getByRole('button', { name: 'Create draft' }).click();
+    await w.getByRole('button', { name: 'Send' }).click();
+
+    // The focused send step REPLACES the editor (no lingering footer). Click the panel's Send → the
+    // recipient's link + the prefilled email/SMS delivery appear (the bug: a household compat send showed
+    // no link at all). The fake Claude personalizes the variants; the fake relay mints the link.
+    await w
+      .getByRole('button', { name: /^Send$/ })
+      .last()
+      .click();
+    const link = await w.getByLabel('Secure link').inputValue();
+    expect(link).toMatch(/\.workers\.dev\/q\/[0-9a-f]+#k=/);
+    expect(await w.getByLabel('PIN', { exact: true }).inputValue()).toMatch(/^\d{6}$/);
+    await expect(w.getByRole('button', { name: /^Email$/ })).toBeVisible();
+    await expect(w.getByRole('button', { name: /^Text$/ })).toBeVisible();
+    await w.getByRole('button', { name: 'Done' }).click();
+
+    // Back at the list, it reads "Sent". Open it → Results offers drain + a per-recipient "Resend" link.
+    await expect(w.getByText(/Sent/).first()).toBeVisible();
+    await w.getByRole('button', { name: /^Closeness/ }).click();
+    await w.getByRole('button', { name: 'Results' }).click();
+    await expect(w.getByRole('button', { name: /check for responses/i })).toBeVisible();
+    await expect(w.getByRole('button', { name: /Resend Angel’s link/ })).toBeVisible();
+
+    // The relay assignment landed with relay material (the recipient's variant is link-answerable).
+    const assignments = await listAssignments(fs, key);
+    expect(assignments.some((a) => a.compatibilityGroupId && a.relay?.token)).toBe(true);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+// §17.14a delivery matrix: every send type/recipient that can carry a link must show the SAME delivery UI
+// (link + PIN + Email + Text + Copy). Asserting one path with a relay connected once masked the others.
+test('delivery matrix (§17.14a): one-person household + external both show link + Email/Text', async () => {
+  const { userData, vault } = await seedReadyVault();
+  // A household partner so a one-person household send has a real recipient.
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('expected a master key');
+  await savePerson(fs, key, {
+    id: 'mara-1',
+    schemaVersion: 1,
+    displayName: 'Mara',
+    isSubject: true,
+    tags: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    // Connect the relay.
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'Relay' }).click();
+    await w.getByLabel(/cloudflare account id/i).fill('acct');
+    await w.getByLabel(/cloudflare api token/i).fill('cf');
+    await w.getByRole('button', { name: /connect & deploy/i }).click();
+    await expect(w.getByText(/relay connected at/i)).toBeVisible();
+
+    const assertDelivery = async (): Promise<void> => {
+      expect(await w.getByLabel('Secure link').inputValue()).toMatch(/\.workers\.dev\/q\//);
+      expect(await w.getByLabel('PIN', { exact: true }).inputValue()).toMatch(/^\d{6}$/);
+      await expect(w.getByRole('button', { name: /^Email$/ })).toBeVisible();
+      await expect(w.getByRole('button', { name: /^Text$/ })).toBeVisible();
+      await expect(w.getByRole('button', { name: /copy message/i })).toBeVisible();
+    };
+
+    // (1) ONE-PERSON HOUSEHOLD: a relay is connected, so the in-app send also mints a link + delivery.
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await startNewQuestionnaire(w); // recipient index 1 = the household partner
+    await w.getByLabel('Title').fill('Household check');
+    await w.getByLabel('Question 1', { exact: true }).fill('How are we doing?');
+    await w.getByRole('button', { name: 'Create draft' }).click();
+    await w.getByRole('button', { name: 'Send' }).click();
+    await w.getByRole('button', { name: 'Standard' }).click();
+    await w.getByRole('button', { name: 'Send' }).last().click();
+    await assertDelivery();
+    await w.getByRole('button', { name: 'Done' }).click();
+
+    // (2) ONE-PERSON EXTERNAL: a private link send shows the same delivery.
+    await w.getByRole('button', { name: 'New' }).click();
+    await w.getByLabel('Recipient').selectOption('external');
+    await w.getByLabel('Their name').fill('Sam');
+    await w.getByRole('button', { name: 'Continue' }).click();
+    await w.getByLabel('Title').fill('Outside view');
+    await w.getByLabel('Question 1', { exact: true }).fill('How do I come across?');
+    await w.getByRole('button', { name: 'Create draft' }).click();
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByRole('heading', { name: /Send to Sam/i })).toBeVisible();
+    await w.getByRole('button', { name: /create link/i }).click();
+    await assertDelivery();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('delivery matrix (§17.14a): no relay → a household send shows the connect-a-relay hint, no link', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('expected a master key');
+  await savePerson(fs, key, {
+    id: 'mara-1',
+    schemaVersion: 1,
+    displayName: 'Mara',
+    isSubject: true,
+    tags: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    // NO relay connected — a household send is Inbox-only, but the panel must SAY a link needs a relay
+    // (never silently linkless). The hint is actionable, not a dead end.
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await startNewQuestionnaire(w);
+    await w.getByLabel('Title').fill('Quiet check');
+    await w.getByLabel('Question 1', { exact: true }).fill('How are we doing?');
+    await w.getByRole('button', { name: 'Create draft' }).click();
+    await w.getByRole('button', { name: 'Send' }).click();
+    await w.getByRole('button', { name: 'Standard' }).click();
+    await w.getByRole('button', { name: 'Send' }).last().click();
+    // No link is minted, but a clear hint tells the sender how to enable one — and there's no Secure link.
+    await expect(w.getByText(/connect a relay in Settings → Relay/i)).toBeVisible();
+    await expect(w.getByLabel('Secure link')).toHaveCount(0);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -2011,7 +2259,7 @@ test('compatibility: align two answered variants into a report + draft Insight, 
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Questionnaires' }).click();
-    await w.getByRole('button', { name: /Compatibility check/ }).click();
+    await w.getByRole('button', { name: /^Compatibility check/ }).click();
     await w.getByRole('button', { name: 'Results' }).click();
 
     // The compat Results surface shows the paired group as "Both answered" and offers to align.
@@ -2120,7 +2368,7 @@ test('compatibility contextOnly (§16.2): no report; each participant’s own co
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Questionnaires' }).click();
-    await w.getByRole('button', { name: /Closeness check/ }).click();
+    await w.getByRole('button', { name: /^Closeness check/ }).click();
     await w.getByRole('button', { name: 'Results' }).click();
 
     // Context-only: NO report is offered — the sender updates each coach instead.

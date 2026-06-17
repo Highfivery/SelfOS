@@ -217,6 +217,8 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.guidedAcknowledgeAdult, bridge.guidedAcknowledgeAdult);
   handle(IpcChannels.usageSessionCosts, bridge.usageSessionCosts);
   handle(IpcChannels.questionnairesList, bridge.questionnairesList);
+  handle(IpcChannels.questionnairesSendStates, bridge.questionnairesSendStates);
+  handle(IpcChannels.questionnairesShareLink, bridge.questionnairesShareLink);
   handle(IpcChannels.questionnairesGet, bridge.questionnairesGet);
   handle(IpcChannels.questionnairesSave, bridge.questionnairesSave);
   handle(IpcChannels.questionnairesDelete, bridge.questionnairesDelete);
@@ -258,6 +260,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.assignmentsCreateRelayLink, bridge.assignmentsCreateRelayLink);
   handle(IpcChannels.assignmentsDrain, bridge.assignmentsDrain);
   handle(IpcChannels.assignmentsRevoke, bridge.assignmentsRevoke);
+  handle(IpcChannels.assignmentsReshare, bridge.assignmentsReshare);
   handle(IpcChannels.relayStatus, bridge.relayStatus);
   handle(IpcChannels.relayConnect, bridge.relayConnect);
   handle(IpcChannels.relayUpdate, bridge.relayUpdate);

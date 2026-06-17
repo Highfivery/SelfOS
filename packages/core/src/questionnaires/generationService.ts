@@ -274,7 +274,9 @@ export async function generateVariant(
   deps: AiDeps,
   input: {
     forName: string;
+    forGender?: string;
     aboutName: string;
+    aboutGender?: string;
     questions: Question[];
     targetContext: GenerationContextRequest;
   },
@@ -282,14 +284,25 @@ export async function generateVariant(
   const context = await gatherGenerationContext(deps.fs, deps.key, input.targetContext);
   const user = buildVariantUserMessage({
     forName: input.forName,
+    ...(input.forGender ? { forGender: input.forGender } : {}),
     aboutName: input.aboutName,
+    ...(input.aboutGender ? { aboutGender: input.aboutGender } : {}),
     ...(context.trim() ? { context } : {}),
-    prompts: input.questions.map((q) => q.prompt),
+    questions: input.questions.map((q) => ({
+      prompt: q.prompt,
+      ...(q.options ? { options: q.options } : {}),
+    })),
   });
-  const call = await runClaude(deps, VARIANT_SYSTEM, user, 'questionnaire.generate', 1200);
+  const call = await runClaude(deps, VARIANT_SYSTEM, user, 'questionnaire.generate', 1500);
   if (!call.ok) return { ok: false, reason: call.reason, message: call.message };
 
-  const validated = z.array(z.string()).safeParse(extractJsonArray(call.text));
+  // The model returns one object per question: { prompt, options }. Both the prompt AND options are
+  // personalized — options carry the partner's gendered pronouns (§17.14e), so leaving them un-rewritten
+  // was the "answers read as if the other person were answering" bug.
+  const variantSchema = z.array(
+    z.object({ prompt: z.string(), options: z.array(z.string()).nullable().optional() }),
+  );
+  const validated = variantSchema.safeParse(extractJsonArray(call.text));
   if (!validated.success || validated.data.length !== input.questions.length) {
     return {
       ok: false,
@@ -298,12 +311,20 @@ export async function generateVariant(
       message: 'Couldn’t personalize this questionnaire. Please try again.',
     };
   }
+  // SAFETY: an option rewrite is only accepted when it preserves the option COUNT (so the two variants stay
+  // aligned + the answer structure is intact); otherwise keep the canonical options for that question.
   const questions: Question[] = input.questions.map((q, i) => {
-    const personalized = validated.data[i]?.trim();
+    const out = validated.data[i];
+    const personalized = out?.prompt.trim();
+    const rewrittenOptions =
+      q.options && out?.options && out.options.length === q.options.length
+        ? out.options.map((o) => o.trim())
+        : undefined;
     return {
       ...q,
       canonicalId: q.canonicalId ?? q.id, // the alignment key (defaults to the canonical question id)
       ...(personalized ? { prompt: personalized } : {}),
+      ...(rewrittenOptions ? { options: rewrittenOptions } : {}),
     };
   });
   return { ok: true, questions, usage: call.usage };

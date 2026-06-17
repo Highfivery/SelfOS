@@ -1941,13 +1941,17 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         return { ok: false, reason: 'INVALID', message: 'This questionnaire has no recipient.' };
       }
       const visibility = canonical.compatibility.visibility;
-      const senderName =
-        (await getPerson(deps.fs, deps.key, deps.personId))?.displayName ?? 'Someone';
+      const senderPerson = await getPerson(deps.fs, deps.key, deps.personId);
+      const senderName = senderPerson?.displayName ?? 'Someone';
+      // Each participant's gender drives the OTHER person's pronouns in their variant (§17.14e) — so a man
+      // asked about his female partner reads "her", never "him".
+      const senderGender = senderPerson?.gender;
 
       // Resolve the OTHER participant up front: each person's variant must ask about the OTHER one (08
       // §17.12 — the recipient was being asked about themselves, not the sender). For a household person,
       // validate it exists + isn't the sender; for an external recipient, it's their given name.
       let otherName: string;
+      let otherGender: string | undefined;
       if (recipient.kind === 'person') {
         if (recipient.personId === deps.personId) {
           return {
@@ -1960,6 +1964,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         if (!rp)
           return { ok: false, reason: 'INVALID', message: 'A chosen person no longer exists.' };
         otherName = rp.displayName;
+        otherGender = rp.gender;
       } else {
         // An external recipient nearly always has a name; fall back to a warm placeholder, not "them".
         otherName = recipient.displayName ?? 'your partner';
@@ -1968,7 +1973,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // The sender's own variant — written TO the sender, ABOUT the other participant; their own full context.
       const senderVariant = await generateVariant(deps, {
         forName: senderName,
+        ...(senderGender ? { forGender: senderGender } : {}),
         aboutName: otherName,
+        ...(otherGender ? { aboutGender: otherGender } : {}),
         questions: canonical.questions,
         targetContext: {
           authorPersonId: deps.personId,
@@ -1991,7 +1998,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         // The recipient's variant — written TO them, ABOUT the sender; their SHAREABLE context only (§13.3).
         const recipientVariant = await generateVariant(deps, {
           forName: otherName,
+          ...(otherGender ? { forGender: otherGender } : {}),
           aboutName: senderName,
+          ...(senderGender ? { aboutGender: senderGender } : {}),
           questions: canonical.questions,
           targetContext: {
             authorPersonId: deps.personId,
@@ -2093,7 +2102,10 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // The external recipient's variant — written TO them, ABOUT the sender (no household context to draw on).
       const externalVariant = await generateVariant(deps, {
         forName: otherName,
+        // An external recipient has no stored gender → their variant refers to the sender by name/their
+        // gender, and to the external person by name (no pronoun assumed).
         aboutName: senderName,
+        ...(senderGender ? { aboutGender: senderGender } : {}),
         questions: canonical.questions,
         targetContext: {
           authorPersonId: deps.personId,

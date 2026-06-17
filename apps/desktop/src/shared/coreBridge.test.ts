@@ -113,16 +113,27 @@ function makeHost(): {
     send: () => Promise.resolve('ok'),
     stream: (options, onDelta) => {
       const userText = options.messages.map((m) => m.content).join('\n');
-      // Compatibility variant personalization → a JSON array of rewritten prompts (one per question), each
-      // tagged with the OTHER participant the user message names ("compares X with Y"), so a test can verify
-      // each person is asked ABOUT the other, not themselves (08 §17.12).
-      if (userText.includes('rewritten prompts')) {
-        const about = /compares .+? with (.+?)\./.exec(userText)?.[1] ?? 'them';
-        const prompts = [...userText.matchAll(/^\d+\.\s(.+)$/gm)].map(
-          (m) => `${m[1]} — about ${about}`,
-        );
+      // Compatibility variant personalization → a JSON array of objects { prompt, options } (one per
+      // question), each prompt tagged with the OTHER participant the user message names ("experience with
+      // Y"), so a test can verify each person is asked ABOUT the other, not themselves (08 §17.12/§17.14e).
+      if (userText.includes('answer about THEIR experience with')) {
+        const about = /experience with (.+?):/.exec(userText)?.[1] ?? 'them';
+        const prompts = [...userText.matchAll(/^\d+\.\s*PROMPT:\s*(.+)$/gm)].map((m) => m[1]);
+        const optionLines = [...userText.matchAll(/^\s*OPTIONS:\s*(.+)$/gm)].map((m) => m[1]);
+        const objs = prompts.map((p, i) => {
+          let opts: string[] | null = null;
+          const ol = optionLines[i];
+          if (ol && ol.trim() !== 'none') {
+            try {
+              opts = JSON.parse(ol) as string[];
+            } catch {
+              opts = null;
+            }
+          }
+          return { prompt: `${p} — about ${about}`, options: opts };
+        });
         return Promise.resolve({
-          text: JSON.stringify(prompts),
+          text: JSON.stringify(objs),
           usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
       }

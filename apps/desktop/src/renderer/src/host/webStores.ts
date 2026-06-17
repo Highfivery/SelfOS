@@ -129,16 +129,27 @@ export function webFakeClaudeClient(): ClaudeClient {
     send: () => Promise.resolve('ok'),
     stream: (options, onDelta): Promise<ClaudeStreamResult> => {
       const userText = options.messages.map((message) => message.content).join('\n');
-      // Compatibility variant personalization (08 §3.6/§17.12) asks for a JSON array of rewritten prompts,
-      // one per question — echo each numbered prompt, tagged with the OTHER participant, so the preview can
-      // exercise the full compatibility send (matching the Electron offline fake).
-      if (userText.includes('rewritten prompts')) {
-        const about = /compares .+? with (.+?)\./.exec(userText)?.[1] ?? 'them';
-        const prompts = [...userText.matchAll(/^\d+\.\s(.+)$/gm)].map(
-          (m) => `${m[1]} — about ${about}`,
-        );
+      // Compatibility variant personalization (08 §3.6/§17.12/§17.14e) asks for a JSON array of objects
+      // { prompt, options } — echo each prompt tagged with the OTHER participant + preserve the options, so
+      // the preview exercises the full compatibility send (matching the Electron offline fake).
+      if (userText.includes('answer about THEIR experience with')) {
+        const about = /experience with (.+?):/.exec(userText)?.[1] ?? 'them';
+        const prompts = [...userText.matchAll(/^\d+\.\s*PROMPT:\s*(.+)$/gm)].map((m) => m[1]);
+        const optionLines = [...userText.matchAll(/^\s*OPTIONS:\s*(.+)$/gm)].map((m) => m[1]);
+        const objs = prompts.map((p, i) => {
+          let options: string[] | null = null;
+          const ol = optionLines[i];
+          if (ol && ol.trim() !== 'none') {
+            try {
+              options = JSON.parse(ol) as string[];
+            } catch {
+              options = null;
+            }
+          }
+          return { prompt: `${p} — about ${about}`, options };
+        });
         return Promise.resolve({
-          text: JSON.stringify(prompts),
+          text: JSON.stringify(objs),
           usage: { inputTokens: 80, outputTokens: 40, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
       }

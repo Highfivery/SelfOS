@@ -881,8 +881,8 @@ describe('Questionnaires', () => {
     renderApp();
 
     await userEvent.click(await screen.findByRole('button', { name: /^Weekly check-in/ }));
-    // Opening it (not via the kebab) shows a "Share a link" button at the top of the locked preview.
-    await userEvent.click(await screen.findByRole('button', { name: /share a link/i }));
+    // Opening it (not via the kebab) shows a "Get the link" button in the Share card at the top.
+    await userEvent.click(await screen.findByRole('button', { name: /get the link/i }));
     expect(questionnairesShareLink).toHaveBeenCalledWith('q1', false);
     expect(
       await screen.findByDisplayValue('https://x.workers.dev/q/top#k=key'),

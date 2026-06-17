@@ -360,6 +360,25 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-17 — Fix (**compatibility variant pronoun safety (options rewritten with gender) + a sleek Share
+  card; 08 §17.14e**; on `fix/questionnaire-delete-draft-sentstate-relay`, NOT merged). User: a compat
+  question for HIM about his FEMALE partner showed options with "him" (answers read as if she were
+  answering). Root cause: `generateVariant` only rewrote PROMPTS, never OPTIONS, and was never told either
+  participant's gender. Fix: `generateVariant` now takes `forGender`/`aboutGender` (from `Person.gender`,
+  passed at all 3 compat call sites); the prompt names each participant with pronouns ("Ben (he/him)",
+  "Angel (she/her)"), forbids the wrong-gender pronoun for the other person, and rewrites each prompt **AND
+  each option** — the model returns `[{prompt, options}]`; options are applied only when the count is
+  preserved (else canonical kept — alignment safety). New `pronounHint` (female→she/her, male→he/him,
+  non-binary→they/them, else name). The offline fakes + all 3 fake-Claude hosts updated to the object shape.
+  Also: the sent-preview **Share card** redesigned (accent icon tile + heading + explainer + "Get the link",
+  link/PIN/Refresh/delivery inside) instead of a loose banner+button. Gate: typecheck (node + web/DOM-lib),
+  lint, format, **437 core + 11 relay + 530 desktop** unit (+ option-rewrite/no-wrong-pronoun, count-mismatch
+  keeps canonical, gender-plumbing message), **77 E2E**; share card verified live (screenshots).
+  **Lesson: personalizing a compatibility question means BOTH the prompt AND the options — gendered pronouns
+  live in the options, so rewriting only the prompt leaves answers in the wrong person's voice; pass both
+  participants' genders explicitly and rewrite options too. NOTE (relay-link staleness, carried from §17.14c/d):
+  the user's EXISTING sends predate `pinWrapped`, so the FIRST "Get the link" on an old send mints once (the
+  PIN was unrecoverable), then it's stable; new sends are stable from the first view.**
 - 2026-06-17 — Fix (**"Share link" re-shows the EXISTING link (stable) + a manual Refresh to regenerate; 08
   §17.14d**; on `fix/questionnaire-delete-draft-sentstate-relay`, NOT merged). User: Share link shouldn't
   regenerate a fresh link+PIN on every click — it should re-show the existing one (to copy/email), with a

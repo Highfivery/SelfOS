@@ -2252,3 +2252,25 @@ manual **Refresh** next to the Secure link to regenerate when they choose.
   Refresh differs) + a screenshot of the Refresh-beside-the-link UI.
 - **Lesson: "re-share" and "regenerate" are different verbs — re-showing a stable artifact must read stored
   material, not re-mint; store what you need to re-show it (the PIN, encrypted), and make regenerate explicit.**
+
+### 17.14e Variant pronoun safety + a sleek Share card (2026-06-17) — BUILT
+
+Two issues: (1) a compatibility question for a man about his FEMALE partner showed answer options with "him"
+— the variant generator only rewrote PROMPTS, never OPTIONS, and was never told either participant's gender;
+(2) the Share affordance was a loose banner + button.
+
+- **Variants now rewrite OPTIONS too, with explicit gender.** `generateVariant` takes `forGender` +
+  `aboutGender` (from `Person.gender`, passed at all three compat call sites); the prompt names each
+  participant with their pronouns ("Ben (he/him)", "Angel (she/her)"), instructs "NEVER the wrong gender's
+  pronoun for {the other person}", and asks the model to rewrite each prompt **and each option**. The model
+  now returns `[{ prompt, options }]`; the caller applies the rewritten options **only when the count is
+  preserved** (else it keeps the canonical options — alignment/structure safety). A `pronounHint` maps a
+  free-text gender to she/her | he/him | they/them (unknown → use the name). The offline fakes + the three
+  fake-Claude hosts were updated to the object shape. Tests: option-rewrite (no "him" for a female partner),
+  count-mismatch keeps canonical, the gender-plumbing message test, REFUSE-on-wrong-count.
+- **A sleek Share card.** The sent (locked) preview's share affordance is now a self-contained card — an
+  accent link-icon tile, a "Share a link" heading + a one-line explainer, and a primary "Get the link" — with
+  the link/PIN/Refresh/delivery inside it, instead of a loose banner + bare button.
+- **Lesson: personalizing a compatibility question means BOTH the prompt and the OPTIONS — gendered pronouns
+  live in the options, so rewriting only the prompt leaves the answers reading from the wrong person's
+  perspective; give the model both participants' genders explicitly and have it rewrite options too.**

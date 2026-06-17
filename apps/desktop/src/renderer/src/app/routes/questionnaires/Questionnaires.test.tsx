@@ -844,7 +844,7 @@ describe('Questionnaires', () => {
       await screen.findByRole('button', { name: /Options for Weekly check-in/ }),
     );
     await userEvent.click(screen.getByRole('menuitem', { name: 'Share link' }));
-    expect(questionnairesShareLink).toHaveBeenCalledWith('q1');
+    expect(questionnairesShareLink).toHaveBeenCalledWith('q1', false);
     expect(
       await screen.findByDisplayValue('https://x.workers.dev/q/shr#k=key'),
     ).toBeInTheDocument();
@@ -883,7 +883,7 @@ describe('Questionnaires', () => {
     await userEvent.click(await screen.findByRole('button', { name: /^Weekly check-in/ }));
     // Opening it (not via the kebab) shows a "Share a link" button at the top of the locked preview.
     await userEvent.click(await screen.findByRole('button', { name: /share a link/i }));
-    expect(questionnairesShareLink).toHaveBeenCalledWith('q1');
+    expect(questionnairesShareLink).toHaveBeenCalledWith('q1', false);
     expect(
       await screen.findByDisplayValue('https://x.workers.dev/q/top#k=key'),
     ).toBeInTheDocument();

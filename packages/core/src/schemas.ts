@@ -860,6 +860,11 @@ export const AssignmentSchema = z.object({
       // e.g. an external compatibility report pushed from Results (08 §17.12-D). Additive-optional: sends
       // minted before this omit it (their outcome write-back is simply unavailable), no migration.
       contentKeyWrapped: z.string().min(1).optional(),
+      // The 6-digit PIN wrapped under the master key (08 §17.14d), so the sender can RE-SHOW the existing
+      // link + PIN later ("Share link") instead of regenerating it every time. The relay still only ever
+      // holds the `pinHash`. Additive-optional: sends minted before this omit it (their "Share link" falls
+      // back to minting a fresh one); no migration.
+      pinWrapped: z.string().min(1).optional(),
     })
     .optional(),
   createdAt: z.string(),

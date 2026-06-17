@@ -2231,3 +2231,24 @@ relayBundle.ts`, kept in sync) and the bundle rebuilt. `relayStatusOf` computes
 - **Lesson: a deploy-version constant that doesn't bump when the deployed CODE changes is a silent-staleness
   trap — the app thinks the old deploy is current, so its "update" prompt never fires and newer routes 404.
   Bump the version on every Worker change.**
+
+### 17.14d "Share link" re-shows the existing link (manual Refresh to regenerate) (2026-06-17) — BUILT
+
+The §17.14c "Share link" re-MINTED a fresh link + PIN on every click (because the PIN was never stored). The
+user wants it stable: clicking "Share link" should re-show the EXISTING link/PIN (to copy / email), with a
+manual **Refresh** next to the Secure link to regenerate when they choose.
+
+- **The PIN is now stored, wrapped under the master key** (`Assignment.relay.pinWrapped`, additive-optional;
+  the relay still only ever holds `pinHash`). `mintRelay` writes it; a new `readRelayLink` reconstructs the
+  existing **link** (token + wrapped content key) + **PIN** (wrapped PIN) with no minting, no relay call.
+- **`questionnaires:shareLink` gains a `regenerate?` arg.** Default (false) → `readRelayLink` re-shows the
+  existing link/PIN (mints only if the send predates `pinWrapped`). `regenerate: true` (the manual Refresh) →
+  `reshareLink` mints a fresh one + revokes the old. Verified: two Share-link calls return the IDENTICAL
+  link + PIN; a regenerate returns a different one; stable again after.
+- **UI:** `RelayLinkDelivery` gains a **Refresh** button next to the Secure link (only where `onRefresh` is
+  passed — the sent-preview/kebab share view, not the already-fresh send-time confirmation). The send-time
+  "we don't keep a copy of the PIN, share it now" copy is replaced everywhere with "you can find this link
+  again from Share a link" (it IS re-findable now). Tests + a LIVE bridge check (same link/PIN on repeat,
+  Refresh differs) + a screenshot of the Refresh-beside-the-link UI.
+- **Lesson: "re-share" and "regenerate" are different verbs — re-showing a stable artifact must read stored
+  material, not re-mint; store what you need to re-show it (the PIN, encrypted), and make regenerate explicit.**

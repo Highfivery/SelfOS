@@ -421,24 +421,29 @@ export function QuestionnaireBuilder({
   // the top of the locked preview + reachable from the list kebab. Distinct from "Send again" (a re-ask).
   const [shareLink, setShareLink] = useState<RelayLinkResult | null>(null);
   const [sharing, setSharing] = useState(false);
+  const [refreshingLink, setRefreshingLink] = useState(false);
   const [shareMsg, setShareMsg] = useState<string | null>(null);
   const senderName = useSessionStore((s) => s.activePerson?.displayName ?? 'Someone');
 
-  const runShareLink = async (): Promise<void> => {
-    if (sharing || !saved) return;
-    setSharing(true);
+  // regenerate=false: re-show the EXISTING link/PIN (the default — clicking Share link doesn't change it).
+  // regenerate=true: the manual Refresh next to the link → mint a fresh link + PIN, revoking the old.
+  const runShareLink = async (regenerate = false): Promise<void> => {
+    if (!saved) return;
+    if (regenerate) setRefreshingLink(true);
+    else setSharing(true);
     setShareMsg(null);
     try {
-      const result = await window.selfos?.questionnairesShareLink(saved.id);
+      const result = await window.selfos?.questionnairesShareLink(saved.id, regenerate);
       if (result) setShareLink(result);
       else
         setShareMsg(
-          'Couldn’t create a link. Make sure a relay is connected — and up to date — in Settings → Relay, then try again.',
+          'Couldn’t get a link. Make sure a relay is connected — and up to date — in Settings → Relay, then try again.',
         );
     } catch {
-      setShareMsg('Couldn’t create a link. Please try again.');
+      setShareMsg('Couldn’t get a link. Please try again.');
     } finally {
       setSharing(false);
+      setRefreshingLink(false);
     }
   };
 
@@ -784,7 +789,9 @@ export function QuestionnaireBuilder({
               pin={shareLink.pin}
               senderName={senderName}
               sensitive={effectiveSensitivity !== 'standard'}
-              note="A fresh link + PIN to share by email or text — the previous link no longer works. We don’t keep a copy of the PIN."
+              note="Share this link + PIN by email or text. It stays the same each time — use Refresh to generate a new one (which stops the current one working)."
+              onRefresh={() => runShareLink(true)}
+              refreshing={refreshingLink}
               onDone={() => setShareLink(null)}
             />
           ) : (

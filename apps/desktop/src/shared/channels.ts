@@ -459,11 +459,15 @@ export interface SelfosBridge {
    */
   questionnairesSendStates(): Promise<Record<string, QuestionnaireSendState>>;
   /**
-   * Get a fresh shareable link + PIN for a SENT questionnaire's latest open send (08 §17.14c) — for the
-   * "Share link" affordance on the sent preview + list kebab. Mints a new link (the PIN is never stored) for
-   * the recipient's send; null if there's no relay, no open send, or the mint fails. Requires `sendExternal`.
+   * The shareable link + PIN for a SENT questionnaire's latest open send (08 §17.14d) — for the "Share link"
+   * affordance on the sent preview + list kebab. By default RE-SHOWS the existing link/PIN (no regeneration);
+   * `regenerate: true` (the manual Refresh) mints a fresh one + revokes the old. Null if there's no relay,
+   * no open send, or (on regenerate) the mint fails. Requires `questionnaires.sendExternal`.
    */
-  questionnairesShareLink(questionnaireId: string): Promise<RelayLinkResult | null>;
+  questionnairesShareLink(
+    questionnaireId: string,
+    regenerate?: boolean,
+  ): Promise<RelayLinkResult | null>;
   /** Load one questionnaire definition; null if absent. */
   questionnairesGet(id: string): Promise<Questionnaire | null>;
   /** Create or update a questionnaire definition (editing bumps its version); returns the saved record. */

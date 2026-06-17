@@ -178,6 +178,7 @@ import {
   addCustomType,
   analyzeAssignment,
   attachRelayLink,
+  readRelayLink,
   buildQuestionTrends,
   compatibilityDisclosure,
   createAssignment,
@@ -2483,10 +2484,15 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       );
       return reshareLink(ctx.fs, ctx.key, client, config.endpointUrl, assignment);
     },
-    questionnairesShareLink: async (questionnaireId): Promise<RelayLinkResult | null> => {
-      // Get a fresh shareable link + PIN for a SENT questionnaire (08 §17.14c) — surfaced at the top of the
-      // sent (locked) preview + the list kebab, so the link stays reachable after sending without going to
-      // Results. Reshares the latest still-open send to the RECIPIENT (never the sender's own member).
+    questionnairesShareLink: async (
+      questionnaireId,
+      regenerate,
+    ): Promise<RelayLinkResult | null> => {
+      // The shareable link + PIN for a SENT questionnaire (08 §17.14d) — at the top of the sent (locked)
+      // preview + the list kebab, so the link stays reachable after sending without going to Results. By
+      // default this RE-SHOWS the EXISTING link/PIN (no regeneration); `regenerate: true` (the manual
+      // Refresh) mints a fresh one + revokes the old. Always the latest still-open RECIPIENT send (never
+      // the sender's own self member).
       const ctx = await host.vaultAndKey();
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.sendExternal')))
         return null;
@@ -2506,6 +2512,11 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!candidate) return null;
       const config = await readRelayConfig(ctx.fs, ctx.key);
       if (!config) return null;
+      // Re-show the existing link unless a refresh was asked for (or the send predates stored PIN material).
+      if (!regenerate) {
+        const existing = await readRelayLink(ctx.fs, ctx.key, candidate.id, config.endpointUrl);
+        if (existing) return existing;
+      }
       const client = createRelayHttpClient(
         config.endpointUrl,
         config.drainSecret,

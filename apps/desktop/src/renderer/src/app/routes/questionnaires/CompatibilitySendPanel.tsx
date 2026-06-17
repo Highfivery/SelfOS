@@ -107,7 +107,7 @@ export function CompatibilitySendPanel({
           {...(recipient.kind === 'external' && recipient.phone
             ? { recipientPhone: recipient.phone }
             : {})}
-          note={`Send ${displayName} this link. You answer your own version in your Inbox; once you’ve both answered, align in Results. We don’t keep a copy of the PIN, so share it now.`}
+          note={`Send ${displayName} this link. You answer your own version in your Inbox; once you’ve both answered, align in Results. You can find this link again any time from the questionnaire’s “Share a link”.`}
           onDone={onSent}
         />
       </Card>

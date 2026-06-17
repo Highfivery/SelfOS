@@ -360,6 +360,21 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-17 — Fix (**"Share link" re-shows the EXISTING link (stable) + a manual Refresh to regenerate; 08
+  §17.14d**; on `fix/questionnaire-delete-draft-sentstate-relay`, NOT merged). User: Share link shouldn't
+  regenerate a fresh link+PIN on every click — it should re-show the existing one (to copy/email), with a
+  Refresh next to the Secure link to regenerate manually. Required STORING the PIN (it was hash-only): added
+  **`Assignment.relay.pinWrapped`** (PIN encrypted under the master key; the relay still only holds `pinHash`),
+  set in `mintRelay`; new core **`readRelayLink`** reconstructs the existing link (token + wrapped content key)
+  - PIN with no mint/relay call. **`questionnaires:shareLink` gains `regenerate?`** — default re-shows the
+    existing (mints only if the send predates `pinWrapped`); `regenerate:true` (the manual **Refresh**) mints
+    fresh + revokes old. `RelayLinkDelivery` got a **Refresh** button beside the Secure link (only on the share
+    view, not the already-fresh send-time confirmation); the "we don't keep the PIN, share it now" copy →
+    "you can find this link again from Share a link" everywhere. **VERIFIED LIVE** (bridge: 2× Share link →
+    identical link+PIN; Refresh → different; screenshot of Refresh-beside-link). Gate: typecheck (node +
+    web/DOM-lib), lint, format, **434 core + 11 relay + 530 desktop** unit, **77 E2E**. Synced 08 §17.14d.
+    **Lesson: "re-share" ≠ "regenerate" — re-showing a stable artifact must READ stored material (store the PIN
+    encrypted), not re-mint; make regenerate an explicit action.**
 - 2026-06-17 — Fix (**THE relay-link root cause: stale deployed Worker (404) + bump version + link reachable
   after sending; 08 §17.14c**; on `fix/questionnaire-delete-draft-sentstate-relay`, NOT merged). The §17.14b
   "loud failure" surfaced the actual bug: a real-Cloudflare **404 on `POST /api/admin/mailbox`** — the user's

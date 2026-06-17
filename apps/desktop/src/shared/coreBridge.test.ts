@@ -2043,7 +2043,7 @@ describe('createCoreBridge', () => {
     expect(sent.linkError).toBeTruthy();
   });
 
-  it('questionnairesShareLink (§17.14c): re-mints the latest send’s link for a sent questionnaire', async () => {
+  it('questionnairesShareLink (§17.14d): re-shows the SAME link/PIN; regenerate mints a fresh one', async () => {
     const { bridge } = await freshOwner();
     await bridge.relayConnect({ apiToken: 'cf', accountId: 'acct' });
     const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
@@ -2057,11 +2057,20 @@ describe('createCoreBridge', () => {
     });
     // Before any send there's nothing to share.
     expect(await bridge.questionnairesShareLink(q.id)).toBeNull();
-    // After sending, the link is reachable again (a fresh mint) without going through Results.
+
+    // After sending, the link is reachable again WITHOUT going through Results — and stable.
     await bridge.assignmentsCreate({ questionnaireId: q.id, privacy: 'standard' });
-    const shared = await bridge.questionnairesShareLink(q.id);
-    expect(shared?.link).toMatch(/\.workers\.dev\/q\//);
-    expect(shared?.pin).toMatch(/^\d{6}$/);
+    const first = await bridge.questionnairesShareLink(q.id);
+    expect(first?.link).toMatch(/\.workers\.dev\/q\//);
+    expect(first?.pin).toMatch(/^\d{6}$/);
+    // Clicking Share link AGAIN returns the IDENTICAL link + PIN (no regeneration — the user's ask).
+    const again = await bridge.questionnairesShareLink(q.id);
+    expect(again).toEqual(first);
+    // Only an explicit Refresh (regenerate) mints a fresh, DIFFERENT link + PIN.
+    const refreshed = await bridge.questionnairesShareLink(q.id, true);
+    expect(refreshed?.link).not.toBe(first?.link);
+    // …and the refreshed one is now what "Share link" shows from then on (stable again).
+    expect(await bridge.questionnairesShareLink(q.id)).toEqual(refreshed);
   });
 
   it('saves/edits a dream, scoped to the active dreamer and gated by dreams.own', async () => {

@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { Copy, Mail, MessageSquare, Share2 } from 'lucide-react';
+import { Copy, Mail, MessageSquare, RefreshCw, Share2 } from 'lucide-react';
 import {
   Banner,
   Button,
@@ -64,6 +64,8 @@ export function RelayLinkDelivery({
   recipientPhone,
   note,
   onDone,
+  onRefresh,
+  refreshing,
 }: {
   link: string;
   pin: string;
@@ -75,6 +77,13 @@ export function RelayLinkDelivery({
   note?: ReactNode;
   /** When provided, renders a "Done" button (omit when embedded inline in a Results card). */
   onDone?: () => void;
+  /**
+   * When provided, renders a manual "Refresh" next to the Secure link (08 §17.14d) — regenerate a fresh
+   * link + PIN on demand, rather than every time the link is shown. Omit where the link is already fresh
+   * (the send-time confirmation).
+   */
+  onRefresh?: () => void | Promise<void>;
+  refreshing?: boolean;
 }): JSX.Element {
   const messages = useSetting('questionnaires.defaultMessages')[0] ?? DEFAULT_RELAY_MESSAGES;
   const [email, setEmail] = useState(recipientEmail ?? '');
@@ -104,6 +113,18 @@ export function RelayLinkDelivery({
               <Copy size={15} aria-hidden="true" />
               {copied === 'link' ? 'Copied' : 'Copy'}
             </Button>
+            {onRefresh ? (
+              <Button
+                variant="secondary"
+                onClick={() => void onRefresh()}
+                disabled={refreshing}
+                aria-label="Refresh the link and PIN"
+                title="Generate a new link + PIN (the current one stops working)"
+              >
+                <RefreshCw size={15} aria-hidden="true" />
+                {refreshing ? 'Refreshing…' : 'Refresh'}
+              </Button>
+            ) : null}
           </div>
         )}
       </Field>

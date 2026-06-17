@@ -132,7 +132,7 @@ export function QuestionnaireSendPanel({
               pin={pin}
               senderName={senderName}
               sensitive={sensitivity !== 'standard'}
-              note={`${sentTo} can also answer anywhere with this link — whichever they reach first counts. We don’t keep a copy of the PIN, so share it now.`}
+              note={`${sentTo} can also answer anywhere with this link — whichever they reach first counts. You can find this link again any time from the questionnaire’s “Share a link”.`}
               onDone={() => onSent(sentTo)}
             />
           ) : (

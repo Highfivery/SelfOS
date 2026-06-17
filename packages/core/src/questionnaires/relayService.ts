@@ -129,6 +129,9 @@ async function mintRelay(
   // decrypts with the same fragment key (compatibility report write-back, §17.12-D).
   const contentKeyWrapped = JSON.stringify(await encrypt(contentKey, key));
   const pinHash = await hashPin(pin);
+  // Keep the PIN wrapped under the master key too, so the sender can re-show the existing link + PIN later
+  // ("Share link", §17.14d) without regenerating. The relay only ever gets the hash.
+  const pinWrapped = JSON.stringify(await encrypt(pin, key));
   const content = await buildContent(
     fs,
     key,
@@ -149,10 +152,30 @@ async function mintRelay(
   };
   await relay.putMailbox(mailbox);
   return {
-    relay: { token, pinHash, publicKey, privateKeyWrapped, contentKeyWrapped },
+    relay: { token, pinHash, publicKey, privateKeyWrapped, contentKeyWrapped, pinWrapped },
     link: buildRelayLink(input.endpointUrl, token, contentKey),
     pin,
   };
+}
+
+/**
+ * Reconstruct the EXISTING link + PIN for a send from its stored relay material (08 §17.14d) — the link from
+ * the token + the wrapped content key, the PIN from the wrapped PIN. No minting, no relay call: this is how
+ * "Share link" re-shows a stable link instead of regenerating. Returns null if the send has no relay
+ * material, or was minted before `pinWrapped`/`contentKeyWrapped` existed (the caller mints fresh instead).
+ */
+export async function readRelayLink(
+  fs: FileSystem,
+  key: Uint8Array,
+  assignmentId: string,
+  endpointUrl: string,
+): Promise<{ link: string; pin: string } | null> {
+  const assignment = await getAssignment(fs, key, assignmentId);
+  const relay = assignment?.relay;
+  if (!relay?.contentKeyWrapped || !relay.pinWrapped) return null;
+  const contentKey = await unwrapUnderMasterKey(relay.contentKeyWrapped, key);
+  const pin = await unwrapUnderMasterKey(relay.pinWrapped, key);
+  return { link: buildRelayLink(endpointUrl, relay.token, contentKey), pin };
 }
 
 /**

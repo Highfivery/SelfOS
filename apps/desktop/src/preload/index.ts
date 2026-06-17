@@ -93,7 +93,8 @@ const bridge: SelfosBridge = {
   usageSessionCosts: () => ipcRenderer.invoke(IpcChannels.usageSessionCosts),
   questionnairesList: () => ipcRenderer.invoke(IpcChannels.questionnairesList),
   questionnairesSendStates: () => ipcRenderer.invoke(IpcChannels.questionnairesSendStates),
-  questionnairesShareLink: (id) => ipcRenderer.invoke(IpcChannels.questionnairesShareLink, id),
+  questionnairesShareLink: (id, regenerate) =>
+    ipcRenderer.invoke(IpcChannels.questionnairesShareLink, id, regenerate),
   questionnairesGet: (id) => ipcRenderer.invoke(IpcChannels.questionnairesGet, id),
   questionnairesSave: (input) => ipcRenderer.invoke(IpcChannels.questionnairesSave, input),
   questionnairesDelete: (id) => ipcRenderer.invoke(IpcChannels.questionnairesDelete, id),

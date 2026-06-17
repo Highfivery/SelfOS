@@ -119,7 +119,7 @@ export function RelaySendPanel({
           sensitive={sensitive}
           {...(recipientEmail ? { recipientEmail } : {})}
           {...(recipientPhone ? { recipientPhone } : {})}
-          note="The link is ready. We don’t keep a copy of the PIN — share it now."
+          note="The link is ready to share. You can find it again any time from the questionnaire’s “Share a link”."
           onDone={onDone}
         />
       </Stack>

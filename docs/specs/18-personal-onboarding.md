@@ -574,7 +574,9 @@ The comprehensive set to build (terse; `single`/`multi`/`scale`/`yesNo`/`date`/`
 `Person` field). Each is **optional/skippable**; `core` sections stay quick (the gate), `invited` go deep.
 Wording tuned at build. **Every `scale` question renders as a 3-label slider** (start/middle/end anchors,
 seeded to the neutral middle) — there are **no 1–5 button rating scales** anywhere in the intake, for
-consistency with the intimacy sliders (2026-06-16).
+consistency with the intimacy sliders (2026-06-16). **Every free-text (`shortText`/`longText`) question carries
+a non-empty placeholder** (an example or a gentle "only what you want to share" prompt) — enforced by a catalog
+unit test so it can't regress (2026-06-17).
 
 **The basics** _(core, form)_ — preferred name / nickname (text) · pronouns(single+other)→`pronouns` ·
 gender identity(single+other)→`gender` · birthday(date)→`birthday` · **important dates(dateList)→`importantDates`**

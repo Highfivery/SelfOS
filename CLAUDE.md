@@ -336,6 +336,19 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-17 — Fix + feedback (**onboarding: ALL free-text questions must have placeholders + drop a redundant
+  decisionStyle option; spec 18 §14.6**, landed on `main` via a worktree). User (frustrated, repeat): "im STILL
+  seeing text fields with no placeholders, THEY MUST ALL HAVE PLACEHOLDERS." Audited the catalog — **57** of 211
+  shortText/longText questions had only `(id, prompt)` and no placeholder; added a meaningful example/help
+  placeholder to **every one** (e.g. occupation → "e.g. nurse, teacher, software engineer"; proudOf → "A moment,
+  a relationship, something you built…"). **Added a unit guard** (`intakeCatalog.test.ts`): every shortText/
+  longText question MUST have a non-empty `placeholder` — so this can't silently regress (the "should've caught
+  it in testing" lesson, made a test). Also: per the user, removed **"The data"** from `decisionStyle` ("You make
+  big decisions mostly with your…") — it overlapped "Head" (both the analytical pole); now a clean Head/Heart/Gut.
+  **Durable rule: every intake free-text question carries a placeholder (enforced by the catalog test).** Gate
+  green (worktree): typecheck, lint, format, 435 core + 11 relay + 513 desktop unit (+the placeholder guard), 73
+  E2E (1 unrelated spec-20 memory test flaked, passed in isolation). On `fix/placeholders-decisionstyle` off
+  `main`, merged. (The kids/pets structured-roster request is a separate slice — asked the user first.)
 - 2026-06-17 — Fix + build (**two onboarding-form follow-ups from a user screenshot; spec 18 §14.6**, landed on
   `main` via worktrees while a concurrent agent held the shared tree). **(1) Important-dates row was visually
   broken** (user flagged: label collapsed to nothing, the × remove button shoved outside the card). Cause: the

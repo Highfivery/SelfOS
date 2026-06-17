@@ -69,10 +69,13 @@ async function startWatcherIfReady(win: BrowserWindow): Promise<void> {
   startVaultWatcher(boot.vaultPath, win.webContents);
 }
 
-// Set an explicit app name BEFORE the single-instance lock / any userData access. In dev, Electron
-// would otherwise derive userData from the package name (`@selfos/desktop`), which can collide with
-// other scaffolded apps and cause a silent single-instance quit.
-app.setName('SelfOS');
+// Set an explicit app name BEFORE the single-instance lock / any userData access — the name drives
+// `userData` (the device-local vault pointer, master key, settings). The packaged app is "SelfOS"; a
+// dev run uses "SelfOS Dev" so it gets its OWN userData and doesn't share the installed app's device
+// state (otherwise a fresh install on a dev machine skips first-run setup and reuses the dev vault).
+// In dev this also avoids Electron deriving userData from the package name (`@selfos/desktop`), which
+// can collide with other scaffolded apps and cause a silent single-instance quit.
+app.setName(app.isPackaged ? 'SelfOS' : 'SelfOS Dev');
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();

@@ -2,10 +2,104 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  max-width: 760px;
+  max-width: 820px;
   min-width: 0;
 }
 
+/* --- Header controls --- */
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.searchRow {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.searchBox {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.searchIcon {
+  position: absolute;
+  left: var(--space-2);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-text-tertiary);
+  pointer-events: none;
+}
+
+.searchBox :global(input) {
+  padding-left: calc(var(--space-2) * 2 + 15px);
+}
+
+.filterRow {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr) auto;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+/* Selects fill their grid track and can shrink below their longest option (no overflow at narrow widths). */
+.filterRow :global(select) {
+  width: 100%;
+  min-width: 0;
+}
+
+.flaggedToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .filterRow {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* --- Life-area / section groups --- */
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.groupTitle {
+  margin: 0;
+}
+
+/* --- Trends --- */
+.trends {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+}
+
+.trendsSummary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.trends[open] .trendsSummary {
+  margin-bottom: var(--space-3);
+}
+
+.trendsBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* --- Card head --- */
 .head {
   display: flex;
   align-items: flex-start;
@@ -13,10 +107,35 @@
   gap: var(--space-3);
 }
 
+.headMain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* --- Fact rows --- */
 .factRow {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  min-width: 0;
+}
+
+.factEditRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.factEditRow :global(textarea) {
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -25,18 +144,69 @@
   color: var(--color-text-tertiary);
 }
 
-/* Marks a break-glass "restricted" intake fact (visible only to the owner, 18-personal-onboarding §8.4). */
+.flagOn {
+  flex-shrink: 0;
+  color: var(--color-danger, #c0392b);
+}
+
+.flaggedText {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.shareCell {
+  flex: none;
+  margin-left: auto;
+}
+
+.flaggedTag,
 .sensitiveTag {
   display: inline-flex;
   align-items: center;
   gap: 2px;
   flex: none;
-  margin-left: auto;
   padding: 0 var(--space-1);
   border-radius: var(--radius-sm);
   background: var(--color-surface-alt);
   color: var(--color-text-tertiary);
   font-size: var(--text-xs);
+}
+
+/* --- Meta row (confidence + categories + provenance) --- */
+.metaRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.categoryTag {
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill, 999px);
+  border: 1px solid var(--color-border);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+
+.provenance {
+  margin-left: auto;
+  min-width: 0;
+}
+
+.provLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--color-accent);
+  font-size: var(--text-xs);
+}
+
+.provLink:hover {
+  text-decoration: underline;
 }
 
 .actions {

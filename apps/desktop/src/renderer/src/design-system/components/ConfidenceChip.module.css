@@ -1,0 +1,35 @@
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-pill, 999px);
+  background: var(--color-surface-alt);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.dots {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.dotOn,
+.dotOff {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.dotOn {
+  background: var(--color-accent);
+}
+
+.dotOff {
+  background: var(--color-border-strong);
+}
+
+.text {
+  font-weight: 500;
+}

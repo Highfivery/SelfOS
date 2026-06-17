@@ -18,6 +18,7 @@ import {
   Heading,
   IconButton,
   Inline,
+  ConfidenceChip,
   LineChart,
   ProportionBar,
   SegmentedControl,
@@ -139,6 +140,14 @@ export function Gallery(): JSX.Element {
               <ShareToggle shared={share} onChange={setShare} label="Occupation" />
               <Text tone="secondary" size="sm">
                 Per-item shareability — {share ? 'shared with related people' : 'kept private'}
+              </Text>
+            </Inline>
+            <Inline gap={3} align="center">
+              <ConfidenceChip level="low" />
+              <ConfidenceChip level="medium" rationale="seen in 2 sessions" />
+              <ConfidenceChip level="high" rationale="corroborated by 4 sources" />
+              <Text tone="secondary" size="sm">
+                Memory confidence — text + non-colour-only dots, rationale on hover
               </Text>
             </Inline>
             <SegmentedControl

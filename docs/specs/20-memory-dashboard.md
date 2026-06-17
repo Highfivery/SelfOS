@@ -1,6 +1,6 @@
 # 20 — Memory: the living insights dashboard
 
-> **Status:** Approved — building (slices 1–2 of 3 built) · _last updated 2026-06-16_
+> **Status:** Approved — BUILT (all 3 slices; not merged) · _last updated 2026-06-16_
 >
 > Memory is meant to be the person's window into **what SelfOS has learned about them** — yet today it
 > (1) **leaks every household member's insights to whoever is logged in** (a serious privacy bug), and
@@ -328,6 +328,32 @@ The spec is build-ready pending final approval.
 
 ## 13. Changelog
 
+- 2026-06-16 — **Slice 3 built (the dashboard UI, §3/§8/§9) — SPEC 20 FULLY BUILT.** Rebuilt
+  `routes/memory/Memory.tsx` into the dashboard: header (full-text search + Refresh memory + filters: source /
+  subject / confidence / flagged-only); a distinct **"Needs your review"** drafts section (Approve / Edit /
+  Discard); a collapsible **Trends** section (mood + energy + any metric over time via the existing
+  `LineChart`); the active person's own insights **grouped by life-area**; and a read-only **"About people you
+  relate to"** section. New `InsightCard.tsx` (own = interactive: per-fact **flag-inaccurate** toggle +
+  `ShareToggle`, confidence chip + rationale, **provenance link that deep-links to the source**, sensitive tag,
+  edit/approve/delete, crisis-lead; related = read-only, no edit/flag/share). New **`ConfidenceChip`**
+  design-system primitive (text + non-colour-only dots + rationale tooltip → exported, in `/gallery`, tested).
+  Helpers: `provenance.ts` (target + label, "from N moments" after a merge) + `trends.ts`. Wired `Sessions.tsx`
+  - `Dreams.tsx` to **open the referenced item from router state** (the provenance deep-link). **Code-reviewer
+    fix-first (2 should-fixes):** (a) the Dreams per-person-reset effect clobbered the deep-link on mount (it runs
+    after the focus effect) — now skips its first run via a ref; (b) a related card rendered a navigable
+    provenance link to the WRONG route (its provenance is scrubbed to `{at}`) — related provenance is now a plain
+    non-link label. Plus nits: filter `<select>`s get `width:100%;min-width:0`; the "Flagged only" inert `<label>`
+    → `<span>`; reverted a `loaded`-gate (conversationStore has no `loaded` flag). Safety: crisis-lead banner +
+    CrisisFooter + not-medical framing (via the footer, de-duplicated); Trends framed gently. Gate green:
+    typecheck (node + web/DOM-lib), lint, format, **432 core + 510 desktop** unit (+ Memory dashboard RTL [7],
+    `ConfidenceChip` [2], `provenanceTarget` [4]; reworked the slice-1 Memory tests for the new structure),
+    **72 E2E** (+2: the dashboard groups/flags[decrypt-persisted]/source-removed/390px guard, and a **live dream
+    provenance deep-link** that catches the reset-clobber bug). Visual QA via real-Electron screenshots at desktop
+  - 390px (clean, intentional; filters stack on mobile; no overflow). **Spec 20 is FULLY BUILT — slices 1
+    (privacy fix) + 2 (engine) + 3 (UI) — NOT merged** (awaiting the user's confirm). **Lesson: a provenance
+    deep-link must survive a component's own mount-time effects (a per-person-reset effect declared after the
+    focus effect clobbers it — guard the first run); and a "view source" link on a record whose source id was
+    scrubbed for privacy (a related person's insight) must be a plain label, never a wrong-destination link.**
 - 2026-06-16 — **Slice 2 built (the living insights engine, §3.5/§3.6/§3.7/§4/§5.2/§5.4).** Schema (additive,
   no migration): `InsightFact += flaggedInaccurate?/flaggedAt?`; `Insight += categories[]` (`.default([])`),
   `confidenceRationale?`, `lastReconciledAt?`, `contributingSources?: InsightProvenance[]`; extracted a named

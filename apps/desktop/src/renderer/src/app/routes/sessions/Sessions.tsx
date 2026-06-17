@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, MessageCircle, Plus, Sparkles } from 'lucide-react';
 import { useConversationStore } from '../../../stores/conversationStore';
 import { useSessionStore } from '../../../stores/sessionStore';
@@ -73,6 +73,16 @@ export function Sessions(): JSX.Element {
     void open(id);
     setView('thread');
   };
+
+  // Deep-link from Memory's provenance link (20-memory-dashboard §3.3): open the referenced session.
+  const location = useLocation();
+  useEffect(() => {
+    const focus = (location.state as { focusConversationId?: string } | null)?.focusConversationId;
+    if (focus) {
+      void open(focus);
+      setView('thread');
+    }
+  }, [location.state, open]);
   const startNew = (): void => {
     newConversation();
     setView('thread');

@@ -1,233 +1,70 @@
-import { useEffect, useState } from 'react';
-import { Brain, Lock, ShieldAlert, Trash2, Unlock } from 'lucide-react';
-import type { Insight, InsightFact } from '@shared/schemas';
+import { useEffect, useMemo, useState } from 'react';
+import { Brain, RefreshCw, Search } from 'lucide-react';
+import type { Insight, InsightSource } from '@shared/schemas';
+import { LIFE_AREAS } from '@shared/schemas';
 import { useInsightStore } from '../../../stores/insightStore';
 import { usePeopleStore } from '../../../stores/peopleStore';
 import { useSessionStore } from '../../../stores/sessionStore';
+import { useConversationStore } from '../../../stores/conversationStore';
+import { useDreamStore } from '../../../stores/dreamStore';
 import {
   Banner,
   Button,
   Card,
   Heading,
-  IconButton,
+  LineChart,
+  Select,
   Stack,
   Switch,
   Text,
-  Textarea,
+  TextInput,
 } from '../../../design-system/components';
 import { CrisisFooter } from '../sessions/CrisisFooter';
+import { InsightCard } from './InsightCard';
+import { buildTrendSeries } from './trends';
 import styles from './Memory.module.css';
 
-const formatDate = (iso: string): string => {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString();
-};
+type SourceFilter = 'all' | InsightSource;
+type ConfidenceFilter = 'all' | 'high' | 'medium' | 'low';
 
-/** One Insight: provenance + (for drafts) the inline review/approve step, (for approved) view + edit/delete. */
-function InsightCard({
-  insight,
-  subjectName,
-}: {
-  insight: Insight;
-  subjectName: string;
-}): JSX.Element {
-  const approve = useInsightStore((s) => s.approve);
-  const update = useInsightStore((s) => s.update);
-  const remove = useInsightStore((s) => s.remove);
+const SOURCE_OPTIONS: { value: SourceFilter; label: string }[] = [
+  { value: 'all', label: 'All sources' },
+  { value: 'intake', label: 'Onboarding' },
+  { value: 'session', label: 'Sessions' },
+  { value: 'dream', label: 'Dreams' },
+  { value: 'questionnaire', label: 'Questionnaires' },
+];
 
-  const [editing, setEditing] = useState(!insight.approved); // drafts open in review mode
-  const [summary, setSummary] = useState(insight.summary);
-  const [facts, setFacts] = useState<InsightFact[]>(insight.facts);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const isIntake = insight.source === 'intake';
-  const sourceLabel =
-    insight.source === 'intake'
-      ? 'onboarding'
-      : insight.source === 'session'
-        ? 'a session'
-        : insight.source === 'dream'
-          ? 'a dream'
-          : 'a questionnaire';
-
-  // Collapse to the read view once an insight becomes approved (the card is reused across reloads by
-  // `key`, so the initial `useState` doesn't re-run — sync it here).
-  useEffect(() => {
-    if (insight.approved) setEditing(false);
-  }, [insight.approved]);
-
-  const edit = { subjectPersonId: insight.subjectPersonId, id: insight.id, summary, facts };
-
-  const onApprove = async (): Promise<void> => {
-    setBusy(true);
-    setError(null);
-    try {
-      if (!(await approve(edit))) setError('Couldn’t save that insight. Please try again.');
-    } catch {
-      setError('Couldn’t save that insight. Please try again.');
-    } finally {
-      setBusy(false);
-    }
-  };
-  const onSave = async (): Promise<void> => {
-    setBusy(true);
-    setError(null);
-    try {
-      if (await update(edit)) setEditing(false);
-      else setError('Couldn’t save your changes. Please try again.');
-    } catch {
-      setError('Couldn’t save your changes. Please try again.');
-    } finally {
-      setBusy(false);
-    }
-  };
-  const onRemove = async (): Promise<void> => {
-    setError(null);
-    try {
-      await remove({ subjectPersonId: insight.subjectPersonId, id: insight.id });
-    } catch {
-      setError('Couldn’t remove that insight. Please try again.');
-    }
-  };
-  const setFactShareable = (id: string, shareable: boolean): void =>
-    setFacts((fs) => fs.map((f) => (f.id === id ? { ...f, shareable } : f)));
-
-  return (
-    <Card>
-      <Stack gap={3}>
-        {insight.crisisFlag ? (
-          <Banner tone="danger">
-            This response may indicate distress. Lead with care — if anyone is in immediate danger,
-            call your local emergency number; in the US &amp; Canada call or text{' '}
-            <strong>988</strong>.
-          </Banner>
-        ) : null}
-
-        <div className={styles.head}>
-          <div>
-            <Text weight={600}>About {subjectName}</Text>
-            <Text size="xs" tone="tertiary">
-              From {sourceLabel} · {formatDate(insight.updatedAt)} ·{' '}
-              {insight.approved ? 'approved' : 'awaiting your review'}
-            </Text>
-          </div>
-          {insight.approved ? (
-            <IconButton
-              aria-label="Delete insight"
-              variant="secondary"
-              disabled={busy}
-              onClick={() => void onRemove()}
-            >
-              <Trash2 size={16} aria-hidden="true" />
-            </IconButton>
-          ) : null}
-        </div>
-
-        {editing ? (
-          <>
-            <Textarea
-              rows={3}
-              value={summary}
-              aria-label="Insight summary"
-              onChange={(event) => setSummary(event.target.value)}
-            />
-            <Stack gap={2}>
-              <Text size="sm" weight={500}>
-                Facts — choose which are safe to share with {subjectName}
-              </Text>
-              {facts.map((fact) => (
-                <div key={fact.id} className={styles.factRow}>
-                  <Switch
-                    checked={fact.shareable}
-                    aria-label={`${fact.text} — shareable`}
-                    onChange={(checked) => setFactShareable(fact.id, checked)}
-                  />
-                  {fact.shareable ? (
-                    <Unlock size={14} aria-hidden="true" className={styles.factIcon} />
-                  ) : (
-                    <Lock size={14} aria-hidden="true" className={styles.factIcon} />
-                  )}
-                  <Text size="sm">{fact.text}</Text>
-                </div>
-              ))}
-            </Stack>
-            <div className={styles.actions}>
-              {insight.approved ? (
-                <Button variant="primary" onClick={() => void onSave()} disabled={busy}>
-                  Save
-                </Button>
-              ) : (
-                <Button variant="primary" onClick={() => void onApprove()} disabled={busy}>
-                  Approve
-                </Button>
-              )}
-              {insight.approved ? (
-                <Button variant="secondary" onClick={() => setEditing(false)} disabled={busy}>
-                  Cancel
-                </Button>
-              ) : (
-                <Button variant="secondary" onClick={() => void onRemove()} disabled={busy}>
-                  Discard
-                </Button>
-              )}
-            </div>
-          </>
-        ) : (
-          <>
-            <Text>{insight.summary}</Text>
-            <Stack gap={1}>
-              {insight.facts.map((fact) => (
-                <div key={fact.id} className={styles.factRow}>
-                  {fact.shareable ? (
-                    <Unlock size={14} aria-hidden="true" className={styles.factIcon} />
-                  ) : (
-                    <Lock size={14} aria-hidden="true" className={styles.factIcon} />
-                  )}
-                  <Text size="sm" tone="secondary">
-                    {fact.text}
-                  </Text>
-                  {fact.restricted ? (
-                    <span className={styles.sensitiveTag} title="Sensitive onboarding content">
-                      <ShieldAlert size={12} aria-hidden="true" /> sensitive
-                    </span>
-                  ) : null}
-                </div>
-              ))}
-            </Stack>
-            {isIntake ? (
-              <Text size="xs" tone="tertiary">
-                Sensitive onboarding content (what weighs on you, intimacy) stays private to your
-                own coaching — it’s shown here only to you, and never to anyone else.
-              </Text>
-            ) : null}
-            <div>
-              <Button variant="secondary" onClick={() => setEditing(true)}>
-                Edit
-              </Button>
-            </div>
-          </>
-        )}
-
-        {error ? <Banner tone="warning">{error}</Banner> : null}
-      </Stack>
-    </Card>
-  );
+function matchesText(insight: Insight, q: string): boolean {
+  if (!q) return true;
+  const hay = [insight.summary, ...insight.facts.map((f) => f.text)].join(' ').toLowerCase();
+  return hay.includes(q);
 }
 
 /**
- * "Memory" — the active person's OWN view of what SelfOS has learned about them (20-memory-dashboard
- * §5.1). The bridge scopes the list to their own insights (+ relationships' shareable facts, rendered in
- * the §5.3 dashboard rebuild — slice 3); this surface shows only their own. Drafts get the inline
- * approve-step (edit the summary, choose which facts are shareable); crisis-flagged insights lead with
- * concern + resources (§8.2).
+ * "Memory" — the active person's living view of what SelfOS has learned about them (20-memory-dashboard §3).
+ * The bridge scopes the list to their own insights + relationships' shareable facts (§5.1). Header with
+ * search + Refresh + filters; a "Needs your review" section for drafts; a Trends section; then their own
+ * insights grouped by life-area, and a read-only section for what people they relate to have shared.
  */
 export function Memory(): JSX.Element {
   const insights = useInsightStore((s) => s.insights);
   const loaded = useInsightStore((s) => s.loaded);
   const load = useInsightStore((s) => s.load);
+  const refresh = useInsightStore((s) => s.refresh);
   const people = usePeopleStore((s) => s.people);
   const loadPeople = usePeopleStore((s) => s.load);
   const activePersonId = useSessionStore((s) => s.activePerson?.id ?? null);
+  const conversations = useConversationStore((s) => s.conversations);
+  const dreams = useDreamStore((s) => s.dreams);
+
+  const [query, setQuery] = useState('');
+  const [source, setSource] = useState<SourceFilter>('all');
+  const [subject, setSubject] = useState<string>('all'); // 'all' | 'you' | a related person id
+  const [confidence, setConfidence] = useState<ConfidenceFilter>('all');
+  const [flaggedOnly, setFlaggedOnly] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshNote, setRefreshNote] = useState<string | null>(null);
 
   useEffect(() => {
     void load();
@@ -235,24 +72,162 @@ export function Memory(): JSX.Element {
   }, [load, loadPeople]);
 
   const nameOf = (id: string): string => people.find((p) => p.id === id)?.displayName ?? 'someone';
+  const liveConversationIds = useMemo(
+    () => new Set(conversations.map((c) => c.id)),
+    [conversations],
+  );
+  const liveDreamIds = useMemo(() => new Set(dreams.map((d) => d.id)), [dreams]);
 
-  // The bridge scopes `insights` to the active person's OWN insights + their relationships' shareable
-  // facts (spec 20 §5.1). This surface (the questionnaire-era card list) shows only the person's OWN
-  // insights for now; rendering related people's shareable facts under their subject is the §5.3
-  // dashboard rebuild (slice 3) — so no half-built related cards or dead controls here (CLAUDE.md §12).
-  const ownInsights = insights.filter((insight) => insight.subjectPersonId === activePersonId);
+  // A session/dream insight whose source no longer exists shows "original source removed" (§3.3/§3.7).
+  // AppShell loads the conversation/dream stores on the active-person change before this mounts, so the
+  // "removed" state reflects the loaded lists (the dashboard re-renders when they arrive).
+  const sourceRemoved = (insight: Insight): boolean => {
+    if (insight.source === 'session' && insight.provenance.conversationId) {
+      return !liveConversationIds.has(insight.provenance.conversationId);
+    }
+    if (insight.source === 'dream' && insight.provenance.dreamId) {
+      return !liveDreamIds.has(insight.provenance.dreamId);
+    }
+    return false;
+  };
+
+  const q = query.trim().toLowerCase();
+  const own = insights.filter((i) => i.subjectPersonId === activePersonId);
+  const related = insights.filter((i) => i.subjectPersonId !== activePersonId);
+  const relatedSubjects = [...new Set(related.map((i) => i.subjectPersonId))];
+
+  const passesFilters = (insight: Insight): boolean =>
+    matchesText(insight, q) &&
+    (source === 'all' || insight.source === source) &&
+    (confidence === 'all' || insight.confidence === confidence) &&
+    (!flaggedOnly || insight.facts.some((f) => f.flaggedInaccurate));
+
+  const subjectOk = (insight: Insight): boolean => {
+    if (subject === 'all') return true;
+    if (subject === 'you') return insight.subjectPersonId === activePersonId;
+    return insight.subjectPersonId === subject;
+  };
+
+  const filteredOwn = own.filter((i) => passesFilters(i) && subjectOk(i));
+  const filteredRelated = related.filter((i) => passesFilters(i) && subjectOk(i));
+  const drafts = filteredOwn.filter((i) => !i.approved);
+  const approvedOwn = filteredOwn.filter((i) => i.approved);
+
+  // Group the person's own approved insights by their primary life-area (categories[0]; 'Other' if untagged).
+  const byArea = new Map<string, Insight[]>();
+  for (const insight of approvedOwn) {
+    const area = insight.categories[0] ?? 'Other';
+    byArea.set(area, [...(byArea.get(area) ?? []), insight]);
+  }
+  const orderedAreas = LIFE_AREAS.filter((a) => byArea.has(a));
+
+  const trendSeries = activePersonId ? buildTrendSeries(insights, activePersonId) : [];
+
+  const onRefresh = async (): Promise<void> => {
+    setRefreshing(true);
+    setRefreshNote(null);
+    try {
+      const result = await refresh();
+      if (result.ok) {
+        const merged = result.mergedCount ?? 0;
+        setRefreshNote(
+          `Memory refreshed — ${result.reconciledCount ?? 0} updated${merged ? `, ${merged} merged` : ''}.`,
+        );
+      } else if (result.reason === 'AI_OFF' || result.reason === 'NO_KEY') {
+        setRefreshNote('Turn on AI in Settings to refresh memory.');
+      } else if (result.reason === 'BUDGET') {
+        setRefreshNote('AI budget reached for this period.');
+      } else if (result.reason === 'NOTHING_TO_DO') {
+        setRefreshNote('Nothing to refresh yet.');
+      } else {
+        setRefreshNote('Couldn’t refresh memory. Please try again.');
+      }
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const nothingShown =
+    loaded && drafts.length === 0 && approvedOwn.length === 0 && filteredRelated.length === 0;
+  const anyInsights = own.length > 0 || related.length > 0;
 
   return (
     <div className={styles.layout}>
       <Stack gap={2}>
         <Heading level={2}>Memory</Heading>
         <Text tone="secondary">
-          What the coach has learned — from questionnaire answers, sessions, dreams, and onboarding.
-          Approve an insight to let it inform future sessions.
+          What SelfOS understands about you — and the people you relate to.
         </Text>
       </Stack>
 
-      {loaded && ownInsights.length === 0 ? (
+      {anyInsights ? (
+        <div className={styles.controls}>
+          <div className={styles.searchRow}>
+            <div className={styles.searchBox}>
+              <Search size={15} aria-hidden="true" className={styles.searchIcon} />
+              <TextInput
+                value={query}
+                aria-label="Search memory"
+                placeholder="Search what SelfOS knows…"
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </div>
+            <Button variant="secondary" onClick={() => void onRefresh()} disabled={refreshing}>
+              <RefreshCw size={14} aria-hidden="true" /> {refreshing ? 'Refreshing…' : 'Refresh'}
+            </Button>
+          </div>
+          <div className={styles.filterRow}>
+            <Select
+              aria-label="Filter by source"
+              value={source}
+              onChange={(event) => setSource(event.target.value as SourceFilter)}
+            >
+              {SOURCE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </Select>
+            <Select
+              aria-label="Filter by subject"
+              value={subject}
+              onChange={(event) => setSubject(event.target.value)}
+            >
+              <option value="all">Everyone</option>
+              <option value="you">You</option>
+              {relatedSubjects.map((id) => (
+                <option key={id} value={id}>
+                  {nameOf(id)}
+                </option>
+              ))}
+            </Select>
+            <Select
+              aria-label="Filter by confidence"
+              value={confidence}
+              onChange={(event) => setConfidence(event.target.value as ConfidenceFilter)}
+            >
+              <option value="all">Any confidence</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </Select>
+            <span className={styles.flaggedToggle}>
+              <Switch
+                checked={flaggedOnly}
+                aria-label="Show only flagged"
+                onChange={setFlaggedOnly}
+              />
+              <Text size="sm" aria-hidden="true">
+                Flagged only
+              </Text>
+            </span>
+          </div>
+        </div>
+      ) : null}
+
+      {refreshNote ? <Banner tone="info">{refreshNote}</Banner> : null}
+
+      {loaded && !anyInsights ? (
         <Card>
           <Stack gap={2} align="center">
             <Brain size={24} aria-hidden="true" />
@@ -262,16 +237,91 @@ export function Memory(): JSX.Element {
             </Text>
           </Stack>
         </Card>
-      ) : (
-        <Stack gap={3}>
-          {ownInsights.map((insight) => (
-            <InsightCard
-              key={insight.id}
-              insight={insight}
-              subjectName={nameOf(insight.subjectPersonId)}
+      ) : null}
+
+      {drafts.length > 0 ? (
+        <section className={styles.group} aria-label="Needs your review">
+          <Heading level={3} className={styles.groupTitle}>
+            Needs your review
+          </Heading>
+          <Text size="sm" tone="tertiary">
+            Drafts wait here until you approve them — they don’t inform your coaching yet.
+          </Text>
+          <Stack gap={3}>
+            {drafts.map((insight) => (
+              <InsightCard
+                key={insight.id}
+                insight={insight}
+                subjectName={nameOf(insight.subjectPersonId)}
+                isOwn
+              />
+            ))}
+          </Stack>
+        </section>
+      ) : null}
+
+      {trendSeries.length > 0 ? (
+        <details className={styles.trends}>
+          <summary className={styles.trendsSummary}>Trends</summary>
+          <div className={styles.trendsBody}>
+            <Text size="sm" tone="tertiary">
+              How your mood and energy have moved across analyzed sessions — a gentle reflection,
+              not a measure.
+            </Text>
+            <LineChart
+              series={trendSeries}
+              ariaLabel="Your mood and energy across analyzed sessions over time"
+              yMin={-1}
+              yMax={1}
             />
-          ))}
-        </Stack>
+          </div>
+        </details>
+      ) : null}
+
+      {orderedAreas.map((area) => (
+        <section key={area} className={styles.group} aria-label={area}>
+          <Heading level={3} className={styles.groupTitle}>
+            {area}
+          </Heading>
+          <Stack gap={3}>
+            {(byArea.get(area) ?? []).map((insight) => (
+              <InsightCard
+                key={insight.id}
+                insight={insight}
+                subjectName="you"
+                isOwn
+                sourceRemoved={sourceRemoved(insight)}
+              />
+            ))}
+          </Stack>
+        </section>
+      ))}
+
+      {filteredRelated.length > 0 ? (
+        <section className={styles.group} aria-label="About people you relate to">
+          <Heading level={3} className={styles.groupTitle}>
+            About people you relate to
+          </Heading>
+          <Text size="sm" tone="tertiary">
+            What the people in your life have chosen to share — read-only.
+          </Text>
+          <Stack gap={3}>
+            {filteredRelated.map((insight) => (
+              <InsightCard
+                key={insight.id}
+                insight={insight}
+                subjectName={nameOf(insight.subjectPersonId)}
+                isOwn={false}
+              />
+            ))}
+          </Stack>
+        </section>
+      ) : null}
+
+      {!nothingShown || !anyInsights ? null : (
+        <Card>
+          <Text tone="secondary">No insights match your filters.</Text>
+        </Card>
       )}
 
       <CrisisFooter />

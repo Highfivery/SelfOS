@@ -20,3 +20,4 @@ export { LineChart, type LineChartSeries, type LineChartPoint } from './LineChar
 export { FrequencyBars, type FrequencyItem } from './FrequencyBars';
 export { ProportionBar } from './ProportionBar';
 export { TrendLine, type TrendPoint } from './TrendLine';
+export { ConfidenceChip, type ConfidenceLevel } from './ConfidenceChip';

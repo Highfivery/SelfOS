@@ -1,15 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import type { Insight } from '@shared/schemas';
 import { Memory } from './Memory';
 import { useInsightStore } from '../../../stores/insightStore';
 import { usePeopleStore } from '../../../stores/peopleStore';
 import { useSessionStore } from '../../../stores/sessionStore';
+import { useConversationStore } from '../../../stores/conversationStore';
+import { useDreamStore } from '../../../stores/dreamStore';
 import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
 
-// The Memory surface shows only the ACTIVE person's own insights (spec 20 §5.1), so the active person
-// must be 'p1' (the fixtures' subject) for their insights to render.
 const activeP1 = {
   id: 'p1',
   schemaVersion: 1 as const,
@@ -20,27 +21,16 @@ const activeP1 = {
   updatedAt: 'now',
 };
 
-afterEach(() => {
-  clearMockBridge();
-  useInsightStore.setState({ insights: [], loaded: false });
-  usePeopleStore.setState({ people: [], loaded: false });
-  useSessionStore.setState({ activePerson: null });
-});
-
-function draftInsight(over: Partial<Insight> = {}): Insight {
+function insight(over: Partial<Insight> & { id: string }): Insight {
   return {
-    id: 'i1',
     schemaVersion: 1,
     source: 'questionnaire',
     subjectPersonId: 'p1',
-    summary: 'They want more connection.',
-    facts: [
-      { id: 'f1', text: 'Wants more date nights', shareable: false },
-      { id: 'f2', text: 'Feels distant', shareable: false },
-    ],
-    confidence: 'high',
-    categories: [],
-    approved: false,
+    summary: `summary-${over.id}`,
+    facts: [],
+    confidence: 'medium',
+    categories: ['Other'],
+    approved: true,
     provenance: { assignmentId: 'a1', at: '2026-06-11T12:00:00.000Z' },
     createdAt: '2026-06-11T12:00:00.000Z',
     updatedAt: '2026-06-11T12:00:00.000Z',
@@ -48,95 +38,142 @@ function draftInsight(over: Partial<Insight> = {}): Insight {
   };
 }
 
-describe('Memory', () => {
+function renderMemory(): void {
+  render(
+    <MemoryRouter>
+      <Memory />
+    </MemoryRouter>,
+  );
+}
+
+afterEach(() => {
+  clearMockBridge();
+  useInsightStore.setState({ insights: [], loaded: false });
+  usePeopleStore.setState({ people: [], loaded: false });
+  useConversationStore.setState({ conversations: [] });
+  useDreamStore.setState({ dreams: [], loaded: false });
+  useSessionStore.setState({ activePerson: null });
+});
+
+describe('Memory dashboard', () => {
   it('shows the empty state when there are no insights', async () => {
+    useSessionStore.setState({ activePerson: activeP1 });
     installMockBridge({ insightsList: () => Promise.resolve([]) });
-    render(<Memory />);
+    renderMemory();
     expect(await screen.findByText(/nothing here yet/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Memory' })).toBeInTheDocument();
   });
 
-  it('reviews a draft and approves it with the chosen shareable facts', async () => {
+  it('puts a draft in "Needs your review" and approves it', async () => {
     useSessionStore.setState({ activePerson: activeP1 });
-    // Stateful: the list reflects approval, so the card can collapse to its read view afterward.
-    let current = draftInsight();
-    const approve = vi.fn(
-      (input: { facts?: { id: string; text: string; shareable: boolean }[] }) => {
-        current = { ...current, approved: true, ...(input.facts ? { facts: input.facts } : {}) };
-        return Promise.resolve(current);
-      },
-    );
+    let current = insight({ id: 'd1', approved: false, summary: 'Wants more connection' });
+    const approve = vi.fn(() => {
+      current = { ...current, approved: true };
+      return Promise.resolve(current);
+    });
     installMockBridge({
       insightsList: () => Promise.resolve([current]),
       insightsApprove: approve,
-      peopleList: () =>
-        Promise.resolve([
-          {
-            id: 'p1',
-            schemaVersion: 1,
-            displayName: 'Ben',
-            isSubject: true,
-            tags: [],
-            createdAt: 'now',
-            updatedAt: 'now',
-          },
-        ]),
     });
-    render(<Memory />);
-
-    // The draft opens in review mode, addressed to the subject person.
-    expect(await screen.findByText(/About Ben/)).toBeInTheDocument();
-    expect(screen.getByText(/awaiting your review/i)).toBeInTheDocument();
-
-    // Mark the first fact shareable, then Approve.
-    await userEvent.click(screen.getByLabelText('Wants more date nights — shareable'));
+    renderMemory();
+    expect(await screen.findByText('Needs your review')).toBeInTheDocument();
+    expect(screen.getByText('Wants more connection')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
-
-    expect(approve).toHaveBeenCalledWith(
-      expect.objectContaining({
-        subjectPersonId: 'p1',
-        id: 'i1',
-        facts: expect.arrayContaining([expect.objectContaining({ id: 'f1', shareable: true })]),
-      }),
-    );
-    // Once approved, the card collapses to the read view (Approve gone, Edit shown).
-    expect(await screen.findByRole('button', { name: 'Edit' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+    expect(approve).toHaveBeenCalled();
   });
 
-  it('shows the active person’s own insight but not a related person’s (own-only scope, slice 1)', async () => {
+  it('groups an approved own insight by life-area with confidence + provenance', async () => {
     useSessionStore.setState({ activePerson: activeP1 });
+    useConversationStore.setState({ conversations: [] }); // no matching conversation → "source removed"
     installMockBridge({
-      // The bridge returns own (p1) + a related person's shareable fact (p2, summary stripped); this
-      // surface renders only the own one for now (related display is the §5.3 dashboard, slice 3).
       insightsList: () =>
         Promise.resolve([
-          draftInsight({
-            id: 'own',
-            subjectPersonId: 'p1',
+          insight({
+            id: 'i1',
             approved: true,
-            summary: 'MY OWN NOTE',
-          }),
-          draftInsight({
-            id: 'related',
-            subjectPersonId: 'p2',
-            approved: true,
-            summary: '',
-            facts: [{ id: 'rf', text: 'RELATED SHARED FACT', shareable: true }],
+            summary: 'Values steady routines',
+            categories: ['Health & body'],
+            confidence: 'high',
+            confidenceRationale: 'echoed across 3 sessions',
+            source: 'session',
+            provenance: { conversationId: 'cX', at: '2026-06-11T12:00:00.000Z' },
           }),
         ]),
     });
-    render(<Memory />);
-    expect(await screen.findByText('MY OWN NOTE')).toBeInTheDocument();
-    expect(screen.queryByText('RELATED SHARED FACT')).not.toBeInTheDocument();
+    renderMemory();
+    expect(await screen.findByText('Values steady routines')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Health & body' })).toBeInTheDocument();
+    expect(screen.getByLabelText(/High confidence — echoed across 3 sessions/)).toBeInTheDocument();
+    // The session's source is gone (no matching conversation) → "original source removed".
+    expect(screen.getByText(/original source removed/i)).toBeInTheDocument();
   });
 
-  it('leads a crisis-flagged insight with concern + resources', async () => {
+  it('renders a related person’s shared facts read-only (no edit) under their section', async () => {
     useSessionStore.setState({ activePerson: activeP1 });
     installMockBridge({
-      insightsList: () => Promise.resolve([draftInsight({ crisisFlag: true })]),
+      peopleList: () => Promise.resolve([{ ...activeP1, id: 'p2', displayName: 'Sam' }]),
+      insightsList: () =>
+        Promise.resolve([
+          insight({ id: 'own', summary: 'MY OWN NOTE' }),
+          insight({
+            id: 'rel',
+            subjectPersonId: 'p2',
+            summary: '',
+            facts: [{ id: 'rf', text: 'Sam started a new job', shareable: true }],
+          }),
+        ]),
     });
-    render(<Memory />);
-    expect(await screen.findByText(/may indicate distress/i)).toBeInTheDocument();
-    expect(screen.getByText(/988/)).toBeInTheDocument();
+    renderMemory();
+    expect(await screen.findByText('About people you relate to')).toBeInTheDocument();
+    expect(screen.getByText('Sam started a new job')).toBeInTheDocument();
+    expect(screen.getByText(/About Sam/)).toBeInTheDocument();
+    // A related card is read-only — no Edit button for it (only the own insight has one).
+    expect(screen.getAllByRole('button', { name: 'Edit' })).toHaveLength(1);
+  });
+
+  it('flags a fact as inaccurate', async () => {
+    useSessionStore.setState({ activePerson: activeP1 });
+    const flag = vi.fn(() => Promise.resolve(null));
+    installMockBridge({
+      insightsList: () =>
+        Promise.resolve([
+          insight({ id: 'i1', facts: [{ id: 'f1', text: 'Dislikes mornings', shareable: false }] }),
+        ]),
+      insightsFlag: flag,
+    });
+    renderMemory();
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Flag as inaccurate: Dislikes mornings/ }),
+    );
+    expect(flag).toHaveBeenCalledWith({ insightId: 'i1', factId: 'f1', flagged: true });
+  });
+
+  it('filters by search', async () => {
+    useSessionStore.setState({ activePerson: activeP1 });
+    installMockBridge({
+      insightsList: () =>
+        Promise.resolve([
+          insight({ id: 'i1', summary: 'Loves hiking outdoors' }),
+          insight({ id: 'i2', summary: 'Prefers quiet evenings' }),
+        ]),
+    });
+    renderMemory();
+    expect(await screen.findByText('Loves hiking outdoors')).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('Search memory'), 'hiking');
+    expect(screen.getByText('Loves hiking outdoors')).toBeInTheDocument();
+    expect(screen.queryByText('Prefers quiet evenings')).not.toBeInTheDocument();
+  });
+
+  it('runs Refresh memory and shows the calm AI-off note', async () => {
+    useSessionStore.setState({ activePerson: activeP1 });
+    const refresh = vi.fn(() => Promise.resolve({ ok: false, reason: 'AI_OFF' as const }));
+    installMockBridge({
+      insightsList: () => Promise.resolve([insight({ id: 'i1' })]),
+      memoryRefresh: refresh,
+    });
+    renderMemory();
+    await userEvent.click(await screen.findByRole('button', { name: /Refresh/ }));
+    expect(refresh).toHaveBeenCalled();
+    expect(await screen.findByText(/Turn on AI in Settings/)).toBeInTheDocument();
   });
 });

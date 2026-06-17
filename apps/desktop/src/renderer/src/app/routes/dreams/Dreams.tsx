@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, BarChart3, Moon, Plus, Sparkles } from 'lucide-react';
 import type { Dream } from '@shared/channels';
 import { useDreamStore } from '../../../stores/dreamStore';
@@ -42,9 +42,16 @@ export function Dreams(): JSX.Element {
   const load = useDreamStore((s) => s.load);
   const activePersonId = useSessionStore((s) => s.activePerson?.id);
   const navigate = useNavigate();
+  const location = useLocation();
   const [selection, setSelection] = useState<Selection>({ mode: 'none' });
   // Within a saved dream, the detail toggles between the editor and the in-pane analysis surface.
   const [analyzing, setAnalyzing] = useState(false);
+
+  // Deep-link from Memory's provenance link (20-memory-dashboard §3.3): open the referenced dream.
+  useEffect(() => {
+    const focus = (location.state as { focusDreamId?: string } | null)?.focusDreamId;
+    if (focus) setSelection({ mode: 'edit', id: focus });
+  }, [location.state]);
 
   // Changing the selected dream (or starting a new one) always returns to the editor view.
   const select = (next: Selection): void => {
@@ -56,9 +63,16 @@ export function Dreams(): JSX.Element {
     void load();
   }, [load]);
 
-  // Reset the detail selection when the active person changes — a switch must not leave another person's
+  // Reset the detail selection when the active person CHANGES — a switch must not leave another person's
   // dream selected (which on mobile would hide the list, incl. "Shared with you"). Per-person isolation.
+  // Skip the first run so a provenance deep-link (focusDreamId, set in the effect above on mount) survives
+  // — this reset effect is declared after it and would otherwise clobber the focused dream on arrival.
+  const firstPersonRun = useRef(true);
   useEffect(() => {
+    if (firstPersonRun.current) {
+      firstPersonRun.current = false;
+      return;
+    }
     setSelection({ mode: 'none' });
     setAnalyzing(false);
   }, [activePersonId]);

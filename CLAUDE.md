@@ -329,6 +329,32 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-16 — Build (**Memory dashboard — SLICE 3: the dashboard UI; SPEC 20 FULLY BUILT**;
+  [20-memory-dashboard](docs/specs/20-memory-dashboard.md) §3/§8/§9, on `feat/memory-dashboard` **worktree**,
+  NOT merged). Rebuilt `routes/memory/Memory.tsx` into the living dashboard: header (search + Refresh memory +
+  filters source/subject/confidence/flagged), a "Needs your review" drafts section, a collapsible Trends section
+  (reuses `LineChart`), the person's own insights grouped by **life-area**, and a read-only "About people you
+  relate to" section. New `InsightCard.tsx` — own = interactive (per-fact flag-inaccurate toggle + `ShareToggle`,
+  confidence chip + rationale, provenance link that **deep-links to the source**, sensitive tag, edit/approve/
+  delete, crisis-lead); related = read-only. New **`ConfidenceChip`** primitive (text + non-colour-only dots +
+  rationale → exported, `/gallery`, tested). `provenance.ts` + `trends.ts` helpers; wired `Sessions`/`Dreams` to
+  open the referenced item from router state. **Code-reviewer fix-first (2 should-fixes):** (a) the Dreams
+  per-person-reset effect (declared AFTER the deep-link focus effect) clobbered the deep-link on mount → now
+  skips its first run via a ref; (b) a related card rendered a navigable provenance link to the WRONG route
+  (related provenance is scrubbed to `{at}`) → related provenance is now a plain non-link label. Nits: filter
+  `<select>`s get `width:100%;min-width:0`; the inert "Flagged only" `<label>` → `<span>`. Gate green: typecheck
+  (node + web/DOM-lib), lint, format, **432 core + 510 desktop** unit (Memory dashboard RTL, `ConfidenceChip`,
+  `provenanceTarget`; reworked the slice-1 Memory tests), **72 E2E** (+2: dashboard groups/flags[decrypt]/source-
+  removed/390px, and a **live dream provenance deep-link** that catches the reset-clobber). **Visual QA** via
+  real-Electron screenshots at desktop + 390px (clean/intentional; filters stack on mobile; no overflow — the
+  web preview can't be used from a worktree, it serves the main tree's build). **SPEC 20 IS FULLY BUILT** —
+  slices 1 (cross-user privacy fix) + 2 (living engine: reconcile/flag/categories/keep-on-delete) + 3 (dashboard
+  UI), all on `feat/memory-dashboard`, **NOT merged** (awaiting the user's confirm). **Lesson: a provenance
+  deep-link (router state read in a mount effect) must survive the target component's OWN mount-time effects — a
+  per-person-reset effect declared after the focus effect runs last on mount and clobbers it (guard the first
+  run); and a "view source" link on a record whose source id was deliberately scrubbed for privacy (a related
+  person's insight) must be a plain label, never a wrong-destination link a green suite won't catch unless a
+  test actually CLICKS a live provenance link.**
 - 2026-06-16 — Build (**Memory dashboard — SLICE 2: the living insights engine**;
   [20-memory-dashboard](docs/specs/20-memory-dashboard.md) §3.5–§3.7/§4/§5.2/§5.4, on `feat/memory-dashboard`
   **worktree**, NOT merged). **Decision asked (cost-material, spec self-contradicted):** automatic reconciliation

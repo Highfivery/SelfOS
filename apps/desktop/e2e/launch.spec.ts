@@ -37,7 +37,12 @@ import {
   submitResponse,
 } from '@selfos/core/questionnaires';
 import { getIntakeSession } from '@selfos/core/intake';
-import { listInsightsForPerson, saveInsight, summarizeForContext } from '@selfos/core/insights';
+import {
+  getInsight,
+  listInsightsForPerson,
+  saveInsight,
+  summarizeForContext,
+} from '@selfos/core/insights';
 import { listDreams, saveAnalysis, saveDream } from '@selfos/core/dreams';
 import { saveConversation } from '@selfos/core/conversations';
 
@@ -1422,6 +1427,182 @@ test('memory: a member sees only their OWN insights, never another member’s (t
     await w.getByRole('link', { name: 'Memory' }).click();
     await expect(w.getByText(/Bo's onboarding portrait/)).toBeVisible();
     await expect(w.getByText(/Ana's onboarding portrait/)).toHaveCount(0);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('memory: the dashboard groups by life-area, flags a fact (decrypt-persisted), shows "source removed", and fits 390px (spec 20 §3)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('master key missing');
+  const at = '2026-06-12T10:00:00.000Z';
+  // A session insight whose conversation no longer exists → its provenance shows "original source removed".
+  await saveInsight(fs, key, {
+    id: 'ins-health',
+    schemaVersion: 1,
+    source: 'session',
+    subjectPersonId: 'owner-1',
+    summary: 'Sleeps better with a wind-down routine',
+    facts: [
+      { id: 'f1', text: 'Reads before bed', shareable: false },
+      { id: 'f2', text: 'This one is wrong', shareable: false },
+    ],
+    confidence: 'high',
+    confidenceRationale: 'echoed across sessions',
+    categories: ['Health & body'],
+    metrics: { moodValence: 0.3, moodEnergy: 0.1 },
+    approved: true,
+    provenance: { conversationId: 'gone-conv', at },
+    createdAt: at,
+    updatedAt: at,
+  });
+  // A second area, a draft (Needs review), and a second mood reading (so Trends has ≥2 points).
+  await saveInsight(fs, key, {
+    id: 'ins-rel',
+    schemaVersion: 1,
+    source: 'questionnaire',
+    subjectPersonId: 'owner-1',
+    summary: 'Values quality time with their partner',
+    facts: [{ id: 'f1', text: 'Prefers weekends unscheduled', shareable: true }],
+    confidence: 'medium',
+    confidenceRationale: 'from a recent questionnaire',
+    categories: ['Relationships'],
+    approved: true,
+    provenance: { assignmentId: 'a1', at: '2026-06-13T10:00:00.000Z' },
+    createdAt: at,
+    updatedAt: '2026-06-13T10:00:00.000Z',
+  });
+  await saveInsight(fs, key, {
+    id: 'ins-draft',
+    schemaVersion: 1,
+    source: 'questionnaire',
+    subjectPersonId: 'owner-1',
+    summary: 'Might want to set firmer work boundaries',
+    facts: [{ id: 'f1', text: 'Mentions evening emails', shareable: false }],
+    confidence: 'low',
+    categories: ['Work & purpose'],
+    approved: false,
+    provenance: { assignmentId: 'a2', at: '2026-06-14T10:00:00.000Z' },
+    createdAt: at,
+    updatedAt: '2026-06-14T10:00:00.000Z',
+  });
+  await saveInsight(fs, key, {
+    id: 'ins-mood2',
+    schemaVersion: 1,
+    source: 'session',
+    subjectPersonId: 'owner-1',
+    summary: 'Felt lighter after a walk',
+    facts: [{ id: 'f1', text: 'Walks help reset', shareable: false }],
+    confidence: 'medium',
+    categories: ['Emotions & patterns'],
+    metrics: { moodValence: 0.6, moodEnergy: 0.5 },
+    approved: true,
+    provenance: { conversationId: 'gone-conv-2', at: '2026-06-15T10:00:00.000Z' },
+    createdAt: at,
+    updatedAt: '2026-06-15T10:00:00.000Z',
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Memory' }).click();
+
+    // The draft is in "Needs your review"; approved insights group by life-area; Trends is present.
+    await expect(w.getByRole('heading', { name: 'Needs your review' })).toBeVisible();
+    await expect(w.getByText('Might want to set firmer work boundaries')).toBeVisible();
+    await expect(w.getByRole('heading', { name: 'Health & body' })).toBeVisible();
+    await expect(w.getByRole('heading', { name: 'Relationships' })).toBeVisible();
+    await expect(w.getByText('Trends')).toBeVisible();
+    await expect(w.getByText('Sleeps better with a wind-down routine')).toBeVisible();
+    // A session insight whose conversation is gone shows "original source removed".
+    await expect(w.getByText(/original source removed/i).first()).toBeVisible();
+
+    // Flag the inaccurate fact → it persists encrypted in the vault (decrypt to assert).
+    await w.getByRole('button', { name: 'Flag as inaccurate: This one is wrong' }).click();
+    await expect(w.getByText('flagged')).toBeVisible();
+    await expect
+      .poll(async () => {
+        const insight = await getInsight(fs, key, 'owner-1', 'ins-health');
+        return insight?.facts.find((f) => f.id === 'f2')?.flaggedInaccurate ?? false;
+      })
+      .toBe(true);
+
+    // Search narrows the list.
+    await w.getByLabel('Search memory').fill('routine');
+    await expect(w.getByText('Sleeps better with a wind-down routine')).toBeVisible();
+
+    // No horizontal overflow at phone width.
+    await w.setViewportSize({ width: 390, height: 800 });
+    const overflow = await w.evaluate(() => {
+      let max = 0;
+      for (const el of Array.from(document.querySelectorAll('*'))) {
+        const style = getComputedStyle(el);
+        if (
+          (style.overflowX === 'auto' || style.overflowX === 'scroll') &&
+          el.scrollWidth - el.clientWidth > max
+        ) {
+          max = el.scrollWidth - el.clientWidth;
+        }
+      }
+      const main = document.querySelector('main');
+      return Math.max(max, main ? main.scrollWidth - main.clientWidth : 0);
+    });
+    expect(overflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('memory: a provenance link opens the live source (dream deep-link survives the per-person reset, spec 20 §3.3)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('master key missing');
+  const at = '2026-06-12T10:00:00.000Z';
+  await saveDream(fs, key, {
+    id: 'dream-1',
+    schemaVersion: 1,
+    personId: 'owner-1',
+    narrative: 'I was flying over a calm silver sea',
+    lucid: false,
+    nightmare: false,
+    tags: [],
+    people: [],
+    sensitivity: 'standard',
+    status: 'captured',
+    createdAt: at,
+    updatedAt: at,
+  });
+  await saveInsight(fs, key, {
+    id: 'ins-dream',
+    schemaVersion: 1,
+    source: 'dream',
+    subjectPersonId: 'owner-1',
+    summary: 'A recurring flying dream',
+    facts: [{ id: 'f1', text: 'Flying feels freeing', shareable: false }],
+    confidence: 'medium',
+    categories: ['Emotions & patterns'],
+    approved: true,
+    provenance: { dreamId: 'dream-1', at },
+    createdAt: at,
+    updatedAt: at,
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Memory' }).click();
+    await expect(w.getByText('A recurring flying dream')).toBeVisible();
+    // Clicking the provenance link opens the referenced dream — NOT the empty Dreams list (the per-person
+    // reset effect must not clobber the deep-link on mount).
+    await w.getByRole('button', { name: /From a dream/ }).click();
+    await expect(w.getByLabel('What happened?')).toHaveValue('I was flying over a calm silver sea');
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

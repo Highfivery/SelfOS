@@ -106,4 +106,16 @@ describe('intakeCatalog', () => {
     expect(addendum).toContain('sensitive');
     expect(getIntakeSection('family')?.focus).toBeTruthy();
   });
+
+  it('EVERY free-text question (shortText / longText) has a non-empty placeholder', () => {
+    const missing: string[] = [];
+    for (const section of INTAKE_CATALOG) {
+      for (const m of section.questions ?? []) {
+        if (m.q.type !== 'shortText' && m.q.type !== 'longText') continue;
+        if (!m.q.placeholder || m.q.placeholder.trim() === '')
+          missing.push(`${section.id}.${m.q.id}`);
+      }
+    }
+    expect(missing).toEqual([]);
+  });
 });

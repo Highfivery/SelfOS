@@ -198,7 +198,7 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
     adult: false,
     opener: "Let's start simple — a few quick things about you.",
     questions: [
-      f(shortText('preferredName', 'What should I call you?')),
+      f(shortText('preferredName', 'What should I call you?', 'e.g. Sam')),
       f(
         single('pronouns', 'Your pronouns', [
           'she/her',
@@ -227,8 +227,8 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
       f(dateList('importantDates', 'Any important dates to remember?'), {
         field: 'importantDates',
       }),
-      f(shortText('location', 'Where do you live?'), { field: 'location' }),
-      f(shortText('grewUp', 'Where did you grow up?')),
+      f(shortText('location', 'Where do you live?', 'e.g. Seattle, WA'), { field: 'location' }),
+      f(shortText('grewUp', 'Where did you grow up?', 'e.g. a small town in Ohio')),
       f(multi('languages', 'Languages you speak', ['English', 'Spanish', 'French', 'Other']), {
         field: 'languages',
         list: true,
@@ -258,7 +258,14 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         ),
         { field: 'appearanceDescription' },
       ),
-      f(shortText('occupation', 'What do you do for work?'), { field: 'occupation' }),
+      f(
+        shortText(
+          'occupation',
+          'What do you do for work?',
+          'e.g. nurse, teacher, software engineer',
+        ),
+        { field: 'occupation' },
+      ),
       f(
         single('education', 'Highest level of education', [
           'High school',
@@ -278,7 +285,7 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         ]),
       ),
       f(shortText('nickname', 'Any nicknames?', 'What friends or family call you')),
-      f(shortText('nationality', 'Your nationality')),
+      f(shortText('nationality', 'Your nationality', 'e.g. American, British')),
     ],
   },
   {
@@ -432,9 +439,27 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         ]),
         { field: 'communicationStyle' },
       ),
-      f(longText('proudOf', 'What are you most proud of?')),
-      f(longText('insecureAbout', 'What do you feel most insecure about?')),
-      f(longText('neverCompromise', 'What would you never compromise on?')),
+      f(
+        longText(
+          'proudOf',
+          'What are you most proud of?',
+          'A moment, a relationship, something you built…',
+        ),
+      ),
+      f(
+        longText(
+          'insecureAbout',
+          'What do you feel most insecure about?',
+          'Only what you want to share.',
+        ),
+      ),
+      f(
+        longText(
+          'neverCompromise',
+          'What would you never compromise on?',
+          'A line you won’t cross.',
+        ),
+      ),
       f(
         shortText(
           'roleModel',
@@ -442,7 +467,13 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           'e.g. a parent, a mentor, a public figure',
         ),
       ),
-      f(longText('remembered', 'What do you want to be remembered for?')),
+      f(
+        longText(
+          'remembered',
+          'What do you want to be remembered for?',
+          'The mark you’d like to leave.',
+        ),
+      ),
       f(
         multi('causes', 'Causes you care about', [
           'Environment',
@@ -473,10 +504,9 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           'Head',
           'Heart',
           'Gut',
-          'The data',
         ]),
       ),
-      f(longText('success', 'What does success mean to you?')),
+      f(longText('success', 'What does success mean to you?', 'In your own words.')),
     ],
   },
   {
@@ -512,8 +542,20 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           'e.g. run a 10k, change careers, feel calmer',
         ),
       ),
-      f(longText('goodLife', 'What does a good life look like to you?')),
-      f(longText('fiveYears', 'Where do you want to be in five years?')),
+      f(
+        longText(
+          'goodLife',
+          'What does a good life look like to you?',
+          'What it looks and feels like for you.',
+        ),
+      ),
+      f(
+        longText(
+          'fiveYears',
+          'Where do you want to be in five years?',
+          'Work, home, how you feel…',
+        ),
+      ),
       f(shortText('habitBuild', 'A habit you want to build', 'e.g. daily walks, journaling')),
       f(
         shortText(
@@ -522,9 +564,21 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           'e.g. doomscrolling, late-night snacking',
         ),
       ),
-      f(longText('avoiding', 'What do you keep avoiding?')),
-      f(longText('unlimited', 'What would you do with unlimited time and money?')),
-      f(longText('futureFear', 'Your biggest fear about the future')),
+      f(longText('avoiding', 'What do you keep avoiding?', 'Something you keep putting off.')),
+      f(
+        longText(
+          'unlimited',
+          'What would you do with unlimited time and money?',
+          'Dream a little.',
+        ),
+      ),
+      f(
+        longText(
+          'futureFear',
+          'Your biggest fear about the future',
+          'What worries you about what’s ahead.',
+        ),
+      ),
       f(
         multi('supportStyle', 'How do you want SelfOS to support you?', [
           'Hold me accountable',
@@ -729,14 +783,42 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ]),
           { restricted: true },
         ),
-        f(longText('medications', 'Medications that affect your mood or energy?'), {
-          restricted: true,
-        }),
-        f(longText('chronicPain', 'Chronic pain or illness?'), { restricted: true }),
-        f(longText('disability', 'Any disability or accessibility needs?'), { restricted: true }),
-        f(longText('eatingHistory', 'Your relationship with food (any history)?'), {
-          restricted: true,
-        }),
+        f(
+          longText(
+            'medications',
+            'Medications that affect your mood or energy?',
+            'e.g. an SSRI, thyroid meds — only if you want to share',
+          ),
+          {
+            restricted: true,
+          },
+        ),
+        f(
+          longText(
+            'chronicPain',
+            'Chronic pain or illness?',
+            'e.g. back pain, migraines — only if relevant',
+          ),
+          { restricted: true },
+        ),
+        f(
+          longText(
+            'disability',
+            'Any disability or accessibility needs?',
+            'Anything that helps SelfOS support you.',
+          ),
+          { restricted: true },
+        ),
+        f(
+          longText(
+            'eatingHistory',
+            'Your relationship with food (any history)?',
+            'Only what you want to share.',
+          ),
+          {
+            restricted: true,
+          },
+        ),
         f(
           slider(
             'bodyRelationship',
@@ -1152,7 +1234,13 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'e.g. dishonesty, no ambition, poor communication…',
           ),
         ),
-        f(longText('showUp', 'How do you show up as a partner, friend, or parent?')),
+        f(
+          longText(
+            'showUp',
+            'How do you show up as a partner, friend, or parent?',
+            'How you tend to be for the people close to you.',
+          ),
+        ),
         f(
           longText(
             'relationshipPattern',
@@ -1160,7 +1248,13 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'e.g. I pull away when things get serious',
           ),
         ),
-        f(longText('relationshipChallenge', 'Your biggest relationship challenge')),
+        f(
+          longText(
+            'relationshipChallenge',
+            'Your biggest relationship challenge',
+            'The thing that comes up again and again.',
+          ),
+        ),
       ]),
       ...grouped('Your circle', [
         f(
@@ -1259,7 +1353,7 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'As much or as little as you like.',
           ),
         ),
-        f(longText('pastLesson', 'What past relationships taught you')),
+        f(longText('pastLesson', 'What past relationships taught you', 'What you took from them.')),
         f(longText('heartbreak', 'A heartbreak that shaped you', 'Only if you want to share.')),
         f(
           longText(
@@ -1516,8 +1610,14 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'Other',
           ]),
         ),
-        f(shortText('industry', 'Your field or industry')),
-        f(shortText('roleSummary', 'What you actually do day-to-day')),
+        f(shortText('industry', 'Your field or industry', 'e.g. healthcare, tech, education')),
+        f(
+          shortText(
+            'roleSummary',
+            'What you actually do day-to-day',
+            'e.g. I manage a small team and…',
+          ),
+        ),
         f(
           slider(
             'workEnjoy',
@@ -1546,7 +1646,7 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'Next step or big picture.',
           ),
         ),
-        f(shortText('dreamJob', 'Your dream job or venture')),
+        f(shortText('dreamJob', 'Your dream job or venture', 'e.g. run my own studio')),
         f(
           slider(
             'ambition',
@@ -1565,7 +1665,13 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'Healthy',
           ),
         ),
-        f(longText('proudWork', 'Something you’ve built or achieved')),
+        f(
+          longText(
+            'proudWork',
+            'Something you’ve built or achieved',
+            'A project, a win, something you made.',
+          ),
+        ),
       ]),
       ...grouped('Money', [
         f(
@@ -1613,7 +1719,11 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ),
         ),
         f(
-          longText('moneyUpbringing', 'How money was handled growing up — and how that shaped you'),
+          longText(
+            'moneyUpbringing',
+            'How money was handled growing up — and how that shaped you',
+            'Tight, comfortable, never discussed…',
+          ),
         ),
       ]),
       ...grouped('Your career path', [
@@ -1937,24 +2047,84 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ]),
           { field: 'interests', list: true },
         ),
-        f(shortText('currentObsession', 'Something you’re a bit obsessed with right now')),
-        f(shortText('talkForHours', 'A topic you could talk about for hours')),
-        f(shortText('creativeOutlet', 'A creative outlet you have (or wish you had)')),
+        f(
+          shortText(
+            'currentObsession',
+            'Something you’re a bit obsessed with right now',
+            'A show, a hobby, a rabbit hole…',
+          ),
+        ),
+        f(
+          shortText(
+            'talkForHours',
+            'A topic you could talk about for hours',
+            'e.g. film, football, philosophy',
+          ),
+        ),
+        f(
+          shortText(
+            'creativeOutlet',
+            'A creative outlet you have (or wish you had)',
+            'e.g. painting, music, writing',
+          ),
+        ),
       ]),
       ...grouped('Fun & play', [
         f(longText('idealWeekend', 'Your ideal weekend', 'From Friday night to Sunday.')),
-        f(shortText('funAlone', 'What you love doing alone')),
-        f(shortText('funWithOthers', 'What you love doing with people')),
+        f(shortText('funAlone', 'What you love doing alone', 'e.g. reading, long walks, gaming')),
+        f(
+          shortText(
+            'funWithOthers',
+            'What you love doing with people',
+            'e.g. dinners, hikes, board games',
+          ),
+        ),
         f(slider('playfulness', 'How playful are you?', 'Serious', 'In between', 'Goofy')),
-        f(shortText('makesYouLaugh', 'What reliably makes you laugh')),
+        f(
+          shortText(
+            'makesYouLaugh',
+            'What reliably makes you laugh',
+            'A person, a show, a kind of humor…',
+          ),
+        ),
       ]),
       ...grouped('Wonder & wishlist', [
-        f(shortText('travelDream', 'A place you’re dying to visit')),
-        f(longText('bucketList', 'Something on your bucket list')),
-        f(shortText('newToTry', 'Something new you want to try')),
-        f(shortText('comfortThing', 'Your comfort movie, show, album, or book')),
-        f(shortText('flowActivity', 'An activity that puts you in “flow”')),
-        f(shortText('childhoodJoy', 'Something you loved as a kid and miss')),
+        f(shortText('travelDream', 'A place you’re dying to visit', 'e.g. Japan, Patagonia')),
+        f(
+          longText(
+            'bucketList',
+            'Something on your bucket list',
+            'Something you’d love to do once.',
+          ),
+        ),
+        f(
+          shortText(
+            'newToTry',
+            'Something new you want to try',
+            'e.g. surfing, pottery, a language',
+          ),
+        ),
+        f(
+          shortText(
+            'comfortThing',
+            'Your comfort movie, show, album, or book',
+            'The one you always return to.',
+          ),
+        ),
+        f(
+          shortText(
+            'flowActivity',
+            'An activity that puts you in “flow”',
+            'When you lose track of time.',
+          ),
+        ),
+        f(
+          shortText(
+            'childhoodJoy',
+            'Something you loved as a kid and miss',
+            'e.g. building forts, drawing',
+          ),
+        ),
       ]),
       ...grouped('What you watch & listen to', [
         f(
@@ -2286,7 +2456,13 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         f(yesno('familyHistory', 'Any family history of mental-health or addiction struggles?')),
       ]),
       ...grouped('More about your family', [
-        f(shortText('parentsWork', 'What your parents (or carers) did for work')),
+        f(
+          shortText(
+            'parentsWork',
+            'What your parents (or carers) did for work',
+            'e.g. teacher, factory worker',
+          ),
+        ),
         f(
           single('movedAround', 'Did you move around growing up?', [
             'Stayed in one place',
@@ -2321,10 +2497,22 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'Inconsistent',
           ]),
         ),
-        f(shortText('closestGrowingUp', 'Who were you closest to growing up?')),
+        f(
+          shortText(
+            'closestGrowingUp',
+            'Who were you closest to growing up?',
+            'e.g. my mom, my older brother',
+          ),
+        ),
       ]),
       ...grouped('What you carry', [
-        f(longText('favoriteMemory', 'A favorite memory from growing up')),
+        f(
+          longText(
+            'favoriteMemory',
+            'A favorite memory from growing up',
+            'A moment that still makes you smile.',
+          ),
+        ),
         f(
           longText(
             'hardMemory',
@@ -2332,8 +2520,14 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'Only if you want to — skip anytime.',
           ),
         ),
-        f(longText('familyTradition', 'A family tradition you treasure (or wish you’d had)')),
-        f(shortText('shapedBy', 'A family member who shaped who you are')),
+        f(
+          longText(
+            'familyTradition',
+            'A family tradition you treasure (or wish you’d had)',
+            'e.g. Sunday dinners, holiday rituals',
+          ),
+        ),
+        f(shortText('shapedBy', 'A family member who shaped who you are', 'e.g. my grandmother')),
         f(longText('wishDifferent', 'What you wish had been different', 'Optional.')),
         f(
           longText(
@@ -2633,7 +2827,9 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
       'are becoming. Held as the person chooses to share.',
     questions: [
       ...grouped('Your chapters', [
-        f(shortText('childhoodWord', 'Your childhood in one word')),
+        f(
+          shortText('childhoodWord', 'Your childhood in one word', 'e.g. happy, chaotic, carefree'),
+        ),
         f(
           longText(
             'chapters',
@@ -2659,10 +2855,28 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'A moment or decision that shifted things.',
           ),
         ),
-        f(longText('bravest', 'The bravest thing you’ve ever done')),
-        f(longText('bestDecision', 'The best decision you ever made')),
+        f(
+          longText(
+            'bravest',
+            'The bravest thing you’ve ever done',
+            'A moment you pushed through fear.',
+          ),
+        ),
+        f(
+          longText(
+            'bestDecision',
+            'The best decision you ever made',
+            'A choice you’re glad you made.',
+          ),
+        ),
         f(longText('regret', 'A decision you regret', 'Only what you want to share.')),
-        f(longText('riskTaken', 'A risk you took — and how it turned out')),
+        f(
+          longText(
+            'riskTaken',
+            'A risk you took — and how it turned out',
+            'What you risked, and how it turned out.',
+          ),
+        ),
         f(
           longText(
             'proudest',
@@ -2672,14 +2886,32 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         ),
       ]),
       ...grouped('People & places', [
-        f(shortText('personChanged', 'A person who changed your life')),
-        f(shortText('placeMatters', 'A place that means a lot to you')),
+        f(
+          shortText(
+            'personChanged',
+            'A person who changed your life',
+            'e.g. a mentor, a partner, a friend',
+          ),
+        ),
+        f(
+          shortText(
+            'placeMatters',
+            'A place that means a lot to you',
+            'e.g. my grandparents’ house',
+          ),
+        ),
       ]),
       ...grouped('How you’ve grown', [
-        f(longText('overcome', 'Something you’ve overcome')),
-        f(longText('reinvented', 'A time you reinvented yourself')),
+        f(longText('overcome', 'Something you’ve overcome', 'Something you got through.')),
+        f(longText('reinvented', 'A time you reinvented yourself', 'A fresh start you made.')),
         f(longText('letGo', 'A dream you let go of', 'And how you feel about it now.')),
-        f(longText('changedMind', 'A belief you’ve changed your mind about')),
+        f(
+          longText(
+            'changedMind',
+            'A belief you’ve changed your mind about',
+            'Something you see differently now.',
+          ),
+        ),
         f(
           shortText(
             'lifeLesson',
@@ -2687,7 +2919,13 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'In a sentence, if you can.',
           ),
         ),
-        f(longText('youngerSelf', 'What would you tell your younger self?')),
+        f(
+          longText(
+            'youngerSelf',
+            'What would you tell your younger self?',
+            'The advice you wish you’d had.',
+          ),
+        ),
         f(longText('becoming', 'Who are you becoming?', 'Where you feel yourself heading.')),
         f(
           longText(
@@ -2987,8 +3225,14 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'Other',
           ]),
         ),
-        f(longText('avoidingHard', 'Something you’ve been avoiding dealing with')),
-        f(longText('fearHoldsBack', 'A fear that holds you back')),
+        f(
+          longText(
+            'avoidingHard',
+            'Something you’ve been avoiding dealing with',
+            'Only if you want to name it.',
+          ),
+        ),
+        f(longText('fearHoldsBack', 'A fear that holds you back', 'What it stops you from doing.')),
         f(
           longText(
             'guiltShame',
@@ -2999,7 +3243,13 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
       ]),
       ...grouped('What helps', [
         f(slider('supported', 'How supported do you feel right now?', 'Alone', 'Somewhat', 'Held')),
-        f(longText('whatHelps', 'When things get dark, what helps you?')),
+        f(
+          longText(
+            'whatHelps',
+            'When things get dark, what helps you?',
+            'People, habits, places that ground you.',
+          ),
+        ),
         f(
           multi('needMore', 'What do you need more of right now?', [
             'Rest',

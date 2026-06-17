@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1](https://github.com/Highfivery/SelfOS/compare/v0.2.0...v0.2.1) (2026-06-17)
+
+
+### Bug Fixes
+
+* **app:** gate the app name so dev uses a separate userData ([5babdf8](https://github.com/Highfivery/SelfOS/commit/5babdf8605a110175d09a0381b0db7a7360a272c))
+* **relay:** package the relay Worker bundle into the built app ([b32b7d9](https://github.com/Highfivery/SelfOS/commit/b32b7d9ab71492140194d4354b5ea3a816c8a571))
+
 ## [0.2.0](https://github.com/Highfivery/SelfOS/compare/v0.1.0...v0.2.0) (2026-06-17)
 
 

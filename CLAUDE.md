@@ -360,6 +360,25 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-17 — Fix (**release-please opened a new release PR after every merge — manifest drift loop**; spec 19,
+  on `fix/release-please-manifest`). Audit (facts, not guesses — checked open PRs, releases, git tags, the
+  manifest on `origin/main`, and the release-please run logs): `.release-please-manifest.json` on `main` was
+  stuck at **`0.1.0`** while the real latest tag was **`v0.2.1`**. release-please trusts the manifest as "current
+  version", so every push it recomputed "next after 0.1.0" → re-proposed `0.2.0` endlessly; a stale "release
+  0.1.0" PR even merged AFTER 0.2.1 shipped, **resetting the manifest backward** (the self-reinforcing part). Two
+  things seeded it: (a) the **`Release-As: 0.1.0` empty commit** I'd added to force the first version lingered in
+  the scan range and dragged proposals back to 0.1.0; (b) **interleaving manual `git merge origin/main` + pushes
+  with the release-PR merges** repeatedly carried an old manifest value forward. Fix: point the manifest at
+  **`0.2.1`** (the real latest tag, published with its `.dmg`) + drop the now-spent `bootstrap-sha`; release-please
+  then scanned from `v0.2.1` forward, found only chore/merge commits, and logged "No user facing commits found …
+  skipping" — loop broken. Cleanup: closed the stale loop PR, deleted 3 duplicate **draft** releases (drafts carry
+  no git tags, so the real v0.1.0/v0.2.0/v0.2.1 tags + published releases were untouched). The build pipeline was
+  never the problem (v0.2.1 shipped its dmg fine). **Lesson: in release-please manifest mode the
+  `.release-please-manifest.json` IS the source of truth for the current version and MUST match the latest git
+  tag — if it drifts below the latest tag, release-please re-proposes already-shipped versions in a loop. NEVER
+  use a `Release-As:` commit to set the first version (it lingers and forces backward proposals — let the manifest
+  baseline + bump flags decide), remove `bootstrap-sha` after the first release, and don't hand-merge `origin/main`
+  into a local branch while release PRs are also merging (it carries stale manifest values forward).**
 - 2026-06-17 — Fix (**dev vs installed app share `userData` → fresh install skips setup**; on
   `fix/dev-userdata-separation`). User noticed the **built** app booted straight into their dev vault instead of
   first-run setup. Cause (diagnosed): the vault pointer + master key + settings live device-local in Electron's

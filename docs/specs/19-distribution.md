@@ -177,7 +177,16 @@ None new. The `app:version` IPC already returns `__APP_VERSION__`; About consume
   ~10-min build ≈ 100 minutes; ~2000 free/mo). If releases become frequent, revisit (local build, or sign +
   cache). Documented, not enforced.
 - **First release from `0.0.0`** — the initial Release PR establishes the starting version (§11 — propose
-  `0.1.0`); subsequent ones follow the commits.
+  `0.1.0`); subsequent ones follow the commits. **Do not** force it with a `Release-As:` commit (that footer
+  lingers in history and forces backward version proposals later); set the version via the manifest baseline +
+  `bump-minor-pre-major`, and the first `feat` cuts `0.1.0`.
+- **Release-please manifest drift (a release-PR loop)** — `.release-please-manifest.json` is the source of truth
+  for the current version; if it drifts **below** the latest git tag (e.g. a stale lower-version Release PR gets
+  merged, or `origin/main` is hand-merged into a branch while release PRs are in flight, carrying an old manifest
+  value forward), release-please re-proposes already-shipped versions on every push — a new Release PR after each
+  merge. Fix: set the manifest to the **latest released tag**, remove the spent `bootstrap-sha`, close the stale
+  PR, and delete any duplicate **draft** releases (drafts carry no git tag, so the real tags are untouched). The
+  build pipeline is unaffected — this is bookkeeping only.
 
 ## 8. Safety
 

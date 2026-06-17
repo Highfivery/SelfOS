@@ -20,10 +20,18 @@ Claude AI when you choose to use an AI feature, using **your own** Claude API ke
    latest **`SelfOS-x.y.z.dmg`**.
 2. Open the `.dmg` and drag **SelfOS** into your **Applications** folder.
 3. **First time you open it:** because SelfOS isn't yet signed with an Apple Developer certificate,
-   macOS will warn that it's from an unidentified developer (or "can't be opened"). This is expected.
-   To allow it, **right-click the SelfOS app → Open → Open**. You only need to do this once.
-   - If it still won't open, open **Terminal** and run:
-     `xattr -cr /Applications/SelfOS.app`, then open it again.
+   macOS blocks it — usually with **"SelfOS is damaged and can't be opened"** (this is the standard
+   warning for unsigned apps; the app is **not** actually damaged). To allow it, open **Terminal**,
+   run the one-time command below, then open SelfOS normally:
+
+   ```
+   xattr -cr /Applications/SelfOS.app
+   ```
+
+   - You only need to do this once. (On older macOS you may instead see "unidentified developer", in
+     which case **right-click the app → Open → Open** also works — but the `xattr` command above
+     fixes both cases.)
+
 4. On first launch, SelfOS will help you **pick a vault folder** (where your data lives) and, for the
    AI features, **add your own Claude API key**.
    - The AI features call the Claude API using your key, which **may incur cost** on your Anthropic

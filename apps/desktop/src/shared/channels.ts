@@ -3,6 +3,7 @@ import type {
   AiKeyStatus,
   AiProvider,
   AlignmentResult,
+  DeviceView,
   Answer,
   AnswerType,
   Assignment,
@@ -108,6 +109,8 @@ export const IpcChannels = {
   aiSetSharedKey: 'ai:setSharedKey',
   aiShareDeviceKey: 'ai:shareDeviceKey',
   aiClearSharedKey: 'ai:clearSharedKey',
+  devicesList: 'devices:list',
+  devicesRename: 'devices:rename',
   householdStatus: 'household:status',
   householdSetup: 'household:setup',
   unlockWithRecoveryPhrase: 'household:unlockWithRecoveryPhrase',
@@ -344,6 +347,10 @@ export interface SelfosBridge {
   aiShareDeviceKey(input?: { provider?: AiProvider }): Promise<void>;
   /** Owner-only: stop sharing a provider's key with the household. */
   aiClearSharedKey(input?: { provider?: AiProvider }): Promise<void>;
+  /** Owner-only: the household's joined devices (28-device-management §6.2). */
+  devicesList(): Promise<DeviceView[]>;
+  /** Owner-only: rename a device in the registry. */
+  devicesRename(input: { deviceId: string; label: string }): Promise<void>;
   /** Whether the household is set up (master key + owner) and who is active. */
   householdStatus(): Promise<HouseholdStatus>;
   /** First-run setup: create the owner (with a login PIN) and return the recovery phrase. */

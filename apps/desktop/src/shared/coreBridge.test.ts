@@ -378,6 +378,29 @@ describe('createCoreBridge', () => {
     expect((await bridge.getSettings()).vault['ai.enabled']).toBe(true);
   });
 
+  it('device registry (28): setup registers this device; a member cannot list/rename (owner-only)', async () => {
+    const { bridge, host } = await freshOwner();
+    // Setup registered this device into the vault; the owner can list it + sees "this device".
+    const devices = await bridge.devicesList();
+    expect(devices).toHaveLength(1);
+    expect(devices[0]?.isThisDevice).toBe(true);
+    const myId = devices[0]!.deviceId;
+    expect(host.device().deviceId).toBe(myId); // the key-free anchor is cached device-local
+
+    // Owner renames it.
+    await bridge.devicesRename({ deviceId: myId, label: 'Studio Mac' });
+    expect((await bridge.devicesList())[0]?.label).toBe('Studio Mac');
+
+    // A member is denied: list returns empty, rename rejects (the bridge is the boundary).
+    const member = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: member.id, roleId: 'member', pin: null });
+    await bridge.sessionSetActive({ personId: member.id });
+    expect(await bridge.devicesList()).toEqual([]);
+    await expect(bridge.devicesRename({ deviceId: myId, label: 'hax' })).rejects.toThrow(
+      'Not permitted',
+    );
+  });
+
   it('unlinkVault detaches the device — clears the master key + every vault pointer', async () => {
     const { bridge, host } = await freshOwner();
     // Precondition: a fully set-up, key-holding device with an active owner + a pending join.

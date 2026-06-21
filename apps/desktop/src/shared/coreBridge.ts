@@ -41,6 +41,7 @@ import {
   conversationStatus,
   type AiKeyStatus,
   type AlignmentResult,
+  type DeviceView,
   type Assignment,
   type CompatibilityGroup,
   type CompatibilityMember,
@@ -128,18 +129,22 @@ import {
 import {
   cancelInvite,
   createInvite,
+  defaultDeviceLabel,
   deletePerson,
   deleteRelationship,
   ensureMemberAccounts,
   getAccessConfig,
   getAccessView,
   getPerson,
+  listDevices,
   listInvitesForPerson,
   listPeople,
   listRelatedPeople,
   listRelationships,
   redeemInvite,
+  registerThisDevice,
   removeAccount,
+  renameDevice,
   savePerson,
   saveRole,
   setAccount,
@@ -398,6 +403,10 @@ const SecretSetSchema = z.object({ id: z.string().min(1), value: z.string() });
 const SecretIdSchema = z.object({ id: z.string().min(1) });
 const AiProviderInputSchema = z.object({ provider: AiProviderSchema.default('anthropic') });
 const AiSetSharedKeySchema = z.object({ provider: AiProviderSchema, value: z.string().min(1) });
+const DevicesRenameSchema = z.object({
+  deviceId: z.string().min(1),
+  label: z.string().min(1).max(80),
+});
 const HouseholdSetupSchema = z.object({
   ownerName: z.string().min(1),
   pin: z.string().min(MIN_OWNER_PIN_LENGTH),
@@ -636,6 +645,27 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
   /** Whether the active person is the household Owner (the full-access role). */
   const activePersonIsOwner = async (fs: FileSystem, key: Uint8Array): Promise<boolean> =>
     (await activePersonRole(fs, key))?.id === OWNER_ROLE_ID;
+
+  // The device registry (28-device-management §5.2): register/heartbeat this device into the vault on each
+  // join path + once per app launch. The key-free `deviceId` is generated once + cached device-local.
+  let deviceHeartbeatDone = false;
+  const ensureDeviceRegistered = async (fs: FileSystem, key: Uint8Array): Promise<void> => {
+    const device = await host.readDeviceState();
+    let deviceId = device.deviceId;
+    let deviceLabel = device.deviceLabel;
+    if (!deviceId) {
+      deviceId = uuid();
+      deviceLabel = defaultDeviceLabel(host.platform);
+      await host.updateDeviceState({ deviceId, deviceLabel });
+    }
+    await registerThisDevice(fs, key, {
+      deviceId,
+      label: deviceLabel ?? defaultDeviceLabel(host.platform),
+      platform: host.platform,
+      now: new Date(),
+      activePersonId: device.activePersonId ?? null,
+    });
+  };
 
   /**
    * Best-effort revoke of the relay links for the sends matching `predicate`, before a deletion purges
@@ -902,6 +932,38 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       await clearSharedKey(ctx.fs, ctx.key, { provider, now: new Date() });
     },
 
+    // --- Devices (28-device-management) — owner-only, enforced in the bridge ---
+    devicesList: async (): Promise<DeviceView[]> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'devices.manage'))) return [];
+      const device = await host.readDeviceState();
+      const [records, people] = await Promise.all([
+        listDevices(ctx.fs, ctx.key),
+        listPeople(ctx.fs, ctx.key),
+      ]);
+      const nameOf = (id?: string | null): string | null =>
+        id ? (people.find((p) => p.id === id)?.displayName ?? null) : null;
+      return records.map((r) => ({
+        deviceId: r.deviceId,
+        label: r.label,
+        platform: r.platform,
+        createdAt: r.createdAt,
+        lastSeenAt: r.lastSeenAt,
+        isThisDevice: r.deviceId === device.deviceId,
+        lastActivePersonName: nameOf(r.lastActivePersonId),
+      }));
+    },
+    devicesRename: async (input): Promise<void> => {
+      const { deviceId, label } = DevicesRenameSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'devices.manage'))) {
+        throw new Error('Not permitted');
+      }
+      await renameDevice(ctx.fs, ctx.key, deviceId, label);
+      const device = await host.readDeviceState();
+      if (device.deviceId === deviceId) await host.updateDeviceState({ deviceLabel: label });
+    },
+
     // --- Household identity (10-multi-device-vault) ---
     householdStatus: async (): Promise<HouseholdStatus> => {
       const vaultDir = await host.vaultPath();
@@ -930,6 +992,15 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       }
       const access = await getAccessConfig(fs, key);
       const hasOwner = access.accounts.some((account) => account.roleId === OWNER_ROLE_ID);
+      // Heartbeat this device into the registry once per app launch (28 §6.1) — non-fatal if it fails.
+      if (!deviceHeartbeatDone && vaultInitialized && hasOwner) {
+        deviceHeartbeatDone = true;
+        try {
+          await ensureDeviceRegistered(fs, key);
+        } catch {
+          /* registry heartbeat is best-effort; never block boot */
+        }
+      }
       return {
         vaultInitialized,
         hasMasterKey: true,
@@ -972,6 +1043,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       await savePerson(fs, key, owner);
       await setAccount(fs, key, { personId: owner.id, roleId: OWNER_ROLE_ID, pin });
       await host.updateDeviceState({ activePersonId: owner.id });
+      await ensureDeviceRegistered(fs, key);
       return { recoveryPhrase, ownerId: owner.id };
     },
     unlockWithRecoveryPhrase: async (input): Promise<{ ok: boolean }> => {
@@ -981,6 +1053,10 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const vaultDir = await host.vaultPath();
       if (!vaultDir) return { ok: false };
       const ok = await restoreFromRecoveryPhrase(host.secrets, host.fileSystem(vaultDir), phrase);
+      if (ok) {
+        const ctx = await host.vaultAndKey();
+        if (ctx) await ensureDeviceRegistered(ctx.fs, ctx.key);
+      }
       return { ok };
     },
     unlinkVault: async (): Promise<BootState> => {
@@ -1145,6 +1221,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!account || account.roleId === OWNER_ROLE_ID) return { ok: false };
       await setAccount(ctx.fs, ctx.key, { personId, roleId: account.roleId, pin });
       await host.updateDeviceState({ activePersonId: personId, pendingJoinPersonId: null });
+      await ensureDeviceRegistered(ctx.fs, ctx.key);
       return { ok: true };
     },
 

@@ -62,6 +62,14 @@ export const DeviceStateSchema = z.object({
   pendingJoinPersonId: z.string().nullable().optional(),
   /** Whether the desktop sidebar is collapsed to an icon rail (device-local UI preference). */
   sidebarCollapsed: z.boolean().optional(),
+  /**
+   * This install's stable device id (28-device-management §4.2) — generated once, stored device-local so
+   * the Devices surface can mark "this device" key-free at boot. Additive-optional (no schemaVersion bump,
+   * the `vaultBookmark` precedent). The synced `config/devices/<id>.enc` record is the source of truth.
+   */
+  deviceId: z.string().optional(),
+  /** A cached copy of this device's registry label (so the UI can label "this device" before the key loads). */
+  deviceLabel: z.string().optional(),
 });
 export type DeviceState = z.infer<typeof DeviceStateSchema>;
 
@@ -1076,6 +1084,37 @@ export const AiKeyStatusSchema = z.object({
   source: z.enum(['device', 'shared', 'none']),
 });
 export type AiKeyStatus = z.infer<typeof AiKeyStatusSchema>;
+
+/**
+ * A device's registry entry (28-device-management §4.2), stored encrypted under the master key at
+ * `config/devices/<deviceId>.enc` — one file per device so two devices booting at once never clobber a
+ * shared registry. `platform` is the raw `BridgeHost.platform` string (macos/ios/web/…).
+ */
+export const DeviceRecordSchema = z.object({
+  schemaVersion: z.literal(1),
+  deviceId: z.string(),
+  label: z.string(),
+  platform: z.string(),
+  createdAt: z.string().datetime(),
+  lastSeenAt: z.string().datetime(),
+  /** Best-effort: who last signed in on this device. The surface shows "—" if unknown. */
+  lastActivePersonId: z.string().nullable().optional(),
+  /** Set when this entry was the target of a revoke (audit; the file is then removed). */
+  revokedAt: z.string().datetime().optional(),
+});
+export type DeviceRecord = z.infer<typeof DeviceRecordSchema>;
+
+/** The renderer-facing projection of a device (28 §4.2) — no raw personId; the name is resolved owner-side. */
+export const DeviceViewSchema = z.object({
+  deviceId: z.string(),
+  label: z.string(),
+  platform: z.string(),
+  createdAt: z.string().datetime(),
+  lastSeenAt: z.string().datetime(),
+  isThisDevice: z.boolean(),
+  lastActivePersonName: z.string().nullable(),
+});
+export type DeviceView = z.infer<typeof DeviceViewSchema>;
 
 /** How aligned two answerers were on one canonical question (08-questionnaires §3.6). */
 export const AlignmentAgreementSchema = z.enum(['aligned', 'mixed', 'divergent']);

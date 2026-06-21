@@ -5,3 +5,4 @@ export * from './migrations';
 export * from './accessService';
 export * from './buildContext';
 export * from './inviteService';
+export * from './deviceRegistry';

@@ -20,7 +20,12 @@ import {
   RevealVaultRow,
   VaultLocationValue,
 } from './customRows';
-import { ApiKeyControl, OpenAiKeyControl, TestConnectionControl } from './aiControls';
+import {
+  ApiKeyControl,
+  OpenAiKeyControl,
+  OpenAiTestConnectionControl,
+  TestConnectionControl,
+} from './aiControls';
 import { RelaySettingsPanel } from './RelaySettingsPanel';
 import { RelayMessagesControl } from './RelayMessagesControl';
 import { IntimacyTopicsControl } from './IntimacyTopicsControl';
@@ -386,6 +391,16 @@ export function registerBuiltinSettings(): void {
       control: { type: 'custom', render: OpenAiKeyControl },
       adminOnly: true,
       order: 6,
+      visibleWhen: dreamImagesEnabled,
+    }),
+    defineSetting({
+      key: 'dreams.imageTest',
+      section: 'dreams',
+      label: 'OpenAI connection',
+      schema: z.null(),
+      default: null,
+      control: { type: 'custom', render: OpenAiTestConnectionControl },
+      order: 7,
       visibleWhen: dreamImagesEnabled,
     }),
     defineSetting({

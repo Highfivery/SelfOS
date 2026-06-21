@@ -27,6 +27,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     secretHas: () => Promise.resolve(false),
     secretClear: () => Promise.resolve(),
     claudeTest: () => Promise.resolve({ ok: true, text: 'ok' }),
+    openaiTest: () => Promise.resolve({ ok: true, text: 'ok' }),
     aiKeyStatus: () =>
       Promise.resolve({
         hasSharedKey: false,

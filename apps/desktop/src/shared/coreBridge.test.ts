@@ -206,6 +206,7 @@ function makeHost(): {
     },
   };
   const image: ImageClient = {
+    verify: () => Promise.resolve(),
     generate: () =>
       Promise.resolve({ ok: true, image: { bytes: new Uint8Array([1, 2, 3]), mime: 'image/png' } }),
   };

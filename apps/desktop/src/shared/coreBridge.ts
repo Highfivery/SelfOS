@@ -95,6 +95,7 @@ import {
 } from './schemas';
 import { OWNER_ROLE_ID, roleAllows, type CapabilityKey } from './capabilities';
 import { runConnectionTest } from './claudeProxy';
+import { runOpenAiConnectionTest } from './openaiProxy';
 import {
   deployRelay,
   teardownRelay,
@@ -873,6 +874,15 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         ? ((await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null)
         : await host.secrets.get(ANTHROPIC_API_KEY_ID);
       return runConnectionTest(host.claude, apiKey, await host.activeModel());
+    },
+    openaiTest: async (): Promise<ClaudeTestResult> => {
+      // Verify the *resolved* OpenAI key (override → shared, 25 §6.3) with a non-generative probe — never an
+      // image generation, so it bills nothing (29 §5.B). The key stays host-side.
+      const ctx = await host.vaultAndKey();
+      const apiKey = ctx
+        ? ((await resolveOpenAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null)
+        : await host.secrets.get(OPENAI_API_KEY_ID);
+      return runOpenAiConnectionTest(host.image, apiKey);
     },
 
     // --- Household AI credentials (25-household-ai-credentials) ---

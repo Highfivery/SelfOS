@@ -44,6 +44,7 @@ const bridge: SelfosBridge = {
   secretHas: (input) => ipcRenderer.invoke(IpcChannels.secretHas, input),
   secretClear: (input) => ipcRenderer.invoke(IpcChannels.secretClear, input),
   claudeTest: () => ipcRenderer.invoke(IpcChannels.claudeTest),
+  openaiTest: () => ipcRenderer.invoke(IpcChannels.openaiTest),
   aiKeyStatus: (input) => ipcRenderer.invoke(IpcChannels.aiKeyStatus, input),
   aiSetSharedKey: (input) => ipcRenderer.invoke(IpcChannels.aiSetSharedKey, input),
   aiShareDeviceKey: (input) => ipcRenderer.invoke(IpcChannels.aiShareDeviceKey, input),

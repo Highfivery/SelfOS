@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ApiKeyControl, OpenAiKeyControl, TestConnectionControl } from './aiControls';
+import {
+  ApiKeyControl,
+  OpenAiKeyControl,
+  OpenAiTestConnectionControl,
+  TestConnectionControl,
+} from './aiControls';
 import { ANTHROPIC_API_KEY_ID, OPENAI_API_KEY_ID } from '@shared/channels';
 import { clearMockBridge, installMockBridge } from '../test-utils/bridge';
 import { useSessionStore } from '../stores/sessionStore';
@@ -108,5 +113,17 @@ describe('TestConnectionControl', () => {
     render(<TestConnectionControl />);
     await userEvent.click(screen.getByRole('button', { name: /test connection/i }));
     await waitFor(() => expect(screen.getByText('Key rejected.')).toBeInTheDocument());
+  });
+
+  it('OpenAI test maps a failure message (29 §5.B)', async () => {
+    installMockBridge({
+      openaiTest: () =>
+        Promise.resolve({ ok: false, code: 'AUTH', message: 'That OpenAI key was rejected.' }),
+    });
+    render(<OpenAiTestConnectionControl />);
+    await userEvent.click(screen.getByRole('button', { name: /test connection/i }));
+    await waitFor(() =>
+      expect(screen.getByText('That OpenAI key was rejected.')).toBeInTheDocument(),
+    );
   });
 });

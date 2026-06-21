@@ -246,16 +246,20 @@ export function OpenAiKeyControl(): JSX.Element {
   );
 }
 
-/** Send a tiny request to verify the key + selected model work. */
-export function TestConnectionControl(): JSX.Element {
+/** Shared "Test connection" control — runs `test()` and shows Connected / a calm error message. */
+function ConnectionTest({
+  test,
+}: {
+  test: () => Promise<ClaudeTestResult | undefined>;
+}): JSX.Element {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ClaudeTestResult | null>(null);
 
-  const test = async (): Promise<void> => {
+  const run = async (): Promise<void> => {
     setBusy(true);
     setResult(null);
     try {
-      const outcome = await window.selfos?.claudeTest();
+      const outcome = await test();
       if (outcome) setResult(outcome);
     } finally {
       setBusy(false);
@@ -265,7 +269,7 @@ export function TestConnectionControl(): JSX.Element {
   return (
     <Stack gap={2}>
       <Inline gap={3}>
-        <Button variant="secondary" onClick={() => void test()} disabled={busy}>
+        <Button variant="secondary" onClick={() => void run()} disabled={busy} aria-busy={busy}>
           {busy ? 'Testing…' : 'Test connection'}
         </Button>
         {result?.ok ? (
@@ -281,4 +285,14 @@ export function TestConnectionControl(): JSX.Element {
       ) : null}
     </Stack>
   );
+}
+
+/** Send a tiny request to verify the Claude key + selected model work. */
+export function TestConnectionControl(): JSX.Element {
+  return <ConnectionTest test={() => window.selfos!.claudeTest()} />;
+}
+
+/** Verify the OpenAI (dream-image) key with a non-generative probe (29-multi-device-housekeeping §5.B). */
+export function OpenAiTestConnectionControl(): JSX.Element {
+  return <ConnectionTest test={() => window.selfos!.openaiTest()} />;
 }

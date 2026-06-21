@@ -28,6 +28,17 @@ function isContentPolicy(payload: unknown): boolean {
 
 export function browserImageClient(): ImageClient {
   return {
+    async verify(apiKey): Promise<void> {
+      let response: Response;
+      try {
+        response = await fetch('https://api.openai.com/v1/models', {
+          headers: { Authorization: `Bearer ${apiKey}` },
+        });
+      } catch {
+        throw new Error('network');
+      }
+      if (!response.ok) throw Object.assign(new Error('http'), { status: response.status });
+    },
     async generate({ apiKey, model, prompt, size }): Promise<ImageGenerateOutcome> {
       let response: Response;
       try {

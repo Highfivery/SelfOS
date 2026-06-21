@@ -105,6 +105,7 @@ export const IpcChannels = {
   secretHas: 'secret:has',
   secretClear: 'secret:clear',
   claudeTest: 'claude:test',
+  openaiTest: 'ai:openaiTest',
   aiKeyStatus: 'ai:keyStatus',
   aiSetSharedKey: 'ai:setSharedKey',
   aiShareDeviceKey: 'ai:shareDeviceKey',
@@ -366,6 +367,8 @@ export interface SelfosBridge {
   secretClear(input: { id: string }): Promise<void>;
   /** Test the Claude connection with the stored (resolved) key + selected model. */
   claudeTest(): Promise<ClaudeTestResult>;
+  /** Test the OpenAI (dream-image) key with a non-generative probe (29 §6.B). */
+  openaiTest(): Promise<ClaudeTestResult>;
   /** AI key readiness for a provider — booleans + an enum only, never a key value (25 §5.3). */
   aiKeyStatus(input?: { provider?: AiProvider }): Promise<AiKeyStatus>;
   /** Owner-only: set the household's shared key for a provider (the value never comes back). */

@@ -50,7 +50,16 @@ describe('Sessions', () => {
   });
 
   it('sends a message and shows the reply', async () => {
-    installMockBridge({ secretHas: () => Promise.resolve(true) });
+    installMockBridge({
+      secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
+    });
     setAiEnabled(true);
     renderSessions();
     await waitFor(() => expect(screen.getByLabelText('Message')).toBeInTheDocument());
@@ -64,6 +73,13 @@ describe('Sessions', () => {
     const conversationsRename = vi.fn(() => Promise.resolve());
     installMockBridge({
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       conversationsList: () =>
         Promise.resolve([
           { id: 'c1', title: 'Old title', updatedAt: 'now', status: 'inProgress' as const },
@@ -86,7 +102,16 @@ describe('Sessions', () => {
   });
 
   it('expands crisis resources', async () => {
-    installMockBridge({ secretHas: () => Promise.resolve(true) });
+    installMockBridge({
+      secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
+    });
     setAiEnabled(true);
     renderSessions();
     await userEvent.click(screen.getByRole('button', { name: /get help now/i }));
@@ -96,6 +121,13 @@ describe('Sessions', () => {
   it('shows status pills and filters the list by status', async () => {
     installMockBridge({
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       conversationsList: () =>
         Promise.resolve([meta('c1', 'Active one'), meta('c2', 'Done one', 'complete')]),
     });
@@ -121,6 +153,13 @@ describe('Sessions', () => {
     const sessionsSetStatus = vi.fn(() => Promise.resolve(meta('c1', 'Active one', 'onHold')));
     installMockBridge({
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       conversationsList: () => Promise.resolve([meta('c1', 'Active one')]),
       sessionsSetStatus,
     });
@@ -140,6 +179,13 @@ describe('Sessions', () => {
     };
     installMockBridge({
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       conversationsList: () => Promise.resolve([meta('c1', 'Active one')]),
       usageSessionCosts: () => Promise.resolve(costs),
     });
@@ -156,6 +202,13 @@ describe('Sessions', () => {
     const costs: Record<string, SessionCost> = { c1: { tokens: 1200, budgetRatio: 0.1 } };
     installMockBridge({
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       conversationsList: () => Promise.resolve([meta('c1', 'Active one')]),
       usageSessionCosts: () => Promise.resolve(costs),
     });
@@ -184,6 +237,13 @@ describe('Sessions', () => {
     };
     installMockBridge({
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       chatStream: (input) =>
         Promise.resolve({
           ok: true,

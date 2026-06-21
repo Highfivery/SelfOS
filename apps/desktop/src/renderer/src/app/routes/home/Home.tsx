@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ANTHROPIC_API_KEY_ID } from '@shared/channels';
+import { aiKeyResolved } from '../../aiAvailability';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useConversationStore } from '../../../stores/conversationStore';
 import { useDreamStore } from '../../../stores/dreamStore';
@@ -51,7 +51,7 @@ export function Home(): JSX.Element {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    void window.selfos?.secretHas({ id: ANTHROPIC_API_KEY_ID }).then((v) => setHasKey(Boolean(v)));
+    void aiKeyResolved('anthropic').then(setHasKey);
   }, []);
 
   // Load every source this dashboard composes — on mount and whenever the active person changes (so one

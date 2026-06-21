@@ -319,7 +319,7 @@ export function AppShell(): JSX.Element {
                 <span className={styles.label}>Usage</span>
               </NavLink>
             ) : null}
-            {import.meta.env.DEV ? (
+            {import.meta.env.DEV && isOwner ? (
               <NavLink
                 to="/gallery"
                 className={navClass}

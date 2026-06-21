@@ -47,18 +47,18 @@ This spec separates two questions that were conflated:
   keychain / `safeStorage`?).
 
 From those two booleans the boot gate routes three ways: first-run **Setup** (uninitialized vault,
-no device key — the **only** path that mints the owner + super-admin), **Unlock / join this device**
+no device key — the **only** path that mints the owner), **Unlock / join this device**
 (initialized vault, no device key), or the existing person-picker / app (device key present). A
 recovery-phrase unlock lets a device cross from the second state to the third without ever re-keying.
 
 **Phasing.** Both phases are now **built**, in independently-shipped sub-slices for the methodical cadence:
 
 - **Slice 1** — the safety fix + foundation: key-free `vaultInitialized` detection, the three-way boot
-  gate, hard guards against overwriting `recovery.enc` / re-running setup, the super-admin secret moved
-  into the vault (with migration), and a recovery-phrase **unlock** UI.
+  gate, hard guards against overwriting `recovery.enc` / re-running setup, and a recovery-phrase
+  **unlock** UI.
   - **1a** — `vaultInitialized` detection + the `createMasterKey`/`setupHousehold` overwrite guards +
     the three-way `HouseholdGate` + the recovery-phrase `UnlockScreen` (the data-loss fix + device join).
-  - **1b** — super-admin secret moved into `config/superadmin.enc` (+ the device-local migration, §6.4).
+  - **1b** — SUPERSEDED (super-admin folded into the Owner).
   - **1c** — the required owner PIN at Setup (§3.2).
 - **Slice 2** — one-time, member-scoped **invite / pairing codes** so a non-owner can join a new device
   without ever seeing the recovery phrase (§5.4).
@@ -72,15 +72,13 @@ recovery-phrase unlock lets a device cross from the second state to the third wi
 
 - **No data loss, ever.** A device opening an already-initialized vault can never re-key it. This is
   the headline guarantee.
-- **One owner + one super-admin per vault**, established once at vault creation — a property of the
+- **One owner per vault**, established once at vault creation — a property of the
   **vault**, not of the device/install.
 - **Key-free initialized-vault detection** via the presence of `config/recovery.enc`, so the boot
   gate can route correctly before any key exists on the device.
 - **A safe device-join / recovery path**: a recovery-phrase **unlock** that restores the master key
   into this device's secret store via the existing core `restoreFromRecoveryPhrase` — permanently
   useful as the owner's disaster recovery and own-second-device path.
-- **Super-admin in the vault** (`config/superadmin.enc`), so it's one household-wide secret rather
-  than a per-device one — with a migration for vaults whose hash is currently device-local only.
 - **Platform-agnostic**: detection + flows live in `@selfos/core` and surface through the same
   `SelfosBridge`, so Electron and the iOS WKWebView (07) share one implementation.
 
@@ -111,12 +109,12 @@ and the developer-facing API where relevant.
 `HouseholdGate` is rebuilt to route on **two** signals from `HouseholdStatus`: the new key-free
 `vaultInitialized` (vault property) and the existing `hasMasterKey` (device property):
 
-| `vaultInitialized` | `hasMasterKey` | Route                               | Meaning                                                  |
-| ------------------ | -------------- | ----------------------------------- | -------------------------------------------------------- |
-| `false`            | `false`        | **Setup** (existing first-run)      | Brand-new vault. The **only** path that mints owner + SA |
-| `true`             | `false`        | **Unlock** (new — §3.3)             | Initialized vault, this device hasn't joined yet         |
-| `true`             | `true`         | existing lock / person-picker → app | This device holds the key — resume as today              |
-| `false`            | `true`         | **Unlock**, treated as desync (§7)  | Device key but no `recovery.enc` (re-key / sync glitch)  |
+| `vaultInitialized` | `hasMasterKey` | Route                               | Meaning                                                 |
+| ------------------ | -------------- | ----------------------------------- | ------------------------------------------------------- |
+| `false`            | `false`        | **Setup** (existing first-run)      | Brand-new vault. The **only** path that mints owner     |
+| `true`             | `false`        | **Unlock** (new — §3.3)             | Initialized vault, this device hasn't joined yet        |
+| `true`             | `true`         | existing lock / person-picker → app | This device holds the key — resume as today             |
+| `false`            | `true`         | **Unlock**, treated as desync (§7)  | Device key but no `recovery.enc` (re-key / sync glitch) |
 
 The fourth row should not occur given the overwrite guard; if observed it is treated as a desync and
 routed to Unlock (the device key likely decrypts nothing useful → real failure surfaces as
@@ -171,19 +169,17 @@ unwrap the key and set a local PIN, joining member-only. Full flow in §5.4.
 
 ### 4.1 Files
 
-| Path (vault-relative)     | Synced | Key-free readable? | Owner / writer           | Holds                                                       |
-| ------------------------- | ------ | ------------------ | ------------------------ | ----------------------------------------------------------- |
-| `config/recovery.enc`     | yes    | **yes** (marker)   | `masterKey.ts` (core)    | Master key wrapped by the recovery-phrase KEK (existing)    |
-| `config/superadmin.enc`   | yes    | no (key-encrypted) | `superAdmin` (core, new) | Salted scrypt hash of the SA passphrase, encrypted under MK |
-| `config/invites/<id>.enc` | yes    | no                 | _Slice 2 only_           | Pending, expiring invite: MK wrapped by an invite-code KEK  |
+| Path (vault-relative)     | Synced | Key-free readable? | Owner / writer        | Holds                                                      |
+| ------------------------- | ------ | ------------------ | --------------------- | ---------------------------------------------------------- |
+| `config/recovery.enc`     | yes    | **yes** (marker)   | `masterKey.ts` (core) | Master key wrapped by the recovery-phrase KEK (existing)   |
+| `config/invites/<id>.enc` | yes    | no                 | _Slice 2 only_        | Pending, expiring invite: MK wrapped by an invite-code KEK |
 
 **`config/recovery.enc` is key-free readable and is the canonical "vault initialized" marker.** The
 bundle JSON (`{ schemaVersion, salt, wrapped: { v, alg, iv, tag, data } }`, see
 `RecoveryBundleSchema` in `masterKey.ts`) is **plaintext JSON**; only the `wrapped` master key inside
 is ciphertext. So `vaultInitialized` is just "does `config/recovery.enc` **exist**?" — presence only,
 no parse, no key required. A present-but-corrupt file deliberately still counts as initialized (§7 #5):
-parsing would risk treating a corrupt vault as fresh and re-keying it. (Contrast `superadmin.enc`,
-whose payload is encrypted under the master key and is only verifiable **after** the key is loaded.)
+parsing would risk treating a corrupt vault as fresh and re-keying it.
 
 ### 4.2 Schemas
 
@@ -202,28 +198,10 @@ export interface HouseholdStatus {
 false it is reported `false` and the gate routes on `vaultInitialized` alone (§3.1) — that is correct,
 because an un-joined device should never be asked to read encrypted access data.
 
-New super-admin bundle (core), encrypted under the master key — a `SuperAdminFile` validated after
-decryption:
+(Super-admin storage removed 2026-06-14 — folded into the Owner.)
 
-```ts
-// @selfos/core
-export const SuperAdminFileSchema = z.object({
-  schemaVersion: z.literal(1),
-  passphraseHash: z.string(), // salted scrypt hash (the existing hashPin/verifyPin format)
-});
-export type SuperAdminFile = z.infer<typeof SuperAdminFileSchema>;
-```
-
-`SuperAdminFile` is serialized to JSON, encrypted with the existing core `cryptoService`
-(AES-256-GCM, the same envelope used by `encryptedStore`), and written to `config/superadmin.enc` via
-the `FileSystem` host — so it reuses the at-rest pipeline rather than inventing a new one.
-
-`DeviceStateSchema` (core `schemas.ts`): `superAdminPassphraseHash` is **deprecated** but **kept
-optional** so migration can read it from old installs (§7 / §6.4). No new device-local field is added
-in Slice 1.
-
-`SuperAdminFileSchema.schemaVersion` is its own version; `recovery.enc`'s `RecoveryBundleSchema`
-already carries `schemaVersion` and is unchanged. Migrations follow 00 §4.4.
+`recovery.enc`'s `RecoveryBundleSchema` already carries `schemaVersion` and is unchanged. Migrations
+follow 00 §4.4.
 
 ### 4.3 Device-local vs in-vault (the split that matters here)
 
@@ -231,14 +209,8 @@ Per 00 §4.1 and 04's "Device-local … never synced" note, this spec makes the 
 it's the whole subject:
 
 - **Device-local** (`userData`, never synced): the **master key** (keychain / `safeStorage`),
-  `activePersonId`, `vaultPath` + the iOS security-scoped bookmark (07). The deprecated
-  `superAdminPassphraseHash` lingers here only until migrated.
-- **In-vault** (synced): `config/recovery.enc`, the **new** `config/superadmin.enc`, all
-  `people/` + relationships + the access config.
-
-Moving the super-admin hash into the synced vault is acceptable: it's a **salted, one-way scrypt
-hash**, then **encrypted under the master key**, gated behind a concealed break-glass UI (04 §8). A
-key-holder could already read everything (the §2 non-goal); the hash leaks nothing further.
+  `activePersonId`, `vaultPath` + the iOS security-scoped bookmark (07).
+- **In-vault** (synced): `config/recovery.enc`, all `people/` + relationships + the access config.
 
 ### 4.4 Ownership
 
@@ -256,30 +228,19 @@ Electron `main` host today and the iOS host in 07:
 - `@selfos/core/crypto` `masterKey.ts` — **`createMasterKey` gains an overwrite guard** (§6.3);
   `restoreFromRecoveryPhrase` already exists and is reused verbatim for unlock; a new key-free
   `isVaultInitialized(fs)` reads/parses `config/recovery.enc`.
-- `@selfos/core` super-admin module (new) — `setSuperAdminPassphrase(fs, key, …)`,
-  `hasSuperAdminPassphrase(fs, key)`, `verifySuperAdminPassphrase(fs, key, …)`, reading/writing
-  `config/superadmin.enc`. This is the existing `apps/desktop/src/main/people/superAdmin.ts` logic
-  relocated and re-pointed from `deviceStore` to the vault. The in-memory inspect-mode
-  (`setSuperAdminActive` / `isSuperAdminActive`) stays an **app/main** concern (device-session state,
-  not portable).
 
 ### 5.2 Electron `main` changes
 
 - `household.ts` — `householdStatus` computes `vaultInitialized` via `isVaultInitialized(fs)`
   **before** trying to load the key, and short-circuits (no key read needed for the un-joined case).
   `setupHousehold` calls the guarded `createMasterKey` and itself refuses on an initialized vault
-  (§6.3). The super-admin write switches from `setSuperAdminPassphrase(userDataDir, …)` (device) to
-  the core vault writer `(fs, key, …)`.
-- `superAdmin.ts` (app) — slims to the inspect-mode flags + thin wrappers delegating set/has/verify to
-  the core vault functions (passing the resolved `fs` + `key`). The migration runs here (§6.4).
-- `ipc.ts` — `superadminUnlock` now verifies against the **vault** (`fs` + `key`) instead of
-  `deviceStore`. A new `household:unlockWithRecoveryPhrase` handler (§6.2) restores the device key.
+  (§6.3).
+- `ipc.ts` — a new `household:unlockWithRecoveryPhrase` handler (§6.2) restores the device key.
 
 > **Relocated in [07-mobile-platform](07-mobile-platform.md) iii-b1:** the above describes the
-> slice-1 design. `householdStatus`/`setupHousehold`, the super-admin set/has/verify, and the
-> device→vault migration now live in the shared `createCoreBridge` factory (one impl for Electron +
-> iOS); `household.ts`/`session.ts` are removed, the app's `superAdmin.ts` keeps only the in-memory
-> inspect flag, and `ipc.ts` delegates these channels to the factory.
+> slice-1 design. `householdStatus`/`setupHousehold` now live in the shared `createCoreBridge` factory
+> (one impl for Electron + iOS); `household.ts`/`session.ts` are removed, and `ipc.ts` delegates these
+> channels to the factory.
 
 ### 5.3 Renderer changes
 
@@ -371,44 +332,27 @@ hasOwner: false, activePersonId: null }`.
   `VAULT_ALREADY_INITIALIZED`) instead of writing. **It must never overwrite an existing
   `recovery.enc`.** This is the single most important change in the spec.
 - **`setupHousehold(...)`** — refuses (typed error) if the vault is already initialized, so it can't
-  mint a second owner / super-admin even if reached. Defense in depth with the boot-gate routing.
+  mint a second owner even if reached. Defense in depth with the boot-gate routing.
 
-### 6.4 `superadmin:*` — read/write the vault, plus migration
-
-- **`superadmin:unlock`** (`{ passphrase }`) — verifies against `config/superadmin.enc`
-  (`verifySuperAdminPassphrase(fs, key, passphrase)`) **post-unlock** (the master key is loaded by
-  then). On success sets in-memory inspect mode (unchanged app behavior). On a vault with no
-  `superadmin.enc` **and** a device-local hash still present, it runs the migration (below) first,
-  then verifies.
-- **`setSuperAdminPassphrase` at Setup** — writes `config/superadmin.enc` (core `(fs, key, …)`),
-  no longer `deviceStore`.
-- **Migration (one-time, idempotent):** on load, if `config/superadmin.enc` is **absent** but the
-  device-local `superAdminPassphraseHash` **exists** (old single-device install), copy that hash into
-  a fresh `config/superadmin.enc` (encrypted under the master key) and **leave the device-local field
-  in place** (harmless; a later cleanup may clear it). This means the very device that set the
-  passphrase seeds the vault copy; other devices then read it from the vault. If `superadmin.enc`
-  exists, it wins (no migration). Covered by 00 §4.4's migration conventions.
+### 6.4 — Removed 2026-06-14 (super-admin folded into the Owner; `config/superadmin.enc` and `superadmin:*` no longer exist).
 
 ## 7. States & edge cases
 
-| #   | Condition                                                                                                          | Intended behavior                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| --- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **Fresh vault, fresh device** (`!vaultInitialized && !hasMasterKey`)                                               | First-run **Setup**. The only path that creates owner + super-admin + `recovery.enc`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| 2   | **Initialized vault, fresh device** (`vaultInitialized && !hasMasterKey`)                                          | **UnlockScreen** (§3.3) — never Setup. This is the headline bug fixed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| 3   | **Initialized vault, device has key**                                                                              | Existing lock / person-picker → app. Unchanged.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| 4   | **Wrong / garbled recovery phrase** at Unlock                                                                      | `restoreFromRecoveryPhrase` returns false → `{ ok: false }` → inline danger banner, input keeps focus, retry. No master key stored, no data touched. No lockout (the synced wrapped key is offline-bruteforceable regardless, §3.3).                                                                                                                                                                                                                                                                                                                                                                             |
-| 5   | **Corrupt `recovery.enc`** (present but unparsable / failed auth-tag on unwrap)                                    | `vaultInitialized: true` (file present) so we **never re-key**; unlock fails with the bad-phrase banner. Treated as a vault-integrity problem → the user restores the folder from sync history or re-selects the vault (00 §7 corrupt-file handling); surfaces via vault-error if it blocks boot. We do **not** offer "start over" here (that would re-key and orphan data).                                                                                                                                                                                                                                     |
-| 6   | **Missing `recovery.enc`**                                                                                         | `vaultInitialized: false`. If the rest of the vault is empty → legitimately fresh → Setup. If `people/` etc. exist but `recovery.enc` is gone (partial sync / user deletion) → see #9.                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| 7   | **Two devices both first-run before the folder syncs** (offline race)                                              | Each sees `!vaultInitialized` and may complete Setup, each writing its own `recovery.enc` + owner. On sync this is a **last-writer-wins** conflict on `config/recovery.enc` (the provider may also drop a conflicted copy, surfaced by 00 §4.3's conflict detection). The recovery.enc presence check **shrinks** the window to "both offline simultaneously during initial setup" — far narrower than today's "every new device." Documented mitigation, not a full fix; true conflict-free setup is a §2 non-goal. The losing device's key won't decrypt the winning data → manifests as decrypt failure (#8). |
-| 8   | **Device holds a stale master key after the vault was re-keyed elsewhere**                                         | Should not happen given the §6.3 overwrite guard (we never re-key an initialized vault). If it does (race #7, or a hand-edited vault), the stale key fails to decrypt the access config / content → typed decrypt error → **vault-error** recovery (00 §7): re-select the vault or unlock with the correct recovery phrase. We do not silently re-key.                                                                                                                                                                                                                                                           |
-| 9   | **Initialized-looking vault missing `recovery.enc`** (people exist, marker gone)                                   | `vaultInitialized: false` would route to Setup → **dangerous** (would re-key). Mitigation: `setupHousehold`/`createMasterKey` also refuse if **any** household artifacts exist (e.g. the access config or `people/` is non-empty) — defense in depth beyond the `recovery.enc` check — and surface a vault-error explaining the recovery file is missing, prompting restore-from-sync.                                                                                                                                                                                                                           |
-| 10  | **Pre-existing vault, super-admin hash device-local only** (old install)                                           | The §6.4 migration writes `config/superadmin.enc` from the device-local hash on next load; thereafter all devices verify against the vault copy. Idempotent; existing single-device behavior is unchanged on that device.                                                                                                                                                                                                                                                                                                                                                                                        |
-| 11  | **Super-admin unlock on a freshly-joined device** (vault has `superadmin.enc`, this device never set a passphrase) | Works: verification reads the vault copy post-key-unlock — the whole point of moving the hash into the vault.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| 12  | **`vaultInitialized && hasMasterKey === true` but `recovery.enc` later deleted while running**                     | The running session keeps working (key is in memory/keychain); a `vault:changed` event (00 §4.3) may flag the loss. Next boot routes per #9. No auto-recovery; never re-key.                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| 13  | **iOS host (07) — same vault opened via iCloud**                                                                   | Identical routing: detection + unlock run in core through the Capacitor `VaultFs` `FileSystem` + Keychain `SecretStore`. A 2nd device that is the user's iPhone joins via recovery phrase (Slice 1) exactly like a 2nd desktop.                                                                                                                                                                                                                                                                                                                                                                                  |
-| 14  | **No vault mounted** (boot phase `onboarding`/`vault-error`)                                                       | `household:status` is not the gate yet — boot (`computeBootState`) handles vault selection/errors first (00 §7, 02 §3). The three-way gate runs only at boot-`ready`.                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| 15  | **Empty / loading**                                                                                                | While `householdStatus` resolves, `HouseholdGate` shows `Splash` (existing `!loaded` path). UnlockScreen has its own submitting state (§3.3).                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| 16  | **Corrupt `config/superadmin.enc`**                                                                                | `verifySuperAdminPassphrase` catches the decrypt/parse error and returns `false` (the concealed unlock stays a generic "didn't match", never an exception to the renderer). `hasSuperAdminPassphrase` is **presence-based**, so a corrupt file still counts as "set" and the §6.4 migration never clobbers it by mistaking corrupt for absent. Restore the file from sync history to recover the break-glass.                                                                                                                                                                                                    |
+| #   | Condition                                                                                      | Intended behavior                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| --- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Fresh vault, fresh device** (`!vaultInitialized && !hasMasterKey`)                           | First-run **Setup**. The only path that creates owner + `recovery.enc`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| 2   | **Initialized vault, fresh device** (`vaultInitialized && !hasMasterKey`)                      | **UnlockScreen** (§3.3) — never Setup. This is the headline bug fixed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| 3   | **Initialized vault, device has key**                                                          | Existing lock / person-picker → app. Unchanged.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| 4   | **Wrong / garbled recovery phrase** at Unlock                                                  | `restoreFromRecoveryPhrase` returns false → `{ ok: false }` → inline danger banner, input keeps focus, retry. No master key stored, no data touched. No lockout (the synced wrapped key is offline-bruteforceable regardless, §3.3).                                                                                                                                                                                                                                                                                                                                                                             |
+| 5   | **Corrupt `recovery.enc`** (present but unparsable / failed auth-tag on unwrap)                | `vaultInitialized: true` (file present) so we **never re-key**; unlock fails with the bad-phrase banner. Treated as a vault-integrity problem → the user restores the folder from sync history or re-selects the vault (00 §7 corrupt-file handling); surfaces via vault-error if it blocks boot. We do **not** offer "start over" here (that would re-key and orphan data).                                                                                                                                                                                                                                     |
+| 6   | **Missing `recovery.enc`**                                                                     | `vaultInitialized: false`. If the rest of the vault is empty → legitimately fresh → Setup. If `people/` etc. exist but `recovery.enc` is gone (partial sync / user deletion) → see #9.                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| 7   | **Two devices both first-run before the folder syncs** (offline race)                          | Each sees `!vaultInitialized` and may complete Setup, each writing its own `recovery.enc` + owner. On sync this is a **last-writer-wins** conflict on `config/recovery.enc` (the provider may also drop a conflicted copy, surfaced by 00 §4.3's conflict detection). The recovery.enc presence check **shrinks** the window to "both offline simultaneously during initial setup" — far narrower than today's "every new device." Documented mitigation, not a full fix; true conflict-free setup is a §2 non-goal. The losing device's key won't decrypt the winning data → manifests as decrypt failure (#8). |
+| 8   | **Device holds a stale master key after the vault was re-keyed elsewhere**                     | Should not happen given the §6.3 overwrite guard (we never re-key an initialized vault). If it does (race #7, or a hand-edited vault), the stale key fails to decrypt the access config / content → typed decrypt error → **vault-error** recovery (00 §7): re-select the vault or unlock with the correct recovery phrase. We do not silently re-key.                                                                                                                                                                                                                                                           |
+| 9   | **Initialized-looking vault missing `recovery.enc`** (people exist, marker gone)               | `vaultInitialized: false` would route to Setup → **dangerous** (would re-key). Mitigation: `setupHousehold`/`createMasterKey` also refuse if **any** household artifacts exist (e.g. the access config or `people/` is non-empty) — defense in depth beyond the `recovery.enc` check — and surface a vault-error explaining the recovery file is missing, prompting restore-from-sync.                                                                                                                                                                                                                           |
+| 10  | **`vaultInitialized && hasMasterKey === true` but `recovery.enc` later deleted while running** | The running session keeps working (key is in memory/keychain); a `vault:changed` event (00 §4.3) may flag the loss. Next boot routes per #9. No auto-recovery; never re-key.                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| 11  | **iOS host (07) — same vault opened via iCloud**                                               | Identical routing: detection + unlock run in core through the Capacitor `VaultFs` `FileSystem` + Keychain `SecretStore`. A 2nd device that is the user's iPhone joins via recovery phrase (Slice 1) exactly like a 2nd desktop.                                                                                                                                                                                                                                                                                                                                                                                  |
+| 12  | **No vault mounted** (boot phase `onboarding`/`vault-error`)                                   | `household:status` is not the gate yet — boot (`computeBootState`) handles vault selection/errors first (00 §7, 02 §3). The three-way gate runs only at boot-`ready`.                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| 13  | **Empty / loading**                                                                            | While `householdStatus` resolves, `HouseholdGate` shows `Splash` (existing `!loaded` path). UnlockScreen has its own submitting state (§3.3).                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 ## 8. Safety
 
@@ -425,14 +369,13 @@ highly sensitive personal data_ — so the safety surface here is **data integri
   an existing `recovery.enc` (§6.3) is what prevents catastrophic, irreversible loss of every
   encrypted record. It is enforced in code (a guard, not a convention) and proven by tests (§10).
 - **The master key never crosses IPC or enters the vault unencrypted.** It is stored only in the
-  device secret store; `recovery.enc` and `superadmin.enc` hold only wrapped/encrypted material
+  device secret store; `recovery.enc` holds only wrapped/encrypted material
   (04 §6 / §7). The renderer never sees the key or ciphertext.
 - **The recovery phrase is never logged or persisted** (00 §8); it exists only transiently in the
   unlock request and is consumed by `restoreFromRecoveryPhrase`.
 - **Explicit trust-model honesty (§2 non-goal):** one key decrypts the whole vault; this is **not**
   cryptographic isolation between household members. We state it plainly so the security posture is
-  not over-claimed. Moving the (hashed, encrypted) super-admin secret into the synced vault does not
-  weaken this — a key-holder's capabilities are unchanged.
+  not over-claimed.
 
 ## 9. Accessibility
 
@@ -460,19 +403,13 @@ CLAUDE.md DoD: E2E covers **every** new surface, plus the responsive + geometry 
 - `createMasterKey` **overwrite guard** — given an existing `config/recovery.enc`, it refuses (typed
   error) and the on-disk bundle is **byte-identical** afterwards (proves no re-key). The single most
   important test in this spec.
-- `setupHousehold` **setup guard** — refuses on an initialized vault; no second owner / super-admin /
+- `setupHousehold` **setup guard** — refuses on an initialized vault; no second owner /
   `recovery.enc` write occurs.
 - `isVaultInitialized` — true when `recovery.enc` is present + parses; false when absent; **true (not
   false)** when present-but-corrupt (must not be mistaken for fresh, §7 #5).
 - `restoreFromRecoveryPhrase` — round-trips a real recovery phrase from `createMasterKey` into a fresh
   (empty) secret store and the restored key decrypts existing fixtures; returns false on a wrong/
   garbled phrase and on missing/corrupt `recovery.enc`.
-- **Super-admin in the vault** — `setSuperAdminPassphrase` writes `config/superadmin.enc` (encrypted),
-  `verifySuperAdminPassphrase` accepts the right passphrase / rejects wrong ones, reading the vault
-  copy; a freshly-restored device (key only, never set the passphrase) verifies successfully.
-- **Migration** — a vault with **no** `superadmin.enc` but a device-local `superAdminPassphraseHash`
-  produces a `superadmin.enc` matching that hash on load; idempotent (re-running is a no-op); when
-  `superadmin.enc` already exists it is **not** overwritten.
 
 **Component (Vitest + RTL, via the mock bridge):**
 
@@ -493,11 +430,6 @@ CLAUDE.md DoD: E2E covers **every** new surface, plus the responsive + geometry 
 - **Enter the recovery phrase ⇒ reach the person picker**, signing in resumes the existing data; assert
   **no second owner** was created (the access config still has exactly one `OWNER_ROLE_ID` account)
   and `config/recovery.enc` is **byte-unchanged** after unlock.
-- **Super-admin verify works post-unlock on a fresh device** — after a recovery-phrase unlock, the
-  concealed super-admin unlock succeeds against the **vault** `superadmin.enc` (a device that never
-  set the passphrase).
-- **Migration path** — boot a seeded vault whose super-admin hash is **device-local only** (no
-  `superadmin.enc`); after load, `config/superadmin.enc` exists and the super-admin unlock works.
 - **Guards** — a layout/no-horizontal-overflow guard for the UnlockScreen at 390px (CLAUDE.md DoD)
   and at desktop width; the boot screens have no fixed-size controls needing a geometry guard, but the
   primary button is asserted full-height-aligned with its field.
@@ -509,7 +441,8 @@ All Slice-1 questions are **resolved** (2026-06-10):
 - **Require an owner PIN at Setup? → Yes.** Setup requires the owner to set a PIN (§3.2 / §5.3), so a
   leaked recovery phrase alone can't sign in as the owner on a new device.
 - **Super-admin storage format → encrypted `config/superadmin.enc`** (salted scrypt hash encrypted
-  under the master key, §4.1), consistent with the at-rest pipeline.
+  under the master key, §4.1), consistent with the at-rest pipeline. _(Obsolete — super-admin removed
+  2026-06-14.)_
 - **Post-unlock persona scope → any persona.** The recovery phrase is documented as the owner's master
   secret; after unlock the user may pick any persona in the existing person-picker (no technical
   per-persona restriction in Slice 1). Members onboard via Slice 2 invites rather than being handed the

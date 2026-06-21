@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lightbulb, Sparkles } from 'lucide-react';
-import { ANTHROPIC_API_KEY_ID } from '@shared/channels';
+import { aiKeyResolved } from '../../aiAvailability';
 import type { Question, QuestionnaireSuggestion } from '@shared/schemas';
 import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
 import { useSetting } from '../../../settings/useSetting';
@@ -41,7 +41,7 @@ export function SuggestedPanel({
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
-    void window.selfos?.secretHas({ id: ANTHROPIC_API_KEY_ID }).then((v) => setHasKey(Boolean(v)));
+    void aiKeyResolved('anthropic').then(setHasKey);
   }, []);
 
   const aiReady = aiEnabled === true && hasKey;

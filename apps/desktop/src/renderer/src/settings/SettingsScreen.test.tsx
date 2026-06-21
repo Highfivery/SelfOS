@@ -62,16 +62,22 @@ describe('SettingsScreen', () => {
     expect(useSettingsStore.getState().values['appearance.theme']).toBe('dark');
   });
 
-  it('hides an admin-only setting from non-admins and shows it (marked) to admins', async () => {
+  it('hides the owner-only sections from non-admins and shows them to admins', async () => {
     installMockBridge();
     const { rerender } = render(<SettingsScreen />);
-    // Non-admin: the admin-only Relay (Cloudflare) setting is absent entirely.
-    await userEvent.click(screen.getByRole('button', { name: 'Relay' }));
-    expect(screen.queryByText('Cloudflare relay')).not.toBeInTheDocument();
+    // Non-admin: the household-wide sections are absent entirely; only Appearance/Vault/About show.
+    for (const name of ['AI', 'Sessions', 'Questionnaires', 'Dreams', 'Relay', 'Devices']) {
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
+    }
+    expect(screen.getByRole('button', { name: 'Appearance' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Vault' })).toBeInTheDocument();
 
-    // Admin: it appears, carrying the "Admin only" marker.
+    // Admin: the sections appear; Relay carries the "Admin only" marker on its Cloudflare control.
     asAdmin();
     rerender(<SettingsScreen />);
+    for (const name of ['AI', 'Sessions', 'Questionnaires', 'Dreams', 'Relay', 'Devices']) {
+      expect(screen.getByRole('button', { name })).toBeInTheDocument();
+    }
     await userEvent.click(screen.getByRole('button', { name: 'Relay' }));
     expect(screen.getByText('Cloudflare relay')).toBeInTheDocument();
     expect(screen.getAllByText('Admin only').length).toBeGreaterThan(0);
@@ -87,6 +93,7 @@ describe('SettingsScreen', () => {
 
   it('reveals the AI model only once AI is enabled (visibleWhen)', async () => {
     installMockBridge();
+    asAdmin(); // the AI section is owner-only
     useSettingsStore.setState((state) => ({ values: { ...state.values, 'ai.enabled': false } }));
     render(<SettingsScreen />);
     await userEvent.click(screen.getByRole('button', { name: 'AI' }));

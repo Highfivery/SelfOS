@@ -50,6 +50,8 @@ export interface SettingsSection {
   description?: string;
   icon: LucideIcon;
   order: number;
+  /** Owner-only section — hidden entirely from non-`settings.manage` users (the whole section). */
+  adminOnly?: boolean;
 }
 
 /** Preserves the value type `T` when declaring a setting. */

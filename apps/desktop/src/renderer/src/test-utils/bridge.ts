@@ -15,6 +15,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     useVault: () => Promise.resolve(READY),
     unlinkVault: () => Promise.resolve(ONBOARDING),
     getConflicts: () => Promise.resolve([]),
+    vaultSyncReadiness: () => Promise.resolve({ ready: true }),
     revealVault: () => Promise.resolve(),
     onVaultChanged: () => () => {},
     platform: 'web',
@@ -27,6 +28,28 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     secretHas: () => Promise.resolve(false),
     secretClear: () => Promise.resolve(),
     claudeTest: () => Promise.resolve({ ok: true, text: 'ok' }),
+    openaiTest: () => Promise.resolve({ ok: true, text: 'ok' }),
+    aiKeyStatus: () =>
+      Promise.resolve({
+        hasSharedKey: false,
+        hasDeviceOverride: false,
+        resolvedReady: false,
+        source: 'none' as const,
+      }),
+    aiSetSharedKey: () => Promise.resolve(),
+    aiShareDeviceKey: () => Promise.resolve(),
+    aiClearSharedKey: () => Promise.resolve(),
+    devicesList: () => Promise.resolve([]),
+    devicesRename: () => Promise.resolve(),
+    keysRotate: () =>
+      Promise.resolve({
+        ok: true as const,
+        recoveryPhrase: 'word '.repeat(12).trim(),
+        reencryptedFileCount: 0,
+        revokedDeviceIds: [],
+        cancelledInviteCount: 0,
+      }),
+    keysRotateStatus: () => Promise.resolve(null),
     householdStatus: () =>
       Promise.resolve({
         vaultInitialized: true,

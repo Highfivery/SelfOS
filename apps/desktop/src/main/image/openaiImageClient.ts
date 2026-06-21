@@ -8,6 +8,7 @@ import type { ImageClient, ImageGenerateOutcome } from '@selfos/core/host';
  * on-device by the user; the offline fake covers the deterministic path.
  */
 const OPENAI_IMAGES_URL = 'https://api.openai.com/v1/images/generations';
+const OPENAI_MODELS_URL = 'https://api.openai.com/v1/models';
 
 /** Heuristic: does an OpenAI error look like a content-policy refusal (vs. a transport/auth error)? */
 function isContentPolicy(payload: unknown): boolean {
@@ -29,6 +30,19 @@ function isContentPolicy(payload: unknown): boolean {
 
 export function openaiImageClient(): ImageClient {
   return {
+    async verify(apiKey): Promise<void> {
+      // Non-generative auth probe — a models-list GET bills nothing (33 §5.B). Reject with `.status` on a
+      // failed response, or a status-free error on a network failure (mapped by openaiProxy).
+      let response: Response;
+      try {
+        response = await fetch(OPENAI_MODELS_URL, {
+          headers: { Authorization: `Bearer ${apiKey}` },
+        });
+      } catch {
+        throw new Error('network');
+      }
+      if (!response.ok) throw Object.assign(new Error('http'), { status: response.status });
+    },
     async generate({ apiKey, model, prompt, size }): Promise<ImageGenerateOutcome> {
       let response: Response;
       try {
@@ -100,6 +114,12 @@ const TINY_PNG_BASE64 =
  */
 export function fakeImageClient(mode?: string): ImageClient {
   return {
+    verify: (): Promise<void> => {
+      // `SELFOS_FAKE_IMAGE=authfail` forces an AUTH failure for the connection-test failure path (33 §10).
+      if (mode === 'authfail')
+        return Promise.reject(Object.assign(new Error('http'), { status: 401 }));
+      return Promise.resolve();
+    },
     generate: (): Promise<ImageGenerateOutcome> => {
       if (mode === 'refuse') {
         return Promise.resolve({

@@ -3,6 +3,7 @@ import {
   ClipboardList,
   Database,
   Info,
+  Laptop,
   MessagesSquare,
   Moon,
   Palette,
@@ -10,6 +11,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { registerSection, registerSettings } from './registry';
+import { DevicesControl } from './DevicesControl';
 import { defineSetting } from './types';
 import {
   AboutDisclaimer,
@@ -18,7 +20,12 @@ import {
   RevealVaultRow,
   VaultLocationValue,
 } from './customRows';
-import { ApiKeyControl, OpenAiKeyControl, TestConnectionControl } from './aiControls';
+import {
+  ApiKeyControl,
+  OpenAiKeyControl,
+  OpenAiTestConnectionControl,
+  TestConnectionControl,
+} from './aiControls';
 import { RelaySettingsPanel } from './RelaySettingsPanel';
 import { RelayMessagesControl } from './RelayMessagesControl';
 import { IntimacyTopicsControl } from './IntimacyTopicsControl';
@@ -71,12 +78,16 @@ export function registerBuiltinSettings(): void {
     icon: Palette,
     order: 1,
   });
+  // AI, Sessions, Questionnaires, Dreams + Relay are household-wide settings the Owner controls —
+  // owner-only sections, hidden entirely from non-`settings.manage` users (members inherit AI via the
+  // shared key, 25-household-ai-credentials; they don't manage household behaviour).
   registerSection({
     id: 'ai',
     title: 'AI',
     description: 'Connect Claude to power conversations.',
     icon: Sparkles,
     order: 2,
+    adminOnly: true,
   });
   registerSection({
     id: 'sessions',
@@ -84,6 +95,7 @@ export function registerBuiltinSettings(): void {
     description: 'How coaching sessions are remembered across the app.',
     icon: MessagesSquare,
     order: 3,
+    adminOnly: true,
   });
   registerSection({
     id: 'questionnaires',
@@ -91,6 +103,7 @@ export function registerBuiltinSettings(): void {
     description: 'How questionnaire responses are turned into insights.',
     icon: ClipboardList,
     order: 4,
+    adminOnly: true,
   });
   registerSection({
     id: 'dreams',
@@ -98,6 +111,7 @@ export function registerBuiltinSettings(): void {
     description: 'Your dream journal and how it informs your coaching.',
     icon: Moon,
     order: 5,
+    adminOnly: true,
   });
   registerSection({
     id: 'relay',
@@ -105,6 +119,15 @@ export function registerBuiltinSettings(): void {
     description: 'Send questionnaires to people without SelfOS, via a private encrypted link.',
     icon: Send,
     order: 6,
+    adminOnly: true,
+  });
+  registerSection({
+    id: 'devices',
+    title: 'Devices',
+    description: 'The devices that have joined your household, and re-keying the vault.',
+    icon: Laptop,
+    order: 6.5,
+    adminOnly: true,
   });
   registerSection({
     id: 'vault',
@@ -371,12 +394,32 @@ export function registerBuiltinSettings(): void {
       visibleWhen: dreamImagesEnabled,
     }),
     defineSetting({
+      key: 'dreams.imageTest',
+      section: 'dreams',
+      label: 'OpenAI connection',
+      schema: z.null(),
+      default: null,
+      control: { type: 'custom', render: OpenAiTestConnectionControl },
+      order: 7,
+      visibleWhen: dreamImagesEnabled,
+    }),
+    defineSetting({
       key: 'relay.connection',
       section: 'relay',
       label: 'Cloudflare relay',
       schema: z.null(),
       default: null,
       control: { type: 'custom', render: RelaySettingsPanel },
+      adminOnly: true,
+      order: 1,
+    }),
+    defineSetting({
+      key: 'devices.list',
+      section: 'devices',
+      label: 'Your devices',
+      schema: z.null(),
+      default: null,
+      control: { type: 'custom', render: DevicesControl },
       adminOnly: true,
       order: 1,
     }),

@@ -42,7 +42,16 @@ const renderPanel = (onSent = vi.fn()): ReturnType<typeof render> =>
 
 describe('CompatibilitySendPanel (§17.12-B)', () => {
   it('has NO participant picker — it compares you + the bound recipient and shows their disclosure', async () => {
-    installMockBridge({ secretHas: () => Promise.resolve(true) });
+    installMockBridge({
+      secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
+    });
     useSettingsStore.setState({ values: { 'ai.enabled': true } });
     useSessionStore.setState({ activePerson: sender });
     renderPanel();
@@ -60,7 +69,17 @@ describe('CompatibilitySendPanel (§17.12-B)', () => {
     const assignmentsCreateCompatibility = vi.fn(() =>
       Promise.resolve({ ok: true as const, compatibilityGroupId: 'g1' }),
     );
-    installMockBridge({ secretHas: () => Promise.resolve(true), assignmentsCreateCompatibility });
+    installMockBridge({
+      secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
+      assignmentsCreateCompatibility,
+    });
     useSettingsStore.setState({ values: { 'ai.enabled': true } });
     useSessionStore.setState({ activePerson: sender });
     renderPanel();

@@ -110,6 +110,13 @@ describe('CompatibilityResults', () => {
         ]),
       assignmentsReshare,
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
     });
     enableAi();
     renderResults();
@@ -137,6 +144,13 @@ describe('CompatibilityResults', () => {
       assignmentsCompatibility: () => Promise.resolve([group()]),
       assignmentsAlign,
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
     });
     enableAi();
     renderResults();
@@ -150,6 +164,13 @@ describe('CompatibilityResults', () => {
       assignmentsCompatibility: () =>
         Promise.resolve([group({ report: report(), analyzed: true })]),
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
     });
     enableAi();
     renderResults();
@@ -167,6 +188,13 @@ describe('CompatibilityResults', () => {
       assignmentsCompatibility: () => Promise.resolve([group({ visibility: 'contextOnly' })]),
       assignmentsDistillContextOnly,
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
     });
     enableAi();
     renderResults();
@@ -182,6 +210,13 @@ describe('CompatibilityResults', () => {
       assignmentsCompatibility: () =>
         Promise.resolve([group({ visibility: 'contextOnly', analyzed: true })]),
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
     });
     enableAi();
     renderResults();
@@ -217,6 +252,13 @@ describe('CompatibilityResults', () => {
         ]),
       assignmentsPublishCompatResult,
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
     });
     enableAi();
     renderResults();
@@ -230,6 +272,13 @@ describe('CompatibilityResults', () => {
     installMockBridge({
       assignmentsCompatibility: () => Promise.resolve([group({ report: report() })]),
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
     });
     enableAi();
     renderResults();
@@ -248,6 +297,13 @@ describe('CompatibilityResults', () => {
         ]),
       assignmentsRevealRaw,
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
     });
     enableAi();
     renderResults();

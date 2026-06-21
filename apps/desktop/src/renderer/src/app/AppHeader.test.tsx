@@ -60,10 +60,11 @@ describe('AppHeader', () => {
     const brand = screen.getByRole('link', { name: 'SelfOS' });
     expect(brand).toHaveAttribute('href', '/');
 
-    // The curated right cluster: sync chip · usage ring · appearance · account.
+    // The curated right cluster: usage ring · appearance · account (the vault/sync affordance moved
+    // into the account menu).
     expect(
-      screen.getByRole('button', { name: 'Vault: all synced — open the vault folder' }),
-    ).toBeInTheDocument();
+      screen.queryByRole('button', { name: /open the vault folder/i }),
+    ).not.toBeInTheDocument();
     expect(await screen.findByRole('button', { name: /AI usage/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Appearance:/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Signed in as Alex' })).toBeInTheDocument();
@@ -79,12 +80,12 @@ describe('AppHeader', () => {
     expect(onOpenNav).toHaveBeenCalledOnce();
   });
 
-  it('shows the sync conflict state in the chip', () => {
+  it('surfaces a sync conflict on the account control', () => {
     installMockBridge();
     useSessionStore.setState({ activePerson: alex });
     renderHeader({ conflicts: ['/vault/x.enc.conflict'] });
     expect(
-      screen.getByRole('button', { name: '1 sync conflict — open the vault folder to resolve' }),
+      screen.getByRole('button', { name: 'Signed in as Alex — 1 sync conflict' }),
     ).toBeInTheDocument();
   });
 });

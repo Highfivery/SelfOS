@@ -206,6 +206,7 @@ function makeHost(): {
     },
   };
   const image: ImageClient = {
+    verify: () => Promise.resolve(),
     generate: () =>
       Promise.resolve({ ok: true, image: { bytes: new Uint8Array([1, 2, 3]), mime: 'image/png' } }),
   };
@@ -292,6 +293,17 @@ describe('createCoreBridge', () => {
     expect(await bridge.getConflicts()).toEqual([]);
   });
 
+  it('vault sync-safety (33 §5.D): a still-syncing fresh folder is not ready; an initialized one is', async () => {
+    const host = makeHost();
+    const bridge = createCoreBridge(host.host);
+    // Fresh folder (no recovery.enc) + pending iCloud downloads → warn, don't offer Setup.
+    host.host.hasPendingDownloads = () => Promise.resolve(true);
+    expect(await bridge.vaultSyncReadiness()).toEqual({ ready: false, reason: 'icloud-pending' });
+    // Once initialized (recovery.enc present), it's ready regardless of pending downloads.
+    await bridge.householdSetup({ ownerName: 'Ben', pin: '1234' });
+    expect(await bridge.vaultSyncReadiness()).toEqual({ ready: true });
+  });
+
   it('sets up a fresh household and reflects the owner in status + people', async () => {
     const { bridge, ownerId, host } = await freshOwner();
     const status = await bridge.householdStatus();
@@ -306,6 +318,120 @@ describe('createCoreBridge', () => {
     expect(people[0]?.displayName).toBe('Ben');
     expect((await bridge.getActivePerson())?.id).toBe(ownerId);
     expect(host.device().activePersonId).toBe(ownerId);
+  });
+
+  it('household AI key: owner shares → member inherits; member cannot write the shared key (25)', async () => {
+    const { bridge, ownerId, host } = await freshOwner();
+    // Owner adds a device key and promotes it into the shared vault credentials.
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-owner-shared' });
+    expect(await bridge.aiKeyStatus({ provider: 'anthropic' })).toMatchObject({
+      hasDeviceOverride: true,
+      source: 'device',
+    });
+    await bridge.aiShareDeviceKey({ provider: 'anthropic' });
+
+    // On disk the shared key is ciphertext, never the raw key (decrypt-the-vault).
+    const bytes = await host.fs.read('config/ai-credentials.enc');
+    const raw = bytes && new TextDecoder().decode(bytes);
+    expect(raw).toContain('aes-256-gcm');
+    expect(raw).not.toContain('sk-owner-shared');
+
+    // Simulate the member's own device: no device key, but the shared vault key is present.
+    await bridge.secretClear({ id: ANTHROPIC_API_KEY_ID });
+    const member = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: member.id, roleId: 'member', pin: null });
+    await bridge.sessionSetActive({ personId: member.id });
+
+    // The member inherits the shared key with zero setup (the headline guarantee).
+    expect(await bridge.aiKeyStatus({ provider: 'anthropic' })).toEqual({
+      hasSharedKey: true,
+      hasDeviceOverride: false,
+      resolvedReady: true,
+      source: 'shared',
+    });
+
+    // The member cannot write or clear the shared household key (owner-gated in the bridge).
+    await expect(
+      bridge.aiSetSharedKey({ provider: 'anthropic', value: 'sk-evil' }),
+    ).rejects.toThrow('Not permitted');
+    await expect(bridge.aiClearSharedKey({ provider: 'anthropic' })).rejects.toThrow(
+      'Not permitted',
+    );
+
+    // The owner can un-share; the file is deleted (no orphan ciphertext).
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    await bridge.aiClearSharedKey({ provider: 'anthropic' });
+    expect(await host.fs.read('config/ai-credentials.enc')).toBeNull();
+  });
+
+  it('settings trust boundary (26): a member cannot write vault/admin-only settings; the owner can', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    // Owner may write a vault setting + an admin-only one.
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    await bridge.setSetting({ key: 'dreams.imageModel', value: 'gpt-image-2', scope: 'device' });
+
+    // A member is rejected for ANY vault-scoped write and any admin-only write…
+    const member = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: member.id, roleId: 'member', pin: null });
+    await bridge.sessionSetActive({ personId: member.id });
+    await expect(
+      bridge.setSetting({ key: 'ai.enabled', value: false, scope: 'vault' }),
+    ).rejects.toThrow('Not permitted');
+    await expect(
+      bridge.setSetting({ key: 'dreams.imageModel', value: 'gpt-image-1', scope: 'device' }),
+    ).rejects.toThrow('Not permitted');
+    await expect(bridge.resetSetting({ key: 'ai.enabled', scope: 'vault' })).rejects.toThrow(
+      'Not permitted',
+    );
+    // …but a cosmetic, device-scoped write stays open to the member.
+    await bridge.setSetting({ key: 'appearance.theme', value: 'dark', scope: 'device' });
+    // The owner's vault setting is untouched by the rejected member writes.
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    expect((await bridge.getSettings()).vault['ai.enabled']).toBe(true);
+  });
+
+  it('device registry (28): setup registers this device; a member cannot list/rename (owner-only)', async () => {
+    const { bridge, host } = await freshOwner();
+    // Setup registered this device into the vault; the owner can list it + sees "this device".
+    const devices = await bridge.devicesList();
+    expect(devices).toHaveLength(1);
+    expect(devices[0]?.isThisDevice).toBe(true);
+    const myId = devices[0]!.deviceId;
+    expect(host.device().deviceId).toBe(myId); // the key-free anchor is cached device-local
+
+    // Owner renames it.
+    await bridge.devicesRename({ deviceId: myId, label: 'Studio Mac' });
+    expect((await bridge.devicesList())[0]?.label).toBe('Studio Mac');
+
+    // A member is denied: list returns empty, rename rejects (the bridge is the boundary).
+    const member = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: member.id, roleId: 'member', pin: null });
+    await bridge.sessionSetActive({ personId: member.id });
+    expect(await bridge.devicesList()).toEqual([]);
+    await expect(bridge.devicesRename({ deviceId: myId, label: 'hax' })).rejects.toThrow(
+      'Not permitted',
+    );
+  });
+
+  it('key rotation (28): owner rotates → new phrase; an old-key device is signed out (§5.5)', async () => {
+    const { bridge, host } = await freshOwner();
+    const oldKey = await host.host.secrets.get(MASTER_KEY_ID);
+    expect(oldKey).not.toBeNull();
+
+    const result = await bridge.keysRotate({});
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.recoveryPhrase.length).toBeGreaterThan(0);
+      expect(result.reencryptedFileCount).toBeGreaterThan(0);
+    }
+    // The owner keeps working on the new key.
+    expect((await bridge.householdStatus()).hasMasterKey).toBe(true);
+
+    // Simulate a device that still holds the OLD key → re-key detection signs it out + clears the stale key.
+    await host.host.secrets.set(MASTER_KEY_ID, oldKey!);
+    const status = await bridge.householdStatus();
+    expect(status.hasMasterKey).toBe(false);
+    expect(await host.host.secrets.get(MASTER_KEY_ID)).toBeNull();
   });
 
   it('unlinkVault detaches the device — clears the master key + every vault pointer', async () => {

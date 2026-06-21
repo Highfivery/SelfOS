@@ -1,8 +1,17 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { HouseholdGate } from './HouseholdGate';
 import { clearMockBridge, installMockBridge } from '../test-utils/bridge';
 import { useSessionStore } from '../stores/sessionStore';
+
+const FRESH = {
+  vaultInitialized: false,
+  hasMasterKey: false,
+  hasOwner: false,
+  activePersonId: null,
+  pendingJoinPersonId: null,
+};
 
 afterEach(() => {
   clearMockBridge();
@@ -23,6 +32,20 @@ describe('HouseholdGate', () => {
         }),
     });
     render(<HouseholdGate />);
+    expect(await screen.findByText('Create your profile')).toBeInTheDocument();
+  });
+
+  it('warns instead of Setup when a fresh folder is still syncing from iCloud (33 §5.D)', async () => {
+    installMockBridge({
+      householdStatus: () => Promise.resolve(FRESH),
+      vaultSyncReadiness: () => Promise.resolve({ ready: false, reason: 'icloud-pending' }),
+    });
+    render(<HouseholdGate />);
+    expect(await screen.findByText(/still syncing from iCloud/i)).toBeInTheDocument();
+    expect(screen.queryByText('Create your profile')).not.toBeInTheDocument();
+
+    // "Set up anyway" is the explicit escape hatch → the Setup wizard.
+    await userEvent.click(screen.getByRole('button', { name: /set up anyway/i }));
     expect(await screen.findByText('Create your profile')).toBeInTheDocument();
   });
 

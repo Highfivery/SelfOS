@@ -8,6 +8,9 @@ import {
   type ChatTurnResult,
   type ClaudeTestResult,
   type ConversationMeta,
+  type KeyRotateResult,
+  type RotationStatus,
+  type VaultSyncReadiness,
   type DreamApproveResult,
   type DreamImageResult,
   type DreamNarrativeResult,
@@ -25,6 +28,7 @@ import {
   type UsageSummary,
 } from './channels';
 import {
+  AiProviderSchema,
   AnswerSchema,
   AnswerTypeSchema,
   BudgetSchema,
@@ -38,7 +42,9 @@ import {
   SessionStatusSchema,
   SettingsFileSchema,
   conversationStatus,
+  type AiKeyStatus,
   type AlignmentResult,
+  type DeviceView,
   type Assignment,
   type CompatibilityGroup,
   type CompatibilityMember,
@@ -90,6 +96,7 @@ import {
 } from './schemas';
 import { OWNER_ROLE_ID, roleAllows, type CapabilityKey } from './capabilities';
 import { runConnectionTest } from './claudeProxy';
+import { runOpenAiConnectionTest } from './openaiProxy';
 import {
   deployRelay,
   teardownRelay,
@@ -107,29 +114,45 @@ import {
 import type { ClaudeClient, FileSystem, ImageClient, SecretStore } from '@selfos/core/host';
 import { uuid } from '@selfos/core/id';
 import {
+  aiKeyStatus as computeAiKeyStatus,
+  clearSharedKey,
+  resolveAiKey,
+  resolveOpenAiKey,
+  writeSharedKey,
+} from '@selfos/core/ai';
+import { settingWriteNeedsAdmin } from './settingsPolicy';
+import {
   createMasterKey,
   isVaultInitialized,
   loadMasterKey,
   MASTER_KEY_ID,
+  readRotationJournal,
   restoreFromRecoveryPhrase,
+  resumeRotation,
+  rotateMasterKey,
+  RotationError,
   storeMasterKey,
   VAULT_ALREADY_INITIALIZED,
 } from '@selfos/core/crypto';
 import {
   cancelInvite,
   createInvite,
+  defaultDeviceLabel,
   deletePerson,
   deleteRelationship,
   ensureMemberAccounts,
   getAccessConfig,
   getAccessView,
   getPerson,
+  listDevices,
   listInvitesForPerson,
   listPeople,
   listRelatedPeople,
   listRelationships,
   redeemInvite,
+  registerThisDevice,
   removeAccount,
+  renameDevice,
   savePerson,
   saveRole,
   setAccount,
@@ -335,6 +358,8 @@ export interface BridgeHost {
   selectVaultFolder(): Promise<string | null>;
   useVault(path: string): Promise<BootState>;
   getConflicts(): Promise<string[]>;
+  /** Whether the active vault folder still has not-yet-downloaded iCloud items (33 §5.D). Best-effort. */
+  hasPendingDownloads?(): Promise<boolean>;
   revealVault(): Promise<void>;
   /**
    * Save image bytes to a file the user chooses OUTSIDE the vault (13-dream-images §3.5) — a native save
@@ -386,6 +411,13 @@ const SetSettingSchema = z.object({
 const ResetSettingSchema = z.object({ key: z.string().min(1), scope: ScopeSchema });
 const SecretSetSchema = z.object({ id: z.string().min(1), value: z.string() });
 const SecretIdSchema = z.object({ id: z.string().min(1) });
+const AiProviderInputSchema = z.object({ provider: AiProviderSchema.default('anthropic') });
+const AiSetSharedKeySchema = z.object({ provider: AiProviderSchema, value: z.string().min(1) });
+const DevicesRenameSchema = z.object({
+  deviceId: z.string().min(1),
+  label: z.string().min(1).max(80),
+});
+const KeysRotateSchema = z.object({ revokeDeviceIds: z.array(z.string()).default([]) });
 const HouseholdSetupSchema = z.object({
   ownerName: z.string().min(1),
   pin: z.string().min(MIN_OWNER_PIN_LENGTH),
@@ -625,6 +657,27 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
   const activePersonIsOwner = async (fs: FileSystem, key: Uint8Array): Promise<boolean> =>
     (await activePersonRole(fs, key))?.id === OWNER_ROLE_ID;
 
+  // The device registry (32-device-management §5.2): register/heartbeat this device into the vault on each
+  // join path + once per app launch. The key-free `deviceId` is generated once + cached device-local.
+  let deviceHeartbeatDone = false;
+  const ensureDeviceRegistered = async (fs: FileSystem, key: Uint8Array): Promise<void> => {
+    const device = await host.readDeviceState();
+    let deviceId = device.deviceId;
+    let deviceLabel = device.deviceLabel;
+    if (!deviceId) {
+      deviceId = uuid();
+      deviceLabel = defaultDeviceLabel(host.platform);
+      await host.updateDeviceState({ deviceId, deviceLabel });
+    }
+    await registerThisDevice(fs, key, {
+      deviceId,
+      label: deviceLabel ?? defaultDeviceLabel(host.platform),
+      platform: host.platform,
+      now: new Date(),
+      activePersonId: device.activePersonId ?? null,
+    });
+  };
+
   /**
    * Best-effort revoke of the relay links for the sends matching `predicate`, before a deletion purges
    * them (§3.9). No-op if no relay is configured; a relay that's unreachable doesn't block the delete —
@@ -657,7 +710,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       fs: ctx.fs,
       key: ctx.key,
       client: host.claude,
-      apiKey: await host.secrets.get(ANTHROPIC_API_KEY_ID),
+      apiKey: (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null,
       model: await host.activeModel(),
       personId,
       now: new Date(),
@@ -715,7 +768,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     personId: string,
   ): Promise<IntakeState> => {
     const session = await ensureIntakeSession(fs, key, personId, new Date());
-    const apiKey = await host.secrets.get(ANTHROPIC_API_KEY_ID);
+    const apiKey = (await resolveAiKey(host.secrets, fs, key)).key ?? null;
     const aiEnabled = (await readVaultSettingsValues(fs))['ai.enabled'] === true;
     const prefs = await getGuidancePrefs(fs, key, personId);
     return {
@@ -749,6 +802,16 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     selectVaultFolder: () => host.selectVaultFolder(),
     useVault: (path) => host.useVault(path),
     getConflicts: () => host.getConflicts(),
+    vaultSyncReadiness: async (): Promise<VaultSyncReadiness> => {
+      // Sync-safety (33 §5.D): if the chosen folder has NO recovery.enc but still has pending iCloud
+      // downloads, "absent marker" may just mean "not downloaded yet" — warn instead of routing to Setup.
+      const ctx = await host.vaultPath();
+      if (!ctx) return { ready: true };
+      const fs = host.fileSystem(ctx);
+      if (await isVaultInitialized(fs)) return { ready: true }; // initialized → Unlock, never Setup
+      const pending = host.hasPendingDownloads ? await host.hasPendingDownloads() : false;
+      return pending ? { ready: false, reason: 'icloud-pending' } : { ready: true };
+    },
     revealVault: () => host.revealVault(),
     onVaultChanged: (listener) => host.onVaultChanged(listener),
     onChatChunk: (listener) => host.onChatChunk(listener),
@@ -767,6 +830,14 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     },
     setSetting: async (input): Promise<void> => {
       const { key, value, scope } = SetSettingSchema.parse(input);
+      // Trust boundary (26): a vault-scoped (household-wide) or admin-only setting write requires
+      // `settings.manage` — enforced here, not just hidden in the UI.
+      if (settingWriteNeedsAdmin(key, scope)) {
+        const ctx = await host.vaultAndKey();
+        if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'settings.manage'))) {
+          throw new Error('Not permitted');
+        }
+      }
       if (scope === 'device') {
         await host.writeDeviceSettings({ ...(await host.readDeviceSettings()), [key]: value });
         return;
@@ -778,6 +849,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     },
     resetSetting: async (input): Promise<void> => {
       const { key, scope } = ResetSettingSchema.parse(input);
+      if (settingWriteNeedsAdmin(key, scope)) {
+        const ctx = await host.vaultAndKey();
+        if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'settings.manage'))) {
+          throw new Error('Not permitted');
+        }
+      }
       if (scope === 'device') {
         const values = { ...(await host.readDeviceSettings()) };
         delete values[key];
@@ -804,8 +881,147 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       await host.secrets.clear(SecretIdSchema.parse(input).id);
     },
     claudeTest: async (): Promise<ClaudeTestResult> => {
-      const apiKey = await host.secrets.get(ANTHROPIC_API_KEY_ID);
+      // Test the *resolved* key (device override → vault-shared → device-only when no vault), 25 §6.3.
+      const ctx = await host.vaultAndKey();
+      const apiKey = ctx
+        ? ((await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null)
+        : await host.secrets.get(ANTHROPIC_API_KEY_ID);
       return runConnectionTest(host.claude, apiKey, await host.activeModel());
+    },
+    openaiTest: async (): Promise<ClaudeTestResult> => {
+      // Verify the *resolved* OpenAI key (override → shared, 25 §6.3) with a non-generative probe — never an
+      // image generation, so it bills nothing (33 §5.B). The key stays host-side.
+      const ctx = await host.vaultAndKey();
+      const apiKey = ctx
+        ? ((await resolveOpenAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null)
+        : await host.secrets.get(OPENAI_API_KEY_ID);
+      return runOpenAiConnectionTest(host.image, apiKey);
+    },
+
+    // --- Household AI credentials (25-household-ai-credentials) ---
+    // Readiness — booleans + an enum only, never a key value (§5.3). Ungated (a self-readiness read, like
+    // secretHas); the value never leaves the bridge.
+    aiKeyStatus: async (input): Promise<AiKeyStatus> => {
+      const { provider } = AiProviderInputSchema.parse(input ?? {});
+      const ctx = await host.vaultAndKey();
+      if (!ctx) {
+        const hasDeviceOverride = await host.secrets.has(
+          provider === 'anthropic' ? ANTHROPIC_API_KEY_ID : OPENAI_API_KEY_ID,
+        );
+        return {
+          hasSharedKey: false,
+          hasDeviceOverride,
+          resolvedReady: hasDeviceOverride,
+          source: hasDeviceOverride ? 'device' : 'none',
+        };
+      }
+      return computeAiKeyStatus(host.secrets, ctx.fs, ctx.key, provider);
+    },
+    // Owner-only writes to the shared household key (§6.2). Gated on `settings.manage` in the bridge — the
+    // trust boundary is here, not the UI (coordinates with spec 30).
+    aiSetSharedKey: async (input): Promise<void> => {
+      const { provider, value } = AiSetSharedKeySchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'settings.manage'))) {
+        throw new Error('Not permitted');
+      }
+      const sharedByPersonId = (await activePersonId()) ?? undefined;
+      await writeSharedKey(ctx.fs, ctx.key, {
+        provider,
+        value,
+        ...(sharedByPersonId ? { sharedByPersonId } : {}),
+        now: new Date(),
+      });
+    },
+    // Promote the owner's existing device key into the vault (the §5.4 migration) — reads the device secret
+    // host-side; no key value crosses IPC inbound. No-op if no device key exists.
+    aiShareDeviceKey: async (input): Promise<void> => {
+      const { provider } = AiProviderInputSchema.parse(input ?? {});
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'settings.manage'))) {
+        throw new Error('Not permitted');
+      }
+      const deviceKey = await host.secrets.get(
+        provider === 'anthropic' ? ANTHROPIC_API_KEY_ID : OPENAI_API_KEY_ID,
+      );
+      if (!deviceKey) return;
+      const sharedByPersonId = (await activePersonId()) ?? undefined;
+      await writeSharedKey(ctx.fs, ctx.key, {
+        provider,
+        value: deviceKey,
+        ...(sharedByPersonId ? { sharedByPersonId } : {}),
+        now: new Date(),
+      });
+    },
+    aiClearSharedKey: async (input): Promise<void> => {
+      const { provider } = AiProviderInputSchema.parse(input ?? {});
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'settings.manage'))) {
+        throw new Error('Not permitted');
+      }
+      await clearSharedKey(ctx.fs, ctx.key, { provider, now: new Date() });
+    },
+
+    // --- Devices (32-device-management) — owner-only, enforced in the bridge ---
+    devicesList: async (): Promise<DeviceView[]> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'devices.manage'))) return [];
+      const device = await host.readDeviceState();
+      const [records, people] = await Promise.all([
+        listDevices(ctx.fs, ctx.key),
+        listPeople(ctx.fs, ctx.key),
+      ]);
+      const nameOf = (id?: string | null): string | null =>
+        id ? (people.find((p) => p.id === id)?.displayName ?? null) : null;
+      return records.map((r) => ({
+        deviceId: r.deviceId,
+        label: r.label,
+        platform: r.platform,
+        createdAt: r.createdAt,
+        lastSeenAt: r.lastSeenAt,
+        isThisDevice: r.deviceId === device.deviceId,
+        lastActivePersonName: nameOf(r.lastActivePersonId),
+      }));
+    },
+    devicesRename: async (input): Promise<void> => {
+      const { deviceId, label } = DevicesRenameSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'devices.manage'))) {
+        throw new Error('Not permitted');
+      }
+      await renameDevice(ctx.fs, ctx.key, deviceId, label);
+      const device = await host.readDeviceState();
+      if (device.deviceId === deviceId) await host.updateDeviceState({ deviceLabel: label });
+    },
+    // Whole-vault key rotation (32 §5.3/§6.4) — owner-only, sync-aware pre-flight, returns the NEW phrase once.
+    keysRotate: async (input): Promise<KeyRotateResult> => {
+      const { revokeDeviceIds } = KeysRotateSchema.parse(input ?? {});
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'devices.manage'))) {
+        return { ok: false, code: 'NOT_PERMITTED' };
+      }
+      // Pre-flight: refuse on unresolved sync conflicts (re-keying a conflicted vault could orphan a copy).
+      if ((await host.getConflicts()).length > 0)
+        return { ok: false, code: 'SYNC_CONFLICT_UNRESOLVED' };
+      const thisDeviceId = (await host.readDeviceState()).deviceId;
+      if (!thisDeviceId) return { ok: false, code: 'ERROR' };
+      try {
+        const result = await rotateMasterKey(ctx.fs, host.secrets, {
+          revokeDeviceIds,
+          thisDeviceId,
+          now: new Date(),
+        });
+        return { ok: true, ...result };
+      } catch (error) {
+        if (error instanceof RotationError) return { ok: false, code: error.code };
+        return { ok: false, code: 'ERROR' };
+      }
+    },
+    keysRotateStatus: async (): Promise<RotationStatus> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'devices.manage'))) return null;
+      const journal = await readRotationJournal(ctx.fs);
+      return journal ? { phase: journal.phase, total: journal.files.length } : null;
     },
 
     // --- Household identity (10-multi-device-vault) ---
@@ -834,8 +1050,43 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           pendingJoinPersonId,
         };
       }
-      const access = await getAccessConfig(fs, key);
+      // (32 §5.3) Resume a rotation this device may have crashed mid-flight, BEFORE reading anything
+      // key-dependent. A 'committing' resume promotes the new master key — so reload it afterward.
+      if (device.deviceId) {
+        try {
+          await resumeRotation(fs, host.secrets, device.deviceId);
+        } catch {
+          /* resume is best-effort; a stuck journal surfaces via keys:rotateStatus */
+        }
+      }
+      const liveKey = (await loadMasterKey(host.secrets)) ?? key;
+
+      // (32 §5.5) Re-key detection: if this device's key can't decrypt the access config but the vault IS
+      // initialized, the vault was re-keyed elsewhere (this device was signed out). Clear the stale key and
+      // route to Unlock (a graceful "rejoin", not a corruption error).
+      let access;
+      try {
+        access = await getAccessConfig(fs, liveKey);
+      } catch {
+        await host.secrets.clear(MASTER_KEY_ID);
+        return {
+          vaultInitialized,
+          hasMasterKey: false,
+          hasOwner: false,
+          activePersonId: null,
+          pendingJoinPersonId,
+        };
+      }
       const hasOwner = access.accounts.some((account) => account.roleId === OWNER_ROLE_ID);
+      // Heartbeat this device into the registry once per app launch (32 §6.1) — non-fatal if it fails.
+      if (!deviceHeartbeatDone && vaultInitialized && hasOwner) {
+        deviceHeartbeatDone = true;
+        try {
+          await ensureDeviceRegistered(fs, liveKey);
+        } catch {
+          /* registry heartbeat is best-effort; never block boot */
+        }
+      }
       return {
         vaultInitialized,
         hasMasterKey: true,
@@ -878,6 +1129,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       await savePerson(fs, key, owner);
       await setAccount(fs, key, { personId: owner.id, roleId: OWNER_ROLE_ID, pin });
       await host.updateDeviceState({ activePersonId: owner.id });
+      await ensureDeviceRegistered(fs, key);
       return { recoveryPhrase, ownerId: owner.id };
     },
     unlockWithRecoveryPhrase: async (input): Promise<{ ok: boolean }> => {
@@ -887,6 +1139,10 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const vaultDir = await host.vaultPath();
       if (!vaultDir) return { ok: false };
       const ok = await restoreFromRecoveryPhrase(host.secrets, host.fileSystem(vaultDir), phrase);
+      if (ok) {
+        const ctx = await host.vaultAndKey();
+        if (ctx) await ensureDeviceRegistered(ctx.fs, ctx.key);
+      }
       return { ok };
     },
     unlinkVault: async (): Promise<BootState> => {
@@ -1051,6 +1307,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!account || account.roleId === OWNER_ROLE_ID) return { ok: false };
       await setAccount(ctx.fs, ctx.key, { personId, roleId: account.roleId, pin });
       await host.updateDeviceState({ activePersonId: personId, pendingJoinPersonId: null });
+      await ensureDeviceRegistered(ctx.fs, ctx.key);
       return { ok: true };
     },
 
@@ -1193,7 +1450,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !personId) {
         return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
       }
-      const apiKey = await host.secrets.get(ANTHROPIC_API_KEY_ID);
+      const apiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
       return runChatTurn({
         fs: ctx.fs,
         key: ctx.key,
@@ -1242,7 +1499,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // The session-memory master toggle lives in vault settings (default ON); the service refuses when off.
       const memoryEnabled =
         (await readVaultSettingsValues(ctx.fs))['sessions.memoryEnabled'] !== false;
-      const apiKey = await host.secrets.get(ANTHROPIC_API_KEY_ID);
+      const apiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
       return endAndSummarize({
         fs: ctx.fs,
         key: ctx.key,
@@ -2653,7 +2910,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       }
       // The API key is read host-side and never crosses to the renderer; streamed deltas go to the
       // dedicated dream sink so they never mix with the Sessions chat stream.
-      const apiKey = await host.secrets.get(ANTHROPIC_API_KEY_ID);
+      const apiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
       return runAnalysisTurn({
         fs: ctx.fs,
         key: ctx.key,
@@ -2686,7 +2943,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) {
         return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
       }
-      const apiKey = await host.secrets.get(ANTHROPIC_API_KEY_ID);
+      const apiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
       return synthesizeAnalysis({
         fs: ctx.fs,
         key: ctx.key,
@@ -2759,7 +3016,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) {
         return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
       }
-      const apiKey = await host.secrets.get(ANTHROPIC_API_KEY_ID);
+      const apiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
       return generatePatternNarrative({
         fs: ctx.fs,
         key: ctx.key,
@@ -2855,8 +3112,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         key: ctx.key,
         claude: host.claude,
         image: host.image,
-        anthropicApiKey: await host.secrets.get(ANTHROPIC_API_KEY_ID),
-        openaiApiKey: await host.secrets.get(OPENAI_API_KEY_ID),
+        anthropicApiKey: (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null,
+        openaiApiKey: (await resolveOpenAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null,
         consent: settings['dreams.imageGenerationEnabled'] === true,
         claudeModel: await host.activeModel(),
         imageModel,
@@ -2962,7 +3219,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       }
       // The API key is read host-side and never crosses to the renderer; deltas go to the dedicated intake
       // sink so they never mix with the Sessions / Dreams streams.
-      const apiKey = await host.secrets.get(ANTHROPIC_API_KEY_ID);
+      const apiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
       return runIntakeTurn({
         fs: ctx.fs,
         key: ctx.key,
@@ -3020,7 +3277,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'intake.own'))) {
         return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
       }
-      const apiKey = await host.secrets.get(ANTHROPIC_API_KEY_ID);
+      const apiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
       return synthesizeIntake({
         fs: ctx.fs,
         key: ctx.key,

@@ -1,4 +1,4 @@
-# 27 — AI is a hard requirement (online required)
+# 31 — AI is a hard requirement (online required)
 
 > **Status:** Approved (policy) · _last updated 2026-06-21_ · on `feat/household-ai-credentials`
 >
@@ -109,4 +109,4 @@ is documentation; the doc-drift backstop (`sync-docs`) covers it.
   per the owner's decision _"AI is required by the app and requires online, period."_ No offline/degraded mode
   is built; the existing AI-required gating + role-aware setup prompts (incl. `25`'s) stand and are not
   relaxed; `00` §7 amended; the onboarding hard gate (`18` §3.1) is confirmed unchanged. Renamed
-  `27-onboarding-offline-resilience.md` → `27-ai-required.md`.
+  `31-ai-required.md` → `31-ai-required.md`.

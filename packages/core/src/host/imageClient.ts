@@ -28,7 +28,7 @@ export interface ImageClient {
   generate(options: ImageGenerateOptions): Promise<ImageGenerateOutcome>;
   /**
    * Verify the key works via a NON-generative auth probe (a models-list GET — never an image generation,
-   * so it bills nothing; 29-multi-device-housekeeping §5.B). Resolves on success; rejects on failure with
+   * so it bills nothing; 33-multi-device-housekeeping §5.B). Resolves on success; rejects on failure with
    * an error carrying `.status` (an HTTP status) so the test maps it to AUTH/RATE_LIMIT/API_ERROR, or no
    * `.status` for a network failure.
    */

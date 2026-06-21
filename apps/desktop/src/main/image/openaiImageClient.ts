@@ -31,7 +31,7 @@ function isContentPolicy(payload: unknown): boolean {
 export function openaiImageClient(): ImageClient {
   return {
     async verify(apiKey): Promise<void> {
-      // Non-generative auth probe — a models-list GET bills nothing (29 §5.B). Reject with `.status` on a
+      // Non-generative auth probe — a models-list GET bills nothing (33 §5.B). Reject with `.status` on a
       // failed response, or a status-free error on a network failure (mapped by openaiProxy).
       let response: Response;
       try {
@@ -115,7 +115,7 @@ const TINY_PNG_BASE64 =
 export function fakeImageClient(mode?: string): ImageClient {
   return {
     verify: (): Promise<void> => {
-      // `SELFOS_FAKE_IMAGE=authfail` forces an AUTH failure for the connection-test failure path (29 §10).
+      // `SELFOS_FAKE_IMAGE=authfail` forces an AUTH failure for the connection-test failure path (33 §10).
       if (mode === 'authfail')
         return Promise.reject(Object.assign(new Error('http'), { status: 401 }));
       return Promise.resolve();

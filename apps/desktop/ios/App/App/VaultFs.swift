@@ -369,7 +369,7 @@ public class VaultFsPlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDelegat
         disarm()
     }
 
-    // MARK: - Sync conflicts + pending downloads (29-multi-device-housekeeping §5.C/§5.D)
+    // MARK: - Sync conflicts + pending downloads (33-multi-device-housekeeping §5.C/§5.D)
 
     /// Vault-relative paths of files with UNRESOLVED iCloud conflict versions — the iCloud-native signal
     /// (`NSFileVersion.unresolvedConflictVersionsOfItem(at:)`), plus the shared "conflicted copy" name
@@ -403,7 +403,7 @@ public class VaultFsPlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDelegat
         call.resolve(["conflicts": conflicts])
     }
 
-    /// Whether the vault still has not-yet-downloaded iCloud items (29 §5.D) — a `.<name>.icloud` placeholder
+    /// Whether the vault still has not-yet-downloaded iCloud items (33 §5.D) — a `.<name>.icloud` placeholder
     /// anywhere means a cross-device read might not see the real `config/recovery.enc` yet. Best-effort.
     @objc func hasPendingDownloads(_ call: CAPPluginCall) {
         guard let vault = resolveVault(call) else { return }

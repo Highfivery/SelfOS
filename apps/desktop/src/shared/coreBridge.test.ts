@@ -293,7 +293,7 @@ describe('createCoreBridge', () => {
     expect(await bridge.getConflicts()).toEqual([]);
   });
 
-  it('vault sync-safety (29 §5.D): a still-syncing fresh folder is not ready; an initialized one is', async () => {
+  it('vault sync-safety (33 §5.D): a still-syncing fresh folder is not ready; an initialized one is', async () => {
     const host = makeHost();
     const bridge = createCoreBridge(host.host);
     // Fresh folder (no recovery.enc) + pending iCloud downloads → warn, don't offer Setup.

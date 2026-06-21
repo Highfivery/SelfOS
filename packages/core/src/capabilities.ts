@@ -40,7 +40,7 @@ export const CAPABILITIES = [
   // dashboard (own insights + relationships' shareable facts). Member default ON. The Memory surface no
   // longer borrows `questionnaires.viewResults` (which now only gates the questionnaire Results surface).
   'memory.own',
-  // Devices & key rotation (28-device-management §4.2) — list/rename/revoke devices + rotate the master
+  // Devices & key rotation (32-device-management §4.2) — list/rename/revoke devices + rotate the master
   // key. Owner-only (not in any non-owner default); the Owner has it via the full-access bypass.
   'devices.manage',
 ] as const;

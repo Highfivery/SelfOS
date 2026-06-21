@@ -360,7 +360,7 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
-- 2026-06-21 — **Build (spec 29 multi-device housekeeping — FULLY BUILT, slices A–D; on
+- 2026-06-21 — **Build (spec 33 multi-device housekeeping — FULLY BUILT, slices A–D; on
   `feat/household-ai-credentials`).** Four independent loose ends. **A** (docs) pruned spec 10's stale
   super-admin documentation so its body matches the 2026-06-14 Owner-is-full-access amendment (deleted the
   `SuperAdminFileSchema` block, the §6.4 `superadmin:*` subsection, the `config/superadmin.enc` table row +
@@ -382,7 +382,7 @@ A running log of durable decisions and feedback captured into the project config
   **Lesson: a non-generative auth probe (`GET /v1/models`) verifies an image key without billing an image;
   and a "still syncing" warning at the boot gate is a cheap UX layer over the real data-loss guard
   (`createMasterKey` refuses to overwrite an already-synced `recovery.enc`), not a substitute for it.**
-- 2026-06-21 — **Build (spec 28 device management & key rotation — FULLY BUILT, slices A–C; on
+- 2026-06-21 — **Build (spec 32 device management & key rotation — FULLY BUILT, slices A–C; on
   `feat/household-ai-credentials`).** Closes the biggest security gap: one master key on N devices with no way
   to see, revoke, or rotate it. **A** device registry (`config/devices/<id>.enc`, one file per device,
   registered on every join path + a per-launch heartbeat; key-free `deviceId` cached device-local for "this
@@ -428,10 +428,10 @@ A running log of durable decisions and feedback captured into the project config
   though the owner had set it up — and root-caused it: the **API key is a device-local secret** (00 §6.2,
   never synced) while `ai.enabled` is a **vault setting** (synced), so a joined member inherited `ai.enabled`
   but had **no key** → every AI surface (and the AI-hard-gated onboarding) locked them out. Created a 5-spec
-  group ([`25` household-ai-credentials](docs/specs/25-household-ai-credentials.md) · [`26` settings trust
-  boundary](docs/specs/26-settings-trust-boundary.md) · [`27` AI-required policy](docs/specs/27-ai-required.md)
-  · [`28` device management & key rotation](docs/specs/28-device-management-and-key-rotation.md) ·
-  [`29` housekeeping](docs/specs/29-multi-device-housekeeping.md); renumbered around a concurrent
+  group ([`25` household-ai-credentials](docs/specs/25-household-ai-credentials.md) · [`30` settings trust
+  boundary](docs/specs/30-settings-trust-boundary.md) · [`31` AI-required policy](docs/specs/31-ai-required.md)
+  · [`32` device management & key rotation](docs/specs/32-device-management-and-key-rotation.md) ·
+  [`33` housekeeping](docs/specs/33-multi-device-housekeeping.md); renumbered around a concurrent
   onboarding-redesign group at 21–24). **Built + committed on `feat/household-ai-credentials`:** **25**
   (owner shares one key, stored **encrypted under the master key** in `config/ai-credentials.enc` — the relay
   precedent — so members inherit it; device override wins; one `resolveAiKey` replaces every `secrets.get`
@@ -440,8 +440,8 @@ A running log of durable decisions and feedback captured into the project config
   bridge: vault-scoped or admin-only writes require `settings.manage`, via a shared `settingsPolicy.ts` source
   anchored by a drift test). Gate green: typecheck, lint, format, **449 core + 538 desktop** unit.
   **DURABLE POLICY (the owner, explicit, 2026-06-21): "AI is required by the app and requires online, period."**
-  There is **no offline / degraded / works-without-AI mode** — that reversed spec 27's original "onboarding
-  offline resilience" draft (repurposed → [`27-ai-required`](docs/specs/27-ai-required.md)). When AI is
+  There is **no offline / degraded / works-without-AI mode** — that reversed spec 31's original "onboarding
+  offline resilience" draft (repurposed → [`31-ai-required`](docs/specs/31-ai-required.md)). When AI is
   unavailable (no key / AI off / offline) surfaces show a **clear role-aware setup/connectivity prompt**, never
   a faked experience; the onboarding hard gate (18 §3.1, portrait required) **stays** and is never relaxed; the
   Owner is exempt from the gate so they can reach setup (no chicken-and-egg). **Remaining (drafted, not built):**

@@ -55,11 +55,11 @@ interface HostParts {
   /** Subscribe to external vault changes; a no-op in the web preview, the native watcher on iOS. */
   onVaultChanged(listener: () => void): () => void;
   /**
-   * Sync-conflict copies for the active vault (29-multi-device-housekeeping §5.C) — `[]` in the web preview
+   * Sync-conflict copies for the active vault (33-multi-device-housekeeping §5.C) — `[]` in the web preview
    * (no real sync), the native `VaultFs.findConflicts` on iOS. Receives the active vault id/bookmark.
    */
   getConflicts?(vaultId: string): Promise<string[]>;
-  /** Whether the vault folder still has not-yet-downloaded iCloud items (29 §5.D); the native check on iOS. */
+  /** Whether the vault folder still has not-yet-downloaded iCloud items (33 §5.D); the native check on iOS. */
   hasPendingDownloads?(vaultId: string): Promise<boolean>;
 }
 

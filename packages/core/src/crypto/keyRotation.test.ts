@@ -87,7 +87,7 @@ async function seedVault(): Promise<{
   return { fs, secrets, oldKey, oldPhrase, contentFiles };
 }
 
-describe('keyRotation — enumeration (28 §5.1)', () => {
+describe('keyRotation — enumeration (32 §5.1)', () => {
   it('discovers every content .enc but excludes recovery.enc, invites, and plaintext settings', async () => {
     const { fs, contentFiles } = await seedVault();
     const found = (await enumerateEncryptedFiles(fs)).sort();
@@ -98,7 +98,7 @@ describe('keyRotation — enumeration (28 §5.1)', () => {
   });
 });
 
-describe('keyRotation — full rotation (28 §5.3)', () => {
+describe('keyRotation — full rotation (32 §5.3)', () => {
   it('re-encrypts everything under a new key, rewraps recovery, drops invites + the revoked device', async () => {
     const { fs, secrets, oldKey, oldPhrase, contentFiles } = await seedVault();
     const result = await rotateMasterKey(fs, secrets, {
@@ -143,7 +143,7 @@ describe('keyRotation — full rotation (28 §5.3)', () => {
   });
 });
 
-describe('keyRotation — crash safety (28 §5.3, the most important tests)', () => {
+describe('keyRotation — crash safety (32 §5.3, the most important tests)', () => {
   it('Phase-1 crash → resume DISCARDS; the vault is unchanged (old key still works)', async () => {
     const { fs, secrets, oldKey, oldPhrase, contentFiles } = await seedVault();
     await expect(

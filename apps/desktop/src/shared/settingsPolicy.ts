@@ -1,5 +1,5 @@
 /**
- * The single source of truth for which settings are **admin-only** (26-settings-trust-boundary). Imported
+ * The single source of truth for which settings are **admin-only** (30-settings-trust-boundary). Imported
  * by BOTH the renderer registry (to hide the control from non-admins) AND the bridge (to reject the write),
  * so display and enforcement can never drift.
  *

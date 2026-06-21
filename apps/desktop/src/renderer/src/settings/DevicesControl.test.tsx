@@ -29,7 +29,7 @@ const devices: DeviceView[] = [
 
 afterEach(() => clearMockBridge());
 
-describe('DevicesControl (28 §3.1)', () => {
+describe('DevicesControl (32 §3.1)', () => {
   it('lists devices, marks this device, and disables revoking it', async () => {
     installMockBridge({ devicesList: () => Promise.resolve(devices) });
     render(<DevicesControl />);

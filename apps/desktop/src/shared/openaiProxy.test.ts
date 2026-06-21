@@ -14,7 +14,7 @@ const failImage = (status?: number): ImageClient => ({
   generate: () => Promise.reject(new Error('not used')),
 });
 
-describe('runOpenAiConnectionTest (29 §5.B)', () => {
+describe('runOpenAiConnectionTest (33 §5.B)', () => {
   it('NO_KEY when no key is resolved (no network call)', async () => {
     expect(await runOpenAiConnectionTest(okImage, null)).toEqual({
       ok: false,

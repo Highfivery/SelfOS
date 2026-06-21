@@ -1,4 +1,4 @@
-# 28 — Device management & key rotation (revocation by re-encryption)
+# 32 — Device management & key rotation (revocation by re-encryption)
 
 > **Status:** Built (slices A–C) · _last updated 2026-06-21_ · on `feat/household-ai-credentials`
 >
@@ -34,13 +34,13 @@ device-local-vs-synced boundary from [`00`](00-architecture.md) (esp. §4.1, §4
 typed IPC, §10 `Result<T, AppError>`). Re-key also re-wraps the **shared AI credentials**
 ([`25`](25-household-ai-credentials.md), `config/ai-credentials.enc` — _the AI key model itself is out of
 scope here_) and the relay config ([`08`](08-questionnaires.md) §5.4, `config/relay.enc`). Settings
-**enforcement** of any device policy is out of scope ([`26`](26-settings-trust-boundary.md)). Per-person /
+**enforcement** of any device policy is out of scope ([`30`](30-settings-trust-boundary.md)). Per-person /
 per-item encryption remains a permanent non-goal ([`10`](10-multi-device-vault.md) §2).
 
 > **Spec group:** part of the 2026-06 multi-device / AI-credentials group —
 > [`25` household AI credentials](25-household-ai-credentials.md) (the shared key this re-encrypts),
-> [`26` settings trust boundary](26-settings-trust-boundary.md), and
-> [`27` AI is required](27-ai-required.md). This spec is **28**. (Specs
+> [`30` settings trust boundary](30-settings-trust-boundary.md), and
+> [`31` AI is required](31-ai-required.md). This spec is **28**. (Specs
 > 21–24 are a separate, concurrent onboarding-content-redesign group.)
 
 ---
@@ -685,7 +685,7 @@ Resolve in this spec's dedicated refinement session — **do not assume**:
 1. **Surface placement** — a standalone `/devices` route vs a **Settings → Devices** section? (Recommend its
    own route, gated by `devices.manage`, given the gravity of revoke.)
 2. **Dependencies** — this spec re-encrypts the shared AI credentials from [`25`](25-household-ai-credentials.md)
-   and coordinates with the settings boundary in [`26`](26-settings-trust-boundary.md) (§5.1, §7 #12). It stays
+   and coordinates with the settings boundary in [`30`](30-settings-trust-boundary.md) (§5.1, §7 #12). It stays
    **decoupled**: it re-encrypts whatever master-key-wrapped AI material exists at build time, or no-ops if `25`
    hasn't landed / the AI key is device-local-only.
 3. **Revoke "this device" policy** — confirm the §3.2 decision (the rotating device is always the survivor;

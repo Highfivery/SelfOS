@@ -132,7 +132,7 @@ export function registerIpcHandlers(): void {
     },
     hasPendingDownloads: async () => {
       // Best-effort macOS iCloud check: a `.<name>.icloud` placeholder anywhere means the folder is still
-      // downloading (29 §5.D). Non-iCloud folders (Dropbox/Drive/local) simply have none.
+      // downloading (33 §5.D). Non-iCloud folders (Dropbox/Drive/local) simply have none.
       const vaultDir = await activeVaultPath();
       if (!vaultDir) return false;
       const { readdir } = await import('node:fs/promises');

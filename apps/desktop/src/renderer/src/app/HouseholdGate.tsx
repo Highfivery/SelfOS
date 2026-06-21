@@ -27,7 +27,7 @@ export function HouseholdGate(): JSX.Element {
   const loaded = useSessionStore((s) => s.loaded);
   const status = useSessionStore((s) => s.status);
   const load = useSessionStore((s) => s.load);
-  // Sync-safety (29 §5.D): before offering first-run Setup, check the chosen folder isn't still
+  // Sync-safety (33 §5.D): before offering first-run Setup, check the chosen folder isn't still
   // downloading from iCloud (a not-yet-synced `recovery.enc` would look like a fresh vault).
   const [readiness, setReadiness] = useState<VaultSyncReadiness | 'checking' | null>(null);
   const [setUpAnyway, setSetUpAnyway] = useState(false);
@@ -53,7 +53,7 @@ export function HouseholdGate(): JSX.Element {
   if (!status.hasMasterKey) {
     // Initialized vault, this device hasn't joined → Unlock.
     if (status.vaultInitialized) return <UnlockScreen />;
-    // Fresh-vault Setup — but warn first if the folder is still syncing from iCloud (29 §5.D).
+    // Fresh-vault Setup — but warn first if the folder is still syncing from iCloud (33 §5.D).
     if (!setUpAnyway) {
       if (readiness === null || readiness === 'checking') return <Splash />;
       if (!readiness.ready) {

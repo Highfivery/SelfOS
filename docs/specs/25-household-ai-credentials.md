@@ -54,7 +54,7 @@ This spec closes that gap with **one shared key, member-overridable**:
 5. A **consented, one-time migration** that promotes an existing owner's device key into the vault.
 6. **One shared, role-aware "AI not set up" component** replacing the scattered, mostly role-blind
    messages — which also fixes the onboarding dead-end's _messaging_ (the deeper onboarding-offline
-   work is spec 27).
+   work is spec 31).
 
 The **resolved key value still never crosses IPC to the renderer** — the `00` §6.2 boundary is
 preserved for the _value_; only its _storage location_ changes (and only for the explicitly-shared key).
@@ -82,13 +82,13 @@ preserved for the _value_; only its _storage location_ changes (and only for the
 **Non-goals (deferred / owned elsewhere)**
 
 - **General settings trust-boundary enforcement** (who may write which vault setting, enforced in the
-  bridge) → **spec 26**. This spec enforces only the _owner-only write to the shared key_, coordinating
+  bridge) → **spec 30**. This spec enforces only the _owner-only write to the shared key_, coordinating
   with 22's broader model.
 - **Onboarding offline form sections + deferred AI synthesis** (letting onboarding progress with no AI
-  at all) → **spec 27**. Here we only fix the _readiness + messaging_ so a member with the inherited key
+  at all) → **spec 31**. Here we only fix the _readiness + messaging_ so a member with the inherited key
   is no longer falsely gated.
 - **Device registry / per-device revocation / key rotation** (rotating the shared key, listing devices,
-  revoking one device's access) → **spec 28**.
+  revoking one device's access) → **spec 32**.
 - **Multiple shared keys / per-feature keys / multiple providers beyond Anthropic + OpenAI.** One shared
   Claude key + one shared OpenAI key.
 - **Real billing integration with Anthropic.** Budgets (06) remain an _estimate_; this spec doesn't add
@@ -133,7 +133,7 @@ writes a secret into a cloud-synced location, and it requires an explicit tap (�
 A non-owner with the household having a shared key sees, in Settings → AI:
 
 - A read-only line: **"AI is provided by your household."** (No key field, no enable toggle — `ai.enabled`
-  is a household setting the owner controls; whether a member may toggle it at all is **spec 26**.)
+  is a household setting the owner controls; whether a member may toggle it at all is **spec 30**.)
 - An optional **"Use my own key instead"** control that reveals a device-local key field (writes the
   member's own `anthropic.apiKey` secret — their **override**, §4.3).
 - When an override exists: a **"Clear override"** action that removes the device secret and falls back to
@@ -171,7 +171,7 @@ Each AI surface (Sessions, Home, Onboarding, Dreams, Questionnaires) renders thi
 not-ready branch. This is also what un-sticks the **onboarding** dead-end's messaging — once a member
 _inherits_ the shared key, `resolvedReady === true` and the gate clears; if there genuinely is no key
 yet, they get the helpful member-facing message instead of a blind "set up AI" (the deeper
-onboarding-can-proceed-offline work is **spec 27**).
+onboarding-can-proceed-offline work is **spec 31**).
 
 ### 3.7 Happy-path summary (the scenario this exists for)
 
@@ -374,7 +374,7 @@ a key value.**
 
 - **Gating:** **owner-only**, enforced **in the bridge** (not just hidden in the UI). Proposed capability
   gate: a settings-admin capability (e.g. `settings.manage`) or an explicit owner check — **coordinate
-  with spec 26**, which establishes the general settings-write trust boundary; this spec uses 26's gate
+  with spec 30**, which establishes the general settings-write trust boundary; this spec uses 30's gate
   for the shared key once 22 lands, and an owner check in the interim. A non-owner call is rejected
   (typed `AppError`), so a tampered renderer can't write the household key.
 - **`ai:shareDeviceKey({ provider })`** — read the device secret host-side, `writeSharedKey` into the
@@ -404,7 +404,7 @@ reaches the renderer and is never logged** (`00` §6.2 / §8).
 'shared'`. All AI surfaces work; onboarding proceeds. (The bug this spec fixes.)
 - **Member, no shared key, no override** → `resolvedReady: false`, `source: 'none'`. Surfaces render the
   member-facing `AiNotConfigured` ("AI is provided by your household — ask your owner, or add your own
-  key"). Onboarding's _messaging_ is helpful (the can-it-proceed-offline behavior is spec 27).
+  key"). Onboarding's _messaging_ is helpful (the can-it-proceed-offline behavior is spec 31).
 - **Member with an override + a shared key also present** → override **wins** (`source: 'device'`). The
   member's own account/key is used; clearing the override falls back to `'shared'`.
 - **Owner, single device, never shares** → `source: 'device'`, identical to today. No `ai-credentials.enc`
@@ -418,7 +418,7 @@ reaches the renderer and is never logged** (`00` §6.2 / §8).
   a calm "couldn't read household AI key" notice, never crash. The vault file is not auto-deleted.
 - **Sync conflict on `ai-credentials.enc`** (two owners/devices wrote it) → the standard `00` §4.3
   conflict detection applies; never auto-resolve. (In practice only the owner writes it; concurrent
-  writes are rare. Device registry / rotation that would make this common is **spec 28**.)
+  writes are rare. Device registry / rotation that would make this common is **spec 32**.)
 - **Offline / vault folder unmounted** → if the vault is unreachable, `readAiCredentials` can't run; a
   device **override** still resolves (it's device-local), so a member with their own key keeps working
   offline-from-vault. A member relying on the shared key needs the vault readable (same as any vault
@@ -561,8 +561,8 @@ fixtures, never network.
 To resolve in the build session (none silently assumed):
 
 - **Owner-write capability gate** — gate the shared-key write ops on `settings.manage`, an explicit
-  owner-id check, or whatever **spec 26** lands as the settings-write trust boundary? (Recommendation:
-  use 26's gate; an owner check in the interim.) **Coordinate with spec 26.**
+  owner-id check, or whatever **spec 30** lands as the settings-write trust boundary? (Recommendation:
+  use 30's gate; an owner check in the interim.) **Coordinate with spec 30.**
 - **Does sharing the OpenAI key live in Settings → Dreams or Settings → AI?** (Recommendation: Dreams,
   beside `OpenAiKeyControl`, since that's where OpenAI lives today.)
 - **Should the owner be able to share a key they _haven't_ added device-locally** (paste a fresh key
@@ -571,9 +571,9 @@ To resolve in the build session (none silently assumed):
 - **Does the member's "Use my own key" need any `ai.enabled` interaction**, or is `ai.enabled` strictly
   owner-controlled (i.e. a member with an override but the owner has AI off still can't use AI)?
   (Recommendation: `ai.enabled` is the household gate; an override doesn't bypass it — **but this overlaps
-  spec 26's** "who may toggle `ai.enabled`" question.)
+  spec 30's** "who may toggle `ai.enabled`" question.)
 - **`AiCredentials.sharedByPersonId` / `updatedAt`** — keep this informational metadata, or omit to keep
-  the file minimal? (Recommendation: keep; useful for a future device registry / audit in spec 28.)
+  the file minimal? (Recommendation: keep; useful for a future device registry / audit in spec 32.)
 - **Final copy** for the Share explainer, the member "provided by your household" line, and the three
   `AiNotConfigured` variants (settled in build + visual QA).
 

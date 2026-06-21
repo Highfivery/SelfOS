@@ -2,7 +2,7 @@ import { Banner, Button, Card, Heading, Inline, Stack, Text } from '../../design
 import { BootLayout } from './BootLayout';
 
 /**
- * The folder-still-syncing warning (29-multi-device-housekeeping §5.D). Shown before first-run Setup when
+ * The folder-still-syncing warning (33-multi-device-housekeeping §5.D). Shown before first-run Setup when
  * the chosen folder has no `config/recovery.enc` YET but still has not-yet-downloaded iCloud items — so the
  * "absent marker" might just mean "not finished downloading." Advisory, not a lock: "Set up anyway" is an
  * explicit escape hatch, and the `createMasterKey` non-overwrite guard remains the hard data-loss backstop.

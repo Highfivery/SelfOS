@@ -358,7 +358,7 @@ export interface BridgeHost {
   selectVaultFolder(): Promise<string | null>;
   useVault(path: string): Promise<BootState>;
   getConflicts(): Promise<string[]>;
-  /** Whether the active vault folder still has not-yet-downloaded iCloud items (29 §5.D). Best-effort. */
+  /** Whether the active vault folder still has not-yet-downloaded iCloud items (33 §5.D). Best-effort. */
   hasPendingDownloads?(): Promise<boolean>;
   revealVault(): Promise<void>;
   /**
@@ -657,7 +657,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
   const activePersonIsOwner = async (fs: FileSystem, key: Uint8Array): Promise<boolean> =>
     (await activePersonRole(fs, key))?.id === OWNER_ROLE_ID;
 
-  // The device registry (28-device-management §5.2): register/heartbeat this device into the vault on each
+  // The device registry (32-device-management §5.2): register/heartbeat this device into the vault on each
   // join path + once per app launch. The key-free `deviceId` is generated once + cached device-local.
   let deviceHeartbeatDone = false;
   const ensureDeviceRegistered = async (fs: FileSystem, key: Uint8Array): Promise<void> => {
@@ -803,7 +803,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     useVault: (path) => host.useVault(path),
     getConflicts: () => host.getConflicts(),
     vaultSyncReadiness: async (): Promise<VaultSyncReadiness> => {
-      // Sync-safety (29 §5.D): if the chosen folder has NO recovery.enc but still has pending iCloud
+      // Sync-safety (33 §5.D): if the chosen folder has NO recovery.enc but still has pending iCloud
       // downloads, "absent marker" may just mean "not downloaded yet" — warn instead of routing to Setup.
       const ctx = await host.vaultPath();
       if (!ctx) return { ready: true };
@@ -890,7 +890,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     },
     openaiTest: async (): Promise<ClaudeTestResult> => {
       // Verify the *resolved* OpenAI key (override → shared, 25 §6.3) with a non-generative probe — never an
-      // image generation, so it bills nothing (29 §5.B). The key stays host-side.
+      // image generation, so it bills nothing (33 §5.B). The key stays host-side.
       const ctx = await host.vaultAndKey();
       const apiKey = ctx
         ? ((await resolveOpenAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null)
@@ -918,7 +918,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       return computeAiKeyStatus(host.secrets, ctx.fs, ctx.key, provider);
     },
     // Owner-only writes to the shared household key (§6.2). Gated on `settings.manage` in the bridge — the
-    // trust boundary is here, not the UI (coordinates with spec 26).
+    // trust boundary is here, not the UI (coordinates with spec 30).
     aiSetSharedKey: async (input): Promise<void> => {
       const { provider, value } = AiSetSharedKeySchema.parse(input);
       const ctx = await host.vaultAndKey();
@@ -962,7 +962,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       await clearSharedKey(ctx.fs, ctx.key, { provider, now: new Date() });
     },
 
-    // --- Devices (28-device-management) — owner-only, enforced in the bridge ---
+    // --- Devices (32-device-management) — owner-only, enforced in the bridge ---
     devicesList: async (): Promise<DeviceView[]> => {
       const ctx = await host.vaultAndKey();
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'devices.manage'))) return [];
@@ -993,7 +993,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const device = await host.readDeviceState();
       if (device.deviceId === deviceId) await host.updateDeviceState({ deviceLabel: label });
     },
-    // Whole-vault key rotation (28 §5.3/§6.4) — owner-only, sync-aware pre-flight, returns the NEW phrase once.
+    // Whole-vault key rotation (32 §5.3/§6.4) — owner-only, sync-aware pre-flight, returns the NEW phrase once.
     keysRotate: async (input): Promise<KeyRotateResult> => {
       const { revokeDeviceIds } = KeysRotateSchema.parse(input ?? {});
       const ctx = await host.vaultAndKey();
@@ -1050,7 +1050,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           pendingJoinPersonId,
         };
       }
-      // (28 §5.3) Resume a rotation this device may have crashed mid-flight, BEFORE reading anything
+      // (32 §5.3) Resume a rotation this device may have crashed mid-flight, BEFORE reading anything
       // key-dependent. A 'committing' resume promotes the new master key — so reload it afterward.
       if (device.deviceId) {
         try {
@@ -1061,7 +1061,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       }
       const liveKey = (await loadMasterKey(host.secrets)) ?? key;
 
-      // (28 §5.5) Re-key detection: if this device's key can't decrypt the access config but the vault IS
+      // (32 §5.5) Re-key detection: if this device's key can't decrypt the access config but the vault IS
       // initialized, the vault was re-keyed elsewhere (this device was signed out). Clear the stale key and
       // route to Unlock (a graceful "rejoin", not a corruption error).
       let access;
@@ -1078,7 +1078,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         };
       }
       const hasOwner = access.accounts.some((account) => account.roleId === OWNER_ROLE_ID);
-      // Heartbeat this device into the registry once per app launch (28 §6.1) — non-fatal if it fails.
+      // Heartbeat this device into the registry once per app launch (32 §6.1) — non-fatal if it fails.
       if (!deviceHeartbeatDone && vaultInitialized && hasOwner) {
         deviceHeartbeatDone = true;
         try {

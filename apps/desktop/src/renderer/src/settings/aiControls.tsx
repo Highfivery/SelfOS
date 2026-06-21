@@ -292,7 +292,7 @@ export function TestConnectionControl(): JSX.Element {
   return <ConnectionTest test={() => window.selfos!.claudeTest()} />;
 }
 
-/** Verify the OpenAI (dream-image) key with a non-generative probe (29-multi-device-housekeeping §5.B). */
+/** Verify the OpenAI (dream-image) key with a non-generative probe (33-multi-device-housekeeping §5.B). */
 export function OpenAiTestConnectionControl(): JSX.Element {
   return <ConnectionTest test={() => window.selfos!.openaiTest()} />;
 }

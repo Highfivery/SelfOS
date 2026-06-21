@@ -2,7 +2,7 @@ import type { ImageClient } from '@selfos/core/host';
 import type { ClaudeErrorCode, ClaudeTestResult } from './channels';
 
 /**
- * The OpenAI connection-test proxy (29-multi-device-housekeeping §5.B) — the OpenAI sibling of
+ * The OpenAI connection-test proxy (33-multi-device-housekeeping §5.B) — the OpenAI sibling of
  * `claudeProxy.runConnectionTest`. Verifies the resolved OpenAI key with a NON-generative models-list probe
  * (`ImageClient.verify`) so a bad key surfaces at setup, not as a failed (billed) image. Same NO_KEY / AUTH
  * / RATE_LIMIT / NETWORK / API_ERROR taxonomy as Claude; messages name OpenAI. The key is passed per call

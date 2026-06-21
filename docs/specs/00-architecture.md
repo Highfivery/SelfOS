@@ -230,7 +230,7 @@ The intended behavior for conditions every feature must handle:
   [`02-app-shell.md`](02-app-shell.md)).
 - **Vault path missing/unmounted** (e.g. cloud folder offline) → clear recoverable error; offer to
   relocate/reselect; never lose data.
-- **Offline / no Claude key** → **AI is a hard requirement** ([`27-ai-required`](27-ai-required.md)):
+- **Offline / no Claude key** → **AI is a hard requirement** ([`31-ai-required`](31-ai-required.md)):
   there is no offline or degraded "works without AI" mode. With no key / AI disabled / no connection, AI
   surfaces show a clear, role-aware **setup/connectivity prompt** (never a faked experience). Purely local
   utilities (reading already-saved entries, appearance) still work, but the product's core value requires

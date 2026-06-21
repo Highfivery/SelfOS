@@ -254,7 +254,7 @@ export const MIN_OWNER_PIN_LENGTH = 4;
 export { ANTHROPIC_API_KEY_ID, OPENAI_API_KEY_ID } from '@selfos/core/schemas';
 export type { DeviceView } from '@selfos/core/schemas';
 
-/** The outcome of a key rotation (28 §6.4). The new recovery phrase is shown once; never logged. */
+/** The outcome of a key rotation (32 §6.4). The new recovery phrase is shown once; never logged. */
 export type KeyRotateResult =
   | {
       ok: true;
@@ -275,10 +275,10 @@ export type KeyRotateResult =
         | 'ERROR';
     };
 
-/** A resumable rotation found at boot (28 §6.5), or null when none is in progress. */
+/** A resumable rotation found at boot (32 §6.5), or null when none is in progress. */
 export type RotationStatus = { phase: 'staging' | 'committing'; total: number } | null;
 
-/** Whether the chosen vault folder is ready to set up, or still syncing from iCloud (29 §5.D). */
+/** Whether the chosen vault folder is ready to set up, or still syncing from iCloud (33 §5.D). */
 export type VaultSyncReadiness = { ready: boolean; reason?: 'icloud-pending' };
 
 export type ClaudeErrorCode = 'NO_KEY' | 'AUTH' | 'RATE_LIMIT' | 'NETWORK' | 'API_ERROR';
@@ -339,7 +339,7 @@ export interface SelfosBridge {
   unlinkVault(): Promise<BootState>;
   /** Absolute paths of any sync-conflict copies found in the active vault. */
   getConflicts(): Promise<string[]>;
-  /** Whether the active vault folder is ready to set up, or still downloading from iCloud (29 §5.D). */
+  /** Whether the active vault folder is ready to set up, or still downloading from iCloud (33 §5.D). */
   vaultSyncReadiness(): Promise<VaultSyncReadiness>;
   /** Open the active vault folder in the OS file manager. */
   revealVault(): Promise<void>;
@@ -373,7 +373,7 @@ export interface SelfosBridge {
   secretClear(input: { id: string }): Promise<void>;
   /** Test the Claude connection with the stored (resolved) key + selected model. */
   claudeTest(): Promise<ClaudeTestResult>;
-  /** Test the OpenAI (dream-image) key with a non-generative probe (29 §6.B). */
+  /** Test the OpenAI (dream-image) key with a non-generative probe (33 §6.B). */
   openaiTest(): Promise<ClaudeTestResult>;
   /** AI key readiness for a provider — booleans + an enum only, never a key value (25 §5.3). */
   aiKeyStatus(input?: { provider?: AiProvider }): Promise<AiKeyStatus>;
@@ -383,13 +383,13 @@ export interface SelfosBridge {
   aiShareDeviceKey(input?: { provider?: AiProvider }): Promise<void>;
   /** Owner-only: stop sharing a provider's key with the household. */
   aiClearSharedKey(input?: { provider?: AiProvider }): Promise<void>;
-  /** Owner-only: the household's joined devices (28-device-management §6.2). */
+  /** Owner-only: the household's joined devices (32-device-management §6.2). */
   devicesList(): Promise<DeviceView[]>;
   /** Owner-only: rename a device in the registry. */
   devicesRename(input: { deviceId: string; label: string }): Promise<void>;
-  /** Owner-only: re-encrypt the whole vault under a new key, revoking the given devices (28 §6.4). */
+  /** Owner-only: re-encrypt the whole vault under a new key, revoking the given devices (32 §6.4). */
   keysRotate(input?: { revokeDeviceIds?: string[] }): Promise<KeyRotateResult>;
-  /** Owner-only: a resumable rotation found at boot, or null (28 §6.5). */
+  /** Owner-only: a resumable rotation found at boot, or null (32 §6.5). */
   keysRotateStatus(): Promise<RotationStatus>;
   /** Whether the household is set up (master key + owner) and who is active. */
   householdStatus(): Promise<HouseholdStatus>;

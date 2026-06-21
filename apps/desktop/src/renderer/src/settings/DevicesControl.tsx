@@ -44,7 +44,7 @@ const ROTATE_ERROR: Record<string, string> = {
 };
 
 /**
- * The serious "Revoke & re-key" dialog (28 §3.1). Re-keying re-encrypts the whole vault, changes the
+ * The serious "Revoke & re-key" dialog (32 §3.1). Re-keying re-encrypts the whole vault, changes the
  * recovery phrase, and signs out every other device — so this dialog is deliberately consequential, not the
  * calm tone of the vault-unlink dialog. On success it shows the NEW recovery phrase once.
  */
@@ -167,7 +167,7 @@ function RevokeDeviceDialog({
   );
 }
 
-/** Owner-only Devices panel (28 §3.1) — list / rename / revoke the household's joined devices. */
+/** Owner-only Devices panel (32 §3.1) — list / rename / revoke the household's joined devices. */
 export function DevicesControl(): JSX.Element {
   const [devices, setDevices] = useState<DeviceView[]>([]);
   const [loaded, setLoaded] = useState(false);

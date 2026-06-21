@@ -106,7 +106,7 @@ against it.
 > setting requires the `settings.manage` capability, and an `adminOnly` setting is admin-write-only
 > regardless of scope; device-scoped non-`adminOnly` settings stay ungated. The set of admin-only
 > setting **keys** is a single shared source of truth that drives both the display-hiding here and the
-> server-side rejection. See [`26-settings-trust-boundary.md`](26-settings-trust-boundary.md) and
+> server-side rejection. See [`30-settings-trust-boundary.md`](30-settings-trust-boundary.md) and
 > [`00-architecture.md`](00-architecture.md) §6 ("the bridge is the trust boundary, not the UI").
 
 ### 4.2 Persistence
@@ -181,7 +181,7 @@ Typed channels (declared in `src/shared`, validated both sides):
 - `settings:set({ key, value, scope })` → persists; returns `Result`. **Capability-gated in main:** a
   `scope:'vault'` write or an `adminOnly` setting requires `settings.manage`; a denied write is
   rejected before any persistence. Device-scoped, non-`adminOnly` writes stay ungated.
-  See [`26-settings-trust-boundary.md`](26-settings-trust-boundary.md).
+  See [`30-settings-trust-boundary.md`](30-settings-trust-boundary.md).
 - `settings:reset({ key })` → same `settings.manage` gate as `settings:set`.
 - `secret:set({ id, value })` / `secret:has({ id })` / `secret:clear({ id })` → keychain via
   `safeStorage`; values never returned to the renderer in plaintext beyond use.

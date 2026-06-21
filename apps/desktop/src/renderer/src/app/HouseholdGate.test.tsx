@@ -35,7 +35,7 @@ describe('HouseholdGate', () => {
     expect(await screen.findByText('Create your profile')).toBeInTheDocument();
   });
 
-  it('warns instead of Setup when a fresh folder is still syncing from iCloud (29 §5.D)', async () => {
+  it('warns instead of Setup when a fresh folder is still syncing from iCloud (33 §5.D)', async () => {
     installMockBridge({
       householdStatus: () => Promise.resolve(FRESH),
       vaultSyncReadiness: () => Promise.resolve({ ready: false, reason: 'icloud-pending' }),

@@ -1,4 +1,4 @@
-# 26 — Settings trust boundary
+# 30 — Settings trust boundary
 
 > **Status:** Built · _last updated 2026-06-21_ · on `feat/household-ai-credentials`
 >
@@ -71,7 +71,7 @@ system) and complements the household-AI-credential and device-registry work it 
   relies on stay open to members, see §3.4). This spec does **not** introduce or change any
   credential.
 - **Device registry / revocation** (tracking which devices hold the key, revoking a lost device) —
-  owned by the **device-registry spec** ("spec 28"). The shared-device nuance is _noted_ here (§3.3)
+  owned by the **device-registry spec** ("spec 32"). The shared-device nuance is _noted_ here (§3.3)
   but its full handling is deferred there.
 - No change to the setting **definition** shape, the registry, persistence, validation, or migration
   — all per [`03-settings.md`](03-settings.md).
@@ -115,7 +115,7 @@ admin controls already only render for admins via `SettingsScreen`'s `adminOnly`
   affects what persona B sees on that device. This is accepted for v1 (it's cosmetic and local; the
   appearance is re-tunable by anyone, and it never leaves the device or touches the vault). Making
   device settings _per-persona_ (or attributing device writes to a logged-in device identity) is a
-  **device-registry** concern and is **deferred to that spec ("spec 28")**. This spec's rule is the
+  **device-registry** concern and is **deferred to that spec ("spec 32")**. This spec's rule is the
   clear, defensible default until then: device-scoped = ungated; vault-scoped + adminOnly = gated.
 
 ### 3.4 AI for members — inherit, don't toggle (interplay with the household-AI-credentials spec)

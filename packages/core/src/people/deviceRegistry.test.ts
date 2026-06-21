@@ -11,7 +11,7 @@ import {
 
 const key = generateMasterKey();
 
-describe('deviceRegistry (28 §5.2)', () => {
+describe('deviceRegistry (32 §5.2)', () => {
   it('registers two devices in distinct files (no clobber) and lists both', async () => {
     const fs = memFileSystem();
     await registerThisDevice(fs, key, {

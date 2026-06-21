@@ -102,7 +102,7 @@ describe('createCapacitorHost', () => {
     expect(await host.selectVaultFolder()).toBeNull();
   });
 
-  it('getConflicts surfaces the native VaultFs conflicts for the active vault (29 §5.C)', async () => {
+  it('getConflicts surfaces the native VaultFs conflicts for the active vault (33 §5.C)', async () => {
     storage.set(
       'selfos:A:deviceState',
       JSON.stringify({ schemaVersion: 1, vaultPath: null, vaultBookmark: 'bm' }),
@@ -121,7 +121,7 @@ describe('createCapacitorHost', () => {
     expect(await createCapacitorHost(fakePlugin()).getConflicts()).toEqual([]);
   });
 
-  it('hasPendingDownloads forwards to the native VaultFs check (29 §5.D)', async () => {
+  it('hasPendingDownloads forwards to the native VaultFs check (33 §5.D)', async () => {
     storage.set(
       'selfos:A:deviceState',
       JSON.stringify({ schemaVersion: 1, vaultPath: null, vaultBookmark: 'bm' }),

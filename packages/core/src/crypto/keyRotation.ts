@@ -15,7 +15,7 @@ import {
 import { loadMasterKey, storeMasterKey } from './masterKey';
 
 /**
- * Whole-vault key rotation (28-device-management §5.3) — the cryptographic revocation primitive. Generates
+ * Whole-vault key rotation (32-device-management §5.3) — the cryptographic revocation primitive. Generates
  * a NEW master key, re-encrypts every master-key-encrypted vault file under it, rewraps `recovery.enc` with
  * a NEW recovery phrase, deletes pending invites, and drops revoked device registry entries. Crash-safe via
  * a two-phase **stage → commit** flow journaled for resume: Phase 1 only writes to a staging area (originals

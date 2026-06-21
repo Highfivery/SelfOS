@@ -3,7 +3,7 @@ import { DeviceRecordSchema, type DeviceRecord } from '../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 
 /**
- * The household device registry (28-device-management §4/§5.2). Every device that joins (Setup,
+ * The household device registry (32-device-management §4/§5.2). Every device that joins (Setup,
  * recovery-phrase unlock, invite redeem) writes its own `config/devices/<deviceId>.enc` — one file per
  * device so two devices booting at once never clobber a shared registry. The owner can list/rename/revoke;
  * key rotation (28 Slice B) re-encrypts survivors and deletes revoked entries. Encrypted under the master

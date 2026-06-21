@@ -1,4 +1,4 @@
-# 29 — Multi-device housekeeping & polish
+# 33 — Multi-device housekeeping & polish
 
 > **Status:** Built (slices A–D) · _last updated 2026-06-21_ · on `feat/household-ai-credentials`
 >
@@ -25,9 +25,9 @@
 
 Part of the 2026-06 multi-device / AI-credentials spec group:
 [`25` household AI credentials](25-household-ai-credentials.md),
-[`26` settings trust boundary](26-settings-trust-boundary.md),
-[`27` AI is required](27-ai-required.md),
-[`28` device management & key rotation](28-device-management-and-key-rotation.md). (Specs 21–24 are a
+[`30` settings trust boundary](30-settings-trust-boundary.md),
+[`31` AI is required](31-ai-required.md),
+[`32` device management & key rotation](32-device-management-and-key-rotation.md). (Specs 21–24 are a
 separate, concurrent onboarding-content-redesign group — untouched here.) Builds on
 [`07-mobile-platform.md`](07-mobile-platform.md) (the iOS `VaultFs` host + `onVaultChanged`),
 [`10-multi-device-vault.md`](10-multi-device-vault.md) (vault identity, the `isVaultInitialized` marker,
@@ -98,7 +98,7 @@ Four small problems, each surfaced by the multi-device work, none big enough for
 - **No distributed lock / true conflict-free concurrent setup** (10 §2 non-goal). D shrinks the window and
   warns; it does not eliminate the two-fully-offline-devices race (the `createMasterKey` guard remains the
   hard backstop).
-- **No key-rotation / device registry** — that's [`28`](28-device-management-and-key-rotation.md).
+- **No key-rotation / device registry** — that's [`32`](32-device-management-and-key-rotation.md).
 - **B does not** add usage metering for the test call (it's a tiny free/cheap probe; see §6.2) and does
   **not** change which key is resolved — it tests the **resolved** key (§6.2, coordinating with
   [`25`](25-household-ai-credentials.md)).
@@ -236,7 +236,7 @@ Concretely:
   are **historical changelog/relocation notes about a code module name**, not live SA documentation —
   **no change needed** (they describe the factory extraction as it happened).
 - [`08`](08-questionnaires.md), [`14`](14-vault-relinking.md), [`18`](18-personal-onboarding.md),
-  [`26`](26-settings-trust-boundary.md), [`28`](28-device-management-and-key-rotation.md) — grep hits
+  [`30`](30-settings-trust-boundary.md), [`32`](32-device-management-and-key-rotation.md) — grep hits
   exist; the build session should **read each hit in context** and confirm it's either (a) a historical
   changelog note (leave) or (b) a live-sounding claim (prune). 28 §5.1 (≈343) explicitly handles a legacy
   `config/superadmin.enc` correctly already (treat as ordinary content). The deliverable is a short list of

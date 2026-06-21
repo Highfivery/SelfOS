@@ -63,7 +63,7 @@ export const DeviceStateSchema = z.object({
   /** Whether the desktop sidebar is collapsed to an icon rail (device-local UI preference). */
   sidebarCollapsed: z.boolean().optional(),
   /**
-   * This install's stable device id (28-device-management §4.2) — generated once, stored device-local so
+   * This install's stable device id (32-device-management §4.2) — generated once, stored device-local so
    * the Devices surface can mark "this device" key-free at boot. Additive-optional (no schemaVersion bump,
    * the `vaultBookmark` precedent). The synced `config/devices/<id>.enc` record is the source of truth.
    */
@@ -1086,7 +1086,7 @@ export const AiKeyStatusSchema = z.object({
 export type AiKeyStatus = z.infer<typeof AiKeyStatusSchema>;
 
 /**
- * A device's registry entry (28-device-management §4.2), stored encrypted under the master key at
+ * A device's registry entry (32-device-management §4.2), stored encrypted under the master key at
  * `config/devices/<deviceId>.enc` — one file per device so two devices booting at once never clobber a
  * shared registry. `platform` is the raw `BridgeHost.platform` string (macos/ios/web/…).
  */
@@ -1104,7 +1104,7 @@ export const DeviceRecordSchema = z.object({
 });
 export type DeviceRecord = z.infer<typeof DeviceRecordSchema>;
 
-/** The renderer-facing projection of a device (28 §4.2) — no raw personId; the name is resolved owner-side. */
+/** The renderer-facing projection of a device (32 §4.2) — no raw personId; the name is resolved owner-side. */
 export const DeviceViewSchema = z.object({
   deviceId: z.string(),
   label: z.string(),

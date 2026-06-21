@@ -115,7 +115,7 @@ describe('TestConnectionControl', () => {
     await waitFor(() => expect(screen.getByText('Key rejected.')).toBeInTheDocument());
   });
 
-  it('OpenAI test maps a failure message (29 §5.B)', async () => {
+  it('OpenAI test maps a failure message (33 §5.B)', async () => {
     installMockBridge({
       openaiTest: () =>
         Promise.resolve({ ok: false, code: 'AUTH', message: 'That OpenAI key was rejected.' }),

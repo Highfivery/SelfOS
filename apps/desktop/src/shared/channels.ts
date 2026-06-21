@@ -250,6 +250,7 @@ export const MIN_OWNER_PIN_LENGTH = 4;
 
 /** The Claude + OpenAI secret ids — single source in core/schemas (renderer-safe), re-exported here. */
 export { ANTHROPIC_API_KEY_ID, OPENAI_API_KEY_ID } from '@selfos/core/schemas';
+export type { DeviceView } from '@selfos/core/schemas';
 
 /** The outcome of a key rotation (28 §6.4). The new recovery phrase is shown once; never logged. */
 export type KeyRotateResult =

@@ -66,7 +66,7 @@ describe('SettingsScreen', () => {
     installMockBridge();
     const { rerender } = render(<SettingsScreen />);
     // Non-admin: the household-wide sections are absent entirely; only Appearance/Vault/About show.
-    for (const name of ['AI', 'Sessions', 'Questionnaires', 'Dreams', 'Relay']) {
+    for (const name of ['AI', 'Sessions', 'Questionnaires', 'Dreams', 'Relay', 'Devices']) {
       expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
     }
     expect(screen.getByRole('button', { name: 'Appearance' })).toBeInTheDocument();
@@ -75,7 +75,7 @@ describe('SettingsScreen', () => {
     // Admin: the sections appear; Relay carries the "Admin only" marker on its Cloudflare control.
     asAdmin();
     rerender(<SettingsScreen />);
-    for (const name of ['AI', 'Sessions', 'Questionnaires', 'Dreams', 'Relay']) {
+    for (const name of ['AI', 'Sessions', 'Questionnaires', 'Dreams', 'Relay', 'Devices']) {
       expect(screen.getByRole('button', { name })).toBeInTheDocument();
     }
     await userEvent.click(screen.getByRole('button', { name: 'Relay' }));

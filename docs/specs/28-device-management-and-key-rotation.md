@@ -1,6 +1,20 @@
 # 28 — Device management & key rotation (revocation by re-encryption)
 
-> **Status:** Draft · _last updated 2026-06-21_
+> **Status:** Built (slices A–C) · _last updated 2026-06-21_ · on `feat/household-ai-credentials`
+>
+> **Built 2026-06-21:** **A** device registry (`config/devices/<id>.enc`, registered on every join path +
+> a per-launch heartbeat; owner-gated `devices:list`/`:rename`; `devices.manage` capability). **B** the
+> crash-safe `rotateMasterKey` (two-phase stage→commit, journaled; the new key held in a device-local temp
+> secret, not the synced journal; idempotent resume; `enumerateEncryptedFiles` path-discovery; owner-gated
+> `keys:rotate`/`:rotateStatus` with a sync-conflict pre-flight; resume-at-boot + §5.5 re-key detection in
+> `householdStatus`). **C** the owner-only **Settings → Devices** section (list/rename/revoke + the serious
+> Revoke-&-re-key dialog + new-phrase panel). Tests: 5 registry + 8 rotation (enumeration, full-rotation
+> decrypt, Phase-1-discard/Phase-2-commit crash safety, corrupt-abort, guards) core; 2 bridge (registry
+> gating, rotation + re-key sign-out); 3 Devices RTL. Gate green: typecheck, lint, format, **462 core + 542
+> desktop** unit; visual QA of the Devices panel (desktop + 390px, no overflow). E2E (the cross-device
+> revoke→re-key→sign-out walk) needs a local display. Placement decision: **Settings → Devices** (owner
+> chose this over a standalone route). Open questions #5 (relay-link re-mint) + #4 (rotate-on-account-
+> removal) remain deferred per §11.
 >
 > SelfOS encrypts the **whole** vault with **one** master key, and roles are an app-layer-only construct
 > ([`10`](10-multi-device-vault.md) §2 — per-person crypto isolation is an explicit, permanent non-goal).

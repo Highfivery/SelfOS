@@ -3,6 +3,7 @@ import {
   ClipboardList,
   Database,
   Info,
+  Laptop,
   MessagesSquare,
   Moon,
   Palette,
@@ -10,6 +11,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { registerSection, registerSettings } from './registry';
+import { DevicesControl } from './DevicesControl';
 import { defineSetting } from './types';
 import {
   AboutDisclaimer,
@@ -112,6 +114,14 @@ export function registerBuiltinSettings(): void {
     description: 'Send questionnaires to people without SelfOS, via a private encrypted link.',
     icon: Send,
     order: 6,
+    adminOnly: true,
+  });
+  registerSection({
+    id: 'devices',
+    title: 'Devices',
+    description: 'The devices that have joined your household, and re-keying the vault.',
+    icon: Laptop,
+    order: 6.5,
     adminOnly: true,
   });
   registerSection({
@@ -385,6 +395,16 @@ export function registerBuiltinSettings(): void {
       schema: z.null(),
       default: null,
       control: { type: 'custom', render: RelaySettingsPanel },
+      adminOnly: true,
+      order: 1,
+    }),
+    defineSetting({
+      key: 'devices.list',
+      section: 'devices',
+      label: 'Your devices',
+      schema: z.null(),
+      default: null,
+      control: { type: 'custom', render: DevicesControl },
       adminOnly: true,
       order: 1,
     }),

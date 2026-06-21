@@ -12,6 +12,7 @@ export const ADMIN_ONLY_SETTING_KEYS: readonly string[] = [
   'dreams.imageModel',
   'dreams.imageApiKey',
   'relay.connection',
+  'devices.list',
 ];
 
 const adminOnlySet = new Set(ADMIN_ONLY_SETTING_KEYS);

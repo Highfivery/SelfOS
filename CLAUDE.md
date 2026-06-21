@@ -360,6 +360,31 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-21 — **Build (spec 28 device management & key rotation — FULLY BUILT, slices A–C; on
+  `feat/household-ai-credentials`).** Closes the biggest security gap: one master key on N devices with no way
+  to see, revoke, or rotate it. **A** device registry (`config/devices/<id>.enc`, one file per device,
+  registered on every join path + a per-launch heartbeat; key-free `deviceId` cached device-local for "this
+  device"; owner-gated `devices:list`/`:rename`; `devices.manage` capability). **B** the cryptographic
+  revocation core — `rotateMasterKey` re-encrypts the WHOLE vault under a fresh key + new recovery phrase,
+  deletes invites, drops revoked device entries; **crash-safe** via a two-phase stage→commit journaled for
+  resume (the new key sits in a **device-local temp secret**, never the synced journal, so a revoked device
+  can't read it mid-rotation; Phase-1 crash discards [vault stays old-key], Phase-2 crash resumes idempotently
+  to fully-new-key); `enumerateEncryptedFiles` is path-discovery over the content roots (not a per-feature
+  list); owner-gated `keys:rotate` (sync-conflict pre-flight) + `keys:rotateStatus`; **resume-at-boot + §5.5
+  re-key detection** in `householdStatus` (an old-key device whose key can't decrypt the access config is
+  signed out → Unlock, not a corruption error). **C** the owner-only **Settings → Devices** section (the
+  owner's placement choice over a standalone route) — list/rename/revoke + a deliberately-serious Revoke-&-
+  re-key dialog (5 consequences) + the new-recovery-phrase panel shown once. Honest threat model (§8):
+  prevents FUTURE access by a revoked device; can't retract the past; one shared key, so revoking one device
+  signs out ALL (no per-member isolation — permanent non-goal). Tests (real crypto over memFileSystem): 5
+  registry + 8 rotation (incl. the crash-safety + corrupt-abort, the spec's heart) + 2 bridge + 3 RTL. Gate
+  green: typecheck, lint, format, **462 core + 542 desktop** unit; visual QA of the Devices panel at desktop +
+  390px (fixed a narrow-card row-crush: rowMain `flex-basis: 200px` so the action buttons wrap below the device
+  name instead of squeezing it to a word-per-line). E2E (cross-device revoke→re-key→sign-out) needs a local
+  display. **Lesson: crash-safe whole-vault re-encryption = stage everything first (originals untouched →
+  Phase-1 crash is a no-op) then swap from a complete staged set under a `committing` journal (idempotent →
+  Phase-2 crash resumes); keep the new key in a DEVICE-LOCAL temp secret, never the synced journal, or a
+  revoked device syncing mid-rotation reads the very key meant to lock it out.**
 - 2026-06-21 — **Build + durable UX/permission decisions (on `feat/household-ai-credentials`).** Three
   owner-requested access/UX changes: **(1)** the **AI, Sessions, Questionnaires, Dreams + Relay settings
   sections are owner-only** — whole sections hidden from non-`settings.manage` users (added `adminOnly` to

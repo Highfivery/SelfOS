@@ -26,6 +26,21 @@ describe('intakeCatalog', () => {
     expect(getIntakeSection('intimacy')?.tier).toBe('invited');
   });
 
+  it('stays lean — the non-intimacy catalog cannot silently re-bloat (26 §10 anti-rebloat guard)', () => {
+    // The 2026-06-21 redesign cut the non-intimacy bank ~392 → 126. Guard the band so a future edit that
+    // re-adds dozens of overlapping questions fails the gate instead of slipping through (CLAUDE.md §7).
+    const count = (id: string): number => getIntakeSection(id)?.questions?.length ?? 0;
+    const nonIntimacy = INTAKE_CATALOG.filter((s) => s.id !== 'intimacy').reduce(
+      (n, s) => n + (s.questions?.length ?? 0),
+      0,
+    );
+    expect(nonIntimacy).toBeGreaterThan(90); // enough to be a useful picture
+    expect(nonIntimacy).toBeLessThanOrEqual(150); // …but not a 400-question wall
+    // The core gate stays short (it blocks first-run).
+    const coreGate = count('basics') + count('life-now') + count('values') + count('want');
+    expect(coreGate).toBeLessThanOrEqual(30);
+  });
+
   it('every form question maps to a real Person field key', () => {
     const valid = new Set<string>(PERSON_FIELD_KEYS);
     for (const section of INTAKE_CATALOG) {

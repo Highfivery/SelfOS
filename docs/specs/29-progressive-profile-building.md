@@ -468,6 +468,14 @@ the §11 model-shape + in-session-default calls) are resolved when this is built
 
 ## 13. Changelog
 
+- 2026-06-21 — **Follow-up: reconciled 4 stale onboarding E2E tests** (same branch). While verifying §29 I
+  found 4 onboarding E2E tests (`launch.spec.ts`) red on `main` — pre-existing drift from the specs 26/27
+  catalog redesign (NOT a §29 regression; proven by failing identically on the base commit). Fixed: the two
+  renamed section titles ("Family & upbringing"→"Family & roots", "Health & wellbeing"→"Health & body") in 3
+  tests, and rewrote the intimacy-conditionals test against the **current** intimacy block (spec 27 removed the
+  penis/vulva/breast anatomy questions and collapsed into-it/curious/limits into a `matrix`) — it now exercises
+  the live conditionals: the `hasPartner` follow-up ("How satisfied are you with your sex life?") and the
+  `dirtyTalk` follow-up. All 4 green; full E2E suite green.
 - 2026-06-21 — **Built** (`feat/progressive-profile`, off `main`, NOT merged). Progressive profile building /
   depth invitations — the sibling of §15 freshness. **Decisions asked first** (all confirmed): extend
   `kind: 'depth'`; in-session ask **ON** by default; **60d / ≥3 / cap 1**; skipped = standing decline until the

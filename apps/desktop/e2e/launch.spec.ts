@@ -4409,11 +4409,11 @@ test('onboarding: resumes mid-intake to the saved transcript (18 §3.1)', async 
     const w = await app.firstWindow();
     await w.getByRole('link', { name: /Onboarding/ }).click();
     // Open the in-progress section from the "Go deeper" grid → its go-deeper transcript auto-expands.
-    await w.getByRole('button', { name: /Family & upbringing/ }).click();
+    await w.getByRole('button', { name: /Family & roots/ }).click();
     await expect(w.getByText('My name is Sam.')).toBeVisible();
     await expect(w.getByText('Lovely to meet you, Sam.')).toBeVisible();
     // Reloading returns to the same section (device-local), not back to the core flow: reopening
-    // Onboarding lands directly on Family & upbringing (its transcript) without re-clicking the grid card.
+    // Onboarding lands directly on Family & roots (its transcript) without re-clicking the grid card.
     await w.reload();
     await w.getByRole('link', { name: /Onboarding/ }).click();
     await expect(w.getByText('My name is Sam.')).toBeVisible();
@@ -4478,7 +4478,7 @@ test('onboarding: a grouped form section shows every group + the go-deeper (noth
     // The "Go deeper" section navigator is ALSO present at the bottom of an opened section (not only on the
     // core steps), so the person can jump STRAIGHT to another section without going Back first (18 §3.1).
     await expect(w.getByRole('heading', { name: 'Go deeper' })).toBeVisible();
-    await w.getByRole('button', { name: /Health & wellbeing/ }).click();
+    await w.getByRole('button', { name: /Health & body/ }).click();
     await expect(w.getByText('How well do you sleep?')).toBeVisible();
     // And from Health, the navigator is still there to jump onward (e.g. back to Relationships).
     await expect(w.getByRole('heading', { name: 'Go deeper' })).toBeVisible();
@@ -4499,8 +4499,9 @@ test('onboarding: a grouped form section shows every group + the go-deeper (noth
 });
 
 // Guard: conditional intimacy questions must REVEAL right under the question that gates them (18 §14.5) — this
-// is the regression where penis/vulva specifics were buried in a far-down group and never seemed to appear.
-test('onboarding: intimacy conditionals reveal under their trigger (penis/vulva/dirty talk)', async () => {
+// is the regression where a gated follow-up was buried in a far-down group and never seemed to appear. (Spec
+// 27 reshaped the intimacy block, so this exercises the live conditionals: a partner follow-up + dirty talk.)
+test('onboarding: intimacy conditionals reveal under their trigger (partner / dirty talk)', async () => {
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
   await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
   {
@@ -4538,25 +4539,15 @@ test('onboarding: intimacy conditionals reveal under their trigger (penis/vulva/
     await w.getByRole('button', { name: /18 or older/ }).click();
     await expect(w.getByText('Who are you drawn to?')).toBeVisible();
 
-    // Penis length/girth are HIDDEN until "attracted to a penis" is Yes, then REVEAL.
-    await expect(w.getByText('Penis length you’re drawn to')).toHaveCount(0);
+    // The current-sex-life follow-ups are HIDDEN until "Do you have a sexual partner right now?" is Yes,
+    // then REVEAL right under it.
+    await expect(w.getByText('How satisfied are you with your sex life?')).toHaveCount(0);
     await w
-      .getByRole('radiogroup', { name: 'Are you attracted to partners with a penis?' })
+      .getByRole('radiogroup', { name: 'Do you have a sexual partner right now?' })
       .getByRole('radio', { name: 'Yes' })
       .click();
-    await expect(w.getByText('Penis length you’re drawn to')).toBeVisible();
-    await expect(w.getByText('Penis girth you like')).toBeVisible();
-
-    // Only vulva-relevant specifics are gated on the vulva question — breast preference is a general body
-    // preference and stays visible regardless (it must NOT be tied to "attracted to a vulva").
-    await expect(w.getByText('Breast size you’re drawn to on a partner')).toBeVisible();
-    await expect(w.getByText('Labia you’re drawn to on a partner')).toHaveCount(0);
-    await w
-      .getByRole('radiogroup', { name: 'Are you attracted to partners with a vulva?' })
-      .getByRole('radio', { name: 'Yes' })
-      .click();
-    await expect(w.getByText('Labia you’re drawn to on a partner')).toBeVisible();
-    await expect(w.getByText('Anything you love about a partner’s clit?')).toBeVisible();
+    await expect(w.getByText('How satisfied are you with your sex life?')).toBeVisible();
+    await expect(w.getByText('How often are you intimate now?')).toBeVisible();
 
     // Dirty-talk follow-ups hide when "Not for me", show otherwise.
     await w
@@ -4645,8 +4636,8 @@ test('onboarding: living-with-children auto-fills Children, and a substance reve
       .click();
     await expect(w.getByText('Tell me about your pets')).toBeVisible();
 
-    // "Health & wellbeing": a per-substance frequency reveals only once that substance is selected.
-    await w.getByRole('button', { name: /Health & wellbeing/ }).click();
+    // "Health & body": a per-substance frequency reveals only once that substance is selected.
+    await w.getByRole('button', { name: /Health & body/ }).click();
     await expect(w.getByText('Cannabis — how often?')).toHaveCount(0);
     await w
       .getByRole('group', { name: 'Which recreational substances do you use, if any?' })

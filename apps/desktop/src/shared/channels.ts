@@ -111,6 +111,8 @@ export const IpcChannels = {
   aiClearSharedKey: 'ai:clearSharedKey',
   devicesList: 'devices:list',
   devicesRename: 'devices:rename',
+  keysRotate: 'keys:rotate',
+  keysRotateStatus: 'keys:rotateStatus',
   householdStatus: 'household:status',
   householdSetup: 'household:setup',
   unlockWithRecoveryPhrase: 'household:unlockWithRecoveryPhrase',
@@ -249,6 +251,30 @@ export const MIN_OWNER_PIN_LENGTH = 4;
 /** The Claude + OpenAI secret ids — single source in core/schemas (renderer-safe), re-exported here. */
 export { ANTHROPIC_API_KEY_ID, OPENAI_API_KEY_ID } from '@selfos/core/schemas';
 
+/** The outcome of a key rotation (28 §6.4). The new recovery phrase is shown once; never logged. */
+export type KeyRotateResult =
+  | {
+      ok: true;
+      recoveryPhrase: string;
+      reencryptedFileCount: number;
+      revokedDeviceIds: string[];
+      cancelledInviteCount: number;
+    }
+  | {
+      ok: false;
+      code:
+        | 'SYNC_CONFLICT_UNRESOLVED'
+        | 'NO_MASTER_KEY'
+        | 'ROTATION_IN_PROGRESS'
+        | 'CANNOT_REVOKE_THIS_DEVICE'
+        | 'FILE_CORRUPT'
+        | 'NOT_PERMITTED'
+        | 'ERROR';
+    };
+
+/** A resumable rotation found at boot (28 §6.5), or null when none is in progress. */
+export type RotationStatus = { phase: 'staging' | 'committing'; total: number } | null;
+
 export type ClaudeErrorCode = 'NO_KEY' | 'AUTH' | 'RATE_LIMIT' | 'NETWORK' | 'API_ERROR';
 export type ClaudeTestResult =
   | { ok: true; text: string }
@@ -351,6 +377,10 @@ export interface SelfosBridge {
   devicesList(): Promise<DeviceView[]>;
   /** Owner-only: rename a device in the registry. */
   devicesRename(input: { deviceId: string; label: string }): Promise<void>;
+  /** Owner-only: re-encrypt the whole vault under a new key, revoking the given devices (28 §6.4). */
+  keysRotate(input?: { revokeDeviceIds?: string[] }): Promise<KeyRotateResult>;
+  /** Owner-only: a resumable rotation found at boot, or null (28 §6.5). */
+  keysRotateStatus(): Promise<RotationStatus>;
   /** Whether the household is set up (master key + owner) and who is active. */
   householdStatus(): Promise<HouseholdStatus>;
   /** First-run setup: create the owner (with a login PIN) and return the recovery phrase. */

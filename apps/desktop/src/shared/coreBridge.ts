@@ -8,6 +8,8 @@ import {
   type ChatTurnResult,
   type ClaudeTestResult,
   type ConversationMeta,
+  type KeyRotateResult,
+  type RotationStatus,
   type DreamApproveResult,
   type DreamImageResult,
   type DreamNarrativeResult,
@@ -122,7 +124,11 @@ import {
   isVaultInitialized,
   loadMasterKey,
   MASTER_KEY_ID,
+  readRotationJournal,
   restoreFromRecoveryPhrase,
+  resumeRotation,
+  rotateMasterKey,
+  RotationError,
   storeMasterKey,
   VAULT_ALREADY_INITIALIZED,
 } from '@selfos/core/crypto';
@@ -407,6 +413,7 @@ const DevicesRenameSchema = z.object({
   deviceId: z.string().min(1),
   label: z.string().min(1).max(80),
 });
+const KeysRotateSchema = z.object({ revokeDeviceIds: z.array(z.string()).default([]) });
 const HouseholdSetupSchema = z.object({
   ownerName: z.string().min(1),
   pin: z.string().min(MIN_OWNER_PIN_LENGTH),
@@ -963,6 +970,36 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const device = await host.readDeviceState();
       if (device.deviceId === deviceId) await host.updateDeviceState({ deviceLabel: label });
     },
+    // Whole-vault key rotation (28 §5.3/§6.4) — owner-only, sync-aware pre-flight, returns the NEW phrase once.
+    keysRotate: async (input): Promise<KeyRotateResult> => {
+      const { revokeDeviceIds } = KeysRotateSchema.parse(input ?? {});
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'devices.manage'))) {
+        return { ok: false, code: 'NOT_PERMITTED' };
+      }
+      // Pre-flight: refuse on unresolved sync conflicts (re-keying a conflicted vault could orphan a copy).
+      if ((await host.getConflicts()).length > 0)
+        return { ok: false, code: 'SYNC_CONFLICT_UNRESOLVED' };
+      const thisDeviceId = (await host.readDeviceState()).deviceId;
+      if (!thisDeviceId) return { ok: false, code: 'ERROR' };
+      try {
+        const result = await rotateMasterKey(ctx.fs, host.secrets, {
+          revokeDeviceIds,
+          thisDeviceId,
+          now: new Date(),
+        });
+        return { ok: true, ...result };
+      } catch (error) {
+        if (error instanceof RotationError) return { ok: false, code: error.code };
+        return { ok: false, code: 'ERROR' };
+      }
+    },
+    keysRotateStatus: async (): Promise<RotationStatus> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'devices.manage'))) return null;
+      const journal = await readRotationJournal(ctx.fs);
+      return journal ? { phase: journal.phase, total: journal.files.length } : null;
+    },
 
     // --- Household identity (10-multi-device-vault) ---
     householdStatus: async (): Promise<HouseholdStatus> => {
@@ -990,13 +1027,39 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           pendingJoinPersonId,
         };
       }
-      const access = await getAccessConfig(fs, key);
+      // (28 §5.3) Resume a rotation this device may have crashed mid-flight, BEFORE reading anything
+      // key-dependent. A 'committing' resume promotes the new master key — so reload it afterward.
+      if (device.deviceId) {
+        try {
+          await resumeRotation(fs, host.secrets, device.deviceId);
+        } catch {
+          /* resume is best-effort; a stuck journal surfaces via keys:rotateStatus */
+        }
+      }
+      const liveKey = (await loadMasterKey(host.secrets)) ?? key;
+
+      // (28 §5.5) Re-key detection: if this device's key can't decrypt the access config but the vault IS
+      // initialized, the vault was re-keyed elsewhere (this device was signed out). Clear the stale key and
+      // route to Unlock (a graceful "rejoin", not a corruption error).
+      let access;
+      try {
+        access = await getAccessConfig(fs, liveKey);
+      } catch {
+        await host.secrets.clear(MASTER_KEY_ID);
+        return {
+          vaultInitialized,
+          hasMasterKey: false,
+          hasOwner: false,
+          activePersonId: null,
+          pendingJoinPersonId,
+        };
+      }
       const hasOwner = access.accounts.some((account) => account.roleId === OWNER_ROLE_ID);
       // Heartbeat this device into the registry once per app launch (28 §6.1) — non-fatal if it fails.
       if (!deviceHeartbeatDone && vaultInitialized && hasOwner) {
         deviceHeartbeatDone = true;
         try {
-          await ensureDeviceRegistered(fs, key);
+          await ensureDeviceRegistered(fs, liveKey);
         } catch {
           /* registry heartbeat is best-effort; never block boot */
         }

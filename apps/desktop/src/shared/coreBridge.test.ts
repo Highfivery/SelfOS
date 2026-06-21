@@ -401,6 +401,27 @@ describe('createCoreBridge', () => {
     );
   });
 
+  it('key rotation (28): owner rotates → new phrase; an old-key device is signed out (§5.5)', async () => {
+    const { bridge, host } = await freshOwner();
+    const oldKey = await host.host.secrets.get(MASTER_KEY_ID);
+    expect(oldKey).not.toBeNull();
+
+    const result = await bridge.keysRotate({});
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.recoveryPhrase.length).toBeGreaterThan(0);
+      expect(result.reencryptedFileCount).toBeGreaterThan(0);
+    }
+    // The owner keeps working on the new key.
+    expect((await bridge.householdStatus()).hasMasterKey).toBe(true);
+
+    // Simulate a device that still holds the OLD key → re-key detection signs it out + clears the stale key.
+    await host.host.secrets.set(MASTER_KEY_ID, oldKey!);
+    const status = await bridge.householdStatus();
+    expect(status.hasMasterKey).toBe(false);
+    expect(await host.host.secrets.get(MASTER_KEY_ID)).toBeNull();
+  });
+
   it('unlinkVault detaches the device — clears the master key + every vault pointer', async () => {
     const { bridge, host } = await freshOwner();
     // Precondition: a fully set-up, key-holding device with an active owner + a pending join.

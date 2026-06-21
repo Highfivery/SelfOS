@@ -39,6 +39,15 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     aiClearSharedKey: () => Promise.resolve(),
     devicesList: () => Promise.resolve([]),
     devicesRename: () => Promise.resolve(),
+    keysRotate: () =>
+      Promise.resolve({
+        ok: true as const,
+        recoveryPhrase: 'word '.repeat(12).trim(),
+        reencryptedFileCount: 0,
+        revokedDeviceIds: [],
+        cancelledInviteCount: 0,
+      }),
+    keysRotateStatus: () => Promise.resolve(null),
     householdStatus: () =>
       Promise.resolve({
         vaultInitialized: true,

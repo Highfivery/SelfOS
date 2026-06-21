@@ -185,6 +185,8 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.aiClearSharedKey, bridge.aiClearSharedKey);
   handle(IpcChannels.devicesList, bridge.devicesList);
   handle(IpcChannels.devicesRename, bridge.devicesRename);
+  handle(IpcChannels.keysRotate, bridge.keysRotate);
+  handle(IpcChannels.keysRotateStatus, bridge.keysRotateStatus);
   handle(IpcChannels.householdStatus, bridge.householdStatus);
   handle(IpcChannels.householdSetup, bridge.householdSetup);
   handle(IpcChannels.unlockWithRecoveryPhrase, bridge.unlockWithRecoveryPhrase);

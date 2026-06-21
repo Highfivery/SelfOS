@@ -352,6 +352,32 @@ describe('createCoreBridge', () => {
     expect(await host.fs.read('config/ai-credentials.enc')).toBeNull();
   });
 
+  it('settings trust boundary (26): a member cannot write vault/admin-only settings; the owner can', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    // Owner may write a vault setting + an admin-only one.
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    await bridge.setSetting({ key: 'dreams.imageModel', value: 'gpt-image-2', scope: 'device' });
+
+    // A member is rejected for ANY vault-scoped write and any admin-only write…
+    const member = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: member.id, roleId: 'member', pin: null });
+    await bridge.sessionSetActive({ personId: member.id });
+    await expect(
+      bridge.setSetting({ key: 'ai.enabled', value: false, scope: 'vault' }),
+    ).rejects.toThrow('Not permitted');
+    await expect(
+      bridge.setSetting({ key: 'dreams.imageModel', value: 'gpt-image-1', scope: 'device' }),
+    ).rejects.toThrow('Not permitted');
+    await expect(bridge.resetSetting({ key: 'ai.enabled', scope: 'vault' })).rejects.toThrow(
+      'Not permitted',
+    );
+    // …but a cosmetic, device-scoped write stays open to the member.
+    await bridge.setSetting({ key: 'appearance.theme', value: 'dark', scope: 'device' });
+    // The owner's vault setting is untouched by the rejected member writes.
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    expect((await bridge.getSettings()).vault['ai.enabled']).toBe(true);
+  });
+
   it('unlinkVault detaches the device — clears the master key + every vault pointer', async () => {
     const { bridge, host } = await freshOwner();
     // Precondition: a fully set-up, key-holding device with an active owner + a pending join.

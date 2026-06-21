@@ -1,6 +1,14 @@
 # 26 — Settings trust boundary
 
-> **Status:** Draft · _last updated 2026-06-21_
+> **Status:** Built · _last updated 2026-06-21_ · on `feat/household-ai-credentials`
+>
+> **Built 2026-06-21:** `apps/desktop/src/shared/settingsPolicy.ts` is the single source of admin-only
+> setting keys (`questionnaires.intimacyTopics`, `dreams.imageModel`, `dreams.imageApiKey`,
+> `relay.connection`); `coreBridge.setSetting`/`resetSetting` now reject a non-`settings.manage` caller for
+> any vault-scoped or admin-only write (`Error('Not permitted')`), device-scoped cosmetic writes stay
+> ungated. Tests: a bridge test (member rejected on vault/admin writes, owner succeeds, member device write
+> allowed, owner value untouched) + a registry-vs-shared-list anti-drift anchor test. Gate green: typecheck,
+> lint, format, **538 desktop** unit. `03-settings.md` §4.1/§6 already cross-reference this spec.
 >
 > A small, focused security-hardening spec. The settings-write IPC handlers (`setSetting`/
 > `resetSetting`) currently have **no capability gate**, so any signed-in person — Member or Guest —

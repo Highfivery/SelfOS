@@ -115,6 +115,7 @@ import {
   resolveOpenAiKey,
   writeSharedKey,
 } from '@selfos/core/ai';
+import { settingWriteNeedsAdmin } from './settingsPolicy';
 import {
   createMasterKey,
   isVaultInitialized,
@@ -778,6 +779,14 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     },
     setSetting: async (input): Promise<void> => {
       const { key, value, scope } = SetSettingSchema.parse(input);
+      // Trust boundary (26): a vault-scoped (household-wide) or admin-only setting write requires
+      // `settings.manage` — enforced here, not just hidden in the UI.
+      if (settingWriteNeedsAdmin(key, scope)) {
+        const ctx = await host.vaultAndKey();
+        if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'settings.manage'))) {
+          throw new Error('Not permitted');
+        }
+      }
       if (scope === 'device') {
         await host.writeDeviceSettings({ ...(await host.readDeviceSettings()), [key]: value });
         return;
@@ -789,6 +798,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     },
     resetSetting: async (input): Promise<void> => {
       const { key, scope } = ResetSettingSchema.parse(input);
+      if (settingWriteNeedsAdmin(key, scope)) {
+        const ctx = await host.vaultAndKey();
+        if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'settings.manage'))) {
+          throw new Error('Not permitted');
+        }
+      }
       if (scope === 'device') {
         const values = { ...(await host.readDeviceSettings()) };
         delete values[key];

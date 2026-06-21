@@ -521,20 +521,28 @@ in this part of the conversation — something that helps the person feel seen. 
 said; do not invent. This is reflective, not clinical. Respond with ONLY a single JSON object: \
 {"reflection": "..."}.`;
 
+/** Max facts the synthesis call should PRODUCE for the portrait (28-portrait-synthesis-optimization §pillar-1).
+ * The portrait is PINNED into every Session/Dream/Questionnaire context, so an unbounded fact list is a fixed
+ * per-call token tax on the user's own key + a diluted signal. We ask for a prioritized, high-signal set and
+ * hard-cap the stored facts at this budget. The summary paragraph stays comprehensive (it's cheap). */
+const PORTRAIT_FACT_SYNTHESIS_BUDGET = 60;
+
 const PORTRAIT_INSTRUCTION = `Now write the closing portrait of this person from everything they shared \
 across the whole intake. Be warm, specific, and faithful — never invent. This is reflective self-knowledge, \
 not a clinical assessment.
 
 This portrait is the AI's lasting memory of this person — it personalizes their coaching, dream analysis, and \
-everything else across the app — so be COMPREHENSIVE. Capture the FULL picture, not just highlights.
+everything else across the app. Make the SUMMARY rich and comprehensive; make the FACTS a PRIORITIZED set of \
+the most important, reusable details — not an exhaustive dump (the facts are injected into every later \
+conversation, so signal beats volume).
 
 Respond with ONLY a single JSON object (no markdown fences) with these keys:
 - "portrait": a warm, member-facing "here's what I've come to understand about you" summary, 3-5 rich paragraphs (string)
-- "facts": a THOROUGH set of structured memory facts — cover EVERY area they shared (identity & basics, life now, \
-values, goals & what they want, work & money, health & wellbeing, relationships, family & upbringing, their story, \
-joy & play, what weighs on them, and intimacy if shared). Capture every concrete, specific detail worth \
-remembering — names, preferences, patterns, goals, struggles, history — not just a handful. Prefer many precise \
-facts over a few vague ones. Each: {"text": a short specific fact, "section": the section id it came from} (array)
+- "facts": the MOST IMPORTANT, highest-signal memory facts — AT MOST ${PORTRAIT_FACT_SYNTHESIS_BUDGET}. Draw across the \
+areas they shared (identity & basics, life now, values, goals, work & money, health, relationships, family, their \
+story, joy & play, what weighs on them, and intimacy if shared), but PRIORITIZE what's most useful for ongoing \
+coaching — concrete names, preferences, patterns, goals, struggles, history. Prefer FEWER sharp, specific facts over \
+many vague or redundant ones. Each: {"text": a short specific fact, "section": the section id it came from} (array)
 - "metrics": optional normalized signals for trends, e.g. {"valence": -1.0..1.0} (object)
 - "inferred": optional fields to fill from the whole picture: {"communicationStyle": string, "values": [..], "goals": string, "faith": string}
 - "crisisFlag": true ONLY if self-harm, suicide, or acute crisis was disclosed (boolean)
@@ -770,8 +778,14 @@ async function synthesizePortrait(deps: IntakeSynthesizeDeps): Promise<IntakeSyn
           ...formAnswersMessages(session),
           { role: 'user', content: PORTRAIT_INSTRUCTION },
         ],
-        // A comprehensive portrait + a thorough fact set across ~12 sections needs room (§15).
-        maxTokens: 8000,
+        // A rich summary + a PRIORITIZED fact set (≤PORTRAIT_FACT_SYNTHESIS_BUDGET) — bounded, not the old
+        // "thorough dump" 8000 (28-portrait-synthesis-optimization §pillar-1/§pillar-4). This is a bounded
+        // structured-JSON call, so we DISABLE adaptive thinking (the [[adaptive-thinking-shares-maxtokens]]
+        // rule + the generationService/reconcileService precedent): otherwise `max_tokens` is the COMBINED
+        // thinking+output budget and trimming it could truncate the portrait JSON to empty. With thinking off,
+        // 6000 is a pure output ceiling with ample headroom for ~60 facts + a 3–5 paragraph summary.
+        maxTokens: 6000,
+        extendedThinking: false,
       },
       () => {},
     );
@@ -804,7 +818,11 @@ async function synthesizePortrait(deps: IntakeSynthesizeDeps): Promise<IntakeSyn
   const priorByText = new Map((prior?.facts ?? []).map((f) => [f.text.trim(), f]));
 
   const facts: InsightFact[] = [];
+  // Hard-cap the stored portrait at the synthesis budget (28 §pillar-1) — keep the model's own ordering
+  // (it returns the most important first), so a model that ignores the "at most N" instruction can't bloat
+  // the pinned, every-call portrait. Empty-text facts are skipped without consuming budget.
   for (const f of draft.facts) {
+    if (facts.length >= PORTRAIT_FACT_SYNTHESIS_BUDGET) break;
     const text = f.text.trim();
     if (!text) continue;
     // The `restricted` flag is decided server-side from the (trusted) section catalog — never the AI.

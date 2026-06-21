@@ -1,6 +1,17 @@
 # 28 — Portrait synthesis & context-budget optimization
 
-> **Status:** Draft · _last updated 2026-06-21_
+> **Status:** Draft · **Slice 28a built** 2026-06-21 (`feat/portrait-optimization`) · _last updated 2026-06-21_
+>
+> **Build split (decided 2026-06-21).** This spec ships in two slices: **28a — the safe wins (BUILT):** the
+> slider-seed fix (an untouched optional slider records nothing) + a **synthesis fact cap** (the portrait
+> stores at most **60** facts — user-chosen "fuller", from an unbounded 80–150) + a reworked prompt
+> (prioritized, not "thorough dump") + `maxTokens` 8000→6000. **28b — topic-relevance selection (DEFERRED,
+> its own slice):** the additive `InsightFact.lifeArea`, `selectPortraitFacts`, `ContextTopic` threaded
+> through `summarizeForContext`/`buildContext` and the Session/Dream/Questionnaire callers — the
+> privacy-critical part. 28a alone already bounds the pinned, every-call portrait to ≤60 facts; 28b further
+> narrows it by topic. **Decisions for 28b (recorded):** synthesis cap 60 (done in 28a); the always-on CORE
+> set is the **broader** option — identity (Values/identity), Goals & growth, Emotions & patterns,
+> Relationships, Health & body, **plus any crisis-flagged fact** (never narrowed away).
 >
 > The onboarding portrait (the `source: 'intake'` Insight from [18-personal-onboarding](18-personal-onboarding.md))
 > is PINNED into the system prompt of **every** Session, Dream analysis, and Questionnaire-generation call —
@@ -173,7 +184,7 @@ And the **synthesis cap** in [`intakeService.ts`](../../packages/core/src/intake
 ```ts
 /** Max facts the synthesis call should PRODUCE for the portrait (the prompt asks for "the most important",
  *  not "everything"). The selector still budgets at context time; this keeps the stored portrait sharp. */
-const PORTRAIT_FACT_SYNTHESIS_BUDGET = 40; // §11 Q1 — tunable
+const PORTRAIT_FACT_SYNTHESIS_BUDGET = 60; // AS BUILT (28a) — user chose "fuller" (was proposed 40)
 ```
 
 ### 4.3 The relevance topic type (a view type, crypto-free)
@@ -418,3 +429,21 @@ building.
 ## 12. Changelog
 
 - 2026-06-21 — created (Draft). Part of the onboarding-redesign spec group (26–29).
+- 2026-06-21 — **Slice 28a built** (`feat/portrait-optimization`, stacked on 26/27, NOT merged). The two
+  low-risk "safe wins": (1) **slider-seed fix** — `@selfos/answering` `SliderControl` no longer auto-commits
+  the midpoint for an untouched optional slider (the thumb still shows at middle as a starting position, but
+  the value stays uncommitted until moved), so an untouched "energy/stress/…" slider records **nothing** and
+  never becomes a false-neutral portrait fact; required scales were already never seeded. (2) **synthesis fact
+  cap** — `PORTRAIT_FACT_SYNTHESIS_BUDGET = 60` (user chose "fuller"): the prompt was reworked from "a THOROUGH
+  set… prefer many facts" → "the MOST IMPORTANT, highest-signal facts, AT MOST 60… prefer fewer sharp facts",
+  the stored portrait is hard-capped at 60 keeping the model's ordering (so a model that ignores the cap can't
+  bloat the pinned, every-call portrait), and `maxTokens` dropped 8000→6000. The portrait **summary** stays
+  comprehensive. **Code-reviewer caught a blocker (fixed):** lowering `maxTokens` while adaptive thinking was
+  still ON (the synthesis call never passed `extendedThinking`) would shrink the COMBINED thinking+output
+  budget → portrait-JSON truncation the offline fake can't catch (the `[[adaptive-thinking-shares-maxtokens]]`
+  trap). Now the bounded synthesis call passes **`extendedThinking: false`** (the generationService/
+  reconcileService precedent), so 6000 is a true output ceiling; a test pins it. **Deferred to 28b** (its own slice): `InsightFact.lifeArea`, `selectPortraitFacts`, the
+  `ContextTopic` threading + caller maps, and the per-call context budget — the privacy-critical
+  `summarizeForContext` change. Tests: +core fact-cap (80 facts → stored 60, order preserved), +RTL
+  untouched-optional-slider-commits-nothing/commits-on-move. Gate: typecheck (node + web), lint, format,
+  **446 core + 534 desktop + 11 relay** unit, onboarding E2E green. Same group-numbering note as 26/27.

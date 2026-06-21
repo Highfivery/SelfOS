@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { describe, expect, it } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Question } from '@shared/schemas';
 import type { AnswerMap, AnswerValue } from '@selfos/core/questionnaires';
@@ -200,6 +200,22 @@ describe('QuestionnaireForm', () => {
     expect(slider).toHaveAttribute('min', '1');
     expect(slider).toHaveAttribute('max', '5');
     expect(screen.queryByRole('radio', { name: '4' })).toBeNull();
+  });
+
+  it('does NOT auto-answer an untouched optional slider; commits only when moved (28)', () => {
+    const onChange = vi.fn();
+    render(
+      <QuestionnaireForm
+        questions={[q({ id: 'a', type: 'slider', prompt: 'Energy', scale: { min: 0, max: 10 } })]}
+        answers={{}}
+        onChange={onChange}
+      />,
+    );
+    // No mount-time commit — an untouched optional slider records nothing (no false-neutral fact, §28).
+    expect(onChange).not.toHaveBeenCalled();
+    // Moving it commits a real numeric value.
+    fireEvent.change(screen.getByRole('slider', { name: 'Energy' }), { target: { value: '7' } });
+    expect(onChange).toHaveBeenCalledWith('a', 7);
   });
 
   it('renders an attached image (decrypted via loadImage) with its alt text', async () => {

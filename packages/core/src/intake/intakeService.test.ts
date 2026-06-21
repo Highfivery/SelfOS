@@ -44,6 +44,7 @@ function fakeClient(
     portrait?: unknown;
     capture?: (s: string) => void;
     captureMessages?: (m: { role: string; content: string }[]) => void;
+    captureOptions?: (o: { maxTokens?: number; extendedThinking?: boolean }) => void;
   } = {},
 ): ClaudeClient {
   const usage = { inputTokens: 12, outputTokens: 6, cacheWriteTokens: 0, cacheReadTokens: 0 };
@@ -52,6 +53,7 @@ function fakeClient(
     stream: (options, onDelta) => {
       over.capture?.(options.system);
       over.captureMessages?.(options.messages);
+      over.captureOptions?.(options);
       const last = options.messages.at(-1)?.content ?? '';
       let text: string;
       if (last.includes('closing portrait')) text = JSON.stringify(over.portrait ?? PORTRAIT);
@@ -333,6 +335,32 @@ describe('intakeService', () => {
     // Inferred fields fill the (empty) Person profile.
     const p = await getPerson(fs, key, 'p1');
     expect(p?.communicationStyle).toBe('direct and warm');
+  });
+
+  it('hard-caps the stored portrait facts at the synthesis budget, keeping model order (28)', async () => {
+    const fs = await setup();
+    await runIntakeTurn(turn(fs, fakeClient(), 'basics', 'I am a nurse.'));
+    // A model that ignores "at most N" and returns 80 facts must NOT bloat the pinned portrait.
+    const many = {
+      ...PORTRAIT,
+      facts: Array.from({ length: 80 }, (_, i) => ({
+        text: `Fact number ${i}`,
+        section: 'basics',
+      })),
+    };
+    // The bounded synthesis call MUST disable adaptive thinking, or `maxTokens` is the combined
+    // thinking+output budget and the portrait JSON can truncate to empty (the adaptive-thinking lesson).
+    let opts: { maxTokens?: number; extendedThinking?: boolean } = {};
+    const res = await synthesizeIntake(
+      synth(fs, fakeClient({ portrait: many, captureOptions: (o) => (opts = o) })),
+    );
+    expect(res.ok).toBe(true);
+    expect(opts.extendedThinking).toBe(false);
+    const session = await getIntakeSession(fs, key, 'p1');
+    const insight = (await getInsight(fs, key, 'p1', session!.insightId!)) as Insight;
+    expect(insight.facts.length).toBe(60); // capped at PORTRAIT_FACT_SYNTHESIS_BUDGET
+    expect(insight.facts[0]?.text).toBe('Fact number 0'); // model ordering preserved (most important first)
+    expect(insight.facts.at(-1)?.text).toBe('Fact number 59');
   });
 
   it('honors a per-question `restricted` answer in a non-restricted section via a "(sensitive)" block (§14.8)', async () => {

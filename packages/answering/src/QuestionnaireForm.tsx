@@ -99,7 +99,8 @@ function matrixPointLabels(matrix: {
   return [minLabel, midLabel, maxLabel];
 }
 
-/** A range slider; seeds to `min` on first render so the thumb position reflects a real answer. */
+/** A range slider; the thumb SHOWS at the middle as a neutral starting position, but the value stays
+ * UNCOMMITTED until the person actually moves it. */
 function SliderControl({
   question,
   value,
@@ -113,14 +114,10 @@ function SliderControl({
   const scale =
     question.scale ?? (question.type === 'rating' ? { min: 1, max: 5 } : { min: 0, max: 10 });
   const middle = Math.round((scale.min + scale.max) / 2);
-  // The thumb shows at the MIDDLE so an untouched slider reads as a neutral starting point. For an OPTIONAL
-  // question we also commit that middle once on mount (an untouched optional slider counts as a neutral
-  // answer — the §18 onboarding behaviour). A REQUIRED question is NOT auto-committed: its value stays
-  // undefined (so `isAnswered` gates it) until the person actually moves it — otherwise a required rating
-  // would silently auto-answer to the midpoint (bad data for e.g. a required intimacy rating).
-  useEffect(() => {
-    if (value === undefined && !question.required) set(middle);
-  }, []);
+  // No auto-commit on mount (28-portrait-synthesis-optimization §pillar-3): an UNTOUCHED slider — optional or
+  // required — records NOTHING, so it's not "answered" and never becomes a false-neutral portrait fact (an
+  // untouched "energy" slider must not read as a deliberate "5/10"). The thumb still renders at `middle` as a
+  // starting position; the value only exists once the person moves it.
   const current = typeof value === 'number' ? value : middle;
   // With descriptive labels at start/middle/end (18 §14.5), anchor all three under the track and drop the
   // raw number; otherwise keep the numeric min/value/max readout.

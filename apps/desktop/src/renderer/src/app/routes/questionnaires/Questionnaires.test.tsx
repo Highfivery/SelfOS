@@ -293,6 +293,13 @@ describe('Questionnaires', () => {
     installMockBridge({
       questionnairesList: () => Promise.resolve([]),
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       questionnairesGenerate: () =>
         Promise.resolve({
           ok: true,
@@ -328,6 +335,13 @@ describe('Questionnaires', () => {
     installMockBridge({
       questionnairesList: () => Promise.resolve([]),
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       questionnairesGenerate: () =>
         new Promise((res) => {
           resolveGen = res as typeof resolveGen;
@@ -351,6 +365,13 @@ describe('Questionnaires', () => {
     installMockBridge({
       questionnairesList: () => Promise.resolve([]),
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       questionnairesGenerate: () =>
         Promise.resolve({
           ok: true,
@@ -394,6 +415,13 @@ describe('Questionnaires', () => {
     installMockBridge({
       questionnairesList: () => Promise.resolve([]),
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       questionnairesImproveQuestion: () =>
         Promise.resolve({ ok: true, prompt: 'How are we really doing lately?' }),
     });
@@ -410,6 +438,13 @@ describe('Questionnaires', () => {
     installMockBridge({
       questionnairesList: () => Promise.resolve([]),
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       gapfinderSuggest: () =>
         Promise.resolve({
           ok: true,
@@ -1043,6 +1078,13 @@ describe('Questionnaires', () => {
     installMockBridge({
       questionnairesList: () => Promise.resolve([]),
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       questionnairesGenerate: generate,
     });
     // openNewBuilder binds Mara (p-mara) as the recipient at the start step.

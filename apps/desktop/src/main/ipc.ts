@@ -179,6 +179,10 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.secretHas, bridge.secretHas);
   handle(IpcChannels.secretClear, bridge.secretClear);
   handle(IpcChannels.claudeTest, bridge.claudeTest);
+  handle(IpcChannels.aiKeyStatus, bridge.aiKeyStatus);
+  handle(IpcChannels.aiSetSharedKey, bridge.aiSetSharedKey);
+  handle(IpcChannels.aiShareDeviceKey, bridge.aiShareDeviceKey);
+  handle(IpcChannels.aiClearSharedKey, bridge.aiClearSharedKey);
   handle(IpcChannels.householdStatus, bridge.householdStatus);
   handle(IpcChannels.householdSetup, bridge.householdSetup);
   handle(IpcChannels.unlockWithRecoveryPhrase, bridge.unlockWithRecoveryPhrase);

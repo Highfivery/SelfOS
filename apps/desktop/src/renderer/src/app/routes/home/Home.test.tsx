@@ -211,6 +211,13 @@ describe('Home', () => {
     useConversationStore.getState().reset();
     installMockBridge({
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       conversationsList: () => Promise.resolve([meta('c1', 'A hard week', 'inProgress')]),
     });
     setAi(true);

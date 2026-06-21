@@ -111,6 +111,13 @@ describe('DreamAnalysisPane sharing', () => {
     const setShare = vi.fn(() => Promise.resolve({ ok: true as const }));
     installMockBridge({
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       dreamGetAnalysis: () => Promise.resolve(approvedAnalysis),
       dreamGetInsight: () => Promise.resolve(insightFixture),
       dreamShareTargets: () => Promise.resolve(partner),
@@ -131,6 +138,13 @@ describe('DreamAnalysisPane sharing', () => {
     elevateToOwner();
     installMockBridge({
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       dreamGetAnalysis: () => Promise.resolve(approvedAnalysis),
       dreamGetInsight: () => Promise.resolve(insightFixture),
       dreamShareTargets: () => Promise.resolve(partner),
@@ -143,6 +157,13 @@ describe('DreamAnalysisPane sharing', () => {
     elevateToOwner();
     installMockBridge({
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       dreamGetAnalysis: () => Promise.resolve(approvedAnalysis),
       dreamGetInsight: () => Promise.resolve(null), // a muted dream returns no insight
       dreamShareTargets: () => Promise.resolve(partner),
@@ -160,6 +181,13 @@ describe('DreamAnalysisPane sharing', () => {
     // superAdmin stays false + no access → can('dreams.shareContext') is false.
     installMockBridge({
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       dreamGetAnalysis: () => Promise.resolve(approvedAnalysis),
       dreamGetInsight: () => Promise.resolve(insightFixture),
       dreamShareTargets: () => Promise.resolve(partner),

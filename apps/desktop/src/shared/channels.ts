@@ -1,5 +1,7 @@
 import type {
   AccessView,
+  AiKeyStatus,
+  AiProvider,
   AlignmentResult,
   Answer,
   AnswerType,
@@ -102,6 +104,10 @@ export const IpcChannels = {
   secretHas: 'secret:has',
   secretClear: 'secret:clear',
   claudeTest: 'claude:test',
+  aiKeyStatus: 'ai:keyStatus',
+  aiSetSharedKey: 'ai:setSharedKey',
+  aiShareDeviceKey: 'ai:shareDeviceKey',
+  aiClearSharedKey: 'ai:clearSharedKey',
   householdStatus: 'household:status',
   householdSetup: 'household:setup',
   unlockWithRecoveryPhrase: 'household:unlockWithRecoveryPhrase',
@@ -237,11 +243,8 @@ export type SettingScope = 'vault' | 'device';
 /** Minimum length of the owner login PIN set at Setup (10-multi-device-vault §3.2). */
 export const MIN_OWNER_PIN_LENGTH = 4;
 
-/** The secret id under which the Claude API key is stored. */
-export const ANTHROPIC_API_KEY_ID = 'anthropic.apiKey';
-
-/** The secret id for the OpenAI API key — SelfOS's second provider, for dream images (13-dream-images §6.1). */
-export const OPENAI_API_KEY_ID = 'openai.apiKey';
+/** The Claude + OpenAI secret ids — single source in core/schemas (renderer-safe), re-exported here. */
+export { ANTHROPIC_API_KEY_ID, OPENAI_API_KEY_ID } from '@selfos/core/schemas';
 
 export type ClaudeErrorCode = 'NO_KEY' | 'AUTH' | 'RATE_LIMIT' | 'NETWORK' | 'API_ERROR';
 export type ClaudeTestResult =
@@ -331,8 +334,16 @@ export interface SelfosBridge {
   secretHas(input: { id: string }): Promise<boolean>;
   /** Remove a stored secret. */
   secretClear(input: { id: string }): Promise<void>;
-  /** Test the Claude connection with the stored key + selected model. */
+  /** Test the Claude connection with the stored (resolved) key + selected model. */
   claudeTest(): Promise<ClaudeTestResult>;
+  /** AI key readiness for a provider — booleans + an enum only, never a key value (25 §5.3). */
+  aiKeyStatus(input?: { provider?: AiProvider }): Promise<AiKeyStatus>;
+  /** Owner-only: set the household's shared key for a provider (the value never comes back). */
+  aiSetSharedKey(input: { provider: AiProvider; value: string }): Promise<void>;
+  /** Owner-only: promote this device's key into the shared household credentials (25 §5.4). */
+  aiShareDeviceKey(input?: { provider?: AiProvider }): Promise<void>;
+  /** Owner-only: stop sharing a provider's key with the household. */
+  aiClearSharedKey(input?: { provider?: AiProvider }): Promise<void>;
   /** Whether the household is set up (master key + owner) and who is active. */
   householdStatus(): Promise<HouseholdStatus>;
   /** First-run setup: create the owner (with a login PIN) and return the recovery phrase. */

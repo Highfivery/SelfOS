@@ -308,6 +308,50 @@ describe('createCoreBridge', () => {
     expect(host.device().activePersonId).toBe(ownerId);
   });
 
+  it('household AI key: owner shares → member inherits; member cannot write the shared key (25)', async () => {
+    const { bridge, ownerId, host } = await freshOwner();
+    // Owner adds a device key and promotes it into the shared vault credentials.
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-owner-shared' });
+    expect(await bridge.aiKeyStatus({ provider: 'anthropic' })).toMatchObject({
+      hasDeviceOverride: true,
+      source: 'device',
+    });
+    await bridge.aiShareDeviceKey({ provider: 'anthropic' });
+
+    // On disk the shared key is ciphertext, never the raw key (decrypt-the-vault).
+    const bytes = await host.fs.read('config/ai-credentials.enc');
+    const raw = bytes && new TextDecoder().decode(bytes);
+    expect(raw).toContain('aes-256-gcm');
+    expect(raw).not.toContain('sk-owner-shared');
+
+    // Simulate the member's own device: no device key, but the shared vault key is present.
+    await bridge.secretClear({ id: ANTHROPIC_API_KEY_ID });
+    const member = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: member.id, roleId: 'member', pin: null });
+    await bridge.sessionSetActive({ personId: member.id });
+
+    // The member inherits the shared key with zero setup (the headline guarantee).
+    expect(await bridge.aiKeyStatus({ provider: 'anthropic' })).toEqual({
+      hasSharedKey: true,
+      hasDeviceOverride: false,
+      resolvedReady: true,
+      source: 'shared',
+    });
+
+    // The member cannot write or clear the shared household key (owner-gated in the bridge).
+    await expect(
+      bridge.aiSetSharedKey({ provider: 'anthropic', value: 'sk-evil' }),
+    ).rejects.toThrow('Not permitted');
+    await expect(bridge.aiClearSharedKey({ provider: 'anthropic' })).rejects.toThrow(
+      'Not permitted',
+    );
+
+    // The owner can un-share; the file is deleted (no orphan ciphertext).
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    await bridge.aiClearSharedKey({ provider: 'anthropic' });
+    expect(await host.fs.read('config/ai-credentials.enc')).toBeNull();
+  });
+
   it('unlinkVault detaches the device — clears the master key + every vault pointer', async () => {
     const { bridge, host } = await freshOwner();
     // Precondition: a fully set-up, key-holding device with an active owner + a pending join.

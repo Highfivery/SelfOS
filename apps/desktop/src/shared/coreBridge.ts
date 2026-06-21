@@ -25,6 +25,7 @@ import {
   type UsageSummary,
 } from './channels';
 import {
+  AiProviderSchema,
   AnswerSchema,
   AnswerTypeSchema,
   BudgetSchema,
@@ -38,6 +39,7 @@ import {
   SessionStatusSchema,
   SettingsFileSchema,
   conversationStatus,
+  type AiKeyStatus,
   type AlignmentResult,
   type Assignment,
   type CompatibilityGroup,
@@ -106,6 +108,13 @@ import {
 } from './relay/relayConfig';
 import type { ClaudeClient, FileSystem, ImageClient, SecretStore } from '@selfos/core/host';
 import { uuid } from '@selfos/core/id';
+import {
+  aiKeyStatus as computeAiKeyStatus,
+  clearSharedKey,
+  resolveAiKey,
+  resolveOpenAiKey,
+  writeSharedKey,
+} from '@selfos/core/ai';
 import {
   createMasterKey,
   isVaultInitialized,
@@ -386,6 +395,8 @@ const SetSettingSchema = z.object({
 const ResetSettingSchema = z.object({ key: z.string().min(1), scope: ScopeSchema });
 const SecretSetSchema = z.object({ id: z.string().min(1), value: z.string() });
 const SecretIdSchema = z.object({ id: z.string().min(1) });
+const AiProviderInputSchema = z.object({ provider: AiProviderSchema.default('anthropic') });
+const AiSetSharedKeySchema = z.object({ provider: AiProviderSchema, value: z.string().min(1) });
 const HouseholdSetupSchema = z.object({
   ownerName: z.string().min(1),
   pin: z.string().min(MIN_OWNER_PIN_LENGTH),
@@ -657,7 +668,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       fs: ctx.fs,
       key: ctx.key,
       client: host.claude,
-      apiKey: await host.secrets.get(ANTHROPIC_API_KEY_ID),
+      apiKey: (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null,
       model: await host.activeModel(),
       personId,
       now: new Date(),
@@ -715,7 +726,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     personId: string,
   ): Promise<IntakeState> => {
     const session = await ensureIntakeSession(fs, key, personId, new Date());
-    const apiKey = await host.secrets.get(ANTHROPIC_API_KEY_ID);
+    const apiKey = (await resolveAiKey(host.secrets, fs, key)).key ?? null;
     const aiEnabled = (await readVaultSettingsValues(fs))['ai.enabled'] === true;
     const prefs = await getGuidancePrefs(fs, key, personId);
     return {
@@ -804,8 +815,76 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       await host.secrets.clear(SecretIdSchema.parse(input).id);
     },
     claudeTest: async (): Promise<ClaudeTestResult> => {
-      const apiKey = await host.secrets.get(ANTHROPIC_API_KEY_ID);
+      // Test the *resolved* key (device override → vault-shared → device-only when no vault), 25 §6.3.
+      const ctx = await host.vaultAndKey();
+      const apiKey = ctx
+        ? ((await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null)
+        : await host.secrets.get(ANTHROPIC_API_KEY_ID);
       return runConnectionTest(host.claude, apiKey, await host.activeModel());
+    },
+
+    // --- Household AI credentials (25-household-ai-credentials) ---
+    // Readiness — booleans + an enum only, never a key value (§5.3). Ungated (a self-readiness read, like
+    // secretHas); the value never leaves the bridge.
+    aiKeyStatus: async (input): Promise<AiKeyStatus> => {
+      const { provider } = AiProviderInputSchema.parse(input ?? {});
+      const ctx = await host.vaultAndKey();
+      if (!ctx) {
+        const hasDeviceOverride = await host.secrets.has(
+          provider === 'anthropic' ? ANTHROPIC_API_KEY_ID : OPENAI_API_KEY_ID,
+        );
+        return {
+          hasSharedKey: false,
+          hasDeviceOverride,
+          resolvedReady: hasDeviceOverride,
+          source: hasDeviceOverride ? 'device' : 'none',
+        };
+      }
+      return computeAiKeyStatus(host.secrets, ctx.fs, ctx.key, provider);
+    },
+    // Owner-only writes to the shared household key (§6.2). Gated on `settings.manage` in the bridge — the
+    // trust boundary is here, not the UI (coordinates with spec 26).
+    aiSetSharedKey: async (input): Promise<void> => {
+      const { provider, value } = AiSetSharedKeySchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'settings.manage'))) {
+        throw new Error('Not permitted');
+      }
+      const sharedByPersonId = (await activePersonId()) ?? undefined;
+      await writeSharedKey(ctx.fs, ctx.key, {
+        provider,
+        value,
+        ...(sharedByPersonId ? { sharedByPersonId } : {}),
+        now: new Date(),
+      });
+    },
+    // Promote the owner's existing device key into the vault (the §5.4 migration) — reads the device secret
+    // host-side; no key value crosses IPC inbound. No-op if no device key exists.
+    aiShareDeviceKey: async (input): Promise<void> => {
+      const { provider } = AiProviderInputSchema.parse(input ?? {});
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'settings.manage'))) {
+        throw new Error('Not permitted');
+      }
+      const deviceKey = await host.secrets.get(
+        provider === 'anthropic' ? ANTHROPIC_API_KEY_ID : OPENAI_API_KEY_ID,
+      );
+      if (!deviceKey) return;
+      const sharedByPersonId = (await activePersonId()) ?? undefined;
+      await writeSharedKey(ctx.fs, ctx.key, {
+        provider,
+        value: deviceKey,
+        ...(sharedByPersonId ? { sharedByPersonId } : {}),
+        now: new Date(),
+      });
+    },
+    aiClearSharedKey: async (input): Promise<void> => {
+      const { provider } = AiProviderInputSchema.parse(input ?? {});
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'settings.manage'))) {
+        throw new Error('Not permitted');
+      }
+      await clearSharedKey(ctx.fs, ctx.key, { provider, now: new Date() });
     },
 
     // --- Household identity (10-multi-device-vault) ---
@@ -1193,7 +1272,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !personId) {
         return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
       }
-      const apiKey = await host.secrets.get(ANTHROPIC_API_KEY_ID);
+      const apiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
       return runChatTurn({
         fs: ctx.fs,
         key: ctx.key,
@@ -1242,7 +1321,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // The session-memory master toggle lives in vault settings (default ON); the service refuses when off.
       const memoryEnabled =
         (await readVaultSettingsValues(ctx.fs))['sessions.memoryEnabled'] !== false;
-      const apiKey = await host.secrets.get(ANTHROPIC_API_KEY_ID);
+      const apiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
       return endAndSummarize({
         fs: ctx.fs,
         key: ctx.key,
@@ -2653,7 +2732,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       }
       // The API key is read host-side and never crosses to the renderer; streamed deltas go to the
       // dedicated dream sink so they never mix with the Sessions chat stream.
-      const apiKey = await host.secrets.get(ANTHROPIC_API_KEY_ID);
+      const apiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
       return runAnalysisTurn({
         fs: ctx.fs,
         key: ctx.key,
@@ -2686,7 +2765,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) {
         return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
       }
-      const apiKey = await host.secrets.get(ANTHROPIC_API_KEY_ID);
+      const apiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
       return synthesizeAnalysis({
         fs: ctx.fs,
         key: ctx.key,
@@ -2759,7 +2838,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) {
         return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
       }
-      const apiKey = await host.secrets.get(ANTHROPIC_API_KEY_ID);
+      const apiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
       return generatePatternNarrative({
         fs: ctx.fs,
         key: ctx.key,
@@ -2855,8 +2934,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         key: ctx.key,
         claude: host.claude,
         image: host.image,
-        anthropicApiKey: await host.secrets.get(ANTHROPIC_API_KEY_ID),
-        openaiApiKey: await host.secrets.get(OPENAI_API_KEY_ID),
+        anthropicApiKey: (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null,
+        openaiApiKey: (await resolveOpenAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null,
         consent: settings['dreams.imageGenerationEnabled'] === true,
         claudeModel: await host.activeModel(),
         imageModel,
@@ -2962,7 +3041,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       }
       // The API key is read host-side and never crosses to the renderer; deltas go to the dedicated intake
       // sink so they never mix with the Sessions / Dreams streams.
-      const apiKey = await host.secrets.get(ANTHROPIC_API_KEY_ID);
+      const apiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
       return runIntakeTurn({
         fs: ctx.fs,
         key: ctx.key,
@@ -3020,7 +3099,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'intake.own'))) {
         return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
       }
-      const apiKey = await host.secrets.get(ANTHROPIC_API_KEY_ID);
+      const apiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
       return synthesizeIntake({
         fs: ctx.fs,
         key: ctx.key,

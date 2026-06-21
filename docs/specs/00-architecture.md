@@ -22,7 +22,8 @@ provider. The architecture's job is to make this safe, scalable, and pleasant to
 
 - **Own your data** — plain Markdown + JSON, portable and inspectable.
 - **Private by default** — sensitive content never leaves the device except in consented Claude
-  calls; the API key is device-local and never enters the synced vault.
+  calls; the API key is device-local by default (an Owner may opt to share it with the household,
+  encrypted under the master key — see [`25`](25-household-ai-credentials.md) §8).
 - **Scale infinitely** — features are self-contained modules that register into the shell; adding
   one never requires editing the shell.
 
@@ -205,8 +206,13 @@ This contract is defined here and exercised first by the **Settings** feature in
 
 ### 6.2 Claude API boundary
 
-- The **API key is stored device-local**, encrypted via Electron **`safeStorage`** (OS keychain),
-  under `userData` — **never** in the vault. It is never logged or sent to the renderer.
+- The **API key is device-local by default**, encrypted via Electron **`safeStorage`** (OS keychain),
+  under `userData`. **Amended by [`25-household-ai-credentials`](25-household-ai-credentials.md):** the
+  household Owner may **opt in** to sharing the key — it is then stored **encrypted under the master key**
+  in the vault (`config/ai-credentials.enc`, the same posture as the relay token in `config/relay.enc`), so
+  member devices inherit it; a device-local override always takes precedence. Whether device-local or
+  shared, the **resolved key value is never logged and never sent to the renderer** (readiness crosses IPC
+  as booleans only).
 - Main exposes IPC such as `claude:sendMessage` that proxies to the Anthropic API (official SDK),
   with **streaming** delivered to the renderer as push events. The renderer passes message content;
   the key and HTTP live in main only.

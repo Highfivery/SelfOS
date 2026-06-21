@@ -55,6 +55,13 @@ describe('QuestionnaireResults', () => {
     enableAi();
     installMockBridge({
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       assignmentsResults: () =>
         Promise.resolve([
           send({ answers: [{ prompt: 'How are we doing?', answer: 'Doing great' }] }),
@@ -70,6 +77,13 @@ describe('QuestionnaireResults', () => {
     enableAi();
     installMockBridge({
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       assignmentsResults: () => Promise.resolve([send({ privacy: 'private' })]),
     });
     renderResults();
@@ -81,6 +95,13 @@ describe('QuestionnaireResults', () => {
     enableAi();
     installMockBridge({
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       assignmentsResults: () => Promise.resolve([send({ privacy: 'private', analyzed: true })]),
     });
     renderResults();
@@ -101,6 +122,13 @@ describe('QuestionnaireResults', () => {
     });
     installMockBridge({
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       insightsAnalyze,
       assignmentsResults: () => Promise.resolve([send({ privacy: 'private', analyzed })]),
     });

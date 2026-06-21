@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Copy, ImagePlus, Link2, Plus, Send, Sparkles, Trash2 } from 'lucide-react';
 import { ALLOWED_IMAGE_MIME, MAX_IMAGE_BYTES } from '@selfos/core/questionnaires';
-import { ANTHROPIC_API_KEY_ID } from '@shared/channels';
+import { aiKeyResolved } from '../../aiAvailability';
 import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
 import { useSetting } from '../../../settings/useSetting';
 import {
@@ -338,9 +338,7 @@ export function QuestionnaireBuilder({
   const [aiEnabled] = useSetting('ai.enabled');
   const [hasAiKey, setHasAiKey] = useState(false);
   useEffect(() => {
-    void window.selfos
-      ?.secretHas({ id: ANTHROPIC_API_KEY_ID })
-      .then((v) => setHasAiKey(Boolean(v)));
+    void aiKeyResolved('anthropic').then(setHasAiKey);
   }, []);
   const aiReady = aiEnabled === true && hasAiKey;
 

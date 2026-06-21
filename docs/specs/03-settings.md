@@ -101,6 +101,14 @@ interface SettingsSection {
 A `defineSetting<T>()` helper preserves `T` from the schema so `default` and `useSetting` are checked
 against it.
 
+> **Write authorization (the trust boundary).** A setting's `adminOnly` flag and any `scope:'vault'`
+> write are enforced **in the main process** — not just hidden in the UI. Writing a vault-scoped
+> setting requires the `settings.manage` capability, and an `adminOnly` setting is admin-write-only
+> regardless of scope; device-scoped non-`adminOnly` settings stay ungated. The set of admin-only
+> setting **keys** is a single shared source of truth that drives both the display-hiding here and the
+> server-side rejection. See [`26-settings-trust-boundary.md`](26-settings-trust-boundary.md) and
+> [`00-architecture.md`](00-architecture.md) §6 ("the bridge is the trust boundary, not the UI").
+
 ### 4.2 Persistence
 
 - **Vault-scoped** values → `config/settings.json` in the vault (synced):
@@ -168,9 +176,13 @@ screen filters `adminOnly` settings out entirely for non-admins.
 
 Typed channels (declared in `src/shared`, validated both sides):
 
-- `settings:getAll` → `{ vaultValues, deviceValues }` (validated, defaults applied).
-- `settings:set({ key, value, scope })` → persists; returns `Result`.
-- `settings:reset({ key })`.
+- `settings:getAll` → `{ vaultValues, deviceValues }` (validated, defaults applied). **Ungated read**
+  — every signed-in person reads vault values (e.g. members read `ai.enabled`/`ai.model` to use AI).
+- `settings:set({ key, value, scope })` → persists; returns `Result`. **Capability-gated in main:** a
+  `scope:'vault'` write or an `adminOnly` setting requires `settings.manage`; a denied write is
+  rejected before any persistence. Device-scoped, non-`adminOnly` writes stay ungated.
+  See [`26-settings-trust-boundary.md`](26-settings-trust-boundary.md).
+- `settings:reset({ key })` → same `settings.manage` gate as `settings:set`.
 - `secret:set({ id, value })` / `secret:has({ id })` / `secret:clear({ id })` → keychain via
   `safeStorage`; values never returned to the renderer in plaintext beyond use.
 - Reuses `vault:selectFolder` (app-shell) for the `path` control.

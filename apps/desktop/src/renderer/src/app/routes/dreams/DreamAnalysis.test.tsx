@@ -92,6 +92,13 @@ describe('Dreams analysis UI', () => {
     enableAi();
     installMockBridge({
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       dreamGetAnalysis: () => Promise.resolve(null),
     });
     renderPane();
@@ -106,6 +113,13 @@ describe('Dreams analysis UI', () => {
     enableAi();
     installMockBridge({
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       dreamGetAnalysis: () => Promise.resolve(null),
     });
     renderPane();
@@ -121,6 +135,13 @@ describe('Dreams analysis UI', () => {
     );
     installMockBridge({
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       dreamGetAnalysis: () => Promise.resolve(analysisFixture),
       dreamUpdateAnalysis: update,
     });
@@ -144,6 +165,13 @@ describe('Dreams analysis UI', () => {
     const approve = vi.fn(() => Promise.resolve({ ok: true as const, insightId: 'i1' }));
     installMockBridge({
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       dreamGetAnalysis: () => Promise.resolve(analysisFixture),
       dreamApprove: approve,
     });
@@ -159,6 +187,13 @@ describe('Dreams analysis UI', () => {
     const remove = vi.fn(() => Promise.resolve());
     installMockBridge({
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       dreamGetAnalysis: () => Promise.resolve({ ...analysisFixture, insightId: 'i1' }),
       dreamRemoveFromContext: remove,
     });
@@ -177,6 +212,13 @@ describe('Dreams analysis UI', () => {
     }));
     installMockBridge({
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       dreamGetAnalysis: () => Promise.resolve(analysisFixture),
     });
     renderPane();
@@ -191,6 +233,13 @@ describe('Dreams analysis UI', () => {
     const approve = vi.fn(() => Promise.resolve({ ok: true as const, insightId: 'i1' }));
     installMockBridge({
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       dreamGetAnalysis: () => Promise.resolve(approved),
       // updateAnalysis preserves the insightId (as the core does), so the store re-approves to keep
       // the coaching context in sync with the edit.

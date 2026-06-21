@@ -1040,6 +1040,43 @@ export const RelayStatusSchema = z.object({
 });
 export type RelayStatus = z.infer<typeof RelayStatusSchema>;
 
+/** The secret id under which the Claude API key is stored device-local (single source; re-exported by channels). */
+export const ANTHROPIC_API_KEY_ID = 'anthropic.apiKey';
+/** The secret id for the OpenAI API key — SelfOS's second provider, for dream images (13-dream-images §6.1). */
+export const OPENAI_API_KEY_ID = 'openai.apiKey';
+
+/**
+ * Household-shared AI credentials (25-household-ai-credentials §4.1), stored encrypted under the master
+ * key at `config/ai-credentials.enc` so every member device pointing at the same vault inherits a working
+ * key. The plaintext keys sit *inside* the encrypted envelope — the same posture as `config/relay.enc`'s
+ * Cloudflare token. Both providers are optional so a household may share Claude, OpenAI, both, or neither.
+ */
+export const AiCredentialsSchema = z.object({
+  schemaVersion: z.number().int().positive(),
+  anthropicApiKey: z.string().min(1).optional(),
+  openaiApiKey: z.string().min(1).optional(),
+  updatedAt: z.string().datetime().optional(),
+  /** Who shared it (the owner) — informational, no secret material. */
+  sharedByPersonId: z.string().optional(),
+});
+export type AiCredentials = z.infer<typeof AiCredentialsSchema>;
+
+/** Which AI provider a credential / resolution refers to (25 §4.4). */
+export const AiProviderSchema = z.enum(['anthropic', 'openai']);
+export type AiProvider = z.infer<typeof AiProviderSchema>;
+
+/**
+ * Renderer-safe AI key readiness (25 §5.3) — **booleans + an enum only, never a key value**. Each AI
+ * surface computes `aiAvailable = ai.enabled && resolvedReady`.
+ */
+export const AiKeyStatusSchema = z.object({
+  hasSharedKey: z.boolean(),
+  hasDeviceOverride: z.boolean(),
+  resolvedReady: z.boolean(),
+  source: z.enum(['device', 'shared', 'none']),
+});
+export type AiKeyStatus = z.infer<typeof AiKeyStatusSchema>;
+
 /** How aligned two answerers were on one canonical question (08-questionnaires §3.6). */
 export const AlignmentAgreementSchema = z.enum(['aligned', 'mixed', 'divergent']);
 export type AlignmentAgreement = z.infer<typeof AlignmentAgreementSchema>;

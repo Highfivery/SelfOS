@@ -130,6 +130,31 @@ export function registerIpcHandlers(): void {
       const vaultDir = await activeVaultPath();
       return vaultDir ? findConflicts(vaultDir) : [];
     },
+    hasPendingDownloads: async () => {
+      // Best-effort macOS iCloud check: a `.<name>.icloud` placeholder anywhere means the folder is still
+      // downloading (29 §5.D). Non-iCloud folders (Dropbox/Drive/local) simply have none.
+      const vaultDir = await activeVaultPath();
+      if (!vaultDir) return false;
+      const { readdir } = await import('node:fs/promises');
+      const { join } = await import('node:path');
+      const walk = async (dir: string): Promise<boolean> => {
+        let entries;
+        try {
+          entries = await readdir(dir, { withFileTypes: true });
+        } catch {
+          return false;
+        }
+        for (const entry of entries) {
+          if (entry.isDirectory()) {
+            if (await walk(join(dir, entry.name))) return true;
+          } else if (entry.name.startsWith('.') && entry.name.endsWith('.icloud')) {
+            return true;
+          }
+        }
+        return false;
+      };
+      return walk(vaultDir);
+    },
     revealVault: async () => {
       const vaultDir = await activeVaultPath();
       if (vaultDir) await shell.openPath(vaultDir);
@@ -170,6 +195,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.refreshBootState, bridge.refreshBootState);
   handle(IpcChannels.selectVaultFolder, bridge.selectVaultFolder);
   handle(IpcChannels.getConflicts, bridge.getConflicts);
+  handle(IpcChannels.vaultSyncReadiness, bridge.vaultSyncReadiness);
   handle(IpcChannels.revealVault, bridge.revealVault);
   handle(IpcChannels.getAppVersion, bridge.getAppVersion);
   handle(IpcChannels.getSettings, bridge.getSettings);

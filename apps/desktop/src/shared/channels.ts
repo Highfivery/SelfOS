@@ -95,6 +95,7 @@ export const IpcChannels = {
   useVault: 'vault:use',
   unlinkVault: 'vault:unlink',
   getConflicts: 'vault:getConflicts',
+  vaultSyncReadiness: 'vault:syncReadiness',
   revealVault: 'vault:reveal',
   vaultChanged: 'vault:changed', // main → renderer event
   fullscreenChanged: 'window:fullscreenChanged', // main → renderer event (macOS hides traffic lights)
@@ -277,6 +278,9 @@ export type KeyRotateResult =
 /** A resumable rotation found at boot (28 §6.5), or null when none is in progress. */
 export type RotationStatus = { phase: 'staging' | 'committing'; total: number } | null;
 
+/** Whether the chosen vault folder is ready to set up, or still syncing from iCloud (29 §5.D). */
+export type VaultSyncReadiness = { ready: boolean; reason?: 'icloud-pending' };
+
 export type ClaudeErrorCode = 'NO_KEY' | 'AUTH' | 'RATE_LIMIT' | 'NETWORK' | 'API_ERROR';
 export type ClaudeTestResult =
   | { ok: true; text: string }
@@ -335,6 +339,8 @@ export interface SelfosBridge {
   unlinkVault(): Promise<BootState>;
   /** Absolute paths of any sync-conflict copies found in the active vault. */
   getConflicts(): Promise<string[]>;
+  /** Whether the active vault folder is ready to set up, or still downloading from iCloud (29 §5.D). */
+  vaultSyncReadiness(): Promise<VaultSyncReadiness>;
   /** Open the active vault folder in the OS file manager. */
   revealVault(): Promise<void>;
   /** Subscribe to external vault changes; returns an unsubscribe function. */

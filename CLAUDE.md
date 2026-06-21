@@ -360,6 +360,28 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-21 — **Build (spec 29 multi-device housekeeping — FULLY BUILT, slices A–D; on
+  `feat/household-ai-credentials`).** Four independent loose ends. **A** (docs) pruned spec 10's stale
+  super-admin documentation so its body matches the 2026-06-14 Owner-is-full-access amendment (deleted the
+  `SuperAdminFileSchema` block, the §6.4 `superadmin:*` subsection, the `config/superadmin.enc` table row +
+  §7 rows; the append-only changelog stays); a doc agent did the surgery + flagged that spec 14's body still
+  has live-sounding super-admin detach steps (left — it already carries a 2026-06-14 amendment note). **B**
+  the OpenAI dream-image key gets a "Test connection" like Claude's: `ImageClient.verify(apiKey)` is a
+  NON-generative `GET /v1/models` probe (bills nothing, never an image generation), `openaiProxy` maps the
+  same NO_KEY/AUTH/RATE_LIMIT/NETWORK/API_ERROR taxonomy, bridge `openaiTest` resolves the key host-side
+  (spec-25 resolver, never crosses IPC), `OpenAiTestConnectionControl` under the OpenAI key in Settings →
+  Dreams. **C** iOS finally shows the conflict Banner: `isConflictCopy` moved to `@selfos/core/vault` (shared
+  by both hosts); blind Swift `VaultFs.findConflicts` (`NSFileVersion.unresolvedConflictVersions` + the name
+  pattern) feeds the EXISTING Banner via a new `HostParts.getConflicts` part; the web preview still returns
+  `[]`. **D** sync-safety: a `vault:syncReadiness` check + a host `hasPendingDownloads` (Electron `.icloud`
+  placeholder scan; iOS blind Swift) makes `HouseholdGate` show a "this folder is still syncing from iCloud"
+  warning (Check again / Set up anyway) before fresh-vault Setup — advisory over the unchanged
+  `createMasterKey` non-overwrite data-loss backstop. Tests: openaiProxy taxonomy + RTL; capacitor
+  getConflicts/hasPendingDownloads wiring; bridge readiness; HouseholdGate warning RTL. Gate green:
+  typecheck, lint, format, **462 core + 551 desktop** unit. iOS Swift is blind-written, user-verified.
+  **Lesson: a non-generative auth probe (`GET /v1/models`) verifies an image key without billing an image;
+  and a "still syncing" warning at the boot gate is a cheap UX layer over the real data-loss guard
+  (`createMasterKey` refuses to overwrite an already-synced `recovery.enc`), not a substitute for it.**
 - 2026-06-21 — **Build (spec 28 device management & key rotation — FULLY BUILT, slices A–C; on
   `feat/household-ai-credentials`).** Closes the biggest security gap: one master key on N devices with no way
   to see, revoke, or rotate it. **A** device registry (`config/devices/<id>.enc`, one file per device,

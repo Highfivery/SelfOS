@@ -1,6 +1,19 @@
 # 29 — Multi-device housekeeping & polish
 
-> **Status:** Draft · _last updated 2026-06-21_
+> **Status:** Built (slices A–D) · _last updated 2026-06-21_ · on `feat/household-ai-credentials`
+>
+> **Built 2026-06-21:** **A** pruned spec 10's stale super-admin docs (header/stubs/changelog only remain;
+> spec 14's body steps flagged — it already carries a 2026-06-14 amendment). **B** OpenAI "Test connection"
+> (`ImageClient.verify` = a non-generative `GET /v1/models` probe; `openaiProxy` maps the shared taxonomy;
+> bridge `openaiTest` resolves the key host-side, never crosses IPC; `OpenAiTestConnectionControl` in Settings
+> → Dreams). **C** iOS sync-conflict detection (`isConflictCopy` moved to `@selfos/core/vault`; blind Swift
+> `VaultFs.findConflicts` [NSFileVersion] → the existing conflict Banner via a `HostParts.getConflicts` part;
+> web preview still `[]`). **D** sync-safety (core `vault:syncReadiness` + a host `hasPendingDownloads`
+> [Electron `.icloud` scan, iOS blind Swift]; `HouseholdGate` shows a "still syncing from iCloud" warning
+> [Check again / Set up anyway] before fresh-vault Setup, over the unchanged `createMasterKey` non-overwrite
+> backstop). Tests: openaiProxy mapping + RTL; capacitor getConflicts/hasPendingDownloads wiring; bridge
+> readiness; HouseholdGate warning RTL. Gate green: typecheck, lint, format, **462 core + 551 desktop** unit.
+> iOS Swift (`findConflicts`/`hasPendingDownloads`) is blind-written — user verifies on-device.
 >
 > A small, mixed hardening/cleanup spec that gathers four **independent** loose ends from the
 > multi-device / AI-credentials work into one document so a build session can ship any subset in any

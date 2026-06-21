@@ -1,7 +1,9 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import type { VaultSyncReadiness } from '@shared/channels';
 import { useSessionStore } from '../stores/sessionStore';
 import { Splash } from './boot/Splash';
 import { Setup } from './boot/Setup';
+import { SyncWarning } from './boot/SyncWarning';
 import { UnlockScreen } from './boot/UnlockScreen';
 import { LockScreen } from './LockScreen';
 import { Shell } from './Shell';
@@ -25,16 +27,51 @@ export function HouseholdGate(): JSX.Element {
   const loaded = useSessionStore((s) => s.loaded);
   const status = useSessionStore((s) => s.status);
   const load = useSessionStore((s) => s.load);
+  // Sync-safety (29 §5.D): before offering first-run Setup, check the chosen folder isn't still
+  // downloading from iCloud (a not-yet-synced `recovery.enc` would look like a fresh vault).
+  const [readiness, setReadiness] = useState<VaultSyncReadiness | 'checking' | null>(null);
+  const [setUpAnyway, setSetUpAnyway] = useState(false);
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  // Run the readiness check only when we're about to offer fresh-vault Setup.
+  const wouldSetup =
+    loaded && Boolean(status) && !status?.hasMasterKey && !status?.vaultInitialized;
+  useEffect(() => {
+    if (!wouldSetup || setUpAnyway) {
+      setReadiness(null);
+      return;
+    }
+    setReadiness('checking');
+    void window.selfos?.vaultSyncReadiness().then((r) => setReadiness(r ?? { ready: true }));
+  }, [wouldSetup, setUpAnyway]);
+
   if (!loaded || !status) return <Splash />;
 
   if (!status.hasMasterKey) {
-    // No key on this device: join an initialized vault, or first-run a fresh one.
-    return status.vaultInitialized ? <UnlockScreen /> : <Setup />;
+    // Initialized vault, this device hasn't joined → Unlock.
+    if (status.vaultInitialized) return <UnlockScreen />;
+    // Fresh-vault Setup — but warn first if the folder is still syncing from iCloud (29 §5.D).
+    if (!setUpAnyway) {
+      if (readiness === null || readiness === 'checking') return <Splash />;
+      if (!readiness.ready) {
+        return (
+          <SyncWarning
+            onCheckAgain={() => {
+              void load();
+              setReadiness('checking');
+              void window.selfos
+                ?.vaultSyncReadiness()
+                .then((r) => setReadiness(r ?? { ready: true }));
+            }}
+            onSetUpAnyway={() => setSetUpAnyway(true)}
+          />
+        );
+      }
+    }
+    return <Setup />;
   }
   // Key present but no recovery.enc → desync; recover by unlocking.
   if (!status.vaultInitialized) return <UnlockScreen />;

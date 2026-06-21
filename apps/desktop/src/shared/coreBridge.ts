@@ -10,6 +10,7 @@ import {
   type ConversationMeta,
   type KeyRotateResult,
   type RotationStatus,
+  type VaultSyncReadiness,
   type DreamApproveResult,
   type DreamImageResult,
   type DreamNarrativeResult,
@@ -357,6 +358,8 @@ export interface BridgeHost {
   selectVaultFolder(): Promise<string | null>;
   useVault(path: string): Promise<BootState>;
   getConflicts(): Promise<string[]>;
+  /** Whether the active vault folder still has not-yet-downloaded iCloud items (29 §5.D). Best-effort. */
+  hasPendingDownloads?(): Promise<boolean>;
   revealVault(): Promise<void>;
   /**
    * Save image bytes to a file the user chooses OUTSIDE the vault (13-dream-images §3.5) — a native save
@@ -799,6 +802,16 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     selectVaultFolder: () => host.selectVaultFolder(),
     useVault: (path) => host.useVault(path),
     getConflicts: () => host.getConflicts(),
+    vaultSyncReadiness: async (): Promise<VaultSyncReadiness> => {
+      // Sync-safety (29 §5.D): if the chosen folder has NO recovery.enc but still has pending iCloud
+      // downloads, "absent marker" may just mean "not downloaded yet" — warn instead of routing to Setup.
+      const ctx = await host.vaultPath();
+      if (!ctx) return { ready: true };
+      const fs = host.fileSystem(ctx);
+      if (await isVaultInitialized(fs)) return { ready: true }; // initialized → Unlock, never Setup
+      const pending = host.hasPendingDownloads ? await host.hasPendingDownloads() : false;
+      return pending ? { ready: false, reason: 'icloud-pending' } : { ready: true };
+    },
     revealVault: () => host.revealVault(),
     onVaultChanged: (listener) => host.onVaultChanged(listener),
     onChatChunk: (listener) => host.onChatChunk(listener),

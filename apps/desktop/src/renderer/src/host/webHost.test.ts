@@ -121,6 +121,17 @@ describe('createCapacitorHost', () => {
     expect(await createCapacitorHost(fakePlugin()).getConflicts()).toEqual([]);
   });
 
+  it('hasPendingDownloads forwards to the native VaultFs check (29 §5.D)', async () => {
+    storage.set(
+      'selfos:A:deviceState',
+      JSON.stringify({ schemaVersion: 1, vaultPath: null, vaultBookmark: 'bm' }),
+    );
+    const host = createCapacitorHost(
+      fakePlugin({ hasPendingDownloads: vi.fn(() => Promise.resolve({ pending: true })) }),
+    );
+    expect(await host.hasPendingDownloads?.()).toBe(true);
+  });
+
   it('onVaultChanged starts the native watch + forwards events; cleanup stops it', async () => {
     storage.set(
       'selfos:A:deviceState',

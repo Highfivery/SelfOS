@@ -59,6 +59,8 @@ interface HostParts {
    * (no real sync), the native `VaultFs.findConflicts` on iOS. Receives the active vault id/bookmark.
    */
   getConflicts?(vaultId: string): Promise<string[]>;
+  /** Whether the vault folder still has not-yet-downloaded iCloud items (29 §5.D); the native check on iOS. */
+  hasPendingDownloads?(vaultId: string): Promise<boolean>;
 }
 
 /** Assemble a `BridgeHost` from interchangeable filesystem/picker/secrets parts (shared by web + iOS). */
@@ -170,6 +172,10 @@ function createBridgeHost(parts: HostParts): BridgeHost {
     getConflicts: async () => {
       const id = await activeVaultId();
       return id && parts.getConflicts ? parts.getConflicts(id) : [];
+    },
+    hasPendingDownloads: async () => {
+      const id = await activeVaultId();
+      return id && parts.hasPendingDownloads ? parts.hasPendingDownloads(id) : false;
     },
     revealVault: () => Promise.resolve(),
     // Export = a browser download (web preview) / share-sheet (iOS, later). No native save dialog here.
@@ -290,6 +296,11 @@ export function createCapacitorHost(
         .findConflicts({ bookmark })
         .then((r) => r.conflicts)
         .catch(() => []),
+    hasPendingDownloads: (bookmark) =>
+      vaultFs
+        .hasPendingDownloads({ bookmark })
+        .then((r) => r.pending)
+        .catch(() => false),
   });
 }
 

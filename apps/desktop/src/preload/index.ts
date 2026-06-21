@@ -20,6 +20,7 @@ const bridge: SelfosBridge = {
   useVault: (path) => ipcRenderer.invoke(IpcChannels.useVault, path),
   unlinkVault: () => ipcRenderer.invoke(IpcChannels.unlinkVault),
   getConflicts: () => ipcRenderer.invoke(IpcChannels.getConflicts),
+  vaultSyncReadiness: () => ipcRenderer.invoke(IpcChannels.vaultSyncReadiness),
   revealVault: () => ipcRenderer.invoke(IpcChannels.revealVault),
   onVaultChanged: (listener) => {
     const handler = (): void => listener();

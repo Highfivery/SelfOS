@@ -15,6 +15,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     useVault: () => Promise.resolve(READY),
     unlinkVault: () => Promise.resolve(ONBOARDING),
     getConflicts: () => Promise.resolve([]),
+    vaultSyncReadiness: () => Promise.resolve({ ready: true }),
     revealVault: () => Promise.resolve(),
     onVaultChanged: () => () => {},
     platform: 'web',

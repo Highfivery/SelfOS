@@ -360,6 +360,34 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-21 — **Durable policy + Build (multi-device specs 25–29 group).** Audited the reported multi-device
+  bug — a member installing on their own machine + selecting the shared vault saw "AI hasn't been set up"
+  though the owner had set it up — and root-caused it: the **API key is a device-local secret** (00 §6.2,
+  never synced) while `ai.enabled` is a **vault setting** (synced), so a joined member inherited `ai.enabled`
+  but had **no key** → every AI surface (and the AI-hard-gated onboarding) locked them out. Created a 5-spec
+  group ([`25` household-ai-credentials](docs/specs/25-household-ai-credentials.md) · [`26` settings trust
+  boundary](docs/specs/26-settings-trust-boundary.md) · [`27` AI-required policy](docs/specs/27-ai-required.md)
+  · [`28` device management & key rotation](docs/specs/28-device-management-and-key-rotation.md) ·
+  [`29` housekeeping](docs/specs/29-multi-device-housekeeping.md); renumbered around a concurrent
+  onboarding-redesign group at 21–24). **Built + committed on `feat/household-ai-credentials`:** **25**
+  (owner shares one key, stored **encrypted under the master key** in `config/ai-credentials.enc` — the relay
+  precedent — so members inherit it; device override wins; one `resolveAiKey` replaces every `secrets.get`
+  AI call site; booleans-only `ai:keyStatus` replaces 11 renderer `secretHas` readiness checks; role-aware
+  `SharedKeyControl`; `00` §4.1/§6.2 amended) and **26** (settings-write trust boundary enforced in the
+  bridge: vault-scoped or admin-only writes require `settings.manage`, via a shared `settingsPolicy.ts` source
+  anchored by a drift test). Gate green: typecheck, lint, format, **449 core + 538 desktop** unit.
+  **DURABLE POLICY (the owner, explicit, 2026-06-21): "AI is required by the app and requires online, period."**
+  There is **no offline / degraded / works-without-AI mode** — that reversed spec 27's original "onboarding
+  offline resilience" draft (repurposed → [`27-ai-required`](docs/specs/27-ai-required.md)). When AI is
+  unavailable (no key / AI off / offline) surfaces show a **clear role-aware setup/connectivity prompt**, never
+  a faked experience; the onboarding hard gate (18 §3.1, portrait required) **stays** and is never relaxed; the
+  Owner is exempt from the gate so they can reach setup (no chicken-and-egg). **Remaining (drafted, not built):**
+  25 Playwright E2E + visual QA; 28 (device registry + revocation by whole-vault re-encryption — large, its own
+  session) and 29 (super-admin doc cleanup, OpenAI test-connection, iOS conflict detection, setup sync-safety).
+  **Lesson: a credential that's device-local-by-design but whose _enablement_ is vault-synced creates a
+  multi-device trap — the synced half says "on" while the device half is empty; either sync both (the chosen
+  fix: opt-in shared key, encrypted in the vault like the relay token) or gate readiness on the resolved
+  credential, never on the synced flag alone.**
 - 2026-06-17 — Fix (**release-please opened a new release PR after every merge — manifest drift loop**; spec 19,
   on `fix/release-please-manifest`). Audit (facts, not guesses — checked open PRs, releases, git tags, the
   manifest on `origin/main`, and the release-please run logs): `.release-please-manifest.json` on `main` was

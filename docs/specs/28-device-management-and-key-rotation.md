@@ -26,7 +26,7 @@ per-item encryption remains a permanent non-goal ([`10`](10-multi-device-vault.m
 > **Spec group:** part of the 2026-06 multi-device / AI-credentials group —
 > [`25` household AI credentials](25-household-ai-credentials.md) (the shared key this re-encrypts),
 > [`26` settings trust boundary](26-settings-trust-boundary.md), and
-> [`27` onboarding offline resilience](27-onboarding-offline-resilience.md). This spec is **28**. (Specs
+> [`27` AI is required](27-ai-required.md). This spec is **28**. (Specs
 > 21–24 are a separate, concurrent onboarding-content-redesign group.)
 
 ---

@@ -13,7 +13,7 @@
 Part of the 2026-06 multi-device / AI-credentials spec group:
 [`25` household AI credentials](25-household-ai-credentials.md),
 [`26` settings trust boundary](26-settings-trust-boundary.md),
-[`27` onboarding offline resilience](27-onboarding-offline-resilience.md),
+[`27` AI is required](27-ai-required.md),
 [`28` device management & key rotation](28-device-management-and-key-rotation.md). (Specs 21–24 are a
 separate, concurrent onboarding-content-redesign group — untouched here.) Builds on
 [`07-mobile-platform.md`](07-mobile-platform.md) (the iOS `VaultFs` host + `onVaultChanged`),

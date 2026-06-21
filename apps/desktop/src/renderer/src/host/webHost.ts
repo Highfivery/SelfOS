@@ -54,6 +54,11 @@ interface HostParts {
   relay: BridgeHost['relay'];
   /** Subscribe to external vault changes; a no-op in the web preview, the native watcher on iOS. */
   onVaultChanged(listener: () => void): () => void;
+  /**
+   * Sync-conflict copies for the active vault (29-multi-device-housekeeping §5.C) — `[]` in the web preview
+   * (no real sync), the native `VaultFs.findConflicts` on iOS. Receives the active vault id/bookmark.
+   */
+  getConflicts?(vaultId: string): Promise<string[]>;
 }
 
 /** Assemble a `BridgeHost` from interchangeable filesystem/picker/secrets parts (shared by web + iOS). */
@@ -162,7 +167,10 @@ function createBridgeHost(parts: HostParts): BridgeHost {
       await deviceStore.update({ vaultBookmark: id });
       return bootState();
     },
-    getConflicts: () => Promise.resolve([]),
+    getConflicts: async () => {
+      const id = await activeVaultId();
+      return id && parts.getConflicts ? parts.getConflicts(id) : [];
+    },
     revealVault: () => Promise.resolve(),
     // Export = a browser download (web preview) / share-sheet (iOS, later). No native save dialog here.
     saveImageFile: (suggestedName, bytes, mime) => {
@@ -277,6 +285,11 @@ export function createCapacitorHost(
       currentVersion: '1',
     },
     onVaultChanged: (listener) => watchCapacitorVault(vaultFs, listener),
+    getConflicts: (bookmark) =>
+      vaultFs
+        .findConflicts({ bookmark })
+        .then((r) => r.conflicts)
+        .catch(() => []),
   });
 }
 

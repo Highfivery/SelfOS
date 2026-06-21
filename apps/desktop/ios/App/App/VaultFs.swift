@@ -32,7 +32,9 @@ public class VaultFsPlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDelegat
         CAPPluginMethod(name: "list", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "remove", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "startWatch", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "stopWatch", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "stopWatch", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "findConflicts", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "hasPendingDownloads", returnType: CAPPluginReturnPromise)
     ]
 
     /// The in-flight `pickFolder` call, resolved/rejected by the picker delegate callbacks.
@@ -365,6 +367,60 @@ public class VaultFsPlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDelegat
     deinit {
         NotificationCenter.default.removeObserver(self)
         disarm()
+    }
+
+    // MARK: - Sync conflicts + pending downloads (29-multi-device-housekeeping §5.C/§5.D)
+
+    /// Vault-relative paths of files with UNRESOLVED iCloud conflict versions — the iCloud-native signal
+    /// (`NSFileVersion.unresolvedConflictVersionsOfItem(at:)`), plus the shared "conflicted copy" name
+    /// pattern as a cheap second signal. Read-only: never reads, writes, or resolves a conflicted file.
+    /// (Blind-written; verify on-device by inducing a conflict on two devices then syncing.)
+    @objc func findConflicts(_ call: CAPPluginCall) {
+        guard let vault = resolveVault(call) else { return }
+        let didAccess = vault.startAccessingSecurityScopedResource()
+        defer { if didAccess { vault.stopAccessingSecurityScopedResource() } }
+
+        var conflicts: [String] = []
+        let coordinator = NSFileCoordinator()
+        var coordError: NSError?
+        coordinator.coordinate(readingItemAt: vault, options: [], error: &coordError) { readURL in
+            guard let walker = FileManager.default.enumerator(
+                at: readURL, includingPropertiesForKeys: [.isRegularFileKey], options: []) else { return }
+            for case let fileURL as URL in walker {
+                let isFile = (try? fileURL.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile ?? false
+                if !isFile { continue }
+                let rel = fileURL.path.hasPrefix(readURL.path)
+                    ? String(fileURL.path.dropFirst(readURL.path.count)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                    : fileURL.lastPathComponent
+                let hasVersionConflict =
+                    (NSFileVersion.unresolvedConflictVersionsOfItem(at: fileURL)?.isEmpty == false)
+                let name = fileURL.lastPathComponent.lowercased()
+                let looksLikeCopy = name.contains("conflicted copy")
+                if hasVersionConflict || looksLikeCopy { conflicts.append(rel) }
+            }
+        }
+        // Like `list`, never reject on a coordination failure — an unreadable vault is just "no conflicts".
+        call.resolve(["conflicts": conflicts])
+    }
+
+    /// Whether the vault still has not-yet-downloaded iCloud items (29 §5.D) — a `.<name>.icloud` placeholder
+    /// anywhere means a cross-device read might not see the real `config/recovery.enc` yet. Best-effort.
+    @objc func hasPendingDownloads(_ call: CAPPluginCall) {
+        guard let vault = resolveVault(call) else { return }
+        let didAccess = vault.startAccessingSecurityScopedResource()
+        defer { if didAccess { vault.stopAccessingSecurityScopedResource() } }
+
+        var pending = false
+        let coordinator = NSFileCoordinator()
+        var coordError: NSError?
+        coordinator.coordinate(readingItemAt: vault, options: [], error: &coordError) { readURL in
+            guard let walker = FileManager.default.enumerator(at: readURL, includingPropertiesForKeys: nil, options: []) else { return }
+            for case let fileURL as URL in walker {
+                let n = fileURL.lastPathComponent
+                if n.hasPrefix(".") && n.hasSuffix(".icloud") { pending = true; break }
+            }
+        }
+        call.resolve(["pending": pending])
     }
 }
 

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Question } from '@shared/schemas';
 import type { AnswerMap, AnswerValue } from '@selfos/core/questionnaires';
@@ -47,6 +47,35 @@ describe('QuestionnaireForm', () => {
     );
     await userEvent.click(screen.getByRole('radio', { name: 'One' }));
     expect(screen.getByRole('radio', { name: 'One' })).toBeChecked();
+  });
+
+  it('renders a 3-point LABELLED matrix (Hard limit · Curious · Into it) and stores the numeric pick (27)', async () => {
+    render(
+      <Harness
+        questions={[
+          q({
+            id: 'a',
+            type: 'matrix',
+            prompt: 'Where do you stand?',
+            matrix: {
+              rows: ['Oral', 'Choking'],
+              min: 1,
+              max: 3,
+              minLabel: 'Hard limit',
+              midLabel: 'Curious',
+              maxLabel: 'Into it',
+            },
+          }),
+        ]}
+      />,
+    );
+    // Each row offers the three LABELLED options, not bare numbers — one "Into it" radio per row.
+    expect(screen.getAllByRole('radio', { name: 'Into it' })).toHaveLength(2);
+    expect(screen.queryByRole('radio', { name: '3' })).toBeNull();
+    // Picking "Into it" for the Oral row stores it (the row radiogroup is labelled "<prompt> — Oral").
+    const oralGroup = screen.getByRole('radiogroup', { name: /Oral/ });
+    await userEvent.click(within(oralGroup).getByRole('radio', { name: 'Into it' }));
+    expect(within(oralGroup).getByRole('radio', { name: 'Into it' })).toBeChecked();
   });
 
   it('offers an "Other" write-in when allowOther is set, and stores the typed text (§17.12-C)', async () => {

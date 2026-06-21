@@ -49,32 +49,54 @@ function ScalePicker({
   value,
   onPick,
   ariaLabel,
+  labels,
 }: {
   min: number;
   max: number;
   value: number | undefined;
   onPick: (n: number) => void;
   ariaLabel: string;
+  // When given (one per point), each button shows its label instead of the bare number — a 3-point labelled
+  // matrix (Hard limit · Curious · Into it). Buttons stay flex-wrapped, so they never overflow on mobile.
+  labels?: string[];
 }): JSX.Element {
   return (
     <div className={styles.scale} role="radiogroup" aria-label={ariaLabel}>
-      {range(min, max).map((n) => (
-        <button
-          key={n}
-          type="button"
-          role="radio"
-          aria-checked={value === n}
-          aria-label={String(n)}
-          className={
-            value === n ? `${styles.scalePoint} ${styles.scalePointOn}` : styles.scalePoint
-          }
-          onClick={() => onPick(n)}
-        >
-          {n}
-        </button>
-      ))}
+      {range(min, max).map((n, i) => {
+        const label = labels?.[i];
+        return (
+          <button
+            key={n}
+            type="button"
+            role="radio"
+            aria-checked={value === n}
+            aria-label={label ?? String(n)}
+            className={
+              value === n ? `${styles.scalePoint} ${styles.scalePointOn}` : styles.scalePoint
+            }
+            onClick={() => onPick(n)}
+          >
+            {label ?? n}
+          </button>
+        );
+      })}
     </div>
   );
+}
+
+/** The 3 labels for a 3-point labelled matrix (Hard limit · Curious · Into it), or undefined for a plain
+ * numbered matrix. Only a matrix with exactly 3 points AND all of min/mid/maxLabel opts in. */
+function matrixPointLabels(matrix: {
+  min: number;
+  max: number;
+  minLabel?: string | undefined;
+  midLabel?: string | undefined;
+  maxLabel?: string | undefined;
+}): string[] | undefined {
+  if (matrix.max - matrix.min !== 2) return undefined;
+  const { minLabel, midLabel, maxLabel } = matrix;
+  if (!minLabel || !midLabel || !maxLabel) return undefined;
+  return [minLabel, midLabel, maxLabel];
 }
 
 /** A range slider; seeds to `min` on first render so the thumb position reflects a real answer. */
@@ -603,6 +625,7 @@ function Control({
     case 'matrix': {
       const matrix = question.matrix ?? { rows: [], min: 1, max: 5 };
       const current = asNumberMap(value);
+      const pointLabels = matrixPointLabels(matrix);
       return (
         <div className={styles.matrix}>
           {matrix.rows.map((row) => (
@@ -614,6 +637,7 @@ function Control({
                 value={current[row]}
                 onPick={(n) => set({ ...current, [row]: n })}
                 ariaLabel={`${question.prompt} — ${row}`}
+                {...(pointLabels ? { labels: pointLabels } : {})}
               />
             </div>
           ))}

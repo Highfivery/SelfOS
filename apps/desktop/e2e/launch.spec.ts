@@ -4302,6 +4302,11 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
     // Core done → the invited grid offers the deeper sections. Opening intimacy shows the shared 18+ gate.
     await w.getByRole('button', { name: /Intimacy & sexuality/ }).click();
     await expect(w.getByRole('button', { name: /18 or older/ })).toBeVisible();
+    // Acknowledge 18+ → the rebalanced intimacy form renders, incl. the 3-state activity MATRIX (27): each
+    // row offers three LABELLED options (Hard limit · Curious · Into it), not bare numbers. Proven in the
+    // real built app, then skip the section so the flow continues to the portrait.
+    await w.getByRole('button', { name: /18 or older/ }).click();
+    await expect(w.getByRole('radio', { name: 'Into it' }).first()).toBeVisible();
     await w.getByRole('button', { name: 'Skip this section' }).click();
 
     // Generate the portrait → a confirm modal (encourages adding more) → it releases the gate (§14.2/§15)

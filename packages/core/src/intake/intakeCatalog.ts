@@ -160,10 +160,6 @@ const SUBSTANCE_FREQ = [
   'Daily',
   'Prefer not to say',
 ];
-// The consensual-adult activity checklist, reused for into-it / curious-to-try / hard-limits (§14.5 D).
-// Sourced from the SHARED `INTIMACY_TOPICS` inventory (08 §16.5a — one source of truth with questionnaire
-// generation); `'Other'` is the intake form's free-text escape, appended here.
-const ACTIVITIES = [...INTIMACY_ACTIVITIES, 'Other'];
 // A comprehensive sex-toy checklist, reused for "toys you own" / "toys you want" (§14.5). Covers the modern
 // app/remote-controlled range (Lovense-style) plus the broader categories; "Other"/"None" appended per use.
 const TOYS = [
@@ -1365,7 +1361,7 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
     opener:
       'An optional, grown-up space to help SelfOS understand your sexuality. Everything is private to your own coaching, and every question is skippable.',
     contentNote:
-      'This block is entirely optional and only for adults (18+). Everything here stays private to your own coaching, is never shared with anyone else, and every question is skippable. It covers your own consensual adult sexuality — including fantasies; real limits are yours to set at the end.',
+      'This block is entirely optional and only for adults (18+). Everything here stays private to your own coaching, is never shared with anyone else, and every question is skippable. It covers your own consensual adult sexuality — including fantasies; real limits are yours to set with the activity list and the boundaries questions.',
     questions: [
       ...grouped('Orientation & identity', [
         f(
@@ -1393,9 +1389,7 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'Everyone',
             'Other',
           ]),
-          {
-            restricted: true,
-          },
+          { restricted: true },
         ),
         f(
           single('relationshipStyle', 'Your relationship style', [
@@ -1408,6 +1402,7 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ]),
           { field: 'relationshipStyle', private: true },
         ),
+        f(yesno('exclusiveNow', 'Are you exclusive / monogamous right now?'), { restricted: true }),
         f(
           slider(
             'intimacyImportance',
@@ -1416,35 +1411,14 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'Important',
             'Huge — central to me',
           ),
-          {
-            restricted: true,
-          },
+          { restricted: true },
         ),
         f(
           single('libido', 'Your sex drive', ['Very low', 'Low', 'Moderate', 'High', 'Very high']),
-          {
-            restricted: true,
-          },
-        ),
-        f(
-          shortText(
-            'sexualityWord',
-            'Describe your sexuality in a word or phrase',
-            'e.g. adventurous, shy, passionate',
-          ),
           { restricted: true },
         ),
       ]),
       ...grouped('Your sexual story', [
-        f(
-          single('firstMasturbatedAge', 'How old were you when you first masturbated?', AGE_RANGES),
-          {
-            restricted: true,
-          },
-        ),
-        f(single('firstOrgasmAge', 'How old were you at your first orgasm?', AGE_RANGES), {
-          restricted: true,
-        }),
         f(
           single('firstPartneredAge', 'How old were you at your first partnered experience?', [
             ...AGE_RANGES.slice(0, -1),
@@ -1467,51 +1441,9 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         ),
         f(
           longText(
-            'discoveredMasturbation',
-            'How did you first discover masturbation?',
-            'Share as much or as little as you like.',
-          ),
-          { restricted: true },
-        ),
-        f(
-          longText(
             'firstExperience',
             'Your first sexual experience, in your own words',
             'Who, when, how it felt — only what you want to share.',
-          ),
-          { restricted: true },
-        ),
-        f(
-          longText(
-            'bestExperience',
-            'Your best or most memorable experience',
-            'What made it so good?',
-          ),
-          { restricted: true },
-        ),
-        f(
-          longText(
-            'embarrassingExperience',
-            'Your most awkward or embarrassing moment',
-            'We all have one — only if you want to share.',
-          ),
-          { restricted: true },
-        ),
-        f(
-          longText(
-            'sexualRegret',
-            'Anything you regret?',
-            'No judgment — only if you want to share.',
-          ),
-          {
-            restricted: true,
-          },
-        ),
-        f(
-          longText(
-            'sexualityEvolved',
-            'How has your sexuality changed over time?',
-            'e.g. what you’re into now vs. then, how confident you feel.',
           ),
           { restricted: true },
         ),
@@ -1532,23 +1464,24 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           { restricted: true },
         ),
       ]),
-      ...grouped('Your current partner', [
+      ...grouped('Your current sex life', [
         f(yesno('hasPartner', 'Do you have a sexual partner right now?'), { restricted: true }),
         f(
-          slider(
-            'sexSatisfaction',
-            'How satisfied are you with your sex life?',
-            'Unhappy',
-            'It’s okay',
-            'Thrilled',
-          ),
+          {
+            ...slider(
+              'sexSatisfaction',
+              'How satisfied are you with your sex life?',
+              'Unhappy',
+              'It’s okay',
+              'Thrilled',
+            ),
+            branch: when('hasPartner', true),
+          },
           { restricted: true },
         ),
         f(
           single('sexFrequency', 'How often are you intimate now?', FREQ, when('hasPartner', true)),
-          {
-            restricted: true,
-          },
+          { restricted: true },
         ),
         f(
           single(
@@ -1557,9 +1490,7 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             FREQ,
             when('hasPartner', true),
           ),
-          {
-            restricted: true,
-          },
+          { restricted: true },
         ),
         f(
           single(
@@ -1571,68 +1502,76 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           { restricted: true },
         ),
         f(
-          single(
-            'orgasmTogether',
-            'How often do you orgasm together?',
-            ['Rarely', 'Sometimes', 'Usually', 'Almost always'],
-            when('hasPartner', true),
-          ),
-          { restricted: true },
-        ),
-        f(
-          slider(
-            'talkAboutSex',
-            'How easily can you talk about sex with them?',
-            'Really hard',
-            'It’s okay',
-            'Totally open',
-          ),
-          { restricted: true },
-        ),
-        f(
-          single(
-            'sharedFantasies',
-            'Have you shared your fantasies with them?',
-            ['Yes, all of them', 'Some', 'Not yet', 'Not comfortable to'],
-            when('hasPartner', true),
-          ),
-          { restricted: true },
-        ),
-        f(
-          longText(
-            'unspokenWant',
-            'Something you want but haven’t asked for',
-            'What would you ask for if it were easy?',
-          ),
-          { restricted: true },
-        ),
-        f(
-          longText('sexWorking', 'What’s working well?', 'The stuff you’d keep exactly as it is.'),
           {
-            restricted: true,
+            ...slider(
+              'talkAboutSex',
+              'How easily can you talk about sex with them?',
+              'Really hard',
+              'It’s okay',
+              'Totally open',
+            ),
+            branch: when('hasPartner', true),
           },
-        ),
-        f(
-          longText(
-            'sexDifferent',
-            'What do you wish were different?',
-            'More of, less of, something new…',
-          ),
           { restricted: true },
         ),
         f(
           {
             ...longText(
-              'partnerAttractive',
-              'What do you find most attractive about them?',
-              'Looks, energy, the way they touch you…',
+              'unspokenWant',
+              'Something you want but haven’t asked for',
+              'What would you ask for if it were easy?',
+            ),
+            branch: when('hasPartner', true),
+          },
+          { restricted: true },
+        ),
+        f(
+          {
+            ...longText(
+              'sexDifferent',
+              'What do you wish were different?',
+              'More of, less of, something new…',
             ),
             branch: when('hasPartner', true),
           },
           { restricted: true },
         ),
       ]),
-      ...grouped('What you like', [
+      ...grouped('Desire, arousal & what you like', [
+        f(
+          single('desireType', 'How does desire usually work for you?', [
+            'Spontaneous — it hits out of the blue',
+            'Responsive — it builds once things get going',
+            'A mix of both',
+            'Not sure',
+          ]),
+          { restricted: true },
+        ),
+        f(
+          single('masturbationFreq', 'How often do you masturbate these days?', [
+            'Rarely / never',
+            'A few times a month',
+            'Weekly',
+            'A few times a week',
+            'Daily',
+            'Prefer not to say',
+          ]),
+          { restricted: true },
+        ),
+        f(
+          multi('inTheMood', 'What gets you in the mood?', [
+            'Touch',
+            'Words / dirty talk',
+            'Anticipation',
+            'Visuals',
+            'Scent',
+            'Romance',
+            'A few drinks',
+            'Stress relief',
+            'Other',
+          ]),
+          { restricted: true },
+        ),
         f(
           multi('turnOns', 'Your turn-ons', [
             'Kissing',
@@ -1663,33 +1602,18 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'Distractions / phones',
             'Silence',
             'Selfishness',
-            'Bad breath',
             'Other',
           ]),
           { restricted: true },
         ),
         f(
-          multi('inTheMood', 'What gets you in the mood?', [
-            'Touch',
-            'Words / dirty talk',
-            'Anticipation',
-            'Visuals',
-            'Scent',
-            'Romance',
-            'A few drinks',
-            'Stress relief',
-            'Other',
-          ]),
-          { restricted: true },
-        ),
-        f(
-          multi('touchAreas', 'Where do you most like to be touched?', [
+          multi('erogenousZones', 'Where do you most like to be touched?', [
             'Neck',
             'Ears',
             'Lips',
             'Chest / nipples',
             'Back',
-            'Thighs',
+            'Inner thighs',
             'Genitals',
             'Butt',
             'All over',
@@ -1698,63 +1622,32 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           { restricted: true },
         ),
         f(
-          multi('positionsPenetrative', 'Favorite positions — penetrative', [
+          multi('positions', 'Favourite positions & ways you like sex', [
             'Missionary',
             'Doggy style',
-            'Cowgirl / on top',
+            'On top / riding',
             'Reverse cowgirl',
             'Spooning',
             'Standing',
-            'Legs on shoulders',
-            'Edge of the bed',
-            'Other',
-          ]),
-          { restricted: true },
-        ),
-        f(
-          multi('positionsOral', 'Favourite oral — what you’re into', [
-            'Giving blowjobs',
-            'Going down on a partner',
-            'Getting head',
-            'Getting eaten out',
+            'Oral (giving)',
+            'Oral (receiving)',
             '69',
             'Face-sitting',
-            'Other',
-          ]),
-          { restricted: true },
-        ),
-        f(
-          multi('positionsAnal', 'Favorite positions — anal', [
-            'Doggy style',
-            'Missionary',
-            'On top / riding',
-            'Spooning',
-            'Not into anal',
-            'Other',
-          ]),
-          { restricted: true },
-        ),
-        f(
-          multi('positionsNonPen', 'Favorite — non-penetrative', [
-            'Making out',
             'Grinding / dry humping',
             'Mutual masturbation',
-            'Sensual massage',
-            'Frottage',
             'Other',
           ]),
           { restricted: true },
         ),
         f(
-          single('paceIntensity', 'Preferred pace & intensity', [
-            'Slow & sensual',
-            'In between',
-            'Rough & intense',
-            'Other',
-          ]),
-          {
-            restricted: true,
-          },
+          slider(
+            'roughness',
+            'How rough do you like it?',
+            'Gentle & slow',
+            'A good balance',
+            'Rough & hard',
+          ),
+          { restricted: true },
         ),
         f(
           single('domSub', 'Dominant or submissive?', [
@@ -1764,22 +1657,15 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'Vanilla',
             'Other',
           ]),
-          {
-            restricted: true,
-          },
+          { restricted: true },
         ),
-        f(multi('intoIt', 'What are you into?', ACTIVITIES), { restricted: true }),
-        f(multi('curiousToTry', 'What are you curious to try?', ACTIVITIES), { restricted: true }),
-        f(multi('hardLimits', "What's off the table for you?", ACTIVITIES), { restricted: true }),
         f(
           single('dirtyTalk', 'How do you feel about dirty talk?', [
             'Love it',
             'Sometimes',
             'Not for me',
           ]),
-          {
-            restricted: true,
-          },
+          { restricted: true },
         ),
         f(
           {
@@ -1792,32 +1678,25 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           },
           { restricted: true },
         ),
+        // The activity inventory as ONE 3-state matrix (replaces the old into-it / curious / hard-limits
+        // triple list). Rows = the shared INTIMACY_ACTIVITIES; each rated Hard limit · Curious · Into it.
         f(
           {
-            ...longText(
-              'dirtyTalkDislikes',
-              'Dirty talk — words or talk that turn you off',
-              'e.g. certain names or terms that pull you out of the moment',
-            ),
-            branch: whenAny('dirtyTalk', ['Love it', 'Sometimes']),
+            id: 'activities',
+            type: 'matrix',
+            prompt:
+              'For each, tap where you stand — your hard limits, what you’re curious about, and what you’re into:',
+            required: false,
+            matrix: {
+              rows: [...INTIMACY_ACTIVITIES],
+              min: 1,
+              max: 3,
+              minLabel: 'Hard limit',
+              midLabel: 'Curious',
+              maxLabel: 'Into it',
+            },
           },
           { restricted: true },
-        ),
-        f(multi('toysOwn', 'Toys you already own', [...TOYS, 'Other', 'None']), {
-          restricted: true,
-        }),
-        f(multi('toysWant', 'Toys you’d like to try', [...TOYS, 'Other', 'None right now']), {
-          restricted: true,
-        }),
-        f(
-          single('sessionLength', 'Quickies or long sessions?', [
-            'Quickies',
-            'Long sessions',
-            'Both',
-          ]),
-          {
-            restricted: true,
-          },
         ),
         f(
           longText(
@@ -1825,9 +1704,25 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'Kinks or fetishes, in your own words',
             'e.g. specific scenarios, materials, sensations, dynamics…',
           ),
+          { restricted: true },
+        ),
+        // Toys as ONE 3-state matrix (replaces toysOwn / toysWant). Rows = the shared TOYS set.
+        f(
           {
-            restricted: true,
+            id: 'toys',
+            type: 'matrix',
+            prompt: 'Toys — what you own, want to try, or aren’t into:',
+            required: false,
+            matrix: {
+              rows: [...TOYS],
+              min: 1,
+              max: 3,
+              minLabel: 'Not for me',
+              midLabel: 'Want to try',
+              maxLabel: 'Own it',
+            },
           },
+          { restricted: true },
         ),
       ]),
       ...grouped('Acts & specifics', [
@@ -1839,13 +1734,6 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             ['Swallow', 'Spit', 'Either', 'Depends'],
             when('givesOralPenis', true),
           ),
-          { restricted: true },
-        ),
-        f(
-          {
-            ...yesno('swallowTurnsOn', 'Does swallowing turn you on?'),
-            branch: when('givesOralPenis', true),
-          },
           { restricted: true },
         ),
         f(
@@ -1863,15 +1751,6 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           { restricted: true },
         ),
         f(
-          single('assPlay', 'Do you like having your ass fingered or played with during sex?', [
-            'Love it',
-            'Sometimes',
-            'Not for me',
-            'Curious',
-          ]),
-          { restricted: true },
-        ),
-        f(
           single('analPref', 'How do you feel about anal?', [
             'Give',
             'Receive',
@@ -1879,9 +1758,7 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'Not for me',
             'Curious',
           ]),
-          {
-            restricted: true,
-          },
+          { restricted: true },
         ),
         f(
           single('choking', 'Do you like choking or being choked?', [
@@ -1894,38 +1771,14 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           { restricted: true },
         ),
         f(
-          slider(
-            'roughness',
-            'How rough do you like it?',
-            'Gentle & slow',
-            'A good balance',
-            'Rough & hard',
-          ),
-          { restricted: true },
-        ),
-        f(
           single('degradePraise', 'Do you like to be degraded or praised?', [
             'Degradation',
             'Praise',
             'Both',
             'Neither',
           ]),
-          {
-            restricted: true,
-          },
+          { restricted: true },
         ),
-        f(
-          single('squirting', 'Squirting?', ['Into it', 'Curious', 'Not for me', "Doesn't apply"]),
-          {
-            restricted: true,
-          },
-        ),
-        f(single('loudQuiet', 'Loud or quiet?', ['Loud', 'Quiet', 'In between']), {
-          restricted: true,
-        }),
-        f(single('lights', 'Lights on or off?', ['On', 'Off', 'No preference']), {
-          restricted: true,
-        }),
         f(
           longText(
             'idealEncounter',
@@ -1935,7 +1788,7 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           { restricted: true },
         ),
       ]),
-      ...grouped('Body & preferences', [
+      ...grouped('Body & confidence', [
         f(
           multi('bodyTypePref', "Body types you're drawn to", [
             'Slim',
@@ -1946,72 +1799,6 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'No preference',
             'Other',
           ]),
-          { restricted: true },
-        ),
-        f(
-          single('breastPref', 'Breast size you’re drawn to on a partner', [
-            'No preference',
-            'Smaller',
-            'Average',
-            'Larger',
-            'Other',
-          ]),
-          { restricted: true },
-        ),
-        f(yesno('attractedPenis', 'Are you attracted to partners with a penis?'), {
-          restricted: true,
-        }),
-        f(
-          {
-            ...slider(
-              'penisLengthPref',
-              'Penis length you’re drawn to',
-              'On the smaller side',
-              'Average',
-              'Big',
-            ),
-            branch: when('attractedPenis', true),
-          },
-          { restricted: true },
-        ),
-        f(
-          {
-            ...slider('penisGirthPref', 'Penis girth you like', 'Slim', 'Average', 'Thick'),
-            branch: when('attractedPenis', true),
-          },
-          { restricted: true },
-        ),
-        f(yesno('attractedVulva', 'Are you attracted to partners with a vulva?'), {
-          restricted: true,
-        }),
-        f(
-          single(
-            'vulvaLabiaPref',
-            'Labia you’re drawn to on a partner',
-            [
-              'No preference',
-              'Neat / tucked in',
-              'Fuller / prominent lips',
-              'I love prominent labia',
-              'Other',
-            ],
-            when('attractedVulva', true),
-          ),
-          { restricted: true },
-        ),
-        f(
-          single(
-            'vulvaClitPref',
-            'Anything you love about a partner’s clit?',
-            [
-              'No preference',
-              'On the smaller side',
-              'Larger / prominent',
-              'I love a big clit',
-              'Other',
-            ],
-            when('attractedVulva', true),
-          ),
           { restricted: true },
         ),
         f(
@@ -2032,44 +1819,17 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'Varies',
             'Other',
           ]),
-          {
-            restricted: true,
-          },
+          { restricted: true },
         ),
         f(
           slider(
             'bodyConfidence',
-            'How confident do you feel in your own body?',
+            'How confident do you feel in your own body sexually?',
             'Self-conscious',
             'It’s alright',
             'Very confident',
           ),
-          {
-            restricted: true,
-          },
-        ),
-        f(
-          multi('erogenousZones', 'Your most sensitive spots', [
-            'Neck',
-            'Ears',
-            'Nipples',
-            'Inner thighs',
-            'Genitals',
-            'Butt',
-            'Lower back',
-            'Other',
-          ]),
           { restricted: true },
-        ),
-        f(
-          longText(
-            'bodyFeelings',
-            'Anything about your body you love or feel self-conscious about sexually?',
-            'What you love, or what you’d like to feel better about.',
-          ),
-          {
-            restricted: true,
-          },
         ),
       ]),
       ...grouped('Fantasies & media', [
@@ -2079,9 +1839,7 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'Your wildest fantasy, in as much detail as you like',
             'Set the scene — no judgment.',
           ),
-          {
-            restricted: true,
-          },
+          { restricted: true },
         ),
         f(
           longText(
@@ -2100,14 +1858,6 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           { restricted: true },
         ),
         f(
-          longText(
-            'neverActOn',
-            'A fantasy you’d love but would never actually do',
-            'Hot in your head, staying there — no judgment.',
-          ),
-          { restricted: true },
-        ),
-        f(
           single(
             'cncInterest',
             'Any interest in consensual non-consent (CNC) — a “forced” roleplay where both people fully agree in advance?',
@@ -2123,9 +1873,7 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'Often',
             'Daily',
           ]),
-          {
-            restricted: true,
-          },
+          { restricted: true },
         ),
         f(
           multi(
@@ -2150,78 +1898,22 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ),
           { restricted: true },
         ),
-        f(
-          {
-            ...longText(
-              'pornRole',
-              'How does porn fit into your life?',
-              'e.g. a turn-on, a habit, inspiration, complicated…',
-            ),
-            branch: whenAny('watchPorn', ['Rarely', 'Sometimes', 'Often', 'Daily']),
-          },
-          { restricted: true },
-        ),
         f(single('erotica', 'Do you read or listen to erotica?', ['Never', 'Sometimes', 'Often']), {
           restricted: true,
         }),
         f(
-          multi(
-            'eroticaType',
-            'What kind of erotica do you like?',
-            [
-              'Romance',
-              'Explicit / smut',
-              'Audio (apps like Quinn / Dipsea)',
-              'Written stories',
-              'Fan fiction',
-              'BDSM / kink',
-              'Other',
-            ],
-            whenAny('erotica', ['Sometimes', 'Often']),
-          ),
-          { restricted: true },
-        ),
-        f(single('sexting', 'Do you sext or share nudes?', ['Never', 'Sometimes', 'Often']), {
-          restricted: true,
-        }),
-        f(
-          single('recording', 'Are you into recording yourselves having sex or you masturbating?', [
-            'Love it',
-            'Sometimes',
+          single('sexualMedia', 'Do you sext, share nudes, record, or cam?', [
+            'None of these',
+            'Sext / share nudes sometimes',
+            'Record ourselves',
+            'Into camming / broadcasting',
             'Curious',
-            'Not for me',
+            'Prefer not to say',
           ]),
-          { restricted: true },
-        ),
-        f(
-          single('broadcasting', 'Would you ever broadcast / livestream (cam) yourself?', [
-            'I do already',
-            'Want to',
-            'Curious',
-            'No',
-          ]),
-          { restricted: true },
-        ),
-        f(
-          single('mirror', 'Do you like watching yourself in a mirror or on camera?', [
-            'Yes',
-            'Sometimes',
-            'No',
-          ]),
-          {
-            restricted: true,
-          },
-        ),
-        f(
-          longText(
-            'recurringDreams',
-            'Any recurring sexual dreams?',
-            'The ones that keep coming back.',
-          ),
           { restricted: true },
         ),
       ]),
-      ...grouped('Sexual wellbeing', [
+      ...grouped('Wellbeing, consent & meaning', [
         f(
           multi('difficulties', "Anything you'd want support with?", [
             'Getting aroused',
@@ -2233,7 +1925,6 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'Dryness',
             'Low desire',
             'Mismatched desire with a partner',
-            'Learning to squirt',
             'Body confidence',
             'Performance anxiety',
             'None',
@@ -2261,14 +1952,31 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         ),
         f(
           longText(
-            'sexWellbeing',
-            'How does sex affect your overall wellbeing?',
-            'What it gives you — connection, release, confidence…',
+            'sexEmotionalSecurity',
+            'How do sex and closeness connect to feeling emotionally secure for you?',
+            'What intimacy gives you beyond the physical.',
           ),
           { restricted: true },
         ),
-      ]),
-      ...grouped('Boundaries & meaning', [
+        f(
+          shortText(
+            'afterCare',
+            'After intense or vulnerable sex, what do you need?',
+            'e.g. cuddling, quiet, reassurance, space, food…',
+          ),
+          { restricted: true },
+        ),
+        f(
+          single('consentPractices', 'How do you and partners handle consent and checking in?', [
+            'We talk about it explicitly',
+            'We mostly read each other',
+            'It varies',
+            'We struggle with it',
+            'Prefer not to say',
+            'Other',
+          ]),
+          { restricted: true },
+        ),
         f(
           longText(
             'boundaries',
@@ -2277,20 +1985,11 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ),
           { restricted: true },
         ),
-        f(shortText('safeword', 'A safeword or signal you use', 'e.g. “red”')),
         f(
           longText(
             'feelSafe',
             'What makes you feel safe and present during sex?',
             'Trust, pace, words, a certain mood…',
-          ),
-          { restricted: true },
-        ),
-        f(
-          longText(
-            'closenessMeaning',
-            'What does great intimacy or closeness mean to you?',
-            'Beyond the physical — what it feels like at its best.',
           ),
           { restricted: true },
         ),

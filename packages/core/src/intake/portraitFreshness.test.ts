@@ -60,6 +60,29 @@ describe('intakeAnswerHashes', () => {
     );
     expect(h2['basics.list']).toBe(h['basics.list']);
   });
+
+  it('treats a matrix answer (row→point) as filled only when rated, order-independently (27)', () => {
+    const make = (m: Record<string, number>) =>
+      intakeAnswerHashes(
+        session({
+          sections: [
+            {
+              id: 'intimacy',
+              status: 'complete',
+              restricted: true,
+              messages: [],
+              answers: { activities: m },
+            },
+          ],
+        }),
+      );
+    // An empty matrix is NOT filled (nothing rated) — no signature.
+    expect(make({})['intimacy.activities']).toBeUndefined();
+    // Rating rows in a different order hashes the same (row order never counts as an edit).
+    expect(make({ oral: 3, choking: 1 })['intimacy.activities']).toBe(
+      make({ choking: 1, oral: 3 })['intimacy.activities'],
+    );
+  });
 });
 
 describe('portraitStaleness', () => {

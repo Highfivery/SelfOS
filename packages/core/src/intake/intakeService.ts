@@ -13,6 +13,7 @@ import {
   type InsightFact,
   type Person,
   type PersonFieldKey,
+  type Question,
   type UsageEvent,
 } from '../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
@@ -162,7 +163,50 @@ function answerToString(value: IntakeAnswerValue | undefined): string {
       .join(', ');
   }
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  // A keyed map (matrix row→point, allocation bucket→amount) → "key: value; …" so it never reads
+  // "[object Object]" in the portrait. A matrix's points are mapped to their labels by the caller (the
+  // synthesis path) when it has them; this is the defensive fallback.
+  if (value !== null && typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>)
+      .map(([k, v]) => `${k}: ${String(v).trim()}`)
+      .filter((s) => !s.endsWith(': '))
+      .join('; ');
+  }
   return String(value).trim();
+}
+
+/** Map a 3-point labelled matrix (the intake activity/toys matrices) answer to readable label text for the
+ * synthesis input — "oral: Into it; choking: Hard limit" — so the portrait captures the meaning, not "1/3".
+ * Falls back to {@link answerToString} for a non-matrix / unlabelled-matrix answer. */
+function formatAnswerForSynthesis(q: Question, value: IntakeAnswerValue | undefined): string {
+  if (q.type !== 'matrix' || !q.matrix || value === null || typeof value !== 'object') {
+    return answerToString(value);
+  }
+  const { min, max, minLabel, midLabel, maxLabel, rows } = q.matrix;
+  const labels =
+    max - min === 2 && minLabel && midLabel && maxLabel ? [minLabel, midLabel, maxLabel] : null;
+  if (!labels || Array.isArray(value)) return answerToString(value);
+  const map = value as Record<string, number>;
+  return rows
+    .map((row) => {
+      const point = map[row];
+      if (typeof point !== 'number') return null;
+      return `${row}: ${labels[point - min] ?? point}`;
+    })
+    .filter((s): s is string => s !== null)
+    .join('; ');
+}
+
+/** Intake answeredness. The shared `isAnswered` treats a `matrix` as answered only when EVERY row is rated
+ * (correct for a short required questionnaire matrix), but the intake's activity/toys matrices are long and
+ * optional — a person rates only the rows that apply. So for a matrix the intake counts it answered when ANY
+ * row is rated; every other type delegates to the shared check. */
+function intakeAnswered(q: Question, value: IntakeAnswerValue | undefined): boolean {
+  if (q.type === 'matrix') {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+    return Object.values(value as Record<string, unknown>).some((v) => typeof v === 'number');
+  }
+  return isAnswered(q, value);
 }
 
 /**
@@ -259,7 +303,7 @@ export async function submitSectionForm(
   for (const [qid, value] of Object.entries(answers)) {
     const m = byId.get(qid);
     if (!m) continue; // ignore anything not in this section's catalog
-    if (!isAnswered(m.q, value)) continue; // skip blanks / unanswered
+    if (!intakeAnswered(m.q, value)) continue; // skip blanks / unanswered
     clean[qid] = value;
   }
 
@@ -530,7 +574,7 @@ function formAnswersMessages(session: IntakeSession): { role: 'user'; content: s
     const normal: string[] = [];
     const sensitive: string[] = [];
     for (const m of def.questions) {
-      const str = answerToString(section.answers[m.q.id]);
+      const str = formatAnswerForSynthesis(m.q, section.answers[m.q.id]);
       if (!str) continue;
       const line = `${m.q.prompt}: ${str}`;
       // A per-question restricted answer in a non-restricted section → the sensitive block. (In a restricted

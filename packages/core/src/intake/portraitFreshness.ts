@@ -19,12 +19,20 @@ function filled(value: IntakeAnswerValue | undefined): boolean {
   if (value === undefined || value === null) return false;
   if (typeof value === 'string') return value.trim().length > 0;
   if (Array.isArray(value)) return value.length > 0;
+  // A keyed map (a matrix row→point answer) is filled only when it has at least one rated row.
+  if (typeof value === 'object') return Object.keys(value).length > 0;
   return true; // number / boolean
 }
 
-/** A deterministic serialization of an answer value (arrays sorted so order never counts as a change). */
+/** A deterministic serialization of an answer value (arrays AND object keys sorted so order never counts
+ * as a change — e.g. rating matrix rows in a different order must not read as "edited"). */
 function serialize(value: IntakeAnswerValue): string {
   if (Array.isArray(value)) return JSON.stringify([...value].map(String).sort());
+  if (value !== null && typeof value === 'object') {
+    return JSON.stringify(
+      Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b))),
+    );
+  }
   return JSON.stringify(value);
 }
 

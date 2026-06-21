@@ -533,6 +533,7 @@ export const IntakeAnswerValueSchema = z.union([
   z.array(z.string()),
   z.array(z.object({ label: z.string(), date: z.string() })), // a `dateList` answer (→ importantDates)
   z.array(z.record(z.string(), z.string())), // a `roster` answer (repeatable rows of {column → value})
+  z.record(z.string(), z.number()), // a `matrix` answer (row → point, e.g. the intimacy activity matrix)
 ]);
 export type IntakeAnswerValue = z.infer<typeof IntakeAnswerValueSchema>;
 
@@ -651,6 +652,10 @@ export const QuestionSchema = z.object({
       min: z.number(),
       max: z.number(),
       minLabel: z.string().optional(),
+      // A 3-point matrix (max−min===2) carrying all of min/mid/maxLabel renders each row as three LABELLED
+      // options (e.g. Hard limit · Curious · Into it) instead of numbered points — the intake activity/toys
+      // matrices use this. The stored value stays the numeric row→point map; the labels are display only.
+      midLabel: z.string().optional(),
       maxLabel: z.string().optional(),
     })
     .optional(),

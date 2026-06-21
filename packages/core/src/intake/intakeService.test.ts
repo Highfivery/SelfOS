@@ -3,6 +3,7 @@ import { generateMasterKey } from '../crypto';
 import { memFileSystem } from '../host/memFileSystem';
 import type { ClaudeClient } from '../host';
 import type { Insight, Person } from '../schemas';
+import { INTIMACY_ACTIVITIES } from '../intimacy/topics';
 import { listConversations } from '../conversations';
 import { getInsight, saveInsight, summarizeForContext, updateInsight } from '../insights';
 import { getPerson, savePerson } from '../people';
@@ -42,6 +43,7 @@ function fakeClient(
     reflection?: string;
     portrait?: unknown;
     capture?: (s: string) => void;
+    captureMessages?: (m: { role: string; content: string }[]) => void;
   } = {},
 ): ClaudeClient {
   const usage = { inputTokens: 12, outputTokens: 6, cacheWriteTokens: 0, cacheReadTokens: 0 };
@@ -49,6 +51,7 @@ function fakeClient(
     send: () => Promise.resolve(''),
     stream: (options, onDelta) => {
       over.capture?.(options.system);
+      over.captureMessages?.(options.messages);
       const last = options.messages.at(-1)?.content ?? '';
       let text: string;
       if (last.includes('closing portrait')) text = JSON.stringify(over.portrait ?? PORTRAIT);
@@ -227,6 +230,27 @@ describe('intakeService', () => {
     expect(p?.privateFields).toEqual(
       expect.arrayContaining(['healthNotes', 'sexualOrientation', 'relationshipStyle']),
     );
+  });
+
+  it('persists a PARTIAL intimacy activity matrix and formats it with labels for the portrait (27)', async () => {
+    const fs = await setup();
+    // Only TWO of the ~30 activity rows are rated. The shared `isAnswered` requires EVERY matrix row, so it
+    // would drop this; the intake's own check accepts a partial matrix, so the ratings persist.
+    const r0 = INTIMACY_ACTIVITIES[0]!;
+    const r1 = INTIMACY_ACTIVITIES[1]!;
+    const activities = { [r0]: 3, [r1]: 1 }; // r0 = Into it (3), r1 = Hard limit (1)
+    await submitSectionForm(fs, key, 'p1', 'intimacy', { activities }, NOW);
+    const sec = (await getIntakeSession(fs, key, 'p1'))?.sections.find((s) => s.id === 'intimacy');
+    expect(sec?.answers.activities).toEqual(activities); // the partial matrix is kept, not dropped
+
+    // Synthesis feeds the answers to the model as readable LABELS, not bare "1/3" or "[object Object]".
+    let messages: { role: string; content: string }[] = [];
+    const client = fakeClient({ captureMessages: (m) => (messages = m) });
+    await synthesizeIntake(synth(fs, client));
+    const body = messages.map((m) => m.content).join('\n');
+    expect(body).toContain(`${r0}: Into it`);
+    expect(body).toContain(`${r1}: Hard limit`);
+    expect(body).not.toContain('[object Object]');
   });
 
   it('ignores answers not declared for the section (the trust boundary)', async () => {

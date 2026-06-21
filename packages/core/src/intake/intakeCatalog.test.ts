@@ -41,6 +41,26 @@ describe('intakeCatalog', () => {
     expect(coreGate).toBeLessThanOrEqual(30);
   });
 
+  it('the intimacy block is rebalanced — in band, with the two 3-state matrices (27)', () => {
+    const intimacy = getIntakeSection('intimacy');
+    const qs = intimacy?.questions ?? [];
+    // Rebalanced 100 → ~58–65; guard the band so it can't silently re-bloat or be gutted.
+    expect(qs.length).toBeGreaterThan(45);
+    expect(qs.length).toBeLessThanOrEqual(70);
+    // The activity + toys lists are collapsed into 3-point LABELLED matrices (min/mid/max all set), not the
+    // old into-it / curious / hard-limits triple checklist.
+    const matrices = qs.filter((m) => m.q.type === 'matrix');
+    expect(matrices.map((m) => m.q.id).sort()).toEqual(['activities', 'toys']);
+    for (const m of matrices) {
+      const mx = m.q.matrix;
+      expect(mx).toBeTruthy();
+      if (!mx) continue;
+      expect(mx.max - mx.min).toBe(2); // exactly 3 points
+      expect(Boolean(mx.minLabel && mx.midLabel && mx.maxLabel)).toBe(true); // 3 labels → labelled render
+      expect(mx.rows.length).toBeGreaterThan(5); // a real inventory of rows
+    }
+  });
+
   it('every form question maps to a real Person field key', () => {
     const valid = new Set<string>(PERSON_FIELD_KEYS);
     for (const section of INTAKE_CATALOG) {
@@ -71,12 +91,10 @@ describe('intakeCatalog', () => {
     expect(intimacy?.questions?.find((m) => m.field === 'relationshipStyle')?.private).toBe(true);
   });
 
-  it('every intimacy answer is restricted or a private field (no sensitive answer leaks unrestricted)', () => {
+  it('EVERY intimacy answer is restricted or a private field (no sensitive answer leaks unrestricted)', () => {
     const intimacy = getIntakeSection('intimacy');
     for (const m of intimacy?.questions ?? []) {
       const guarded = m.restricted === true || (m.field !== undefined && m.private === true);
-      // The only allowed exception is the non-identifying safeword shortcut, which carries no content.
-      if (m.q.id === 'safeword') continue;
       expect(guarded, `intimacy question ${m.q.id} must be restricted or a private field`).toBe(
         true,
       );

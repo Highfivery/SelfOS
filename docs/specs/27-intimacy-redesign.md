@@ -1,6 +1,6 @@
 # 27 — Intimacy & sexuality block redesign
 
-> **Status:** Draft · _last updated 2026-06-21_
+> **Status:** Approved · **Built** 2026-06-21 (`feat/intimacy-redesign`) · _last updated 2026-06-21_
 >
 > The opt-in 18+ **Intimacy & sexuality** intake block ([`18`](18-personal-onboarding.md) §14.5) is
 > comprehensive but **100 questions** with real fatigue traps — most painfully, three full ~40-item activity
@@ -97,7 +97,7 @@ limit: W").
 - **No new restricted/private mechanics** — same `restricted`-fact routing
   ([`18`](18-personal-onboarding.md) §14.8/§14.10).
 
-### 4.2 The rebalanced bank (~58)
+### 4.2 The rebalanced bank (61 as built)
 
 Notation as [`26`](26-intake-catalog-redesign.md): `single`/`multi`/`yesNo`/`text`/`longtext`/`slider`
 (3-anchor, **unseeded** [`26`](26-intake-catalog-redesign.md) §5)/`matrix` · all `(R)` `restricted` except
@@ -215,21 +215,31 @@ attraction is already captured by "who you're drawn to" in A.)_
 _(A single gentle, optional line near H points to **What weighs on you** for anyone wanting to discuss a
 non-consensual experience — handled trauma-informed there, not solicited here.)_
 
-**Tally:** 6 + 5 + 8 + 13 + 6 + 4 + 7 + 9 = **58**. (From 100. Explicit register retained; the two matrices
-do the heavy lifting on volume; H adds the wellbeing depth.)
+**Tally:** **61** as built (from 100; the inline counts above are indicative — a couple of branched
+follow-ups land the exact figure). Explicit register retained; the two matrices do the heavy lifting on
+volume; H adds the wellbeing depth.
 
 ## 5. Architecture & modules
 
 - **`intakeCatalog.ts`** — rewrite the `intimacy` section to the §4.2 bank. Reuse the shared
   `INTIMACY_ACTIVITIES` / `INTIMACY_FANTASIES` / `TOYS` constants; the activity + toys **matrices** reference
   those same lists (one source of truth with [`08`](08-questionnaires.md) generation — no drift).
-- **`matrix` (categorical columns)** — verify `@selfos/answering` renders a `matrix` whose columns are
-  **named single-select options** (Into it / Curious / Hard limit), not only a numeric scale. If today's
-  `matrix` is scale-only, add a categorical variant (additive `Question.matrix.columns?: string[]` or reuse
-  the existing `scale`/options shape) + render + `answerToString`/`isAnswered`. Keep it minimal and tested.
-- **Synthesis** — unchanged: the whole `intimacy` section is `restricted`, so all its facts flag restricted
-  via `RESTRICTED_SECTION_REFS` ([`18`](18-personal-onboarding.md) §14.8). `answerToString` must format a
-  matrix answer readably for the portrait ("Into it: oral, choking; Curious: …; Hard limit: …").
+- **`matrix` (3-point labelled — AS BUILT).** Today's `matrix` is rows × a numeric scale (value
+  `Record<string, number>`). Rather than a heavier categorical-columns type (which would need a horizontal
+  column grid — a mobile no-horizontal-scroll hazard, §12), the 3-state matrix is an **ordinal 3-point** scale
+  whose buttons show **labels instead of numbers**. The minimal additive changes: (1) `Question.matrix` gains
+  an optional **`midLabel`** (mirroring slider); (2) `@selfos/answering`'s `ScalePicker` gains an optional
+  `labels` prop, and the matrix render passes the 3 labels when a matrix has exactly 3 points + all of
+  min/mid/maxLabel (otherwise unchanged numbered points — existing 5-point questionnaire matrices are
+  untouched); (3) `IntakeAnswerValue` is **widened** to include `Record<string, number>` (the intake now
+  stores a matrix answer); (4) the shared `isAnswered` (every-row, kept for required questionnaire matrices)
+  is supplemented by an **intake-local `intakeAnswered`** that counts a matrix answered when **any** row is
+  rated — so a long optional activity matrix persists partial ratings. The buttons stay flex-wrapped
+  (`.scale`/`.matrixRow` wrap), so 3 labelled options never overflow at ~360px.
+- **Synthesis** — the whole `intimacy` section is `restricted`, so all its facts flag restricted via
+  `RESTRICTED_SECTION_REFS` ([`18`](18-personal-onboarding.md) §14.8). A new `formatAnswerForSynthesis` maps a
+  3-point labelled matrix answer to readable label text for the portrait input ("oral: Into it; choking: Hard
+  limit"), and `answerToString` gained a keyed-map fallback so a matrix never reads "[object Object]".
 - **Slider-seed fix** — the intimacy sliders (libido intensity, roughness, body confidence, etc.) use the
   **unseeded** optional-slider behaviour from [`26`](26-intake-catalog-redesign.md) §5 /
   [`28`](28-portrait-synthesis-optimization.md) — an untouched intensity slider is **unanswered** (no
@@ -281,7 +291,7 @@ announce "not set." Reduced-motion respected.
   free-text has a placeholder, the NEW wellbeing items present); the section is `restricted` + `adult`; the
   branches sit under their gates (the conditional-reveal assertion from [`18`](18-personal-onboarding.md)
   §14.5 still passes).
-- **Matrix unit (if extended):** a categorical matrix renders rows × named columns; `isAnswered` true only
+- **Matrix unit:** a categorical matrix renders rows × named columns; `isAnswered` true only
   for filled rows; `answerToString` formats "Into it: …; Curious: …; Hard limit: …".
 - **Synthesis unit:** intimacy answers → `restricted` facts (never `shareable`); the matrix answer becomes
   readable facts; `sexualOrientation`/`relationshipStyle` land as private fields.
@@ -292,10 +302,12 @@ announce "not set." Reduced-motion respected.
 
 ## 11. Open questions
 
-1. **Matrix support** — does today's `matrix` already do categorical single-select columns, or is the small
-   additive extension needed? (Decide at build by reading `@selfos/answering`.)
-2. **Activity-list length in a matrix** — the full ~40-item `INTIMACY_ACTIVITIES` as matrix rows may be long;
-   group it (penetrative / oral / anal / kink / exhibition…) with sub-headers, or trim the inventory?
+1. **Matrix support** — RESOLVED at build: today's `matrix` is scale-only, so the 3-state matrix is an
+   ordinal **3-point labelled** scale (additive `midLabel` + a `ScalePicker labels` prop), not a categorical-
+   columns type — see §5. Mobile-safe (wrapping), value stays `Record<string, number>`.
+2. **Activity-list length in a matrix** — shipped with the **full** shared `INTIMACY_ACTIVITIES` as rows (one
+   source of truth with [`08`](08-questionnaires.md) — not forked/trimmed); the rows stack vertically. If it
+   reads long in use, a future polish could add sub-headers; not blocking.
 3. **STI / sexual-health screening** — add a light, clearly-optional, non-diagnostic "anything about sexual
    health you'd want SelfOS to keep in mind" (text), or keep out as medical? (Default: out.)
 4. **Exact retention in B/C/E** — the reflective-story and acts items trimmed here (§4.2) — confirm the cut
@@ -306,7 +318,7 @@ announce "not set." Reduced-motion respected.
 
 - **Direction** — rebalance **but keep explicit** (user, 2026-06-21): cut volume + add wellbeing depth, do
   not soften the graphic/casual register.
-- **Volume** — ~58 (from 100), via the activity/toys matrices, merged positions, and trimmed granular
+- **Volume** — 61 as built (from 100), via the activity/toys matrices, merged positions, and trimmed granular
   body-prefs.
 - **Additions** — desire type, current masturbation frequency, after-care, consent/communication practices,
   sex↔emotional-security; sexual self-esteem kept.
@@ -317,4 +329,20 @@ announce "not set." Reduced-motion respected.
 - 2026-06-21 — created (Draft). Part of the onboarding-redesign spec group (26 non-intimacy catalog · 27
   intimacy · 28 synthesis/context optimization · 29 progressive profile-building). Rebalances the intimacy
   block 100 → ~58, explicit register retained, via a 3-state activity matrix + sex-therapy wellbeing
-  additions; amends [`18`](18-personal-onboarding.md) §14.5/§14.10/§14.11. Awaiting review.
+  additions; amends [`18`](18-personal-onboarding.md) §14.5/§14.10/§14.11.
+- 2026-06-21 — **Approved + built** (`feat/intimacy-redesign`, stacked on `feat/intake-catalog-redesign`/26,
+  NOT merged). Rewrote the `intimacy` section **100 → 61**, explicit register retained: the into-it/curious/
+  hard-limits triple list → ONE 3-point **labelled matrix** (Hard limit · Curious · Into it); `toysOwn`/
+  `toysWant` → one toys matrix (Not for me · Want to try · Own it); merged the 4 position multis + the
+  touch/erogenous multis; trimmed the granular body-pref enumeration (breast/labia/clit/penis sliders);
+  **added** the sex-therapy depth — `desireType` (spontaneous/responsive), `masturbationFreq`,
+  `sexEmotionalSecurity`, `afterCare`, `consentPractices` (`bodyConfidence` kept). Engine (all additive,
+  no migration): `matrix.midLabel` + a labelled `ScalePicker` (3-point matrices only; existing numbered
+  matrices untouched), `IntakeAnswerValue` widened to the matrix record, an intake-local partial-matrix
+  answeredness, and `formatAnswerForSynthesis` (labelled portrait text). `sexualOrientation`/
+  `relationshipStyle` stay the only private fields; every other intimacy answer `restricted` (the catalog
+  invariant test passes). Tests: +catalog intimacy-band/matrix guard, +core partial-matrix-persists +
+  synthesis-formats-labels, +`QuestionnaireForm` RTL labelled-matrix render+pick, and the onboarding **E2E**
+  now asserts the labelled matrix renders in the real built app after the 18+ ack. Gate: typecheck (node +
+  web), lint, format, **444 core + 533 desktop + 11 relay** unit, onboarding E2E green. Same numbering note
+  as 26 (this group is 26–29; merge-time reconcile). Awaiting user review.

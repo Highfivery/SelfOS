@@ -71,12 +71,16 @@ export function registerBuiltinSettings(): void {
     icon: Palette,
     order: 1,
   });
+  // AI, Sessions, Questionnaires, Dreams + Relay are household-wide settings the Owner controls —
+  // owner-only sections, hidden entirely from non-`settings.manage` users (members inherit AI via the
+  // shared key, 25-household-ai-credentials; they don't manage household behaviour).
   registerSection({
     id: 'ai',
     title: 'AI',
     description: 'Connect Claude to power conversations.',
     icon: Sparkles,
     order: 2,
+    adminOnly: true,
   });
   registerSection({
     id: 'sessions',
@@ -84,6 +88,7 @@ export function registerBuiltinSettings(): void {
     description: 'How coaching sessions are remembered across the app.',
     icon: MessagesSquare,
     order: 3,
+    adminOnly: true,
   });
   registerSection({
     id: 'questionnaires',
@@ -91,6 +96,7 @@ export function registerBuiltinSettings(): void {
     description: 'How questionnaire responses are turned into insights.',
     icon: ClipboardList,
     order: 4,
+    adminOnly: true,
   });
   registerSection({
     id: 'dreams',
@@ -98,6 +104,7 @@ export function registerBuiltinSettings(): void {
     description: 'Your dream journal and how it informs your coaching.',
     icon: Moon,
     order: 5,
+    adminOnly: true,
   });
   registerSection({
     id: 'relay',
@@ -105,6 +112,7 @@ export function registerBuiltinSettings(): void {
     description: 'Send questionnaires to people without SelfOS, via a private encrypted link.',
     icon: Send,
     order: 6,
+    adminOnly: true,
   });
   registerSection({
     id: 'vault',

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ChevronDown, Lock, Users } from 'lucide-react';
+import { ChevronDown, FolderOpen, Lock, TriangleAlert, Users } from 'lucide-react';
 import { useSessionStore } from '../stores/sessionStore';
 import { TitlebarControl } from '../design-system/components';
 import styles from './AccountMenu.module.css';
@@ -16,10 +16,19 @@ function initials(name: string): string {
  * The titlebar account control: avatar + active person's name. Opening it reveals the session menu —
  * switch person and lock (logout).
  */
-export function AccountMenu({ onSwitch }: { onSwitch: () => void }): JSX.Element | null {
+export function AccountMenu({
+  onSwitch,
+  conflicts = [],
+}: {
+  onSwitch: () => void;
+  /** Sync-conflict copies found in the vault — surfaced in the menu's "Open vault folder" item. */
+  conflicts?: string[];
+}): JSX.Element | null {
   const activePerson = useSessionStore((s) => s.activePerson);
   const lock = useSessionStore((s) => s.lock);
   const [open, setOpen] = useState(false);
+  const conflictCount = conflicts.length;
+  const hasConflicts = conflictCount > 0;
 
   useEffect(() => {
     if (!open) return undefined;
@@ -37,15 +46,21 @@ export function AccountMenu({ onSwitch }: { onSwitch: () => void }): JSX.Element
     <div className={styles.wrap}>
       <TitlebarControl
         className={styles.trigger}
+        tone={hasConflicts ? 'warning' : 'default'}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={`Signed in as ${name}`}
+        aria-label={
+          hasConflicts
+            ? `Signed in as ${name} — ${conflictCount} sync ${conflictCount === 1 ? 'conflict' : 'conflicts'}`
+            : `Signed in as ${name}`
+        }
         onClick={() => setOpen((value) => !value)}
       >
         <span className={styles.avatar} aria-hidden="true">
           {initials(name)}
         </span>
         <span className={styles.name}>{name}</span>
+        {hasConflicts ? <TriangleAlert size={14} aria-hidden="true" /> : null}
         <ChevronDown size={14} aria-hidden="true" />
       </TitlebarControl>
       {open ? (
@@ -81,6 +96,24 @@ export function AccountMenu({ onSwitch }: { onSwitch: () => void }): JSX.Element
             >
               <Lock size={16} aria-hidden="true" />
               Lock
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.item}
+              onClick={() => {
+                setOpen(false);
+                void window.selfos?.revealVault();
+              }}
+            >
+              {hasConflicts ? (
+                <TriangleAlert size={16} aria-hidden="true" />
+              ) : (
+                <FolderOpen size={16} aria-hidden="true" />
+              )}
+              {hasConflicts
+                ? `Resolve ${conflictCount} sync ${conflictCount === 1 ? 'conflict' : 'conflicts'}`
+                : 'Open vault folder'}
             </button>
           </div>
         </>

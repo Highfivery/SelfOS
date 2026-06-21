@@ -360,6 +360,22 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-21 — **Build + durable UX/permission decisions (on `feat/household-ai-credentials`).** Three
+  owner-requested access/UX changes: **(1)** the **AI, Sessions, Questionnaires, Dreams + Relay settings
+  sections are owner-only** — whole sections hidden from non-`settings.manage` users (added `adminOnly` to
+  `SettingsSection`; `SettingsScreen` filters sections, not just individual settings). Non-owners see only
+  Appearance / Vault / About. (Consequence: the spec-25 member key-override UI is no longer surfaced —
+  members rely on the inherited shared key.) **(2)** The **dev-only `/gallery` is owner-gated** (nav link +
+  route, on top of dev-only). **(3)** The header **vault/sync "checkbox" (the `SyncStatusChip`, a check-circle
+  that opened the vault folder and read as an unclear checkbox) moved into the account dropdown** as an
+  "Open vault folder" item; a sync conflict now shows on the account control + as a "Resolve N sync
+  conflicts" item (the in-content Banner still surfaces conflicts). Deleted `SyncStatusChip`. Also finished
+  **spec 25's E2E** (owner shares via UI → decrypt the vault → keyless device resolves `source:'shared'`).
+  Gate green: typecheck, lint, format, **449 core + 537 desktop** unit/RTL/bridge. E2E + visual QA need a
+  local display (the standing Electron-E2E constraint). **Lesson: hide whole owner-only SECTIONS at the
+  section level (a `SettingsSection.adminOnly` flag the screen filters on), not just per-setting — and when a
+  control's icon (a check-circle) reads as an interactive checkbox, it belongs in a labelled menu item, not a
+  bare titlebar chip.**
 - 2026-06-21 — **Durable policy + Build (multi-device specs 25–29 group).** Audited the reported multi-device
   bug — a member installing on their own machine + selecting the shared vault saw "AI hasn't been set up"
   though the owner had set it up — and root-caused it: the **API key is a device-local secret** (00 §6.2,

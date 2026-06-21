@@ -5,7 +5,6 @@ import { TitlebarControl } from '../design-system/components';
 import { AppearanceMenu } from './AppearanceMenu';
 import { AccountMenu } from './AccountMenu';
 import { Brand } from './Brand';
-import { SyncStatusChip } from './SyncStatusChip';
 import { UsageRing } from './UsageRing';
 import styles from './AppHeader.module.css';
 
@@ -67,14 +66,11 @@ export function AppHeader({
         <Brand />
       </Link>
       <div className={styles.items}>
-        {/* The sync chip collapses first at the narrowest widths (the in-content Banner still shows
-            conflicts); keeps the essential controls + the macOS traffic-light inset within view. */}
-        <span className={styles.syncSlot}>
-          <SyncStatusChip conflicts={conflicts} />
-        </span>
+        {/* The vault/sync affordance moved into the account menu (it read as an unclear "checkbox" in the
+            bar); the in-content Banner still surfaces conflicts prominently. */}
         <UsageRing />
         <AppearanceMenu />
-        <AccountMenu onSwitch={onSwitchPerson} />
+        <AccountMenu onSwitch={onSwitchPerson} conflicts={conflicts} />
       </div>
     </header>
   );

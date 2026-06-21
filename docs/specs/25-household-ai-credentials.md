@@ -587,10 +587,16 @@ To resolve in the build session (none silently assumed):
   `ai:keyStatus` through the full seam; all 11 renderer readiness surfaces migrated off `secretHas` to a
   shared `aiKeyResolved()`; role-aware `SharedKeyControl` (owner Share/Stop-sharing; member "provided by
   your household" + override). `00` §4.1/§6.2 amended. Tests: 8 core + 1 coreBridge
-  (owner-shares→member-inherits→member-denied) + 2 RTL. Gate green: typecheck, lint, format, **449 core +
-  533 desktop** unit. **Remaining for full DoD:** Playwright E2E (member-inherits end-to-end) + visual QA;
-  the consented migration _auto-prompt_ with a device-local dismissal flag (the Share affordance is built);
-  `AiNotConfigured` copy-consolidation (readiness already consolidated via `aiKeyResolved`).
+  (owner-shares→member-inherits→member-denied) + 2 RTL + a **Playwright E2E** (owner shares via the UI →
+  decrypt `config/ai-credentials.enc` [ciphertext on disk] → clear the device key → a keyless device
+  resolves `source:'shared'` + Sessions has no "Connect Claude"). Gate green: typecheck, lint, format,
+  **449 core + 537 desktop** unit. **E2E + visual QA require a local display** (the project's standing
+  constraint — Electron E2E can't run headless; the test is written to the proven relay-test pattern, to be
+  run on the user's machine). **Deferred:** the consented migration _auto-prompt_ with a device-local
+  dismissal flag (the Share affordance is built); `AiNotConfigured` copy-consolidation (readiness already
+  consolidated via `aiKeyResolved`). NOTE: a later change (per the owner) made the whole **AI settings
+  section owner-only**, so the member device-override UI is no longer surfaced — members rely solely on the
+  inherited shared key (the override bridge path still resolves if a key were set).
 - 2026-06-21 — created (Draft). Owner-shared, master-key-encrypted household AI credentials
   (`config/ai-credentials.enc`) so members on a shared vault inherit a working Claude/OpenAI key;
   device-local override wins; one resolver replaces ~14 scattered `secrets.get` call sites; a

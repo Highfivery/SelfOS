@@ -24,7 +24,7 @@ import {
 } from '@selfos/core/people';
 import { hashPin } from '@selfos/core/crypto';
 import { recordUsage } from '@selfos/core/usage';
-import { writeEncryptedJson } from '@selfos/core/vault';
+import { readEncryptedJson, writeEncryptedJson } from '@selfos/core/vault';
 import {
   createCompatibilitySend,
   getAlignmentReport,
@@ -4740,6 +4740,59 @@ test('onboarding: a Member is hard-gated into onboarding until they finish (18 �
     // Gate released: the portrait shows AND the app nav is now available.
     await expect(w.getByText(/come to understand about you/)).toBeVisible();
     await expect(w.getByRole('link', { name: 'Home' })).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('household AI key (25): owner shares a key → a keyless device inherits it (member scenario)', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'AI', exact: true }).click();
+
+    // Owner adds a device key and shares it with the household.
+    await w.getByLabel('Claude API key').fill('sk-ant-e2e-shared-key');
+    await w.getByRole('button', { name: 'Save key' }).click();
+    await w.getByRole('button', { name: /share with the household/i }).click();
+    await expect(w.getByText(/shared with your household/i)).toBeVisible();
+
+    // The shared key is stored ENCRYPTED in the vault (ciphertext on disk, the key inside the envelope).
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    const onDisk = await readFile(join(vault, 'config', 'ai-credentials.enc'), 'utf8');
+    expect(onDisk).toContain('aes-256-gcm');
+    expect(onDisk).not.toContain('sk-ant-e2e-shared-key');
+    const creds = (await readEncryptedJson(fs, 'config/ai-credentials.enc', key)) as {
+      anthropicApiKey?: string;
+    };
+    expect(creds?.anthropicApiKey).toBe('sk-ant-e2e-shared-key');
+
+    // Simulate a member's own device: clear the device override so ONLY the shared vault key remains.
+    await w.getByRole('button', { name: 'Clear' }).click();
+
+    // A keyless device resolves the shared key — booleans-only status, value never crosses IPC.
+    const status = (await w.evaluate(() =>
+      (
+        window as unknown as {
+          selfos: { aiKeyStatus: (i: { provider: string }) => Promise<unknown> };
+        }
+      ).selfos.aiKeyStatus({ provider: 'anthropic' }),
+    )) as { source?: string; resolvedReady?: boolean; hasDeviceOverride?: boolean };
+    expect(status).toMatchObject({
+      hasDeviceOverride: false,
+      resolvedReady: true,
+      source: 'shared',
+    });
+    expect(JSON.stringify(status)).not.toContain('sk-ant-e2e-shared-key');
+
+    // The AI is now available on a surface despite no device key (no "Connect Claude" prompt).
+    await w.getByRole('link', { name: 'Sessions' }).click();
+    await expect(w.getByText(/connect claude in/i)).toHaveCount(0);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

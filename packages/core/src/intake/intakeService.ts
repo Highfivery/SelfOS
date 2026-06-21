@@ -490,7 +490,15 @@ const ReflectionDraftSchema = z.object({ reflection: z.string() });
 
 const PortraitDraftSchema = z.object({
   portrait: z.string(),
-  facts: z.array(z.object({ text: z.string(), section: z.string().optional() })).default([]),
+  facts: z
+    .array(
+      z.object({
+        text: z.string(),
+        section: z.string().optional(),
+        lifeArea: z.string().optional(),
+      }),
+    )
+    .default([]),
   metrics: z.record(z.string(), z.number()).optional(),
   inferred: z
     .object({
@@ -542,11 +550,42 @@ Respond with ONLY a single JSON object (no markdown fences) with these keys:
 areas they shared (identity & basics, life now, values, goals, work & money, health, relationships, family, their \
 story, joy & play, what weighs on them, and intimacy if shared), but PRIORITIZE what's most useful for ongoing \
 coaching — concrete names, preferences, patterns, goals, struggles, history. Prefer FEWER sharp, specific facts over \
-many vague or redundant ones. Each: {"text": a short specific fact, "section": the section id it came from} (array)
+many vague or redundant ones. Each: {"text": a short specific fact, "section": the section id it came from, \
+"lifeArea": the fact's single life-area from EXACTLY this list: ${LIFE_AREAS.join(', ')}} (array)
 - "metrics": optional normalized signals for trends, e.g. {"valence": -1.0..1.0} (object)
 - "inferred": optional fields to fill from the whole picture: {"communicationStyle": string, "values": [..], "goals": string, "faith": string}
 - "crisisFlag": true ONLY if self-harm, suicide, or acute crisis was disclosed (boolean)
 - "categories": 1-2 dominant life-area tags for this person, from EXACTLY this list: ${LIFE_AREAS.join(', ')} (array of strings)`;
+
+/** Per-fact life-area for relevance selection (28 §pillar-2/§4.4). A section that's foundational IDENTITY
+ * (basics/life-now/story) maps to undefined ⇒ the always-on CORE; topic-specific sections map to their area.
+ * Used only as a fallback when the model didn't tag the fact. The "(sensitive)" sub-block (`<id>-sensitive`)
+ * inherits its base section's area. */
+const SECTION_LIFE_AREA: Record<string, string> = {
+  values: 'Values & beliefs',
+  want: 'Goals & growth',
+  health: 'Health & body',
+  relationships: 'Relationships',
+  'work-money': 'Work & purpose',
+  'joy-play': 'Other',
+  family: 'Family',
+  weighs: 'Emotions & patterns',
+  intimacy: 'Intimacy',
+};
+
+const LIFE_AREA_BY_LOWER = new Map(LIFE_AREAS.map((a) => [a.toLowerCase(), a]));
+
+/** The fact's life-area: the model's value normalized against `LIFE_AREAS` (never trusted raw), else derived
+ * from the section id, else undefined (⇒ always-on CORE — never narrowed away). */
+function normalizeFactLifeArea(
+  modelValue: string | undefined,
+  section: string | undefined,
+): string | undefined {
+  const fromModel = modelValue?.trim().toLowerCase();
+  if (fromModel && LIFE_AREA_BY_LOWER.has(fromModel)) return LIFE_AREA_BY_LOWER.get(fromModel);
+  if (section) return SECTION_LIFE_AREA[section.replace(/-sensitive$/, '')];
+  return undefined;
+}
 
 /** All non-empty `chat` section transcripts as model messages for synthesis (labeled with the section id). */
 function transcriptMessages(
@@ -828,6 +867,9 @@ async function synthesizePortrait(deps: IntakeSynthesizeDeps): Promise<IntakeSyn
     // The `restricted` flag is decided server-side from the (trusted) section catalog — never the AI.
     const restricted = sectionRefRestricted(f.section);
     const carried = priorByText.get(text);
+    // The life-area (28 §pillar-2): the model's value normalized, else derived from the section; carry a
+    // prior (e.g. reconciled) tag forward on re-synthesis so it isn't lost.
+    const lifeArea = normalizeFactLifeArea(f.lifeArea, f.section) ?? carried?.lifeArea;
     facts.push({
       id: uuid(),
       text,
@@ -838,6 +880,7 @@ async function synthesizePortrait(deps: IntakeSynthesizeDeps): Promise<IntakeSyn
         ? { shareableWith: carried.shareableWith }
         : {}),
       ...(restricted ? { restricted: true } : {}),
+      ...(lifeArea ? { lifeArea } : {}),
     });
   }
 

@@ -1,17 +1,19 @@
 # 28 — Portrait synthesis & context-budget optimization
 
-> **Status:** Draft · **Slice 28a built** 2026-06-21 (`feat/portrait-optimization`) · _last updated 2026-06-21_
+> **Status:** **Built (28a + 28b)** 2026-06-21 (`feat/portrait-optimization`, `feat/portrait-relevance`) · _last updated 2026-06-21_
 >
-> **Build split (decided 2026-06-21).** This spec ships in two slices: **28a — the safe wins (BUILT):** the
-> slider-seed fix (an untouched optional slider records nothing) + a **synthesis fact cap** (the portrait
-> stores at most **60** facts — user-chosen "fuller", from an unbounded 80–150) + a reworked prompt
-> (prioritized, not "thorough dump") + `maxTokens` 8000→6000. **28b — topic-relevance selection (DEFERRED,
-> its own slice):** the additive `InsightFact.lifeArea`, `selectPortraitFacts`, `ContextTopic` threaded
-> through `summarizeForContext`/`buildContext` and the Session/Dream/Questionnaire callers — the
-> privacy-critical part. 28a alone already bounds the pinned, every-call portrait to ≤60 facts; 28b further
-> narrows it by topic. **Decisions for 28b (recorded):** synthesis cap 60 (done in 28a); the always-on CORE
-> set is the **broader** option — identity (Values/identity), Goals & growth, Emotions & patterns,
-> Relationships, Health & body, **plus any crisis-flagged fact** (never narrowed away).
+> **Built in two slices.** **28a — the safe wins:** the slider-seed fix (an untouched optional slider records
+> nothing) + a **synthesis fact cap** (the portrait stores at most **60** facts — user-chosen "fuller", from
+> an unbounded 80–150) + a reworked prompt (prioritized, not "thorough dump") + `maxTokens` 8000→6000 with
+> `extendedThinking: false`. **28b — topic-relevance selection:** the additive `InsightFact.lifeArea`,
+> `selectPortraitFacts`, and `ContextTopic` threaded through `summarizeForContext`/`buildContext` and the
+> session prompt builder — the privacy-critical part. As built, the per-call context budget is **45**
+> (`PORTRAIT_FACT_CONTEXT_BUDGET`) with a guaranteed always-on core of **25** (`PORTRAIT_CORE_FACT_BUDGET`),
+> the **broader** CORE set (Values & beliefs, Goals & growth, Emotions & patterns, Relationships, Health &
+> body, plus anything untagged), and a **crisis-flagged portrait is never topically narrowed** (only
+> bounded). A free-start session (no guide) passes no topic ⇒ core + fill. The session chat threads a topic
+> from the guided-exercise group; Dream/Questionnaire callers get the bounded core+fill (their topic mapping
+> is a small follow-up).
 >
 > The onboarding portrait (the `source: 'intake'` Insight from [18-personal-onboarding](18-personal-onboarding.md))
 > is PINNED into the system prompt of **every** Session, Dream analysis, and Questionnaire-generation call —
@@ -167,16 +169,17 @@ export const InsightFactSchema = z.object({
 
 ### 4.2 The fact-budget constants (code, not vault)
 
-New constants in [`insightStore.ts`](../../packages/core/src/insights/insightStore.ts) (proposed values — see §11):
+New constants in [`insightStore.ts`](../../packages/core/src/insights/insightStore.ts) (AS BUILT — user chose "fuller"):
 
 ```ts
 /** Max intake-portrait facts emitted into ANY single coaching context (the per-call budget). Replaces the
- *  current "emit every portrait fact" behaviour. Recency/priority/topical-relevance ordered. */
-const PORTRAIT_FACT_CONTEXT_BUDGET = 30; // §11 Q1 — tunable
+ *  current "emit every portrait fact" behaviour. Priority/topical-relevance ordered. */
+const PORTRAIT_FACT_CONTEXT_BUDGET = 45; // AS BUILT (was proposed 30)
 
-/** Facts always present regardless of topic — the person's identity/foundational set (core life-areas or
- *  untagged). Counts toward the budget; the remainder of the budget is filled by topical facts. */
-const PORTRAIT_CORE_FACT_BUDGET = 12; // §11 Q2 — tunable
+/** Of the budget, how many always-on CORE facts to guarantee first — the identity/foundational set (core
+ *  life-areas or untagged). Distress (`Emotions & patterns`) is taken BEFORE this, unbounded by the core
+ *  budget (safety), so it is never crowded out. */
+const PORTRAIT_CORE_FACT_BUDGET = 25; // AS BUILT (was proposed 12)
 ```
 
 And the **synthesis cap** in [`intakeService.ts`](../../packages/core/src/intake/intakeService.ts):
@@ -447,3 +450,25 @@ building.
   `summarizeForContext` change. Tests: +core fact-cap (80 facts → stored 60, order preserved), +RTL
   untouched-optional-slider-commits-nothing/commits-on-move. Gate: typecheck (node + web), lint, format,
   **446 core + 534 desktop + 11 relay** unit, onboarding E2E green. Same group-numbering note as 26/27.
+- 2026-06-21 — **Slice 28b built** (`feat/portrait-relevance`, stacked on 28a, NOT merged). The
+  topic-relevance selection. Additive `InsightFact.lifeArea` (no migration; a pre-28b fact ⇒ untagged ⇒
+  always-on CORE) + a crypto-free `ContextTopic` view type. New pure, exported, exhaustively-tested
+  **`selectPortraitFacts(facts, topic, crisisFlag)`** in `insightStore.ts`: always-on CORE first (up to
+  `PORTRAIT_CORE_FACT_BUDGET = 25`; the broader set incl. `Emotions & patterns` so distress is never narrowed,
+  - anything untagged), then this call's topical facts, then a priority fill, **capped at
+    `PORTRAIT_FACT_CONTEXT_BUDGET = 45`**, model/importance order preserved; a **crisis-flagged** portrait is
+    bounded-but-never-topically-narrowed; a legacy (untagged) portrait is bounded-only. `summarizeForContext`
+    gained an optional `topic?` and routes ONLY the pinned intake portrait through the selector — the
+    cross-person privacy filters (restricted/shareable/flagged, `MAX_SHARED_FACTS_PER_PERSON`) are untouched,
+    and selection runs on the subject's OWN facts. `buildContext(topic?)` forwards it; `buildSystemPrompt`
+    derives the topic from the guided-exercise group (`guideLifeAreas`: coaching → Work/Money, intimacy →
+    Intimacy, therapy → Family/Emotions) — a free-start session passes none. Synthesis now asks the model for a
+    per-fact `lifeArea`, normalized server-side against `LIFE_AREAS` (never trusted raw) with a section-id
+    fallback (`SECTION_LIFE_AREA`; identity sections basics/life-now/story ⇒ undefined ⇒ core), carried forward
+    on re-synthesis. Tests: +7 pure selector cases (legacy bound / crisis-never-narrowed / core-always-in /
+    NARROWS-off-topic / distress-always-in / no-topic) + a `summarizeForContext` integration (a Money topic
+    surfaces Money facts, narrows out Intimacy, summary always pinned) + a synthesis life-area-tagging test
+    (model value / section fallback / identity→core / invalid→fallback). Gate: typecheck (node + web), lint,
+    format, **454 core + 534 desktop + 11 relay** unit, **7 E2E** (onboarding + sessions + guided + dreams) green.
+    **Follow-up:** thread a topic into Dream analysis (dream tags → life-areas) + Questionnaire generation; both
+    currently get the bounded core+fill (still an improvement over the old uncapped dump).

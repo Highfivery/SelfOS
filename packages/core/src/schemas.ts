@@ -399,8 +399,23 @@ export const InsightFactSchema = z.object({
   // not to re-assert it. The fact stays visible-but-marked + reversible (never silently deleted).
   flaggedInaccurate: z.boolean().optional(),
   flaggedAt: z.string().optional(),
+  // The fact's life-area, from the fixed LIFE_AREAS taxonomy (28-portrait-synthesis-optimization §pillar-2).
+  // Drives per-call relevance selection of the (pinned) onboarding portrait: a budgeting session pulls
+  // Money/Work facts, an intimacy session pulls Intimacy facts — instead of dumping all. Additive-optional:
+  // a pre-28b fact has none ⇒ treated as always-relevant CORE (never narrowed). Normalized server-side
+  // against LIFE_AREAS, never trusted raw from the model (mirrors `Insight.categories`).
+  lifeArea: z.string().optional(),
 });
 export type InsightFact = z.infer<typeof InsightFactSchema>;
+
+/** The call-type/topic signal a caller passes so context selects the relevant portrait facts
+ * (28-portrait-synthesis-optimization §pillar-2). All fields optional: an absent/empty topic ⇒ the always-on
+ * CORE facts + a priority fill (no topical narrowing). Crypto-free (defined here in the schemas shim) so the
+ * renderer/IPC may reference it. */
+export const ContextTopicSchema = z.object({
+  lifeAreas: z.array(z.string()).optional(),
+});
+export type ContextTopic = z.infer<typeof ContextTopicSchema>;
 
 /**
  * Where an Insight came from (20-memory-dashboard §3.3 powers deep-links). The primary `provenance` is the

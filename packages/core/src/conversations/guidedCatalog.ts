@@ -43,6 +43,21 @@ export function guidedGroupTitle(group: GuidedGroupId): string {
   return GUIDED_GROUPS.find((g) => g.id === group)?.title ?? group;
 }
 
+/** The portrait life-areas (LIFE_AREAS) a guided session's group makes relevant, for per-call portrait-fact
+ * selection (28-portrait-synthesis-optimization §4.4). The always-on CORE (emotions/goals/relationships/…) is
+ * added by the selector regardless; this just foregrounds the topic-specific extras (e.g. a coaching session
+ * surfaces Work/Money facts, an intimacy session surfaces Intimacy facts). A free-start (no guide) passes no
+ * topic ⇒ core + fill. */
+const GUIDE_LIFE_AREAS: Record<GuidedGroupId, string[]> = {
+  therapy: ['Emotions & patterns', 'Family', 'Relationships'],
+  coaching: ['Goals & growth', 'Work & purpose', 'Money'],
+  intimacy: ['Intimacy', 'Relationships'],
+};
+
+export function guideLifeAreas(group: GuidedGroupId): string[] {
+  return GUIDE_LIFE_AREAS[group];
+}
+
 /** Shared frame prepended to every addendum — the not-therapy boundary in the coach's own instructions. */
 function frame(framework: string): string {
   return `This session is a self-guided wellness exercise inspired by ${framework} — it is NOT therapy, \

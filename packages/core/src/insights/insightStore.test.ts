@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { generateMasterKey } from '../crypto';
 import { memFileSystem } from '../host/memFileSystem';
-import type { Insight } from '../schemas';
+import type { Insight, InsightFact } from '../schemas';
 import {
   deleteInsight,
   flagInsightFact,
@@ -9,6 +9,7 @@ import {
   listInsightsForPerson,
   listRelatedShareableInsights,
   saveInsight,
+  selectPortraitFacts,
   summarizeForContext,
 } from './insightStore';
 
@@ -29,6 +30,90 @@ function insight(over: Partial<Insight> & { id: string; subjectPersonId: string 
     ...over,
   };
 }
+
+const pf = (id: string, lifeArea?: string): InsightFact => ({
+  id,
+  text: `fact-${id}`,
+  shareable: false,
+  ...(lifeArea ? { lifeArea } : {}),
+});
+
+describe('selectPortraitFacts (28 §pillar-2 — per-call portrait relevance)', () => {
+  it('legacy: NO life-area tags → bounds to the budget (45), no narrowing, order preserved', () => {
+    const facts = Array.from({ length: 60 }, (_, i) => pf(`f${i}`)); // all untagged
+    const out = selectPortraitFacts(facts, { lifeAreas: ['Money'] }, false);
+    expect(out.length).toBe(45);
+    expect(out[0]?.id).toBe('f0');
+    expect(out.at(-1)?.id).toBe('f44');
+  });
+
+  it('a crisis-flagged portrait is NEVER topically narrowed — only bounded', () => {
+    const facts = [
+      pf('money', 'Money'),
+      pf('intimacy', 'Intimacy'),
+      ...Array.from({ length: 5 }, (_, i) => pf(`fam${i}`, 'Family')),
+    ];
+    const out = selectPortraitFacts(facts, { lifeAreas: ['Money'] }, true);
+    // Off-topic Intimacy/Family facts are all kept (under budget) — distress safety: keep the full picture.
+    expect(out.map((f) => f.id)).toEqual(facts.map((f) => f.id));
+  });
+
+  it('always includes CORE (identity/goals/emotions/relationships/health + untagged) regardless of topic', () => {
+    const facts = [
+      pf('emotions', 'Emotions & patterns'),
+      pf('goals', 'Goals & growth'),
+      pf('rel', 'Relationships'),
+      pf('untagged'),
+      pf('money', 'Money'), // topical, NOT in this topic
+    ];
+    const ids = selectPortraitFacts(facts, { lifeAreas: ['Intimacy'] }, false).map((f) => f.id);
+    expect(ids).toEqual(expect.arrayContaining(['emotions', 'goals', 'rel', 'untagged']));
+  });
+
+  it('NARROWS: keeps core + the topic facts, drops off-topic non-core when over budget', () => {
+    const core = Array.from({ length: 25 }, (_, i) => pf(`core${i}`, 'Goals & growth'));
+    const money = Array.from({ length: 30 }, (_, i) => pf(`money${i}`, 'Money'));
+    const intimacy = Array.from({ length: 30 }, (_, i) => pf(`int${i}`, 'Intimacy'));
+    const ids = selectPortraitFacts(
+      [...core, ...money, ...intimacy],
+      { lifeAreas: ['Money'] },
+      false,
+    ).map((f) => f.id);
+    expect(ids.length).toBe(45);
+    expect(ids.filter((id) => id.startsWith('core')).length).toBe(25); // all core guaranteed
+    expect(ids.filter((id) => id.startsWith('money')).length).toBe(20); // topic fills the rest
+    expect(ids.some((id) => id.startsWith('int'))).toBe(false); // off-topic, non-core → dropped
+  });
+
+  it('distress (Emotions & patterns) is core → present even on an unrelated (Money) topic, over budget', () => {
+    const facts = [
+      pf('distress', 'Emotions & patterns'),
+      ...Array.from({ length: 50 }, (_, i) => pf(`m${i}`, 'Money')),
+    ];
+    const ids = selectPortraitFacts(facts, { lifeAreas: ['Money'] }, false).map((f) => f.id);
+    expect(ids).toContain('distress');
+  });
+
+  it('SAFETY: a distress fact ranked LAST, past a full core budget, is still kept on an off-topic call', () => {
+    // 25 higher-priority core (fills the core budget) + 30 topic facts (fill the rest) would crowd out a
+    // late distress fact WITHOUT the always-take-distress rule. It must survive (CLAUDE.md §1).
+    const facts = [
+      ...Array.from({ length: 25 }, (_, i) => pf(`g${i}`, 'Goals & growth')),
+      ...Array.from({ length: 30 }, (_, i) => pf(`m${i}`, 'Money')),
+      pf('latedistress', 'Emotions & patterns'),
+    ];
+    const ids = selectPortraitFacts(facts, { lifeAreas: ['Money'] }, false).map((f) => f.id);
+    expect(ids).toContain('latedistress');
+    expect(ids.length).toBe(45);
+  });
+
+  it('no topic → core + priority fill, bounded (no topical preference)', () => {
+    const facts = Array.from({ length: 60 }, (_, i) =>
+      pf(`f${i}`, i < 10 ? 'Goals & growth' : 'Money'),
+    );
+    expect(selectPortraitFacts(facts, undefined, false).length).toBe(45);
+  });
+});
 
 describe('insightStore', () => {
   it('saves, reads, lists (newest first), and deletes', async () => {
@@ -143,6 +228,27 @@ describe('insightStore', () => {
     it('returns an empty string when there are no insights', async () => {
       const fs = memFileSystem();
       expect(await summarizeForContext(fs, key, 'p1', [])).toBe('');
+    });
+
+    it('selects the topic-relevant portrait facts (28): a Money topic surfaces Money facts, not Intimacy', async () => {
+      const fs = memFileSystem();
+      // An intake portrait larger than the per-call budget: all-core fillers + 1 Money + 1 Intimacy fact.
+      const facts: InsightFact[] = [
+        ...Array.from({ length: 45 }, (_, i) => pf(`core${i}`, 'Goals & growth')),
+        pf('themoney', 'Money'),
+        pf('theintimacy', 'Intimacy'),
+      ];
+      await saveInsight(
+        fs,
+        key,
+        insight({ id: 'portrait', subjectPersonId: 'p1', source: 'intake', facts }),
+      );
+      const moneyCtx = await summarizeForContext(fs, key, 'p1', [], { lifeAreas: ['Money'] });
+      // The Money fact is surfaced for a money topic; the off-topic Intimacy fact is narrowed out (budget).
+      expect(moneyCtx).toContain('fact-themoney');
+      expect(moneyCtx).not.toContain('fact-theintimacy');
+      // The pinned summary is always present regardless of topic.
+      expect(moneyCtx).toContain('summary-portrait');
     });
   });
 

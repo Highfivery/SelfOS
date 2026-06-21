@@ -1,5 +1,11 @@
 import type { FileSystem } from '../host';
-import { DreamSchema, InsightSchema, type Insight } from '../schemas';
+import {
+  DreamSchema,
+  InsightSchema,
+  type ContextTopic,
+  type Insight,
+  type InsightFact,
+} from '../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 
 /**
@@ -198,6 +204,72 @@ const MAX_OWN_INSIGHTS = 12;
 const MAX_SHARED_FACTS_PER_PERSON = 5;
 
 /**
+ * Per-call relevance selection of the onboarding portrait's facts (28-portrait-synthesis-optimization
+ * §pillar-2). The portrait is PINNED into EVERY Session/Dream/Questionnaire context, so injecting all its
+ * facts every time is a fixed token tax + a diluted signal. `selectPortraitFacts` keeps an always-on CORE
+ * (identity/goals/emotions/relationships/health + anything untagged) and adds the facts relevant to THIS
+ * call's topic, bounded to a budget — so a budgeting chat sees Money/Work facts, an intimacy session sees
+ * Intimacy facts, and a distress fact is never narrowed away.
+ */
+const PORTRAIT_FACT_CONTEXT_BUDGET = 45; // total portrait facts emitted into any single context (user: "fuller")
+const PORTRAIT_CORE_FACT_BUDGET = 25; // of the budget, how many always-on CORE facts to guarantee first
+
+/** The always-relevant identity life-areas — the "broader" set (user choice, 2026-06-21). Distress
+ * (`Emotions & patterns`) is included so a crisis/struggle fact is NEVER narrowed away by topic selection.
+ * Anything UNTAGGED is also treated as core (never hide an unclassified fact). */
+const CORE_LIFE_AREAS: ReadonlySet<string> = new Set([
+  'Values & beliefs',
+  'Goals & growth',
+  'Emotions & patterns',
+  'Relationships',
+  'Health & body',
+]);
+
+/**
+ * Pick the portrait facts to feed THIS call (pure + exported + tested). `facts` must already be the live
+ * (non-`flaggedInaccurate`) facts. Order is the fact array's order (the synthesis returns most-important
+ * first), preserved in the output. Safety: a `crisisFlag` portrait is **never** topically narrowed (bounded
+ * only); the always-on CORE (incl. distress) is taken first; untagged facts are core. Privacy is unaffected —
+ * these are the subject's OWN facts; the caller applies all cross-person filters elsewhere.
+ */
+export function selectPortraitFacts(
+  facts: InsightFact[],
+  topic: ContextTopic | undefined,
+  crisisFlag: boolean,
+): InsightFact[] {
+  // No life-area tags at all (a pre-28b portrait) — nothing to narrow by; just bound it.
+  // A crisis-flagged portrait is also never topically narrowed (keep the full picture, bounded).
+  if (crisisFlag || !facts.some((f) => f.lifeArea)) {
+    return facts.slice(0, PORTRAIT_FACT_CONTEXT_BUDGET);
+  }
+  const topicAreas = new Set(topic?.lifeAreas ?? []);
+  const isCore = (f: InsightFact): boolean => !f.lifeArea || CORE_LIFE_AREAS.has(f.lifeArea);
+  const taken = new Set<string>();
+  const take = (f: InsightFact): void => {
+    if (taken.size < PORTRAIT_FACT_CONTEXT_BUDGET) taken.add(f.id);
+  };
+  // 0) SAFETY (CLAUDE.md §1): a struggle/distress fact must never be narrowed away by topic. Take EVERY
+  //    `Emotions & patterns` fact first (bounded only by the overall budget, not the core budget), so a
+  //    distress signal reaches the coach in any session — not just an emotional one.
+  for (const f of facts) if (f.lifeArea === 'Emotions & patterns') take(f);
+  // 1) the rest of the always-on core, up to the core budget (and the overall budget).
+  let core = 0;
+  for (const f of facts) {
+    if (core >= PORTRAIT_CORE_FACT_BUDGET) break;
+    if (isCore(f) && !taken.has(f.id)) {
+      take(f);
+      core += 1;
+    }
+  }
+  // 2) facts relevant to this call's topic.
+  for (const f of facts) if (f.lifeArea && topicAreas.has(f.lifeArea)) take(f);
+  // 3) fill any remaining budget in importance order.
+  for (const f of facts) take(f);
+  // Emit in the original (importance) order.
+  return facts.filter((f) => taken.has(f.id));
+}
+
+/**
  * Build the Insight portion of a person's coaching context: their own **approved** insights (summary +
  * all facts — their private facts feed only their own coaching), plus the **shareable** facts from the
  * approved insights of the people they relate to. Others' private (non-shareable) facts are never
@@ -209,6 +281,7 @@ export async function summarizeForContext(
   key: Uint8Array,
   personId: string,
   related: { id: string; displayName: string }[],
+  topic?: ContextTopic,
 ): Promise<string> {
   const lines: string[] = [];
 
@@ -232,7 +305,15 @@ export async function summarizeForContext(
       // dropped entirely: its summary restates the corrected claim, so it must not reach the coach either.
       if (insight.facts.length > 0 && liveFacts.length === 0) continue;
       lines.push(`- ${insight.summary}`);
-      for (const fact of liveFacts) lines.push(`  · ${fact.text}`);
+      // The PINNED onboarding portrait is large and feeds EVERY call — emit the facts relevant to THIS
+      // call's topic, bounded to a budget (28-portrait-synthesis-optimization §pillar-2). Session/dream
+      // insights are small, so they emit all their live facts as before. Selection is applied to the
+      // subject's OWN facts here; it never touches the cross-person privacy filtering below.
+      const emit =
+        insight.source === 'intake'
+          ? selectPortraitFacts(liveFacts, topic, insight.crisisFlag ?? false)
+          : liveFacts;
+      for (const fact of emit) lines.push(`  · ${fact.text}`);
     }
   }
 

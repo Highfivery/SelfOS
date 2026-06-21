@@ -1,6 +1,11 @@
 import type { FileSystem } from '../host';
 import { insightFeedsContext, listInsightsForPerson, summarizeForContext } from '../insights';
-import { isPersonFieldShared, type Person, type PersonFieldKey } from '../schemas';
+import {
+  isPersonFieldShared,
+  type ContextTopic,
+  type Person,
+  type PersonFieldKey,
+} from '../schemas';
 import { getPerson, listPeople } from './peopleService';
 import { listRelationships } from './relationshipService';
 
@@ -63,6 +68,9 @@ export async function buildContext(
   fs: FileSystem,
   key: Uint8Array,
   personId: string,
+  // The call's topic (28-portrait-synthesis-optimization §pillar-2): when present, the pinned onboarding
+  // portrait emits the facts relevant to these life-areas (+ the always-on core). Absent ⇒ core + fill.
+  topic?: ContextTopic,
 ): Promise<string> {
   const person = await getPerson(fs, key, personId);
   if (!person) return '';
@@ -107,7 +115,7 @@ export async function buildContext(
 
   // Insight / memory layer (08-questionnaires §4.4): their own approved insights + shareable facts about
   // the people they relate to. Others' private facts are never included (the shareable-vs-private split).
-  const insightContext = await summarizeForContext(fs, key, personId, related);
+  const insightContext = await summarizeForContext(fs, key, personId, related, topic);
   if (insightContext) lines.push(insightContext);
 
   return lines.join('\n');

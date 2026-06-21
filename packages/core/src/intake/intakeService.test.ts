@@ -363,6 +363,31 @@ describe('intakeService', () => {
     expect(insight.facts.at(-1)?.text).toBe('Fact number 59');
   });
 
+  it('tags each portrait fact with a life-area: model value, else section fallback, else core (28)', async () => {
+    const fs = await setup();
+    await runIntakeTurn(turn(fs, fakeClient(), 'basics', 'I am a nurse.'));
+    const portrait = {
+      ...PORTRAIT,
+      facts: [
+        { text: 'A money fact tagged by the model', section: 'weighs', lifeArea: 'Money' }, // model wins
+        { text: 'A work fact', section: 'work-money' }, // section fallback → Work & purpose
+        { text: 'A values fact', section: 'values' }, // section fallback → Values & beliefs
+        { text: 'An identity fact', section: 'basics' }, // identity section → undefined ⇒ CORE
+        { text: 'A bogus-tag fact', section: 'health', lifeArea: 'NotARealArea' }, // invalid → section health
+      ],
+    };
+    const res = await synthesizeIntake(synth(fs, fakeClient({ portrait })));
+    expect(res.ok).toBe(true);
+    const session = await getIntakeSession(fs, key, 'p1');
+    const insight = (await getInsight(fs, key, 'p1', session!.insightId!)) as Insight;
+    const area = (t: string) => insight.facts.find((f) => f.text.startsWith(t))?.lifeArea;
+    expect(area('A money fact')).toBe('Money'); // model's valid value normalized + kept
+    expect(area('A work fact')).toBe('Work & purpose'); // derived from section
+    expect(area('A values fact')).toBe('Values & beliefs');
+    expect(area('An identity fact')).toBeUndefined(); // basics → core (never narrowed)
+    expect(area('A bogus-tag fact')).toBe('Health & body'); // invalid model tag → section fallback
+  });
+
   it('honors a per-question `restricted` answer in a non-restricted section via a "(sensitive)" block (§14.8)', async () => {
     const fs = await setup();
     // The Health section is NOT restricted, but `substancesUsed` is a per-question restricted answer; `sleep`

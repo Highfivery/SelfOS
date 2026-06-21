@@ -1,6 +1,6 @@
 import type { FileSystem } from '../host';
 import { buildContext } from '../people';
-import { getExercise } from './guidedCatalog';
+import { getExercise, guideLifeAreas } from './guidedCatalog';
 import { buildStepInstruction } from './guidedSteps';
 
 /** The fixed v1 coach voice (05-conversations §11.5). Warm, reflective, non-clinical. */
@@ -30,9 +30,12 @@ export async function buildSystemPrompt(
   personId: string,
   guideId?: string,
 ): Promise<string> {
-  const context = await buildContext(fs, key, personId);
-  const parts = [PERSONA, SAFETY, context];
   const exercise = guideId ? getExercise(guideId) : undefined;
+  // A guided session foregrounds its group's life-areas in the (pinned) portrait selection (28 §4.4); a
+  // free-start session passes no topic ⇒ the always-on core + a priority fill.
+  const topic = exercise ? { lifeAreas: guideLifeAreas(exercise.group) } : undefined;
+  const context = await buildContext(fs, key, personId, topic);
+  const parts = [PERSONA, SAFETY, context];
   if (exercise) {
     parts.push(exercise.systemPromptAddendum);
     if (exercise.kind === 'structured' && exercise.steps) {

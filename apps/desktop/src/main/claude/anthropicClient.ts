@@ -147,6 +147,26 @@ export function fakeClaudeClient(): ClaudeClient {
       // The session-analysis turn (09 §5) asks to "summarize this session" as a JSON object. Return a
       // valid SessionAnalysisDraft so the offline End & summarize path parses + produces facts/mood.
       if (userText.includes('summarize this session')) {
+        // 29 — when the depth-detection env flag is set AND this pass was handed the unexplored-areas context
+        // (the §5.2 marker), emit ONE depth invitation for the first listed invited section so an E2E can see
+        // the depth card. Gated by SELFOS_FAKE_DEPTH so existing analysis E2E are untouched.
+        const system = options.system ?? '';
+        const depthInvitations =
+          process.env['SELFOS_FAKE_DEPTH'] &&
+          system.includes('Profile areas they have not explored yet')
+            ? (() => {
+                const sectionId = /^\s*-\s+([a-z-]+)\s+\("/m.exec(system)?.[1];
+                return sectionId
+                  ? [
+                      {
+                        sectionId,
+                        theme: 'your family',
+                        rationale: 'It has come up a few times.',
+                      },
+                    ]
+                  : [];
+              })()
+            : [];
         return Promise.resolve({
           text: JSON.stringify({
             summary: 'A reflective check-in about a hard day, ending on a calmer note.',
@@ -157,6 +177,7 @@ export function fakeClaudeClient(): ClaudeClient {
             moodValence: -0.2,
             moodEnergy: 0.1,
             crisisFlag: false,
+            depthInvitations,
           }),
           usage: { inputTokens: 180, outputTokens: 70, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });

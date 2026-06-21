@@ -259,13 +259,19 @@ import {
 import {
   ensureIntakeSession,
   getIntakeSection,
+  getIntakeSession,
   intakeSectionMeta,
   runIntakeTurn,
   skipIntakeSection,
   submitSectionForm,
   synthesizeIntake,
 } from '@selfos/core/intake';
-import { acceptSuggestion, dismissSuggestion, listPendingSuggestions } from '@selfos/core/profile';
+import {
+  acceptSuggestion,
+  dismissSuggestion,
+  listPendingSuggestions,
+  unfilledInvitedSections,
+} from '@selfos/core/profile';
 import { fromBase64, toBase64 } from '@selfos/core/encoding';
 
 /**
@@ -1194,6 +1200,20 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
       }
       const apiKey = await host.secrets.get(ANTHROPIC_API_KEY_ID);
+      // 29 §3.5 — the in-session depth ask (setting `intake.inSessionDepthAsk`, default ON). When on, hand the
+      // turn the person's unexplored invited sections so the coach may gently invite ONE (prompt-level,
+      // relevance-gated). Adult (18+) sections are withheld until the shared ack; restricted-but-not-adult
+      // areas stay in the list but the instruction only raises them if the person opens that door (§8).
+      const depthAskOn =
+        (await readVaultSettingsValues(ctx.fs))['intake.inSessionDepthAsk'] !== false;
+      let depthAsk: { sections: ReturnType<typeof unfilledInvitedSections> } | undefined;
+      if (depthAskOn) {
+        const session = await getIntakeSession(ctx.fs, ctx.key, personId);
+        const prefs = await getGuidancePrefs(ctx.fs, ctx.key, personId);
+        const adultAcked = prefs.adultAcknowledged === true;
+        const sections = unfilledInvitedSections(session).filter((s) => !s.adult || adultAcked);
+        if (sections.length > 0) depthAsk = { sections };
+      }
       return runChatTurn({
         fs: ctx.fs,
         key: ctx.key,
@@ -1204,6 +1224,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         conversationId,
         userText,
         onDelta: (text) => host.emitChatChunk(text),
+        ...(depthAsk ? { depthAsk } : {}),
         now: new Date(),
       });
     },
@@ -1243,6 +1264,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const memoryEnabled =
         (await readVaultSettingsValues(ctx.fs))['sessions.memoryEnabled'] !== false;
       const apiKey = await host.secrets.get(ANTHROPIC_API_KEY_ID);
+      // 29 — hand the analysis the person's intake session so the same (paid) pass can detect an unexplored
+      // profile area and emit a depth invitation for free.
+      const intakeSession = await getIntakeSession(ctx.fs, ctx.key, personId);
       return endAndSummarize({
         fs: ctx.fs,
         key: ctx.key,
@@ -1252,6 +1276,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         personId,
         conversationId,
         memoryEnabled,
+        intakeSession,
         now: new Date(),
       });
     },

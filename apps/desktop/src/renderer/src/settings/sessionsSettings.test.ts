@@ -27,11 +27,24 @@ describe('Sessions settings (09 §3/§14)', () => {
     const auto = getDefinition('sessions.autoSummarizeOnEnd');
     expect(auto?.visibleWhen?.({ 'sessions.memoryEnabled': false })).toBe(false);
     expect(auto?.visibleWhen?.({ 'sessions.memoryEnabled': true })).toBe(true);
-    // The Sessions section exposes exactly these two toggles.
+    // The Sessions section exposes these toggles (incl. the 29 in-session depth ask).
     expect(
       getDefinitionsForSection('sessions')
         .map((d) => d.key)
         .sort(),
-    ).toEqual(['sessions.autoSummarizeOnEnd', 'sessions.memoryEnabled']);
+    ).toEqual([
+      'intake.inSessionDepthAsk',
+      'sessions.autoSummarizeOnEnd',
+      'sessions.memoryEnabled',
+    ]);
+  });
+
+  it('registers the in-session depth-ask toggle (default ON, vault-scoped, AI-gated) (29 §3.5)', () => {
+    const depth = getDefinition('intake.inSessionDepthAsk');
+    expect(depth?.section).toBe('sessions');
+    expect(depth?.default).toBe(true);
+    expect(depth?.scope).toBe('vault');
+    expect(depth?.visibleWhen?.({ 'ai.enabled': true })).toBe(true);
+    expect(depth?.visibleWhen?.({ 'ai.enabled': false })).toBe(false);
   });
 });

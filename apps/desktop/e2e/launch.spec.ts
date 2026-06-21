@@ -45,6 +45,7 @@ import {
 } from '@selfos/core/insights';
 import { listDreams, saveAnalysis, saveDream } from '@selfos/core/dreams';
 import { saveConversation } from '@selfos/core/conversations';
+import { listProfileSuggestions } from '@selfos/core/profile';
 
 const MAIN = join(__dirname, '..', 'out', 'main', 'index.js');
 
@@ -4745,6 +4746,105 @@ test('onboarding: a Member is hard-gated into onboarding until they finish (18 �
     // Gate released: the portrait shows AND the app nav is now available.
     await expect(w.getByText(/come to understand about you/)).toBeVisible();
     await expect(w.getByRole('link', { name: 'Home' })).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('progressive profile: a session circling an unexplored area surfaces a depth invitation → Go deeper opens the section (29)', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+
+  // Seed the owner's intake so EVERY invited section except "Family & roots" is filled — the depth-detection
+  // pass then has exactly one unexplored area to name, making the fake deterministic.
+  const seedFs = createNodeFileSystem(vault);
+  const seedKey = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!seedKey) throw new Error('depth e2e: master key missing');
+  await writeEncryptedJson(
+    seedFs,
+    'people/owner-1/intake/session.enc',
+    {
+      id: 'intake-depth',
+      schemaVersion: 1,
+      personId: 'owner-1',
+      status: 'complete',
+      sections: [
+        'health',
+        'relationships',
+        'work-money',
+        'joy-play',
+        'story',
+        'weighs',
+        'intimacy',
+      ].map((id) => ({
+        id,
+        status: 'complete',
+        restricted: id === 'weighs' || id === 'intimacy',
+        messages: [],
+        answers: {},
+      })),
+      startedAt: 'now',
+      updatedAt: 'now',
+      completedAt: 'now',
+    },
+    seedKey,
+  );
+
+  // SELFOS_FAKE_DEPTH makes the offline analyzer emit one depth invitation when handed the unexplored-areas
+  // context — so existing analysis E2E (without the flag) stay untouched.
+  const app = await electron.launch({
+    args: [`--user-data-dir=${userData}`, MAIN],
+    env: { ...e2eEnv(), SELFOS_FAKE_DEPTH: '1' },
+  });
+  try {
+    const w = await app.firstWindow();
+
+    // Run a session and complete + summarize — the SAME paid pass detects the unexplored area.
+    await w.getByRole('link', { name: 'Sessions' }).click();
+    await w.getByLabel('Message').fill('I keep coming back to my family lately');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/hear you/i).first()).toBeVisible();
+    await w
+      .getByRole('complementary', { name: 'Conversations' })
+      .getByRole('button', { name: /Session options for/ })
+      .first()
+      .click();
+    await w.getByRole('menuitem', { name: 'Complete & summarize' }).click();
+    await expect(w.getByRole('heading', { name: 'Session summary' })).toBeVisible();
+
+    // Decrypt the vault: a kind:'depth' invitation for "family" was recorded as a by-product (no new screen).
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('depth e2e: master key missing (2)');
+    const depth = (await listProfileSuggestions(fs, key, 'owner-1')).filter(
+      (s) => s.kind === 'depth',
+    );
+    expect(depth).toHaveLength(1);
+    expect(depth[0]?.sectionId).toBe('family');
+    expect(depth[0]?.status).toBe('pending');
+
+    // Home shows the calm depth card; it fits phone width with no horizontal overflow.
+    await w.getByRole('link', { name: 'Home', exact: true }).click();
+    await expect(w.getByText(/Tell me more about Family & roots/)).toBeVisible();
+    await w.setViewportSize({ width: 390, height: 800 });
+    const overflow = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      return main ? main.scrollWidth - main.clientWidth : 0;
+    });
+    expect(overflow).toBeLessThanOrEqual(1);
+    await w.setViewportSize({ width: 1100, height: 800 });
+
+    // Go deeper → the Family section opens in onboarding (the existing intake form path; §29 adds no new UI).
+    await w.getByRole('button', { name: /Go deeper/ }).click();
+    await expect(w.getByRole('heading', { name: 'Family & roots' })).toBeVisible();
+
+    // Accepting resolves the invitation (no nagging — the accepted area won't be re-offered).
+    const after = (await listProfileSuggestions(fs, key, 'owner-1')).filter(
+      (s) => s.kind === 'depth',
+    );
+    expect(after[0]?.status).toBe('accepted');
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

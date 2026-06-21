@@ -19,9 +19,15 @@ import { getPerson, savePerson } from '../people/peopleService';
  * and only on the person's explicit confirmation; `dismissSuggestion` is durable.
  */
 
-const SCHEMA_VERSION = 1;
-const dir = (personId: string): string => `people/${personId}/profile-suggestions`;
-const path = (personId: string, id: string): string => `${dir(personId)}/${id}.enc`;
+export const SCHEMA_VERSION = 1;
+/** The per-subject profile-suggestions directory (shared by the §15 freshness + §29 depth records). */
+export const suggestionsDir = (personId: string): string =>
+  `people/${personId}/profile-suggestions`;
+/** A single suggestion's encrypted file path (reused by the §29 depth-invitation recorder). */
+export const suggestionPath = (personId: string, id: string): string =>
+  `${suggestionsDir(personId)}/${id}.enc`;
+const dir = suggestionsDir;
+const path = suggestionPath;
 
 const FIELD_KEYS = new Set<string>(PERSON_FIELD_KEYS);
 // List-valued Person fields — an accepted value for one is split on commas (others are scalar strings).

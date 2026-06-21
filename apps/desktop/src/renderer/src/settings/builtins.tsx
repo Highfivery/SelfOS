@@ -39,6 +39,7 @@ declare module './types' {
     'ai.model': 'claude-sonnet-4-6' | 'claude-opus-4-8';
     'sessions.memoryEnabled': boolean;
     'sessions.autoSummarizeOnEnd': boolean;
+    'intake.inSessionDepthAsk': boolean;
     'questionnaires.autoAnalyze': boolean;
     'questionnaires.defaultMessages': RelayMessages;
     'questionnaires.intimacyTopics': null;
@@ -248,6 +249,19 @@ export function registerBuiltinSettings(): void {
       scope: 'vault',
       order: 2,
       visibleWhen: (values) => values['sessions.memoryEnabled'] !== false,
+    }),
+    defineSetting({
+      key: 'intake.inSessionDepthAsk',
+      section: 'sessions',
+      label: 'Invite me to go deeper during sessions',
+      description:
+        'When on, if a session keeps circling a part of your profile you haven’t filled in, the coach may gently invite you — once — to share more about it (e.g. “want to tell me a bit more about your family?”). It only asks when it’s clearly relevant, never pushes, and always steps back for anything serious. Turn off to only ever see calm “go deeper” cards instead. (Sensitive areas stay behind the 18+ check.)',
+      schema: z.boolean(),
+      default: true,
+      control: { type: 'switch' },
+      scope: 'vault',
+      order: 3,
+      visibleWhen: aiEnabled,
     }),
     defineSetting({
       key: 'questionnaires.autoAnalyze',

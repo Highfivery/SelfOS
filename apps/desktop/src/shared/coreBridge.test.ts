@@ -522,6 +522,83 @@ describe('createCoreBridge', () => {
     expect(await bridge.profileSuggestions()).toHaveLength(0);
   });
 
+  it('session analysis emits a DEPTH invitation (restricted from the catalog), own-scoped (29)', async () => {
+    const { bridge, host } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        const last = options.messages.at(-1)?.content ?? '';
+        if (last.includes('summarize this session')) {
+          // The same paid pass was handed the unexplored-areas context (29 §5.2).
+          expect(options.system ?? '').toContain('Profile areas they have not explored yet');
+          const text = JSON.stringify({
+            summary: 'A reflective check-in about a hard time.',
+            themes: ['the past'],
+            goals: [],
+            followUps: [],
+            people: [],
+            moodValence: -0.1,
+            moodEnergy: 0,
+            // weighs is a RESTRICTED catalog section — the invitation must inherit that.
+            depthInvitations: [
+              {
+                sectionId: 'weighs',
+                theme: 'a hard time growing up',
+                rationale: 'it keeps coming up',
+              },
+            ],
+          });
+          return Promise.resolve({
+            text,
+            usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+          });
+        }
+        onDelta('ok');
+        return Promise.resolve({
+          text: 'ok',
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    await bridge.chatStream({ conversationId: 'c1', userText: 'thinking about my childhood' });
+    expect((await bridge.sessionsEndAndSummarize({ conversationId: 'c1' })).ok).toBe(true);
+
+    const depth = (await bridge.profileSuggestions()).filter((s) => s.kind === 'depth');
+    expect(depth).toHaveLength(1);
+    expect(depth[0]).toMatchObject({ kind: 'depth', sectionId: 'weighs', restricted: true });
+
+    // Own-scoped: a different person never sees it.
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.sessionSetActive({ personId: mara.id });
+    expect((await bridge.profileSuggestions()).filter((s) => s.kind === 'depth')).toHaveLength(0);
+  });
+
+  it('weaves the in-session depth ask into the chat prompt (default on), and not when off (29 §3.5)', async () => {
+    const { bridge, host } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    let captured = '';
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        captured = options.system ?? '';
+        onDelta('ok');
+        return Promise.resolve({
+          text: 'ok',
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    // Default ON → the coach is handed the unexplored invited sections to (relevantly) invite.
+    await bridge.chatStream({ conversationId: 'c1', userText: 'hello' });
+    expect(captured).toContain("haven't filled in yet");
+    // Turn it off → cards-only; no in-session ask in the prompt.
+    await bridge.setSetting({ key: 'intake.inSessionDepthAsk', value: false, scope: 'vault' });
+    captured = '';
+    await bridge.chatStream({ conversationId: 'c2', userText: 'hello again' });
+    expect(captured).not.toContain("haven't filled in yet");
+  });
+
   it('refuses to summarize when session memory is disabled', async () => {
     const { bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });

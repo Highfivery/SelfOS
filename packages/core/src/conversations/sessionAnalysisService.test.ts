@@ -2,10 +2,11 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { generateMasterKey } from '../crypto';
 import type { ClaudeClient } from '../host';
 import { memFileSystem } from '../host/memFileSystem';
-import type { Conversation, Person } from '../schemas';
+import type { Conversation, IntakeSession, Person } from '../schemas';
 import { savePerson } from '../people';
 import { buildContext } from '../people';
 import { getInsight, listInsightsForPerson, summarizeForContext } from '../insights';
+import { listProfileSuggestions } from '../profile';
 import { queryUsage, recordUsage, setPersonBudget } from '../usage';
 import { getConversation, saveConversation } from './conversationService';
 import { endAndSummarize, setSessionStatus } from './sessionAnalysisService';
@@ -323,5 +324,66 @@ describe('endAndSummarize', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.insight.crisisFlag).toBe(true);
+  });
+});
+
+describe('endAndSummarize — depth invitations (29, the free by-product)', () => {
+  const withDepth = (sectionId: string): string =>
+    JSON.stringify({
+      summary: 'A reflective check-in that kept returning to family.',
+      themes: ['family'],
+      goals: [],
+      followUps: [],
+      people: [],
+      moodValence: 0,
+      moodEnergy: 0,
+      crisisFlag: false,
+      depthInvitations: [{ sectionId, theme: 'your father', rationale: 'family came up a lot' }],
+    });
+
+  const intake = (sections: IntakeSession['sections']): IntakeSession => ({
+    id: 's1',
+    schemaVersion: 1,
+    personId: 'p1',
+    status: 'complete',
+    sections,
+    completedAt: now.toISOString(),
+    startedAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+  });
+
+  it('records a depth invitation for an unexplored area — and meters NO extra event', async () => {
+    await savePerson(fs, key, person('p1', 'Alex'));
+    await saveConversation(fs, key, conversation('c1', 'p1'));
+    const result = await endAndSummarize(
+      deps({ client: analysisClient(withDepth('family')), intakeSession: intake([]) }),
+    );
+    expect(result.ok).toBe(true);
+    const depth = (await listProfileSuggestions(fs, key, 'p1')).filter((s) => s.kind === 'depth');
+    expect(depth).toHaveLength(1);
+    expect(depth[0]?.sectionId).toBe('family');
+    // The same paid pass produced it — exactly ONE usage event, no separate depth-detection spend.
+    const events = await queryUsage(fs, key, {
+      from: '0000',
+      to: '9999',
+      personId: 'p1',
+      type: 'session.analyze',
+    });
+    expect(events).toHaveLength(1);
+  });
+
+  it('records none when the target area is already filled', async () => {
+    await savePerson(fs, key, person('p1', 'Alex'));
+    await saveConversation(fs, key, conversation('c1', 'p1'));
+    await endAndSummarize(
+      deps({
+        client: analysisClient(withDepth('family')),
+        intakeSession: intake([
+          { id: 'family', status: 'complete', restricted: false, messages: [], answers: {} },
+        ]),
+      }),
+    );
+    const depth = (await listProfileSuggestions(fs, key, 'p1')).filter((s) => s.kind === 'depth');
+    expect(depth).toHaveLength(0);
   });
 });

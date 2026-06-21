@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, Lock, Sparkles, Users } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Check, Compass, Lock, Sparkles, Users } from 'lucide-react';
 import type { AnswerMap } from '@selfos/core/questionnaires';
 import { portraitStaleness } from '@selfos/core/intake';
 import type { IntakeSectionMeta } from '@shared/channels';
@@ -32,6 +32,7 @@ type SectionStatus = 'notStarted' | 'inProgress' | 'skipped' | 'complete';
  */
 export function Onboarding(): JSX.Element {
   const navigate = useNavigate();
+  const location = useLocation();
   const state = useIntakeStore((s) => s.state);
   const loaded = useIntakeStore((s) => s.loaded);
   const error = useIntakeStore((s) => s.error);
@@ -73,6 +74,11 @@ export function Onboarding(): JSX.Element {
   const [switching, setSwitching] = useState(false);
   // The "See my portrait" confirmation modal (a chance to add more before generating, §15).
   const [confirmPortrait, setConfirmPortrait] = useState(false);
+  // 29 — pending DEPTH invitations (sectionId → theme), so the "Go deeper" cards for an invited section the
+  // coach has suggested get a gentle "Suggested" treatment + the recurring theme (§3.2/§5.4). Own-scoped via
+  // the bridge. Deep-link target (from the Home depth card) is read from router state once.
+  const [depthThemeBySection, setDepthThemeBySection] = useState<Map<string, string>>(new Map());
+  const deepLinkedRef = useRef(false);
   // Switching sections from the bottom "Go deeper" grid loads the new section at the top — bring it into view.
   const topRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -108,6 +114,33 @@ export function Onboarding(): JSX.Element {
   useEffect(() => {
     if (activeId && !openSection && sections.length > 0) setActiveId(null);
   }, [activeId, openSection, sections.length, setActiveId]);
+
+  // Load pending depth invitations (29) → highlight the matching "Go deeper" cards. Re-loads per active person.
+  useEffect(() => {
+    let cancelled = false;
+    void window.selfos?.profileSuggestions().then((all) => {
+      if (cancelled) return;
+      const map = new Map<string, string>();
+      for (const s of all ?? []) {
+        if (s.kind === 'depth' && s.sectionId) map.set(s.sectionId, s.theme ?? '');
+      }
+      setDepthThemeBySection(map);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activePersonId]);
+
+  // Deep-link from the Home depth card: open the invited section it points at, once, after sections load. The
+  // ref guards against re-firing (and clobbering a later manual navigation — the §20 reset-clobber lesson).
+  useEffect(() => {
+    if (deepLinkedRef.current) return;
+    const target = (location.state as { openSection?: string } | null)?.openSection;
+    if (target && sections.some((m) => m.id === target)) {
+      deepLinkedRef.current = true;
+      setActiveId(target);
+    }
+  }, [location.state, sections, setActiveId]);
   // The gated first-run walks the next pending core section (core → core → portrait); keyed by id so each
   // panel re-seeds its form state.
   const nextCore: IntakeSectionMeta | null = !complete ? (pendingCore[0] ?? null) : null;
@@ -196,11 +229,14 @@ export function Onboarding(): JSX.Element {
     const status = statusOf.get(m.id);
     const current = m.id === activeId;
     const isDone = status === 'complete';
+    // 29 — a pending depth invitation for this (unfilled, not-current) invited section → "Suggested" treatment.
+    const suggested = !current && !isDone && depthThemeBySection.has(m.id);
     const { answered, total } = sectionProgress(m, (findSection(m.id)?.answers ?? {}) as AnswerMap);
     const cardClass = [
       styles.invitedCard,
       current ? styles.invitedCardCurrent : '',
       isDone && !current ? styles.invitedCardDone : '',
+      suggested ? styles.invitedCardSuggested : '',
     ]
       .filter(Boolean)
       .join(' ');
@@ -227,6 +263,10 @@ export function Onboarding(): JSX.Element {
             <span className={styles.invitedTagDone} aria-hidden="true">
               <Check size={13} aria-hidden="true" /> Update
             </span>
+          ) : suggested ? (
+            <span className={styles.invitedTagSuggested}>
+              <Compass size={13} aria-hidden="true" /> Suggested
+            </span>
           ) : (
             <span className={styles.invitedTag} aria-hidden="true">
               {status === 'skipped' ? 'Skipped' : 'Add'}
@@ -234,7 +274,11 @@ export function Onboarding(): JSX.Element {
           )}
         </div>
         <span className={styles.invitedBlurb}>{m.blurb}</span>
-        {total > 0 ? (
+        {suggested && depthThemeBySection.get(m.id) ? (
+          <span className={styles.invitedSuggestedNote}>
+            Come up a few times: {depthThemeBySection.get(m.id)}
+          </span>
+        ) : total > 0 ? (
           <span className={styles.invitedCount} aria-hidden="true">
             {answered} of {total} answered
           </span>

@@ -2,6 +2,7 @@ import type { ClaudeClient, FileSystem } from '../host';
 import { uuid } from '../id';
 import type { ChatTurnResult, Conversation, UsageEvent } from '../schemas';
 import { checkBudget, costOf, recordUsage } from '../usage';
+import type { DepthAskContext } from '../profile';
 import { getConversation, saveConversation } from './conversationService';
 import { buildSystemPrompt } from './promptBuilder';
 import { WRAP_UP_INSTRUCTION, WRAP_UP_MARKER } from './wrapUp';
@@ -20,6 +21,9 @@ export interface ChatTurnDeps {
   conversationId: string;
   userText: string;
   onDelta: (text: string) => void;
+  /** The optional in-session depth ask (29 §3.5) — the unexplored invited sections to gently invite. The host
+   *  computes this (setting on + intake read + 18+-ack adult filtering); absent ⇒ no in-session ask. */
+  depthAsk?: DepthAskContext;
   now: Date;
   override?: boolean;
 }
@@ -74,7 +78,7 @@ export async function runChatTurn(deps: ChatTurnDeps): Promise<ChatTurnResult> {
 
   // The wrap-up instruction teaches the coach the private completion-marker convention; the guided
   // addendum (if `guideId` is set) steers the turn after persona+safety+context (16 §5).
-  const system = `${await buildSystemPrompt(fs, key, personId, conversation.guideId)}\n\n${WRAP_UP_INSTRUCTION}`;
+  const system = `${await buildSystemPrompt(fs, key, personId, conversation.guideId, deps.depthAsk)}\n\n${WRAP_UP_INSTRUCTION}`;
   let result;
   try {
     result = await client.stream(

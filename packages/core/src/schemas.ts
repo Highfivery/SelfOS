@@ -495,12 +495,19 @@ export const ProfileUpdateSuggestionSchema = z.object({
   id: z.string().min(1),
   schemaVersion: z.number().int().positive(),
   subjectPersonId: z.string().min(1),
-  kind: z.enum(['field', 'intakeSection']),
+  // 'field' / 'intakeSection' = the §15 FRESHNESS kinds ("this answer is stale — update it"); 'depth' = the
+  // §29 progressive-profile DEPTH invitation ("this area is unexplored — want to go deeper?"). Additive enum
+  // widen — pre-29 records (no 'depth') parse unchanged (the email/phone additive precedent, no schema bump).
+  kind: z.enum(['field', 'intakeSection', 'depth']),
   field: PersonFieldKeySchema.optional(), // set for kind 'field'
-  sectionId: z.string().optional(), // set for kind 'intakeSection'
-  observed: z.string().min(1), // what the recent activity implies the new value is
+  sectionId: z.string().optional(), // set for kind 'intakeSection' AND 'depth' (the invited section it opens)
+  // For 'depth' (29): the thin life-area the activity kept circling (when it routed via an area, §5.3).
+  lifeArea: z.string().optional(),
+  // For 'depth' (29): the recurring theme that triggered it ("we keep coming back to your dad").
+  theme: z.string().optional(),
+  observed: z.string().min(1), // §15: the implied new value; for 'depth' = the theme/area the model named
   current: z.string().optional(), // the known value it would replace, if any
-  rationale: z.string(), // a short, human reason ("a recent session mentioned a new job")
+  rationale: z.string(), // a short, human reason ("a recent session mentioned a new job"); the card subtitle
   sourceInsightId: z.string().min(1),
   sourceKind: z.enum(['session', 'dream', 'questionnaire', 'intake']),
   restricted: z.boolean(),
@@ -518,6 +525,20 @@ export const RawProfileSuggestionSchema = z.object({
   rationale: z.string().default(''),
 });
 export type RawProfileSuggestion = z.infer<typeof RawProfileSuggestionSchema>;
+
+/**
+ * The raw shape an analysis pass emits for a §29 DEPTH delta (model output → validated before trust, §5.2).
+ * The model names ONE recurring profile area the conversation keeps circling that the person hasn't explored —
+ * either by the invited `sectionId` from the unfilled list it's shown, or by a `lifeArea` we map to a section
+ * host-side. A hallucinated/`core`/already-filled target is dropped at recording (`recordDepthInvitations…`).
+ */
+export const RawDepthInvitationSchema = z.object({
+  sectionId: z.string().optional(), // the invited section, if the model named one
+  lifeArea: z.string().optional(), // OR the thin life-area (mapped to a section host-side, §5.3)
+  theme: z.string().min(1), // the recurring topic ("your father", "money stress")
+  rationale: z.string().default(''),
+});
+export type RawDepthInvitation = z.infer<typeof RawDepthInvitationSchema>;
 
 /**
  * Personal onboarding — the "getting to know you" intake (18-personal-onboarding §4.1). An AI-guided,

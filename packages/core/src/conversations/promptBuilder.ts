@@ -1,5 +1,6 @@
 import type { FileSystem } from '../host';
 import { buildContext } from '../people';
+import { depthAskInstruction, type DepthAskContext } from '../profile';
 import { getExercise, guideLifeAreas } from './guidedCatalog';
 import { buildStepInstruction } from './guidedSteps';
 
@@ -29,6 +30,7 @@ export async function buildSystemPrompt(
   key: Uint8Array,
   personId: string,
   guideId?: string,
+  depthAsk?: DepthAskContext,
 ): Promise<string> {
   const exercise = guideId ? getExercise(guideId) : undefined;
   // A guided session foregrounds its group's life-areas in the (pinned) portrait selection (28 §4.4); a
@@ -41,6 +43,13 @@ export async function buildSystemPrompt(
     if (exercise.kind === 'structured' && exercise.steps) {
       parts.push(buildStepInstruction(exercise.steps));
     }
+  }
+  // 29 — the optional in-session depth ask (a setting, default on): a guarded, prompt-level invitation to go
+  // deeper on an unexplored profile area, appended AFTER persona + safety + context so the boundary always
+  // leads (it steers, never overrides). Empty/absent ⇒ nothing added.
+  if (depthAsk) {
+    const ask = depthAskInstruction(depthAsk);
+    if (ask) parts.push(ask);
   }
   return parts.filter(Boolean).join('\n\n');
 }

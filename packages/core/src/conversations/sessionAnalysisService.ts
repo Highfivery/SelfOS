@@ -3,10 +3,12 @@ import type { ClaudeClient, FileSystem } from '../host';
 import { uuid } from '../id';
 import {
   LIFE_AREAS,
+  RawDepthInvitationSchema,
   RawProfileSuggestionSchema,
   type Conversation,
   type Insight,
   type InsightFact,
+  type IntakeSession,
   type SessionStatus,
   type SessionSummaryResult,
   type UsageEvent,
@@ -14,7 +16,13 @@ import {
 import { buildContext } from '../people';
 import { checkBudget, costOf, recordUsage } from '../usage';
 import { getInsight, normalizeCategories, saveInsight } from '../insights';
-import { recordSuggestionsFromAnalysis } from '../profile';
+import {
+  DEPTH_INVITATION_INSTRUCTION,
+  depthDetectionContext,
+  recordDepthInvitationsFromAnalysis,
+  recordSuggestionsFromAnalysis,
+  unfilledInvitedSections,
+} from '../profile';
 import { getConversation, saveConversation } from './conversationService';
 import { PERSONA, SAFETY } from './promptBuilder';
 import { getExercise } from './guidedCatalog';
@@ -62,6 +70,9 @@ const SessionAnalysisDraftSchema = z.object({
   crisisFlag: z.boolean().optional(),
   categories: z.array(z.string()).default([]),
   profileSuggestions: z.array(RawProfileSuggestionSchema).default([]),
+  // 29 — depth invitations: ONLY when the session keeps circling an unexplored profile area (the same free
+  // pass, no extra spend). Validated/resolved server-side before any is recorded.
+  depthInvitations: z.array(RawDepthInvitationSchema).default([]),
 });
 
 export interface SetSessionStatusDeps {
@@ -98,6 +109,9 @@ export interface EndAndSummarizeDeps {
   personId: string;
   conversationId: string;
   memoryEnabled: boolean;
+  /** The person's intake session (29) — lets the same analysis pass detect unexplored profile areas and emit a
+   *  depth invitation for FREE. Passed by the host (the bridge reads it); absent ⇒ no depth detection. */
+  intakeSession?: IntakeSession | null;
   now: Date;
   override?: boolean;
 }
@@ -182,12 +196,20 @@ export async function endAndSummarize(deps: EndAndSummarizeDeps): Promise<Sessio
   const guideNote = exercise
     ? `This session was a guided self-help exercise: "${exercise.title}" (inspired by ${exercise.framework}). Reflect that in the summary where relevant.`
     : '';
-  const system = [PERSONA, SAFETY, SESSION_ANALYSIS_GUIDANCE, guideNote, context]
+  // 29 — hand this same (already-paid) pass the unexplored invited profile areas so it can OPTIONALLY emit a
+  // depth invitation. Empty ⇒ no detection context + the base instruction (no behavioural change).
+  const unfilled = unfilledInvitedSections(deps.intakeSession ?? null);
+  const depthContext = depthDetectionContext(unfilled);
+  const analysisInstruction =
+    unfilled.length > 0
+      ? `${ANALYSIS_INSTRUCTION}\n${DEPTH_INVITATION_INSTRUCTION}`
+      : ANALYSIS_INSTRUCTION;
+  const system = [PERSONA, SAFETY, SESSION_ANALYSIS_GUIDANCE, guideNote, context, depthContext]
     .filter(Boolean)
     .join('\n\n');
   const messages = [
     ...conversation.messages.map((m) => ({ role: m.role, content: m.content })),
-    { role: 'user' as const, content: ANALYSIS_INSTRUCTION },
+    { role: 'user' as const, content: analysisInstruction },
   ];
 
   let result;
@@ -290,6 +312,19 @@ export async function endAndSummarize(deps: EndAndSummarizeDeps): Promise<Sessio
     'session',
     insightId,
     false,
+    now,
+  );
+
+  // Progressive profile building (29): the same pass may have noticed the session keeps circling an unexplored
+  // profile area — record a depth invitation (no extra AI spend; resolved + cadence-gated server-side).
+  await recordDepthInvitationsFromAnalysis(
+    fs,
+    key,
+    personId,
+    draft.depthInvitations,
+    'session',
+    insightId,
+    deps.intakeSession ?? null,
     now,
   );
 

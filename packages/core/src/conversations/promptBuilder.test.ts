@@ -67,4 +67,25 @@ describe('buildSystemPrompt', () => {
     const free = await buildSystemPrompt(fs, key, 'p1');
     expect(guided).toBe(free);
   });
+
+  it('appends the in-session depth ask AFTER persona+safety when sections are passed (29 §3.5)', async () => {
+    await savePerson(fs, key, person('p1', 'Alex'));
+    const depthAsk = {
+      sections: [
+        { id: 'family', title: 'Family & roots', restricted: false, adult: false, skipped: false },
+      ],
+    };
+    const prompt = await buildSystemPrompt(fs, key, 'p1', undefined, depthAsk);
+    expect(prompt).toContain('Family & roots'); // the invited area is named
+    expect(prompt).toMatch(/crisis/i); // crisis always takes precedence in the ask
+    // The boundary still leads — the ask comes after persona + safety.
+    expect(prompt.indexOf(SAFETY)).toBeLessThan(prompt.indexOf('Family & roots'));
+  });
+
+  it('adds no depth ask when there are no unexplored sections to invite', async () => {
+    await savePerson(fs, key, person('p1', 'Alex'));
+    const withEmpty = await buildSystemPrompt(fs, key, 'p1', undefined, { sections: [] });
+    const free = await buildSystemPrompt(fs, key, 'p1');
+    expect(withEmpty).toBe(free);
+  });
 });

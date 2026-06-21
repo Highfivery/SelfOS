@@ -1,6 +1,21 @@
 # 29 — Progressive profile building (depth invitations)
 
-> **Status:** Draft · _last updated 2026-06-21_
+> **Status:** **Built** 2026-06-21 (`feat/progressive-profile`, off `main`) · _last updated 2026-06-21_
+>
+> **As built.** Extends the §15 `ProfileUpdateSuggestion` with `kind: 'depth'` (the DRY choice) — depth
+> invitations reuse §15's service/IPC/store/accept-dismiss wholesale; the only seam change is the additive
+> schema widen. Detection rides the **session** analysis pass (the one §15-wired producer; dreams +
+> questionnaires deferred exactly as §15 deferred them, §5.2) — the same metered call, **no extra spend**. A
+> new `@selfos/core/profile/depthInvitations.ts` holds the pure routing/cadence: `unfilledInvitedSections`,
+> the `LifeArea → sectionId` map, `recordDepthInvitationsFromAnalysis` (resolves to a real **unfilled invited**
+> section; drops core/filled/hallucinated targets; **inherits `restricted` from the trusted catalog, never the
+> model**), and the prompt fragments. **Confirmed tunings:** cooldown **60 days**, model offers after **≥3**
+> recurrences, global cap **1** pending depth card; a **skipped** section is a standing decline until the
+> cooldown elapses since onboarding, then a strong recurrence may re-invite. The **in-session ask ships ON by
+> default** (`intake.inSessionDepthAsk`, a vault setting) — a guarded, prompt-level invitation the host appends
+> after PERSONA+SAFETY (adult sections withheld until the 18+ ack; crisis always wins). Surfaces: a Home
+> **DepthInvitationCard** (distinct from the §15 freshness card) + a "Suggested" treatment on the Onboarding
+> "Go deeper" grid with a Home→section deep-link; **no new answering UI**.
 >
 > Instead of front-loading a long onboarding intake, SelfOS establishes a **tight core intake** (specs
 > [`26`](26-intake-catalog-redesign.md)/[`27`](27-intimacy-redesign.md) trim the catalog) and then
@@ -407,25 +422,24 @@ Vault + Claude mocked as established (`SELFOS_FAKE_CLAUDE`); run `pnpm typecheck
   (if shipped on by default) gets its own case: a relevant session offers one gentle depth question; an
   irrelevant (budgeting) session never does; a crisis disclosure drops the ask.
 
-## 11. Open questions
+## 11. Open questions — RESOLVED (2026-06-21, at build)
 
-- **Model shape — extend or sibling?** Does §29 **extend** `ProfileUpdateSuggestion` with `kind: 'depth'` (the
-  DRY default this draft specs — reuses §15's service/IPC/store), or add a **separate `ProfileDepthInvitation`
-  model + service**? Extending is less code and one review surface; a sibling keeps freshness and depth
-  cleanly distinct. **Recommend extend** unless the user wants strict separation.
-- **In-session ask — on or off by default?** Should the §3.5 coach-weaves-a-depth-question behaviour ship
-  **on** (richer, more humane) or **off** (cards-only, most conservative) by default, with the
-  [`03`](03-settings.md) toggle either way? This is a product/tone call.
-- **Invitation cadence / throttle.** The **cooldown** before a dismissed area can re-fire (e.g. 30 / 60 / 90
-  days?), the **global cap** on simultaneous pending depth invitations, and how many recurrences before the
-  model should offer one (the analysis prompt's "keeps circling" threshold — 2? 3?).
-- **Surfacing priority vs. §15 freshness.** When both a depth card and a "Keep your profile fresh" card are
-  pending, which leads on Home (or do they coexist as one combined "your profile" section)? — a small UX call.
-- **Skipped-section policy.** Is an **explicitly-skipped** invited section a _permanent_ decline (never
-  re-invited), or does it re-open after a long cooldown if activity strongly recurs? (This draft treats it as a
-  standing decline within the cooldown — confirm.)
-- **Area routing coverage.** Which `LIFE_AREAS` map to an `invited` section vs. have no owning section (and so
-  are never invited)? Finalize the `LifeArea → sectionId` map at build, against spec 26's trimmed catalog.
+- **Model shape — extend or sibling?** → **EXTEND.** `ProfileUpdateSuggestion.kind` gains `'depth'` (additive
+  enum widen, no `schemaVersion` bump) + optional `lifeArea`/`theme`; the §15 service/IPC/store/accept-dismiss
+  are reused wholesale, with the renderer splitting freshness vs. depth by `kind`.
+- **In-session ask — on or off by default?** → **ON by default**, behind the vault setting
+  `intake.inSessionDepthAsk` ([`03`](03-settings.md), AI-gated). When off, depth surfaces as cards only.
+- **Invitation cadence / throttle.** → **cooldown 60 days · ≥3 recurrences before the model offers one · global
+  cap 1** pending depth invitation (`DEPTH_COOLDOWN_DAYS` / `DEPTH_RECURRENCE_THRESHOLD` / `DEPTH_GLOBAL_CAP`).
+- **Surfacing priority vs. §15 freshness.** → **They coexist** as two distinct cards on Home (the freshness
+  "Keep your profile fresh" card and the depth "Want to go a little deeper?" card), each self-hiding when empty;
+  the freshness card filters out `kind: 'depth'`.
+- **Skipped-section policy.** → **A skip is a standing decline until the 60-day cooldown elapses since
+  onboarding finished**, then a strong recurrence may re-invite once (anchored on `IntakeSession.completedAt`).
+- **Area routing coverage.** → `LifeArea → sectionId`: Health & body→health, Relationships→relationships,
+  Work & purpose & Money→work-money, Family→family, Emotions & patterns→weighs, Intimacy→intimacy. `joy-play`
+  and `story` have no clean owning life-area and are only invitable when the model names the `sectionId`
+  directly; `Goals & growth`/`Faith`/`Other` route to no invited section (never auto-invited via an area).
 
 ## 12. Resolved decisions
 
@@ -454,6 +468,38 @@ the §11 model-shape + in-session-default calls) are resolved when this is built
 
 ## 13. Changelog
 
+- 2026-06-21 — **Built** (`feat/progressive-profile`, off `main`, NOT merged). Progressive profile building /
+  depth invitations — the sibling of §15 freshness. **Decisions asked first** (all confirmed): extend
+  `kind: 'depth'`; in-session ask **ON** by default; **60d / ≥3 / cap 1**; skipped = standing decline until the
+  cooldown. **Core:** widened `ProfileUpdateSuggestionSchema.kind` + `RawDepthInvitationSchema` (additive, no
+  bump); new `@selfos/core/profile/depthInvitations.ts` — `unfilledInvitedSections`, `resolveDepthSection`,
+  `recordDepthInvitationsFromAnalysis` (resolves to a real **unfilled invited** section, drops
+  core/filled/recently-declined/skipped-in-cooldown/hallucinated targets, dedups one-per-area + a global cap,
+  **inherits `restricted` from the catalog, never the model**), and the prompt fragments
+  (`depthDetectionContext` / `DEPTH_INVITATION_INSTRUCTION` / `depthAskInstruction`). **Producer wiring:** the
+  **session** analysis pass (the one §15-wired producer) gains a `depthInvitations` output key + the unfilled
+  context + a `recordDepthInvitationsFromAnalysis` call beside the §15 one — same metered call, **no extra
+  spend, no extra metering event** (asserted). Dreams + questionnaires deferred (same as §15). **In-session
+  ask:** `runChatTurn`/`buildSystemPrompt` gain an optional `depthAsk`; the bridge reads the
+  `intake.inSessionDepthAsk` setting (default ON) + the intake session + the 18+ ack and passes the unexplored
+  (adult-filtered) sections — a guarded prompt-level invite appended **after** persona+safety. **IPC:** none
+  added — the existing `profile:suggestions/accept/dismiss` carry depth records; the renderer holds the full
+  record (with `sectionId`) so **Go deeper** routes from local data + the existing accept channel. **Renderer:**
+  a Home `DepthInvitationCard` (filters `kind:'depth'`; the §15 freshness card now filters it OUT), a
+  "Suggested" treatment + Home→section deep-link on the Onboarding "Go deeper" grid; **no new answering UI /
+  nav / route**. **Settings:** `intake.inSessionDepthAsk` (Sessions section, default ON, AI-gated). **Privacy:**
+  own-scoped via the existing `intake.own` gating; a restricted-area invitation is `restricted` (own-context-
+  only, owner-visible) from the catalog. **Tests:** core unit (17 depthInvitations: record/drop/dedup/cap/
+  cooldown/skip/restricted-inherit/resolve/pure-helpers; +2 session-analysis: emits-on-unexplored / none-when-
+  filled / **no extra metering**), buildSystemPrompt (in-session ask after safety; empty when none), coreBridge
+  (restricted depth own-scoped; the in-session ask in the chat prompt on/off), RTL (DepthInvitationCard render/
+  accept/dismiss/self-hide; freshness card ignores depth), and an **E2E** (session → summarize → depth card
+  [decrypt `kind:'depth'`] → Go deeper opens the Family section → accept resolves it; 390px overflow guard).
+  The **in-session-ask** correctness is proven at the prompt contract (buildSystemPrompt + the bridge
+  system-prompt capture) rather than a model-judgment E2E (the fake can't judge relevance). Gate green:
+  typecheck (node + web), lint, format, **476 core + 542 desktop + 11 relay** unit, **E2E**. **Group-numbering
+  note:** this is the onboarding-redesign group (26–29); a concurrent multi-device/credentials group also
+  numbered 25–28 — a one-time renumber reconcile is pending when both branches land.
 - 2026-06-21 — created (Draft). The progressive-profile-building / **depth-invitation** spec — the sibling of
   [`18`](18-personal-onboarding.md) §15's freshness system: a calm, opt-in invitation to go deeper on an
   unexplored `invited` intake section / thin life-area, detected as a **free by-product** of the producers'

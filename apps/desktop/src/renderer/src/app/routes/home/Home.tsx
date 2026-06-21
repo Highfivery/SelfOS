@@ -12,6 +12,7 @@ import { useSetting } from '../../../settings/useSetting';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { OnboardingCard } from './OnboardingCard';
 import { ProfileFreshnessCard } from './ProfileFreshnessCard';
+import { DepthInvitationCard } from './DepthInvitationCard';
 import { ContinueCard } from './ContinueCard';
 import { SuggestionsCard } from './SuggestionsCard';
 import { WellbeingCard } from './WellbeingCard';
@@ -112,6 +113,7 @@ export function Home(): JSX.Element {
 
       {ready ? <OnboardingCard /> : null}
       {ready ? <ProfileFreshnessCard /> : null}
+      {ready ? <DepthInvitationCard /> : null}
 
       {!ready ? null : isNew ? (
         <GettingStarted

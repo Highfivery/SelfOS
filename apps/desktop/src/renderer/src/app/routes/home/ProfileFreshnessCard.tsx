@@ -24,10 +24,11 @@ const FIELD_LABELS: Record<string, string> = {
 };
 
 /**
- * The self-maintaining-profile nudge (18-personal-onboarding §15): pending profile-update suggestions noticed
- * by the analysis passes. Self-hides when there are none. Each is a **proposal** — Update writes the field,
- * Dismiss is durable (no re-nag). Own-scoped + gated `intake.own` in the bridge; shown only to a person who
- * can do their own intake.
+ * The self-maintaining-profile nudge (18-personal-onboarding §15): pending profile-update **freshness**
+ * suggestions noticed by the analysis passes. Self-hides when there are none. Each is a **proposal** — Update
+ * writes the field, Dismiss is durable (no re-nag). Own-scoped + gated `intake.own` in the bridge; shown only
+ * to a person who can do their own intake. The §29 DEPTH invitations (`kind: 'depth'`) are a distinct surface
+ * (DepthInvitationCard) — filtered out here so freshness and depth stay separate (29 §1/§3.2).
  */
 export function ProfileFreshnessCard(): JSX.Element | null {
   const canDoIntake = useSessionStore((s) => s.can('intake.own'));
@@ -36,7 +37,8 @@ export function ProfileFreshnessCard(): JSX.Element | null {
   const [busy, setBusy] = useState<string | null>(null);
 
   const load = useCallback(async (): Promise<void> => {
-    setPending((await window.selfos?.profileSuggestions()) ?? []);
+    const all = (await window.selfos?.profileSuggestions()) ?? [];
+    setPending(all.filter((s) => s.kind !== 'depth'));
     setLoaded(true);
   }, []);
   useEffect(() => {
@@ -50,7 +52,7 @@ export function ProfileFreshnessCard(): JSX.Element | null {
     const next = accept
       ? await window.selfos?.profileAcceptSuggestion(id)
       : await window.selfos?.profileDismissSuggestion(id);
-    setPending(next ?? []);
+    setPending((next ?? []).filter((s) => s.kind !== 'depth'));
     setBusy(null);
   };
 

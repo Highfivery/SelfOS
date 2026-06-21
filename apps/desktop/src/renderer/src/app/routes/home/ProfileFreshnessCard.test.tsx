@@ -61,4 +61,17 @@ describe('ProfileFreshnessCard', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Dismiss/ }));
     await waitFor(() => expect(profileDismissSuggestion).toHaveBeenCalledWith('s1'));
   });
+
+  it('ignores §29 depth invitations — that surface is the DepthInvitationCard, not freshness', async () => {
+    elevateToOwner();
+    installMockBridge({
+      profileSuggestions: () =>
+        Promise.resolve([
+          suggestion({ id: 'd1', kind: 'depth', field: undefined, sectionId: 'family' }),
+        ]),
+    });
+    const { container } = render(<ProfileFreshnessCard />);
+    // Only a depth record is pending → the freshness card self-hides (it filters kind === 'depth').
+    await waitFor(() => expect(container).toBeEmptyDOMElement());
+  });
 });

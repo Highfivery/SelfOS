@@ -1698,34 +1698,6 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           { restricted: true },
         ),
         f(
-          single(
-            'swallowSpit',
-            'If you give oral on a penis, do you swallow or spit?',
-            ['Swallow', 'Spit', 'Either', 'Depends'],
-            when('getSpecific', true),
-          ),
-          { restricted: true },
-        ),
-        f(
-          multi(
-            'cumWhere',
-            'Where do you like your partner to cum?',
-            [
-              'In my mouth',
-              'On my face',
-              'On my chest / body',
-              'On my ass',
-              'Inside me (vaginal)',
-              'Inside me (anal)',
-              'Wherever they want',
-              "I don't have a preference",
-              'Other',
-            ],
-            when('getSpecific', true),
-          ),
-          { restricted: true },
-        ),
-        f(
           {
             ...longText(
               'idealEncounter',

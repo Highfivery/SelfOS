@@ -360,6 +360,22 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-22 — **Release ops (v0.3.1 shipped the auto-share fix; CI Actions bumped off Node 20; release-please
+  re-proposal loop fixed again — on `main`).** After merging the auto-share fix, cut **v0.3.1** (release-please
+  PR #10 → tag + the macOS job published `SelfOS-0.3.1-arm64.dmg`, 108 MB). Then two CI/release housekeeping
+  items: **(1)** the GitHub **Node-20 deprecation** — bumped `actions/checkout@v4→v7`, `actions/setup-node@v4→v6`,
+  `pnpm/action-setup@v4→v6` in both `ci.yml` + `release.yml` (inputs unchanged; pnpm reads `packageManager` from
+  package.json; CI verified green with the new actions). `googleapis/release-please-action@v4` is **left** (it
+  drives the fragile release flow — a v5 major bump needs careful testing; it's force-run on Node 24 for now, a
+  flagged follow-up). **(2)** Merging the v0.3.1 PR triggered a **spurious "release 0.3.2" PR (#11)** re-proposing
+  the already-shipped fix — the manifest-drift loop again. Root cause this time: **`bootstrap-sha` was STALE at
+  v0.3.0 (573c634)**, so release-please re-scanned from v0.3.0 each run and re-found the v0.3.1 commit. Fix:
+  **advance `bootstrap-sha` to the v0.3.1 commit (e5562a6)** + close PR #11; verified the next release-please run
+  opened **no** PR. **Lesson (sharpened): with this repo's `bootstrap-sha` setup, the sha MUST be advanced to each
+  new release commit — it's a floor, not a "last release" marker, so leaving it at the prior release makes
+  release-please re-propose the just-shipped commits as the next patch. It exists only to fence off an ancient
+  `Release-As: 0.1.0` footer (commit 36c3dff); the real permanent fix is to neutralize that footer so
+  `bootstrap-sha` can be dropped entirely (the manifest is already the source of truth) — a follow-up.**
 - 2026-06-22 — **Fix + durable decision (AI auto-shares to the household by default — the recurring "member
   sees AI not set up on the shared vault" trap, FINALLY root-caused against the REAL vault; spec 25 §5.6, on
   `fix/ai-credentials-autoshare` off `main`, NOT merged).** A member (Angel) on the freshly-installed **released**

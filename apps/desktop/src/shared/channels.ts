@@ -1,6 +1,9 @@
 import type {
   AccessView,
+  AiKeyStatus,
+  AiProvider,
   AlignmentResult,
+  DeviceView,
   Answer,
   AnswerType,
   Assignment,
@@ -92,6 +95,7 @@ export const IpcChannels = {
   useVault: 'vault:use',
   unlinkVault: 'vault:unlink',
   getConflicts: 'vault:getConflicts',
+  vaultSyncReadiness: 'vault:syncReadiness',
   revealVault: 'vault:reveal',
   vaultChanged: 'vault:changed', // main → renderer event
   fullscreenChanged: 'window:fullscreenChanged', // main → renderer event (macOS hides traffic lights)
@@ -102,6 +106,15 @@ export const IpcChannels = {
   secretHas: 'secret:has',
   secretClear: 'secret:clear',
   claudeTest: 'claude:test',
+  openaiTest: 'ai:openaiTest',
+  aiKeyStatus: 'ai:keyStatus',
+  aiSetSharedKey: 'ai:setSharedKey',
+  aiShareDeviceKey: 'ai:shareDeviceKey',
+  aiClearSharedKey: 'ai:clearSharedKey',
+  devicesList: 'devices:list',
+  devicesRename: 'devices:rename',
+  keysRotate: 'keys:rotate',
+  keysRotateStatus: 'keys:rotateStatus',
   householdStatus: 'household:status',
   householdSetup: 'household:setup',
   unlockWithRecoveryPhrase: 'household:unlockWithRecoveryPhrase',
@@ -237,11 +250,41 @@ export type SettingScope = 'vault' | 'device';
 /** Minimum length of the owner login PIN set at Setup (10-multi-device-vault §3.2). */
 export const MIN_OWNER_PIN_LENGTH = 4;
 
-/** The secret id under which the Claude API key is stored. */
+// The Claude + OpenAI secret ids. Defined as local string literals (NOT re-exported from
+// `@selfos/core/schemas`) because `channels.ts` is imported by the **preload**, which runs sandboxed and
+// must stay free of any runtime `zod` import — a value re-export from core/schemas pulls zod into the
+// preload bundle and breaks it ("module not found: zod" → preload fails to load → boot hangs). These mirror
+// the canonical `@selfos/core/schemas` constants (kept in lockstep; both are `'<provider>.apiKey'`).
 export const ANTHROPIC_API_KEY_ID = 'anthropic.apiKey';
-
-/** The secret id for the OpenAI API key — SelfOS's second provider, for dream images (13-dream-images §6.1). */
 export const OPENAI_API_KEY_ID = 'openai.apiKey';
+export type { DeviceView } from '@selfos/core/schemas';
+
+/** The outcome of a key rotation (32 §6.4). The new recovery phrase is shown once; never logged. */
+export type KeyRotateResult =
+  | {
+      ok: true;
+      recoveryPhrase: string;
+      reencryptedFileCount: number;
+      revokedDeviceIds: string[];
+      cancelledInviteCount: number;
+    }
+  | {
+      ok: false;
+      code:
+        | 'SYNC_CONFLICT_UNRESOLVED'
+        | 'NO_MASTER_KEY'
+        | 'ROTATION_IN_PROGRESS'
+        | 'CANNOT_REVOKE_THIS_DEVICE'
+        | 'FILE_CORRUPT'
+        | 'NOT_PERMITTED'
+        | 'ERROR';
+    };
+
+/** A resumable rotation found at boot (32 §6.5), or null when none is in progress. */
+export type RotationStatus = { phase: 'staging' | 'committing'; total: number } | null;
+
+/** Whether the chosen vault folder is ready to set up, or still syncing from iCloud (33 §5.D). */
+export type VaultSyncReadiness = { ready: boolean; reason?: 'icloud-pending' };
 
 export type ClaudeErrorCode = 'NO_KEY' | 'AUTH' | 'RATE_LIMIT' | 'NETWORK' | 'API_ERROR';
 export type ClaudeTestResult =
@@ -301,6 +344,8 @@ export interface SelfosBridge {
   unlinkVault(): Promise<BootState>;
   /** Absolute paths of any sync-conflict copies found in the active vault. */
   getConflicts(): Promise<string[]>;
+  /** Whether the active vault folder is ready to set up, or still downloading from iCloud (33 §5.D). */
+  vaultSyncReadiness(): Promise<VaultSyncReadiness>;
   /** Open the active vault folder in the OS file manager. */
   revealVault(): Promise<void>;
   /** Subscribe to external vault changes; returns an unsubscribe function. */
@@ -331,8 +376,26 @@ export interface SelfosBridge {
   secretHas(input: { id: string }): Promise<boolean>;
   /** Remove a stored secret. */
   secretClear(input: { id: string }): Promise<void>;
-  /** Test the Claude connection with the stored key + selected model. */
+  /** Test the Claude connection with the stored (resolved) key + selected model. */
   claudeTest(): Promise<ClaudeTestResult>;
+  /** Test the OpenAI (dream-image) key with a non-generative probe (33 §6.B). */
+  openaiTest(): Promise<ClaudeTestResult>;
+  /** AI key readiness for a provider — booleans + an enum only, never a key value (25 §5.3). */
+  aiKeyStatus(input?: { provider?: AiProvider }): Promise<AiKeyStatus>;
+  /** Owner-only: set the household's shared key for a provider (the value never comes back). */
+  aiSetSharedKey(input: { provider: AiProvider; value: string }): Promise<void>;
+  /** Owner-only: promote this device's key into the shared household credentials (25 §5.4). */
+  aiShareDeviceKey(input?: { provider?: AiProvider }): Promise<void>;
+  /** Owner-only: stop sharing a provider's key with the household. */
+  aiClearSharedKey(input?: { provider?: AiProvider }): Promise<void>;
+  /** Owner-only: the household's joined devices (32-device-management §6.2). */
+  devicesList(): Promise<DeviceView[]>;
+  /** Owner-only: rename a device in the registry. */
+  devicesRename(input: { deviceId: string; label: string }): Promise<void>;
+  /** Owner-only: re-encrypt the whole vault under a new key, revoking the given devices (32 §6.4). */
+  keysRotate(input?: { revokeDeviceIds?: string[] }): Promise<KeyRotateResult>;
+  /** Owner-only: a resumable rotation found at boot, or null (32 §6.5). */
+  keysRotateStatus(): Promise<RotationStatus>;
   /** Whether the household is set up (master key + owner) and who is active. */
   householdStatus(): Promise<HouseholdStatus>;
   /** First-run setup: create the owner (with a login PIN) and return the recovery phrase. */

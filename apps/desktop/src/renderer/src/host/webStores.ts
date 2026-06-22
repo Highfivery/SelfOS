@@ -226,6 +226,7 @@ const TINY_PNG_BASE64 =
 /** Deterministic offline image client for the web preview (mirrors the Electron `fakeImageClient`). */
 export function webFakeImageClient(): ImageClient {
   return {
+    verify: (): Promise<void> => Promise.resolve(),
     generate: (): Promise<ImageGenerateOutcome> =>
       Promise.resolve({
         ok: true,

@@ -62,6 +62,14 @@ export const DeviceStateSchema = z.object({
   pendingJoinPersonId: z.string().nullable().optional(),
   /** Whether the desktop sidebar is collapsed to an icon rail (device-local UI preference). */
   sidebarCollapsed: z.boolean().optional(),
+  /**
+   * This install's stable device id (32-device-management §4.2) — generated once, stored device-local so
+   * the Devices surface can mark "this device" key-free at boot. Additive-optional (no schemaVersion bump,
+   * the `vaultBookmark` precedent). The synced `config/devices/<id>.enc` record is the source of truth.
+   */
+  deviceId: z.string().optional(),
+  /** A cached copy of this device's registry label (so the UI can label "this device" before the key loads). */
+  deviceLabel: z.string().optional(),
 });
 export type DeviceState = z.infer<typeof DeviceStateSchema>;
 
@@ -1080,6 +1088,74 @@ export const RelayStatusSchema = z.object({
   updateAvailable: z.boolean(),
 });
 export type RelayStatus = z.infer<typeof RelayStatusSchema>;
+
+/** The secret id under which the Claude API key is stored device-local (single source; re-exported by channels). */
+export const ANTHROPIC_API_KEY_ID = 'anthropic.apiKey';
+/** The secret id for the OpenAI API key — SelfOS's second provider, for dream images (13-dream-images §6.1). */
+export const OPENAI_API_KEY_ID = 'openai.apiKey';
+
+/**
+ * Household-shared AI credentials (25-household-ai-credentials §4.1), stored encrypted under the master
+ * key at `config/ai-credentials.enc` so every member device pointing at the same vault inherits a working
+ * key. The plaintext keys sit *inside* the encrypted envelope — the same posture as `config/relay.enc`'s
+ * Cloudflare token. Both providers are optional so a household may share Claude, OpenAI, both, or neither.
+ */
+export const AiCredentialsSchema = z.object({
+  schemaVersion: z.number().int().positive(),
+  anthropicApiKey: z.string().min(1).optional(),
+  openaiApiKey: z.string().min(1).optional(),
+  updatedAt: z.string().datetime().optional(),
+  /** Who shared it (the owner) — informational, no secret material. */
+  sharedByPersonId: z.string().optional(),
+});
+export type AiCredentials = z.infer<typeof AiCredentialsSchema>;
+
+/** Which AI provider a credential / resolution refers to (25 §4.4). */
+export const AiProviderSchema = z.enum(['anthropic', 'openai']);
+export type AiProvider = z.infer<typeof AiProviderSchema>;
+
+/**
+ * Renderer-safe AI key readiness (25 §5.3) — **booleans + an enum only, never a key value**. Each AI
+ * surface computes `aiAvailable = ai.enabled && resolvedReady`.
+ */
+export const AiKeyStatusSchema = z.object({
+  hasSharedKey: z.boolean(),
+  hasDeviceOverride: z.boolean(),
+  resolvedReady: z.boolean(),
+  source: z.enum(['device', 'shared', 'none']),
+});
+export type AiKeyStatus = z.infer<typeof AiKeyStatusSchema>;
+
+/**
+ * A device's registry entry (32-device-management §4.2), stored encrypted under the master key at
+ * `config/devices/<deviceId>.enc` — one file per device so two devices booting at once never clobber a
+ * shared registry. `platform` is the raw `BridgeHost.platform` string (macos/ios/web/…).
+ */
+export const DeviceRecordSchema = z.object({
+  schemaVersion: z.literal(1),
+  deviceId: z.string(),
+  label: z.string(),
+  platform: z.string(),
+  createdAt: z.string().datetime(),
+  lastSeenAt: z.string().datetime(),
+  /** Best-effort: who last signed in on this device. The surface shows "—" if unknown. */
+  lastActivePersonId: z.string().nullable().optional(),
+  /** Set when this entry was the target of a revoke (audit; the file is then removed). */
+  revokedAt: z.string().datetime().optional(),
+});
+export type DeviceRecord = z.infer<typeof DeviceRecordSchema>;
+
+/** The renderer-facing projection of a device (32 §4.2) — no raw personId; the name is resolved owner-side. */
+export const DeviceViewSchema = z.object({
+  deviceId: z.string(),
+  label: z.string(),
+  platform: z.string(),
+  createdAt: z.string().datetime(),
+  lastSeenAt: z.string().datetime(),
+  isThisDevice: z.boolean(),
+  lastActivePersonName: z.string().nullable(),
+});
+export type DeviceView = z.infer<typeof DeviceViewSchema>;
 
 /** How aligned two answerers were on one canonical question (08-questionnaires §3.6). */
 export const AlignmentAgreementSchema = z.enum(['aligned', 'mixed', 'divergent']);

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, BookHeart, Sparkles } from 'lucide-react';
-import { ANTHROPIC_API_KEY_ID } from '@shared/channels';
+import { aiKeyResolved } from '../../aiAvailability';
 import type { SegmentOption } from '../../../design-system/components';
 import type { DreamPatternWindow } from '@shared/schemas';
 import { useDreamPatternStore } from '../../../stores/dreamPatternStore';
@@ -61,7 +61,7 @@ export function DreamPatterns(): JSX.Element {
   }, [load]);
   useEffect(() => {
     void (async () => {
-      setHasKey(Boolean(await window.selfos?.secretHas({ id: ANTHROPIC_API_KEY_ID })));
+      setHasKey(await aiKeyResolved('anthropic'));
     })();
   }, []);
 

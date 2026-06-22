@@ -360,6 +360,97 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-21 — **Build (spec 33 multi-device housekeeping — FULLY BUILT, slices A–D; on
+  `feat/household-ai-credentials`).** Four independent loose ends. **A** (docs) pruned spec 10's stale
+  super-admin documentation so its body matches the 2026-06-14 Owner-is-full-access amendment (deleted the
+  `SuperAdminFileSchema` block, the §6.4 `superadmin:*` subsection, the `config/superadmin.enc` table row +
+  §7 rows; the append-only changelog stays); a doc agent did the surgery + flagged that spec 14's body still
+  has live-sounding super-admin detach steps (left — it already carries a 2026-06-14 amendment note). **B**
+  the OpenAI dream-image key gets a "Test connection" like Claude's: `ImageClient.verify(apiKey)` is a
+  NON-generative `GET /v1/models` probe (bills nothing, never an image generation), `openaiProxy` maps the
+  same NO_KEY/AUTH/RATE_LIMIT/NETWORK/API_ERROR taxonomy, bridge `openaiTest` resolves the key host-side
+  (spec-25 resolver, never crosses IPC), `OpenAiTestConnectionControl` under the OpenAI key in Settings →
+  Dreams. **C** iOS finally shows the conflict Banner: `isConflictCopy` moved to `@selfos/core/vault` (shared
+  by both hosts); blind Swift `VaultFs.findConflicts` (`NSFileVersion.unresolvedConflictVersions` + the name
+  pattern) feeds the EXISTING Banner via a new `HostParts.getConflicts` part; the web preview still returns
+  `[]`. **D** sync-safety: a `vault:syncReadiness` check + a host `hasPendingDownloads` (Electron `.icloud`
+  placeholder scan; iOS blind Swift) makes `HouseholdGate` show a "this folder is still syncing from iCloud"
+  warning (Check again / Set up anyway) before fresh-vault Setup — advisory over the unchanged
+  `createMasterKey` non-overwrite data-loss backstop. Tests: openaiProxy taxonomy + RTL; capacitor
+  getConflicts/hasPendingDownloads wiring; bridge readiness; HouseholdGate warning RTL. Gate green:
+  typecheck, lint, format, **462 core + 551 desktop** unit. iOS Swift is blind-written, user-verified.
+  **Lesson: a non-generative auth probe (`GET /v1/models`) verifies an image key without billing an image;
+  and a "still syncing" warning at the boot gate is a cheap UX layer over the real data-loss guard
+  (`createMasterKey` refuses to overwrite an already-synced `recovery.enc`), not a substitute for it.**
+- 2026-06-21 — **Build (spec 32 device management & key rotation — FULLY BUILT, slices A–C; on
+  `feat/household-ai-credentials`).** Closes the biggest security gap: one master key on N devices with no way
+  to see, revoke, or rotate it. **A** device registry (`config/devices/<id>.enc`, one file per device,
+  registered on every join path + a per-launch heartbeat; key-free `deviceId` cached device-local for "this
+  device"; owner-gated `devices:list`/`:rename`; `devices.manage` capability). **B** the cryptographic
+  revocation core — `rotateMasterKey` re-encrypts the WHOLE vault under a fresh key + new recovery phrase,
+  deletes invites, drops revoked device entries; **crash-safe** via a two-phase stage→commit journaled for
+  resume (the new key sits in a **device-local temp secret**, never the synced journal, so a revoked device
+  can't read it mid-rotation; Phase-1 crash discards [vault stays old-key], Phase-2 crash resumes idempotently
+  to fully-new-key); `enumerateEncryptedFiles` is path-discovery over the content roots (not a per-feature
+  list); owner-gated `keys:rotate` (sync-conflict pre-flight) + `keys:rotateStatus`; **resume-at-boot + §5.5
+  re-key detection** in `householdStatus` (an old-key device whose key can't decrypt the access config is
+  signed out → Unlock, not a corruption error). **C** the owner-only **Settings → Devices** section (the
+  owner's placement choice over a standalone route) — list/rename/revoke + a deliberately-serious Revoke-&-
+  re-key dialog (5 consequences) + the new-recovery-phrase panel shown once. Honest threat model (§8):
+  prevents FUTURE access by a revoked device; can't retract the past; one shared key, so revoking one device
+  signs out ALL (no per-member isolation — permanent non-goal). Tests (real crypto over memFileSystem): 5
+  registry + 8 rotation (incl. the crash-safety + corrupt-abort, the spec's heart) + 2 bridge + 3 RTL. Gate
+  green: typecheck, lint, format, **462 core + 542 desktop** unit; visual QA of the Devices panel at desktop +
+  390px (fixed a narrow-card row-crush: rowMain `flex-basis: 200px` so the action buttons wrap below the device
+  name instead of squeezing it to a word-per-line). E2E (cross-device revoke→re-key→sign-out) needs a local
+  display. **Lesson: crash-safe whole-vault re-encryption = stage everything first (originals untouched →
+  Phase-1 crash is a no-op) then swap from a complete staged set under a `committing` journal (idempotent →
+  Phase-2 crash resumes); keep the new key in a DEVICE-LOCAL temp secret, never the synced journal, or a
+  revoked device syncing mid-rotation reads the very key meant to lock it out.**
+- 2026-06-21 — **Build + durable UX/permission decisions (on `feat/household-ai-credentials`).** Three
+  owner-requested access/UX changes: **(1)** the **AI, Sessions, Questionnaires, Dreams + Relay settings
+  sections are owner-only** — whole sections hidden from non-`settings.manage` users (added `adminOnly` to
+  `SettingsSection`; `SettingsScreen` filters sections, not just individual settings). Non-owners see only
+  Appearance / Vault / About. (Consequence: the spec-25 member key-override UI is no longer surfaced —
+  members rely on the inherited shared key.) **(2)** The **dev-only `/gallery` is owner-gated** (nav link +
+  route, on top of dev-only). **(3)** The header **vault/sync "checkbox" (the `SyncStatusChip`, a check-circle
+  that opened the vault folder and read as an unclear checkbox) moved into the account dropdown** as an
+  "Open vault folder" item; a sync conflict now shows on the account control + as a "Resolve N sync
+  conflicts" item (the in-content Banner still surfaces conflicts). Deleted `SyncStatusChip`. Also finished
+  **spec 25's E2E** (owner shares via UI → decrypt the vault → keyless device resolves `source:'shared'`).
+  Gate green: typecheck, lint, format, **449 core + 537 desktop** unit/RTL/bridge. E2E + visual QA need a
+  local display (the standing Electron-E2E constraint). **Lesson: hide whole owner-only SECTIONS at the
+  section level (a `SettingsSection.adminOnly` flag the screen filters on), not just per-setting — and when a
+  control's icon (a check-circle) reads as an interactive checkbox, it belongs in a labelled menu item, not a
+  bare titlebar chip.**
+- 2026-06-21 — **Durable policy + Build (multi-device specs 25–29 group).** Audited the reported multi-device
+  bug — a member installing on their own machine + selecting the shared vault saw "AI hasn't been set up"
+  though the owner had set it up — and root-caused it: the **API key is a device-local secret** (00 §6.2,
+  never synced) while `ai.enabled` is a **vault setting** (synced), so a joined member inherited `ai.enabled`
+  but had **no key** → every AI surface (and the AI-hard-gated onboarding) locked them out. Created a 5-spec
+  group ([`25` household-ai-credentials](docs/specs/25-household-ai-credentials.md) · [`30` settings trust
+  boundary](docs/specs/30-settings-trust-boundary.md) · [`31` AI-required policy](docs/specs/31-ai-required.md)
+  · [`32` device management & key rotation](docs/specs/32-device-management-and-key-rotation.md) ·
+  [`33` housekeeping](docs/specs/33-multi-device-housekeeping.md); renumbered around a concurrent
+  onboarding-redesign group at 21–24). **Built + committed on `feat/household-ai-credentials`:** **25**
+  (owner shares one key, stored **encrypted under the master key** in `config/ai-credentials.enc` — the relay
+  precedent — so members inherit it; device override wins; one `resolveAiKey` replaces every `secrets.get`
+  AI call site; booleans-only `ai:keyStatus` replaces 11 renderer `secretHas` readiness checks; role-aware
+  `SharedKeyControl`; `00` §4.1/§6.2 amended) and **26** (settings-write trust boundary enforced in the
+  bridge: vault-scoped or admin-only writes require `settings.manage`, via a shared `settingsPolicy.ts` source
+  anchored by a drift test). Gate green: typecheck, lint, format, **449 core + 538 desktop** unit.
+  **DURABLE POLICY (the owner, explicit, 2026-06-21): "AI is required by the app and requires online, period."**
+  There is **no offline / degraded / works-without-AI mode** — that reversed spec 31's original "onboarding
+  offline resilience" draft (repurposed → [`31-ai-required`](docs/specs/31-ai-required.md)). When AI is
+  unavailable (no key / AI off / offline) surfaces show a **clear role-aware setup/connectivity prompt**, never
+  a faked experience; the onboarding hard gate (18 §3.1, portrait required) **stays** and is never relaxed; the
+  Owner is exempt from the gate so they can reach setup (no chicken-and-egg). **Remaining (drafted, not built):**
+  25 Playwright E2E + visual QA; 28 (device registry + revocation by whole-vault re-encryption — large, its own
+  session) and 29 (super-admin doc cleanup, OpenAI test-connection, iOS conflict detection, setup sync-safety).
+  **Lesson: a credential that's device-local-by-design but whose _enablement_ is vault-synced creates a
+  multi-device trap — the synced half says "on" while the device half is empty; either sync both (the chosen
+  fix: opt-in shared key, encrypted in the vault like the relay token) or gate readiness on the resolved
+  credential, never on the synced flag alone.**
 - 2026-06-17 — Fix (**release-please opened a new release PR after every merge — manifest drift loop**; spec 19,
   on `fix/release-please-manifest`). Audit (facts, not guesses — checked open PRs, releases, git tags, the
   manifest on `origin/main`, and the release-please run logs): `.release-please-manifest.json` on `main` was

@@ -15,6 +15,8 @@ function mockPlugin(overrides: Partial<VaultFsPlugin> = {}): VaultFsPlugin {
     list: vi.fn(() => Promise.resolve({ entries: [] })),
     remove: vi.fn(() => Promise.resolve()),
     startWatch: vi.fn(() => Promise.resolve()),
+    findConflicts: vi.fn(() => Promise.resolve({ conflicts: [] })),
+    hasPendingDownloads: vi.fn(() => Promise.resolve({ pending: false })),
     stopWatch: vi.fn(() => Promise.resolve()),
     addListener: vi.fn(() => Promise.resolve({ remove: () => Promise.resolve() })),
     ...overrides,

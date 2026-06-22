@@ -27,6 +27,13 @@ export interface VaultFsPlugin {
   list(options: { bookmark: string; path: string }): Promise<{ entries: string[] }>;
   /** Remove a vault-relative file or directory (recursively); a no-op if absent. */
   remove(options: { bookmark: string; path: string }): Promise<void>;
+  /**
+   * Vault-relative paths of files with unresolved iCloud sync conflicts (33 §5.C) — via
+   * `NSFileVersion.unresolvedConflictVersionsOfItem(at:)` plus the shared name-pattern. `[]` if none.
+   */
+  findConflicts(options: { bookmark: string }): Promise<{ conflicts: string[] }>;
+  /** Whether the vault still has not-yet-downloaded iCloud `.icloud` placeholder items (33 §5.D). */
+  hasPendingDownloads(options: { bookmark: string }): Promise<{ pending: boolean }>;
   /** Begin observing the vault for changes (incl. iCloud syncs); emits `vaultChanged` events (iii-b3b). */
   startWatch(options: { bookmark: string }): Promise<void>;
   /** Stop observing the vault. */

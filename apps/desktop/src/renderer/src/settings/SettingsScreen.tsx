@@ -13,12 +13,15 @@ function matches(def: SettingDefinition, query: string): boolean {
 }
 
 export function SettingsScreen(): JSX.Element {
-  const sections = useMemo(() => getSections(), []);
+  // Admin-only settings AND whole admin-only sections (AI/Sessions/Questionnaires/Dreams/Relay) are
+  // hidden from non-`settings.manage` users entirely.
+  const isAdmin = useSessionStore((s) => s.can('settings.manage'));
+  const sections = useMemo(
+    () => getSections().filter((section) => !section.adminOnly || isAdmin),
+    [isAdmin],
+  );
   const [activeId, setActiveId] = useState<string>(sections[0]?.id ?? '');
   const [query, setQuery] = useState('');
-
-  // Admin-only settings (e.g. the disclosure toggle, §8.4) are hidden from non-admins entirely.
-  const isAdmin = useSessionStore((s) => s.can('settings.manage'));
 
   const q = query.trim().toLowerCase();
   const filtered = useMemo<{ section: SettingsSection; defs: SettingDefinition[] }[] | null>(() => {
@@ -33,7 +36,9 @@ export function SettingsScreen(): JSX.Element {
       .filter((group) => group.defs.length > 0);
   }, [q, sections, isAdmin]);
 
-  const active = sections.find((s) => s.id === activeId);
+  // If the selected section is no longer visible (e.g. a person switch dropped admin sections), fall
+  // back to the first visible one so the screen never renders an empty body.
+  const active = sections.find((s) => s.id === activeId) ?? sections[0];
   const activeDefs = (active ? getDefinitionsForSection(active.id) : []).filter(
     (def) => !def.adminOnly || isAdmin,
   );

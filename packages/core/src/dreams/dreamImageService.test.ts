@@ -50,6 +50,7 @@ function fakeClaude(distilled = 'a soft surreal dreamscape of open doorways'): C
 /** A fake image client that records the prompt OpenAI would see and returns a configurable outcome. */
 function fakeImage(outcome?: ImageGenerateOutcome): ImageClient {
   return {
+    verify: () => Promise.resolve(),
     generate: (options) => {
       imageCaptured.prompt = options.prompt;
       return Promise.resolve(
@@ -304,6 +305,7 @@ describe('generateDreamImage', () => {
       deps({
         style: 'watercolor',
         image: {
+          verify: () => Promise.resolve(),
           generate: (o) => {
             imageCaptured.prompt = o.prompt;
             return Promise.resolve({

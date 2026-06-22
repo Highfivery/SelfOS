@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Send, Sparkles } from 'lucide-react';
 import { compatibilityDisclosure } from '@selfos/core/questionnaires';
-import { ANTHROPIC_API_KEY_ID } from '@shared/channels';
+import { aiKeyResolved } from '../../aiAvailability';
 import type { CompatibilityVisibility, Recipient, SensitivityTier } from '@shared/schemas';
 import { Banner, Button, Card, Heading, Stack, Text } from '../../../design-system/components';
 import { useSessionStore } from '../../../stores/sessionStore';
@@ -42,9 +42,7 @@ export function CompatibilitySendPanel({
   const [aiEnabled] = useSetting('ai.enabled');
   const [hasAiKey, setHasAiKey] = useState(false);
   useEffect(() => {
-    void window.selfos
-      ?.secretHas({ id: ANTHROPIC_API_KEY_ID })
-      .then((v) => setHasAiKey(Boolean(v)));
+    void aiKeyResolved('anthropic').then(setHasAiKey);
   }, []);
   const aiReady = aiEnabled === true && hasAiKey;
 

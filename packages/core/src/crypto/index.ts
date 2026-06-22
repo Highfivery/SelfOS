@@ -4,3 +4,4 @@
 export * from './cryptoService';
 export * from './pin';
 export * from './masterKey';
+export * from './keyRotation';

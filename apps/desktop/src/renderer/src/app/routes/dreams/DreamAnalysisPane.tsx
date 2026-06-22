@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Sparkles } from 'lucide-react';
 import type { Dream } from '@shared/channels';
-import { ANTHROPIC_API_KEY_ID } from '@shared/channels';
+import { aiKeyResolved } from '../../aiAvailability';
 import { useDreamAnalysisStore } from '../../../stores/dreamAnalysisStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useSetting } from '../../../settings/useSetting';
@@ -61,7 +61,7 @@ export function DreamAnalysisPane({ dream, onBack }: DreamAnalysisPaneProps): JS
   useEffect(() => window.selfos?.onDreamChunk(appendChunk), [appendChunk]);
   useEffect(() => {
     void (async () => {
-      setHasKey(Boolean(await window.selfos?.secretHas({ id: ANTHROPIC_API_KEY_ID })));
+      setHasKey(await aiKeyResolved('anthropic'));
     })();
   }, []);
   useEffect(() => {

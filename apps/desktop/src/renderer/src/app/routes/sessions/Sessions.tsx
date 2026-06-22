@@ -4,7 +4,7 @@ import { ArrowLeft, MessageCircle, Plus, Sparkles } from 'lucide-react';
 import { useConversationStore } from '../../../stores/conversationStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useSetting } from '../../../settings/useSetting';
-import { ANTHROPIC_API_KEY_ID } from '@shared/channels';
+import { aiKeyResolved } from '../../aiAvailability';
 import type { SessionStatus } from '@shared/schemas';
 import { getExercise, stripCoachMarkers } from '@selfos/core/conversations';
 import { useGuidanceStore } from '../../../stores/guidanceStore';
@@ -106,7 +106,7 @@ export function Sessions(): JSX.Element {
   useEffect(() => window.selfos?.onChatChunk(appendChunk), [appendChunk]);
   useEffect(() => {
     void (async () => {
-      setHasKey(Boolean(await window.selfos?.secretHas({ id: ANTHROPIC_API_KEY_ID })));
+      setHasKey(await aiKeyResolved('anthropic'));
     })();
   }, []);
   useEffect(() => {

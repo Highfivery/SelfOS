@@ -16,9 +16,13 @@ import { Usage } from './routes/usage/Usage';
 import { SettingsScreen } from '../settings/SettingsScreen';
 import { useSettingsStore } from '../settings/settingsStore';
 import { useNavStore } from '../stores/navStore';
+import { useSessionStore } from '../stores/sessionStore';
 
 /** The main app (rendered once the vault is ready): router + sidebar layout. */
 export function Shell(): JSX.Element {
+  // The dev-only design gallery is owner-only (the route is omitted entirely otherwise, so even a typed
+  // URL can't reach it).
+  const isOwner = useSessionStore((s) => s.isOwner());
   useEffect(() => {
     void useSettingsStore.getState().load();
     void useNavStore.getState().load();
@@ -40,7 +44,7 @@ export function Shell(): JSX.Element {
           <Route path="roles" element={<Roles />} />
           <Route path="usage" element={<Usage />} />
           <Route path="settings" element={<SettingsScreen />} />
-          {import.meta.env.DEV ? <Route path="gallery" element={<Gallery />} /> : null}
+          {import.meta.env.DEV && isOwner ? <Route path="gallery" element={<Gallery />} /> : null}
         </Route>
       </Routes>
     </HashRouter>

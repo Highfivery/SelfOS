@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Download, ImageIcon, RefreshCw, Share2, Sparkles, Trash2 } from 'lucide-react';
 import type { Dream, DreamShareTarget } from '@shared/channels';
-import { OPENAI_API_KEY_ID } from '@shared/channels';
+import { aiKeyResolved } from '../../aiAvailability';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useSetting } from '../../../settings/useSetting';
 import {
@@ -69,7 +69,7 @@ export function DreamImagePanel({ dream }: DreamImagePanelProps): JSX.Element | 
     setExported(false);
     setSharedWith(dream.image?.shareableWith ?? []);
     void (async () => {
-      const has = await window.selfos?.secretHas({ id: OPENAI_API_KEY_ID });
+      const has = await aiKeyResolved('openai');
       const existing = await window.selfos?.dreamGetImage({ dreamId: dream.id });
       // The dreamer's related people (only relevant when this dream's image can be shared).
       const targets = shareable ? ((await window.selfos?.dreamShareTargets()) ?? []) : [];

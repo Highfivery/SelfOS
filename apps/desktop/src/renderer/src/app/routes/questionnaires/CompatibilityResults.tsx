@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Eye, Link2, Lock, RefreshCw, Send, Sparkles } from 'lucide-react';
-import { ANTHROPIC_API_KEY_ID } from '@shared/channels';
+import { aiKeyResolved } from '../../aiAvailability';
 import type {
   CompatibilityGroup,
   CompatibilityMember,
@@ -32,9 +32,7 @@ export function CompatibilityResults({
   const [aiEnabled] = useSetting('ai.enabled');
   const [hasAiKey, setHasAiKey] = useState(false);
   useEffect(() => {
-    void window.selfos
-      ?.secretHas({ id: ANTHROPIC_API_KEY_ID })
-      .then((v) => setHasAiKey(Boolean(v)));
+    void aiKeyResolved('anthropic').then(setHasAiKey);
   }, []);
   const aiReady = aiEnabled === true && hasAiKey;
 

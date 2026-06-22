@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Button, Inline, Stack, Text, TextInput } from '../design-system/components';
+import { Banner, Button, Inline, Stack, Text, TextInput } from '../design-system/components';
 import { ANTHROPIC_API_KEY_ID, OPENAI_API_KEY_ID, type ClaudeTestResult } from '@shared/channels';
+import type { AiKeyStatus, AiProvider } from '@selfos/core/schemas';
+import { useSessionStore } from '../stores/sessionStore';
 
 /**
  * Set / replace / clear an encrypted device-local API key (the value never leaves the main process —
@@ -13,12 +15,14 @@ function SecretKeyControl({
   configuredHint,
   emptyHint,
   placeholder,
+  onChanged,
 }: {
   secretId: string;
   label: string;
   configuredHint: string;
   emptyHint: string;
   placeholder: string;
+  onChanged?: () => void;
 }): JSX.Element {
   const [configured, setConfigured] = useState(false);
   const [value, setValue] = useState('');
@@ -41,6 +45,7 @@ function SecretKeyControl({
       await window.selfos?.secretSet({ id: secretId, value: trimmed });
       setValue('');
       await refresh();
+      onChanged?.();
     } finally {
       setBusy(false);
     }
@@ -51,6 +56,7 @@ function SecretKeyControl({
     try {
       await window.selfos?.secretClear({ id: secretId });
       await refresh();
+      onChanged?.();
     } finally {
       setBusy(false);
     }
@@ -82,42 +88,178 @@ function SecretKeyControl({
   );
 }
 
-/** Set / replace / clear the encrypted Claude API key. */
+/**
+ * The household AI key control (25-household-ai-credentials §3). Role-aware: the Owner enters a key + may
+ * **share it with the household** (stored encrypted in the vault, §4.1); a Member sees "AI is provided by
+ * your household" and may **override** with their own device-local key. No key value ever crosses to the
+ * renderer — only the booleans-only `aiKeyStatus`.
+ */
+function SharedKeyControl({
+  provider,
+  label,
+  configuredHint,
+  emptyHint,
+  placeholder,
+}: {
+  provider: AiProvider;
+  label: string;
+  configuredHint: string;
+  emptyHint: string;
+  placeholder: string;
+}): JSX.Element {
+  const canManage = useSessionStore((state) => state.can('settings.manage'));
+  const secretId = provider === 'anthropic' ? ANTHROPIC_API_KEY_ID : OPENAI_API_KEY_ID;
+  const [status, setStatus] = useState<AiKeyStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [showOverride, setShowOverride] = useState(false);
+
+  const refresh = async (): Promise<void> => {
+    setStatus((await window.selfos?.aiKeyStatus({ provider })) ?? null);
+  };
+  useEffect(() => {
+    void refresh();
+  }, []);
+
+  const share = async (): Promise<void> => {
+    setBusy(true);
+    try {
+      await window.selfos?.aiShareDeviceKey({ provider });
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+  const unshare = async (): Promise<void> => {
+    setBusy(true);
+    try {
+      await window.selfos?.aiClearSharedKey({ provider });
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const keyField = (
+    <SecretKeyControl
+      secretId={secretId}
+      label={label}
+      configuredHint={configuredHint}
+      emptyHint={emptyHint}
+      placeholder={placeholder}
+      onChanged={() => void refresh()}
+    />
+  );
+
+  // --- Owner: enter a key + share it with the household ---
+  if (canManage) {
+    return (
+      <Stack gap={3}>
+        {keyField}
+        <Stack gap={2}>
+          {status?.hasSharedKey ? (
+            <>
+              <Text size="sm" tone="accent">
+                Shared with your household — every member device uses this key.
+              </Text>
+              <Inline gap={2}>
+                <Button variant="secondary" onClick={() => void unshare()} disabled={busy}>
+                  Stop sharing
+                </Button>
+              </Inline>
+            </>
+          ) : status?.hasDeviceOverride ? (
+            <>
+              <Text size="sm" tone="secondary">
+                Share this key with your household so members can use AI without entering a key of
+                their own. Your one account pays for everyone; per-person budgets (Settings → Usage)
+                control how much each person can spend.
+              </Text>
+              <Inline gap={2}>
+                <Button variant="primary" onClick={() => void share()} disabled={busy}>
+                  Share with the household
+                </Button>
+              </Inline>
+            </>
+          ) : (
+            <Text size="sm" tone="secondary">
+              Add a key above, then share it with your household.
+            </Text>
+          )}
+        </Stack>
+      </Stack>
+    );
+  }
+
+  // --- Member: inherit the household key, or override with their own ---
+  return (
+    <Stack gap={2}>
+      {status?.hasSharedKey ? (
+        <Banner tone="info">AI is provided by your household.</Banner>
+      ) : (
+        <Text size="sm" tone="secondary">
+          Ask your household owner to set up AI, or add your own key below.
+        </Text>
+      )}
+      {status?.hasDeviceOverride || showOverride || !status?.hasSharedKey ? (
+        <Stack gap={2}>
+          {status?.hasSharedKey ? (
+            <Text size="sm" tone="secondary">
+              Using your own key instead of the household key.
+            </Text>
+          ) : null}
+          {keyField}
+        </Stack>
+      ) : (
+        <Inline gap={2}>
+          <Button variant="ghost" onClick={() => setShowOverride(true)}>
+            Use my own key instead
+          </Button>
+        </Inline>
+      )}
+    </Stack>
+  );
+}
+
+/** Set / replace / clear the Claude API key, with household sharing (Owner) / inheritance (Member). */
 export function ApiKeyControl(): JSX.Element {
   return (
-    <SecretKeyControl
-      secretId={ANTHROPIC_API_KEY_ID}
+    <SharedKeyControl
+      provider="anthropic"
       label="Claude API key"
-      configuredHint="A key is configured — encrypted and stored only on this device."
-      emptyHint="No key yet. Create one at console.anthropic.com, then paste it here."
+      configuredHint="A key is configured on this device — encrypted and stored only here."
+      emptyHint="No key on this device yet. Create one at console.anthropic.com, then paste it here."
       placeholder="sk-ant-…"
     />
   );
 }
 
-/** Set / replace / clear the encrypted OpenAI API key (dream images, 13-dream-images §6). */
+/** Set / replace / clear the OpenAI API key (dream images, 13-dream-images §6), with household sharing. */
 export function OpenAiKeyControl(): JSX.Element {
   return (
-    <SecretKeyControl
-      secretId={OPENAI_API_KEY_ID}
+    <SharedKeyControl
+      provider="openai"
       label="OpenAI API key"
-      configuredHint="A key is configured — encrypted and stored only on this device."
-      emptyHint="No key yet. Create one at platform.openai.com, then paste it here."
+      configuredHint="A key is configured on this device — encrypted and stored only here."
+      emptyHint="No key on this device yet. Create one at platform.openai.com, then paste it here."
       placeholder="sk-…"
     />
   );
 }
 
-/** Send a tiny request to verify the key + selected model work. */
-export function TestConnectionControl(): JSX.Element {
+/** Shared "Test connection" control — runs `test()` and shows Connected / a calm error message. */
+function ConnectionTest({
+  test,
+}: {
+  test: () => Promise<ClaudeTestResult | undefined>;
+}): JSX.Element {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ClaudeTestResult | null>(null);
 
-  const test = async (): Promise<void> => {
+  const run = async (): Promise<void> => {
     setBusy(true);
     setResult(null);
     try {
-      const outcome = await window.selfos?.claudeTest();
+      const outcome = await test();
       if (outcome) setResult(outcome);
     } finally {
       setBusy(false);
@@ -127,7 +269,7 @@ export function TestConnectionControl(): JSX.Element {
   return (
     <Stack gap={2}>
       <Inline gap={3}>
-        <Button variant="secondary" onClick={() => void test()} disabled={busy}>
+        <Button variant="secondary" onClick={() => void run()} disabled={busy} aria-busy={busy}>
           {busy ? 'Testing…' : 'Test connection'}
         </Button>
         {result?.ok ? (
@@ -143,4 +285,14 @@ export function TestConnectionControl(): JSX.Element {
       ) : null}
     </Stack>
   );
+}
+
+/** Send a tiny request to verify the Claude key + selected model work. */
+export function TestConnectionControl(): JSX.Element {
+  return <ConnectionTest test={() => window.selfos!.claudeTest()} />;
+}
+
+/** Verify the OpenAI (dream-image) key with a non-generative probe (33-multi-device-housekeeping §5.B). */
+export function OpenAiTestConnectionControl(): JSX.Element {
+  return <ConnectionTest test={() => window.selfos!.openaiTest()} />;
 }

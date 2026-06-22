@@ -56,7 +56,16 @@ function renderPanel(d: Dream = dream): void {
 describe('DreamImagePanel', () => {
   it('renders nothing without the dreams.generateImage capability', () => {
     // Default session (no active person, no access) → can() is false.
-    installMockBridge({ secretHas: () => Promise.resolve(true) });
+    installMockBridge({
+      secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
+    });
     const { container } = render(
       <MemoryRouter>
         <DreamImagePanel dream={dream} />
@@ -67,7 +76,16 @@ describe('DreamImagePanel', () => {
 
   it('shows a calm consent state when image generation is off', async () => {
     enable({ consent: false });
-    installMockBridge({ secretHas: () => Promise.resolve(true) });
+    installMockBridge({
+      secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
+    });
     renderPanel();
     expect(
       await screen.findByText(/turn on dream-image generation in settings/i),
@@ -76,7 +94,16 @@ describe('DreamImagePanel', () => {
 
   it('shows a calm AI-off state when AI is disabled', async () => {
     enable({ ai: false });
-    installMockBridge({ secretHas: () => Promise.resolve(true) });
+    installMockBridge({
+      secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
+    });
     renderPanel();
     expect(await screen.findByText(/enable ai in settings/i)).toBeInTheDocument();
   });
@@ -90,7 +117,16 @@ describe('DreamImagePanel', () => {
 
   it('offers the expanded, family-grouped style presets in the entry picker (§15.1)', async () => {
     enable();
-    installMockBridge({ secretHas: () => Promise.resolve(true) });
+    installMockBridge({
+      secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
+    });
     renderPanel();
     const select = await screen.findByRole('combobox', { name: 'Style' });
     // Expanded presets beyond the original four are present…
@@ -106,7 +142,16 @@ describe('DreamImagePanel', () => {
     useSettingsStore.setState((s) => ({
       values: { ...s.values, 'dreams.imageStyle': 'daguerreotype' },
     }));
-    installMockBridge({ secretHas: () => Promise.resolve(true) });
+    installMockBridge({
+      secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
+    });
     renderPanel();
     expect(await screen.findByRole('option', { name: 'daguerreotype' })).toBeInTheDocument();
   });
@@ -119,6 +164,13 @@ describe('DreamImagePanel', () => {
     let stored = false;
     installMockBridge({
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       dreamGetImage: () =>
         Promise.resolve(stored ? { mime: 'image/png', dataBase64: 'AAAA' } : null),
       dreamGenerateImage: () => {
@@ -139,6 +191,13 @@ describe('DreamImagePanel', () => {
     let stored = false;
     installMockBridge({
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       dreamGetImage: () =>
         Promise.resolve(stored ? { mime: 'image/png', dataBase64: 'AAAA' } : null),
       dreamGenerateImage: () => {
@@ -159,6 +218,13 @@ describe('DreamImagePanel', () => {
     let present = true;
     installMockBridge({
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       dreamGetImage: () =>
         Promise.resolve(present ? { mime: 'image/png', dataBase64: 'AAAA' } : null),
       dreamDeleteImage: () => {
@@ -180,6 +246,13 @@ describe('DreamImagePanel', () => {
     const dreamSetImageShare = vi.fn(() => Promise.resolve({ ok: true as const }));
     installMockBridge({
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       dreamGetImage: () => Promise.resolve({ mime: 'image/png', dataBase64: 'AAAA' }),
       dreamShareTargets: () => Promise.resolve([{ id: 'p2', displayName: 'Partner' }]),
       dreamExportImage,
@@ -205,6 +278,13 @@ describe('DreamImagePanel', () => {
     enable();
     installMockBridge({
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       dreamGetImage: () => Promise.resolve({ mime: 'image/png', dataBase64: 'AAAA' }),
       dreamShareTargets: () => Promise.resolve([{ id: 'p2', displayName: 'Partner' }]),
     });
@@ -218,6 +298,13 @@ describe('DreamImagePanel', () => {
     enable();
     installMockBridge({
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       dreamGetImage: () => Promise.resolve(null),
       dreamGenerateImage: () =>
         Promise.resolve({ ok: false as const, reason: 'REFUSED' as const, message: 'policy' }),

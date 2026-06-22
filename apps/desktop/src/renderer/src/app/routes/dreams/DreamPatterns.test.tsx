@@ -88,6 +88,13 @@ describe('Dream patterns screen', () => {
     installMockBridge({
       dreamPatternStats: () => Promise.resolve(baseStats),
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       dreamGetPatternSummary: () => Promise.resolve(null),
     });
     renderPatterns();
@@ -100,6 +107,13 @@ describe('Dream patterns screen', () => {
     installMockBridge({
       dreamPatternStats: () => Promise.resolve(baseStats),
       secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
       dreamGetPatternSummary: () =>
         Promise.resolve({
           schemaVersion: 1,

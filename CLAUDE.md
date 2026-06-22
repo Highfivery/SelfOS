@@ -385,6 +385,16 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-22 — **Process (enforce PR-only `main` client-side; on `chore/block-direct-push-to-main`).** Tried to
+  add GitHub branch protection / a ruleset to enforce the new PR-only rule, but **both require GitHub Pro on a
+  private repo** (HTTP 403: "Upgrade to GitHub Pro or make this repository public"). So enforcement is
+  client-side: a **`pre-push` hook blocks a direct `git push origin main`** (reads the ref list on stdin;
+  emergency override `git push --no-verify`). PR merges happen server-side on GitHub, so the guard only ever
+  stops a local direct push — it doesn't impede the flow. Documented in CONTRIBUTING.md (+ how to add a real
+  ruleset if the repo ever goes Pro or public: require the `Lint · Typecheck · Test` check + linear history + a
+  PR, admin bypass). **Lesson: branch protection + rulesets are paid features for private repos — on the free
+  plan, enforce PR-only with a client-side `pre-push` guard (a backstop, not a wall, since `--no-verify` and
+  non-hooked clients bypass it).**
 - 2026-06-22 — **Process (adopt a PR-based workflow + a real release step; durable, user-chosen; on
   `chore/dev-workflow-and-release-process`).** After a run of release-please pain (a manifest-drift loop, the
   version going backwards, duplicate draft releases, a `merge:` commitlint rejection, Node-v15 hook failures) —

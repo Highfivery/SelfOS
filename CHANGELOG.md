@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.3.0](https://github.com/Highfivery/SelfOS/compare/v0.2.1...v0.3.0) (2026-06-22)
+
+
+### Features
+
+* **access:** owner-only settings sections + gallery; move vault control into account menu ([a72c269](https://github.com/Highfivery/SelfOS/commit/a72c269b8d71826db55865072784c8bf6a47ee6c))
+* **ai:** household-shared AI credentials so members inherit the owner's key ([c639dab](https://github.com/Highfivery/SelfOS/commit/c639dab2759c47ff709ec270f19faae8410a6702))
+* **devices:** device registry — slice A of spec 28 ([cc64c76](https://github.com/Highfivery/SelfOS/commit/cc64c765ab537c1b2fddb8cbc5e3ba6984a00b42))
+* **devices:** key rotation — slice B of spec 28 (revocation by re-encryption) ([128935c](https://github.com/Highfivery/SelfOS/commit/128935cc3297ba588e0cec2a5d8925f762d7003c))
+* **devices:** owner Devices settings section — slice C of spec 28 ([e142f61](https://github.com/Highfivery/SelfOS/commit/e142f61e238e5fd4a9e74f4b4b001cec4fdf7e22))
+* **housekeeping:** spec 29 slice C — iOS sync-conflict detection ([f975ae3](https://github.com/Highfivery/SelfOS/commit/f975ae3912f09a2fe74782940930c2f491d29403))
+* **housekeeping:** spec 29 slice D — sync-safety warning at first-run setup ([19d113e](https://github.com/Highfivery/SelfOS/commit/19d113e0d8206b532b0b5168542295e4ed555582))
+* **housekeeping:** spec 29 slices A + B — spec-10 doc cleanup + OpenAI test connection ([7ba5aed](https://github.com/Highfivery/SelfOS/commit/7ba5aed89bf587be0f08b232014ed254fcc22f1b))
+* **intake:** also cut swallowSpit + cumWhere from intimacy (61 → 40) ([32f7b0b](https://github.com/Highfivery/SelfOS/commit/32f7b0bcfaa2f26344d4573b6886dd8d1edf15f5))
+* **intake:** progressive profile depth invitations (spec 29) ([2aa034d](https://github.com/Highfivery/SelfOS/commit/2aa034da847e4558a4591a6fd5afef0595584e4d))
+* **intake:** rebalance intimacy block 100→61, kept explicit (spec 27) ([284083f](https://github.com/Highfivery/SelfOS/commit/284083fa5b6e1cdb6a1aad8f707f273782478ce7))
+* **intake:** redesign onboarding catalog — cut non-intimacy 392→126 (spec 26) ([053dcf3](https://github.com/Highfivery/SelfOS/commit/053dcf3be0bed85b71cc0522b5574984e3dd1c62))
+* **intake:** slice 28a — slider-seed fix + portrait fact cap (spec 28) ([e66c0a0](https://github.com/Highfivery/SelfOS/commit/e66c0a0af33b273b7e64fb30fbc860df56040c91))
+* **intake:** slice 28b — topic-relevance portrait selection (spec 28) ([a96de09](https://github.com/Highfivery/SelfOS/commit/a96de0916cdb2df4fcc4c417eb4f6a429a5852b3))
+* **intake:** trim intimacy block 61 → 42 + opt-in specifics gate (spec 27 §4.3) ([6bd9d8f](https://github.com/Highfivery/SelfOS/commit/6bd9d8fe4107cd1904eff47e6cebcc0679de248d))
+* **settings:** enforce the settings-write trust boundary in the bridge ([b2292ab](https://github.com/Highfivery/SelfOS/commit/b2292ab94147fdf83fc4de71a40f034308544dcf))
+
 ## [0.1.0](https://github.com/Highfivery/SelfOS/compare/v0.2.1...v0.1.0) (2026-06-17)
 
 

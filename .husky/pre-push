@@ -1,5 +1,6 @@
 #!/usr/bin/env sh
 # Heavier gate before code leaves the machine: full typecheck + full unit suite.
 # Playwright E2E is added here once the desktop app exists.
+sh scripts/require-node.sh || exit 1
 pnpm run typecheck
 pnpm run test

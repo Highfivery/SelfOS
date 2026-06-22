@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/Highfivery/SelfOS/compare/v0.3.0...v0.3.1) (2026-06-22)
+
+
+### Bug Fixes
+
+* **ai:** auto-share AI credentials to the household by default (spec 25 §5.6) ([f173150](https://github.com/Highfivery/SelfOS/commit/f173150edd183d95b2aea1fbc2b277a37778b83a))
+
 ## [0.3.0](https://github.com/Highfivery/SelfOS/compare/v0.2.1...v0.3.0) (2026-06-22)
 
 

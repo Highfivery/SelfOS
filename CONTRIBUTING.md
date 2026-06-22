@@ -60,7 +60,11 @@ pnpm --filter @selfos/desktop e2e     # build, then Playwright-Electron E2E
 
 ### Workflow (branch → PR → squash-merge)
 
-`main` is only ever updated through a **merged pull request** — never a direct push, never a local merge.
+`main` is only ever updated through a **merged pull request** — never a direct push, never a local merge. A
+**`pre-push` git hook blocks direct pushes to `main`** locally (emergency override: `git push --no-verify`).
+Server-side branch protection isn't enabled because it requires GitHub Pro on a private repo — if that changes
+(upgrade, or make the repo public), add a ruleset requiring the **Lint · Typecheck · Test** check + linear
+history + a PR, with admin bypass.
 
 1. **Branch off the latest `main`:** `git switch main && git pull`, then
    `git switch -c <type>/<slug>` where `<type>` is `feat` / `fix` / `chore` / `docs` / `refactor`.

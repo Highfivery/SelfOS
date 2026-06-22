@@ -2,5 +2,17 @@
 # Heavier gate before code leaves the machine: full typecheck + full unit suite.
 # Playwright E2E is added here once the desktop app exists.
 sh scripts/require-node.sh || exit 1
+
+# main is PR-only (CLAUDE.md §6/§9): block a direct push to it. PR merges happen server-side on
+# GitHub, so this only ever stops a local `git push origin main`. The ref list arrives on stdin as
+# "<local-ref> <local-sha> <remote-ref> <remote-sha>" lines. Emergency override: git push --no-verify.
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+  if [ "$remote_ref" = "refs/heads/main" ]; then
+    echo "✗ Direct pushes to main are blocked — open a PR and squash-merge it (CLAUDE.md §6)." >&2
+    echo "  Emergency override: git push --no-verify." >&2
+    exit 1
+  fi
+done
+
 pnpm run typecheck
 pnpm run test

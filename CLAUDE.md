@@ -101,13 +101,24 @@ Specs are numbered and inherit [`docs/specs/_TEMPLATE.md`](docs/specs/_TEMPLATE.
 
 We move **slowly and deliberately**, perfecting one slice before starting the next.
 
-For every slice:
+For every slice (the **PR-based flow** — `main` only ever moves through a merged PR):
 
-1. **Branch** off `main` (`feat/…`, `fix/…`, `chore/…`, `docs/…`). Never commit directly to `main`.
+1. **Branch** off the latest `main` — `git switch main && git pull` first, then
+   `git switch -c <type>/<slug>` (`feat/…`, `fix/…`, `chore/…`, `docs/…`, `refactor/…`). **Never commit
+   to `main` directly, and never `git merge origin/main` into a branch — rebase onto it** (`git rebase
+origin/main`) so history stays linear and the release manifest never carries a stale value forward.
 2. **Spec** → review with the user → perfect → approve.
 3. **Implement** with tests (see Definition of Done).
-4. Run the **`ship-slice`** skill: `quality-gate` → `code-reviewer` agent → `sync-docs` → commit.
-5. Confirm Definition of Done, then merge to `main` (locally for now) and move on.
+4. Run the **`ship-slice`** skill: `quality-gate` → `code-reviewer` agent → `sync-docs` → commit (on the
+   branch).
+5. **Push the branch and open a PR** (`git push -u origin HEAD && gh pr create`). Let **CI go green**.
+6. **Squash-merge the PR on GitHub** with a Conventional Commit title (`gh pr merge --squash`); delete the
+   branch. One clean commit lands on `main` — never a direct push, never a local merge.
+7. **Offer to release** (the **`release`** skill): once the slice is on `main`, ask the user
+   _"Tag & publish vX.Y.Z now, or batch with the next change?"_ Releasing = **merging the open
+   release-please PR** (which auto-bumps the version, writes `CHANGELOG.md`, tags `vX.Y.Z`, and builds +
+   publishes the `.dmg`). **Never hand-bump a version or hand-tag** — release-please owns it (spec
+   [`19`](docs/specs/19-distribution.md)).
 
 **ALWAYS ask — NEVER assume or guess.** Before implementing anything with an unstated product, UX,
 visibility, permission, or behavior decision (defaults, who-sees-what, scope, placement, period),
@@ -247,11 +258,25 @@ If you notice a rule here is stale or contradicted by how we actually work, **pr
 ## 9. Git & commit standards
 
 - **Conventional Commits** (`feat:`, `fix:`, `docs:`, `style:`, `refactor:`, `perf:`, `test:`,
-  `build:`, `ci:`, `chore:`, `revert:`). Enforced by commitlint; body lines ≤ 100 chars.
+  `build:`, `ci:`, `chore:`, `revert:`). Enforced by commitlint; body lines ≤ 100 chars. The squash-merge
+  **PR title** is what lands on `main`, so it must be a valid Conventional Commit (it drives the changelog +
+  the version bump). `feat:` → minor, `fix:` → patch, `feat!:`/`BREAKING CHANGE` → major (pre-1.0: breaking →
+  minor); `docs:`/`chore:`/`test:`/`ci:`/`build:` don't cut a release.
 - Every commit ends with the trailer:
   `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`
-- **Feature branches only**; merge to `main` after review. The **`commit`** skill writes compliant
-  messages; it refuses to commit if the quality gate hasn't passed.
+- **Branches → PRs → squash-merge.** Work on a `<type>/<slug>` branch off `main`; land it by **squash-merging
+  a PR on GitHub** (§6). **`main` is never pushed to directly and is never updated by a local merge.** **Never
+  `git merge origin/main` into a branch — rebase onto it** (a hand-merge once carried a stale release manifest
+  forward and looped release-please). The **`commit`** skill writes compliant messages and refuses if the
+  quality gate hasn't passed.
+- **Versioning, tags, and `CHANGELOG.md` are owned by release-please — never hand-edit them.** Don't bump a
+  `version`, don't `git tag`, don't write `CHANGELOG.md` by hand, and **never add a `Release-As:` commit** (the
+  footer lingers in history and forces backward version proposals). `.release-please-manifest.json` is the
+  source-of-truth current version and **must match the latest git tag**; a `bootstrap-sha` floor keeps the
+  commit scan above old release-config commits. If it drifts (a release-PR loop), fix the manifest to the
+  latest tag — see spec [`19`](docs/specs/19-distribution.md) §7 + the **`release`** skill.
+- **Git hooks need Node ≥ 20** (`.nvmrc` pins **24**). If a push/commit fails with a `pnpm requires … Node`
+  error, run `nvm use` first. The hooks fail fast with this hint.
 
 ---
 
@@ -288,8 +313,8 @@ publishes it. Maintainers never hand-edit a version or tag. macOS-only + unsigne
 ## 11. Skills & agents available
 
 **Skills** (`.claude/skills/`): `write-spec`, `quality-gate`, `capture-feedback`, `sync-docs`,
-`commit`, `ship-slice`. (`add-setting` and `new-feature-module` are added once the settings registry
-and feature-module architecture are built.)
+`commit`, `ship-slice`, `release`. (`add-setting` and `new-feature-module` are added once the settings
+registry and feature-module architecture are built.)
 
 **Agents** (`.claude/agents/`): `code-reviewer`, `test-author`, `spec-writer`, `doc-auditor`.
 
@@ -360,6 +385,26 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-22 — **Process (adopt a PR-based workflow + a real release step; durable, user-chosen; on
+  `chore/dev-workflow-and-release-process`).** After a run of release-please pain (a manifest-drift loop, the
+  version going backwards, duplicate draft releases, a `merge:` commitlint rejection, Node-v15 hook failures) —
+  all caused by **how** we landed work, not the code — the user chose to formalize the recommended flow.
+  Decisions (all "recommended" options, asked via AskUserQuestion): **(1) strict PR-based** — every change on a
+  `<type>/<slug>` branch → push → PR → CI green → **squash-merge on GitHub**; `main` is **never** pushed to
+  directly, **never** updated by a local merge, and you **never `git merge origin/main` into a branch** (rebase
+  onto it); **(2) squash-merge** with a Conventional Commit PR title (that title drives the changelog + bump);
+  **(3) offer a release after every merged slice** — _"Tag & publish vX.Y.Z now, or batch?"_; **(4) full
+  implementation.** Built: rewrote CLAUDE.md §6 (cadence → branch/PR/squash/release steps) + §9 (git: squash
+  titles, release-please owns versioning/tags/`CHANGELOG.md`, never hand-bump/tag, never `Release-As:`, manifest
+  == latest tag + `bootstrap-sha` floor, Node ≥20 for hooks); added the **`release` skill** (safe release-please
+  flow: sync + clean → health pre-flight catching manifest drift/duplicate PRs/backward versions → confirm
+  version + changelog → `gh pr merge --squash` → watch the build → verify the published `.dmg` + no loop);
+  updated **`ship-slice`** to push + open a PR + squash-merge + offer the release; expanded **CONTRIBUTING.md**
+  (Workflow + Releases + a Node-version prereq); and added **`scripts/require-node.sh`** wired into the pre-commit
+  - pre-push hooks (fails fast with "run `nvm use`" instead of a cryptic pnpm error — the v15 footgun). This very
+    change was landed via the new flow (branch → PR → squash-merge) to dogfood it. **Lesson: most release pain is a
+    workflow problem — keep `main` PR-only + squash-merged, let release-please own every version/tag/changelog, and
+    make "release" a deliberate, pre-flighted step (the `release` skill), not an ad-hoc merge.**
 - 2026-06-22 — **Release ops (v0.3.1 shipped the auto-share fix; CI Actions bumped off Node 20; release-please
   re-proposal loop fixed again — on `main`).** After merging the auto-share fix, cut **v0.3.1** (release-please
   PR #10 → tag + the macOS job published `SelfOS-0.3.1-arm64.dmg`, 108 MB). Then two CI/release housekeeping

@@ -41,16 +41,17 @@ describe('intakeCatalog', () => {
     expect(coreGate).toBeLessThanOrEqual(30);
   });
 
-  it('the intimacy block is rebalanced — in band, with the two 3-state matrices (27)', () => {
+  it('the intimacy block is rebalanced — in band, with the 3-state activities matrix (27 §4.3)', () => {
     const intimacy = getIntakeSection('intimacy');
     const qs = intimacy?.questions ?? [];
-    // Rebalanced 100 → ~58–65; guard the band so it can't silently re-bloat or be gutted.
-    expect(qs.length).toBeGreaterThan(45);
-    expect(qs.length).toBeLessThanOrEqual(70);
-    // The activity + toys lists are collapsed into 3-point LABELLED matrices (min/mid/max all set), not the
-    // old into-it / curious / hard-limits triple checklist.
+    // 100 → 61 (first pass) → ~42 (second pass: consolidation + the opt-in `getSpecific` gate). Guard the band
+    // so it can't silently re-bloat or be gutted.
+    expect(qs.length).toBeGreaterThan(30);
+    expect(qs.length).toBeLessThanOrEqual(50);
+    // The activity list is collapsed into one 3-point LABELLED matrix (min/mid/max all set); the old `toys`
+    // matrix was cut (its rows live in `INTIMACY_ACTIVITIES`).
     const matrices = qs.filter((m) => m.q.type === 'matrix');
-    expect(matrices.map((m) => m.q.id).sort()).toEqual(['activities', 'toys']);
+    expect(matrices.map((m) => m.q.id).sort()).toEqual(['activities']);
     for (const m of matrices) {
       const mx = m.q.matrix;
       expect(mx).toBeTruthy();
@@ -59,6 +60,14 @@ describe('intakeCatalog', () => {
       expect(Boolean(mx.minLabel && mx.midLabel && mx.maxLabel)).toBe(true); // 3 labels → labelled render
       expect(mx.rows.length).toBeGreaterThan(5); // a real inventory of rows
     }
+    // The explicit specifics are gated behind one opt-in toggle; the always-visible core must NOT be.
+    const ids = qs.map((m) => m.q.id);
+    expect(ids).toContain('getSpecific');
+    const gated = (id: string): boolean =>
+      qs.find((m) => m.q.id === id)?.q.branch?.whenQuestionId === 'getSpecific';
+    expect(gated('activities')).toBe(true); // explicit detail → gated
+    expect(gated('boundaries')).toBe(false); // safety/consent → always visible, never gated
+    expect(gated('understandSexuality')).toBe(false);
   });
 
   it('every form question maps to a real Person field key', () => {

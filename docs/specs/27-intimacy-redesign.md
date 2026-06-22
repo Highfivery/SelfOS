@@ -219,6 +219,41 @@ non-consensual experience — handled trauma-informed there, not solicited here.
 follow-ups land the exact figure). Explicit register retained; the two matrices do the heavy lifting on
 volume; H adds the wellbeing depth.
 
+### 4.3 Second pass — consolidation + an opt-in "specifics" gate (61 → ~42; user-directed 2026-06-21)
+
+A follow-up review found the 61-block still long, with avoidable **redundancy against the `activities`
+matrix** and granular preference data that only a subset of people want to fill in. The user's goal is
+**better AI signal for personalizing sessions / questionnaires / dream analysis with fewer questions** — so
+this pass **consolidates** (not softens) and **gates the explicit specifics behind one opt-in**, keeping the
+explicit register. The result: **~42 questions**, of which a casual user sees only **~28** (the core) unless
+they toggle "want to get specific?". Explicit content is unchanged for those who opt in.
+
+- **Cut as redundant with the kept `activities` matrix** (it already has give/receive rows): `givesOralPenis`
+  (Oral giving), `analPref` (Anal giving/receiving), `choking` (Choking giving/receiving), and the **`toys`
+  matrix** (Vibrators/dildos, Butt plugs are activity rows). `cncInterest` is dropped — already an option in
+  `commonFantasies`.
+- **Cut as low coaching-signal / your call:** `partnerGrooming`, `ownGrooming`, `erogenousZones`,
+  `partnerCount`, `firstExperience` (covered by messages-growing-up + shame), `kinks` free-text (covered by
+  matrix + commonFantasies + idealEncounter), `pornGenres` (keep `watchPorn` frequency), `positions`,
+  `masturbationFreq`, `bodyTypePref`.
+- **Merge / rework:** `inTheMood` → folded into `turnOns`; `wildestFantasy` + `fantasiesToTry` → one
+  `fantasies` long-text; `erotica` + `sexualMedia` → one `eroticaMedia` multi; `dirtyTalk` single dropped
+  (the matrix has a _Dirty talk_ row) but the rich `dirtyTalkLikes` ("what you love to hear") is kept;
+  `degradePraise` → two new rows on the activities matrix (_Degradation / humiliation_, _Praise / worship_),
+  the single dropped.
+- **The opt-in gate** — a new `getSpecific` (yesNo) in a "Getting specific (optional)" group. Everything
+  explicit/granular branches on `when('getSpecific', true)`: `turnOns`, `turnOffs`, `roughness`, `domSub`,
+  the `activities` matrix, `dirtyTalkLikes`, `swallowSpit`, `cumWhere`, `idealEncounter`, `fantasies`,
+  `commonFantasies`, `watchPorn`, `eroticaMedia`. **Always-visible core (~28):** orientation/identity (+
+  `desireType`), the reflective story (messages / shame / first-age), the whole **current-sex-life** relational
+  block (gated only on `hasPartner`), `bodyConfidence`, and the **entire** wellbeing / consent / safety /
+  meaning group. Safety, consent, boundaries and the emotional/relational signal are **never** hidden behind
+  the specifics gate.
+- **`restricted`/privacy unchanged** — every intimacy answer stays `restricted` (or a `private` field); the
+  18+ ack + own-context-only boundary (§8) is untouched. `INTIMACY_ACTIVITIES`/`INTIMACY_FANTASIES` shared
+  constants are unchanged (the two new matrix rows are appended inline to the intake matrix only, not the
+  shared inventory the questionnaire engine reads).
+
 ## 5. Architecture & modules
 
 - **`intakeCatalog.ts`** — rewrite the `intimacy` section to the §4.2 bank. Reuse the shared
@@ -319,7 +354,8 @@ announce "not set." Reduced-motion respected.
 - **Direction** — rebalance **but keep explicit** (user, 2026-06-21): cut volume + add wellbeing depth, do
   not soften the graphic/casual register.
 - **Volume** — 61 as built (from 100), via the activity/toys matrices, merged positions, and trimmed granular
-  body-prefs.
+  body-prefs. **Second pass (2026-06-21): ~42** — consolidate redundancy against the activities matrix + gate
+  the explicit specifics behind one opt-in toggle (§4.3); ~28 shown to a casual user. Explicit register kept.
 - **Additions** — desire type, current masturbation frequency, after-care, consent/communication practices,
   sex↔emotional-security; sexual self-esteem kept.
 - **Boundary** — unchanged; sexual trauma routes to **What weighs on you**, not solicited here.
@@ -346,3 +382,18 @@ announce "not set." Reduced-motion respected.
   now asserts the labelled matrix renders in the real built app after the 18+ ack. Gate: typecheck (node +
   web), lint, format, **444 core + 533 desktop + 11 relay** unit, onboarding E2E green. Same numbering note
   as 26 (this group is 26–29; merge-time reconcile). Awaiting user review.
+- 2026-06-21 — **Second pass — consolidation + opt-in specifics gate (61 → ~42)** (`feat/intimacy-trim`,
+  off `main`). User: "still A LOT of questions" — goal is better AI personalization signal with fewer
+  questions. Decisions all **asked first** (3 rounds). **Cut 15:** redundant-with-the-`activities`-matrix
+  (`givesOralPenis`/`analPref`/`choking`/the `toys` matrix; `cncInterest` already in `commonFantasies`) +
+  low-signal/your-call (`partnerGrooming`/`ownGrooming`/`erogenousZones`/`partnerCount`/`firstExperience`/
+  `kinks`/`pornGenres`/`positions`/`masturbationFreq`/`bodyTypePref`). **Merged:** `inTheMood`→`turnOns`;
+  `wildestFantasy`+`fantasiesToTry`→one `fantasies` long-text; `erotica`+`sexualMedia`→one `eroticaMedia`
+  multi; `dirtyTalk` single dropped (matrix covers it; kept `dirtyTalkLikes`); `degradePraise`→two new
+  activities-matrix rows. **New opt-in gate:** a `getSpecific` yesNo in a "Getting specific (optional)"
+  group; the 13 explicit/granular questions branch on `when('getSpecific', true)` so a casual user sees
+  ~28 core (orientation, reflective story, the relational current-sex-life block, body confidence, and the
+  **entire** wellbeing/consent/safety/meaning group — never gated). Privacy/18+/`restricted` unchanged;
+  shared `INTIMACY_ACTIVITIES`/`_FANTASIES` constants untouched (the two new rows are inline to the intake
+  matrix only). See §4.3. Tests updated (catalog band ~42 + matrices = `['activities']`; the intimacy E2E
+  reworked to exercise the new `getSpecific` gate alongside the `hasPartner` conditional).

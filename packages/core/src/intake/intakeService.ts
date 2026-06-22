@@ -175,7 +175,7 @@ function answerToString(value: IntakeAnswerValue | undefined): string {
   return String(value).trim();
 }
 
-/** Map a 3-point labelled matrix (the intake activity/toys matrices) answer to readable label text for the
+/** Map a 3-point labelled matrix (the intake activity matrix) answer to readable label text for the
  * synthesis input — "oral: Into it; choking: Hard limit" — so the portrait captures the meaning, not "1/3".
  * Falls back to {@link answerToString} for a non-matrix / unlabelled-matrix answer. */
 function formatAnswerForSynthesis(q: Question, value: IntakeAnswerValue | undefined): string {
@@ -198,7 +198,7 @@ function formatAnswerForSynthesis(q: Question, value: IntakeAnswerValue | undefi
 }
 
 /** Intake answeredness. The shared `isAnswered` treats a `matrix` as answered only when EVERY row is rated
- * (correct for a short required questionnaire matrix), but the intake's activity/toys matrices are long and
+ * (correct for a short required questionnaire matrix), but the intake's activity matrix is long and
  * optional — a person rates only the rows that apply. So for a matrix the intake counts it answered when ANY
  * row is rated; every other type delegates to the shared check. */
 function intakeAnswered(q: Question, value: IntakeAnswerValue | undefined): boolean {

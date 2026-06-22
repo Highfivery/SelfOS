@@ -160,50 +160,6 @@ const SUBSTANCE_FREQ = [
   'Daily',
   'Prefer not to say',
 ];
-// A comprehensive sex-toy checklist, reused for "toys you own" / "toys you want" (§14.5). Covers the modern
-// app/remote-controlled range (Lovense-style) plus the broader categories; "Other"/"None" appended per use.
-const TOYS = [
-  'Bullet vibrator',
-  'Wand vibrator',
-  'Rabbit vibrator',
-  'Clitoral suction toy',
-  'G-spot vibrator',
-  'App / remote-controlled vibrator',
-  'Wearable / panty vibrator',
-  'Finger vibrator',
-  'Dildo',
-  'Realistic dildo',
-  'Glass / metal dildo',
-  'Suction-cup dildo',
-  'Thrusting toy / sex machine',
-  'Double-ended dildo',
-  'Strap-on',
-  'Butt plug',
-  'Vibrating butt plug',
-  'Anal beads',
-  'Prostate massager',
-  'Cock ring',
-  'Vibrating cock ring',
-  'Stroker / masturbator sleeve',
-  'Automatic stroker',
-  'Penis pump',
-  'Cock cage / chastity',
-  'App-controlled couples toy',
-  'Nipple clamps',
-  'Nipple suckers',
-  'Restraints / cuffs',
-  'Blindfold',
-  'Paddle / flogger',
-  'Gag',
-  'Collar & leash',
-  'Rope / bondage kit',
-  'Kegel / Ben Wa balls',
-  'Sex wedge / pillow',
-  'Sex swing',
-  'E-stim toy',
-  'Lube',
-];
-
 export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
   // ============================ CORE (gates first-run) ============================
   {
@@ -1361,7 +1317,7 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
     opener:
       'An optional, grown-up space to help SelfOS understand your sexuality. Everything is private to your own coaching, and every question is skippable.',
     contentNote:
-      'This block is entirely optional and only for adults (18+). Everything here stays private to your own coaching, is never shared with anyone else, and every question is skippable. It covers your own consensual adult sexuality — including fantasies; real limits are yours to set with the activity list and the boundaries questions.',
+      'This block is entirely optional and only for adults (18+). Everything here stays private to your own coaching, is never shared with anyone else, and every question is skippable. It covers your own consensual adult sexuality — including fantasies; real limits are yours to set with the activity list and the boundaries questions. The explicit specifics sit behind one optional toggle near the end.',
     questions: [
       ...grouped('Orientation & identity', [
         f(
@@ -1417,6 +1373,15 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           single('libido', 'Your sex drive', ['Very low', 'Low', 'Moderate', 'High', 'Very high']),
           { restricted: true },
         ),
+        f(
+          single('desireType', 'How does desire usually work for you?', [
+            'Spontaneous — it hits out of the blue',
+            'Responsive — it builds once things get going',
+            'A mix of both',
+            'Not sure',
+          ]),
+          { restricted: true },
+        ),
       ]),
       ...grouped('Your sexual story', [
         f(
@@ -1425,26 +1390,6 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             "Haven't yet",
             'Prefer not to say',
           ]),
-          { restricted: true },
-        ),
-        f(
-          single('partnerCount', 'How many sexual partners have you had?', [
-            '0',
-            '1',
-            '2–5',
-            '6–10',
-            '11–20',
-            '20+',
-            'Prefer not to say',
-          ]),
-          { restricted: true },
-        ),
-        f(
-          longText(
-            'firstExperience',
-            'Your first sexual experience, in your own words',
-            'Who, when, how it felt — only what you want to share.',
-          ),
           { restricted: true },
         ),
         f(
@@ -1537,290 +1482,7 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           { restricted: true },
         ),
       ]),
-      ...grouped('Desire, arousal & what you like', [
-        f(
-          single('desireType', 'How does desire usually work for you?', [
-            'Spontaneous — it hits out of the blue',
-            'Responsive — it builds once things get going',
-            'A mix of both',
-            'Not sure',
-          ]),
-          { restricted: true },
-        ),
-        f(
-          single('masturbationFreq', 'How often do you masturbate these days?', [
-            'Rarely / never',
-            'A few times a month',
-            'Weekly',
-            'A few times a week',
-            'Daily',
-            'Prefer not to say',
-          ]),
-          { restricted: true },
-        ),
-        f(
-          multi('inTheMood', 'What gets you in the mood?', [
-            'Touch',
-            'Words / dirty talk',
-            'Anticipation',
-            'Visuals',
-            'Scent',
-            'Romance',
-            'A few drinks',
-            'Stress relief',
-            'Other',
-          ]),
-          { restricted: true },
-        ),
-        f(
-          multi('turnOns', 'Your turn-ons', [
-            'Kissing',
-            'Foreplay',
-            'Dirty talk',
-            'Being teased',
-            'Lingerie',
-            'Oral',
-            'Sensual massage',
-            'Confidence',
-            'Romance',
-            'Spontaneity',
-            'Roleplay',
-            'Being desired',
-            'A partner taking control',
-            'Other',
-          ]),
-          { restricted: true },
-        ),
-        f(
-          multi('turnOffs', 'Your turn-offs', [
-            'Bad hygiene',
-            'Rushing',
-            'Pressure',
-            'Lack of confidence',
-            'Too rough',
-            'Too gentle',
-            'Distractions / phones',
-            'Silence',
-            'Selfishness',
-            'Other',
-          ]),
-          { restricted: true },
-        ),
-        f(
-          multi('erogenousZones', 'Where do you most like to be touched?', [
-            'Neck',
-            'Ears',
-            'Lips',
-            'Chest / nipples',
-            'Back',
-            'Inner thighs',
-            'Genitals',
-            'Butt',
-            'All over',
-            'Other',
-          ]),
-          { restricted: true },
-        ),
-        f(
-          multi('positions', 'Favourite positions & ways you like sex', [
-            'Missionary',
-            'Doggy style',
-            'On top / riding',
-            'Reverse cowgirl',
-            'Spooning',
-            'Standing',
-            'Oral (giving)',
-            'Oral (receiving)',
-            '69',
-            'Face-sitting',
-            'Grinding / dry humping',
-            'Mutual masturbation',
-            'Other',
-          ]),
-          { restricted: true },
-        ),
-        f(
-          slider(
-            'roughness',
-            'How rough do you like it?',
-            'Gentle & slow',
-            'A good balance',
-            'Rough & hard',
-          ),
-          { restricted: true },
-        ),
-        f(
-          single('domSub', 'Dominant or submissive?', [
-            'Dominant',
-            'Submissive',
-            'Switch',
-            'Vanilla',
-            'Other',
-          ]),
-          { restricted: true },
-        ),
-        f(
-          single('dirtyTalk', 'How do you feel about dirty talk?', [
-            'Love it',
-            'Sometimes',
-            'Not for me',
-          ]),
-          { restricted: true },
-        ),
-        f(
-          {
-            ...longText(
-              'dirtyTalkLikes',
-              'Dirty talk — things you love to hear',
-              'e.g. praise, being told what to do, descriptions of what they want to do to you…',
-            ),
-            branch: whenAny('dirtyTalk', ['Love it', 'Sometimes']),
-          },
-          { restricted: true },
-        ),
-        // The activity inventory as ONE 3-state matrix (replaces the old into-it / curious / hard-limits
-        // triple list). Rows = the shared INTIMACY_ACTIVITIES; each rated Hard limit · Curious · Into it.
-        f(
-          {
-            id: 'activities',
-            type: 'matrix',
-            prompt:
-              'For each, tap where you stand — your hard limits, what you’re curious about, and what you’re into:',
-            required: false,
-            matrix: {
-              rows: [...INTIMACY_ACTIVITIES],
-              min: 1,
-              max: 3,
-              minLabel: 'Hard limit',
-              midLabel: 'Curious',
-              maxLabel: 'Into it',
-            },
-          },
-          { restricted: true },
-        ),
-        f(
-          longText(
-            'kinks',
-            'Kinks or fetishes, in your own words',
-            'e.g. specific scenarios, materials, sensations, dynamics…',
-          ),
-          { restricted: true },
-        ),
-        // Toys as ONE 3-state matrix (replaces toysOwn / toysWant). Rows = the shared TOYS set.
-        f(
-          {
-            id: 'toys',
-            type: 'matrix',
-            prompt: 'Toys — what you own, want to try, or aren’t into:',
-            required: false,
-            matrix: {
-              rows: [...TOYS],
-              min: 1,
-              max: 3,
-              minLabel: 'Not for me',
-              midLabel: 'Want to try',
-              maxLabel: 'Own it',
-            },
-          },
-          { restricted: true },
-        ),
-      ]),
-      ...grouped('Acts & specifics', [
-        f(yesno('givesOralPenis', 'Do you like giving blowjobs?'), { restricted: true }),
-        f(
-          single(
-            'swallowSpit',
-            'When you give a blowjob, do you swallow or spit?',
-            ['Swallow', 'Spit', 'Either', 'Depends'],
-            when('givesOralPenis', true),
-          ),
-          { restricted: true },
-        ),
-        f(
-          multi('cumWhere', 'Where do you like your partner to cum?', [
-            'In my mouth',
-            'On my face',
-            'On my chest / body',
-            'On my ass',
-            'Inside me (vaginal)',
-            'Inside me (anal)',
-            'Wherever they want',
-            "I don't have a preference",
-            'Other',
-          ]),
-          { restricted: true },
-        ),
-        f(
-          single('analPref', 'How do you feel about anal?', [
-            'Give',
-            'Receive',
-            'Both',
-            'Not for me',
-            'Curious',
-          ]),
-          { restricted: true },
-        ),
-        f(
-          single('choking', 'Do you like choking or being choked?', [
-            'Being choked',
-            'Doing the choking',
-            'Both',
-            'Neither',
-            'Curious',
-          ]),
-          { restricted: true },
-        ),
-        f(
-          single('degradePraise', 'Do you like to be degraded or praised?', [
-            'Degradation',
-            'Praise',
-            'Both',
-            'Neither',
-          ]),
-          { restricted: true },
-        ),
-        f(
-          longText(
-            'idealEncounter',
-            'Describe your ideal sexual encounter, start to finish, in as much detail as you like',
-            'From the first touch to the end — paint the picture.',
-          ),
-          { restricted: true },
-        ),
-      ]),
-      ...grouped('Body & confidence', [
-        f(
-          multi('bodyTypePref', "Body types you're drawn to", [
-            'Slim',
-            'Athletic',
-            'Average',
-            'Curvy',
-            'Bigger',
-            'No preference',
-            'Other',
-          ]),
-          { restricted: true },
-        ),
-        f(
-          single('partnerGrooming', 'Pubic hair you prefer on a partner', [
-            'Shaved / bare',
-            'Trimmed',
-            'Natural / grown out',
-            'No preference',
-            'Other',
-          ]),
-          { restricted: true },
-        ),
-        f(
-          single('ownGrooming', 'How do you keep your own grooming?', [
-            'Shaved / bare',
-            'Trimmed',
-            'Natural',
-            'Varies',
-            'Other',
-          ]),
-          { restricted: true },
-        ),
+      ...grouped('Body & wellbeing', [
         f(
           slider(
             'bodyConfidence',
@@ -1831,89 +1493,6 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ),
           { restricted: true },
         ),
-      ]),
-      ...grouped('Fantasies & media', [
-        f(
-          longText(
-            'wildestFantasy',
-            'Your wildest fantasy, in as much detail as you like',
-            'Set the scene — no judgment.',
-          ),
-          { restricted: true },
-        ),
-        f(
-          longText(
-            'fantasiesToTry',
-            'Fantasies you’d actually like to try',
-            'The ones you’d say yes to in real life.',
-          ),
-          { restricted: true },
-        ),
-        f(
-          // Sourced from the SHARED `INTIMACY_TOPICS` inventory (08 §16.5a); `'Other'` is the form escape.
-          multi('commonFantasies', 'Which of these appeal to you?', [
-            ...INTIMACY_FANTASIES,
-            'Other',
-          ]),
-          { restricted: true },
-        ),
-        f(
-          single(
-            'cncInterest',
-            'Any interest in consensual non-consent (CNC) — a “forced” roleplay where both people fully agree in advance?',
-            ['Yes', 'Curious', 'No'],
-          ),
-          { restricted: true },
-        ),
-        f(
-          single('watchPorn', 'Do you watch porn?', [
-            'Never',
-            'Rarely',
-            'Sometimes',
-            'Often',
-            'Daily',
-          ]),
-          { restricted: true },
-        ),
-        f(
-          multi(
-            'pornGenres',
-            'What kind of porn are you into?',
-            [
-              'Amateur',
-              'Professional',
-              'Lesbian',
-              'Gay',
-              'Threesome / group',
-              'POV',
-              'BDSM / kink',
-              'Romantic / passionate',
-              'Rough',
-              'Hentai / animated',
-              'Fetish-specific',
-              'Audio / erotica',
-              'Other',
-            ],
-            whenAny('watchPorn', ['Rarely', 'Sometimes', 'Often', 'Daily']),
-          ),
-          { restricted: true },
-        ),
-        f(single('erotica', 'Do you read or listen to erotica?', ['Never', 'Sometimes', 'Often']), {
-          restricted: true,
-        }),
-        f(
-          single('sexualMedia', 'Do you sext, share nudes, record, or cam?', [
-            'None of these',
-            'Sext / share nudes sometimes',
-            'Record ourselves',
-            'Into camming / broadcasting',
-            'Curious',
-            'Prefer not to say',
-          ]),
-          { restricted: true },
-        ),
-      ]),
-      ...grouped('Wellbeing, consent & meaning', [
         f(
           multi('difficulties', "Anything you'd want support with?", [
             'Getting aroused',
@@ -1966,6 +1545,8 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ),
           { restricted: true },
         ),
+      ]),
+      ...grouped('Consent, safety & meaning', [
         f(
           single('consentPractices', 'How do you and partners handle consent and checking in?', [
             'We talk about it explicitly',
@@ -1998,6 +1579,207 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'understandSexuality',
             'What do you most want SelfOS to understand about your sexuality?',
             'The one thing you’d want it to really get.',
+          ),
+          { restricted: true },
+        ),
+      ]),
+      // The explicit specifics sit behind ONE opt-in toggle (27 §4.3) — the always-visible core above covers
+      // identity, the relational picture, body confidence, and all the safety/consent/meaning signal; only the
+      // granular preference/act/fantasy detail is gated, so a casual user answers a short form.
+      ...grouped('Getting specific (optional)', [
+        f(
+          yesno(
+            'getSpecific',
+            'Want to get into the explicit specifics — your turn-ons, kinks, acts, and fantasies?',
+          ),
+          { restricted: true },
+        ),
+        f(
+          multi(
+            'turnOns',
+            'What turns you on or gets you in the mood?',
+            [
+              'Kissing',
+              'Foreplay',
+              'Oral',
+              'Dirty talk',
+              'Being teased',
+              'Lingerie',
+              'Sensual massage',
+              'Anticipation',
+              'Visuals',
+              'Scent',
+              'Confidence',
+              'Romance',
+              'Spontaneity',
+              'Roleplay',
+              'Being desired',
+              'A partner taking control',
+              'A few drinks',
+              'Stress relief',
+              'Other',
+            ],
+            when('getSpecific', true),
+          ),
+          { restricted: true },
+        ),
+        f(
+          multi(
+            'turnOffs',
+            'Your turn-offs',
+            [
+              'Bad hygiene',
+              'Rushing',
+              'Pressure',
+              'Lack of confidence',
+              'Too rough',
+              'Too gentle',
+              'Distractions / phones',
+              'Silence',
+              'Selfishness',
+              'Other',
+            ],
+            when('getSpecific', true),
+          ),
+          { restricted: true },
+        ),
+        f(
+          {
+            ...slider(
+              'roughness',
+              'How rough do you like it?',
+              'Gentle & slow',
+              'A good balance',
+              'Rough & hard',
+            ),
+            branch: when('getSpecific', true),
+          },
+          { restricted: true },
+        ),
+        f(
+          single(
+            'domSub',
+            'Dominant or submissive?',
+            ['Dominant', 'Submissive', 'Switch', 'Vanilla', 'Other'],
+            when('getSpecific', true),
+          ),
+          { restricted: true },
+        ),
+        // The activity inventory as ONE 3-state matrix — Hard limit · Curious · Into it. Rows = the shared
+        // INTIMACY_ACTIVITIES plus two dynamics folded in from the old degrade/praise single (27 §4.3).
+        f(
+          {
+            id: 'activities',
+            type: 'matrix',
+            prompt:
+              'For each, tap where you stand — your hard limits, what you’re curious about, and what you’re into:',
+            required: false,
+            matrix: {
+              rows: [...INTIMACY_ACTIVITIES, 'Degradation / humiliation', 'Praise / worship'],
+              min: 1,
+              max: 3,
+              minLabel: 'Hard limit',
+              midLabel: 'Curious',
+              maxLabel: 'Into it',
+            },
+            branch: when('getSpecific', true),
+          },
+          { restricted: true },
+        ),
+        f(
+          {
+            ...longText(
+              'dirtyTalkLikes',
+              'Dirty talk — things you love to hear',
+              'e.g. praise, being told what to do, descriptions of what they want to do to you…',
+            ),
+            branch: when('getSpecific', true),
+          },
+          { restricted: true },
+        ),
+        f(
+          single(
+            'swallowSpit',
+            'If you give oral on a penis, do you swallow or spit?',
+            ['Swallow', 'Spit', 'Either', 'Depends'],
+            when('getSpecific', true),
+          ),
+          { restricted: true },
+        ),
+        f(
+          multi(
+            'cumWhere',
+            'Where do you like your partner to cum?',
+            [
+              'In my mouth',
+              'On my face',
+              'On my chest / body',
+              'On my ass',
+              'Inside me (vaginal)',
+              'Inside me (anal)',
+              'Wherever they want',
+              "I don't have a preference",
+              'Other',
+            ],
+            when('getSpecific', true),
+          ),
+          { restricted: true },
+        ),
+        f(
+          {
+            ...longText(
+              'idealEncounter',
+              'Describe your ideal sexual encounter, start to finish, in as much detail as you like',
+              'From the first touch to the end — paint the picture.',
+            ),
+            branch: when('getSpecific', true),
+          },
+          { restricted: true },
+        ),
+        f(
+          {
+            ...longText(
+              'fantasies',
+              'Fantasies you’d love to explore',
+              'Set the scene — no judgment. The ones you’d say yes to in real life, and the ones just for your head.',
+            ),
+            branch: when('getSpecific', true),
+          },
+          { restricted: true },
+        ),
+        f(
+          // Sourced from the SHARED `INTIMACY_TOPICS` inventory (08 §16.5a); `'Other'` is the form escape.
+          multi(
+            'commonFantasies',
+            'Which of these appeal to you?',
+            [...INTIMACY_FANTASIES, 'Other'],
+            when('getSpecific', true),
+          ),
+          { restricted: true },
+        ),
+        f(
+          single(
+            'watchPorn',
+            'Do you watch porn?',
+            ['Never', 'Rarely', 'Sometimes', 'Often', 'Daily'],
+            when('getSpecific', true),
+          ),
+          { restricted: true },
+        ),
+        f(
+          multi(
+            'eroticaMedia',
+            'Erotica & sharing — anything you’re into?',
+            [
+              'Read / listen to erotica',
+              'Sext / share nudes',
+              'Record ourselves',
+              'Camming / broadcasting',
+              'Curious',
+              'None of these',
+              'Prefer not to say',
+            ],
+            when('getSpecific', true),
           ),
           { restricted: true },
         ),

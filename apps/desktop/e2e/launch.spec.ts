@@ -4303,10 +4303,17 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
     // Core done → the invited grid offers the deeper sections. Opening intimacy shows the shared 18+ gate.
     await w.getByRole('button', { name: /Intimacy & sexuality/ }).click();
     await expect(w.getByRole('button', { name: /18 or older/ })).toBeVisible();
-    // Acknowledge 18+ → the rebalanced intimacy form renders, incl. the 3-state activity MATRIX (27): each
-    // row offers three LABELLED options (Hard limit · Curious · Into it), not bare numbers. Proven in the
-    // real built app, then skip the section so the flow continues to the portrait.
+    // Acknowledge 18+ → the rebalanced intimacy form renders. The core (e.g. orientation) shows immediately;
+    // the explicit specifics — incl. the 3-state activity MATRIX (Hard limit · Curious · Into it) — sit behind
+    // the opt-in "get specific?" toggle (27 §4.3). Toggle it to prove the labelled matrix renders in the real
+    // built app, then skip the section so the flow continues to the portrait.
     await w.getByRole('button', { name: /18 or older/ }).click();
+    await expect(w.getByText('Who are you drawn to?')).toBeVisible(); // a core, always-visible question
+    await expect(w.getByRole('radio', { name: 'Into it' })).toHaveCount(0); // matrix gated by default
+    await w
+      .getByRole('radiogroup', { name: /Want to get into the explicit specifics/ })
+      .getByRole('radio', { name: 'Yes' })
+      .click();
     await expect(w.getByRole('radio', { name: 'Into it' }).first()).toBeVisible();
     await w.getByRole('button', { name: 'Skip this section' }).click();
 
@@ -4501,7 +4508,7 @@ test('onboarding: a grouped form section shows every group + the go-deeper (noth
 // Guard: conditional intimacy questions must REVEAL right under the question that gates them (18 §14.5) — this
 // is the regression where a gated follow-up was buried in a far-down group and never seemed to appear. (Spec
 // 27 reshaped the intimacy block, so this exercises the live conditionals: a partner follow-up + dirty talk.)
-test('onboarding: intimacy conditionals reveal under their trigger (partner / dirty talk)', async () => {
+test('onboarding: intimacy conditionals reveal under their trigger (partner / opt-in specifics)', async () => {
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
   await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
   {
@@ -4549,16 +4556,15 @@ test('onboarding: intimacy conditionals reveal under their trigger (partner / di
     await expect(w.getByText('How satisfied are you with your sex life?')).toBeVisible();
     await expect(w.getByText('How often are you intimate now?')).toBeVisible();
 
-    // Dirty-talk follow-ups hide when "Not for me", show otherwise.
-    await w
-      .getByRole('radiogroup', { name: 'How do you feel about dirty talk?' })
-      .getByRole('radio', { name: 'Not for me' })
-      .click();
+    // The explicit specifics are HIDDEN until the opt-in "want to get specific?" toggle is Yes (27 §4.3),
+    // then REVEAL together.
     await expect(w.getByText('Dirty talk — things you love to hear')).toHaveCount(0);
+    await expect(w.getByText('What turns you on or gets you in the mood?')).toHaveCount(0);
     await w
-      .getByRole('radiogroup', { name: 'How do you feel about dirty talk?' })
-      .getByRole('radio', { name: 'Love it' })
+      .getByRole('radiogroup', { name: /Want to get into the explicit specifics/ })
+      .getByRole('radio', { name: 'Yes' })
       .click();
+    await expect(w.getByText('What turns you on or gets you in the mood?')).toBeVisible();
     await expect(w.getByText('Dirty talk — things you love to hear')).toBeVisible();
   } finally {
     await app.close();

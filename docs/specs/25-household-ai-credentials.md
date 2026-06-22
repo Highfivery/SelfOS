@@ -345,6 +345,34 @@ The owner's first-run promotion (§3.2):
 The migration **never silently writes** the key into the synced vault — it requires the explicit Share
 tap (§8). Existing single-device users who never share are completely unaffected.
 
+### 5.6 Auto-share by default (amendment 2026-06-22 — the recurring-trap fix)
+
+The opt-in §5.4 promotion proved to be a **recurring trap**: an owner sets up AI, it works on their
+machine, `ai.enabled` even syncs "on" — but the key is device-local and **unshared**, so every member is
+silently locked out of onboarding ("Ask your household owner to enable AI") with no signal to the owner
+that a separate Share tap is needed. Verified against a real two-machine setup: `ai.enabled: true` synced,
+owner had `anthropic.apiKey` device-local, but `config/ai-credentials.enc` was **absent** (never shared).
+
+Resolution (owner decision 2026-06-22): **sharing is the default, with an explicit opt-out.**
+
+- **New vault setting `ai.shareCredentials`** (boolean, **default `true`**, **admin-only**, AI section,
+  `visibleWhen` AI enabled). Copy: "Share AI with your household … Turn off to keep your key on this
+  device only." It is in `ADMIN_ONLY_SETTING_KEYS` (30) so the bridge rejects a non-owner write.
+- **Auto-share on save:** when an **owner** (`settings.manage`) saves a Claude/OpenAI key via `secretSet`
+  and `ai.shareCredentials !== false`, the bridge **also** `writeSharedKey(...)` it into the vault. A
+  **member's** own-key override is **device-local only** (the `settings.manage` guard skips non-owners).
+- **Boot migration:** `householdStatus` runs an idempotent `ensureSharedAiCredentials` for the active
+  owner (skips a provider already shared), so an **existing** setup that predates auto-sharing reaches
+  members on the **next launch** — no tap required.
+- **The opt-out is live:** toggling `ai.shareCredentials` **off** withdraws the shared key(s) from the
+  vault (members fall back to their own); toggling **on** shares the owner's current device key(s).
+- The manual **"Share with the household" / "Stop sharing"** buttons (§3.1/§5.4) are **removed** —
+  auto-share + the toggle replace them; the owner key control now shows status only. The
+  `ai:shareDeviceKey` / `ai:clearSharedKey` bridge ops remain (idempotent, still valid).
+
+This supersedes §5.4's opt-in promotion as the default; §5.4's privacy framing still holds (the key is
+encrypted under the master key, never plaintext on disk or over IPC; budgets cap per-person spend).
+
 ### 5.5 Modules touched (summary)
 
 | Layer             | File                                                 | Change                                                                                        |

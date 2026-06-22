@@ -43,6 +43,7 @@ declare module './types' {
     'appearance.textScale': number;
     'appearance.reduceMotion': boolean;
     'ai.enabled': boolean;
+    'ai.shareCredentials': boolean;
     'ai.model': 'claude-sonnet-4-6' | 'claude-opus-4-8';
     'sessions.memoryEnabled': boolean;
     'sessions.autoSummarizeOnEnd': boolean;
@@ -246,6 +247,20 @@ export function registerBuiltinSettings(): void {
       default: null,
       control: { type: 'custom', render: TestConnectionControl },
       order: 4,
+      visibleWhen: aiEnabled,
+    }),
+    defineSetting({
+      key: 'ai.shareCredentials',
+      section: 'ai',
+      label: 'Share AI with your household',
+      description:
+        'When on, the API key you add here is shared with everyone in your household (encrypted in your vault) so member devices can use AI without each adding a key of their own — your one account pays for everyone, and per-person budgets (Settings → Usage) cap each person’s spend. Turn off to keep your key on this device only.',
+      schema: z.boolean(),
+      default: true,
+      control: { type: 'switch' },
+      order: 5,
+      scope: 'vault',
+      adminOnly: true,
       visibleWhen: aiEnabled,
     }),
     defineSetting({

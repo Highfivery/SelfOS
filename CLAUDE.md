@@ -360,6 +360,29 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-22 — **Fix + durable decision (AI auto-shares to the household by default — the recurring "member
+  sees AI not set up on the shared vault" trap, FINALLY root-caused against the REAL vault; spec 25 §5.6, on
+  `fix/ai-credentials-autoshare` off `main`, NOT merged).** A member (Angel) on the freshly-installed **released**
+  app (v0.3.0) still hit "Connect AI to begin." **Diagnosed, not assumed** (per §6): (1) confirmed the spec-25 fix
+  IS in v0.3.0 (`git tag --contains c639dab` → v0.3.0) — NOT a release-lag; (2) traced the code —
+  `aiAvailable = resolveAiKey() && ai.enabled`, both correct, no bug; (3) **inspected the actual iCloud vault**
+  (`~/.../Family/SelfOS`): `ai.enabled: true` synced ✓, owner has `anthropic.apiKey` device-local ✓, but
+  **`config/ai-credentials.enc` was ABSENT** — the owner **never clicked "Share with the household"** (spec 25
+  made sharing OPT-IN). So Angel correctly resolved "no key." Root cause = the opt-in itself is the trap. **Owner
+  decision: sharing is the DEFAULT, with an explicit opt-out.** Built: vault setting **`ai.shareCredentials`**
+  (default **true**, admin-only, in `ADMIN_ONLY_SETTING_KEYS`); **auto-share on `secretSet`** (an OWNER saving a
+  Claude/OpenAI key mirrors it into the vault unless opted out — a member's own-key override stays device-local via
+  the `settings.manage` guard); an idempotent **boot migration** (`ensureSharedAiCredentials` in `householdStatus`)
+  so an EXISTING owner key auto-shares on next launch with no tap; the **opt-out is live** (toggle off withdraws,
+  on re-shares). Removed the redundant manual "Share"/"Stop sharing" buttons (the `ai:shareDeviceKey`/`:clearSharedKey`
+  ops stay — idempotent). Gate green: typecheck, lint, format, **497 core + 11 relay + 565 desktop** unit (+4 bridge
+  auto-share/opt-out/member-stays-local; +RTL copy/no-button). **Immediate unblock (no release needed):** the owner
+  clicks "Share with the household" in their CURRENT v0.3.0 app → `config/ai-credentials.enc` syncs to the member.
+  This branch makes it automatic going forward (needs a release to ship). **Lesson: a "released fix that still
+  fails" is a cue to inspect the REAL data, not the code — the fix was present and correct, but built an OPT-IN the
+  owner never exercised; the actual vault (`ai.enabled: true` synced + `ai-credentials.enc` absent) gave the answer
+  in one `ls`. When the expected behavior is "owner sets up X → household has X," make sharing the DEFAULT with an
+  opt-out, not an opt-in the owner must discover.**
 - 2026-06-21 — **Build (spec 33 multi-device housekeeping — FULLY BUILT, slices A–D; on
   `feat/household-ai-credentials`).** Four independent loose ends. **A** (docs) pruned spec 10's stale
   super-admin documentation so its body matches the 2026-06-14 Owner-is-full-access amendment (deleted the

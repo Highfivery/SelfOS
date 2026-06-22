@@ -59,18 +59,29 @@ describe('ApiKeyControl', () => {
   });
 });
 
-describe('ApiKeyControl — household sharing (25)', () => {
-  it('owner with a device key can share it with the household', async () => {
-    const aiShareDeviceKey = vi.fn(() => Promise.resolve());
+describe('ApiKeyControl — household sharing (25, auto-share)', () => {
+  it('owner whose key is shared sees the household-shared status', async () => {
     installMockBridge({
       secretHas: () => Promise.resolve(true),
-      aiKeyStatus: () => Promise.resolve(deviceStatus),
-      aiShareDeviceKey,
+      aiKeyStatus: () => Promise.resolve(sharedStatus),
     });
     signInAsOwner();
     render(<ApiKeyControl />);
-    await userEvent.click(await screen.findByRole('button', { name: /share with the household/i }));
-    expect(aiShareDeviceKey).toHaveBeenCalledWith({ provider: 'anthropic' });
+    expect(await screen.findByText(/shared with your household/i)).toBeInTheDocument();
+  });
+
+  it('owner with a not-yet-shared device key sees the auto-share explainer (no manual button)', async () => {
+    installMockBridge({
+      secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () => Promise.resolve(deviceStatus),
+    });
+    signInAsOwner();
+    render(<ApiKeyControl />);
+    expect(
+      await screen.findByText(/shared with your household automatically/i),
+    ).toBeInTheDocument();
+    // The manual share button is gone — auto-share + the "Share AI with your household" toggle replace it.
+    expect(screen.queryByRole('button', { name: /share with the household/i })).toBeNull();
   });
 
   it('member inherits the household key and can opt into their own', async () => {
@@ -80,8 +91,6 @@ describe('ApiKeyControl — household sharing (25)', () => {
     });
     render(<ApiKeyControl />); // not signed in as owner → member view
     expect(await screen.findByText(/provided by your household/i)).toBeInTheDocument();
-    // No owner-only "Share" control for a member.
-    expect(screen.queryByRole('button', { name: /share with the household/i })).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: /use my own key instead/i }));
     expect(screen.getByLabelText('Claude API key')).toBeInTheDocument();
   });

@@ -116,6 +116,7 @@ import { uuid } from '@selfos/core/id';
 import {
   aiKeyStatus as computeAiKeyStatus,
   clearSharedKey,
+  readAiCredentials,
   resolveAiKey,
   resolveOpenAiKey,
   writeSharedKey,
@@ -684,6 +685,34 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     });
   };
 
+  const AI_KEY_IDS = { anthropic: ANTHROPIC_API_KEY_ID, openai: OPENAI_API_KEY_ID } as const;
+
+  /**
+   * Auto-share (25 §5.6): mirror the active owner's device-local AI keys into the vault-shared credentials
+   * so member devices inherit them with NO manual step — the fix for the recurring "AI not set up on a
+   * member's shared vault" trap (a device-local key + a synced `ai.enabled` left members locked out). Runs
+   * only for an owner (`settings.manage`), only when the `ai.shareCredentials` opt-out is not off, and is
+   * idempotent — a provider already shared is skipped, so it costs nothing on repeat boots. Best-effort.
+   */
+  const ensureSharedAiCredentials = async (fs: FileSystem, key: Uint8Array): Promise<void> => {
+    if (!(await activePersonCan(fs, key, 'settings.manage'))) return;
+    if ((await readVaultSettingsValues(fs))['ai.shareCredentials'] === false) return;
+    const creds = await readAiCredentials(fs, key);
+    const sharedByPersonId = (await activePersonId()) ?? undefined;
+    for (const provider of ['anthropic', 'openai'] as const) {
+      const already = provider === 'anthropic' ? creds?.anthropicApiKey : creds?.openaiApiKey;
+      if (already) continue;
+      const deviceKey = await host.secrets.get(AI_KEY_IDS[provider]);
+      if (!deviceKey) continue;
+      await writeSharedKey(fs, key, {
+        provider,
+        value: deviceKey,
+        ...(sharedByPersonId ? { sharedByPersonId } : {}),
+        now: new Date(),
+      });
+    }
+  };
+
   /**
    * Best-effort revoke of the relay links for the sends matching `predicate`, before a deletion purges
    * them (§3.9). No-op if no relay is configured; a relay that's unreachable doesn't block the delete —
@@ -852,6 +881,18 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!vaultDir) return;
       const fs = host.fileSystem(vaultDir);
       await writeVaultSettingsValues(fs, { ...(await readVaultSettingsValues(fs)), [key]: value });
+      // Toggling household key-sharing takes effect immediately (25 §5.6): turning it ON shares the owner's
+      // current device keys; turning it OFF withdraws them from the vault (members fall back to their own).
+      if (key === 'ai.shareCredentials') {
+        const liveKey = await loadMasterKey(host.secrets);
+        if (liveKey) {
+          if (value === true) await ensureSharedAiCredentials(fs, liveKey);
+          else if (value === false && (await activePersonCan(fs, liveKey, 'settings.manage'))) {
+            await clearSharedKey(fs, liveKey, { provider: 'anthropic', now: new Date() });
+            await clearSharedKey(fs, liveKey, { provider: 'openai', now: new Date() });
+          }
+        }
+      }
     },
     resetSetting: async (input): Promise<void> => {
       const { key, scope } = ResetSettingSchema.parse(input);
@@ -879,6 +920,23 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     secretSet: async (input): Promise<void> => {
       const { id, value } = SecretSetSchema.parse(input);
       await host.secrets.set(id, value);
+      // Auto-share an AI key to the household by default (25 §5.6): when an OWNER saves a Claude/OpenAI key
+      // and sharing isn't opted out, mirror it into the vault so members inherit it with no extra step. A
+      // member's own-key override is device-local only (the settings.manage guard skips non-owners).
+      if (id === ANTHROPIC_API_KEY_ID || id === OPENAI_API_KEY_ID) {
+        const ctx = await host.vaultAndKey();
+        if (ctx && (await activePersonCan(ctx.fs, ctx.key, 'settings.manage'))) {
+          if ((await readVaultSettingsValues(ctx.fs))['ai.shareCredentials'] !== false) {
+            const sharedByPersonId = (await activePersonId()) ?? undefined;
+            await writeSharedKey(ctx.fs, ctx.key, {
+              provider: id === ANTHROPIC_API_KEY_ID ? 'anthropic' : 'openai',
+              value,
+              ...(sharedByPersonId ? { sharedByPersonId } : {}),
+              now: new Date(),
+            });
+          }
+        }
+      }
     },
     secretHas: async (input): Promise<boolean> => {
       return host.secrets.has(SecretIdSchema.parse(input).id);
@@ -1089,8 +1147,11 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         deviceHeartbeatDone = true;
         try {
           await ensureDeviceRegistered(fs, liveKey);
+          // Auto-share the owner's device-local AI keys into the vault (25 §5.6) so an existing setup that
+          // predates auto-sharing reaches members on the next launch — without the owner clicking anything.
+          await ensureSharedAiCredentials(fs, liveKey);
         } catch {
-          /* registry heartbeat is best-effort; never block boot */
+          /* registry heartbeat + auto-share are best-effort; never block boot */
         }
       }
       return {

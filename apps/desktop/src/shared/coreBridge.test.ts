@@ -364,6 +364,56 @@ describe('createCoreBridge', () => {
     expect(await host.fs.read('config/ai-credentials.enc')).toBeNull();
   });
 
+  it('auto-share (25 §5.6): an owner saving a key shares it automatically → a member inherits, no manual step', async () => {
+    const { bridge, host } = await freshOwner();
+    // The owner just SAVES a key — no explicit share call. The recurring-bug fix.
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-auto' });
+    expect(await host.fs.read('config/ai-credentials.enc')).not.toBeNull();
+    expect(await bridge.aiKeyStatus({ provider: 'anthropic' })).toMatchObject({
+      hasSharedKey: true,
+    });
+
+    // A member on their own device (no device key) inherits it with zero setup.
+    await bridge.secretClear({ id: ANTHROPIC_API_KEY_ID });
+    const member = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: member.id, roleId: 'member', pin: null });
+    await bridge.sessionSetActive({ personId: member.id });
+    expect(await bridge.aiKeyStatus({ provider: 'anthropic' })).toMatchObject({
+      source: 'shared',
+      resolvedReady: true,
+    });
+  });
+
+  it('auto-share (25 §5.6): a member overriding with their OWN key does not auto-share it', async () => {
+    const { bridge, host } = await freshOwner();
+    const member = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: member.id, roleId: 'member', pin: null });
+    await bridge.sessionSetActive({ personId: member.id });
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-member-own' });
+    // The member's key stays device-local — never written to the household-shared vault file.
+    expect(await host.fs.read('config/ai-credentials.enc')).toBeNull();
+    expect(await bridge.aiKeyStatus({ provider: 'anthropic' })).toMatchObject({
+      hasSharedKey: false,
+      source: 'device',
+    });
+  });
+
+  it('auto-share opt-out (25 §5.6): with ai.shareCredentials off, an owner key stays device-local; toggling re-shares', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.setSetting({ key: 'ai.shareCredentials', value: false, scope: 'vault' });
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-private' });
+    expect(await bridge.aiKeyStatus({ provider: 'anthropic' })).toMatchObject({
+      hasSharedKey: false,
+      source: 'device',
+    });
+    // Turning sharing back ON shares the current device key immediately…
+    await bridge.setSetting({ key: 'ai.shareCredentials', value: true, scope: 'vault' });
+    expect((await bridge.aiKeyStatus({ provider: 'anthropic' })).hasSharedKey).toBe(true);
+    // …and turning it OFF withdraws it from the vault.
+    await bridge.setSetting({ key: 'ai.shareCredentials', value: false, scope: 'vault' });
+    expect((await bridge.aiKeyStatus({ provider: 'anthropic' })).hasSharedKey).toBe(false);
+  });
+
   it('settings trust boundary (26): a member cannot write vault/admin-only settings; the owner can', async () => {
     const { bridge, ownerId } = await freshOwner();
     // Owner may write a vault setting + an admin-only one.

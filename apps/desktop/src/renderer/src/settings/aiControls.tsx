@@ -110,7 +110,6 @@ function SharedKeyControl({
   const canManage = useSessionStore((state) => state.can('settings.manage'));
   const secretId = provider === 'anthropic' ? ANTHROPIC_API_KEY_ID : OPENAI_API_KEY_ID;
   const [status, setStatus] = useState<AiKeyStatus | null>(null);
-  const [busy, setBusy] = useState(false);
   const [showOverride, setShowOverride] = useState(false);
 
   const refresh = async (): Promise<void> => {
@@ -119,25 +118,6 @@ function SharedKeyControl({
   useEffect(() => {
     void refresh();
   }, []);
-
-  const share = async (): Promise<void> => {
-    setBusy(true);
-    try {
-      await window.selfos?.aiShareDeviceKey({ provider });
-      await refresh();
-    } finally {
-      setBusy(false);
-    }
-  };
-  const unshare = async (): Promise<void> => {
-    setBusy(true);
-    try {
-      await window.selfos?.aiClearSharedKey({ provider });
-      await refresh();
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const keyField = (
     <SecretKeyControl
@@ -150,42 +130,22 @@ function SharedKeyControl({
     />
   );
 
-  // --- Owner: enter a key + share it with the household ---
+  // --- Owner: enter a key; it's shared with the household automatically (toggle: "Share AI with your
+  // household"). The manual share/unshare buttons are gone — auto-share + that opt-out replace them. ---
   if (canManage) {
     return (
       <Stack gap={3}>
         {keyField}
-        <Stack gap={2}>
-          {status?.hasSharedKey ? (
-            <>
-              <Text size="sm" tone="accent">
-                Shared with your household — every member device uses this key.
-              </Text>
-              <Inline gap={2}>
-                <Button variant="secondary" onClick={() => void unshare()} disabled={busy}>
-                  Stop sharing
-                </Button>
-              </Inline>
-            </>
-          ) : status?.hasDeviceOverride ? (
-            <>
-              <Text size="sm" tone="secondary">
-                Share this key with your household so members can use AI without entering a key of
-                their own. Your one account pays for everyone; per-person budgets (Settings → Usage)
-                control how much each person can spend.
-              </Text>
-              <Inline gap={2}>
-                <Button variant="primary" onClick={() => void share()} disabled={busy}>
-                  Share with the household
-                </Button>
-              </Inline>
-            </>
-          ) : (
-            <Text size="sm" tone="secondary">
-              Add a key above, then share it with your household.
-            </Text>
-          )}
-        </Stack>
+        {status?.hasSharedKey ? (
+          <Text size="sm" tone="accent">
+            Shared with your household — every member device uses this key.
+          </Text>
+        ) : (
+          <Text size="sm" tone="secondary">
+            Keys you add here are shared with your household automatically so members can use AI
+            without a key of their own. Manage this with “Share AI with your household” below.
+          </Text>
+        )}
       </Stack>
     );
   }

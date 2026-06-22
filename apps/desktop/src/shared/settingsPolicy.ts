@@ -8,6 +8,7 @@
  * settings (appearance, sidebar, …) are ungated — they're cosmetic, per-device, and never touch the vault.
  */
 export const ADMIN_ONLY_SETTING_KEYS: readonly string[] = [
+  'ai.shareCredentials',
   'questionnaires.intimacyTopics',
   'dreams.imageModel',
   'dreams.imageApiKey',

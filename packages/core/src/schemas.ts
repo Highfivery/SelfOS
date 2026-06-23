@@ -484,6 +484,11 @@ export const ConversationSchema = z.object({
   // (today's behaviour). `guideStep` is the current step index for structured exercises only.
   guideId: z.string().optional(),
   guideStep: z.number().int().nonnegative().optional(),
+  // Free-form session topic cache (28 §13.2). The life-areas a Haiku classifier inferred from the
+  // conversation, reused across turns and re-run only on a subject shift, so context selects the relevant
+  // pinned portrait facts. Additive-optional — absent ⇒ unclassified (⇒ core + fill). Guided sessions don't
+  // use this (they derive their topic from the exercise group).
+  topicLifeAreas: z.array(z.string()).optional(),
 });
 export type Conversation = z.infer<typeof ConversationSchema>;
 

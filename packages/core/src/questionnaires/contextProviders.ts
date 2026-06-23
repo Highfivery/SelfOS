@@ -3,6 +3,7 @@ import { summarizeForContext } from '../insights';
 import { isPersonFieldShared } from '../schemas';
 import { getPerson, listPeople } from '../people/peopleService';
 import { listRelationships } from '../people/relationshipService';
+import { questionnaireTopic } from './questionnaireTopic';
 
 /**
  * The **context-provider registry** (08-questionnaires §5.1) — the extensibility backbone for AI
@@ -21,6 +22,9 @@ export interface GenerationContextRequest {
   targetPersonId?: string;
   includeTarget: boolean;
   includeRelationship: boolean;
+  /** The questionnaire's type (08 §15.1) — derives a relevance topic so the author's pinned portrait surfaces
+   *  the facts relevant to this questionnaire (28 §13.1). Absent ⇒ no topic (core + fill). */
+  questionnaireType?: string;
 }
 
 export interface ContextProvider {
@@ -98,7 +102,13 @@ const insightsProvider: ContextProvider = {
       const target = await getPerson(fs, key, req.targetPersonId);
       if (target) related = [{ id: target.id, displayName: target.displayName }];
     }
-    return summarizeForContext(fs, key, req.authorPersonId, related);
+    return summarizeForContext(
+      fs,
+      key,
+      req.authorPersonId,
+      related,
+      questionnaireTopic(req.questionnaireType),
+    );
   },
 };
 

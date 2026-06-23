@@ -4,7 +4,9 @@ import type { ClaudeClient } from '../host';
 import { memFileSystem } from '../host/memFileSystem';
 import type { Person } from '../schemas';
 import { savePerson } from '../people';
-import { recordUsage, setPersonBudget } from '../usage';
+import { queryUsage, recordUsage, setPersonBudget } from '../usage';
+import { saveInsight } from '../insights';
+import type { Insight } from '../schemas';
 import { getConversation, listConversations, saveConversation } from './conversationService';
 import { runChatTurn } from './chatService';
 
@@ -316,5 +318,210 @@ describe('runChatTurn — guided sessions (16)', () => {
     const conversation = await getConversation(fs, key, 'p1', 'g2');
     // GROW has 4 steps → max index 3.
     expect(conversation?.guideStep).toBe(3);
+  });
+});
+
+// --- Free-form session topic classifier (28 §13.2) ---
+
+const TOPIC_MODEL = 'claude-haiku-4-5';
+
+/** A client that returns life-area JSON for the Haiku classifier call and a normal reply otherwise; counts
+ *  how many times the classifier (Haiku) ran. */
+function topicAwareClient(lifeAreas: string[]): {
+  client: ClaudeClient;
+  classifyCalls: () => number;
+} {
+  let calls = 0;
+  const client: ClaudeClient = {
+    send: () => Promise.resolve('ok'),
+    stream: (options, onDelta) => {
+      if (options.model === TOPIC_MODEL) {
+        calls += 1;
+        return Promise.resolve({
+          text: JSON.stringify({ lifeAreas }),
+          usage: { inputTokens: 15, outputTokens: 4, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+      onDelta('Tell me more.');
+      return Promise.resolve({
+        text: 'Tell me more.',
+        usage: { inputTokens: 100, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0 },
+      });
+    },
+  };
+  return { client, classifyCalls: () => calls };
+}
+
+function turn(over: Partial<Parameters<typeof runChatTurn>[0]>): Parameters<typeof runChatTurn>[0] {
+  return {
+    fs,
+    key,
+    client: fakeClient,
+    apiKey: 'sk-test',
+    model: 'claude-sonnet-4-6',
+    personId: 'p1',
+    conversationId: 'c1',
+    userText: 'hello',
+    onDelta: () => {},
+    now,
+    ...over,
+  };
+}
+
+describe('runChatTurn — free-form topic classifier (28 §13.2)', () => {
+  it('classifies a free-form turn, caches the topic, and meters a session.topic event', async () => {
+    await base();
+    const { client, classifyCalls } = topicAwareClient(['Money']);
+    await runChatTurn(turn({ client, userText: 'I am drowning in debt and rent' }));
+    expect(classifyCalls()).toBe(1);
+
+    expect((await getConversation(fs, key, 'p1', 'c1'))?.topicLifeAreas).toEqual(['Money']);
+
+    const topicEvents = await queryUsage(fs, key, {
+      from: '2026-01-01',
+      to: '2027-01-01',
+      personId: 'p1',
+      type: 'session.topic',
+    });
+    expect(topicEvents).toHaveLength(1);
+    expect(topicEvents[0]?.model).toBe(TOPIC_MODEL);
+  });
+
+  it('reuses the cached topic on a follow-up that stays on subject (no second classify)', async () => {
+    await base();
+    const { client, classifyCalls } = topicAwareClient(['Money']);
+    await runChatTurn(turn({ client, userText: 'I am drowning in debt' }));
+    await runChatTurn(turn({ client, userText: 'more about my savings and the rent' }));
+    expect(classifyCalls()).toBe(1); // stayed within Money → no re-classify
+  });
+
+  it('re-classifies when the subject shifts to a new area', async () => {
+    await base();
+    const { client, classifyCalls } = topicAwareClient(['Money']);
+    await runChatTurn(turn({ client, userText: 'I am drowning in debt' }));
+    await runChatTurn(turn({ client, userText: 'actually my husband is the real issue' }));
+    expect(classifyCalls()).toBe(2); // Relationships is outside cached Money → re-classify
+  });
+
+  it('a guided session never runs the classifier', async () => {
+    await base();
+    const { client, classifyCalls } = topicAwareClient(['Money']);
+    await saveConversation(fs, key, {
+      id: 'g3',
+      schemaVersion: 1,
+      personId: 'p1',
+      title: 'GROW',
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      guideId: 'grow-goal-setting',
+      guideStep: 0,
+      messages: [],
+    });
+    await runChatTurn(turn({ client, conversationId: 'g3', userText: 'I want to save money' }));
+    expect(classifyCalls()).toBe(0);
+    expect((await getConversation(fs, key, 'p1', 'g3'))?.topicLifeAreas).toBeUndefined();
+  });
+
+  it('the classified topic changes which portrait facts feed the session (end-to-end)', async () => {
+    await base();
+    // 45 untagged (⇒ core) filler facts EXHAUST the per-call budget, then a single topical Money fact last —
+    // so the Money fact only survives selection when the classified topic actually pulls it in (28b §pillar-2).
+    const filler = Array.from({ length: 45 }, (_, i) => ({
+      id: `u${i}`,
+      text: `Filler fact ${i}`,
+      shareable: false,
+    }));
+    const portrait: Insight = {
+      id: 'intake-1',
+      schemaVersion: 1,
+      source: 'intake',
+      subjectPersonId: 'p1',
+      summary: 'A thoughtful, steady person.',
+      facts: [
+        ...filler,
+        {
+          id: 'f-money',
+          text: 'A debt from a failed business',
+          shareable: false,
+          lifeArea: 'Money',
+        },
+      ],
+      confidence: 'medium',
+      categories: [],
+      approved: true,
+      provenance: { at: now.toISOString() },
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    };
+    await saveInsight(fs, key, portrait);
+
+    // A capturing client that returns the GIVEN classifier topic and records the chat system prompt.
+    const capturing = (lifeAreas: string[]): { client: ClaudeClient; system: () => string } => {
+      let system = '';
+      return {
+        system: () => system,
+        client: {
+          send: () => Promise.resolve('ok'),
+          stream: (options, onDelta) => {
+            if (options.model === TOPIC_MODEL) {
+              return Promise.resolve({
+                text: JSON.stringify({ lifeAreas }),
+                usage: {
+                  inputTokens: 15,
+                  outputTokens: 4,
+                  cacheWriteTokens: 0,
+                  cacheReadTokens: 0,
+                },
+              });
+            }
+            system = options.system;
+            onDelta('ok');
+            return Promise.resolve({
+              text: 'ok',
+              usage: {
+                inputTokens: 100,
+                outputTokens: 10,
+                cacheWriteTokens: 0,
+                cacheReadTokens: 0,
+              },
+            });
+          },
+        },
+      };
+    };
+
+    // A Money-classified turn pulls the Money fact into the prompt...
+    const money = capturing(['Money']);
+    await runChatTurn(
+      turn({ client: money.client, conversationId: 'cm', userText: 'I am drowning in debt' }),
+    );
+    expect(money.system()).toContain('A debt from a failed business');
+    expect(money.system()).toContain('A thoughtful, steady person.'); // the summary always feeds
+
+    // ...while a neutral-classified turn (no Money area) leaves it out — the off-topic fact is narrowed away.
+    const neutral = capturing([]);
+    await runChatTurn(
+      turn({ client: neutral.client, conversationId: 'cn', userText: 'just thinking out loud' }),
+    );
+    expect(neutral.system()).not.toContain('A debt from a failed business');
+    expect(neutral.system()).toContain('A thoughtful, steady person.'); // summary still feeds
+  });
+
+  it('fails open — a classifier transport error never blocks the reply', async () => {
+    await base();
+    const client: ClaudeClient = {
+      send: () => Promise.resolve('ok'),
+      stream: (options, onDelta) => {
+        if (options.model === TOPIC_MODEL) return Promise.reject(new Error('network'));
+        onDelta('I hear you.');
+        return Promise.resolve({
+          text: 'I hear you.',
+          usage: { inputTokens: 100, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    const result = await runChatTurn(turn({ client, userText: 'I am stressed about money' }));
+    expect(result.ok).toBe(true); // the reply still lands
+    expect((await getConversation(fs, key, 'p1', 'c1'))?.topicLifeAreas).toBeUndefined();
   });
 });

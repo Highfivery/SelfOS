@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { ClaudeClient, FileSystem } from '../host';
 import { uuid } from '../id';
 import { DreamTagsSchema } from '../schemas';
+import { dreamTopic } from './dreamTopic';
 import type {
   ChatTurnResult,
   Conversation,
@@ -15,7 +16,8 @@ import type {
   UsageEvent,
 } from '../schemas';
 import { checkBudget, costOf, recordUsage } from '../usage';
-import { buildContext, buildLinkedPeopleContext } from '../people';
+import { buildContext, buildLinkedPeopleContext, listRelationships } from '../people';
+import type { RelationshipType } from '../schemas';
 import { FORMATTING, PERSONA, SAFETY } from '../conversations/promptBuilder';
 import { deleteInsight, getInsight, saveInsight } from '../insights';
 import {
@@ -111,12 +113,27 @@ async function buildDreamPrompt(
   personId: string,
   dream: Dream,
 ): Promise<string> {
-  const context = await buildContext(fs, key, personId);
-  // Foreground the People-graph-linked people who appeared in THIS dream, so the coach can connect the
-  // dream's figures to real relationships (12 §3.1/§5.1). Shareable data only — never their private notes.
+  // The People-graph-linked people who appeared in THIS dream (12 §3.1/§5.1).
   const linkedIds = dream.people
     .map((person) => person.personId)
     .filter((id): id is string => Boolean(id));
+  // Resolve each linked figure's relationship to the dreamer so the dream topic can widen by it (28 §13.1):
+  // a partner → Intimacy, a parent/sibling → Family, etc. (dreamTopic stays pure — the async lookup is here).
+  const relationships = await listRelationships(fs, key);
+  const relationshipTypes = linkedIds
+    .map(
+      (id) =>
+        relationships.find(
+          (r) =>
+            (r.fromPersonId === personId && r.toPersonId === id) ||
+            (r.fromPersonId === id && r.toPersonId === personId),
+        )?.type,
+    )
+    .filter((t): t is RelationshipType => t !== undefined);
+  // Feed the pinned portrait the dream's life-areas (28 §13.1) so its relevant facts surface in the analysis.
+  const context = await buildContext(fs, key, personId, dreamTopic(dream, relationshipTypes));
+  // Foreground the linked people (shareable data only — never their private notes) so the coach can connect
+  // the dream's figures to real relationships.
   const dreamPeople = await buildLinkedPeopleContext(fs, key, personId, linkedIds);
   return [
     PERSONA,

@@ -12,8 +12,10 @@
 > the **broader** CORE set (Values & beliefs, Goals & growth, Emotions & patterns, Relationships, Health &
 > body, plus anything untagged), and a **crisis-flagged portrait is never topically narrowed** (only
 > bounded). A free-start session (no guide) passes no topic ⇒ core + fill. The session chat threads a topic
-> from the guided-exercise group; Dream/Questionnaire callers get the bounded core+fill (their topic mapping
-> is a small follow-up).
+> from the guided-exercise group. **§13 (2026-06-23, `feat/topic-aware-context`, pending merge)** completes the
+> rest: deterministic `dreamTopic`/`questionnaireTopic` maps for Dream analysis + Questionnaire generation, and
+> a cached Haiku **classifier** (re-run only on a subject shift, metered `session.topic`, fail-open) for
+> free-form sessions — so onboarding facts surface on every coaching surface, not just guided ones.
 >
 > The onboarding portrait (the `source: 'intake'` Insight from [18-personal-onboarding](18-personal-onboarding.md))
 > is PINNED into the system prompt of **every** Session, Dream analysis, and Questionnaire-generation call —
@@ -208,12 +210,12 @@ export type ContextTopic = z.infer<typeof ContextTopicSchema>;
 
 The topic signal comes from data the caller already holds — no new persisted state:
 
-| Caller                     | Signal source                                                                              | → `lifeAreas`                                                                                             |
-| -------------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
-| **Session (guided)**       | The `GuidedExercise.group` (`therapy`/`coaching`/`intimacy`) + `framework` (16 §3.2)       | A static `GUIDE_LIFE_AREAS` map in `guidedCatalog.ts` (e.g. intimacy group → `Intimacy`, `Relationships`) |
-| **Session (free-start)**   | None at start                                                                              | `undefined` ⇒ core + priority-fill                                                                        |
-| **Dream analysis**         | The dream's linked-people relationships + dream tags (12), and any reconciled `categories` | Map dream tags/linked relationships → life-areas; else `undefined`                                        |
-| **Questionnaire generate** | The questionnaire `type` taxonomy (08 §3.1 — e.g. intimacy/relationship/general)           | A static `QUESTIONNAIRE_TYPE_LIFE_AREAS` map                                                              |
+| Caller                     | Signal source                                                                                          | → `lifeAreas`                                                                                                      |
+| -------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| **Session (guided)**       | The `GuidedExercise.group` (`therapy`/`coaching`/`intimacy`) + `framework` (16 §3.2)                   | A static `GUIDE_LIFE_AREAS` map in `guidedCatalog.ts` (e.g. intimacy group → `Intimacy`, `Relationships`)          |
+| **Session (free-start)**   | The user's latest message — a cached Haiku classifier, re-run only on a subject shift (§13.2)          | The classifier's `lifeAreas`, cached on `Conversation.topicLifeAreas`; fail-open ⇒ `undefined` ⇒ core + fill       |
+| **Dream analysis**         | The dream's tags + narrative (keyword scan) + nightmare/mood + linked people's relationship types (12) | `dreamTopic(dream, relTypes)` (§13.1, pure) → life-areas; partner→`Intimacy`, parent→`Family`, …; else `undefined` |
+| **Questionnaire generate** | The questionnaire `type` taxonomy (08 §3.1 — e.g. intimacy/relationship/general)                       | `questionnaireTopic(type)` (§13.1) — a static `QUESTIONNAIRE_TYPE_LIFE_AREAS` map                                  |
 
 Each map is a **pure, code-only constant** co-located with its caller (DRY: the life-area taxonomy is the single
 `LIFE_AREAS` in `schemas.ts`). A caller with no clear signal passes no topic — the safe default.
@@ -422,7 +424,9 @@ building.
 5. **The relevance-selection source.** Confirmed sources: guided-session `group`/`framework` (16), questionnaire
    `type` (08), dream linked life-areas/tags (12). **For a free-start (unguided) Session there is no topic signal at
    start** — accept the core+fill default, or should we **infer** a topic from the first user message (an extra
-   classification step / cost)? (Recommendation: accept the default; no extra spend.)
+   classification step / cost)? **RESOLVED (2026-06-23, §13.2):** infer it — a cached `claude-haiku-4-5` classifier
+   re-run only on a subject shift, metered (`session.topic`) + fail-open. The dream + questionnaire maps (rows 3–4)
+   are implemented now too (the deferred 28b follow-up, §13.1).
 6. **An optional Settings toggle?** Should there be a (default-on) `memory.relevantFactsOnly` setting so a user can
    force the full portrait into every call, or is the bounded/relevant behaviour always-on with no toggle?
    (Recommendation: always-on, no toggle — fewer knobs; the budget is generous.)
@@ -431,6 +435,13 @@ building.
 
 ## 12. Changelog
 
+- 2026-06-23 — **Amendment drafted (§13) — topic-aware context everywhere** (`feat/topic-aware-context`,
+  spec under review). Completes the 28b follow-up — deterministic `dreamTopic(dream)` + `questionnaireTopic(type)`
+  maps so dream analysis + questionnaire generation feed topic-relevant portrait facts — and **resolves §11 Q5**:
+  a free-form session infers its topic from a cached `claude-haiku-4-5` classifier re-run only on a subject shift
+  (metered `session.topic`, budget-gated, fail-open to core+fill). Additive schema only
+  (`Conversation.topicLifeAreas`, `UsageType += 'session.topic'`); the 28b selector + privacy filters are
+  unchanged. Implementation pending spec approval.
 - 2026-06-21 — created (Draft). Part of the onboarding-redesign spec group (26–29).
 - 2026-06-21 — **Slice 28a built** (`feat/portrait-optimization`, stacked on 26/27, NOT merged). The two
   low-risk "safe wins": (1) **slider-seed fix** — `@selfos/answering` `SliderControl` no longer auto-commits
@@ -472,3 +483,89 @@ building.
     format, **454 core + 534 desktop + 11 relay** unit, **7 E2E** (onboarding + sessions + guided + dreams) green.
     **Follow-up:** thread a topic into Dream analysis (dream tags → life-areas) + Questionnaire generation; both
     currently get the bounded core+fill (still an improvement over the old uncapped dump).
+
+---
+
+## 13. Amendment (2026-06-23) — topic-aware context on every coaching surface
+
+> **Status:** Approved-pending · `feat/topic-aware-context`. Completes the 28b **follow-up** (dream +
+> questionnaire topic maps, already specced in §4.4/§5.4) and **resolves §11 Q5**: a free-form session now
+> derives its topic from a cheap classifier instead of falling back to core-only.
+
+**Why.** 28b wired topic-relevance only for **guided** sessions. Free-form sessions, dream analysis, and
+questionnaire generation all pass no topic, so they get the always-on core facts + the pinned summary only —
+the granular life-area facts (Money, Work, **Intimacy**, Joy, deeper Family) rarely surface where they're
+relevant. Owner direction (2026-06-23): onboarding detail should actually be **used** across all AI surfaces,
+"otherwise it would be never used/needed." Decisions taken ask-first: (a) topic-aware everywhere; (b) free-form
+sessions infer via a **cheap model classification**, cached and re-run **only when the subject shifts**.
+
+### 13.1 Dream analysis + questionnaire generation — deterministic maps (the deferred 28b follow-up)
+
+Implements §4.4/§5.4 as specced — **no AI cost**:
+
+- **`dreamTopic(dream, relationshipTypes?)`** (pure, `@selfos/core/dreams`): maps the dream's structured
+  signals → life-areas — its tags + narrative scanned for life-area keywords (money → `Money`, sex → `Intimacy`,
+  etc.), `nightmare` / heavy negative waking mood ⇒ `Emotions & patterns`, and **people present** widened by
+  their relationship to the dreamer via `RELATIONSHIP_LIFE_AREAS` (a `partner`/`ex` → `Intimacy`, a
+  `parent`/`child`/`sibling` → `Family`, a `coworker` → `Work & purpose`, plus the generic `Relationships`
+  signal for anyone present). The function stays **pure** — `dreamAnalysisService` does the async
+  relationship-graph lookup (resolving each linked figure's `RelationshipType`) and passes the resolved types
+  in. No mappable signal ⇒ `undefined` (core + fill). Emitted in canonical `LIFE_AREAS` order.
+- **`questionnaireTopic(type)`** (pure, co-located with the questionnaire type taxonomy): a static
+  `QUESTIONNAIRE_TYPE_LIFE_AREAS` map (`intimacy → Intimacy, Relationships`; `general → undefined`; …).
+  `contextProviders.insightsProvider` passes it into `summarizeForContext`.
+
+### 13.2 Free-form session — a cached topic classifier (resolves §11 Q5)
+
+A free-form (non-guided) session derives its topic from a **small classification model call**, not the
+core-only fallback. Cost is bounded by **caching the topic on the conversation and only re-classifying when the
+subject shifts**.
+
+- **Classifier** (`classifyTopic`, new in `@selfos/core/conversations`): one **`claude-haiku-4-5`** call
+  (small/fast, independent of the chat model), `extendedThinking: false`, ~`maxTokens 120`, fed the latest user
+  message (+ the prior assistant turn for context). Returns `{ lifeAreas: string[] }` validated against
+  `LIFE_AREAS` (unknown labels dropped). It sees only text already sent to the model for the reply — no new data
+  exposure; it never sees the portrait facts.
+- **Cache + shift trigger.** `Conversation` gains additive-optional **`topicLifeAreas?: string[]`**. On each
+  free-form turn a pure, zero-cost **`topicShifted(userText, cachedLifeAreas)`** decides whether to re-run the
+  classifier: re-classify on the **first** turn (no cache) or when the message's keyword signals hit a life-area
+  outside the cached set (a likely subject change); otherwise reuse the cached topic. The keyword map is a
+  **trigger only** — the topic itself is always the model's answer, never the keywords (that's why option A,
+  pure-keyword classification, was rejected; the keywords merely decide _when_ to spend on Haiku).
+- **Metered + budget-gated + fails open.** A new **`session.topic`** usage type meters the Haiku call (06). It is
+  budget-checked; on over-budget / transport error / unparseable output it **falls back to the cached topic** (or
+  `undefined` ⇒ core + fill on turn 1) — it never blocks, never delays beyond the one fast call, and never breaks
+  the reply. **Guided sessions skip the classifier** entirely (they keep their `guideLifeAreas` topic).
+- **Where it runs.** `chatService.runChatTurn`, before assembling the system prompt, so the resolved topic flows
+  through `buildSystemPrompt → buildContext → summarizeForContext → selectPortraitFacts`. The portrait **summary**
+  still feeds every call regardless of topic.
+
+### 13.3 Schema & usage (additive, no migration)
+
+- `Conversation.topicLifeAreas?: string[]` — the cached classified topic (absent ⇒ unclassified).
+- `UsageType += 'session.topic'` (+ a label).
+- **No change** to `ContextTopic`, `selectPortraitFacts`, the privacy filters, or `InsightFact` — this slice only
+  _feeds_ the existing 28b selector a topic on three more surfaces.
+
+### 13.4 Safety / privacy / honesty
+
+- The classifier output is **labels only** (life-areas), derived from the user's own message; it never widens
+  who-sees-what. The restricted / own-context-only and cross-person privacy filters in `summarizeForContext` are
+  untouched — selection still runs **after** them, on the subject's own facts.
+- **Crisis is never narrowed:** a crisis-flagged portrait stays bounded-but-never-topically-narrowed (28b),
+  independent of any classified topic.
+- Fail-open means an AI / budget outage degrades to today's core + summary behavior, never an error.
+
+### 13.5 Testing
+
+- **Pure-unit:** `dreamTopic` (partner → Intimacy/Relationships, nightmare → Emotions, none → undefined),
+  `questionnaireTopic` (intimacy → Intimacy, general → undefined), `topicShifted` (first turn / in-set no-shift /
+  out-of-set shift / no-keyword no-shift), `classifyTopic` (parse, drop-unknown labels, fail-open on bad output).
+- **Integration (in-process, the strongest coverage):** a Money-classified free-form turn pins the Money
+  portrait fact into the chat system prompt while a neutral-classified turn doesn't (over the fact budget, so
+  the topic genuinely changes selection); the classifier is cached + re-run only on a shift; metering records a
+  `session.topic` event; a guided session never classifies; a classifier transport error fails open (the reply
+  still lands). The assembled system prompt is captured via the fake client — an E2E can't read it.
+- **E2E:** the real built app records a metered `session.topic` event after a free-form session turn (the
+  offline fake returns no areas, so it's a no-narrow classification, but the classify → meter → fail-open seam
+  runs end to end). No real Haiku call in CI.

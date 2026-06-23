@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/Highfivery/SelfOS/compare/v0.3.3...v0.4.0) (2026-06-23)
+
+
+### Features
+
+* render AI prose as rich text with a shared Markdown primitive (spec 34) ([#26](https://github.com/Highfivery/SelfOS/issues/26)) ([7efa190](https://github.com/Highfivery/SelfOS/commit/7efa1903f5dc64d546c5d291734e8d86660a2ea9))
+
 ## [0.3.3](https://github.com/Highfivery/SelfOS/compare/v0.3.2...v0.3.3) (2026-06-23)
 
 

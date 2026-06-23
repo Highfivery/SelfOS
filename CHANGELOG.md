@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.0](https://github.com/Highfivery/SelfOS/compare/v0.5.1...v0.6.0) (2026-06-23)
+
+
+### Features
+
+* **context:** topic-aware portrait facts on every coaching surface (spec 28 §13) ([#39](https://github.com/Highfivery/SelfOS/issues/39)) ([fa4d506](https://github.com/Highfivery/SelfOS/commit/fa4d506908078069e52935ee943350e335489e40))
+* **onboarding:** 5-point gender-aware intimacy activity matrix (spec 27 §4.2) ([#36](https://github.com/Highfivery/SelfOS/issues/36)) ([c33af96](https://github.com/Highfivery/SelfOS/commit/c33af963688ab0b6080611c43f4fb5e7f92a6e31))
+* **onboarding:** porn conditional fields, parent-figures roster, cut 4 questions (specs 18/26/27) ([#38](https://github.com/Highfivery/SelfOS/issues/38)) ([da13d09](https://github.com/Highfivery/SelfOS/commit/da13d0982680473b0687baf43f4d57c647aed15f))
+
+
+### Bug Fixes
+
+* capture date of birth for pets in onboarding too ([#34](https://github.com/Highfivery/SelfOS/issues/34)) ([9c6bc51](https://github.com/Highfivery/SelfOS/commit/9c6bc51993c5be5ebeffb752d0393ae5b1e53ea2))
+
 ## [0.5.1](https://github.com/Highfivery/SelfOS/compare/v0.5.0...v0.5.1) (2026-06-23)
 
 

@@ -18,7 +18,7 @@ import {
 } from '../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 import { buildContext, getPerson, savePerson } from '../people';
-import { PERSONA, SAFETY } from '../conversations/promptBuilder';
+import { FORMATTING, PERSONA, SAFETY } from '../conversations/promptBuilder';
 import { checkBudget, costOf, recordUsage } from '../usage';
 import { getInsight, normalizeCategories, saveInsight } from '../insights';
 import { isAnswered } from '../questionnaires/answering';
@@ -372,7 +372,7 @@ async function buildIntakeSystem(
   const def = getIntakeSection(sectionId);
   if (!def) return null;
   const context = await buildContext(fs, key, person.id);
-  return [PERSONA, SAFETY, context, buildInterviewerAddendum(person.displayName, def)]
+  return [PERSONA, SAFETY, context, buildInterviewerAddendum(person.displayName, def), FORMATTING]
     .filter(Boolean)
     .join('\n\n');
 }
@@ -587,7 +587,8 @@ export interface IntakeSynthesizeDeps {
 
 const REFLECTION_INSTRUCTION = `Now write a brief, warm reflection (2-3 sentences) on what you've heard \
 in this part of the conversation — something that helps the person feel seen. Be faithful to what they \
-said; do not invent. This is reflective, not clinical. Respond with ONLY a single JSON object: \
+said; do not invent. This is reflective, not clinical. The reflection may use light Markdown (**bold**, \
+*italic*); no tables, images, raw HTML, or code fences. Respond with ONLY a single JSON object: \
 {"reflection": "..."}.`;
 
 /** Max facts the synthesis call should PRODUCE for the portrait (28-portrait-synthesis-optimization §pillar-1).
@@ -604,6 +605,10 @@ This portrait is the AI's lasting memory of this person — it personalizes thei
 everything else across the app. Make the SUMMARY rich and comprehensive; make the FACTS a PRIORITIZED set of \
 the most important, reusable details — not an exhaustive dump (the facts are injected into every later \
 conversation, so signal beats volume).
+
+The "portrait" prose may use light Markdown for readability — paragraphs (blank line between them), \
+**bold**, *italic*, and "-" lists; no tables, images, raw HTML, or code fences. The "facts" stay PLAIN \
+text (no Markdown).
 
 Respond with ONLY a single JSON object (no markdown fences) with these keys:
 - "portrait": a warm, member-facing "here's what I've come to understand about you" summary, 3-5 rich paragraphs (string)

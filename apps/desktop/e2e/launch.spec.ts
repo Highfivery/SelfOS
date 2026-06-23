@@ -627,6 +627,10 @@ test('sessions: send a message, stream a reply, and show the usage header + cris
     // `.first()` tolerates the brief stream→persist handoff where the streaming bubble and the saved
     // message both match.
     await expect(w.getByText(/hear you/i).first()).toBeVisible(); // offline fake reply
+    // The reply renders as Markdown (34): the fake's list + bold become real <li>/<strong>, no raw `**`.
+    await expect(w.locator('main li', { hasText: 'Name' }).first()).toBeVisible();
+    await expect(w.locator('main strong', { hasText: 'one' }).first()).toBeVisible();
+    await expect(w.getByText('**one**')).toHaveCount(0);
     await expect(w.getByText(/This session:/)).toHaveCount(0); // no cost in sessions
     await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible(); // crisis footer
 
@@ -4322,6 +4326,11 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
     await w.getByRole('button', { name: /See my portrait/ }).click();
     await w.getByRole('button', { name: 'Generate my portrait' }).click();
     await expect(w.getByText(/come to understand about you/)).toBeVisible();
+    // The portrait renders as Markdown (34): the fake portrait's bold + list become real <strong>/<li>,
+    // not literal `**` — the structured-not-blob acceptance for the flagged onboarding surface (§3.2).
+    await expect(w.locator('main li', { hasText: 'honesty' }).first()).toBeVisible();
+    await expect(w.locator('main strong', { hasText: 'honesty' }).first()).toBeVisible();
+    await expect(w.getByText('**honesty**')).toHaveCount(0);
 
     // Decrypt the vault: the direct answer filled the owner-only profile, and the portrait + its restricted
     // fact feed the person's OWN coaching context (restricted facts are own-context-only, never redacted there).

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { BookHeart, Check, Pencil, Trash2 } from 'lucide-react';
 import type { DreamAnalysis, DreamAnalysisEdits } from '@shared/schemas';
-import { Banner, Button, Heading, Stack, Text } from '../../../design-system/components';
+import { Banner, Button, Heading, Markdown, Stack, Text } from '../../../design-system/components';
 import { DreamAnalysisEditor } from './DreamAnalysisEditor';
 import styles from './Dreams.module.css';
 
@@ -14,7 +14,7 @@ interface DreamSynthesisCardProps {
   onRemoveFromContext: () => void;
 }
 
-/** One readable section of the analysis (pre-wrapped prose). */
+/** One readable section of the analysis (Markdown prose). */
 function Section({
   title,
   note,
@@ -32,9 +32,9 @@ function Section({
           {note}
         </Text>
       ) : null}
-      <Text className={styles.sectionBody} tone="secondary">
+      <Markdown className={styles.sectionBody} tone="secondary">
         {body}
-      </Text>
+      </Markdown>
     </div>
   );
 }

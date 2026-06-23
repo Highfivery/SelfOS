@@ -21,3 +21,6 @@ export { FrequencyBars, type FrequencyItem } from './FrequencyBars';
 export { ProportionBar } from './ProportionBar';
 export { TrendLine, type TrendPoint } from './TrendLine';
 export { ConfidenceChip, type ConfidenceLevel } from './ConfidenceChip';
+// The shared rich-text renderer lives in @selfos/answering (so the relay page + iOS reuse it); re-export
+// it here so in-app callers import it like any other design-system primitive (34-rich-text-rendering §5).
+export { Markdown } from '@selfos/answering';

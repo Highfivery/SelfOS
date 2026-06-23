@@ -172,6 +172,11 @@ this is the v1 inventory:
 - **Data viz:** `LineChart` — a minimal multi-series line chart (token-driven `--color-chart-*`,
   theme-aware, `role="img"` + a labelled `<title>` + a legend); powers questionnaire trends and any small
   time-series.
+- **Rich text:** `Markdown` — the shared curated-Markdown renderer for AI prose (paragraphs, emphasis,
+  lists, blockquotes, clamped `<h3>`/`<h4>` headings, rules; links render as styled non-navigating text; an
+  `inline` mode for short facts). Hand-rolled + safe by construction (no raw HTML, no images, no live
+  links). Lives in `@selfos/answering` (so the relay page + iOS reuse it) and is re-exported from the
+  design system; see [`34-rich-text-rendering.md`](34-rich-text-rendering.md).
 - **Icons:** **`lucide-react`** — a single outline icon set (calm, consistent, tree-shakeable).
 
 ## 6. IPC / API contracts

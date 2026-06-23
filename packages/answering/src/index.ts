@@ -5,3 +5,11 @@ export { QuestionnaireForm } from './QuestionnaireForm';
 export type { LoadImage } from './QuestionnaireForm';
 export { QuestionImage } from './QuestionImage';
 export { CrisisFooter } from './CrisisFooter';
+export { Markdown } from './Markdown';
+export {
+  parseMarkdown,
+  parseInline,
+  type Block,
+  type InlineNode,
+  type ListItem,
+} from './markdownParser';

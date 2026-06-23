@@ -124,7 +124,11 @@ export function webDeviceSettings(device: string): WebDeviceSettings {
  * in iii-c; the API key still flows through the host, never the renderer state.
  */
 export function webFakeClaudeClient(): ClaudeClient {
-  const reply = 'I hear you. What feels most important about that right now?';
+  // Markdown-bearing reply (34 §10) so the preview exercises the real <Markdown> renderer.
+  const reply =
+    'I hear you. A couple of small things that might help:\n\n' +
+    '- Name **one** feeling underneath it\n' +
+    '- Notice what already helped today';
   return {
     send: () => Promise.resolve('ok'),
     stream: (options, onDelta): Promise<ClaudeStreamResult> => {
@@ -157,7 +161,8 @@ export function webFakeClaudeClient(): ClaudeClient {
       if (userText.includes('compatibility report JSON')) {
         return Promise.resolve({
           text: JSON.stringify({
-            summary: 'You two are largely aligned, with a few differences worth talking through.',
+            summary:
+              'You two are largely aligned, with **a few differences** worth talking through.',
             items: [],
             crisisFlag: false,
             facts: [{ text: 'They share core values but differ on pace.', shareable: true }],
@@ -188,7 +193,7 @@ export function webFakeClaudeClient(): ClaudeClient {
       if (options.messages.some((message) => message.content.includes('JSON object'))) {
         const draft = JSON.stringify({
           summary: 'A dream of shifting rooms and open skies.',
-          emotionalLandscape: 'A mix of unease and quiet wonder.',
+          emotionalLandscape: 'A mix of **unease** and quiet wonder.',
           wakingLifeConnections: 'Perhaps something at home feels like it is changing.',
           notableImages:
             'The rearranging house, offered as imaginative reflection rather than fact.',

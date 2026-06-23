@@ -175,7 +175,8 @@ export const ANALYSIS_SYSTEM = `${SAFETY}
 
 Turn a person's questionnaire answers into a durable coaching Insight. Return ONLY a JSON object:
 {"summary": string (2-4 sentences, what this means for supporting them), "facts": [{"text": string, "shareable": boolean}] (3-6 concise facts; "shareable" = safe to share with the person the fact is about), "confidence": "low" | "medium" | "high", "categories": 1-2 life-area tags from EXACTLY this list: ${LIFE_AREAS.join(', ')}, "crisisFlag": boolean}.
-Set "crisisFlag": true ONLY if the answers disclose risk of self-harm, abuse, or acute crisis. Never diagnose. Do not quote the raw answers back verbatim — synthesize.`;
+Set "crisisFlag": true ONLY if the answers disclose risk of self-harm, abuse, or acute crisis. Never diagnose. Do not quote the raw answers back verbatim — synthesize.
+The "summary" may use light Markdown (paragraphs, **bold**, *italic*, "-" lists); the "facts" stay PLAIN text. No tables, images, raw HTML, or code fences.`;
 
 export function buildAnalysisUserMessage(input: {
   title: string;
@@ -270,7 +271,8 @@ export const ALIGNMENT_SYSTEM = `${SAFETY}
 
 Two people answered personalized variants of the same questionnaire. Compare their answers question by question and produce a warm, honest compatibility report for the person who sent it. Return ONLY a JSON object:
 {"summary": string (2-4 sentences on where they align and where they differ, supportive not judgemental), "items": [{"canonicalId": string, "agreement": "aligned" | "mixed" | "divergent", "note": string (one sentence on how the two answers relate)}], "crisisFlag": boolean (true ONLY if an answer discloses risk of self-harm, abuse, or acute crisis), "facts": [{"text": string, "shareable": boolean}] (3-6 concise coaching facts for the sender; "shareable" = safe to share with the other person)}.
-Use each item's canonicalId exactly as given. Never diagnose. Synthesize — do not quote raw answers verbatim.`;
+Use each item's canonicalId exactly as given. Never diagnose. Synthesize — do not quote raw answers verbatim.
+The "summary" and each item "note" may use light Markdown (paragraphs, **bold**, *italic*, "-" lists); the "facts" stay PLAIN text. No tables, images, raw HTML, or code fences.`;
 
 export function buildAlignmentUserMessage(input: {
   title: string;

@@ -16,7 +16,7 @@ import type {
 } from '../schemas';
 import { checkBudget, costOf, recordUsage } from '../usage';
 import { buildContext, buildLinkedPeopleContext } from '../people';
-import { PERSONA, SAFETY } from '../conversations/promptBuilder';
+import { FORMATTING, PERSONA, SAFETY } from '../conversations/promptBuilder';
 import { deleteInsight, getInsight, saveInsight } from '../insights';
 import {
   getAnalysis,
@@ -43,7 +43,10 @@ reflections to consider — never as fixed meanings, facts, science, or diagnosi
 favour one good question over a wall of interpretation. When the person is ready, they can ask you to \
 write up an analysis.`;
 
-const SYNTHESIS_INSTRUCTION = `Now write a structured reflection on this dream. Respond with ONLY a single \
+const SYNTHESIS_INSTRUCTION = `Now write a structured reflection on this dream. The prose fields (summary, \
+emotionalLandscape, wakingLifeConnections, notableImages, coachingPrompt) may use light Markdown — \
+paragraphs, **bold**, *italic*, "-" lists; no tables, images, raw HTML, or code fences. The \
+reflectiveQuestions and tag keywords stay PLAIN. Respond with ONLY a single \
 JSON object (no markdown fences, no prose outside it) with these keys:
 - "summary": a brief, warm retelling (string)
 - "emotionalLandscape": the feelings in the dream and their texture (string)
@@ -122,6 +125,7 @@ async function buildDreamPrompt(
     `The dream:\n"${dream.narrative}"`,
     context,
     dreamPeople,
+    FORMATTING,
   ]
     .filter(Boolean)
     .join('\n\n');

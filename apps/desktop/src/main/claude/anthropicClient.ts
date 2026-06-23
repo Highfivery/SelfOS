@@ -94,7 +94,8 @@ export function fakeClaudeClient(): ClaudeClient {
       if (userText.includes('compatibility report JSON')) {
         return Promise.resolve({
           text: JSON.stringify({
-            summary: 'You two are largely aligned, with a few differences worth talking through.',
+            summary:
+              'You two are largely aligned, with **a few differences** worth talking through.',
             items: [],
             crisisFlag: false,
             facts: [{ text: 'They share core values but differ on pace.', shareable: true }],
@@ -123,7 +124,8 @@ export function fakeClaudeClient(): ClaudeClient {
       if (userText.includes('Produce the Insight JSON')) {
         return Promise.resolve({
           text: JSON.stringify({
-            summary: 'They value steady connection and want to feel more appreciated day to day.',
+            summary:
+              'They value steady connection and want to feel **more appreciated** day to day.',
             facts: [{ text: 'Feels most connected through shared time.', shareable: true }],
             confidence: 'medium',
             crisisFlag: false,
@@ -194,8 +196,14 @@ export function fakeClaudeClient(): ClaudeClient {
         if (userText.includes('closing portrait')) {
           return Promise.resolve({
             text: JSON.stringify({
+              // Markdown-bearing portrait (34 §10): the first paragraph stays plain so the
+              // /thoughtful and steady/ assertions match an uninterrupted text run; later prose adds a
+              // bold + a list to exercise the renderer.
               portrait:
-                'You come across as thoughtful and steady — someone who cares about honesty and shows up for the people you love.',
+                'You come across as thoughtful and steady — someone who cares about honesty and shows up for the people you love.\n\n' +
+                'A few things that stand out:\n\n' +
+                '- You value **honesty** in your closest relationships\n' +
+                '- You carry real responsibility at work',
               facts: [
                 { text: 'Works as a nurse', section: 'basics' },
                 { text: 'Carries grief from a recent loss', section: 'weighs' },
@@ -235,7 +243,7 @@ export function fakeClaudeClient(): ClaudeClient {
       if (options.messages.some((message) => message.content.includes('JSON object'))) {
         const draft = JSON.stringify({
           summary: 'A dream of shifting rooms and open skies.',
-          emotionalLandscape: 'A mix of unease and quiet wonder.',
+          emotionalLandscape: 'A mix of **unease** and quiet wonder.',
           wakingLifeConnections: 'Perhaps something at home feels like it is changing.',
           notableImages:
             'The rearranging house, offered as imaginative reflection rather than fact.',
@@ -257,7 +265,12 @@ export function fakeClaudeClient(): ClaudeClient {
           usage: { inputTokens: 200, outputTokens: 90, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
       }
-      const reply = 'I hear you. What feels most important about that right now?';
+      // Markdown-bearing reply (34 §10) so streaming + saved rendering exercise the real <Markdown>
+      // renderer. "hear you" stays contiguous for the existing /hear you/i assertions.
+      const reply =
+        'I hear you. A couple of small things that might help:\n\n' +
+        '- Name **one** feeling underneath it\n' +
+        '- Notice what already helped today';
       for (const word of reply.split(' ')) onDelta(`${word} `);
       return Promise.resolve({
         text: reply,

@@ -6,7 +6,7 @@ import { aiKeyResolved } from '../../aiAvailability';
 import { useDreamAnalysisStore } from '../../../stores/dreamAnalysisStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useSetting } from '../../../settings/useSetting';
-import { Banner, Button, Heading, Stack, Text } from '../../../design-system/components';
+import { Banner, Button, Heading, Markdown, Stack, Text } from '../../../design-system/components';
 import { Composer } from '../sessions/Composer';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { DreamSynthesisCard } from './DreamSynthesisCard';
@@ -87,10 +87,14 @@ export function DreamAnalysisPane({ dream, onBack }: DreamAnalysisPaneProps): JS
                 key={index}
                 className={message.role === 'user' ? styles.userMsg : styles.coachMsg}
               >
-                {message.content}
+                {message.role === 'user' ? message.content : <Markdown>{message.content}</Markdown>}
               </div>
             ))}
-            {streaming ? <div className={styles.coachMsg}>{streaming}</div> : null}
+            {streaming ? (
+              <div className={styles.coachMsg}>
+                <Markdown>{streaming}</Markdown>
+              </div>
+            ) : null}
             {sending && !streaming ? (
               <div className={`${styles.coachMsg} ${styles.thinking}`}>Coach is reflecting…</div>
             ) : null}

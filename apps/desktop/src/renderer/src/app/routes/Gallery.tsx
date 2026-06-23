@@ -20,6 +20,7 @@ import {
   Inline,
   ConfidenceChip,
   LineChart,
+  Markdown,
   ProportionBar,
   SegmentedControl,
   Select,
@@ -39,6 +40,26 @@ import { GuidedStepper } from './sessions/GuidedStepper';
 import styles from './Gallery.module.css';
 
 type Align = 'left' | 'center' | 'right';
+
+// Every supported Markdown construct (34-rich-text-rendering §3.1), for live review in the gallery.
+const MARKDOWN_SAMPLE = `### A heading in prose
+
+You come across as **steady** and *thoughtful* — someone who values \`honesty\`.
+
+A few things that stand out:
+
+- You show up for the people you love
+- You carry real responsibility at work
+  - even when it is heavy
+
+1. Name one feeling
+2. Notice what helped
+
+> A gentle reminder to be kind to yourself.
+
+---
+
+Links render as styled, non-navigating text: [findahelpline.com](https://findahelpline.com).`;
 
 const ALIGN_OPTIONS: ReadonlyArray<SegmentOption<Align>> = [
   { value: 'left', label: 'Left', icon: AlignLeft },
@@ -335,6 +356,22 @@ export function Gallery(): JSX.Element {
               ]}
               current={2}
             />
+          </Stack>
+        </Section>
+
+        <Section title="Markdown (AI prose)">
+          <Stack gap={3}>
+            <Card>
+              <Markdown>{MARKDOWN_SAMPLE}</Markdown>
+            </Card>
+            <Text size="sm" tone="secondary">
+              Inline mode (for short facts) — emphasis + code only, no block elements:
+            </Text>
+            <Card>
+              <Markdown inline>
+                {'Feels most connected through **shared time** and `rituals`.'}
+              </Markdown>
+            </Card>
           </Stack>
         </Section>
       </Stack>

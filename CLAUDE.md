@@ -416,6 +416,17 @@ A running log of durable decisions and feedback captured into the project config
   raw HTML, images, or an href (give the link AST node no URL field at all), so `javascript:`/`data:`/`<script>`
   have nowhere to live; and keep it a pure AST parser so the security + streaming invariants are unit-testable
   without a DOM.**
+- 2026-06-23 — **Fix (a stale E2E that timed out on `main` — the auto-share UI change left it behind; on
+  `fix/household-ai-key-e2e`).** The `household AI key (25): owner shares a key → a keyless device inherits it`
+  E2E timed out at 30s on clean `main`. **Diagnosed, not assumed:** the auto-share feature (spec 25 §5.6) had
+  merged, which **removed the manual "Share with the household" button** (an owner's key now auto-mirrors to
+  `config/ai-credentials.enc` in `coreBridge.secretSet`); the test still `click`ed that deleted button, so it
+  hung until the test timeout. Product behavior is correct (the coreBridge auto-share unit test passes) — only
+  the E2E was stale. Fix: drop the manual-share click; after **Save key** the test now asserts the auto-share
+  confirmation ("Shared with your household") directly. The vault-decrypt assertions, the device-key Clear →
+  `source:'shared'`, and the no-"connect Claude" check are unchanged. Gate: lint, format, **79/79 E2E** (was
+  78/79). **Lesson: when a feature removes/renames a control, grep the E2E for the old label — a `click` on a
+  vanished button doesn't fail fast, it hangs to the full test timeout, reading as a mysterious flake.**
 - 2026-06-23 — **Fix — PERMANENT (the release-please re-proposal loop is GONE; root cause was draft-release
   tag-timing, not the ancient footer; spec 19 amended, on `chore/fix-release-please-permanently`).** Every
   release for weeks needed 2 extra PRs (advance `bootstrap-sha` + close a spurious "release X.Y.(Z+1)" PR).

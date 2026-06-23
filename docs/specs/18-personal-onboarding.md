@@ -872,7 +872,8 @@ questions. Meters `intake.interview` per turn.
   `@selfos/answering` as stacked per-row cards (fields stack vertically → never overflows). Used in **Your
   life now**: a **children** roster (name / gender / **date of birth** — a DOB, not a stale age), branched on
   the Children question being have-young/grown-kids (the liveWith→Children auto-fill flows in too), and a
-  **pets** roster (name / species / gender), branched on a pet being selected in "Any pets?". Both are
+  **pets** roster (name / species / gender / **date of birth**), branched on a pet being selected in "Any
+  pets?". Both are
   **portrait/context-only** (no `Person` field) — `answerToString` formats roster rows ("Emma, Girl,
   2018-05-14; …") so they feed the synthesis, not "[object Object]". Not authorable in the questionnaire
   builder (§12).

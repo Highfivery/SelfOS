@@ -4931,12 +4931,18 @@ test('onboarding: living-with-children auto-fills Children, and a substance reve
     });
     expect(rosterOverflow).toBeLessThanOrEqual(1);
 
-    // Selecting a pet reveals the pets roster (name / species / gender).
+    // Selecting a pet reveals the pets roster (name / species / gender / date-of-birth — a DOB, not an age).
     await w
       .getByRole('group', { name: 'Any pets?' })
       .getByRole('checkbox', { name: 'Dog' })
       .click();
     await expect(w.getByText('Tell me about your pets')).toBeVisible();
+    // Pets is the last roster in the section, so its "+ Add" is the last one (children's is above it).
+    await w.getByRole('button', { name: '+ Add', exact: true }).last().click();
+    await w.getByLabel('Tell me about your pets — Name 1').fill('Rex');
+    const petDob = w.getByLabel('Tell me about your pets — Date of birth 1');
+    await expect(petDob).toHaveAttribute('type', 'date');
+    await petDob.fill('2022-03-09');
 
     // "Health & body": a per-substance frequency reveals only once that substance is selected.
     await w.getByRole('button', { name: /Health & body/ }).click();

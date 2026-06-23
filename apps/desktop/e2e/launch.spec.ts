@@ -4866,10 +4866,10 @@ test('household AI key (25): owner shares a key → a keyless device inherits it
     await w.getByRole('link', { name: 'Settings' }).click();
     await w.getByRole('button', { name: 'AI', exact: true }).click();
 
-    // Owner adds a device key and shares it with the household.
+    // Owner adds a device key — it auto-shares with the household (25 §5.6: the default; the manual
+    // "share" button was removed). Saving alone mirrors it into the vault; the UI confirms the share.
     await w.getByLabel('Claude API key').fill('sk-ant-e2e-shared-key');
     await w.getByRole('button', { name: 'Save key' }).click();
-    await w.getByRole('button', { name: /share with the household/i }).click();
     await expect(w.getByText(/shared with your household/i)).toBeVisible();
 
     // The shared key is stored ENCRYPTED in the vault (ciphertext on disk, the key inside the envelope).

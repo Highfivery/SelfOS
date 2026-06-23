@@ -42,6 +42,7 @@ function fakeClient(
     reply?: string;
     reflection?: string;
     portrait?: unknown;
+    portraitText?: string;
     capture?: (s: string) => void;
     captureMessages?: (m: { role: string; content: string }[]) => void;
     captureOptions?: (o: { maxTokens?: number; extendedThinking?: boolean }) => void;
@@ -56,7 +57,8 @@ function fakeClient(
       over.captureOptions?.(options);
       const last = options.messages.at(-1)?.content ?? '';
       let text: string;
-      if (last.includes('closing portrait')) text = JSON.stringify(over.portrait ?? PORTRAIT);
+      if (last.includes('closing portrait'))
+        text = over.portraitText ?? JSON.stringify(over.portrait ?? PORTRAIT);
       else if (last.includes('reflection'))
         text = JSON.stringify({ reflection: over.reflection ?? 'You carry a lot with grace.' });
       else text = over.reply ?? 'Thank you for sharing. What feels most important right now?';
@@ -335,6 +337,38 @@ describe('intakeService', () => {
     // Inferred fields fill the (empty) Person profile.
     const p = await getPerson(fs, key, 'p1');
     expect(p?.communicationStyle).toBe('direct and warm');
+  });
+
+  it('salvages a portrait when the model reply has off-spec fields (non-numeric metric, malformed fact)', async () => {
+    const fs = await setup();
+    await runIntakeTurn(turn(fs, fakeClient(), 'basics', 'I am a nurse.'));
+    // A single off-spec field must NOT discard the whole portrait (the reported 2026-06-22 failure).
+    const offSpec = {
+      portrait: 'A warm, resilient person who works in care.',
+      facts: [
+        { text: 'Works as a nurse', section: 'basics' },
+        { notText: 'malformed — no text field' }, // dropped, not fatal
+      ],
+      metrics: { valence: 0.4, mood: 'calm' }, // 'calm' is non-numeric → metrics salvaged away
+      crisisFlag: 'no', // non-boolean → ignored
+    };
+    const res = await synthesizeIntake(synth(fs, fakeClient({ portrait: offSpec })));
+    expect(res.ok).toBe(true); // salvaged, not rejected
+    const session = await getIntakeSession(fs, key, 'p1');
+    const insight = (await getInsight(fs, key, 'p1', session!.insightId!)) as Insight;
+    expect(insight.summary).toContain('resilient');
+    expect(insight.facts.map((f) => f.text)).toContain('Works as a nurse');
+    expect(insight.facts.every((f) => f.text.length > 0)).toBe(true); // the malformed fact was dropped
+  });
+
+  it('reports a truncated portrait distinctly as "cut off" (not a generic shape error)', async () => {
+    const fs = await setup();
+    await runIntakeTurn(turn(fs, fakeClient(), 'basics', 'I am a nurse.'));
+    // A draft cut off mid-stream — incomplete, unparseable JSON.
+    const truncated = '{"portrait":"A warm person who","facts":[{"text":"Works as a nu';
+    const res = await synthesizeIntake(synth(fs, fakeClient({ portraitText: truncated })));
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.message).toMatch(/cut off/i);
   });
 
   it('hard-caps the stored portrait facts at the synthesis budget, keeping model order (28)', async () => {

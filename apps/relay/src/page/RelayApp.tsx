@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CrisisFooter, QuestionnaireForm } from '@selfos/answering';
+import { CrisisFooter, Markdown, QuestionnaireForm } from '@selfos/answering';
 import {
   contentKeyFromFragment,
   openContent,
@@ -86,7 +86,7 @@ function ResultView({ result }: { result: RelayResult }): JSX.Element {
   return (
     <div className="card">
       <h1 className="title">{result.headline}</h1>
-      {result.summary ? <p className="subtitle">{result.summary}</p> : null}
+      {result.summary ? <Markdown className="subtitle">{result.summary}</Markdown> : null}
       {result.kind === 'report' && result.items && result.items.length > 0 ? (
         <ul className="resultList">
           {result.items.map((item) => (
@@ -95,7 +95,7 @@ function ResultView({ result }: { result: RelayResult }): JSX.Element {
               <span className={`resultBadge resultBadge--${item.agreement}`}>
                 {AGREEMENT_LABEL[item.agreement] ?? item.agreement}
               </span>
-              {item.note ? <p className="muted">{item.note}</p> : null}
+              {item.note ? <Markdown className="muted">{item.note}</Markdown> : null}
             </li>
           ))}
         </ul>

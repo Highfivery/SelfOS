@@ -8,7 +8,15 @@ import { aiKeyResolved } from '../../aiAvailability';
 import type { SessionStatus } from '@shared/schemas';
 import { getExercise, stripCoachMarkers } from '@selfos/core/conversations';
 import { useGuidanceStore } from '../../../stores/guidanceStore';
-import { Banner, Button, Select, Stack, Text, TextInput } from '../../../design-system/components';
+import {
+  Banner,
+  Button,
+  Markdown,
+  Select,
+  Stack,
+  Text,
+  TextInput,
+} from '../../../design-system/components';
 import { Composer } from './Composer';
 import { CrisisFooter } from './CrisisFooter';
 import { SessionLauncher } from './SessionLauncher';
@@ -301,11 +309,18 @@ export function Sessions(): JSX.Element {
                       key={index}
                       className={message.role === 'user' ? styles.userMsg : styles.coachMsg}
                     >
-                      {message.content}
+                      {message.role === 'user' ? (
+                        message.content
+                      ) : (
+                        // Coach prose renders Markdown; strip any coach markers first (order matters, §7).
+                        <Markdown>{stripCoachMarkers(message.content)}</Markdown>
+                      )}
                     </div>
                   ))}
                   {streaming ? (
-                    <div className={styles.coachMsg}>{stripCoachMarkers(streaming)}</div>
+                    <div className={styles.coachMsg}>
+                      <Markdown>{stripCoachMarkers(streaming)}</Markdown>
+                    </div>
                   ) : null}
                   {sending && !streaming ? (
                     <div className={`${styles.coachMsg} ${styles.thinking}`}>

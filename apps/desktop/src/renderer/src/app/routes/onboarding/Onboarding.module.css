@@ -157,11 +157,13 @@
   align-items: flex-start;
 }
 
-/* Closing portrait */
+/* Closing portrait — <Markdown> owns layout now (34 §3.5 readability pass): generous paragraph rhythm so
+ * the portrait reads as structured prose, not one dense block. */
 .portraitBody {
-  white-space: pre-wrap;
-  line-height: 1.6;
-  overflow-wrap: anywhere;
+  font-size: var(--text-md);
+}
+.portraitBody > * + * {
+  margin-top: var(--space-4);
 }
 
 .reflections {

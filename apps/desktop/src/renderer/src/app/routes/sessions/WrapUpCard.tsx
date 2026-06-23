@@ -6,6 +6,7 @@ import {
   Button,
   Heading,
   IconButton,
+  Markdown,
   Stack,
   Text,
 } from '../../../design-system/components';
@@ -51,7 +52,7 @@ export function WrapUpCard({
       ) : null}
 
       <Stack gap={3}>
-        <Text>{insight.summary}</Text>
+        <Markdown>{insight.summary}</Markdown>
 
         {valence !== undefined || energy !== undefined ? (
           <div className={styles.moodRow}>
@@ -75,7 +76,9 @@ export function WrapUpCard({
             </Text>
             <ul className={styles.factList}>
               {insight.facts.map((fact) => (
-                <li key={fact.id}>{fact.text}</li>
+                <li key={fact.id}>
+                  <Markdown inline>{fact.text}</Markdown>
+                </li>
               ))}
             </ul>
           </Stack>

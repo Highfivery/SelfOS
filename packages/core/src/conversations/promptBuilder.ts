@@ -20,6 +20,18 @@ professional help right now — local emergency services or a crisis line — ra
 alone. Do not attempt to manage a crisis by yourself.`;
 
 /**
+ * The formatting contract (34-rich-text-rendering §5). SelfOS renders replies with a curated Markdown
+ * renderer, so the model is told to stay within the supported subset and avoid anything the renderer
+ * drops (tables, images, raw HTML, code fences). Appended AFTER persona + safety + context + any addenda
+ * so the boundary always leads. Mirrored as a per-call note in the JSON-producing prompts (portrait,
+ * dream synthesis, insight analysis, alignment).
+ */
+export const FORMATTING = `Formatting: you may use light Markdown to make replies readable — short \
+paragraphs (blank line between them), **bold**, *italic*, \`inline code\`, "-" or "1." lists, "> " \
+blockquotes, "###" headings, and "---" rules. Do NOT use tables, images, raw HTML, or fenced code \
+blocks; keep formatting light and in service of clarity, not decoration.`;
+
+/**
  * Assemble the system prompt: persona + safety + the person's consented context. When the session is a
  * guided exercise (16-guided-sessions §5), the exercise's steering addendum is appended **after** persona,
  * safety, and context — it steers, it never replaces them (the boundary always leads). For a structured
@@ -51,5 +63,6 @@ export async function buildSystemPrompt(
     const ask = depthAskInstruction(depthAsk);
     if (ask) parts.push(ask);
   }
+  parts.push(FORMATTING);
   return parts.filter(Boolean).join('\n\n');
 }

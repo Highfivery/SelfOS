@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import type { Insight } from '@shared/schemas';
-import { Card, Heading, Stack, Text } from '../../../design-system/components';
+import { Card, Heading, Markdown, Stack, Text } from '../../../design-system/components';
 import styles from './Home.module.css';
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -45,7 +45,9 @@ export function MemoryCard({
               <Text size="xs" tone="tertiary">
                 {SOURCE_LABEL[insight.source] ?? 'Insight'}
               </Text>
-              <span className={styles.factText}>{insight.summary}</span>
+              <Markdown inline className={styles.factText}>
+                {insight.summary}
+              </Markdown>
             </div>
           ))}
         </Stack>

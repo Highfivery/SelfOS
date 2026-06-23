@@ -69,6 +69,66 @@ describe('Sessions', () => {
     expect(screen.getByText('I had a hard day')).toBeInTheDocument();
   });
 
+  it('renders a coach reply as Markdown (bold + a list), not literal markdown (34)', async () => {
+    installMockBridge({
+      secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
+      chatStream: (input) =>
+        Promise.resolve({
+          ok: true,
+          conversation: {
+            id: input.conversationId,
+            schemaVersion: 1,
+            personId: 'owner-1',
+            title: input.userText,
+            createdAt: 'now',
+            updatedAt: 'now',
+            messages: [
+              { role: 'user', content: input.userText, ts: 'now' },
+              {
+                role: 'assistant',
+                content: 'Try this:\n\n- Name **one** feeling\n- Breathe',
+                ts: 'now',
+              },
+            ],
+          },
+          usage: {
+            id: 'u',
+            schemaVersion: 1,
+            type: 'chat',
+            personId: 'owner-1',
+            model: 'claude-sonnet-4-6',
+            at: 'now',
+            inputTokens: 100,
+            outputTokens: 10,
+            cacheWriteTokens: 0,
+            cacheReadTokens: 0,
+            costUsd: 0.001,
+          },
+        }),
+    });
+    setAiEnabled(true);
+    const { container } = render(
+      <MemoryRouter>
+        <Sessions />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(screen.getByLabelText('Message')).toBeInTheDocument());
+    await userEvent.type(screen.getByLabelText('Message'), 'help');
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(container.querySelector('strong')?.textContent).toBe('one'));
+    expect(container.querySelectorAll('li').length).toBeGreaterThanOrEqual(2);
+    expect(container.textContent).not.toContain('**');
+    // The user message stays plain (not Markdown-parsed).
+    expect(screen.getByText('help')).toBeInTheDocument();
+  });
+
   it('renames a conversation', async () => {
     const conversationsRename = vi.fn(() => Promise.resolve());
     installMockBridge({

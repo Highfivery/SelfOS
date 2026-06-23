@@ -385,6 +385,37 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-23 — **Build (AI rich-text rendering — SPEC 34 BUILT; on `feat/rich-text-rendering`, PR opened).** Every
+  AI-generated string was rendered as a plain text node, so the Markdown the model naturally writes (`**bold**`,
+  `-`/`1.` lists, `###`, `>` quotes, `` `code` ``) showed as literal characters on the onboarding **portrait**,
+  **coaching sessions**, and a dozen more surfaces. Built ONE shared **`<Markdown>`** primitive — a hand-rolled,
+  dependency-free parser (`markdownParser.ts`, an AST → semantic elements) + the component — in **`@selfos/answering`**
+  (so the relay Worker page + iOS reuse it), re-exported from the Electron design-system. **Safe by construction
+  (the whole point):** the parser NEVER emits raw HTML (`<script>`/`<img onerror>` → literal text), DROPS image
+  syntax, and the `link` AST node carries **no URL field** so a neutered link renders as a styled non-navigating
+  `<span>` with no `href`/scheme ever — protecting the renderer-is-offline guarantee; it's **total** (never throws)
+  and **streaming-safe** (incomplete markdown degrades to literal text, resolves on completion). A `FORMATTING`
+  contract is appended **AFTER** persona+safety in `buildSystemPrompt` (chat/guided/depth-ask), the intake
+  interviewer, and the dream-analysis chat (boundary still leads), with light-Markdown notes added to the
+  JSON-prose calls (portrait/reflection, dream synthesis, questionnaire analysis + alignment) — prose may use it,
+  **facts stay plain**. Switched all ~16 §3.4 render sites to `<Markdown>` (block) / `<Markdown inline>` (facts) —
+  onboarding portrait + reflections + go-deeper chat, session messages (saved + streaming), wrap-up, dream
+  synthesis + dream chat, memory insight (+ Home card), the alignment report (incl. the **relay page**) — with
+  **markers stripped BEFORE rendering** (order matters) and **user input left plain**; removed redundant
+  `white-space: pre-wrap` where `<Markdown>` owns layout, plus the §3.5 portrait/insight readability pass + a
+  `/gallery` showcase. The offline fake Claude (both Electron + web hosts) now returns markdown so tests exercise
+  real rendering (asserted substrings kept in uninterrupted text runs). Tests: parser units + DOM **security**
+  units (no live `<script>`/`<img>`/`<a>`/`href`, no network) + streaming-degradation; per-surface RTL (portrait,
+  session, wrap-up, insight, alignment render real `<strong>`/`<li>`, not literal `**`); E2E (session reply +
+  portrait render structured). Code-reviewer **ship** (security boundary verified airtight). **Live-preview
+  verified** the Sessions reply renders as a real bulleted list with bold. Gate green: typecheck, lint, format,
+  **501 core + 11 relay + 598 desktop** unit; **78/79 E2E** (the 1 failure — household-AI-key sharing — is
+  **pre-existing**, fails identically on clean `main`, unrelated to this change). Synced spec 34 + spec 01 §5.6
+  (the `Markdown` primitive added to the catalog). **Lesson: a curated-Markdown renderer for untrusted model
+  output should be safe by CONSTRUCTION, not sanitization — make the parser structurally incapable of emitting
+  raw HTML, images, or an href (give the link AST node no URL field at all), so `javascript:`/`data:`/`<script>`
+  have nowhere to live; and keep it a pure AST parser so the security + streaming invariants are unit-testable
+  without a DOM.**
 - 2026-06-23 — **Fix — PERMANENT (the release-please re-proposal loop is GONE; root cause was draft-release
   tag-timing, not the ancient footer; spec 19 amended, on `chore/fix-release-please-permanently`).** Every
   release for weeks needed 2 extra PRs (advance `bootstrap-sha` + close a spurious "release X.Y.(Z+1)" PR).

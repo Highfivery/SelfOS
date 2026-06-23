@@ -4,7 +4,7 @@ import { stripIntakeFieldMarkers } from '@selfos/core/intake';
 import type { AnswerMap, AnswerValue } from '@selfos/core/questionnaires';
 import type { IntakeAnswerValue, IntakeSection, IntakeSectionMeta } from '@shared/channels';
 import { ArrowRight, MessageCircle, ShieldCheck } from 'lucide-react';
-import { Banner, Button, Card, Heading, Text } from '../../../design-system/components';
+import { Banner, Button, Card, Heading, Markdown, Text } from '../../../design-system/components';
 import { Composer } from '../sessions/Composer';
 import { useIntakeStore } from '../../../stores/intakeStore';
 import styles from './Onboarding.module.css';
@@ -132,13 +132,18 @@ export function IntakeFormPanel({
                     key={i}
                     className={`${styles.turn} ${m.role === 'user' ? styles.userMsg : styles.coachMsg}`}
                   >
-                    {m.content}
+                    {m.role === 'user' ? (
+                      m.content
+                    ) : (
+                      // Assistant prose renders Markdown; strip any field markers first (order matters, §7).
+                      <Markdown>{stripIntakeFieldMarkers(m.content)}</Markdown>
+                    )}
                   </div>
                 ))}
                 {running ? (
                   streaming ? (
                     <div className={`${styles.turn} ${styles.coachMsg}`}>
-                      {stripIntakeFieldMarkers(streaming)}
+                      <Markdown>{stripIntakeFieldMarkers(streaming)}</Markdown>
                     </div>
                   ) : (
                     <div className={styles.thinking}>Listening…</div>

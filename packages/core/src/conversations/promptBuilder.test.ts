@@ -3,7 +3,7 @@ import { generateMasterKey } from '../crypto';
 import { memFileSystem } from '../host/memFileSystem';
 import { savePerson } from '../people';
 import type { Person } from '../schemas';
-import { buildSystemPrompt, PERSONA, SAFETY } from './promptBuilder';
+import { buildSystemPrompt, FORMATTING, PERSONA, SAFETY } from './promptBuilder';
 import { getExercise } from './guidedCatalog';
 
 const key = generateMasterKey();
@@ -34,6 +34,16 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('crisis'); // crisis routing
     expect(prompt).toContain('Alex'); // context
     expect(prompt).toContain('enjoys hiking'); // shareable context
+  });
+
+  it('appends the formatting contract LAST, after persona + safety (34 §5)', async () => {
+    await savePerson(fs, key, person('p1', 'Alex'));
+    const prompt = await buildSystemPrompt(fs, key, 'p1');
+    expect(prompt).toContain(FORMATTING);
+    expect(prompt.indexOf(PERSONA)).toBeLessThan(prompt.indexOf(FORMATTING));
+    expect(prompt.indexOf(SAFETY)).toBeLessThan(prompt.indexOf(FORMATTING));
+    // It tells the model to avoid what the renderer drops.
+    expect(prompt.toLowerCase()).toContain('do not use tables, images, raw html');
   });
 
   it('does not append a guided addendum for a free session', async () => {

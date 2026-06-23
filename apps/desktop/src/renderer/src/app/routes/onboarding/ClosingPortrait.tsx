@@ -1,6 +1,6 @@
 import type { IntakeSectionMeta, IntakeSession } from '@shared/channels';
 import { RefreshCw, Sparkles } from 'lucide-react';
-import { Button, Card, Heading, Stack, Text } from '../../../design-system/components';
+import { Button, Card, Heading, Markdown, Stack, Text } from '../../../design-system/components';
 import { useIntakeStore } from '../../../stores/intakeStore';
 import styles from './Onboarding.module.css';
 
@@ -31,7 +31,7 @@ export function ClosingPortrait({
             <Sparkles size={18} aria-hidden="true" /> What I’ve come to understand about you
           </Heading>
           {session.portrait ? (
-            <Text className={styles.portraitBody}>{session.portrait}</Text>
+            <Markdown className={styles.portraitBody}>{session.portrait}</Markdown>
           ) : (
             <Text tone="secondary">Your portrait will appear here once it’s written.</Text>
           )}
@@ -47,7 +47,7 @@ export function ClosingPortrait({
                 <Text size="sm" weight={600}>
                   {titleOf(s.id)}
                 </Text>
-                <Text tone="secondary">{s.reflection}</Text>
+                <Markdown tone="secondary">{s.reflection ?? ''}</Markdown>
               </div>
             ))}
           </div>

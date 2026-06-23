@@ -9,6 +9,7 @@ import {
   Card,
   ConfidenceChip,
   IconButton,
+  Markdown,
   ShareToggle,
   Stack,
   Switch,
@@ -131,7 +132,9 @@ export function InsightCard({
             <Text size="xs" tone="tertiary" className={styles.eyebrow}>
               {`${SOURCE_EYEBROW[insight.source]} · ${isOwn ? 'About you' : `About ${subjectName}`}`}
             </Text>
-            {insight.summary && !editing ? <Text weight={600}>{insight.summary}</Text> : null}
+            {insight.summary && !editing ? (
+              <Markdown className={styles.insightSummary}>{insight.summary}</Markdown>
+            ) : null}
           </div>
           {isOwn && insight.approved && !editing ? (
             <IconButton
@@ -215,13 +218,14 @@ export function InsightCard({
                       />
                     </IconButton>
                   ) : null}
-                  <Text
+                  <Markdown
+                    inline
                     size="sm"
                     tone="secondary"
                     className={fact.flaggedInaccurate ? styles.flaggedText : undefined}
                   >
                     {fact.text}
-                  </Text>
+                  </Markdown>
                   {fact.flaggedInaccurate ? (
                     <span className={styles.flaggedTag}>flagged</span>
                   ) : null}

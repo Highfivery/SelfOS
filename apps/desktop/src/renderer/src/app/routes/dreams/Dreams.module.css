@@ -319,7 +319,7 @@
 }
 
 .sectionBody {
-  white-space: pre-wrap;
+  /* <Markdown> owns block layout now (34); keep long-word wrapping. */
   overflow-wrap: anywhere;
 }
 

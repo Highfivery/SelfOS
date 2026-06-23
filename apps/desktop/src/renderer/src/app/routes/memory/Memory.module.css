@@ -119,6 +119,12 @@
   letter-spacing: 0.04em;
 }
 
+/* The insight summary reads as prose; the facts below are the labeled list (34 §3.5 hierarchy). */
+.insightSummary {
+  font-weight: 600;
+  margin-top: 2px;
+}
+
 /* --- Fact rows --- */
 .factRow {
   display: flex;

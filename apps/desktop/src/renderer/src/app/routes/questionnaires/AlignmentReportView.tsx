@@ -1,5 +1,5 @@
 import type { AlignmentReport, SendAnswer } from '@shared/schemas';
-import { Banner, Stack, Text } from '../../../design-system/components';
+import { Banner, Markdown, Stack, Text } from '../../../design-system/components';
 import styles from './Questionnaires.module.css';
 
 const AGREEMENT_LABEL = { aligned: 'Aligned', mixed: 'Mixed', divergent: 'Different' } as const;
@@ -37,7 +37,7 @@ export function AlignmentReportView({ report }: { report: AlignmentReport }): JS
           services or a crisis line (in the US, call or text 988).
         </Banner>
       ) : null}
-      <Text>{report.summary}</Text>
+      <Markdown>{report.summary}</Markdown>
       <Stack gap={2}>
         {report.items.map((item) => (
           <div key={item.canonicalId} className={styles.alignItem}>
@@ -50,9 +50,9 @@ export function AlignmentReportView({ report }: { report: AlignmentReport }): JS
               </span>
             </div>
             {item.note ? (
-              <Text size="sm" tone="secondary">
+              <Markdown size="sm" tone="secondary">
                 {item.note}
-              </Text>
+              </Markdown>
             ) : null}
           </div>
         ))}

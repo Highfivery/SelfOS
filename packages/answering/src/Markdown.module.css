@@ -1,0 +1,117 @@
+/*
+ * Styling for the shared <Markdown> renderer (34-rich-text-rendering). Design-token only — and only
+ * tokens defined in BOTH the Electron design-system AND the relay page's tokens.css, so the one component
+ * renders identically in-app and on the relay Worker page. Headings clamp so prose never out-titles its
+ * card (§3.1/§9); long words/URLs wrap (§3.7).
+ */
+
+.markdown {
+  font-family: var(--font-sans);
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Vertical rhythm: paragraphs/blocks share a consistent gap; first/last trim card padding. */
+.markdown > * {
+  margin: 0;
+}
+.markdown > * + * {
+  margin-top: var(--space-3);
+}
+
+.paragraph {
+  line-height: 1.6;
+}
+
+/* Headings inside prose clamp to never exceed a card title (§3.1). h3 sits at body+ weight, h4 below it. */
+.h3 {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--color-text-primary);
+}
+.h4 {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+  color: var(--color-text-secondary);
+}
+.markdown > * + .h3,
+.markdown > * + .h4 {
+  margin-top: var(--space-4);
+}
+
+.ul,
+.ol {
+  padding-left: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.ul {
+  list-style: disc;
+}
+.ol {
+  list-style: decimal;
+}
+.li {
+  line-height: 1.5;
+}
+/* Nested sublist: a touch tighter, with its own top gap from the parent item text. */
+.li > .ul,
+.li > .ol {
+  margin-top: var(--space-1);
+}
+
+.blockquote {
+  padding: var(--space-1) var(--space-3);
+  border-left: 3px solid var(--color-border-strong);
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+.code {
+  font-family:
+    ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  font-size: 0.9em;
+  padding: 0.1em 0.35em;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  overflow-wrap: anywhere;
+}
+
+.hr {
+  border: 0;
+  border-top: 1px solid var(--color-border);
+  margin: var(--space-3) 0;
+}
+
+/* Neutered link (§11): visually a link, but non-interactive and not in the tab order. */
+.link {
+  color: var(--color-accent-text);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+/* Inline mode: no block elements, sits on the surrounding text line. */
+.inline {
+  overflow-wrap: anywhere;
+}
+
+/* Optional tone/size pass-through to match the surrounding Text. */
+.tone-primary {
+  color: var(--color-text-primary);
+}
+.tone-secondary {
+  color: var(--color-text-secondary);
+}
+.size-sm {
+  font-size: var(--text-sm);
+}
+.size-base {
+  font-size: var(--text-base);
+}

@@ -32,12 +32,44 @@ import {
   Textarea,
   TextInput,
   TitlebarControl,
+  Toast,
   TrendLine,
   type SegmentOption,
 } from '../../design-system/components';
+import type { Notification } from '@shared/channels';
 import { GuidedExerciseCard } from './sessions/GuidedExerciseCard';
 import { GuidedStepper } from './sessions/GuidedStepper';
+import { NotificationCenter } from '../notifications/NotificationCenter';
 import styles from './Gallery.module.css';
+
+const SAMPLE_NOTIFICATIONS: Notification[] = [
+  {
+    id: 'sync-conflict#2',
+    kind: 'sync-conflict',
+    severity: 'warning',
+    title: 'Sync conflicts found',
+    body: '2 sync conflict copies were found in your vault.',
+    action: { type: 'reveal-vault' },
+    createdAt: new Date(Date.now() - 3 * 60_000).toISOString(),
+    coalesceKey: 'sync-conflict',
+    signature: '2',
+    read: false,
+    dismissed: false,
+  },
+  {
+    id: 'responses-arrived:q1#1',
+    kind: 'responses-arrived',
+    severity: 'info',
+    title: 'New questionnaire responses',
+    body: '“Weekly check-in” has a new response.',
+    action: { type: 'navigate', to: '/questionnaires' },
+    createdAt: new Date(Date.now() - 90 * 60_000).toISOString(),
+    coalesceKey: 'responses-arrived:q1',
+    signature: '1',
+    read: true,
+    dismissed: false,
+  },
+];
 
 type Align = 'left' | 'center' | 'right';
 
@@ -372,6 +404,49 @@ export function Gallery(): JSX.Element {
                 {'Feels most connected through **shared time** and `rituals`.'}
               </Markdown>
             </Card>
+          </Stack>
+        </Section>
+
+        <Section title="Notifications (35)">
+          <Stack gap={5}>
+            <Text tone="secondary" size="sm">
+              Toasts — top-right pop-ups; info/success auto-dismiss, warning is sticky:
+            </Text>
+            <Stack gap={2}>
+              <Toast
+                severity="info"
+                title="Heads up"
+                body="An informational toast."
+                onClose={() => {}}
+              />
+              <Toast
+                severity="success"
+                title="All set"
+                body="Something finished successfully."
+                onClose={() => {}}
+              />
+              <Toast
+                severity="warning"
+                title="Sync conflicts found"
+                body="2 sync conflict copies were found in your vault."
+                actionLabel="Resolve"
+                onAction={() => {}}
+                onClose={() => {}}
+              />
+            </Stack>
+            <Text tone="secondary" size="sm">
+              The notification center — opened from the titlebar bell (unread row first, with a
+              dot):
+            </Text>
+            <div style={{ position: 'relative', minHeight: 220 }}>
+              <NotificationCenter
+                notifications={SAMPLE_NOTIFICATIONS}
+                onAction={() => {}}
+                onDismiss={() => {}}
+                onDismissAll={() => {}}
+                onMarkAllRead={() => {}}
+              />
+            </div>
           </Stack>
         </Section>
       </Stack>

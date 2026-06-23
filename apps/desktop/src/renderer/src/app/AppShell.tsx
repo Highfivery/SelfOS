@@ -31,6 +31,9 @@ import { useDreamPatternStore } from '../stores/dreamPatternStore';
 import { useResultsStore } from '../stores/resultsStore';
 import { useGuidanceStore } from '../stores/guidanceStore';
 import { useIntakeStore } from '../stores/intakeStore';
+import { useNotificationStore } from '../stores/notificationStore';
+import { useNotificationSources } from './notifications/useNotificationSources';
+import { ToastViewport } from './notifications/ToastViewport';
 import { Onboarding } from './routes/onboarding/Onboarding';
 import { AppHeader } from './AppHeader';
 import { Switcher } from './Switcher';
@@ -78,6 +81,10 @@ export function AppShell(): JSX.Element {
 
   const closeDrawer = (): void => setDrawerOpen(false);
 
+  // Feed the notification center from live state (conflicts + suggestions + responses); update-available is
+  // stubbed (spec 36). Called unconditionally so it runs through the onboarding gate too (35 §3.6).
+  useNotificationSources(conflicts);
+
   // When the signed-in person changes, drop the previous account's per-person data and load this
   // person's — sessions/usage/budget are per-user, so nothing from the prior login may linger
   // (the usage ring + Sessions list update immediately; the Usage screen reloads on next view).
@@ -93,6 +100,8 @@ export function AppShell(): JSX.Element {
     useGuidanceStore.getState().reset(); // guided suggestions + 18+ ack are per-person (16 §4.3/§8.3)
     useIntakeStore.getState().reset(); // the intake is per-person (18-personal-onboarding §7)
     useInsightStore.getState().reset(); // Memory is per-person — own + relationships only (20 §5.1)
+    useNotificationStore.getState().reset(); // notifications are per-person, device-local (35 §4)
+    void useNotificationStore.getState().load();
     void useConversationStore.getState().load();
     void useBudgetStore.getState().refresh();
     void useInboxStore.getState().load();
@@ -382,6 +391,7 @@ export function AppShell(): JSX.Element {
       </div>
 
       {switching ? <Switcher onClose={() => setSwitching(false)} /> : null}
+      <ToastViewport />
     </div>
   );
 }

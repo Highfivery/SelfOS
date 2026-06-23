@@ -1,0 +1,135 @@
+import type { LucideIcon } from 'lucide-react';
+import { ClipboardCheck, Download, RefreshCw, Sparkles } from 'lucide-react';
+import type {
+  Notification,
+  NotificationAction,
+  NotificationKind,
+  NotificationSeverity,
+  PersonNotificationState,
+} from '@shared/channels';
+
+/**
+ * The extensible notification registry (35-notification-system §3.3/§5). Each kind declares its icon,
+ * default severity (→ a design-system Banner tone, no new colors), and how a re-raise re-surfaces a
+ * dismissed/read item. A new kind = a literal in `NOTIFICATION_KINDS` (core) + an entry here.
+ */
+interface KindDef {
+  icon: LucideIcon;
+  severity: NotificationSeverity;
+  /**
+   * Whether an item dismissed/read at `prevSig` should re-surface now its signature is `curSig`.
+   * Default (`onChange`): any change re-surfaces. `sync-conflict`/`responses-arrived` use `onIncrease` so
+   * resolving some (fewer conflicts) never re-pops a notification — only MORE does (35 §11).
+   */
+  resurfaces: (prevSig: string, curSig: string) => boolean;
+}
+
+const onChange = (prev: string, cur: string): boolean => prev !== cur;
+const onIncrease = (prev: string, cur: string): boolean => {
+  const p = Number(prev);
+  const c = Number(cur);
+  return Number.isFinite(p) && Number.isFinite(c) ? c > p : prev !== cur;
+};
+// For comma-joined id sets (profile-freshness): re-surface only when a BRAND-NEW id appears (§11) — a
+// shrinking set (the user acted on a suggestion elsewhere) must NOT re-pop a dismissed notification.
+const onNewMember = (prev: string, cur: string): boolean => {
+  const prevSet = new Set(prev.split(',').filter(Boolean));
+  return cur
+    .split(',')
+    .filter(Boolean)
+    .some((id) => !prevSet.has(id));
+};
+
+export const NOTIFICATION_KIND_DEFS: Record<NotificationKind, KindDef> = {
+  'update-available': { icon: Download, severity: 'warning', resurfaces: onChange },
+  'profile-freshness': { icon: Sparkles, severity: 'info', resurfaces: onNewMember },
+  'responses-arrived': { icon: ClipboardCheck, severity: 'info', resurfaces: onIncrease },
+  'sync-conflict': { icon: RefreshCw, severity: 'warning', resurfaces: onIncrease },
+};
+
+/** The icon for a kind (used by the bell rows + toasts). */
+export function notificationIcon(kind: NotificationKind): LucideIcon {
+  return NOTIFICATION_KIND_DEFS[kind].icon;
+}
+
+/** A notification before read/dismissed resolution — what a source contributes for one slot. */
+export interface NotificationCandidate {
+  kind: NotificationKind;
+  /** Stable per-slot key (one notification per key); re-raising the same key updates in place. */
+  coalesceKey: string;
+  /** The current condition value (count/version/id). Re-surfacing compares this to the persisted one. */
+  signature: string;
+  title: string;
+  body?: string;
+  /** Defaults to the kind's severity when omitted. */
+  severity?: NotificationSeverity;
+  action?: NotificationAction;
+  /** ISO timestamp for newest-first ordering. Defaults to the resolve time when omitted. */
+  createdAt?: string;
+}
+
+/** Whether a flag set at `prevSig` STILL covers `curSig` (i.e. the item should remain read/dismissed). */
+function stillCovers(kind: NotificationKind, prevSig: string | undefined, curSig: string): boolean {
+  if (prevSig === undefined) return false;
+  return !NOTIFICATION_KIND_DEFS[kind].resurfaces(prevSig, curSig);
+}
+
+/**
+ * Resolve raw candidates against the persisted read/dismissed signatures into the list the center renders.
+ * A dismissed item whose condition hasn't changed (per its kind) is dropped entirely; a read item stays
+ * but doesn't count toward the unread badge. Coalesces to one item per key, newest first. Pure — so the
+ * coalescing + re-surfacing rules are unit-tested without a DOM (35 §10).
+ */
+export function resolveNotifications(
+  candidates: NotificationCandidate[],
+  persisted: PersonNotificationState,
+  now: string,
+): Notification[] {
+  // Coalesce: one candidate per key (a source contributes a single slot per key; last wins defensively).
+  const byKey = new Map<string, NotificationCandidate>();
+  for (const candidate of candidates) byKey.set(candidate.coalesceKey, candidate);
+
+  const out: Notification[] = [];
+  for (const candidate of byKey.values()) {
+    const dismissed = stillCovers(
+      candidate.kind,
+      persisted.dismissed[candidate.coalesceKey],
+      candidate.signature,
+    );
+    if (dismissed) continue; // dismissed + condition unchanged → not shown at all
+    const read = stillCovers(
+      candidate.kind,
+      persisted.read[candidate.coalesceKey],
+      candidate.signature,
+    );
+    out.push({
+      id: `${candidate.coalesceKey}#${candidate.signature}`,
+      kind: candidate.kind,
+      severity: candidate.severity ?? NOTIFICATION_KIND_DEFS[candidate.kind].severity,
+      title: candidate.title,
+      ...(candidate.body !== undefined ? { body: candidate.body } : {}),
+      ...(candidate.action !== undefined ? { action: candidate.action } : {}),
+      createdAt: candidate.createdAt ?? now,
+      coalesceKey: candidate.coalesceKey,
+      signature: candidate.signature,
+      read,
+      dismissed: false,
+    });
+  }
+  // Newest first; stable tiebreak on key so the order never churns between equal-time items.
+  out.sort((a, b) =>
+    a.createdAt < b.createdAt
+      ? 1
+      : a.createdAt > b.createdAt
+        ? -1
+        : a.coalesceKey < b.coalesceKey
+          ? -1
+          : 1,
+  );
+  return out;
+}
+
+/** The unread count for the bell badge. */
+export function unreadCount(notifications: Notification[]): number {
+  return notifications.filter((n) => !n.read).length;
+}

@@ -6,6 +6,7 @@ import { AppearanceMenu } from './AppearanceMenu';
 import { AccountMenu } from './AccountMenu';
 import { Brand } from './Brand';
 import { UsageRing } from './UsageRing';
+import { NotificationBell } from './notifications/NotificationBell';
 import styles from './AppHeader.module.css';
 
 interface AppHeaderProps {
@@ -68,6 +69,7 @@ export function AppHeader({
       <div className={styles.items}>
         {/* The vault/sync affordance moved into the account menu (it read as an unclear "checkbox" in the
             bar); the in-content Banner still surfaces conflicts prominently. */}
+        <NotificationBell />
         <UsageRing />
         <AppearanceMenu />
         <AccountMenu onSwitch={onSwitchPerson} conflicts={conflicts} />

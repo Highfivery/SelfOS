@@ -41,6 +41,70 @@ export const SettingsFileSchema = z.object({
 });
 export type SettingsFile = z.infer<typeof SettingsFileSchema>;
 
+// ---------------------------------------------------------------------------
+// Notifications (35-notification-system) — view types + the device-local
+// per-person read/dismissed persistence. Most notifications are DERIVED from
+// live state (conflicts, suggestions, responses, the update check); only the
+// read/dismissed flags persist, keyed by a notification's `coalesceKey`.
+// ---------------------------------------------------------------------------
+
+/** The kinds migrated in v1. Extensible — add a literal here + a registry entry in the renderer. */
+export const NOTIFICATION_KINDS = [
+  'update-available',
+  'profile-freshness',
+  'responses-arrived',
+  'sync-conflict',
+] as const;
+export const NotificationKindSchema = z.enum(NOTIFICATION_KINDS);
+export type NotificationKind = z.infer<typeof NotificationKindSchema>;
+
+/** Drives icon/accent + toast persistence; maps to the design-system Banner tones (no new colors). */
+export const NotificationSeveritySchema = z.enum(['info', 'success', 'warning']);
+export type NotificationSeverity = z.infer<typeof NotificationSeveritySchema>;
+
+/**
+ * What acting on a notification does. `navigate` follows an in-app route; `external` opens a URL via the
+ * main-process shell (the renderer never opens URLs directly); `reveal-vault` opens the vault folder (the
+ * sync-conflict "Resolve" affordance — a shell op, not a route or URL). Absent = purely informational.
+ */
+export const NotificationActionSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('navigate'), to: z.string().min(1) }),
+  z.object({ type: z.literal('external'), url: z.string().min(1) }),
+  z.object({ type: z.literal('reveal-vault') }),
+]);
+export type NotificationAction = z.infer<typeof NotificationActionSchema>;
+
+/**
+ * A resolved notification as the center/toasts render it. Derived in the renderer from live state +
+ * persisted read/dismissed flags; never crosses IPC (only the flags persist). `coalesceKey` is the
+ * stable "slot" (one notification per key); `signature` is the current condition value (conflict count,
+ * version, suggestion id) — re-surfacing compares the persisted signature to this one per kind.
+ */
+export const NotificationSchema = z.object({
+  id: z.string().min(1),
+  kind: NotificationKindSchema,
+  severity: NotificationSeveritySchema,
+  title: z.string().min(1),
+  body: z.string().optional(),
+  action: NotificationActionSchema.optional(),
+  createdAt: z.string(),
+  coalesceKey: z.string().min(1),
+  signature: z.string(),
+  read: z.boolean(),
+  dismissed: z.boolean(),
+});
+export type Notification = z.infer<typeof NotificationSchema>;
+
+/**
+ * One person's device-local notification state: per `coalesceKey`, the `signature` at which the item was
+ * last read / dismissed. A later signature (per the kind's re-surface rule) un-reads / un-dismisses it.
+ */
+export const PersonNotificationStateSchema = z.object({
+  read: z.record(z.string(), z.string()).default({}),
+  dismissed: z.record(z.string(), z.string()).default({}),
+});
+export type PersonNotificationState = z.infer<typeof PersonNotificationStateSchema>;
+
 /** Device-local state (in userData, never synced) — active vault + window geometry. */
 export const DeviceStateSchema = z.object({
   schemaVersion: z.number().int().positive(),
@@ -70,6 +134,12 @@ export const DeviceStateSchema = z.object({
   deviceId: z.string().optional(),
   /** A cached copy of this device's registry label (so the UI can label "this device" before the key loads). */
   deviceLabel: z.string().optional(),
+  /**
+   * Per-person notification read/dismissed state (35-notification-system §4), keyed by person id. Ephemeral
+   * UI state — device-local, never synced, never in the vault (a dismissal shouldn't leak across personas).
+   * Additive-optional (the `vaultBookmark` precedent — no schemaVersion bump).
+   */
+  notificationState: z.record(z.string(), PersonNotificationStateSchema).optional(),
 });
 export type DeviceState = z.infer<typeof DeviceStateSchema>;
 
@@ -1638,6 +1708,18 @@ export interface SendResult {
 export interface QuestionnaireSendState {
   lastSentAt: string;
   total: number;
+}
+
+/**
+ * One questionnaire the active person sent that has ≥1 submitted response — the source for the
+ * `responses-arrived` notification (35-notification-system §3.6). Derived in the bridge from the sender's
+ * assignments (local read; no network — the relay drain is the existing point that fetches external
+ * responses). `submittedCount` is the re-surface signature (a new response → higher count → re-surfaces).
+ */
+export interface ResponsesArrivedSummary {
+  questionnaireId: string;
+  title: string;
+  submittedCount: number;
 }
 
 /** One of the two paired sends of a compatibility questionnaire, as the sender sees it (08 §3.6). */

@@ -35,6 +35,7 @@ import {
   DreamAnalysisEditsSchema,
   DreamInputSchema,
   PersonInputSchema,
+  PersonNotificationStateSchema,
   QuestionnaireInputSchema,
   RelationshipInputSchema,
   RoleSchema,
@@ -87,6 +88,8 @@ import {
   type DreamPatternWindow,
   type DreamShareTarget,
   type Person,
+  type PersonNotificationState,
+  type ResponsesArrivedSummary,
   type Questionnaire,
   type Relationship,
   type RelayConfig,
@@ -368,6 +371,8 @@ export interface BridgeHost {
   /** Whether the active vault folder still has not-yet-downloaded iCloud items (33 §5.D). Best-effort. */
   hasPendingDownloads?(): Promise<boolean>;
   revealVault(): Promise<void>;
+  /** Open an external URL in the user's browser (the renderer never opens URLs directly; 35 §3.4). */
+  openExternal(url: string): Promise<void>;
   /**
    * Save image bytes to a file the user chooses OUTSIDE the vault (13-dream-images §3.5) — a native save
    * dialog on Electron, a download on iOS/web. Returns the chosen path, or null if cancelled.
@@ -3416,6 +3421,57 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     },
     setSidebarCollapsed: async (collapsed): Promise<void> => {
       await host.updateDeviceState({ sidebarCollapsed: z.boolean().parse(collapsed) });
+    },
+
+    // --- Notifications (35-notification-system §6) ---
+    getNotificationState: async (): Promise<PersonNotificationState> => {
+      const personId = await activePersonId();
+      if (!personId) return { read: {}, dismissed: {} };
+      const device = await host.readDeviceState();
+      // `.parse({})` fills the `read`/`dismissed` defaults for a person with no stored state yet.
+      return PersonNotificationStateSchema.parse(device.notificationState?.[personId] ?? {});
+    },
+    setNotificationState: async (state): Promise<void> => {
+      const personId = await activePersonId();
+      if (!personId) return; // no active person → nothing to key the state under
+      const parsed = PersonNotificationStateSchema.parse(state);
+      const device = await host.readDeviceState();
+      await host.updateDeviceState({
+        notificationState: { ...device.notificationState, [personId]: parsed },
+      });
+    },
+    notificationsResponsesArrived: async (): Promise<ResponsesArrivedSummary[]> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.viewResults')))
+        return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      // The active person's own sends with a submitted response, grouped by questionnaire. Local read —
+      // the relay drain (the existing point) is what fetches external responses; here we only count what's
+      // already in the vault, so no network is added (35 §3.6/§11).
+      const sends = await listAssignments(ctx.fs, ctx.key, { senderPersonId: personId });
+      const counts = new Map<string, number>();
+      for (const a of sends) {
+        // Count both 'submitted' and 'analyzed' — a response the sender already analyzed still ARRIVED,
+        // so the count stays a monotonic "responses received" tally. Counting only 'submitted' would make
+        // analyzing one a 2→1 decrease, which `onIncrease` never re-surfaces, hiding a still-pending one.
+        if (a.status !== 'submitted' && a.status !== 'analyzed') continue;
+        counts.set(a.questionnaireId, (counts.get(a.questionnaireId) ?? 0) + 1);
+      }
+      const out: ResponsesArrivedSummary[] = [];
+      for (const [questionnaireId, submittedCount] of counts) {
+        const def = await getQuestionnaire(ctx.fs, ctx.key, questionnaireId);
+        if (!def) continue; // a deleted questionnaire — nothing to navigate to
+        out.push({ questionnaireId, title: def.title, submittedCount });
+      }
+      return out;
+    },
+    openExternal: async (url): Promise<void> => {
+      const parsed = z.string().url().parse(url);
+      // Only ever hand the shell an http(s) URL — never a file:/custom scheme from a notification payload.
+      if (!/^https?:\/\//i.test(parsed))
+        throw new Error('Only http(s) URLs may be opened externally');
+      await host.openExternal(parsed);
     },
   };
 }

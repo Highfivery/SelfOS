@@ -330,6 +330,8 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
               type: 'select',
               options: ['Female', 'Male', 'Unknown'],
             },
+            // Date of birth, not age — a DOB stays correct as time passes (matches the children roster).
+            { key: 'dob', label: 'Date of birth', type: 'date' },
           ],
           whenAny('pets', ['Dog', 'Cat', 'Other']),
         ),

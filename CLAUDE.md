@@ -385,6 +385,29 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-22 — **Fix (onboarding portrait synthesis failed with "came back in an unexpected shape" — hardened
+  BOTH plausible mechanical causes since the live call couldn't be reproduced; spec 28, on
+  `fix/portrait-synthesis-robust`).** A member (Angel) finished a MAXIMAL intake (every section answered:
+  36/40 intimacy, 15/16 health, 17/17 relationships…) and "See my portrait" failed every time. **Diagnosed,
+  not assumed** (per §6 — and NOT a refusal): traced the code — synthesis already disables adaptive thinking
+  (the §17.10 fix), so the generic error funnels TWO mechanical causes into one message: (a) **output
+  truncation** — a "rich, comprehensive" summary + ~60 detailed facts on a huge intake can approach/exceed the
+  6000-token ceiling → incomplete JSON → `extractJson`'s `JSON.parse` throws; (b) **one off-spec field** — a
+  single non-numeric `metric` or malformed fact makes the STRICT `PortraitDraftSchema.parse` reject an
+  otherwise-perfect portrait. **Could not reproduce Angel's exact call** (her answers + the key are encrypted
+  on-device behind the Keychain/master-key), so rather than guess ONE cause, hardened **both**: (1) the schema
+  is now **tolerant** (`.catch` on every field — only `portrait` is hard-required; a bad metric/fact/`values`
+  degrades to a safe default, malformed facts drop as empty-text downstream); (2) **maxTokens 6000→8000** for
+  headroom (a compliant response is ~3k); (3) the failure now **distinguishes "cut off" (truncated JSON, retry)
+  from "unexpected shape"** so any residual case is self-diagnosing. Tests: an off-spec reply (non-numeric
+  metric + malformed fact) now SALVAGES to a valid portrait; a truncated reply reports "cut off". Gate green:
+  typecheck, lint, format, **499 core + 11 relay + 565 desktop** unit. **Lesson: a STRICT structured-JSON
+  `.parse` on a model response is brittle — one off-spec optional field nukes an otherwise-perfect result;
+  parse model JSON TOLERANTLY (`.catch`/salvage, require only the essential field) and give bounded JSON calls
+  real output headroom. When the live call can't be reproduced (encrypted on-device), harden every
+  code-identified failure surface + make the residual self-diagnosing (distinct messages) — don't ship a
+  speculative single-cause guess.** (Follow-up: session/dream analysis use the same strict-`.parse` shape and
+  could get the same tolerant treatment.)
 - 2026-06-22 — **Process (enforce PR-only `main` client-side; on `chore/block-direct-push-to-main`).** Tried to
   add GitHub branch protection / a ruleset to enforce the new PR-only rule, but **both require GitHub Pro on a
   private repo** (HTTP 403: "Upgrade to GitHub Pro or make this repository public"). So enforcement is

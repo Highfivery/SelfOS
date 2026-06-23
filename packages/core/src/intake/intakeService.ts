@@ -488,28 +488,38 @@ const clampUnit = (n: number): number => Math.max(-1, Math.min(1, n));
 
 const ReflectionDraftSchema = z.object({ reflection: z.string() });
 
+// Tolerant by design (fix 2026-06-22): the portrait is the whole point of onboarding, so a single off-spec
+// field from the model — a non-numeric `metric`, a malformed fact, a non-array `values` — must NOT discard
+// an otherwise-complete portrait. Only `portrait` (a string) is hard-required; every other field falls back
+// to a safe default via `.catch`, and empty-text facts (a caught/malformed fact becomes `{text:''}`) are
+// dropped downstream. (A TRUNCATED reply is a different failure — incomplete JSON throws in `extractJson`
+// before this runs, and is reported distinctly as "cut off"; the larger output budget makes it rare.)
 const PortraitDraftSchema = z.object({
   portrait: z.string(),
   facts: z
     .array(
-      z.object({
-        text: z.string(),
-        section: z.string().optional(),
-        lifeArea: z.string().optional(),
-      }),
+      z
+        .object({
+          text: z.string(),
+          section: z.string().optional(),
+          lifeArea: z.string().optional(),
+        })
+        .catch({ text: '' }),
     )
+    .catch([])
     .default([]),
-  metrics: z.record(z.string(), z.number()).optional(),
+  metrics: z.record(z.string(), z.number()).catch({}).optional(),
   inferred: z
     .object({
-      communicationStyle: z.string().optional(),
-      values: z.array(z.string()).optional(),
-      goals: z.string().optional(),
-      faith: z.string().optional(),
+      communicationStyle: z.string().optional().catch(undefined),
+      values: z.array(z.string()).optional().catch(undefined),
+      goals: z.string().optional().catch(undefined),
+      faith: z.string().optional().catch(undefined),
     })
+    .catch({})
     .optional(),
-  crisisFlag: z.boolean().optional(),
-  categories: z.array(z.string()).default([]),
+  crisisFlag: z.boolean().optional().catch(undefined),
+  categories: z.array(z.string()).catch([]).default([]),
 });
 
 export interface IntakeSynthesizeDeps {
@@ -817,13 +827,15 @@ async function synthesizePortrait(deps: IntakeSynthesizeDeps): Promise<IntakeSyn
           ...formAnswersMessages(session),
           { role: 'user', content: PORTRAIT_INSTRUCTION },
         ],
-        // A rich summary + a PRIORITIZED fact set (≤PORTRAIT_FACT_SYNTHESIS_BUDGET) — bounded, not the old
-        // "thorough dump" 8000 (28-portrait-synthesis-optimization §pillar-1/§pillar-4). This is a bounded
+        // A rich summary + a PRIORITIZED fact set (≤PORTRAIT_FACT_SYNTHESIS_BUDGET). This is a bounded
         // structured-JSON call, so we DISABLE adaptive thinking (the [[adaptive-thinking-shares-maxtokens]]
         // rule + the generationService/reconcileService precedent): otherwise `max_tokens` is the COMBINED
-        // thinking+output budget and trimming it could truncate the portrait JSON to empty. With thinking off,
-        // 6000 is a pure output ceiling with ample headroom for ~60 facts + a 3–5 paragraph summary.
-        maxTokens: 6000,
+        // thinking+output budget and trimming it could truncate the portrait JSON to empty. With thinking off
+        // this is a pure output ceiling. Raised 6000→8000 (fix 2026-06-22): a MAXIMAL intake (every section
+        // answered, e.g. a near-complete profile) can drive a rich summary + ~60 detailed facts close to the
+        // old ceiling and truncate the JSON mid-stream → an "unexpected shape" failure; 8000 gives clear
+        // headroom (a compliant response is ~3k).
+        maxTokens: 8000,
         extendedThinking: false,
       },
       () => {},
@@ -840,16 +852,28 @@ async function synthesizePortrait(deps: IntakeSynthesizeDeps): Promise<IntakeSyn
   const usage = buildUsage('intake.synthesize', model, session.id, personId, at, result.usage);
   await recordUsage(fs, key, usage);
 
-  let draft;
+  // Parse resiliently (fix 2026-06-22). `extractJson` THROWS on a truncated/absent JSON object; the tolerant
+  // schema then salvages any off-spec optional fields. So a failure here means there was no parseable JSON —
+  // almost always a draft cut off mid-stream. Distinguish that (the model emitted SOMETHING with a `{`) from a
+  // genuinely empty/no-JSON reply, and tell the user it's a retry, not a dead end.
+  let json: unknown = null;
   try {
-    draft = PortraitDraftSchema.parse(extractJson(result.text));
+    json = extractJson(result.text);
   } catch {
+    json = null;
+  }
+  const parsed = PortraitDraftSchema.safeParse(json);
+  if (!parsed.success) {
+    const looksCutOff = result.text.includes('{');
     return {
       ok: false,
       reason: 'ERROR',
-      message: 'The portrait came back in an unexpected shape. Please try again.',
+      message: looksCutOff
+        ? 'The portrait was cut off before it finished. Please try again.'
+        : 'The portrait came back in an unexpected shape. Please try again.',
     };
   }
+  const draft = parsed.data;
 
   const insightId = session.insightId ?? uuid();
   // Re-synthesis: carry each prior fact's sharing choices forward, matched by text (robust to reordering).

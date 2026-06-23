@@ -385,6 +385,26 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-23 — **Fix (portrait STILL truncating on v0.3.2 — the distinct message CONFIRMED the cause; salvage
+  partial JSON + bigger budget so onboarding never dead-ends; issue #19, spec 28, on
+  `fix/portrait-truncation-salvage`).** The 2026-06-22 hardening shipped in v0.3.2 and the user came back with a
+  NEW message: **"The portrait was cut off before it finished"** — exactly the distinct truncation message I'd
+  added. So the self-diagnosing messages PAID OFF: the cause is confirmed **output truncation**, not the
+  off-spec-field path. Verified the real Electron client DOES honor `extendedThinking:false` (omits `thinking`),
+  so it's genuine output volume — a maximal intake (Angel: every section, 36/40 intimacy…) drove the portrait
+  JSON past even 8000 tokens and it got cut off mid-`facts`. Fix: **(1) maxTokens 8000→16000** (a compliant
+  portrait is ~5-6k; you only pay for tokens generated); **(2) `salvageTruncatedPortrait`** — if the full parse
+  still fails, recover the `portrait` summary (it comes FIRST, almost always intact) + every COMPLETE fact object
+  (a balanced-brace scan that skips the truncated trailing one), so the portrait completes instead of
+  dead-ending. The "cut off" error now fires ONLY when even the summary didn't arrive. Tests: a truncated reply
+  (summary + 1 complete fact + 1 cut-off fact) now SALVAGES to a valid portrait with the complete fact, dropping
+  the truncated one; a reply cut off before the summary still reports "cut off". Gate green: typecheck, lint,
+  format, **500 core + 11 relay + 565 desktop** unit. **Lesson: building the DISTINCT failure message in the
+  prior fix is what made THIS one a 5-minute confirmed diagnosis instead of another guess — self-diagnosing
+  errors are worth the extra branch. And for a structured-JSON call whose output can legitimately be large
+  (driven by input richness), a strict all-or-nothing parse is the wrong contract: give generous budget AND
+  salvage a partial result (the summary leads, so it survives truncation), because the user's onboarding must
+  never hinge on the model fitting an exact ceiling.**
 - 2026-06-22 — **Fix (onboarding portrait synthesis failed with "came back in an unexpected shape" — hardened
   BOTH plausible mechanical causes since the live call couldn't be reproduced; spec 28, on
   `fix/portrait-synthesis-robust`).** A member (Angel) finished a MAXIMAL intake (every section answered:

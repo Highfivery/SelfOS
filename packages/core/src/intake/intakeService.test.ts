@@ -361,11 +361,25 @@ describe('intakeService', () => {
     expect(insight.facts.every((f) => f.text.length > 0)).toBe(true); // the malformed fact was dropped
   });
 
-  it('reports a truncated portrait distinctly as "cut off" (not a generic shape error)', async () => {
+  it('salvages a truncated portrait — recovers the summary + complete facts, drops the cut-off one (#19)', async () => {
     const fs = await setup();
     await runIntakeTurn(turn(fs, fakeClient(), 'basics', 'I am a nurse.'));
-    // A draft cut off mid-stream — incomplete, unparseable JSON.
-    const truncated = '{"portrait":"A warm person who","facts":[{"text":"Works as a nu';
+    // Cut off mid-`facts`: the summary + first fact are intact; a second fact is truncated.
+    const truncated =
+      '{"portrait":"A warm, resilient person who works in care.","facts":[' +
+      '{"text":"Works as a nurse","section":"basics"},{"text":"Lives in Aus';
+    const res = await synthesizeIntake(synth(fs, fakeClient({ portraitText: truncated })));
+    expect(res.ok).toBe(true); // onboarding completes instead of dead-ending
+    const session = await getIntakeSession(fs, key, 'p1');
+    const insight = (await getInsight(fs, key, 'p1', session!.insightId!)) as Insight;
+    expect(insight.summary).toContain('resilient');
+    expect(insight.facts.map((f) => f.text)).toEqual(['Works as a nurse']); // the truncated fact dropped
+  });
+
+  it('reports "cut off" only when even the summary did not come through (#19)', async () => {
+    const fs = await setup();
+    await runIntakeTurn(turn(fs, fakeClient(), 'basics', 'I am a nurse.'));
+    const truncated = '{"portr'; // cut off before the portrait value — nothing to salvage
     const res = await synthesizeIntake(synth(fs, fakeClient({ portraitText: truncated })));
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.message).toMatch(/cut off/i);

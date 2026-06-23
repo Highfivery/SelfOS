@@ -800,6 +800,82 @@ test('access: grant a login, switch person, and gate the People nav', async () =
   }
 });
 
+test('route guards: a non-owner cannot reach an owner-only route by switching person or a typed hash', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    // Create + grant a member login (Jordan), onboarded so the Member gate doesn't take over (18 §3.1).
+    await w.getByRole('link', { name: 'People' }).click();
+    await w.getByRole('button', { name: 'Add person' }).click();
+    await w.getByLabel('Name').fill('Jordan');
+    await w.getByRole('button', { name: 'Create' }).click();
+    await w.getByText('Jordan').click();
+    await w.getByRole('button', { name: 'Access' }).click();
+    await w.getByRole('button', { name: 'Grant access' }).click();
+    await expect(w.getByText(/can sign in/i)).toBeVisible();
+    await completeIntakeFor(vault, userData, 'Jordan');
+
+    // The Owner is sitting on the owner-only Roles screen.
+    await w.getByRole('link', { name: 'Roles' }).click();
+    await expect(w.getByRole('heading', { name: 'Roles', level: 2 })).toBeVisible();
+    await expect.poll(() => w.evaluate(() => window.location.hash)).toBe('#/roles');
+
+    // Switch to Jordan (a Member) WHILE on /roles → silently redirected to Home; the route is unrendered.
+    await w.getByRole('button', { name: /signed in as/i }).click();
+    await w.getByRole('menuitem', { name: 'Switch person' }).click();
+    const dialog = w.getByRole('dialog', { name: /who.s here/i });
+    await expect(dialog).toBeVisible();
+    await dialog.getByText('Jordan').click();
+
+    await expect(w.getByRole('button', { name: 'Signed in as Jordan' })).toBeVisible();
+    await expect.poll(() => w.evaluate(() => window.location.hash)).toBe('#/');
+    await expect(w.getByRole('heading', { name: 'Roles', level: 2 })).toHaveCount(0);
+    // The nav-link gating still holds too (defense in depth).
+    await expect(w.getByRole('link', { name: 'Roles' })).toHaveCount(0);
+
+    // A typed hash to another owner-only route (#/people) is also bounced to Home.
+    await w.evaluate(() => {
+      window.location.hash = '#/people';
+    });
+    await expect.poll(() => w.evaluate(() => window.location.hash)).toBe('#/');
+    await expect(w.getByRole('heading', { name: 'People', level: 2 })).toHaveCount(0);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('route guards: the Owner still reaches owner-only routes (positive case)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    await w.getByRole('link', { name: 'Roles' }).click();
+    await expect(w.getByRole('heading', { name: 'Roles', level: 2 })).toBeVisible();
+
+    // A typed hash resolves for a capable person (the guard is transparent when allowed).
+    await w.evaluate(() => {
+      window.location.hash = '#/people';
+    });
+    await expect.poll(() => w.evaluate(() => window.location.hash)).toBe('#/people');
+    await expect(w.getByRole('heading', { name: 'People', level: 2 })).toBeVisible();
+
+    // An unknown hash (a typo, or an unreachable route) lands on Home, not a blank content area.
+    await w.evaluate(() => {
+      window.location.hash = '#/does-not-exist';
+    });
+    await expect.poll(() => w.evaluate(() => window.location.hash)).toBe('#/');
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('owner: a vault persisted before newer capabilities still grants full budget/usage access', async () => {
   // Reproduces a real vault created before `budgets.manage` existed: access.enc has an Owner role
   // whose stored capability map lacks it. The Owner must still get full access (roleAllows owner rule).

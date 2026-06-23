@@ -58,8 +58,10 @@ rest**.
 
 - A **switcher** (launch and on-demand) lists people who have **access** (an account). Pick one →
   if a PIN is set, enter it → that person becomes active. The **Owner switches to anyone with no PIN** (the Owner is trusted); switching **back to the Owner** still requires the Owner's PIN.
-- The active person's **role** gates nav and actions; their sessions/journal/questionnaires scope to
-  them; switching away locks the prior person's private views.
+- The active person's **role** gates nav, actions, **and the routes/surfaces themselves** (a
+  capability-gated screen is unreachable by a person who lacks the capability — including after a person
+  switch while on it, or via a typed hash), not just the sidebar entry; their
+  sessions/journal/questionnaires scope to them; switching away locks the prior person's private views.
 
 ### 3.2 People & relationships
 
@@ -269,7 +271,10 @@ session lock.
 - **Screens**: People list/detail/edit, Relationship editor, "Who's here?" switcher, Roles &
   capabilities matrix (Owner). Built on the design-system primitives;
   nav entries are capability-gated.
-- A `<Gated capability="…">` guard + `useCan()` hook gate UI uniformly.
+- UI gating uses the reactive `useSessionStore((s) => s.can(capability))` selector for nav entries and
+  actions, plus a `RequireCapability` route guard that redirects a person who lacks a route's
+  capability to Home (see [`02-app-shell.md`](02-app-shell.md) §5.2) — so a gated surface is hidden
+  _and_ unreachable.
 
 ## 7. IPC / API contracts
 
@@ -308,7 +313,8 @@ roles matrix are fully keyboard-operable, labeled, and screen-reader friendly.
   people/relationship/access services against a temp vault (encrypted round-trip, migrations,
   archive), PIN hash/verify, capability resolution per role (Owner = all capabilities).
 - **Component (RTL):** people list/detail/edit; relationship editor; the switcher (PIN gate); the
-  roles matrix; `<Gated>`/`useCan` behavior.
+  roles matrix; the `RequireCapability` route guard (allowed renders / typed-hash redirect /
+  live-switch redirect to Home).
 - **E2E (Playwright):** create a person, link a relationship, set roles, switch active person with a
   PIN, confirm capability-gated nav, and (with a test master key) confirm vault files are ciphertext.
   Uses the existing `SELFOS_FAKE_*` determinism hooks where needed.

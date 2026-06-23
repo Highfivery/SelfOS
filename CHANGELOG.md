@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/Highfivery/SelfOS/compare/v0.3.1...v0.3.2) (2026-06-23)
+
+
+### Bug Fixes
+
+* **intake:** make portrait synthesis resilient to off-spec + truncated model JSON ([#15](https://github.com/Highfivery/SelfOS/issues/15)) ([9d225b1](https://github.com/Highfivery/SelfOS/commit/9d225b1c0be8182a5c56dcbbfedbb35d6cb81d2b)), closes [#14](https://github.com/Highfivery/SelfOS/issues/14)
+
 ## [0.3.1](https://github.com/Highfivery/SelfOS/compare/v0.3.0...v0.3.1) (2026-06-22)
 
 

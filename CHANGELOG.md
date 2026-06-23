@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/Highfivery/SelfOS/compare/v0.5.0...v0.5.1) (2026-06-23)
+
+
+### Bug Fixes
+
+* onboarding kids roster captures date of birth, not a stale age ([#32](https://github.com/Highfivery/SelfOS/issues/32)) ([10977b2](https://github.com/Highfivery/SelfOS/commit/10977b2d96d6b76b3eae6cc279ced2f68f50b296))
+
 ## [0.5.0](https://github.com/Highfivery/SelfOS/compare/v0.4.0...v0.5.0) (2026-06-23)
 
 

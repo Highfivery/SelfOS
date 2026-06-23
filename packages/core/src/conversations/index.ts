@@ -9,3 +9,4 @@ export * from './guidedCatalog';
 export * from './guidedSteps';
 export * from './guidedSessionService';
 export * from './guidanceService';
+export * from './topicClassifier';

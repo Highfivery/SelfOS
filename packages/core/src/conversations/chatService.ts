@@ -8,6 +8,7 @@ import { buildSystemPrompt } from './promptBuilder';
 import { WRAP_UP_INSTRUCTION, WRAP_UP_MARKER } from './wrapUp';
 import { getExercise } from './guidedCatalog';
 import { parseLatestStep, stripCoachMarkers } from './guidedSteps';
+import { TOPIC_MODEL, classifyTopic, topicShifted } from './topicClassifier';
 
 export type { ChatTurnResult };
 
@@ -31,6 +32,34 @@ export interface ChatTurnDeps {
 function deriveTitle(text: string): string {
   const trimmed = text.trim().replace(/\s+/g, ' ');
   return trimmed.length > 48 ? `${trimmed.slice(0, 48)}…` : trimmed || 'New conversation';
+}
+
+/** A `session.topic` usage event for the (cheap, Haiku) free-form topic classifier (28 §13.2). */
+function buildTopicUsage(
+  conversationId: string,
+  personId: string,
+  at: string,
+  usage: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheWriteTokens: number;
+    cacheReadTokens: number;
+  },
+): UsageEvent {
+  return {
+    id: uuid(),
+    schemaVersion: 1,
+    type: 'session.topic',
+    personId,
+    sessionId: conversationId,
+    model: TOPIC_MODEL,
+    at,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    cacheWriteTokens: usage.cacheWriteTokens,
+    cacheReadTokens: usage.cacheReadTokens,
+    costUsd: costOf(TOPIC_MODEL, usage),
+  };
 }
 
 /**
@@ -74,11 +103,38 @@ export async function runChatTurn(deps: ChatTurnDeps): Promise<ChatTurnResult> {
     delete conversation.endedAt;
     if (conversation.insightId) conversation.insightStale = true;
   }
+  // The prior assistant turn (for the topic classifier's context) — grabbed BEFORE the new user message is
+  // pushed, so it's the genuine previous reply.
+  const priorAssistant = [...conversation.messages]
+    .reverse()
+    .find((message) => message.role === 'assistant')?.content;
   conversation.messages.push({ role: 'user', content: userText, ts: at });
+
+  // Free-form session topic (28 §13.2): infer the relevant life-areas from the message with a cheap Haiku
+  // classifier so the pinned portrait surfaces the facts that matter here. Cached on the conversation and
+  // re-run ONLY on a subject shift. Guided sessions skip it (their topic comes from the exercise group).
+  // Fail-open: any error keeps the cached topic (or none on turn 1) and never blocks the reply.
+  let topicOverride = conversation.topicLifeAreas
+    ? { lifeAreas: conversation.topicLifeAreas }
+    : undefined;
+  let topicUsage: UsageEvent | undefined;
+  if (!conversation.guideId && topicShifted(userText, conversation.topicLifeAreas)) {
+    const classified = await classifyTopic({
+      client,
+      apiKey,
+      userText,
+      ...(priorAssistant !== undefined ? { priorAssistant } : {}),
+    });
+    if (classified) {
+      conversation.topicLifeAreas = classified.lifeAreas;
+      topicOverride = { lifeAreas: classified.lifeAreas };
+      topicUsage = buildTopicUsage(conversation.id, personId, at, classified.usage);
+    }
+  }
 
   // The wrap-up instruction teaches the coach the private completion-marker convention; the guided
   // addendum (if `guideId` is set) steers the turn after persona+safety+context (16 §5).
-  const system = `${await buildSystemPrompt(fs, key, personId, conversation.guideId, deps.depthAsk)}\n\n${WRAP_UP_INSTRUCTION}`;
+  const system = `${await buildSystemPrompt(fs, key, personId, conversation.guideId, deps.depthAsk, topicOverride)}\n\n${WRAP_UP_INSTRUCTION}`;
   let result;
   try {
     result = await client.stream(
@@ -136,6 +192,8 @@ export async function runChatTurn(deps: ChatTurnDeps): Promise<ChatTurnResult> {
     }),
   };
   await recordUsage(fs, key, usage);
+  // Meter the classifier call too, if it ran (28 §13.2) — a separate `session.topic` event.
+  if (topicUsage) await recordUsage(fs, key, topicUsage);
 
   return { ok: true, conversation, usage, ...(wrapUpSuggested ? { wrapUpSuggested } : {}) };
 }

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { ClaudeClient, FileSystem } from '../host';
 import { uuid } from '../id';
 import { DreamTagsSchema } from '../schemas';
+import { dreamTopic } from './dreamTopic';
 import type {
   ChatTurnResult,
   Conversation,
@@ -111,7 +112,8 @@ async function buildDreamPrompt(
   personId: string,
   dream: Dream,
 ): Promise<string> {
-  const context = await buildContext(fs, key, personId);
+  // Feed the pinned portrait the dream's life-areas (28 §13.1) so its relevant facts surface in the analysis.
+  const context = await buildContext(fs, key, personId, dreamTopic(dream));
   // Foreground the People-graph-linked people who appeared in THIS dream, so the coach can connect the
   // dream's figures to real relationships (12 §3.1/§5.1). Shareable data only — never their private notes.
   const linkedIds = dream.people

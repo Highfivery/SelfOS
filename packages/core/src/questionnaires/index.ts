@@ -17,3 +17,4 @@ export * from './recipientHistory';
 export * from './generationService';
 export * from './gapFinderService';
 export * from './analysisService';
+export * from './questionnaireTopic';

@@ -23,7 +23,7 @@ import {
   setAccount,
 } from '@selfos/core/people';
 import { hashPin } from '@selfos/core/crypto';
-import { recordUsage } from '@selfos/core/usage';
+import { queryUsage, recordUsage } from '@selfos/core/usage';
 import { readEncryptedJson, writeEncryptedJson } from '@selfos/core/vault';
 import {
   createCompatibilitySend,
@@ -935,6 +935,26 @@ test('sessions: send a message, stream a reply, and show the usage header + cris
       return main ? main.scrollWidth - main.clientWidth : 0;
     });
     expect(overflow).toBeLessThanOrEqual(1);
+
+    // The free-form turn ran the topic classifier (28 §13.2) — a metered `session.topic` event is recorded
+    // alongside the chat event in the real built app (the offline fake returns no areas, so it's a no-narrow
+    // classification, but the seam — classify + meter, fail-open — runs end to end).
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('sessions e2e: master key missing');
+    await expect
+      .poll(
+        async () =>
+          (
+            await queryUsage(fs, key, {
+              from: '2026-01-01',
+              to: '2027-01-01',
+              personId: 'owner-1',
+              type: 'session.topic',
+            })
+          ).length,
+      )
+      .toBeGreaterThanOrEqual(1);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

@@ -333,7 +333,8 @@ These are **additive-optional**, so existing Insights parse unchanged with **no 
 - **dreamAnalysisService** — the guided-analysis orchestration. Reuses `05`'s streaming/turn + budget +
   usage plumbing and `promptBuilder`, but (a) persists the transcript to the **dream folder** (kept out of
   Sessions), (b) uses a **dream-analysis system prompt** (PERSONA + SAFETY + the blended honest dream-work
-  instructions + `buildContext(personId)` + **`buildLinkedPeopleContext`** — the shareable context of the
+  instructions + `buildContext(personId, dreamTopic(dream))` (the dream's life-areas, 28 §13.1) +
+  **`buildLinkedPeopleContext`** — the shareable context of the
   People-graph-linked people who appeared in _this_ dream, foregrounded so the coach can connect the
   dream's figures to real relationships; **shareable data only** (display name + relationship type +
   relationship/public notes + shareable insight facts), **never their private notes or non-shareable

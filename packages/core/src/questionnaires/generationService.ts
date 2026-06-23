@@ -192,7 +192,12 @@ export async function generateQuestions(
   deps: AiDeps,
   request: GenerateRequest,
 ): Promise<GenerateResult> {
-  const context = await gatherGenerationContext(deps.fs, deps.key, request.context);
+  // Pass the questionnaire type so the insights provider derives a relevance topic (28 §13.1) — an intimacy
+  // questionnaire surfaces the author's Intimacy/Relationships portrait facts, etc.
+  const context = await gatherGenerationContext(deps.fs, deps.key, {
+    ...request.context,
+    questionnaireType: request.type,
+  });
   // The intimacy topic inventory (08 §16.5a) seeds the explicit framing for an intimacy questionnaire at the
   // explicit/unfiltered tiers — the built-in topics merged with the Owner's custom additions (vault prefs).
   const user = buildGenerationUserMessage({

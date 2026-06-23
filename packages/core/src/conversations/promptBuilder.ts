@@ -1,4 +1,5 @@
 import type { FileSystem } from '../host';
+import type { ContextTopic } from '../schemas';
 import { buildContext } from '../people';
 import { depthAskInstruction, type DepthAskContext } from '../profile';
 import { getExercise, guideLifeAreas } from './guidedCatalog';
@@ -43,11 +44,14 @@ export async function buildSystemPrompt(
   personId: string,
   guideId?: string,
   depthAsk?: DepthAskContext,
+  // A free-form session's inferred topic (28 §13.2 — the Haiku classifier in `chatService`). Used ONLY when
+  // there's no exercise; a guided session always derives its topic from the exercise group (below).
+  topicOverride?: ContextTopic,
 ): Promise<string> {
   const exercise = guideId ? getExercise(guideId) : undefined;
   // A guided session foregrounds its group's life-areas in the (pinned) portrait selection (28 §4.4); a
-  // free-start session passes no topic ⇒ the always-on core + a priority fill.
-  const topic = exercise ? { lifeAreas: guideLifeAreas(exercise.group) } : undefined;
+  // free-start session uses the classifier's inferred topic (§13.2), or none ⇒ the always-on core + fill.
+  const topic = exercise ? { lifeAreas: guideLifeAreas(exercise.group) } : topicOverride;
   const context = await buildContext(fs, key, personId, topic);
   const parts = [PERSONA, SAFETY, context];
   if (exercise) {

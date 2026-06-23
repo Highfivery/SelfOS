@@ -4,6 +4,7 @@
  */
 export const USAGE_TYPE_LABELS: Record<string, string> = {
   chat: 'Coaching session',
+  'session.topic': 'Session — topic',
   'session.analyze': 'Session summary',
   'guided.suggest': 'Session suggestions',
   'questionnaire.generate': 'Questionnaire — AI draft',

@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.0](https://github.com/Highfivery/SelfOS/compare/v0.4.0...v0.5.0) (2026-06-23)
+
+
+### Features
+
+* notify-only update awareness — checks GitHub Releases, raises an update notification (spec 36) ([#31](https://github.com/Highfivery/SelfOS/issues/31)) ([ce5519f](https://github.com/Highfivery/SelfOS/commit/ce5519f09e345c9aecc4931ea94da31d855735d9))
+* unified in-app notification system — bell + center + toasts (spec 35) ([#29](https://github.com/Highfivery/SelfOS/issues/29)) ([6a701a4](https://github.com/Highfivery/SelfOS/commit/6a701a429786bdbea784d52a5d224a9d6c355e69))
+
 ## [0.4.0](https://github.com/Highfivery/SelfOS/compare/v0.3.3...v0.4.0) (2026-06-23)
 
 

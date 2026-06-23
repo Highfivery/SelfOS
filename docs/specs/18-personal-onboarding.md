@@ -427,6 +427,19 @@ tunings below were resolved at build (2026-06-14, see §12 "Build-time decisions
 
 ## 13. Changelog
 
+- 2026-06-23 — **Content pass — §14.4a/§14.5** (`feat/onboarding-content-updates`, PR open; owner-approved,
+  implemented not re-asked). Four onboarding-content changes, all in `intakeCatalog.ts`: (1) **porn follow-ups**
+  re-added to the intimacy "Getting specific" group — `pornGenres` ("What kind of porn are you into?") +
+  `pornWhen` ("When do you like to watch it?"), both `restricted` multis with an "Other" write-in, revealed via
+  `whenAny('watchPorn', ['Rarely','Sometimes','Often','Daily'])` (the genre list is **not**
+  orientation-filtered); (2) **four questions removed** — `afterCare` + the free-text `boundaries` (intimacy),
+  `chapters` + `happiest` (story) — and their now-dead spec lines/tests; (3) a gentle **parent-figures `roster`**
+  added to **Family & roots** ("Where you come from"): relation · status · birthday · date-they-passed columns,
+  portrait/context only (no Person field, like the kids/pets rosters); the "date they passed" column is always
+  shown (the roster has no per-column conditional visibility), labelled "(if applicable)". Reused existing answer
+  types (`multi`, `single`, `roster` with its `date` column); no schema/engine change. Catalog units + the
+  onboarding **E2E** (fill the parent roster incl. both date columns; reveal+fill the porn fields; assert the
+  four removed prompts are gone — decrypted) cover it. Amends §14.5; see also [`27`](27-intimacy-redesign.md) §13.
 - 2026-06-14 — created (Review). Decisions resolved ask-first across four question rounds; build-ready pending
   final approval. The fourth Insight producer; reuses [`05`](05-conversations.md)/[`09`](09-session-analysis.md)
   chat+analysis, [`15`](15-shareability.md) shareability, [`16`](16-guided-sessions.md) interview machinery, and
@@ -556,20 +569,20 @@ genuinely sensitive content is own-coaching-only (all intake facts default un-sh
 routed to the **restricted** "What weighs on you" section. The table below is **indicative** — the catalog is
 the source of truth.
 
-| Section                                      | Tier    | Mode | Specific questions                                                                                                                                                                            |
-| -------------------------------------------- | ------- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **The basics**                               | core    | form | pronouns→`pronouns`, gender→`gender`, birthday(date)→`birthday`, location→`location`, languages(multi)→`languages`, ethnicity→`ethnicity`, occupation→`occupation`.                           |
-| **Your life now**                            | core    | form | who you live with(multi)→`livingSituation` (picking "Children" auto-fills children), relationship status→`relationshipStatus`, children→`parentalStatus`, pets(multi), typical weekday(text). |
-| **Values & identity**                        | core    | form | core values(multi)→`values`, faith(single+other)→`faith`, communication style→`communicationStyle`, identity descriptors(multi, optional).                                                    |
-| **What you want**                            | core    | form | growth areas(multi)→`goals`, "a specific goal"(text).                                                                                                                                         |
-| **Health & wellbeing** _(private)_           | invited | form | sleep/energy/stress(sliders), movement(single), "anything to keep in mind"(text)→`healthNotes`(private).                                                                                      |
-| **Relationships**                            | invited | form | attachment/conflict style, love languages, trust/openness, boundaries/forgiveness, your circle & social battery, relationship history & heartbreaks; infers `communicationStyle`.             |
-| **Work & money**                             | invited | form | work situation/industry/role, enjoyment & stress, ambition & work–life balance, money situation/style/worries, financial goals, how money was modeled growing up.                             |
-| **Joy & play**                               | invited | form | passions(multi), obsessions, creative outlets, ideal weekend, what's fun alone vs with people, playfulness, bucket list, comfort media, childhood joys.                                       |
-| **Family & upbringing**                      | invited | form | who raised you, siblings, closeness with each parent(scale), affection/conflict style, money/discipline, family now, favorite + harder memories, "gifts and wounds" + go-deeper.              |
-| **Your story**                               | invited | form | chapters, a turning point, something you're proud of, a hard time you came through, biggest life lesson, who you're becoming (text) + go-deeper.                                              |
-| **What weighs on you** _(restricted)_        | invited | form | gentle, all skippable: what's weighing on you(multi), how heavy(scale), inner critic(single), a recurring worry / stuck pattern / grief(text) + trauma-informed go-deeper.                    |
-| **Intimacy & sexuality** _(18+, restricted)_ | invited | form | see §14.5.                                                                                                                                                                                    |
+| Section                                      | Tier    | Mode | Specific questions                                                                                                                                                                                                                 |
+| -------------------------------------------- | ------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **The basics**                               | core    | form | pronouns→`pronouns`, gender→`gender`, birthday(date)→`birthday`, location→`location`, languages(multi)→`languages`, ethnicity→`ethnicity`, occupation→`occupation`.                                                                |
+| **Your life now**                            | core    | form | who you live with(multi)→`livingSituation` (picking "Children" auto-fills children), relationship status→`relationshipStatus`, children→`parentalStatus`, pets(multi), typical weekday(text).                                      |
+| **Values & identity**                        | core    | form | core values(multi)→`values`, faith(single+other)→`faith`, communication style→`communicationStyle`, identity descriptors(multi, optional).                                                                                         |
+| **What you want**                            | core    | form | growth areas(multi)→`goals`, "a specific goal"(text).                                                                                                                                                                              |
+| **Health & wellbeing** _(private)_           | invited | form | sleep/energy/stress(sliders), movement(single), "anything to keep in mind"(text)→`healthNotes`(private).                                                                                                                           |
+| **Relationships**                            | invited | form | attachment/conflict style, love languages, trust/openness, boundaries/forgiveness, your circle & social battery, relationship history & heartbreaks; infers `communicationStyle`.                                                  |
+| **Work & money**                             | invited | form | work situation/industry/role, enjoyment & stress, ambition & work–life balance, money situation/style/worries, financial goals, how money was modeled growing up.                                                                  |
+| **Joy & play**                               | invited | form | passions(multi), obsessions, creative outlets, ideal weekend, what's fun alone vs with people, playfulness, bucket list, comfort media, childhood joys.                                                                            |
+| **Family & upbringing**                      | invited | form | who raised you, siblings, closest growing up, a parent-figures `roster`(relation/status/birthday/passed — portrait-only), closeness with each parent(scale), affection/conflict style, family now, "gifts and wounds" + go-deeper. |
+| **Your story**                               | invited | form | childhood in a word, a turning point, something you're proud of, a hard time you came through, biggest life lesson, who you're becoming (text) + go-deeper.                                                                        |
+| **What weighs on you** _(restricted)_        | invited | form | gentle, all skippable: what's weighing on you(multi), how heavy(scale), inner critic(single), a recurring worry / stuck pattern / grief(text) + trauma-informed go-deeper.                                                         |
+| **Intimacy & sexuality** _(18+, restricted)_ | invited | form | see §14.5.                                                                                                                                                                                                                         |
 
 ### 14.4a Full per-section question bank (non-intimacy)
 
@@ -653,17 +666,21 @@ something new you want to try(text) · your comfort media(text) · a "flow" acti
 miss(text).
 
 **Family & upbringing** _(invited, form + go-deeper)_ — who raised you(single+other) · siblings / birth
-order(single+other) · family faith / culture growing up(text) · closeness with your mother figure(scale) ·
-closeness with your father figure(scale) · how affection was shown(single) · how conflict was handled(single) ·
-any family mental-health or addiction history(yesNo) · your relationship with family now(single) · the gifts and
-wounds you took from your upbringing(text). Then the **"Tell me more →"** go-deeper for what your upbringing was
+order(single+other) · family faith / culture growing up(text) · who you were closest to growing up(text) · a
+gentle **parent-figures `roster`** (relation · status · birthday · date-they-passed — portrait/context only,
+no Person field, like the kids/pets rosters; the "date they passed" column is always shown, labelled "(if
+applicable)") · closeness with your mother figure(scale) · closeness with your father figure(scale) · how
+affection was shown(single) · how conflict was handled(single) · any family mental-health or addiction
+history(yesNo) · your relationship with family now(single) · the gifts and wounds you took from your
+upbringing(text). Then the **"Tell me more →"** go-deeper for what your upbringing was
 really like, secrets, inherited patterns, chosen family, and (if a parent) what you do the same or differently —
 crisis footer present.
 
-**Your story** _(invited, form + go-deeper)_ — your life in a few chapters(text) · a turning point(text) ·
-something you're proud of(text) · a hard time you came through(text) · the biggest lesson life has taught
-you(text) · who you're becoming(text). Then the go-deeper for lowest moments, regrets, defining relationships,
-what you've survived, and how you've changed.
+**Your story** _(invited, form + go-deeper)_ — your childhood in one word(text) · a hard time you came
+through(text) · a turning point(text) · something you're proud of(text) · the biggest lesson life has taught
+you(text) · who you're becoming(text). _(2026-06-23 content pass: the "life in a few chapters" `chapters` and
+"happiest chapter so far" `happiest` prompts were cut.)_ Then the go-deeper for lowest moments, regrets,
+defining relationships, what you've survived, and how you've changed.
 
 **What weighs on you** _(invited, form + go-deeper, restricted — trauma-informed)_ — all gentle and skippable:
 what's weighing on you most right now(multi+other: work / money / a relationship / family / health / loneliness
@@ -808,9 +825,11 @@ yourself in a mirror or on camera (single) · any recurring sexual dreams (text)
 arousal, reaching orgasm, pain, erectile, dryness, mismatched desire, none — optional) · performance anxiety
 (scale) · how your mood affects your libido (text) · how sex affects your overall wellbeing (text).
 
-**H. Boundaries, consent & meaning** — consent / safety / boundaries SelfOS should always hold (text) · a
-safeword or signal you use (text) · what makes you feel safe and present during sex (text) · what great intimacy
-or closeness means to you (text) · what you most want SelfOS to understand about your sexuality (text).
+**H. Boundaries, consent & meaning** — how you and partners handle consent and checking in
+(`consentPractices`, single + note) · what makes you feel safe and present during sex (text) · what you most
+want SelfOS to understand about your sexuality (text). _(2026-06-23 content pass: the free-text `boundaries`
+("consent / safety / boundaries SelfOS should always hold") and the after-care text `afterCare` were cut;
+`consentPractices` carries the consent signal and the safety rails (§14.10) are unchanged.)_
 
 Everything except orientation (`sexualOrientation`) and relationship style (`relationshipStyle`, both
 private-by-default fields) becomes a **`restricted` Insight fact** feeding **only the person's own**

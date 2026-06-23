@@ -208,12 +208,14 @@ attraction is already captured by "who you're drawn to" in A.)_
 - performance anxiety (slider)
 - how your mood affects your libido (longtext)
 - **NEW — how sex & closeness connect to feeling emotionally secure for you** (longtext)
-- **NEW — after intense or vulnerable sex, what do you need (after-care)?** (text)
 - **NEW — how you and partners handle consent and checking in** (single: we talk explicitly / we read each
   other / it varies / we struggle with it / Other, + optional note)
-- consent / safety / boundaries SelfOS should always hold (longtext)
 - what makes you feel safe and present during sex (longtext)
 - what you most want SelfOS to understand about your sexuality (longtext)
+
+_(2026-06-23 content pass — both **cut**: the after-care text (`afterCare`) and the free-text "consent / safety /
+boundaries SelfOS should always hold" (`boundaries`) — `consentPractices` carries the consent signal, the safety
+rails are unchanged, §8.)_
 
 _(A single gentle, optional line near H points to **What weighs on you** for anyone wanting to discuss a
 non-consensual experience — handled trauma-informed there, not solicited here.)_
@@ -256,6 +258,14 @@ they toggle "want to get specific?". Explicit content is unchanged for those who
   18+ ack + own-context-only boundary (§8) is untouched. `INTIMACY_ACTIVITIES`/`INTIMACY_FANTASIES` shared
   constants are unchanged (the two new matrix rows are appended inline to the intake matrix only, not the
   shared inventory the questionnaire engine reads).
+
+> **Update (2026-06-23 content pass).** Two **porn follow-ups** are **re-added** to the "Getting specific"
+> group (this reverses the §4.3 `pornGenres` cut above): `pornGenres` ("What kind of porn are you into?" —
+> multi) and `pornWhen` ("When do you like to watch it?" — multi), both `restricted`, each with an "Other"
+> write-in, both revealed via `whenAny('watchPorn', ['Rarely','Sometimes','Often','Daily'])` (i.e. anything but
+> "Never"). The genre list is **not** orientation-filtered — people watch across categories. Two questions
+> were **cut** here (§4.2 H): `afterCare` and the free-text `boundaries`. Net intimacy count is unchanged
+> (~42), still in band.
 
 ## 5. Architecture & modules
 
@@ -382,6 +392,20 @@ announce "not set." Reduced-motion respected.
 
 ## 13. Changelog
 
+- 2026-06-23 — **Content pass — porn follow-ups re-added; after-care + free-text boundaries cut**
+  (`feat/onboarding-content-updates`, PR open; owner-approved, implemented not re-asked). The "Getting
+  specific (optional)" group regains two `restricted` multis revealed when `watchPorn ≠ Never` (via
+  `whenAny('watchPorn', ['Rarely','Sometimes','Often','Daily'])`): **`pornGenres`** ("What kind of porn are you
+  into?" — Amateur · Professional/studio · Straight · Lesbian · Gay · Bi/threesome · Trans · BDSM/kink · Rough ·
+  Romantic/passionate · POV · Animated/hentai · Audio/erotica · Roleplay/cosplay · Prefer not to say · Other —
+  **not** orientation-filtered) and **`pornWhen`** ("When do you like to watch it?" — Alone · With a partner · To
+  unwind/de-stress · Before bed · In the morning · Late at night · When stressed or bored · Other). This reverses
+  the §4.3 `pornGenres` cut. **Cut** from §4.2 H: `afterCare` (after-care text) and the free-text `boundaries`
+  ("consent / safety / boundaries SelfOS should always hold") — `consentPractices` carries the consent signal and
+  the safety rails (§8) are unchanged. Net intimacy count unchanged (~42, still in band). Consensual-adult
+  boundary, 18+/`restricted`/own-context-only privacy all unchanged. Catalog units assert the porn branches +
+  the four removed ids gone; the onboarding **E2E** reveals + fills the porn fields (watchPorn = Sometimes →
+  Amateur / Alone, decrypted) and asserts the removed intimacy prompts are absent. Amends 18 §14.5.
 - 2026-06-23 — **Merge-state reconcile (no code).** Both 2026-06-21 passes below say "NOT merged / awaiting user
   review" — append-only dated snapshots that are now **out of date**: the rebalance + trim **are on `main`**
   (direct commits `284083f` → `6bd9d8f` → `32f7b0b` in the pre-PR-workflow era), and the matrix redesign merged via

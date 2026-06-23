@@ -4540,7 +4540,9 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
         status: 'inProgress',
         sections: order.map((id) => ({
           id,
-          status: id === 'basics' || id === 'intimacy' ? 'notStarted' : 'skipped',
+          // basics fills a field; family exercises the parent-figures roster; story checks the removed
+          // chapters/happiest questions are gone; intimacy is the 18+ gate. The rest stay skipped.
+          status: ['basics', 'family', 'story', 'intimacy'].includes(id) ? 'notStarted' : 'skipped',
           restricted: id === 'weighs' || id === 'intimacy',
           messages: [],
           answers: {},
@@ -4592,7 +4594,29 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
     expect(dateRowOverflow).toBeLessThanOrEqual(1);
     await w.getByRole('button', { name: /Continue/ }).click();
 
-    // Core done → the invited grid offers the deeper sections. Opening intimacy shows the shared 18+ gate.
+    // Core done → the invited grid offers the deeper sections. Open Family & roots and add a parent-figures
+    // roster row (portrait/context only, like the kids/pets rosters) — relation/status + the two date columns.
+    await w.getByRole('button', { name: /Family & roots/ }).click();
+    await expect(w.getByRole('heading', { name: 'Family & roots' })).toBeVisible();
+    await w.getByRole('button', { name: '+ Add', exact: true }).click();
+    await w.getByLabel(/— Relation 1$/).selectOption('Mother');
+    await w.getByLabel(/— Status 1$/).selectOption('Passed away');
+    await w.getByLabel(/— Birthday 1$/).fill('1955-03-10');
+    // The "Date they passed" column is always shown (the roster has no per-column conditional visibility),
+    // labelled "(if applicable)" so a living parent's row leaves it blank.
+    await w.getByLabel(/— Date they passed \(if applicable\) 1$/).fill('2020-08-01');
+    await w.getByRole('button', { name: /Continue/ }).click();
+
+    // Open Your story → the two removed prompts (chapters / happiest) are gone.
+    await w.getByRole('button', { name: /Your story/ }).click();
+    await expect(w.getByRole('heading', { name: 'Your story' })).toBeVisible();
+    await expect(
+      w.getByText('If your life so far were a few chapters, what would they be?'),
+    ).toHaveCount(0);
+    await expect(w.getByText('Your happiest chapter so far')).toHaveCount(0);
+    await w.getByRole('button', { name: /Continue/ }).click();
+
+    // Opening intimacy shows the shared 18+ gate.
     await w.getByRole('button', { name: /Intimacy & sexuality/ }).click();
     await expect(w.getByRole('button', { name: /18 or older/ })).toBeVisible();
     // Acknowledge 18+ → the rebalanced intimacy form renders. The core (e.g. orientation) shows immediately;
@@ -4602,6 +4626,11 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
     // the matrix answer actually persists.
     await w.getByRole('button', { name: /18 or older/ }).click();
     await expect(w.getByText('Who are you drawn to?')).toBeVisible(); // a core, always-visible question
+    // The two removed always-visible intimacy questions (afterCare, the free-text boundaries) are gone.
+    await expect(w.getByText('After intense or vulnerable sex, what do you need?')).toHaveCount(0);
+    await expect(
+      w.getByText('Consent, safety, or boundaries SelfOS should always hold'),
+    ).toHaveCount(0);
     await expect(w.getByRole('radio', { name: 'Love it' })).toHaveCount(0); // matrix gated by default
     await w.getByRole('checkbox', { name: 'Women', exact: true }).click(); // drawnTo → tailors giving-oral
     await w
@@ -4636,6 +4665,17 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
       .getByRole('radiogroup', { name: /Going down on her/ })
       .getByRole('radio', { name: 'Love it' })
       .click();
+    // Porn follow-ups (each with an "Other" write-in) reveal only when watchPorn ≠ Never. The genre list is
+    // NOT orientation-filtered — people watch across categories.
+    await expect(w.getByText('What kind of porn are you into?')).toHaveCount(0); // hidden until set
+    await w
+      .getByRole('radiogroup', { name: /Do you watch porn\?/ })
+      .getByRole('radio', { name: 'Sometimes', exact: true })
+      .click();
+    await expect(w.getByText('What kind of porn are you into?')).toBeVisible();
+    await expect(w.getByText('When do you like to watch it?')).toBeVisible();
+    await w.getByRole('checkbox', { name: 'Amateur', exact: true }).click();
+    await w.getByRole('checkbox', { name: 'Alone', exact: true }).click();
     await w.getByRole('button', { name: /Continue/ }).click();
 
     // Generate the portrait → a confirm modal (encourages adding more) → it releases the gate (§14.2/§15)
@@ -4670,6 +4710,17 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
     )?.answers;
     expect(intimacyAnswers?.drawnTo).toEqual(['Women']);
     expect(intimacyAnswers?.activities).toEqual({ 'Going down on her (oral)': 5 });
+    // The porn follow-ups persisted (revealed by watchPorn = Sometimes).
+    expect(intimacyAnswers?.watchPorn).toBe('Sometimes');
+    expect(intimacyAnswers?.pornGenres).toEqual(['Amateur']);
+    expect(intimacyAnswers?.pornWhen).toEqual(['Alone']);
+    // The parent-figures roster persisted under the family section (portrait/context only — no Person field).
+    const familyAnswers = (await getIntakeSession(fs, key, 'owner-1'))?.sections.find(
+      (s) => s.id === 'family',
+    )?.answers;
+    expect(familyAnswers?.parentFigures).toEqual([
+      { relation: 'Mother', status: 'Passed away', birthday: '1955-03-10', passedOn: '2020-08-01' },
+    ]);
     const context = await buildContext(fs, key, 'owner-1');
     expect(context).toContain('thoughtful and steady'); // the portrait summary feeds own context
     expect(context).toContain('grief'); // a restricted fact still feeds the person's OWN coaching

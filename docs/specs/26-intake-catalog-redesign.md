@@ -116,8 +116,8 @@ No new screens, controls, or nav. The not-medical line + `CrisisFooter` stay on 
 | 5   | Health & body            | `health`        | invited       | no¹                 | 22 (16 + 6 conditional)         |
 | 6   | Relationships            | `relationships` | invited       | no                  | 17                              |
 | 7   | Work & money             | `work-money`    | invited       | no                  | 14                              |
-| 8   | Family & roots           | `family`        | invited       | no                  | 13                              |
-| 9   | Your story               | `story`         | invited       | no                  | 10                              |
+| 8   | Family & roots           | `family`        | invited       | no                  | 14                              |
+| 9   | Your story               | `story`         | invited       | no                  | 8                               |
 | 10  | Joy & play               | `joy-play`      | invited       | no                  | 12                              |
 | 11  | What weighs on you       | `weighs`        | invited       | **yes**             | 11                              |
 | —   | **Intimacy & sexuality** | `intimacy`      | invited (18+) | **yes** (unchanged) | [`27`](27-intimacy-redesign.md) |
@@ -126,12 +126,12 @@ No new screens, controls, or nav. The not-medical line + `CrisisFooter` stay on 
 [`18`](18-personal-onboarding.md) §14.8 "(sensitive)" sub-block routing — unchanged); the 6 conditional
 per-substance frequencies are each shown only when that substance is selected.
 
-**Non-intimacy total: 126** (from 392). Core gate: ~27 (basics 10 + life-now 7 + values 5 + want 5; the
+**Non-intimacy total: 125** (from 392). Core gate: ~27 (basics 10 + life-now 7 + values 5 + want 5; the
 life-now children/pets rosters are conditional, so ~25 visible) — down from 52. The big consolidations vs.
 today: Values 17→5 (meaning/legacy moved to Story go-deeper); Health 64→22; Relationships 52→17; Work&money
-51→14; Family 48→13; Story 45→10; Joy 43→12; Weighs 37→11. No separate "values/legacy" invited section
+51→14; Family 48→14; Story 45→8; Joy 43→12; Weighs 37→11. No separate "values/legacy" invited section
 (folded into Story's go-deeper). Intimacy stays at 100 until [`27`](27-intimacy-redesign.md) trims it to ~58,
-so the **total is 226 after this slice → ~184 after 27**. The retired question ids are simply absent — their
+so the **total is 225 after this slice → ~184 after 27**. The retired question ids are simply absent — their
 stored answers are ignored (§7).
 
 ### 4.3 The question bank (terse; `→field` promotes to a `Person` field)
@@ -269,17 +269,16 @@ groups. ~20 money questions → 5.)_
 - any family mental-health or addiction history (yesNo)
 - your childhood home mostly felt… (single: warm / tense / chaotic / strict / loving but hard / mixed)
 - your relationship with your family now (single)
+- a gentle parent-figures roster (relation / status / birthday / date-they-passed — portrait/context only, no Person field, like the kids/pets rosters; the "date they passed" column is always shown, labelled "(if applicable)")
 - the gifts and wounds you took from your upbringing (longtext)
 - a favorite memory from growing up (longtext)
 - _go-deeper:_ "Tell me more →" for parents' personalities, siblings, grandparents, heritage, inherited
   patterns, chosen family, and (if a parent) what you keep vs. do differently — the narrative that was ~35
   separate questions.
 
-**9. Your story** _(invited, form + go-deeper, keeps `focus`)_ — 10
+**9. Your story** _(invited, form + go-deeper, keeps `focus`)_ — 8
 
 - your childhood in one word (text)
-- your life so far in a few chapters (longtext)
-- your happiest chapter (longtext)
 - a hard time you came through (longtext)
 - a turning point that changed your direction (longtext)
 - something you're most proud of (longtext) _(absorbs Values' `proudOf`)_
@@ -426,6 +425,16 @@ operable and announce "not yet set"; a control test covers it.
 
 ## 13. Changelog
 
+- 2026-06-23 — **Content pass — Family +`parentFigures` roster, Story −2** (`feat/onboarding-content-updates`,
+  PR open; owner-approved, implemented not re-asked). **Family & roots** gains a gentle **parent-figures
+  `roster`** in the "Where you come from" group (relation · status · birthday · date-they-passed columns,
+  portrait/context only — no Person field, like the kids/pets rosters; the "date they passed" column is always
+  shown, labelled "(if applicable)", since the roster has no per-column conditional visibility): **14**
+  questions. **Your story** drops `chapters` ("life in a few chapters") + `happiest` ("happiest chapter"):
+  **8**. Net non-intimacy total **126 → 125** (the §4.2/§4.3 counts above are updated; the catalog is the source
+  of truth per the §4.2 caveat). Reused existing answer types (no schema/engine change). The intimacy-side of
+  the same slice (porn follow-ups re-added; `afterCare` + free-text `boundaries` cut) is in
+  [`27`](27-intimacy-redesign.md) §13 / [`18`](18-personal-onboarding.md) §14.5.
 - 2026-06-23 — **Merge-state reconcile (no code).** The "off `main`, NOT merged / awaiting user review" 2026-06-21
   entries below are append-only dated snapshots that are now **out of date**: this catalog redesign **is on `main`**
   (it landed as direct commits `053dcf3` + the E2E reconcile `47b6582` during the pre-PR-workflow era, before the

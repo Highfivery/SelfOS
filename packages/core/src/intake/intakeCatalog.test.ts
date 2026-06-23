@@ -73,8 +73,53 @@ describe('intakeCatalog', () => {
     const gated = (id: string): boolean =>
       qs.find((m) => m.q.id === id)?.q.branch?.whenQuestionId === 'getSpecific';
     expect(gated('activities')).toBe(true); // explicit detail → gated
-    expect(gated('boundaries')).toBe(false); // safety/consent → always visible, never gated
+    expect(gated('consentPractices')).toBe(false); // safety/consent → always visible, never gated
     expect(gated('understandSexuality')).toBe(false);
+    // The four removed questions (afterCare, intimacy `boundaries`, story `chapters`/`happiest`) are gone.
+    const allIds = INTAKE_CATALOG.flatMap((s) => (s.questions ?? []).map((m) => m.q.id));
+    for (const removed of ['afterCare', 'chapters', 'happiest']) {
+      expect(allIds).not.toContain(removed);
+    }
+    // The intimacy `boundaries` free-text is gone; the relationships `boundaries` slider stays (id reused
+    // across sections, which is allowed — answers are keyed per-section).
+    expect(ids).not.toContain('boundaries');
+    expect(getIntakeSection('relationships')?.questions?.some((m) => m.q.id === 'boundaries')).toBe(
+      true,
+    );
+    // The two porn follow-ups appear only once watchPorn ≠ Never (branch on watchPorn, itself gated).
+    for (const pornId of ['pornGenres', 'pornWhen']) {
+      const q = qs.find((m) => m.q.id === pornId);
+      expect(q?.q.branch?.whenQuestionId).toBe('watchPorn');
+      expect(q?.q.branch?.equalsAny).toEqual(['Rarely', 'Sometimes', 'Often', 'Daily']);
+      expect(q?.restricted).toBe(true);
+    }
+  });
+
+  it('the family section has a portrait-only parent-figures roster with relation/status/date columns', () => {
+    const parents = getIntakeSection('family')?.questions?.find((m) => m.q.id === 'parentFigures');
+    expect(parents).toBeTruthy();
+    expect(parents?.q.type).toBe('roster');
+    expect(parents?.field).toBeUndefined(); // portrait/context only — no Person field, like kids/pets
+    const cols = parents?.q.roster ?? [];
+    expect(cols.map((c) => c.key)).toEqual(['relation', 'status', 'birthday', 'passedOn']);
+    expect(cols.find((c) => c.key === 'relation')?.options).toEqual([
+      'Mother',
+      'Father',
+      'Stepmother',
+      'Stepfather',
+      'Guardian',
+      'Other',
+    ]);
+    expect(cols.find((c) => c.key === 'status')?.options).toEqual([
+      'Living',
+      'Passed away',
+      'Not in my life',
+      'Prefer not to say',
+    ]);
+    expect(cols.find((c) => c.key === 'birthday')?.type).toBe('date');
+    expect(cols.find((c) => c.key === 'passedOn')?.type).toBe('date');
+    // The always-shown "date they passed" column is labelled so a living parent's row leaves it blank.
+    expect(cols.find((c) => c.key === 'passedOn')?.label).toMatch(/if applicable/i);
   });
 
   it('every form question maps to a real Person field key', () => {

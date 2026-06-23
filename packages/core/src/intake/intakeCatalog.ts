@@ -304,7 +304,8 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
               type: 'select',
               options: ['Girl', 'Boy', 'Non-binary', 'Prefer not to say'],
             },
-            { key: 'age', label: 'Age', type: 'text', placeholder: 'e.g. 7' },
+            // Date of birth, not age — an age goes stale as time passes; a DOB stays correct.
+            { key: 'dob', label: 'Date of birth', type: 'date' },
           ],
           whenAny('parentalStatus', ['Have young kids', 'Have grown kids']),
         ),

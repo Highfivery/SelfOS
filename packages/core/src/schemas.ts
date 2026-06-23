@@ -743,15 +743,19 @@ export const AnswerTypeSchema = z.enum([
   'matrix',
   'allocation',
   'dateList', // a repeatable list of {label, date} pairs (e.g. anniversaries → Person.importantDates)
-  'roster', // a repeatable list of rows with configurable columns (e.g. kids: name/gender/age; pets)
+  'roster', // a repeatable list of rows with configurable columns (e.g. kids: name/gender/DOB; pets)
 ]);
 export type AnswerType = z.infer<typeof AnswerTypeSchema>;
 
-/** A `roster` column definition — a labeled per-row field, either free text or a select with options. */
+/**
+ * A `roster` column definition — a labeled per-row field: free `text`, a `select` with options, or a
+ * `date` (rendered as a native date picker; e.g. a child's date of birth, which — unlike an age — never
+ * goes stale). A `date` value is the ISO `YYYY-MM-DD` string the input emits.
+ */
 export const RosterColumnSchema = z.object({
   key: z.string().min(1),
   label: z.string().min(1),
-  type: z.enum(['text', 'select']),
+  type: z.enum(['text', 'select', 'date']),
   options: z.array(z.string()).optional(), // for type: 'select'
   placeholder: z.string().optional(), // example text for a 'text' column
 });

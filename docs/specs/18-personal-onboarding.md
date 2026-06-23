@@ -865,14 +865,17 @@ questions. Meters `intake.interview` per turn.
   `DateEntry` shape), rendered by `@selfos/answering` as an add/remove label+date row editor; widened the
   `IntakeAnswerValue` + questionnaire `Answer.value` unions. Used by the basics `importantDates` question; the
   questionnaire builder does not expose it as authorable (no half-built surface, §12).
-- **`roster` answer type** (2026-06-17) — a shared `AnswerType` for a repeatable list of rows with
-  **configurable columns** (`Question.roster: { key, label, type: 'text'|'select', options?, placeholder? }[]`);
-  value is `Record<string,string>[]` (rows). Rendered by `@selfos/answering` as stacked per-row cards (fields
-  stack vertically → never overflows). Used in **Your life now**: a **children** roster (name / gender / age),
-  branched on the Children question being have-young/grown-kids (the liveWith→Children auto-fill flows in too),
-  and a **pets** roster (name / species / gender), branched on a pet being selected in "Any pets?". Both are
-  **portrait/context-only** (no `Person` field) — `answerToString` formats roster rows ("Emma, Girl, 7; …") so
-  they feed the synthesis, not "[object Object]". Not authorable in the questionnaire builder (§12).
+- **`roster` answer type** (2026-06-17; `date` column added 2026-06-23) — a shared `AnswerType` for a
+  repeatable list of rows with **configurable columns**
+  (`Question.roster: { key, label, type: 'text'|'select'|'date', options?, placeholder? }[]`); value is
+  `Record<string,string>[]` (rows; a `date` cell is the input's `YYYY-MM-DD` string). Rendered by
+  `@selfos/answering` as stacked per-row cards (fields stack vertically → never overflows). Used in **Your
+  life now**: a **children** roster (name / gender / **date of birth** — a DOB, not a stale age), branched on
+  the Children question being have-young/grown-kids (the liveWith→Children auto-fill flows in too), and a
+  **pets** roster (name / species / gender), branched on a pet being selected in "Any pets?". Both are
+  **portrait/context-only** (no `Person` field) — `answerToString` formats roster rows ("Emma, Girl,
+  2018-05-14; …") so they feed the synthesis, not "[object Object]". Not authorable in the questionnaire
+  builder (§12).
 - **`IntakeSession`/`IntakeSection`** — `answers` already exists (additive use). The gate-release predicate
   becomes "**core** sections resolved **and** portrait generated" (was: all sections); pre-redesign sessions
   still parse (a tier-less section is treated as `invited`, so an in-flight one isn't suddenly re-gated — TBD

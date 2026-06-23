@@ -160,7 +160,7 @@ describe('QuestionnaireForm', () => {
     expect(screen.queryByLabelText('Important dates — label 1')).toBeNull();
   });
 
-  it('captures roster rows with configurable columns (add, fill text + select, remove)', async () => {
+  it('captures roster rows with configurable columns (add, fill text + select + date, remove)', async () => {
     render(
       <Harness
         questions={[
@@ -171,7 +171,8 @@ describe('QuestionnaireForm', () => {
             roster: [
               { key: 'name', label: 'Name', type: 'text', placeholder: 'e.g. Emma' },
               { key: 'gender', label: 'Gender', type: 'select', options: ['Girl', 'Boy'] },
-              { key: 'age', label: 'Age', type: 'text' },
+              // A date-of-birth column renders a native date picker (a DOB, not a stale age).
+              { key: 'dob', label: 'Date of birth', type: 'date' },
             ],
           }),
         ]}
@@ -184,7 +185,10 @@ describe('QuestionnaireForm', () => {
     expect(name).toHaveValue('Emma');
     await userEvent.selectOptions(screen.getByLabelText('Your kids — Gender 1'), 'Girl');
     expect(screen.getByLabelText('Your kids — Gender 1')).toHaveValue('Girl');
-    await userEvent.type(screen.getByLabelText('Your kids — Age 1'), '7');
+    const dob = screen.getByLabelText('Your kids — Date of birth 1');
+    expect(dob).toHaveAttribute('type', 'date');
+    await userEvent.type(dob, '2018-05-14');
+    expect(dob).toHaveValue('2018-05-14');
     await userEvent.click(screen.getByRole('button', { name: 'Remove #1' }));
     expect(screen.queryByLabelText('Your kids — Name 1')).toBeNull();
   });

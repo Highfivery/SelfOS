@@ -4917,12 +4917,13 @@ test('onboarding: living-with-children auto-fills Children, and a substance reve
       'true',
     );
 
-    // Having kids reveals the children roster (name / gender / age per child).
+    // Having kids reveals the children roster (name / gender / date-of-birth per child — a DOB, not a
+    // stale age).
     await expect(w.getByText('Tell me about your kids')).toBeVisible();
     await w.getByRole('button', { name: '+ Add', exact: true }).click(); // only the children roster is shown yet
     await w.getByLabel('Tell me about your kids — Name 1').fill('Emma');
     await w.getByLabel('Tell me about your kids — Gender 1').selectOption('Girl');
-    await w.getByLabel('Tell me about your kids — Age 1').fill('7');
+    await w.getByLabel('Tell me about your kids — Date of birth 1').fill('2018-05-14');
     // The roster row stacks its fields — no horizontal overflow.
     const rosterOverflow = await w.evaluate(() => {
       const main = document.querySelector('main');

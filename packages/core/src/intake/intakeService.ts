@@ -484,6 +484,57 @@ function extractJson(text: string): unknown {
   return JSON.parse(stripped.slice(start, end + 1));
 }
 
+/**
+ * Recover a usable portrait from a TRUNCATED reply (fix 2026-06-23, issue #19): on a maximal intake the model
+ * can emit a portrait JSON that exceeds the output budget and gets cut off mid-`facts`, so `JSON.parse` of the
+ * whole thing throws. But the summary comes FIRST and is almost always intact, and most facts completed — so
+ * rather than dead-end the user, pull the `portrait` string + every COMPLETE fact object (skipping the
+ * truncated trailing one). Returns null only if even the summary didn't come through.
+ */
+function salvageTruncatedPortrait(
+  text: string,
+): { portrait: string; facts: { text: string; section?: string; lifeArea?: string }[] } | null {
+  const stripped = text.replace(/```json/gi, '').replace(/```/g, '');
+  const pm = stripped.match(/"portrait"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  if (!pm?.[1]) return null;
+  let portrait: string;
+  try {
+    portrait = JSON.parse(`"${pm[1]}"`) as string;
+  } catch {
+    return null;
+  }
+  if (!portrait.trim()) return null;
+
+  const facts: { text: string; section?: string; lifeArea?: string }[] = [];
+  const arrStart = stripped.indexOf('[', stripped.indexOf('"facts"'));
+  if (stripped.includes('"facts"') && arrStart !== -1) {
+    let depth = 0;
+    let objStart = -1;
+    for (let i = arrStart + 1; i < stripped.length; i++) {
+      const c = stripped[i];
+      if (c === '{') {
+        if (depth === 0) objStart = i;
+        depth++;
+      } else if (c === '}') {
+        depth--;
+        if (depth === 0 && objStart !== -1) {
+          try {
+            const o = JSON.parse(stripped.slice(objStart, i + 1)) as { text?: unknown };
+            if (o && typeof o.text === 'string')
+              facts.push(o as { text: string; section?: string; lifeArea?: string });
+          } catch {
+            /* skip a malformed object */
+          }
+          objStart = -1;
+        }
+      } else if (c === ']' && depth === 0) {
+        break;
+      }
+    }
+  }
+  return { portrait, facts };
+}
+
 const clampUnit = (n: number): number => Math.max(-1, Math.min(1, n));
 
 const ReflectionDraftSchema = z.object({ reflection: z.string() });
@@ -831,11 +882,12 @@ async function synthesizePortrait(deps: IntakeSynthesizeDeps): Promise<IntakeSyn
         // structured-JSON call, so we DISABLE adaptive thinking (the [[adaptive-thinking-shares-maxtokens]]
         // rule + the generationService/reconcileService precedent): otherwise `max_tokens` is the COMBINED
         // thinking+output budget and trimming it could truncate the portrait JSON to empty. With thinking off
-        // this is a pure output ceiling. Raised 6000→8000 (fix 2026-06-22): a MAXIMAL intake (every section
-        // answered, e.g. a near-complete profile) can drive a rich summary + ~60 detailed facts close to the
-        // old ceiling and truncate the JSON mid-stream → an "unexpected shape" failure; 8000 gives clear
-        // headroom (a compliant response is ~3k).
-        maxTokens: 8000,
+        // this is a pure output ceiling. Raised to 16000 (issue #19, 2026-06-23): a MAXIMAL intake (every
+        // section answered) drove the model past 8000 and truncated the JSON mid-`facts` — confirmed by the
+        // distinct "cut off" message. 16000 gives generous headroom (a compliant response is ~5-6k; you only
+        // pay for tokens generated), and `salvageTruncatedPortrait` recovers the summary + complete facts if
+        // an extreme case still overruns, so onboarding never dead-ends.
+        maxTokens: 16000,
         extendedThinking: false,
       },
       () => {},
@@ -862,7 +914,13 @@ async function synthesizePortrait(deps: IntakeSynthesizeDeps): Promise<IntakeSyn
   } catch {
     json = null;
   }
-  const parsed = PortraitDraftSchema.safeParse(json);
+  let parsed = PortraitDraftSchema.safeParse(json);
+  if (!parsed.success) {
+    // Truncated mid-stream (issue #19): salvage the summary + the facts that DID come through, so a maximal
+    // intake completes instead of dead-ending. The larger budget makes this the rare backstop, not the norm.
+    const salvaged = salvageTruncatedPortrait(result.text);
+    if (salvaged) parsed = PortraitDraftSchema.safeParse(salvaged);
+  }
   if (!parsed.success) {
     const looksCutOff = result.text.includes('{');
     return {

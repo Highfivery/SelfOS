@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.0](https://github.com/Highfivery/SelfOS/compare/v0.6.0...v0.7.0) (2026-06-23)
+
+
+### Features
+
+* **onboarding:** richer Home onboarding card — progress stats + staleness-driven review ([#42](https://github.com/Highfivery/SelfOS/issues/42)) ([f47ac4c](https://github.com/Highfivery/SelfOS/commit/f47ac4c02a30d26ef63e9d218f3ce3cb6e037cf0))
+
+
+### Bug Fixes
+
+* **app-shell:** guard capability-gated routes, not just nav links ([#40](https://github.com/Highfivery/SelfOS/issues/40)) ([fb08e9e](https://github.com/Highfivery/SelfOS/commit/fb08e9e4490ad80ee6c2c14e73019375cc8975bf))
+
 ## [0.6.0](https://github.com/Highfivery/SelfOS/compare/v0.5.1...v0.6.0) (2026-06-23)
 
 

@@ -4605,6 +4605,106 @@ test('home: a seeded person sees the cards, links into them, and fits at 390px',
   }
 });
 
+test('home: the onboarding card shows in-progress stats and fits at 390px (17 §13)', async () => {
+  const { userData, vault, fs, key } = await seedHomeVault();
+  const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+  // The owner is exempt from the onboarding gate, so an in-progress intake renders the Home card with stats.
+  await writeEncryptedJson(
+    fs,
+    'people/owner-1/intake/session.enc',
+    {
+      id: 'intake-ip',
+      schemaVersion: 1,
+      personId: 'owner-1',
+      status: 'inProgress',
+      sections: [
+        // basics: a form section, started + one answer; life-now: skipped (its questions don't count as remaining).
+        {
+          id: 'basics',
+          status: 'complete',
+          restricted: false,
+          messages: [],
+          answers: { occupation: 'nurse' },
+        },
+        { id: 'life-now', status: 'skipped', restricted: false, messages: [], answers: {} },
+      ],
+      startedAt: 'now',
+      updatedAt: twoDaysAgo,
+    },
+    key,
+  );
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await expect(w.getByRole('heading', { name: /finish getting to know selfos/i })).toBeVisible();
+    await expect(w.getByText(/of \d+ answered/)).toBeVisible();
+    await expect(w.getByText(/2 of \d+ done/)).toBeVisible(); // basics complete + life-now skipped
+    // The "last updated" line renders (its exact relative value is unit-tested in OnboardingCard.test).
+    await expect(w.getByText('Last updated', { exact: true })).toBeVisible();
+    await expect(w.getByRole('button', { name: /continue onboarding/i })).toBeVisible();
+
+    // 390px: the stat row wraps, no horizontal overflow anywhere.
+    await w.setViewportSize({ width: 390, height: 780 });
+    const offenders = await w.evaluate(() => {
+      const bad: string[] = [];
+      for (const el of Array.from(document.querySelectorAll('*'))) {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          bad.push(el.className || el.tagName);
+        }
+      }
+      const main = document.querySelector('main');
+      return { bad, mainOverflow: main ? main.scrollWidth - main.clientWidth : 0 };
+    });
+    expect(offenders.bad).toEqual([]);
+    expect(offenders.mainOverflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('home: the onboarding card nudges for a review when the portrait is stale (17 §13)', async () => {
+  const { userData, vault, fs, key } = await seedHomeVault();
+  // A complete intake whose answers have changed since the portrait snapshot → "due for a review" (no clock).
+  await writeEncryptedJson(
+    fs,
+    'people/owner-1/intake/session.enc',
+    {
+      id: 'intake-done',
+      schemaVersion: 1,
+      personId: 'owner-1',
+      status: 'complete',
+      sections: [
+        {
+          id: 'basics',
+          status: 'complete',
+          restricted: false,
+          messages: [],
+          answers: { occupation: 'nurse' },
+        },
+      ],
+      portraitAnswerSig: {}, // a portrait exists, but an answer is present that wasn't snapshotted → stale
+      startedAt: 'now',
+      updatedAt: 'now',
+      completedAt: 'now',
+    },
+    key,
+  );
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await expect(w.getByRole('heading', { name: /quick profile review/i })).toBeVisible();
+    await expect(w.getByText('Changed since portrait')).toBeVisible();
+    await expect(w.getByRole('button', { name: /refresh my portrait/i })).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('onboarding: nudge → turn fills a field → skip intimacy → portrait feeds context → owner sees restricted facts (18)', async () => {
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
   await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');

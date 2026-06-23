@@ -1031,11 +1031,19 @@ current?: string (the known value), rationale: string, sourceInsightId, sourceKi
 - **Living-profile home** — the Onboarding surface (the editable profile, §14.11) shows pending suggestions
   inline beside the relevant section, so "review" and "edit" are the same place.
 
-### 15.4 A periodic checkup (light)
+### 15.4 A gentle "profile review" nudge (staleness-driven, no clock)
 
-Beyond event-driven detection, a gentle time-based **"profile checkup"** nudge (e.g. it's been a while since
-you reviewed your profile) invites a glance — derived from the intake's `updatedAt`, **no AI**. Dismissable;
-never nags.
+> **Built 2026-06-23:** the Home `OnboardingCard`'s complete-state review nudge. **Deliberately NOT
+> time-based** — superseding this section's original "periodic checkup derived from `updatedAt`" idea, which
+> would have been a calendar nag (and contradicted `29`'s no-clock framing).
+
+Rather than a time-based clock, the gentle **"profile review"** nudge is **staleness-driven**: the
+complete-state Home `OnboardingCard` surfaces a review **only when the portrait has gone out of date**
+(answers added/edited/cleared since it was generated, via `portraitStaleness`), showing the % changed and
+when the portrait was last updated. It **self-hides when complete and the portrait is fresh** — **no AI**, no
+calendar/elapsed-time nag, matching `29`'s no-clock framing. The intake's `updatedAt` is shown only as a
+"last updated" label, never as a trigger. Pending §15 suggestions are owned by the "Keep your profile fresh"
+card (§15.3); the OnboardingCard does not re-surface them.
 
 ### 15.5 Privacy & safety
 

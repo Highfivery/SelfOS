@@ -236,3 +236,15 @@ the user:
   Resume opens the session, 390px inner-scrollbar guard). Visual QA via the web preview at desktop (light +
   dark, the 3-up card reflow) + 390px (single column, no overflow, no console errors). NOT merged (awaiting
   user confirm). **This completes the 2026-06 app refresh (packages A–G).**
+- 2026-06-23 — **Enriched the `OnboardingCard`** (an 18 §3.1/§15 surface that, alongside `ProfileFreshnessCard`,
+  also renders on Home; gated `intake.own`, per-person, not admin-gated). In progress it now shows scannable
+  stats — branch-aware answered/total questions (**excluding intentionally-skipped sections**), sections done
+  (complete + skipped), last updated — beside Continue. Once complete it's a calm portrait-health summary that
+  nudges a refresh **only when the portrait is stale** (`portraitStaleness` — answers changed since; % changed +
+  when updated), and **self-hides when complete and fresh** — **never a calendar clock** (no nagging, matches
+  `29`; 18 §15.4). Pending §15 suggestions stay owned solely by `ProfileFreshnessCard` (the OnboardingCard does
+  not re-surface them, so the two Home cards don't duplicate). Home-card only (not mirrored to the Onboarding
+  page). Pure `intakeQuestionTotals` added to `onboarding/progress.ts`. Renderer-only (no IPC/schema/token).
+  Gate green: typecheck, lint, format, unit (+OnboardingCard RTL per state, +`intakeQuestionTotals`), **E2E**
+  (+2 home: in-progress stats + 390px overflow guard; complete-stale review). Visual QA at desktop + 360px. On
+  `feat/onboarding-card-stats`.

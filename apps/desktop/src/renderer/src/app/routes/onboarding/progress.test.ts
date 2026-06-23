@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { IntakeSectionMeta } from '@shared/channels';
-import { isAnswered, overallProgress, sectionProgress } from './progress';
+import { intakeQuestionTotals, isAnswered, overallProgress, sectionProgress } from './progress';
 import type { IntakeSectionStatus } from './progress';
 
 const meta = (over: Partial<IntakeSectionMeta>): IntakeSectionMeta => ({
@@ -68,6 +68,39 @@ describe('sectionProgress', () => {
     expect(sectionProgress(branched, { trigger: false })).toEqual({ answered: 1, total: 1 });
     // Trigger true → the follow-up appears → 2 total, 1 answered.
     expect(sectionProgress(branched, { trigger: true })).toEqual({ answered: 1, total: 2 });
+  });
+});
+
+describe('intakeQuestionTotals', () => {
+  const metas = [
+    meta({
+      id: 's1',
+      questions: [
+        { id: 'a', type: 'shortText', prompt: 'A', required: false },
+        { id: 'b', type: 'shortText', prompt: 'B', required: false },
+      ],
+    }),
+    meta({
+      id: 's2',
+      questions: [{ id: 'c', type: 'shortText', prompt: 'C', required: false }],
+    }),
+    meta({ id: 's3', mode: 'chat' }), // chat-only (no questions) → 0/0
+  ];
+
+  it('sums answered / total across sections, branch-aware', () => {
+    const sectionFor = (id: string) =>
+      ({ s1: { answers: { a: 'x' } }, s2: { answers: { c: 'y' } } })[id] ?? { answers: {} };
+    expect(intakeQuestionTotals(metas, sectionFor)).toEqual({ answered: 2, total: 3 });
+  });
+
+  it('excludes intentionally-skipped sections from the totals', () => {
+    const sectionFor = (id: string) =>
+      ({
+        s1: { status: 'skipped' as const, answers: {} },
+        s2: { answers: { c: 'y' } },
+      })[id] ?? { answers: {} };
+    // s1 (2 questions) is skipped → excluded entirely; only s2 counts.
+    expect(intakeQuestionTotals(metas, sectionFor)).toEqual({ answered: 1, total: 1 });
   });
 });
 

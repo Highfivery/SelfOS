@@ -31,6 +31,27 @@ export function sectionProgress(
   return { answered, total: visible.length };
 }
 
+/**
+ * Branch-aware answered / total questions across the whole intake, EXCLUDING intentionally-skipped sections
+ * (a skipped section's questions never count as "remaining", 17 §13 / decision). Chat-only sections (no
+ * questions) contribute 0/0. `sectionFor` returns a section's live status + answers by id. Pure.
+ */
+export function intakeQuestionTotals(
+  metas: IntakeSectionMeta[],
+  sectionFor: (id: string) => { status?: IntakeSectionStatus; answers: AnswerMap } | undefined,
+): { answered: number; total: number } {
+  let answered = 0;
+  let total = 0;
+  for (const m of metas) {
+    const section = sectionFor(m.id);
+    if (section?.status === 'skipped') continue; // a skipped section is done — its questions aren't "remaining"
+    const p = sectionProgress(m, section?.answers ?? {});
+    answered += p.answered;
+    total += p.total;
+  }
+  return { answered, total };
+}
+
 /** Overall onboarding progress, measured by section: completed (finished) + skipped out of all sections. */
 export function overallProgress(
   metas: IntakeSectionMeta[],

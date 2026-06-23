@@ -222,6 +222,36 @@
   gap: var(--space-3);
 }
 
+/* Onboarding card — a compact, scannable stat row (progress / portrait health) */
+.onboardStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  margin: 0;
+}
+
+.onboardStat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.onboardStat dt {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+}
+
+.onboardStat dd {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
 /* Profile-freshness suggestions (§15) */
 .freshnessItem {
   display: flex;

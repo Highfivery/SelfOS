@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.4](https://github.com/Highfivery/SelfOS/compare/v0.3.3...v0.3.4) (2026-06-23)
+
+
+### Bug Fixes
+
+* **intake:** salvage truncated portraits + raise the synthesis budget ([#20](https://github.com/Highfivery/SelfOS/issues/20)) ([70566d6](https://github.com/Highfivery/SelfOS/commit/70566d66c0977518b28f0d60372784e7a7dc10d4)), closes [#19](https://github.com/Highfivery/SelfOS/issues/19)
+
 ## [0.3.3](https://github.com/Highfivery/SelfOS/compare/v0.3.2...v0.3.3) (2026-06-23)
 
 

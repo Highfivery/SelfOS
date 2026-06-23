@@ -1074,6 +1074,28 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'e.g. my mom, my older brother',
           ),
         ),
+        // Parent figures — portrait/context only (no Person field), like the kids/pets rosters. Framed
+        // gently in the prompt because it can touch grief; the "Date they passed" column is always shown
+        // (the roster has no per-column conditional visibility) but labelled "(if applicable)" so a living
+        // parent's row simply leaves it blank.
+        f(
+          roster('parentFigures', 'Your parents — tell me a little about them, if you’d like', [
+            {
+              key: 'relation',
+              label: 'Relation',
+              type: 'select',
+              options: ['Mother', 'Father', 'Stepmother', 'Stepfather', 'Guardian', 'Other'],
+            },
+            {
+              key: 'status',
+              label: 'Status',
+              type: 'select',
+              options: ['Living', 'Passed away', 'Not in my life', 'Prefer not to say'],
+            },
+            { key: 'birthday', label: 'Birthday', type: 'date' },
+            { key: 'passedOn', label: 'Date they passed (if applicable)', type: 'date' },
+          ]),
+        ),
       ]),
       ...grouped('How your family worked', [
         f(
@@ -1165,14 +1187,6 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
       'their life meaning, and the legacy they hope to leave. Held as the person chooses to share.',
     questions: [
       f(shortText('childhoodWord', 'Your childhood in one word', 'e.g. happy, chaotic, carefree')),
-      f(
-        longText(
-          'chapters',
-          'If your life so far were a few chapters, what would they be?',
-          'Name the chapters, however you see them.',
-        ),
-      ),
-      f(longText('happiest', 'Your happiest chapter so far', 'A time you’d return to.')),
       f(longText('hardest', 'A hard time you came through', 'Only what you want to share.')),
       f(
         longText(
@@ -1325,7 +1339,7 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
     opener:
       'An optional, grown-up space to help SelfOS understand your sexuality. Everything is private to your own coaching, and every question is skippable.',
     contentNote:
-      'This block is entirely optional and only for adults (18+). Everything here stays private to your own coaching, is never shared with anyone else, and every question is skippable. It covers your own consensual adult sexuality — including fantasies; real limits are yours to set with the activity list and the boundaries questions. The explicit specifics sit behind one optional toggle near the end.',
+      'This block is entirely optional and only for adults (18+). Everything here stays private to your own coaching, is never shared with anyone else, and every question is skippable. It covers your own consensual adult sexuality — including fantasies; real limits are yours to set with the activity list and the consent & safety questions. The explicit specifics sit behind one optional toggle near the end.',
     questions: [
       ...grouped('Orientation & identity', [
         f(
@@ -1545,14 +1559,6 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ),
           { restricted: true },
         ),
-        f(
-          shortText(
-            'afterCare',
-            'After intense or vulnerable sex, what do you need?',
-            'e.g. cuddling, quiet, reassurance, space, food…',
-          ),
-          { restricted: true },
-        ),
       ]),
       ...grouped('Consent, safety & meaning', [
         f(
@@ -1564,14 +1570,6 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'Prefer not to say',
             'Other',
           ]),
-          { restricted: true },
-        ),
-        f(
-          longText(
-            'boundaries',
-            'Consent, safety, or boundaries SelfOS should always hold',
-            'Anything that should always be respected.',
-          ),
           { restricted: true },
         ),
         f(
@@ -1745,6 +1743,52 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
             'Do you watch porn?',
             ['Never', 'Rarely', 'Sometimes', 'Often', 'Daily'],
             when('getSpecific', true),
+          ),
+          { restricted: true },
+        ),
+        // Two follow-ups revealed when they watch porn (anything but "Never"). The genre list is NOT
+        // orientation-filtered — people watch across categories. Each has an "Other" write-in.
+        f(
+          multi(
+            'pornGenres',
+            'What kind of porn are you into?',
+            [
+              'Amateur',
+              'Professional / studio',
+              'Straight',
+              'Lesbian',
+              'Gay',
+              'Bi / threesome',
+              'Trans',
+              'BDSM / kink',
+              'Rough',
+              'Romantic / passionate',
+              'POV',
+              'Animated / hentai',
+              'Audio / erotica',
+              'Roleplay / cosplay',
+              'Prefer not to say',
+              'Other',
+            ],
+            whenAny('watchPorn', ['Rarely', 'Sometimes', 'Often', 'Daily']),
+          ),
+          { restricted: true },
+        ),
+        f(
+          multi(
+            'pornWhen',
+            'When do you like to watch it?',
+            [
+              'Alone',
+              'With a partner',
+              'To unwind / de-stress',
+              'Before bed',
+              'In the morning',
+              'Late at night',
+              'When stressed or bored',
+              'Other',
+            ],
+            whenAny('watchPorn', ['Rarely', 'Sometimes', 'Often', 'Daily']),
           ),
           { restricted: true },
         ),

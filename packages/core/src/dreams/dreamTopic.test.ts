@@ -40,6 +40,25 @@ describe('dreamTopic (28 §13.1)', () => {
     expect(topic?.lifeAreas).toContain('Relationships');
   });
 
+  it('widens by a linked person’s relationship: a partner → Intimacy + Relationships', () => {
+    const topic = dreamTopic(dream({ people: [{ personId: 'p2' }] }), ['partner']);
+    expect(topic?.lifeAreas).toContain('Intimacy');
+    expect(topic?.lifeAreas).toContain('Relationships');
+  });
+
+  it('a parent/sibling/child → Family (+ Relationships from people-present)', () => {
+    const topic = dreamTopic(dream({ people: [{ personId: 'p2' }] }), ['parent']);
+    expect(topic?.lifeAreas).toContain('Family');
+    expect(topic?.lifeAreas).toContain('Relationships');
+    expect(topic?.lifeAreas).not.toContain('Intimacy');
+  });
+
+  it('a coworker → Work & purpose + Relationships', () => {
+    const topic = dreamTopic(dream({ people: [{ personId: 'p2' }] }), ['coworker']);
+    expect(topic?.lifeAreas).toContain('Work & purpose');
+    expect(topic?.lifeAreas).toContain('Relationships');
+  });
+
   it('returns undefined when there is no mappable signal (⇒ core + fill)', () => {
     expect(dreamTopic(dream({ narrative: 'a quiet field of flowers' }))).toBeUndefined();
   });

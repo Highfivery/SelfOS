@@ -210,12 +210,12 @@ export type ContextTopic = z.infer<typeof ContextTopicSchema>;
 
 The topic signal comes from data the caller already holds — no new persisted state:
 
-| Caller                     | Signal source                                                                                 | → `lifeAreas`                                                                                                |
-| -------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| **Session (guided)**       | The `GuidedExercise.group` (`therapy`/`coaching`/`intimacy`) + `framework` (16 §3.2)          | A static `GUIDE_LIFE_AREAS` map in `guidedCatalog.ts` (e.g. intimacy group → `Intimacy`, `Relationships`)    |
-| **Session (free-start)**   | The user's latest message — a cached Haiku classifier, re-run only on a subject shift (§13.2) | The classifier's `lifeAreas`, cached on `Conversation.topicLifeAreas`; fail-open ⇒ `undefined` ⇒ core + fill |
-| **Dream analysis**         | The dream's tags + narrative (keyword scan) + nightmare/mood + people-present (12)            | `dreamTopic(dream)` (§13.1, pure) → life-areas; people-present ⇒ `Relationships`; else `undefined`           |
-| **Questionnaire generate** | The questionnaire `type` taxonomy (08 §3.1 — e.g. intimacy/relationship/general)              | `questionnaireTopic(type)` (§13.1) — a static `QUESTIONNAIRE_TYPE_LIFE_AREAS` map                            |
+| Caller                     | Signal source                                                                                          | → `lifeAreas`                                                                                                      |
+| -------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| **Session (guided)**       | The `GuidedExercise.group` (`therapy`/`coaching`/`intimacy`) + `framework` (16 §3.2)                   | A static `GUIDE_LIFE_AREAS` map in `guidedCatalog.ts` (e.g. intimacy group → `Intimacy`, `Relationships`)          |
+| **Session (free-start)**   | The user's latest message — a cached Haiku classifier, re-run only on a subject shift (§13.2)          | The classifier's `lifeAreas`, cached on `Conversation.topicLifeAreas`; fail-open ⇒ `undefined` ⇒ core + fill       |
+| **Dream analysis**         | The dream's tags + narrative (keyword scan) + nightmare/mood + linked people's relationship types (12) | `dreamTopic(dream, relTypes)` (§13.1, pure) → life-areas; partner→`Intimacy`, parent→`Family`, …; else `undefined` |
+| **Questionnaire generate** | The questionnaire `type` taxonomy (08 §3.1 — e.g. intimacy/relationship/general)                       | `questionnaireTopic(type)` (§13.1) — a static `QUESTIONNAIRE_TYPE_LIFE_AREAS` map                                  |
 
 Each map is a **pure, code-only constant** co-located with its caller (DRY: the life-area taxonomy is the single
 `LIFE_AREAS` in `schemas.ts`). A caller with no clear signal passes no topic — the safe default.
@@ -503,14 +503,14 @@ sessions infer via a **cheap model classification**, cached and re-run **only wh
 
 Implements §4.4/§5.4 as specced — **no AI cost**:
 
-- **`dreamTopic(dream)`** (pure + sync, `@selfos/core/dreams`): maps the dream's structured signals →
-  life-areas — its tags + narrative scanned for life-area keywords (so a dream mentioning a partner/sex →
-  `Intimacy`, money → `Money`, etc.), `nightmare` / heavy negative waking mood ⇒ `Emotions & patterns`, and any
-  **people present** ⇒ `Relationships`. (It stays pure — it does NOT resolve a linked person's relationship
-  type to split partner→`Intimacy` vs family→`Family`; the topic only _widens_ which facts surface, and the
-  intimacy/family signal already comes through the tags/narrative, so the marginal benefit doesn't justify the
-  async relationship-graph lookup.) No mappable signal ⇒ `undefined` (core + fill). `dreamAnalysisService`
-  passes it into `buildContext`.
+- **`dreamTopic(dream, relationshipTypes?)`** (pure, `@selfos/core/dreams`): maps the dream's structured
+  signals → life-areas — its tags + narrative scanned for life-area keywords (money → `Money`, sex → `Intimacy`,
+  etc.), `nightmare` / heavy negative waking mood ⇒ `Emotions & patterns`, and **people present** widened by
+  their relationship to the dreamer via `RELATIONSHIP_LIFE_AREAS` (a `partner`/`ex` → `Intimacy`, a
+  `parent`/`child`/`sibling` → `Family`, a `coworker` → `Work & purpose`, plus the generic `Relationships`
+  signal for anyone present). The function stays **pure** — `dreamAnalysisService` does the async
+  relationship-graph lookup (resolving each linked figure's `RelationshipType`) and passes the resolved types
+  in. No mappable signal ⇒ `undefined` (core + fill). Emitted in canonical `LIFE_AREAS` order.
 - **`questionnaireTopic(type)`** (pure, co-located with the questionnaire type taxonomy): a static
   `QUESTIONNAIRE_TYPE_LIFE_AREAS` map (`intimacy → Intimacy, Relationships`; `general → undefined`; …).
   `contextProviders.insightsProvider` passes it into `summarizeForContext`.

@@ -2,10 +2,14 @@ name: Release
 
 # Hands-off distribution (19-distribution):
 #   1. release-please reads the Conventional Commits on `main`, keeps a "Release vX.Y.Z" PR open, and
-#      — when that PR is merged — bumps the version, writes the changelog, and creates a *draft*
-#      GitHub Release (draft-until-asset, so users never see an installer-less release).
+#      — when that PR is merged — bumps the version, writes the changelog, and PUBLISHES the GitHub
+#      Release immediately (config `draft: false`). Publishing creates the git tag right away, so when
+#      release-please re-runs on the same merge push it SEES the new tag and does NOT re-propose the
+#      just-released commit as a phantom next patch (the draft-release had no tag yet → the old
+#      re-proposal loop that needed a per-release bootstrap-sha bump; now gone).
 #   2. build-macos then builds the desktop app on a macOS runner and uploads the `.dmg` to that
-#      release, then flips it from draft to published.
+#      published release (electron-builder `releaseType: release`). Trade-off: the release is visible
+#      for the ~3 min the build runs before the installer attaches.
 on:
   push:
     branches: [main]
@@ -38,9 +42,9 @@ jobs:
     permissions:
       contents: write
     steps:
-      # Check out the release commit by SHA, not the tag: a *draft* release has no real git tag yet
-      # (it's created when the release is published below). `github.sha` is the merged Release-PR
-      # commit that release-please just version-bumped + tagged in the draft.
+      # Check out the merged Release-PR commit by SHA — the commit release-please just version-bumped,
+      # tagged, and published. (Equivalent to the tag now that the release publishes non-draft; SHA needs
+      # no tag-name plumbing.)
       - name: Checkout
         uses: actions/checkout@v7
         with:
@@ -75,7 +79,9 @@ jobs:
           SELFOS_BUILD_SHA: ${{ github.sha }}
         run: pnpm --filter @selfos/desktop exec electron-builder --mac --publish always
 
-      - name: Publish the release (now the installer is attached)
+      # Defensive no-op: the release is already published (config `draft: false`). Kept so the release is
+      # guaranteed non-draft even if a future change flips drafting back on.
+      - name: Ensure the release is published
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release edit "${{ needs.release-please.outputs.tag_name }}" --draft=false

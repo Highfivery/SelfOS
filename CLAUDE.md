@@ -385,6 +385,29 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-23 — **Fix — PERMANENT (the release-please re-proposal loop is GONE; root cause was draft-release
+  tag-timing, not the ancient footer; spec 19 amended, on `chore/fix-release-please-permanently`).** Every
+  release for weeks needed 2 extra PRs (advance `bootstrap-sha` + close a spurious "release X.Y.(Z+1)" PR).
+  **Diagnosed the REAL mechanism** (not the assumed "Release-As footer" story): the spurious PRs always
+  re-proposed the **latest release's** commit (0.3.2→0.3.3, 0.3.3→0.3.4…), NEVER 0.1.0 — so it was **not** the
+  footer. The config had **`draft: true`** (draft-until-asset), and **a draft GitHub release has no git tag
+  until published**. So when release-please re-ran on the release-PR merge, the new tag didn't exist yet → it
+  saw the PRIOR tag as latest → re-proposed the just-released commit as a phantom next patch. The macOS build
+  published (creating the tag) ~3 min later, but the spurious PR was already open. Advancing `bootstrap-sha`
+  (the scan floor) every release just MASKED it. **Permanent fix:** **`draft: false`** (release-please
+  publishes immediately → tag exists when it re-checks → proposes nothing) + **drop `bootstrap-sha`** (with
+  tag-detection working, release-please never scans back past the latest tag, so the ancient `Release-As:
+0.1.0` footer in `36c3dff` is unreachable — the only reason the floor existed) + electron-builder
+  **`publish.releaseType: release`** (upload the `.dmg` to the already-published release, not a draft).
+  **Trade-off (accepted):** a release is visible for the ~3 min the build runs before its `.dmg` attaches —
+  draft-until-asset is gone, but so is the loop. Synced spec 19 (amendment) + the `release.yml` comments.
+  **Lesson: a draft GitHub release does NOT create its git tag until published — so any tool that detects "the
+  last release" by tag (release-please) will re-propose the just-released commit when it re-runs before
+  publish. Publish non-draft so the tag exists immediately; `bootstrap-sha` is a FIRST-release-only baseline
+  and must be removed afterward (a kept floor overrides tag-detection and forces the re-scan). The
+  spurious-PR's PROPOSED VERSION is the tell: re-proposing the latest (not 0.1.0) = a tag-timing problem, not
+  the footer.** NOTE: validated end-to-end on the NEXT real release (the config-merge run itself must open NO
+  release PR; the dmg-attach to a published release is proven on the next `feat`/`fix`).
 - 2026-06-23 — **Fix (portrait STILL truncating on v0.3.2 — the distinct message CONFIRMED the cause; salvage
   partial JSON + bigger budget so onboarding never dead-ends; issue #19, spec 28, on
   `fix/portrait-truncation-salvage`).** The 2026-06-22 hardening shipped in v0.3.2 and the user came back with a

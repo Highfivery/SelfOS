@@ -156,6 +156,12 @@ the renderer.
   module routes + `/settings/*` + Home (`/`) + a 404.
 - Route → component mapping comes from `module.routes`; nav comes from `module.nav`. The shell
   contains **no hard-coded feature routes**.
+- **Capability-gated routes are guarded, not just hidden.** A route whose nav link is capability-gated
+  is wrapped in a `RequireCapability` guard that reads the reactive `can(capability)` selector and
+  redirects to Home (`<Navigate to="/" replace>`) when the active person lacks it — so the screen is
+  unreachable by switching the active person while on it, or by typing a `#/…` hash, not merely absent
+  from the sidebar (defense in depth alongside the nav gating, which is kept). The route↔capability map
+  matches the nav-link gating exactly. Any unknown hash redirects to Home via a catch-all `*` route.
 
 ### 5.3 State stores (Zustand)
 

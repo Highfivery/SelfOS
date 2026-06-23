@@ -291,6 +291,19 @@
   font-weight: 600;
 }
 
+/* A boundary/limit point (e.g. "Hard no") — a distinct danger tone so it reads as a limit, not a feeling. */
+.scalePointLimit {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+.scalePointLimit.scalePointOn {
+  border-color: var(--color-danger);
+  background: var(--color-danger-subtle-bg);
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
 .scalePoint:focus-visible {
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;

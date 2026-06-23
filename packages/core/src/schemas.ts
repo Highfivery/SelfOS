@@ -812,10 +812,18 @@ export const QuestionSchema = z.object({
       max: z.number(),
       minLabel: z.string().optional(),
       // A 3-point matrix (max−min===2) carrying all of min/mid/maxLabel renders each row as three LABELLED
-      // options (e.g. Hard limit · Curious · Into it) instead of numbered points — the intake activity/toys
-      // matrices use this. The stored value stays the numeric row→point map; the labels are display only.
+      // options (e.g. Hard limit · Curious · Into it) instead of numbered points. The stored value stays the
+      // numeric row→point map; the labels are display only.
       midLabel: z.string().optional(),
       maxLabel: z.string().optional(),
+      // An N-point LABELLED scale: one label per point (length must equal max−min+1) — e.g. the intake
+      // activity matrix's 5-point feeling scale (Hard no · Not interested · Curious · Like it · Love it).
+      // When present it wins over min/mid/maxLabel; absent → numbered points (existing questionnaire matrices)
+      // or the 3-label fallback above. Additive; the value is still the numeric row→point map.
+      pointLabels: z.array(z.string()).optional(),
+      // Labels (a subset of `pointLabels`) rendered with a distinct boundary/limit tone rather than the
+      // neutral feeling tone — e.g. ['Hard no'], so a hard limit reads as a boundary, not just another option.
+      limitLabels: z.array(z.string()).optional(),
     })
     .optional(),
   metricKey: z.string().optional(), // rating/slider/matrix → populates Insight.metrics

@@ -4564,6 +4564,8 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
     await expect(w.getByRole('heading', { name: 'The basics' })).toBeVisible();
     await w.getByLabel('What do you do for work?').fill('nurse');
     await w.getByLabel('How would you describe how you look?').fill('tall, curly hair');
+    // Gender drives the intimacy activity matrix's anatomy-aware oral rows (27 §4.2).
+    await w.getByRole('radio', { name: 'Man', exact: true }).click();
     // Ethnicity is now a multi-select (pick one or more) → joined into the string `ethnicity` field.
     // Multi options render as role="checkbox" cards; `exact` avoids "East Asian" matching "Southeast Asian".
     await w.getByRole('checkbox', { name: 'East Asian', exact: true }).click();
@@ -4594,18 +4596,47 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
     await w.getByRole('button', { name: /Intimacy & sexuality/ }).click();
     await expect(w.getByRole('button', { name: /18 or older/ })).toBeVisible();
     // Acknowledge 18+ → the rebalanced intimacy form renders. The core (e.g. orientation) shows immediately;
-    // the explicit specifics — incl. the 3-state activity MATRIX (Hard limit · Curious · Into it) — sit behind
-    // the opt-in "get specific?" toggle (27 §4.3). Toggle it to prove the labelled matrix renders in the real
-    // built app, then skip the section so the flow continues to the portrait.
+    // the explicit specifics — incl. the 5-point activity MATRIX (Hard no · Not interested · Curious · Like it ·
+    // Love it) — sit behind the opt-in "get specific?" toggle (27 §4.2/§4.3). Pick "Who are you drawn to?" so the
+    // matrix's oral rows tailor to the person (a straight man), toggle the gate, fill a row, then Continue so
+    // the matrix answer actually persists.
     await w.getByRole('button', { name: /18 or older/ }).click();
     await expect(w.getByText('Who are you drawn to?')).toBeVisible(); // a core, always-visible question
-    await expect(w.getByRole('radio', { name: 'Into it' })).toHaveCount(0); // matrix gated by default
+    await expect(w.getByRole('radio', { name: 'Love it' })).toHaveCount(0); // matrix gated by default
+    await w.getByRole('checkbox', { name: 'Women', exact: true }).click(); // drawnTo → tailors giving-oral
     await w
       .getByRole('radiogroup', { name: /Want to get into the explicit specifics/ })
       .getByRole('radio', { name: 'Yes' })
       .click();
-    await expect(w.getByRole('radio', { name: 'Into it' }).first()).toBeVisible();
-    await w.getByRole('button', { name: 'Skip this section' }).click();
+    // The 5-point labelled matrix renders, tailored to a straight man: cunnilingus-giving + receiving-blowjob,
+    // never the blowjob-giving variant (27 §4.2).
+    await expect(w.getByRole('radio', { name: 'Love it' }).first()).toBeVisible();
+    await expect(w.getByRole('radiogroup', { name: /Receiving oral \(blowjob\)/ })).toBeVisible();
+    await expect(w.getByRole('radiogroup', { name: /Going down on her/ })).toBeVisible();
+    await expect(w.getByRole('radiogroup', { name: /Giving a blowjob/ })).toHaveCount(0);
+    // The 5-point matrix must wrap cleanly at phone width — no horizontal scroll on the page or any inner
+    // control (the .scale row wraps the five labelled points). Check WHILE the matrix is on screen.
+    await w.setViewportSize({ width: 390, height: 780 });
+    const matrixGuard = await w.evaluate(() => {
+      const offenders: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          offenders.push(`${el.tagName}.${String(el.className)}`);
+        }
+      });
+      const main = document.querySelector('main');
+      return { offenders, mainOverflow: main ? main.scrollWidth - main.clientWidth : 0 };
+    });
+    expect(matrixGuard.offenders).toEqual([]);
+    expect(matrixGuard.mainOverflow).toBeLessThanOrEqual(1);
+    await w.setViewportSize({ width: 1280, height: 800 });
+    // Rate the gender-aware giving-oral row "Love it" (point 5) — it must persist through the submit.
+    await w
+      .getByRole('radiogroup', { name: /Going down on her/ })
+      .getByRole('radio', { name: 'Love it' })
+      .click();
+    await w.getByRole('button', { name: /Continue/ }).click();
 
     // Generate the portrait → a confirm modal (encourages adding more) → it releases the gate (§14.2/§15)
     // and feeds the person's own context.
@@ -4632,6 +4663,13 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
     expect(filled?.ethnicity).toContain('East Asian'); // multi-select → joined string
     expect(filled?.ethnicity).toContain('Mixed / Multiple');
     expect(filled?.importantDates).toEqual([{ label: 'Anniversary', date: '2014-06-21' }]); // dateList
+    // The intimacy activity matrix persists (it is no longer dropped on submit) and is keyed by the
+    // gender-aware ROW the renderer resolved for a straight man (27 §4.2): "Going down on her (oral)" → Love it.
+    const intimacyAnswers = (await getIntakeSession(fs, key, 'owner-1'))?.sections.find(
+      (s) => s.id === 'intimacy',
+    )?.answers;
+    expect(intimacyAnswers?.drawnTo).toEqual(['Women']);
+    expect(intimacyAnswers?.activities).toEqual({ 'Going down on her (oral)': 5 });
     const context = await buildContext(fs, key, 'owner-1');
     expect(context).toContain('thoughtful and steady'); // the portrait summary feeds own context
     expect(context).toContain('grief'); // a restricted fact still feeds the person's OWN coaching

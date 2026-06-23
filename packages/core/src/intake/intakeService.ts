@@ -22,6 +22,7 @@ import { FORMATTING, PERSONA, SAFETY } from '../conversations/promptBuilder';
 import { checkBudget, costOf, recordUsage } from '../usage';
 import { getInsight, normalizeCategories, saveInsight } from '../insights';
 import { isAnswered } from '../questionnaires/answering';
+import { activityRowContext, withResolvedActivityRows } from './activityContext';
 import {
   INTAKE_CATALOG,
   buildInterviewerAddendum,
@@ -175,19 +176,33 @@ function answerToString(value: IntakeAnswerValue | undefined): string {
   return String(value).trim();
 }
 
-/** Map a 3-point labelled matrix (the intake activity matrix) answer to readable label text for the
- * synthesis input — "oral: Into it; choking: Hard limit" — so the portrait captures the meaning, not "1/3".
- * Falls back to {@link answerToString} for a non-matrix / unlabelled-matrix answer. */
+/** The display labels for a labelled matrix's points (the N-point `pointLabels`, else the 3-label
+ * min/mid/maxLabel fallback) — or null for a plain numbered matrix. */
+function matrixLabels(matrix: NonNullable<Question['matrix']>): string[] | null {
+  const span = matrix.max - matrix.min + 1;
+  if (matrix.pointLabels && matrix.pointLabels.length === span) return matrix.pointLabels;
+  const { min, max, minLabel, midLabel, maxLabel } = matrix;
+  if (max - min === 2 && minLabel && midLabel && maxLabel) return [minLabel, midLabel, maxLabel];
+  return null;
+}
+
+/** Map a labelled matrix (the intake activity matrix) answer to readable label text for the synthesis
+ * input — "oral: Love it; choking: Hard no" — so the portrait captures the meaning, not "1/5". Falls back to
+ * {@link answerToString} for a non-matrix / unlabelled-matrix answer. */
 function formatAnswerForSynthesis(q: Question, value: IntakeAnswerValue | undefined): string {
   if (q.type !== 'matrix' || !q.matrix || value === null || typeof value !== 'object') {
     return answerToString(value);
   }
-  const { min, max, minLabel, midLabel, maxLabel, rows } = q.matrix;
-  const labels =
-    max - min === 2 && minLabel && midLabel && maxLabel ? [minLabel, midLabel, maxLabel] : null;
+  const labels = matrixLabels(q.matrix);
   if (!labels || Array.isArray(value)) return answerToString(value);
+  const { min, rows } = q.matrix;
   const map = value as Record<string, number>;
-  return rows
+  // The activity-matrix rows are re-resolved from (gender, drawnTo) — so a rating stored under a row label that
+  // a LATER gender/drawnTo edit no longer resolves to (an "orphaned" key) would otherwise vanish from the
+  // portrait. Append any such stored keys verbatim (the key IS the label), so a re-synthesis never silently
+  // drops a prior rating. For a plain matrix (rows already cover every key) this is a no-op.
+  const orphaned = Object.keys(map).filter((k) => !rows.includes(k));
+  return [...rows, ...orphaned]
     .map((row) => {
       const point = map[row];
       if (typeof point !== 'number') return null;
@@ -680,6 +695,9 @@ const sensitiveSectionTitle = (title: string): string => `${title} — sensitive
  * their facts inherit restriction (§14.8). */
 function formAnswersMessages(session: IntakeSession): { role: 'user'; content: string }[] {
   const out: { role: 'user'; content: string }[] = [];
+  // The intimacy activity matrix's rows are tailored per-person (27 §4.2); re-resolve with the same context
+  // the renderer used so the stored answer keys map back to their labels.
+  const actCtx = activityRowContext(session);
   for (const def of INTAKE_CATALOG) {
     if (!def.questions) continue;
     const section = session.sections.find((s) => s.id === def.id);
@@ -687,7 +705,8 @@ function formAnswersMessages(session: IntakeSession): { role: 'user'; content: s
     const normal: string[] = [];
     const sensitive: string[] = [];
     for (const m of def.questions) {
-      const str = formatAnswerForSynthesis(m.q, section.answers[m.q.id]);
+      const q = withResolvedActivityRows(m.q, actCtx);
+      const str = formatAnswerForSynthesis(q, section.answers[m.q.id]);
       if (!str) continue;
       const line = `${m.q.prompt}: ${str}`;
       // A per-question restricted answer in a non-restricted section → the sensitive block. (In a restricted

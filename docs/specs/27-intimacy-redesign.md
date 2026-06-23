@@ -1,6 +1,7 @@
 # 27 — Intimacy & sexuality block redesign
 
-> **Status:** Approved · **Built** 2026-06-21 (`feat/intimacy-redesign`) · _last updated 2026-06-21_
+> **Status:** Approved · **Built** 2026-06-21 (`feat/intimacy-redesign`) · activity matrix **redesigned to
+> 5-point + gender-aware** 2026-06-23 (`feat/intimacy-matrix-redesign`) · _last updated 2026-06-23_
 >
 > The opt-in 18+ **Intimacy & sexuality** intake block ([`18`](18-personal-onboarding.md) §14.5) is
 > comprehensive but **100 questions** with real fatigue traps — most painfully, three full ~40-item activity
@@ -259,18 +260,29 @@ they toggle "want to get specific?". Explicit content is unchanged for those who
 - **`intakeCatalog.ts`** — rewrite the `intimacy` section to the §4.2 bank. Reuse the shared
   `INTIMACY_ACTIVITIES` / `INTIMACY_FANTASIES` / `TOYS` constants; the activity + toys **matrices** reference
   those same lists (one source of truth with [`08`](08-questionnaires.md) generation — no drift).
-- **`matrix` (3-point labelled — AS BUILT).** Today's `matrix` is rows × a numeric scale (value
-  `Record<string, number>`). Rather than a heavier categorical-columns type (which would need a horizontal
-  column grid — a mobile no-horizontal-scroll hazard, §12), the 3-state matrix is an **ordinal 3-point** scale
-  whose buttons show **labels instead of numbers**. The minimal additive changes: (1) `Question.matrix` gains
-  an optional **`midLabel`** (mirroring slider); (2) `@selfos/answering`'s `ScalePicker` gains an optional
-  `labels` prop, and the matrix render passes the 3 labels when a matrix has exactly 3 points + all of
-  min/mid/maxLabel (otherwise unchanged numbered points — existing 5-point questionnaire matrices are
-  untouched); (3) `IntakeAnswerValue` is **widened** to include `Record<string, number>` (the intake now
-  stores a matrix answer); (4) the shared `isAnswered` (every-row, kept for required questionnaire matrices)
-  is supplemented by an **intake-local `intakeAnswered`** that counts a matrix answered when **any** row is
-  rated — so a long optional activity matrix persists partial ratings. The buttons stay flex-wrapped
-  (`.scale`/`.matrixRow` wrap), so 3 labelled options never overflow at ~360px.
+- **`matrix` (labelled — AS BUILT; 5-point as of 2026-06-23).** Today's `matrix` is rows × a numeric scale
+  (value `Record<string, number>`). Rather than a heavier categorical-columns type (which would need a
+  horizontal column grid — a mobile no-horizontal-scroll hazard, §12), the activity matrix is an **ordinal
+  labelled scale** whose buttons show **labels instead of numbers**. As **first built** it was a 3-point scale
+  via `min/mid/maxLabel`; the **2026-06-23 redesign** (`feat/intimacy-matrix-redesign`) makes it a **5-point
+  ordered feeling scale — Hard no · Not interested · Curious · Like it · Love it** (see the changelog + 18
+  §14.5). The additive engine changes: (1) `Question.matrix` gains an optional **`pointLabels: string[]`** (one
+  label per point — wins over the legacy 3-label `min/mid/maxLabel`; existing numbered questionnaire matrices
+  are untouched) **and `limitLabels: string[]`** (labels rendered with a distinct boundary/danger tone — e.g.
+  `['Hard no']`, so a hard limit reads as a boundary, not just another option); (2) `@selfos/answering`'s
+  `ScalePicker` takes the `labels` + `limitLabels` and the matrix render passes them when `pointLabels` matches
+  the point count; (3) `IntakeAnswerValue` already includes `Record<string, number>` (the intake stores a
+  matrix answer); (4) the shared `isAnswered` (every-row, kept for required questionnaire matrices) is
+  supplemented by an **intake-local `intakeAnswered`** that counts a matrix answered when **any** row is rated;
+  (5) `formatAnswerForSynthesis` maps the points to `pointLabels` for the portrait input. The buttons stay
+  flex-wrapped (`.scale`/`.matrixRow` wrap), so the 5 labelled options fit / wrap cleanly at ~360px.
+- **Gender/orientation-aware rows (2026-06-23).** A pure `resolveIntakeActivityRows({ gender, drawnTo })`
+  (`@selfos/core/intimacy`) tailors **only the oral rows** by anatomy (own anatomy → receiving label; partner
+  anatomy from `drawnTo` → giving rows: a straight man sees only the cunnilingus-giving variant, a bi person
+  both), with a **safe full-neutral fallback the moment either input is ambiguous** (never erase on
+  uncertainty). The shared `INTIMACY_ACTIVITIES` inventory is **not** mutated; the resolver runs at the
+  **render layer** (renderer, live from `gender` + the `drawnTo` answer) and synthesis **re-resolves with the
+  same context** so the stored answer keys map back to labels. See 18 §14.5 + `activityRows.ts`.
 - **Synthesis** — the whole `intimacy` section is `restricted`, so all its facts flag restricted via
   `RESTRICTED_SECTION_REFS` ([`18`](18-personal-onboarding.md) §14.8). A new `formatAnswerForSynthesis` maps a
   3-point labelled matrix answer to readable label text for the portrait input ("oral: Into it; choking: Hard
@@ -293,6 +305,10 @@ the bridge before the intimacy section's questions are served ([`18`](18-persona
   ([`26`](26-intake-catalog-redesign.md) §7).
 - **18+ not acknowledged** — the section stays gated; unchanged.
 - **Matrix partially filled** — blank rows = no answer (no fact); only filled rows produce facts.
+- **Gender/drawnTo edited AFTER rating the matrix (2026-06-23).** The activity rows are re-resolved from
+  `(gender, drawnTo)`, so changing either later can leave a rating stored under a row label the new context no
+  longer resolves (an "orphaned" key). The on-disk answer is untouched, and synthesis **appends any orphaned
+  stored keys verbatim** (the key is itself the label), so a re-synthesis never silently drops a prior rating.
 - **Branch staleness** — handled by the existing `resolveBranch` pruning ([`08`](08-questionnaires.md)).
 - **Crisis / trauma disclosure mid-block** — leads with warmth + resources; the optional pointer to **What
   weighs on you** is available; footer always present.
@@ -337,9 +353,11 @@ announce "not set." Reduced-motion respected.
 
 ## 11. Open questions
 
-1. **Matrix support** — RESOLVED at build: today's `matrix` is scale-only, so the 3-state matrix is an
-   ordinal **3-point labelled** scale (additive `midLabel` + a `ScalePicker labels` prop), not a categorical-
-   columns type — see §5. Mobile-safe (wrapping), value stays `Record<string, number>`.
+1. **Matrix support** — RESOLVED at build, then extended 2026-06-23: the `matrix` is scale-only, so the
+   activity matrix is an ordinal **labelled** scale — first 3-point (`midLabel` + a `ScalePicker labels` prop),
+   now **5-point** (Hard no · Not interested · Curious · Like it · Love it) via additive `pointLabels` +
+   `limitLabels`, not a categorical-columns type — see §5. Mobile-safe (wrapping), value stays
+   `Record<string, number>`.
 2. **Activity-list length in a matrix** — shipped with the **full** shared `INTIMACY_ACTIVITIES` as rows (one
    source of truth with [`08`](08-questionnaires.md) — not forked/trimmed); the rows stack vertically. If it
    reads long in use, a future polish could add sub-headers; not blocking.
@@ -362,6 +380,27 @@ announce "not set." Reduced-motion respected.
 
 ## 13. Changelog
 
+- 2026-06-23 — **Activity matrix redesign — 5-point + gender/orientation-aware** (`feat/intimacy-matrix-redesign`,
+  off `main`; owner-approved decisions, implemented not re-asked). The 3-state activity matrix became a **5-point
+  ordered feeling scale — Hard no · Not interested · Curious · Like it · Love it** (a single mutually-exclusive
+  choice per row; **"Hard no" rendered as a boundary** with a distinct danger tone, the other four as feelings).
+  Engine (all additive, no migration): `Question.matrix` gains **`pointLabels: string[]`** (N-label scale; wins
+  over the legacy 3-label `min/mid/maxLabel`, existing numbered questionnaire matrices untouched) +
+  **`limitLabels: string[]`** (boundary tone); `@selfos/answering`'s `ScalePicker` renders `pointLabels` with a
+  `.scalePointLimit` tone for `limitLabels`; `formatAnswerForSynthesis` maps points → `pointLabels`. The acts are
+  **gender/orientation-aware at the RENDER layer only** — a pure `resolveIntakeActivityRows({ gender, drawnTo })`
+  (`@selfos/core/intimacy/activityRows.ts`) relabels/splits **only the oral rows** (own anatomy → receiving;
+  partner anatomy from `drawnTo` → giving; a straight man never sees the blowjob-giving variant, a bi person sees
+  both; everything else stays universal), with a **safe full-neutral fallback the instant either input is
+  ambiguous** (never erase on uncertainty). The shared `INTIMACY_ACTIVITIES` inventory is **not** mutated;
+  synthesis re-resolves with the same `(gender, drawnTo)` from the session so the stored keys map back to labels.
+  **Also fixed:** the onboarding renderer's `toSubmit` dropped the matrix (an object answer) so activity ratings
+  never persisted — it now passes the row→point record through. Tests: core resolver units (straight man / straight
+  woman / bi / gay man / non-binary / "Everyone" / unknown), catalog band → 5-point, synthesis gender-aware +
+  pointLabels, `QuestionnaireForm` RTL 5-point + limit tone, `IntakeFormPanel` RTL gender-aware rows + matrix
+  persists, and the onboarding **E2E** now fills the gender-aware matrix → Continue → decrypts the matrix value +
+  a 390px no-overflow guard while the matrix renders. Gate: typecheck, lint, format, **523 core + 11 relay + 650
+  desktop** unit, onboarding E2E green. Amends 18 §14.5.
 - 2026-06-21 — created (Draft). Part of the onboarding-redesign spec group (26 non-intimacy catalog · 27
   intimacy · 28 synthesis/context optimization · 29 progressive profile-building). Rebalances the intimacy
   block 100 → ~58, explicit register retained, via a 3-state activity matrix + sex-therapy wellbeing

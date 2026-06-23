@@ -1,4 +1,9 @@
-import { INTIMACY_ACTIVITIES, INTIMACY_FANTASIES } from '../intimacy/topics';
+import { INTIMACY_FANTASIES } from '../intimacy/topics';
+import {
+  ACTIVITY_LIMIT_LABELS,
+  ACTIVITY_POINT_LABELS,
+  resolveIntakeActivityRows,
+} from '../intimacy/activityRows';
 import type {
   BranchRule,
   IntakeSectionMeta,
@@ -1668,22 +1673,24 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ),
           { restricted: true },
         ),
-        // The activity inventory as ONE 3-state matrix — Hard limit · Curious · Into it. Rows = the shared
-        // INTIMACY_ACTIVITIES plus two dynamics folded in from the old degrade/praise single (27 §4.3).
+        // The activity inventory as ONE 5-point feeling matrix — Hard no · Not interested · Curious · Like it
+        // · Love it (27 §4.2). Rows default to the NEUTRAL list (= `resolveIntakeActivityRows({})`); the
+        // renderer re-resolves them per-person from gender + drawnTo (oral directionality only), and synthesis
+        // re-resolves with the same context so the keys line up. The two relationship dynamics + the boundary
+        // ("Hard no") tone are folded in by the resolver / labels.
         f(
           {
             id: 'activities',
             type: 'matrix',
             prompt:
-              'For each, tap where you stand — your hard limits, what you’re curious about, and what you’re into:',
+              'For each, tap where you stand — a hard no, not for you, curious, or something you’re into:',
             required: false,
             matrix: {
-              rows: [...INTIMACY_ACTIVITIES, 'Degradation / humiliation', 'Praise / worship'],
+              rows: resolveIntakeActivityRows(),
               min: 1,
-              max: 3,
-              minLabel: 'Hard limit',
-              midLabel: 'Curious',
-              maxLabel: 'Into it',
+              max: 5,
+              pointLabels: [...ACTIVITY_POINT_LABELS],
+              limitLabels: [...ACTIVITY_LIMIT_LABELS],
             },
             branch: when('getSpecific', true),
           },

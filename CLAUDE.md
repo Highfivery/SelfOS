@@ -385,6 +385,39 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-23 — **Build (onboarding intimacy-matrix redesign — 5-point + gender/orientation-aware; spec 27 §4.2 +
+  18 §14.5; on `feat/intimacy-matrix-redesign`, PR open).** Owner-approved decisions (implemented, not re-asked).
+  The intake `activities` matrix went from a 3-state scale (Hard limit · Curious · Into it) to a **5-point ordered
+  feeling scale — Hard no · Not interested · Curious · Like it · Love it** (one mutually-exclusive choice per row;
+  **"Hard no" rendered as a BOUNDARY** with a distinct danger tone, the other four as feelings — a hard no is the
+  strongest "no", not an extra toggle). Engine, all **additive** (no migration): `Question.matrix` gains
+  **`pointLabels: string[]`** (N-label scale; wins over the legacy 3-label `min/mid/maxLabel`, existing numbered
+  questionnaire matrices untouched) + **`limitLabels: string[]`** (boundary tone); `@selfos/answering`'s
+  `ScalePicker` renders them (new `.scalePointLimit` style + a `--color-danger-subtle-bg` token, which the relay
+  page already defined); `formatAnswerForSynthesis` maps points → `pointLabels`. The acts are
+  **gender/orientation-aware at the RENDER layer only** via a pure `resolveIntakeActivityRows({ gender, drawnTo })`
+  (`@selfos/core/intimacy/activityRows.ts`): **only the oral rows** are relabelled/split by anatomy — own anatomy
+  → receiving label; partner anatomy from `drawnTo` → giving rows; **a straight man never sees the blowjob-giving
+  variant**, a bi person sees both; **everything else stays universal** (no over-filtering). **Never erase on
+  uncertainty:** any ambiguity in gender (non-binary/trans/PNTS/other/unset) OR `drawnTo`
+  (everyone/non-binary/trans\*/other/empty) → the FULL list with neutral oral labels. The shared
+  `INTIMACY_ACTIVITIES` inventory is **NOT** mutated (questionnaire generation/spec 08 reads the same list);
+  synthesis **re-resolves with the same `(gender, drawnTo)`** from the session (`activityContext.ts`) so stored
+  matrix keys map back to labels, and **appends any orphaned stored keys verbatim** so a later gender/drawnTo edit
+  never silently drops a prior rating. **Also fixed a real bug:** the onboarding renderer's `toSubmit` dropped the
+  matrix (an object answer) so activity ratings never persisted — it now passes the row→point record through.
+  Code-reviewer **ship** (resolver rules, render↔synthesis key consistency, inventory immutability, additive
+  schema compat, and the privacy boundary all verified; applied the one should-fix — the orphaned-key hardening).
+  Gate: typecheck, lint, format, **523 core + 11 relay + 650 desktop** unit; onboarding **E2E** drives the real UI
+  (gender → drawnTo → 18+ gate → fill the gender-aware matrix → Continue → **decrypt** the persisted matrix value;
+  asserts the blowjob-giving row is absent for a straight man) + a 390px no-overflow guard while the matrix renders;
+  visual QA at desktop + 390px (the 5 points wrap cleanly, "Hard no" reads as a red boundary). Synced spec 27 +
+  18 §14.5 + 08's `Question.matrix` interface. **Lesson: keep a per-person row tailoring at the RENDER layer (a
+  pure resolver), never by mutating a SHARED inventory another feature reads; make render + synthesis resolve from
+  the SAME persisted inputs so a relabelled row's answer key still maps back — and append orphaned keys so a later
+  edit can't silently drop a rating. The matrix-as-display-string keying meant the renderer's object-dropping
+  `toSubmit` had been silently discarding every activity rating — a "tests pass, data lost" trap a decrypt-the-
+  value E2E catches where a render-only assertion didn't.**
 - 2026-06-23 — **Build (update awareness, notify-only — SPEC 36 BUILT; on `feat/update-awareness`, PR open).** SelfOS
   had no way to tell a user a newer version exists. Built a notify-only check (NO auto-download/install, no
   electron-updater, no signing — the app stays unsigned): a pure `@selfos/core/updates` `checkForUpdate({fetch,

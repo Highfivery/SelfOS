@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
 import { QuestionnaireForm } from '@selfos/answering';
 import { stripIntakeFieldMarkers } from '@selfos/core/intake';
+import { resolveIntakeActivityRows } from '@selfos/core/intimacy';
 import type { AnswerMap, AnswerValue } from '@selfos/core/questionnaires';
+import type { Question } from '@selfos/core/schemas';
 import type { IntakeAnswerValue, IntakeSection, IntakeSectionMeta } from '@shared/channels';
 import { ArrowRight, MessageCircle, ShieldCheck } from 'lucide-react';
 import { Banner, Button, Card, Heading, Markdown, Text } from '../../../design-system/components';
@@ -19,11 +21,15 @@ export function IntakeFormPanel({
   meta,
   section,
   adultAcknowledged,
+  profileGender,
   onAdvance,
 }: {
   meta: IntakeSectionMeta;
   section: IntakeSection | undefined;
   adultAcknowledged: boolean;
+  /** The person's gender (from the `basics` section / profile) — tailors the intimacy activity matrix's oral
+   * rows alongside the live `drawnTo` answer (27 §4.2). */
+  profileGender?: string;
   onAdvance: () => void;
 }): JSX.Element {
   const busy = useIntakeStore((s) => s.busy);
@@ -58,17 +64,44 @@ export function IntakeFormPanel({
       return next;
     });
 
-  const questions = useMemo(() => meta.questions ?? [], [meta.questions]);
+  // The intimacy activity matrix's rows are tailored per-person (27 §4.2): only the oral rows are relabelled/
+  // hidden by own anatomy (gender) + partner anatomy (the live `drawnTo` answer in this same form). Re-resolved
+  // here so the customization updates live as they pick "Who are you drawn to?"; synthesis re-resolves with the
+  // same context server-side, so the stored matrix keys line up.
+  const drawnTo = useMemo(() => {
+    const v = answers['drawnTo'];
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : undefined;
+  }, [answers]);
+  const questions = useMemo<Question[]>(() => {
+    const base = meta.questions ?? [];
+    return base.map((q) =>
+      q.id === 'activities' && q.type === 'matrix' && q.matrix
+        ? {
+            ...q,
+            matrix: {
+              ...q.matrix,
+              rows: resolveIntakeActivityRows({ gender: profileGender, drawnTo }),
+            },
+          }
+        : q,
+    );
+  }, [meta.questions, profileGender, drawnTo]);
   const locked = meta.adult && !adultAcknowledged;
   const complete = section?.status === 'complete';
 
-  // Intake questions never use matrix/allocation, so an answer is always an `IntakeAnswerValue`; drop any
-  // object-valued answer defensively so the submit payload matches the bridge contract.
+  // A matrix answer is a row→point record (Record<string, number>) — keep it; every other intake answer is a
+  // scalar/array. Any OTHER non-array object isn't a valid intake answer, so drop it defensively to match the
+  // bridge contract (IntakeAnswerValueSchema).
   const toSubmit = (): Record<string, IntakeAnswerValue> => {
     const out: Record<string, IntakeAnswerValue> = {};
     for (const [qid, value] of Object.entries(answers)) {
-      if (value !== null && typeof value === 'object' && !Array.isArray(value)) continue;
-      out[qid] = value;
+      if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+        if (Object.values(value).every((v) => typeof v === 'number')) {
+          out[qid] = value as IntakeAnswerValue;
+        }
+        continue;
+      }
+      out[qid] = value as IntakeAnswerValue;
     }
     return out;
   };

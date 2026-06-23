@@ -41,23 +41,30 @@ describe('intakeCatalog', () => {
     expect(coreGate).toBeLessThanOrEqual(30);
   });
 
-  it('the intimacy block is rebalanced — in band, with the 3-state activities matrix (27 §4.3)', () => {
+  it('the intimacy block is rebalanced — in band, with the 5-point activities matrix (27 §4.2)', () => {
     const intimacy = getIntakeSection('intimacy');
     const qs = intimacy?.questions ?? [];
     // 100 → 61 (first pass) → ~42 (second pass: consolidation + the opt-in `getSpecific` gate). Guard the band
     // so it can't silently re-bloat or be gutted.
     expect(qs.length).toBeGreaterThan(30);
     expect(qs.length).toBeLessThanOrEqual(50);
-    // The activity list is collapsed into one 3-point LABELLED matrix (min/mid/max all set); the old `toys`
-    // matrix was cut (its rows live in `INTIMACY_ACTIVITIES`).
+    // The activity list is ONE 5-point LABELLED matrix (Hard no · Not interested · Curious · Like it · Love it),
+    // with the boundary ("Hard no") flagged as a limit; the old `toys` matrix was cut.
     const matrices = qs.filter((m) => m.q.type === 'matrix');
     expect(matrices.map((m) => m.q.id).sort()).toEqual(['activities']);
     for (const m of matrices) {
       const mx = m.q.matrix;
       expect(mx).toBeTruthy();
       if (!mx) continue;
-      expect(mx.max - mx.min).toBe(2); // exactly 3 points
-      expect(Boolean(mx.minLabel && mx.midLabel && mx.maxLabel)).toBe(true); // 3 labels → labelled render
+      expect(mx.max - mx.min).toBe(4); // exactly 5 points
+      expect(mx.pointLabels).toEqual([
+        'Hard no',
+        'Not interested',
+        'Curious',
+        'Like it',
+        'Love it',
+      ]);
+      expect(mx.limitLabels).toEqual(['Hard no']); // the boundary point reads as a limit
       expect(mx.rows.length).toBeGreaterThan(5); // a real inventory of rows
     }
     // The explicit specifics are gated behind one opt-in toggle; the always-visible core must NOT be.

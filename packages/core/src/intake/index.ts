@@ -2,3 +2,4 @@
 export * from './intakeCatalog';
 export * from './intakeService';
 export * from './portraitFreshness';
+export * from './activityContext';

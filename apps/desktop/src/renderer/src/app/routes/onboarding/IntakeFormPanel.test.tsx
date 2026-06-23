@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import {
+  ACTIVITY_POINT_LABELS,
+  ACTIVITY_LIMIT_LABELS,
+  resolveIntakeActivityRows,
+} from '@selfos/core/intimacy';
 import type { IntakeSection, IntakeSectionMeta } from '@shared/channels';
 import { IntakeFormPanel } from './IntakeFormPanel';
 import { useIntakeStore } from '../../../stores/intakeStore';
@@ -50,6 +55,40 @@ const intimacyMeta: IntakeSectionMeta = {
       prompt: 'Sex drive',
       required: false,
       options: ['Low', 'High'],
+    },
+  ],
+};
+
+// An intimacy section carrying the 5-point activity matrix (neutral default rows, as the bridge sends them).
+const intimacyMatrixMeta: IntakeSectionMeta = {
+  id: 'intimacy',
+  title: 'Intimacy & sexuality',
+  blurb: 'Optional, 18+.',
+  restricted: true,
+  adult: true,
+  tier: 'invited',
+  mode: 'form',
+  opener: 'Optional grown-up space.',
+  questions: [
+    {
+      id: 'drawnTo',
+      type: 'multiChoice',
+      prompt: 'Who are you drawn to?',
+      required: false,
+      options: ['Men', 'Women', 'Everyone', 'Other'],
+    },
+    {
+      id: 'activities',
+      type: 'matrix',
+      prompt: 'Where do you stand?',
+      required: false,
+      matrix: {
+        rows: resolveIntakeActivityRows(),
+        min: 1,
+        max: 5,
+        pointLabels: [...ACTIVITY_POINT_LABELS],
+        limitLabels: [...ACTIVITY_LIMIT_LABELS],
+      },
     },
   ],
 };
@@ -204,5 +243,54 @@ describe('IntakeFormPanel', () => {
     );
     expect(screen.getByText('Sex drive')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /18 or older/ })).not.toBeInTheDocument();
+  });
+
+  it('tailors the activity matrix oral rows to gender + the live drawnTo answer (27 §4.2)', () => {
+    installMockBridge({});
+    render(
+      <IntakeFormPanel
+        meta={intimacyMatrixMeta}
+        section={section({ id: 'intimacy', restricted: true, answers: { drawnTo: ['Women'] } })}
+        adultAcknowledged={true}
+        profileGender="Man"
+        onAdvance={() => {}}
+      />,
+    );
+    // A straight man: gives oral to a vulva-haver + receives a blowjob; never the blowjob-giving variant.
+    expect(screen.getByRole('radiogroup', { name: /Going down on her/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole('radiogroup', { name: /Receiving oral \(blowjob\)/ }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('radiogroup', { name: /Giving a blowjob/ })).not.toBeInTheDocument();
+  });
+
+  it('persists a matrix answer through the submit (it is no longer dropped as an object)', async () => {
+    const intakeSubmitForm = vi.fn(() =>
+      Promise.resolve({
+        session: {} as never,
+        sections: [],
+        aiAvailable: true,
+        adultAcknowledged: true,
+      }),
+    );
+    installMockBridge({ intakeSubmitForm });
+    render(
+      <IntakeFormPanel
+        meta={intimacyMatrixMeta}
+        section={section({ id: 'intimacy', restricted: true })}
+        adultAcknowledged={true}
+        onAdvance={() => {}}
+      />,
+    );
+    // Pick "Love it" (point 5) on the universal "Bondage" row, then Continue.
+    const bondage = screen.getByRole('radiogroup', { name: /Bondage/ });
+    fireEvent.click(within(bondage).getByRole('radio', { name: 'Love it' }));
+    fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
+    await waitFor(() =>
+      expect(intakeSubmitForm).toHaveBeenCalledWith({
+        sectionId: 'intimacy',
+        answers: { activities: { Bondage: 5 } },
+      }),
+    );
   });
 });

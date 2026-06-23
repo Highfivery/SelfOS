@@ -339,7 +339,16 @@ interface Question {
   media?: { imagePath: string; alt: string; mime: string }; // author-attached image (encrypted; ZK on relay)
   options?: string[]; // choice/ranking/thisOrThat/allocation buckets
   scale?: { min: number; max: number; minLabel?: string; maxLabel?: string; step?: number };
-  matrix?: { rows: string[]; min: number; max: number; minLabel?: string; maxLabel?: string };
+  matrix?: {
+    rows: string[];
+    min: number;
+    max: number;
+    minLabel?: string;
+    midLabel?: string;
+    maxLabel?: string;
+    pointLabels?: string[]; // N-point labelled scale (length === max−min+1); wins over min/mid/maxLabel
+    limitLabels?: string[]; // subset of pointLabels rendered with a boundary/limit tone (e.g. ['Hard no'])
+  };
   metricKey?: string; // rating/slider/matrix → populates Insight.metrics[metricKey] (§4.4)
   branch?: BranchRule;
 }

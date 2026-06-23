@@ -78,6 +78,41 @@ describe('QuestionnaireForm', () => {
     expect(within(oralGroup).getByRole('radio', { name: 'Into it' })).toBeChecked();
   });
 
+  it('renders an N-point LABELLED matrix (Hard no … Love it) with a boundary tone on the limit (27 §4.2)', async () => {
+    render(
+      <Harness
+        questions={[
+          q({
+            id: 'a',
+            type: 'matrix',
+            prompt: 'Where do you stand?',
+            matrix: {
+              rows: ['Oral', 'Choking'],
+              min: 1,
+              max: 5,
+              pointLabels: ['Hard no', 'Not interested', 'Curious', 'Like it', 'Love it'],
+              limitLabels: ['Hard no'],
+            },
+          }),
+        ]}
+      />,
+    );
+    // Each row offers the five LABELLED options, not bare numbers — one "Love it"/"Hard no" radio per row.
+    expect(screen.getAllByRole('radio', { name: 'Love it' })).toHaveLength(2);
+    expect(screen.getAllByRole('radio', { name: 'Hard no' })).toHaveLength(2);
+    expect(screen.queryByRole('radio', { name: '5' })).toBeNull();
+    // The "Hard no" boundary point carries the distinct limit class; a feeling point does not.
+    const oralGroup = screen.getByRole('radiogroup', { name: /Oral/ });
+    const hardNo = within(oralGroup).getByRole('radio', { name: 'Hard no' });
+    expect(hardNo.className).toMatch(/scalePointLimit/);
+    expect(within(oralGroup).getByRole('radio', { name: 'Love it' }).className).not.toMatch(
+      /scalePointLimit/,
+    );
+    // Picking "Love it" stores it.
+    await userEvent.click(within(oralGroup).getByRole('radio', { name: 'Love it' }));
+    expect(within(oralGroup).getByRole('radio', { name: 'Love it' })).toBeChecked();
+  });
+
   it('offers an "Other" write-in when allowOther is set, and stores the typed text (§17.12-C)', async () => {
     render(
       <Harness

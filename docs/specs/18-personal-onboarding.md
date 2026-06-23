@@ -695,6 +695,31 @@ explicit acts, kinks, and **taboo _fantasies_** (CNC / "ravishment" roleplay, et
 with real limits captured in group H). It does **not** present minors, real non-consent, or other illegal acts
 as activities to pursue. Within that line it is fully explicit and unfiltered.
 
+> **Amendment (2026-06-23, `feat/intimacy-matrix-redesign`) — the activity matrix is a 5-point, gender-aware
+> control. Supersedes the 3-state matrix (27 §4.2) and the older triple-list / anatomy-Yes/No prose above.**
+>
+> - **5-point ordered feeling scale.** The `activities` matrix is now **Hard no · Not interested · Curious ·
+>   Like it · Love it** (a single mutually-exclusive choice per row), replacing the 3-point Hard limit · Curious
+>   · Into it. **"Hard no" renders as a boundary** (a distinct danger/limit tone), the other four as feelings —
+>   a hard no is the strongest "no", not an extra toggle. The renderer's `matrix` answer type gained an N-label
+>   **`pointLabels: string[]`** (wins over the legacy 3-label `min/mid/maxLabel`; existing numbered questionnaire
+>   matrices are untouched) + **`limitLabels: string[]`** for the boundary tone. Value stays the numeric
+>   `Record<row, point>` map; the buttons stay flex-wrapped, so the 5 points fit / wrap cleanly at ~360px.
+> - **Anatomy-aware oral, at the RENDER layer only.** The shared `INTIMACY_ACTIVITIES` inventory ([`08`](08-questionnaires.md)
+>   §16.5a) is **never mutated** (questionnaire generation reads the same list). A pure
+>   `resolveIntakeActivityRows({ gender, drawnTo })` ([`@selfos/core/intimacy`](../../packages/core/src/intimacy/activityRows.ts))
+>   tailors **only the two oral rows** by anatomy: **Receiving oral** is always shown, labelled by own anatomy
+>   (man → "Receiving oral (blowjob)"; woman → "Receiving oral (going down on you)"; else neutral); **Giving
+>   oral** is shown per partner anatomy from `drawnTo` (drawn to penis-havers → "Giving a blowjob"; drawn to
+>   vulva-havers → "Going down on her (oral)"). A **straight man sees only the cunnilingus-giving variant, never
+>   "give a blowjob"**; a bi person sees both. **Every other act stays universal** (no over-filtering of
+>   pegging/choking/etc.). **Never erase on uncertainty:** any ambiguity in gender (non-binary / trans /
+>   prefer-not-to-say / other / unset) **or** `drawnTo` (everyone / non-binary / trans\* / other / empty) → the
+>   FULL list with neutral oral labels. The keys are the display labels; **synthesis re-resolves with the same
+>   `(gender, drawnTo)`** from the session so the stored answer keys map back to their labels.
+> - **Fixed:** the renderer's `toSubmit` previously dropped the matrix (an object-valued answer), so the activity
+>   ratings never persisted; it now passes the row→point record through, with an RTL + E2E decrypt guarding it.
+
 > **Shared topic inventory (08 §16.5a, built 2026-06-15):** the consensual-adult **activity** checklist
 > (into-it / curious-to-try / hard-limits) and the **common-fantasies** list below are now the shared
 > `@selfos/core/intimacy` `INTIMACY_TOPICS` constant — ONE source of truth imported by both this intake block

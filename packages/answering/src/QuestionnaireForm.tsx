@@ -50,20 +50,32 @@ function ScalePicker({
   onPick,
   ariaLabel,
   labels,
+  limitLabels,
 }: {
   min: number;
   max: number;
   value: number | undefined;
   onPick: (n: number) => void;
   ariaLabel: string;
-  // When given (one per point), each button shows its label instead of the bare number — a 3-point labelled
-  // matrix (Hard limit · Curious · Into it). Buttons stay flex-wrapped, so they never overflow on mobile.
+  // When given (one per point), each button shows its label instead of the bare number — a labelled matrix
+  // (e.g. Hard no · Not interested · Curious · Like it · Love it). Buttons stay flex-wrapped, never overflowing.
   labels?: string[];
+  // Labels rendered with a distinct boundary/limit tone (e.g. ['Hard no']) — a hard no reads as a boundary,
+  // not just another feeling. Only meaningful alongside `labels`.
+  limitLabels?: string[];
 }): JSX.Element {
   return (
     <div className={styles.scale} role="radiogroup" aria-label={ariaLabel}>
       {range(min, max).map((n, i) => {
         const label = labels?.[i];
+        const isLimit = label !== undefined && (limitLabels?.includes(label) ?? false);
+        const cls = [
+          styles.scalePoint,
+          value === n ? styles.scalePointOn : '',
+          isLimit ? styles.scalePointLimit : '',
+        ]
+          .filter(Boolean)
+          .join(' ');
         return (
           <button
             key={n}
@@ -71,9 +83,7 @@ function ScalePicker({
             role="radio"
             aria-checked={value === n}
             aria-label={label ?? String(n)}
-            className={
-              value === n ? `${styles.scalePoint} ${styles.scalePointOn}` : styles.scalePoint
-            }
+            className={cls}
             onClick={() => onPick(n)}
           >
             {label ?? n}
@@ -84,15 +94,18 @@ function ScalePicker({
   );
 }
 
-/** The 3 labels for a 3-point labelled matrix (Hard limit · Curious · Into it), or undefined for a plain
- * numbered matrix. Only a matrix with exactly 3 points AND all of min/mid/maxLabel opts in. */
+/** The labels for a labelled matrix — the N-point `pointLabels` when its length matches the point count, else
+ * the legacy 3-point min/mid/maxLabel — or undefined for a plain numbered matrix. */
 function matrixPointLabels(matrix: {
   min: number;
   max: number;
   minLabel?: string | undefined;
   midLabel?: string | undefined;
   maxLabel?: string | undefined;
+  pointLabels?: string[] | undefined;
 }): string[] | undefined {
+  const span = matrix.max - matrix.min + 1;
+  if (matrix.pointLabels && matrix.pointLabels.length === span) return matrix.pointLabels;
   if (matrix.max - matrix.min !== 2) return undefined;
   const { minLabel, midLabel, maxLabel } = matrix;
   if (!minLabel || !midLabel || !maxLabel) return undefined;
@@ -637,6 +650,7 @@ function Control({
                 onPick={(n) => set({ ...current, [row]: n })}
                 ariaLabel={`${question.prompt} — ${row}`}
                 {...(pointLabels ? { labels: pointLabels } : {})}
+                {...(pointLabels && matrix.limitLabels ? { limitLabels: matrix.limitLabels } : {})}
               />
             </div>
           ))}

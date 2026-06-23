@@ -208,6 +208,9 @@ function e2eEnv(): Record<string, string> {
   env.SELFOS_FAKE_CLAUDE = '1';
   env.SELFOS_FAKE_RELAY = '1'; // deterministic in-memory relay (no Cloudflare account/network)
   env.SELFOS_FAKE_IMAGE = '1'; // deterministic tiny-PNG image client (no OpenAI network)
+  // Deterministic update check (no real GitHub call) — default reports an OLD version so the launch check
+  // is a no-op (up to date, no notification). Update tests override SELFOS_FAKE_UPDATE per launch (36 §10).
+  env.SELFOS_FAKE_UPDATE = '0.0.0';
   return env;
 }
 
@@ -417,6 +420,141 @@ test('notifications: are per-person — a member does not see the owner’s fres
     await w.getByRole('button', { name: 'Notifications' }).click();
     await expect(w.getByText('You’re all caught up.')).toBeVisible();
     await expect(w.getByText('Profile updates to review')).toHaveCount(0);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('update awareness: a launch check finds a newer version → notification + working "Open" external action; dismiss persists (36)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  // SELFOS_FAKE_UPDATE reports a far-newer version, so the launch check raises the update notification.
+  let app = await electron.launch({
+    args: [`--user-data-dir=${userData}`, MAIN],
+    env: { ...e2eEnv(), SELFOS_FAKE_UPDATE: '9.9.9' },
+  });
+  try {
+    const w = await app.firstWindow();
+    // The update is unread → the bell badges it, and (warning severity) a sticky toast appears.
+    await expect(w.getByRole('button', { name: 'Notifications, 1 unread' })).toBeVisible();
+    await expect(w.getByText('SelfOS 9.9.9 is available').first()).toBeVisible();
+
+    // Record external opens in the MAIN process (the renderer's "Open" → shell.openExternal).
+    await app.evaluate(({ shell }) => {
+      const recorder = globalThis as unknown as { __opened: string[] };
+      recorder.__opened = [];
+      shell.openExternal = (url: string): Promise<void> => {
+        recorder.__opened.push(url);
+        return Promise.resolve();
+      };
+    });
+
+    // Open the center, find the update row, and trigger its external "Open" action.
+    await w.getByRole('button', { name: /^Notifications/ }).click();
+    const center = w.getByRole('menu', { name: 'Notifications' });
+    const row = center.getByRole('menuitem').filter({ hasText: 'SelfOS 9.9.9 is available' });
+    await expect(row).toBeVisible();
+    await row.getByRole('button', { name: 'Open' }).click();
+    const opened = await app.evaluate(
+      () => (globalThis as unknown as { __opened: string[] }).__opened,
+    );
+    expect(opened).toEqual(['https://github.com/Highfivery/SelfOS/releases/tag/v9.9.9']);
+
+    // Dismiss it.
+    await w.getByRole('button', { name: /^Notifications/ }).click();
+    await center
+      .getByRole('menuitem')
+      .filter({ hasText: 'SelfOS 9.9.9 is available' })
+      .getByRole('button', { name: 'Dismiss notification' })
+      .click();
+    await expect(center.getByText('SelfOS 9.9.9 is available')).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+
+  // Relaunch (still 9.9.9): the same version stays dismissed (app-global, device-local).
+  app = await electron.launch({
+    args: [`--user-data-dir=${userData}`, MAIN],
+    env: { ...e2eEnv(), SELFOS_FAKE_UPDATE: '9.9.9' },
+  });
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('button', { name: 'Notifications', exact: true }).click();
+    const center = w.getByRole('menu', { name: 'Notifications' });
+    await expect(center.getByText('SelfOS 9.9.9 is available')).toHaveCount(0);
+
+    // ~360px: the center scrolls vertically only — never a horizontal scrollbar (CLAUDE.md §12).
+    await w.setViewportSize({ width: 360, height: 780 });
+    const countOffenders = (): Promise<string[]> =>
+      w.evaluate(() => {
+        const bad: string[] = [];
+        document.querySelectorAll('*').forEach((el) => {
+          const ox = getComputedStyle(el).overflowX;
+          if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+            bad.push(`${el.tagName}.${el.className}`);
+          }
+        });
+        return bad;
+      });
+    expect(await countOffenders()).toEqual([]);
+
+    // The Settings → About control's "available" state (Check + View release buttons) also fits at 360px.
+    // Close the center, then navigate at desktop width (the nav is a hidden drawer at phone width).
+    await w.keyboard.press('Escape');
+    await expect(w.getByRole('menu', { name: 'Notifications' })).toHaveCount(0);
+    await w.setViewportSize({ width: 1024, height: 780 });
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'About', exact: true }).click();
+    await expect(w.getByText(/update available: v9\.9\.9/i)).toBeVisible();
+    await expect(w.getByRole('button', { name: 'View release' })).toBeVisible();
+    // The two-button row wraps rather than overflowing `main` (the section nav's own pill-row scroll is
+    // intentional, so check `main`/doc width, not the generic element scan — matching the settings guard,
+    // which runs at 390px — the standard Settings phone width).
+    await w.setViewportSize({ width: 390, height: 780 });
+    const aboutFits = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      return (
+        !!main &&
+        main.scrollWidth <= main.clientWidth &&
+        document.documentElement.scrollWidth <= window.innerWidth
+      );
+    });
+    expect(aboutFits).toBe(true);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('update awareness: the manual About check shows up-to-date, and a calm error when offline (36)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  // Default env reports an OLD version → up to date.
+  let app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'About', exact: true }).click();
+    await w.getByRole('button', { name: 'Check for updates' }).click();
+    await expect(w.getByText(/up to date/i)).toBeVisible();
+    // No update notification was raised (we're current).
+    await expect(w.getByRole('button', { name: /Notifications, \d+ unread/ })).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+
+  // Relaunch with the check forced to fail → the calm "couldn't check" state (no toast).
+  app = await electron.launch({
+    args: [`--user-data-dir=${userData}`, MAIN],
+    env: { ...e2eEnv(), SELFOS_FAKE_UPDATE: 'error' },
+  });
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'About', exact: true }).click();
+    await w.getByRole('button', { name: 'Check for updates' }).click();
+    await expect(w.getByText(/couldn’t check right now/i)).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -3560,7 +3698,9 @@ test('settings: every section renders content without horizontal overflow', asyn
     const pkg = JSON.parse(await readFile(join(__dirname, '..', 'package.json'), 'utf8')) as {
       version: string;
     };
-    await expect(w.getByText(pkg.version, { exact: false })).toBeVisible(); // app version, not Electron's
+    // Anchor to the version line (`v0.4.0 · sha · date`) so it doesn't also match the "Check for updates"
+    // result line ("You’re up to date (v0.4.0).") — the app version, not Electron's.
+    await expect(w.getByText(new RegExp(`^v${pkg.version.replace(/\./g, '\\.')}`))).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

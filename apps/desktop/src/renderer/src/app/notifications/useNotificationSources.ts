@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ResponsesArrivedSummary } from '@shared/channels';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useNotificationStore } from '../../stores/notificationStore';
+import { useUpdateStore } from '../../stores/updateStore';
 import type { NotificationCandidate } from './notificationKinds';
 
 /**
@@ -17,6 +18,8 @@ export function useNotificationSources(conflicts: string[]): void {
   const canViewResults = useSessionStore((s) => s.can('questionnaires.viewResults'));
   const canIntake = useSessionStore((s) => s.can('intake.own'));
   const setCandidates = useNotificationStore((s) => s.setCandidates);
+  // The update result is app-global (NOT per-person) — it survives a person switch (36 §11).
+  const update = useUpdateStore((s) => s.result);
 
   const [suggestionIds, setSuggestionIds] = useState<string[]>([]);
   const [responses, setResponses] = useState<ResponsesArrivedSummary[]>([]);
@@ -47,6 +50,17 @@ export function useNotificationSources(conflicts: string[]): void {
   // Rebuild the candidate list whenever any source changes; conflicts arrive reactively via the prop.
   useEffect(() => {
     const candidates: NotificationCandidate[] = [];
+
+    if (update?.isUpdateAvailable) {
+      candidates.push({
+        kind: 'update-available',
+        coalesceKey: 'update-available', // app-global slot (the bridge persists its read/dismissed globally)
+        signature: update.latest, // a still-newer version changes it and re-surfaces (onChange, §11)
+        title: `SelfOS ${update.latest} is available`,
+        body: `You're on ${update.current}.`,
+        action: { type: 'external', url: update.releaseUrl },
+      });
+    }
 
     if (conflicts.length > 0) {
       candidates.push({
@@ -92,5 +106,5 @@ export function useNotificationSources(conflicts: string[]): void {
     }
 
     setCandidates(candidates);
-  }, [conflicts, suggestionIds, responses, setCandidates]);
+  }, [conflicts, suggestionIds, responses, update, setCandidates]);
 }

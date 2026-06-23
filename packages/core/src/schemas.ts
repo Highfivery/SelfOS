@@ -105,6 +105,35 @@ export const PersonNotificationStateSchema = z.object({
 });
 export type PersonNotificationState = z.infer<typeof PersonNotificationStateSchema>;
 
+/**
+ * The coalesce keys whose read/dismissed state is APP-GLOBAL rather than per-person
+ * (36-update-awareness §11): an update concerns the whole install, so dismissing it for one persona
+ * dismisses it for all and it survives a person switch. The bridge splits these keys into a shared
+ * device-state blob; everything else stays per-person (35-notification-system §4).
+ */
+export const APP_GLOBAL_NOTIFICATION_KEYS = ['update-available'] as const;
+
+// ---------------------------------------------------------------------------
+// Update awareness (36-update-awareness) — the notify-only update-check view
+// type. The raw GitHub Releases payload is parsed/validated in the host and
+// never crosses IPC wholesale; only this distilled result does.
+// ---------------------------------------------------------------------------
+
+/**
+ * The result of an update check: the running version, the latest published version, whether an update
+ * is available (latest > current), the release page to open, and when it was checked. A `null` result
+ * (offline / rate-limited / timeout) means "couldn't check" — never overwrites the cached last-known.
+ */
+export const UpdateCheckResultSchema = z.object({
+  current: z.string(),
+  latest: z.string(),
+  isUpdateAvailable: z.boolean(),
+  releaseUrl: z.string(),
+  publishedAt: z.string().optional(),
+  checkedAt: z.string(),
+});
+export type UpdateCheckResult = z.infer<typeof UpdateCheckResultSchema>;
+
 /** Device-local state (in userData, never synced) — active vault + window geometry. */
 export const DeviceStateSchema = z.object({
   schemaVersion: z.number().int().positive(),
@@ -140,6 +169,18 @@ export const DeviceStateSchema = z.object({
    * Additive-optional (the `vaultBookmark` precedent — no schemaVersion bump).
    */
   notificationState: z.record(z.string(), PersonNotificationStateSchema).optional(),
+  /**
+   * App-global notification read/dismissed state (36-update-awareness §11) — the single shared blob for
+   * `APP_GLOBAL_NOTIFICATION_KEYS` (the update notice). Not keyed by person: an update concerns the whole
+   * install, so its dismissal is shared across personas. Additive-optional (the `vaultBookmark` precedent).
+   */
+  globalNotificationState: PersonNotificationStateSchema.optional(),
+  /** When this device last successfully checked for an app update (ISO). Advisory; the result is cached below. */
+  lastUpdateCheckAt: z.string().optional(),
+  /** The latest published version seen by the last successful check (semver, no `v`). */
+  latestKnownVersion: z.string().optional(),
+  /** The last successful update-check result, surfaced to Settings → About without re-fetching. */
+  lastUpdateCheckResult: UpdateCheckResultSchema.optional(),
 });
 export type DeviceState = z.infer<typeof DeviceStateSchema>;
 

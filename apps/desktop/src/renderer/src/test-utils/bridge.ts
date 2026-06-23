@@ -537,6 +537,8 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     setNotificationState: () => Promise.resolve(),
     notificationsResponsesArrived: () => Promise.resolve([]),
     openExternal: () => Promise.resolve(),
+    updatesCheck: () => Promise.resolve(null),
+    updatesGetState: () => Promise.resolve(null),
     ...overrides,
   };
   window.selfos = bridge;

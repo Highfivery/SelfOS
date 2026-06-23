@@ -119,10 +119,21 @@ No vault data, no schema. The configuration artifacts:
   **app** version is the one that ships.
 - **release-please config** — `release-please-config.json` + `.release-please-manifest.json` at the repo root,
   in **manifest mode** with the package keyed at the root (`.`) (`release-type: node`, `package-name: SelfOS`,
-  `include-component-in-tag: false` → tags `vX.Y.Z`, `bump-minor-pre-major: true` so the first `feat` → `0.1.0`,
-  `draft: true` for draft-until-asset, `bootstrap-sha` pinned to the current `main` HEAD so the first changelog
-  starts clean). The changelog is the root `CHANGELOG.md`; `apps/desktop/package.json` is bumped via
-  `extra-files`.
+  `include-component-in-tag: false` → tags `vX.Y.Z`, `bump-minor-pre-major: true` so the first `feat` → `0.1.0`).
+  The changelog is the root `CHANGELOG.md`; `apps/desktop/package.json` is bumped via `extra-files`.
+
+  > **Amendment 2026-06-23 (the permanent re-proposal-loop fix).** The config now uses **`draft: false`** and
+  > has **no `bootstrap-sha`**. The earlier `draft: true` (draft-until-asset) was the root of a recurring loop:
+  > a **draft** GitHub release has **no git tag** until it's published, so when release-please re-ran on the
+  > release-PR merge it didn't see the new tag and re-proposed the just-released commit as a phantom next
+  > patch — papered over by bumping `bootstrap-sha` (the scan floor) every release (2 extra PRs each time).
+  > Publishing immediately (`draft: false`) creates the tag right away, so release-please sees it and proposes
+  > nothing; with the tag-based detection working, the `bootstrap-sha` floor (which only existed to fence off
+  > the ancient `Release-As: 0.1.0` footer in `36c3dff`) is dropped — release-please never scans back past the
+  > latest tag, so that footer is unreachable. **Trade-off:** a release is visible for the ~3 min the macOS
+  > build runs before its `.dmg` attaches (electron-builder `publish.releaseType: release` uploads to the
+  > already-published release). Worth it to end the loop.
+
 - **electron-builder `publish`** — add a `publish` block to `apps/desktop/electron-builder.yml`:
   `provider: github`, `owner: Highfivery`, `repo: SelfOS` (so `--publish` uploads the `.dmg` to the matching
   Release). `mac.target` stays `dmg`; `win`/`linux` remain declared but are not built by the release matrix

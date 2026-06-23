@@ -22,7 +22,11 @@ linux:
   target: AppImage
 # Upload the built installer to GitHub Releases (19-distribution §4). The release job runs
 # `electron-builder --mac --publish always`, which attaches the .dmg to the matching tag's release.
+# `releaseType: release` uploads to the ALREADY-PUBLISHED release release-please created (the config's
+# `draft: false`) rather than electron-builder's default of looking for / creating a draft — so the dmg
+# lands on the live release and no duplicate draft is made.
 publish:
   provider: github
   owner: Highfivery
   repo: SelfOS
+  releaseType: release

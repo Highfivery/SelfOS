@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { FolderOpen, FolderSync } from 'lucide-react';
-import { Button, Text } from '../design-system/components';
+import { Button, Inline, Stack, Text } from '../design-system/components';
 import { useAppStore } from '../stores/appStore';
+import { useUpdateStore } from '../stores/updateStore';
 import { ChangeVaultDialog } from './ChangeVaultDialog';
 
 export function VaultLocationValue(): JSX.Element {
@@ -64,6 +65,62 @@ export function AboutVersion(): JSX.Element {
     <Text size="sm" tone="secondary">
       {label}
     </Text>
+  );
+}
+
+/**
+ * "Check for updates" — a manual, forced update check (36-update-awareness §3.2). Reflects background
+ * checks too (it reads the shared `updateStore`), so the result line stays accurate after an auto check.
+ * States: idle → checking (`aria-busy`) → up-to-date / available + "View release" / a calm error. Results
+ * are announced via a `role="status"` live region (§9). Not admin-gated — any signed-in person may check.
+ */
+export function CheckForUpdatesControl(): JSX.Element {
+  const result = useUpdateStore((s) => s.result);
+  const status = useUpdateStore((s) => s.status);
+  const errored = useUpdateStore((s) => s.errored);
+  const check = useUpdateStore((s) => s.check);
+  const checking = status === 'checking';
+
+  const available = result?.isUpdateAvailable === true;
+
+  return (
+    <Stack gap={2}>
+      <Inline gap={3} align="center" wrap>
+        <Button
+          variant="secondary"
+          onClick={() => void check(true)}
+          disabled={checking}
+          aria-busy={checking}
+        >
+          {checking ? 'Checking…' : 'Check for updates'}
+        </Button>
+        {available ? (
+          <Button
+            variant="primary"
+            onClick={() => void window.selfos?.openExternal(result.releaseUrl)}
+          >
+            View release
+          </Button>
+        ) : null}
+      </Inline>
+      <div role="status" aria-live="polite">
+        {!checking && available ? (
+          <Text size="sm" tone="accent">
+            Update available: v{result.latest} (you’re on v{result.current}).
+          </Text>
+        ) : null}
+        {!checking && result && !available && !errored ? (
+          <Text size="sm" tone="secondary">
+            You’re up to date (v{result.current}).
+          </Text>
+        ) : null}
+        {!checking && errored ? (
+          <Text size="sm" tone="secondary">
+            Couldn’t check right now. Try again in a moment.
+          </Text>
+        ) : null}
+      </div>
+    </Stack>
   );
 }
 

@@ -28,6 +28,7 @@ import {
   type UsageSummary,
 } from './channels';
 import {
+  APP_GLOBAL_NOTIFICATION_KEYS,
   AiProviderSchema,
   AnswerSchema,
   AnswerTypeSchema,
@@ -96,6 +97,7 @@ import {
   type RelayStatus,
   type SessionCost,
   type SessionSummaryResult,
+  type UpdateCheckResult,
 } from './schemas';
 import { OWNER_ROLE_ID, roleAllows, type CapabilityKey } from './capabilities';
 import { runConnectionTest } from './claudeProxy';
@@ -373,6 +375,12 @@ export interface BridgeHost {
   revealVault(): Promise<void>;
   /** Open an external URL in the user's browser (the renderer never opens URLs directly; 35 §3.4). */
   openExternal(url: string): Promise<void>;
+  /**
+   * Check for a newer published app version (36-update-awareness §5). The host owns the network call (the
+   * public GitHub Releases API, no auth) + parsing; returns the distilled result, or `null` when the check
+   * couldn't be made (offline / rate-limited / timeout). Faked under `SELFOS_FAKE_UPDATE` in the host.
+   */
+  checkForUpdate(): Promise<UpdateCheckResult | null>;
   /**
    * Save image bytes to a file the user chooses OUTSIDE the vault (13-dream-images §3.5) — a native save
    * dialog on Electron, a download on iOS/web. Returns the chosen path, or null if cancelled.
@@ -3425,20 +3433,43 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
 
     // --- Notifications (35-notification-system §6) ---
     getNotificationState: async (): Promise<PersonNotificationState> => {
-      const personId = await activePersonId();
-      if (!personId) return { read: {}, dismissed: {} };
       const device = await host.readDeviceState();
-      // `.parse({})` fills the `read`/`dismissed` defaults for a person with no stored state yet.
-      return PersonNotificationStateSchema.parse(device.notificationState?.[personId] ?? {});
+      const personId = await activePersonId();
+      // App-global keys (the update notice, 36 §11) come from the shared blob so a dismissal is shared
+      // across personas + survives a switch; everything else is the active person's own state.
+      const global = PersonNotificationStateSchema.parse(device.globalNotificationState ?? {});
+      const person = personId
+        ? PersonNotificationStateSchema.parse(device.notificationState?.[personId] ?? {})
+        : { read: {}, dismissed: {} };
+      return {
+        read: { ...person.read, ...pickKeys(global.read, APP_GLOBAL_NOTIFICATION_KEYS) },
+        dismissed: {
+          ...person.dismissed,
+          ...pickKeys(global.dismissed, APP_GLOBAL_NOTIFICATION_KEYS),
+        },
+      };
     },
     setNotificationState: async (state): Promise<void> => {
-      const personId = await activePersonId();
-      if (!personId) return; // no active person → nothing to key the state under
       const parsed = PersonNotificationStateSchema.parse(state);
       const device = await host.readDeviceState();
-      await host.updateDeviceState({
-        notificationState: { ...device.notificationState, [personId]: parsed },
-      });
+      // Split: the app-global keys persist to the shared blob; the rest to the active person's blob.
+      const patch: DeviceStatePatch = {
+        globalNotificationState: {
+          read: pickKeys(parsed.read, APP_GLOBAL_NOTIFICATION_KEYS),
+          dismissed: pickKeys(parsed.dismissed, APP_GLOBAL_NOTIFICATION_KEYS),
+        },
+      };
+      const personId = await activePersonId();
+      if (personId) {
+        patch.notificationState = {
+          ...device.notificationState,
+          [personId]: {
+            read: omitKeys(parsed.read, APP_GLOBAL_NOTIFICATION_KEYS),
+            dismissed: omitKeys(parsed.dismissed, APP_GLOBAL_NOTIFICATION_KEYS),
+          },
+        };
+      }
+      await host.updateDeviceState(patch);
     },
     notificationsResponsesArrived: async (): Promise<ResponsesArrivedSummary[]> => {
       const ctx = await host.vaultAndKey();
@@ -3473,5 +3504,36 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         throw new Error('Only http(s) URLs may be opened externally');
       await host.openExternal(parsed);
     },
+
+    // --- Update awareness (36-update-awareness §6) ---
+    updatesCheck: async (): Promise<UpdateCheckResult | null> => {
+      const result = await host.checkForUpdate();
+      // Cache ONLY a successful result — a `null` (couldn't check) must not overwrite the last-known (§7).
+      if (result) {
+        await host.updateDeviceState({
+          lastUpdateCheckAt: result.checkedAt,
+          latestKnownVersion: result.latest,
+          lastUpdateCheckResult: result,
+        });
+      }
+      return result;
+    },
+    updatesGetState: async (): Promise<UpdateCheckResult | null> =>
+      (await host.readDeviceState()).lastUpdateCheckResult ?? null,
   };
+}
+
+/** Keep only the entries whose key is in `keys` (the app-global notification split, 36 §11). */
+function pickKeys(map: Record<string, string>, keys: readonly string[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const key of keys) if (map[key] !== undefined) out[key] = map[key] as string;
+  return out;
+}
+
+/** Drop the entries whose key is in `keys` (the per-person remainder of the notification split). */
+function omitKeys(map: Record<string, string>, keys: readonly string[]): Record<string, string> {
+  const set = new Set(keys);
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(map)) if (!set.has(key)) out[key] = value;
+  return out;
 }

@@ -18,6 +18,8 @@ import { loadMasterKey } from '@selfos/core/crypto';
 import { createNodeFileSystem } from './host/nodeFileSystem';
 import { loadRelayBundle, RELAY_VERSION } from './relay/relayBundle';
 import { fakeRelayBundle, fakeRelayFetch } from '../shared/relay/fakeRelay';
+import { checkForUpdate } from '@selfos/core/updates';
+import { fakeUpdateFetch } from './updates/fakeUpdateFetch';
 import { startVaultWatcher, stopVaultWatcher } from './vaultWatcherManager';
 
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
@@ -54,6 +56,13 @@ export function registerIpcHandlers(): void {
   let intakeSender: WebContents | undefined;
   // E2E/dev: a deterministic in-memory relay (no real Cloudflare account/network), like SELFOS_FAKE_CLAUDE.
   const useFakeRelay = Boolean(process.env['SELFOS_FAKE_RELAY']);
+  // E2E/dev: a deterministic update check (no real GitHub call). The env value is the latest version to
+  // report; the REAL parse + semver logic still runs (36-update-awareness §10).
+  const fakeUpdate = process.env['SELFOS_FAKE_UPDATE'];
+  const updateFetch = fakeUpdate
+    ? fakeUpdateFetch(fakeUpdate)
+    : (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) =>
+        globalThis.fetch(input, init);
 
   const host: BridgeHost = {
     vaultAndKey: async () => {
@@ -163,6 +172,12 @@ export function registerIpcHandlers(): void {
       // The coreBridge already validates this is an http(s) URL before reaching the host.
       await shell.openExternal(url);
     },
+    checkForUpdate: () =>
+      checkForUpdate({
+        fetch: updateFetch,
+        currentVersion: __APP_VERSION__,
+        now: new Date().toISOString(),
+      }),
     saveImageFile: async (suggestedName, bytes) => {
       // E2E hook: write to a fixed path without showing the native dialog (which Playwright can't drive).
       const fakeDir = process.env['SELFOS_FAKE_SAVE_DIR'];
@@ -343,6 +358,8 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.setNotificationState, bridge.setNotificationState);
   handle(IpcChannels.notificationsResponsesArrived, bridge.notificationsResponsesArrived);
   handle(IpcChannels.openExternal, bridge.openExternal);
+  handle(IpcChannels.updatesCheck, bridge.updatesCheck);
+  handle(IpcChannels.updatesGetState, bridge.updatesGetState);
 
   // useVault is platform-specific: after the shared data side runs, begin watching the freshly
   // activated vault for THIS window (the watcher needs the invoking WebContents).

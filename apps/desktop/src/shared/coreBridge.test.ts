@@ -257,6 +257,7 @@ function makeHost(): {
     getConflicts: () => Promise.resolve([]),
     revealVault: () => Promise.resolve(),
     openExternal: () => Promise.resolve(),
+    checkForUpdate: () => Promise.resolve(null),
     saveImageFile: (name) => Promise.resolve(`/tmp/${name}`),
     onVaultChanged: () => () => {},
     onChatChunk: () => () => {},
@@ -2846,5 +2847,70 @@ describe('notifications (35)', () => {
     // A non-http(s) scheme is refused before reaching the shell.
     await expect(bridge.openExternal('file:///etc/passwd')).rejects.toThrow();
     expect(opened).toHaveLength(1);
+  });
+
+  it('persists the update-available dismiss APP-GLOBALLY (shared across personas, survives a switch)', async () => {
+    const { bridge, ownerId, host } = await freshOwner();
+    // The owner dismisses the update AND reads a per-person sync-conflict notice.
+    await bridge.setNotificationState({
+      read: { 'sync-conflict': '2' },
+      dismissed: { 'update-available': '0.5.0' },
+    });
+    // The update key lives in the shared blob; the conflict in the owner's per-person blob (the split).
+    expect(host.device().globalNotificationState).toEqual({
+      read: {},
+      dismissed: { 'update-available': '0.5.0' },
+    });
+    expect(host.device().notificationState?.[ownerId]).toEqual({
+      read: { 'sync-conflict': '2' },
+      dismissed: {},
+    });
+
+    // A different person sees the SAME update dismiss (app-global) but NOT the owner's per-person conflict.
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    expect((await bridge.sessionSetActive({ personId: mara.id })).ok).toBe(true);
+    expect(await bridge.getNotificationState()).toEqual({
+      read: {},
+      dismissed: { 'update-available': '0.5.0' },
+    });
+  });
+});
+
+describe('update awareness (36)', () => {
+  it('caches a successful check, and updatesGetState returns the cached result', async () => {
+    const { bridge, host } = await freshOwner();
+    const result = {
+      current: '0.4.0',
+      latest: '0.5.0',
+      isUpdateAvailable: true,
+      releaseUrl: 'https://github.com/Highfivery/SelfOS/releases/tag/v0.5.0',
+      publishedAt: '2026-06-20T00:00:00Z',
+      checkedAt: '2026-06-23T00:00:00.000Z',
+    };
+    host.host.checkForUpdate = () => Promise.resolve(result);
+
+    expect(await bridge.updatesCheck()).toEqual(result);
+    expect(host.device().lastUpdateCheckResult).toEqual(result);
+    expect(host.device().latestKnownVersion).toBe('0.5.0');
+    expect(host.device().lastUpdateCheckAt).toBe('2026-06-23T00:00:00.000Z');
+    expect(await bridge.updatesGetState()).toEqual(result);
+  });
+
+  it('does NOT overwrite the cached result when a check fails (returns null)', async () => {
+    const { bridge, host } = await freshOwner();
+    const good = {
+      current: '0.4.0',
+      latest: '0.5.0',
+      isUpdateAvailable: true,
+      releaseUrl: 'https://github.com/Highfivery/SelfOS/releases',
+      checkedAt: '2026-06-23T00:00:00.000Z',
+    };
+    host.host.checkForUpdate = () => Promise.resolve(good);
+    await bridge.updatesCheck();
+
+    // A later failed check (offline/rate-limited) returns null and leaves the cache intact (§7).
+    host.host.checkForUpdate = () => Promise.resolve(null);
+    expect(await bridge.updatesCheck()).toBeNull();
+    expect(await bridge.updatesGetState()).toEqual(good);
   });
 });

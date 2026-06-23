@@ -14,6 +14,10 @@ folder like iCloud or Dropbox if you want it on more than one device. Nothing is
 stored on a server. The only thing that ever leaves your computer is the message you send to the
 Claude AI when you choose to use an AI feature, using **your own** Claude API key.
 
+The one other outbound call is an **update check**: SelfOS asks GitHub whether a newer version has
+been released so it can tell you in-app. It sends no personal data — just a standard version check —
+and you can turn it off in **Settings → About**.
+
 ## Install (macOS)
 
 1. Go to the **[Releases](https://github.com/Highfivery/SelfOS/releases)** page and download the

@@ -77,6 +77,7 @@ import type {
   SessionCost,
   SessionStatus,
   SessionSummaryResult,
+  UpdateCheckResult,
   UsageEvent,
   UsageSummary,
 } from './schemas';
@@ -255,6 +256,9 @@ export const IpcChannels = {
   setNotificationState: 'notifications:setState',
   notificationsResponsesArrived: 'notifications:responsesArrived',
   openExternal: 'shell:openExternal',
+  // Update awareness (36-update-awareness §6) — a notify-only check against the public GitHub Releases API.
+  updatesCheck: 'updates:check',
+  updatesGetState: 'updates:getState',
 } as const;
 
 export type SettingScope = 'vault' | 'device';
@@ -881,6 +885,14 @@ export interface SelfosBridge {
   notificationsResponsesArrived(): Promise<ResponsesArrivedSummary[]>;
   /** Open a URL in the user's browser via the main-process shell (the renderer never opens URLs directly). */
   openExternal(url: string): Promise<void>;
+  /**
+   * Check the public GitHub Releases API for a newer version (36-update-awareness §6). Returns the result
+   * (incl. "up to date"), or `null` when the check couldn't be made (offline / rate-limited / timeout) so
+   * the UI shows a calm "couldn't check right now". `force` is advisory (the renderer schedules cadence).
+   */
+  updatesCheck(force?: boolean): Promise<UpdateCheckResult | null>;
+  /** The last successful update-check result (cached device-local), or null if none yet. */
+  updatesGetState(): Promise<UpdateCheckResult | null>;
 }
 
 export type {
@@ -951,6 +963,7 @@ export type {
   SessionCost,
   SessionStatus,
   SessionSummaryResult,
+  UpdateCheckResult,
   UsageEvent,
   UsageSummary,
 };

@@ -33,6 +33,7 @@ import { useGuidanceStore } from '../stores/guidanceStore';
 import { useIntakeStore } from '../stores/intakeStore';
 import { useNotificationStore } from '../stores/notificationStore';
 import { useNotificationSources } from './notifications/useNotificationSources';
+import { useUpdateChecks } from './notifications/useUpdateChecks';
 import { ToastViewport } from './notifications/ToastViewport';
 import { Onboarding } from './routes/onboarding/Onboarding';
 import { AppHeader } from './AppHeader';
@@ -81,9 +82,11 @@ export function AppShell(): JSX.Element {
 
   const closeDrawer = (): void => setDrawerOpen(false);
 
-  // Feed the notification center from live state (conflicts + suggestions + responses); update-available is
-  // stubbed (spec 36). Called unconditionally so it runs through the onboarding gate too (35 §3.6).
+  // Feed the notification center from live state (conflicts + suggestions + responses + the update check).
+  // Called unconditionally so it runs through the onboarding gate too (35 §3.6).
   useNotificationSources(conflicts);
+  // Drive the update-check cadence (launch + 6h + focus, gated by the auto toggle); 36-update-awareness §3.1.
+  useUpdateChecks();
 
   // When the signed-in person changes, drop the previous account's per-person data and load this
   // person's — sessions/usage/budget are per-user, so nothing from the prior login may linger

@@ -112,8 +112,8 @@ sync-conflict detector (`14`/`02`).
 - **Responses-arrived** — when a drain/poll discovers a newly-submitted response to one of the
   active person's sends (this requires a check on launch/visit — see §7; do **not** add background
   network beyond what spec 36's update poll establishes; reuse existing drain points).
-- **Update-available** — the kind is registered, but no checker exists yet (the source is **stubbed**);
-  spec 36 raises it.
+- **Update-available** — fed by spec 36's GitHub Releases check (a renderer `updateStore` → the
+  `useNotificationSources` candidate); its read/dismissed state is app-global, not per-person.
 
 ## 4. Data model (vault files & schemas)
 
@@ -229,6 +229,12 @@ Per the durable rule, no notification copy implies an owner/admin can see a pers
 - 2026-06-22 — **Approved.** Resolved: top-right toasts (info/success ~5s, warning sticky); keep deep
   affordances AND add notifications; condition-change re-surfacing; reuse drain + spec-36 tick (no new
   background network); update-available is sticky.
+- 2026-06-23 — **Update-available un-stubbed** (spec [`36`](36-update-awareness.md), on `feat/update-awareness`).
+  Spec 36 now feeds the registered `update-available` kind from a real GitHub Releases check via a renderer
+  `updateStore` → the `useNotificationSources` candidate (sticky warning toast, `external` action → the release
+  page). Its read/dismissed state is **app-global** (not per-person): `APP_GLOBAL_NOTIFICATION_KEYS` +
+  a `globalNotificationState` device blob the bridge splits out of `getNotificationState`/`setNotificationState`,
+  so an update dismissal is shared across personas and survives a person switch (the rest stay per-person).
 - 2026-06-23 — **Built** (on `feat/notification-system`). The framework + bell/center/toasts shipped with
   four kinds wired: `sync-conflict` + `responses-arrived` + `profile-freshness` live, and
   `update-available` registered but **stubbed** (no checker — spec 36 raises it). Notifications are

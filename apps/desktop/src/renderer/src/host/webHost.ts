@@ -10,6 +10,7 @@ import { capacitorFileSystem, VaultFs, type VaultFsPlugin } from './capacitorVau
 import { capacitorSecretStore, Keychain, type KeychainPlugin } from './capacitorSecretStore';
 import { browserClaudeClient } from './browserClaudeClient';
 import { browserImageClient } from './browserImageClient';
+import { checkForUpdate } from '@selfos/core/updates';
 import {
   currentDeviceId,
   scrubLegacyLocalStorageSecrets,
@@ -182,6 +183,12 @@ function createBridgeHost(parts: HostParts): BridgeHost {
       window.open(url, '_blank', 'noopener,noreferrer');
       return Promise.resolve();
     },
+    checkForUpdate: () =>
+      checkForUpdate({
+        fetch: (input, init) => globalThis.fetch(input, init),
+        currentVersion: APP_VERSION,
+        now: new Date().toISOString(),
+      }),
     // Export = a browser download (web preview) / share-sheet (iOS, later). No native save dialog here.
     saveImageFile: (suggestedName, bytes, mime) => {
       // Copy into a plain ArrayBuffer — a Uint8Array<ArrayBufferLike> isn't a BlobPart under the DOM lib.

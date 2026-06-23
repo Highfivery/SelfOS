@@ -17,6 +17,7 @@ import {
   AboutDisclaimer,
   AboutVersion,
   ChangeVaultRow,
+  CheckForUpdatesControl,
   RevealVaultRow,
   VaultLocationValue,
 } from './customRows';
@@ -56,6 +57,7 @@ declare module './types' {
     'dreams.imageModel': 'gpt-image-2' | 'gpt-image-1';
     'dreams.imageStyle': string; // a free string — an IMAGE_STYLE_PRESETS value, growable without migration
     'dreams.imageStyleNotes': string;
+    'updates.autoCheck': boolean;
   }
 }
 
@@ -490,13 +492,36 @@ export function registerBuiltinSettings(): void {
       order: 1,
     }),
     defineSetting({
+      key: 'about.checkForUpdates',
+      section: 'about',
+      label: 'Updates',
+      description:
+        'Check GitHub for a newer version. SelfOS never auto-installs — you download manually.',
+      schema: z.null(),
+      default: null,
+      control: { type: 'custom', render: CheckForUpdatesControl },
+      order: 2,
+    }),
+    defineSetting({
+      key: 'updates.autoCheck',
+      section: 'about',
+      label: 'Check for updates automatically',
+      description:
+        'On launch and periodically while open. Only contacts GitHub — no personal data is sent.',
+      schema: z.boolean(),
+      default: true,
+      control: { type: 'switch' },
+      scope: 'device', // an install-level preference — never synced across the household
+      order: 3,
+    }),
+    defineSetting({
       key: 'about.disclaimer',
       section: 'about',
       label: 'About SelfOS',
       schema: z.null(),
       default: null,
       control: { type: 'custom', render: AboutDisclaimer },
-      order: 2,
+      order: 4,
     }),
   ]);
 }

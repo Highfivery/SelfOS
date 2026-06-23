@@ -385,6 +385,31 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-23 — **Build (update awareness, notify-only — SPEC 36 BUILT; on `feat/update-awareness`, PR open).** SelfOS
+  had no way to tell a user a newer version exists. Built a notify-only check (NO auto-download/install, no
+  electron-updater, no signing — the app stays unsigned): a pure `@selfos/core/updates` `checkForUpdate({fetch,
+currentVersion, now})` does the **unauthenticated** GitHub `releases/latest` GET (the repo is now **public** — no
+  token, ever; descriptive User-Agent, ~8s `AbortController` timeout, Zod-validated, semver-compared) → returns
+  `UpdateCheckResult | null` where **null = couldn't check** and NEVER overwrites the cache (404/malformed tag → up
+  to date; 403/network/timeout/unparseable → null). The network call is a **host primitive**
+  (`BridgeHost.checkForUpdate`, `globalThis.fetch` in main, faked under `SELFOS_FAKE_UPDATE`); `coreBridge.updatesCheck`
+  caches a SUCCESSFUL result device-local + `updatesGetState` reads it. **Cadence is renderer-driven** (a
+  `useUpdateChecks` AppShell hook: launch + 6h + focus/visibility, gated by the `updates.autoCheck` device toggle
+  [default ON], ~30min throttle for non-forced; manual button forces) rather than a main timer — simpler, and
+  "cleared on quit" = the renderer effect cleanup. An app-global `updateStore` (NOT per-person reset) drives both the
+  Settings → About control (idle/checking[`aria-busy`]/up-to-date/available[+ View release]/calm error, `role=status`)
+  AND the spec-35 `update-available` notification (sticky warning toast; `external` action → the tag's `html_url` via
+  `shell.openExternal`). **App-global dismiss** (§11): `APP_GLOBAL_NOTIFICATION_KEYS` + a `globalNotificationState`
+  device blob the bridge splits/merges, so an update dismissal is shared across personas + survives a person switch
+  (spec 35 was per-person-only). Corrected the now-stale "repo is private" notes in spec 19 + README (downloads are
+  public; still unsigned → Gatekeeper bypass stays) + documented the GitHub update-check as the only non-Claude/
+  non-relay outbound call. Gate green: typecheck, lint, format, **513 core + 647 desktop** unit; **83/83 E2E** (the
+  default E2E env pins `SELFOS_FAKE_UPDATE=0.0.0` so no test hits real GitHub or raises a phantom update). Synced
+  spec 36 (→ Built) + spec 35 (update-available un-stubbed). **Lesson: an update notice is app-GLOBAL, but spec 35's
+  notification state is per-person — bridge a single `globalNotificationState` blob keyed by a known
+  `APP_GLOBAL_NOTIFICATION_KEYS` set so dismiss is shared + survives a switch, rather than bolting global state onto
+  the per-person store; and a default-on launch check that surfaces "You're up to date (vX.Y.Z)" collides with a
+  bare `getByText(version)` E2E assert — anchor version matchers (`^v0\.4\.0`) so the new line doesn't break them.**
 - 2026-06-23 — **Build (unified in-app notification system — SPEC 35 BUILT; on `feat/notification-system`).** SelfOS
   surfaced alerts ad-hoc (a sync-conflict `Banner`, a Home "keep your profile fresh" card, no signal when a
   questionnaire recipient responded). Built ONE framework — a `TitlebarControl` **bell** + unread badge → a

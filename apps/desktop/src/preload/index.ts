@@ -227,6 +227,8 @@ const bridge: SelfosBridge = {
   notificationsResponsesArrived: () =>
     ipcRenderer.invoke(IpcChannels.notificationsResponsesArrived),
   openExternal: (url) => ipcRenderer.invoke(IpcChannels.openExternal, url),
+  updatesCheck: (force) => ipcRenderer.invoke(IpcChannels.updatesCheck, force),
+  updatesGetState: () => ipcRenderer.invoke(IpcChannels.updatesGetState),
 };
 
 contextBridge.exposeInMainWorld('selfos', bridge);

@@ -34,8 +34,10 @@ Three coupled pieces, all automated:
 
 **Scope decisions (resolved §12):** **macOS only** for now (the maintainer's platform; `.dmg`); **unsigned**
 (no Apple Developer ID yet) with the one-time Gatekeeper bypass documented; **release-please** for versioning
-(cloud, free Linux); **build in Actions** on a macOS runner (occasional releases fit the free private-repo
-quota); **repo stays private** (downloads by the maintainer + collaborators signed in to GitHub).
+(cloud, free Linux); **build in Actions** on a macOS runner (occasional releases fit the free Actions
+quota); **repo is public** (as of 2026-06 — anyone can download a release with no GitHub sign-in; this is
+what lets spec 36's update check hit the unauthenticated GitHub Releases API). Still **unsigned**, so the
+Gatekeeper bypass stays.
 
 ## 2. Goals / Non-goals
 
@@ -57,7 +59,8 @@ quota); **repo stays private** (downloads by the maintainer + collaborators sign
 - **Windows / Linux installers** — the electron-builder config already declares `nsis`/`AppImage`; enabling
   them in the release matrix is a later add (Windows also wants signing to avoid SmartScreen).
 - **iOS / App Store** — the Capacitor path ([`07`](07-mobile-platform.md)), entirely separate.
-- **Public distribution / a website** — releases live on the private repo's Releases page.
+- **A marketing website / app store** — releases live on the repo's public GitHub Releases page; no separate
+  download site is built.
 
 ## 3. UX & flows
 
@@ -184,9 +187,10 @@ None new. The `app:version` IPC already returns `__APP_VERSION__`; About consume
 - **Version drift** — guarded: the About version and the installer version both derive from the **same**
   `apps/desktop/package.json`, so they can't disagree. A unit/E2E assert (`__APP_VERSION__` === the file's
   version) backs this (§10).
-- **Free-quota overage** — occasional releases fit the private-repo free Actions minutes (macOS bills 10×; a
-  ~10-min build ≈ 100 minutes; ~2000 free/mo). If releases become frequent, revisit (local build, or sign +
-  cache). Documented, not enforced.
+- **Free-quota overage** — occasional releases fit the free Actions minutes (a public repo gets unlimited
+  Actions minutes on standard runners; even under the private-repo accounting macOS bills 10×, a ~10-min build
+  ≈ 100 minutes, ~2000 free/mo). If releases become frequent, revisit (local build, or sign + cache).
+  Documented, not enforced.
 - **First release from `0.0.0`** — the initial Release PR establishes the starting version (§11 — propose
   `0.1.0`); subsequent ones follow the commits. **Do not** force it with a `Release-As:` commit (that footer
   lingers in history and forces backward version proposals later); set the version via the manifest baseline +
@@ -247,8 +251,10 @@ Built (2026-06-16); only the real first-release smoke test (§10) remains.
 - **Versioning** — **release-please** (Conventional Commits → a Release PR → version bump + tag + GitHub
   Release); the maintainer never hand-edits a version.
 - **Build** — **in GitHub Actions on a macOS runner**, triggered by the release; occasional releases fit the
-  private-repo free Actions quota.
-- **Repo** — stays **private**; downloads by the maintainer + collaborators signed in to GitHub.
+  free Actions quota.
+- **Repo** — **public** (as of 2026-06; originally private). Anyone can download a release with no GitHub
+  sign-in, and the update check (spec [`36`](36-update-awareness.md)) reads the unauthenticated GitHub
+  Releases API — **no token is ever embedded**. Still unsigned, so the Gatekeeper bypass stays.
 - **About version** — auto-updates (already reads the release-please-bumped `apps/desktop/package.json`); no
   code change required.
 - **README** — rewritten **non-technical** (about + install + privacy + crisis note); dev/tech content moves

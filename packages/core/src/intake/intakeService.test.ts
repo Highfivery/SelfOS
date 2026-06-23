@@ -498,13 +498,13 @@ describe('intakeService', () => {
       key,
       'p1',
       'life-now',
-      { children: [{ name: 'Emma', gender: 'Girl', age: '7' }] },
+      { children: [{ name: 'Emma', gender: 'Girl', dob: '2018-05-14' }] },
       NOW,
     );
     // Stored in the section answers; NOT promoted to a Person field (storage is portrait/context only).
     const session = await getIntakeSession(fs, key, 'p1');
     expect(session?.sections.find((s) => s.id === 'life-now')?.answers.children).toEqual([
-      { name: 'Emma', gender: 'Girl', age: '7' },
+      { name: 'Emma', gender: 'Girl', dob: '2018-05-14' },
     ]);
     expect(await getPerson(fs, key, 'p1')).not.toHaveProperty('children');
 
@@ -523,7 +523,7 @@ describe('intakeService', () => {
       },
     };
     await synthesizeIntake(synth(fs, client));
-    expect(captured).toContain('Emma, Girl, 7');
+    expect(captured).toContain('Emma, Girl, 2018-05-14'); // DOB, not a stale age
     expect(captured).not.toContain('[object Object]');
   });
 

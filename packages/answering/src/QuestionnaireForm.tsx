@@ -318,11 +318,13 @@ function RosterControl({
                 </select>
               ) : (
                 <input
-                  type="text"
+                  type={col.type === 'date' ? 'date' : 'text'}
                   className={styles.input}
                   value={row[col.key] ?? ''}
                   aria-label={`${question.prompt} — ${col.label} ${i + 1}`}
-                  {...(col.placeholder ? { placeholder: col.placeholder } : {})}
+                  {...(col.type !== 'date' && col.placeholder
+                    ? { placeholder: col.placeholder }
+                    : {})}
                   onChange={(event) => update(i, col.key, event.target.value)}
                 />
               )}

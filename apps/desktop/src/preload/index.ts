@@ -222,6 +222,11 @@ const bridge: SelfosBridge = {
   getSidebarCollapsed: () => ipcRenderer.invoke(IpcChannels.getSidebarCollapsed),
   setSidebarCollapsed: (collapsed) =>
     ipcRenderer.invoke(IpcChannels.setSidebarCollapsed, collapsed),
+  getNotificationState: () => ipcRenderer.invoke(IpcChannels.getNotificationState),
+  setNotificationState: (state) => ipcRenderer.invoke(IpcChannels.setNotificationState, state),
+  notificationsResponsesArrived: () =>
+    ipcRenderer.invoke(IpcChannels.notificationsResponsesArrived),
+  openExternal: (url) => ipcRenderer.invoke(IpcChannels.openExternal, url),
 };
 
 contextBridge.exposeInMainWorld('selfos', bridge);

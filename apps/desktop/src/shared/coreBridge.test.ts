@@ -256,6 +256,7 @@ function makeHost(): {
     useVault: () => Promise.resolve(ready),
     getConflicts: () => Promise.resolve([]),
     revealVault: () => Promise.resolve(),
+    openExternal: () => Promise.resolve(),
     saveImageFile: (name) => Promise.resolve(`/tmp/${name}`),
     onVaultChanged: () => () => {},
     onChatChunk: () => () => {},
@@ -2764,5 +2765,86 @@ describe('createCoreBridge', () => {
     expect((await bridge.sessionSetActive({ personId: mara.id })).ok).toBe(true);
     expect((await bridge.insightsList()).some((i) => i.source === 'intake')).toBe(false);
     expect(await bridge.insightsList()).toEqual([]); // brand-new member: nothing in their own memory yet
+  });
+});
+
+describe('notifications (35)', () => {
+  it('persists notification read/dismissed state per person, keyed by the active person id', async () => {
+    const { bridge, ownerId, host } = await freshOwner();
+    await bridge.setNotificationState({ read: { 'sync-conflict': '2' }, dismissed: {} });
+    expect(await bridge.getNotificationState()).toEqual({
+      read: { 'sync-conflict': '2' },
+      dismissed: {},
+    });
+    expect(host.device().notificationState?.[ownerId]).toEqual({
+      read: { 'sync-conflict': '2' },
+      dismissed: {},
+    });
+
+    // A different person sees their OWN (empty) state — no leakage across personas.
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    expect((await bridge.sessionSetActive({ personId: mara.id })).ok).toBe(true);
+    expect(await bridge.getNotificationState()).toEqual({ read: {}, dismissed: {} });
+
+    // The owner's state is untouched after switching back (returning to the owner needs their PIN).
+    expect((await bridge.sessionSetActive({ personId: ownerId, pin: '1234' })).ok).toBe(true);
+    expect((await bridge.getNotificationState()).read).toEqual({ 'sync-conflict': '2' });
+  });
+
+  it('returns no responses-arrived summaries when the active person has no sends', async () => {
+    const { bridge } = await freshOwner();
+    expect(await bridge.notificationsResponsesArrived()).toEqual([]);
+  });
+
+  it('denies the responses-arrived read to a person without questionnaires.viewResults (a Guest)', async () => {
+    const { bridge } = await freshOwner();
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    expect((await bridge.sessionSetActive({ personId: guest.id })).ok).toBe(true);
+    expect(await bridge.notificationsResponsesArrived()).toEqual([]);
+  });
+
+  it('summarizes a questionnaire once a recipient submits a response (the responses-arrived source)', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    const recipient = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: recipient.id, roleId: 'member', pin: null });
+    const q = await bridge.questionnairesSave({
+      title: 'Weekly check-in',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: recipient.id },
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'How are we doing?', required: true }],
+    });
+    const { assignment } = await bridge.assignmentsCreate({ questionnaireId: q.id });
+
+    // No submission yet → nothing to surface.
+    expect(await bridge.notificationsResponsesArrived()).toEqual([]);
+
+    // The recipient submits; switching back to the owner (the sender) surfaces the summary.
+    await bridge.sessionSetActive({ personId: recipient.id });
+    await bridge.assignmentsSubmit({
+      assignmentId: assignment.id,
+      answers: [{ questionId: 'q1', value: 'Doing well' }],
+    });
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+
+    expect(await bridge.notificationsResponsesArrived()).toEqual([
+      { questionnaireId: q.id, title: 'Weekly check-in', submittedCount: 1 },
+    ]);
+  });
+
+  it('opens only http(s) URLs externally, via the host shell', async () => {
+    const host = makeHost();
+    const opened: string[] = [];
+    host.host.openExternal = (url: string) => {
+      opened.push(url);
+      return Promise.resolve();
+    };
+    const bridge = createCoreBridge(host.host);
+    await bridge.openExternal('https://github.com/Highfivery/SelfOS/releases');
+    expect(opened).toEqual(['https://github.com/Highfivery/SelfOS/releases']);
+    // A non-http(s) scheme is refused before reaching the shell.
+    await expect(bridge.openExternal('file:///etc/passwd')).rejects.toThrow();
+    expect(opened).toHaveLength(1);
   });
 });

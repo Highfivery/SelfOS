@@ -1,0 +1,11 @@
+.viewport {
+  position: fixed;
+  top: calc(var(--titlebar-height, 0px) + var(--space-3));
+  right: var(--space-4);
+  z-index: 60; /* above the center dropdown (50) and its backdrop (40) */
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  pointer-events: none; /* let clicks fall through the gaps; each toast re-enables its own */
+  max-width: calc(100vw - var(--space-8));
+}

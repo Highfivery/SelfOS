@@ -169,6 +169,9 @@ this is the v1 inventory:
 - **Feedback / status:** `Badge`, `AdminOnlyBadge` (the "Admin only" lock pill — marks any
   control/section only admins can see; CLAUDE.md §12), `Avatar`, `Spinner`, `Skeleton`, `EmptyState`,
   `Banner`.
+- **Notifications:** `Toast` — a brief, non-blocking pop-up (info/success/warning tones from the `Banner`
+  tokens; `role=status`/`alert` by severity; auto-dismiss with hover/focus pause, or sticky; optional single
+  action). Powers the notification toasts; see [`35-notification-system.md`](35-notification-system.md).
 - **Data viz:** `LineChart` — a minimal multi-series line chart (token-driven `--color-chart-*`,
   theme-aware, `role="img"` + a labelled `<title>` + a legend); powers questionnaire trends and any small
   time-series.

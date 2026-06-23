@@ -47,8 +47,14 @@ import type {
   IntakeState,
   IntakeSynthesisResult,
   IntakeTurnResult,
+  Notification,
+  NotificationAction,
+  NotificationKind,
+  NotificationSeverity,
+  PersonNotificationState,
   Person,
   ProfileUpdateSuggestion,
+  ResponsesArrivedSummary,
   SendAnswer,
   SendResult,
   MemoryReconcileResult,
@@ -243,6 +249,12 @@ export const IpcChannels = {
   profileDismissSuggestion: 'profile:dismissSuggestion',
   getSidebarCollapsed: 'ui:getSidebarCollapsed',
   setSidebarCollapsed: 'ui:setSidebarCollapsed',
+  // Notifications (35-notification-system §6) — read/dismissed flags ride device-state (per-person);
+  // openExternal is the shell path the renderer uses for an external action (e.g. the update link).
+  getNotificationState: 'notifications:getState',
+  setNotificationState: 'notifications:setState',
+  notificationsResponsesArrived: 'notifications:responsesArrived',
+  openExternal: 'shell:openExternal',
 } as const;
 
 export type SettingScope = 'vault' | 'device';
@@ -857,6 +869,18 @@ export interface SelfosBridge {
   getSidebarCollapsed(): Promise<boolean>;
   /** Persist the sidebar collapsed/expanded state (device-local). */
   setSidebarCollapsed(collapsed: boolean): Promise<void>;
+  // --- Notifications (35-notification-system §6) ---
+  /** The active person's device-local notification read/dismissed signatures. */
+  getNotificationState(): Promise<PersonNotificationState>;
+  /** Replace the active person's notification read/dismissed state (device-local, per-person). */
+  setNotificationState(state: PersonNotificationState): Promise<void>;
+  /**
+   * Questionnaires the active person sent that have ≥1 submitted response (the `responses-arrived` source).
+   * Local read — no network; gated by `questionnaires.viewResults` + sender-scoped in the bridge.
+   */
+  notificationsResponsesArrived(): Promise<ResponsesArrivedSummary[]>;
+  /** Open a URL in the user's browser via the main-process shell (the renderer never opens URLs directly). */
+  openExternal(url: string): Promise<void>;
 }
 
 export type {
@@ -904,6 +928,11 @@ export type {
   IntakeSynthesisResult,
   IntakeTurnResult,
   InviteSummary,
+  Notification,
+  NotificationAction,
+  NotificationKind,
+  NotificationSeverity,
+  PersonNotificationState,
   ProfileUpdateSuggestion,
   Person,
   PersonInput,
@@ -913,6 +942,7 @@ export type {
   QuestionnaireSendState,
   QuestionTrend,
   RelayLinkResult,
+  ResponsesArrivedSummary,
   Relationship,
   RelationshipInput,
   Role,

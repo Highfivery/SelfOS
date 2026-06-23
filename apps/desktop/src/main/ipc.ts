@@ -159,6 +159,10 @@ export function registerIpcHandlers(): void {
       const vaultDir = await activeVaultPath();
       if (vaultDir) await shell.openPath(vaultDir);
     },
+    openExternal: async (url) => {
+      // The coreBridge already validates this is an http(s) URL before reaching the host.
+      await shell.openExternal(url);
+    },
     saveImageFile: async (suggestedName, bytes) => {
       // E2E hook: write to a fixed path without showing the native dialog (which Playwright can't drive).
       const fakeDir = process.env['SELFOS_FAKE_SAVE_DIR'];
@@ -335,6 +339,10 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.profileDismissSuggestion, bridge.profileDismissSuggestion);
   handle(IpcChannels.getSidebarCollapsed, bridge.getSidebarCollapsed);
   handle(IpcChannels.setSidebarCollapsed, bridge.setSidebarCollapsed);
+  handle(IpcChannels.getNotificationState, bridge.getNotificationState);
+  handle(IpcChannels.setNotificationState, bridge.setNotificationState);
+  handle(IpcChannels.notificationsResponsesArrived, bridge.notificationsResponsesArrived);
+  handle(IpcChannels.openExternal, bridge.openExternal);
 
   // useVault is platform-specific: after the shared data side runs, begin watching the freshly
   // activated vault for THIS window (the watcher needs the invoking WebContents).

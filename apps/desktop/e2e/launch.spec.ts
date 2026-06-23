@@ -165,6 +165,39 @@ async function completeIntakeFor(
   await seedCompletedIntake(fs, key, person.id);
 }
 
+/** Seed a pending profile-freshness suggestion for a subject (the `profile-freshness` notification source). */
+async function seedProfileSuggestion(
+  vault: string,
+  userData: string,
+  personId: string,
+  id: string,
+): Promise<void> {
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('seedProfileSuggestion: master key missing');
+  const now = new Date().toISOString();
+  await writeEncryptedJson(
+    fs,
+    `people/${personId}/profile-suggestions/${id}.enc`,
+    {
+      id,
+      schemaVersion: 1,
+      subjectPersonId: personId,
+      kind: 'field',
+      field: 'occupation',
+      observed: 'nurse',
+      rationale: 'A recent session mentioned a new job.',
+      sourceInsightId: 'insight-1',
+      sourceKind: 'session',
+      restricted: false,
+      status: 'pending',
+      createdAt: now,
+      updatedAt: now,
+    },
+    key,
+  );
+}
+
 // Deterministic AI: passthrough secret encryption (no keychain prompt) + offline Claude client.
 function e2eEnv(): Record<string, string> {
   const env: Record<string, string> = {};
@@ -270,7 +303,120 @@ test('surfaces a sync conflict when a conflict copy exists in the vault', async 
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    await expect(w.getByText(/sync conflict copy was found/i)).toBeVisible();
+    // Scope to the in-content banner — the same text now also appears in a notification toast (spec 35).
+    await expect(w.getByRole('main').getByText(/sync conflict copy was found/i)).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('notifications: bell + center surface conflicts and freshness; an action navigates; dismiss sticks; no overflow (35)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  await mkdir(join(vault, 'journal'), { recursive: true });
+  await writeFile(join(vault, 'journal', 'note (conflicted copy 2026-06-09).md'), 'x', 'utf8');
+  await seedProfileSuggestion(vault, userData, 'owner-1', 'sugg-1');
+
+  let app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    // 1 conflict + 1 freshness = 2 unread.
+    await expect(w.getByRole('button', { name: 'Notifications, 2 unread' })).toBeVisible();
+
+    // Go off Home first so the freshness action (→ Home) is observable.
+    await w.getByRole('link', { name: 'Usage' }).click();
+    await expect.poll(() => w.evaluate(() => window.location.hash)).toContain('/usage');
+
+    // Open the center: both kinds show. Scope to the center menu — the same text also appears in a toast.
+    await w.getByRole('button', { name: /^Notifications/ }).click();
+    const center = w.getByRole('menu', { name: 'Notifications' });
+    await expect(center.getByText('Sync conflicts found')).toBeVisible();
+    const freshnessRow = center
+      .getByRole('menuitem')
+      .filter({ hasText: 'Profile updates to review' });
+    await expect(freshnessRow).toBeVisible();
+
+    // The freshness action navigates to Home and closes the center.
+    await freshnessRow.getByRole('button', { name: 'View' }).click();
+    await expect.poll(() => w.evaluate(() => window.location.hash)).toBe('#/');
+    await expect(w.getByRole('menu', { name: 'Notifications' })).toHaveCount(0); // center closed
+
+    // Reopen and dismiss the sync-conflict row.
+    await w.getByRole('button', { name: /^Notifications/ }).click();
+    await center
+      .getByRole('menuitem')
+      .filter({ hasText: 'Sync conflicts found' })
+      .getByRole('button', { name: 'Dismiss notification' })
+      .click();
+    await expect(center.getByText('Sync conflicts found')).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+
+  // Relaunch: the dismissed conflict stays dismissed; the still-pending freshness item remains.
+  app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('button', { name: /^Notifications/ }).click();
+    const center = w.getByRole('menu', { name: 'Notifications' });
+    await expect(center.getByText('Profile updates to review')).toBeVisible();
+    await expect(center.getByText('Sync conflicts found')).toHaveCount(0);
+
+    // ~360px: the center scrolls vertically only — never a horizontal scrollbar (CLAUDE.md §12).
+    await w.setViewportSize({ width: 360, height: 780 });
+    const offenders = await w.evaluate(() => {
+      const bad: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          bad.push(`${el.tagName}.${el.className}`);
+        }
+      });
+      return bad;
+    });
+    expect(offenders).toEqual([]);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('notifications: are per-person — a member does not see the owner’s freshness item (35)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  await seedProfileSuggestion(vault, userData, 'owner-1', 'sugg-1');
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    // The owner sees their freshness notification.
+    await expect(w.getByRole('button', { name: 'Notifications, 1 unread' })).toBeVisible();
+
+    // Create + grant a member (Jordan), onboarded so the member gate doesn't take over (18 §3.1).
+    await w.getByRole('link', { name: 'People' }).click();
+    await w.getByRole('button', { name: 'Add person' }).click();
+    await w.getByLabel('Name').fill('Jordan');
+    await w.getByRole('button', { name: 'Create' }).click();
+    await w.getByText('Jordan').click();
+    await w.getByRole('button', { name: 'Access' }).click();
+    await w.getByRole('button', { name: 'Grant access' }).click();
+    await expect(w.getByText(/can sign in/i)).toBeVisible();
+    await completeIntakeFor(vault, userData, 'Jordan');
+
+    // Switch to Jordan (owner → member is PIN-free).
+    await w.getByRole('button', { name: /signed in as/i }).click();
+    await w.getByRole('menuitem', { name: 'Switch person' }).click();
+    await w
+      .getByRole('dialog', { name: /who.s here/i })
+      .getByText('Jordan')
+      .click();
+    await expect(w.getByRole('button', { name: 'Signed in as Jordan' })).toBeVisible();
+
+    // Jordan sees no notifications — the owner's freshness item is absent (per-person, device-local).
+    await expect(w.getByRole('button', { name: 'Notifications, 1 unread' })).toHaveCount(0);
+    await w.getByRole('button', { name: 'Notifications' }).click();
+    await expect(w.getByText('You’re all caught up.')).toBeVisible();
+    await expect(w.getByText('Profile updates to review')).toHaveCount(0);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

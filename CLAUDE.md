@@ -385,6 +385,36 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-23 — **Build (unified in-app notification system — SPEC 35 BUILT; on `feat/notification-system`).** SelfOS
+  surfaced alerts ad-hoc (a sync-conflict `Banner`, a Home "keep your profile fresh" card, no signal when a
+  questionnaire recipient responded). Built ONE framework — a `TitlebarControl` **bell** + unread badge → a
+  **NotificationCenter** dropdown + corner **toasts** — and migrated four kinds: **sync-conflict**,
+  **responses-arrived**, **profile-freshness** (all live) + **update-available** (registered but **stubbed** — no
+  checker yet; spec 36 raises it). Notifications are **derived** in the renderer from live state (conflicts already
+  on the AppHeader path; one-shot profile-suggestion + responses-arrived reads on mount/person-change — NO background
+  polling); only read/dismissed **signatures** persist — **device-local + per-person** — via two device-state-backed
+  channels `notifications:getState`/`:setState` (mirroring `sidebarCollapsed`), keyed by the active person IN THE
+  BRIDGE (the trust boundary). A pure `resolveNotifications` registry coalesces to one item per `coalesceKey` and
+  re-surfaces a dismissed item only when its condition CHANGES (`onIncrease` for conflicts/responses so resolving
+  some never re-pops; set-gains-a-new-id for profile-freshness so a shrinking set never re-nags; `onChange` for
+  update-available). **New seam beyond the spec:** a `reveal-vault` **action** for the sync-conflict "Resolve" (a
+  shell op, not a route/URL — alongside navigate/external/none), a `notifications:responsesArrived` consumer read
+  (gated `questionnaires.viewResults`, sender-scoped — counts submitted **and** analyzed so the tally is monotonic),
+  and a `shell:openExternal` channel (http(s)-only) for the external action. Added a design-system **`Toast`**
+  primitive (severity tones from `Banner` tokens, sticky-or-auto-dismiss with hover/focus pause, `aria-live`/
+  `role=alert`; toasts clear once read/dismissed so a sticky one never lingers) + the bell/center/viewport chrome +
+  a per-person-reset `notificationStore`; showcased in `/gallery`. Tightened `AppHeader` gaps + edge padding at phone
+  width so the larger cluster (now incl. the bell) fits with **no horizontal scrollbar** (§12) — the fix had to sit
+  AFTER the `767px` block to win at 390px, and stays less specific than the `win32` control-inset rule. Crisis stays
+  OUT (untouched `CrisisFooter`); the in-content sync-conflict Banner + Home freshness card REMAIN as deep
+  affordances. Code-reviewer **ship** (privacy/per-person/re-surface/a11y verified; applied both should-fixes —
+  count analyzed responses + the profile-freshness set-gains-id comparator — and the viewResults-denial nit test).
+  Gate green: typecheck, lint, format, **637 desktop + core** unit; **81/81 E2E** (the prior household-AI-key flake
+  now passes). Synced spec 35 (§3.4/§4/§6 + Built changelog) + spec 01 §5.6 (`Toast`). **Lesson: keep notifications
+  DERIVED (recompute from live state) and persist only read/dismissed SIGNATURES per coalesce key — so dismissals
+  survive a reload, never sync or leak across personas, and a per-kind re-surface rule (`onIncrease` /
+  set-gains-id / `onChange`) decides re-popping with no stored notification log; and adding a control to the titlebar
+  means re-checking the phone-width fit (the §12 overflow guard caught it).**
 - 2026-06-23 — **Build (AI rich-text rendering — SPEC 34 BUILT; on `feat/rich-text-rendering`, PR opened).** Every
   AI-generated string was rendered as a plain text node, so the Markdown the model naturally writes (`**bold**`,
   `-`/`1.` lists, `###`, `>` quotes, `` `code` ``) showed as literal characters on the onboarding **portrait**,

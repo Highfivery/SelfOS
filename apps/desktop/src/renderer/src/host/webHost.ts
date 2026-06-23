@@ -178,6 +178,10 @@ function createBridgeHost(parts: HostParts): BridgeHost {
       return id && parts.hasPendingDownloads ? parts.hasPendingDownloads(id) : false;
     },
     revealVault: () => Promise.resolve(),
+    openExternal: (url) => {
+      window.open(url, '_blank', 'noopener,noreferrer');
+      return Promise.resolve();
+    },
     // Export = a browser download (web preview) / share-sheet (iOS, later). No native save dialog here.
     saveImageFile: (suggestedName, bytes, mime) => {
       // Copy into a plain ArrayBuffer — a Uint8Array<ArrayBufferLike> isn't a BlobPart under the DOM lib.

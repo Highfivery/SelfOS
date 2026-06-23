@@ -1,0 +1,35 @@
+.wrap {
+  position: relative;
+  display: inline-flex;
+  flex: none; /* the bell never shrinks in the titlebar cluster (CLAUDE.md §12) */
+}
+
+.trigger {
+  position: relative;
+}
+
+.badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-pill);
+  background: var(--color-warning);
+  color: var(--color-accent-solid-text);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  border: none;
+  background: transparent;
+}

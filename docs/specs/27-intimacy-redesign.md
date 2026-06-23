@@ -1,7 +1,9 @@
 # 27 — Intimacy & sexuality block redesign
 
-> **Status:** Approved · **Built** 2026-06-21 (`feat/intimacy-redesign`) · activity matrix **redesigned to
-> 5-point + gender-aware** 2026-06-23 (`feat/intimacy-matrix-redesign`) · _last updated 2026-06-23_
+> **Status:** Approved · **Built + on `main`.** Both 2026-06-21 passes (`feat/intimacy-redesign` →
+> `284083f`, `feat/intimacy-trim` → `6bd9d8f`/`32f7b0b`) landed as direct commits in the pre-PR-workflow era;
+> the activity matrix was **redesigned to 5-point + gender-aware** 2026-06-23 (`feat/intimacy-matrix-redesign`,
+> merged via PR #36 / `c33af96`). · _last updated 2026-06-23_
 >
 > The opt-in 18+ **Intimacy & sexuality** intake block ([`18`](18-personal-onboarding.md) §14.5) is
 > comprehensive but **100 questions** with real fatigue traps — most painfully, three full ~40-item activity
@@ -380,8 +382,13 @@ announce "not set." Reduced-motion respected.
 
 ## 13. Changelog
 
+- 2026-06-23 — **Merge-state reconcile (no code).** Both 2026-06-21 passes below say "NOT merged / awaiting user
+  review" — append-only dated snapshots that are now **out of date**: the rebalance + trim **are on `main`**
+  (direct commits `284083f` → `6bd9d8f` → `32f7b0b` in the pre-PR-workflow era), and the matrix redesign merged via
+  **PR #36 / `c33af96`**. The Status header is the authoritative current state. (The "merge-time reconcile" these
+  entries anticipated — see §11/§12.)
 - 2026-06-23 — **Activity matrix redesign — 5-point + gender/orientation-aware** (`feat/intimacy-matrix-redesign`,
-  off `main`; owner-approved decisions, implemented not re-asked). The 3-state activity matrix became a **5-point
+  merged to `main` via PR #36; owner-approved decisions, implemented not re-asked). The 3-state activity matrix became a **5-point
   ordered feeling scale — Hard no · Not interested · Curious · Like it · Love it** (a single mutually-exclusive
   choice per row; **"Hard no" rendered as a boundary** with a distinct danger tone, the other four as feelings).
   Engine (all additive, no migration): `Question.matrix` gains **`pointLabels: string[]`** (N-label scale; wins

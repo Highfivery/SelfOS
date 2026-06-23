@@ -1,6 +1,7 @@
 # 26 — Intake catalog redesign (non-intimacy)
 
-> **Status:** Approved · **Built** 2026-06-21 (`feat/intake-catalog-redesign`) · _last updated 2026-06-21_
+> **Status:** Approved · **Built + on `main`** (`feat/intake-catalog-redesign`, landed as direct commits
+> `053dcf3`/`47b6582` in the pre-PR-workflow era) · _last updated 2026-06-23_
 >
 > The onboarding intake ([`18`](18-personal-onboarding.md)) grew to **~492 questions across 12 sections**,
 > many repetitive or near-identical — slow to finish, expensive to synthesize, and diluting the coach's
@@ -425,6 +426,12 @@ operable and announce "not yet set"; a control test covers it.
 
 ## 13. Changelog
 
+- 2026-06-23 — **Merge-state reconcile (no code).** The "off `main`, NOT merged / awaiting user review" 2026-06-21
+  entries below are append-only dated snapshots that are now **out of date**: this catalog redesign **is on `main`**
+  (it landed as direct commits `053dcf3` + the E2E reconcile `47b6582` during the pre-PR-workflow era, before the
+  PR-only-`main` rule). The Status header is the authoritative current state. Flagged because the 5-point
+  gender-aware activity-matrix work (27, PR #36) built on top and surfaced that these spec changelogs still read
+  "not merged."
 - 2026-06-21 — created (Draft). Part of the onboarding-redesign spec group (26 non-intimacy catalog · 27
   intimacy · 28 synthesis/context optimization · 29 progressive profile-building). Cuts the non-intimacy
   intake from ~392 → 126 questions; amends [`18`](18-personal-onboarding.md) §14.4/§14.4a.

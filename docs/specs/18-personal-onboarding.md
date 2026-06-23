@@ -1,11 +1,14 @@
 # 18 — Personal onboarding ("Getting to know you")
 
-> **Status:** Approved · _last updated 2026-06-15_ · **Amended 2026-06-15 (§14–§15, building):** the all-chat
-> interview is being reworked into a **hybrid form/chat intake** — a short gated `core` of quick forms +
+> **Status:** Approved · **Built + on `main`** · _last updated 2026-06-23_ · **Amended 2026-06-15 (§14–§15):**
+> the all-chat interview was reworked into a **hybrid form/chat intake** — a short gated `core` of quick forms +
 > `invited` deep/sensitive sections, specific questions everywhere, an explicit branched intimacy block, useful
 > answers promoted to real `Person` fields, the questionnaire engine reused (§14) — plus a **self-maintaining
 > profile** that detects stale answers from ongoing activity and invites updates (§15). §1–§13 describe the
-> as-first-built v1; §14–§15 are the active redesign.
+> as-first-built v1; §14–§15 (the hybrid redesign + the 26/27 catalog/intimacy rebalance + the 2026-06-23
+> 5-point gender-aware activity matrix) are **all on `main`**. NOTE: changelog entries below are append-only
+> dated snapshots — several say "NOT merged / awaiting user review" because they were true on their date; that
+> work has since landed on `main` (this Status line is the authoritative current state).
 >
 > A warm, AI-guided onboarding that helps a person tell SelfOS who they are — their life now, their
 > history, family, health, what weighs on them, relationships, values, what they want to work on, and

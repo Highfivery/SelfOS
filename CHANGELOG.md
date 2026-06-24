@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/Highfivery/SelfOS/compare/v0.8.0...v0.8.1) (2026-06-24)
+
+
+### Bug Fixes
+
+* **onboarding:** share-by-default backfill, inline picker confirm, clean Memory cards ([#56](https://github.com/Highfivery/SelfOS/issues/56)) ([1791e07](https://github.com/Highfivery/SelfOS/commit/1791e07b5a62116489efb67dc52a0df87933ff56))
+
 ## [0.8.0](https://github.com/Highfivery/SelfOS/compare/v0.7.0...v0.8.0) (2026-06-24)
 
 

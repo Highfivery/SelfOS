@@ -26,7 +26,11 @@ export async function retroTagLegacyPortraits(
     if (insight.facts.some((f) => f.lifeArea)) continue; // already tagged (fresh / previously retro-tagged)
     let changed = false;
     const facts = insight.facts.map((fact) => {
-      const area = lifeAreasFromText(fact.text)[0];
+      const areas = lifeAreasFromText(fact.text);
+      // SAFETY (§28/§8, mirrors selectPortraitFacts' emotions-first rule): if a fact reads as distress, tag it
+      // `Emotions & patterns` so it stays always-on CORE — never let an earlier-ordered keyword (Work, Money…)
+      // demote a legacy distress fact off the never-narrowed guarantee.
+      const area = areas.includes('Emotions & patterns') ? 'Emotions & patterns' : areas[0];
       if (!area) return fact; // no confident match → leave untagged (treated as CORE, never hidden)
       changed = true;
       return { ...fact, lifeArea: area };

@@ -50,6 +50,23 @@ describe('retroTagLegacyPortraits (39 §4.5 — no-AI life-area tagging)', () =>
     expect(out?.updatedAt).toBe('2026-06-10T00:00:00.000Z'); // invisible maintenance — not bumped
   });
 
+  it('keeps a distress fact CORE — prefers Emotions over an earlier-ordered keyword (§28/§8 safety)', async () => {
+    const fs = memFileSystem();
+    await saveInsight(
+      fs,
+      key,
+      insight({
+        id: 'portrait',
+        // "anxiety" → Emotions & patterns AND "work" → Work & purpose (earlier in LIFE_AREAS); the distress
+        // tag must win so the fact stays always-on, not narrowed away in a non-work session.
+        facts: [{ id: 'f1', text: 'Constant anxiety about work deadlines', shareable: false }],
+      }),
+    );
+    await retroTagLegacyPortraits(fs, key, 'p1');
+    const out = await getInsight(fs, key, 'p1', 'portrait');
+    expect(out?.facts.find((f) => f.id === 'f1')?.lifeArea).toBe('Emotions & patterns');
+  });
+
   it('skips an already-tagged portrait and non-intake insights (idempotent)', async () => {
     const fs = memFileSystem();
     await saveInsight(

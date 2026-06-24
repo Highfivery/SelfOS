@@ -1,4 +1,5 @@
 import type { Answer, Question, SendAnswer } from '../schemas';
+import { MAX_RESPONSE_BYTES } from '../relay/relayLimits';
 
 /**
  * Pure answering logic shared by every host that renders a questionnaire to be answered — preview /
@@ -73,6 +74,33 @@ export function allocationTotal(value: AnswerValue | undefined): number {
     return Object.values(value).reduce((sum, n) => sum + (Number.isFinite(n) ? n : 0), 0);
   }
   return 0;
+}
+
+/**
+ * A relay submission is sealed (ECDH + AES-GCM) and base64-encoded before upload, which expands the JSON
+ * plaintext by ~4/3 and adds an envelope + ephemeral key. The relay rejects a sealed body over
+ * `MAX_RESPONSE_BYTES` (08 §11.3); this estimates the SEALED size from the plaintext so a too-long response
+ * is caught BEFORE encrypt/upload with a clear recipient-facing message (38 §3.9), rather than an opaque
+ * relay rejection. Sharing `MAX_RESPONSE_BYTES` keeps the client cap from drifting from the server's.
+ */
+const SEAL_OVERHEAD_BYTES = 512; // envelope JSON fields + base64 ephemeral key + IV/tag headroom.
+
+export interface ResponseSizeCheck {
+  ok: boolean;
+  estimatedBytes: number;
+  maxBytes: number;
+}
+
+/** Estimate the SEALED byte size of a relay response payload from its serialized plaintext. */
+export function estimateSealedResponseBytes(payload: unknown): number {
+  const plaintext = new TextEncoder().encode(JSON.stringify(payload)).length;
+  return Math.ceil((plaintext * 4) / 3) + SEAL_OVERHEAD_BYTES;
+}
+
+/** Whether a relay response payload will fit the relay's size cap once sealed (38 §3.9). */
+export function responseSizeGuard(payload: unknown): ResponseSizeCheck {
+  const estimatedBytes = estimateSealedResponseBytes(payload);
+  return { ok: estimatedBytes <= MAX_RESPONSE_BYTES, estimatedBytes, maxBytes: MAX_RESPONSE_BYTES };
 }
 
 /** Whether a question has a usable answer for its type (an allocation must total exactly 100). */

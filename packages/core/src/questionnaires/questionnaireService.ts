@@ -94,9 +94,8 @@ const NEEDS_OPTIONS: ReadonlySet<string> = new Set([
  */
 export function validateQuestionnaire(input: Questionnaire | QuestionnaireInput): string[] {
   const problems: string[] = [];
-  const ids = new Set(input.questions.map((q) => q.id));
   if (input.questions.length === 0) problems.push('A questionnaire needs at least one question.');
-  for (const q of input.questions) {
+  input.questions.forEach((q, index) => {
     if (NEEDS_OPTIONS.has(q.type) && (q.options?.length ?? 0) < 2) {
       problems.push(`"${q.prompt}" (${q.type}) needs at least two options.`);
     }
@@ -106,11 +105,31 @@ export function validateQuestionnaire(input: Questionnaire | QuestionnaireInput)
     if (q.type === 'matrix' && (q.matrix?.rows.length ?? 0) === 0) {
       problems.push(`"${q.prompt}" (matrix) needs at least one row.`);
     }
-    if (q.branch && !ids.has(q.branch.whenQuestionId)) {
-      problems.push(
-        `"${q.prompt}" branches on a missing question id (${q.branch.whenQuestionId}).`,
-      );
+    if (q.branch) {
+      // A branch shows this question only once its trigger has been answered, so the trigger MUST be a
+      // strictly-earlier question (38 §3.9). This single backward-only rule also makes a circular branch
+      // impossible: each question has at most one branch pointing at one other, so a list whose every
+      // branch points earlier is a backward forest — no cycle can form. A missing/self/later target is a
+      // dead-end (the question could never appear).
+      const targetIndex = input.questions.findIndex((o) => o.id === q.branch?.whenQuestionId);
+      if (targetIndex === -1) {
+        problems.push(
+          `"${q.prompt}" branches on a missing question id (${q.branch.whenQuestionId}).`,
+        );
+      } else if (targetIndex === index) {
+        problems.push(`"${q.prompt}" branches on itself, so it can never appear.`);
+      } else if (targetIndex > index) {
+        problems.push(
+          `"${q.prompt}" branches on a later question, so it can never appear — move its trigger earlier.`,
+        );
+      }
     }
+  });
+  // The form must never be able to render empty: at least one question has to be unconditional (38 §3.9).
+  if (input.questions.length > 0 && input.questions.every((q) => q.branch)) {
+    problems.push(
+      'Every question is conditional, so the form could show nothing — at least one question must always appear.',
+    );
   }
   return problems;
 }

@@ -7,7 +7,11 @@ import {
   openResult,
   sealResponse,
 } from '@selfos/core/relay';
-import { unansweredRequired, visibleQuestions } from '@selfos/core/questionnaires';
+import {
+  responseSizeGuard,
+  unansweredRequired,
+  visibleQuestions,
+} from '@selfos/core/questionnaires';
 import type { AnswerMap, AnswerValue } from '@selfos/core/questionnaires';
 import { toBase64 } from '@selfos/core/encoding';
 import type {
@@ -315,6 +319,13 @@ function FormScreen({
     payload: RelayResponsePayload,
     done: 'thanks' | 'awaiting' | 'declined',
   ): Promise<void> => {
+    // Guard the serialized payload against the relay's size cap BEFORE sealing/uploading, so a too-long
+    // response gets a clear message instead of an opaque relay rejection (38 §3.9). The relay's own
+    // MAX_RESPONSE_BYTES check stays the backstop.
+    if (!responseSizeGuard(payload).ok) {
+      setError('This response is too long to send — please shorten your written answers.');
+      return;
+    }
     setBusy(true);
     setError(null);
     try {

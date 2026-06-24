@@ -137,6 +137,58 @@ describe('validateQuestionnaire', () => {
       ).join(' '),
     ).toContain('missing question');
   });
+
+  it('flags a branch on a LATER question (a dead-end that can never appear, 38 §3.9)', () => {
+    expect(
+      validateQuestionnaire(
+        input({
+          questions: [
+            question({ id: 'q1', branch: { whenQuestionId: 'q2', equals: true, action: 'show' } }),
+            question({ id: 'q2', type: 'yesNo', branch: undefined }),
+          ],
+        }),
+      ).join(' '),
+    ).toContain('later question');
+  });
+
+  it('flags a branch that references itself (38 §3.9)', () => {
+    expect(
+      validateQuestionnaire(
+        input({
+          questions: [
+            question({ id: 'q1', branch: { whenQuestionId: 'q1', equals: true, action: 'show' } }),
+          ],
+        }),
+      ).join(' '),
+    ).toContain('itself');
+  });
+
+  it('flags a form where EVERY question is conditional (could render empty, 38 §3.9)', () => {
+    // Both questions are branched, so nothing is guaranteed to appear — the form could be empty.
+    expect(
+      validateQuestionnaire(
+        input({
+          questions: [
+            question({ id: 'q1', type: 'yesNo', branch: { whenQuestionId: 'q1', action: 'show' } }),
+            question({ id: 'q2', branch: { whenQuestionId: 'q1', equals: true, action: 'show' } }),
+          ],
+        }),
+      ).join(' '),
+    ).toContain('always appear');
+  });
+
+  it('accepts a valid backward branch (trigger earlier, plus an unconditional question)', () => {
+    expect(
+      validateQuestionnaire(
+        input({
+          questions: [
+            question({ id: 'q1', type: 'yesNo' }),
+            question({ id: 'q2', branch: { whenQuestionId: 'q1', equals: true, action: 'show' } }),
+          ],
+        }),
+      ),
+    ).toEqual([]);
+  });
 });
 
 describe('assignmentService', () => {

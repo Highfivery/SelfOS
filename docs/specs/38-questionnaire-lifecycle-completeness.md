@@ -614,10 +614,17 @@ decisions). Recommended order, smallest-risk first:
    **read** ("seen" = opens Results, §11 #2); a higher count re-surfaces (the onIncrease rule). autoAnalyze
    already runs on the Results-open visit — the two analyze paths (manual button + the setting) are
    unchanged. No vault file / no migration (device-local "seen").
-2. **Validation guards.** Extend `validateQuestionnaire` (branch dead-end / circular / all-hidden);
-   email/phone format gating in `RelayLinkDelivery`; the response-size guard in the shared answering
-   renderer (shared cap constant with the relay). Pure-logic-heavy, well-tested, no AI/relay behavior
-   change. (§11 #9.)
+2. **Validation guards.** ✅ **Built (2026-06-23).** `validateQuestionnaire` now flags a branch on a
+   **later** question or **itself** (a dead-end that can never appear) and a form where **every question
+   is conditional** (could render empty) — the backward-only branch rule also makes a cycle structurally
+   impossible (one branch per question, pointing earlier). It gates new edits + new sends; immutable sent
+   snapshots are never re-validated (§11 #9). `RelayLinkDelivery` validates email/phone format: a
+   non-empty malformed value **disables that one delivery action** with an inline `aria-invalid` hint
+   while Copy / Share / the raw link stay usable (empty is allowed). A pure `responseSizeGuard` (in
+   `@selfos/core/questionnaires`) estimates the **sealed** size (base64 ~4/3 + envelope) and shares the
+   relay's `MAX_RESPONSE_BYTES` — centralized into a leaf `relay/relayLimits.ts` so client + server can't
+   drift — and the relay page blocks an over-cap submit with "too long" before sealing (the relay's own
+   413 stays the backstop). No AI/relay behavior change; no `RELAY_VERSION` bump.
 3. **Draft-vs-ready + started-vs-finished labeling.** The Draft badge + disabled-Send-with-reasons; the
    sender-facing started/answered/expired distinction (derive expiry visibility too). Renderer + derivation
    only. (§11 #6, #8.)

@@ -2,11 +2,12 @@ import { z } from 'zod';
 import { classifyParseOutcome, extractJsonObject, tolerantArray } from '../ai/jsonSalvage';
 import type { ClaudeClient, FileSystem } from '../host';
 import { uuid } from '../id';
-import type { Insight, InsightProvenance, MemoryReconcileResult, UsageEvent } from '../schemas';
+import type { Insight, MemoryReconcileResult, UsageEvent } from '../schemas';
 import { LIFE_AREAS } from '../schemas';
 import { checkBudget, costOf, recordUsage } from '../usage';
 import { normalizeCategories } from './categories';
-import { deleteInsight, getInsight, listInsightsForPerson, saveInsight } from './insightStore';
+import { getInsight, listInsightsForPerson, saveInsight } from './insightStore';
+import { queueMergeProposals } from './mergeProposals';
 
 /**
  * "Refresh memory" reconciliation (20-memory-dashboard §3.5/§4.3/§5.2). The MANUAL, budget-gated AI pass
@@ -77,8 +78,6 @@ function digestInsight(insight: Insight): unknown {
     })),
   };
 }
-
-const norm = (s: string): string => s.trim().toLowerCase().replace(/\s+/g, ' ');
 
 export interface ReconcileDeps {
   fs: FileSystem;
@@ -159,49 +158,21 @@ export async function reconcileInsights(deps: ReconcileDeps): Promise<MemoryReco
   }
 
   const ids = new Set(active.map((i) => i.id));
-  const deleted = new Set<string>();
-  let mergedCount = 0;
 
-  // Apply merges first (conservative — usually none). Only between two distinct ids that both exist; skip a
-  // source already merged away. Folds the source's NON-flagged facts into the target (deduped by text),
-  // records the source's provenance under `contributingSources`, then deletes the source.
-  for (const merge of parsed.data.merges) {
-    if (merge.from === merge.into) continue;
-    if (!ids.has(merge.from) || !ids.has(merge.into)) continue;
-    if (deleted.has(merge.from) || deleted.has(merge.into)) continue;
-    const from = await getInsight(fs, key, personId, merge.from);
-    const into = await getInsight(fs, key, personId, merge.into);
-    if (!from || !into) continue;
+  // Confirm-before-apply (39-living-memory §3.4): merges are NEVER applied silently. Each valid, distinct,
+  // both-existing merge op is QUEUED as a proposal the user confirms (Merge) or dismisses (Keep both) in
+  // Memory. The low-risk confidence/category recalibration below still auto-applies.
+  const validMerges = parsed.data.merges.filter(
+    (m) => m.from !== m.into && ids.has(m.from) && ids.has(m.into),
+  );
+  const summaryById = new Map(active.map((i) => [i.id, i.summary]));
+  const proposedCount = await queueMergeProposals(fs, key, personId, validMerges, summaryById, now);
 
-    const seen = new Set(into.facts.map((f) => norm(f.text)));
-    const foldedFacts = [...into.facts];
-    for (const fact of from.facts) {
-      if (fact.flaggedInaccurate) continue; // never carry a corrected fact forward
-      if (seen.has(norm(fact.text))) continue;
-      seen.add(norm(fact.text));
-      foldedFacts.push({ ...fact, id: uuid() });
-    }
-    const contributing: InsightProvenance[] = [
-      ...(into.contributingSources ?? []),
-      from.provenance,
-      ...(from.contributingSources ?? []),
-    ];
-    await saveInsight(fs, key, {
-      ...into,
-      facts: foldedFacts,
-      contributingSources: contributing,
-      lastReconciledAt: at,
-      updatedAt: at,
-    });
-    await deleteInsight(fs, personId, from.id);
-    deleted.add(from.id);
-    mergedCount += 1;
-  }
-
-  // Apply per-insight confidence / rationale / category updates to the survivors.
+  // Apply per-insight confidence / rationale / category updates (auto — low risk). No insight is deleted here;
+  // a merge only removes the source if/when the user accepts its proposal.
   let reconciledCount = 0;
   for (const op of parsed.data.insights) {
-    if (!ids.has(op.id) || deleted.has(op.id)) continue;
+    if (!ids.has(op.id)) continue;
     const existing = await getInsight(fs, key, personId, op.id);
     if (!existing) continue;
     await saveInsight(fs, key, {
@@ -215,5 +186,5 @@ export async function reconcileInsights(deps: ReconcileDeps): Promise<MemoryReco
     reconciledCount += 1;
   }
 
-  return { ok: true, reconciledCount, mergedCount, usage };
+  return { ok: true, reconciledCount, mergedCount: 0, proposedCount, usage };
 }

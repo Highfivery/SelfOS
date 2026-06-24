@@ -35,6 +35,7 @@ import {
   BudgetSchema,
   DreamAnalysisEditsSchema,
   DreamInputSchema,
+  GoalStatusSchema,
   PersonInputSchema,
   PersonNotificationStateSchema,
   QuestionnaireInputSchema,
@@ -59,9 +60,11 @@ import {
   type InboxAssignmentDetail,
   type InboxCompatibilityView,
   type InboxItem,
+  type Goal,
   type Insight,
   type IntimacyTopicsView,
   type MemoryReconcileResult,
+  type MemoryReconcileState,
   type OutboundSharing,
   IntakeAnswerValueSchema,
   type IntakeState,
@@ -201,10 +204,16 @@ import {
   flagInsightFact,
   listAllInsights,
   listInsightsForPerson,
+  listMergeProposals,
   listRelatedShareableInsights,
+  reapOrphanShares,
   reconcileInsights,
+  resolveMergeProposal,
+  retroTagLegacyPortraits,
+  shouldAutoReconcile,
   updateInsight,
 } from '@selfos/core/insights';
+import { deleteGoal, listGoals, setGoalStatus, updateGoal } from '@selfos/core/goals';
 import { INTIMACY_ACTIVITIES, INTIMACY_FANTASIES } from '@selfos/core/intimacy';
 import {
   addCustomIntimacyTopic,
@@ -588,6 +597,19 @@ const InsightFlagSchema = z.object({
   insightId: z.string().min(1),
   factId: z.string().min(1).optional(),
   flagged: z.boolean(),
+});
+// Tracked goals (39-living-memory §6). All scoped to the active person in the handler (the trust boundary).
+const GoalSetStatusSchema = z.object({ goalId: z.string().min(1), status: GoalStatusSchema });
+const GoalUpdateSchema = z.object({
+  goalId: z.string().min(1),
+  text: z.string().optional(),
+  due: z.string().optional(),
+  horizon: z.string().optional(),
+});
+const GoalDeleteSchema = z.object({ goalId: z.string().min(1) });
+const ResolveProposalSchema = z.object({
+  proposalId: z.string().min(1),
+  action: z.enum(['merge', 'keepBoth']),
 });
 // Personal onboarding (18-personal-onboarding §6).
 const IntakeRunTurnSchema = z.object({ sectionId: z.string().min(1), userText: z.string() });
@@ -1280,7 +1302,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     peopleDelete: async (id): Promise<void> => {
       const ctx = await host.vaultAndKey();
       if (!ctx) return;
-      await deletePerson(ctx.fs, PersonIdSchema.parse(id));
+      const personId = PersonIdSchema.parse(id);
+      await deletePerson(ctx.fs, personId);
+      // Reap any per-person shares pointing at the now-deleted person from every OTHER person's insight
+      // facts (39-living-memory §4.5). Cleanup only — the read-time re-gate already prevents any leak, so
+      // a best-effort failure here is non-fatal. Done from the seam to avoid a people↔insights import cycle.
+      await reapOrphanShares(ctx.fs, ctx.key, personId);
     },
     relationshipsList: async (): Promise<Relationship[]> => {
       const ctx = await host.vaultAndKey();
@@ -1999,11 +2026,112 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         new Date(),
       );
     },
-    memoryRefresh: async (): Promise<MemoryReconcileResult> => {
+    memoryRefresh: async (input): Promise<MemoryReconcileResult> => {
+      const auto = input?.auto === true;
+      // An AUTOMATIC pass (renderer cadence) only runs when warranted: the opt-out setting is honored, and the
+      // threshold/gap/throttle gate must pass — otherwise it's a calm SKIPPED no-op that never spends. A MANUAL
+      // Refresh always forces (skips this gate). The throttle marker is device-local + per-person.
+      if (auto) {
+        const ctx = await host.vaultAndKey();
+        const personId = await activePersonId();
+        if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'memory.own'))) {
+          return { ok: false, reason: 'SKIPPED' };
+        }
+        if ((await readVaultSettingsValues(ctx.fs))['memory.autoReconcile'] === false) {
+          return { ok: false, reason: 'SKIPPED' };
+        }
+        const approved = (await listInsightsForPerson(ctx.fs, ctx.key, personId)).filter(
+          (i) => i.approved,
+        );
+        const device = await host.readDeviceState();
+        const lastCheckedAt = device.memoryReconcileCheckedAt?.[personId];
+        if (!shouldAutoReconcile({ insights: approved, lastCheckedAt, now: new Date() })) {
+          return { ok: false, reason: 'SKIPPED' };
+        }
+        // Stamp BEFORE running, so even a pass that spends won't re-trigger within the throttle window.
+        await host.updateDeviceState({
+          memoryReconcileCheckedAt: {
+            ...(device.memoryReconcileCheckedAt ?? {}),
+            [personId]: new Date().toISOString(),
+          },
+        });
+      }
       // Reuse the AI-deps assembly (gates on `memory.own`, reads the key host-side, never to the renderer).
       const deps = await aiDeps('memory.own');
-      if (!deps) return { ok: false, reason: 'DENIED', message: 'Not available.' };
+      if (!deps)
+        return { ok: false, reason: auto ? 'SKIPPED' : 'DENIED', message: 'Not available.' };
+      // Free no-AI step that rides this pass (39 §4.5): retro-tag a legacy untagged portrait's facts with a
+      // life-area so it topic-narrows in context like a fresh one. Idempotent; never bumps updatedAt.
+      await retroTagLegacyPortraits(deps.fs, deps.key, deps.personId);
       return reconcileInsights(deps);
+    },
+    memoryReconcileState: async (): Promise<MemoryReconcileState> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'memory.own'))) return { proposals: [] };
+      const personId = await activePersonId();
+      if (!personId) return { proposals: [] };
+      const insights = await listInsightsForPerson(ctx.fs, ctx.key, personId);
+      const lastReconciledAt = insights
+        .map((i) => i.lastReconciledAt)
+        .filter((v): v is string => typeof v === 'string')
+        .sort()
+        .at(-1);
+      const proposals = await listMergeProposals(ctx.fs, ctx.key, personId);
+      return { ...(lastReconciledAt ? { lastReconciledAt } : {}), proposals };
+    },
+    memoryResolveProposal: async (input): Promise<void> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'memory.own'))) return;
+      const personId = await activePersonId();
+      if (!personId) return;
+      const p = ResolveProposalSchema.parse(input);
+      // Scoped to the active person's OWN proposals (the trust boundary).
+      await resolveMergeProposal(ctx.fs, ctx.key, personId, p.proposalId, p.action, new Date());
+    },
+    goalsList: async (): Promise<Goal[]> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'memory.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return listGoals(ctx.fs, ctx.key, personId);
+    },
+    goalsSetStatus: async (input): Promise<Goal | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'memory.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const p = GoalSetStatusSchema.parse(input);
+      // Scoped to the active person's OWN goals — a person can only change their own (the trust boundary).
+      return setGoalStatus(ctx.fs, ctx.key, personId, p.goalId, p.status, new Date());
+    },
+    goalsUpdate: async (input): Promise<Goal | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'memory.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const p = GoalUpdateSchema.parse(input);
+      return updateGoal(
+        ctx.fs,
+        ctx.key,
+        personId,
+        p.goalId,
+        {
+          ...(p.text !== undefined ? { text: p.text } : {}),
+          ...(p.due !== undefined ? { due: p.due } : {}),
+          ...(p.horizon !== undefined ? { horizon: p.horizon } : {}),
+        },
+        new Date(),
+      );
+    },
+    goalsDelete: async (input): Promise<void> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'memory.own'))) return;
+      const personId = await activePersonId();
+      if (!personId) return;
+      const p = GoalDeleteSchema.parse(input);
+      // The delete path is `people/<activePerson>/goals/<id>` — inherently scoped to the active person's
+      // OWN goals, so a person can never remove another's (the trust boundary).
+      await deleteGoal(ctx.fs, personId, p.goalId);
     },
     assignmentsCreate: async (input): Promise<InAppSendResult> => {
       const ctx = await host.vaultAndKey();

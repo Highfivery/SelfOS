@@ -19,6 +19,7 @@ import {
   IconButton,
   Inline,
   ConfidenceChip,
+  GoalStatusChip,
   LineChart,
   Markdown,
   ProportionBar,
@@ -210,6 +211,16 @@ export function Gallery(): JSX.Element {
               <ConfidenceChip level="high" rationale="corroborated by 4 sources" />
               <Text tone="secondary" size="sm">
                 Memory confidence — text + non-colour-only dots, rationale on hover
+              </Text>
+            </Inline>
+            <Inline gap={2} align="center" wrap>
+              <GoalStatusChip status="open" />
+              <GoalStatusChip status="inProgress" />
+              <GoalStatusChip status="done" />
+              <GoalStatusChip status="stale" />
+              <GoalStatusChip status="abandoned" />
+              <Text tone="secondary" size="sm">
+                Goal status — labelled, never colour alone (39 §3.1)
               </Text>
             </Inline>
             <SegmentedControl

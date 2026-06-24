@@ -1,4 +1,5 @@
 import type { FileSystem } from '../host';
+import { summarizeOpenCommitments } from '../goals';
 import {
   insightFeedsContext,
   listInsightsForPerson,
@@ -153,6 +154,12 @@ export async function buildContext(
     person.displayName,
   );
   if (insightContext) lines.push(insightContext);
+
+  // Open commitments (39-living-memory §5.2): a small bounded grounding line so the coach is AWARE of the
+  // person's tracked goals. Awareness only — the proactive follow-up/nudging is spec 40. Per-subject; behind
+  // the same context bound. `new Date()` is correct here — this is the live, time-of-call context assembly.
+  const commitments = await summarizeOpenCommitments(fs, key, personId, new Date());
+  if (commitments) lines.push(commitments);
 
   return lines.join('\n');
 }

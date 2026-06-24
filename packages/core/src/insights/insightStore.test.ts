@@ -8,6 +8,7 @@ import {
   getInsight,
   listInsightsForPerson,
   listRelatedShareableInsights,
+  reapOrphanShares,
   saveInsight,
   selectPortraitFacts,
   summarizeForContext,
@@ -463,6 +464,128 @@ describe('insightStore', () => {
         { id: 'p2', displayName: 'Sam' },
       ]);
       expect(related[0]?.facts.map((f) => f.text)).toEqual(['shareable + true']);
+    });
+
+    it('RETRACTS a previously-shared fact on flag (strips shares + stamps retractedShareAt)', async () => {
+      const fs = memFileSystem();
+      await saveInsight(
+        fs,
+        key,
+        insight({
+          id: 'i1',
+          subjectPersonId: 'p2',
+          facts: [
+            { id: 'f1', text: 'broadcast WRONG', shareable: true },
+            { id: 'f2', text: 'targeted WRONG', shareable: false, shareableWith: ['p1', 'p3'] },
+            { id: 'f3', text: 'never shared', shareable: false },
+          ],
+        }),
+      );
+      // Before flagging, p1 sees both shared facts.
+      const before = await summarizeForContext(fs, key, 'p1', [{ id: 'p2', displayName: 'Sam' }]);
+      expect(before).toContain('broadcast WRONG');
+      expect(before).toContain('targeted WRONG');
+
+      const f1 = await flagInsightFact(fs, key, 'p2', 'i1', 'f1', true, now);
+      const flaggedF1 = f1?.facts.find((f) => f.id === 'f1');
+      expect(flaggedF1?.shareable).toBe(false);
+      expect(flaggedF1?.retractedShareAt).toBe('2026-06-16T00:00:00.000Z');
+
+      const f2 = await flagInsightFact(fs, key, 'p2', 'i1', 'f2', true, now);
+      const flaggedF2 = f2?.facts.find((f) => f.id === 'f2');
+      expect('shareableWith' in (flaggedF2 ?? {})).toBe(false); // every per-person grant stripped
+      expect(flaggedF2?.retractedShareAt).toBe('2026-06-16T00:00:00.000Z');
+
+      // After flagging, the related person's coaching context no longer carries either fact.
+      const after = await summarizeForContext(fs, key, 'p1', [{ id: 'p2', displayName: 'Sam' }]);
+      expect(after).not.toContain('WRONG');
+
+      // A never-shared fact flagged inaccurate gets NO retraction stamp (nothing to withdraw).
+      const f3 = await flagInsightFact(fs, key, 'p2', 'i1', 'f3', true, now);
+      const flaggedF3 = f3?.facts.find((f) => f.id === 'f3');
+      expect('retractedShareAt' in (flaggedF3 ?? {})).toBe(false);
+    });
+
+    it('clearing a flag drops the retraction stamp but does NOT re-grant the share', async () => {
+      const fs = memFileSystem();
+      await saveInsight(
+        fs,
+        key,
+        insight({
+          id: 'i1',
+          subjectPersonId: 'p2',
+          facts: [{ id: 'f1', text: 'was shared', shareable: true }],
+        }),
+      );
+      await flagInsightFact(fs, key, 'p2', 'i1', 'f1', true, now);
+      const cleared = await flagInsightFact(fs, key, 'p2', 'i1', 'f1', false, now);
+      const f1 = cleared?.facts.find((f) => f.id === 'f1');
+      expect(f1 && 'flaggedInaccurate' in f1).toBe(false);
+      expect(f1 && 'retractedShareAt' in f1).toBe(false);
+      expect(f1?.shareable).toBe(false); // share stays stripped — re-sharing is a deliberate action
+    });
+  });
+
+  describe('reapOrphanShares (39-living-memory §4.5 — orphaned-share cleanup)', () => {
+    it('removes a deleted person’s id from every other person’s shareableWith, and nowhere else', async () => {
+      const fs = memFileSystem();
+      await saveInsight(
+        fs,
+        key,
+        insight({
+          id: 'i1',
+          subjectPersonId: 'p1',
+          facts: [
+            {
+              id: 'f1',
+              text: 'shared with gone+kept',
+              shareable: false,
+              shareableWith: ['gone', 'kept'],
+            },
+            { id: 'f2', text: 'shared with gone only', shareable: false, shareableWith: ['gone'] },
+            { id: 'f3', text: 'shared elsewhere', shareable: false, shareableWith: ['kept'] },
+          ],
+        }),
+      );
+      await saveInsight(
+        fs,
+        key,
+        insight({
+          id: 'i2',
+          subjectPersonId: 'p3',
+          updatedAt: '2026-06-01T00:00:00.000Z',
+          facts: [{ id: 'g1', text: 'untouched', shareable: true }],
+        }),
+      );
+
+      const reaped = await reapOrphanShares(fs, key, 'gone');
+      expect(reaped).toBe(2);
+
+      const i1 = await getInsight(fs, key, 'p1', 'i1');
+      expect(i1?.facts.find((f) => f.id === 'f1')?.shareableWith).toEqual(['kept']); // 'gone' removed, 'kept' stays
+      expect('shareableWith' in (i1?.facts.find((f) => f.id === 'f2') ?? {})).toBe(false); // emptied → dropped
+      expect(i1?.facts.find((f) => f.id === 'f3')?.shareableWith).toEqual(['kept']); // unrelated share untouched
+
+      // An untouched insight is not re-saved — its updatedAt is unchanged (invisible maintenance).
+      const i2 = await getInsight(fs, key, 'p3', 'i2');
+      expect(i2?.updatedAt).toBe('2026-06-01T00:00:00.000Z');
+    });
+
+    it('does not bump updatedAt on a touched insight (no bubbling in Memory)', async () => {
+      const fs = memFileSystem();
+      await saveInsight(
+        fs,
+        key,
+        insight({
+          id: 'i1',
+          subjectPersonId: 'p1',
+          updatedAt: '2026-05-01T00:00:00.000Z',
+          facts: [{ id: 'f1', text: 'x', shareable: false, shareableWith: ['gone'] }],
+        }),
+      );
+      await reapOrphanShares(fs, key, 'gone');
+      const i1 = await getInsight(fs, key, 'p1', 'i1');
+      expect(i1?.updatedAt).toBe('2026-05-01T00:00:00.000Z');
     });
   });
 });

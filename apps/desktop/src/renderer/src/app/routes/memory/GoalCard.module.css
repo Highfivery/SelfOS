@@ -1,0 +1,64 @@
+.card {
+  padding: var(--space-3);
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.goalText {
+  min-width: 0; /* flex truncation footgun guard */
+  font-weight: 500;
+}
+
+.metaRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+}
+
+.provLink {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--color-accent);
+}
+
+.provLink:hover {
+  text-decoration: underline;
+}
+
+.dueField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.stalePrompt {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-surface-alt);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.actions > :first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+  max-width: 200px;
+}

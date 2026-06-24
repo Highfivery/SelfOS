@@ -26,6 +26,7 @@ import { useUsageStore } from '../stores/usageStore';
 import { unansweredCount, useInboxStore } from '../stores/inboxStore';
 import { useDreamStore } from '../stores/dreamStore';
 import { useInsightStore } from '../stores/insightStore';
+import { useGoalStore } from '../stores/goalStore';
 import { useDreamAnalysisStore } from '../stores/dreamAnalysisStore';
 import { useDreamPatternStore } from '../stores/dreamPatternStore';
 import { useResultsStore } from '../stores/resultsStore';
@@ -34,6 +35,7 @@ import { useIntakeStore } from '../stores/intakeStore';
 import { useNotificationStore } from '../stores/notificationStore';
 import { useNotificationSources } from './notifications/useNotificationSources';
 import { useUpdateChecks } from './notifications/useUpdateChecks';
+import { useMemoryReconcile } from './notifications/useMemoryReconcile';
 import { ToastViewport } from './notifications/ToastViewport';
 import { Onboarding } from './routes/onboarding/Onboarding';
 import { AppHeader } from './AppHeader';
@@ -87,6 +89,8 @@ export function AppShell(): JSX.Element {
   useNotificationSources(conflicts);
   // Drive the update-check cadence (launch + 6h + focus, gated by the auto toggle); 36-update-awareness §3.1.
   useUpdateChecks();
+  // Drive the automatic memory-reconcile cadence (launch + focus, gated + throttled); 39-living-memory §3.3.
+  useMemoryReconcile();
 
   // When the signed-in person changes, drop the previous account's per-person data and load this
   // person's — sessions/usage/budget are per-user, so nothing from the prior login may linger
@@ -103,6 +107,7 @@ export function AppShell(): JSX.Element {
     useGuidanceStore.getState().reset(); // guided suggestions + 18+ ack are per-person (16 §4.3/§8.3)
     useIntakeStore.getState().reset(); // the intake is per-person (18-personal-onboarding §7)
     useInsightStore.getState().reset(); // Memory is per-person — own + relationships only (20 §5.1)
+    useGoalStore.getState().reset(); // tracked goals are per-person (39-living-memory §5.4)
     useNotificationStore.getState().reset(); // notifications are per-person, device-local (35 §4)
     void useNotificationStore.getState().load();
     void useConversationStore.getState().load();
@@ -112,6 +117,7 @@ export function AppShell(): JSX.Element {
     void useGuidanceStore.getState().load();
     void useIntakeStore.getState().load();
     void useInsightStore.getState().load();
+    void useGoalStore.getState().load();
   }, [activePersonId]);
 
   // Collapse any open drawer when the viewport grows back to desktop (where the sidebar is permanent).

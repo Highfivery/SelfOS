@@ -128,8 +128,15 @@ export async function updateInsight(
 /**
  * Set or clear a fact's `flaggedInaccurate` correction (20-memory-dashboard §3.6). `factId === null` flags
  * (or clears) **every** fact on the insight (the "flag the whole insight" affordance). Flagging stamps
- * `flaggedAt`; clearing removes both flag fields entirely. The fact stays stored + visible in Memory — it's
+ * `flaggedAt`; clearing removes the flag fields entirely. The fact stays stored + visible in Memory — it's
  * only excluded from context (`summarizeForContext`) and the next reconciliation is told not to re-assert it.
+ *
+ * Retraction (39-living-memory §4.2): flagging a fact that had ALREADY been shared (broadcast `shareable` or
+ * targeted `shareableWith`) **strips those shares** — `shareable` → false, `shareableWith` removed — and
+ * stamps `retractedShareAt` so Memory can show "sharing withdrawn." Without this, a corrected claim keeps
+ * feeding a related person's coach until the next read re-gate happens to drop it. Clearing the flag removes
+ * the flag + retraction stamp but does NOT auto-restore the share (re-sharing is a deliberate user action).
+ *
  * Returns the updated insight, or null if it's gone. The caller (bridge) scopes this to the person's OWN
  * insights — a person can only flag their own.
  */
@@ -147,16 +154,64 @@ export async function flagInsightFact(
   const at = now.toISOString();
   const facts = existing.facts.map((fact) => {
     if (factId !== null && fact.id !== factId) return fact;
-    if (flagged) return { ...fact, flaggedInaccurate: true, flaggedAt: at };
-    // Clear: drop the flag fields entirely (exactOptionalPropertyTypes — never store `undefined`).
+    if (flagged) {
+      const wasShared = fact.shareable || (fact.shareableWith?.length ?? 0) > 0;
+      const next: InsightFact = { ...fact, flaggedInaccurate: true, flaggedAt: at };
+      if (wasShared) {
+        next.shareable = false; // retract the broadcast grant
+        delete next.shareableWith; // retract every per-person grant
+        next.retractedShareAt = at; // mark "sharing withdrawn" for Memory (only when there was a share)
+      }
+      return next;
+    }
+    // Clear: drop the flag + retraction fields entirely (exactOptionalPropertyTypes — never store `undefined`).
+    // The share stays stripped — un-flagging never silently re-grants a withdrawn share.
     const cleared = { ...fact };
     delete cleared.flaggedInaccurate;
     delete cleared.flaggedAt;
+    delete cleared.retractedShareAt;
     return cleared;
   });
   const updated: Insight = { ...existing, facts, updatedAt: at };
   await saveInsight(fs, key, updated);
   return updated;
+}
+
+/**
+ * Reap orphaned per-person shares after a person is deleted (39-living-memory §4.5 / §1 C1). Scans EVERY
+ * other person's insight facts and removes the deleted id from any `shareableWith` (dropping the array when
+ * it empties), re-saving only touched insights. Pure file I/O, no AI. `updatedAt` is intentionally NOT
+ * bumped — this is invisible maintenance and must not bubble an unrelated insight to the top of Memory.
+ *
+ * This is cleanup, NOT the trust boundary: the read-time re-gate (`listRelatedPeople` dropping a removed
+ * relationship) already prevents any leak, so an interrupted reap can never expose data — it only removes
+ * stale ids that would otherwise re-grant if a future person reused the id. Reads the `people/` dir directly
+ * (the `listAllInsights` precedent) to avoid a people↔insights import cycle. Returns the count reaped.
+ */
+export async function reapOrphanShares(
+  fs: FileSystem,
+  key: Uint8Array,
+  deletedPersonId: string,
+): Promise<number> {
+  let reaped = 0;
+  for (const personId of await fs.list('people')) {
+    if (personId === deletedPersonId) continue; // their folder is already gone
+    for (const insight of await listInsightsForPerson(fs, key, personId)) {
+      let touched = false;
+      const facts = insight.facts.map((fact) => {
+        if (!fact.shareableWith?.includes(deletedPersonId)) return fact;
+        touched = true;
+        reaped += 1;
+        const remaining = fact.shareableWith.filter((id) => id !== deletedPersonId);
+        const next = { ...fact };
+        if (remaining.length > 0) next.shareableWith = remaining;
+        else delete next.shareableWith;
+        return next;
+      });
+      if (touched) await saveInsight(fs, key, { ...insight, facts });
+    }
+  }
+  return reaped;
 }
 
 /**

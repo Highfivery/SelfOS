@@ -1199,6 +1199,142 @@ describe('createCoreBridge', () => {
     expect(await bridge.memoryRefresh()).toMatchObject({ ok: false, reason: 'DENIED' });
   });
 
+  it('auto-reconcile: runs when warranted (queues a merge PROPOSAL), throttles, and honors the opt-out (39 §3.3/§3.4)', async () => {
+    const { bridge, host, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const ctx = (await host.host.vaultAndKey())!;
+    const at = new Date().toISOString();
+    // Seed 5 approved insights — a duplicate pair (dupA/dupB) + three others — so the threshold trips.
+    for (const id of ['dupA', 'dupB', 'x1', 'x2', 'x3']) {
+      await saveInsight(ctx.fs, ctx.key, {
+        id,
+        schemaVersion: 1,
+        source: 'session',
+        subjectPersonId: ownerId,
+        summary: `summary-${id}`,
+        facts: [{ id: `f-${id}`, text: `fact ${id}`, shareable: false }],
+        confidence: 'low',
+        categories: [],
+        approved: true,
+        provenance: { conversationId: id, at },
+        createdAt: at,
+        updatedAt: at,
+      });
+    }
+    // The reconcile model recalibrates confidence + proposes merging dupA into dupB.
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (_options, onDelta) => {
+        const text = JSON.stringify({
+          insights: ['dupA', 'dupB', 'x1', 'x2', 'x3'].map((id) => ({ id, confidence: 'high' })),
+          merges: [{ from: 'dupA', into: 'dupB' }],
+        });
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+
+    // First auto pass runs (5 new, never reconciled) and QUEUES the merge — it never silently folds.
+    const first = await bridge.memoryRefresh({ auto: true });
+    expect(first).toMatchObject({ ok: true, mergedCount: 0, proposedCount: 1 });
+    const state = await bridge.memoryReconcileState();
+    expect(state.lastReconciledAt).toBeTruthy();
+    expect(state.proposals).toHaveLength(1);
+    // Both insights still exist — the proposal hasn't been applied.
+    const afterPass = (await bridge.insightsList()).map((i) => i.id);
+    expect(afterPass).toContain('dupA');
+    expect(afterPass).toContain('dupB');
+
+    // Second auto pass within 24h is throttled → a calm SKIPPED no-op (no extra spend).
+    expect(await bridge.memoryRefresh({ auto: true })).toMatchObject({
+      ok: false,
+      reason: 'SKIPPED',
+    });
+
+    // Confirming the proposal applies the merge (the source is folded away).
+    await bridge.memoryResolveProposal({ proposalId: state.proposals[0]!.id, action: 'merge' });
+    expect((await bridge.insightsList()).some((i) => i.id === 'dupA')).toBe(false);
+    expect((await bridge.memoryReconcileState()).proposals).toHaveLength(0);
+
+    // With the opt-out off, an auto pass is skipped regardless of warrant.
+    await bridge.setSetting({ key: 'memory.autoReconcile', value: false, scope: 'vault' });
+    expect(await bridge.memoryRefresh({ auto: true })).toMatchObject({
+      ok: false,
+      reason: 'SKIPPED',
+    });
+  });
+
+  it('reaps orphaned shareableWith from other people’s facts when a person is deleted (39 §4.5)', async () => {
+    const { bridge, host, ownerId } = await freshOwner();
+    const friend = await bridge.peopleSave({ displayName: 'Friend', isSubject: true, tags: [] });
+    const ctx = (await host.host.vaultAndKey())!;
+    const at = new Date().toISOString();
+    // The owner has an insight whose fact is targeted-shared with `friend`.
+    await saveInsight(ctx.fs, ctx.key, {
+      id: 'ins1',
+      schemaVersion: 1,
+      source: 'session',
+      subjectPersonId: ownerId,
+      summary: 'About the owner',
+      facts: [
+        { id: 'f1', text: 'shared with friend', shareable: false, shareableWith: [friend.id] },
+      ],
+      confidence: 'low',
+      categories: [],
+      approved: true,
+      provenance: { at },
+      createdAt: at,
+      updatedAt: at,
+    });
+
+    await bridge.peopleDelete(friend.id);
+
+    // The dangling reference is gone from the owner's (still-present) fact.
+    const owners = await bridge.insightsList();
+    const f1 = owners.find((i) => i.id === 'ins1')?.facts.find((f) => f.id === 'f1');
+    expect('shareableWith' in (f1 ?? {})).toBe(false);
+  });
+
+  it('goals: lists/sets-status/updates/deletes the active person’s own, gated on memory.own (39 §6)', async () => {
+    const { bridge, host, ownerId } = await freshOwner();
+    const ctx = (await host.host.vaultAndKey())!;
+    const { saveGoal } = await import('@selfos/core/goals');
+    const base = {
+      schemaVersion: 1 as const,
+      provenance: { at: new Date().toISOString() },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    await saveGoal(ctx.fs, ctx.key, {
+      ...base,
+      id: 'g1',
+      subjectPersonId: ownerId,
+      text: 'run a marathon',
+      status: 'open',
+    });
+
+    expect((await bridge.goalsList()).map((g) => g.text)).toEqual(['run a marathon']);
+    expect((await bridge.goalsSetStatus({ goalId: 'g1', status: 'done' }))?.status).toBe('done');
+    expect((await bridge.goalsUpdate({ goalId: 'g1', text: 'run a half marathon' }))?.text).toBe(
+      'run a half marathon',
+    );
+
+    // A Guest (no memory.own) sees none and can't mutate.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    expect((await bridge.sessionSetActive({ personId: guest.id })).ok).toBe(true);
+    expect(await bridge.goalsList()).toEqual([]);
+    expect(await bridge.goalsSetStatus({ goalId: 'g1', status: 'open' })).toBeNull();
+
+    // Back as the owner (PIN required returning to the owner), delete it.
+    expect((await bridge.sessionSetActive({ personId: ownerId, pin: '1234' })).ok).toBe(true);
+    await bridge.goalsDelete({ goalId: 'g1' });
+    expect(await bridge.goalsList()).toEqual([]);
+  });
+
   it('persists custom types for the picker, gated by questionnaires.create', async () => {
     const { bridge } = await freshOwner();
     expect(await bridge.questionnairesListTypes()).toEqual([]);

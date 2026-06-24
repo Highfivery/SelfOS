@@ -219,6 +219,26 @@ describe('buildContext', () => {
     expect(ctx).toContain('DREAM-INSIGHT-SUMMARY');
   });
 
+  it('surfaces the subject’s OWN open commitments as a bounded grounding line (39 §5.2)', async () => {
+    const fs = memFileSystem();
+    await savePerson(fs, key, person('a', 'Alex'));
+    const { saveGoal } = await import('../goals/goalService');
+    const base = {
+      schemaVersion: 1 as const,
+      subjectPersonId: 'a',
+      provenance: { at: '2026-06-20T00:00:00.000Z' },
+      createdAt: '2026-06-20T00:00:00.000Z',
+      updatedAt: '2026-06-20T00:00:00.000Z',
+    };
+    await saveGoal(fs, key, { ...base, id: 'g1', text: 'finish the thesis', status: 'open' });
+    await saveGoal(fs, key, { ...base, id: 'g2', text: 'a closed one', status: 'done' });
+
+    const ctx = await buildContext(fs, key, 'a');
+    expect(ctx).toContain('Open commitments');
+    expect(ctx).toContain('finish the thesis');
+    expect(ctx).not.toContain('a closed one'); // closed goals aren't grounding
+  });
+
   it('returns empty for an unknown person', async () => {
     expect(await buildContext(memFileSystem(), key, 'nope')).toBe('');
   });

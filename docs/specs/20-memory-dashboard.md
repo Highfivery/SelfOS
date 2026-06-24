@@ -124,6 +124,10 @@ A collapsible section charting the **metrics** AI already emits over time for th
 - **Automatic (no extra spend):** every time a source is analyzed (end-&-summarize a session, analyze a dream,
   analyze a questionnaire, synthesize intake), the **reconciliation step rides that pass** (§5.2) — adjusting
   the subject's existing insights' confidence and merging duplicates, alongside producing the new insight.
+  > **Amended by [`39`](39-living-memory-continuity.md):** the full coherence pass now runs on a
+  > renderer-driven cadence (≥5 new insights or a >14-day gap, throttled to 24h, opt-out `memory.autoReconcile`),
+  > not as a step riding each analysis pass; and merges are **confirm-before-apply** — queued as proposals in
+  > "Needs your review" (Merge / Keep both), with only confidence/category recalibration auto-applied.
 - **Manual:** a **Refresh memory** action re-runs reconciliation over the active person's insights on demand
   (budget-gated, metered `memory.reconcile`) — for when the user wants to force a re-evaluation. Calm states
   when AI is off / over budget (the dashboard still renders existing insights).
@@ -174,8 +178,10 @@ Memory no longer borrows it. (`questionnaires.viewResults` no longer implies see
 Reconciliation (AI) takes, for one subject: the **new analysis** (when riding a pass) or nothing (manual
 refresh), plus the subject's **existing active insights** (summaries, facts, confidence, categories, and which
 facts are **flaggedInaccurate**). It returns operations: set each insight's `confidence` (+ `rationale`),
-**merge** insight A into B (fold A's facts into B, append A's provenance to B's `contributingSources`, delete
-A), assign `categories`, and **must not re-assert** any `flaggedInaccurate` fact. It only ever sees/affects the
+**propose merging** insight A into B (a confirm-before-apply proposal per
+[`39`](39-living-memory-continuity.md) §3.4; on acceptance, A's facts fold into B, A's provenance appends to
+B's `contributingSources`, and A is deleted), assign `categories`, and **must not re-assert** any
+`flaggedInaccurate` fact. It only ever sees/affects the
 **one subject's own** insights (never cross-subject) — a privacy invariant of the prompt assembly.
 
 ## 5. Architecture & modules

@@ -182,6 +182,13 @@ export const DeviceStateSchema = z.object({
   latestKnownVersion: z.string().optional(),
   /** The last successful update-check result, surfaced to Settings → About without re-fetching. */
   lastUpdateCheckResult: UpdateCheckResultSchema.optional(),
+  /**
+   * When this device last RAN an automatic memory-reconcile, keyed by subject person id (39-living-memory
+   * §3.3). The auto-cadence throttle marker — device-local + per-person (each device throttles independently,
+   * a reconcile dismissal shouldn't leak across personas). Additive-optional (the `notificationState`
+   * precedent — no schemaVersion bump).
+   */
+  memoryReconcileCheckedAt: z.record(z.string(), z.string()).optional(),
 });
 export type DeviceState = z.infer<typeof DeviceStateSchema>;
 
@@ -531,6 +538,10 @@ export const InsightFactSchema = z.object({
   // not to re-assert it. The fact stays visible-but-marked + reversible (never silently deleted).
   flaggedInaccurate: z.boolean().optional(),
   flaggedAt: z.string().optional(),
+  // Set when flagging a previously-SHARED fact inaccurate strips its share (39-living-memory §4.2): the
+  // `shareable`/`shareableWith` are cleared and this stamps when, so Memory can show "sharing withdrawn."
+  // Only present if there was a share to retract; cleared when the flag is removed. Additive-optional.
+  retractedShareAt: z.string().optional(),
   // The fact's life-area, from the fixed LIFE_AREAS taxonomy (28-portrait-synthesis-optimization §pillar-2).
   // Drives per-call relevance selection of the (pinned) onboarding portrait: a budgeting session pulls
   // Money/Work facts, an intimacy session pulls Intimacy facts — instead of dumping all. Additive-optional:
@@ -660,6 +671,87 @@ export const InsightSchema = z.object({
   updatedAt: z.string(),
 });
 export type Insight = z.infer<typeof InsightSchema>;
+
+/**
+ * A first-class tracked goal / commitment (39-living-memory §4.1). Goals were just `Goal: …` text facts on a
+ * session insight — no status, no follow-through. Now they're their own entity at `people/<id>/goals/<id>.enc`,
+ * extracted from session analysis (no extra AI spend — the analysis already returns `goals`), with a lifecycle
+ * the user can see + close, and a clean read API for the coach's follow-up (spec 40). Per-subject (the owner is
+ * `subjectPersonId`); never cross-person. `schemaVersion` starts at 1.
+ *
+ * `stale` is DERIVED for display (`effectiveGoalStatus`) and only PERSISTED when the user confirms a status
+ * (§11 Q4) — the stored `status` stays `open`/`inProgress` until they act, so a goal never silently changes.
+ */
+export const GoalStatusSchema = z.enum(['open', 'inProgress', 'done', 'stale', 'abandoned']);
+export type GoalStatus = z.infer<typeof GoalStatusSchema>;
+
+export const GoalSchema = z.object({
+  id: z.string().min(1),
+  schemaVersion: z.number().int().positive(),
+  subjectPersonId: z.string().min(1), // the goal's owner — per-person isolation
+  text: z.string(), // the commitment in the person's terms
+  status: GoalStatusSchema, // `open` by default; `stale` is derived for display, persisted only on confirm
+  due: z.string().optional(), // ISO date — a hard deadline if named
+  horizon: z.string().optional(), // a soft horizon when there's no date ("this month", "someday")
+  lifeArea: z.string().optional(), // from LIFE_AREAS, normalized server-side (mirrors InsightFact)
+  provenance: InsightProvenanceSchema, // which session/source named it (reuse the existing schema)
+  contributingSources: z.array(InsightProvenanceSchema).optional(), // re-mentions folded in (§4.3)
+  insightId: z.string().optional(), // the Insight this goal was extracted from (back-reference)
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  lastTouchedAt: z.string().optional(), // last time the person/coach engaged it (the staleness basis)
+});
+export type Goal = z.infer<typeof GoalSchema>;
+
+/** A goal is "stale" past its `due`, or (no `due`) after this many days untouched (39 §11 Q4). */
+export const STALE_AFTER_DAYS = 21;
+
+/** Active (not yet closed) goal statuses — the ones that can derive to `stale` and feed the coach. */
+const ACTIVE_GOAL_STATUSES: ReadonlySet<GoalStatus> = new Set(['open', 'inProgress']);
+
+/** When the goal was last meaningfully touched — the staleness clock (falls back to creation). Pure. */
+function goalTouchedAt(goal: Goal): string {
+  return goal.lastTouchedAt ?? goal.updatedAt ?? goal.createdAt;
+}
+
+/**
+ * Whether an ACTIVE goal currently reads as stale (39 §3.1/§11 Q4) — past its `due`, OR (no `due`) untouched
+ * for `STALE_AFTER_DAYS`. Pure + crypto-free so both the bridge and the renderer derive the same display state
+ * without persisting it. A closed goal (done/abandoned) or one already stored `stale` is never re-derived.
+ */
+export function isGoalStale(goal: Goal, now: Date): boolean {
+  if (!ACTIVE_GOAL_STATUSES.has(goal.status)) return false;
+  if (goal.due) {
+    const due = Date.parse(goal.due);
+    return Number.isFinite(due) && due < now.getTime();
+  }
+  const touched = Date.parse(goalTouchedAt(goal));
+  if (!Number.isFinite(touched)) return false;
+  return now.getTime() - touched > STALE_AFTER_DAYS * 24 * 60 * 60 * 1000;
+}
+
+/** The status to DISPLAY for a goal: its stored status, or `stale` when an active goal has gone stale. Pure. */
+export function effectiveGoalStatus(goal: Goal, now: Date): GoalStatus {
+  return isGoalStale(goal, now) ? 'stale' : goal.status;
+}
+
+/**
+ * A pending memory-merge proposal (39-living-memory §3.4). Reconciliation no longer silently merges two
+ * insights — it queues a proposal the user confirms (Merge) or dismisses (Keep both) in Memory's "Needs your
+ * review" region. Stored per-subject at `people/<id>/memory-proposals/<id>.enc`. The summaries are snapshotted
+ * for display so the card reads even if an insight later changes. `schemaVersion` starts at 1; additive.
+ */
+export const MergeProposalSchema = z.object({
+  id: z.string().min(1),
+  schemaVersion: z.number().int().positive(),
+  subjectPersonId: z.string().min(1),
+  fromId: z.string().min(1), // the insight that would be folded away
+  intoId: z.string().min(1), // the insight it would fold into (kept)
+  fromSummary: z.string(),
+  intoSummary: z.string(),
+  createdAt: z.string(),
+});
+export type MergeProposal = z.infer<typeof MergeProposalSchema>;
 
 /**
  * A profile-update suggestion (18-personal-onboarding §15) — the self-maintaining-profile signal. Produced as
@@ -1083,9 +1175,18 @@ export interface MemoryReconcileResult {
   ok: boolean;
   reconciledCount?: number;
   mergedCount?: number;
+  /** Merge proposals queued for the user to confirm (39-living-memory §3.4 — confirm-before-apply). */
+  proposedCount?: number;
   usage?: UsageEvent;
-  reason?: AiFailureReason | 'AI_OFF' | 'NOTHING_TO_DO';
+  /** `SKIPPED` = an automatic pass that wasn't warranted (throttle/threshold/opt-out) — a silent no-op. */
+  reason?: AiFailureReason | 'AI_OFF' | 'NOTHING_TO_DO' | 'SKIPPED';
   message?: string;
+}
+
+/** The "kept tidy" signal + the queue of merge proposals for Memory (39-living-memory §3.2/§3.4). */
+export interface MemoryReconcileState {
+  lastReconciledAt?: string;
+  proposals: MergeProposal[];
 }
 
 export const ChannelSchema = z.enum(['inApp', 'relay']);

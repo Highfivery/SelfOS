@@ -260,6 +260,27 @@ export function fakeClaudeClient(): ClaudeClient {
         });
       }
 
+      // Memory reconciliation (20-memory-dashboard §3.5 / 39 §3.3) — the system prompt asks to "keep the
+      // memory coherent". Echo a confidence op for every input insight (parsed from the digest), proposing no
+      // merges, so the auto/manual reconcile seam runs end-to-end. Categories are deliberately OMITTED (an
+      // imperfect-but-valid reply, 37 §10) so the tolerant parse path is exercised.
+      if (options.system?.includes('keep the memory coherent')) {
+        let ids: string[] = [];
+        try {
+          const digest = JSON.parse(userText) as { id?: string }[];
+          ids = digest.map((d) => d.id ?? '').filter(Boolean);
+        } catch {
+          ids = [];
+        }
+        return Promise.resolve({
+          text: JSON.stringify({
+            insights: ids.map((id) => ({ id, confidence: 'medium' })),
+            merges: [],
+          }),
+          usage: { inputTokens: 90, outputTokens: 40, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+
       // The dream-analysis synthesis turn asks for a single JSON object (12-dreams §3.2). Return a valid
       // DreamAnalysis draft so the offline synthesize path parses deterministically; every other turn is
       // the reflective chat reply.

@@ -8,6 +8,7 @@ import { buildContext } from '../people';
 import { getInsight, listInsightsForPerson, summarizeForContext } from '../insights';
 import { listProfileSuggestions } from '../profile';
 import { queryUsage, recordUsage, setPersonBudget } from '../usage';
+import { listGoals } from '../goals';
 import { getConversation, saveConversation } from './conversationService';
 import { endAndSummarize, setSessionStatus } from './sessionAnalysisService';
 
@@ -169,6 +170,16 @@ describe('endAndSummarize', () => {
     expect(conv?.insightId).toBe(result.insight.id);
     expect(conv?.insightStale).toBe(false);
     expect(conv?.endedAt).toBe(now.toISOString());
+  });
+
+  it('extracts the session’s goals into tracked Goal entities (39 §4.1, no extra spend)', async () => {
+    const result = await endAndSummarize(deps());
+    expect(result.ok).toBe(true);
+    const goals = await listGoals(fs, key, 'p1');
+    expect(goals.map((g) => g.text)).toEqual(['Ask the manager for an extension']);
+    expect(goals[0]?.status).toBe('open');
+    expect(goals[0]?.provenance.conversationId).toBe('c1');
+    expect(goals[0]?.insightId).toBe(result.ok ? result.insight.id : undefined);
   });
 
   it('records a session.analyze usage event', async () => {

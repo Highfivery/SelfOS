@@ -1,8 +1,8 @@
-import { useNavigate } from 'react-router-dom';
 import { RefreshCw, Sparkles } from 'lucide-react';
 import { getExercise } from '@selfos/core/conversations';
 import { useGuidanceStore } from '../../../stores/guidanceStore';
 import { Button, Heading, Stack, Text } from '../../../design-system/components';
+import { AiUnavailableNotice } from '../../AiUnavailableNotice';
 import { GuidedExerciseCard } from './GuidedExerciseCard';
 import styles from './Launcher.module.css';
 
@@ -28,7 +28,6 @@ export function SuggestedSessions({
   configured: boolean;
   onPick: (guideId: string) => void;
 }): JSX.Element {
-  const navigate = useNavigate();
   const suggestions = useGuidanceStore((s) => s.suggestions);
   const generating = useGuidanceStore((s) => s.generating);
   const error = useGuidanceStore((s) => s.error);
@@ -54,13 +53,7 @@ export function SuggestedSessions({
       </div>
 
       {!configured ? (
-        <Text tone="secondary" size="sm">
-          Turn on AI in{' '}
-          <button type="button" className={styles.linkButton} onClick={() => navigate('/settings')}>
-            Settings
-          </button>{' '}
-          to get personalized suggestions.
-        </Text>
+        <AiUnavailableNotice variant="inline" />
       ) : generating && !suggestions ? (
         <div role="status">
           <Text tone="secondary" size="sm">

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { ChevronDown, FolderOpen, Lock, TriangleAlert, Users } from 'lucide-react';
+import { ChevronDown, FolderOpen, Info, Lock, TriangleAlert, Users } from 'lucide-react';
 import { useSessionStore } from '../stores/sessionStore';
 import { TitlebarControl } from '../design-system/components';
+import { AboutSelfOsDialog } from './AboutSelfOsDialog';
 import styles from './AccountMenu.module.css';
 
 /** Two-letter initials from a display name (first + last word), for the avatar. */
@@ -27,6 +28,7 @@ export function AccountMenu({
   const activePerson = useSessionStore((s) => s.activePerson);
   const lock = useSessionStore((s) => s.lock);
   const [open, setOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const conflictCount = conflicts.length;
   const hasConflicts = conflictCount > 0;
 
@@ -115,9 +117,22 @@ export function AccountMenu({
                 ? `Resolve ${conflictCount} sync ${conflictCount === 1 ? 'conflict' : 'conflicts'}`
                 : 'Open vault folder'}
             </button>
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.item}
+              onClick={() => {
+                setOpen(false);
+                setAboutOpen(true);
+              }}
+            >
+              <Info size={16} aria-hidden="true" />
+              About SelfOS
+            </button>
           </div>
         </>
       ) : null}
+      {aboutOpen ? <AboutSelfOsDialog onClose={() => setAboutOpen(false)} /> : null}
     </div>
   );
 }

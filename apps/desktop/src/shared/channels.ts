@@ -273,6 +273,9 @@ export const IpcChannels = {
   profileDismissSuggestion: 'profile:dismissSuggestion',
   getSidebarCollapsed: 'ui:getSidebarCollapsed',
   setSidebarCollapsed: 'ui:setSidebarCollapsed',
+  // Discovery (41 §4) — dismissed one-time orientation/tips, device-local + per-person.
+  getDiscoveryDismissals: 'discovery:getDismissals',
+  setDiscoveryDismissals: 'discovery:setDismissals',
   // Notifications (35-notification-system §6) — read/dismissed flags ride device-state (per-person);
   // openExternal is the shell path the renderer uses for an external action (e.g. the update link).
   getNotificationState: 'notifications:getState',
@@ -964,6 +967,11 @@ export interface SelfosBridge {
   getSidebarCollapsed(): Promise<boolean>;
   /** Persist the sidebar collapsed/expanded state (device-local). */
   setSidebarCollapsed(collapsed: boolean): Promise<void>;
+  // --- Discovery (41 §4) — one-time orientation/tip dismissals, device-local + per-person ---
+  /** The active person's dismissed one-time discovery hint keys (orientation + tips). */
+  getDiscoveryDismissals(): Promise<string[]>;
+  /** Replace the active person's dismissed discovery hint keys (device-local, per-person). */
+  setDiscoveryDismissals(keys: string[]): Promise<void>;
   // --- Notifications (35-notification-system §6) ---
   /** The active person's device-local notification read/dismissed signatures. */
   getNotificationState(): Promise<PersonNotificationState>;

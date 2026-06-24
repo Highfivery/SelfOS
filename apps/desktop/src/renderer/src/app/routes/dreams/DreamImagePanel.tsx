@@ -38,6 +38,9 @@ export function DreamImagePanel({ dream }: DreamImagePanelProps): JSX.Element | 
   const canGenerate = useSessionStore((s) => s.can('dreams.generateImage'));
   const canShare = useSessionStore((s) => s.can('dreams.shareContext'));
   const isAdmin = useSessionStore((s) => s.can('budgets.manage'));
+  // Dream-image setup (consent, the OpenAI key, AI on) lives in the owner-only Dreams settings; a member
+  // can't reach it, so the "Open Settings" path is theirs alone — a member is pointed at the owner (41 §3.3).
+  const canManageAi = useSessionStore((s) => s.can('settings.manage'));
   const [consent] = useSetting('dreams.imageGenerationEnabled');
   const [aiEnabled] = useSetting('ai.enabled');
   const [defaultStyle] = useSetting('dreams.imageStyle');
@@ -160,17 +163,27 @@ export function DreamImagePanel({ dream }: DreamImagePanelProps): JSX.Element | 
     </Inline>
   );
 
-  const settingsNote = (body: string): JSX.Element => (
+  // The owner sees the specific set-up step + a Settings button; a member (who can't reach Dreams
+  // settings) sees a single calm ask-the-owner line, no dead button.
+  const settingsNote = (ownerBody: string): JSX.Element => (
     <div className={styles.imagePanel}>
       {heading}
-      <Text size="sm" tone="secondary">
-        {body}
-      </Text>
-      <Inline>
-        <Button variant="secondary" onClick={() => navigate('/settings')}>
-          Open Settings
-        </Button>
-      </Inline>
+      {canManageAi ? (
+        <>
+          <Text size="sm" tone="secondary">
+            {ownerBody}
+          </Text>
+          <Inline>
+            <Button variant="secondary" onClick={() => navigate('/settings')}>
+              Open Settings
+            </Button>
+          </Inline>
+        </>
+      ) : (
+        <Text size="sm" tone="secondary">
+          Dream images aren’t set up yet — ask the person who set up this household to turn them on.
+        </Text>
+      )}
     </div>
   );
 
@@ -343,6 +356,12 @@ export function DreamImagePanel({ dream }: DreamImagePanelProps): JSX.Element | 
         </Stack>
       ) : confirm ? null : (
         <Stack gap={3}>
+          {/* Calm "no image yet" — an invitation, never a broken/error affordance (41 §7). */}
+          {error ? null : (
+            <Text size="sm" tone="tertiary">
+              No image yet — bring this dream to life as a dreamlike picture whenever you like.
+            </Text>
+          )}
           {stylePicker}
           <Inline>
             <Button variant="primary" onClick={onVisualize} disabled={busy}>

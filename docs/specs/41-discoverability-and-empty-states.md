@@ -1,6 +1,6 @@
 # 41 — Discoverability, empty states & first-run polish
 
-> **Status:** Draft · _last updated 2026-06-23_
+> **Status:** Built · _last updated 2026-06-24_
 >
 > SelfOS is cohesive and capable, but it **under-discovers its own power**: new and non-technical users land
 > without a clear "what next", empty states dead-end instead of nudging, advanced affordances (the
@@ -377,7 +377,33 @@ Vault + Claude mocked as established; `pnpm typecheck` after writing tests (memo
 
 ## 11. Open questions
 
-Genuinely-open product/UX decisions — **do not assume**:
+> **Resolved with the owner (2026-06-24) and built — recorded here so the decisions don't get re-litigated:**
+>
+> 1. **Empty states in v1 = the full audit.** Inbox (→ create a questionnaire, capability-gated), Memory (→
+>    "insights appear after analysis" + Start a session), Dreams-no-image (a calm "No image yet", distinct from
+>    the error states), Home-minimal (the `DiscoveryNudge` for a near-empty person + a richer `GettingStarted`),
+>    **plus** Dreams journal, People, and the Questionnaires list. Surfaces with a prominent header action
+>    (People/Dreams) use a differently-worded in-card CTA ("Add your first person" / "Log your first dream") to
+>    avoid a duplicate-label collision.
+> 2. **One-time tips ship** — on the questionnaire **gap-finder** (`SuggestedPanel`) and **depth invitations**
+>    (`DepthInvitationCard`), as quiet inline `OneTimeTip`s (no overlay). Dismissal is device-local + per-person;
+>    _using_ the affordance also suppresses its tip.
+> 3. **AI-unavailable copy** = the proposed wording. Member: "AI isn't set up yet — ask the person who set up
+>    this household to turn it on." (generic, never names the owner, never implies a key). Owner: "AI isn't set
+>    up yet. **Set up Claude in Settings → AI**" (a link). Offline (both roles): "You appear to be offline —
+>    SelfOS needs a connection for this." Centralized in one `AiUnavailableNotice` component + `aiUnavailableMessage`
+>    helper; role is unknown → falls to the **safer member** copy.
+> 4. **Scope signal = a small text badge** per setting (`ScopeBadge`): "Synced" (vault) / "This device" (device),
+>    a borderless ghost label visually distinct from the bordered "Admin only" pill, with a fuller `aria-label`.
+> 5. **First-run orientation = a dismissible Home card** (`WelcomeOrientationCard`, "How SelfOS works") **plus an
+>    account-menu "About SelfOS"** re-open (`AboutSelfOsDialog`). Dismissal device-local + per-person; re-readable
+>    any time.
+> 6. **Nav** — left as-is (the icon audit found the collapsed-rail tooltips sufficient).
+> 7. **Dismissal granularity = per-person + per-device** (the spec-35 device-state precedent), via a new
+>    `discovery:getDismissals`/`:setDismissals` seam keyed by the active person in the bridge + an additive
+>    `DeviceState.discoveryDismissals`.
+
+Originally-open product/UX decisions (now resolved above):
 
 1. **Which empty states / nudges ship in v1?** Inbox + Memory + Dreams-no-image + Home-minimal are the proposed
    core (§3.1). Should the audit also cover Dreams journal, Sessions launcher, People, and Questionnaires list
@@ -403,6 +429,19 @@ Genuinely-open product/UX decisions — **do not assume**:
 
 ## 12. Changelog
 
+- 2026-06-24 — **Built** (all 5 slices, on `feat/discoverability-empty-states`). Slice 1: the role-aware
+  `AiUnavailableNotice` (+ `aiUnavailableMessage`) — single source of truth, swapped onto every AI surface
+  (Sessions launcher + composer, SuggestedSessions, Suggested/Draft-with-AI panels, Memory refresh, the
+  compatibility send + both Results, dream analysis + patterns, onboarding, DreamImagePanel's member case).
+  Slice 2: actionable empty states across Inbox / Memory / Dreams-no-image / Home (`DiscoveryNudge` + richer
+  `GettingStarted`) / Dreams journal / People / Questionnaires, each capability-gated. Slice 3: the `ScopeBadge`
+  device-vs-synced signal on every setting (distinct from the Admin marker; `/gallery`). Slice 4: the first-run
+  orientation (`WelcomeOrientationCard` + account-menu `AboutSelfOsDialog`) and one-time `OneTimeTip`s on the
+  gap-finder + depth invitations, backed by a device-local per-person `discovery:*` device-state seam
+  (`DeviceState.discoveryDismissals`, additive). Slice 5: 360px geometry guards (settings content + the
+  orientation surface; the titlebar cluster collapse — sync chip / brand wordmark / account name all hide
+  <479px — verified; the residual macOS traffic-light inset isn't present on the 360px iOS target). §11 decisions
+  recorded above.
 - 2026-06-23 — created (Draft). Part of the five-spec group (37–41); spec 41 = discoverability, empty states,
   role-aware AI-unavailable messaging, settings device-vs-synced signal, and a brief first-run orientation.
   Grounded in the live Home/Inbox/Memory/Dreams/Settings/AppShell surfaces and specs 02/03/17/18/25/29/31/35.

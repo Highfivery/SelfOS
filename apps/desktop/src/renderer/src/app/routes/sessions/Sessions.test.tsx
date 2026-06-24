@@ -44,7 +44,7 @@ describe('Sessions', () => {
     renderSessions();
     // The launcher renders even with AI off — the catalog browses; only chatting needs AI.
     expect(await screen.findByText('What do you want to work through?')).toBeInTheDocument();
-    expect(screen.getByText(/to start talking/i)).toBeInTheDocument();
+    expect(screen.getByText(/browse and start guided sessions below/i)).toBeInTheDocument();
     expect(screen.getByText('Reflective & therapy-informed')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /get help now/i })).toBeInTheDocument();
   });

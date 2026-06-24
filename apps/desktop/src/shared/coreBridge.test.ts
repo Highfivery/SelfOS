@@ -3078,6 +3078,25 @@ describe('createCoreBridge', () => {
   });
 });
 
+describe('discovery dismissals (41)', () => {
+  it('persists dismissed hint keys per person, keyed by the active person id', async () => {
+    const { bridge, ownerId, host } = await freshOwner();
+    expect(await bridge.getDiscoveryDismissals()).toEqual([]);
+    await bridge.setDiscoveryDismissals(['orientation', 'tip.gapFinder']);
+    expect(await bridge.getDiscoveryDismissals()).toEqual(['orientation', 'tip.gapFinder']);
+    expect(host.device().discoveryDismissals?.[ownerId]).toEqual(['orientation', 'tip.gapFinder']);
+
+    // A different person sees their OWN (empty) dismissals — no leakage across personas.
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    expect((await bridge.sessionSetActive({ personId: mara.id })).ok).toBe(true);
+    expect(await bridge.getDiscoveryDismissals()).toEqual([]);
+
+    // The owner's dismissals survive a round-trip switch (returning to the owner needs their PIN).
+    expect((await bridge.sessionSetActive({ personId: ownerId, pin: '1234' })).ok).toBe(true);
+    expect(await bridge.getDiscoveryDismissals()).toEqual(['orientation', 'tip.gapFinder']);
+  });
+});
+
 describe('notifications (35)', () => {
   it('persists notification read/dismissed state per person, keyed by the active person id', async () => {
     const { bridge, ownerId, host } = await freshOwner();

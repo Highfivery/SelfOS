@@ -82,7 +82,8 @@ interface SettingDefinition<T = unknown> {
   schema: z.ZodType<T>; // source of truth for value type + validation
   default: T;
   control: SettingControl;
-  scope?: 'vault' | 'device'; // default 'vault' (synced). 'device' = userData (not synced)
+  scope?: 'vault' | 'device'; // default 'vault' (synced). 'device' = userData (not synced).
+  // Surfaced in the UI as a quiet ScopeBadge ("Synced" / "This device") — see 41 §3.4.
   order?: number;
   visibleWhen?: (values: SettingsValues) => boolean;
   tags?: string[]; // search keywords

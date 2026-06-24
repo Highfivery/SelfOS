@@ -11,6 +11,8 @@ import {
 } from 'lucide-react';
 import {
   AdminOnlyBadge,
+  ScopeBadge,
+  OneTimeTip,
   Button,
   Card,
   Field,
@@ -283,12 +285,31 @@ export function Gallery(): JSX.Element {
         </Section>
 
         <Section title="Markers">
-          <Inline gap={3} wrap>
-            <AdminOnlyBadge />
-            <Text tone="secondary" size="sm">
-              Sits beside any heading or control that only admins can see.
-            </Text>
-          </Inline>
+          <Stack gap={2}>
+            <Inline gap={3} wrap>
+              <AdminOnlyBadge />
+              <Text tone="secondary" size="sm">
+                Sits beside any heading or control that only admins can see.
+              </Text>
+            </Inline>
+            <Inline gap={3} wrap>
+              <ScopeBadge scope="vault" />
+              <ScopeBadge scope="device" />
+              <Text tone="secondary" size="sm">
+                A quiet device-vs-synced signal for a setting — borderless, so it never collides
+                with the Admin marker when both appear.
+              </Text>
+            </Inline>
+          </Stack>
+        </Section>
+
+        <Section title="One-time tip">
+          <div style={{ maxWidth: 420 }}>
+            <OneTimeTip onDismiss={() => {}}>
+              A quiet, dismissible hint that points at an easy-to-miss feature — shown once, never a
+              modal.
+            </OneTimeTip>
+          </div>
         </Section>
 
         <Section title="Line chart">

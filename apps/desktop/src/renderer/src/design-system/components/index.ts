@@ -7,6 +7,8 @@ export { IconButton } from './IconButton';
 export { Card } from './Card';
 export { Banner } from './Banner';
 export { AdminOnlyBadge } from './AdminOnlyBadge';
+export { ScopeBadge } from './ScopeBadge';
+export { OneTimeTip } from './OneTimeTip';
 export { Field } from './Field';
 export { TextInput } from './TextInput';
 export { Textarea } from './Textarea';

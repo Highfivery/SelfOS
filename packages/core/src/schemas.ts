@@ -197,6 +197,13 @@ export const DeviceStateSchema = z.object({
    * `memoryReconcileCheckedAt` precedent (ephemeral UI cadence state, must not sync). Additive-optional.
    */
   coachingSynthesizedAt: z.record(z.string(), z.string()).optional(),
+  /**
+   * Dismissed one-time discovery hints (the first-run orientation + feature tips, 41 §4), keyed by subject
+   * person id → the set of dismissed hint keys. Ephemeral UI state — device-local + per-person (a tip
+   * dismissal must not sync or nag after a person switch). Additive-optional (the `notificationState`
+   * precedent — no schemaVersion bump).
+   */
+  discoveryDismissals: z.record(z.string(), z.array(z.string())).optional(),
 });
 export type DeviceState = z.infer<typeof DeviceStateSchema>;
 

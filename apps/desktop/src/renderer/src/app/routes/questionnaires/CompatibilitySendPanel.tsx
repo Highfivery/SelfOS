@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Send, Sparkles } from 'lucide-react';
 import { compatibilityDisclosure } from '@selfos/core/questionnaires';
 import { aiKeyResolved } from '../../aiAvailability';
+import { AiUnavailableNotice } from '../../AiUnavailableNotice';
 import type { CompatibilityVisibility, Recipient, SensitivityTier } from '@shared/schemas';
 import { Banner, Button, Card, Heading, Stack, Text } from '../../../design-system/components';
 import { useSessionStore } from '../../../stores/sessionStore';
@@ -157,10 +158,10 @@ export function CompatibilitySendPanel({
       <Card>
         <Stack gap={3}>
           <Heading level={3}>Send “{title}”</Heading>
-          <Banner tone="info">
-            Compatibility questionnaires need AI to personalize each person’s version. Turn on AI in{' '}
-            <Link to="/settings">Settings</Link> to send this.
-          </Banner>
+          <Text tone="secondary" size="sm">
+            Compatibility questionnaires need AI to personalize each person’s version.
+          </Text>
+          <AiUnavailableNotice />
           <div className={styles.footer}>
             <Button variant="secondary" onClick={onCancel}>
               Cancel

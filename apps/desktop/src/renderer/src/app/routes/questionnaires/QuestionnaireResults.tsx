@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Brain, Download, Link2, Link2Off, Lock, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 import { aiKeyResolved } from '../../aiAvailability';
+import { AiUnavailableNotice } from '../../AiUnavailableNotice';
 import type {
   AssignmentStatus,
   CompatibilityConfig,
@@ -249,11 +250,7 @@ function StandardResults({ questionnaireId }: { questionnaireId: string }): JSX.
       </div>
       {drainMsg ? <Banner tone="info">{drainMsg}</Banner> : null}
       {exportMsg ? <Banner tone="info">{exportMsg}</Banner> : null}
-      {!aiReady ? (
-        <Banner tone="info">
-          Turn on AI in <Link to="/settings">Settings</Link> to analyze responses into insights.
-        </Banner>
-      ) : null}
+      {!aiReady ? <AiUnavailableNotice /> : null}
 
       {results.map((send) => (
         <SendCard

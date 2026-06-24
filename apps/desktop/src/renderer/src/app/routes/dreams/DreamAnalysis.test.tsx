@@ -83,7 +83,8 @@ describe('Dreams analysis UI', () => {
   it('shows a calm connect-Claude state when AI is off, never blocking the journal', async () => {
     installMockBridge({ secretHas: () => Promise.resolve(false) });
     renderPane();
-    expect(await screen.findByText(/connect claude to analyze/i)).toBeInTheDocument();
+    expect(await screen.findByText(/reflect on this dream/i)).toBeInTheDocument();
+    expect(screen.getByText(/isn.t set up yet/i)).toBeInTheDocument();
     // No chat composer or synthesize action when unconfigured.
     expect(screen.queryByRole('button', { name: 'Create analysis' })).not.toBeInTheDocument();
   });

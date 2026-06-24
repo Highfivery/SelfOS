@@ -3865,6 +3865,23 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       await host.updateDeviceState({ sidebarCollapsed: z.boolean().parse(collapsed) });
     },
 
+    // --- Discovery (41 §4) — one-time orientation/tip dismissals, device-local + per-person ---
+    getDiscoveryDismissals: async (): Promise<string[]> => {
+      const personId = await activePersonId();
+      if (!personId) return [];
+      const device = await host.readDeviceState();
+      return z.array(z.string()).parse(device.discoveryDismissals?.[personId] ?? []);
+    },
+    setDiscoveryDismissals: async (keys): Promise<void> => {
+      const parsed = z.array(z.string()).parse(keys);
+      const personId = await activePersonId();
+      if (!personId) return;
+      const device = await host.readDeviceState();
+      await host.updateDeviceState({
+        discoveryDismissals: { ...device.discoveryDismissals, [personId]: parsed },
+      });
+    },
+
     // --- Notifications (35-notification-system §6) ---
     getNotificationState: async (): Promise<PersonNotificationState> => {
       const device = await host.readDeviceState();

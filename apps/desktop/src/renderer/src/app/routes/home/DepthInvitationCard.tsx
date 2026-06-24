@@ -3,8 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Compass, X } from 'lucide-react';
 import type { IntakeSectionMeta, ProfileUpdateSuggestion } from '@shared/channels';
 import { Button, Card, Heading, Stack, Text } from '../../../design-system/components';
+import { DiscoveryTip } from '../../DiscoveryTip';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useIntakeStore } from '../../../stores/intakeStore';
+import { useDiscoveryStore, DISCOVERY_KEYS } from '../../../stores/discoveryStore';
 import styles from './Home.module.css';
 
 // A stable empty reference — a selector that returns a fresh `[]` each call re-renders Zustand forever.
@@ -25,6 +27,7 @@ export function DepthInvitationCard(): JSX.Element | null {
   const [pending, setPending] = useState<ProfileUpdateSuggestion[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const dismissTip = useDiscoveryStore((s) => s.dismiss);
 
   const load = useCallback(async (): Promise<void> => {
     const all = (await window.selfos?.profileSuggestions()) ?? [];
@@ -41,6 +44,7 @@ export function DepthInvitationCard(): JSX.Element | null {
     sections.find((m) => m.id === sectionId)?.title ?? 'your profile';
 
   const goDeeper = async (s: ProfileUpdateSuggestion): Promise<void> => {
+    dismissTip(DISCOVERY_KEYS.tipDepthInvitations); // acting on it suppresses the explainer tip
     setBusy(s.id);
     await window.selfos?.profileAcceptSuggestion(s.id);
     // Open the invited section in the Onboarding "Go deeper" flow, scrolled to the top (§3.3 / §14.7). The
@@ -62,6 +66,10 @@ export function DepthInvitationCard(): JSX.Element | null {
         <Heading level={2}>
           <Compass size={18} aria-hidden="true" /> Want to go a little deeper?
         </Heading>
+        <DiscoveryTip tipKey={DISCOVERY_KEYS.tipDepthInvitations}>
+          SelfOS invites you to go deeper over time, as it notices what keeps coming up. Always
+          optional.
+        </DiscoveryTip>
         <Stack gap={3}>
           {pending.map((s) => (
             <div key={s.id} className={styles.freshnessItem}>

@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Brain, RefreshCw, Search } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Brain, MessageCircle, RefreshCw, Search } from 'lucide-react';
 import type { Insight, InsightSource } from '@shared/schemas';
 import { LIFE_AREAS } from '@shared/schemas';
 import { useInsightStore } from '../../../stores/insightStore';
 import { useGoalStore } from '../../../stores/goalStore';
 import { usePeopleStore } from '../../../stores/peopleStore';
 import { useSessionStore } from '../../../stores/sessionStore';
+import { aiUnavailableMessage } from '../../AiUnavailableNotice';
 import { useConversationStore } from '../../../stores/conversationStore';
 import { useDreamStore } from '../../../stores/dreamStore';
 import {
@@ -61,6 +63,7 @@ function relativeDate(iso: string): string {
  * insights grouped by life-area, and a read-only section for what people they relate to have shared.
  */
 export function Memory(): JSX.Element {
+  const navigate = useNavigate();
   const insights = useInsightStore((s) => s.insights);
   const loaded = useInsightStore((s) => s.loaded);
   const load = useInsightStore((s) => s.load);
@@ -68,6 +71,8 @@ export function Memory(): JSX.Element {
   const people = usePeopleStore((s) => s.people);
   const loadPeople = usePeopleStore((s) => s.load);
   const activePersonId = useSessionStore((s) => s.activePerson?.id ?? null);
+  const canManageAi = useSessionStore((s) => s.can('settings.manage'));
+  const canStartSession = useSessionStore((s) => s.can('sessions.own'));
   const conversations = useConversationStore((s) => s.conversations);
   const dreams = useDreamStore((s) => s.dreams);
   const goals = useGoalStore((s) => s.goals);
@@ -167,7 +172,7 @@ export function Memory(): JSX.Element {
           `Memory refreshed — ${result.reconciledCount ?? 0} updated${proposed ? `, ${proposed} merge${proposed === 1 ? '' : 's'} to review below` : ''}.`,
         );
       } else if (result.reason === 'AI_OFF' || result.reason === 'NO_KEY') {
-        setRefreshNote('Turn on AI in Settings to refresh memory.');
+        setRefreshNote(aiUnavailableMessage({ canManageAi }));
       } else if (result.reason === 'BUDGET') {
         setRefreshNote('AI budget reached for this period.');
       } else if (result.reason === 'NOTHING_TO_DO') {
@@ -267,12 +272,18 @@ export function Memory(): JSX.Element {
 
       {loaded && !anyInsights ? (
         <Card>
-          <Stack gap={2} align="center">
+          <Stack gap={3} align="center">
             <Brain size={24} aria-hidden="true" />
             <Text tone="secondary">
-              Nothing here yet. As you have sessions, log dreams, and answer questionnaires, what
-              SelfOS learns about you shows up here.
+              Insights appear here after your sessions, dreams, and questionnaires are analyzed —
+              your own view of what SelfOS is learning about you. Start a session to begin.
             </Text>
+            {canStartSession ? (
+              <Button variant="secondary" onClick={() => navigate('/sessions')}>
+                <MessageCircle size={16} aria-hidden="true" />
+                Start a session
+              </Button>
+            ) : null}
           </Stack>
         </Card>
       ) : null}

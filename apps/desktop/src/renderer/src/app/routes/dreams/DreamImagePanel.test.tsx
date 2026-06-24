@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import type { Dream } from '@shared/channels';
+import { DEFAULT_ROLES } from '@shared/capabilities';
 import { DreamImagePanel } from './DreamImagePanel';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useSettingsStore } from '../../../settings/settingsStore';
@@ -113,6 +114,54 @@ describe('DreamImagePanel', () => {
     installMockBridge({ secretHas: () => Promise.resolve(false) });
     renderPanel();
     expect(await screen.findByText(/add your openai key in settings/i)).toBeInTheDocument();
+  });
+
+  it('tells a member to ask the owner when dream images are not set up (no Settings path)', async () => {
+    // A member can own/generate dream images but cannot reach the owner-only Dreams settings.
+    useSessionStore.setState({
+      activePerson: {
+        id: 'm1',
+        schemaVersion: 1,
+        displayName: 'Sam',
+        isSubject: true,
+        tags: [],
+        createdAt: 'now',
+        updatedAt: 'now',
+      },
+      access: {
+        roles: DEFAULT_ROLES,
+        accounts: [{ personId: 'm1', roleId: 'member', hasPin: false }],
+      },
+    });
+    // Consent off — the member can't turn it on, so they're pointed at the owner.
+    useSettingsStore.setState((s) => ({
+      values: { ...s.values, 'ai.enabled': true, 'dreams.imageGenerationEnabled': false },
+    }));
+    installMockBridge({ secretHas: () => Promise.resolve(true) });
+    renderPanel();
+    expect(
+      await screen.findByText(/ask the person who set up this household/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /open settings/i })).not.toBeInTheDocument();
+  });
+
+  it('shows a calm "no image yet" entry state, distinct from an error', async () => {
+    enable();
+    installMockBridge({
+      secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
+    });
+    renderPanel();
+    expect(await screen.findByText(/no image yet/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /visualize this dream/i })).toBeInTheDocument();
+    // The calm absence is not an error banner.
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
   it('offers the expanded, family-grouped style presets in the entry picker (§15.1)', async () => {

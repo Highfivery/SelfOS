@@ -1,0 +1,10 @@
+/* A text link rendered inside the notice copy. Focus styling comes from the global :focus-visible rule. */
+.link {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-accent-text);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}

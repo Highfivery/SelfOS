@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import type { Goal, Insight } from '@shared/schemas';
+import { DEFAULT_ROLES } from '@shared/capabilities';
 import { Memory } from './Memory';
 import { useInsightStore } from '../../../stores/insightStore';
 import { useGoalStore } from '../../../stores/goalStore';
@@ -75,12 +76,32 @@ afterEach(() => {
 });
 
 describe('Memory dashboard', () => {
-  it('shows the empty state when there are no insights', async () => {
-    useSessionStore.setState({ activePerson: activeP1 });
+  it('shows the empty state explaining when insights appear, with a Start-a-session action', async () => {
+    useSessionStore.setState({
+      activePerson: activeP1,
+      access: {
+        roles: DEFAULT_ROLES,
+        accounts: [{ personId: activeP1.id, roleId: 'member', hasPin: false }],
+      },
+    });
     installMockBridge({ insightsList: () => Promise.resolve([]) });
     renderMemory();
-    expect(await screen.findByText(/nothing here yet/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Insights appear here after your sessions/i),
+    ).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Memory' })).toBeInTheDocument();
+    // A member can own sessions → the gated next action shows.
+    expect(screen.getByRole('button', { name: /start a session/i })).toBeInTheDocument();
+  });
+
+  it('omits the Start-a-session action for a person who cannot own sessions', async () => {
+    useSessionStore.setState({ activePerson: activeP1, access: null }); // no role → can('sessions.own') false
+    installMockBridge({ insightsList: () => Promise.resolve([]) });
+    renderMemory();
+    expect(
+      await screen.findByText(/Insights appear here after your sessions/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /start a session/i })).not.toBeInTheDocument();
   });
 
   it('puts a draft in "Needs your review" and approves it', async () => {
@@ -272,6 +293,9 @@ describe('Memory dashboard', () => {
     renderMemory();
     await userEvent.click(await screen.findByRole('button', { name: /Refresh/ }));
     expect(refresh).toHaveBeenCalled();
-    expect(await screen.findByText(/Turn on AI in Settings/)).toBeInTheDocument();
+    // No role/access set on the session store, so the role-aware note falls to the safer member copy.
+    expect(
+      await screen.findByText(/ask the person who set up this household/i),
+    ).toBeInTheDocument();
   });
 });

@@ -1,0 +1,16 @@
+/* A borderless ghost label — deliberately quieter than the bordered AdminOnlyBadge pill so the two
+   markers read as distinct and never collide visually when both sit on one setting. */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-text-tertiary);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.icon {
+  flex: none;
+}

@@ -1,14 +1,44 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import type { InboxAssignmentDetail, InboxItem } from '@shared/channels';
+import { DEFAULT_ROLES } from '@shared/capabilities';
+import type { Person } from '@shared/schemas';
 import { Inbox } from './Inbox';
 import { useInboxStore } from '../../../stores/inboxStore';
+import { useSessionStore } from '../../../stores/sessionStore';
 import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
+
+const renderInbox = (): ReturnType<typeof render> =>
+  render(
+    <MemoryRouter>
+      <Inbox />
+    </MemoryRouter>,
+  );
+
+const ME: Person = {
+  id: 'me-1',
+  schemaVersion: 1,
+  displayName: 'Ben',
+  isSubject: true,
+  tags: [],
+  createdAt: 'now',
+  updatedAt: 'now',
+};
+
+/** Set the active person's role so the empty-state's capability-gated action reflects it. */
+function signIn(roleId: 'owner' | 'member'): void {
+  useSessionStore.setState({
+    activePerson: ME,
+    access: { roles: DEFAULT_ROLES, accounts: [{ personId: ME.id, roleId, hasPin: false }] },
+  });
+}
 
 afterEach(() => {
   clearMockBridge();
   useInboxStore.setState({ items: [], loaded: false });
+  useSessionStore.getState().reset();
 });
 
 const item = (over: Partial<InboxItem> = {}): InboxItem => ({
@@ -46,15 +76,26 @@ const detail = (over: Partial<InboxAssignmentDetail> = {}): InboxAssignmentDetai
 });
 
 describe('Inbox', () => {
-  it('shows the empty state when nothing has been sent', async () => {
+  it('shows the empty state, with no create action when the person cannot create questionnaires', async () => {
     installMockBridge({ assignmentsInbox: () => Promise.resolve([]) });
-    render(<Inbox />);
+    renderInbox(); // no role signed in → can('questionnaires.create') is false
     expect(await screen.findByText(/nothing to answer right now/i)).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /create a questionnaire/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('offers "Create a questionnaire" in the empty state when the person can create them', async () => {
+    signIn('owner');
+    installMockBridge({ assignmentsInbox: () => Promise.resolve([]) });
+    renderInbox();
+    expect(await screen.findByText(/nothing to answer right now/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /create a questionnaire/i })).toBeInTheDocument();
   });
 
   it('lists an assignment with who sent it and a New chip', async () => {
     installMockBridge({ assignmentsInbox: () => Promise.resolve([item()]) });
-    render(<Inbox />);
+    renderInbox();
     expect(await screen.findByText('Weekly check-in')).toBeInTheDocument();
     expect(screen.getByText(/From Ben/)).toBeInTheDocument();
     expect(screen.getByText('New')).toBeInTheDocument();
@@ -68,7 +109,7 @@ describe('Inbox', () => {
       assignmentsOpen: () => Promise.resolve(),
       assignmentsSubmit: submit,
     });
-    render(<Inbox />);
+    renderInbox();
 
     await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
     // Private mode tells the recipient their raw answers stay hidden, and crisis help is always present.
@@ -91,7 +132,7 @@ describe('Inbox', () => {
       assignmentsGet: () => Promise.resolve(detail()),
       assignmentsSubmit: submit,
     });
-    render(<Inbox />);
+    renderInbox();
 
     await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
     await userEvent.click(await screen.findByRole('button', { name: 'Submit' }));
@@ -107,7 +148,7 @@ describe('Inbox', () => {
       assignmentsGet: () => Promise.resolve(detail()),
       assignmentsDecline: decline,
     });
-    render(<Inbox />);
+    renderInbox();
 
     await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
     await userEvent.click(await screen.findByRole('button', { name: 'Decline' }));
@@ -122,7 +163,7 @@ describe('Inbox', () => {
       assignmentsInbox: () => Promise.resolve([item({ status: 'submitted', answerable: false })]),
       assignmentsGet: () => Promise.resolve(detail({ status: 'submitted', answerable: false })),
     });
-    render(<Inbox />);
+    renderInbox();
 
     await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
     expect(await screen.findByText(/submitted this questionnaire/i)).toBeInTheDocument();
@@ -144,7 +185,7 @@ describe('Inbox', () => {
           }),
         ),
     });
-    render(<Inbox />);
+    renderInbox();
 
     await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
     // eachSeesOwn promises the answerer can review their own answers, and names the OTHER participant
@@ -181,7 +222,7 @@ describe('Inbox', () => {
           }),
         ),
     });
-    render(<Inbox />);
+    renderInbox();
 
     await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
     expect(await screen.findByText('Your shared report')).toBeInTheDocument();
@@ -201,7 +242,7 @@ describe('Inbox', () => {
       assignmentsInbox: () => Promise.resolve([item()]),
       assignmentsGet: () => Promise.resolve(detail({ compatibility })),
     });
-    const { unmount } = render(<Inbox />);
+    const { unmount } = renderInbox();
     await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
     expect(
       await screen.findByText(/no one in this exchange sees your answers/i),
@@ -215,7 +256,7 @@ describe('Inbox', () => {
       assignmentsGet: () =>
         Promise.resolve(detail({ status: 'submitted', answerable: false, compatibility })),
     });
-    render(<Inbox />);
+    renderInbox();
     await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
     expect(await screen.findByText(/there’s no report for this one/i)).toBeInTheDocument();
     expect(screen.queryByText('Your shared report')).not.toBeInTheDocument();

@@ -107,16 +107,18 @@ describe('Onboarding', () => {
     installMockBridge({ intakeGetState: () => Promise.resolve(state({ aiAvailable: false })) });
     renderOnboarding();
     expect(await screen.findByText('Connect AI to begin')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Open Settings' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Set up Claude in Settings/i })).toBeInTheDocument();
   });
 
-  it('shows the member "ask your owner" copy when AI is unavailable', async () => {
+  it('shows the member "ask the owner" copy when AI is unavailable', async () => {
     signIn('member');
     installMockBridge({ intakeGetState: () => Promise.resolve(state({ aiAvailable: false })) });
     renderOnboarding();
     expect(await screen.findByText('Connect AI to begin')).toBeInTheDocument();
-    expect(screen.getByText(/Ask your household\s+owner/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Open Settings' })).not.toBeInTheDocument();
+    expect(screen.getByText(/ask the person who set up this household/i)).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Set up Claude in Settings/i }),
+    ).not.toBeInTheDocument();
   });
 
   it('runs an interview turn in the active section and shows the streamed reply', async () => {

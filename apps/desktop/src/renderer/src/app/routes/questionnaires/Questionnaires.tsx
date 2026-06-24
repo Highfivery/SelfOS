@@ -113,8 +113,9 @@ export function Questionnaires(): JSX.Element {
             <Stack gap={2} align="center">
               <ClipboardList size={24} aria-hidden="true" />
               <Text tone="secondary">
-                No questionnaires yet. Create one to gather honest input from the people in your
-                life.
+                No questionnaires yet. Use <strong>New</strong> above to create one and gather
+                honest input from the people in your life — or <strong>Suggested</strong> to let the
+                coach propose one worth sending.
               </Text>
             </Stack>
           </Card>

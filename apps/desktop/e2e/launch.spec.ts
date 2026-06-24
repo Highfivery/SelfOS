@@ -1919,15 +1919,19 @@ test('questionnaires: AI draft + Suggested surfaces show calm enable-AI states',
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Questionnaires' }).click();
 
-    // Builder: with AI off, the "Draft with AI" panel prompts to enable it (never an error).
+    // Builder: with AI off, the "Draft with AI" panel shows the role-aware notice (never an error). The
+    // owner sees the set-up path (41 §3.3).
     await startNewQuestionnaire(w);
-    await expect(w.getByText(/turn on ai in settings to draft questions/i)).toBeVisible();
+    await expect(w.getByText(/isn.t set up yet/i).first()).toBeVisible();
+    await expect(
+      w.getByRole('button', { name: /Set up Claude in Settings/i }).first(),
+    ).toBeVisible();
 
     // Suggested (gap-finder) opens its own surface with the same calm state — reached from the list.
     await backToQuestionnaires(w);
     await w.getByRole('button', { name: 'Suggested' }).click();
     await expect(w.getByRole('heading', { name: /suggested for you/i })).toBeVisible();
-    await expect(w.getByText(/turn on ai in settings to get suggestions/i)).toBeVisible();
+    await expect(w.getByText(/isn.t set up yet/i).first()).toBeVisible();
 
     const overflow = await w.evaluate(() => {
       const main = document.querySelector('main');
@@ -2050,8 +2054,9 @@ test('memory: the Insights surface shows its empty state + crisis affordance', a
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Memory' }).click();
     await expect(w.getByRole('heading', { name: 'Memory' })).toBeVisible();
-    // No analyzed answers yet (the live producer wires up with the Inbox, §13.5).
-    await expect(w.getByText(/nothing here yet/i)).toBeVisible();
+    // No analyzed answers yet (the live producer wires up with the Inbox, §13.5); the empty state explains
+    // when insights appear (41 §3.1).
+    await expect(w.getByText(/Insights appear here after your sessions/i)).toBeVisible();
     // The not-medical line + crisis affordance are always present on this surface.
     await expect(w.getByText(/not medical care/i)).toBeVisible();
     await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible();
@@ -2758,8 +2763,8 @@ test('results: a Standard response surfaces the raw answers in the sender’s Re
     await w.getByRole('button', { name: 'Results' }).click();
     await expect(w.getByText('How are we doing?')).toBeVisible();
     await expect(w.getByText('Doing great')).toBeVisible();
-    // AI is off, so analysis is offered via a calm Settings prompt (no dead Analyze button).
-    await expect(w.getByText(/turn on ai/i)).toBeVisible();
+    // AI is off, so analysis is offered via the calm role-aware notice (no dead Analyze button).
+    await expect(w.getByText(/isn.t set up yet/i).first()).toBeVisible();
 
     // No horizontal overflow at desktop or phone width.
     const overflow = (): Promise<number> =>
@@ -6237,5 +6242,169 @@ test('questionnaires: responses-arrived names the responder → View results →
     await rm(userData, { recursive: true, force: true });
     await rm(vault, { recursive: true, force: true });
     await rm(saveDir, { recursive: true, force: true });
+  }
+});
+
+test('discoverability: role-aware AI-unavailable — owner gets the Settings → AI link, a member is told to ask the owner (41)', async () => {
+  // No AI key seeded → AI is unavailable; the common real "not set up" state (§7 DoD prerequisite-absent).
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    // Owner: the Sessions launcher shows the owner set-up path → it navigates to Settings.
+    await w.getByRole('link', { name: 'Sessions' }).click();
+    await expect(w.getByText(/isn.t set up yet/i).first()).toBeVisible();
+    // The launcher and the suggestions row each render the notice — either owner link reaches Settings.
+    await w
+      .getByRole('button', { name: /Set up Claude in Settings/i })
+      .first()
+      .click();
+    await expect.poll(() => w.evaluate(() => window.location.hash)).toContain('/settings');
+
+    // Create + grant a member (onboarded so the gate doesn't take over), then switch to them.
+    await w.getByRole('link', { name: 'People' }).click();
+    await w.getByRole('button', { name: 'Add person' }).click();
+    await w.getByLabel('Name').fill('Jordan');
+    await w.getByRole('button', { name: 'Create' }).click();
+    await w.getByText('Jordan').click();
+    await w.getByRole('button', { name: 'Access' }).click();
+    await w.getByRole('button', { name: 'Grant access' }).click();
+    await expect(w.getByText(/can sign in/i)).toBeVisible();
+    await completeIntakeFor(vault, userData, 'Jordan');
+
+    await w.getByRole('button', { name: /signed in as/i }).click();
+    await w.getByRole('menuitem', { name: 'Switch person' }).click();
+    await w
+      .getByRole('dialog', { name: /who.s here/i })
+      .getByText('Jordan')
+      .click();
+    await expect(w.getByRole('button', { name: 'Signed in as Jordan' })).toBeVisible();
+
+    // Member: the ask-the-owner copy, and NO owner-only Settings → AI link anywhere on the surface.
+    await w.getByRole('link', { name: 'Sessions' }).click();
+    await expect(w.getByText(/ask the person who set up this household/i).first()).toBeVisible();
+    await expect(w.getByRole('button', { name: /Set up Claude in Settings/i })).toHaveCount(0);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('discoverability: the Inbox empty state offers "Create a questionnaire" → the builder (41)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Inbox' }).click();
+    await expect(w.getByText(/nothing to answer right now/i)).toBeVisible();
+    await w.getByRole('button', { name: /Create a questionnaire/i }).click();
+    await expect.poll(() => w.evaluate(() => window.location.hash)).toContain('/questionnaires');
+    await expect(w.getByRole('heading', { name: 'Questionnaires' })).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('discoverability: Settings shows the device-vs-synced signal (41)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Settings' }).click();
+    // Appearance (the default section) is synced across devices.
+    await expect(w.getByText('Synced').first()).toBeVisible();
+    // About → "Check for updates automatically" is device-local.
+    await w.getByRole('button', { name: 'About', exact: true }).click();
+    await expect(w.getByText('This device').first()).toBeVisible();
+
+    // ~360px: no PAGE/`main` horizontal scrollbar (CLAUDE.md §12). The section nav's own pill-row scroll is
+    // intentional (the responsive Settings design), so check main/doc width — matching the settings guard.
+    // ~360px: no inner horizontal scrollbar on the Settings CONTENT. The section nav's pill row is an
+    // intentional horizontal scroll (the responsive Settings design), so it's excluded; everything else
+    // must not scroll-x (CLAUDE.md §12). `main` itself fits at 360px — verified separately below.
+    await w.setViewportSize({ width: 360, height: 780 });
+    const offenders = await w.evaluate(() => {
+      const bad: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        const isSectionNav = /sections/.test(el.className); // the intentional pill-row scroll
+        if (
+          !isSectionNav &&
+          el.scrollWidth - el.clientWidth > 1 &&
+          (ox === 'auto' || ox === 'scroll')
+        ) {
+          bad.push(`${el.tagName}.${el.className}`);
+        }
+      });
+      return bad;
+    });
+    expect(offenders).toEqual([]);
+    // The Settings content column (`main`) fits the 360px viewport with no horizontal scroll.
+    const mainFits = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      return !!main && main.scrollWidth <= main.clientWidth;
+    });
+    expect(mainFits).toBe(true);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('discoverability: the first-run orientation shows, is dismissed, is re-openable, and stays dismissed on relaunch (41)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  let app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    // Home shows the brief orientation with the not-medical line.
+    await expect(w.getByRole('heading', { name: /how selfos works/i })).toBeVisible();
+    await expect(w.getByText(/not medical care/i).first()).toBeVisible();
+
+    // No horizontal overflow at ~360px with the orientation card present.
+    await w.setViewportSize({ width: 360, height: 780 });
+    const offenders = await w.evaluate(() => {
+      const bad: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          bad.push(`${el.tagName}.${el.className}`);
+        }
+      });
+      return bad;
+    });
+    expect(offenders).toEqual([]);
+    await w.setViewportSize({ width: 1100, height: 800 });
+
+    // Dismiss it → gone.
+    await w.getByRole('button', { name: 'Dismiss welcome' }).click();
+    await expect(w.getByRole('heading', { name: /how selfos works/i })).toHaveCount(0);
+
+    // Re-openable any time from the account menu → "About SelfOS".
+    await w.getByRole('button', { name: /signed in as/i }).click();
+    await w.getByRole('menuitem', { name: 'About SelfOS' }).click();
+    await expect(w.getByRole('dialog', { name: /about selfos/i })).toBeVisible();
+    await w.getByRole('button', { name: /got it/i }).click();
+    await expect(w.getByRole('dialog', { name: /about selfos/i })).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+
+  // Relaunch: the dismissal persisted (device-local, per-person) — the card does not reappear.
+  app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    // Wait for Home to settle (the brand-new owner sees the getting-started card), then confirm the
+    // orientation card is gone — the device-local dismissal persisted across the relaunch.
+    await expect(w.getByRole('heading', { name: /welcome to selfos/i })).toBeVisible();
+    await expect(w.getByRole('heading', { name: /how selfos works/i })).toHaveCount(0);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
   }
 });

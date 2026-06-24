@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Sparkles } from 'lucide-react';
 import type { Question, SensitivityTier } from '@shared/schemas';
+import { AiUnavailableNotice } from '../../AiUnavailableNotice';
 import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import {
@@ -42,7 +42,6 @@ export function QuestionnaireAiPanel({
   // A short AI-suggested title (08 §16.4); the builder applies it only when the title is still empty.
   onTitle?: (title: string) => void;
 }): JSX.Element {
-  const navigate = useNavigate();
   const generate = useQuestionnaireStore((s) => s.generate);
   // Owner-only inline "add a topic" for an intimacy questionnaire at an explicit tier (08 §16.5a).
   const canManageTopics = useSessionStore((s) => s.can('people.manage'));
@@ -90,14 +89,7 @@ export function QuestionnaireAiPanel({
   }, [busy]);
 
   if (!aiReady) {
-    return (
-      <Banner tone="info">
-        Turn on AI in Settings to draft questions automatically.{' '}
-        <button type="button" className={styles.linkButton} onClick={() => navigate('/settings')}>
-          Open Settings
-        </button>
-      </Banner>
-    );
+    return <AiUnavailableNotice />;
   }
 
   const onGenerate = async (): Promise<void> => {

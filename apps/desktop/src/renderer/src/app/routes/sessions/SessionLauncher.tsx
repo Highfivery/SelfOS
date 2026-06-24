@@ -1,6 +1,6 @@
-import { useNavigate } from 'react-router-dom';
 import { useGuidanceStore } from '../../../stores/guidanceStore';
-import { Banner, Heading, Stack, Text } from '../../../design-system/components';
+import { Heading, Stack, Text } from '../../../design-system/components';
+import { AiUnavailableNotice } from '../../AiUnavailableNotice';
 import { Composer } from './Composer';
 import { SuggestedSessions } from './SuggestedSessions';
 import { GuidedCatalog } from './GuidedCatalog';
@@ -23,7 +23,6 @@ export function SessionLauncher({
   /** Prefill the free-start composer (40 §3.3 — the Home synthesis "Talk it through" seed-handoff). */
   seedText?: string;
 }): JSX.Element {
-  const navigate = useNavigate();
   const adultAcknowledged = useGuidanceStore((s) => s.adultAcknowledged);
   const acknowledgeAdult = useGuidanceStore((s) => s.acknowledgeAdult);
 
@@ -46,17 +45,12 @@ export function SessionLauncher({
               onSend={onStartFree}
             />
           ) : (
-            <Banner tone="info">
-              Connect Claude in{' '}
-              <button
-                type="button"
-                className={styles.linkButton}
-                onClick={() => navigate('/settings')}
-              >
-                Settings
-              </button>{' '}
-              to start talking. You can still browse and start guided sessions below.
-            </Banner>
+            <Stack gap={2}>
+              <AiUnavailableNotice />
+              <Text tone="secondary" size="sm">
+                You can still browse and start guided sessions below.
+              </Text>
+            </Stack>
           )}
         </section>
 

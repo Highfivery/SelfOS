@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Sparkles } from 'lucide-react';
 import type { Dream } from '@shared/channels';
 import { aiKeyResolved } from '../../aiAvailability';
+import { AiUnavailableNotice } from '../../AiUnavailableNotice';
 import { useDreamAnalysisStore } from '../../../stores/dreamAnalysisStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useSetting } from '../../../settings/useSetting';
@@ -30,7 +30,6 @@ export function DreamAnalysisPane({ dream, onBack }: DreamAnalysisPaneProps): JS
   const [aiEnabled] = useSetting('ai.enabled');
   const [memoryEnabledSetting] = useSetting('dreams.memoryEnabled');
   const [hasKey, setHasKey] = useState(false);
-  const navigate = useNavigate();
 
   const messages = useDreamAnalysisStore((s) => s.messages);
   const streaming = useDreamAnalysisStore((s) => s.streaming);
@@ -177,14 +176,11 @@ export function DreamAnalysisPane({ dream, onBack }: DreamAnalysisPaneProps): JS
       ) : (
         <div className={styles.empty}>
           <Stack gap={3} align="center">
-            <Heading level={3}>Connect Claude to analyze</Heading>
+            <Heading level={3}>Reflect on this dream</Heading>
             <Text tone="secondary">
-              Enable AI and add your key to reflect on this dream. Your journal still works without
-              it.
+              SelfOS uses AI to reflect on a dream with you. Your journal still works without it.
             </Text>
-            <Button variant="primary" onClick={() => navigate('/settings')}>
-              Open Settings
-            </Button>
+            <AiUnavailableNotice />
           </Stack>
         </div>
       )}

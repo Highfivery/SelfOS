@@ -389,6 +389,43 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-24 — **Build (discoverability, empty states & first-run polish — SPEC 41 BUILT, all 5 slices; on
+  `feat/discoverability-empty-states`, PR pending).** A renderer-only UX polish pass to make the app
+  self-explaining. **§11 resolved with the owner first (recorded in spec 41 §11):** full empty-state audit;
+  one-time tips ship (gap-finder + depth invitations); proposed role-aware AI copy; a small text scope badge;
+  orientation = a dismissible Home card + an account-menu re-open; nav left as-is; dismissals per-person +
+  per-device. **Slice 1 (highest-value):** one `AiUnavailableNotice` component + `aiUnavailableMessage` helper
+  — the single source of truth for role-aware AI-unavailable copy (owner → "Set up Claude in **Settings → AI**"
+  link; member → "ask the person who set up this household to turn it on" — generic, never names the owner,
+  never implies a key; offline → a connection line for both; unknown role → the **safer member** copy) — swapped
+  onto **every** AI surface (Sessions launcher + composer, SuggestedSessions, the Draft-with-AI + Suggested
+  panels, Memory refresh note, compatibility send + both Results, dream analysis + patterns, onboarding, and
+  DreamImagePanel's member case). **Slice 2:** actionable, capability-gated empty states — Inbox (→ Create a
+  questionnaire), Memory (→ "insights appear after analysis" + Start a session), Dreams-no-image (a calm "No
+  image yet" distinct from the REFUSED/ERROR banners), Home (`DiscoveryNudge` for a near-empty person + a richer
+  `GettingStarted` that also points at a guided session / dreams / a questionnaire), Dreams journal, People, and
+  the Questionnaires list (the header-action surfaces use a differently-worded in-card CTA — "Add your first
+  person" / "Log your first dream" — to avoid a duplicate-label collision). **Slice 3:** the `ScopeBadge`
+  device-vs-synced signal on every setting (a borderless ghost label, visually + a11y-distinct from the bordered
+  "Admin only" pill; both can sit on one row; `/gallery`). **Slice 4:** the first-run orientation
+  (`WelcomeOrientationCard` "How SelfOS works" + the account-menu `AboutSelfOsDialog`, sharing `OrientationBody`
+  - the not-medical line) and one-time `OneTimeTip`s on the gap-finder + depth invitations — backed by a new
+    device-local, per-person `discovery:getDismissals`/`:setDismissals` seam (additive `DeviceState.discoveryDismissals`,
+    keyed by the active person in the bridge — the trust boundary; the spec-35 precedent) + a `discoveryStore`
+    reset/loaded in the AppShell per-person effect. **Slice 5:** 360px geometry guards. Gate green: typecheck,
+    lint, format, **697 core + 754 desktop** unit (+ `AiUnavailableNotice`, `ScopeBadge`, discovery store/components,
+    the per-person discovery coreBridge test, and updated empty-state/AI-copy assertions across ~10 suites), **E2E
+    +4** (role-aware AI-unavailable owner-vs-member, Inbox → builder, the scope signal, orientation
+    appears→dismiss→re-open→relaunch-gone). Visual QA at desktop (orientation card + not-medical line, the Synced /
+    This device badges, the discovery nudge). Synced spec 41 (→ Built), 01 (`ScopeBadge`/`OneTimeTip`), 02 (the
+    account-menu items), 03 (the scope-signal note). **Lesson: a "fix the AI-unavailable copy everywhere" task is
+    really a centralization task — one role-aware component swapped onto every surface beats N hand-rolled strings,
+    and the owner/member split must be the trust-aware one (a member never sees a key prompt or owner-naming, and
+    an unknown role falls to the safer member copy). The macOS traffic-light inset makes the titlebar wider than a
+    360px window in E2E, but that inset doesn't exist on the real 360px target (iOS), so the established 360px guard
+    is the `overflow-x:auto|scroll` element scan (excluding the intentional settings section-nav pill row) + a
+    `main`-width check, NOT a document-width assertion.**
+
 - 2026-06-24 — **Build (proactive coaching — SPEC 40 BUILT, all 5 slices; on `feat/proactive-coaching`, PR
   pending).** The behaviour layer that ACTS on what spec 39's memory/goals know. **§11 resolved with the owner
   first (all decisions recorded in spec 40 §11):** a single per-person `coaching.proactivity` enum

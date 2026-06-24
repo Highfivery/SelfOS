@@ -202,6 +202,7 @@ import {
   listAllInsights,
   listInsightsForPerson,
   listRelatedShareableInsights,
+  reapOrphanShares,
   reconcileInsights,
   updateInsight,
 } from '@selfos/core/insights';
@@ -1280,7 +1281,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     peopleDelete: async (id): Promise<void> => {
       const ctx = await host.vaultAndKey();
       if (!ctx) return;
-      await deletePerson(ctx.fs, PersonIdSchema.parse(id));
+      const personId = PersonIdSchema.parse(id);
+      await deletePerson(ctx.fs, personId);
+      // Reap any per-person shares pointing at the now-deleted person from every OTHER person's insight
+      // facts (39-living-memory §4.5). Cleanup only — the read-time re-gate already prevents any leak, so
+      // a best-effort failure here is non-fatal. Done from the seam to avoid a people↔insights import cycle.
+      await reapOrphanShares(ctx.fs, ctx.key, personId);
     },
     relationshipsList: async (): Promise<Relationship[]> => {
       const ctx = await host.vaultAndKey();

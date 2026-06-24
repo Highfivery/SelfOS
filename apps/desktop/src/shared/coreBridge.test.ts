@@ -1199,6 +1199,37 @@ describe('createCoreBridge', () => {
     expect(await bridge.memoryRefresh()).toMatchObject({ ok: false, reason: 'DENIED' });
   });
 
+  it('reaps orphaned shareableWith from other people’s facts when a person is deleted (39 §4.5)', async () => {
+    const { bridge, host, ownerId } = await freshOwner();
+    const friend = await bridge.peopleSave({ displayName: 'Friend', isSubject: true, tags: [] });
+    const ctx = (await host.host.vaultAndKey())!;
+    const at = new Date().toISOString();
+    // The owner has an insight whose fact is targeted-shared with `friend`.
+    await saveInsight(ctx.fs, ctx.key, {
+      id: 'ins1',
+      schemaVersion: 1,
+      source: 'session',
+      subjectPersonId: ownerId,
+      summary: 'About the owner',
+      facts: [
+        { id: 'f1', text: 'shared with friend', shareable: false, shareableWith: [friend.id] },
+      ],
+      confidence: 'low',
+      categories: [],
+      approved: true,
+      provenance: { at },
+      createdAt: at,
+      updatedAt: at,
+    });
+
+    await bridge.peopleDelete(friend.id);
+
+    // The dangling reference is gone from the owner's (still-present) fact.
+    const owners = await bridge.insightsList();
+    const f1 = owners.find((i) => i.id === 'ins1')?.facts.find((f) => f.id === 'f1');
+    expect('shareableWith' in (f1 ?? {})).toBe(false);
+  });
+
   it('persists custom types for the picker, gated by questionnaires.create', async () => {
     const { bridge } = await freshOwner();
     expect(await bridge.questionnairesListTypes()).toEqual([]);

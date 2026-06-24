@@ -229,6 +229,14 @@ export function InsightCard({
                   {fact.flaggedInaccurate ? (
                     <span className={styles.flaggedTag}>flagged</span>
                   ) : null}
+                  {fact.retractedShareAt ? (
+                    <span
+                      className={styles.flaggedTag}
+                      title="This fact was shared, then withdrawn when you flagged it"
+                    >
+                      sharing withdrawn
+                    </span>
+                  ) : null}
                   {fact.restricted ? (
                     <span className={styles.sensitiveTag} title="Sensitive onboarding content">
                       <ShieldAlert size={12} aria-hidden="true" /> sensitive

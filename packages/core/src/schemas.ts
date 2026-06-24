@@ -531,6 +531,10 @@ export const InsightFactSchema = z.object({
   // not to re-assert it. The fact stays visible-but-marked + reversible (never silently deleted).
   flaggedInaccurate: z.boolean().optional(),
   flaggedAt: z.string().optional(),
+  // Set when flagging a previously-SHARED fact inaccurate strips its share (39-living-memory §4.2): the
+  // `shareable`/`shareableWith` are cleared and this stamps when, so Memory can show "sharing withdrawn."
+  // Only present if there was a share to retract; cleared when the flag is removed. Additive-optional.
+  retractedShareAt: z.string().optional(),
   // The fact's life-area, from the fixed LIFE_AREAS taxonomy (28-portrait-synthesis-optimization §pillar-2).
   // Drives per-call relevance selection of the (pinned) onboarding portrait: a budgeting session pulls
   // Money/Work facts, an intimacy session pulls Intimacy facts — instead of dumping all. Additive-optional:

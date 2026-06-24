@@ -1,6 +1,6 @@
 # 40 — Proactive coaching
 
-> **Status:** Approved — _last updated 2026-06-24_
+> **Status:** Built — _last updated 2026-06-24_
 >
 > Today SelfOS **remembers** but never **acts** on what it knows: it is a reactive, user-initiated
 > coach. Session analysis already extracts goals, depth-invitations, and profile-suggestions — but
@@ -381,8 +381,12 @@ Claude key stays in main (`00` §6.2). Renderer payloads Zod-validated both side
   The renderer cadence hook calls this only when `shouldSynthesize` + budget allow; a manual "What are
   you noticing?" affordance (if §11 adds one) forces it.
 - **`coaching:getSynthesis()`** → the cached `CoachingSynthesis | null` (no spend) — for re-display.
-- **`coaching:crisisSignal()`** → the deterministic `aggregateCrisisSignal` result (no AI, no spend) —
-  for the supportive surface (§3.5). Resources-first; carries no diagnosis.
+- **Cross-insight crisis signal (no IPC channel — renderer-computed).** _As built:_ the deterministic
+  `aggregateCrisisSignal` (no AI, no spend) runs in the **renderer** (Home), over the per-person insights +
+  dream pattern stats Home already loads — exactly like the existing `hasRecentCrisis` it supersedes. No
+  `coaching:crisisSignal()` bridge channel was added (it would only re-fetch data the renderer already holds
+  per-person); the pure helper lives in `@selfos/core/coaching` and is unit-tested. Resources-first; carries
+  no diagnosis.
 - **`coaching:getPrefs()`** / **`coaching:setPrefs({ proactivity })`** → the per-person `CoachingPrefs`
   (§4.1a). Gated `sessions.own`, active-person-scoped in the bridge. Backs the §5.4 settings control.
 - **Goal nudges reuse spec 39's IPC** — `goals:list` (read open/stale), `goals:setStatus` (the nudge's
@@ -520,9 +524,11 @@ them). Summary of the resolutions:
 8. **Manual affordance (Q8)** — **yes**, add a manual **"What are you noticing lately?"** explicit-tap
    affordance (forces a synthesis past the throttle) **in addition to** the automatic cadence.
 9. **Coalescing per kind (Q9)** — a synthesis observation **yields** to a depth-invitation /
-   profile-freshness nudge for the **same life-area** (the more specific, actionable nudge wins); for any
-   kind, the **Home card self-hides when the spec-35 notification owns that signal**, so the user sees
-   one coherent prompt.
+   profile-freshness nudge for the **same life-area** (the more specific, actionable nudge wins). _As
+   built:_ the synthesis **Home card (the persistent action surface) and its notification (the transient
+   alert) coexist** — the established profile-freshness card+notification pattern (17 §11) — rather than the
+   card self-hiding; the substantive dedup is the cross-kind same-area yield above, so the user never sees
+   two prompts about the same area.
 
 ---
 
@@ -593,6 +599,34 @@ after spec 39's goals land for the goal-consuming slices).
 
 ## 13. Changelog
 
+- 2026-06-24 — **BUILT (all 5 slices).** On `feat/proactive-coaching`. **Slice 1 (in-session + setting):**
+  `@selfos/core/coaching` `goalRaiseInstruction` (pure, the `depthAskInstruction` sibling) + `CoachingPrefs`
+  (per-person `coaching.proactivity`, off/gentle/active, default gentle) read in the bridge; `buildSystemPrompt`
+  threads an optional goal-raise appended AFTER persona+safety+context; `coaching:getPrefs/setPrefs`; a
+  member-visible **Coaching** settings section + `ProactivityControl`. **Slice 2 (crisis, no-AI):**
+  `aggregateCrisisSignal` (≥2 crisis flags in 14d OR the nightmare nudge) computed in the renderer; a Home
+  `CrisisSupportBanner` (non-dismissible, resources-first, not governed by the setting) that supersedes the
+  WellbeingCard's session-only banner (`hasRecentCrisis` removed). **Slice 3 (synthesis pass):**
+  `coachingSynthesisService` (`synthesize`/`getSynthesis`/pure `shouldSynthesize`/`countNewInsights`),
+  `CoachingSynthesis` cache + `coaching.synthesize` usage type + a per-person device-state throttle marker;
+  tolerant-parse + meter-before-parse; `coaching:synthesize({auto?})`/`getSynthesis`; a renderer cadence hook +
+  `synthesisStore` + Home `InsightOfTheWeekCard` ("Talk it through" seeds a session via a Composer
+  `initialText` handoff) + a manual run. **Slice 4 (goal nudges):** the `goal-followup` notification kind +
+  source (≤1, stalest, onChange) + Home `GoalFollowupCard` (Still on it / Mark done / Let it go →
+  `goals:setStatus`). **Slice 5 (coordination):** the `coaching-synthesis` notification kind + source with the
+  same-area yield to depth/freshness; phone-width overflow polish. Code-reviewer **ship after one should-fix**
+  (the synthesis EMPTY gate now counts RECENT in-window insights so an all-stale history can't bill an empty
+  digest; +per-person setting scope `device`; honest `AI_OFF`). Gate green: typecheck, lint, format, **697
+  core + 11 relay + 715 desktop** unit, **99 E2E** (+4: per-person Coaching setting decrypt round-trip,
+  recurring-distress banner, synthesis card + seed-handoff, stale-goal nudge + Mark-done decrypt). **As-built
+  deviations from §6/§3.7 (recorded above):** (a) NO `coaching:crisisSignal()` channel — the deterministic
+  signal is renderer-computed over data Home already holds per-person (the `hasRecentCrisis` precedent); (b)
+  the synthesis Home card + notification **coexist** (the 17 §11 pattern) rather than the card self-hiding —
+  the cross-kind same-area yield is the dedup. **Lesson: a synthesis/EMPTY gate must use the SAME recency
+  window the digest does — counting all-time approved insights let an all-stale history pass the gate and pay
+  for an empty digest; and a per-person preference belongs in a `CoachingPrefs` file read in the bridge, not
+  the household/device settings registry (whose scopes can't express per-active-person — the registry entry
+  stays inert).**
 - 2026-06-24 — **Approved.** All §11 open questions resolved with the user (recorded at the top of §11):
   single `coaching.proactivity` enum (off/gentle/active, default **gentle**, **per-person** via a
   `CoachingPrefs` file — §4.1a — read in the bridge, depth-ask kept separate); nudges live **in-session +

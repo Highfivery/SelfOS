@@ -2830,9 +2830,16 @@ describe('notifications (35)', () => {
     });
     await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
 
-    expect(await bridge.notificationsResponsesArrived()).toEqual([
-      { questionnaireId: q.id, title: 'Weekly check-in', submittedCount: 1 },
-    ]);
+    const summaries = await bridge.notificationsResponsesArrived();
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]).toMatchObject({
+      questionnaireId: q.id,
+      title: 'Weekly check-in',
+      submittedCount: 1,
+      // The newest responder names the notification ("Mara answered …"), with a submit time (38 §4.2).
+      latestRecipientName: 'Mara',
+    });
+    expect(typeof summaries[0]?.at).toBe('string');
   });
 
   it('opens only http(s) URLs externally, via the host shell', async () => {

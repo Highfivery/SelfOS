@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import type { SendResult } from '@shared/schemas';
 import { QuestionnaireResults } from './QuestionnaireResults';
 import { useResultsStore } from '../../../stores/resultsStore';
+import { useNotificationStore } from '../../../stores/notificationStore';
 import { useSettingsStore } from '../../../settings/settingsStore';
 import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
 
@@ -24,6 +25,7 @@ afterEach(() => {
     loaded: false,
     loading: false,
   });
+  useNotificationStore.getState().reset();
   useSettingsStore.setState({ values: {} });
 });
 
@@ -49,6 +51,26 @@ describe('QuestionnaireResults', () => {
     installMockBridge({ assignmentsResults: () => Promise.resolve([]) });
     renderResults();
     expect(await screen.findByText(/haven’t sent this questionnaire yet/i)).toBeInTheDocument();
+  });
+
+  it('marks the responses-arrived notification seen on open (38 §3.1)', async () => {
+    installMockBridge({ assignmentsResults: () => Promise.resolve([]) });
+    await useNotificationStore.getState().load();
+    useNotificationStore.getState().setCandidates([
+      {
+        kind: 'responses-arrived',
+        coalesceKey: 'responses-arrived:q1',
+        signature: '1',
+        title: 'Angel answered “Our week”',
+      },
+    ]);
+    const slot = (): boolean | undefined =>
+      useNotificationStore
+        .getState()
+        .notifications.find((n) => n.coalesceKey === 'responses-arrived:q1')?.read;
+    expect(slot()).toBe(false); // unread before the sender opens Results
+    renderResults();
+    await waitFor(() => expect(slot()).toBe(true)); // opening Results = "seen"
   });
 
   it('shows the raw answers for a Standard, submitted send', async () => {

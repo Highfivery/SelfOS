@@ -1811,6 +1811,13 @@ export interface ResponsesArrivedSummary {
   questionnaireId: string;
   title: string;
   submittedCount: number;
+  /**
+   * The most recent responder's display name (or a neutral label for an unnamed external), so the
+   * notification can read "Angel answered …" rather than a faceless count (38 §3.1/§4.2).
+   */
+  latestRecipientName: string;
+  /** The newest response's time (the assignment's submit timestamp) — orders the notification (38 §4.2). */
+  at: string;
 }
 
 /** One of the two paired sends of a compatibility questionnaire, as the sender sees it (08 §3.6). */

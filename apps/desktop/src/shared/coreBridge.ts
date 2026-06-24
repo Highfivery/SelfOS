@@ -3482,18 +3482,31 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // already in the vault, so no network is added (35 §3.6/§11).
       const sends = await listAssignments(ctx.fs, ctx.key, { senderPersonId: personId });
       const counts = new Map<string, number>();
+      // The most recent answered send per questionnaire (by submit time ≈ updatedAt) — names the
+      // notification ("Angel answered …") and orders it (38 §4.2).
+      const latest = new Map<string, Assignment>();
       for (const a of sends) {
         // Count both 'submitted' and 'analyzed' — a response the sender already analyzed still ARRIVED,
         // so the count stays a monotonic "responses received" tally. Counting only 'submitted' would make
         // analyzing one a 2→1 decrease, which `onIncrease` never re-surfaces, hiding a still-pending one.
         if (a.status !== 'submitted' && a.status !== 'analyzed') continue;
         counts.set(a.questionnaireId, (counts.get(a.questionnaireId) ?? 0) + 1);
+        const cur = latest.get(a.questionnaireId);
+        if (!cur || a.updatedAt > cur.updatedAt) latest.set(a.questionnaireId, a);
       }
       const out: ResponsesArrivedSummary[] = [];
       for (const [questionnaireId, submittedCount] of counts) {
         const def = await getQuestionnaire(ctx.fs, ctx.key, questionnaireId);
         if (!def) continue; // a deleted questionnaire — nothing to navigate to
-        out.push({ questionnaireId, title: def.title, submittedCount });
+        const newest = latest.get(questionnaireId);
+        if (!newest) continue; // unreachable (counts ⊆ latest), but keeps the index access total
+        out.push({
+          questionnaireId,
+          title: def.title,
+          submittedCount,
+          latestRecipientName: await recipientDisplayName(ctx.fs, ctx.key, newest),
+          at: newest.updatedAt,
+        });
       }
       return out;
     },

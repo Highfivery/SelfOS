@@ -92,16 +92,19 @@ export function useNotificationSources(conflicts: string[]): void {
     }
 
     for (const r of responses) {
+      // "Seen" = opening that questionnaire's Results (38 §3.1) — the action deep-links straight there
+      // (focus + view), and QuestionnaireResults marks this slot read on open.
+      const single = r.submittedCount === 1;
       candidates.push({
         kind: 'responses-arrived',
         coalesceKey: `responses-arrived:${r.questionnaireId}`,
         signature: String(r.submittedCount), // a new response → higher count → re-surfaces (§11)
-        title: 'New questionnaire responses',
-        body:
-          r.submittedCount === 1
-            ? `“${r.title}” has a new response.`
-            : `“${r.title}” has ${r.submittedCount} responses.`,
-        action: { type: 'navigate', to: '/questionnaires' },
+        title: single
+          ? `${r.latestRecipientName} answered “${r.title}”`
+          : `New responses to “${r.title}”`,
+        ...(single ? {} : { body: `${r.submittedCount} responses are ready to review.` }),
+        createdAt: r.at,
+        action: { type: 'navigate', to: `/questionnaires?focus=${r.questionnaireId}&view=results` },
       });
     }
 

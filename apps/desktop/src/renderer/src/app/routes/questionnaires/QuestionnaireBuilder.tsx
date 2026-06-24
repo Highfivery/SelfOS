@@ -306,6 +306,7 @@ export function QuestionnaireBuilder({
   compat,
   initialRecipient,
   initialShare,
+  initialView,
   onDuplicate,
   onDone,
 }: {
@@ -317,6 +318,8 @@ export function QuestionnaireBuilder({
   initialRecipient?: Recipient;
   // Opened via the list "Share link" kebab action (§17.14c) — auto-fetch the shareable link on mount.
   initialShare?: boolean;
+  // Opened via a `responses-arrived` notification's "View results" deep-link (38 §3.1) — start on Results.
+  initialView?: 'results';
   onDuplicate?: (seed: BuilderSeed) => void;
   onDone: () => void;
 }): JSX.Element {
@@ -458,10 +461,12 @@ export function QuestionnaireBuilder({
   // Edit ⇄ Preview ⇄ Results. Preview renders the live drafts as the recipient sees them; Results (only
   // for a saved questionnaire, and only with viewResults) shows its sends + per-send outcome. A SENT
   // questionnaire opens read-only, so it starts on Preview (Edit isn't offered).
-  const [mode, setMode] = useState<BuilderMode>(() =>
-    questionnaire && sendStates[questionnaire.id] ? 'preview' : 'edit',
-  );
   const canViewResults = useSessionStore((s) => s.can('questionnaires.viewResults'));
+  const [mode, setMode] = useState<BuilderMode>(() => {
+    // A notification deep-link opens straight on Results (38 §3.1) when allowed and the questionnaire is saved.
+    if (initialView === 'results' && questionnaire !== null && canViewResults) return 'results';
+    return questionnaire && sendStates[questionnaire.id] ? 'preview' : 'edit';
+  });
   const showResults = saved !== null && canViewResults;
   const previewQuestions = drafts
     .filter((d) => d.prompt.trim() !== '')

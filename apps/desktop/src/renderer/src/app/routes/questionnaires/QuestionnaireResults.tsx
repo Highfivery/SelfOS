@@ -23,6 +23,7 @@ import {
   type LineChartSeries,
 } from '../../../design-system/components';
 import { useResultsStore } from '../../../stores/resultsStore';
+import { useNotificationStore } from '../../../stores/notificationStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useSetting } from '../../../settings/useSetting';
 import { RelayLinkDelivery } from './RelayLinkDelivery';
@@ -56,6 +57,14 @@ export function QuestionnaireResults({
   questionnaireId: string;
   compatibility: CompatibilityConfig | null;
 }): JSX.Element {
+  // Opening Results is "seen" (38 §3.1): clear the responses-arrived slot for this questionnaire so the bell
+  // stops counting it. A later, higher response count re-surfaces it (the onIncrease rule, 35 §11). markRead
+  // is a no-op when no such notification is showing, so this is safe on a direct (non-notification) open.
+  const markRead = useNotificationStore((s) => s.markRead);
+  useEffect(() => {
+    markRead(`responses-arrived:${questionnaireId}`);
+  }, [markRead, questionnaireId]);
+
   // A compatibility questionnaire has its own paired Results surface (alignment report + break-glass),
   // distinct from the per-recipient Standard/Private cards below.
   if (compatibility?.enabled) {

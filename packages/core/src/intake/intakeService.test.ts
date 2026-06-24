@@ -2,10 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { generateMasterKey } from '../crypto';
 import { memFileSystem } from '../host/memFileSystem';
 import type { ClaudeClient } from '../host';
-import type { Insight, Person } from '../schemas';
+import { factSharedWithViewer, type Insight, type Person } from '../schemas';
 import { listConversations } from '../conversations';
 import { getInsight, saveInsight, summarizeForContext, updateInsight } from '../insights';
 import { getPerson, savePerson } from '../people';
+import { SHARING_PRESETS } from '../people/sharingPresets';
 import { queryUsage } from '../usage';
 import {
   ensureIntakeSession,
@@ -640,5 +641,125 @@ describe('intakeService', () => {
     );
     // A trailing, not-yet-closed marker fragment is hidden too (the live-stream flash guard).
     expect(stripIntakeFieldMarkers('Lovely. [[SELFOS:FIELD:occupation=nur')).toBe('Lovely.');
+  });
+});
+
+describe('intake per-question sharing (43)', () => {
+  it('submitSectionForm persists answerSharing: explicit choice + category default for unset', async () => {
+    const fs = await setup();
+    // `faith` answered with an explicit scope; `values` answered with NO scope → its category preset.
+    await submitSectionForm(
+      fs,
+      key,
+      'p1',
+      'values',
+      { values: ['Honesty'], faith: 'Agnostic' },
+      NOW,
+      { faith: ['partner'] },
+    );
+    const session = await getIntakeSession(fs, key, 'p1');
+    const sharing = session?.sections.find((s) => s.id === 'values')?.answerSharing ?? {};
+    expect(sharing['faith']).toEqual(['partner']);
+    // `values` had no explicit scope → defaults to the `values` category preset (everyone).
+    expect(sharing['values']).toEqual(SHARING_PRESETS.values);
+  });
+
+  it('submitSectionForm defaults a restricted question to Private (empty) when unset', async () => {
+    const fs = await setup();
+    await submitSectionForm(fs, key, 'p1', 'weighs', { weighsWhat: ['Grief or loss'] }, NOW);
+    const session = await getIntakeSession(fs, key, 'p1');
+    const sharing = session?.sections.find((s) => s.id === 'weighs')?.answerSharing ?? {};
+    expect(sharing['weighsWhat']).toEqual([]);
+  });
+
+  it('synthesize tags a non-restricted fact with the section scope (and the gate honors it)', async () => {
+    const fs = await setup();
+    await submitSectionForm(fs, key, 'p1', 'values', { values: ['Honesty'] }, NOW, {
+      values: ['partner', 'friend'],
+    });
+    const portrait = {
+      ...PORTRAIT,
+      facts: [{ text: 'Values honesty above all', section: 'values' }],
+    };
+    await synthesizeIntake(synth(fs, fakeClient({ portrait })));
+    const session = await getIntakeSession(fs, key, 'p1');
+    const fact = (await getInsight(fs, key, 'p1', session!.insightId!))!.facts.find((f) =>
+      f.text.includes('honesty'),
+    )!;
+    expect(fact.restricted).toBeUndefined();
+    expect(fact.shareable).toBe(false); // never broadcast — type-scoped only
+    expect(fact.shareableTypes).toEqual(['partner', 'friend']);
+    // The 42 gate shares it with a partner/friend viewer, not a sibling.
+    expect(factSharedWithViewer(fact, 'pv', ['partner'])).toBe(true);
+    expect(factSharedWithViewer(fact, 'pv', ['sibling'])).toBe(false);
+  });
+
+  it('a restricted fact stays restricted + own-only when its answers are NOT opted in', async () => {
+    const fs = await setup();
+    await submitSectionForm(fs, key, 'p1', 'weighs', { weighsWhat: ['Grief or loss'] }, NOW); // default Private
+    const portrait = { ...PORTRAIT, facts: [{ text: 'Carries grief', section: 'weighs' }] };
+    await synthesizeIntake(synth(fs, fakeClient({ portrait })));
+    const session = await getIntakeSession(fs, key, 'p1');
+    const fact = (await getInsight(fs, key, 'p1', session!.insightId!))!.facts.find((f) =>
+      f.text.includes('grief'),
+    )!;
+    expect(fact.restricted).toBe(true);
+    expect(fact.shareableTypes).toBeUndefined();
+    expect(factSharedWithViewer(fact, 'pv', ['partner'])).toBe(false);
+  });
+
+  it('an opted-in restricted answer yields a NON-restricted, type-scoped fact', async () => {
+    const fs = await setup();
+    await submitSectionForm(fs, key, 'p1', 'weighs', { weighsWhat: ['Grief or loss'] }, NOW, {
+      weighsWhat: ['partner'],
+    });
+    const portrait = { ...PORTRAIT, facts: [{ text: 'Carries grief', section: 'weighs' }] };
+    await synthesizeIntake(synth(fs, fakeClient({ portrait })));
+    const session = await getIntakeSession(fs, key, 'p1');
+    const fact = (await getInsight(fs, key, 'p1', session!.insightId!))!.facts.find((f) =>
+      f.text.includes('grief'),
+    )!;
+    expect(fact.restricted).toBeUndefined();
+    expect(fact.shareableTypes).toEqual(['partner']);
+    expect(factSharedWithViewer(fact, 'pv', ['partner'])).toBe(true);
+  });
+
+  it('a section never submitted post-spec (no answerSharing) keeps its facts own-only', async () => {
+    const fs = await setup();
+    // No form submit → sections carry no answerSharing; the portrait still references them.
+    const portrait = {
+      ...PORTRAIT,
+      facts: [{ text: 'Values honesty above all', section: 'values' }],
+    };
+    await synthesizeIntake(synth(fs, fakeClient({ portrait })));
+    const session = await getIntakeSession(fs, key, 'p1');
+    const fact = (await getInsight(fs, key, 'p1', session!.insightId!))!.facts.find((f) =>
+      f.text.includes('honesty'),
+    )!;
+    expect(fact.shareableTypes).toBeUndefined();
+    expect(factSharedWithViewer(fact, 'pv', ['partner'])).toBe(false);
+  });
+
+  it('most-restrictive-of-section: one Private answer locks the section facts to own-only', async () => {
+    const fs = await setup();
+    await submitSectionForm(
+      fs,
+      key,
+      'p1',
+      'values',
+      { values: ['Honesty'], faith: 'Agnostic' },
+      NOW,
+      { values: ['partner'], faith: [] }, // faith is Private → intersection is empty
+    );
+    const portrait = {
+      ...PORTRAIT,
+      facts: [{ text: 'Values honesty above all', section: 'values' }],
+    };
+    await synthesizeIntake(synth(fs, fakeClient({ portrait })));
+    const session = await getIntakeSession(fs, key, 'p1');
+    const fact = (await getInsight(fs, key, 'p1', session!.insightId!))!.facts.find((f) =>
+      f.text.includes('honesty'),
+    )!;
+    expect(fact.shareableTypes).toBeUndefined();
   });
 });

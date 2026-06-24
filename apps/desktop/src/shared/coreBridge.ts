@@ -72,6 +72,7 @@ import {
   type MemoryReconcileState,
   type OutboundSharing,
   IntakeAnswerValueSchema,
+  RelationshipTypeSchema,
   type IntakeState,
   type ProfileUpdateSuggestion,
   type IntakeSynthesisResult,
@@ -638,6 +639,8 @@ const IntakeSynthesizeSchema = z.object({ sectionId: z.string().min(1).optional(
 const IntakeSubmitFormSchema = z.object({
   sectionId: z.string().min(1),
   answers: z.record(z.string(), IntakeAnswerValueSchema),
+  // Per-question relationship-type sharing scopes (43 §6) — the trust boundary validates the types.
+  sharing: z.record(z.string(), z.array(RelationshipTypeSchema)).optional(),
 });
 const ProfileSuggestionIdSchema = z.string().min(1);
 const AssignmentIdSchema = z.string().min(1);
@@ -3788,7 +3791,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       return buildIntakeState(ctx.fs, ctx.key, personId);
     },
     intakeSubmitForm: async (input): Promise<IntakeState> => {
-      const { sectionId, answers } = IntakeSubmitFormSchema.parse(input);
+      const { sectionId, answers, sharing } = IntakeSubmitFormSchema.parse(input);
       const ctx = await host.vaultAndKey();
       const personId = ctx ? await activePersonId() : null;
       if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'intake.own'))) {
@@ -3801,7 +3804,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         const prefs = await getGuidancePrefs(ctx.fs, ctx.key, personId);
         if (prefs.adultAcknowledged !== true) return buildIntakeState(ctx.fs, ctx.key, personId);
       }
-      await submitSectionForm(ctx.fs, ctx.key, personId, sectionId, answers, new Date());
+      await submitSectionForm(ctx.fs, ctx.key, personId, sectionId, answers, new Date(), sharing);
       return buildIntakeState(ctx.fs, ctx.key, personId);
     },
     intakeAcknowledgeAdult: async (): Promise<IntakeState> => {

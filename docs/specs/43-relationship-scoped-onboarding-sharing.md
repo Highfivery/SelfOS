@@ -1,7 +1,7 @@
 # 43 — Onboarding per-question sharing (share-by-default, in the flow)
 
-> **Status:** Draft — decisions resolved ask-first (2026-06-23), build-ready pending final approval ·
-> _last updated 2026-06-23_ · **Depends on [`42`](42-relationship-scoped-sharing.md).**
+> **Status:** Built (2026-06-24) · _last updated 2026-06-24_ ·
+> **Depends on [`42`](42-relationship-scoped-sharing.md).**
 >
 > Today, onboarding answers are **own-context-only** (all intake Insight facts hardcoded
 > `shareable: false`), and the only way to share anything is to finish the intake, run synthesis, then go to
@@ -233,6 +233,15 @@ All via the vault/crypto service. **Additive-optional — no `schemaVersion` bum
   bulk-lock a section in one move.
 - **Not-medical / crisis / 18+** — unchanged ([`18`](18-personal-onboarding.md) §8/§14.10); the trauma-informed
   framing and crisis footer remain on every onboarding surface.
+- **Accepted residual (model attribution).** Fact↔question attribution comes from the model's echoed section
+  ref. The conservative tagging (§4) bounds the blast radius — a normal-block fact only ever inherits the
+  **non-restricted** questions' scopes (the candidate split mirrors `formAnswersMessages`), and a restricted
+  fact stays own-only unless its restricted answers were opted in. The residual: if the model misattributes a
+  sensitive answer's content to the **base** (non-sensitive) section ref, that fact would inherit the base
+  section's (capped, non-broadcast) scope rather than staying restricted. This is bounded (preset, never
+  broadcast), low-likelihood (restricted answers are sent only under the "(sensitive)" sub-block header), and
+  the answer path is exact regardless — a known, accepted limit, not a silent one. A per-fact model-cited-source
+  refinement (§11) is the future hardening if attribution proves unreliable.
 
 ## 9. Accessibility
 
@@ -279,6 +288,29 @@ proves reliable. The exact per-category mapping + the section-bulk "mixed" UX de
 
 ## 12. Changelog
 
+- 2026-06-24 — **BUILT** (on `feat/onboarding-scoped-sharing`). As-built notes: **(1)** `@selfos/answering`
+  stays free of the app design-system, so the `sharing` prop is a **render-prop** `{ renderControl(questionId)
+}` (not `{ scopeOf, setScope, availableTypes }`) — the onboarding host (`IntakeFormPanel`) renders the actual
+  `RelationshipScopePicker` and owns the scope state, picker, bulk control, explainer, sensitive-confirm, and
+  the one-tap refresh. **(2)** New pure `@selfos/core/intake/sharingCategory.ts` —
+  `SECTION_SHARING_CATEGORY` map + `questionCategory`/`questionDefaultsPrivate`/`defaultScopeForQuestion`;
+  `IntakeFormQuestion.category?` added (additive). **(3)** `submitSectionForm(…, sharing?)` writes
+  `IntakeSection.answerSharing`, defaulting every answered question from its preset (restricted ⇒ Private).
+  **(4)** `synthesizePortrait` tags each fact's `shareableTypes` via `factScopeForSection` — the
+  most-restrictive INTERSECTION of the section's per-question scopes, read **only** from the explicit
+  `answerSharing` (a pre-spec section that's merely re-synthesized stays own-only — no surprise broadcast, §7);
+  the normal-vs-"(sensitive)" candidate split mirrors `formAnswersMessages` so a private sensitive answer never
+  drags a section's ordinary facts to own-only (or vice-versa); a `restricted` fact stays restricted unless its
+  answers were opted in (then non-restricted + type-scoped). **(5)** The promoted profile field (e.g.
+  `occupation`) keeps its **independent** spec-15 field-share (shared to all related by default) — spec 43 only
+  governs the intake answer + the derived fact; the E2E asserts the spec-43 signal via the FACT text + the
+  confidentiality preamble, not the bare promoted value. Tests: core (`sharingCategory` + `submitSectionForm`
+  answerSharing + `synthesizePortrait` tagging incl. most-restrictive / restricted-stays / opted-in / no-
+  answerSharing-own-only), a bridge round-trip (IPC carries scope → partner sees the fact, sibling doesn't),
+  RTL (per-question chips defaulted by preset, section bulk + "Mixed", sensitive-confirm, refresh affordance),
+  and an E2E (scope basics → Partner → decrypt `answerSharing` + the fact's `shareableTypes` → partner's
+  context has the fact behind the preamble, the sibling's has neither; 360px overflow guard). Amends
+  [`18`](18-personal-onboarding.md) and reuses the [`08`](08-questionnaires.md)/`@selfos/answering` form.
 - 2026-06-23 — created (Draft). The onboarding half of the relationship-sharing group; depends on
   [`42`](42-relationship-scoped-sharing.md). Decisions resolved ask-first (2026-06-23): per-question control
   - section bulk, share-by-default per the §4.3 presets, both answers + facts flow, one-tap re-analysis,

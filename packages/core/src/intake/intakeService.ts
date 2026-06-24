@@ -20,6 +20,7 @@ import {
   type Person,
   type PersonFieldKey,
   type Question,
+  type RelationshipType,
   type UsageEvent,
 } from '../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
@@ -29,6 +30,7 @@ import { checkBudget, costOf, recordUsage } from '../usage';
 import { getInsight, normalizeCategories, saveInsight } from '../insights';
 import { isAnswered } from '../questionnaires/answering';
 import { activityRowContext, withResolvedActivityRows } from './activityContext';
+import { defaultScopeForQuestion } from './sharingCategory';
 import {
   INTAKE_CATALOG,
   buildInterviewerAddendum,
@@ -312,6 +314,12 @@ export async function submitSectionForm(
   sectionId: string,
   answers: Record<string, IntakeAnswerValue>,
   now: Date,
+  /**
+   * Per-question relationship-type sharing scopes (43 §3.4/§4). Any answered question NOT named here defaults
+   * to its category preset (`defaultScopeForQuestion`), so a person who never touches the chip still shares
+   * per the visible default. The resolved scope is stored explicitly on `section.answerSharing`.
+   */
+  sharing?: Record<string, RelationshipType[]>,
 ): Promise<IntakeSession> {
   const def = getIntakeSection(sectionId);
   const session = await ensureIntakeSession(fs, key, personId, now);
@@ -334,10 +342,27 @@ export async function submitSectionForm(
   }
 
   section.answers = { ...section.answers, ...clean };
+  // Resolve + persist a sharing scope for EVERY currently-answered question in this section (43 §4): the
+  // renderer's choice wins, else a prior stored scope, else the category preset. Drop scopes for questions no
+  // longer answered. Storing the resolved scope explicitly keeps the read side (42 §5.2) honest and makes a
+  // no-interaction default share per the chip the person saw, never a hidden one.
+  const nextSharing: Record<string, RelationshipType[]> = {};
+  for (const qid of Object.keys(section.answers)) {
+    if (!byId.has(qid)) continue; // only this section's catalog questions
+    const chosen =
+      sharing?.[qid] ?? section.answerSharing?.[qid] ?? defaultScopeForQuestion(sectionId, qid);
+    nextSharing[qid] = dedupeTypes(chosen);
+  }
+  section.answerSharing = nextSharing;
   if (section.status !== 'skipped') section.status = 'complete';
   session.updatedAt = at;
   await writeEncryptedJson(fs, intakePath(personId), session, key);
   return session;
+}
+
+/** De-dupe a scope, preserving order (the bridge Zod-validates the types themselves). */
+function dedupeTypes(types: readonly RelationshipType[]): RelationshipType[] {
+  return [...new Set(types)];
 }
 
 // --- Budget helper ---
@@ -727,6 +752,63 @@ function sectionRefRestricted(ref: string | undefined): boolean {
   return RESTRICTED_SECTION_REFS.has(ref.trim().toLowerCase());
 }
 
+/** Maps a model-echoed section ref (id or title, normal or "(sensitive)" variant) back to its real catalog
+ * section id + whether it's the sensitive sub-block. Built once from the trusted catalog so a fact can be
+ * attributed to the answers (and thus the sharing scopes) it derives from (43 §4). */
+const SECTION_REF_LOOKUP: ReadonlyMap<string, { id: string; sensitive: boolean }> = (() => {
+  const map = new Map<string, { id: string; sensitive: boolean }>();
+  for (const d of INTAKE_CATALOG) {
+    map.set(d.id.toLowerCase(), { id: d.id, sensitive: false });
+    map.set(d.title.toLowerCase(), { id: d.id, sensitive: false });
+    map.set(sensitiveSectionId(d.id).toLowerCase(), { id: d.id, sensitive: true });
+    map.set(sensitiveSectionTitle(d.title).toLowerCase(), { id: d.id, sensitive: true });
+  }
+  return map;
+})();
+
+function resolveSectionRef(
+  ref: string | undefined,
+): { id: string; sensitive: boolean } | undefined {
+  if (!ref) return undefined;
+  return SECTION_REF_LOOKUP.get(ref.trim().toLowerCase());
+}
+
+/**
+ * The relationship-type scope to tag onto a fact derived from a section (43 §4). Conservative
+ * "most-restrictive-of-section": the INTERSECTION of the per-question scopes of the answered questions the
+ * fact could draw on, read ONLY from the explicit `section.answerSharing` (the scopes the person SAW + chose).
+ * A section with no `answerSharing` (pre-spec / never re-submitted) → `[]` (own-only, no surprise broadcast,
+ * 43 §7). The candidate questions match the model's normal-vs-"(sensitive)" split (`formAnswersMessages`):
+ * a sensitive sub-block considers only the section's `restricted` questions; a wholly-restricted section all
+ * its questions; a normal block the non-restricted questions (so a private sensitive answer can't drag a
+ * section's ordinary facts to own-only, and vice-versa).
+ */
+function factScopeForSection(
+  session: IntakeSession,
+  ref: { id: string; sensitive: boolean } | undefined,
+): RelationshipType[] {
+  if (!ref) return [];
+  const def = getIntakeSection(ref.id);
+  const section = session.sections.find((s) => s.id === ref.id);
+  if (!def?.questions || !section?.answerSharing) return [];
+
+  const candidates = def.questions.filter((m) => {
+    if (ref.sensitive) return m.restricted === true;
+    if (def.restricted) return true;
+    return m.restricted !== true;
+  });
+
+  let intersection: RelationshipType[] | null = null;
+  for (const m of candidates) {
+    if (section.answers[m.q.id] === undefined) continue; // only answered questions contribute
+    const scope = section.answerSharing[m.q.id] ?? [];
+    intersection =
+      intersection === null ? [...scope] : intersection.filter((t) => scope.includes(t));
+    if (intersection.length === 0) break; // any private answer locks the block (most-restrictive)
+  }
+  return intersection ?? [];
+}
+
 /**
  * Synthesis (§3.5/§11.3). With `sectionId`: a light per-section reflection (best-effort — if AI is
  * unavailable or over budget, the section is still marked complete, just without a reflection). Without a
@@ -931,20 +1013,30 @@ async function synthesizePortrait(deps: IntakeSynthesizeDeps): Promise<IntakeSyn
     const text = f.text.trim();
     if (!text) continue;
     // The `restricted` flag is decided server-side from the (trusted) section catalog — never the AI.
-    const restricted = sectionRefRestricted(f.section);
+    const restrictedByCatalog = sectionRefRestricted(f.section);
     const carried = priorByText.get(text);
     // The life-area (28 §pillar-2): the model's value normalized, else derived from the section; carry a
     // prior (e.g. reconciled) tag forward on re-synthesis so it isn't lost.
     const lifeArea = normalizeFactLifeArea(f.lifeArea, f.section) ?? carried?.lifeArea;
+    // Relationship-type sharing (43 §4): tag the fact from the per-question scopes of its source section.
+    // For a `restricted` fact this stays own-only UNLESS the person explicitly opted the answers in (a
+    // non-empty intersection) — then the fact is emitted NON-restricted + type-scoped (43 §3.1/§8). For a
+    // normal fact the scope is the most-restrictive-of-section. Computed from `answerSharing` only (the seen
+    // choices), so a pre-spec section that's merely re-synthesized never surprise-shares (43 §7).
+    const scope = factScopeForSection(session, resolveSectionRef(f.section));
+    const optedInRestricted = restrictedByCatalog && scope.length > 0;
+    const restricted = restrictedByCatalog && !optedInRestricted;
+    const shareableTypes = restrictedByCatalog ? (optedInRestricted ? scope : []) : scope;
     facts.push({
       id: uuid(),
       text,
-      // Intake facts default own-context-only (the safe reading, §8.3 build-decision); the owner can
-      // promote per-fact later. Carry forward a prior owner choice on re-synthesis.
+      // Intake facts never broadcast (`shareable: false`) — relationship-type scoping (`shareableTypes`) is
+      // the only share path here. Carry a prior owner broadcast/per-person choice forward on re-synthesis.
       shareable: carried?.shareable ?? false,
       ...(carried?.shareableWith && carried.shareableWith.length > 0
         ? { shareableWith: carried.shareableWith }
         : {}),
+      ...(shareableTypes.length > 0 ? { shareableTypes } : {}),
       ...(restricted ? { restricted: true } : {}),
       ...(lifeArea ? { lifeArea } : {}),
     });

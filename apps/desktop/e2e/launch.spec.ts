@@ -5397,8 +5397,10 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
 
     // The basics section is a structured FORM; a form answer fills the owner-only profile (no AI).
     await expect(w.getByRole('heading', { name: 'The basics' })).toBeVisible();
-    await w.getByLabel('What do you do for work?').fill('nurse');
-    await w.getByLabel('How would you describe how you look?').fill('tall, curly hair');
+    await w.getByLabel('What do you do for work?', { exact: true }).fill('nurse');
+    await w
+      .getByLabel('How would you describe how you look?', { exact: true })
+      .fill('tall, curly hair');
     // Gender drives the intimacy activity matrix's anatomy-aware oral rows (27 §4.2).
     await w.getByRole('radio', { name: 'Man', exact: true }).click();
     // Ethnicity is now a multi-select (pick one or more) → joined into the string `ethnicity` field.
@@ -5581,6 +5583,155 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
     });
     expect(guard.offenders).toEqual([]);
     expect(guard.mainOverflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('onboarding per-question sharing: scope a section to Partner → the derived fact reaches the partner, not the sibling (43)', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  // Seed a partner B + a sibling C of the owner, and an in-progress intake with only `basics` to do.
+  {
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('sharing e2e: master key missing');
+    const now = new Date().toISOString();
+    for (const [id, name] of [
+      ['partner-b', 'Bee'],
+      ['sibling-c', 'Cee'],
+    ] as const) {
+      await savePerson(fs, key, {
+        id,
+        schemaVersion: 1,
+        displayName: name,
+        isSubject: true,
+        tags: [],
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    // edge.type = "to is from's ___": B is the owner's partner; C is the owner's sibling.
+    await saveRelationship(fs, key, {
+      id: 'rel-b',
+      schemaVersion: 1,
+      fromPersonId: 'owner-1',
+      toPersonId: 'partner-b',
+      type: 'partner',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await saveRelationship(fs, key, {
+      id: 'rel-c',
+      schemaVersion: 1,
+      fromPersonId: 'owner-1',
+      toPersonId: 'sibling-c',
+      type: 'sibling',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await writeEncryptedJson(
+      fs,
+      'people/owner-1/intake/session.enc',
+      {
+        id: 'intake-sharing',
+        schemaVersion: 1,
+        personId: 'owner-1',
+        status: 'inProgress',
+        sections: [
+          { id: 'basics', status: 'notStarted', restricted: false, messages: [], answers: {} },
+          { id: 'life-now', status: 'skipped', restricted: false, messages: [], answers: {} },
+          { id: 'values', status: 'skipped', restricted: false, messages: [], answers: {} },
+          { id: 'want', status: 'skipped', restricted: false, messages: [], answers: {} },
+        ],
+        startedAt: 'now',
+        updatedAt: 'now',
+      },
+      key,
+    );
+  }
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Home' }).waitFor();
+    await w.getByRole('link', { name: 'Home' }).click();
+    await w.getByRole('button', { name: /Start onboarding|Continue onboarding/ }).click();
+
+    await expect(w.getByRole('heading', { name: 'The basics' })).toBeVisible();
+    // The honest "shared ≠ shown" explainer + per-question sharing chips are present (43 §3.1/§3.3).
+    await expect(w.getByText(/inform their AI coaching/i)).toBeVisible();
+    // The chip's accessible name starts with the prompt, so target the textbox role explicitly (avoid the
+    // getByLabel substring collision with the chip button).
+    await w.getByRole('textbox', { name: 'What do you do for work?' }).fill('nurse');
+
+    // Use the per-SECTION bulk control to scope the whole basics section to Partner ONLY: open it, clear to
+    // Private, then check Partner. (The picker only offers Partner + Sibling — the types in the owner's graph.)
+    await w.getByRole('button', { name: /this whole section/i }).click();
+    await w.getByRole('button', { name: 'Private (only me)' }).click();
+    await w.getByRole('checkbox', { name: 'Partner' }).click();
+    await w.keyboard.press('Escape'); // close the popover
+    // The occupation chip now reads "shared with Partner".
+    await expect(
+      w.getByRole('button', { name: /What do you do for work\?: shared with Partner/i }),
+    ).toBeVisible();
+
+    // No horizontal overflow (page or inner controls) at phone width while the sharing chips render (43 §9).
+    await w.setViewportSize({ width: 390, height: 800 });
+    const guard = await w.evaluate(() => {
+      const offenders: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          offenders.push(`${el.tagName}.${String(el.className)}`);
+        }
+      });
+      const main = document.querySelector('main');
+      return { offenders, mainOverflow: main ? main.scrollWidth - main.clientWidth : 0 };
+    });
+    expect(guard.offenders).toEqual([]);
+    expect(guard.mainOverflow).toBeLessThanOrEqual(1);
+    await w.setViewportSize({ width: 1280, height: 800 });
+
+    await w.getByRole('button', { name: /Continue/ }).click();
+    // basics was the only pending core section → generate the portrait.
+    await w.getByRole('button', { name: /See my portrait/ }).click();
+    await w.getByRole('button', { name: 'Generate my portrait' }).click();
+    await expect(w.getByText(/come to understand about you/)).toBeVisible();
+
+    // Decrypt: the basics answer carries the Partner scope, and the derived 'nurse' fact is type-scoped to
+    // partner (never broadcast) while the restricted 'grief' fact stays own-only.
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('sharing e2e: master key missing');
+    await expect
+      .poll(async () => (await getIntakeSession(fs, key, 'owner-1'))?.status)
+      .toBe('complete');
+    const basics = (await getIntakeSession(fs, key, 'owner-1'))?.sections.find(
+      (s) => s.id === 'basics',
+    );
+    expect(basics?.answerSharing?.occupation).toEqual(['partner']);
+    const insightId = (await getIntakeSession(fs, key, 'owner-1'))?.insightId;
+    if (!insightId) throw new Error('sharing e2e: portrait insight missing');
+    const insight = await getInsight(fs, key, 'owner-1', insightId);
+    const nurseFact = insight?.facts.find((f) => f.text.includes('nurse'));
+    expect(nurseFact?.shareable).toBe(false);
+    expect(nurseFact?.shareableTypes).toEqual(['partner']);
+
+    // The partner B sees the shared intake FACT ("Works as a nurse") in a cross-shared block behind the
+    // confidentiality preamble; the sibling C gets NO cross-shared block at all (the preamble only appears
+    // when something crosses). Neither sees the restricted 'grief' fact (42 §3.4 / 43 §8). NB: the promoted
+    // `occupation` PROFILE field is shared to all related people by spec 15 independently — so the spec-43
+    // signal is the FACT text + the preamble, not the bare word "nurse".
+    const partnerCtx = await buildContext(fs, key, 'partner-b');
+    expect(partnerCtx).toContain('Works as a nurse');
+    expect(partnerCtx).toContain('shared by people related to');
+    expect(partnerCtx).not.toContain('grief');
+    const siblingCtx = await buildContext(fs, key, 'sibling-c');
+    expect(siblingCtx).not.toContain('Works as a nurse');
+    expect(siblingCtx).not.toContain('shared by people related to');
+    expect(siblingCtx).not.toContain('grief');
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -5959,7 +6110,7 @@ test('onboarding: a Member is hard-gated into onboarding until they finish (18 �
 
     // Finish: complete the open core form, then generate the portrait → the gate releases.
     await expect(w.getByRole('heading', { name: 'The basics' })).toBeVisible();
-    await w.getByLabel('What do you do for work?').fill('nurse');
+    await w.getByLabel('What do you do for work?', { exact: true }).fill('nurse');
     await w.getByRole('button', { name: /Continue/ }).click();
     await w.getByRole('button', { name: /See my portrait/ }).click();
     await w.getByRole('button', { name: 'Generate my portrait' }).click();

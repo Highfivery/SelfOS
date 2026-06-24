@@ -18,7 +18,7 @@ import {
   unlock as kvUnlock,
   type RelayEnv,
 } from '@selfos/core/relay';
-import { saveInsight } from '@selfos/core/insights';
+import { saveInsight, summarizeForContext } from '@selfos/core/insights';
 import { saveGoal } from '@selfos/core/goals';
 import { buildContext } from '@selfos/core/people';
 import { ANTHROPIC_API_KEY_ID, OPENAI_API_KEY_ID } from './channels';
@@ -3131,6 +3131,71 @@ describe('createCoreBridge', () => {
     expect((await bridge.sessionSetActive({ personId: mara.id })).ok).toBe(true);
     expect((await bridge.insightsList()).some((i) => i.source === 'intake')).toBe(false);
     expect(await bridge.insightsList()).toEqual([]); // brand-new member: nothing in their own memory yet
+  });
+
+  it('intake per-question sharing (43): the IPC carries the scope, synthesis tags the fact, and a partner sees it while a sibling does not', async () => {
+    const { bridge, host, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (_options, onDelta) => {
+        const text = JSON.stringify({
+          portrait: 'You value honesty.',
+          facts: [{ text: 'Values honesty above all', section: 'values' }],
+          crisisFlag: false,
+        });
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    // A partner B and a sibling C of the owner.
+    const partner = await bridge.peopleSave({ displayName: 'Bee', isSubject: true, tags: [] });
+    const sibling = await bridge.peopleSave({ displayName: 'Cee', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: partner.id, roleId: 'member', pin: null });
+    await bridge.accessSetAccount({ personId: sibling.id, roleId: 'member', pin: null });
+    // edge.type = "to is from's ___": B is the owner's partner; C is the owner's sibling.
+    await bridge.relationshipsSave({
+      fromPersonId: ownerId,
+      toPersonId: partner.id,
+      type: 'partner',
+    });
+    await bridge.relationshipsSave({
+      fromPersonId: ownerId,
+      toPersonId: sibling.id,
+      type: 'sibling',
+    });
+
+    // The owner scopes a `values` answer to Partner via the IPC; the returned state persists it.
+    const state = await bridge.intakeSubmitForm({
+      sectionId: 'values',
+      answers: { values: ['Honesty'] },
+      sharing: { values: ['partner'] },
+    });
+    expect(state.session.sections.find((s) => s.id === 'values')?.answerSharing?.values).toEqual([
+      'partner',
+    ]);
+
+    // Synthesis tags the derived fact with the same scope (never broadcast).
+    expect((await bridge.intakeSynthesize({})).ok).toBe(true);
+    const fact = (await bridge.insightsList())
+      .find((i) => i.source === 'intake')!
+      .facts.find((f) => f.text.includes('honesty'))!;
+    expect(fact.shareable).toBe(false);
+    expect(fact.shareableTypes).toEqual(['partner']);
+
+    // The partner's coaching context surfaces it (behind the confidentiality preamble); the sibling's never.
+    const ctx = (await host.host.vaultAndKey())!;
+    const partnerCtx = await summarizeForContext(ctx.fs, ctx.key, partner.id, [
+      { id: ownerId, displayName: 'Owner', grantedTypes: ['partner'] },
+    ]);
+    expect(partnerCtx).toContain('honesty');
+    const siblingCtx = await summarizeForContext(ctx.fs, ctx.key, sibling.id, [
+      { id: ownerId, displayName: 'Owner', grantedTypes: ['sibling'] },
+    ]);
+    expect(siblingCtx).not.toContain('honesty');
   });
 });
 

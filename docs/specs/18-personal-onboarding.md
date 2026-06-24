@@ -8,7 +8,12 @@
 > as-first-built v1; §14–§15 (the hybrid redesign + the 26/27 catalog/intimacy rebalance + the 2026-06-23
 > 5-point gender-aware activity matrix) are **all on `main`**. NOTE: changelog entries below are append-only
 > dated snapshots — several say "NOT merged / awaiting user review" because they were true on their date; that
-> work has since landed on `main` (this Status line is the authoritative current state).
+> work has since landed on `main` (this Status line is the authoritative current state). **Amended 2026-06-24
+> ([`43`](43-relationship-scoped-onboarding-sharing.md)):** each form question now carries a relationship-type
+> **sharing** control (share-by-default per [`42`](42-relationship-scoped-sharing.md) presets; restricted ⇒
+> Private), `submitSectionForm` writes `IntakeSection.answerSharing`, and `synthesizePortrait` tags facts'
+> `shareableTypes` — so an intake answer/fact can flow to a partner's coaching (the couples/intimacy case)
+> without broadcasting to everyone. The §8.3 own-context-only default is now per-question, not global.
 >
 > A warm, AI-guided onboarding that helps a person tell SelfOS who they are — their life now, their
 > history, family, health, what weighs on them, relationships, values, what they want to work on, and

@@ -64,6 +64,7 @@ afterEach(() => {
   clearMockBridge();
   useInsightStore.setState({
     insights: [],
+    outbound: { items: [] },
     loaded: false,
     lastReconciledAt: undefined,
     proposals: [],
@@ -142,7 +143,7 @@ describe('Memory dashboard', () => {
     });
     renderMemory();
     expect(await screen.findByText('Values steady routines')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Health & body' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Health & body/ })).toBeInTheDocument();
     expect(screen.getByLabelText(/High confidence — echoed across 3 sessions/)).toBeInTheDocument();
     // The session's source is gone (no matching conversation) → "original source removed".
     expect(screen.getByText(/original source removed/i)).toBeInTheDocument();
@@ -171,21 +172,47 @@ describe('Memory dashboard', () => {
     expect(screen.getAllByRole('button', { name: 'Edit' })).toHaveLength(1);
   });
 
-  it('flags a fact as inaccurate', async () => {
+  it('marks an AI-inferred fact "not right about me"', async () => {
     useSessionStore.setState({ activePerson: activeP1 });
     const flag = vi.fn(() => Promise.resolve(null));
     installMockBridge({
       insightsList: () =>
         Promise.resolve([
-          insight({ id: 'i1', facts: [{ id: 'f1', text: 'Dislikes mornings', shareable: false }] }),
+          // A session insight = AI-inferred → keeps the relabelled correction toggle.
+          insight({
+            id: 'i1',
+            source: 'session',
+            provenance: { conversationId: 'c1', at: '2026-06-11T12:00:00.000Z' },
+            facts: [{ id: 'f1', text: 'Dislikes mornings', shareable: false }],
+          }),
         ]),
       insightsFlag: flag,
     });
     renderMemory();
-    await userEvent.click(
-      await screen.findByRole('button', { name: /Flag as inaccurate: Dislikes mornings/ }),
-    );
+    await userEvent.click(await screen.findByRole('button', { name: /This isn’t right about me/ }));
     expect(flag).toHaveBeenCalledWith({ insightId: 'i1', factId: 'f1', flagged: true });
+  });
+
+  it('shows Edit answer + Delete (no correction toggle) for an onboarding fact', async () => {
+    useSessionStore.setState({ activePerson: activeP1 });
+    installMockBridge({
+      insightsList: () =>
+        Promise.resolve([
+          insight({
+            id: 'p',
+            source: 'intake',
+            provenance: { intakeSection: 'basics', at: '2026-06-11T12:00:00.000Z' },
+            facts: [{ id: 'f1', text: 'Grew up in Ohio', shareable: false }],
+          }),
+        ]),
+    });
+    renderMemory();
+    expect(await screen.findByRole('button', { name: /Edit answer/ })).toBeInTheDocument();
+    // Onboarding facts are what you told SelfOS — no "this isn't right" toggle, no plain "Edit".
+    expect(
+      screen.queryByRole('button', { name: /This isn’t right about me/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
   });
 
   it('filters by search', async () => {

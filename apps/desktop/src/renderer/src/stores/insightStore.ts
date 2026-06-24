@@ -1,6 +1,12 @@
 import { create } from 'zustand';
-import type { SelfosBridge } from '@shared/channels';
-import type { Insight, MergeProposal, MemoryReconcileResult } from '@shared/schemas';
+import type { InsightFactEdit, SelfosBridge } from '@shared/channels';
+import type {
+  Insight,
+  MergeProposal,
+  MemoryReconcileResult,
+  OutboundSharing,
+  RelationshipType,
+} from '@shared/schemas';
 
 type EditInput = Parameters<SelfosBridge['insightsApprove']>[0];
 type DeleteInput = Parameters<SelfosBridge['insightsDelete']>[0];
@@ -8,13 +14,16 @@ type FlagInput = Parameters<SelfosBridge['insightsFlag']>[0];
 
 interface InsightState {
   insights: Insight[];
+  /** The ACTIVE person's OWN outbound sharing (42 §5.3) — drives the sharing stat + transparency surface. */
+  outbound: OutboundSharing;
   loaded: boolean;
   /** The "kept tidy" signal (39 §3.2): when reconciliation last ran, + queued merge proposals (§3.4). */
   lastReconciledAt: string | undefined;
   proposals: MergeProposal[];
   /**
    * The ACTIVE person's memory (20-memory-dashboard §5.1): their own insights + their relationships'
-   * shareable facts only — the bridge scopes it; this store never holds another member's insights.
+   * shareable facts only — the bridge scopes it; this store never holds another member's insights. Also
+   * loads their own outbound sharing (44 §3.2), so a scope change anywhere refreshes both via `load`.
    */
   load: () => Promise<void>;
   /** Approve a draft (apply edits + chosen shareable facts) so it enters the coach's context. */
@@ -22,6 +31,21 @@ interface InsightState {
   /** Edit an already-saved Insight. */
   update: (input: EditInput) => Promise<Insight | null>;
   remove: (input: DeleteInput) => Promise<void>;
+  /**
+   * Set one fact's relationship-type sharing scope (44 §3.4) — `unrestrict` lifts a sensitive OWN fact's
+   * restriction as the deliberate second act of the 42 §8 two-step. Reloads memory + outbound after.
+   */
+  setFactScope: (input: {
+    subjectPersonId: string;
+    insightId: string;
+    fact: InsightFactEdit;
+  }) => Promise<void>;
+  /** Change ONE intake answer's sharing scope (44 §3.5), then refresh the outbound view. */
+  setAnswerScope: (input: {
+    sectionId: string;
+    questionId: string;
+    types: RelationshipType[];
+  }) => Promise<void>;
   /** Flag/clear a fact (or whole insight) as inaccurate — drops it from the coach at once (§3.6). */
   flag: (input: FlagInput) => Promise<Insight | null>;
   /** Manual "Refresh memory" — a budget-gated AI reconciliation pass; reloads the list after (§3.5). */
@@ -38,17 +62,29 @@ interface InsightState {
 
 export const useInsightStore = create<InsightState>((set, get) => ({
   insights: [],
+  outbound: { items: [] },
   loaded: false,
   lastReconciledAt: undefined,
   proposals: [],
   load: async () => {
-    set({ insights: (await window.selfos?.insightsList()) ?? [], loaded: true });
+    const [insights, outbound] = await Promise.all([
+      window.selfos?.insightsList() ?? Promise.resolve([] as Insight[]),
+      window.selfos?.memoryOutboundSharing() ?? Promise.resolve({ items: [] } as OutboundSharing),
+    ]);
+    set({ insights, outbound, loaded: true });
   },
   loadReconcileState: async () => {
     const state = (await window.selfos?.memoryReconcileState()) ?? { proposals: [] };
     set({ lastReconciledAt: state.lastReconciledAt, proposals: state.proposals });
   },
-  reset: () => set({ insights: [], loaded: false, lastReconciledAt: undefined, proposals: [] }),
+  reset: () =>
+    set({
+      insights: [],
+      outbound: { items: [] },
+      loaded: false,
+      lastReconciledAt: undefined,
+      proposals: [],
+    }),
   approve: async (input) => {
     const result = (await window.selfos?.insightsApprove(input)) ?? null;
     await get().load();
@@ -58,6 +94,21 @@ export const useInsightStore = create<InsightState>((set, get) => ({
     const result = (await window.selfos?.insightsUpdate(input)) ?? null;
     await get().load();
     return result;
+  },
+  setFactScope: async ({ subjectPersonId, insightId, fact }) => {
+    // `updateInsight` REPLACES the facts array with what we send, so include every fact — the changed one
+    // carrying the new scope, the rest minimal (their stored `shareableTypes`/`restricted` are preserved by
+    // the server-side merge-by-id). Without this, scoping one fact would drop the others.
+    const insight = get().insights.find((i) => i.id === insightId);
+    const facts: InsightFactEdit[] = (insight?.facts ?? [fact]).map((f) =>
+      f.id === fact.id ? fact : { id: f.id, text: f.text, shareable: f.shareable },
+    );
+    await window.selfos?.insightsUpdate({ subjectPersonId, id: insightId, facts });
+    await get().load();
+  },
+  setAnswerScope: async (input) => {
+    await window.selfos?.intakeSetAnswerSharing(input);
+    await get().load();
   },
   remove: async (input) => {
     await window.selfos?.insightsDelete(input);

@@ -389,6 +389,40 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-24 — **Build (Memory dashboard overhaul — SPEC 44 BUILT; on `feat/memory-dashboard-overhaul`, PR
+  pending).** The Memory half of the relationship-sharing group (consumes spec 42, amends spec 20) — making
+  Memory **readable, consumable, and trustworthy**. **(1) Stats summary header** (`StatsSummary` + pure
+  `stats.ts` derivations — `overviewStats`/`confidenceStats`/`sharingStats`): "SelfOS knows N things" by source +
+  last-updated · a confidence distribution (text + a non-colour-only bar) · "you're sharing M things — Partner
+  (k) …" with a **Manage sharing →** link (from `memory:outboundSharing`); shown only when there's something to
+  summarize. **(2) Trends promoted to the top**, open by default (was a collapsed `<details>` at the bottom).
+  **(3) Split-by-source corrections** in `InsightCard`: an ONBOARDING (`intake`) insight gets **Edit answer**
+  (deep-links to the originating section via `provenance.intakeSection` → onboarding `openSection`) + Delete and
+  **no flag** (you fix what you told us by editing the answer); an AI-INFERRED insight keeps the correction
+  toggle, **relabelled "This isn't right about me"** (clear `aria-label`, not a bare flag icon). **(4) Per-fact
+  sharing** swaps the broadcast `ShareToggle` for the spec-42 `RelationshipScopePicker` (`FactSharingControl`) —
+  a legacy broadcast fact reads as "shared with all your relationship types," narrowable; a `restricted`
+  sensitive fact shows a sensitive chip + the **deliberate two-step** (confirm → choose a type) that un-restricts
+  AND scopes in one write (the 42 §8 "two explicit acts," never a default). **(5) `/memory/sharing` transparency
+  surface** (`SharingPanel`) — every shared item + its scope + the concrete recipients ("Shared with Partner ·
+  reaching Pat"), each editable in place. **Owner decision (asked, 2026-06-24): intake answers are scope-editable
+  in place** (resolving the spec's §3.5↔§6 gap) → new **`intake:setAnswerSharing`** channel + `setIntakeAnswerSharing`
+  core fn (gated `intake.own`, active-person-scoped; empty ⇒ Private). Extended the `insights:update` facts
+  contract with additive `shareableTypes`/`restricted` (merged by id server-side, so a normal edit preserves
+  them — a sensitive fact can ONLY be un-restricted by the explicit two-step). Extracted a shared
+  `availableRelationshipTypesFor` helper (Memory/SharingPanel/onboarding — DRY). Code-reviewer **fix-first**
+  (privacy boundary verified airtight; applied: hide the sharing picker on a flagged fact [it can't reach anyone
+  anyway] + a store-level multi-fact `setFactScope` unit test). Gate green: typecheck, lint, format, **715 core +
+  11 relay + 768 desktop** unit (+stats, +StatsSummary, +FactSharingControl, +SharingPanel, +insightStore
+  setFactScope, +setIntakeAnswerSharing core, +2 coreBridge: scope-to-partner/un-restrict + answer scope),
+  **105 E2E** (+1: stats header → type-scope a fact to partner [decrypt reaches partner, not the sibling] →
+  "not right" [decrypt absent from own context] → Manage sharing surface → Edit answer deep-link; 360px guards on
+  Memory + the sharing panel). Visual QA at desktop + 360px (real Electron screenshots: stats row, trends-at-top,
+  the sharing panel with scope chips + recipients). Synced spec 44 (→ Built) + 20 (amended). **Lesson:
+  `updateInsight` REPLACES the facts array with the patch, so a per-fact scope edit must send EVERY fact (the
+  changed one + the rest minimal, preserved by merge-by-id) or it silently drops the siblings; and a still-open
+  `RelationshipScopePicker` popover overlays a sibling row's control — an E2E must close it (Escape) before the
+  next click or the click times out (the trace's last action localized it).**
 - 2026-06-24 — **Build (onboarding per-question sharing — SPEC 43 BUILT; on `feat/onboarding-scoped-sharing`,
   PR pending).** The onboarding half of the relationship-sharing group (consumes spec 42's model). Each intake
   **form question now carries a relationship-type sharing chip** (the spec-42 `RelationshipScopePicker`),

@@ -526,6 +526,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         aiAvailable: false,
         adultAcknowledged: false,
       }),
+    intakeSetAnswerSharing: () => Promise.resolve(true),
     profileSuggestions: () => Promise.resolve([]),
     profileAcceptSuggestion: () => Promise.resolve([]),
     profileDismissSuggestion: () => Promise.resolve([]),

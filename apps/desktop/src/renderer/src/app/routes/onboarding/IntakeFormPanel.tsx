@@ -27,37 +27,10 @@ import {
   Text,
 } from '../../../design-system/components';
 import { Composer } from '../sessions/Composer';
+import { availableRelationshipTypesFor } from '../../availableRelationshipTypes';
 import { useIntakeStore } from '../../../stores/intakeStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import styles from './Onboarding.module.css';
-
-/** The relationship type a related person holds to the subject (the inverse of the stored edge, 42 §5.1).
- * Inlined here so this renderer file stays free of the host-only `@selfos/core/people` barrel. */
-const INVERSE: Record<RelationshipType, RelationshipType> = {
-  partner: 'partner',
-  parent: 'child',
-  child: 'parent',
-  sibling: 'sibling',
-  friend: 'friend',
-  coworker: 'coworker',
-  ex: 'ex',
-  other: 'other',
-};
-
-/** The relationship types present FROM the active person TO anyone in their graph — the types the sharing
- * picker should offer (43 §5). Undefined (the picker's full-set default) when they have no relationships yet. */
-function availableTypesFor(
-  personId: string | null,
-  relationships: Relationship[],
-): RelationshipType[] | undefined {
-  if (!personId) return undefined;
-  const types = new Set<RelationshipType>();
-  for (const edge of relationships) {
-    if (edge.fromPersonId === personId) types.add(edge.type);
-    else if (edge.toPersonId === personId) types.add(INVERSE[edge.type]);
-  }
-  return types.size > 0 ? [...types] : undefined;
-}
 
 /** Whether two scopes hold the same set of types (order-independent). */
 function sameScope(a: readonly RelationshipType[], b: readonly RelationshipType[]): boolean {
@@ -150,7 +123,7 @@ export function IntakeFormPanel({
     };
   }, []);
   const availableTypes = useMemo(
-    () => availableTypesFor(activePersonId, relationships),
+    () => availableRelationshipTypesFor(activePersonId, relationships),
     [activePersonId, relationships],
   );
   const hasRelationships = availableTypes !== undefined;

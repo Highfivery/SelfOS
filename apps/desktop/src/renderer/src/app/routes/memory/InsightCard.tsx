@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowUpRight, Flag, ShieldAlert, Trash2 } from 'lucide-react';
-import type { Insight, InsightFact } from '@shared/schemas';
+import { ArrowUpRight, PencilLine, Trash2 } from 'lucide-react';
+import type { Insight, InsightFact, RelationshipType } from '@shared/schemas';
 import { useInsightStore } from '../../../stores/insightStore';
 import {
   Banner,
@@ -10,12 +10,11 @@ import {
   ConfidenceChip,
   IconButton,
   Markdown,
-  ShareToggle,
   Stack,
-  Switch,
   Text,
   Textarea,
 } from '../../../design-system/components';
+import { FactSharingControl } from './FactSharingControl';
 import { provenanceTarget } from './provenance';
 import styles from './Memory.module.css';
 
@@ -32,22 +31,28 @@ const SOURCE_EYEBROW: Record<Insight['source'], string> = {
 };
 
 /**
- * One insight on the Memory dashboard (20-memory-dashboard §3.2). For the active person's OWN insights it's
- * fully interactive (review/approve a draft, edit, delete, per-fact share + flag-inaccurate, jump to source);
- * for a RELATED person's shared facts it's read-only (`isOwn = false`) — just their subject + shareable facts
- * + confidence, never an edit/flag/share control (the bridge rejects mutating another's insight anyway).
- * `sourceRemoved` renders "original source removed" instead of a working provenance link (§3.3/§3.7).
+ * One insight on the Memory dashboard (20-memory-dashboard §3.2 + 44 §3.4). For the active person's OWN
+ * insights it's interactive; for a RELATED person's shared facts it's read-only (`isOwn = false`).
+ *
+ * Corrections split by source (44 §3.4): an ONBOARDING (`intake`) insight is what you told SelfOS — you fix
+ * it by **editing the answer** (deep-link) or **deleting**, never "flagging." An AI-INFERRED insight
+ * (session/dream/questionnaire) keeps the correction toggle, relabelled **"This isn't right about me"** —
+ * it drops the fact from the coach at once. Per-fact sharing uses the relationship-type `RelationshipScopePicker`
+ * (`FactSharingControl`), replacing the broadcast toggle. `sourceRemoved` renders "original source removed."
  */
 export function InsightCard({
   insight,
   subjectName,
   isOwn,
   sourceRemoved,
+  availableTypes,
 }: {
   insight: Insight;
   subjectName: string;
   isOwn: boolean;
   sourceRemoved?: boolean;
+  /** Relationship types present in the person's graph (44 §3.4) — passed to each fact's sharing picker. */
+  availableTypes?: RelationshipType[];
 }): JSX.Element {
   const navigate = useNavigate();
   const approve = useInsightStore((s) => s.approve);
@@ -55,6 +60,7 @@ export function InsightCard({
   const remove = useInsightStore((s) => s.remove);
   const flag = useInsightStore((s) => s.flag);
 
+  const isIntake = insight.source === 'intake';
   const [editing, setEditing] = useState(isOwn && !insight.approved); // own drafts open in review mode
   const [summary, setSummary] = useState(insight.summary);
   const [facts, setFacts] = useState<InsightFact[]>(insight.facts);
@@ -68,7 +74,14 @@ export function InsightCard({
   }, [insight.approved]);
 
   const prov = provenanceTarget(insight);
-  const edit = { subjectPersonId: insight.subjectPersonId, id: insight.id, summary, facts };
+  // Approve/edit carries only `{id, text, shareable}` — `updateInsight` merges by id, so the server-owned
+  // `shareableTypes`/`restricted` stay intact (sharing is set separately via the per-fact picker, §3.4).
+  const edit = {
+    subjectPersonId: insight.subjectPersonId,
+    id: insight.id,
+    summary,
+    facts: facts.map((f) => ({ id: f.id, text: f.text, shareable: f.shareable })),
+  };
 
   const guard = async (fn: () => Promise<unknown>, message: string): Promise<void> => {
     setBusy(true);
@@ -101,21 +114,11 @@ export function InsightCard({
       () => flag({ insightId: insight.id, factId, flagged }),
       'Couldn’t update that. Please try again.',
     );
-  const onShare = (factId: string, shareable: boolean): Promise<void> =>
-    guard(
-      () =>
-        update({
-          subjectPersonId: insight.subjectPersonId,
-          id: insight.id,
-          facts: insight.facts.map((f) => (f.id === factId ? { ...f, shareable } : f)),
-        }),
-      'Couldn’t update sharing. Please try again.',
-    );
 
-  const setFactShareable = (id: string, shareable: boolean): void =>
-    setFacts((fs) => fs.map((f) => (f.id === id ? { ...f, shareable } : f)));
   const setFactText = (id: string, text: string): void =>
     setFacts((fs) => fs.map((f) => (f.id === id ? { ...f, text } : f)));
+
+  const goToSource = (): void => navigate(prov.to, prov.state ? { state: prov.state } : undefined);
 
   return (
     <Card>
@@ -159,11 +162,6 @@ export function InsightCard({
             <Stack gap={2}>
               {facts.map((fact) => (
                 <div key={fact.id} className={styles.factEditRow}>
-                  <Switch
-                    checked={fact.shareable}
-                    aria-label={`${fact.text} — shareable`}
-                    onChange={(checked) => setFactShareable(fact.id, checked)}
-                  />
                   <Textarea
                     rows={1}
                     value={fact.text}
@@ -199,25 +197,6 @@ export function InsightCard({
             <Stack gap={1}>
               {insight.facts.map((fact) => (
                 <div key={fact.id} className={styles.factRow}>
-                  {isOwn ? (
-                    <IconButton
-                      aria-label={
-                        fact.flaggedInaccurate
-                          ? `Unflag: ${fact.text}`
-                          : `Flag as inaccurate: ${fact.text}`
-                      }
-                      variant="ghost"
-                      disabled={busy}
-                      onClick={() => void onFlag(fact.id, !fact.flaggedInaccurate)}
-                    >
-                      <Flag
-                        size={13}
-                        aria-hidden="true"
-                        className={fact.flaggedInaccurate ? styles.flagOn : styles.factIcon}
-                        fill={fact.flaggedInaccurate ? 'currentColor' : 'none'}
-                      />
-                    </IconButton>
-                  ) : null}
                   <Markdown
                     inline
                     size="sm"
@@ -227,31 +206,46 @@ export function InsightCard({
                     {fact.text}
                   </Markdown>
                   {fact.flaggedInaccurate ? (
-                    <span className={styles.flaggedTag}>flagged</span>
+                    <span className={styles.flaggedTag}>marked not right</span>
                   ) : null}
                   {fact.retractedShareAt ? (
                     <span
                       className={styles.flaggedTag}
-                      title="This fact was shared, then withdrawn when you flagged it"
+                      title="This fact was shared, then withdrawn when you marked it"
                     >
                       sharing withdrawn
                     </span>
                   ) : null}
-                  {fact.restricted ? (
-                    <span className={styles.sensitiveTag} title="Sensitive onboarding content">
-                      <ShieldAlert size={12} aria-hidden="true" /> sensitive
-                    </span>
-                  ) : null}
-                  {isOwn ? (
-                    <span className={styles.shareCell}>
-                      <ShareToggle
-                        shared={fact.shareable}
-                        label={fact.text}
+                  <div className={styles.factControls}>
+                    {/* A flagged fact is excluded from everyone's context + from outbound sharing, so a
+                        sharing picker on it would be misleading — hide it until the flag is cleared. */}
+                    {isOwn && !fact.flaggedInaccurate ? (
+                      <FactSharingControl
+                        insightId={insight.id}
+                        subjectPersonId={insight.subjectPersonId}
+                        fact={fact}
                         disabled={busy}
-                        onChange={(shared) => void onShare(fact.id, shared)}
+                        {...(availableTypes ? { availableTypes } : {})}
                       />
-                    </span>
-                  ) : null}
+                    ) : null}
+                    {/* AI-INFERRED facts can be pushed back on ("this isn't right about me"); ONBOARDING facts
+                        are what you told us — you fix them by editing the answer, not flagging (§3.4). */}
+                    {isOwn && !isIntake ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={busy}
+                        aria-label={
+                          fact.flaggedInaccurate
+                            ? `Undo — this is right about me: ${fact.text}`
+                            : `This isn’t right about me: ${fact.text}`
+                        }
+                        onClick={() => void onFlag(fact.id, !fact.flaggedInaccurate)}
+                      >
+                        {fact.flaggedInaccurate ? 'Undo' : 'Not right'}
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
               ))}
             </Stack>
@@ -278,13 +272,7 @@ export function InsightCard({
                     {prov.label} · original source removed
                   </Text>
                 ) : (
-                  <button
-                    type="button"
-                    className={styles.provLink}
-                    onClick={() =>
-                      navigate(prov.to, prov.state ? { state: prov.state } : undefined)
-                    }
-                  >
+                  <button type="button" className={styles.provLink} onClick={goToSource}>
                     {prov.label} · {formatDate(insight.provenance.at)}{' '}
                     <ArrowUpRight size={12} aria-hidden="true" />
                   </button>
@@ -294,9 +282,20 @@ export function InsightCard({
 
             {isOwn ? (
               <div className={styles.actions}>
-                <Button variant="secondary" onClick={() => setEditing(true)}>
-                  Edit
-                </Button>
+                {isIntake ? (
+                  // Onboarding correction = edit the source answer (§3.4); the portrait re-synthesizes from it.
+                  <Button
+                    variant="secondary"
+                    title="Editing your onboarding answers is how you correct what you told SelfOS"
+                    onClick={goToSource}
+                  >
+                    <PencilLine size={14} aria-hidden="true" /> Edit answer
+                  </Button>
+                ) : (
+                  <Button variant="secondary" onClick={() => setEditing(true)}>
+                    Edit
+                  </Button>
+                )}
               </div>
             ) : null}
           </>

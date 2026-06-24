@@ -1265,6 +1265,130 @@ describe('createCoreBridge', () => {
     expect(await bridge.memoryOutboundSharing()).toEqual({ items: [] });
   });
 
+  it('insights:update scopes a fact to a relationship type + deliberately un-restricts a sensitive one (44 §3.4)', async () => {
+    const { bridge, host, ownerId } = await freshOwner();
+    const ctx = (await host.host.vaultAndKey())!;
+    const partner = await bridge.peopleSave({ displayName: 'Bee', isSubject: true, tags: [] });
+    const sibling = await bridge.peopleSave({ displayName: 'Cee', isSubject: true, tags: [] });
+    await bridge.relationshipsSave({
+      fromPersonId: ownerId,
+      toPersonId: partner.id,
+      type: 'partner',
+    });
+    await bridge.relationshipsSave({
+      fromPersonId: ownerId,
+      toPersonId: sibling.id,
+      type: 'sibling',
+    });
+    const at = new Date().toISOString();
+    await saveInsight(ctx.fs, ctx.key, {
+      id: 'ins1',
+      schemaVersion: 1,
+      source: 'session',
+      subjectPersonId: ownerId,
+      summary: 's',
+      facts: [
+        { id: 'f1', text: 'plays guitar', shareable: false },
+        { id: 'f2', text: 'a sensitive matter', shareable: false, restricted: true },
+      ],
+      confidence: 'low',
+      categories: [],
+      approved: true,
+      provenance: { at },
+      createdAt: at,
+      updatedAt: at,
+    });
+
+    // Scope f1 to Partner (never broadcast); send all facts the way the renderer does.
+    await bridge.insightsUpdate({
+      subjectPersonId: ownerId,
+      id: 'ins1',
+      facts: [
+        { id: 'f1', text: 'plays guitar', shareable: false, shareableTypes: ['partner'] },
+        { id: 'f2', text: 'a sensitive matter', shareable: false },
+      ],
+    });
+    let stored = (await bridge.insightsList()).find((i) => i.id === 'ins1')!;
+    expect(stored.facts).toHaveLength(2); // no fact dropped
+    expect(stored.facts.find((f) => f.id === 'f1')?.shareableTypes).toEqual(['partner']);
+    expect(stored.facts.find((f) => f.id === 'f1')?.shareable).toBe(false);
+    // The restricted fact is preserved by the merge (a normal edit never strips it).
+    expect(stored.facts.find((f) => f.id === 'f2')?.restricted).toBe(true);
+
+    // f1 reaches the partner's coaching context, never the sibling's.
+    const partnerCtx = await summarizeForContext(ctx.fs, ctx.key, partner.id, [
+      { id: ownerId, displayName: 'Owner', grantedTypes: ['partner'] },
+    ]);
+    expect(partnerCtx).toContain('plays guitar');
+    const siblingCtx = await summarizeForContext(ctx.fs, ctx.key, sibling.id, [
+      { id: ownerId, displayName: 'Owner', grantedTypes: ['sibling'] },
+    ]);
+    expect(siblingCtx).not.toContain('plays guitar');
+    expect(siblingCtx).not.toContain('a sensitive matter');
+
+    // Deliberately un-restrict f2 (the 42 §8 two-step) + scope to Partner.
+    await bridge.insightsUpdate({
+      subjectPersonId: ownerId,
+      id: 'ins1',
+      facts: [
+        { id: 'f1', text: 'plays guitar', shareable: false, shareableTypes: ['partner'] },
+        {
+          id: 'f2',
+          text: 'a sensitive matter',
+          shareable: false,
+          shareableTypes: ['partner'],
+          restricted: false,
+        },
+      ],
+    });
+    stored = (await bridge.insightsList()).find((i) => i.id === 'ins1')!;
+    expect(stored.facts.find((f) => f.id === 'f2')?.restricted).toBe(false);
+    const partnerCtx2 = await summarizeForContext(ctx.fs, ctx.key, partner.id, [
+      { id: ownerId, displayName: 'Owner', grantedTypes: ['partner'] },
+    ]);
+    expect(partnerCtx2).toContain('a sensitive matter');
+  });
+
+  it('intake:setAnswerSharing changes an answer’s scope post-onboarding; gated on intake.own (44 §3.5)', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.intakeSubmitForm({
+      sectionId: 'values',
+      answers: { values: ['Honesty'] },
+      sharing: { values: ['partner'] },
+    });
+    expect(
+      await bridge.intakeSetAnswerSharing({
+        sectionId: 'values',
+        questionId: 'values',
+        types: ['sibling'],
+      }),
+    ).toBe(true);
+    const state = await bridge.intakeGetState();
+    expect(state.session.sections.find((s) => s.id === 'values')?.answerSharing?.values).toEqual([
+      'sibling',
+    ]);
+    // A phantom (unanswered) question is a no-op.
+    expect(
+      await bridge.intakeSetAnswerSharing({
+        sectionId: 'values',
+        questionId: 'nope',
+        types: ['partner'],
+      }),
+    ).toBe(false);
+
+    // A Guest (no intake.own) can't change sharing.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    expect((await bridge.sessionSetActive({ personId: guest.id })).ok).toBe(true);
+    expect(
+      await bridge.intakeSetAnswerSharing({
+        sectionId: 'values',
+        questionId: 'values',
+        types: ['partner'],
+      }),
+    ).toBe(false);
+  });
+
   it('flags a fact (excluded from context, kept in Memory) and refreshes memory via reconciliation (spec 20 §3.5/§3.6)', async () => {
     const { bridge, host, ownerId } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });

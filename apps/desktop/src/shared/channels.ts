@@ -268,6 +268,7 @@ export const IpcChannels = {
   intakeSkipSection: 'intake:skipSection',
   intakeSubmitForm: 'intake:submitForm',
   intakeAcknowledgeAdult: 'intake:acknowledgeAdult',
+  intakeSetAnswerSharing: 'intake:setAnswerSharing',
   intakeSynthesize: 'intake:synthesize',
   profileSuggestions: 'profile:suggestions',
   profileAcceptSuggestion: 'profile:acceptSuggestion',
@@ -329,6 +330,19 @@ export type RotationStatus = { phase: 'staging' | 'committing'; total: number } 
 
 /** Whether the chosen vault folder is ready to set up, or still syncing from iCloud (33 §5.D). */
 export type VaultSyncReadiness = { ready: boolean; reason?: 'icloud-pending' };
+
+/**
+ * A fact patch carried by `insightsApprove`/`insightsUpdate`. `shareableTypes` is the relationship-type scope
+ * (42/44); `restricted: false` is the deliberate un-restrict of a sensitive OWN fact (42 §8). Both optional +
+ * merged by id server-side, so a normal edit (omitting them) preserves the stored scope/restriction.
+ */
+export interface InsightFactEdit {
+  id: string;
+  text: string;
+  shareable: boolean;
+  shareableTypes?: RelationshipType[];
+  restricted?: boolean;
+}
 
 export type ClaudeErrorCode = 'NO_KEY' | 'AUTH' | 'RATE_LIMIT' | 'NETWORK' | 'API_ERROR';
 export type ClaudeTestResult =
@@ -653,14 +667,18 @@ export interface SelfosBridge {
     subjectPersonId: string;
     id: string;
     summary?: string;
-    facts?: { id: string; text: string; shareable: boolean }[];
+    facts?: InsightFactEdit[];
   }): Promise<Insight | null>;
-  /** Edit an existing Insight (summary / facts). */
+  /**
+   * Edit an existing Insight (summary / facts). A fact's `shareableTypes` is the relationship-type scope set
+   * by the Memory sharing control (42/44); `restricted: false` is the deliberate un-restrict of a sensitive
+   * OWN fact (42 §8). Omitted fields are preserved (merged by id in `updateInsight`).
+   */
   insightsUpdate(input: {
     subjectPersonId: string;
     id: string;
     summary?: string;
-    facts?: { id: string; text: string; shareable: boolean }[];
+    facts?: InsightFactEdit[];
   }): Promise<Insight | null>;
   /** Delete an Insight. */
   insightsDelete(input: { subjectPersonId: string; id: string }): Promise<void>;
@@ -957,6 +975,16 @@ export interface SelfosBridge {
   }): Promise<IntakeState>;
   /** The one-time 18+ acknowledgement for the intimacy block (shared with guided sessions). Requires `intake.own`. */
   intakeAcknowledgeAdult(): Promise<IntakeState>;
+  /**
+   * Change the sharing scope of ONE already-answered intake question (44-memory-dashboard §3.5) — powers the
+   * "what you share & with whom" surface's per-answer scope control without re-doing onboarding. Empty `types`
+   * ⇒ Private (own context only). Requires `intake.own`; active-person-scoped. Returns `true` when applied.
+   */
+  intakeSetAnswerSharing(input: {
+    sectionId: string;
+    questionId: string;
+    types: RelationshipType[];
+  }): Promise<boolean>;
   /**
    * Run a synthesis pass: with a `sectionId` a light per-section reflection; without one the richer final
    * portrait (→ the portrait Insight + inferred field fills + completion). Requires `intake.own`.

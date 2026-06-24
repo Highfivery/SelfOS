@@ -7,6 +7,7 @@ import { Sessions } from './routes/sessions/Sessions';
 import { Questionnaires } from './routes/questionnaires/Questionnaires';
 import { Inbox } from './routes/inbox/Inbox';
 import { Memory } from './routes/memory/Memory';
+import { SharingPanel } from './routes/memory/SharingPanel';
 import { Dreams } from './routes/dreams/Dreams';
 import { DreamPatterns } from './routes/dreams/DreamPatterns';
 import { Onboarding } from './routes/onboarding/Onboarding';
@@ -34,6 +35,7 @@ const GUARDED_ROUTES: { path: string; capability: CapabilityKey; element: JSX.El
   { path: 'questionnaires', capability: 'questionnaires.create', element: <Questionnaires /> },
   { path: 'inbox', capability: 'questionnaires.answer', element: <Inbox /> },
   { path: 'memory', capability: 'memory.own', element: <Memory /> },
+  { path: 'memory/sharing', capability: 'memory.own', element: <SharingPanel /> },
   { path: 'dreams', capability: 'dreams.own', element: <Dreams /> },
   { path: 'dreams/patterns', capability: 'dreams.own', element: <DreamPatterns /> },
   { path: 'people', capability: 'people.manage', element: <People /> },

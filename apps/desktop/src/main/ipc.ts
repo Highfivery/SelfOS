@@ -362,6 +362,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.intakeSkipSection, bridge.intakeSkipSection);
   handle(IpcChannels.intakeSubmitForm, bridge.intakeSubmitForm);
   handle(IpcChannels.intakeAcknowledgeAdult, bridge.intakeAcknowledgeAdult);
+  handle(IpcChannels.intakeSetAnswerSharing, bridge.intakeSetAnswerSharing);
   handle(IpcChannels.intakeSynthesize, bridge.intakeSynthesize);
   handle(IpcChannels.profileSuggestions, bridge.profileSuggestions);
   handle(IpcChannels.profileAcceptSuggestion, bridge.profileAcceptSuggestion);

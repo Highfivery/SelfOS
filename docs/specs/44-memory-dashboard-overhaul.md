@@ -1,7 +1,6 @@
 # 44 — Memory dashboard overhaul (read it, get it, trust it)
 
-> **Status:** Draft — decisions resolved ask-first (2026-06-23), build-ready pending final approval ·
-> _last updated 2026-06-23_ · **Depends on [`42`](42-relationship-scoped-sharing.md).**
+> **Status:** Built (2026-06-24) · _last updated 2026-06-24_ · **Depends on [`42`](42-relationship-scoped-sharing.md).**
 >
 > The Memory dashboard ([`20`](20-memory-dashboard.md)) works but is hard to **read, consume, and trust**:
 > no at-a-glance summary or stats, trends buried in a collapsed `<details>`, and a per-fact **"flag as
@@ -168,6 +167,10 @@ place to audit and control all outbound sharing.
 - **`insights:flag`** — unchanged; the UI now only surfaces it for AI-inferred sources (relabelled).
 - **`memory:outboundSharing`** — consumed (defined in [`42`](42-relationship-scoped-sharing.md)); own-scoped,
   gated `memory.own`.
+- **`intake:setAnswerSharing`** (built 2026-06-24) — changes ONE already-answered intake question's
+  `answerSharing` scope without re-doing onboarding (the transparency surface's per-answer picker). Gated
+  `intake.own`, active-person-scoped; empty `types` ⇒ Private. (Resolved the §3.5-vs-§6 gap: intake answers are
+  scope-editable in place, not just shown — owner decision, 2026-06-24.)
 - **No Claude call** added (Refresh-memory reconciliation is unchanged, [`20`](20-memory-dashboard.md) §5.2).
   The key stays in main.
 
@@ -249,6 +252,24 @@ show a tiny per-group count on each life-area header (recommended, cheap).
 
 ## 12. Changelog
 
+- 2026-06-24 — **Built.** Stats summary header (`StatsSummary` — overview/confidence/sharing, pure `stats.ts`
+  derivations), **Trends promoted to the top** (open by default), **split-by-source corrections** in
+  `InsightCard` (onboarding facts → **Edit answer** deep-link + Delete, no flag; AI-inferred → the relabelled
+  **"This isn't right about me"** toggle), the broadcast `ShareToggle` replaced by the per-fact
+  `RelationshipScopePicker` (`FactSharingControl`, incl. the [`42`](42-relationship-scoped-sharing.md) §8
+  deliberate un-restrict two-step for a sensitive own fact), and a **`/memory/sharing` transparency surface**
+  (`SharingPanel`) listing every shared item + recipients with in-place scope editing. Owner decision
+  (2026-06-24): intake answers are scope-editable in place → new **`intake:setAnswerSharing`** channel +
+  `setIntakeAnswerSharing` core fn (resolving the §3.5↔§6 gap). Extended the `insights:update` facts contract
+  with additive `shareableTypes`/`restricted` (merged by id server-side, so a normal edit preserves them).
+  Extracted the shared `availableRelationshipTypesFor` helper (Memory/SharingPanel/onboarding). Gate green:
+  typecheck, lint, format, **715 core + 767 desktop** unit (+stats, +StatsSummary, +FactSharingControl,
+  +SharingPanel, +setIntakeAnswerSharing core, +2 coreBridge: scope-a-fact-to-partner/un-restrict + answer
+  scope), **E2E +1** (stats header → type-scope a fact to partner [decrypt reaches partner], "not right"
+  [decrypt absent from own context], Manage sharing surface, Edit answer deep-link, 360px guards). **Lesson:
+  `updateInsight` REPLACES the facts array with the patch, so a per-fact scope edit must send EVERY fact (the
+  changed one + the rest minimal, preserved by merge-by-id) or it silently drops the others; and a still-open
+  picker popover overlays a sibling row's control — close it (Escape) before the next click.**
 - 2026-06-23 — created (Draft). The Memory half of the relationship-sharing group; depends on
   [`42`](42-relationship-scoped-sharing.md), independent of [`43`](43-relationship-scoped-onboarding-sharing.md).
   Decisions resolved ask-first (2026-06-23): the four stats (overview/confidence/sharing/trends-at-top),

@@ -10,8 +10,8 @@ export interface ProvenanceTarget {
   label: string;
   /** The route to navigate to. */
   to: string;
-  /** Router state the target screen reads to open the exact item (sessions/dreams). */
-  state?: { focusConversationId?: string; focusDreamId?: string };
+  /** Router state the target screen reads to open the exact item (sessions/dreams/onboarding section). */
+  state?: { focusConversationId?: string; focusDreamId?: string; openSection?: string };
   /** The originating id, if any — used to detect "source removed" against the loaded per-person stores. */
   source: { kind: 'session'; id: string } | { kind: 'dream'; id: string } | { kind: 'other' };
 }
@@ -46,7 +46,16 @@ export function provenanceTarget(insight: Insight): ProvenanceTarget {
     };
   }
   if (insight.source === 'intake') {
-    return { label, to: '/onboarding', source: { kind: 'other' } };
+    // "Edit answer" deep-links to the originating onboarding section (44 §3.4) — the Onboarding screen reads
+    // `openSection` from router state and jumps there. Absent `intakeSection` → opens onboarding at the top.
+    return {
+      label,
+      to: '/onboarding',
+      ...(insight.provenance.intakeSection
+        ? { state: { openSection: insight.provenance.intakeSection } }
+        : {}),
+      source: { kind: 'other' },
+    };
   }
   // questionnaire + compatibility → the questionnaire Results surface.
   return { label, to: '/questionnaires', source: { kind: 'other' } };

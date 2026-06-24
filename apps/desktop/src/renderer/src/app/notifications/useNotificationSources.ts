@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { ResponsesArrivedSummary } from '@shared/channels';
+import type { ReminderDueSummary, ResponsesArrivedSummary } from '@shared/channels';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useNotificationStore } from '../../stores/notificationStore';
 import { useUpdateStore } from '../../stores/updateStore';
@@ -23,24 +23,30 @@ export function useNotificationSources(conflicts: string[]): void {
 
   const [suggestionIds, setSuggestionIds] = useState<string[]>([]);
   const [responses, setResponses] = useState<ResponsesArrivedSummary[]>([]);
+  const [reminders, setReminders] = useState<ReminderDueSummary[]>([]);
 
   // One-shot reads per active person. Guarded so a fetch resolving after a person switch is ignored.
   useEffect(() => {
     let active = true;
     setSuggestionIds([]);
     setResponses([]);
+    setReminders([]);
     void (async () => {
-      const [sugg, resp] = await Promise.all([
+      const [sugg, resp, rem] = await Promise.all([
         canIntake
           ? (window.selfos?.profileSuggestions() ?? Promise.resolve([]))
           : Promise.resolve([]),
         canViewResults
           ? (window.selfos?.notificationsResponsesArrived() ?? Promise.resolve([]))
           : Promise.resolve([]),
+        canViewResults
+          ? (window.selfos?.notificationsRemindersDue() ?? Promise.resolve([]))
+          : Promise.resolve([]),
       ]);
       if (!active || useSessionStore.getState().activePerson?.id !== activePersonId) return;
       setSuggestionIds(sugg.map((s) => s.id).sort());
       setResponses(resp);
+      setReminders(rem);
     })();
     return () => {
       active = false;
@@ -108,6 +114,22 @@ export function useNotificationSources(conflicts: string[]): void {
       });
     }
 
+    for (const r of reminders) {
+      // A gentle nudge to the SENDER that a send is still unanswered after 7 days (38 §3.3) — it links to
+      // Results so they can re-share; it never messages the recipient.
+      const single = r.count === 1;
+      candidates.push({
+        kind: 'reminder-due',
+        coalesceKey: `reminder-due:${r.questionnaireId}`,
+        signature: String(r.count), // a new unanswered send → higher count → re-surfaces (onIncrease)
+        title: single
+          ? `${r.recipientName} hasn’t answered “${r.title}” yet`
+          : `${r.count} people haven’t answered “${r.title}” yet`,
+        body: 'Open it to re-share the link.',
+        action: { type: 'navigate', to: `/questionnaires?focus=${r.questionnaireId}&view=results` },
+      });
+    }
+
     setCandidates(candidates);
-  }, [conflicts, suggestionIds, responses, update, setCandidates]);
+  }, [conflicts, suggestionIds, responses, reminders, update, setCandidates]);
 }

@@ -54,6 +54,7 @@ import type {
   PersonNotificationState,
   Person,
   ProfileUpdateSuggestion,
+  ReminderDueSummary,
   ResponsesArrivedSummary,
   SendAnswer,
   SendResult,
@@ -206,6 +207,7 @@ export const IpcChannels = {
   assignmentsDrain: 'assignments:drain',
   assignmentsRevoke: 'assignments:revoke',
   assignmentsReshare: 'assignments:reshare',
+  assignmentsReAsk: 'assignments:reAsk',
   relayStatus: 'relay:status',
   relayConnect: 'relay:connect',
   relayUpdate: 'relay:update',
@@ -255,6 +257,7 @@ export const IpcChannels = {
   getNotificationState: 'notifications:getState',
   setNotificationState: 'notifications:setState',
   notificationsResponsesArrived: 'notifications:responsesArrived',
+  notificationsRemindersDue: 'notifications:remindersDue',
   openExternal: 'shell:openExternal',
   // Update awareness (36-update-awareness §6) — a notify-only check against the public GitHub Releases API.
   updatesCheck: 'updates:check',
@@ -744,6 +747,14 @@ export interface SelfosBridge {
    * relay, the sender's own member, an already-answered send). Requires `questionnaires.sendExternal`.
    */
   assignmentsReshare(assignmentId: string): Promise<RelayLinkResult | null>;
+  /**
+   * Re-send the same questionnaire to the same bound recipient in one action (38 §3.3) — no re-authoring.
+   * Auto-revokes the prior open send's relay link so an old emailed link can't double-submit (38 §3.6).
+   * Mirrors the original delivery (household in-app + a unified link, or an external relay link). Returns
+   * the new send (link/pin set when a relay minted one). Compatibility re-ask isn't supported yet (use
+   * Duplicate). Requires `questionnaires.create`; the recipient is re-validated in the bridge.
+   */
+  assignmentsReAsk(input: { questionnaireId: string }): Promise<InAppSendResult>;
   /** The relay connection status (no secrets) for the send panel + admin Relay setup. */
   relayStatus(): Promise<RelayStatus>;
   /** Connect + deploy the household relay to Cloudflare (admin-only). Returns the new status. */
@@ -883,6 +894,11 @@ export interface SelfosBridge {
    * Local read — no network; gated by `questionnaires.viewResults` + sender-scoped in the bridge.
    */
   notificationsResponsesArrived(): Promise<ResponsesArrivedSummary[]>;
+  /**
+   * The active sender's sends still unanswered past the 7-day reminder window — the `reminder-due` source
+   * (38 §3.3). Sender-scoped, gated `questionnaires.viewResults`, local-only (no network, no scheduler).
+   */
+  notificationsRemindersDue(): Promise<ReminderDueSummary[]>;
   /** Open a URL in the user's browser via the main-process shell (the renderer never opens URLs directly). */
   openExternal(url: string): Promise<void>;
   /**
@@ -954,6 +970,7 @@ export type {
   QuestionnaireSendState,
   QuestionTrend,
   RelayLinkResult,
+  ReminderDueSummary,
   ResponsesArrivedSummary,
   Relationship,
   RelationshipInput,

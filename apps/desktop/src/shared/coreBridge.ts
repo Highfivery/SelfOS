@@ -90,6 +90,7 @@ import {
   type DreamShareTarget,
   type Person,
   type PersonNotificationState,
+  type ReminderDueSummary,
   type ResponsesArrivedSummary,
   type Questionnaire,
   type Relationship,
@@ -2859,6 +2860,108 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       );
       return reshareLink(ctx.fs, ctx.key, client, config.endpointUrl, assignment);
     },
+    assignmentsReAsk: async (input): Promise<InAppSendResult> => {
+      // Re-send the same questionnaire to the same bound recipient in one action (38 §3.3), mirroring the
+      // original delivery, and auto-revoke the prior open link so it can't double-submit (38 §3.6).
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create')))
+        throw new Error('Not permitted');
+      const personId = await activePersonId();
+      if (!personId) throw new Error('No active person');
+      const { questionnaireId } = z.object({ questionnaireId: z.string().min(1) }).parse(input);
+      const def = await getQuestionnaire(ctx.fs, ctx.key, questionnaireId);
+      if (!def) throw new Error('Questionnaire not found');
+      if (def.compatibility?.enabled) {
+        throw new Error(
+          'Re-asking a compatibility questionnaire isn’t supported yet — use Duplicate.',
+        );
+      }
+      // The sender's prior sends of THIS questionnaire, newest first — replicate the last one's privacy.
+      const prior = (await listAssignments(ctx.fs, ctx.key, { senderPersonId: personId })).filter(
+        (a) => a.questionnaireId === questionnaireId,
+      );
+      const last = prior[0];
+      const senderName = (await getPerson(ctx.fs, ctx.key, personId))?.displayName ?? 'Someone';
+      const senderVisible = last?.senderVisibleToRecipient ?? true;
+      const relayConfig = (await activePersonCan(ctx.fs, ctx.key, 'questionnaires.sendExternal'))
+        ? await readRelayConfig(ctx.fs, ctx.key)
+        : null;
+      const client = relayConfig
+        ? createRelayHttpClient(relayConfig.endpointUrl, relayConfig.drainSecret, host.relay.fetch)
+        : null;
+      // Auto-revoke every still-open relay-linked prior send's mailbox so an old link can't be reopened.
+      if (client) {
+        for (const a of prior) {
+          if (
+            a.relay &&
+            (a.status === 'sent' || a.status === 'opened' || a.status === 'inProgress')
+          ) {
+            await revokeRelayForDeletion(ctx.fs, ctx.key, client, a.id);
+          }
+        }
+      }
+
+      // External-bound → a fresh relay link (requires a relay).
+      if (def.recipient?.kind === 'external') {
+        if (!relayConfig || !client) {
+          throw new Error('No relay is connected. Ask an admin to set one up in Settings → Relay.');
+        }
+        const bound = def.recipient;
+        const privacy = last?.privacy ?? 'private';
+        const { assignment, link, pin } = await createRelaySend(ctx.fs, ctx.key, client, {
+          questionnaireId,
+          senderPersonId: personId,
+          senderName,
+          recipient: {
+            kind: 'external',
+            ...(bound.displayName !== undefined ? { displayName: bound.displayName } : {}),
+            ...(bound.email !== undefined ? { email: bound.email } : {}),
+            ...(bound.phone !== undefined ? { phone: bound.phone } : {}),
+          },
+          senderVisibleToRecipient: senderVisible,
+          privacy,
+          disclosure: externalSendDisclosure(
+            senderVisible ? senderName : 'the person who sent this',
+            privacy,
+          ),
+          endpointUrl: relayConfig.endpointUrl,
+        });
+        return { assignment, link, pin };
+      }
+
+      // Household person → in-app send + a unified link when a relay is connected.
+      if (def.recipient?.kind !== 'person') throw new Error('This questionnaire has no recipient.');
+      const recipientPersonId = def.recipient.personId;
+      if (!(await getPerson(ctx.fs, ctx.key, recipientPersonId)))
+        throw new Error('Recipient not found');
+      const privacy = last?.privacy ?? 'standard';
+      const assignment = await createAssignment(ctx.fs, ctx.key, {
+        questionnaireId,
+        senderPersonId: personId,
+        recipient: { kind: 'person' as const, personId: recipientPersonId },
+        channel: 'inApp',
+        privacy,
+        senderVisibleToRecipient: senderVisible,
+      });
+      if (!client || !relayConfig) return { assignment };
+      try {
+        const { link, pin } = await attachRelayLink(ctx.fs, ctx.key, client, assignment.id, {
+          senderName,
+          senderVisibleToRecipient: senderVisible,
+          disclosure: externalSendDisclosure(
+            senderVisible ? senderName : 'the person who sent this',
+            privacy,
+          ),
+          endpointUrl: relayConfig.endpointUrl,
+        });
+        return { assignment, link, pin };
+      } catch {
+        return {
+          assignment,
+          linkError: 'We couldn’t create the link — open Results to resend it.',
+        };
+      }
+    },
     questionnairesShareLink: async (
       questionnaireId,
       regenerate,
@@ -3513,6 +3616,41 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           submittedCount,
           latestRecipientName: await recipientDisplayName(ctx.fs, ctx.key, newest),
           at: newest.updatedAt,
+        });
+      }
+      return out;
+    },
+    notificationsRemindersDue: async (): Promise<ReminderDueSummary[]> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.viewResults')))
+        return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      // The sender's still-open sends past the 7-day window, grouped by questionnaire. Local read — no
+      // background network, no scheduler; the nudge is recomputed on the existing launch/focus tick (35 §3.6).
+      const WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+      const now = Date.now();
+      const sends = await listAssignments(ctx.fs, ctx.key, { senderPersonId: personId });
+      const groups = new Map<string, { count: number; newest: Assignment }>();
+      for (const a of sends) {
+        // Still awaiting an answer (not submitted/declined/expired/revoked) AND past the window.
+        if (a.status !== 'sent' && a.status !== 'opened' && a.status !== 'inProgress') continue;
+        if (now - new Date(a.createdAt).getTime() < WINDOW_MS) continue;
+        const cur = groups.get(a.questionnaireId);
+        groups.set(a.questionnaireId, {
+          count: (cur?.count ?? 0) + 1,
+          newest: !cur || a.createdAt > cur.newest.createdAt ? a : cur.newest,
+        });
+      }
+      const out: ReminderDueSummary[] = [];
+      for (const [questionnaireId, { count, newest }] of groups) {
+        const def = await getQuestionnaire(ctx.fs, ctx.key, questionnaireId);
+        if (!def) continue;
+        out.push({
+          questionnaireId,
+          title: def.title,
+          recipientName: await recipientDisplayName(ctx.fs, ctx.key, newest),
+          count,
         });
       }
       return out;

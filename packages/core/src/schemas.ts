@@ -53,6 +53,7 @@ export const NOTIFICATION_KINDS = [
   'update-available',
   'profile-freshness',
   'responses-arrived',
+  'reminder-due',
   'sync-conflict',
 ] as const;
 export const NotificationKindSchema = z.enum(NOTIFICATION_KINDS);
@@ -1810,6 +1811,18 @@ export interface QuestionnaireSendState {
  * assignments (local read; no network — the relay drain is the existing point that fetches external
  * responses). `submittedCount` is the re-surface signature (a new response → higher count → re-surfaces).
  */
+/**
+ * One questionnaire the active person sent that's still unanswered after the reminder window (7 days) — the
+ * source for the `reminder-due` notification (38 §3.3). Derived in the bridge from the sender's open sends
+ * (local read; no network, no scheduler). Nudges the SENDER to re-share; it never messages the recipient.
+ */
+export interface ReminderDueSummary {
+  questionnaireId: string;
+  title: string;
+  recipientName: string; // the most recent still-unanswered recipient (names the nudge)
+  count: number; // unanswered sends past the window — the re-surface signature (onIncrease)
+}
+
 export interface ResponsesArrivedSummary {
   questionnaireId: string;
   title: string;

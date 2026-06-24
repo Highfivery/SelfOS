@@ -640,9 +640,18 @@ decisions). Recommended order, smallest-risk first:
    countdown so the sender knows when to re-share before the recipient hits a dead link (§3.6). Revoke
    already reaches every relay-linked open send (gated on `relayLinked && isOpen`, not `channel`).
    **Revoke-on-re-ask lands with re-ask in slice 5.**
-5. **Re-ask in one action (+ optional reminder).** `assignments:reAsk` re-sends the same snapshot to the
-   same recipient with `reAskOf` chaining + the §11-decided prior-link handling; the optional in-app
-   reminder if §11 #3 keeps it in v1. (§11 #3, #4.)
+5. **Re-ask in one action (+ reminder).** ✅ **Built (2026-06-23).** `assignments:reAsk({ questionnaireId })`
+   re-sends the same questionnaire to the same bound recipient in one action — household in-app (+ a unified
+   link when a relay is connected) or an external relay link, mirroring the original delivery — and
+   **auto-revokes every still-open prior link** (§11 #4) so an old emailed link can't double-submit. A new
+   send simply adds to the questionnaire's sends, which trends already aggregate (no `reAskOf` threading
+   needed). The builder's sent-locked "Send again" became a one-action **"Ask again"** (non-compat;
+   compatibility re-ask is **deferred** — its paired frozen variants need cloning, not regenerating — so
+   compat keeps the panel re-walk). **Reminder:** a new spec-35 **`reminder-due`** notification nudges the
+   **sender** (never the recipient) when a send is unanswered past **7 days**, derived host-side
+   (`notifications:remindersDue`, no network/scheduler) and re-surfacing on `onIncrease`. **No
+   `lastReminderAt` field after all** — the notification framework's device-local dismiss already prevents
+   re-nagging (the §4.3 "device-local = no schema change" path), so no migration.
 6. **Export raw answers / results.** `assignments:exportResults` + the host save op + the pure export
    builder over `SendResult[]` (privacy boundary inherited). (§11 #7.)
 7. **Document & finish `contextOnly`.** Builder picker copy, Results "Update both coaches" reconciliation,

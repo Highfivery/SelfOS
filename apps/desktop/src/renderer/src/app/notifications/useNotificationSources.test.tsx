@@ -71,6 +71,30 @@ describe('useNotificationSources — responses-arrived (38 §3.1)', () => {
     });
   });
 
+  it('nudges the sender about a still-unanswered send (reminder-due, 38 §3.3)', async () => {
+    installMockBridge({
+      notificationsRemindersDue: () =>
+        Promise.resolve([
+          { questionnaireId: 'q9', title: 'Our week', recipientName: 'Angel', count: 1 },
+        ]),
+    });
+    asOwner();
+    await useNotificationStore.getState().load();
+
+    render(<Harness />);
+
+    await waitFor(() => {
+      const rem = useNotificationStore
+        .getState()
+        .notifications.find((n) => n.coalesceKey === 'reminder-due:q9');
+      expect(rem?.title).toBe('Angel hasn’t answered “Our week” yet');
+      expect(rem?.action).toEqual({
+        type: 'navigate',
+        to: '/questionnaires?focus=q9&view=results',
+      });
+    });
+  });
+
   it('summarizes multiple responses without naming any one responder', async () => {
     installMockBridge({
       notificationsResponsesArrived: () =>

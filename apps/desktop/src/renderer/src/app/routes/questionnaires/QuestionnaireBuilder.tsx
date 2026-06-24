@@ -428,6 +428,30 @@ export function QuestionnaireBuilder({
   const [refreshingLink, setRefreshingLink] = useState(false);
   const [shareMsg, setShareMsg] = useState<string | null>(null);
   const senderName = useSessionStore((s) => s.activePerson?.displayName ?? 'Someone');
+  // "Ask again" (38 §3.3): one-action re-send of the same questionnaire to the same recipient. On success
+  // we surface the new link (relay) or a calm confirmation; the prior open link is auto-revoked in the bridge.
+  const [askResult, setAskResult] = useState<{ link?: string; pin?: string } | null>(null);
+  const [askConfirmed, setAskConfirmed] = useState(false);
+
+  const onAskAgain = async (): Promise<void> => {
+    if (!saved) return;
+    setBusy(true);
+    setShareMsg(null);
+    setAskResult(null);
+    setAskConfirmed(false);
+    try {
+      const result = await window.selfos?.assignmentsReAsk({ questionnaireId: saved.id });
+      if (result) {
+        if (result.link && result.pin) setAskResult({ link: result.link, pin: result.pin });
+        else setAskConfirmed(true);
+        await load(); // refresh the Sent · <date> (N times) badge
+      }
+    } catch (e) {
+      setShareMsg(e instanceof Error ? e.message : 'Could not re-send this questionnaire.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   // regenerate=false: re-show the EXISTING link/PIN (the default — clicking Share link doesn't change it).
   // regenerate=true: the manual Refresh next to the link → mint a fresh link + PIN, revoking the old.
@@ -852,15 +876,28 @@ export function QuestionnaireBuilder({
               {resend.ready ? 'You can ask again now.' : `${resend.message}.`}
             </Text>
           ) : null}
+          {shareMsg ? <Banner tone="warning">{shareMsg}</Banner> : null}
+          {askConfirmed ? (
+            <Banner tone="info">Asked again — it’s back in their Inbox.</Banner>
+          ) : null}
+          {askResult?.link && askResult.pin ? (
+            <RelayLinkDelivery
+              link={askResult.link}
+              pin={askResult.pin}
+              senderName={senderName}
+              sensitive={effectiveSensitivity !== 'standard'}
+              note="A fresh link — the previous one no longer works."
+            />
+          ) : null}
           <div className={styles.footer}>
             <div className={styles.footerActions}>
               <Button
                 variant="primary"
-                onClick={() => void onOpenSend()}
+                onClick={() => (compatEnabled ? void onOpenSend() : void onAskAgain())}
                 disabled={busy || !(resend?.ready ?? true)}
               >
                 <Send size={16} aria-hidden="true" />
-                Send again
+                {compatEnabled ? 'Send again' : 'Ask again'}
               </Button>
               {duplicateButton}
               <Button variant="secondary" onClick={onDone} disabled={busy}>

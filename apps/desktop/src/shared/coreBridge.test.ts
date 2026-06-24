@@ -2842,6 +2842,69 @@ describe('notifications (35)', () => {
     expect(typeof summaries[0]?.at).toBe('string');
   });
 
+  it('re-asks a household questionnaire in one action — a fresh send, no re-authoring (38 §3.3)', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    const recipient = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: recipient.id, roleId: 'member', pin: null });
+    const q = await bridge.questionnairesSave({
+      title: 'Weekly check-in',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: recipient.id },
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'How are we doing?', required: true }],
+    });
+    const first = await bridge.assignmentsCreate({ questionnaireId: q.id });
+
+    const reAsked = await bridge.assignmentsReAsk({ questionnaireId: q.id });
+    expect(reAsked.assignment.id).not.toBe(first.assignment.id);
+    expect(reAsked.assignment.questionnaireId).toBe(q.id);
+    expect(reAsked.assignment.status).toBe('sent');
+    // Both sends now exist for this questionnaire — trends aggregate every submitted send (no re-authoring).
+    const results = await bridge.assignmentsResults(q.id);
+    expect(results).toHaveLength(2);
+    void ownerId;
+  });
+
+  it('refuses to re-ask a compatibility questionnaire (use Duplicate instead, 38 §3.3)', async () => {
+    const { bridge } = await freshOwner();
+    const other = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
+    const q = await bridge.questionnairesSave({
+      title: 'Compatibility',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: other.id },
+      compatibility: { enabled: true, visibility: 'sharedReport' },
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'How connected?', required: true }],
+    });
+    await expect(bridge.assignmentsReAsk({ questionnaireId: q.id })).rejects.toThrow(
+      /compatibility/i,
+    );
+  });
+
+  it('does not nudge about a freshly-sent (within-window) unanswered questionnaire (38 §3.3)', async () => {
+    const { bridge } = await freshOwner();
+    const recipient = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: recipient.id, roleId: 'member', pin: null });
+    const q = await bridge.questionnairesSave({
+      title: 'Weekly check-in',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: recipient.id },
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'How are we doing?', required: true }],
+    });
+    await bridge.assignmentsCreate({ questionnaireId: q.id });
+    // Just sent → still inside the 7-day window → no reminder yet (and the relay drain never auto-runs).
+    expect(await bridge.notificationsRemindersDue()).toEqual([]);
+  });
+
+  it('denies the reminders read to a person without questionnaires.viewResults (a Guest)', async () => {
+    const { bridge } = await freshOwner();
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+    expect(await bridge.notificationsRemindersDue()).toEqual([]);
+  });
+
   it('opens only http(s) URLs externally, via the host shell', async () => {
     const host = makeHost();
     const opened: string[] = [];

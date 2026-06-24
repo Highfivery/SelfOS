@@ -198,12 +198,62 @@
 /* --- Fact rows --- */
 /* Wrap so a long sharing chip (e.g. a legacy broadcast fact showing every relationship type) drops to its
  * own line and ellipsizes instead of overflowing the card at narrow widths (the §12 no-inner-scroll rule). */
-.factRow {
+/* --- Fact list (44 audit — readability) ---
+   A long portrait groups its facts by life-area; each fact is a list row with hairline dividers, readable
+   text, and any tag flowing INLINE right after the text (never a far-right floating chip). */
+.factGroup {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.factGroup + .factGroup {
+  margin-top: var(--space-3);
+}
+
+.factGroupTitle {
+  margin: 0;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+}
+
+.factList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.factItem {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  min-width: 0;
+}
+
+.factItem + .factItem {
+  border-top: 1px solid var(--color-border);
+}
+
+.factText {
+  min-width: 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+/* The interactive controls (sharing picker + "Not right") for an AI-inferred fact, kept at the row's end. */
+.factActions {
+  display: inline-flex;
+  flex: none;
   align-items: center;
   gap: var(--space-2);
-  min-width: 0;
 }
 
 .factEditRow {
@@ -242,43 +292,22 @@
   min-width: 0;
 }
 
-/* The per-fact controls (sharing picker + "not right") cluster at the row's end. */
-.factControls {
-  display: inline-flex;
-  flex-wrap: wrap;
-  max-width: 100%;
-  min-width: 0;
-  align-items: center;
-  gap: var(--space-2);
-  flex: none;
-  margin-left: auto;
-}
-
+/* Inline badges (sensitive / flagged / withdrawn) — small, subtle, flowing right after the fact text
+   (44 audit). `inline-flex` + `vertical-align: middle` keeps them on the text's last line, never floating. */
+.inlineTag,
 .flaggedTag,
 .sensitiveTag {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  flex: none;
-  padding: 0 var(--space-1);
+  gap: 3px;
+  vertical-align: middle;
+  margin-left: var(--space-1);
+  padding: 1px var(--space-1);
   border-radius: var(--radius-sm);
   background: var(--color-surface-alt);
   color: var(--color-text-tertiary);
   font-size: var(--text-xs);
-}
-
-/* Read-only scope chip for an onboarding-derived fact (44 §3.4): its sharing is set by the answer, so
-   Memory shows it but doesn't edit it (you change it via "Edit answer"). */
-.derivedScope {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  flex: none;
-  padding: 0 var(--space-1);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-alt);
-  color: var(--color-text-tertiary);
-  font-size: var(--text-xs);
+  white-space: nowrap;
 }
 
 /* --- Meta row (confidence + categories + provenance) --- */

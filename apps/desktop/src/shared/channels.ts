@@ -5,6 +5,7 @@ import type {
   AlignmentResult,
   Goal,
   GoalStatus,
+  MemoryReconcileState,
   DeviceView,
   Answer,
   AnswerType,
@@ -192,6 +193,8 @@ export const IpcChannels = {
   insightsDelete: 'insights:delete',
   insightsFlag: 'insights:flag',
   memoryRefresh: 'memory:refresh',
+  memoryReconcileState: 'memory:reconcileState',
+  memoryResolveProposal: 'memory:resolveProposal',
   goalsList: 'goals:list',
   goalsSetStatus: 'goals:setStatus',
   goalsUpdate: 'goals:update',
@@ -658,8 +661,16 @@ export interface SelfosBridge {
     factId?: string;
     flagged: boolean;
   }): Promise<Insight | null>;
-  /** Manual "Refresh memory" — a budget-gated AI reconciliation pass over the active person's insights. */
-  memoryRefresh(): Promise<MemoryReconcileResult>;
+  /**
+   * Reconcile the active person's memory (20 §3.5 / 39 §3.3). A manual "Refresh" (`auto` omitted/false) always
+   * forces it; an automatic pass (`auto: true`, driven by the renderer cadence) only runs when warranted
+   * (threshold/gap, throttled, opt-out honored) — otherwise it returns a calm `SKIPPED` no-op.
+   */
+  memoryRefresh(input?: { auto?: boolean }): Promise<MemoryReconcileResult>;
+  /** The "kept tidy" signal + queued merge proposals for the active person (39 §3.2/§3.4). */
+  memoryReconcileState(): Promise<MemoryReconcileState>;
+  /** Confirm (merge) or dismiss (keep both) one of the active person's queued merge proposals (39 §3.4). */
+  memoryResolveProposal(input: { proposalId: string; action: 'merge' | 'keepBoth' }): Promise<void>;
   /**
    * The ACTIVE person's tracked goals / commitments (39-living-memory §3.1) — own only, scoped + gated on
    * `memory.own` in the bridge (the trust boundary). Newest-first.

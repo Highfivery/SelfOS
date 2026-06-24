@@ -34,9 +34,19 @@ describe('Sessions settings (09 §3/§14)', () => {
         .sort(),
     ).toEqual([
       'intake.inSessionDepthAsk',
+      'memory.autoReconcile',
       'sessions.autoSummarizeOnEnd',
       'sessions.memoryEnabled',
     ]);
+  });
+
+  it('registers the auto-reconcile toggle (default ON, vault-scoped, hidden when memory is off) (39 §3.3)', () => {
+    const auto = getDefinition('memory.autoReconcile');
+    expect(auto?.section).toBe('sessions');
+    expect(auto?.default).toBe(true);
+    expect(auto?.scope).toBe('vault');
+    expect(auto?.visibleWhen?.({ 'sessions.memoryEnabled': false })).toBe(false);
+    expect(auto?.visibleWhen?.({ 'sessions.memoryEnabled': true })).toBe(true);
   });
 
   it('registers the in-session depth-ask toggle (default ON, vault-scoped, AI-gated) (29 §3.5)', () => {

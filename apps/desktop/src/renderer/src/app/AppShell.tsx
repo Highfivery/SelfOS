@@ -35,6 +35,7 @@ import { useIntakeStore } from '../stores/intakeStore';
 import { useNotificationStore } from '../stores/notificationStore';
 import { useNotificationSources } from './notifications/useNotificationSources';
 import { useUpdateChecks } from './notifications/useUpdateChecks';
+import { useMemoryReconcile } from './notifications/useMemoryReconcile';
 import { ToastViewport } from './notifications/ToastViewport';
 import { Onboarding } from './routes/onboarding/Onboarding';
 import { AppHeader } from './AppHeader';
@@ -88,6 +89,8 @@ export function AppShell(): JSX.Element {
   useNotificationSources(conflicts);
   // Drive the update-check cadence (launch + 6h + focus, gated by the auto toggle); 36-update-awareness §3.1.
   useUpdateChecks();
+  // Drive the automatic memory-reconcile cadence (launch + focus, gated + throttled); 39-living-memory §3.3.
+  useMemoryReconcile();
 
   // When the signed-in person changes, drop the previous account's per-person data and load this
   // person's — sessions/usage/budget are per-user, so nothing from the prior login may linger

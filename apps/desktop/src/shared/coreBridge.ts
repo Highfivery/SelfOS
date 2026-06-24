@@ -64,6 +64,7 @@ import {
   type Insight,
   type IntimacyTopicsView,
   type MemoryReconcileResult,
+  type MemoryReconcileState,
   type OutboundSharing,
   IntakeAnswerValueSchema,
   type IntakeState,
@@ -203,9 +204,12 @@ import {
   flagInsightFact,
   listAllInsights,
   listInsightsForPerson,
+  listMergeProposals,
   listRelatedShareableInsights,
   reapOrphanShares,
   reconcileInsights,
+  resolveMergeProposal,
+  shouldAutoReconcile,
   updateInsight,
 } from '@selfos/core/insights';
 import { deleteGoal, listGoals, setGoalStatus, updateGoal } from '@selfos/core/goals';
@@ -602,6 +606,10 @@ const GoalUpdateSchema = z.object({
   horizon: z.string().optional(),
 });
 const GoalDeleteSchema = z.object({ goalId: z.string().min(1) });
+const ResolveProposalSchema = z.object({
+  proposalId: z.string().min(1),
+  action: z.enum(['merge', 'keepBoth']),
+});
 // Personal onboarding (18-personal-onboarding §6).
 const IntakeRunTurnSchema = z.object({ sectionId: z.string().min(1), userText: z.string() });
 const IntakeSectionIdSchema = z.object({ sectionId: z.string().min(1) });
@@ -2017,11 +2025,64 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         new Date(),
       );
     },
-    memoryRefresh: async (): Promise<MemoryReconcileResult> => {
+    memoryRefresh: async (input): Promise<MemoryReconcileResult> => {
+      const auto = input?.auto === true;
+      // An AUTOMATIC pass (renderer cadence) only runs when warranted: the opt-out setting is honored, and the
+      // threshold/gap/throttle gate must pass — otherwise it's a calm SKIPPED no-op that never spends. A MANUAL
+      // Refresh always forces (skips this gate). The throttle marker is device-local + per-person.
+      if (auto) {
+        const ctx = await host.vaultAndKey();
+        const personId = await activePersonId();
+        if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'memory.own'))) {
+          return { ok: false, reason: 'SKIPPED' };
+        }
+        if ((await readVaultSettingsValues(ctx.fs))['memory.autoReconcile'] === false) {
+          return { ok: false, reason: 'SKIPPED' };
+        }
+        const approved = (await listInsightsForPerson(ctx.fs, ctx.key, personId)).filter(
+          (i) => i.approved,
+        );
+        const device = await host.readDeviceState();
+        const lastCheckedAt = device.memoryReconcileCheckedAt?.[personId];
+        if (!shouldAutoReconcile({ insights: approved, lastCheckedAt, now: new Date() })) {
+          return { ok: false, reason: 'SKIPPED' };
+        }
+        // Stamp BEFORE running, so even a pass that spends won't re-trigger within the throttle window.
+        await host.updateDeviceState({
+          memoryReconcileCheckedAt: {
+            ...(device.memoryReconcileCheckedAt ?? {}),
+            [personId]: new Date().toISOString(),
+          },
+        });
+      }
       // Reuse the AI-deps assembly (gates on `memory.own`, reads the key host-side, never to the renderer).
       const deps = await aiDeps('memory.own');
-      if (!deps) return { ok: false, reason: 'DENIED', message: 'Not available.' };
+      if (!deps)
+        return { ok: false, reason: auto ? 'SKIPPED' : 'DENIED', message: 'Not available.' };
       return reconcileInsights(deps);
+    },
+    memoryReconcileState: async (): Promise<MemoryReconcileState> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'memory.own'))) return { proposals: [] };
+      const personId = await activePersonId();
+      if (!personId) return { proposals: [] };
+      const insights = await listInsightsForPerson(ctx.fs, ctx.key, personId);
+      const lastReconciledAt = insights
+        .map((i) => i.lastReconciledAt)
+        .filter((v): v is string => typeof v === 'string')
+        .sort()
+        .at(-1);
+      const proposals = await listMergeProposals(ctx.fs, ctx.key, personId);
+      return { ...(lastReconciledAt ? { lastReconciledAt } : {}), proposals };
+    },
+    memoryResolveProposal: async (input): Promise<void> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'memory.own'))) return;
+      const personId = await activePersonId();
+      if (!personId) return;
+      const p = ResolveProposalSchema.parse(input);
+      // Scoped to the active person's OWN proposals (the trust boundary).
+      await resolveMergeProposal(ctx.fs, ctx.key, personId, p.proposalId, p.action, new Date());
     },
     goalsList: async (): Promise<Goal[]> => {
       const ctx = await host.vaultAndKey();

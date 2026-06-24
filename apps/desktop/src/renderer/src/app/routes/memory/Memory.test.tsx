@@ -61,7 +61,12 @@ function goal(over: Partial<Goal> & { id: string; text: string }): Goal {
 
 afterEach(() => {
   clearMockBridge();
-  useInsightStore.setState({ insights: [], loaded: false });
+  useInsightStore.setState({
+    insights: [],
+    loaded: false,
+    lastReconciledAt: undefined,
+    proposals: [],
+  });
   useGoalStore.setState({ goals: [], loaded: false });
   usePeopleStore.setState({ people: [], loaded: false });
   useConversationStore.setState({ conversations: [] });
@@ -224,6 +229,37 @@ describe('Memory dashboard', () => {
     expect(
       await screen.findByText(/Goals you mention in sessions show up here/),
     ).toBeInTheDocument();
+  });
+
+  it('shows a merge proposal in Needs your review and confirms it + the kept-tidy signal', async () => {
+    useSessionStore.setState({ activePerson: activeP1 });
+    const resolve = vi.fn(() => Promise.resolve());
+    installMockBridge({
+      insightsList: () => Promise.resolve([insight({ id: 'i1' })]),
+      memoryReconcileState: () =>
+        Promise.resolve({
+          lastReconciledAt: new Date().toISOString(),
+          proposals: [
+            {
+              id: 'mp1',
+              schemaVersion: 1,
+              subjectPersonId: 'p1',
+              fromId: 'a',
+              intoId: 'b',
+              fromSummary: 'Loves the outdoors',
+              intoSummary: 'Values nature',
+              createdAt: new Date().toISOString(),
+            },
+          ],
+        }),
+      memoryResolveProposal: resolve,
+    });
+    renderMemory();
+    expect(await screen.findByText(/Memory last tidied/)).toBeInTheDocument();
+    expect(screen.getByText(/combine them into one/)).toBeInTheDocument();
+    expect(screen.getByText('· Values nature')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Merge' }));
+    expect(resolve).toHaveBeenCalledWith({ proposalId: 'mp1', action: 'merge' });
   });
 
   it('runs Refresh memory and shows the calm AI-off note', async () => {

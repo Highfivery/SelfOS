@@ -182,6 +182,13 @@ export const DeviceStateSchema = z.object({
   latestKnownVersion: z.string().optional(),
   /** The last successful update-check result, surfaced to Settings → About without re-fetching. */
   lastUpdateCheckResult: UpdateCheckResultSchema.optional(),
+  /**
+   * When this device last RAN an automatic memory-reconcile, keyed by subject person id (39-living-memory
+   * §3.3). The auto-cadence throttle marker — device-local + per-person (each device throttles independently,
+   * a reconcile dismissal shouldn't leak across personas). Additive-optional (the `notificationState`
+   * precedent — no schemaVersion bump).
+   */
+  memoryReconcileCheckedAt: z.record(z.string(), z.string()).optional(),
 });
 export type DeviceState = z.infer<typeof DeviceStateSchema>;
 
@@ -729,6 +736,24 @@ export function effectiveGoalStatus(goal: Goal, now: Date): GoalStatus {
 }
 
 /**
+ * A pending memory-merge proposal (39-living-memory §3.4). Reconciliation no longer silently merges two
+ * insights — it queues a proposal the user confirms (Merge) or dismisses (Keep both) in Memory's "Needs your
+ * review" region. Stored per-subject at `people/<id>/memory-proposals/<id>.enc`. The summaries are snapshotted
+ * for display so the card reads even if an insight later changes. `schemaVersion` starts at 1; additive.
+ */
+export const MergeProposalSchema = z.object({
+  id: z.string().min(1),
+  schemaVersion: z.number().int().positive(),
+  subjectPersonId: z.string().min(1),
+  fromId: z.string().min(1), // the insight that would be folded away
+  intoId: z.string().min(1), // the insight it would fold into (kept)
+  fromSummary: z.string(),
+  intoSummary: z.string(),
+  createdAt: z.string(),
+});
+export type MergeProposal = z.infer<typeof MergeProposalSchema>;
+
+/**
  * A profile-update suggestion (18-personal-onboarding §15) — the self-maintaining-profile signal. Produced as
  * a by-product of the session/dream/questionnaire analysis passes that already run (no extra AI spend): when
  * the analysis sees a fact that contradicts or extends a known profile/intake answer, it proposes an update.
@@ -1150,9 +1175,18 @@ export interface MemoryReconcileResult {
   ok: boolean;
   reconciledCount?: number;
   mergedCount?: number;
+  /** Merge proposals queued for the user to confirm (39-living-memory §3.4 — confirm-before-apply). */
+  proposedCount?: number;
   usage?: UsageEvent;
-  reason?: AiFailureReason | 'AI_OFF' | 'NOTHING_TO_DO';
+  /** `SKIPPED` = an automatic pass that wasn't warranted (throttle/threshold/opt-out) — a silent no-op. */
+  reason?: AiFailureReason | 'AI_OFF' | 'NOTHING_TO_DO' | 'SKIPPED';
   message?: string;
+}
+
+/** The "kept tidy" signal + the queue of merge proposals for Memory (39-living-memory §3.2/§3.4). */
+export interface MemoryReconcileState {
+  lastReconciledAt?: string;
+  proposals: MergeProposal[];
 }
 
 export const ChannelSchema = z.enum(['inApp', 'relay']);

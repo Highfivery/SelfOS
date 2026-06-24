@@ -4,6 +4,7 @@ import { memFileSystem } from '../host/memFileSystem';
 import type { ClaudeClient } from '../host';
 import type { Insight } from '../schemas';
 import { getInsight, listInsightsForPerson, saveInsight } from './insightStore';
+import { listMergeProposals } from './mergeProposals';
 import { reconcileInsights } from './reconcileService';
 
 const key = generateMasterKey();
@@ -76,7 +77,7 @@ describe('reconcileInsights', () => {
     expect(i1?.lastReconciledAt).toBe('2026-06-16T00:00:00.000Z');
   });
 
-  it('conservatively merges a duplicate: folds non-flagged facts, records provenance, deletes the source', async () => {
+  it('QUEUES a duplicate as a merge proposal (confirm-before-apply, 39 §3.4) — never silently merges', async () => {
     const fs = memFileSystem();
     await saveInsight(
       fs,
@@ -84,16 +85,18 @@ describe('reconcileInsights', () => {
       insight({
         id: 'a',
         provenance: { conversationId: 'cA', at: '2026-06-10T00:00:00.000Z' },
-        facts: [
-          { id: 'fa1', text: 'Loves hiking', shareable: false },
-          { id: 'fa2', text: 'WRONG FACT', shareable: false, flaggedInaccurate: true },
-        ],
+        summary: 'summary-a',
+        facts: [{ id: 'fa1', text: 'Loves hiking', shareable: false }],
       }),
     );
     await saveInsight(
       fs,
       key,
-      insight({ id: 'b', facts: [{ id: 'fb1', text: 'Values nature', shareable: false }] }),
+      insight({
+        id: 'b',
+        summary: 'summary-b',
+        facts: [{ id: 'fb1', text: 'Values nature', shareable: false }],
+      }),
     );
     const client = fakeClient({
       insights: [
@@ -103,13 +106,23 @@ describe('reconcileInsights', () => {
       merges: [{ from: 'a', into: 'b' }],
     });
     const result = await reconcileInsights(deps(fs, client));
-    expect(result).toMatchObject({ ok: true, mergedCount: 1 });
+    expect(result).toMatchObject({ ok: true, mergedCount: 0, proposedCount: 1 });
 
-    expect(await getInsight(fs, key, 'p1', 'a')).toBeNull(); // the duplicate was deleted
-    const b = await getInsight(fs, key, 'p1', 'b');
-    expect(b?.facts.map((f) => f.text)).toContain('Loves hiking'); // folded in
-    expect(b?.facts.some((f) => f.text === 'WRONG FACT')).toBe(false); // a flagged fact is NEVER carried forward
-    expect(b?.contributingSources?.some((p) => p.conversationId === 'cA')).toBe(true); // provenance recorded
+    // Both insights still exist — nothing was folded/deleted; a proposal was queued instead.
+    expect(await getInsight(fs, key, 'p1', 'a')).not.toBeNull();
+    expect(await getInsight(fs, key, 'p1', 'b')).not.toBeNull();
+    const proposals = await listMergeProposals(fs, key, 'p1');
+    expect(proposals).toHaveLength(1);
+    expect(proposals[0]).toMatchObject({
+      fromId: 'a',
+      intoId: 'b',
+      fromSummary: 'summary-a',
+      intoSummary: 'summary-b',
+    });
+
+    // A second pass proposing the same pair doesn't duplicate the proposal.
+    await reconcileInsights(deps(fs, client));
+    expect(await listMergeProposals(fs, key, 'p1')).toHaveLength(1);
   });
 
   it('returns AI_OFF with no API key, and NOTHING_TO_DO when there are no approved insights', async () => {

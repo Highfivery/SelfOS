@@ -48,6 +48,7 @@ declare module './types' {
     'ai.model': 'claude-sonnet-4-6' | 'claude-opus-4-8';
     'sessions.memoryEnabled': boolean;
     'sessions.autoSummarizeOnEnd': boolean;
+    'memory.autoReconcile': boolean;
     'intake.inSessionDepthAsk': boolean;
     'questionnaires.autoAnalyze': boolean;
     'questionnaires.defaultMessages': RelayMessages;
@@ -288,6 +289,19 @@ export function registerBuiltinSettings(): void {
       control: { type: 'switch' },
       scope: 'vault',
       order: 2,
+      visibleWhen: (values) => values['sessions.memoryEnabled'] !== false,
+    }),
+    defineSetting({
+      key: 'memory.autoReconcile',
+      section: 'sessions',
+      label: 'Keep memory tidy automatically',
+      description:
+        'When on, SelfOS occasionally tidies your memory in the background — recalibrating confidence and proposing merges of duplicate insights for you to confirm — so it stays coherent without you remembering to tap “Refresh memory.” It only runs when enough has changed, no more than once a day, and never when AI is off or over budget. Turn off to only ever tidy memory by tapping Refresh yourself.',
+      schema: z.boolean(),
+      default: true,
+      control: { type: 'switch' },
+      scope: 'vault',
+      order: 3,
       visibleWhen: (values) => values['sessions.memoryEnabled'] !== false,
     }),
     defineSetting({

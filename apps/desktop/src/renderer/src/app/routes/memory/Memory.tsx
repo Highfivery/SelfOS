@@ -43,6 +43,17 @@ function matchesText(insight: Insight, q: string): boolean {
   return hay.includes(q);
 }
 
+/** A calm relative date for the "Memory last tidied …" signal (39 §3.2). */
+function relativeDate(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return 'recently';
+  const days = Math.floor((Date.now() - then) / (24 * 60 * 60 * 1000));
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 7) return `${days} days ago`;
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
 /**
  * "Memory" — the active person's living view of what SelfOS has learned about them (20-memory-dashboard §3).
  * The bridge scopes the list to their own insights + relationships' shareable facts (§5.1). Header with
@@ -61,6 +72,10 @@ export function Memory(): JSX.Element {
   const dreams = useDreamStore((s) => s.dreams);
   const goals = useGoalStore((s) => s.goals);
   const loadGoals = useGoalStore((s) => s.load);
+  const lastReconciledAt = useInsightStore((s) => s.lastReconciledAt);
+  const proposals = useInsightStore((s) => s.proposals);
+  const loadReconcileState = useInsightStore((s) => s.loadReconcileState);
+  const resolveProposal = useInsightStore((s) => s.resolveProposal);
 
   const [query, setQuery] = useState('');
   const [source, setSource] = useState<SourceFilter>('all');
@@ -74,7 +89,8 @@ export function Memory(): JSX.Element {
     void load();
     void loadPeople();
     void loadGoals();
-  }, [load, loadPeople, loadGoals]);
+    void loadReconcileState();
+  }, [load, loadPeople, loadGoals, loadReconcileState]);
 
   // Active goals (open/in-progress — `stale` derives from these) above; closed (done/let go) fold into a
   // collapsed history. The store returns newest-first.
@@ -146,9 +162,9 @@ export function Memory(): JSX.Element {
     try {
       const result = await refresh();
       if (result.ok) {
-        const merged = result.mergedCount ?? 0;
+        const proposed = result.proposedCount ?? 0;
         setRefreshNote(
-          `Memory refreshed — ${result.reconciledCount ?? 0} updated${merged ? `, ${merged} merged` : ''}.`,
+          `Memory refreshed — ${result.reconciledCount ?? 0} updated${proposed ? `, ${proposed} merge${proposed === 1 ? '' : 's'} to review below` : ''}.`,
         );
       } else if (result.reason === 'AI_OFF' || result.reason === 'NO_KEY') {
         setRefreshNote('Turn on AI in Settings to refresh memory.');
@@ -175,6 +191,11 @@ export function Memory(): JSX.Element {
         <Text tone="secondary">
           What SelfOS understands about you — and the people you relate to.
         </Text>
+        {lastReconciledAt ? (
+          <Text size="sm" tone="tertiary" aria-live="polite">
+            Memory last tidied {relativeDate(lastReconciledAt)}.
+          </Text>
+        ) : null}
       </Stack>
 
       {anyInsights ? (
@@ -256,15 +277,42 @@ export function Memory(): JSX.Element {
         </Card>
       ) : null}
 
-      {drafts.length > 0 ? (
+      {drafts.length > 0 || proposals.length > 0 ? (
         <section className={styles.group} aria-label="Needs your review">
           <Heading level={3} className={styles.groupTitle}>
             Needs your review
           </Heading>
-          <Text size="sm" tone="tertiary">
-            Drafts wait here until you approve them — they don’t inform your coaching yet.
-          </Text>
           <Stack gap={3}>
+            {proposals.map((proposal) => (
+              <Card key={proposal.id} className={styles.proposal}>
+                <Stack gap={2}>
+                  <Text size="sm" tone="secondary">
+                    These two look like the same thing — combine them into one?
+                  </Text>
+                  <Text>· {proposal.intoSummary}</Text>
+                  <Text>· {proposal.fromSummary}</Text>
+                  <div className={styles.proposalActions}>
+                    <Button
+                      variant="secondary"
+                      onClick={() => void resolveProposal(proposal.id, 'merge')}
+                    >
+                      Merge
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={() => void resolveProposal(proposal.id, 'keepBoth')}
+                    >
+                      Keep both
+                    </Button>
+                  </div>
+                </Stack>
+              </Card>
+            ))}
+            {drafts.length > 0 ? (
+              <Text size="sm" tone="tertiary">
+                Drafts wait here until you approve them — they don’t inform your coaching yet.
+              </Text>
+            ) : null}
             {drafts.map((insight) => (
               <InsightCard
                 key={insight.id}

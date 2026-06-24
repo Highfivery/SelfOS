@@ -297,6 +297,8 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.insightsDelete, bridge.insightsDelete);
   handle(IpcChannels.insightsFlag, bridge.insightsFlag);
   handle(IpcChannels.memoryRefresh, bridge.memoryRefresh);
+  handle(IpcChannels.memoryReconcileState, bridge.memoryReconcileState);
+  handle(IpcChannels.memoryResolveProposal, bridge.memoryResolveProposal);
   handle(IpcChannels.goalsList, bridge.goalsList);
   handle(IpcChannels.goalsSetStatus, bridge.goalsSetStatus);
   handle(IpcChannels.goalsUpdate, bridge.goalsUpdate);

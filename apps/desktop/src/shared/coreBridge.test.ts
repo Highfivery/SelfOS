@@ -1199,6 +1199,74 @@ describe('createCoreBridge', () => {
     expect(await bridge.memoryRefresh()).toMatchObject({ ok: false, reason: 'DENIED' });
   });
 
+  it('auto-reconcile: runs when warranted (queues a merge PROPOSAL), throttles, and honors the opt-out (39 §3.3/§3.4)', async () => {
+    const { bridge, host, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const ctx = (await host.host.vaultAndKey())!;
+    const at = new Date().toISOString();
+    // Seed 5 approved insights — a duplicate pair (dupA/dupB) + three others — so the threshold trips.
+    for (const id of ['dupA', 'dupB', 'x1', 'x2', 'x3']) {
+      await saveInsight(ctx.fs, ctx.key, {
+        id,
+        schemaVersion: 1,
+        source: 'session',
+        subjectPersonId: ownerId,
+        summary: `summary-${id}`,
+        facts: [{ id: `f-${id}`, text: `fact ${id}`, shareable: false }],
+        confidence: 'low',
+        categories: [],
+        approved: true,
+        provenance: { conversationId: id, at },
+        createdAt: at,
+        updatedAt: at,
+      });
+    }
+    // The reconcile model recalibrates confidence + proposes merging dupA into dupB.
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (_options, onDelta) => {
+        const text = JSON.stringify({
+          insights: ['dupA', 'dupB', 'x1', 'x2', 'x3'].map((id) => ({ id, confidence: 'high' })),
+          merges: [{ from: 'dupA', into: 'dupB' }],
+        });
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+
+    // First auto pass runs (5 new, never reconciled) and QUEUES the merge — it never silently folds.
+    const first = await bridge.memoryRefresh({ auto: true });
+    expect(first).toMatchObject({ ok: true, mergedCount: 0, proposedCount: 1 });
+    const state = await bridge.memoryReconcileState();
+    expect(state.lastReconciledAt).toBeTruthy();
+    expect(state.proposals).toHaveLength(1);
+    // Both insights still exist — the proposal hasn't been applied.
+    const afterPass = (await bridge.insightsList()).map((i) => i.id);
+    expect(afterPass).toContain('dupA');
+    expect(afterPass).toContain('dupB');
+
+    // Second auto pass within 24h is throttled → a calm SKIPPED no-op (no extra spend).
+    expect(await bridge.memoryRefresh({ auto: true })).toMatchObject({
+      ok: false,
+      reason: 'SKIPPED',
+    });
+
+    // Confirming the proposal applies the merge (the source is folded away).
+    await bridge.memoryResolveProposal({ proposalId: state.proposals[0]!.id, action: 'merge' });
+    expect((await bridge.insightsList()).some((i) => i.id === 'dupA')).toBe(false);
+    expect((await bridge.memoryReconcileState()).proposals).toHaveLength(0);
+
+    // With the opt-out off, an auto pass is skipped regardless of warrant.
+    await bridge.setSetting({ key: 'memory.autoReconcile', value: false, scope: 'vault' });
+    expect(await bridge.memoryRefresh({ auto: true })).toMatchObject({
+      ok: false,
+      reason: 'SKIPPED',
+    });
+  });
+
   it('reaps orphaned shareableWith from other people’s facts when a person is deleted (39 §4.5)', async () => {
     const { bridge, host, ownerId } = await freshOwner();
     const friend = await bridge.peopleSave({ displayName: 'Friend', isSubject: true, tags: [] });

@@ -9,6 +9,8 @@ import { readEncryptedJson } from '../vault';
 // The catalog is pure data (it imports only `intimacy` + `schemas`), so importing it by its direct path —
 // NOT the `../intake` barrel, which would pull `intakeService` and create a people↔intake cycle — is safe.
 import { INTAKE_CATALOG } from '../intake/intakeCatalog';
+// `effectiveAnswerScope` is pure (catalog + presets) and imported by its direct path for the same reason.
+import { effectiveAnswerScope } from '../intake/sharingCategory';
 
 /**
  * Read a person's SHARED structured intake answers into a related person's coaching context
@@ -112,9 +114,12 @@ export async function buildSharedIntakeAnswerLines(
 
   const lines: string[] = [];
   for (const section of parsed.data.sections) {
-    if (!section.answerSharing) continue;
-    for (const [questionId, scope] of Object.entries(section.answerSharing)) {
+    // Iterate ANSWERED questions (not just stored `answerSharing` entries): a portrait from before
+    // per-question sharing has answers but no `answerSharing`, and `effectiveAnswerScope` backfills each
+    // answered question's category default (restricted answers stay Private). An explicit choice wins.
+    for (const questionId of Object.keys(section.answers)) {
       if (lines.length >= MAX_SHARED_ANSWERS_PER_PERSON) return lines;
+      const scope = effectiveAnswerScope(section.id, questionId, section.answerSharing);
       if (!answerGrants(scope, grantedTypes)) continue;
       const value = section.answers[questionId];
       if (value === undefined) continue;

@@ -63,6 +63,24 @@ export function defaultScopeForQuestion(sectionId: string, questionId: string): 
   return [...SHARING_PRESETS[questionCategory(sectionId, questionId)]];
 }
 
+/**
+ * The EFFECTIVE sharing scope for one answered intake question (43 §4 / 44 audit): an explicit
+ * `answerSharing[qid]` the person chose (including an explicit `[]` = deliberately Private) wins; a question
+ * with NO stored entry falls back to its category default (`defaultScopeForQuestion`) — the **share-by-default
+ * backfill**, so a portrait synthesized before per-question sharing existed (no `answerSharing`) still shares
+ * its ordinary answers per the presets, while restricted (intimacy/trauma) answers stay Private (their default
+ * is `[]`). The single source of truth for every reader: synthesis (`factScopeForSection`), the shared-answer
+ * context (`buildSharedIntakeAnswerLines`), and the transparency read (`listOutboundSharing`).
+ */
+export function effectiveAnswerScope(
+  sectionId: string,
+  questionId: string,
+  answerSharing: Readonly<Record<string, RelationshipType[]>> | undefined,
+): RelationshipType[] {
+  const explicit = answerSharing?.[questionId];
+  return explicit !== undefined ? explicit : defaultScopeForQuestion(sectionId, questionId);
+}
+
 /** Every form-section id in the catalog (so the renderer/tests can iterate the categorized sections). */
 export function formSectionIds(): string[] {
   return INTAKE_CATALOG.filter((d) => d.mode === 'form' && d.questions).map((d) => d.id);

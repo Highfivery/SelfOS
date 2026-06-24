@@ -3,12 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { Brain, MessageCircle, RefreshCw, Search } from 'lucide-react';
 import type { Insight, InsightSource, Relationship } from '@shared/schemas';
 import { LIFE_AREAS } from '@shared/schemas';
+import { availableRelationshipTypesFor } from '../../availableRelationshipTypes';
 import { useInsightStore } from '../../../stores/insightStore';
 import { useGoalStore } from '../../../stores/goalStore';
 import { usePeopleStore } from '../../../stores/peopleStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { aiUnavailableMessage } from '../../AiUnavailableNotice';
-import { availableRelationshipTypesFor } from '../../availableRelationshipTypes';
 import { useConversationStore } from '../../../stores/conversationStore';
 import { useDreamStore } from '../../../stores/dreamStore';
 import {
@@ -103,7 +103,7 @@ export function Memory(): JSX.Element {
     void window.selfos?.relationshipsList?.().then((rels) => setRelationships(rels ?? []));
   }, [load, loadPeople, loadGoals, loadReconcileState]);
 
-  // The relationship types present in the person's graph — offered by each fact's sharing picker (44 §3.4).
+  // The relationship types in the person's graph — offered by an AI-inferred fact's sharing picker (44 §3.4).
   const availableTypes = useMemo(
     () => availableRelationshipTypesFor(activePersonId, relationships),
     [activePersonId, relationships],

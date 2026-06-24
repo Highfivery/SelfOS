@@ -11,6 +11,8 @@ import { readEncryptedJson } from '../vault';
 import { listRelatedPeople } from './buildContext';
 import { relationshipTypesFromSubjectToViewer } from './relationshipScope';
 import { formatSharedAnswer, getIntakeQuestion } from './sharedIntakeAnswers';
+// Pure (catalog + presets), imported by its direct path to avoid the people↔intake barrel cycle.
+import { effectiveAnswerScope } from '../intake/sharingCategory';
 
 /**
  * The transparency read (42-relationship-scoped-sharing §5.3): exactly which of a person's OWN shareable
@@ -71,14 +73,17 @@ export async function listOutboundSharing(
     }
   }
 
-  // 2) Shared structured intake answers (their per-question `answerSharing` scope, written by 43).
+  // 2) Shared structured intake answers (their per-question `answerSharing` scope, written by 43). Iterate
+  //    ANSWERED questions and resolve each via `effectiveAnswerScope` (the share-by-default backfill), so a
+  //    portrait from before per-question sharing still surfaces its shared answers; restricted answers default
+  //    Private and drop out below. An explicit choice (incl. an explicit []) is honored.
   const raw = await readEncryptedJson(fs, `people/${personId}/intake/session.enc`, key);
   const parsed = raw === null ? null : IntakeSessionSchema.safeParse(raw);
   if (parsed?.success) {
     for (const section of parsed.data.sections) {
-      if (!section.answerSharing) continue;
-      for (const [questionId, types] of Object.entries(section.answerSharing)) {
-        if (types.length === 0) continue;
+      for (const questionId of Object.keys(section.answers)) {
+        const types = effectiveAnswerScope(section.id, questionId, section.answerSharing);
+        if (types.length === 0) continue; // Private — not outbound
         const value = section.answers[questionId];
         if (value === undefined) continue;
         const question = getIntakeQuestion(questionId);

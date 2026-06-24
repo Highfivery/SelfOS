@@ -30,7 +30,7 @@ import { checkBudget, costOf, recordUsage } from '../usage';
 import { getInsight, normalizeCategories, saveInsight } from '../insights';
 import { isAnswered } from '../questionnaires/answering';
 import { activityRowContext, withResolvedActivityRows } from './activityContext';
-import { defaultScopeForQuestion } from './sharingCategory';
+import { defaultScopeForQuestion, effectiveAnswerScope } from './sharingCategory';
 import {
   INTAKE_CATALOG,
   buildInterviewerAddendum,
@@ -822,7 +822,7 @@ function factScopeForSection(
   if (!ref) return [];
   const def = getIntakeSection(ref.id);
   const section = session.sections.find((s) => s.id === ref.id);
-  if (!def?.questions || !section?.answerSharing) return [];
+  if (!def?.questions || !section) return [];
 
   const candidates = def.questions.filter((m) => {
     if (ref.sensitive) return m.restricted === true;
@@ -833,7 +833,11 @@ function factScopeForSection(
   let intersection: RelationshipType[] | null = null;
   for (const m of candidates) {
     if (section.answers[m.q.id] === undefined) continue; // only answered questions contribute
-    const scope = section.answerSharing[m.q.id] ?? [];
+    // Backfill: an answered question with no explicit `answerSharing` (a portrait synthesized before
+    // per-question sharing existed) falls back to its category default — so existing portraits share by
+    // default on the next refresh; restricted answers stay Private (their default is []). An explicit
+    // choice (incl. an explicit [] = deliberately Private) is honored.
+    const scope = effectiveAnswerScope(ref.id, m.q.id, section.answerSharing);
     intersection =
       intersection === null ? [...scope] : intersection.filter((t) => scope.includes(t));
     if (intersection.length === 0) break; // any private answer locks the block (most-restrictive)

@@ -394,6 +394,9 @@ describe('IntakeFormPanel — per-question sharing (43)', () => {
     fireEvent.click(screen.getByRole('button', { name: /Sex drive: private/i }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Partner' }));
     expect(await screen.findByText(/is sensitive — share it/i)).toBeInTheDocument();
+    // The confirm renders INLINE in the question's sharing slot (44 audit): it REPLACES the picker — the
+    // checkbox is gone — so it's co-located with the click, not a disconnected top banner.
+    expect(screen.queryByRole('checkbox', { name: 'Partner' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Share it' }));
 
     fireEvent.click(screen.getByRole('button', { name: /Save changes|Continue/ }));

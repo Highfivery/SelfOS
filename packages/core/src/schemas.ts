@@ -55,6 +55,7 @@ export const NOTIFICATION_KINDS = [
   'responses-arrived',
   'reminder-due',
   'sync-conflict',
+  'goal-followup', // 40-proactive-coaching §3.2 — a gentle check-in on a stale/due goal
 ] as const;
 export const NotificationKindSchema = z.enum(NOTIFICATION_KINDS);
 export type NotificationKind = z.infer<typeof NotificationKindSchema>;

@@ -9,6 +9,7 @@ import { unansweredCount, useInboxStore } from '../../../stores/inboxStore';
 import { useGuidanceStore } from '../../../stores/guidanceStore';
 import { useIntakeStore } from '../../../stores/intakeStore';
 import { useSynthesisStore } from '../../../stores/synthesisStore';
+import { useGoalStore } from '../../../stores/goalStore';
 import { useSetting } from '../../../settings/useSetting';
 import { aggregateCrisisSignal } from '@selfos/core/coaching';
 import { CrisisFooter } from '../sessions/CrisisFooter';
@@ -20,6 +21,7 @@ import { ContinueCard } from './ContinueCard';
 import { SuggestionsCard } from './SuggestionsCard';
 import { WellbeingCard } from './WellbeingCard';
 import { InsightOfTheWeekCard } from './InsightOfTheWeekCard';
+import { GoalFollowupCard } from './GoalFollowupCard';
 import { DreamsCard } from './DreamsCard';
 import { MemoryCard } from './MemoryCard';
 import { InboxCard } from './InboxCard';
@@ -50,6 +52,7 @@ export function Home(): JSX.Element {
   const patternStats = useDreamPatternStore((s) => s.stats);
   const insights = useInsightStore((s) => s.insights);
   const inboxItems = useInboxStore((s) => s.items);
+  const goals = useGoalStore((s) => s.goals);
 
   const [aiEnabled] = useSetting('ai.enabled');
   const [hasKey, setHasKey] = useState(false);
@@ -73,6 +76,7 @@ export function Home(): JSX.Element {
       useGuidanceStore.getState().load(),
       useIntakeStore.getState().load(),
       useSynthesisStore.getState().load(),
+      useGoalStore.getState().load(), // bridge gates on memory.own → [] when not permitted
     ]).then(() => {
       if (!cancelled) setReady(true);
     });
@@ -114,7 +118,8 @@ export function Home(): JSX.Element {
     conversations.length === 0 &&
     dreams.length === 0 &&
     approvedInsights.length === 0 &&
-    inboxCount === 0;
+    inboxCount === 0 &&
+    goals.length === 0;
 
   return (
     <div className={styles.home}>
@@ -148,6 +153,7 @@ export function Home(): JSX.Element {
               canCreateQuestionnaires={canCreateQuestionnaires}
             />
           ) : null}
+          {canViewMemory ? <GoalFollowupCard /> : null}
           <WellbeingCard points={moodPoints} />
           {hasSessions ? (
             <InsightOfTheWeekCard

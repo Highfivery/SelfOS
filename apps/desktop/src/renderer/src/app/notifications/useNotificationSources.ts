@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import type { ReminderDueSummary, ResponsesArrivedSummary } from '@shared/channels';
+import type { Goal } from '@shared/schemas';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useNotificationStore } from '../../stores/notificationStore';
 import { useUpdateStore } from '../../stores/updateStore';
+import { stalestGoal } from './goalFollowup';
 import type { NotificationCandidate } from './notificationKinds';
 
 /**
@@ -17,6 +19,7 @@ export function useNotificationSources(conflicts: string[]): void {
   const activePersonId = useSessionStore((s) => s.activePerson?.id ?? null);
   const canViewResults = useSessionStore((s) => s.can('questionnaires.viewResults'));
   const canIntake = useSessionStore((s) => s.can('intake.own'));
+  const canMemory = useSessionStore((s) => s.can('memory.own'));
   const setCandidates = useNotificationStore((s) => s.setCandidates);
   // The update result is app-global (NOT per-person) — it survives a person switch (36 §11).
   const update = useUpdateStore((s) => s.result);
@@ -24,6 +27,7 @@ export function useNotificationSources(conflicts: string[]): void {
   const [suggestionIds, setSuggestionIds] = useState<string[]>([]);
   const [responses, setResponses] = useState<ResponsesArrivedSummary[]>([]);
   const [reminders, setReminders] = useState<ReminderDueSummary[]>([]);
+  const [goals, setGoals] = useState<Goal[]>([]);
 
   // One-shot reads per active person. Guarded so a fetch resolving after a person switch is ignored.
   useEffect(() => {
@@ -31,8 +35,9 @@ export function useNotificationSources(conflicts: string[]): void {
     setSuggestionIds([]);
     setResponses([]);
     setReminders([]);
+    setGoals([]);
     void (async () => {
-      const [sugg, resp, rem] = await Promise.all([
+      const [sugg, resp, rem, gls] = await Promise.all([
         canIntake
           ? (window.selfos?.profileSuggestions() ?? Promise.resolve([]))
           : Promise.resolve([]),
@@ -42,16 +47,18 @@ export function useNotificationSources(conflicts: string[]): void {
         canViewResults
           ? (window.selfos?.notificationsRemindersDue() ?? Promise.resolve([]))
           : Promise.resolve([]),
+        canMemory ? (window.selfos?.goalsList() ?? Promise.resolve([])) : Promise.resolve([]),
       ]);
       if (!active || useSessionStore.getState().activePerson?.id !== activePersonId) return;
       setSuggestionIds(sugg.map((s) => s.id).sort());
       setResponses(resp);
       setReminders(rem);
+      setGoals(gls);
     })();
     return () => {
       active = false;
     };
-  }, [activePersonId, canIntake, canViewResults]);
+  }, [activePersonId, canIntake, canViewResults, canMemory]);
 
   // Rebuild the candidate list whenever any source changes; conflicts arrive reactively via the prop.
   useEffect(() => {
@@ -130,6 +137,22 @@ export function useNotificationSources(conflicts: string[]): void {
       });
     }
 
+    // A gentle goal check-in (40 §3.2) — at most ONE open at a time (the stalest), coalesced. The action
+    // links to Memory where the goal + its Still on it / Mark done / Let it go actions live; the Home
+    // GoalFollowupCard offers those inline. Acting changes the goal (signature) so a dismissed nudge stays
+    // dismissed until the goal changes; resolving the stalest surfaces the next.
+    const stale = stalestGoal(goals, new Date());
+    if (stale) {
+      candidates.push({
+        kind: 'goal-followup',
+        coalesceKey: 'goal-followup',
+        signature: `${stale.id}:${stale.updatedAt}`,
+        title: 'A goal worth a check-in',
+        body: `You set a goal a while back: “${stale.text}”. Still working on it?`,
+        action: { type: 'navigate', to: '/memory' },
+      });
+    }
+
     setCandidates(candidates);
-  }, [conflicts, suggestionIds, responses, reminders, update, setCandidates]);
+  }, [conflicts, suggestionIds, responses, reminders, goals, update, setCandidates]);
 }

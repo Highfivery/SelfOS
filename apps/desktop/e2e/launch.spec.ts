@@ -736,6 +736,52 @@ test('proactive coaching: the synthesis card shows the cached observation and se
   }
 });
 
+test('proactive coaching: a stale goal surfaces a nudge + Home card; Mark done closes it (40 §3.2)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('master key missing');
+  const old = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString(); // 40 days → stale (>21)
+  await saveGoal(fs, key, {
+    id: 'g1',
+    schemaVersion: 1,
+    subjectPersonId: 'owner-1',
+    text: 'finish the side project',
+    status: 'open',
+    provenance: { conversationId: 'c0', at: old },
+    createdAt: old,
+    updatedAt: old,
+    lastTouchedAt: old,
+  });
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    // The Home goal-followup card surfaces the stale goal with the calm actions (exact: the card's
+    // <strong>, not the longer notification body that also names the goal).
+    await expect(w.getByRole('heading', { name: /still working on it/i })).toBeVisible();
+    await expect(w.getByText('finish the side project', { exact: true })).toBeVisible();
+    // …and the same signal is a (non-spammy) notification.
+    await expect(w.getByRole('button', { name: /Notifications, \d+ unread/ })).toBeVisible();
+    await w.getByRole('button', { name: /^Notifications/ }).click();
+    await expect(
+      w.getByRole('menu', { name: 'Notifications' }).getByText(/a goal worth a check-in/i),
+    ).toBeVisible();
+    await w.keyboard.press('Escape');
+
+    // Mark done closes the goal → the card drops away (acting un-stales/closes it).
+    await w.getByRole('button', { name: 'Mark done' }).click();
+    await expect(w.getByRole('heading', { name: /still working on it/i })).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+
+  // Decrypt: the goal is now done (the nudge can never return for it).
+  const goal = await getGoal(fs, key, 'owner-1', 'g1');
+  expect(goal?.status).toBe('done');
+  await rm(userData, { recursive: true, force: true });
+  await rm(vault, { recursive: true, force: true });
+});
+
 test('first-time setup creates the owner and enters the app', async () => {
   const userData = await mkdtemp(join(tmpdir(), 'selfos-e2e-ud-'));
   const vault = await mkdtemp(join(tmpdir(), 'selfos-e2e-vault-'));

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, BookHeart, Sparkles } from 'lucide-react';
 import { aiKeyResolved } from '../../aiAvailability';
+import { AiUnavailableNotice } from '../../AiUnavailableNotice';
 import type { SegmentOption } from '../../../design-system/components';
 import type { DreamPatternWindow } from '@shared/schemas';
 import { useDreamPatternStore } from '../../../stores/dreamPatternStore';
@@ -261,11 +262,9 @@ export function DreamPatterns(): JSX.Element {
               ) : (
                 <Stack gap={2} align="start">
                   <Text tone="secondary">
-                    Connect Claude to reflect across your dreams. Your charts above work without it.
+                    SelfOS uses AI to reflect across your dreams. Your charts above work without it.
                   </Text>
-                  <Button variant="secondary" onClick={() => navigate('/settings')}>
-                    Open Settings
-                  </Button>
+                  <AiUnavailableNotice />
                 </Stack>
               )}
             </Stack>

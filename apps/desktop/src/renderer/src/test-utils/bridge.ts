@@ -563,6 +563,8 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
       }),
     getSidebarCollapsed: () => Promise.resolve(false),
     setSidebarCollapsed: () => Promise.resolve(),
+    getDiscoveryDismissals: () => Promise.resolve([]),
+    setDiscoveryDismissals: () => Promise.resolve(),
     getNotificationState: () => Promise.resolve({ read: {}, dismissed: {} }),
     setNotificationState: () => Promise.resolve(),
     notificationsResponsesArrived: () => Promise.resolve([]),

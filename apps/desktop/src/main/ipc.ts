@@ -368,6 +368,8 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.profileDismissSuggestion, bridge.profileDismissSuggestion);
   handle(IpcChannels.getSidebarCollapsed, bridge.getSidebarCollapsed);
   handle(IpcChannels.setSidebarCollapsed, bridge.setSidebarCollapsed);
+  handle(IpcChannels.getDiscoveryDismissals, bridge.getDiscoveryDismissals);
+  handle(IpcChannels.setDiscoveryDismissals, bridge.setDiscoveryDismissals);
   handle(IpcChannels.getNotificationState, bridge.getNotificationState);
   handle(IpcChannels.setNotificationState, bridge.setNotificationState);
   handle(IpcChannels.notificationsResponsesArrived, bridge.notificationsResponsesArrived);

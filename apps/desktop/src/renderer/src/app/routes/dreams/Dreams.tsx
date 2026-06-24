@@ -103,11 +103,16 @@ export function Dreams(): JSX.Element {
 
         {loaded && dreams.length === 0 ? (
           <Card>
-            <Stack gap={2} align="center">
+            <Stack gap={3} align="center">
               <Moon size={24} aria-hidden="true" />
               <Text tone="secondary">
-                No dreams yet. Capture one the moment you wake — before it fades.
+                No dreams yet. Capture one the moment you wake — before it fades. SelfOS can reflect
+                on it with you and notice patterns over time.
               </Text>
+              <Button variant="secondary" onClick={() => select({ mode: 'new' })}>
+                <Plus size={16} aria-hidden="true" />
+                Log your first dream
+              </Button>
             </Stack>
           </Card>
         ) : (

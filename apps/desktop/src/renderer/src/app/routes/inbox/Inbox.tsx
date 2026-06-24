@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Inbox as InboxIcon } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, ClipboardList, Inbox as InboxIcon } from 'lucide-react';
 import type { InboxItem } from '@shared/channels';
-import { Card, Heading, Stack, Text } from '../../../design-system/components';
+import { Button, Card, Heading, Stack, Text } from '../../../design-system/components';
 import { useInboxStore } from '../../../stores/inboxStore';
+import { useSessionStore } from '../../../stores/sessionStore';
 import { InboxAnswer } from './InboxAnswer';
 import styles from './Inbox.module.css';
 
@@ -19,9 +21,11 @@ function statusOf(item: InboxItem): { label: string; isNew: boolean } {
 
 /** The recipient's Inbox (08-questionnaires §3.3): questionnaires sent to the active person. */
 export function Inbox(): JSX.Element {
+  const navigate = useNavigate();
   const items = useInboxStore((s) => s.items);
   const loaded = useInboxStore((s) => s.loaded);
   const load = useInboxStore((s) => s.load);
+  const canCreate = useSessionStore((s) => s.can('questionnaires.create'));
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -39,11 +43,17 @@ export function Inbox(): JSX.Element {
 
         {loaded && items.length === 0 ? (
           <Card>
-            <Stack gap={2} align="center">
+            <Stack gap={3} align="center">
               <InboxIcon size={24} aria-hidden="true" />
               <Text tone="secondary">
                 Nothing to answer right now. Questionnaires people send you will show up here.
               </Text>
+              {canCreate ? (
+                <Button variant="secondary" onClick={() => navigate('/questionnaires')}>
+                  <ClipboardList size={16} aria-hidden="true" />
+                  Create a questionnaire
+                </Button>
+              ) : null}
             </Stack>
           </Card>
         ) : (

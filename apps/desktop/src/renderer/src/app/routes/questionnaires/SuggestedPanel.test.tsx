@@ -71,7 +71,7 @@ describe('SuggestedPanel', () => {
       </MemoryRouter>,
     );
     await waitFor(() =>
-      expect(screen.getByText(/turn on ai in settings to get suggestions/i)).toBeInTheDocument(),
+      expect(screen.getByText(/ask the person who set up this household/i)).toBeInTheDocument(),
     );
   });
 });

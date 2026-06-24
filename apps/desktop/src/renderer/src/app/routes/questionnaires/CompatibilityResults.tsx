@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Eye, Link2, Lock, RefreshCw, Send, Sparkles } from 'lucide-react';
 import { aiKeyResolved } from '../../aiAvailability';
+import { AiUnavailableNotice } from '../../AiUnavailableNotice';
 import type {
   CompatibilityGroup,
   CompatibilityMember,
@@ -61,11 +62,7 @@ export function CompatibilityResults({
   return (
     <Stack gap={3}>
       <Heading level={3}>Compatibility</Heading>
-      {!aiReady ? (
-        <Banner tone="info">
-          Turn on AI in <Link to="/settings">Settings</Link> to align responses into a report.
-        </Banner>
-      ) : null}
+      {!aiReady ? <AiUnavailableNotice /> : null}
       {groups.map((group) => (
         <GroupCard
           key={group.compatibilityGroupId}

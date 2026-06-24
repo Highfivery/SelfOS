@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { ArrowLeft, MessageCircle, Plus, Sparkles } from 'lucide-react';
 import { useConversationStore } from '../../../stores/conversationStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useSetting } from '../../../settings/useSetting';
 import { aiKeyResolved } from '../../aiAvailability';
+import { AiUnavailableNotice } from '../../AiUnavailableNotice';
 import type { SessionStatus } from '@shared/schemas';
 import { getExercise, stripCoachMarkers } from '@selfos/core/conversations';
 import { useGuidanceStore } from '../../../stores/guidanceStore';
@@ -69,7 +70,6 @@ export function Sessions(): JSX.Element {
   const dismissWrapUp = useConversationStore((s) => s.dismissWrapUp);
   const appendChunk = useConversationStore((s) => s.appendChunk);
 
-  const navigate = useNavigate();
   const threadRef = useRef<HTMLDivElement>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
@@ -362,17 +362,7 @@ export function Sessions(): JSX.Element {
             {configured ? (
               <Composer disabled={sending} onSend={(text) => void send(text)} />
             ) : (
-              <Banner tone="info">
-                Connect Claude in{' '}
-                <button
-                  type="button"
-                  className={styles.connectLink}
-                  onClick={() => navigate('/settings')}
-                >
-                  Settings
-                </button>{' '}
-                to continue this session.
-              </Banner>
+              <AiUnavailableNotice />
             )}
           </>
         )}

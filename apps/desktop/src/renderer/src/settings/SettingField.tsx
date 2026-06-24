@@ -3,6 +3,7 @@ import {
   AdminOnlyBadge,
   IconButton,
   Inline,
+  ScopeBadge,
   SegmentedControl,
   Select,
   Slider,
@@ -118,6 +119,8 @@ export function SettingField({ def }: { def: SettingDefinition }): JSX.Element |
   const value = values[def.key];
   const onChange = (next: unknown): void => void setValue(def.key, next);
   const isDefault = JSON.stringify(value) === JSON.stringify(def.default);
+  // Scope defaults to 'vault' (synced) per 03 §4.1; surfaced as a quiet device-vs-synced signal (41 §3.4).
+  const scope = def.scope ?? 'vault';
 
   // Custom rows (info, actions, long content) and multiline textareas render full-width and stacked so the
   // content has room to wrap instead of being crushed into the fixed control column. A textarea keeps the
@@ -130,6 +133,7 @@ export function SettingField({ def }: { def: SettingDefinition }): JSX.Element |
           <Inline gap={2}>
             <Text weight={500}>{def.label}</Text>
             {def.adminOnly ? <AdminOnlyBadge /> : null}
+            <ScopeBadge scope={scope} />
           </Inline>
           {isTextarea && !isDefault ? (
             <IconButton aria-label={`Reset ${def.label}`} onClick={() => void resetValue(def.key)}>
@@ -153,6 +157,7 @@ export function SettingField({ def }: { def: SettingDefinition }): JSX.Element |
         <Inline gap={2}>
           <Text weight={500}>{def.label}</Text>
           {def.adminOnly ? <AdminOnlyBadge /> : null}
+          <ScopeBadge scope={scope} />
         </Inline>
         {def.description ? (
           <Text size="sm" tone="secondary">

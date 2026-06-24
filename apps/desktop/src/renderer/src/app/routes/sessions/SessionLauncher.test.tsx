@@ -61,7 +61,7 @@ describe('SuggestedSessions', () => {
         <SuggestedSessions configured={false} onPick={() => {}} />
       </MemoryRouter>,
     );
-    expect(screen.getByText(/turn on ai/i)).toBeInTheDocument();
+    expect(screen.getByText(/isn.t set up yet/i)).toBeInTheDocument();
     // No spend affordance is offered when AI is off.
     expect(screen.queryByRole('button', { name: /get personalized/i })).not.toBeInTheDocument();
   });

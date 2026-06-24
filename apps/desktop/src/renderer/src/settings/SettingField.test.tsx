@@ -105,6 +105,54 @@ describe('SettingField', () => {
     expect(screen.getByRole('option', { name: 'Watercolor' })).toBeInTheDocument();
   });
 
+  it('shows "This device" for a device-scoped setting and "Synced" for a vault-scoped one', () => {
+    useSettingsStore.setState({ values: { 'x.device': false, 'x.vault': false } });
+    const deviceDef = defineSetting({
+      key: 'x.device',
+      section: 's',
+      label: 'Sidebar collapsed',
+      schema: z.boolean(),
+      default: false,
+      control: { type: 'switch' },
+      scope: 'device',
+    });
+    const { rerender } = render(<SettingField def={deviceDef} />);
+    // Meaning is carried in text, and the SR-exposed accessible name is the fuller phrase.
+    expect(screen.getByText('This device')).toBeInTheDocument();
+    expect(screen.getByLabelText('This device only')).toBeInTheDocument();
+
+    const vaultDef = defineSetting({
+      key: 'x.vault',
+      section: 's',
+      label: 'AI enabled',
+      schema: z.boolean(),
+      default: false,
+      control: { type: 'switch' }, // scope omitted → defaults to 'vault' (synced)
+    });
+    rerender(<SettingField def={vaultDef} />);
+    expect(screen.getByText('Synced')).toBeInTheDocument();
+    expect(screen.getByLabelText('Synced across devices')).toBeInTheDocument();
+  });
+
+  it('shows both the Admin-only and scope markers, with distinct accessible names', () => {
+    useSettingsStore.setState({ values: { 'x.adminVault': false } });
+    const def = defineSetting({
+      key: 'x.adminVault',
+      section: 's',
+      label: 'Default questionnaire visibility',
+      schema: z.boolean(),
+      default: false,
+      control: { type: 'switch' },
+      adminOnly: true, // a vault setting that's also admin-only → both markers, no collision
+    });
+    render(<SettingField def={def} />);
+    expect(screen.getByText('Admin only')).toBeInTheDocument();
+    expect(screen.getByText('Synced')).toBeInTheDocument();
+    // Distinct SR names so the two never read as one.
+    expect(screen.getByLabelText('Synced across devices')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Admin only')).not.toBeInTheDocument(); // AdminOnlyBadge carries visible text, no aria-label
+  });
+
   it('renders a legacy/unknown stored value as a fallback option in a grouped select', () => {
     useSettingsStore.setState({ values: { 'x.style': 'daguerreotype' } });
     const def = defineSetting({

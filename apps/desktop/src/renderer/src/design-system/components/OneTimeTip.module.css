@@ -1,0 +1,27 @@
+.tip {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.icon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--color-accent-text);
+}
+
+.body {
+  flex: 1;
+  min-width: 0;
+}
+
+.dismiss {
+  flex: none;
+  margin: -2px -2px 0 0;
+}

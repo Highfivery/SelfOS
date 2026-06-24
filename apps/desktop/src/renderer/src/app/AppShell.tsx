@@ -34,6 +34,7 @@ import { useGuidanceStore } from '../stores/guidanceStore';
 import { useIntakeStore } from '../stores/intakeStore';
 import { useSynthesisStore } from '../stores/synthesisStore';
 import { useNotificationStore } from '../stores/notificationStore';
+import { useDiscoveryStore } from '../stores/discoveryStore';
 import { useNotificationSources } from './notifications/useNotificationSources';
 import { useUpdateChecks } from './notifications/useUpdateChecks';
 import { useMemoryReconcile } from './notifications/useMemoryReconcile';
@@ -114,7 +115,9 @@ export function AppShell(): JSX.Element {
     useGoalStore.getState().reset(); // tracked goals are per-person (39-living-memory §5.4)
     useSynthesisStore.getState().reset(); // the cached cross-feature synthesis is per-person (40 §5.3)
     useNotificationStore.getState().reset(); // notifications are per-person, device-local (35 §4)
+    useDiscoveryStore.getState().reset(); // orientation/tip dismissals are per-person, device-local (41 §4)
     void useNotificationStore.getState().load();
+    void useDiscoveryStore.getState().load();
     void useConversationStore.getState().load();
     void useBudgetStore.getState().refresh();
     void useInboxStore.getState().load();

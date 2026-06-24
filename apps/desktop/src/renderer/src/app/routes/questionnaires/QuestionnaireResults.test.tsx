@@ -193,7 +193,7 @@ describe('QuestionnaireResults', () => {
       assignmentsResults: () => Promise.resolve([send()]),
     });
     renderResults();
-    await waitFor(() => expect(screen.getByText(/turn on ai/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/isn.t set up yet/i)).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: /analyze/i })).not.toBeInTheDocument();
   });
 

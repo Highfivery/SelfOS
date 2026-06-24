@@ -103,7 +103,9 @@ Global, feature-agnostic controls (not per-route) live in the right of the **`Ap
 - the AI-usage **ring** (06) opening an **enriched dropdown** (§13.4: % of allowance, session count,
   top usage by type, admin-only $ with the AdminOnlyBadge, and a "View usage details →" link), and
 - an **account menu** — the active person (avatar + name) opening: **Switch person** (the "Who's
-  here?" picker) and **Lock** (logout — see §3.6).
+  here?" picker), **Lock** (logout — see §3.6), **Open vault folder** (also surfaces any sync conflict),
+  and **About SelfOS** (the re-openable first-run orientation,
+  [`41`](41-discoverability-and-empty-states.md) §3.5).
 
 New global items drop into the cluster without reworking the shell. Admin-only controls carry the
 "Admin only" marker (CLAUDE.md §12). See §13 for the per-platform window chrome.

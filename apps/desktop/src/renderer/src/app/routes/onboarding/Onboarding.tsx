@@ -14,6 +14,7 @@ import {
 } from '../../../design-system/components';
 import { useIntakeStore } from '../../../stores/intakeStore';
 import { useSessionStore } from '../../../stores/sessionStore';
+import { AiUnavailableNotice } from '../../AiUnavailableNotice';
 import { Switcher } from '../../Switcher';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { IntakeSectionPanel } from './IntakeSectionPanel';
@@ -41,8 +42,6 @@ export function Onboarding(): JSX.Element {
   const finalizing = useIntakeStore((s) => s.finalizing);
   const displayName = useSessionStore((s) => s.activePerson?.displayName ?? null);
   const activePersonId = useSessionStore((s) => s.activePerson?.id ?? null);
-  // "Owner" here = someone who can turn on AI (settings.manage); drives the AI-unavailable copy (§7).
-  const canManageAi = useSessionStore((s) => s.can('settings.manage'));
 
   // The opened section is persisted device-local (per person) so a reload/restart returns you to where you
   // were instead of bouncing to the first unfinished core step. It's transient UI nav state — never content.
@@ -179,22 +178,11 @@ export function Onboarding(): JSX.Element {
           <div className={styles.center}>
             <Lock size={22} aria-hidden="true" />
             <Heading level={2}>Connect AI to begin</Heading>
-            {canManageAi ? (
-              <>
-                <Text tone="secondary">
-                  Onboarding uses AI to bring everything together into your portrait, so it needs AI
-                  turned on. Add your Claude API key and enable AI in Settings to start.
-                </Text>
-                <Button variant="primary" onClick={() => navigate('/settings')}>
-                  Open Settings
-                </Button>
-              </>
-            ) : (
-              <Text tone="secondary">
-                Onboarding uses AI to build your portrait, so it needs AI turned on. Ask your
-                household owner to enable AI, then come back here — nothing you’ve done is lost.
-              </Text>
-            )}
+            <Text tone="secondary">
+              Onboarding uses AI to bring everything together into your portrait, so it needs AI
+              turned on. Nothing you’ve done is lost.
+            </Text>
+            <AiUnavailableNotice />
           </div>
         </Card>
         <CrisisFooter />

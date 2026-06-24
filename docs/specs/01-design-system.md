@@ -167,7 +167,9 @@ this is the v1 inventory:
 - **Surfaces:** `Card`, `Panel`, `Modal`/`Dialog`, `Popover`, `Tooltip`, `Toast`.
 - **Navigation:** `Tabs`, `Menu`, `SidebarItem`, `Breadcrumb`.
 - **Feedback / status:** `Badge`, `AdminOnlyBadge` (the "Admin only" lock pill — marks any
-  control/section only admins can see; CLAUDE.md §12), `Avatar`, `Spinner`, `Skeleton`, `EmptyState`,
+  control/section only admins can see; CLAUDE.md §12), `ScopeBadge` (a quiet borderless "Synced" /
+  "This device" signal for a setting's `scope`, distinct from the Admin pill;
+  [`41`](41-discoverability-and-empty-states.md) §3.4), `Avatar`, `Spinner`, `Skeleton`, `EmptyState`,
   `Banner`.
 - **Notifications:** `Toast` — a brief, non-blocking pop-up (info/success/warning tones from the `Banner`
   tokens; `role=status`/`alert` by severity; auto-dismiss with hover/focus pause, or sticky; optional single
@@ -180,6 +182,9 @@ this is the v1 inventory:
   `inline` mode for short facts). Hand-rolled + safe by construction (no raw HTML, no images, no live
   links). Lives in `@selfos/answering` (so the relay page + iOS reuse it) and is re-exported from the
   design system; see [`34-rich-text-rendering.md`](34-rich-text-rendering.md).
+- **Discovery:** `OneTimeTip` — a quiet, dismissible inline hint (not a modal/overlay) pointing at an
+  easy-to-miss affordance, shown at most once; presentational (the caller gates it on device-local
+  per-person dismissal state). See [`41`](41-discoverability-and-empty-states.md) §3.2.
 - **Icons:** **`lucide-react`** — a single outline icon set (calm, consistent, tree-shakeable).
 
 ## 6. IPC / API contracts

@@ -238,6 +238,8 @@ const bridge: SelfosBridge = {
   getSidebarCollapsed: () => ipcRenderer.invoke(IpcChannels.getSidebarCollapsed),
   setSidebarCollapsed: (collapsed) =>
     ipcRenderer.invoke(IpcChannels.setSidebarCollapsed, collapsed),
+  getDiscoveryDismissals: () => ipcRenderer.invoke(IpcChannels.getDiscoveryDismissals),
+  setDiscoveryDismissals: (keys) => ipcRenderer.invoke(IpcChannels.setDiscoveryDismissals, keys),
   getNotificationState: () => ipcRenderer.invoke(IpcChannels.getNotificationState),
   setNotificationState: (state) => ipcRenderer.invoke(IpcChannels.setNotificationState, state),
   notificationsResponsesArrived: () =>

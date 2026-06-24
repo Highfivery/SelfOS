@@ -110,10 +110,23 @@ describe('Home', () => {
     renderHome();
     expect(await screen.findByRole('heading', { name: /welcome to selfos/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /start a session/i })).toBeInTheDocument();
+    // Discovery: the owner is pointed at sending a questionnaire too (41 §3.1).
+    expect(screen.getByRole('button', { name: /send a questionnaire/i })).toBeInTheDocument();
     // No real cards yet.
     expect(screen.queryByRole('heading', { name: /pick up where you left off/i })).toBeNull();
     // Crisis footer is always present (§7).
     expect(screen.getByRole('button', { name: /get help now/i })).toBeInTheDocument();
+  });
+
+  it('shows the discovery nudge for a near-empty person (one session, nothing else)', async () => {
+    installMockBridge({
+      conversationsList: () => Promise.resolve([meta('c1', 'A first talk', 'inProgress')]),
+    });
+    renderHome();
+    // Not brand-new (so no Welcome card), but light enough to nudge discovery.
+    expect(await screen.findByText(/a few things to explore/i)).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /welcome to selfos/i })).toBeNull();
+    expect(screen.getByRole('button', { name: /log a dream/i })).toBeInTheDocument();
   });
 
   it('renders the cards a seeded person has, and hides the empty ones', async () => {

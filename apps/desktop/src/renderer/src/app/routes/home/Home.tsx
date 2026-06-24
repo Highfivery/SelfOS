@@ -26,6 +26,8 @@ import { DreamsCard } from './DreamsCard';
 import { MemoryCard } from './MemoryCard';
 import { InboxCard } from './InboxCard';
 import { GettingStarted } from './GettingStarted';
+import { DiscoveryNudge } from './DiscoveryNudge';
+import { WelcomeOrientationCard } from './WelcomeOrientationCard';
 import { buildStatusLine, timeOfDayGreeting } from './greeting';
 import { sessionMoodPoints, wellbeingRead } from './wellbeing';
 import styles from './Home.module.css';
@@ -121,6 +123,19 @@ export function Home(): JSX.Element {
     inboxCount === 0 &&
     goals.length === 0;
 
+  // Near-empty (not brand-new): a person who's started but barely — point at the under-discovered
+  // affordances they haven't tried yet (41 §3.1). Self-hides as activity grows.
+  const lightActivity = conversations.length + dreams.length + goals.length <= 2;
+  const suggestGuided = hasSessions && conversations.length <= 1;
+  const suggestDreams = canOwnDreams && dreams.length === 0;
+  const suggestQuestionnaire = canCreateQuestionnaires && inboxCount === 0;
+  const showDiscoveryNudge =
+    ready &&
+    !isNew &&
+    !crisis && // a distress moment leads with support, not discovery nudges (§8)
+    lightActivity &&
+    (suggestGuided || suggestDreams || suggestQuestionnaire);
+
   return (
     <div className={styles.home}>
       <header>
@@ -130,15 +145,26 @@ export function Home(): JSX.Element {
 
       {ready && crisis ? <CrisisSupportBanner /> : null}
 
+      {/* During a recurring-distress moment the supportive banner leads — never an upbeat orientation
+          card above it (§8: never minimize distress). */}
+      {ready && !crisis ? <WelcomeOrientationCard /> : null}
       {ready ? <OnboardingCard /> : null}
       {ready ? <ProfileFreshnessCard /> : null}
       {ready ? <DepthInvitationCard /> : null}
+      {showDiscoveryNudge ? (
+        <DiscoveryNudge
+          suggestGuided={suggestGuided}
+          suggestDreams={suggestDreams}
+          suggestQuestionnaire={suggestQuestionnaire}
+        />
+      ) : null}
 
       {!ready ? null : isNew ? (
         <GettingStarted
           hasSessions={hasSessions}
           canOwnDreams={canOwnDreams}
           canManagePeople={canManagePeople}
+          canCreateQuestionnaires={canCreateQuestionnaires}
         />
       ) : (
         <div className={styles.grid}>

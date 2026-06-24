@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Lightbulb, Sparkles } from 'lucide-react';
 import { aiKeyResolved } from '../../aiAvailability';
+import { AiUnavailableNotice } from '../../AiUnavailableNotice';
+import { DiscoveryTip } from '../../DiscoveryTip';
 import type { Question, QuestionnaireSuggestion } from '@shared/schemas';
 import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
+import { useDiscoveryStore, DISCOVERY_KEYS } from '../../../stores/discoveryStore';
 import { useSetting } from '../../../settings/useSetting';
 import { Banner, Button, Card, Heading, Stack, Text } from '../../../design-system/components';
 import type { BuilderSeed } from './QuestionnaireBuilder';
@@ -32,8 +34,8 @@ export function SuggestedPanel({
 }: {
   onCreate: (seed: BuilderSeed) => void;
 }): JSX.Element {
-  const navigate = useNavigate();
   const suggest = useQuestionnaireStore((s) => s.suggest);
+  const dismissTip = useDiscoveryStore((s) => s.dismiss);
   const [aiEnabled] = useSetting('ai.enabled');
   const [hasKey, setHasKey] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -47,6 +49,7 @@ export function SuggestedPanel({
   const aiReady = aiEnabled === true && hasKey;
 
   const onFind = async (): Promise<void> => {
+    dismissTip(DISCOVERY_KEYS.tipGapFinder); // using the gap-finder suppresses its tip for good
     setBusy(true);
     setNotice(null);
     try {
@@ -66,14 +69,13 @@ export function SuggestedPanel({
       <Heading level={3}>Suggested for you</Heading>
 
       {!aiReady ? (
-        <Banner tone="info">
-          Turn on AI in Settings to get suggestions.{' '}
-          <button type="button" className={styles.linkButton} onClick={() => navigate('/settings')}>
-            Open Settings
-          </button>
-        </Banner>
+        <AiUnavailableNotice />
       ) : (
         <>
+          <DiscoveryTip tipKey={DISCOVERY_KEYS.tipGapFinder}>
+            New here? Let the coach suggest a questionnaire worth sending — it reads what it already
+            knows, never raw answers.
+          </DiscoveryTip>
           <Text tone="secondary">
             Let the coach suggest the next questionnaires to send, based on what it knows about the
             people in your life.

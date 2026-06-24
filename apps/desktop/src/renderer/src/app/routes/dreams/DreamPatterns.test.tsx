@@ -137,7 +137,8 @@ describe('Dream patterns screen', () => {
     });
     renderPatterns();
     expect(await screen.findByText('water')).toBeInTheDocument(); // charts work offline
-    expect(screen.getByText(/connect claude to reflect across your dreams/i)).toBeInTheDocument();
+    expect(screen.getByText(/SelfOS uses AI to reflect across your dreams/i)).toBeInTheDocument();
+    expect(screen.getByText(/ask the person who set up this household/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Generate a reflection' })).not.toBeInTheDocument();
   });
 });

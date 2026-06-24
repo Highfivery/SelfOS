@@ -389,6 +389,35 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-24 — **Fix — collapsible life-area portrait (user-reported "IT LOOKS EXACTLY THE SAME"; on
+  `fix/onboarding-sharing-ux`).** My flat grouping (faint gray uppercase headers + dividers) was too subtle to
+  register as an improvement — the user still saw a wall of gray facts. **This time I showed an interactive
+  MOCKUP (the `visualize` tool) of a bolder direction and got explicit sign-off BEFORE building** — the right
+  move after repeated misses. Built: the long portrait now renders **collapsible life-area sections** — each a
+  button header with a per-area icon, fact count, a "private" badge when it holds restricted facts, and a
+  chevron — that expand on demand; **sensitive sections (any restricted fact) start COLLAPSED by default**
+  (user-confirmed) so intimacy/trauma isn't on screen at a glance. Short insights stay a flat list. Verified
+  with real Playwright screenshots (collapsed + expanded). Gate green: typecheck, lint, format, 724 core + 11
+  relay + 769 desktop unit, full E2E. **Lesson: when "improve the UI/UX" feedback recurs, stop iterating
+  blindly — show a concrete visual mockup and get the user to pick the DIRECTION before coding. A subtle
+  restyle reads as "no change"; the user wanted a structural rethink (collapse the wall into navigable
+  sections), which a mockup surfaces in one round instead of three failed PRs.**
+- 2026-06-24 — **Fix — UX redesign of the Memory portrait + onboarding sharing (user-reported "greatly
+  improve the UI/UX", twice; on `fix/onboarding-sharing-ux`).** The prior fix removed the chips but the
+  surfaces were still poor and I'd done NO visual QA — the user (rightly) called it out. **Memory portrait
+  card** was an unreadable wall of ~40 tiny gray facts with "sensitive" tags floating on their own
+  right-aligned "blank" lines (`.factControls margin-left:auto` + `flex-wrap` wrapped the tag onto a new
+  line). Redesigned: a long multi-area insight (the portrait) now **groups facts by life-area** with small
+  uppercase headers (`groupFactsByArea`); facts are a clean **list with hairline dividers** + readable text;
+  tags flow **inline right after the text**. **Onboarding sharing control** floated top-right of the prompt
+  (`.sharingSlot margin-left:auto`), leaving a big empty gap, and the inline sensitive-confirm rendered there
+  too; moved it to its **own line directly under the prompt, left-aligned**. **Verified with real Playwright
+  screenshots** (seed a 24-fact portrait → screenshot Memory; open onboarding → screenshot the form) — the
+  visual QA I'd skipped. Gate green: typecheck, lint, format, **724 core + 11 relay + 768 desktop** unit, full
+  E2E. **Lesson: "greatly improve the UI/UX" is not satisfied by removing a control — it means LOOKING at the
+  rendered result and redesigning for readability (grouping, dividers, typography, inline-not-floating tags).
+  Do real visual QA (a seeded Playwright screenshot you actually open and judge), not just "tests pass" — a
+  green suite says the data is right, not that the screen is readable.**
 - 2026-06-24 — **Fix (onboarding sharing was broken end-to-end — user-reported; on
   `fix/onboarding-sharing-end-to-end`).** The user (rightly frustrated) found three connected bugs the
   "comprehensive" sharing E2E had MISSED — because it seeded `Insight`s with `shareableTypes` already set and

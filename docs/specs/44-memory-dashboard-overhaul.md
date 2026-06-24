@@ -252,6 +252,23 @@ show a tiny per-group count on each life-area header (recommended, cheap).
 
 ## 12. Changelog
 
+- 2026-06-24 — **Fix — collapsible life-area portrait** (`fix/onboarding-sharing-ux`, user-reported "still
+  looks the same" → confirmed direction via an interactive mockup). The flat grouping (below) was too subtle;
+  the long portrait now becomes **collapsible life-area sections** — each a button header with a per-area
+  **icon**, the **fact count**, a **"private"** badge when it holds restricted facts, and a chevron — that you
+  **expand on demand** so 20+ facts aren't dumped at once. **Sensitive sections (any restricted fact) start
+  COLLAPSED by default** (user-confirmed) so intimacy/trauma isn't on screen at a glance. Short insights
+  (session/dream) stay a plain list. `groupFactsByArea` + `LIFE_AREA_ICON` + a per-card `collapsedAreas` state
+  (seeded from the sensitive groups); `renderFact` extracted + reused. **Verified with real screenshots.**
+- 2026-06-24 — **Fix — portrait readability redesign** (`fix/onboarding-sharing-ux`, user-reported + visual
+  QA). The onboarding portrait card was an unreadable wall of ~40 tiny gray facts with "sensitive" tags
+  floating on their own right-aligned "blank" lines (the `.factControls` `margin-left:auto` + `flex-wrap`).
+  Redesigned the fact list: a long, multi-area insight (the portrait) now **groups its facts by life-area**
+  with small uppercase section headers (`groupFactsByArea`, threshold 8 facts + ≥2 areas; falls back to a flat
+  list for short insights); facts render as a clean **list with hairline dividers** + readable text; and any
+  tag (sensitive / flagged / withdrawn) flows **INLINE right after the fact text** (never a floating chip).
+  **Verified with real screenshots** (the visual QA that was missing). AI-inferred facts keep their per-fact
+  sharing picker + correction at the row end.
 - 2026-06-24 — **Fix — clean cards** (`fix/onboarding-sharing-end-to-end`, user-reported). The per-fact
   read-only "Private/Shared" chip on **onboarding** facts produced a wall of "Private" chips on a portrait
   (cluttered, misaligned). Removed: onboarding facts now carry **no per-fact sharing chip** (a restricted one

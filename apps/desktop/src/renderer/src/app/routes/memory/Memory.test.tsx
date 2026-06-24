@@ -234,11 +234,54 @@ describe('Memory dashboard', () => {
         ]),
     });
     renderMemory();
-    // A restricted fact keeps a small informational "sensitive" tag (own-coaching-only) — but no sharing
-    // control on the card (clean cards, 44 audit); sharing is managed in one place.
-    expect(await screen.findByText('sensitive')).toBeInTheDocument();
+    // A restricted onboarding fact keeps a small informational "private" tag (own-coaching-only) — but no
+    // sharing control on the card (44 audit); sharing is managed in one place.
+    expect(await screen.findByText('private')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /activate to change/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Share with someone/ })).not.toBeInTheDocument();
+  });
+
+  it('groups a long portrait into collapsible life-area sections; sensitive ones start collapsed', async () => {
+    useSessionStore.setState({ activePerson: activeP1 });
+    const lifeAreaFact = (id: string, text: string, lifeArea: string, restricted = false) => ({
+      id,
+      text,
+      shareable: false,
+      lifeArea,
+      ...(restricted ? { restricted: true } : {}),
+    });
+    installMockBridge({
+      insightsList: () =>
+        Promise.resolve([
+          insight({
+            id: 'p',
+            source: 'intake',
+            summary: 'A portrait.',
+            provenance: { intakeSection: 'basics', at: '2026-06-11T12:00:00.000Z' },
+            facts: [
+              lifeAreaFact('1', 'Married to Ben', 'Relationships'),
+              lifeAreaFact('2', 'Two kids', 'Family'),
+              lifeAreaFact('3', 'Works in RevOps', 'Work & purpose'),
+              lifeAreaFact('4', 'Has Hashimoto', 'Health & body'),
+              lifeAreaFact('5', 'Core values: honesty', 'Values & beliefs'),
+              lifeAreaFact('6', 'Career goal', 'Goals & growth'),
+              lifeAreaFact('7', 'Atheist', 'Faith'),
+              lifeAreaFact('8', 'Money anxiety', 'Money'),
+              lifeAreaFact('9', 'Bisexual, monogamous', 'Intimacy', true),
+            ],
+          }),
+        ]),
+    });
+    renderMemory();
+    // Section headers render as expand/collapse buttons.
+    expect(await screen.findByRole('button', { name: /Relationships/ })).toBeInTheDocument();
+    // A non-sensitive section is OPEN by default → its fact is visible.
+    expect(screen.getByText('Works in RevOps')).toBeInTheDocument();
+    // The sensitive (restricted) Intimacy section is COLLAPSED by default → its fact is NOT rendered yet.
+    expect(screen.queryByText('Bisexual, monogamous')).not.toBeInTheDocument();
+    // Expanding it reveals the fact.
+    await userEvent.click(screen.getByRole('button', { name: /Intimacy/ }));
+    expect(screen.getByText('Bisexual, monogamous')).toBeInTheDocument();
   });
 
   it('filters by search', async () => {

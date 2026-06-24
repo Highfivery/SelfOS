@@ -744,16 +744,11 @@ function QuestionField({
   );
   return (
     <div className={styles.question}>
-      {sharingControl ? (
-        // 43 §3.1/§9: the sharing chip sits right-aligned beside the prompt and wraps under it at narrow
-        // widths (the chip is `flex: none`, so it never causes an inner scrollbar — the §12 DoD guard).
-        <div className={styles.promptRow}>
-          {prompt}
-          <div className={styles.sharingSlot}>{sharingControl}</div>
-        </div>
-      ) : (
-        prompt
-      )}
+      {prompt}
+      {/* 43 §3.1 — the sharing control sits on its own line directly UNDER the prompt, left-aligned (not
+          floating right of a short prompt with a big empty gap). The inline sensitive-share confirm renders
+          here too, co-located with the question. `flex: none` so it never causes an inner scrollbar (§12). */}
+      {sharingControl ? <div className={styles.sharingSlot}>{sharingControl}</div> : null}
       {question.help ? <p className={styles.help}>{question.help}</p> : null}
       {question.media && loadImage ? (
         <QuestionImage media={question.media} loadImage={loadImage} />

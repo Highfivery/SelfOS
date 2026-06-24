@@ -1,7 +1,26 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowUpRight, PencilLine, ShieldAlert, Trash2 } from 'lucide-react';
+import {
+  Activity,
+  ArrowUpRight,
+  Brain,
+  Briefcase,
+  ChevronDown,
+  Compass,
+  Flame,
+  Heart,
+  type LucideIcon,
+  PencilLine,
+  ShieldAlert,
+  Sparkles,
+  Tag,
+  Target,
+  Trash2,
+  Users,
+  Wallet,
+} from 'lucide-react';
 import type { Insight, InsightFact, RelationshipType } from '@shared/schemas';
+import { LIFE_AREAS } from '@shared/schemas';
 import { useInsightStore } from '../../../stores/insightStore';
 import {
   Banner,
@@ -29,6 +48,52 @@ const SOURCE_EYEBROW: Record<Insight['source'], string> = {
   dream: 'Dream',
   questionnaire: 'Questionnaire',
 };
+
+/** Above this many facts, a long insight (the onboarding portrait) groups its facts by life-area so it's
+ * scannable instead of one wall of text; shorter insights stay a single flat list. */
+const FACT_GROUP_THRESHOLD = 8;
+
+/**
+ * Split an insight's facts into life-area groups (44 audit — readability). Only groups a long, multi-area
+ * insight (the portrait); otherwise returns one untitled group (a plain list). Facts with no `lifeArea` fall
+ * under a trailing "More" group. Order follows the `LIFE_AREAS` taxonomy.
+ */
+function groupFactsByArea(
+  facts: InsightFact[],
+  enabled: boolean,
+): { area: string | null; facts: InsightFact[] }[] {
+  const areas = [...new Set(facts.map((f) => f.lifeArea).filter((a): a is string => Boolean(a)))];
+  if (!enabled || facts.length <= FACT_GROUP_THRESHOLD || areas.length < 2) {
+    return [{ area: null, facts }];
+  }
+  const ordered = [
+    ...LIFE_AREAS.filter((a) => areas.includes(a)),
+    ...areas.filter((a) => !(LIFE_AREAS as readonly string[]).includes(a)),
+  ];
+  const groups = ordered.map((area) => ({
+    area,
+    facts: facts.filter((f) => f.lifeArea === area),
+  }));
+  const noArea = facts.filter((f) => !f.lifeArea);
+  if (noArea.length > 0) groups.push({ area: 'More', facts: noArea });
+  return groups.filter((g) => g.facts.length > 0);
+}
+
+/** An icon per life-area for the collapsible section headers (44 audit — visual hierarchy). */
+const LIFE_AREA_ICON: Record<string, LucideIcon> = {
+  Relationships: Heart,
+  Family: Users,
+  'Work & purpose': Briefcase,
+  'Health & body': Activity,
+  'Emotions & patterns': Brain,
+  'Values & beliefs': Compass,
+  Intimacy: Flame,
+  'Goals & growth': Target,
+  Money: Wallet,
+  Faith: Sparkles,
+  Other: Tag,
+};
+const areaIcon = (area: string): LucideIcon => LIFE_AREA_ICON[area] ?? Tag;
 
 /**
  * One insight on the Memory dashboard (20-memory-dashboard §3.2 + 44 §3.4). For the active person's OWN
@@ -122,6 +187,81 @@ export function InsightCard({
 
   const goToSource = (): void => navigate(prov.to, prov.state ? { state: prov.state } : undefined);
 
+  // A long portrait groups its facts into collapsible life-area sections (44 audit). Sensitive sections (any
+  // restricted fact) start COLLAPSED so trauma/intimacy isn't on screen at a glance; everything else is open.
+  const factGroups = groupFactsByArea(insight.facts, isOwn);
+  const grouped = factGroups.length > 1 || factGroups[0]?.area !== null;
+  const [collapsedAreas, setCollapsedAreas] = useState<Set<string>>(
+    () =>
+      new Set(
+        factGroups
+          .filter((g) => g.area !== null && g.facts.some((f) => f.restricted))
+          .map((g) => g.area as string),
+      ),
+  );
+  const toggleArea = (area: string): void =>
+    setCollapsedAreas((prev) => {
+      const next = new Set(prev);
+      if (next.has(area)) next.delete(area);
+      else next.add(area);
+      return next;
+    });
+
+  /** One fact as a clean list row: text + inline tags, plus (AI-inferred only) the sharing + correction. */
+  const renderFact = (fact: InsightFact): JSX.Element => (
+    <li key={fact.id} className={styles.factItem}>
+      <span className={styles.factText}>
+        <Markdown
+          inline
+          size="sm"
+          className={fact.flaggedInaccurate ? styles.flaggedText : undefined}
+        >
+          {fact.text}
+        </Markdown>
+        {fact.flaggedInaccurate ? <span className={styles.inlineTag}>marked not right</span> : null}
+        {fact.retractedShareAt ? (
+          <span
+            className={styles.inlineTag}
+            title="This fact was shared, then withdrawn when you marked it"
+          >
+            sharing withdrawn
+          </span>
+        ) : null}
+        {isIntake && fact.restricted ? (
+          <span className={styles.sensitiveTag} title="Sensitive — only your own coach uses this.">
+            <ShieldAlert size={11} aria-hidden="true" /> private
+          </span>
+        ) : null}
+      </span>
+      {isOwn && !isIntake ? (
+        <span className={styles.factActions}>
+          {!fact.flaggedInaccurate ? (
+            <FactSharingControl
+              insightId={insight.id}
+              subjectPersonId={insight.subjectPersonId}
+              fact={fact}
+              disabled={busy}
+              {...(availableTypes ? { availableTypes } : {})}
+            />
+          ) : null}
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={busy}
+            aria-label={
+              fact.flaggedInaccurate
+                ? `Undo — this is right about me: ${fact.text}`
+                : `This isn’t right about me: ${fact.text}`
+            }
+            onClick={() => void onFlag(fact.id, !fact.flaggedInaccurate)}
+          >
+            {fact.flaggedInaccurate ? 'Undo' : 'Not right'}
+          </Button>
+        </span>
+      ) : null}
+    </li>
+  );
+
   return (
     <Card>
       <Stack gap={3}>
@@ -196,72 +336,42 @@ export function InsightCard({
           </>
         ) : (
           <>
-            <Stack gap={1}>
-              {insight.facts.map((fact) => (
-                <div key={fact.id} className={styles.factRow}>
-                  <Markdown
-                    inline
-                    size="sm"
-                    tone="secondary"
-                    className={fact.flaggedInaccurate ? styles.flaggedText : undefined}
-                  >
-                    {fact.text}
-                  </Markdown>
-                  {fact.flaggedInaccurate ? (
-                    <span className={styles.flaggedTag}>marked not right</span>
-                  ) : null}
-                  {fact.retractedShareAt ? (
-                    <span
-                      className={styles.flaggedTag}
-                      title="This fact was shared, then withdrawn when you marked it"
+            {/* A short insight (session/dream) is a plain list; a long portrait becomes COLLAPSIBLE life-area
+                sections — expand on demand so 20+ facts aren't dumped at once, sensitive sections collapsed by
+                default (44 audit, confirmed with the user 2026-06-24). */}
+            {!grouped ? (
+              <ul className={styles.factList}>{(factGroups[0]?.facts ?? []).map(renderFact)}</ul>
+            ) : (
+              factGroups.map((group) => {
+                const area = group.area ?? 'More';
+                const Icon = areaIcon(area);
+                const sensitive = group.facts.some((f) => f.restricted);
+                const open = !collapsedAreas.has(area);
+                return (
+                  <div key={area} className={styles.factGroup}>
+                    <button
+                      type="button"
+                      className={styles.factGroupHead}
+                      aria-expanded={open}
+                      onClick={() => toggleArea(area)}
                     >
-                      sharing withdrawn
-                    </span>
-                  ) : null}
-                  <div className={styles.factControls}>
-                    {/* ONBOARDING facts carry NO per-fact sharing chip (44 audit — the reported "wall of
-                        Private"): their sharing is share-by-default + managed via the answer / "Manage
-                        sharing". A restricted onboarding fact keeps a small informational "sensitive" tag. An
-                        AI-INFERRED fact keeps a discreet `FactSharingControl` so it can be shared at all.
-                        A flagged fact is excluded from context + outbound, so its picker is hidden. */}
-                    {isIntake && fact.restricted ? (
-                      <span
-                        className={styles.sensitiveTag}
-                        title="Sensitive — only your own coach uses this."
-                      >
-                        <ShieldAlert size={12} aria-hidden="true" /> sensitive
-                      </span>
-                    ) : null}
-                    {isOwn && !isIntake && !fact.flaggedInaccurate ? (
-                      <FactSharingControl
-                        insightId={insight.id}
-                        subjectPersonId={insight.subjectPersonId}
-                        fact={fact}
-                        disabled={busy}
-                        {...(availableTypes ? { availableTypes } : {})}
+                      <Icon size={17} aria-hidden="true" className={styles.factGroupIcon} />
+                      <span className={styles.factGroupName}>{area}</span>
+                      {sensitive ? <span className={styles.factGroupPrivate}>private</span> : null}
+                      <span className={styles.factGroupCount}>{group.facts.length}</span>
+                      <ChevronDown
+                        size={17}
+                        aria-hidden="true"
+                        className={open ? styles.chevOpen : styles.chev}
                       />
-                    ) : null}
-                    {/* AI-INFERRED facts can be pushed back on ("this isn't right about me"); ONBOARDING facts
-                        are what you told us — you fix them by editing the answer, not flagging (§3.4). */}
-                    {isOwn && !isIntake ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={busy}
-                        aria-label={
-                          fact.flaggedInaccurate
-                            ? `Undo — this is right about me: ${fact.text}`
-                            : `This isn’t right about me: ${fact.text}`
-                        }
-                        onClick={() => void onFlag(fact.id, !fact.flaggedInaccurate)}
-                      >
-                        {fact.flaggedInaccurate ? 'Undo' : 'Not right'}
-                      </Button>
+                    </button>
+                    {open ? (
+                      <ul className={styles.factList}>{group.facts.map(renderFact)}</ul>
                     ) : null}
                   </div>
-                </div>
-              ))}
-            </Stack>
+                );
+              })
+            )}
 
             <div className={styles.metaRow}>
               <ConfidenceChip

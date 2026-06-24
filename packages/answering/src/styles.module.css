@@ -28,24 +28,15 @@
   color: var(--color-text-primary);
 }
 
-/* Prompt + per-question sharing chip header row (43 §3.1/§9). The prompt takes the row and the chip sits at
-   the end; both wrap at narrow widths (the chip is `flex: none`, so it never causes an inner scrollbar). */
-.promptRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.promptRow .prompt {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
+/* Per-question sharing control (43 §3.1) — sits on its own line directly under the prompt, left-aligned, so
+   a short prompt doesn't leave a big empty gap. `align-self: flex-start` keeps the chip/confirm hugging the
+   left; `flex: none` so it never stretches or causes an inner scrollbar (§12). */
 .sharingSlot {
-  flex: 0 0 auto;
-  margin-left: auto;
+  align-self: flex-start;
+  flex: none;
+  max-width: 100%;
+  min-width: 0;
+  margin-top: calc(-1 * var(--space-1));
 }
 
 /* Author-attached question image — fits the column, never overflows. */

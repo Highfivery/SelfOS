@@ -5693,11 +5693,11 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
     expect(context).toContain('grief'); // a restricted fact still feeds the person's OWN coaching
 
     // The Owner is the full-access role → sees both the portrait summary AND the restricted ('grief')
-    // fact directly in Memory, marked "sensitive" (a member would get the restricted fact redacted, §8.4).
+    // fact directly in Memory, marked "private" (own-coaching-only; a member would get it redacted, §8.4).
     await w.getByRole('link', { name: 'Memory' }).click();
     await expect(w.getByText(/thoughtful and steady/)).toBeVisible();
     await expect(w.getByText(/Carries grief/)).toBeVisible();
-    await expect(w.getByText('sensitive').first()).toBeVisible();
+    await expect(w.getByText('private').first()).toBeVisible();
 
     // No horizontal overflow (page or inner controls) at phone width on the onboarding flow.
     await w.getByRole('link', { name: /Onboarding/ }).click();

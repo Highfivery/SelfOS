@@ -26,6 +26,7 @@ import { useUsageStore } from '../stores/usageStore';
 import { unansweredCount, useInboxStore } from '../stores/inboxStore';
 import { useDreamStore } from '../stores/dreamStore';
 import { useInsightStore } from '../stores/insightStore';
+import { useGoalStore } from '../stores/goalStore';
 import { useDreamAnalysisStore } from '../stores/dreamAnalysisStore';
 import { useDreamPatternStore } from '../stores/dreamPatternStore';
 import { useResultsStore } from '../stores/resultsStore';
@@ -103,6 +104,7 @@ export function AppShell(): JSX.Element {
     useGuidanceStore.getState().reset(); // guided suggestions + 18+ ack are per-person (16 §4.3/§8.3)
     useIntakeStore.getState().reset(); // the intake is per-person (18-personal-onboarding §7)
     useInsightStore.getState().reset(); // Memory is per-person — own + relationships only (20 §5.1)
+    useGoalStore.getState().reset(); // tracked goals are per-person (39-living-memory §5.4)
     useNotificationStore.getState().reset(); // notifications are per-person, device-local (35 §4)
     void useNotificationStore.getState().load();
     void useConversationStore.getState().load();
@@ -112,6 +114,7 @@ export function AppShell(): JSX.Element {
     void useGuidanceStore.getState().load();
     void useIntakeStore.getState().load();
     void useInsightStore.getState().load();
+    void useGoalStore.getState().load();
   }, [activePersonId]);
 
   // Collapse any open drawer when the viewport grows back to desktop (where the sidebar is permanent).

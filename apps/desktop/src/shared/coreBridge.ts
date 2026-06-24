@@ -35,6 +35,7 @@ import {
   BudgetSchema,
   DreamAnalysisEditsSchema,
   DreamInputSchema,
+  GoalStatusSchema,
   PersonInputSchema,
   PersonNotificationStateSchema,
   QuestionnaireInputSchema,
@@ -59,6 +60,7 @@ import {
   type InboxAssignmentDetail,
   type InboxCompatibilityView,
   type InboxItem,
+  type Goal,
   type Insight,
   type IntimacyTopicsView,
   type MemoryReconcileResult,
@@ -206,6 +208,7 @@ import {
   reconcileInsights,
   updateInsight,
 } from '@selfos/core/insights';
+import { deleteGoal, listGoals, setGoalStatus, updateGoal } from '@selfos/core/goals';
 import { INTIMACY_ACTIVITIES, INTIMACY_FANTASIES } from '@selfos/core/intimacy';
 import {
   addCustomIntimacyTopic,
@@ -590,6 +593,15 @@ const InsightFlagSchema = z.object({
   factId: z.string().min(1).optional(),
   flagged: z.boolean(),
 });
+// Tracked goals (39-living-memory §6). All scoped to the active person in the handler (the trust boundary).
+const GoalSetStatusSchema = z.object({ goalId: z.string().min(1), status: GoalStatusSchema });
+const GoalUpdateSchema = z.object({
+  goalId: z.string().min(1),
+  text: z.string().optional(),
+  due: z.string().optional(),
+  horizon: z.string().optional(),
+});
+const GoalDeleteSchema = z.object({ goalId: z.string().min(1) });
 // Personal onboarding (18-personal-onboarding §6).
 const IntakeRunTurnSchema = z.object({ sectionId: z.string().min(1), userText: z.string() });
 const IntakeSectionIdSchema = z.object({ sectionId: z.string().min(1) });
@@ -2010,6 +2022,51 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const deps = await aiDeps('memory.own');
       if (!deps) return { ok: false, reason: 'DENIED', message: 'Not available.' };
       return reconcileInsights(deps);
+    },
+    goalsList: async (): Promise<Goal[]> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'memory.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return listGoals(ctx.fs, ctx.key, personId);
+    },
+    goalsSetStatus: async (input): Promise<Goal | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'memory.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const p = GoalSetStatusSchema.parse(input);
+      // Scoped to the active person's OWN goals — a person can only change their own (the trust boundary).
+      return setGoalStatus(ctx.fs, ctx.key, personId, p.goalId, p.status, new Date());
+    },
+    goalsUpdate: async (input): Promise<Goal | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'memory.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const p = GoalUpdateSchema.parse(input);
+      return updateGoal(
+        ctx.fs,
+        ctx.key,
+        personId,
+        p.goalId,
+        {
+          ...(p.text !== undefined ? { text: p.text } : {}),
+          ...(p.due !== undefined ? { due: p.due } : {}),
+          ...(p.horizon !== undefined ? { horizon: p.horizon } : {}),
+        },
+        new Date(),
+      );
+    },
+    goalsDelete: async (input): Promise<void> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'memory.own'))) return;
+      const personId = await activePersonId();
+      if (!personId) return;
+      const p = GoalDeleteSchema.parse(input);
+      // The delete path is `people/<activePerson>/goals/<id>` — inherently scoped to the active person's
+      // OWN goals, so a person can never remove another's (the trust boundary).
+      await deleteGoal(ctx.fs, personId, p.goalId);
     },
     assignmentsCreate: async (input): Promise<InAppSendResult> => {
       const ctx = await host.vaultAndKey();

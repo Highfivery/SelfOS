@@ -3,6 +3,8 @@ import type {
   AiKeyStatus,
   AiProvider,
   AlignmentResult,
+  Goal,
+  GoalStatus,
   DeviceView,
   Answer,
   AnswerType,
@@ -190,6 +192,10 @@ export const IpcChannels = {
   insightsDelete: 'insights:delete',
   insightsFlag: 'insights:flag',
   memoryRefresh: 'memory:refresh',
+  goalsList: 'goals:list',
+  goalsSetStatus: 'goals:setStatus',
+  goalsUpdate: 'goals:update',
+  goalsDelete: 'goals:delete',
   assignmentsCreate: 'assignments:create',
   assignmentsInbox: 'assignments:inbox',
   assignmentsGet: 'assignments:get',
@@ -654,6 +660,22 @@ export interface SelfosBridge {
   }): Promise<Insight | null>;
   /** Manual "Refresh memory" — a budget-gated AI reconciliation pass over the active person's insights. */
   memoryRefresh(): Promise<MemoryReconcileResult>;
+  /**
+   * The ACTIVE person's tracked goals / commitments (39-living-memory §3.1) — own only, scoped + gated on
+   * `memory.own` in the bridge (the trust boundary). Newest-first.
+   */
+  goalsList(): Promise<Goal[]>;
+  /** Set one of the active person's OWN goals' status (39 §3.1); bumps lastTouchedAt (un-stales). */
+  goalsSetStatus(input: { goalId: string; status: GoalStatus }): Promise<Goal | null>;
+  /** Edit one of the active person's OWN goals (text / due / horizon; empty due/horizon clears). */
+  goalsUpdate(input: {
+    goalId: string;
+    text?: string;
+    due?: string;
+    horizon?: string;
+  }): Promise<Goal | null>;
+  /** Delete one of the active person's OWN goals. */
+  goalsDelete(input: { goalId: string }): Promise<void>;
   /**
    * Send a questionnaire to its BOUND household recipient (in-app), freezing an immutable snapshot at send.
    * The recipient is set on the questionnaire at creation (08 §17.3) — it is NOT passed here. Returns the

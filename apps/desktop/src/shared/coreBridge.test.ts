@@ -1230,6 +1230,43 @@ describe('createCoreBridge', () => {
     expect('shareableWith' in (f1 ?? {})).toBe(false);
   });
 
+  it('goals: lists/sets-status/updates/deletes the active person’s own, gated on memory.own (39 §6)', async () => {
+    const { bridge, host, ownerId } = await freshOwner();
+    const ctx = (await host.host.vaultAndKey())!;
+    const { saveGoal } = await import('@selfos/core/goals');
+    const base = {
+      schemaVersion: 1 as const,
+      provenance: { at: new Date().toISOString() },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    await saveGoal(ctx.fs, ctx.key, {
+      ...base,
+      id: 'g1',
+      subjectPersonId: ownerId,
+      text: 'run a marathon',
+      status: 'open',
+    });
+
+    expect((await bridge.goalsList()).map((g) => g.text)).toEqual(['run a marathon']);
+    expect((await bridge.goalsSetStatus({ goalId: 'g1', status: 'done' }))?.status).toBe('done');
+    expect((await bridge.goalsUpdate({ goalId: 'g1', text: 'run a half marathon' }))?.text).toBe(
+      'run a half marathon',
+    );
+
+    // A Guest (no memory.own) sees none and can't mutate.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    expect((await bridge.sessionSetActive({ personId: guest.id })).ok).toBe(true);
+    expect(await bridge.goalsList()).toEqual([]);
+    expect(await bridge.goalsSetStatus({ goalId: 'g1', status: 'open' })).toBeNull();
+
+    // Back as the owner (PIN required returning to the owner), delete it.
+    expect((await bridge.sessionSetActive({ personId: ownerId, pin: '1234' })).ok).toBe(true);
+    await bridge.goalsDelete({ goalId: 'g1' });
+    expect(await bridge.goalsList()).toEqual([]);
+  });
+
   it('persists custom types for the picker, gated by questionnaires.create', async () => {
     const { bridge } = await freshOwner();
     expect(await bridge.questionnairesListTypes()).toEqual([]);

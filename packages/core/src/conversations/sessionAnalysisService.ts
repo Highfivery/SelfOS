@@ -22,6 +22,7 @@ import {
 import { buildContext } from '../people';
 import { checkBudget, costOf, recordUsage } from '../usage';
 import { getInsight, normalizeCategories, saveInsight } from '../insights';
+import { extractGoals } from '../goals';
 import {
   DEPTH_INVITATION_INSTRUCTION,
   depthDetectionContext,
@@ -318,6 +319,20 @@ export async function endAndSummarize(deps: EndAndSummarizeDeps): Promise<Sessio
     updatedAt: at,
   };
   await saveInsight(fs, key, insight);
+
+  // First-class tracked goals (39-living-memory §4.1/§5.2): structure the SAME `goals` the analysis already
+  // returned into tracked Goal entities (no extra AI spend — they're also kept as `Goal:` facts above for the
+  // existing context/de-dup). A re-mentioned commitment folds into the existing open goal (§4.3).
+  await extractGoals({
+    fs,
+    key,
+    personId,
+    goals: draft.goals,
+    provenance: insight.provenance,
+    insightId,
+    lifeArea: 'Goals & growth',
+    now,
+  });
 
   // Self-maintaining profile (§15): the same pass may have noticed a profile fact changed — record any
   // suggestions as confirm-before-apply proposals (no extra AI spend; session facts aren't restricted).

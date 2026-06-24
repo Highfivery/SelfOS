@@ -252,6 +252,14 @@ show a tiny per-group count on each life-area header (recommended, cheap).
 
 ## 12. Changelog
 
+- 2026-06-24 — **Fix — collapsible life-area portrait** (`fix/onboarding-sharing-ux`, user-reported "still
+  looks the same" → confirmed direction via an interactive mockup). The flat grouping (below) was too subtle;
+  the long portrait now becomes **collapsible life-area sections** — each a button header with a per-area
+  **icon**, the **fact count**, a **"private"** badge when it holds restricted facts, and a chevron — that you
+  **expand on demand** so 20+ facts aren't dumped at once. **Sensitive sections (any restricted fact) start
+  COLLAPSED by default** (user-confirmed) so intimacy/trauma isn't on screen at a glance. Short insights
+  (session/dream) stay a plain list. `groupFactsByArea` + `LIFE_AREA_ICON` + a per-card `collapsedAreas` state
+  (seeded from the sensitive groups); `renderFact` extracted + reused. **Verified with real screenshots.**
 - 2026-06-24 — **Fix — portrait readability redesign** (`fix/onboarding-sharing-ux`, user-reported + visual
   QA). The onboarding portrait card was an unreadable wall of ~40 tiny gray facts with "sensitive" tags
   floating on their own right-aligned "blank" lines (the `.factControls` `margin-left:auto` + `flex-wrap`).

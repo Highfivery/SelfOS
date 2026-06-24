@@ -1,6 +1,24 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowUpRight, PencilLine, ShieldAlert, Trash2 } from 'lucide-react';
+import {
+  Activity,
+  ArrowUpRight,
+  Brain,
+  Briefcase,
+  ChevronDown,
+  Compass,
+  Flame,
+  Heart,
+  type LucideIcon,
+  PencilLine,
+  ShieldAlert,
+  Sparkles,
+  Tag,
+  Target,
+  Trash2,
+  Users,
+  Wallet,
+} from 'lucide-react';
 import type { Insight, InsightFact, RelationshipType } from '@shared/schemas';
 import { LIFE_AREAS } from '@shared/schemas';
 import { useInsightStore } from '../../../stores/insightStore';
@@ -60,6 +78,22 @@ function groupFactsByArea(
   if (noArea.length > 0) groups.push({ area: 'More', facts: noArea });
   return groups.filter((g) => g.facts.length > 0);
 }
+
+/** An icon per life-area for the collapsible section headers (44 audit — visual hierarchy). */
+const LIFE_AREA_ICON: Record<string, LucideIcon> = {
+  Relationships: Heart,
+  Family: Users,
+  'Work & purpose': Briefcase,
+  'Health & body': Activity,
+  'Emotions & patterns': Brain,
+  'Values & beliefs': Compass,
+  Intimacy: Flame,
+  'Goals & growth': Target,
+  Money: Wallet,
+  Faith: Sparkles,
+  Other: Tag,
+};
+const areaIcon = (area: string): LucideIcon => LIFE_AREA_ICON[area] ?? Tag;
 
 /**
  * One insight on the Memory dashboard (20-memory-dashboard §3.2 + 44 §3.4). For the active person's OWN
@@ -153,6 +187,81 @@ export function InsightCard({
 
   const goToSource = (): void => navigate(prov.to, prov.state ? { state: prov.state } : undefined);
 
+  // A long portrait groups its facts into collapsible life-area sections (44 audit). Sensitive sections (any
+  // restricted fact) start COLLAPSED so trauma/intimacy isn't on screen at a glance; everything else is open.
+  const factGroups = groupFactsByArea(insight.facts, isOwn);
+  const grouped = factGroups.length > 1 || factGroups[0]?.area !== null;
+  const [collapsedAreas, setCollapsedAreas] = useState<Set<string>>(
+    () =>
+      new Set(
+        factGroups
+          .filter((g) => g.area !== null && g.facts.some((f) => f.restricted))
+          .map((g) => g.area as string),
+      ),
+  );
+  const toggleArea = (area: string): void =>
+    setCollapsedAreas((prev) => {
+      const next = new Set(prev);
+      if (next.has(area)) next.delete(area);
+      else next.add(area);
+      return next;
+    });
+
+  /** One fact as a clean list row: text + inline tags, plus (AI-inferred only) the sharing + correction. */
+  const renderFact = (fact: InsightFact): JSX.Element => (
+    <li key={fact.id} className={styles.factItem}>
+      <span className={styles.factText}>
+        <Markdown
+          inline
+          size="sm"
+          className={fact.flaggedInaccurate ? styles.flaggedText : undefined}
+        >
+          {fact.text}
+        </Markdown>
+        {fact.flaggedInaccurate ? <span className={styles.inlineTag}>marked not right</span> : null}
+        {fact.retractedShareAt ? (
+          <span
+            className={styles.inlineTag}
+            title="This fact was shared, then withdrawn when you marked it"
+          >
+            sharing withdrawn
+          </span>
+        ) : null}
+        {isIntake && fact.restricted ? (
+          <span className={styles.sensitiveTag} title="Sensitive — only your own coach uses this.">
+            <ShieldAlert size={11} aria-hidden="true" /> private
+          </span>
+        ) : null}
+      </span>
+      {isOwn && !isIntake ? (
+        <span className={styles.factActions}>
+          {!fact.flaggedInaccurate ? (
+            <FactSharingControl
+              insightId={insight.id}
+              subjectPersonId={insight.subjectPersonId}
+              fact={fact}
+              disabled={busy}
+              {...(availableTypes ? { availableTypes } : {})}
+            />
+          ) : null}
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={busy}
+            aria-label={
+              fact.flaggedInaccurate
+                ? `Undo — this is right about me: ${fact.text}`
+                : `This isn’t right about me: ${fact.text}`
+            }
+            onClick={() => void onFlag(fact.id, !fact.flaggedInaccurate)}
+          >
+            {fact.flaggedInaccurate ? 'Undo' : 'Not right'}
+          </Button>
+        </span>
+      ) : null}
+    </li>
+  );
+
   return (
     <Card>
       <Stack gap={3}>
@@ -227,77 +336,42 @@ export function InsightCard({
           </>
         ) : (
           <>
-            {groupFactsByArea(insight.facts, isOwn).map((group) => (
-              <div key={group.area ?? '_flat'} className={styles.factGroup}>
-                {group.area ? <p className={styles.factGroupTitle}>{group.area}</p> : null}
-                <ul className={styles.factList}>
-                  {group.facts.map((fact) => (
-                    <li key={fact.id} className={styles.factItem}>
-                      <span className={styles.factText}>
-                        <Markdown
-                          inline
-                          size="sm"
-                          className={fact.flaggedInaccurate ? styles.flaggedText : undefined}
-                        >
-                          {fact.text}
-                        </Markdown>
-                        {/* Tags flow INLINE right after the fact text (44 audit — no more far-right floating
-                            tags that wrapped onto their own "blank" line). A restricted onboarding fact keeps
-                            a small informational "sensitive" tag; sharing is share-by-default + managed in
-                            "Manage sharing". */}
-                        {fact.flaggedInaccurate ? (
-                          <span className={styles.inlineTag}>marked not right</span>
-                        ) : null}
-                        {fact.retractedShareAt ? (
-                          <span
-                            className={styles.inlineTag}
-                            title="This fact was shared, then withdrawn when you marked it"
-                          >
-                            sharing withdrawn
-                          </span>
-                        ) : null}
-                        {isIntake && fact.restricted ? (
-                          <span
-                            className={styles.sensitiveTag}
-                            title="Sensitive — only your own coach uses this."
-                          >
-                            <ShieldAlert size={11} aria-hidden="true" /> sensitive
-                          </span>
-                        ) : null}
-                      </span>
-                      {/* AI-INFERRED facts keep a discreet sharing picker + a "this isn't right about me"
-                          correction; ONBOARDING facts have neither on the card (you fix them via the answer). */}
-                      {isOwn && !isIntake ? (
-                        <span className={styles.factActions}>
-                          {!fact.flaggedInaccurate ? (
-                            <FactSharingControl
-                              insightId={insight.id}
-                              subjectPersonId={insight.subjectPersonId}
-                              fact={fact}
-                              disabled={busy}
-                              {...(availableTypes ? { availableTypes } : {})}
-                            />
-                          ) : null}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={busy}
-                            aria-label={
-                              fact.flaggedInaccurate
-                                ? `Undo — this is right about me: ${fact.text}`
-                                : `This isn’t right about me: ${fact.text}`
-                            }
-                            onClick={() => void onFlag(fact.id, !fact.flaggedInaccurate)}
-                          >
-                            {fact.flaggedInaccurate ? 'Undo' : 'Not right'}
-                          </Button>
-                        </span>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+            {/* A short insight (session/dream) is a plain list; a long portrait becomes COLLAPSIBLE life-area
+                sections — expand on demand so 20+ facts aren't dumped at once, sensitive sections collapsed by
+                default (44 audit, confirmed with the user 2026-06-24). */}
+            {!grouped ? (
+              <ul className={styles.factList}>{(factGroups[0]?.facts ?? []).map(renderFact)}</ul>
+            ) : (
+              factGroups.map((group) => {
+                const area = group.area ?? 'More';
+                const Icon = areaIcon(area);
+                const sensitive = group.facts.some((f) => f.restricted);
+                const open = !collapsedAreas.has(area);
+                return (
+                  <div key={area} className={styles.factGroup}>
+                    <button
+                      type="button"
+                      className={styles.factGroupHead}
+                      aria-expanded={open}
+                      onClick={() => toggleArea(area)}
+                    >
+                      <Icon size={17} aria-hidden="true" className={styles.factGroupIcon} />
+                      <span className={styles.factGroupName}>{area}</span>
+                      {sensitive ? <span className={styles.factGroupPrivate}>private</span> : null}
+                      <span className={styles.factGroupCount}>{group.facts.length}</span>
+                      <ChevronDown
+                        size={17}
+                        aria-hidden="true"
+                        className={open ? styles.chevOpen : styles.chev}
+                      />
+                    </button>
+                    {open ? (
+                      <ul className={styles.factList}>{group.facts.map(renderFact)}</ul>
+                    ) : null}
+                  </div>
+                );
+              })
+            )}
 
             <div className={styles.metaRow}>
               <ConfidenceChip

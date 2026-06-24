@@ -6368,7 +6368,12 @@ test('household AI key (25): owner shares a key → a keyless device inherits it
     // "share" button was removed). Saving alone mirrors it into the vault; the UI confirms the share.
     await w.getByLabel('Claude API key').fill('sk-ant-e2e-shared-key');
     await w.getByRole('button', { name: 'Save key' }).click();
-    await expect(w.getByText(/shared with your household/i)).toBeVisible();
+    // Wait for the POST-SAVE confirmation specifically — it renders only once `status.hasSharedKey` is true,
+    // which is `config/ai-credentials.enc` existing + decrypting (aiCredentialsService). The looser
+    // /shared with your household/i ALSO matched the static pre-save explainer ("Keys you add here are
+    // shared with your household automatically…"), so it passed before the share write finished → the
+    // readFile below raced the write (intermittent ENOENT). This distinct text is a deterministic wait.
+    await expect(w.getByText(/every member device uses this key/i)).toBeVisible();
 
     // The shared key is stored ENCRYPTED in the vault (ciphertext on disk, the key inside the envelope).
     const fs = createNodeFileSystem(vault);

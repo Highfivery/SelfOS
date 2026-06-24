@@ -1777,6 +1777,26 @@ export const GuidancePrefsSchema = z.object({
 export type GuidancePrefs = z.infer<typeof GuidancePrefsSchema>;
 
 /**
+ * Proactive-coaching intensity (40-proactive-coaching §3.6/§4.1a). Per-person, read in the bridge.
+ * `off` = no in-session goal-raising, no synthesis pass, no goal-followup nudges (cross-insight crisis
+ * awareness §3.5 is safety and is NEVER disabled by this). `gentle` (default when absent) = in-session
+ * goal-raising + a slow synthesis cadence + ≤1 open nudge. `active` = a faster synthesis cadence + a
+ * slightly more present in-session coach.
+ */
+export const ProactivityLevelSchema = z.enum(['off', 'gentle', 'active']);
+export type ProactivityLevel = z.infer<typeof ProactivityLevelSchema>;
+
+/** Per-person coaching preferences (40 §4.1a) — `people/<id>/coaching/prefs.enc`. Absent ⇒ `gentle`. */
+export const CoachingPrefsSchema = z.object({
+  schemaVersion: z.number().int().positive(),
+  proactivity: ProactivityLevelSchema.optional(), // absent ⇒ DEFAULT_PROACTIVITY ('gentle')
+});
+export type CoachingPrefs = z.infer<typeof CoachingPrefsSchema>;
+
+/** The proactivity level when a person hasn't chosen one (40 §3.6). */
+export const DEFAULT_PROACTIVITY: ProactivityLevel = 'gentle';
+
+/**
  * What the launcher reads on open (16 §6) — cached suggestions (no spend) + the 18+ ack state. `cache`
  * is null until the person taps "Get personalized suggestions" (explicit-first-tap, no silent spend).
  */

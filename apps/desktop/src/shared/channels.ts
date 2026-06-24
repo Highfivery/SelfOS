@@ -5,6 +5,8 @@ import type {
   AlignmentResult,
   Goal,
   GoalStatus,
+  CoachingPrefs,
+  ProactivityLevel,
   MemoryReconcileState,
   DeviceView,
   Answer,
@@ -199,6 +201,8 @@ export const IpcChannels = {
   goalsSetStatus: 'goals:setStatus',
   goalsUpdate: 'goals:update',
   goalsDelete: 'goals:delete',
+  coachingGetPrefs: 'coaching:getPrefs',
+  coachingSetPrefs: 'coaching:setPrefs',
   assignmentsCreate: 'assignments:create',
   assignmentsInbox: 'assignments:inbox',
   assignmentsGet: 'assignments:get',
@@ -687,6 +691,13 @@ export interface SelfosBridge {
   }): Promise<Goal | null>;
   /** Delete one of the active person's OWN goals. */
   goalsDelete(input: { goalId: string }): Promise<void>;
+  /**
+   * The active person's OWN proactive-coaching preferences (40 §4.1a) — the per-person proactivity level.
+   * Gated `sessions.own`, active-person-scoped in the bridge. `null` when not signed in / not permitted.
+   */
+  coachingGetPrefs(): Promise<CoachingPrefs | null>;
+  /** Set the active person's OWN proactivity level (40 §3.6) — off / gentle / active. */
+  coachingSetPrefs(input: { proactivity: ProactivityLevel }): Promise<CoachingPrefs | null>;
   /**
    * Send a questionnaire to its BOUND household recipient (in-app), freezing an immutable snapshot at send.
    * The recipient is set on the questionnaire at creation (08 §17.3) — it is NOT passed here. Returns the

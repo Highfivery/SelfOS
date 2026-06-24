@@ -2,6 +2,7 @@ import type { FileSystem } from '../host';
 import type { ContextTopic } from '../schemas';
 import { buildContext } from '../people';
 import { depthAskInstruction, type DepthAskContext } from '../profile';
+import { goalRaiseInstruction, type GoalRaiseContext } from '../coaching/goalRaise';
 import { getExercise, guideLifeAreas } from './guidedCatalog';
 import { buildStepInstruction } from './guidedSteps';
 
@@ -47,6 +48,9 @@ export async function buildSystemPrompt(
   // A free-form session's inferred topic (28 §13.2 — the Haiku classifier in `chatService`). Used ONLY when
   // there's no exercise; a guided session always derives its topic from the exercise group (below).
   topicOverride?: ContextTopic,
+  // 40-proactive-coaching §3.1 — the optional in-session goal-raise (proactivity setting on + active goals).
+  // The host assembles it (proactivity level + the open/stale goal set); absent ⇒ no proactive follow-up.
+  goalRaise?: GoalRaiseContext,
 ): Promise<string> {
   const exercise = guideId ? getExercise(guideId) : undefined;
   // A guided session foregrounds its group's life-areas in the (pinned) portrait selection (28 §4.4); a
@@ -66,6 +70,13 @@ export async function buildSystemPrompt(
   if (depthAsk) {
     const ask = depthAskInstruction(depthAsk);
     if (ask) parts.push(ask);
+  }
+  // 40 §3.1 — the optional in-session goal-raise: a guarded invitation to gently follow up on ONE open/stale
+  // commitment when relevant, appended AFTER persona + safety + context (it steers, never overrides). The
+  // host omits it entirely when proactivity is off; the builder returns '' when there are no active goals.
+  if (goalRaise) {
+    const raise = goalRaiseInstruction(goalRaise);
+    if (raise) parts.push(raise);
   }
   parts.push(FORMATTING);
   return parts.filter(Boolean).join('\n\n');

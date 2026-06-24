@@ -564,6 +564,77 @@ test('update awareness: the manual About check shows up-to-date, and a calm erro
   }
 });
 
+test('proactive coaching: the Coaching setting is per-person, member-reachable, persists; no overflow (40)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  await seedMemberWithPortrait(vault, userData, 'mara-1', 'Mara', 'a private fact');
+  const app = await launch(userData);
+  const label = { exact: true };
+  try {
+    const w = await app.firstWindow();
+
+    // Owner → Settings → the member-visible Coaching section → defaults to gentle → choose Active.
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'Coaching', exact: true }).click();
+    await expect(w.getByLabel('How proactive your coach is', label)).toHaveValue('gentle');
+    await w.getByLabel('How proactive your coach is', label).selectOption('active');
+
+    // Read-after-write through the live bridge: leaving + returning re-fetches the persisted (decrypted)
+    // value, so this confirms the write actually landed in the vault — no file-flush race.
+    await w.getByRole('link', { name: 'Home' }).click();
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'Coaching', exact: true }).click();
+    await expect(w.getByLabel('How proactive your coach is', label)).toHaveValue('active');
+
+    // No horizontal overflow at phone width while the control renders.
+    await w.setViewportSize({ width: 390, height: 780 });
+    const fits = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      return (
+        !!main &&
+        main.scrollWidth <= main.clientWidth &&
+        document.documentElement.scrollWidth <= window.innerWidth
+      );
+    });
+    expect(fits).toBe(true);
+    await w.setViewportSize({ width: 1024, height: 780 });
+
+    // Switch to the member — they can reach Coaching (per-person) but NOT the admin-only Sessions section.
+    await w.getByRole('button', { name: /signed in as/i }).click();
+    await w.getByRole('menuitem', { name: 'Switch person' }).click();
+    await w
+      .getByRole('dialog', { name: /who.s here/i })
+      .getByRole('button', { name: 'Mara' })
+      .click();
+    await expect(w.getByRole('button', { name: 'Signed in as Mara' })).toBeVisible();
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await expect(w.getByRole('button', { name: 'Coaching', exact: true })).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Sessions', exact: true })).toHaveCount(0); // admin-only
+
+    // The member tunes their OWN coach (default gentle, independent of the owner's 'active').
+    await w.getByRole('button', { name: 'Coaching', exact: true }).click();
+    await expect(w.getByLabel('How proactive your coach is', label)).toHaveValue('gentle');
+    await w.getByLabel('How proactive your coach is', label).selectOption('off');
+    await w.getByRole('link', { name: 'Home' }).click(); // leave + return to flush the write
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'Coaching', exact: true }).click();
+    await expect(w.getByLabel('How proactive your coach is', label)).toHaveValue('off');
+  } finally {
+    await app.close();
+  }
+
+  // Decrypt the vault: the owner kept 'active', the member chose 'off' — per-person isolation.
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  expect(await readEncryptedJson(fs, 'people/owner-1/coaching/prefs.enc', key!)).toMatchObject({
+    proactivity: 'active',
+  });
+  expect(await readEncryptedJson(fs, 'people/mara-1/coaching/prefs.enc', key!)).toMatchObject({
+    proactivity: 'off',
+  });
+  await rm(userData, { recursive: true, force: true });
+  await rm(vault, { recursive: true, force: true });
+});
+
 test('first-time setup creates the owner and enters the app', async () => {
   const userData = await mkdtemp(join(tmpdir(), 'selfos-e2e-ud-'));
   const vault = await mkdtemp(join(tmpdir(), 'selfos-e2e-vault-'));

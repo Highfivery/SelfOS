@@ -19,6 +19,7 @@ import {
   type RelayEnv,
 } from '@selfos/core/relay';
 import { saveInsight } from '@selfos/core/insights';
+import { saveGoal } from '@selfos/core/goals';
 import { buildContext } from '@selfos/core/people';
 import { ANTHROPIC_API_KEY_ID, OPENAI_API_KEY_ID } from './channels';
 import { DeviceStateSchema } from './schemas';
@@ -775,6 +776,62 @@ describe('createCoreBridge', () => {
     captured = '';
     await bridge.chatStream({ conversationId: 'c2', userText: 'hello again' });
     expect(captured).not.toContain("haven't filled in yet");
+  });
+
+  it('weaves the in-session goal-raise into the chat prompt when a goal exists, and not when off (40 §3.1)', async () => {
+    const { bridge, host, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const ctx = (await host.host.vaultAndKey())!;
+    await saveGoal(ctx.fs, ctx.key, {
+      id: 'g1',
+      schemaVersion: 1,
+      subjectPersonId: ownerId,
+      text: 'finish the side project',
+      status: 'open',
+      provenance: { at: '2026-01-01T00:00:00.000Z' },
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+    let captured = '';
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        captured = options.system ?? '';
+        onDelta('ok');
+        return Promise.resolve({
+          text: 'ok',
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    // Default 'gentle' → the coach is told it may proactively follow up on the open commitment.
+    await bridge.chatStream({ conversationId: 'c1', userText: 'hello' });
+    expect(captured).toContain('finish the side project');
+    expect(captured).toContain('never turn the session into a progress review'); // the §3.1 instruction
+
+    // Off → the proactive instruction is gone (the passive spec-39 grounding line may still mention the
+    // goal, but the behavioural raise is suppressed).
+    expect((await bridge.coachingSetPrefs({ proactivity: 'off' }))?.proactivity).toBe('off');
+    captured = '';
+    await bridge.chatStream({ conversationId: 'c2', userText: 'hello again' });
+    expect(captured).not.toContain('never turn the session into a progress review');
+  });
+
+  it('coaching prefs round-trip and are per-person (40 §4.1a)', async () => {
+    const { bridge } = await freshOwner();
+    // Default when unset.
+    expect(await bridge.coachingGetPrefs()).toEqual({ schemaVersion: 1 });
+    // The owner sets 'active'.
+    await bridge.coachingSetPrefs({ proactivity: 'active' });
+    expect((await bridge.coachingGetPrefs())?.proactivity).toBe('active');
+
+    // A member tunes their OWN coach independently — the owner's choice is untouched (per-person isolation).
+    const member = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: member.id, roleId: 'member', pin: null });
+    await bridge.sessionSetActive({ personId: member.id });
+    expect(await bridge.coachingGetPrefs()).toEqual({ schemaVersion: 1 }); // member's own default
+    await bridge.coachingSetPrefs({ proactivity: 'off' });
+    expect((await bridge.coachingGetPrefs())?.proactivity).toBe('off');
   });
 
   it('refuses to summarize when session memory is disabled', async () => {

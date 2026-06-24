@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   ClipboardList,
+  Compass,
   Database,
   Info,
   Laptop,
@@ -30,6 +31,7 @@ import {
 import { RelaySettingsPanel } from './RelaySettingsPanel';
 import { RelayMessagesControl } from './RelayMessagesControl';
 import { IntimacyTopicsControl } from './IntimacyTopicsControl';
+import { ProactivityControl } from './ProactivityControl';
 import {
   DEFAULT_RELAY_MESSAGES,
   RelayMessagesSchema,
@@ -50,6 +52,7 @@ declare module './types' {
     'sessions.autoSummarizeOnEnd': boolean;
     'memory.autoReconcile': boolean;
     'intake.inSessionDepthAsk': boolean;
+    'coaching.proactivity': null; // per-person (CoachingPrefs); the custom control owns its state via IPC
     'questionnaires.autoAnalyze': boolean;
     'questionnaires.defaultMessages': RelayMessages;
     'questionnaires.intimacyTopics': null;
@@ -101,6 +104,15 @@ export function registerBuiltinSettings(): void {
     icon: MessagesSquare,
     order: 3,
     adminOnly: true,
+  });
+  // Coaching is a PER-PERSON section (each persona tunes their own coach, 40 §3.6) — NOT admin-only, so every
+  // member can reach it (members otherwise see only Appearance / Coaching / Vault / About).
+  registerSection({
+    id: 'coaching',
+    title: 'Coaching',
+    description: 'How present and proactive your coach is — just for you.',
+    icon: Compass,
+    order: 3.5,
   });
   registerSection({
     id: 'questionnaires',
@@ -316,6 +328,18 @@ export function registerBuiltinSettings(): void {
       scope: 'vault',
       order: 3,
       visibleWhen: aiEnabled,
+    }),
+    defineSetting({
+      key: 'coaching.proactivity',
+      section: 'coaching',
+      label: 'Proactive check-ins',
+      description:
+        'How much your coach follows up on its own — gently raising a goal you set when it’s relevant, and noticing themes across your sessions, dreams, and reflections. This is gentle reflection, never a checklist or a watcher, and it’s just for you. (Support for a hard moment is always available, whatever you choose here.)',
+      schema: z.null(),
+      default: null,
+      control: { type: 'custom', render: ProactivityControl },
+      scope: 'vault',
+      order: 1,
     }),
     defineSetting({
       key: 'questionnaires.autoAnalyze',

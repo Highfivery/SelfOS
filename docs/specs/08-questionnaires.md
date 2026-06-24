@@ -210,11 +210,18 @@ Both people answer a per-answerer **personalized variant** of the same underlyin
 report. The author picks a **visibility mode** per questionnaire — and the recipient's disclosure follows it
 automatically:
 
-- **Shared report, raw hidden both ways** (default) → recipient told _"Private…"_.
-- **Sender sees all** → recipient told _"Your answers will be shared with [sender]"_ (requires
-  `questionnaires.readRaw`, §8).
-- **Each sees own + shared report** → recipient told their answers stay private to them; both see the
-  joint report.
+- **Shared report, raw hidden both ways** (`sharedReport`, default) → recipient told _"Private…"_.
+- **Sender sees all** (`senderSeesAll`) → recipient told _"Your answers will be shared with [sender]"_
+  (requires `questionnaires.readRaw`, §8).
+- **Each sees own + shared report** (`eachSeesOwn`) → recipient told their answers stay private to them;
+  both see the joint report.
+- **No report — just inform each coach** (`contextOnly`) → both answer; **no shared report and no raw
+  sharing either way**; each participant's answers distil into an **auto-approved, own-context-only**
+  Insight that feeds **only their own** coach (sender-triggered "Update both coaches" from Results). The
+  recipient is told _"There's no report, and no one in this exchange sees your answers — they just help
+  your own coach understand you a little better."_ The most private mode; the copy never implies an
+  owner/admin can read anyone's answers (the durable rule). _(Built in 13.5d; documented as a first-class
+  fourth mode here per spec 38 §3.8.)_
 
 ### 3.7 Analysis, Insights, metrics & the gap-finder
 
@@ -365,7 +372,10 @@ interface Questionnaire {
   type: string; // a starter-taxonomy key OR a user-defined custom type
   sensitivity: SensitivityTier;
   questions: Question[];
-  compatibility?: { enabled: true; visibility: 'sharedReport' | 'senderSeesAll' | 'eachSeesOwn' };
+  compatibility?: {
+    enabled: true;
+    visibility: 'sharedReport' | 'senderSeesAll' | 'eachSeesOwn' | 'contextOnly';
+  };
   createdAt: string;
   updatedAt: string;
 }

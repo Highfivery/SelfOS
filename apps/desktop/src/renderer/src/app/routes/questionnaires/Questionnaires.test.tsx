@@ -152,6 +152,18 @@ describe('Questionnaires', () => {
     );
   });
 
+  it('offers contextOnly as the most-private compatibility mode, never implying owner access (38 §3.8)', async () => {
+    installMockBridge({ questionnairesList: () => Promise.resolve([]) });
+    await openNewCompat();
+
+    const visibility = await screen.findByLabelText('Who sees what');
+    expect(screen.getByRole('option', { name: /No report/i })).toBeInTheDocument();
+    await userEvent.selectOptions(visibility, 'contextOnly');
+    // The selected-mode help reads as the most private and never implies an owner/admin can read answers.
+    expect(screen.getByText(/most private option/i)).toBeInTheDocument();
+    expect(screen.queryByText(/owner|admin/i)).not.toBeInTheDocument();
+  });
+
   it('surfaces validation problems via Check (real validateQuestionnaire, 38 §3.4)', async () => {
     installMockBridge({ questionnairesList: () => Promise.resolve([]) });
     await openNewBuilder();

@@ -8,8 +8,9 @@
 > 2. **"Seen" semantics** — a response stops being "new" when the sender **opens that questionnaire's
 >    Results**; device-local (spec 35's model), **no vault marker / no schema change**.
 > 3. **Reminders** — **in v1**; an **in-app spec-35 notification nudges the SENDER** to re-share when a
->    send is unanswered **7+ days** (never auto-messages the recipient, no scheduler). Adds additive
->    `Assignment.lastReminderAt` to avoid re-nagging.
+>    send is unanswered **7+ days** (never auto-messages the recipient, no scheduler). _(Built without a
+>    `lastReminderAt` field — the notification's device-local dismiss already prevents re-nagging, so no
+>    schema change; see slice 5.)_
 > 4. **Re-ask / reshare prior link** — **auto-revoke** the prior open send's link (best-effort if the
 >    relay is unreachable); surfaced, never silent.
 > 5. **Templates** — **lean on Duplicate** (keep 08 §12.1's "no templates"); slice 8 = a small
@@ -660,7 +661,11 @@ format })` builds the export **host-side** (the privacy boundary lives in the br
    host save op (the spec-13 precedent; dialog title genericized to "Save file"). Results offers **Export
    CSV / Export JSON** once there's a submitted send, with a "outside your encrypted vault" confirmation.
    Gated `questionnaires.viewResults`, sender-scoped.
-7. **Document & finish `contextOnly`.** Builder picker copy, Results "Update both coaches" reconciliation,
-   recipient disclosure, and the 08 §3.6 doc update listing all four modes. (§11 #10.)
+7. **Document & finish `contextOnly`.** ✅ **Built (2026-06-23).** The mode was already wired in code (the
+   builder picker option "No report — just inform each coach" / "The most private option", the
+   `disclosure.ts` recipient copy, and the Results "Update both coaches" action) — this slice **verified
+   the copy never implies owner/admin visibility** (the durable rule, §11 #10) and **documented it as a
+   first-class fourth mode in 08 §3.6** (the modes list + the `compatibility.visibility` union), plus a
+   builder test asserting the option is offered with the most-private copy and no owner/admin language.
 8. **Templates / favorites (if in scope).** Only if §11 #5 chooses a model beyond Duplicate — its own
    slice, spec-first, reconciled with 08's "no templates" decision.

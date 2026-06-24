@@ -67,9 +67,29 @@ export async function saveQuestionnaire(
     ...(input.recipient !== undefined ? { recipient: input.recipient } : {}),
     ...(input.description !== undefined ? { description: input.description } : {}),
     ...(input.compatibility !== undefined ? { compatibility: input.compatibility } : {}),
+    // The favorite flag lives on the def but isn't author-supplied (it's a list star), so carry it through
+    // an edit from the existing def rather than dropping it (38 §13.8) — like createdAt/creatorPersonId.
+    ...(existing?.favorite ? { favorite: existing.favorite } : {}),
   };
   await writeEncryptedJson(fs, defPath(questionnaire.id), questionnaire, key);
   return questionnaire;
+}
+
+/**
+ * Toggle a questionnaire's favorite (pin) flag WITHOUT bumping its content `version` or `updatedAt` — it's
+ * a list convenience, not an edit to the questions (38 §13.8). No-op if the questionnaire is gone.
+ */
+export async function setFavorite(
+  fs: FileSystem,
+  key: Uint8Array,
+  id: string,
+  favorite: boolean,
+): Promise<void> {
+  const existing = await getQuestionnaire(fs, key, id);
+  if (!existing) return;
+  const next: Questionnaire = { ...existing, favorite };
+  if (!favorite) delete next.favorite; // keep the absence-means-false invariant tidy
+  await writeEncryptedJson(fs, defPath(id), next, key);
 }
 
 /** Delete a questionnaire definition (no key needed — removal doesn't read ciphertext). */

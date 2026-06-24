@@ -904,6 +904,10 @@ export const QuestionnaireSchema = z.object({
   sensitivity: SensitivityTierSchema,
   questions: z.array(QuestionSchema),
   compatibility: CompatibilityConfigSchema.optional(),
+  // Pin a recurring questionnaire to the top of the list (38 §13.8). Additive-optional, household-wide;
+  // absent = not favorited. Set via `setFavorite` (a star toggle), NOT through the builder — so it never
+  // bumps the content `version`, and `saveQuestionnaire` preserves it across edits.
+  favorite: z.boolean().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

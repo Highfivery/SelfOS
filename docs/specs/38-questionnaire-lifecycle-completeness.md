@@ -1,6 +1,6 @@
 # 38 — Questionnaire lifecycle completeness
 
-> **Status:** Approved — building (slice 1 built) — _last updated 2026-06-23_
+> **Status:** Built (all 8 slices) — _last updated 2026-06-23_
 >
 > **§11 decisions resolved with the owner (2026-06-23) — all 8 slices in scope:**
 >
@@ -667,5 +667,9 @@ format })` builds the export **host-side** (the privacy boundary lives in the br
    the copy never implies owner/admin visibility** (the durable rule, §11 #10) and **documented it as a
    first-class fourth mode in 08 §3.6** (the modes list + the `compatibility.visibility` union), plus a
    builder test asserting the option is offered with the most-private copy and no owner/admin language.
-8. **Templates / favorites (if in scope).** Only if §11 #5 chooses a model beyond Duplicate — its own
-   slice, spec-first, reconciled with 08's "no templates" decision.
+8. **Favorites (reuse via Duplicate).** ✅ **Built (2026-06-23).** Per §11 #5 we kept 08's "no templates"
+   decision and added a lightweight **Favorite (pin)** instead: an additive-optional `Questionnaire.favorite`
+   flag, toggled by a **star** on each list row (`questionnaires:setFavorite`, gated `questionnaires.create`)
+   — set **without bumping the content `version`** (it's a list convenience, not an edit), preserved across
+   edits by `saveQuestionnaire`, and **sorted to the top** of the list. Reuse a recurring questionnaire via
+   the existing **Duplicate**; no new storage model. (No migration — additive-optional, absent = not pinned.)

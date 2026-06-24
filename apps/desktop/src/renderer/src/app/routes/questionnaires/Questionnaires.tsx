@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { ArrowLeft, ClipboardList, Plus, Sparkles } from 'lucide-react';
+import { ArrowLeft, ClipboardList, Plus, Sparkles, Star } from 'lucide-react';
 import { validateQuestionnaire } from '@selfos/core/questionnaires';
 import type { Recipient } from '@shared/schemas';
 import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
@@ -9,6 +9,7 @@ import {
   Button,
   Card,
   Heading,
+  IconButton,
   Inline,
   Stack,
   Text,
@@ -35,7 +36,11 @@ export function Questionnaires(): JSX.Element {
   const loaded = useQuestionnaireStore((s) => s.loaded);
   const load = useQuestionnaireStore((s) => s.load);
   const remove = useQuestionnaireStore((s) => s.remove);
+  const setFavorite = useQuestionnaireStore((s) => s.setFavorite);
   const loadTypes = useQuestionnaireStore((s) => s.loadTypes);
+  // Favorited (pinned) questionnaires sort to the top (38 §13.8); the rest keep their existing order.
+  // (Coerce to 0/1 — Number(undefined) is NaN, which would break the comparator.)
+  const ordered = [...questionnaires].sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0));
   // Home's "Suggested next steps" card can hand off a gap-finder suggestion as a builder seed (17 §3.1).
   const location = useLocation();
   const handoffSeed = (location.state as { seed?: BuilderSeed } | null)?.seed;
@@ -116,7 +121,7 @@ export function Questionnaires(): JSX.Element {
         ) : (
           <Stack gap={2}>
             {deleteError ? <Banner tone="warning">{deleteError}</Banner> : null}
-            {questionnaires.map((q) => {
+            {ordered.map((q) => {
               const active = selection.mode === 'edit' && selection.id === q.id;
               const sent = sendStates[q.id];
               // An unsent definition that isn't valid-to-send is a Draft (38 §3.4) — a clear "not ready" cue
@@ -147,6 +152,18 @@ export function Questionnaires(): JSX.Element {
                         ) : null}
                       </span>
                     </button>
+                    <IconButton
+                      variant="ghost"
+                      aria-label={q.favorite ? `Unpin “${q.title}”` : `Pin “${q.title}”`}
+                      aria-pressed={q.favorite ?? false}
+                      onClick={() => void setFavorite(q.id, !q.favorite)}
+                    >
+                      <Star
+                        size={16}
+                        aria-hidden="true"
+                        {...(q.favorite ? { fill: 'currentColor' } : {})}
+                      />
+                    </IconButton>
                     <QuestionnaireRowMenu
                       title={q.title}
                       {...(sent

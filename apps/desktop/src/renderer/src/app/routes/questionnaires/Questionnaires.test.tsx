@@ -164,6 +164,34 @@ describe('Questionnaires', () => {
     expect(screen.queryByText(/owner|admin/i)).not.toBeInTheDocument();
   });
 
+  it('pins a favorited questionnaire to the top and toggles via the bridge (38 §13.8)', async () => {
+    const questionnairesSetFavorite = vi.fn(() => Promise.resolve());
+    const q = (id: string, title: string, favorite = false) => ({
+      id,
+      schemaVersion: 1 as const,
+      version: 1,
+      title,
+      type: 'general',
+      sensitivity: 'standard' as const,
+      ...(favorite ? { favorite: true } : {}),
+      questions: [{ id: 'x', type: 'shortText' as const, prompt: '?', required: false }],
+      createdAt: 'now',
+      updatedAt: 'now',
+    });
+    installMockBridge({
+      questionnairesSetFavorite,
+      questionnairesList: () => Promise.resolve([q('qa', 'Alpha'), q('qb', 'Beta', true)]),
+    });
+    renderApp();
+
+    // The favorited "Beta" sorts above "Alpha".
+    const names = (await screen.findAllByText(/^(Alpha|Beta)$/)).map((n) => n.textContent);
+    expect(names[0]).toBe('Beta');
+    // Pinning "Alpha" persists via the bridge.
+    await userEvent.click(screen.getByRole('button', { name: /Pin “Alpha”/ }));
+    expect(questionnairesSetFavorite).toHaveBeenCalledWith({ id: 'qa', favorite: true });
+  });
+
   it('surfaces validation problems via Check (real validateQuestionnaire, 38 §3.4)', async () => {
     installMockBridge({ questionnairesList: () => Promise.resolve([]) });
     await openNewBuilder();

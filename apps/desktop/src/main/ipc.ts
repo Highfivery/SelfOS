@@ -277,6 +277,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.questionnairesSave, bridge.questionnairesSave);
   handle(IpcChannels.questionnairesDelete, bridge.questionnairesDelete);
   handle(IpcChannels.questionnairesValidate, bridge.questionnairesValidate);
+  handle(IpcChannels.questionnairesSetFavorite, bridge.questionnairesSetFavorite);
   handle(IpcChannels.questionnairesListTypes, bridge.questionnairesListTypes);
   handle(IpcChannels.questionnairesAddType, bridge.questionnairesAddType);
   handle(IpcChannels.questionnairesIntimacyTopics, bridge.questionnairesIntimacyTopics);

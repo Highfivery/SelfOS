@@ -42,6 +42,7 @@ interface QuestionnaireState {
   save: (input: QuestionnaireInput) => Promise<Questionnaire | null>;
   remove: (id: string) => Promise<void>;
   validate: (input: QuestionnaireInput) => Promise<string[]>;
+  setFavorite: (id: string, favorite: boolean) => Promise<void>;
 }
 
 /** The sender's questionnaire definitions (08-questionnaires §3.1). CRUD flows through the bridge. */
@@ -85,4 +86,11 @@ export const useQuestionnaireStore = create<QuestionnaireState>((set, get) => ({
     await get().load();
   },
   validate: async (input) => (await window.selfos?.questionnairesValidate(input)) ?? [],
+  setFavorite: async (id, favorite) => {
+    // Optimistic flip so the star + sort respond instantly; the bridge persists it (no version bump).
+    set({
+      questionnaires: get().questionnaires.map((q) => (q.id === id ? { ...q, favorite } : q)),
+    });
+    await window.selfos?.questionnairesSetFavorite({ id, favorite });
+  },
 }));

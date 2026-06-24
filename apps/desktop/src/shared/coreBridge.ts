@@ -256,6 +256,7 @@ import {
   submitResponse,
   suggestQuestionnaires,
   validateQuestionnaire,
+  setFavorite,
   buildResultsExport,
   exportMimeType,
   type AiDeps,
@@ -1753,6 +1754,14 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     questionnairesValidate: async (input): Promise<string[]> => {
       // Pure pre-flight check — exposes nothing sensitive, so no vault/capability gate.
       return validateQuestionnaire(QuestionnaireInputSchema.parse(input));
+    },
+    questionnairesSetFavorite: async (input): Promise<void> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) return;
+      const { id, favorite } = z
+        .object({ id: z.string().min(1), favorite: z.boolean() })
+        .parse(input);
+      await setFavorite(ctx.fs, ctx.key, id, favorite);
     },
     questionnairesListTypes: async (): Promise<string[]> => {
       const ctx = await host.vaultAndKey();

@@ -169,6 +169,7 @@ export const IpcChannels = {
   questionnairesSave: 'questionnaires:save',
   questionnairesDelete: 'questionnaires:delete',
   questionnairesValidate: 'questionnaires:validate',
+  questionnairesSetFavorite: 'questionnaires:setFavorite',
   questionnairesListTypes: 'questionnaires:listTypes',
   questionnairesAddType: 'questionnaires:addType',
   questionnairesIntimacyTopics: 'questionnaires:intimacyTopics',
@@ -559,6 +560,11 @@ export interface SelfosBridge {
   questionnairesDelete(id: string): Promise<void>;
   /** Structural problems with a draft (empty array = valid) — for live builder feedback. */
   questionnairesValidate(input: QuestionnaireInput): Promise<string[]>;
+  /**
+   * Pin/unpin a questionnaire (the list star, 38 §13.8) — sets `favorite` without bumping the content
+   * version. Requires `questionnaires.create`.
+   */
+  questionnairesSetFavorite(input: { id: string; favorite: boolean }): Promise<void>;
   /** The user-defined custom types (vault-stored), for the builder's type picker. Requires `questionnaires.create`. */
   questionnairesListTypes(): Promise<string[]>;
   /** Add a custom type (trimmed, de-duped) and return the updated list. Requires `questionnaires.create`. */

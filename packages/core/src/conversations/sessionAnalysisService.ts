@@ -327,8 +327,10 @@ export async function endAndSummarize(deps: EndAndSummarizeDeps): Promise<Sessio
   await saveInsight(fs, key, insight);
 
   // First-class tracked goals (39-living-memory §4.1/§5.2): structure the SAME `goals` the analysis already
-  // returned into tracked Goal entities (no extra AI spend — they're also kept as `Goal:` facts above for the
-  // existing context/de-dup). A re-mentioned commitment folds into the existing open goal (§4.3).
+  // returned into tracked Goal entities (no extra AI spend). The `Goal:` facts above are kept for the Sessions
+  // wrap-up card + per-fact sharing, but are EXCLUDED from the coach's own-context (insightStore
+  // `GOAL_FACT_PREFIX`) so goals reach the coach once, via the structured "Open commitments" line, not twice
+  // (39 §4.4). A re-mentioned commitment folds into the existing open goal (§4.3).
   await extractGoals({
     fs,
     key,

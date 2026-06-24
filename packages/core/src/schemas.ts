@@ -1838,6 +1838,7 @@ export type CoachingSynthesisResult =
       reason:
         | 'NO_KEY'
         | 'BUDGET'
+        | 'CAPPED' // the proactivity-specific per-week synthesis cap (40 §3.4) — distinct from a hard BUDGET stop
         | 'AI_OFF'
         | 'EMPTY'
         | 'REFUSED'

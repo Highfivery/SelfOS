@@ -408,10 +408,16 @@ A running log of durable decisions and feedback captured into the project config
   cadence for 24h — the stamp moved to AFTER the pass and is skipped for the no-spend reasons (AI_OFF/BUDGET/ERROR)
   while a billed-but-unparseable pass still stamps (no re-spend). **(spec 38 — test gap)** added a bridge test
   proving **re-ask auto-revokes the prior relay link** (the old link → 404, the anti-double-submit §3.6 claim that
-  was previously asserted only by a comment). **Flagged for a product decision (NOT changed):** (39 §4.4) goals are
-  **double-grounded** into coaching context — once as legacy `Goal:` insight facts AND again via the new structured
-  "Open commitments" line; pick one source. (40 §3.4/§11-Q4) the resolved **proactivity-specific per-period budget
-  cap** was never implemented — manual synthesis is bounded only by the general budget. **Lesson: a digest/grounding
+  was previously asserted only by a comment). **Then fixed the two items first flagged for a decision (owner: "fix
+  anything that needs to be addressed"):** (39 §4.4) goals were **double-grounded** into coaching context — once as
+  legacy `Goal:` insight facts AND via the new "Open commitments" line; now the `Goal:` facts are EXCLUDED from the
+  subject's own-context emit (a shared `GOAL_FACT_PREFIX` in insightStore), so a goal reaches the coach once (the
+  structured line, which carries status/due/staleness) — the facts stay on the insight for the Sessions wrap-up
+  card + per-fact sharing, and a goal SHARED with another person still reaches their context. (40 §3.4/§11-Q4) added
+  the resolved **proactivity-specific per-week synthesis cap** (`SYNTHESIS_WEEKLY_CAP=7`, rolling 7-day count of
+  `coaching.synthesize` events, new `CAPPED` reason, owner-override bypass) so the manual "Look again" path can't run
+  away on cost. +tests for both (no double-ground in assembled context + a goal still reaches a sharee; the 8th
+  weekly pass is CAPPED with no spend). **Lesson: a digest/grounding
   builder that reads insights directly must run them through the SAME `feedableInsights` boundary as
   `summarizeForContext`, or muted/flagged content leaks into an AI pass — a docstring claiming the boundary isn't
   the boundary; and a throttle/cooldown must be stamped only after a pass that actually SPENT, never before the

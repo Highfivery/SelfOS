@@ -11,7 +11,7 @@ import {
   type ProactivityLevel,
   type UsageEvent,
 } from '../schemas';
-import { checkBudget, costOf, recordUsage } from '../usage';
+import { checkBudget, costOf, queryUsage, recordUsage } from '../usage';
 import { PERSONA, SAFETY } from '../conversations/promptBuilder';
 import { feedableInsights, listInsightsForPerson } from '../insights';
 import { getPatternStats } from '../dreams';
@@ -37,6 +37,13 @@ const SYNTHESIS_WINDOW_DAYS = 30;
 const MAX_INSIGHTS = 12;
 /** Below this many in-window insights there isn't enough to say anything honest → EMPTY (no spend). */
 const MIN_INSIGHTS = 2;
+/**
+ * A proactivity-specific cap on synthesis passes in any rolling 7 days (40 §3.4 / §11 Q4): the auto cadence
+ * self-throttles (≤ once per 3–7 days), but the MANUAL "Look again" / "What are you noticing lately?" path
+ * bypasses that throttle, so without this a user could spend it repeatedly. ~one/day is far above any genuine
+ * use, so it only ever stops runaway spend. The owner budget-override bypasses it (like a budget stop).
+ */
+const SYNTHESIS_WEEKLY_CAP = 7;
 
 /** Cadence windows + new-insight thresholds per proactivity level (40 §3.4 / §11 Q4). */
 const CADENCE: Record<
@@ -239,6 +246,26 @@ export async function synthesize(deps: SynthesizeDeps): Promise<CoachingSynthesi
   const app = await checkBudget(fs, key, { scope: 'app', now, override: deps.override });
   if (person.state === 'over' || app.state === 'over') {
     return { ok: false, reason: 'BUDGET', message: 'AI budget reached for this period.' };
+  }
+
+  // Proactivity-specific cap (40 §3.4): count this person's synthesis passes in the trailing 7 days and stop
+  // before spending a (cap+1)th — so the manual "Look again" path can't run away on cost. The owner override
+  // bypasses it, like a budget stop. Counted from the SAME metered `coaching.synthesize` events.
+  if (!deps.override) {
+    const weekAgo = new Date(now.getTime() - 7 * DAY_MS).toISOString();
+    const passes = await queryUsage(fs, key, {
+      from: weekAgo,
+      to: now.toISOString(),
+      personId,
+      type: 'coaching.synthesize',
+    });
+    if (passes.length >= SYNTHESIS_WEEKLY_CAP) {
+      return {
+        ok: false,
+        reason: 'CAPPED',
+        message: 'You’ve reached this week’s reflections — check back in a few days.',
+      };
+    }
   }
 
   const stats = await getPatternStats(fs, key, personId, 'all', now);

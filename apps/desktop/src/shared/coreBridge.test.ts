@@ -834,6 +834,79 @@ describe('createCoreBridge', () => {
     expect((await bridge.coachingGetPrefs())?.proactivity).toBe('off');
   });
 
+  it('runs + caches the cross-feature synthesis; throttles auto; off + thin disable it (40 §3.3/§3.4)', async () => {
+    const { bridge, host, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const ctx = (await host.host.vaultAndKey())!;
+    const seedInsight = (id: string): Promise<void> =>
+      saveInsight(ctx.fs, ctx.key, {
+        id,
+        schemaVersion: 1,
+        source: 'session',
+        subjectPersonId: ownerId,
+        summary: `reflected on ${id}`,
+        facts: [{ id: `${id}f`, text: `a fact ${id}`, shareable: false }],
+        confidence: 'medium',
+        categories: ['Relationships'],
+        approved: true,
+        provenance: { conversationId: id, at: new Date().toISOString() },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+
+    // A thin profile (no insights) → EMPTY, no spend.
+    expect((await bridge.coachingSynthesize({})).ok).toBe(false);
+
+    await seedInsight('s1');
+    await seedInsight('s2');
+    await seedInsight('s3');
+
+    // The synthesis turn gets a JSON observation; everything else streams 'ok'.
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        const last = options.messages.at(-1)?.content ?? '';
+        if (last.includes('Recent reflections across this person')) {
+          return Promise.resolve({
+            text: JSON.stringify({
+              observation: 'Connection keeps surfacing across your recent reflections.',
+              sources: ['sessions'],
+              lifeArea: 'Relationships',
+            }),
+            usage: { inputTokens: 8, outputTokens: 8, cacheWriteTokens: 0, cacheReadTokens: 0 },
+          });
+        }
+        onDelta('ok');
+        return Promise.resolve({
+          text: 'ok',
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+
+    // A manual run produces + caches the observation, metered.
+    const manual = await bridge.coachingSynthesize({});
+    expect(manual.ok).toBe(true);
+    if (manual.ok) expect(manual.synthesis.observation).toContain('Connection');
+    expect((await bridge.coachingGetSynthesis())?.observation).toContain('Connection');
+    const usage = await bridge.usageSummary({ scope: 'person', period: 'month' });
+    expect(usage.byType['coaching.synthesize']?.count).toBe(1);
+
+    // An AUTOMATIC run right after is throttled (just synthesized) → EMPTY, no second spend.
+    const auto = await bridge.coachingSynthesize({ auto: true });
+    expect(auto).toMatchObject({ ok: false, reason: 'EMPTY' });
+    expect(
+      (await bridge.usageSummary({ scope: 'person', period: 'month' })).byType[
+        'coaching.synthesize'
+      ]?.count,
+    ).toBe(1);
+
+    // Proactivity off disables it entirely (the cached one stays readable, but a run is a calm no-op).
+    await bridge.coachingSetPrefs({ proactivity: 'off' });
+    expect((await bridge.coachingSynthesize({})).ok).toBe(false);
+    expect((await bridge.coachingGetSynthesis())?.observation).toContain('Connection');
+  });
+
   it('refuses to summarize when session memory is disabled', async () => {
     const { bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });

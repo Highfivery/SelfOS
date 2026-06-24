@@ -305,6 +305,8 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.goalsDelete, bridge.goalsDelete);
   handle(IpcChannels.coachingGetPrefs, bridge.coachingGetPrefs);
   handle(IpcChannels.coachingSetPrefs, bridge.coachingSetPrefs);
+  handle(IpcChannels.coachingGetSynthesis, bridge.coachingGetSynthesis);
+  handle(IpcChannels.coachingSynthesize, bridge.coachingSynthesize);
   handle(IpcChannels.assignmentsCreate, bridge.assignmentsCreate);
   handle(IpcChannels.assignmentsInbox, bridge.assignmentsInbox);
   handle(IpcChannels.assignmentsGet, bridge.assignmentsGet);

@@ -15,10 +15,13 @@ export function SessionLauncher({
   configured,
   onStartFree,
   onPickGuided,
+  seedText = '',
 }: {
   configured: boolean;
   onStartFree: (text: string) => void;
   onPickGuided: (guideId: string) => void;
+  /** Prefill the free-start composer (40 §3.3 — the Home synthesis "Talk it through" seed-handoff). */
+  seedText?: string;
 }): JSX.Element {
   const navigate = useNavigate();
   const adultAcknowledged = useGuidanceStore((s) => s.adultAcknowledged);
@@ -39,6 +42,7 @@ export function SessionLauncher({
               disabled={false}
               autoFocus={false}
               placeholder="Start talking…"
+              initialText={seedText}
               onSend={onStartFree}
             />
           ) : (

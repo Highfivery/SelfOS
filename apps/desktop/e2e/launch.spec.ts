@@ -680,6 +680,62 @@ test('proactive coaching: recurring distress surfaces a supportive, resources-fi
   }
 });
 
+test('proactive coaching: the synthesis card shows the cached observation and seeds a session (40 §3.3)', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('master key missing');
+  const at = new Date().toISOString();
+  // Two approved insights so the card isn't self-hidden, but below gentle's auto threshold (3) so the
+  // launch cadence stays a no-op — the pre-seeded cached observation is what we assert.
+  for (const id of ['s1', 's2']) {
+    await saveInsight(fs, key, {
+      id,
+      schemaVersion: 1,
+      source: 'session',
+      subjectPersonId: 'owner-1',
+      summary: `reflected on ${id}`,
+      facts: [{ id: `${id}f`, text: `a fact ${id}`, shareable: false }],
+      confidence: 'medium',
+      categories: ['Relationships'],
+      approved: true,
+      provenance: { conversationId: id, at },
+      createdAt: at,
+      updatedAt: at,
+    });
+  }
+  const observation =
+    'Connection keeps surfacing across your recent dreams and last week’s session.';
+  await writeEncryptedJson(
+    fs,
+    'people/owner-1/coaching/synthesis.enc',
+    {
+      schemaVersion: 1,
+      subjectPersonId: 'owner-1',
+      observation,
+      sources: ['sessions', 'dreams'],
+      lifeArea: 'Relationships',
+      computedAt: at,
+    },
+    key,
+  );
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    // Home surfaces the cross-feature observation as a gentle, non-clinical nudge.
+    await expect(w.getByRole('heading', { name: /something i.m noticing/i })).toBeVisible();
+    await expect(w.getByText(/connection keeps surfacing/i)).toBeVisible();
+    // "Talk it through" seeds a session prefilled with the observation (the §3.3 seed-handoff).
+    await w.getByRole('button', { name: /talk it through/i }).click();
+    await expect(w.getByLabel('Message')).toHaveValue(observation);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('first-time setup creates the owner and enters the app', async () => {
   const userData = await mkdtemp(join(tmpdir(), 'selfos-e2e-ud-'));
   const vault = await mkdtemp(join(tmpdir(), 'selfos-e2e-vault-'));

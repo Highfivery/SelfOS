@@ -8,6 +8,7 @@ import { useInsightStore } from '../../../stores/insightStore';
 import { unansweredCount, useInboxStore } from '../../../stores/inboxStore';
 import { useGuidanceStore } from '../../../stores/guidanceStore';
 import { useIntakeStore } from '../../../stores/intakeStore';
+import { useSynthesisStore } from '../../../stores/synthesisStore';
 import { useSetting } from '../../../settings/useSetting';
 import { aggregateCrisisSignal } from '@selfos/core/coaching';
 import { CrisisFooter } from '../sessions/CrisisFooter';
@@ -18,6 +19,7 @@ import { DepthInvitationCard } from './DepthInvitationCard';
 import { ContinueCard } from './ContinueCard';
 import { SuggestionsCard } from './SuggestionsCard';
 import { WellbeingCard } from './WellbeingCard';
+import { InsightOfTheWeekCard } from './InsightOfTheWeekCard';
 import { DreamsCard } from './DreamsCard';
 import { MemoryCard } from './MemoryCard';
 import { InboxCard } from './InboxCard';
@@ -70,6 +72,7 @@ export function Home(): JSX.Element {
       useInboxStore.getState().load(),
       useGuidanceStore.getState().load(),
       useIntakeStore.getState().load(),
+      useSynthesisStore.getState().load(),
     ]).then(() => {
       if (!cancelled) setReady(true);
     });
@@ -146,6 +149,12 @@ export function Home(): JSX.Element {
             />
           ) : null}
           <WellbeingCard points={moodPoints} />
+          {hasSessions ? (
+            <InsightOfTheWeekCard
+              configured={configured}
+              canSynthesize={approvedInsights.length >= 2}
+            />
+          ) : null}
           <DreamsCard dreams={dreams} stats={patternStats} />
           <MemoryCard insights={approvedInsights} canView={canViewMemory} />
           <InboxCard count={inboxCount} />

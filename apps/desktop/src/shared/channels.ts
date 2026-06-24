@@ -6,6 +6,8 @@ import type {
   Goal,
   GoalStatus,
   CoachingPrefs,
+  CoachingSynthesis,
+  CoachingSynthesisResult,
   ProactivityLevel,
   MemoryReconcileState,
   DeviceView,
@@ -203,6 +205,8 @@ export const IpcChannels = {
   goalsDelete: 'goals:delete',
   coachingGetPrefs: 'coaching:getPrefs',
   coachingSetPrefs: 'coaching:setPrefs',
+  coachingGetSynthesis: 'coaching:getSynthesis',
+  coachingSynthesize: 'coaching:synthesize',
   assignmentsCreate: 'assignments:create',
   assignmentsInbox: 'assignments:inbox',
   assignmentsGet: 'assignments:get',
@@ -698,6 +702,14 @@ export interface SelfosBridge {
   coachingGetPrefs(): Promise<CoachingPrefs | null>;
   /** Set the active person's OWN proactivity level (40 §3.6) — off / gentle / active. */
   coachingSetPrefs(input: { proactivity: ProactivityLevel }): Promise<CoachingPrefs | null>;
+  /** The active person's cached cross-feature synthesis (40 §4.1), or null. No spend — a cached read. */
+  coachingGetSynthesis(): Promise<CoachingSynthesis | null>;
+  /**
+   * Run the cross-feature synthesis pass (40 §3.3) — budget-gated, metered `coaching.synthesize`, tolerant-
+   * parsed. `auto: true` (renderer cadence) applies the throttle/threshold gate; omitting it forces a run
+   * (manual "What are you noticing lately?"). Gated `sessions.own`, active-person-scoped.
+   */
+  coachingSynthesize(input?: { auto?: boolean }): Promise<CoachingSynthesisResult>;
   /**
    * Send a questionnaire to its BOUND household recipient (in-app), freezing an immutable snapshot at send.
    * The recipient is set on the questionnaire at creation (08 §17.3) — it is NOT passed here. Returns the

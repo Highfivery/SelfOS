@@ -48,6 +48,8 @@ import {
   effectiveGoalStatus,
   ProactivityLevelSchema,
   type CoachingPrefs,
+  type CoachingSynthesis,
+  type CoachingSynthesisResult,
   type AiKeyStatus,
   type AlignmentResult,
   type DeviceView,
@@ -218,9 +220,13 @@ import {
 } from '@selfos/core/insights';
 import { deleteGoal, listGoals, setGoalStatus, updateGoal } from '@selfos/core/goals';
 import {
+  countNewInsights,
   getCoachingPrefs,
   getProactivity,
+  getSynthesis,
   setCoachingPrefs,
+  shouldSynthesize,
+  synthesize,
   type GoalRaiseGoal,
 } from '@selfos/core/coaching';
 import { INTIMACY_ACTIVITIES, INTIMACY_FANTASIES } from '@selfos/core/intimacy';
@@ -618,6 +624,9 @@ const GoalUpdateSchema = z.object({
 const GoalDeleteSchema = z.object({ goalId: z.string().min(1) });
 // Proactive coaching (40 §6) — the per-person proactivity preference write.
 const CoachingSetPrefsSchema = z.object({ proactivity: ProactivityLevelSchema });
+// `auto` (renderer cadence) applies the throttle/threshold gate; absent/false = a manual force (still
+// budget/key-gated, throttle bypassed).
+const CoachingSynthesizeSchema = z.object({ auto: z.boolean().optional() });
 const ResolveProposalSchema = z.object({
   proposalId: z.string().min(1),
   action: z.enum(['merge', 'keepBoth']),
@@ -2175,6 +2184,61 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const p = CoachingSetPrefsSchema.parse(input);
       // Scoped to the active person's OWN coaching prefs (the trust boundary) — each persona tunes their own.
       return setCoachingPrefs(ctx.fs, ctx.key, personId, { proactivity: p.proactivity });
+    },
+    coachingGetSynthesis: async (): Promise<CoachingSynthesis | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'sessions.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      return getSynthesis(ctx.fs, ctx.key, personId);
+    },
+    coachingSynthesize: async (input): Promise<CoachingSynthesisResult> => {
+      const { auto } = CoachingSynthesizeSchema.parse(input ?? {});
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'sessions.own'))) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      // Proactivity `off` disables the synthesis pass entirely (40 §3.6) — a calm skip, never spends.
+      const level = await getProactivity(ctx.fs, ctx.key, personId);
+      if (level === 'off') {
+        return { ok: false, reason: 'EMPTY', message: 'Proactive coaching is turned off.' };
+      }
+      // An AUTOMATIC pass (renderer cadence) only runs when warranted (throttle window + new-insight delta);
+      // a MANUAL force bypasses just the throttle (still budget/key-gated). The marker is device-local/per-person.
+      const now = new Date();
+      if (auto) {
+        const insights = await listInsightsForPerson(ctx.fs, ctx.key, personId);
+        const device = await host.readDeviceState();
+        const lastSynthesizedAt = device.coachingSynthesizedAt?.[personId];
+        const newInsightCount = countNewInsights(insights, lastSynthesizedAt);
+        if (
+          !shouldSynthesize(
+            {
+              level,
+              newInsightCount,
+              ...(lastSynthesizedAt ? { lastSynthesizedAt } : {}),
+            },
+            now,
+          )
+        ) {
+          return { ok: false, reason: 'EMPTY', message: 'Nothing new to notice yet.' };
+        }
+      }
+      const deps = await aiDeps('sessions.own');
+      if (!deps) return { ok: false, reason: 'ERROR', message: 'Not available.' };
+      const result = await synthesize(deps);
+      // Stamp the throttle marker on a successful run (auto or manual) so auto won't re-fire within the window.
+      if (result.ok) {
+        const device = await host.readDeviceState();
+        await host.updateDeviceState({
+          coachingSynthesizedAt: {
+            ...(device.coachingSynthesizedAt ?? {}),
+            [personId]: new Date().toISOString(),
+          },
+        });
+      }
+      return result;
     },
     assignmentsCreate: async (input): Promise<InAppSendResult> => {
       const ctx = await host.vaultAndKey();

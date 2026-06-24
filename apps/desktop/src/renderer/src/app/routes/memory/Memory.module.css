@@ -64,6 +64,83 @@
   }
 }
 
+/* --- Stats summary (44 §3.2) --- */
+.statsRow {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.statCard {
+  min-width: 0;
+}
+
+.statEyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.confidenceBar {
+  display: flex;
+  height: 8px;
+  border-radius: var(--radius-pill, 999px);
+  overflow: hidden;
+  background: var(--color-surface-alt);
+}
+
+.confHigh {
+  background: var(--color-success);
+}
+
+.confMed {
+  background: var(--color-accent-solid);
+}
+
+.confLow {
+  background: var(--color-border-strong);
+}
+
+.manageLink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--color-accent);
+  font-size: var(--text-sm);
+}
+
+.manageLink:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 640px) {
+  .statsRow {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --- Sensitive-fact share two-step (42 §8 / 44 §3.4) --- */
+.sensitiveConfirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-left: auto;
+  max-width: 280px;
+}
+
+.sensitiveConfirmActions {
+  display: flex;
+  gap: var(--space-2);
+}
+
 /* --- Life-area / section groups --- */
 .group {
   display: flex;
@@ -74,6 +151,13 @@
 
 .groupTitle {
   margin: 0;
+}
+
+/* A small per-group count beside a life-area heading (44 §11 build-time tuning). */
+.groupCount {
+  color: var(--color-text-tertiary);
+  font-weight: 400;
+  font-size: var(--text-sm);
 }
 
 /* --- Trends --- */
@@ -126,8 +210,11 @@
 }
 
 /* --- Fact rows --- */
+/* Wrap so a long sharing chip (e.g. a legacy broadcast fact showing every relationship type) drops to its
+ * own line and ellipsizes instead of overflowing the card at narrow widths (the §12 no-inner-scroll rule). */
 .factRow {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
   min-width: 0;
@@ -161,6 +248,22 @@
 }
 
 .shareCell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* The per-fact controls (sharing picker + "not right") cluster at the row's end. */
+.factControls {
+  display: inline-flex;
+  flex-wrap: wrap;
+  max-width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
   flex: none;
   margin-left: auto;
 }

@@ -2204,16 +2204,16 @@ test('memory: the dashboard groups by life-area, flags a fact (decrypt-persisted
     // The draft is in "Needs your review"; approved insights group by life-area; Trends is present.
     await expect(w.getByRole('heading', { name: 'Needs your review' })).toBeVisible();
     await expect(w.getByText('Might want to set firmer work boundaries')).toBeVisible();
-    await expect(w.getByRole('heading', { name: 'Health & body' })).toBeVisible();
-    await expect(w.getByRole('heading', { name: 'Relationships' })).toBeVisible();
+    await expect(w.getByRole('heading', { name: /Health & body/ })).toBeVisible();
+    await expect(w.getByRole('heading', { name: /Relationships/ })).toBeVisible();
     await expect(w.getByText('Trends')).toBeVisible();
     await expect(w.getByText('Sleeps better with a wind-down routine')).toBeVisible();
     // A session insight whose conversation is gone shows "original source removed".
     await expect(w.getByText(/original source removed/i).first()).toBeVisible();
 
-    // Flag the inaccurate fact → it persists encrypted in the vault (decrypt to assert).
-    await w.getByRole('button', { name: 'Flag as inaccurate: This one is wrong' }).click();
-    await expect(w.getByText('flagged')).toBeVisible();
+    // Mark the inaccurate fact "not right about me" (the relabelled correction, 44 §3.4) → persists encrypted.
+    await w.getByRole('button', { name: /This isn.t right about me: This one is wrong/ }).click();
+    await expect(w.getByText('marked not right')).toBeVisible();
     await expect
       .poll(async () => {
         const insight = await getInsight(fs, key, 'owner-1', 'ins-health');
@@ -2242,6 +2242,136 @@ test('memory: the dashboard groups by life-area, flags a fact (decrypt-persisted
       return Math.max(max, main ? main.scrollWidth - main.clientWidth : 0);
     });
     expect(overflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('memory overhaul: stats header, type-scope a fact to partner (decrypt), mark "not right" (decrypt), Edit answer + Manage sharing, 360px (spec 44)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('master key missing');
+  const at = '2026-06-20T10:00:00.000Z';
+  // A partner related to the owner, so a partner-scoped fact flows into THEIR context.
+  await savePerson(fs, key, {
+    id: 'partner-1',
+    schemaVersion: 1,
+    displayName: 'Pat',
+    isSubject: true,
+    tags: [],
+    createdAt: at,
+    updatedAt: at,
+  });
+  await saveRelationship(fs, key, {
+    id: 'rel-p',
+    schemaVersion: 1,
+    fromPersonId: 'owner-1',
+    toPersonId: 'partner-1',
+    type: 'partner',
+    createdAt: at,
+    updatedAt: at,
+  });
+  // The owner's onboarding portrait (intake → "Edit answer", never a flag) + a session insight (AI-inferred).
+  await saveInsight(fs, key, {
+    id: 'ins-portrait',
+    schemaVersion: 1,
+    source: 'intake',
+    subjectPersonId: 'owner-1',
+    summary: 'A grounded, curious person',
+    facts: [{ id: 'pf1', text: 'Grew up in Ohio', shareable: false }],
+    confidence: 'high',
+    categories: ['Values & beliefs'],
+    approved: true,
+    provenance: { intakeSection: 'basics', at },
+    createdAt: at,
+    updatedAt: at,
+  });
+  await saveInsight(fs, key, {
+    id: 'ins-sess',
+    schemaVersion: 1,
+    source: 'session',
+    subjectPersonId: 'owner-1',
+    summary: 'From a recent session',
+    facts: [
+      { id: 'sf1', text: 'Enjoys rock climbing', shareable: false },
+      { id: 'sf2', text: 'WRONGLY-INFERRED-CLAIM', shareable: false },
+    ],
+    confidence: 'medium',
+    categories: ['Emotions & patterns'],
+    approved: true,
+    provenance: { conversationId: 'gone', at },
+    createdAt: at,
+    updatedAt: at,
+  });
+
+  // Before any change, the owner's own facts feed their own context.
+  expect(await buildContext(fs, key, 'owner-1')).toContain('WRONGLY-INFERRED-CLAIM');
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Memory' }).click();
+
+    // Stats header: overview total (3 live facts), confidence distribution, sharing summary.
+    await expect(w.getByText(/SelfOS knows\s*3\s*things about you/)).toBeVisible();
+    await expect(w.getByText(/High\s*1/)).toBeVisible();
+    await expect(w.getByText('You’re not sharing anything yet.')).toBeVisible();
+    // The broadcast ShareToggle is gone — the per-fact control is now the relationship-scope picker chip.
+    await expect(w.getByRole('button', { name: /Enjoys rock climbing: private/i })).toBeVisible();
+
+    // Type-scope "Enjoys rock climbing" to Partner via the card picker → it reaches the partner's context.
+    await w.getByRole('button', { name: /Enjoys rock climbing: private/i }).click();
+    await w.getByRole('checkbox', { name: 'Partner' }).click();
+    await w.keyboard.press('Escape'); // close the picker popover so it can't overlay the next control
+    await expect
+      .poll(async () => (await buildContext(fs, key, 'partner-1')).includes('Enjoys rock climbing'))
+      .toBe(true);
+
+    // Mark the wrong AI-inferred fact "not right about me" → it drops from the owner's own context.
+    await w
+      .getByRole('button', { name: /This isn.t right about me: WRONGLY-INFERRED-CLAIM/ })
+      .click();
+    await expect(w.getByText('marked not right')).toBeVisible();
+    await expect
+      .poll(async () => (await buildContext(fs, key, 'owner-1')).includes('WRONGLY-INFERRED-CLAIM'))
+      .toBe(false);
+
+    // No horizontal overflow at phone width (the §12 inner-scrollbar scan + main check).
+    const overflowAt = async (): Promise<number> =>
+      w.evaluate(() => {
+        let max = 0;
+        for (const el of Array.from(document.querySelectorAll('*'))) {
+          const style = getComputedStyle(el);
+          if (
+            (style.overflowX === 'auto' || style.overflowX === 'scroll') &&
+            el.scrollWidth - el.clientWidth > max
+          ) {
+            max = el.scrollWidth - el.clientWidth;
+          }
+        }
+        const main = document.querySelector('main');
+        return Math.max(max, main ? main.scrollWidth - main.clientWidth : 0);
+      });
+    await w.setViewportSize({ width: 360, height: 800 });
+    expect(await overflowAt()).toBeLessThanOrEqual(1);
+    await w.setViewportSize({ width: 1024, height: 800 });
+
+    // Manage sharing → the transparency surface lists the now-shared fact with its scope + recipient.
+    await w.getByRole('button', { name: /Manage sharing/ }).click();
+    await expect(w.getByRole('heading', { name: /What you share/ })).toBeVisible();
+    await expect(w.getByText('Enjoys rock climbing')).toBeVisible();
+    await expect(w.getByText(/Shared with Partner · reaching Pat/)).toBeVisible();
+    await w.setViewportSize({ width: 360, height: 800 });
+    expect(await overflowAt()).toBeLessThanOrEqual(1);
+    await w.setViewportSize({ width: 1024, height: 800 });
+
+    // Back to Memory; "Edit answer" on the onboarding portrait deep-links into onboarding (§3.4).
+    await w.getByRole('button', { name: /^Memory$/ }).click();
+    await w.getByRole('button', { name: /Edit answer/ }).click();
+    await expect.poll(() => w.url()).toContain('onboarding');
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -2369,8 +2499,10 @@ test('memory cleanup: flagging a previously-shared fact retracts it from a relat
     await w.getByRole('link', { name: 'Memory' }).click();
     await expect(w.getByText('PLANNING-A-SURPRISE-PARTY')).toBeVisible();
 
-    // Flag it inaccurate → the share is retracted (Memory shows "sharing withdrawn").
-    await w.getByRole('button', { name: 'Flag as inaccurate: PLANNING-A-SURPRISE-PARTY' }).click();
+    // Mark it "not right about me" → the share is retracted (Memory shows "sharing withdrawn").
+    await w
+      .getByRole('button', { name: /This isn.t right about me: PLANNING-A-SURPRISE-PARTY/ })
+      .click();
     await expect(w.getByText('sharing withdrawn')).toBeVisible();
 
     // Decrypt-level proof: Casey's context no longer carries the corrected claim.

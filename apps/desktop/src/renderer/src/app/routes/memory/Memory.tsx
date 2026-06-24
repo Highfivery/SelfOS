@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Brain, MessageCircle, RefreshCw, Search } from 'lucide-react';
-import type { Insight, InsightSource } from '@shared/schemas';
+import type { Insight, InsightSource, Relationship } from '@shared/schemas';
 import { LIFE_AREAS } from '@shared/schemas';
 import { useInsightStore } from '../../../stores/insightStore';
 import { useGoalStore } from '../../../stores/goalStore';
 import { usePeopleStore } from '../../../stores/peopleStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { aiUnavailableMessage } from '../../AiUnavailableNotice';
+import { availableRelationshipTypesFor } from '../../availableRelationshipTypes';
 import { useConversationStore } from '../../../stores/conversationStore';
 import { useDreamStore } from '../../../stores/dreamStore';
 import {
@@ -25,6 +26,8 @@ import {
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { InsightCard } from './InsightCard';
 import { GoalCard } from './GoalCard';
+import { StatsSummary } from './StatsSummary';
+import { confidenceStats, overviewStats, sharingStats } from './stats';
 import { buildTrendSeries } from './trends';
 import styles from './Memory.module.css';
 
@@ -65,6 +68,7 @@ function relativeDate(iso: string): string {
 export function Memory(): JSX.Element {
   const navigate = useNavigate();
   const insights = useInsightStore((s) => s.insights);
+  const outbound = useInsightStore((s) => s.outbound);
   const loaded = useInsightStore((s) => s.loaded);
   const load = useInsightStore((s) => s.load);
   const refresh = useInsightStore((s) => s.refresh);
@@ -89,13 +93,21 @@ export function Memory(): JSX.Element {
   const [flaggedOnly, setFlaggedOnly] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshNote, setRefreshNote] = useState<string | null>(null);
+  const [relationships, setRelationships] = useState<Relationship[]>([]);
 
   useEffect(() => {
     void load();
     void loadPeople();
     void loadGoals();
     void loadReconcileState();
+    void window.selfos?.relationshipsList?.().then((rels) => setRelationships(rels ?? []));
   }, [load, loadPeople, loadGoals, loadReconcileState]);
+
+  // The relationship types present in the person's graph — offered by each fact's sharing picker (44 §3.4).
+  const availableTypes = useMemo(
+    () => availableRelationshipTypesFor(activePersonId, relationships),
+    [activePersonId, relationships],
+  );
 
   // Active goals (open/in-progress — `stale` derives from these) above; closed (done/let go) fold into a
   // collapsed history. The store returns newest-first.
@@ -150,6 +162,13 @@ export function Memory(): JSX.Element {
   const filteredRelated = related.filter((i) => passesFilters(i) && subjectOk(i));
   const drafts = filteredOwn.filter((i) => !i.approved);
   const approvedOwn = filteredOwn.filter((i) => i.approved);
+
+  // Stats summarize the WHOLE memory (own approved), independent of the current filters/search (§3.2).
+  const ownApprovedAll = own.filter((i) => i.approved);
+  const overviewSummary = overviewStats(ownApprovedAll);
+  const confidenceSummary = confidenceStats(ownApprovedAll);
+  const sharingSummary = sharingStats(outbound);
+  const showStats = loaded && ownApprovedAll.length > 0;
 
   // Group the person's own approved insights by their primary life-area (categories[0]; 'Other' if untagged).
   const byArea = new Map<string, Insight[]>();
@@ -270,6 +289,33 @@ export function Memory(): JSX.Element {
 
       {refreshNote ? <Banner tone="info">{refreshNote}</Banner> : null}
 
+      {showStats ? (
+        <StatsSummary
+          overview={overviewSummary}
+          confidence={confidenceSummary}
+          sharing={sharingSummary}
+          onManageSharing={() => navigate('/memory/sharing')}
+        />
+      ) : null}
+
+      {trendSeries.length > 0 ? (
+        <details className={styles.trends} open>
+          <summary className={styles.trendsSummary}>Trends</summary>
+          <div className={styles.trendsBody}>
+            <Text size="sm" tone="tertiary">
+              How your mood and energy have moved across analyzed sessions — a gentle reflection,
+              not a measure.
+            </Text>
+            <LineChart
+              series={trendSeries}
+              ariaLabel="Your mood and energy across analyzed sessions over time"
+              yMin={-1}
+              yMax={1}
+            />
+          </div>
+        </details>
+      ) : null}
+
       {loaded && !anyInsights ? (
         <Card>
           <Stack gap={3} align="center">
@@ -330,6 +376,7 @@ export function Memory(): JSX.Element {
                 insight={insight}
                 subjectName={nameOf(insight.subjectPersonId)}
                 isOwn
+                {...(availableTypes ? { availableTypes } : {})}
               />
             ))}
           </Stack>
@@ -371,42 +418,28 @@ export function Memory(): JSX.Element {
         </section>
       ) : null}
 
-      {trendSeries.length > 0 ? (
-        <details className={styles.trends}>
-          <summary className={styles.trendsSummary}>Trends</summary>
-          <div className={styles.trendsBody}>
-            <Text size="sm" tone="tertiary">
-              How your mood and energy have moved across analyzed sessions — a gentle reflection,
-              not a measure.
-            </Text>
-            <LineChart
-              series={trendSeries}
-              ariaLabel="Your mood and energy across analyzed sessions over time"
-              yMin={-1}
-              yMax={1}
-            />
-          </div>
-        </details>
-      ) : null}
-
-      {orderedAreas.map((area) => (
-        <section key={area} className={styles.group} aria-label={area}>
-          <Heading level={3} className={styles.groupTitle}>
-            {area}
-          </Heading>
-          <Stack gap={3}>
-            {(byArea.get(area) ?? []).map((insight) => (
-              <InsightCard
-                key={insight.id}
-                insight={insight}
-                subjectName="you"
-                isOwn
-                sourceRemoved={sourceRemoved(insight)}
-              />
-            ))}
-          </Stack>
-        </section>
-      ))}
+      {orderedAreas.map((area) => {
+        const areaInsights = byArea.get(area) ?? [];
+        return (
+          <section key={area} className={styles.group} aria-label={area}>
+            <Heading level={3} className={styles.groupTitle}>
+              {area} <span className={styles.groupCount}>({areaInsights.length})</span>
+            </Heading>
+            <Stack gap={3}>
+              {areaInsights.map((insight) => (
+                <InsightCard
+                  key={insight.id}
+                  insight={insight}
+                  subjectName="you"
+                  isOwn
+                  sourceRemoved={sourceRemoved(insight)}
+                  {...(availableTypes ? { availableTypes } : {})}
+                />
+              ))}
+            </Stack>
+          </section>
+        );
+      })}
 
       {filteredRelated.length > 0 ? (
         <section className={styles.group} aria-label="About people you relate to">

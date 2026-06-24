@@ -365,6 +365,38 @@ function dedupeTypes(types: readonly RelationshipType[]): RelationshipType[] {
   return [...new Set(types)];
 }
 
+/**
+ * Set (or clear) the sharing scope for ONE already-answered intake question (44-memory-dashboard §3.5).
+ * Powers the transparency surface's per-answer `RelationshipScopePicker`: changing the scope updates
+ * `section.answerSharing[questionId]` directly, without re-submitting the whole section. An empty `types`
+ * clears the scope (own-only). Returns the updated session, or null when the section/answer is gone (so the
+ * picker can't scope a phantom answer). It does NOT touch the answer VALUE or the derived portrait FACT —
+ * the fact's own `shareableTypes` is edited separately via `insights:update` (§3.4); a later "Refresh
+ * memory" re-derives the fact scope from this. The caller (bridge) scopes this to the active person's OWN
+ * intake — a person can only change their own sharing.
+ */
+export async function setIntakeAnswerSharing(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  sectionId: string,
+  questionId: string,
+  types: readonly RelationshipType[],
+  now: Date,
+): Promise<IntakeSession | null> {
+  const session = await getIntakeSession(fs, key, personId);
+  if (!session) return null;
+  const section = session.sections.find((s) => s.id === sectionId);
+  if (!section || section.answers[questionId] === undefined) return null;
+  const nextSharing = { ...(section.answerSharing ?? {}) };
+  if (types.length === 0) delete nextSharing[questionId];
+  else nextSharing[questionId] = dedupeTypes(types);
+  section.answerSharing = nextSharing;
+  session.updatedAt = now.toISOString();
+  await writeEncryptedJson(fs, intakePath(personId), session, key);
+  return session;
+}
+
 // --- Budget helper ---
 
 async function overBudget(

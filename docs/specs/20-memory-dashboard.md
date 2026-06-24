@@ -1,6 +1,10 @@
 # 20 — Memory: the living insights dashboard
 
-> **Status:** Approved — BUILT (all 3 slices; not merged) · _last updated 2026-06-16_
+> **Status:** Approved — BUILT (all 3 slices) · **Overhauled by [`44`](44-memory-dashboard-overhaul.md)**
+> (2026-06-24): stats summary header, Trends promoted to the top, split-by-source corrections (Edit-answer for
+> onboarding facts; "This isn't right about me" for AI-inferred facts), and the broadcast `ShareToggle` replaced
+> by the relationship-type `RelationshipScopePicker` + a `/memory/sharing` transparency surface. · _last updated
+> 2026-06-24_
 >
 > Memory is meant to be the person's window into **what SelfOS has learned about them** — yet today it
 > (1) **leaks every household member's insights to whoever is logged in** (a serious privacy bug), and

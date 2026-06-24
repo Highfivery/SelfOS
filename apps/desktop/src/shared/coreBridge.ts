@@ -324,6 +324,7 @@ import {
   getIntakeSession,
   intakeSectionMeta,
   runIntakeTurn,
+  setIntakeAnswerSharing,
   skipIntakeSection,
   submitSectionForm,
   synthesizeIntake,
@@ -600,6 +601,14 @@ const InsightFactInputSchema = z.object({
   id: z.string().min(1),
   text: z.string(),
   shareable: z.boolean(),
+  // Relationship-type scope for the fact (42 §4.1 / 44 §3.4): the new Memory sharing control sets THIS
+  // (with `shareable: false`) instead of broadcasting. Additive-optional; merged by id in `updateInsight`,
+  // so an edit that omits it preserves the stored scope.
+  shareableTypes: z.array(RelationshipTypeSchema).optional(),
+  // The deliberate un-restrict of a person's OWN sensitive fact (42 §8 two-step / 44 §3.4): only ever sent
+  // as `false` by the explicit "share this sensitive fact" action. A normal edit never carries it, so the
+  // merge preserves a fact's `restricted` flag — it can only be lifted by this deliberate act on one's own fact.
+  restricted: z.boolean().optional(),
 });
 const InsightEditSchema = z.object({
   subjectPersonId: z.string().min(1),
@@ -641,6 +650,11 @@ const IntakeSubmitFormSchema = z.object({
   answers: z.record(z.string(), IntakeAnswerValueSchema),
   // Per-question relationship-type sharing scopes (43 §6) — the trust boundary validates the types.
   sharing: z.record(z.string(), z.array(RelationshipTypeSchema)).optional(),
+});
+const IntakeSetAnswerSharingSchema = z.object({
+  sectionId: z.string().min(1),
+  questionId: z.string().min(1),
+  types: z.array(RelationshipTypeSchema),
 });
 const ProfileSuggestionIdSchema = z.string().min(1);
 const AssignmentIdSchema = z.string().min(1);
@@ -3816,6 +3830,25 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // The 18+ ack is shared with guided sessions (16) — acking here unlocks both surfaces (§3.3 decision).
       await acknowledgeAdult(ctx.fs, ctx.key, personId);
       return buildIntakeState(ctx.fs, ctx.key, personId);
+    },
+    intakeSetAnswerSharing: async (input): Promise<boolean> => {
+      // The transparency surface's per-answer scope control (44 §3.5). Gated on `intake.own` + scoped to the
+      // active person — a person can only change THEIR OWN intake answer sharing (the bridge is the boundary).
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'intake.own')))
+        return false;
+      const { sectionId, questionId, types } = IntakeSetAnswerSharingSchema.parse(input);
+      const updated = await setIntakeAnswerSharing(
+        ctx.fs,
+        ctx.key,
+        personId,
+        sectionId,
+        questionId,
+        types,
+        new Date(),
+      );
+      return updated !== null;
     },
     intakeSynthesize: async (input): Promise<IntakeSynthesisResult> => {
       const { sectionId } = IntakeSynthesizeSchema.parse(input);

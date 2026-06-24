@@ -13,6 +13,7 @@ import {
   getIntakeSession,
   redactRestrictedFacts,
   runIntakeTurn,
+  setIntakeAnswerSharing,
   skipIntakeSection,
   stripIntakeFieldMarkers,
   submitSectionForm,
@@ -192,6 +193,34 @@ describe('intakeService', () => {
     expect(p?.appearanceDescription).toBe('tall, curly hair, glasses');
     expect(p?.importantDates).toEqual([{ label: 'Anniversary', date: '2014-06-21' }]);
     expect(p?.interests).toEqual(['Music', 'Travel']);
+  });
+
+  it('setIntakeAnswerSharing changes ONE answered question’s scope, clears it on empty, and no-ops a phantom', async () => {
+    const fs = await setup();
+    await submitSectionForm(fs, key, 'p1', 'health', { physicalConditions: 'asthma' }, NOW);
+    // Set a deliberate scope on the answered question.
+    const updated = await setIntakeAnswerSharing(
+      fs,
+      key,
+      'p1',
+      'health',
+      'physicalConditions',
+      ['partner'],
+      NOW,
+    );
+    expect(updated).not.toBeNull();
+    let session = await getIntakeSession(fs, key, 'p1');
+    let section = session?.sections.find((s) => s.id === 'health');
+    expect(section?.answerSharing?.physicalConditions).toEqual(['partner']);
+    // Empty types clears the scope (own-only) — the key is removed, not stored as [].
+    await setIntakeAnswerSharing(fs, key, 'p1', 'health', 'physicalConditions', [], NOW);
+    session = await getIntakeSession(fs, key, 'p1');
+    section = session?.sections.find((s) => s.id === 'health');
+    expect(section?.answerSharing?.physicalConditions).toBeUndefined();
+    // A phantom (unanswered) question is a no-op (null) — the picker can't scope what isn't answered.
+    expect(
+      await setIntakeAnswerSharing(fs, key, 'p1', 'health', 'not-a-question', ['partner'], NOW),
+    ).toBeNull();
   });
 
   it('joins multiple questions targeting one field instead of clobbering, and is idempotent (healthNotes)', async () => {

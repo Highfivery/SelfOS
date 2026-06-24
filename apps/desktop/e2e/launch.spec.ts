@@ -5871,6 +5871,97 @@ test('onboarding per-question sharing: scope a section to Partner → the derive
   }
 });
 
+test('memory: an existing (pre-spec) portrait shares by default — Sharing reflects it, cards are clean (share-by-default backfill)', async () => {
+  // Reproduces the real bug: a portrait synthesized BEFORE per-question sharing existed (answers present,
+  // NO `answerSharing`, facts with NO `shareableTypes`) showed everything as "Private". The backfill resolves
+  // a missing answerSharing entry to the category default, so existing portraits share by default.
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('backfill e2e: master key missing');
+  const now = new Date().toISOString();
+  await savePerson(fs, key, {
+    id: 'partner-b',
+    schemaVersion: 1,
+    displayName: 'Bee',
+    isSubject: true,
+    tags: [],
+    createdAt: now,
+    updatedAt: now,
+  });
+  await saveRelationship(fs, key, {
+    id: 'rel-b',
+    schemaVersion: 1,
+    fromPersonId: 'owner-1',
+    toPersonId: 'partner-b',
+    type: 'partner',
+    createdAt: now,
+    updatedAt: now,
+  });
+  // A COMPLETE intake from BEFORE per-question sharing: answers present, NO `answerSharing` on the section.
+  await writeEncryptedJson(
+    fs,
+    'people/owner-1/intake/session.enc',
+    {
+      id: 'intake-pre',
+      schemaVersion: 1,
+      personId: 'owner-1',
+      status: 'complete',
+      insightId: 'portrait-pre',
+      sections: [
+        {
+          id: 'health',
+          status: 'complete',
+          restricted: false,
+          messages: [],
+          answers: { sleepSchedule: 'Early to bed, early to rise' },
+        },
+      ],
+      startedAt: now,
+      updatedAt: now,
+    },
+    key,
+  );
+  // The pre-spec portrait Insight: facts with NO `shareableTypes` (own-only — the symptom).
+  await saveInsight(fs, key, {
+    id: 'portrait-pre',
+    schemaVersion: 1,
+    source: 'intake',
+    subjectPersonId: 'owner-1',
+    summary: 'A warm portrait.',
+    facts: [{ id: 'f1', text: 'Values steady routines', shareable: false }],
+    confidence: 'medium',
+    categories: ['Health & body'],
+    approved: true,
+    provenance: { intakeSection: 'health', at: now },
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  // The backfill applies on the ANSWER path immediately (no re-synthesis): the partner's context has it.
+  expect(await buildContext(fs, key, 'partner-b')).toContain('Early to bed, early to rise');
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Memory' }).click();
+    // The Sharing summary reflects the backfilled share — NOT the empty "not sharing anything yet".
+    await expect(w.getByText(/You.?re sharing/i)).toBeVisible();
+    await expect(w.getByText(/not sharing anything yet/i)).toHaveCount(0);
+    // Clean cards (44 audit): the portrait fact renders with NO per-fact "Private" chip.
+    await expect(w.getByText('Values steady routines')).toBeVisible();
+    expect(await w.getByText('Private', { exact: true }).count()).toBe(0);
+    // Manage sharing is the one place — it lists the shared onboarding answer.
+    await w.getByRole('button', { name: /Manage sharing/i }).click();
+    await expect(w.getByText(/Early to bed, early to rise/)).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('onboarding: resumes mid-intake to the saved transcript (18 §3.1)', async () => {
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
   await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');

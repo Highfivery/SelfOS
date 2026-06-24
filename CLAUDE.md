@@ -389,6 +389,31 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-24 — **Fix (onboarding sharing was broken end-to-end — user-reported; on
+  `fix/onboarding-sharing-end-to-end`).** The user (rightly frustrated) found three connected bugs the
+  "comprehensive" sharing E2E had MISSED — because it seeded `Insight`s with `shareableTypes` already set and
+  asserted the gate, never driving the real onboarding→synthesis→Memory path. **(1) Share-by-default never
+  reached EXISTING portraits.** `factScopeForSection` (+ the answer readers) returned `[]` for any section
+  with no `answerSharing`, and `answerSharing` is only written on (re-)submit — so a portrait synthesized
+  before per-question sharing showed **everything "Private"** in Memory, the Sharing card said "not sharing
+  anything yet," and nothing flowed to a partner. Fix (user chose **auto-backfill**): a new pure
+  `effectiveAnswerScope(sectionId, qid, answerSharing)` resolves a **missing** entry for an _answered_
+  question to its **category default** (an explicit choice, incl. an explicit `[]` = Private, still wins;
+  restricted answers default `[]`), wired into `factScopeForSection`, `buildSharedIntakeAnswerLines`, and
+  `listOutboundSharing` — so existing portraits share by default (answers immediately, facts on the next
+  refresh). **(2) The onboarding picker "did nothing"** on a sensitive question — the opt-in confirm rendered
+  as a Banner at the **top of the section**, far off-screen from the popover; now it renders **inline in the
+  question's (or bulk) sharing slot**, replacing the picker. **(3) Memory clutter** — onboarding facts carried
+  a read-only "Private" chip on _every_ line (a wall); removed (clean cards), while AI-inferred facts keep a
+  discreet `FactSharingControl` (you still need to share a session/dream insight). Sharing is otherwise seen +
+  controlled in the "Manage sharing" panel (now populated by the backfill). **E2E that would have caught it:**
+  a new test seeds a **pre-spec portrait** (answers, NO `answerSharing`, facts with no `shareableTypes`) →
+  asserts the partner's context gets the answer (decrypt), the Sharing summary reflects it, and cards are
+  clean. Gate green: typecheck, lint, format, **724 core + 11 relay + 768 desktop** unit, **106 E2E**.
+  **Lesson: an E2E that SEEDS the post-state (insights with `shareableTypes` set) tests the gate, not the
+  feature — drive the real producer path (onboarding form → submit → synthesis → Memory) AND the existing-data
+  path (a portrait from before the feature), or a whole class of "it doesn't work for real users" bugs slips
+  through green. And "share by default" must backfill EXISTING data, not just newly-submitted sections.**
 - 2026-06-24 — **Audit + fix (relationship-scoped sharing specs 42–44 post-merge review; on
   `fix/relationship-sharing-audit-followups`, PR pending).** A complete audit of the merged 42/43/44 work
   (privacy gate, context-assembly, trust boundary, E2E) — the core boundary (`factSharedWithViewer` +

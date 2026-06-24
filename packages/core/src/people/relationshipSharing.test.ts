@@ -150,6 +150,52 @@ describe('relationship-type-scoped context (42 §5.2) — the headline privacy g
     expect(await buildContext(fs, key, 'B')).not.toContain('a partner thing');
   });
 
+  it('backfills share-by-default for a pre-spec intake (answers, NO answerSharing) — partner sees it, sibling does not', async () => {
+    const fs = await seedTriad();
+    // A portrait from before per-question sharing: a 'health' answer with NO `answerSharing` on the section.
+    // health defaults partner-only, so the backfill shares it with the partner but not the sibling.
+    await writeEncryptedJson(
+      fs,
+      'people/A/intake/session.enc',
+      intakeSession('A', {
+        sections: [
+          {
+            id: 'health',
+            status: 'complete',
+            restricted: false,
+            messages: [],
+            answers: { sleepSchedule: 'Early to bed, early to rise' },
+            // no answerSharing — the pre-spec case the backfill fixes
+          },
+        ],
+      }),
+      key,
+    );
+    expect(await buildContext(fs, key, 'B')).toContain('Early to bed, early to rise');
+    expect(await buildContext(fs, key, 'C')).not.toContain('Early to bed, early to rise');
+  });
+
+  it('a pre-spec RESTRICTED section answer stays Private under backfill', async () => {
+    const fs = await seedTriad();
+    await writeEncryptedJson(
+      fs,
+      'people/A/intake/session.enc',
+      intakeSession('A', {
+        sections: [
+          {
+            id: 'weighs', // wholly-restricted
+            status: 'complete',
+            restricted: true,
+            messages: [],
+            answers: { recurringWorry: 'a heavy private thing' },
+          },
+        ],
+      }),
+      key,
+    );
+    expect(await buildContext(fs, key, 'B')).not.toContain('a heavy private thing');
+  });
+
   it('shared intake answers flow into a related person’s context per answerSharing', async () => {
     const fs = await seedTriad();
     await writeEncryptedJson(

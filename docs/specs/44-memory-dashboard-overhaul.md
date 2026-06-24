@@ -252,6 +252,13 @@ show a tiny per-group count on each life-area header (recommended, cheap).
 
 ## 12. Changelog
 
+- 2026-06-24 — **Fix — clean cards** (`fix/onboarding-sharing-end-to-end`, user-reported). The per-fact
+  read-only "Private/Shared" chip on **onboarding** facts produced a wall of "Private" chips on a portrait
+  (cluttered, misaligned). Removed: onboarding facts now carry **no per-fact sharing chip** (a restricted one
+  keeps a small informational "sensitive" tag); their sharing is share-by-default + managed via the answer and
+  the **Manage sharing** panel (now populated by the spec-43 backfill). **AI-inferred** facts keep the discreet
+  `FactSharingControl` (you still need a way to share a session/dream insight). The Sharing summary + Manage
+  sharing panel are the one place to see/control what's shared.
 - 2026-06-24 — **Audit follow-up** (`fix/relationship-sharing-audit-followups`): the per-fact
   `RelationshipScopePicker` was editable for **onboarding (`source: 'intake'`)** facts, but an intake fact's
   scope is **derived from its answer's `answerSharing`** (spec 43 §4) and **recomputed on every

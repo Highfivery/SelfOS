@@ -37,6 +37,9 @@ function sameScope(a: readonly RelationshipType[], b: readonly RelationshipType[
   return a.length === b.length && a.every((t) => b.includes(t));
 }
 
+/** The `pendingShare.qid` sentinel for the per-section bulk control (vs a real question id). */
+const SECTION_BULK = '__section__';
+
 /**
  * A structured **form** intake section (18-personal-onboarding §14.3/§14.6) — renders the section's questions
  * through the shared `@selfos/answering` `QuestionnaireForm` (branch-aware, the host owns the answer state),
@@ -129,10 +132,14 @@ export function IntakeFormPanel({
   const hasRelationships = availableTypes !== undefined;
 
   // A sensitive opt-in (restricted question/section → non-empty scope) asks for an explicit confirm first
-  // (43 §3.1/§8) — `Private` is always one tap away, sharing a sensitive answer is a deliberate gesture.
-  const [pendingShare, setPendingShare] = useState<{ label: string; apply: () => void } | null>(
-    null,
-  );
+  // (43 §3.1/§8) — `Private` is always one tap away, sharing a sensitive answer is a deliberate gesture. The
+  // confirm renders INLINE in that question's (or the bulk control's) sharing slot, co-located with the click
+  // (`qid` = the question, or SECTION_BULK), never a disconnected top banner that read as "nothing happened".
+  const [pendingShare, setPendingShare] = useState<{
+    qid: string;
+    label: string;
+    apply: () => void;
+  } | null>(null);
 
   const promptOf = (qid: string): string =>
     (meta.questions ?? []).find((q) => q.id === qid)?.prompt ?? qid;
@@ -144,6 +151,7 @@ export function IntakeFormPanel({
     const current = scopes[qid] ?? [];
     if (questionDefaultsPrivate(meta.id, qid) && current.length === 0 && types.length > 0) {
       setPendingShare({
+        qid,
         label: `“${promptOf(qid)}” is sensitive — share it with ${describeScope(types)}’s coaching?`,
         apply: () => applyScope(qid, types),
       });
@@ -151,6 +159,28 @@ export function IntakeFormPanel({
     }
     applyScope(qid, types);
   };
+
+  /** The inline sensitive-share confirm (43 §8) rendered in place of a picker when its scope is pending. */
+  const renderConfirm = (pending: { label: string; apply: () => void }): JSX.Element => (
+    <div className={styles.inlineConfirm} role="group" aria-label="Confirm sensitive sharing">
+      <Text size="sm">{pending.label}</Text>
+      <div className={styles.inlineConfirmActions}>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => {
+            pending.apply();
+            setPendingShare(null);
+          }}
+        >
+          Share it
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => setPendingShare(null)}>
+          Keep private
+        </Button>
+      </div>
+    </div>
+  );
 
   // The section bulk scope — a common value when every question agrees, else "mixed" (43 §3.2).
   const questionIds = (meta.questions ?? []).map((q) => q.id);
@@ -175,6 +205,7 @@ export function IntakeFormPanel({
       meta.restricted || questionIds.some((qid) => questionDefaultsPrivate(meta.id, qid));
     if (touchesSensitive && types.length > 0) {
       setPendingShare({
+        qid: SECTION_BULK,
         label: `This section includes sensitive answers — share all of it with ${describeScope(types)}’s coaching?`,
         apply: doApply,
       });
@@ -184,14 +215,17 @@ export function IntakeFormPanel({
   };
 
   const sharing: QuestionSharing = {
-    renderControl: (questionId) => (
-      <RelationshipScopePicker
-        value={scopes[questionId] ?? []}
-        onChange={(types) => setScope(questionId, types)}
-        label={promptOf(questionId)}
-        {...(availableTypes ? { availableTypes } : {})}
-      />
-    ),
+    renderControl: (questionId) =>
+      pendingShare?.qid === questionId ? (
+        renderConfirm(pendingShare)
+      ) : (
+        <RelationshipScopePicker
+          value={scopes[questionId] ?? []}
+          onChange={(types) => setScope(questionId, types)}
+          label={promptOf(questionId)}
+          {...(availableTypes ? { availableTypes } : {})}
+        />
+      ),
   };
 
   // The intimacy activity matrix's rows are tailored per-person (27 §4.2): only the oral rows are relabelled/
@@ -285,40 +319,24 @@ export function IntakeFormPanel({
           </Text>
         </div>
 
-        {/* 43 §3.2 — the per-section bulk sharing control. */}
+        {/* 43 §3.2 — the per-section bulk sharing control. The sensitive-share confirm renders inline here too. */}
         {questionIds.length > 0 ? (
           <div className={styles.sectionSharing}>
             <span className={styles.sectionSharingLabel}>Sharing for this section</span>
-            {bulkScope === null ? <span className={styles.mixedBadge}>Mixed</span> : null}
-            <RelationshipScopePicker
-              value={bulkScope ?? []}
-              onChange={applyBulk}
-              label="this whole section"
-              {...(availableTypes ? { availableTypes } : {})}
-            />
+            {pendingShare?.qid === SECTION_BULK ? (
+              renderConfirm(pendingShare)
+            ) : (
+              <>
+                {bulkScope === null ? <span className={styles.mixedBadge}>Mixed</span> : null}
+                <RelationshipScopePicker
+                  value={bulkScope ?? []}
+                  onChange={applyBulk}
+                  label="this whole section"
+                  {...(availableTypes ? { availableTypes } : {})}
+                />
+              </>
+            )}
           </div>
-        ) : null}
-
-        {pendingShare ? (
-          <Banner tone="info">
-            <div className={styles.confirmShare}>
-              <Text>{pendingShare.label}</Text>
-              <div className={styles.confirmShareActions}>
-                <Button
-                  variant="primary"
-                  onClick={() => {
-                    pendingShare.apply();
-                    setPendingShare(null);
-                  }}
-                >
-                  Share it
-                </Button>
-                <Button variant="ghost" onClick={() => setPendingShare(null)}>
-                  Keep private
-                </Button>
-              </div>
-            </div>
-          </Banner>
         ) : null}
 
         <QuestionnaireForm

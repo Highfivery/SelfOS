@@ -288,6 +288,16 @@ proves reliable. The exact per-category mapping + the section-bulk "mixed" UX de
 
 ## 12. Changelog
 
+- 2026-06-24 — **Fix — share-by-default backfill + inline picker confirm** (`fix/onboarding-sharing-end-to-end`,
+  user-reported). Two bugs: **(a)** share-by-default never reached EXISTING portraits — `factScopeForSection`
+  - the answer readers returned `[]` for a section with no `answerSharing` (only written on (re-)submit), so a
+    portrait from before this spec showed everything Private. Fixed with a pure `effectiveAnswerScope` that
+    backfills a **missing** entry for an _answered_ question to its category default (explicit choice incl.
+    explicit `[]`=Private still wins; restricted defaults `[]`), used by synthesis (§4) + the shared-answer
+    context + the transparency read. **(b)** The sensitive-share confirm (§3.1) rendered as a top-of-section
+    Banner far from the picker → "nothing happened"; it now renders **inline in the question's (or bulk) sharing
+    slot**, replacing the picker. Tests: `effectiveAnswerScope` units + a pre-spec backfill integration + an E2E
+    reproducing a pre-spec portrait → partner context + Sharing summary reflect it.
 - 2026-06-24 — **BUILT** (on `feat/onboarding-scoped-sharing`). As-built notes: **(1)** `@selfos/answering`
   stays free of the app design-system, so the `sharing` prop is a **render-prop** `{ renderControl(questionId)
 }` (not `{ scopeOf, setScope, availableTypes }`) — the onboarding host (`IntakeFormPanel`) renders the actual

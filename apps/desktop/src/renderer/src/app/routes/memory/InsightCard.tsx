@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowUpRight, Lock, PencilLine, ShieldAlert, Trash2, Users } from 'lucide-react';
+import { ArrowUpRight, PencilLine, ShieldAlert, Trash2 } from 'lucide-react';
 import type { Insight, InsightFact, RelationshipType } from '@shared/schemas';
-import { describeScope } from '@selfos/core/sharing';
 import { useInsightStore } from '../../../stores/insightStore';
 import {
   Banner,
@@ -38,8 +37,10 @@ const SOURCE_EYEBROW: Record<Insight['source'], string> = {
  * Corrections split by source (44 §3.4): an ONBOARDING (`intake`) insight is what you told SelfOS — you fix
  * it by **editing the answer** (deep-link) or **deleting**, never "flagging." An AI-INFERRED insight
  * (session/dream/questionnaire) keeps the correction toggle, relabelled **"This isn't right about me"** —
- * it drops the fact from the coach at once. Per-fact sharing uses the relationship-type `RelationshipScopePicker`
- * (`FactSharingControl`), replacing the broadcast toggle. `sourceRemoved` renders "original source removed."
+ * it drops the fact from the coach at once. Sharing (44 audit): ONBOARDING facts carry NO per-fact chip (the
+ * "wall of Private" the user reported) — their sharing is share-by-default and managed via the answer + the
+ * "Manage sharing" panel; an AI-INFERRED fact keeps a discreet per-fact `FactSharingControl` (you still need
+ * a way to share a session/dream insight). `sourceRemoved` renders "original source removed."
  */
 export function InsightCard({
   insight,
@@ -52,7 +53,7 @@ export function InsightCard({
   subjectName: string;
   isOwn: boolean;
   sourceRemoved?: boolean;
-  /** Relationship types present in the person's graph (44 §3.4) — passed to each fact's sharing picker. */
+  /** Relationship types in the person's graph — offered by an AI-inferred fact's sharing picker (44 §3.4). */
   availableTypes?: RelationshipType[];
 }): JSX.Element {
   const navigate = useNavigate();
@@ -218,12 +219,20 @@ export function InsightCard({
                     </span>
                   ) : null}
                   <div className={styles.factControls}>
-                    {/* A flagged fact is excluded from everyone's context + from outbound sharing, so a
-                        sharing picker on it would be misleading — hide it until the flag is cleared. An
-                        ONBOARDING fact's scope is DERIVED from its answer (43 §4) and recomputed on every
-                        re-synthesis, so editing it directly here would silently revert — show it READ-ONLY
-                        and change sharing via "Edit answer". AI-inferred facts stay directly editable. */}
-                    {isOwn && !fact.flaggedInaccurate && !isIntake ? (
+                    {/* ONBOARDING facts carry NO per-fact sharing chip (44 audit — the reported "wall of
+                        Private"): their sharing is share-by-default + managed via the answer / "Manage
+                        sharing". A restricted onboarding fact keeps a small informational "sensitive" tag. An
+                        AI-INFERRED fact keeps a discreet `FactSharingControl` so it can be shared at all.
+                        A flagged fact is excluded from context + outbound, so its picker is hidden. */}
+                    {isIntake && fact.restricted ? (
+                      <span
+                        className={styles.sensitiveTag}
+                        title="Sensitive — only your own coach uses this."
+                      >
+                        <ShieldAlert size={12} aria-hidden="true" /> sensitive
+                      </span>
+                    ) : null}
+                    {isOwn && !isIntake && !fact.flaggedInaccurate ? (
                       <FactSharingControl
                         insightId={insight.id}
                         subjectPersonId={insight.subjectPersonId}
@@ -231,35 +240,6 @@ export function InsightCard({
                         disabled={busy}
                         {...(availableTypes ? { availableTypes } : {})}
                       />
-                    ) : null}
-                    {isOwn && !fact.flaggedInaccurate && isIntake ? (
-                      fact.restricted ? (
-                        // A sensitive (restricted) onboarding fact is own-coaching-only. Sharing it is an
-                        // opt-in on the onboarding ANSWER (43 §8 / §3.1), so Memory shows it READ-ONLY —
-                        // change it via "Edit answer", never a fact-level write that re-synthesis reverts.
-                        <span
-                          className={styles.sensitiveTag}
-                          title="Sensitive — only your own coach uses this. Change sharing via “Edit answer”."
-                        >
-                          <ShieldAlert size={12} aria-hidden="true" /> sensitive · only your coach
-                        </span>
-                      ) : (
-                        <span
-                          className={styles.derivedScope}
-                          title="Set by your onboarding answer — use “Edit answer” to change who this informs"
-                        >
-                          {(fact.shareableTypes?.length ?? 0) > 0 ? (
-                            <>
-                              <Users size={12} aria-hidden="true" /> Shared:{' '}
-                              {describeScope(fact.shareableTypes ?? [])}
-                            </>
-                          ) : (
-                            <>
-                              <Lock size={12} aria-hidden="true" /> Private
-                            </>
-                          )}
-                        </span>
-                      )
                     ) : null}
                     {/* AI-INFERRED facts can be pushed back on ("this isn't right about me"); ONBOARDING facts
                         are what you told us — you fix them by editing the answer, not flagging (§3.4). */}

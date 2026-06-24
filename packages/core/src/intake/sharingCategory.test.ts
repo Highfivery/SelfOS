@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { SHARING_PRESETS } from '../people/sharingPresets';
 import {
   defaultScopeForQuestion,
+  effectiveAnswerScope,
   questionCategory,
   questionDefaultsPrivate,
 } from './sharingCategory';
@@ -42,5 +43,27 @@ describe('intake sharingCategory (43 §4)', () => {
     const a = defaultScopeForQuestion('basics', 'gender');
     a.push('ex');
     expect(SHARING_PRESETS.basics).not.toContain('ex');
+  });
+
+  describe('effectiveAnswerScope — the share-by-default backfill (44 audit)', () => {
+    it('honors an explicit choice, including an explicit [] (deliberately Private)', () => {
+      expect(
+        effectiveAnswerScope('health', 'sleepSchedule', { sleepSchedule: ['partner'] }),
+      ).toEqual(['partner']);
+      // An explicit empty array is a deliberate Private — NOT backfilled to the default.
+      expect(effectiveAnswerScope('basics', 'gender', { gender: [] })).toEqual([]);
+    });
+
+    it('backfills the category default when there is no stored entry (pre-spec portrait)', () => {
+      // No answerSharing at all → an answered non-restricted question shares per its preset.
+      expect(effectiveAnswerScope('health', 'sleepSchedule', undefined)).toEqual(['partner']);
+      expect(effectiveAnswerScope('basics', 'gender', {})).toEqual(SHARING_PRESETS.basics);
+    });
+
+    it('keeps a restricted question Private under backfill (no surprise share)', () => {
+      expect(effectiveAnswerScope('intimacy', 'drawnTo', undefined)).toEqual([]);
+      expect(effectiveAnswerScope('weighs', 'weighsWhat', {})).toEqual([]);
+      expect(effectiveAnswerScope('health', 'substancesUsed', undefined)).toEqual([]);
+    });
   });
 });

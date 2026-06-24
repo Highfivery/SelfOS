@@ -223,6 +223,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     questionnairesImproveQuestion: () => Promise.resolve({ ok: true, prompt: 'improved' }),
     gapfinderSuggest: () => Promise.resolve({ ok: true, suggestions: [] }),
     insightsList: () => Promise.resolve([]),
+    memoryOutboundSharing: () => Promise.resolve({ items: [] }),
     insightsAnalyze: () => Promise.resolve({ ok: false, reason: 'NO_RESPONSE' }),
     insightsApprove: () => Promise.resolve(null),
     insightsUpdate: () => Promise.resolve(null),

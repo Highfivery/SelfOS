@@ -514,6 +514,13 @@ export const InsightFactSchema = z.object({
   // Per-person targeted sharing (12-dreams §3.4): person ids this fact is shared with, in addition to the
   // broadcast `shareable` boolean. Additive-optional — existing facts parse unchanged, no migration.
   shareableWith: z.array(z.string()).optional(),
+  // Relationship-type-scoped sharing (42-relationship-scoped-sharing §4.1): the relationship types whose
+  // related people may have this fact inform THEIR coaching context. Resolved against the live relationship
+  // graph at buildContext time (a new sibling/partner inherits access per the item's types — no per-person
+  // bookkeeping). Absent/empty ⇒ not type-shared (still own-context-only unless the legacy
+  // `shareable`/`shareableWith` paths apply). A `restricted` fact is NEVER shared regardless (§8).
+  // Additive-optional — the new sharing UIs set THIS, never broadcast `shareable: true`.
+  shareableTypes: z.array(RelationshipTypeSchema).optional(),
   // Break-glass-only (18-personal-onboarding §8.4): a fact derived from a `restricted` intake section
   // ("what weighs on you" / intimacy). It still feeds the subject's OWN coaching context, but is withheld
   // from the owner's normal People/Memory views — reachable only via the audited reveal. Additive-optional.
@@ -531,6 +538,55 @@ export const InsightFactSchema = z.object({
   lifeArea: z.string().optional(),
 });
 export type InsightFact = z.infer<typeof InsightFactSchema>;
+
+/**
+ * The single sharing gate for an Insight fact (42-relationship-scoped-sharing §5.1): whether a fact owned
+ * by one person may flow into a viewer's coaching context, given the relationship types describing how the
+ * OWNER relates to the VIEWER (resolved from the live graph by the caller — see `relationshipTypesFromSubjectToViewer`).
+ * Combines, in order: legacy broadcast `shareable: true`, per-person `shareableWith.includes(viewer)`
+ * (12-dreams), and type-scoping `shareableTypes` ∩ `grantedTypes` ≠ ∅ (42) — AND requires the fact be
+ * neither `restricted` (18 §8.4 — never shared by type) nor `flaggedInaccurate` (20 §3.6). Pure + reused by
+ * `summarizeForContext`, `listRelatedShareableInsights`, and `scopeGrants`, so the boundary is defined once.
+ */
+export function factSharedWithViewer(
+  fact: Pick<
+    InsightFact,
+    'shareable' | 'shareableWith' | 'shareableTypes' | 'restricted' | 'flaggedInaccurate'
+  >,
+  viewerId: string,
+  grantedTypes: readonly RelationshipType[],
+): boolean {
+  if (fact.restricted === true || fact.flaggedInaccurate === true) return false;
+  if (fact.shareable) return true;
+  if (fact.shareableWith?.includes(viewerId)) return true;
+  return (fact.shareableTypes ?? []).some((type) => grantedTypes.includes(type));
+}
+
+/**
+ * One item in a person's outbound-sharing transparency view (42-relationship-scoped-sharing §5.3) — an
+ * Insight fact or a shared intake answer they own, with its scope + the concrete related people currently
+ * receiving it. Own data, so `text` is the full item; never crosses to a viewer (own-scoped read). A
+ * crypto-free view type (defined here in the schemas shim) so the IPC/renderer may reference it.
+ */
+export interface OutboundSharingItem {
+  /** Stable id: the `InsightFact.id`, or `<sectionId>.<questionId>` for a shared intake answer. */
+  id: string;
+  kind: 'fact' | 'intakeAnswer';
+  /** The item's own text/label (own data → shown in full). */
+  text: string;
+  /** Legacy broadcast (`shareable: true`) — reaches EVERY related person. The new UIs never set it. */
+  broadcast: boolean;
+  /** The relationship types this item is scoped to (42 §4.1/§4.2). */
+  types: RelationshipType[];
+  /** Explicit person ids it's shared with (the per-person path — dreams, 12 §3.4). */
+  personIds: string[];
+  /** The concrete related people currently receiving it, resolved against the live graph. */
+  recipients: { id: string; displayName: string }[];
+}
+
+export interface OutboundSharing {
+  items: OutboundSharingItem[];
+}
 
 /** The call-type/topic signal a caller passes so context selects the relevant portrait facts
  * (28-portrait-synthesis-optimization §pillar-2). All fields optional: an absent/empty topic ⇒ the always-on
@@ -706,6 +762,11 @@ export const IntakeSectionSchema = z.object({
   messages: z.array(ChatMessageSchema), // the chat transcript (chat sections + go-deeper); excludes the opener
   answers: z.record(z.string(), IntakeAnswerValueSchema), // structured form answers, keyed by question id
   reflection: z.string().optional(), // the light per-section member-facing reflection (§11.3)
+  // Per-question sharing scope (42-relationship-scoped-sharing §4.2), keyed by question id → the relationship
+  // types whose related people may have THIS answer inform their coaching. Absent question ⇒ that answer is
+  // not type-shared (own-context-only). Written by the onboarding per-question UI (43); read into a related
+  // person's context here (42 §5.2). Additive-optional — pre-spec sections parse unchanged, no migration.
+  answerSharing: z.record(z.string(), z.array(RelationshipTypeSchema)).optional(),
 });
 export type IntakeSection = z.infer<typeof IntakeSectionSchema>;
 

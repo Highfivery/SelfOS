@@ -289,6 +289,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.questionnairesImproveQuestion, bridge.questionnairesImproveQuestion);
   handle(IpcChannels.gapfinderSuggest, bridge.gapfinderSuggest);
   handle(IpcChannels.insightsList, bridge.insightsList);
+  handle(IpcChannels.memoryOutboundSharing, bridge.memoryOutboundSharing);
   handle(IpcChannels.insightsAnalyze, bridge.insightsAnalyze);
   handle(IpcChannels.insightsApprove, bridge.insightsApprove);
   handle(IpcChannels.insightsUpdate, bridge.insightsUpdate);

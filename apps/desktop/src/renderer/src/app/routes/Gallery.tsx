@@ -25,6 +25,7 @@ import {
   SegmentedControl,
   Select,
   ShareToggle,
+  RelationshipScopePicker,
   Slider,
   Stack,
   Switch,
@@ -37,6 +38,7 @@ import {
   type SegmentOption,
 } from '../../design-system/components';
 import type { Notification } from '@shared/channels';
+import type { RelationshipType } from '@selfos/core/schemas';
 import { GuidedExerciseCard } from './sessions/GuidedExerciseCard';
 import { GuidedStepper } from './sessions/GuidedStepper';
 import { NotificationCenter } from '../notifications/NotificationCenter';
@@ -115,6 +117,7 @@ function Section({ title, children }: { title: string; children: ReactNode }): J
 export function Gallery(): JSX.Element {
   const [toggle, setToggle] = useState(true);
   const [share, setShare] = useState(true);
+  const [scope, setScope] = useState<RelationshipType[]>(['partner']);
   const [align, setAlign] = useState<Align>('center');
   const [textScale, setTextScale] = useState(100);
 
@@ -193,6 +196,12 @@ export function Gallery(): JSX.Element {
               <ShareToggle shared={share} onChange={setShare} label="Occupation" />
               <Text tone="secondary" size="sm">
                 Per-item shareability — {share ? 'shared with related people' : 'kept private'}
+              </Text>
+            </Inline>
+            <Inline gap={3} align="center">
+              <RelationshipScopePicker value={scope} onChange={setScope} label="Sleep schedule" />
+              <Text tone="secondary" size="sm">
+                Relationship-type sharing (42) — informs their AI coaching, never shown to them
               </Text>
             </Inline>
             <Inline gap={3} align="center">

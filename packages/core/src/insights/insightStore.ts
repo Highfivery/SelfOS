@@ -2,10 +2,13 @@ import type { FileSystem } from '../host';
 import {
   DreamSchema,
   InsightSchema,
+  factSharedWithViewer,
   type ContextTopic,
   type Insight,
   type InsightFact,
+  type RelationshipType,
 } from '../schemas';
+import { confidentialityPreamble } from '../sharing';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 
 /**
@@ -270,18 +273,36 @@ export function selectPortraitFacts(
 }
 
 /**
+ * A related person, as `summarizeForContext`/`listRelatedShareableInsights` need them (42 §5.2). The caller
+ * resolves `grantedTypes` (how this related person relates to the VIEWER, via
+ * `relationshipTypesFromSubjectToViewer`) + the related person's shared intake-answer lines — so the
+ * insights module never imports `people`/`intake` (no cycle). Absent `grantedTypes` ⇒ no type grants (only
+ * legacy broadcast / per-person sharing apply); absent `sharedAnswerLines` ⇒ no shared answers.
+ */
+export interface RelatedForContext {
+  id: string;
+  displayName: string;
+  grantedTypes?: RelationshipType[];
+  sharedAnswerLines?: string[];
+}
+
+/**
  * Build the Insight portion of a person's coaching context: their own **approved** insights (summary +
- * all facts — their private facts feed only their own coaching), plus the **shareable** facts from the
- * approved insights of the people they relate to. Others' private (non-shareable) facts are never
- * included — the shareable-vs-private split (04-people-roles §3.4). Recency-prioritized + capped.
- * Returns formatted lines, or '' when there's nothing to add.
+ * all facts — their private facts feed only their own coaching), plus the cross-shared facts + intake
+ * answers from the people they relate to, gated by relationship-type scope (42-relationship-scoped-sharing
+ * §5.2). Others' private/own-only items are never included — the shareable-vs-private split
+ * (04-people-roles §3.4). When any cross-shared content is present it is prefixed with the confidentiality
+ * preamble (42 §3.4) so the coach uses but never discloses it. Recency-prioritized + capped. Returns
+ * formatted lines, or '' when there's nothing to add. `viewerName` names the supported person in the
+ * confidentiality preamble.
  */
 export async function summarizeForContext(
   fs: FileSystem,
   key: Uint8Array,
   personId: string,
-  related: { id: string; displayName: string }[],
+  related: RelatedForContext[],
   topic?: ContextTopic,
+  viewerName?: string,
 ): Promise<string> {
   const lines: string[] = [];
 
@@ -317,29 +338,35 @@ export async function summarizeForContext(
     }
   }
 
+  // Cross-shared content from related people (42 §5.2) — assembled first so the confidentiality preamble
+  // (§3.4) can prefix the whole block once, and only when something actually crosses over.
+  const crossSharedBlocks: string[] = [];
   for (const other of related) {
+    const granted = other.grantedTypes ?? [];
     const otherApproved = await feedableInsights(
       fs,
       key,
       (await listInsightsForPerson(fs, key, other.id)).filter((insight) => insight.approved),
     );
-    const shared = otherApproved
-      // A related person's fact reaches THIS person's context if it's broadcast-shareable OR targeted
-      // specifically at them (12-dreams §3.4 per-person sharing). Others' untargeted private facts never do.
-      // A `restricted` intake fact (18-personal-onboarding §8.4) is own-context-only and NEVER broadcasts,
-      // regardless of `shareable`/`shareableWith` — defense in depth so it can't leak into another's context.
+    // A related person's fact reaches THIS person's context if `factSharedWithViewer` grants it: broadcast
+    // `shareable`, per-person `shareableWith` (12-dreams §3.4), OR `shareableTypes` ∩ the subject→viewer
+    // type(s) (42 §4.1). A `restricted` (18 §8.4) or flagged-inaccurate (20 §3.6) fact is NEVER shared —
+    // the gate folds those exclusions in, so it can't leak into another's context.
+    const sharedFacts = otherApproved
       .flatMap((insight) =>
-        insight.facts.filter(
-          (fact) =>
-            fact.restricted !== true &&
-            fact.flaggedInaccurate !== true &&
-            (fact.shareable || (fact.shareableWith?.includes(personId) ?? false)),
-        ),
+        insight.facts.filter((fact) => factSharedWithViewer(fact, personId, granted)),
       )
       .slice(0, MAX_SHARED_FACTS_PER_PERSON);
-    if (shared.length === 0) continue;
-    lines.push(`Shareable about ${other.displayName}:`);
-    for (const fact of shared) lines.push(`- ${fact.text}`);
+    const blockLines: string[] = [];
+    for (const fact of sharedFacts) blockLines.push(`- ${fact.text}`);
+    // The related person's shared structured intake answers (42 §5.2), already resolved + capped by the caller.
+    for (const line of other.sharedAnswerLines ?? []) blockLines.push(`- ${line}`);
+    if (blockLines.length === 0) continue;
+    crossSharedBlocks.push([`Shareable about ${other.displayName}:`, ...blockLines].join('\n'));
+  }
+  if (crossSharedBlocks.length > 0) {
+    lines.push(confidentialityPreamble(viewerName ?? ''));
+    lines.push(...crossSharedBlocks);
   }
 
   return lines.join('\n');
@@ -362,19 +389,19 @@ export async function listRelatedShareableInsights(
   fs: FileSystem,
   key: Uint8Array,
   viewerId: string,
-  related: { id: string; displayName: string }[],
+  related: RelatedForContext[],
 ): Promise<Insight[]> {
   const out: Insight[] = [];
   for (const other of related) {
+    const granted = other.grantedTypes ?? [];
     const approved = (await listInsightsForPerson(fs, key, other.id)).filter(
       (insight) => insight.approved,
     );
     for (const insight of await feedableInsights(fs, key, approved)) {
-      const shareableFacts = insight.facts.filter(
-        (fact) =>
-          fact.restricted !== true &&
-          fact.flaggedInaccurate !== true &&
-          (fact.shareable || (fact.shareableWith?.includes(viewerId) ?? false)),
+      // The exact `summarizeForContext` gate (42 §5.2): broadcast / per-person / type-scoped, never
+      // restricted or flagged. Type-scoping uses the caller-resolved subject→viewer types.
+      const shareableFacts = insight.facts.filter((fact) =>
+        factSharedWithViewer(fact, viewerId, granted),
       );
       if (shareableFacts.length === 0) continue;
       // Project an EXPLICIT minimal shape — never spread the whole Insight. A related person's `metrics`

@@ -419,6 +419,38 @@ A running log of durable decisions and feedback captured into the project config
   otherwise-usable result, and the parse boundary must own a balanced-brace salvage for truncation; classify a
   "no usable output" as TRUNCATED/MALFORMED first and REFUSED only on detected refusal-prose (never assume a
   refusal); and offline fakes that return flawless JSON HIDE this class of bug — make them imperfect by default.**
+- 2026-06-23 — **Build (relationship-scoped sharing — the FOUNDATIONAL sharing model; SPEC 42 BUILT; on
+  `feat/relationship-scoped-sharing`, PR open).** Sharing was all-or-nothing — a fact was broadcast to EVERY related
+  person (`shareable:true`) or one person id (`shareableWith`), and ALL intake data was hardcoded own-context-only —
+  so "share with my partner but never my parent/coworker" (the marriage/sex-counseling case) was inexpressible. Built
+  the **read + model** (the producers/surfaces are specs 43/44): a fact/intake-answer now names the **relationship
+  types** whose people's AI may use it, resolved against the **live graph at buildContext time**. Schema (additive,
+  **no schemaVersion bump**): `InsightFact.shareableTypes` + `IntakeSection.answerSharing`. ONE pure gate
+  `factSharedWithViewer(fact, viewer, grantedTypes)` in `schemas.ts` (broadcast ∨ per-person ∨ type-scope, **AND**
+  not-`restricted` **AND** not-`flaggedInaccurate`) + a pure resolver `relationshipTypesFromSubjectToViewer`
+  (parent↔child **inverse derivation**) + `scopeGrants` (`@selfos/core/people/relationshipScope`). `summarizeForContext`
+  / `listRelatedShareableInsights` rewired onto the gate — the CALLER resolves `grantedTypes` + passes them in, so
+  `insights` never imports `people`/`intake` (the cycle-avoidance pattern); shared **intake answers** read into a
+  related person's context via `buildSharedIntakeAnswerLines` (imports the catalog by its **direct path**, not the
+  barrel, to dodge the people↔intake cycle). The §3.4 **confidentiality preamble** prefixes any cross-shared block —
+  "shared ≠ shown": the recipient's coach may USE but never quote/attribute/reveal it (the load-bearing
+  couples-counseling guarantee). `SHARING_PRESETS` constant (partner=all; close family/friends=all-but-intimacy/trauma;
+  coworker=basics/work/values; ex/other=nothing; intimacy/trauma=partner-only). Transparency: `listOutboundSharing` +
+  the **own-scoped, `memory.own`-gated `memory:outboundSharing`** IPC (what you share + the concrete people receiving
+  it). Renderer: a reusable **`RelationshipScopePicker`** (collapsed chip → popover checkbox list + "Private (only me)"
+  - the honest explainer; `flex:none`, text/icon not colour-only, §12 dropdown handling) + shared copy
+    (`describeScope`, `confidentialityPreamble`) in `@selfos/core/sharing` + `/gallery`. **Safety invariant (exhaustively
+    tested):** a partner-scoped fact reaches the PARTNER, never a sibling/parent/coworker; a `restricted` fact reaches NO
+    one even when type-scoped; a corrupt scope fails **closed**; removing the edge re-gates at read. Code-reviewer
+    **ship** (privacy boundary + trust boundary + cycle safety all verified airtight; applied the one nit — name the
+    author in the questionnaire-generation preamble). Gate green: typecheck, lint, format, **582 core + 11 relay + 663
+    desktop** unit (resolver/`scopeGrants` truth table, partner-vs-sibling/restricted guard, transparency read,
+    `RelationshipScopePicker` RTL, `memory:outboundSharing` gating) + a decrypt-level E2E privacy guard. **Lesson: when a
+    shared file in a SHARED working tree holds BOTH your hunks and a concurrent agent's (here `schemas.ts` — they added a
+    `TRUNCATED` `AiFailureReason` for spec 37), a whole-file `git diff` patch drags their half across; do feature work in
+    a `git worktree`, and if a patch already captured a foreign hunk, `git checkout --` the file and re-apply ONLY your
+    hunks. And keep the sharing gate as ONE pure predicate (`factSharedWithViewer`) the caller feeds resolved types into,
+    so `insights` stays cycle-free and the boundary is defined exactly once.**
 - 2026-06-23 — **Build (onboarding intimacy-matrix redesign — 5-point + gender/orientation-aware; spec 27 §4.2 +
   18 §14.5; on `feat/intimacy-matrix-redesign`, PR open).** Owner-approved decisions (implemented, not re-asked).
   The intake `activities` matrix went from a 3-state scale (Hard limit · Curious · Into it) to a **5-point ordered

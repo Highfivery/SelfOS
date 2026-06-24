@@ -5,7 +5,7 @@ import { saveInsight } from '../insights';
 import { confidentialityPreamble } from '../sharing';
 import type { Insight, IntakeSession, Person, Relationship } from '../schemas';
 import { writeEncryptedJson } from '../vault';
-import { buildContext } from './buildContext';
+import { buildContext, buildLinkedPeopleContext } from './buildContext';
 import { listOutboundSharing } from './outboundSharing';
 import { savePerson } from './peopleService';
 import { saveRelationship } from './relationshipService';
@@ -173,6 +173,110 @@ describe('relationship-type-scoped context (42 §5.2) — the headline privacy g
     expect(partnerCtx).toContain('Early to bed, early to rise');
     // The sibling never sees it (scoped to partner only).
     expect(await buildContext(fs, key, 'C')).not.toContain('Early to bed, early to rise');
+  });
+});
+
+describe('buildLinkedPeopleContext — the dreams surface honors the same gate (42 §5.2 / audit #1)', () => {
+  it('a partner-scoped fact reaches the partner-dreamer, under the confidentiality preamble', async () => {
+    const fs = await seedTriad();
+    await saveInsight(
+      fs,
+      key,
+      insight({
+        id: 'i1',
+        subjectPersonId: 'A',
+        facts: [
+          { id: 'f1', text: 'A craves closeness', shareable: false, shareableTypes: ['partner'] },
+        ],
+      }),
+    );
+    // B (A's partner) dreams about A → A's partner-scoped fact informs B's dream coach...
+    const partnerDream = await buildLinkedPeopleContext(fs, key, 'B', ['A']);
+    expect(partnerDream).toContain('A craves closeness');
+    expect(partnerDream).toContain(confidentialityPreamble('Bri')); // "shared ≠ shown" on dreams too
+    // ...but C (A's sibling) dreaming about A does NOT see the partner-scoped fact, and gets no preamble.
+    const siblingDream = await buildLinkedPeopleContext(fs, key, 'C', ['A']);
+    expect(siblingDream).not.toContain('A craves closeness');
+    expect(siblingDream).not.toContain('Treat them as private background');
+  });
+
+  it('excludes a flagged-inaccurate fact even when broadcast-shareable (the pre-existing leak, now closed)', async () => {
+    const fs = await seedTriad();
+    await saveInsight(
+      fs,
+      key,
+      insight({
+        id: 'i2',
+        subjectPersonId: 'A',
+        facts: [
+          {
+            id: 'f1',
+            text: 'a corrected claim',
+            shareable: true,
+            flaggedInaccurate: true,
+            flaggedAt: 'now',
+          },
+        ],
+      }),
+    );
+    expect(await buildLinkedPeopleContext(fs, key, 'B', ['A'])).not.toContain('a corrected claim');
+  });
+
+  it('a restricted fact is never surfaced to a dreamer (18 §8.4)', async () => {
+    const fs = await seedTriad();
+    await saveInsight(
+      fs,
+      key,
+      insight({
+        id: 'i3',
+        subjectPersonId: 'A',
+        facts: [
+          {
+            id: 'f1',
+            text: 'a restricted thing',
+            shareable: false,
+            restricted: true,
+            shareableTypes: ['partner'],
+          },
+        ],
+      }),
+    );
+    expect(await buildLinkedPeopleContext(fs, key, 'B', ['A'])).not.toContain('a restricted thing');
+  });
+});
+
+describe('corrupt scope fails closed (42 §7 / audit #3)', () => {
+  it('a corrupt shareableTypes degrades a fact to own-only and never crashes a related viewer’s context', async () => {
+    const fs = await seedTriad();
+    // Write a raw insight whose fact carries an INVALID relationship type — bypassing the schema on write.
+    const corrupt: unknown = {
+      schemaVersion: 1,
+      id: 'ic',
+      source: 'questionnaire',
+      subjectPersonId: 'A',
+      summary: 's',
+      facts: [
+        {
+          id: 'f1',
+          text: 'a corrupt-scope fact',
+          shareable: false,
+          shareableTypes: ['not-a-type'],
+        },
+      ],
+      confidence: 'medium',
+      categories: [],
+      approved: true,
+      provenance: { at: 'now' },
+      createdAt: 'now',
+      updatedAt: 'now',
+    };
+    await writeEncryptedJson(fs, 'people/A/insights/ic.enc', corrupt, key);
+
+    // The related viewer's whole context still builds (no throw) and the corrupt fact is NOT shared.
+    const partnerCtx = await buildContext(fs, key, 'B');
+    expect(partnerCtx).not.toContain('a corrupt-scope fact');
+    // The owner still sees it in their OWN context (degraded to own-only, not lost).
+    expect(await buildContext(fs, key, 'A')).toContain('a corrupt-scope fact');
   });
 });
 

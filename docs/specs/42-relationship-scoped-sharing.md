@@ -390,6 +390,19 @@ source of truth).
 
 ## 12. Changelog
 
+- 2026-06-24 — **Audit follow-ups** (`fix/relationship-sharing-audit-followups`). A post-build review of
+  42/43/44 found three should-fixes, all resolved: **(1)** `buildLinkedPeopleContext` (the dreams
+  linked-people context) bypassed the centralized gate — it now routes through `factSharedWithViewer`
+  (resolving `grantedTypes` against the live graph) so it honors `shareableTypes`, excludes
+  `flaggedInaccurate` facts (a pre-existing leak on the dreams surface), and is prefixed with the §3.4
+  confidentiality preamble like `summarizeForContext` — "shared ≠ shown" now holds on dreams too. **(3)** a
+  corrupt scope now **fails closed**: `InsightFact.shareableTypes` + `IntakeSection.answerSharing` gained
+  `.catch(undefined)` (§7), so a malformed value degrades a fact/answer to own-only instead of throwing out
+  of a related viewer's whole `buildContext`. Plus the duplicated inverse-type map is now a single
+  `INVERSE_RELATIONSHIP_TYPE` exported from `@selfos/core/sharing` (used by the core resolver + the
+  renderer). (#2 — intake-fact scope is in spec 44.) Tests: +`buildLinkedPeopleContext` partner/sibling/
+  flagged/restricted + a corrupt-scope-fails-closed unit (`relationshipSharing.test.ts`). Gate green:
+  typecheck, lint, format, **719 core + 768 desktop** unit, **105 E2E**.
 - 2026-06-23 — **Built.** Implemented the foundational read + model: `InsightFact.shareableTypes` +
   `IntakeSection.answerSharing` (additive-optional, no schemaVersion bump); the pure resolver
   (`relationshipTypesFromSubjectToViewer` + `scopeGrants`, with parent↔child inverse derivation) + the single

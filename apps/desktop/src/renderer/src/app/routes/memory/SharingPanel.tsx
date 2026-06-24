@@ -52,11 +52,18 @@ export function SharingPanel(): JSX.Element {
   ): {
     insightId: string;
     subjectPersonId: string;
+    source: (typeof insights)[number]['source'];
     fact: (typeof insights)[number]['facts'][number];
   } | null => {
     for (const insight of insights) {
       const fact = insight.facts.find((f) => f.id === factId);
-      if (fact) return { insightId: insight.id, subjectPersonId: insight.subjectPersonId, fact };
+      if (fact)
+        return {
+          insightId: insight.id,
+          subjectPersonId: insight.subjectPersonId,
+          source: insight.source,
+          fact,
+        };
     }
     return null;
   };
@@ -65,6 +72,16 @@ export function SharingPanel(): JSX.Element {
     if (item.kind === 'fact') {
       const loc = factLocation(item.id);
       if (!loc) return null;
+      // An onboarding-derived fact's scope is owned by its answer (43 §4) and recomputed on re-synthesis,
+      // so editing it here would silently revert — show it read-only (the matching `intakeAnswer` item below
+      // is the editable control). AI-inferred facts stay directly editable.
+      if (loc.source === 'intake') {
+        return (
+          <Text size="xs" tone="tertiary">
+            Set by your onboarding answer
+          </Text>
+        );
+      }
       return (
         <FactSharingControl
           insightId={loc.insightId}

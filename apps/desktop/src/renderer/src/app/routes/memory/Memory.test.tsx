@@ -202,7 +202,9 @@ describe('Memory dashboard', () => {
             id: 'p',
             source: 'intake',
             provenance: { intakeSection: 'basics', at: '2026-06-11T12:00:00.000Z' },
-            facts: [{ id: 'f1', text: 'Grew up in Ohio', shareable: false }],
+            facts: [
+              { id: 'f1', text: 'Grew up in Ohio', shareable: false, shareableTypes: ['partner'] },
+            ],
           }),
         ]),
     });
@@ -213,6 +215,31 @@ describe('Memory dashboard', () => {
       screen.queryByRole('button', { name: /This isn’t right about me/ }),
     ).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+    // Its sharing is DERIVED from the onboarding answer (43 §4), so Memory shows it READ-ONLY — no editable
+    // scope picker (which would silently revert on re-synthesis); you change it via Edit answer (audit #2).
+    expect(screen.getByTitle(/Set by your onboarding answer/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /activate to change/ })).not.toBeInTheDocument();
+  });
+
+  it('shows a restricted onboarding fact as read-only "sensitive" (no editable picker)', async () => {
+    useSessionStore.setState({ activePerson: activeP1 });
+    installMockBridge({
+      insightsList: () =>
+        Promise.resolve([
+          insight({
+            id: 'p',
+            source: 'intake',
+            provenance: { intakeSection: 'weighs', at: '2026-06-11T12:00:00.000Z' },
+            facts: [{ id: 'f1', text: 'Carries grief', shareable: false, restricted: true }],
+          }),
+        ]),
+    });
+    renderMemory();
+    // Sensitive intake facts are own-coaching-only; sharing is opted-in on the ANSWER, so Memory shows them
+    // read-only ("sensitive · only your coach") — never an editable picker that re-synthesis would revert.
+    expect(await screen.findByText(/sensitive · only your coach/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /activate to change/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Share with someone/ })).not.toBeInTheDocument();
   });
 
   it('filters by search', async () => {

@@ -4,24 +4,14 @@ import {
   type Relationship,
   type RelationshipType,
 } from '../schemas';
+import { INVERSE_RELATIONSHIP_TYPE as INVERSE } from '../sharing';
 
 /**
  * Relationship-type-scoped sharing resolver (42-relationship-scoped-sharing §5.1). Pure, tested, and
  * importable by both `people` and (indirectly, via caller-resolved types) `insights` — so the sharing
  * boundary is computed in one place against the LIVE relationship graph, never per-person snapshots.
+ * The inverse-type map is shared from `../sharing` (the single source of truth, also used by the renderer).
  */
-
-/** The inverse of a relationship type — symmetric types map to themselves; parent↔child invert (04 §4.2). */
-const INVERSE: Record<RelationshipType, RelationshipType> = {
-  partner: 'partner',
-  parent: 'child',
-  child: 'parent',
-  sibling: 'sibling',
-  friend: 'friend',
-  coworker: 'coworker',
-  ex: 'ex',
-  other: 'other',
-};
 
 /**
  * The relationship type(s) describing how the VIEWER relates to the SUBJECT — i.e. "the viewer is the

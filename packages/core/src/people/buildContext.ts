@@ -7,11 +7,13 @@ import {
   type RelatedForContext,
 } from '../insights';
 import {
+  factSharedWithViewer,
   isPersonFieldShared,
   type ContextTopic,
   type Person,
   type PersonFieldKey,
 } from '../schemas';
+import { confidentialityPreamble } from '../sharing';
 import { getPerson, listPeople } from './peopleService';
 import { listRelationships } from './relationshipService';
 import { relationshipTypesFromSubjectToViewer } from './relationshipScope';
@@ -246,6 +248,12 @@ const MAX_LINKED_FACTS_PER_PERSON = 5;
  * included**, even if they aren't a relationship-graph relation. Returns formatted lines, or '' when there
  * is nothing shareable to add. Unknown ids and refs without a `personId` (free names) are skipped — those
  * are already in the dream narrative.
+ *
+ * Cross-shared facts here go through the SAME `factSharedWithViewer` gate as `summarizeForContext`
+ * (42-relationship-scoped-sharing §5.2): broadcast / per-person / relationship-type-scoped (`shareableTypes`
+ * resolved against the live graph), never `restricted` (18 §8.4) and never `flaggedInaccurate` (20 §3.6).
+ * When any cross-shared fact crosses over, the block is prefixed with the confidentiality preamble (42 §3.4)
+ * so the dream coach uses but never discloses it — "shared ≠ shown" holds on the dreams surface too.
  */
 export async function buildLinkedPeopleContext(
   fs: FileSystem,
@@ -260,6 +268,7 @@ export async function buildLinkedPeopleContext(
   const relationships = await listRelationships(fs, key);
 
   const lines: string[] = [];
+  let anyCrossShared = false;
   for (const id of ids) {
     const person = byId.get(id);
     if (!person) continue;
@@ -273,9 +282,13 @@ export async function buildLinkedPeopleContext(
       relationship?.notes && relationship.notesShared !== false ? ` (${relationship.notes})` : '';
     lines.push(`- ${person.displayName}${relType}${sharedPronouns(person)}${relNote}`);
     // Only the fields the owner has left SHARED (15-shareability §5) — never a locked field.
-    for (const line of profileLines(person, 'others')) lines.push(`  · ${line}`);
+    const profile = profileLines(person, 'others');
+    for (const line of profile) lines.push(`  · ${line}`);
+    if (profile.length > 0) anyCrossShared = true;
     // Only shareable facts about them, and only from insights that still feed context (a dream with
-    // `informsContext` off is suppressed, 15-shareability §4.2) — never their private facts.
+    // `informsContext` off is suppressed, 15-shareability §4.2). The relationship type(s) describing how the
+    // linked person relates to the viewer gate `shareableTypes` against the live graph (42 §5.2).
+    const granted = relationshipTypesFromSubjectToViewer(id, viewerId, relationships);
     const approved = (await listInsightsForPerson(fs, key, id)).filter(
       (insight) => insight.approved,
     );
@@ -285,17 +298,19 @@ export async function buildLinkedPeopleContext(
     }
     const facts = feedable
       .flatMap((insight) =>
-        insight.facts.filter(
-          (fact) =>
-            // A `restricted` intake fact is own-context-only — never surfaced to a linked viewer (18 §8.4).
-            fact.restricted !== true &&
-            (fact.shareable || (fact.shareableWith?.includes(viewerId) ?? false)),
-        ),
+        // The single gate (42 §5.1): broadcast / per-person / type-scoped, never restricted or flagged.
+        insight.facts.filter((fact) => factSharedWithViewer(fact, viewerId, granted)),
       )
       .slice(0, MAX_LINKED_FACTS_PER_PERSON);
     for (const fact of facts) lines.push(`  · ${fact.text}`);
+    if (facts.length > 0) anyCrossShared = true;
   }
 
   if (lines.length === 0) return '';
-  return ['People from your life who appeared in this dream:', ...lines].join('\n');
+  const header = 'People from your life who appeared in this dream:';
+  // Guard the cross-shared block with the confidentiality rule, as `summarizeForContext` does (42 §3.4).
+  const preamble = anyCrossShared
+    ? [confidentialityPreamble(byId.get(viewerId)?.displayName ?? '')]
+    : [];
+  return [...preamble, header, ...lines].join('\n');
 }

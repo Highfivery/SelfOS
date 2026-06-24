@@ -207,6 +207,7 @@ export function Onboarding(): JSX.Element {
         section={findSection(meta.id)}
         adultAcknowledged={state.adultAcknowledged}
         {...(profileGender ? { profileGender } : {})}
+        portraitStale={portraitStaleness(state.session).stale}
         onAdvance={() => setActiveId(null)}
       />
     ) : (

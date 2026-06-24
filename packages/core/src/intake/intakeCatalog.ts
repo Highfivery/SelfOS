@@ -4,6 +4,7 @@ import {
   ACTIVITY_POINT_LABELS,
   resolveIntakeActivityRows,
 } from '../intimacy/activityRows';
+import type { SharingCategory } from '../people/sharingPresets';
 import type {
   BranchRule,
   IntakeSectionMeta,
@@ -33,6 +34,8 @@ export interface IntakeFormQuestion {
   private?: boolean;
   /** A sensitive answer (intimacy/trauma) → a `restricted` Insight fact, own-context-only (§8.4). */
   restricted?: boolean;
+  /** Override the section's sharing category for this question's default scope (43 §4). */
+  category?: SharingCategory;
 }
 
 export interface IntakeSectionDef {

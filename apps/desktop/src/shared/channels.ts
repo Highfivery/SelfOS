@@ -80,6 +80,7 @@ import type {
   QuestionTrend,
   Relationship,
   RelationshipInput,
+  RelationshipType,
   RelayStatus,
   Role,
   SensitivityTier,
@@ -948,6 +949,11 @@ export interface SelfosBridge {
   intakeSubmitForm(input: {
     sectionId: string;
     answers: Record<string, IntakeAnswerValue>;
+    /**
+     * Per-question relationship-type sharing scopes (43 §6). Any answered question not named here defaults to
+     * its category preset server-side. Empty array ⇒ Private (own context only).
+     */
+    sharing?: Record<string, RelationshipType[]>;
   }): Promise<IntakeState>;
   /** The one-time 18+ acknowledgement for the intimacy block (shared with guided sessions). Requires `intake.own`. */
   intakeAcknowledgeAdult(): Promise<IntakeState>;
@@ -1062,6 +1068,7 @@ export type {
   ResponsesArrivedSummary,
   Relationship,
   RelationshipInput,
+  RelationshipType,
   Role,
   SendAnswer,
   SendResult,

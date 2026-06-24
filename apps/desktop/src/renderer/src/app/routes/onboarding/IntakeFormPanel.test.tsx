@@ -5,6 +5,7 @@ import {
   ACTIVITY_LIMIT_LABELS,
   resolveIntakeActivityRows,
 } from '@selfos/core/intimacy';
+import { defaultScopeForQuestion } from '@selfos/core/intake';
 import type { IntakeSection, IntakeSectionMeta } from '@shared/channels';
 import { IntakeFormPanel } from './IntakeFormPanel';
 import { useIntakeStore } from '../../../stores/intakeStore';
@@ -38,6 +39,11 @@ const formMeta: IntakeSectionMeta = {
   ],
 };
 
+// Every basics question shares by default per its category preset (none restricted) — what the panel submits.
+const formSharing = Object.fromEntries(
+  formMeta.questions!.map((q) => [q.id, defaultScopeForQuestion('basics', q.id)]),
+);
+
 const intimacyMeta: IntakeSectionMeta = {
   id: 'intimacy',
   title: 'Intimacy & sexuality',
@@ -55,6 +61,35 @@ const intimacyMeta: IntakeSectionMeta = {
       prompt: 'Sex drive',
       required: false,
       options: ['Low', 'High'],
+    },
+  ],
+};
+
+// A NON-restricted section (health) that nonetheless holds a restricted question (substancesUsed) — the
+// catalog decides `restricted`, so the synthetic question ids must be real health ids (43 §8 bulk-confirm).
+const healthMeta: IntakeSectionMeta = {
+  id: 'health',
+  title: 'Health & body',
+  blurb: 'Body & wellbeing.',
+  restricted: false,
+  adult: false,
+  tier: 'invited',
+  mode: 'form',
+  opener: 'A few about your body.',
+  questions: [
+    {
+      id: 'sleepSchedule',
+      type: 'singleChoice',
+      prompt: 'Sleep schedule',
+      required: false,
+      options: ['Early', 'Late'],
+    },
+    {
+      id: 'substancesUsed',
+      type: 'multiChoice',
+      prompt: 'Substances you use',
+      required: false,
+      options: ['Cannabis / weed', 'None'],
     },
   ],
 };
@@ -137,6 +172,7 @@ describe('IntakeFormPanel', () => {
       expect(intakeSubmitForm).toHaveBeenCalledWith({
         sectionId: 'basics',
         answers: { pronouns: 'she/her' },
+        sharing: formSharing,
       }),
     );
     await waitFor(() => expect(onAdvance).toHaveBeenCalled());
@@ -171,6 +207,7 @@ describe('IntakeFormPanel', () => {
       expect(intakeSubmitForm).toHaveBeenCalledWith({
         sectionId: 'basics',
         answers: { likes: ['Music', 'cooking'] },
+        sharing: formSharing,
       }),
     );
   });
@@ -290,7 +327,114 @@ describe('IntakeFormPanel', () => {
       expect(intakeSubmitForm).toHaveBeenCalledWith({
         sectionId: 'intimacy',
         answers: { activities: { Bondage: 5 } },
+        // The restricted intimacy section defaults every question to Private (43 §8).
+        sharing: { drawnTo: [], activities: [] },
       }),
     );
+  });
+});
+
+describe('IntakeFormPanel — per-question sharing (43)', () => {
+  it('renders the in-context explainer and a sharing chip per question, defaulted by category', () => {
+    installMockBridge({ relationshipsList: () => Promise.resolve([]) });
+    render(
+      <IntakeFormPanel
+        meta={formMeta}
+        section={section()}
+        adultAcknowledged={false}
+        onAdvance={() => {}}
+      />,
+    );
+    // The honest "informs their AI, never shown to them" explainer is present (43 §3.3).
+    expect(screen.getByText(/inform their AI coaching/i)).toBeInTheDocument();
+    // A non-restricted basics question shares by default (the preset includes a partner) — the chip reads
+    // "shared with …", not Private. (Each chip's accessible name is "<prompt>: shared with …".)
+    expect(screen.getByRole('button', { name: /Your pronouns: shared with/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /What do you do for work\?: shared with/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('shows a per-section bulk control, "Mixed" when questions differ', () => {
+    installMockBridge({ relationshipsList: () => Promise.resolve([]) });
+    render(
+      <IntakeFormPanel
+        meta={formMeta}
+        // Seed a saved scope that differs across questions → the bulk chip reads "Mixed".
+        section={section({
+          answerSharing: { pronouns: ['partner'], occupation: [], likes: ['partner', 'friend'] },
+        })}
+        adultAcknowledged={false}
+        onAdvance={() => {}}
+      />,
+    );
+    expect(screen.getByText('Sharing for this section')).toBeInTheDocument();
+    expect(screen.getByText('Mixed')).toBeInTheDocument();
+  });
+
+  it('confirms before sharing a sensitive (restricted) answer, then carries the scope into the submit', async () => {
+    const intakeSubmitForm = vi.fn(() =>
+      Promise.resolve({
+        session: {} as never,
+        sections: [],
+        aiAvailable: true,
+        adultAcknowledged: true,
+      }),
+    );
+    installMockBridge({ intakeSubmitForm, relationshipsList: () => Promise.resolve([]) });
+    render(
+      <IntakeFormPanel
+        meta={intimacyMeta}
+        section={section({ id: 'intimacy', restricted: true })}
+        adultAcknowledged={true}
+        onAdvance={() => {}}
+      />,
+    );
+    // The libido chip starts Private (sensitive). Open it and pick Partner → a confirm appears, not applied yet.
+    fireEvent.click(screen.getByRole('button', { name: /Sex drive: private/i }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Partner' }));
+    expect(await screen.findByText(/is sensitive — share it/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Share it' }));
+
+    fireEvent.click(screen.getByRole('button', { name: /Save changes|Continue/ }));
+    await waitFor(() =>
+      expect(intakeSubmitForm).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sectionId: 'intimacy',
+          sharing: expect.objectContaining({ libido: ['partner'] }),
+        }),
+      ),
+    );
+  });
+
+  it('confirms a bulk share when a non-restricted section holds a sensitive question (health/substances)', async () => {
+    installMockBridge({ relationshipsList: () => Promise.resolve([]) });
+    render(
+      <IntakeFormPanel
+        meta={healthMeta}
+        section={section({ id: 'health' })}
+        adultAcknowledged={false}
+        onAdvance={() => {}}
+      />,
+    );
+    // Open the per-section bulk control and add Partner → because `substancesUsed` is restricted, the §8
+    // confirm must appear before anything is shared (the bulk control must not bypass it).
+    fireEvent.click(screen.getByRole('button', { name: /this whole section/i }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Partner' }));
+    expect(await screen.findByText(/includes sensitive answers/i)).toBeInTheDocument();
+  });
+
+  it('offers the one-tap "refresh your portrait" once an edit makes the portrait stale', () => {
+    installMockBridge({ relationshipsList: () => Promise.resolve([]) });
+    render(
+      <IntakeFormPanel
+        meta={formMeta}
+        section={section({ status: 'complete' })}
+        adultAcknowledged={false}
+        portraitStale={true}
+        onAdvance={() => {}}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /Refresh your portrait/i })).toBeInTheDocument();
   });
 });

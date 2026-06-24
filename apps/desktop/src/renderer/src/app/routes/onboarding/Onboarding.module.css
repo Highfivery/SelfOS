@@ -145,6 +145,72 @@
   gap: var(--space-2);
 }
 
+/* 43 — the honest in-context sharing explainer (next to the first sharing control). */
+.sharingExplainer {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-alt);
+  color: var(--color-text-secondary);
+}
+
+.sharingExplainer svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--color-text-secondary);
+}
+
+/* 43 §3.2 — the per-section bulk sharing control row. */
+.sectionSharing {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.sectionSharingLabel {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.mixedBadge {
+  flex: 0 0 auto;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+
+/* 43 §3.1/§8 — the sensitive-share confirm inside its Banner. */
+.confirmShare {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.confirmShareActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* 43 §3.5 — the inline one-tap "refresh your portrait" affordance after an edit. */
+.refreshRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-alt);
+}
+
 .reflection {
   border-left: 3px solid var(--color-accent-solid);
 }

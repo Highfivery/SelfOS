@@ -23,12 +23,24 @@ export type { LoadImage } from './QuestionImage';
  * Self-contained: plain elements + token CSS, depending only on the pure `@selfos/core/questionnaires`
  * `answering` helper — no app design-system — so it bundles into the relay Worker's static page too.
  */
+/**
+ * Per-question sharing controls (43-relationship-scoped-onboarding-sharing §3.1/§5). Supplied ONLY by the
+ * onboarding host — `@selfos/answering` stays free of the app design-system, so the host renders the actual
+ * `RelationshipScopePicker` via `renderControl`. Absent ⇒ no sharing UI (questionnaires render unchanged).
+ */
+export interface QuestionSharing {
+  /** Render the sharing control for a question's header row (e.g. a relationship-scope chip + popover). */
+  renderControl: (questionId: string) => ReactNode;
+}
+
 interface QuestionnaireFormProps {
   questions: Question[];
   answers: AnswerMap;
   onChange: (questionId: string, value: AnswerValue) => void;
   /** Supplies decrypted image bytes for any question with `media`; omit to skip image rendering. */
   loadImage?: LoadImage;
+  /** Per-question sharing controls (onboarding only, 43); omit ⇒ no sharing UI. */
+  sharing?: QuestionSharing;
   /** Crisis affordance shown below the questions; defaults to the built-in `CrisisFooter` (§8.2). */
   footer?: ReactNode;
 }
@@ -703,30 +715,45 @@ function QuestionField({
   value,
   onChange,
   loadImage,
+  sharingControl,
 }: {
   question: Question;
   value: AnswerValue | undefined;
   onChange: (questionId: string, value: AnswerValue) => void;
   loadImage?: LoadImage;
+  /** A pre-rendered per-question sharing control (43) for the header row; omit ⇒ none. */
+  sharingControl?: ReactNode;
 }): JSX.Element {
   // A plain card with a visible prompt heading — NOT <fieldset>/<legend>, whose legend renders on the card's
   // top border and gets bisected when a long prompt wraps (the visible-overlap bug). Each control carries its
   // own aria-label (single inputs) or radiogroup/group label (choices, matrix), so the prompt still names the
   // control for screen readers without an aria-labelledby that would double-label and collide with it.
+  const prompt = (
+    <p className={styles.prompt}>
+      {question.prompt}
+      {question.required ? (
+        <>
+          <span aria-hidden="true" className={styles.required}>
+            {' '}
+            *
+          </span>
+          <span className={styles.srOnly}> (required)</span>
+        </>
+      ) : null}
+    </p>
+  );
   return (
     <div className={styles.question}>
-      <p className={styles.prompt}>
-        {question.prompt}
-        {question.required ? (
-          <>
-            <span aria-hidden="true" className={styles.required}>
-              {' '}
-              *
-            </span>
-            <span className={styles.srOnly}> (required)</span>
-          </>
-        ) : null}
-      </p>
+      {sharingControl ? (
+        // 43 §3.1/§9: the sharing chip sits right-aligned beside the prompt and wraps under it at narrow
+        // widths (the chip is `flex: none`, so it never causes an inner scrollbar — the §12 DoD guard).
+        <div className={styles.promptRow}>
+          {prompt}
+          <div className={styles.sharingSlot}>{sharingControl}</div>
+        </div>
+      ) : (
+        prompt
+      )}
       {question.help ? <p className={styles.help}>{question.help}</p> : null}
       {question.media && loadImage ? (
         <QuestionImage media={question.media} loadImage={loadImage} />
@@ -741,6 +768,7 @@ export function QuestionnaireForm({
   answers,
   onChange,
   loadImage,
+  sharing,
   footer,
 }: QuestionnaireFormProps): JSX.Element {
   const visible = visibleQuestions(questions, answers);
@@ -751,6 +779,7 @@ export function QuestionnaireForm({
       value={answers[question.id]}
       onChange={onChange}
       {...(loadImage ? { loadImage } : {})}
+      {...(sharing ? { sharingControl: sharing.renderControl(question.id) } : {})}
     />
   );
 

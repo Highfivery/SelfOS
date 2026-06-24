@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { IntakeAnswerValue, IntakeState } from '@shared/channels';
+import type { IntakeAnswerValue, IntakeState, RelationshipType } from '@shared/channels';
 import { useBudgetStore } from './budgetStore';
 
 /**
@@ -19,8 +19,13 @@ interface IntakeStoreState {
   appendChunk: (delta: string) => void;
   runTurn: (sectionId: string, userText: string) => Promise<void>;
   skipSection: (sectionId: string) => Promise<void>;
-  /** Submit a structured form section's answers (no AI). Fills the profile + marks the section complete. */
-  submitForm: (sectionId: string, answers: Record<string, IntakeAnswerValue>) => Promise<void>;
+  /** Submit a structured form section's answers (no AI). Fills the profile + marks the section complete.
+   * `sharing` carries the per-question relationship-type scopes (43); unset questions default server-side. */
+  submitForm: (
+    sectionId: string,
+    answers: Record<string, IntakeAnswerValue>,
+    sharing?: Record<string, RelationshipType[]>,
+  ) => Promise<void>;
   acknowledgeAdult: () => Promise<void>;
   /** Finish a section: marks it complete + generates a light reflection (best-effort). */
   completeSection: (sectionId: string) => Promise<void>;
@@ -67,9 +72,14 @@ export const useIntakeStore = create<IntakeStoreState>((set, get) => ({
     const next = (await window.selfos?.intakeSkipSection({ sectionId })) ?? null;
     set({ busy: false, ...(next ? { state: next } : {}) });
   },
-  submitForm: async (sectionId, answers) => {
+  submitForm: async (sectionId, answers, sharing) => {
     set({ busy: true, error: null });
-    const next = (await window.selfos?.intakeSubmitForm({ sectionId, answers })) ?? null;
+    const next =
+      (await window.selfos?.intakeSubmitForm({
+        sectionId,
+        answers,
+        ...(sharing ? { sharing } : {}),
+      })) ?? null;
     set({ busy: false, ...(next ? { state: next } : {}) });
   },
   acknowledgeAdult: async () => {

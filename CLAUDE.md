@@ -389,6 +389,37 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-24 — **Build (onboarding per-question sharing — SPEC 43 BUILT; on `feat/onboarding-scoped-sharing`,
+  PR pending).** The onboarding half of the relationship-sharing group (consumes spec 42's model). Each intake
+  **form question now carries a relationship-type sharing chip** (the spec-42 `RelationshipScopePicker`),
+  **shared-by-default** per category presets (restricted intimacy/trauma ⇒ Private), with a **per-section bulk
+  control** (+ "Mixed"), the honest **"informs their AI, never shown to them"** explainer, a **sensitive-opt-in
+  confirm**, and a one-tap **"refresh your portrait"** after an edit — so the marriage/sex-counseling case
+  ("my partner's AI can use this, not my coworker's") is expressible in the flow. **Core:** new pure
+  `@selfos/core/intake/sharingCategory.ts` (`SECTION_SHARING_CATEGORY` + `defaultScopeForQuestion`/
+  `questionCategory`/`questionDefaultsPrivate`; `IntakeFormQuestion.category?` additive); `submitSectionForm(…,
+sharing?)` writes `IntakeSection.answerSharing` (defaulting every answered question from its preset);
+  `synthesizePortrait` tags each fact's `shareableTypes` via `factScopeForSection` — the **most-restrictive
+  INTERSECTION** of the section's per-question scopes, read **only** from explicit `answerSharing` (a pre-spec
+  section merely re-synthesized stays own-only — no surprise broadcast), with the normal-vs-"(sensitive)"
+  candidate split mirroring `formAnswersMessages`; a `restricted` fact stays restricted unless its answers are
+  opted in (then non-restricted + type-scoped). Intake facts still **never broadcast** (`shareable:false`) —
+  `shareableTypes` is the only share path. **IPC:** `intake:submitForm` carries `sharing` (Zod-validated +
+  active-person-scoped in the bridge). **`@selfos/answering`** gains an optional **render-prop** `sharing:
+{ renderControl(questionId) }` (the package stays free of the app design-system; the host renders the picker),
+  rendered in a `flex-wrap` question header row (no inner scrollbar at 360px) — **questionnaires pass nothing →
+  unchanged**. Code-reviewer **fix-first** (one should-fix: the per-section **bulk** control bypassed the §8
+  sensitive confirm for a restricted question inside a non-restricted section [health/substances] — now confirms
+  when sharing any sensitive default-private question; +RTL test; +documented the bounded model-attribution
+  residual in §8). Gate green: typecheck, lint, format, **714 core + 751 desktop + 11 relay** unit, **104 E2E**
+  (+1: scope basics → Partner → decrypt `answerSharing` + the fact's `shareableTypes` → the partner's context
+  has the fact behind the confidentiality preamble, the sibling's has neither; 360px overflow guard). Synced
+  spec 43 (→ Built) + 18 (§8.3 default is now per-question). **Lesson: the promoted PROFILE field (e.g.
+  `occupation`) keeps its independent spec-15 field-share (shared to all related by default) — spec 43 only
+  governs the intake ANSWER + the derived FACT, so the spec-43 E2E signal is the fact text + the confidentiality
+  preamble, never the bare promoted value (which leaks to all relatives via spec 15); and the picker chip's
+  accessible name starts with the question prompt, so a `getByLabel('<prompt>')` collides — target the textbox
+  role or use `{exact:true}` (the recurring substring-collision footgun).**
 - 2026-06-24 — **Audit + fixes (specs 37–41 post-merge review; on `fix/audit-37-41-followups`, PR open).** A
   deep audit of the five merged specs (one code-reviewer per spec) surfaced **1 BLOCKER + several should-fixes**,
   all now fixed with tests on a branch (full gate green: typecheck, lint, format, **700 core + 11 relay + 745

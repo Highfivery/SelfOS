@@ -153,8 +153,12 @@ A slice is **not** done until **all** of these pass:
 - [ ] `pnpm typecheck` clean
 - [ ] `pnpm lint` clean (ESLint) and Prettier-formatted
 - [ ] Unit/component tests for new logic (Vitest); meaningful, not trivial
-- [ ] E2E tests for **every** new user-facing surface/section, not just the happy path (Playwright);
-      include a no-horizontal-overflow / layout guard for content-heavy screens, and a geometry guard
+- [ ] E2E tests for **every** new user-facing surface/section, not just the happy path (Playwright).
+      **ALWAYS WRITE _AND RUN_ THE E2E — never defer it as "pending on-machine verification" or skip it on a
+      worktree/"needs a display" excuse (2026-06-24, forceful).** E2E runs headlessly here: `pnpm --filter
+@selfos/desktop exec electron-vite build` once, then `pnpm exec playwright test [-g "<name>"]` — the
+      `_electron.launch` harness needs no visible display. A slice is NOT done until its E2E is green.
+      Include a no-horizontal-overflow / layout guard for content-heavy screens, and a geometry guard
       for fixed-size controls (e.g. a toggle must not shrink in a flex row — assert computed
       `flex-shrink` / thumb position). **The overflow guard must catch INNER scrollbars too** — assert NO
       element has `scrollWidth > clientWidth` with computed `overflow-x: auto|scroll` (not just `main`);
@@ -384,6 +388,19 @@ placing anything. Specifically:
 ## Changelog
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
+
+- 2026-06-24 — **Feedback — HARD RULE (forceful): ALWAYS create _AND RUN_ E2E to verify work — never defer or
+  skip it.** I shipped spec 38's PR with E2E "pending on-machine verification" on a bogus "needs a display"
+  excuse. The user corrected this firmly. E2E **runs headlessly here**: `pnpm --filter @selfos/desktop exec
+electron-vite build` once, then `pnpm exec playwright test [-g "<name>"]` (the `_electron.launch` harness needs
+  no visible display — proven by running the existing suite + 2 new spec-38 tests, **90/90 green**). Sharpened
+  CLAUDE.md §7 DoD (the E2E item now leads with "ALWAYS WRITE AND RUN; a slice is NOT done until its E2E is
+  green"). Wrote the missing spec-38 E2E (draft-vs-ready + branch validation through the real builder UI; and the
+  full discoverability→export flow: seed a submitted **Private** send → the `responses-arrived` notification names
+  the responder → "View results" deep-links to Results → **Export CSV writes a real file outside the vault** and
+  the assertion confirms the numeric value is present but the **Private prose is absent**). On
+  `feat/questionnaire-lifecycle` (PR [#47]). **Lesson: E2E is runnable in this environment — the "no display"
+  claim was wrong; build once then `playwright test`, and treat green E2E as a non-negotiable gate, not a TODO.**
 
 - 2026-06-23 — **Build (AI output robustness & honest failures — SPEC 37 BUILT; on `feat/ai-output-robustness`,
   PR open).** A whole class of bugs came from brittle handling of Claude's JSON: an all-or-nothing `safeParse`

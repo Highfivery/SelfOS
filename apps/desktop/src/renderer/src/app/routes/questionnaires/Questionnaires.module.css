@@ -113,6 +113,26 @@
   font-weight: 500;
 }
 
+/* "Draft" chip — an unsent questionnaire that isn't yet valid to send (38 §3.4). */
+.rowDraft {
+  color: var(--color-text-tertiary);
+  font-weight: 500;
+}
+
+.draftBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--space-2);
+  border-radius: 999px;
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
 /* Per-row kebab menu (mirrors the Sessions list menu). */
 .menuWrap {
   position: relative;

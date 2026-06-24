@@ -19,6 +19,19 @@ import {
 } from './relayMessages';
 import styles from './Questionnaires.module.css';
 
+/**
+ * Lightweight format checks for building `mailto:`/`sms:` links (38 §3.9). A typo'd value would otherwise
+ * build a dead link; instead an invalid (non-empty) value disables that one action with a quiet hint, while
+ * Copy / Share / the raw link stay usable. Empty = allowed (the sender fills the recipient in their client).
+ */
+export function isLikelyEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+export function isLikelyPhone(value: string): boolean {
+  const trimmed = value.trim();
+  return /^\+?[\d\s().-]{7,}$/.test(trimmed) && (trimmed.match(/\d/g)?.length ?? 0) >= 7;
+}
+
 /** A labelled toggle row (the `Switch` primitive is the control only — the label is ours). Shared. */
 export function ToggleRow({
   label,
@@ -100,6 +113,15 @@ export function RelayLinkDelivery({
     window.setTimeout(() => setCopied(null), 1500);
   };
   const canShare = useMemo(() => typeof navigator !== 'undefined' && 'share' in navigator, []);
+  // Only a NON-EMPTY malformed value is an error — empty is fine (the sender addresses it in their client).
+  const emailError =
+    email.trim() !== '' && !isLikelyEmail(email)
+      ? 'That email looks off — fix it, or use Copy / Share instead.'
+      : undefined;
+  const phoneError =
+    phone.trim() !== '' && !isLikelyPhone(phone)
+      ? 'That number looks off — fix it, or use Copy / Share instead.'
+      : undefined;
 
   return (
     <Stack gap={4}>
@@ -141,7 +163,7 @@ export function RelayLinkDelivery({
         )}
       </Field>
 
-      <Field label="Email (optional)">
+      <Field label="Email (optional)" {...(emailError ? { error: emailError } : {})}>
         {(props) => (
           <TextInput
             {...props}
@@ -152,7 +174,7 @@ export function RelayLinkDelivery({
           />
         )}
       </Field>
-      <Field label="Phone (optional)">
+      <Field label="Phone (optional)" {...(phoneError ? { error: phoneError } : {})}>
         {(props) => (
           <TextInput
             {...props}
@@ -196,6 +218,7 @@ export function RelayLinkDelivery({
       <div className={styles.deliveryRow}>
         <Button
           variant="primary"
+          disabled={emailError !== undefined}
           onClick={() => {
             const subject = emailSubjectFrom(messages, senderName);
             window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
@@ -206,6 +229,7 @@ export function RelayLinkDelivery({
         </Button>
         <Button
           variant="secondary"
+          disabled={phoneError !== undefined}
           onClick={() => {
             const sms = smsBodyFrom(messages, { sender: senderName, link, pin, includePin });
             window.location.href = `sms:${encodeURIComponent(phone)}?&body=${encodeURIComponent(sms)}`;

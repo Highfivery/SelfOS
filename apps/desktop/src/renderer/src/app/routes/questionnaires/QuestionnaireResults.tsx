@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Brain, Link2, Link2Off, Lock, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
+import { Brain, Download, Link2, Link2Off, Lock, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 import { aiKeyResolved } from '../../aiAvailability';
 import type {
   AssignmentStatus,
@@ -23,6 +23,7 @@ import {
   type LineChartSeries,
 } from '../../../design-system/components';
 import { useResultsStore } from '../../../stores/resultsStore';
+import { useNotificationStore } from '../../../stores/notificationStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useSetting } from '../../../settings/useSetting';
 import { RelayLinkDelivery } from './RelayLinkDelivery';
@@ -30,11 +31,23 @@ import styles from './Questionnaires.module.css';
 
 const OPEN_STATUSES: AssignmentStatus[] = ['sent', 'opened', 'inProgress'];
 
+/** A human countdown for a relay link's expiry, so the sender knows when to re-share (38 §3.6). */
+export function formatLinkExpiry(expiresAt: string, now: number = Date.now()): string {
+  const ms = new Date(expiresAt).getTime() - now;
+  if (!Number.isFinite(ms)) return '';
+  if (ms <= 0) return 'Link expired';
+  const days = Math.ceil(ms / (24 * 60 * 60 * 1000));
+  if (days <= 1) return 'Link expires today';
+  return `Link expires in ${days} days`;
+}
+
+// Sender-facing lifecycle labels (38 §3.5). "Started" = the recipient opened and saved a draft (inProgress)
+// but hasn't submitted — the sender sees only that it's underway, never the draft answers.
 const STATUS_LABEL: Record<AssignmentStatus, string> = {
   draft: 'Draft',
   sent: 'Sent — waiting',
   opened: 'Opened — waiting',
-  inProgress: 'In progress',
+  inProgress: 'Started',
   submitted: 'Answered',
   analyzed: 'Answered',
   expired: 'Expired',
@@ -56,6 +69,14 @@ export function QuestionnaireResults({
   questionnaireId: string;
   compatibility: CompatibilityConfig | null;
 }): JSX.Element {
+  // Opening Results is "seen" (38 §3.1): clear the responses-arrived slot for this questionnaire so the bell
+  // stops counting it. A later, higher response count re-surfaces it (the onIncrease rule, 35 §11). markRead
+  // is a no-op when no such notification is showing, so this is safe on a direct (non-notification) open.
+  const markRead = useNotificationStore((s) => s.markRead);
+  useEffect(() => {
+    markRead(`responses-arrived:${questionnaireId}`);
+  }, [markRead, questionnaireId]);
+
   // A compatibility questionnaire has its own paired Results surface (alignment report + break-glass),
   // distinct from the per-recipient Standard/Private cards below.
   if (compatibility?.enabled) {
@@ -81,6 +102,24 @@ function StandardResults({ questionnaireId }: { questionnaireId: string }): JSX.
   // A relay-backed send is drainable whether it's an external ('relay') or a household ('inApp') send that
   // also minted a link (§17.13) — key off the relay material, NOT the channel.
   const hasRelayLink = results.some((r) => r.relayLinked);
+  // Export is offered once there's at least one submitted/analyzed send to export (38 §3.7).
+  const hasAnswers = results.some((r) => r.status === 'submitted' || r.status === 'analyzed');
+  const [exporting, setExporting] = useState(false);
+  const [exportMsg, setExportMsg] = useState<string | null>(null);
+
+  const onExport = async (format: 'csv' | 'json'): Promise<void> => {
+    setExporting(true);
+    setExportMsg(null);
+    try {
+      const path = await window.selfos?.assignmentsExportResults({ questionnaireId, format });
+      // null = the sender cancelled the save dialog — no message (not an error).
+      if (path) setExportMsg(`Exported to ${path} — this file is outside your encrypted vault.`);
+    } catch {
+      setExportMsg('Couldn’t export the results. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const runDrain = async (): Promise<void> => {
     setDraining(true);
@@ -183,14 +222,33 @@ function StandardResults({ questionnaireId }: { questionnaireId: string }): JSX.
     <Stack gap={3}>
       <div className={styles.resultsHead}>
         <Heading level={3}>Results</Heading>
-        {hasRelayLink ? (
-          <Button variant="secondary" onClick={() => void runDrain()} disabled={draining}>
-            <RefreshCw size={15} aria-hidden="true" />
-            {draining ? 'Checking…' : 'Check for responses'}
-          </Button>
-        ) : null}
+        <Inline gap={2} align="center">
+          {hasAnswers ? (
+            <>
+              <Button variant="secondary" onClick={() => void onExport('csv')} disabled={exporting}>
+                <Download size={15} aria-hidden="true" />
+                Export CSV
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => void onExport('json')}
+                disabled={exporting}
+              >
+                <Download size={15} aria-hidden="true" />
+                Export JSON
+              </Button>
+            </>
+          ) : null}
+          {hasRelayLink ? (
+            <Button variant="secondary" onClick={() => void runDrain()} disabled={draining}>
+              <RefreshCw size={15} aria-hidden="true" />
+              {draining ? 'Checking…' : 'Check for responses'}
+            </Button>
+          ) : null}
+        </Inline>
       </div>
       {drainMsg ? <Banner tone="info">{drainMsg}</Banner> : null}
+      {exportMsg ? <Banner tone="info">{exportMsg}</Banner> : null}
       {!aiReady ? (
         <Banner tone="info">
           Turn on AI in <Link to="/settings">Settings</Link> to analyze responses into insights.
@@ -327,6 +385,12 @@ function SendCard({
             {send.channel === 'relay'
               ? 'Sent via a private link.'
               : 'In their Inbox — also answerable via the link you shared.'}
+          </Text>
+        ) : null}
+
+        {send.expiresAt ? (
+          <Text size="sm" tone="secondary">
+            {formatLinkExpiry(send.expiresAt)}
           </Text>
         ) : null}
 

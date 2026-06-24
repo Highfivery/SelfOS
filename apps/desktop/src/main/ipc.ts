@@ -184,7 +184,7 @@ export function registerIpcHandlers(): void {
       const filePath = fakeDir
         ? join(fakeDir, suggestedName)
         : await dialog
-            .showSaveDialog({ title: 'Export dream image', defaultPath: suggestedName })
+            .showSaveDialog({ title: 'Save file', defaultPath: suggestedName })
             .then((r) => (r.canceled ? null : r.filePath));
       if (!filePath) return null;
       await writeFile(filePath, Buffer.from(bytes));
@@ -277,6 +277,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.questionnairesSave, bridge.questionnairesSave);
   handle(IpcChannels.questionnairesDelete, bridge.questionnairesDelete);
   handle(IpcChannels.questionnairesValidate, bridge.questionnairesValidate);
+  handle(IpcChannels.questionnairesSetFavorite, bridge.questionnairesSetFavorite);
   handle(IpcChannels.questionnairesListTypes, bridge.questionnairesListTypes);
   handle(IpcChannels.questionnairesAddType, bridge.questionnairesAddType);
   handle(IpcChannels.questionnairesIntimacyTopics, bridge.questionnairesIntimacyTopics);
@@ -316,6 +317,8 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.assignmentsDrain, bridge.assignmentsDrain);
   handle(IpcChannels.assignmentsRevoke, bridge.assignmentsRevoke);
   handle(IpcChannels.assignmentsReshare, bridge.assignmentsReshare);
+  handle(IpcChannels.assignmentsReAsk, bridge.assignmentsReAsk);
+  handle(IpcChannels.assignmentsExportResults, bridge.assignmentsExportResults);
   handle(IpcChannels.relayStatus, bridge.relayStatus);
   handle(IpcChannels.relayConnect, bridge.relayConnect);
   handle(IpcChannels.relayUpdate, bridge.relayUpdate);
@@ -358,6 +361,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.getNotificationState, bridge.getNotificationState);
   handle(IpcChannels.setNotificationState, bridge.setNotificationState);
   handle(IpcChannels.notificationsResponsesArrived, bridge.notificationsResponsesArrived);
+  handle(IpcChannels.notificationsRemindersDue, bridge.notificationsRemindersDue);
   handle(IpcChannels.openExternal, bridge.openExternal);
   handle(IpcChannels.updatesCheck, bridge.updatesCheck);
   handle(IpcChannels.updatesGetState, bridge.updatesGetState);

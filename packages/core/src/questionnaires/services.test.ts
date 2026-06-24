@@ -15,6 +15,7 @@ import {
   getQuestionnaire,
   listQuestionnaires,
   saveQuestionnaire,
+  setFavorite,
   validateQuestionnaire,
 } from './questionnaireService';
 import { getResponse, saveResponse } from './responseService';
@@ -73,6 +74,23 @@ describe('questionnaireService', () => {
     await deleteQuestionnaire(fs, a.id);
     expect(await getQuestionnaire(fs, key, a.id)).toBeNull();
     expect((await listQuestionnaires(fs, key)).length).toBe(1);
+  });
+
+  it('toggles favorite without bumping version, and an edit preserves it (38 §13.8)', async () => {
+    const fs = memFileSystem();
+    const created = await saveQuestionnaire(fs, key, input({ title: 'Recurring' }));
+    await setFavorite(fs, key, created.id, true);
+    const q = await getQuestionnaire(fs, key, created.id);
+    expect(q?.favorite).toBe(true);
+    expect(q?.version).toBe(created.version); // favoriting is not a content edit — no version bump
+
+    // Editing the questions preserves the favorite flag (it isn't author-supplied via the builder).
+    await saveQuestionnaire(fs, key, input({ id: created.id, title: 'Recurring v2' }));
+    expect((await getQuestionnaire(fs, key, created.id))?.favorite).toBe(true);
+
+    // Un-favoriting clears the flag entirely (absence = not favorited).
+    await setFavorite(fs, key, created.id, false);
+    expect((await getQuestionnaire(fs, key, created.id))?.favorite).toBeUndefined();
   });
 
   it('stores definitions encrypted at rest', async () => {
@@ -136,6 +154,58 @@ describe('validateQuestionnaire', () => {
         }),
       ).join(' '),
     ).toContain('missing question');
+  });
+
+  it('flags a branch on a LATER question (a dead-end that can never appear, 38 §3.9)', () => {
+    expect(
+      validateQuestionnaire(
+        input({
+          questions: [
+            question({ id: 'q1', branch: { whenQuestionId: 'q2', equals: true, action: 'show' } }),
+            question({ id: 'q2', type: 'yesNo', branch: undefined }),
+          ],
+        }),
+      ).join(' '),
+    ).toContain('later question');
+  });
+
+  it('flags a branch that references itself (38 §3.9)', () => {
+    expect(
+      validateQuestionnaire(
+        input({
+          questions: [
+            question({ id: 'q1', branch: { whenQuestionId: 'q1', equals: true, action: 'show' } }),
+          ],
+        }),
+      ).join(' '),
+    ).toContain('itself');
+  });
+
+  it('flags a form where EVERY question is conditional (could render empty, 38 §3.9)', () => {
+    // Both questions are branched, so nothing is guaranteed to appear — the form could be empty.
+    expect(
+      validateQuestionnaire(
+        input({
+          questions: [
+            question({ id: 'q1', type: 'yesNo', branch: { whenQuestionId: 'q1', action: 'show' } }),
+            question({ id: 'q2', branch: { whenQuestionId: 'q1', equals: true, action: 'show' } }),
+          ],
+        }),
+      ).join(' '),
+    ).toContain('always appear');
+  });
+
+  it('accepts a valid backward branch (trigger earlier, plus an unconditional question)', () => {
+    expect(
+      validateQuestionnaire(
+        input({
+          questions: [
+            question({ id: 'q1', type: 'yesNo' }),
+            question({ id: 'q2', branch: { whenQuestionId: 'q1', equals: true, action: 'show' } }),
+          ],
+        }),
+      ),
+    ).toEqual([]);
   });
 });
 

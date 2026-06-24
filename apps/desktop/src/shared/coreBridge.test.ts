@@ -2872,9 +2872,128 @@ describe('notifications (35)', () => {
     });
     await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
 
-    expect(await bridge.notificationsResponsesArrived()).toEqual([
-      { questionnaireId: q.id, title: 'Weekly check-in', submittedCount: 1 },
-    ]);
+    const summaries = await bridge.notificationsResponsesArrived();
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]).toMatchObject({
+      questionnaireId: q.id,
+      title: 'Weekly check-in',
+      submittedCount: 1,
+      // The newest responder names the notification ("Mara answered …"), with a submit time (38 §4.2).
+      latestRecipientName: 'Mara',
+    });
+    expect(typeof summaries[0]?.at).toBe('string');
+  });
+
+  it('re-asks a household questionnaire in one action — a fresh send, no re-authoring (38 §3.3)', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    const recipient = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: recipient.id, roleId: 'member', pin: null });
+    const q = await bridge.questionnairesSave({
+      title: 'Weekly check-in',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: recipient.id },
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'How are we doing?', required: true }],
+    });
+    const first = await bridge.assignmentsCreate({ questionnaireId: q.id });
+
+    const reAsked = await bridge.assignmentsReAsk({ questionnaireId: q.id });
+    expect(reAsked.assignment.id).not.toBe(first.assignment.id);
+    expect(reAsked.assignment.questionnaireId).toBe(q.id);
+    expect(reAsked.assignment.status).toBe('sent');
+    // Both sends now exist for this questionnaire — trends aggregate every submitted send (no re-authoring).
+    const results = await bridge.assignmentsResults(q.id);
+    expect(results).toHaveLength(2);
+    void ownerId;
+  });
+
+  it('refuses to re-ask a compatibility questionnaire (use Duplicate instead, 38 §3.3)', async () => {
+    const { bridge } = await freshOwner();
+    const other = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
+    const q = await bridge.questionnairesSave({
+      title: 'Compatibility',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: other.id },
+      compatibility: { enabled: true, visibility: 'sharedReport' },
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'How connected?', required: true }],
+    });
+    await expect(bridge.assignmentsReAsk({ questionnaireId: q.id })).rejects.toThrow(
+      /compatibility/i,
+    );
+  });
+
+  it('does not nudge about a freshly-sent (within-window) unanswered questionnaire (38 §3.3)', async () => {
+    const { bridge } = await freshOwner();
+    const recipient = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: recipient.id, roleId: 'member', pin: null });
+    const q = await bridge.questionnairesSave({
+      title: 'Weekly check-in',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: recipient.id },
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'How are we doing?', required: true }],
+    });
+    await bridge.assignmentsCreate({ questionnaireId: q.id });
+    // Just sent → still inside the 7-day window → no reminder yet (and the relay drain never auto-runs).
+    expect(await bridge.notificationsRemindersDue()).toEqual([]);
+  });
+
+  it('denies the reminders read to a person without questionnaires.viewResults (a Guest)', async () => {
+    const { bridge } = await freshOwner();
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+    expect(await bridge.notificationsRemindersDue()).toEqual([]);
+  });
+
+  it('exports results to a file outside the vault; a Private send contributes numeric only (38 §3.7)', async () => {
+    const { bridge, ownerId, host } = await freshOwner();
+    // Capture what gets written to disk (the export bytes) without a real save dialog.
+    const saved: { name: string; bytes: Uint8Array }[] = [];
+    host.host.saveImageFile = (name, bytes) => {
+      saved.push({ name, bytes });
+      return Promise.resolve(`/tmp/${name}`);
+    };
+    const recipient = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: recipient.id, roleId: 'member', pin: null });
+    const q = await bridge.questionnairesSave({
+      title: 'Weekly check-in',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: recipient.id },
+      questions: [
+        { id: 'prose', type: 'shortText', prompt: 'Anything to add?', required: false },
+        {
+          id: 'rate',
+          type: 'rating',
+          prompt: 'Rate it',
+          required: true,
+          scale: { min: 1, max: 5 },
+        },
+      ],
+    });
+    // PRIVATE send → the prose answer must be excluded from the export (numeric only).
+    const { assignment } = await bridge.assignmentsCreate({
+      questionnaireId: q.id,
+      privacy: 'private',
+    });
+    await bridge.sessionSetActive({ personId: recipient.id });
+    await bridge.assignmentsSubmit({
+      assignmentId: assignment.id,
+      answers: [
+        { questionId: 'prose', value: 'secret prose' },
+        { questionId: 'rate', value: 4 },
+      ],
+    });
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+
+    const path = await bridge.assignmentsExportResults({ questionnaireId: q.id, format: 'csv' });
+    expect(path).toBe('/tmp/weekly-check-in.csv');
+    const csv = new TextDecoder().decode(saved[0]?.bytes);
+    expect(csv).toContain('Rate it'); // the numeric question is exported
+    expect(csv).toContain(',4'); // its value
+    expect(csv).not.toContain('secret prose'); // a Private send's prose never reaches the file
   });
 
   it('opens only http(s) URLs externally, via the host shell', async () => {

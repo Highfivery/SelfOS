@@ -3,8 +3,9 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import type { SendResult } from '@shared/schemas';
-import { QuestionnaireResults } from './QuestionnaireResults';
+import { QuestionnaireResults, formatLinkExpiry } from './QuestionnaireResults';
 import { useResultsStore } from '../../../stores/resultsStore';
+import { useNotificationStore } from '../../../stores/notificationStore';
 import { useSettingsStore } from '../../../settings/settingsStore';
 import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
 
@@ -24,6 +25,7 @@ afterEach(() => {
     loaded: false,
     loading: false,
   });
+  useNotificationStore.getState().reset();
   useSettingsStore.setState({ values: {} });
 });
 
@@ -49,6 +51,52 @@ describe('QuestionnaireResults', () => {
     installMockBridge({ assignmentsResults: () => Promise.resolve([]) });
     renderResults();
     expect(await screen.findByText(/haven’t sent this questionnaire yet/i)).toBeInTheDocument();
+  });
+
+  it('marks the responses-arrived notification seen on open (38 §3.1)', async () => {
+    installMockBridge({ assignmentsResults: () => Promise.resolve([]) });
+    await useNotificationStore.getState().load();
+    useNotificationStore.getState().setCandidates([
+      {
+        kind: 'responses-arrived',
+        coalesceKey: 'responses-arrived:q1',
+        signature: '1',
+        title: 'Angel answered “Our week”',
+      },
+    ]);
+    const slot = (): boolean | undefined =>
+      useNotificationStore
+        .getState()
+        .notifications.find((n) => n.coalesceKey === 'responses-arrived:q1')?.read;
+    expect(slot()).toBe(false); // unread before the sender opens Results
+    renderResults();
+    await waitFor(() => expect(slot()).toBe(true)); // opening Results = "seen"
+  });
+
+  it('exports results to a file outside the vault and confirms the path (38 §3.7)', async () => {
+    const assignmentsExportResults = vi.fn(() => Promise.resolve('/tmp/our-week.csv'));
+    installMockBridge({
+      assignmentsExportResults,
+      assignmentsResults: () =>
+        Promise.resolve([send({ status: 'submitted', answers: [{ prompt: 'Q', answer: 'A' }] })]),
+    });
+    renderResults();
+    await screen.findByText('Mara');
+    await userEvent.click(screen.getByRole('button', { name: /export csv/i }));
+    expect(assignmentsExportResults).toHaveBeenCalledWith({ questionnaireId: 'q1', format: 'csv' });
+    expect(await screen.findByText(/outside your encrypted vault/i)).toBeInTheDocument();
+  });
+
+  it('surfaces a relay link’s expiry on an open send (38 §3.6)', async () => {
+    const future = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+    installMockBridge({
+      assignmentsResults: () =>
+        Promise.resolve([
+          send({ relayLinked: true, channel: 'relay', status: 'sent', expiresAt: future }),
+        ]),
+    });
+    renderResults();
+    expect(await screen.findByText(/link expires in 3 days/i)).toBeInTheDocument();
   });
 
   it('shows the raw answers for a Standard, submitted send', async () => {
@@ -294,5 +342,16 @@ describe('QuestionnaireResults', () => {
     ).toBeInTheDocument();
     expect(screen.getByDisplayValue('112233')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^email$/i })).toBeInTheDocument();
+  });
+});
+
+describe('formatLinkExpiry (38 §3.6)', () => {
+  const now = Date.UTC(2026, 5, 23);
+  it('counts down days, names today, and reports an expired link', () => {
+    expect(formatLinkExpiry(new Date(now + 3 * 864e5).toISOString(), now)).toBe(
+      'Link expires in 3 days',
+    );
+    expect(formatLinkExpiry(new Date(now + 1000).toISOString(), now)).toBe('Link expires today');
+    expect(formatLinkExpiry(new Date(now - 864e5).toISOString(), now)).toBe('Link expired');
   });
 });

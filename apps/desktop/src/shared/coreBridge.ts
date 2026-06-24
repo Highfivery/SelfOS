@@ -91,6 +91,7 @@ import {
   type DreamShareTarget,
   type Person,
   type PersonNotificationState,
+  type ReminderDueSummary,
   type ResponsesArrivedSummary,
   type Questionnaire,
   type Relationship,
@@ -258,7 +259,11 @@ import {
   submitResponse,
   suggestQuestionnaires,
   validateQuestionnaire,
+  setFavorite,
+  buildResultsExport,
+  exportMimeType,
   type AiDeps,
+  type ExportSend,
   type TrendSend,
 } from '@selfos/core/questionnaires';
 import {
@@ -1753,6 +1758,14 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // Pure pre-flight check — exposes nothing sensitive, so no vault/capability gate.
       return validateQuestionnaire(QuestionnaireInputSchema.parse(input));
     },
+    questionnairesSetFavorite: async (input): Promise<void> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) return;
+      const { id, favorite } = z
+        .object({ id: z.string().min(1), favorite: z.boolean() })
+        .parse(input);
+      await setFavorite(ctx.fs, ctx.key, id, favorite);
+    },
     questionnairesListTypes: async (): Promise<string[]> => {
       const ctx = await host.vaultAndKey();
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) return [];
@@ -2242,6 +2255,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           privacy: a.privacy,
           createdAt: a.createdAt,
           analyzed: analyzed.has(a.id),
+          // Surface the link expiry only for a still-open relay-linked send — once submitted/revoked/expired
+          // the countdown is moot (38 §3.6).
+          ...(a.relay &&
+          a.expiresAt &&
+          (a.status === 'sent' || a.status === 'opened' || a.status === 'inProgress')
+            ? { expiresAt: a.expiresAt }
+            : {}),
           ...(a.status === 'submitted' ? { submittedAt: a.updatedAt } : {}),
           ...(a.declineNote !== undefined ? { declineNote: a.declineNote } : {}),
           ...(answers ? { answers } : {}),
@@ -2870,6 +2890,162 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         host.relay.fetch,
       );
       return reshareLink(ctx.fs, ctx.key, client, config.endpointUrl, assignment);
+    },
+    assignmentsReAsk: async (input): Promise<InAppSendResult> => {
+      // Re-send the same questionnaire to the same bound recipient in one action (38 §3.3), mirroring the
+      // original delivery, and auto-revoke the prior open link so it can't double-submit (38 §3.6).
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create')))
+        throw new Error('Not permitted');
+      const personId = await activePersonId();
+      if (!personId) throw new Error('No active person');
+      const { questionnaireId } = z.object({ questionnaireId: z.string().min(1) }).parse(input);
+      const def = await getQuestionnaire(ctx.fs, ctx.key, questionnaireId);
+      if (!def) throw new Error('Questionnaire not found');
+      if (def.compatibility?.enabled) {
+        throw new Error(
+          'Re-asking a compatibility questionnaire isn’t supported yet — use Duplicate.',
+        );
+      }
+      // The sender's prior sends of THIS questionnaire, newest first — replicate the last one's privacy.
+      const prior = (await listAssignments(ctx.fs, ctx.key, { senderPersonId: personId })).filter(
+        (a) => a.questionnaireId === questionnaireId,
+      );
+      const last = prior[0];
+      const senderName = (await getPerson(ctx.fs, ctx.key, personId))?.displayName ?? 'Someone';
+      const senderVisible = last?.senderVisibleToRecipient ?? true;
+      const relayConfig = (await activePersonCan(ctx.fs, ctx.key, 'questionnaires.sendExternal'))
+        ? await readRelayConfig(ctx.fs, ctx.key)
+        : null;
+      const client = relayConfig
+        ? createRelayHttpClient(relayConfig.endpointUrl, relayConfig.drainSecret, host.relay.fetch)
+        : null;
+      // Auto-revoke every still-open relay-linked prior send's mailbox so an old link can't be reopened.
+      if (client) {
+        for (const a of prior) {
+          if (
+            a.relay &&
+            (a.status === 'sent' || a.status === 'opened' || a.status === 'inProgress')
+          ) {
+            await revokeRelayForDeletion(ctx.fs, ctx.key, client, a.id);
+          }
+        }
+      }
+
+      // External-bound → a fresh relay link (requires a relay).
+      if (def.recipient?.kind === 'external') {
+        if (!relayConfig || !client) {
+          throw new Error('No relay is connected. Ask an admin to set one up in Settings → Relay.');
+        }
+        const bound = def.recipient;
+        const privacy = last?.privacy ?? 'private';
+        const { assignment, link, pin } = await createRelaySend(ctx.fs, ctx.key, client, {
+          questionnaireId,
+          senderPersonId: personId,
+          senderName,
+          recipient: {
+            kind: 'external',
+            ...(bound.displayName !== undefined ? { displayName: bound.displayName } : {}),
+            ...(bound.email !== undefined ? { email: bound.email } : {}),
+            ...(bound.phone !== undefined ? { phone: bound.phone } : {}),
+          },
+          senderVisibleToRecipient: senderVisible,
+          privacy,
+          disclosure: externalSendDisclosure(
+            senderVisible ? senderName : 'the person who sent this',
+            privacy,
+          ),
+          endpointUrl: relayConfig.endpointUrl,
+        });
+        return { assignment, link, pin };
+      }
+
+      // Household person → in-app send + a unified link when a relay is connected.
+      if (def.recipient?.kind !== 'person') throw new Error('This questionnaire has no recipient.');
+      const recipientPersonId = def.recipient.personId;
+      if (!(await getPerson(ctx.fs, ctx.key, recipientPersonId)))
+        throw new Error('Recipient not found');
+      const privacy = last?.privacy ?? 'standard';
+      const assignment = await createAssignment(ctx.fs, ctx.key, {
+        questionnaireId,
+        senderPersonId: personId,
+        recipient: { kind: 'person' as const, personId: recipientPersonId },
+        channel: 'inApp',
+        privacy,
+        senderVisibleToRecipient: senderVisible,
+      });
+      if (!client || !relayConfig) return { assignment };
+      try {
+        const { link, pin } = await attachRelayLink(ctx.fs, ctx.key, client, assignment.id, {
+          senderName,
+          senderVisibleToRecipient: senderVisible,
+          disclosure: externalSendDisclosure(
+            senderVisible ? senderName : 'the person who sent this',
+            privacy,
+          ),
+          endpointUrl: relayConfig.endpointUrl,
+        });
+        return { assignment, link, pin };
+      } catch {
+        return {
+          assignment,
+          linkError: 'We couldn’t create the link — open Results to resend it.',
+        };
+      }
+    },
+    assignmentsExportResults: async (input): Promise<string | null> => {
+      // Export a questionnaire's results to a file OUTSIDE the vault (38 §3.7). The privacy boundary is
+      // enforced HERE (the bridge), not the renderer: a Standard send exports all answers; a Private send
+      // exports only its NUMERIC values (rating/slider/matrix/allocation), never prose — exactly as Results.
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.viewResults')))
+        throw new Error('Not permitted');
+      const personId = await activePersonId();
+      if (!personId) throw new Error('No active person');
+      const { questionnaireId, format } = z
+        .object({ questionnaireId: z.string().min(1), format: z.enum(['csv', 'json']) })
+        .parse(input);
+      const def = await getQuestionnaire(ctx.fs, ctx.key, questionnaireId);
+      if (!def) throw new Error('Questionnaire not found');
+      const sends = (await listAssignments(ctx.fs, ctx.key, { senderPersonId: personId })).filter(
+        (a) => a.questionnaireId === questionnaireId,
+      );
+      const numericTypes = new Set(['rating', 'slider', 'matrix', 'allocation']);
+      const exportSends: ExportSend[] = [];
+      for (const a of sends) {
+        const recipientName = await recipientDisplayName(ctx.fs, ctx.key, a);
+        const answers: { prompt: string; answer: string }[] = [];
+        if (a.status === 'submitted') {
+          const snapshot = await getAssignmentSnapshot(ctx.fs, ctx.key, a.id);
+          const response = await getResponse(ctx.fs, ctx.key, a.id);
+          if (snapshot && response) {
+            const byId = new Map(response.answers.map((ans) => [ans.questionId, ans.value]));
+            for (const q of snapshot.questions) {
+              // Private sends contribute ONLY numeric values (consistent with trends, §3.2); prose excluded.
+              if (a.privacy === 'private' && !numericTypes.has(q.type)) continue;
+              answers.push({ prompt: q.prompt, answer: formatAnswerForDisplay(q, byId.get(q.id)) });
+            }
+          }
+        }
+        exportSends.push({
+          recipientName,
+          status: a.status,
+          privacy: a.privacy,
+          ...(a.status === 'submitted' ? { submittedAt: a.updatedAt } : {}),
+          answers,
+        });
+      }
+      const text = buildResultsExport(def.title, exportSends, format);
+      const slug =
+        def.title
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '') || 'results';
+      return host.saveImageFile(
+        `${slug}.${format}`,
+        new TextEncoder().encode(text),
+        exportMimeType(format),
+      );
     },
     questionnairesShareLink: async (
       questionnaireId,
@@ -3501,18 +3677,66 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // already in the vault, so no network is added (35 §3.6/§11).
       const sends = await listAssignments(ctx.fs, ctx.key, { senderPersonId: personId });
       const counts = new Map<string, number>();
+      // The most recent answered send per questionnaire (by submit time ≈ updatedAt) — names the
+      // notification ("Angel answered …") and orders it (38 §4.2).
+      const latest = new Map<string, Assignment>();
       for (const a of sends) {
         // Count both 'submitted' and 'analyzed' — a response the sender already analyzed still ARRIVED,
         // so the count stays a monotonic "responses received" tally. Counting only 'submitted' would make
         // analyzing one a 2→1 decrease, which `onIncrease` never re-surfaces, hiding a still-pending one.
         if (a.status !== 'submitted' && a.status !== 'analyzed') continue;
         counts.set(a.questionnaireId, (counts.get(a.questionnaireId) ?? 0) + 1);
+        const cur = latest.get(a.questionnaireId);
+        if (!cur || a.updatedAt > cur.updatedAt) latest.set(a.questionnaireId, a);
       }
       const out: ResponsesArrivedSummary[] = [];
       for (const [questionnaireId, submittedCount] of counts) {
         const def = await getQuestionnaire(ctx.fs, ctx.key, questionnaireId);
         if (!def) continue; // a deleted questionnaire — nothing to navigate to
-        out.push({ questionnaireId, title: def.title, submittedCount });
+        const newest = latest.get(questionnaireId);
+        if (!newest) continue; // unreachable (counts ⊆ latest), but keeps the index access total
+        out.push({
+          questionnaireId,
+          title: def.title,
+          submittedCount,
+          latestRecipientName: await recipientDisplayName(ctx.fs, ctx.key, newest),
+          at: newest.updatedAt,
+        });
+      }
+      return out;
+    },
+    notificationsRemindersDue: async (): Promise<ReminderDueSummary[]> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.viewResults')))
+        return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      // The sender's still-open sends past the 7-day window, grouped by questionnaire. Local read — no
+      // background network, no scheduler; the nudge is recomputed on the existing launch/focus tick (35 §3.6).
+      const WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+      const now = Date.now();
+      const sends = await listAssignments(ctx.fs, ctx.key, { senderPersonId: personId });
+      const groups = new Map<string, { count: number; newest: Assignment }>();
+      for (const a of sends) {
+        // Still awaiting an answer (not submitted/declined/expired/revoked) AND past the window.
+        if (a.status !== 'sent' && a.status !== 'opened' && a.status !== 'inProgress') continue;
+        if (now - new Date(a.createdAt).getTime() < WINDOW_MS) continue;
+        const cur = groups.get(a.questionnaireId);
+        groups.set(a.questionnaireId, {
+          count: (cur?.count ?? 0) + 1,
+          newest: !cur || a.createdAt > cur.newest.createdAt ? a : cur.newest,
+        });
+      }
+      const out: ReminderDueSummary[] = [];
+      for (const [questionnaireId, { count, newest }] of groups) {
+        const def = await getQuestionnaire(ctx.fs, ctx.key, questionnaireId);
+        if (!def) continue;
+        out.push({
+          questionnaireId,
+          title: def.title,
+          recipientName: await recipientDisplayName(ctx.fs, ctx.key, newest),
+          count,
+        });
       }
       return out;
     },

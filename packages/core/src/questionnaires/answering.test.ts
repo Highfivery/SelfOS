@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { Question } from '../schemas';
+import { MAX_RESPONSE_BYTES } from '../relay/relayLimits';
 import {
   allocationTotal,
+  estimateSealedResponseBytes,
   formatAnswerForDisplay,
   isAnswered,
   isQuestionVisible,
+  responseSizeGuard,
   unansweredRequired,
   visibleQuestions,
 } from './answering';
@@ -219,5 +222,33 @@ describe('answering — formatAnswerForDisplay', () => {
 
   it('returns an empty string for an unanswered value', () => {
     expect(formatAnswerForDisplay(q({ id: 'a', type: 'shortText' }), undefined)).toBe('');
+  });
+});
+
+describe('responseSizeGuard (38 §3.9)', () => {
+  it('passes a normal-sized response', () => {
+    const payload = { kind: 'submit', answers: [{ questionId: 'q1', value: 'Doing well' }] };
+    const check = responseSizeGuard(payload);
+    expect(check.ok).toBe(true);
+    expect(check.maxBytes).toBe(MAX_RESPONSE_BYTES);
+  });
+
+  it('fails a response whose sealed size would exceed the relay cap', () => {
+    // A ~250 KB free-text answer base64-expands past the 256 KB sealed cap.
+    const payload = { kind: 'submit', answers: [{ questionId: 'q1', value: 'x'.repeat(250_000) }] };
+    const check = responseSizeGuard(payload);
+    expect(check.ok).toBe(false);
+    expect(check.estimatedBytes).toBeGreaterThan(MAX_RESPONSE_BYTES);
+  });
+
+  it('estimates the SEALED size above the raw plaintext (base64 + envelope overhead)', () => {
+    const payload = { value: 'y'.repeat(1000) };
+    const raw = new TextEncoder().encode(JSON.stringify(payload)).length;
+    expect(estimateSealedResponseBytes(payload)).toBeGreaterThan(raw);
+  });
+
+  it('shares the relay cap constant (the client guard can’t drift from the server)', () => {
+    // The guard reports MAX_RESPONSE_BYTES — the SAME constant the relay Worker enforces.
+    expect(responseSizeGuard({}).maxBytes).toBe(MAX_RESPONSE_BYTES);
   });
 });

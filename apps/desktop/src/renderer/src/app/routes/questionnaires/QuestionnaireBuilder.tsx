@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Copy, ImagePlus, Link2, Plus, Send, Sparkles, Trash2 } from 'lucide-react';
-import { ALLOWED_IMAGE_MIME, MAX_IMAGE_BYTES } from '@selfos/core/questionnaires';
+import {
+  ALLOWED_IMAGE_MIME,
+  MAX_IMAGE_BYTES,
+  validateQuestionnaire,
+} from '@selfos/core/questionnaires';
 import { aiKeyResolved } from '../../aiAvailability';
 import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
 import { useSetting } from '../../../settings/useSetting';
@@ -306,6 +310,7 @@ export function QuestionnaireBuilder({
   compat,
   initialRecipient,
   initialShare,
+  initialView,
   onDuplicate,
   onDone,
 }: {
@@ -317,6 +322,8 @@ export function QuestionnaireBuilder({
   initialRecipient?: Recipient;
   // Opened via the list "Share link" kebab action (§17.14c) — auto-fetch the shareable link on mount.
   initialShare?: boolean;
+  // Opened via a `responses-arrived` notification's "View results" deep-link (38 §3.1) — start on Results.
+  initialView?: 'results';
   onDuplicate?: (seed: BuilderSeed) => void;
   onDone: () => void;
 }): JSX.Element {
@@ -324,7 +331,6 @@ export function QuestionnaireBuilder({
   const remove = useQuestionnaireStore((s) => s.remove);
   const load = useQuestionnaireStore((s) => s.load);
   const sendStates = useQuestionnaireStore((s) => s.sendStates);
-  const validate = useQuestionnaireStore((s) => s.validate);
   const customTypes = useQuestionnaireStore((s) => s.customTypes);
   const addType = useQuestionnaireStore((s) => s.addType);
   const storeImage = useQuestionnaireStore((s) => s.storeImage);
@@ -422,6 +428,30 @@ export function QuestionnaireBuilder({
   const [refreshingLink, setRefreshingLink] = useState(false);
   const [shareMsg, setShareMsg] = useState<string | null>(null);
   const senderName = useSessionStore((s) => s.activePerson?.displayName ?? 'Someone');
+  // "Ask again" (38 §3.3): one-action re-send of the same questionnaire to the same recipient. On success
+  // we surface the new link (relay) or a calm confirmation; the prior open link is auto-revoked in the bridge.
+  const [askResult, setAskResult] = useState<{ link?: string; pin?: string } | null>(null);
+  const [askConfirmed, setAskConfirmed] = useState(false);
+
+  const onAskAgain = async (): Promise<void> => {
+    if (!saved) return;
+    setBusy(true);
+    setShareMsg(null);
+    setAskResult(null);
+    setAskConfirmed(false);
+    try {
+      const result = await window.selfos?.assignmentsReAsk({ questionnaireId: saved.id });
+      if (result) {
+        if (result.link && result.pin) setAskResult({ link: result.link, pin: result.pin });
+        else setAskConfirmed(true);
+        await load(); // refresh the Sent · <date> (N times) badge
+      }
+    } catch (e) {
+      setShareMsg(e instanceof Error ? e.message : 'Could not re-send this questionnaire.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   // regenerate=false: re-show the EXISTING link/PIN (the default — clicking Share link doesn't change it).
   // regenerate=true: the manual Refresh next to the link → mint a fresh link + PIN, revoking the old.
@@ -458,10 +488,12 @@ export function QuestionnaireBuilder({
   // Edit ⇄ Preview ⇄ Results. Preview renders the live drafts as the recipient sees them; Results (only
   // for a saved questionnaire, and only with viewResults) shows its sends + per-send outcome. A SENT
   // questionnaire opens read-only, so it starts on Preview (Edit isn't offered).
-  const [mode, setMode] = useState<BuilderMode>(() =>
-    questionnaire && sendStates[questionnaire.id] ? 'preview' : 'edit',
-  );
   const canViewResults = useSessionStore((s) => s.can('questionnaires.viewResults'));
+  const [mode, setMode] = useState<BuilderMode>(() => {
+    // A notification deep-link opens straight on Results (38 §3.1) when allowed and the questionnaire is saved.
+    if (initialView === 'results' && questionnaire !== null && canViewResults) return 'results';
+    return questionnaire && sendStates[questionnaire.id] ? 'preview' : 'edit';
+  });
   const showResults = saved !== null && canViewResults;
   const previewQuestions = drafts
     .filter((d) => d.prompt.trim() !== '')
@@ -591,10 +623,15 @@ export function QuestionnaireBuilder({
     }
   };
 
-  /** The full set of blocking problems (client-side range/alt checks + the engine's validate). */
-  const computeProblems = async (): Promise<string[]> => {
+  /**
+   * The full set of blocking problems (client-side range/alt checks + the engine's `validateQuestionnaire`).
+   * Synchronous: `validateQuestionnaire` is the SAME pure function the bridge's `validate` runs (it just
+   * Zod-parses first), so computing it in the renderer is equivalent and lets the live Draft state +
+   * disabled-Send react instantly (38 §3.4).
+   */
+  const computeProblems = (): string[] => {
     // Only complete (non-blank-prompt) drafts become questions — a blank in-progress row is dropped on
-    // save/send, so it never blocks. validate(input()) then catches a title-only draft (≥1 question needed).
+    // save/send, so it never blocks. validateQuestionnaire then catches a title-only draft (≥1 question).
     const live = drafts.filter((d) => d.prompt.trim() !== '');
     const rangeProblems = live
       .filter(
@@ -607,19 +644,24 @@ export function QuestionnaireBuilder({
     const altProblems = live
       .filter((d) => d.media && d.media.alt.trim() === '')
       .map((d) => `The image on "${d.prompt.trim()}" needs a description (alt text).`);
-    return [...rangeProblems, ...altProblems, ...(await validate(input()))];
+    return [...rangeProblems, ...altProblems, ...validateQuestionnaire(input())];
   };
 
-  const onCheck = async (): Promise<void> => {
+  // Live validity (38 §3.4): an unsent questionnaire that isn't valid-to-send is a Draft — a badge shows it
+  // and Send is disabled with the reasons. Computed each render; `validateQuestionnaire` is cheap pure logic.
+  const liveProblems = computeProblems();
+  const isDraft = !isSent && liveProblems.length > 0;
+
+  const onCheck = (): void => {
     setJustSaved(false);
-    setProblems(await computeProblems());
+    setProblems(computeProblems());
   };
 
   // Send: a complete questionnaire must be saved (so the snapshot matches what's on screen) before the
   // send panel can freeze it. We validate, save (any unsaved edits), then reveal the recipient/privacy
   // picker (08 §16.3 — sending still saves first).
   const onOpenSend = async (): Promise<void> => {
-    const found = await computeProblems();
+    const found = computeProblems();
     if (found.length > 0) {
       setProblems(found);
       return;
@@ -703,9 +745,17 @@ export function QuestionnaireBuilder({
     <Stack gap={4}>
       <div className={styles.builderHeader}>
         <Stack gap={1}>
-          <Heading level={3}>
-            {saved ? (isSent ? 'Questionnaire' : 'Edit questionnaire') : 'New questionnaire'}
-          </Heading>
+          <Inline gap={2} align="center">
+            <Heading level={3}>
+              {saved ? (isSent ? 'Questionnaire' : 'Edit questionnaire') : 'New questionnaire'}
+            </Heading>
+            {/* A questionnaire that isn't valid-to-send reads as a Draft (38 §3.4) — not yet sendable. */}
+            {isDraft ? (
+              <span className={styles.draftBadge} title="Not ready to send yet">
+                Draft
+              </span>
+            ) : null}
+          </Inline>
           <Text size="sm" tone="secondary">
             For: <strong>{recipientLabel}</strong>
             {sentState ? (
@@ -826,15 +876,28 @@ export function QuestionnaireBuilder({
               {resend.ready ? 'You can ask again now.' : `${resend.message}.`}
             </Text>
           ) : null}
+          {shareMsg ? <Banner tone="warning">{shareMsg}</Banner> : null}
+          {askConfirmed ? (
+            <Banner tone="info">Asked again — it’s back in their Inbox.</Banner>
+          ) : null}
+          {askResult?.link && askResult.pin ? (
+            <RelayLinkDelivery
+              link={askResult.link}
+              pin={askResult.pin}
+              senderName={senderName}
+              sensitive={effectiveSensitivity !== 'standard'}
+              note="A fresh link — the previous one no longer works."
+            />
+          ) : null}
           <div className={styles.footer}>
             <div className={styles.footerActions}>
               <Button
                 variant="primary"
-                onClick={() => void onOpenSend()}
+                onClick={() => (compatEnabled ? void onOpenSend() : void onAskAgain())}
                 disabled={busy || !(resend?.ready ?? true)}
               >
                 <Send size={16} aria-hidden="true" />
-                Send again
+                {compatEnabled ? 'Send again' : 'Ask again'}
               </Button>
               {duplicateButton}
               <Button variant="secondary" onClick={onDone} disabled={busy}>
@@ -1447,8 +1510,15 @@ export function QuestionnaireBuilder({
             <Banner tone="info">Saved. You can send it now, or keep editing.</Banner>
           ) : null}
 
+          {/* A saved-but-incomplete questionnaire keeps Send disabled with the reasons attached (38 §3.4). */}
+          {saved && isDraft ? (
+            <Text size="sm" tone="secondary" id="send-draft-reason">
+              Draft — finish before you can send: {liveProblems.join(' ')}
+            </Text>
+          ) : null}
+
           <div className={styles.footer}>
-            <Button variant="secondary" onClick={() => void onCheck()} disabled={busy}>
+            <Button variant="secondary" onClick={onCheck} disabled={busy}>
               Check
             </Button>
             <div className={styles.footerActions}>
@@ -1458,7 +1528,12 @@ export function QuestionnaireBuilder({
               {/* Send is a distinct step on a SAVED questionnaire (08 §16.3), not a co-equal of Save on a
                   brand-new draft — so it only appears once there's something saved to send. */}
               {saved ? (
-                <Button variant="primary" onClick={() => void onOpenSend()} disabled={!canSave}>
+                <Button
+                  variant="primary"
+                  onClick={() => void onOpenSend()}
+                  disabled={!canSave || isDraft}
+                  {...(isDraft ? { 'aria-describedby': 'send-draft-reason' } : {})}
+                >
                   <Send size={16} aria-hidden="true" />
                   Send
                 </Button>

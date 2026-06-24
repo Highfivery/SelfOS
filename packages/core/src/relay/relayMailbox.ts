@@ -19,9 +19,10 @@ import {
  * the send private key, neither of which the relay sees.
  */
 
-export const MAX_RESPONSE_BYTES = 256 * 1024;
-export const MAX_PIN_ATTEMPTS = 5;
-export const LOCKOUT_MS = 15 * 60 * 1000;
+// The cap + PIN limits live in a leaf module so the client-side response-size guard can share them without
+// pulling this Worker module into the answering bundle (38 §5.4). Re-exported for existing importers.
+export { MAX_RESPONSE_BYTES, MAX_PIN_ATTEMPTS, LOCKOUT_MS } from './relayLimits';
+import { MAX_RESPONSE_BYTES, MAX_PIN_ATTEMPTS, LOCKOUT_MS } from './relayLimits';
 
 /** The minimal KV the relay needs — Workers KV satisfies it; tests pass an in-memory fake. */
 export interface RelayKv {

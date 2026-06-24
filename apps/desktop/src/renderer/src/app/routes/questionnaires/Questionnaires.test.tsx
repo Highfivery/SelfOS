@@ -152,18 +152,74 @@ describe('Questionnaires', () => {
     );
   });
 
-  it('surfaces validation problems via Check', async () => {
+  it('offers contextOnly as the most-private compatibility mode, never implying owner access (38 §3.8)', async () => {
+    installMockBridge({ questionnairesList: () => Promise.resolve([]) });
+    await openNewCompat();
+
+    const visibility = await screen.findByLabelText('Who sees what');
+    expect(screen.getByRole('option', { name: /No report/i })).toBeInTheDocument();
+    await userEvent.selectOptions(visibility, 'contextOnly');
+    // The selected-mode help reads as the most private and never implies an owner/admin can read answers.
+    expect(screen.getByText(/most private option/i)).toBeInTheDocument();
+    expect(screen.queryByText(/owner|admin/i)).not.toBeInTheDocument();
+  });
+
+  it('pins a favorited questionnaire to the top and toggles via the bridge (38 §13.8)', async () => {
+    const questionnairesSetFavorite = vi.fn(() => Promise.resolve());
+    const q = (id: string, title: string, favorite = false) => ({
+      id,
+      schemaVersion: 1 as const,
+      version: 1,
+      title,
+      type: 'general',
+      sensitivity: 'standard' as const,
+      ...(favorite ? { favorite: true } : {}),
+      questions: [{ id: 'x', type: 'shortText' as const, prompt: '?', required: false }],
+      createdAt: 'now',
+      updatedAt: 'now',
+    });
+    installMockBridge({
+      questionnairesSetFavorite,
+      questionnairesList: () => Promise.resolve([q('qa', 'Alpha'), q('qb', 'Beta', true)]),
+    });
+    renderApp();
+
+    // The favorited "Beta" sorts above "Alpha".
+    const names = (await screen.findAllByText(/^(Alpha|Beta)$/)).map((n) => n.textContent);
+    expect(names[0]).toBe('Beta');
+    // Pinning "Alpha" persists via the bridge.
+    await userEvent.click(screen.getByRole('button', { name: /Pin “Alpha”/ }));
+    expect(questionnairesSetFavorite).toHaveBeenCalledWith({ id: 'qa', favorite: true });
+  });
+
+  it('surfaces validation problems via Check (real validateQuestionnaire, 38 §3.4)', async () => {
+    installMockBridge({ questionnairesList: () => Promise.resolve([]) });
+    await openNewBuilder();
+
+    await userEvent.type(screen.getByLabelText('Title'), 'Q');
+    await userEvent.type(screen.getByLabelText('Question 1'), 'Pick one');
+    // A singleChoice with no options is genuinely invalid — Check surfaces the real problem (not a mock).
+    await userEvent.selectOptions(screen.getByLabelText('Answer type'), 'singleChoice');
+    await userEvent.click(screen.getByRole('button', { name: 'Check' }));
+
+    expect(await screen.findByText(/needs at least two options/i)).toBeInTheDocument();
+  });
+
+  it('marks a saved-but-incomplete questionnaire as a Draft and disables Send (38 §3.4)', async () => {
     installMockBridge({
       questionnairesList: () => Promise.resolve([]),
-      questionnairesValidate: () => Promise.resolve(['"Pick one" needs at least two options.']),
+      questionnairesSave: saveSpy(),
     });
     await openNewBuilder();
 
     await userEvent.type(screen.getByLabelText('Title'), 'Q');
     await userEvent.type(screen.getByLabelText('Question 1'), 'Pick one');
-    await userEvent.click(screen.getByRole('button', { name: 'Check' }));
+    await userEvent.selectOptions(screen.getByLabelText('Answer type'), 'singleChoice'); // no options → invalid
+    await userEvent.click(screen.getByRole('button', { name: 'Create draft' }));
 
-    expect(await screen.findByText(/needs at least two options/i)).toBeInTheDocument();
+    // Saved but not valid-to-send → a Draft, with Send disabled and the reason shown (no separate banner).
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+    expect(screen.getByText(/finish before you can send/i)).toBeInTheDocument();
   });
 
   it('offers "Allow Other" on choice questions, ON by default, and persists it (§17.12-C)', async () => {
@@ -842,7 +898,7 @@ describe('Questionnaires', () => {
     // The read-only preview has NO test-on-yourself "Finish" — that only confused on a sent item (§17.14f).
     expect(screen.queryByRole('button', { name: 'Finish' })).not.toBeInTheDocument();
     // Re-send is offered but disabled until the cooldown elapses, with a timing notice.
-    expect(screen.getByRole('button', { name: /send again/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /ask again/i })).toBeDisabled();
     expect(screen.getByText(/Ask again in/i)).toBeInTheDocument();
     // Duplicate (to make changes) is available.
     expect(screen.getByRole('button', { name: 'Duplicate' })).toBeInTheDocument();
@@ -953,7 +1009,55 @@ describe('Questionnaires', () => {
 
     expect(await screen.findByText(/Ready to re-send/i)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /^Weekly check-in/ }));
-    expect(screen.getByRole('button', { name: /send again/i })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /ask again/i })).toBeEnabled();
+  });
+
+  it('"Ask again" re-sends in one action and confirms (38 §3.3)', async () => {
+    const assignmentsReAsk = vi.fn(() =>
+      Promise.resolve({
+        assignment: {
+          id: 'reask-1',
+          schemaVersion: 1 as const,
+          questionnaireId: 'q1',
+          senderPersonId: 'owner-1',
+          recipient: { kind: 'person' as const, personId: 'p-mara' },
+          channel: 'inApp' as const,
+          privacy: 'standard' as const,
+          senderVisibleToRecipient: true,
+          status: 'sent' as const,
+          createdAt: 'now',
+          updatedAt: 'now',
+        },
+      }),
+    );
+    installMockBridge({
+      assignmentsReAsk,
+      questionnairesList: () =>
+        Promise.resolve([
+          {
+            id: 'q1',
+            schemaVersion: 1,
+            version: 1,
+            title: 'Weekly check-in',
+            type: 'general',
+            sensitivity: 'standard',
+            recipient: { kind: 'person', personId: 'p-mara' },
+            questions: [
+              { id: 'qq1', type: 'shortText', prompt: 'How are we doing?', required: true },
+            ],
+            createdAt: 'now',
+            updatedAt: 'now',
+          },
+        ]),
+      questionnairesSendStates: () =>
+        Promise.resolve({ q1: { lastSentAt: '2026-01-01T00:00:00.000Z', total: 1 } }),
+    });
+    renderApp();
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Weekly check-in/ }));
+    await userEvent.click(screen.getByRole('button', { name: /ask again/i }));
+    expect(assignmentsReAsk).toHaveBeenCalledWith({ questionnaireId: 'q1' });
+    expect(await screen.findByText(/back in their Inbox/i)).toBeInTheDocument();
   });
 
   it('deletes a questionnaire from the list row after confirming (§3.9)', async () => {

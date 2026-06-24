@@ -54,6 +54,7 @@ import type {
   PersonNotificationState,
   Person,
   ProfileUpdateSuggestion,
+  ReminderDueSummary,
   ResponsesArrivedSummary,
   SendAnswer,
   SendResult,
@@ -169,6 +170,7 @@ export const IpcChannels = {
   questionnairesSave: 'questionnaires:save',
   questionnairesDelete: 'questionnaires:delete',
   questionnairesValidate: 'questionnaires:validate',
+  questionnairesSetFavorite: 'questionnaires:setFavorite',
   questionnairesListTypes: 'questionnaires:listTypes',
   questionnairesAddType: 'questionnaires:addType',
   questionnairesIntimacyTopics: 'questionnaires:intimacyTopics',
@@ -208,6 +210,8 @@ export const IpcChannels = {
   assignmentsDrain: 'assignments:drain',
   assignmentsRevoke: 'assignments:revoke',
   assignmentsReshare: 'assignments:reshare',
+  assignmentsReAsk: 'assignments:reAsk',
+  assignmentsExportResults: 'assignments:exportResults',
   relayStatus: 'relay:status',
   relayConnect: 'relay:connect',
   relayUpdate: 'relay:update',
@@ -257,6 +261,7 @@ export const IpcChannels = {
   getNotificationState: 'notifications:getState',
   setNotificationState: 'notifications:setState',
   notificationsResponsesArrived: 'notifications:responsesArrived',
+  notificationsRemindersDue: 'notifications:remindersDue',
   openExternal: 'shell:openExternal',
   // Update awareness (36-update-awareness §6) — a notify-only check against the public GitHub Releases API.
   updatesCheck: 'updates:check',
@@ -557,6 +562,11 @@ export interface SelfosBridge {
   questionnairesDelete(id: string): Promise<void>;
   /** Structural problems with a draft (empty array = valid) — for live builder feedback. */
   questionnairesValidate(input: QuestionnaireInput): Promise<string[]>;
+  /**
+   * Pin/unpin a questionnaire (the list star, 38 §13.8) — sets `favorite` without bumping the content
+   * version. Requires `questionnaires.create`.
+   */
+  questionnairesSetFavorite(input: { id: string; favorite: boolean }): Promise<void>;
   /** The user-defined custom types (vault-stored), for the builder's type picker. Requires `questionnaires.create`. */
   questionnairesListTypes(): Promise<string[]>;
   /** Add a custom type (trimmed, de-duped) and return the updated list. Requires `questionnaires.create`. */
@@ -751,6 +761,24 @@ export interface SelfosBridge {
    * relay, the sender's own member, an already-answered send). Requires `questionnaires.sendExternal`.
    */
   assignmentsReshare(assignmentId: string): Promise<RelayLinkResult | null>;
+  /**
+   * Re-send the same questionnaire to the same bound recipient in one action (38 §3.3) — no re-authoring.
+   * Auto-revokes the prior open send's relay link so an old emailed link can't double-submit (38 §3.6).
+   * Mirrors the original delivery (household in-app + a unified link, or an external relay link). Returns
+   * the new send (link/pin set when a relay minted one). Compatibility re-ask isn't supported yet (use
+   * Duplicate). Requires `questionnaires.create`; the recipient is re-validated in the bridge.
+   */
+  assignmentsReAsk(input: { questionnaireId: string }): Promise<InAppSendResult>;
+  /**
+   * Export a questionnaire's results to a file OUTSIDE the encrypted vault (38 §3.7) — CSV or JSON. Built
+   * host-side over the same privacy-filtered SendResult shape Results uses (a Private send contributes only
+   * its numeric values, never prose), then written via a save dialog. Returns the written path, or null if
+   * the sender cancels. Requires `questionnaires.viewResults`; sender-scoped.
+   */
+  assignmentsExportResults(input: {
+    questionnaireId: string;
+    format: 'csv' | 'json';
+  }): Promise<string | null>;
   /** The relay connection status (no secrets) for the send panel + admin Relay setup. */
   relayStatus(): Promise<RelayStatus>;
   /** Connect + deploy the household relay to Cloudflare (admin-only). Returns the new status. */
@@ -890,6 +918,11 @@ export interface SelfosBridge {
    * Local read — no network; gated by `questionnaires.viewResults` + sender-scoped in the bridge.
    */
   notificationsResponsesArrived(): Promise<ResponsesArrivedSummary[]>;
+  /**
+   * The active sender's sends still unanswered past the 7-day reminder window — the `reminder-due` source
+   * (38 §3.3). Sender-scoped, gated `questionnaires.viewResults`, local-only (no network, no scheduler).
+   */
+  notificationsRemindersDue(): Promise<ReminderDueSummary[]>;
   /** Open a URL in the user's browser via the main-process shell (the renderer never opens URLs directly). */
   openExternal(url: string): Promise<void>;
   /**
@@ -961,6 +994,7 @@ export type {
   QuestionnaireSendState,
   QuestionTrend,
   RelayLinkResult,
+  ReminderDueSummary,
   ResponsesArrivedSummary,
   Relationship,
   RelationshipInput,

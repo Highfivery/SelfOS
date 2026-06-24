@@ -53,6 +53,7 @@ export const NOTIFICATION_KINDS = [
   'update-available',
   'profile-freshness',
   'responses-arrived',
+  'reminder-due',
   'sync-conflict',
 ] as const;
 export const NotificationKindSchema = z.enum(NOTIFICATION_KINDS);
@@ -964,6 +965,10 @@ export const QuestionnaireSchema = z.object({
   sensitivity: SensitivityTierSchema,
   questions: z.array(QuestionSchema),
   compatibility: CompatibilityConfigSchema.optional(),
+  // Pin a recurring questionnaire to the top of the list (38 §13.8). Additive-optional, household-wide;
+  // absent = not favorited. Set via `setFavorite` (a star toggle), NOT through the builder — so it never
+  // bumps the content `version`, and `saveQuestionnaire` preserves it across edits.
+  favorite: z.boolean().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -1846,6 +1851,9 @@ export interface SendResult {
   status: AssignmentStatus;
   privacy: PrivacyMode;
   createdAt: string;
+  // When a relay-linked send's link stops working (default 60 days). Surfaced so the sender knows when to
+  // re-share, before the recipient hits a dead link (38 §3.6). Absent on a link-less in-app send.
+  expiresAt?: string;
   submittedAt?: string;
   declineNote?: string;
   analyzed: boolean;
@@ -1868,10 +1876,29 @@ export interface QuestionnaireSendState {
  * assignments (local read; no network — the relay drain is the existing point that fetches external
  * responses). `submittedCount` is the re-surface signature (a new response → higher count → re-surfaces).
  */
+/**
+ * One questionnaire the active person sent that's still unanswered after the reminder window (7 days) — the
+ * source for the `reminder-due` notification (38 §3.3). Derived in the bridge from the sender's open sends
+ * (local read; no network, no scheduler). Nudges the SENDER to re-share; it never messages the recipient.
+ */
+export interface ReminderDueSummary {
+  questionnaireId: string;
+  title: string;
+  recipientName: string; // the most recent still-unanswered recipient (names the nudge)
+  count: number; // unanswered sends past the window — the re-surface signature (onIncrease)
+}
+
 export interface ResponsesArrivedSummary {
   questionnaireId: string;
   title: string;
   submittedCount: number;
+  /**
+   * The most recent responder's display name (or a neutral label for an unnamed external), so the
+   * notification can read "Angel answered …" rather than a faceless count (38 §3.1/§4.2).
+   */
+  latestRecipientName: string;
+  /** The newest response's time (the assignment's submit timestamp) — orders the notification (38 §4.2). */
+  at: string;
 }
 
 /** One of the two paired sends of a compatibility questionnaire, as the sender sees it (08 §3.6). */

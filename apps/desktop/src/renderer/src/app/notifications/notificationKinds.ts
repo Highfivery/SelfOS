@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { ClipboardCheck, Download, RefreshCw, Sparkles } from 'lucide-react';
+import { ClipboardCheck, Clock, Download, RefreshCw, Sparkles } from 'lucide-react';
 import type {
   Notification,
   NotificationAction,
@@ -44,6 +44,9 @@ export const NOTIFICATION_KIND_DEFS: Record<NotificationKind, KindDef> = {
   'update-available': { icon: Download, severity: 'warning', resurfaces: onChange },
   'profile-freshness': { icon: Sparkles, severity: 'info', resurfaces: onNewMember },
   'responses-arrived': { icon: ClipboardCheck, severity: 'info', resurfaces: onIncrease },
+  // A gentle "still unanswered" nudge to the SENDER (38 §3.3). onIncrease so dismissing it never re-nags
+  // unless ANOTHER send passes the window — answering/resolving some never re-pops it.
+  'reminder-due': { icon: Clock, severity: 'info', resurfaces: onIncrease },
   'sync-conflict': { icon: RefreshCw, severity: 'warning', resurfaces: onIncrease },
 };
 

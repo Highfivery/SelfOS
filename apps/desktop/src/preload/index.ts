@@ -109,6 +109,8 @@ const bridge: SelfosBridge = {
   questionnairesSave: (input) => ipcRenderer.invoke(IpcChannels.questionnairesSave, input),
   questionnairesDelete: (id) => ipcRenderer.invoke(IpcChannels.questionnairesDelete, id),
   questionnairesValidate: (input) => ipcRenderer.invoke(IpcChannels.questionnairesValidate, input),
+  questionnairesSetFavorite: (input) =>
+    ipcRenderer.invoke(IpcChannels.questionnairesSetFavorite, input),
   questionnairesListTypes: () => ipcRenderer.invoke(IpcChannels.questionnairesListTypes),
   questionnairesAddType: (name) => ipcRenderer.invoke(IpcChannels.questionnairesAddType, name),
   questionnairesIntimacyTopics: () => ipcRenderer.invoke(IpcChannels.questionnairesIntimacyTopics),
@@ -167,6 +169,9 @@ const bridge: SelfosBridge = {
     ipcRenderer.invoke(IpcChannels.assignmentsRevoke, assignmentId),
   assignmentsReshare: (assignmentId) =>
     ipcRenderer.invoke(IpcChannels.assignmentsReshare, assignmentId),
+  assignmentsReAsk: (input) => ipcRenderer.invoke(IpcChannels.assignmentsReAsk, input),
+  assignmentsExportResults: (input) =>
+    ipcRenderer.invoke(IpcChannels.assignmentsExportResults, input),
   relayStatus: () => ipcRenderer.invoke(IpcChannels.relayStatus),
   relayConnect: (input) => ipcRenderer.invoke(IpcChannels.relayConnect, input),
   relayUpdate: () => ipcRenderer.invoke(IpcChannels.relayUpdate),
@@ -227,6 +232,7 @@ const bridge: SelfosBridge = {
   setNotificationState: (state) => ipcRenderer.invoke(IpcChannels.setNotificationState, state),
   notificationsResponsesArrived: () =>
     ipcRenderer.invoke(IpcChannels.notificationsResponsesArrived),
+  notificationsRemindersDue: () => ipcRenderer.invoke(IpcChannels.notificationsRemindersDue),
   openExternal: (url) => ipcRenderer.invoke(IpcChannels.openExternal, url),
   updatesCheck: (force) => ipcRenderer.invoke(IpcChannels.updatesCheck, force),
   updatesGetState: () => ipcRenderer.invoke(IpcChannels.updatesGetState),

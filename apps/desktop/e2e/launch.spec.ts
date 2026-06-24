@@ -26,6 +26,7 @@ import { hashPin } from '@selfos/core/crypto';
 import { queryUsage, recordUsage } from '@selfos/core/usage';
 import { readEncryptedJson, writeEncryptedJson } from '@selfos/core/vault';
 import {
+  createAssignment,
   createCompatibilitySend,
   getAlignmentReport,
   getAssignmentSnapshot,
@@ -5620,5 +5621,124 @@ test('household AI key (25): owner shares a key → a keyless device inherits it
     await app.close();
     await rm(userData, { recursive: true, force: true });
     await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('questionnaires: an invalid draft reads as a Draft with Send disabled + reasons; fixing enables it (38 §3.4/§3.9)', async () => {
+  const { userData, vault } = await seedReadyVault();
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await startNewQuestionnaire(w);
+    await w.getByLabel('Title').fill('Weekly check-in');
+    await w.getByLabel('Question 1', { exact: true }).fill('Pick one');
+    // A singleChoice with no options is genuinely invalid → a Draft that can't be sent.
+    await w.getByLabel('Answer type').selectOption({ label: 'Single choice' });
+    await w.getByRole('button', { name: 'Create draft' }).click();
+
+    // The header shows a Draft badge, Send is disabled, and the reasons are spelled out (38 §3.4).
+    await expect(w.getByText('Draft', { exact: true })).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Send' })).toBeDisabled();
+    await expect(w.getByText(/finish before you can send/i)).toBeVisible();
+
+    // Fixing it (two options) clears the Draft and enables Send.
+    await w.getByLabel('Option 1', { exact: true }).fill('A');
+    await w.getByLabel('Option 2', { exact: true }).fill('B');
+    await expect(w.getByRole('button', { name: 'Send' })).toBeEnabled();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('questionnaires: responses-arrived names the responder → View results → export a real file, Private prose absent (38 §3.1/§3.7)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const saveDir = await mkdtemp(join(tmpdir(), 'selfos-e2e-save-'));
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('expected a master key');
+  const now = new Date().toISOString();
+  await savePerson(fs, key, {
+    id: 'mara-1',
+    schemaVersion: 1,
+    displayName: 'Mara',
+    isSubject: true,
+    tags: [],
+    createdAt: now,
+    updatedAt: now,
+  });
+  // A PRIVATE questionnaire with a prose + a numeric question — exported, the prose must be excluded.
+  const q = await saveQuestionnaire(
+    fs,
+    key,
+    {
+      title: 'Weekly check-in',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: 'mara-1' },
+      questions: [
+        { id: 'prose', type: 'shortText', prompt: 'Anything to add?', required: false },
+        {
+          id: 'rate',
+          type: 'rating',
+          prompt: 'Rate it',
+          required: true,
+          scale: { min: 1, max: 5 },
+        },
+      ],
+    },
+    'owner-1',
+  );
+  const assignment = await createAssignment(fs, key, {
+    questionnaireId: q.id,
+    senderPersonId: 'owner-1',
+    recipient: { kind: 'person', personId: 'mara-1' },
+    channel: 'inApp',
+    privacy: 'private',
+    senderVisibleToRecipient: true,
+  });
+  await submitResponse(fs, key, {
+    assignmentId: assignment.id,
+    answers: [
+      { questionId: 'prose', value: 'my secret prose' },
+      { questionId: 'rate', value: 4 },
+    ],
+  });
+
+  const app = await electron.launch({
+    args: [`--user-data-dir=${userData}`, MAIN],
+    env: { ...e2eEnv(), SELFOS_FAKE_SAVE_DIR: saveDir },
+  });
+  try {
+    const w = await app.firstWindow();
+    // The responses-arrived notification names the responder (not a faceless count) — 1 unread.
+    await expect(w.getByRole('button', { name: 'Notifications, 1 unread' })).toBeVisible();
+    await w.getByRole('button', { name: /^Notifications/ }).click();
+    const center = w.getByRole('menu', { name: 'Notifications' });
+    const row = center.getByRole('menuitem').filter({ hasText: 'Mara answered' });
+    await expect(row).toBeVisible();
+
+    // "View results" deep-links straight to that questionnaire's Results (38 §3.1).
+    await row.getByRole('button', { name: 'View' }).click();
+    await expect.poll(() => w.evaluate(() => window.location.hash)).toContain('focus=');
+    await expect(w.getByRole('heading', { name: 'Results' })).toBeVisible();
+    // A Private send never shows its raw answers to the sender.
+    await expect(w.getByText(/Answered privately/i)).toBeVisible();
+
+    // Export CSV writes a real file OUTSIDE the vault; the Private prose is absent, the numeric value present.
+    await w.getByRole('button', { name: /Export CSV/i }).click();
+    await expect(w.getByText(/outside your encrypted vault/i)).toBeVisible();
+    const csv = await readFile(join(saveDir, 'weekly-check-in.csv'), 'utf8');
+    expect(csv).toContain('Rate it');
+    expect(csv).toContain('4');
+    expect(csv).not.toContain('my secret prose');
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+    await rm(saveDir, { recursive: true, force: true });
   }
 });

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { ArrowLeft, ClipboardList, Plus, Sparkles } from 'lucide-react';
+import { validateQuestionnaire } from '@selfos/core/questionnaires';
 import type { Recipient } from '@shared/schemas';
 import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
 import {
@@ -118,6 +119,9 @@ export function Questionnaires(): JSX.Element {
             {questionnaires.map((q) => {
               const active = selection.mode === 'edit' && selection.id === q.id;
               const sent = sendStates[q.id];
+              // An unsent definition that isn't valid-to-send is a Draft (38 §3.4) — a clear "not ready" cue
+              // in the list, distinct from a sent questionnaire. `validateQuestionnaire` is pure (no IPC).
+              const isDraft = !sent && validateQuestionnaire(q).length > 0;
               return (
                 <Stack key={q.id} gap={1}>
                   <div className={active ? `${styles.row} ${styles.rowActive}` : styles.row}>
@@ -131,6 +135,7 @@ export function Questionnaires(): JSX.Element {
                         <span>
                           {q.questions.length} {q.questions.length === 1 ? 'question' : 'questions'}
                         </span>
+                        {isDraft ? <span className={styles.rowDraft}>· Draft</span> : null}
                         {sent ? (
                           <span className={styles.rowSent}>
                             · Sent {formatSentDate(sent.lastSentAt)}

@@ -625,9 +625,13 @@ decisions). Recommended order, smallest-risk first:
    relay's `MAX_RESPONSE_BYTES` — centralized into a leaf `relay/relayLimits.ts` so client + server can't
    drift — and the relay page blocks an over-cap submit with "too long" before sealing (the relay's own
    413 stays the backstop). No AI/relay behavior change; no `RELAY_VERSION` bump.
-3. **Draft-vs-ready + started-vs-finished labeling.** The Draft badge + disabled-Send-with-reasons; the
-   sender-facing started/answered/expired distinction (derive expiry visibility too). Renderer + derivation
-   only. (§11 #6, #8.)
+3. **Draft-vs-ready + started-vs-finished labeling.** ✅ **Built (2026-06-23).** A questionnaire that fails
+   `validateQuestionnaire` shows a **Draft** badge in the builder header and a `· Draft` cue in the list,
+   with **Send disabled** and the missing-pieces reasons attached (`aria-describedby`, no separate banner —
+   §11 #6). The builder now validates **synchronously** in the renderer (the same pure `validateQuestionnaire`
+   the bridge runs), so the Draft state + Send-disable react instantly. The sender-facing status label for an
+   in-progress draft is now **"Started"** (the recipient opened + saved a draft but hasn't submitted — never
+   the draft answers; §11 #8). Renderer + derivation only; expiry surfacing lands in slice 4.
 4. **Link lifecycle: revoke-on-reask/reshare + expiry surfacing.** Make re-ask + reshare revoke the prior
    open link (per §11 #4); surface `expiresAt` in Results; ensure Revoke reaches every relay-linked send
    shape. Verify across all delivery paths. (§11 #4.)

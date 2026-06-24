@@ -152,18 +152,34 @@ describe('Questionnaires', () => {
     );
   });
 
-  it('surfaces validation problems via Check', async () => {
+  it('surfaces validation problems via Check (real validateQuestionnaire, 38 §3.4)', async () => {
+    installMockBridge({ questionnairesList: () => Promise.resolve([]) });
+    await openNewBuilder();
+
+    await userEvent.type(screen.getByLabelText('Title'), 'Q');
+    await userEvent.type(screen.getByLabelText('Question 1'), 'Pick one');
+    // A singleChoice with no options is genuinely invalid — Check surfaces the real problem (not a mock).
+    await userEvent.selectOptions(screen.getByLabelText('Answer type'), 'singleChoice');
+    await userEvent.click(screen.getByRole('button', { name: 'Check' }));
+
+    expect(await screen.findByText(/needs at least two options/i)).toBeInTheDocument();
+  });
+
+  it('marks a saved-but-incomplete questionnaire as a Draft and disables Send (38 §3.4)', async () => {
     installMockBridge({
       questionnairesList: () => Promise.resolve([]),
-      questionnairesValidate: () => Promise.resolve(['"Pick one" needs at least two options.']),
+      questionnairesSave: saveSpy(),
     });
     await openNewBuilder();
 
     await userEvent.type(screen.getByLabelText('Title'), 'Q');
     await userEvent.type(screen.getByLabelText('Question 1'), 'Pick one');
-    await userEvent.click(screen.getByRole('button', { name: 'Check' }));
+    await userEvent.selectOptions(screen.getByLabelText('Answer type'), 'singleChoice'); // no options → invalid
+    await userEvent.click(screen.getByRole('button', { name: 'Create draft' }));
 
-    expect(await screen.findByText(/needs at least two options/i)).toBeInTheDocument();
+    // Saved but not valid-to-send → a Draft, with Send disabled and the reason shown (no separate banner).
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+    expect(screen.getByText(/finish before you can send/i)).toBeInTheDocument();
   });
 
   it('offers "Allow Other" on choice questions, ON by default, and persists it (§17.12-C)', async () => {

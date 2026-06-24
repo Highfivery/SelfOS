@@ -31,11 +31,13 @@ import styles from './Questionnaires.module.css';
 
 const OPEN_STATUSES: AssignmentStatus[] = ['sent', 'opened', 'inProgress'];
 
+// Sender-facing lifecycle labels (38 §3.5). "Started" = the recipient opened and saved a draft (inProgress)
+// but hasn't submitted — the sender sees only that it's underway, never the draft answers.
 const STATUS_LABEL: Record<AssignmentStatus, string> = {
   draft: 'Draft',
   sent: 'Sent — waiting',
   opened: 'Opened — waiting',
-  inProgress: 'In progress',
+  inProgress: 'Started',
   submitted: 'Answered',
   analyzed: 'Answered',
   expired: 'Expired',

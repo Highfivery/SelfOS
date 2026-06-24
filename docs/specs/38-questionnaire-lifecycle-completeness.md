@@ -1,6 +1,14 @@
 # 38 — Questionnaire lifecycle completeness
 
-> **Status:** Built (all 8 slices) — _last updated 2026-06-23_
+> **Status:** Built (all 8 slices) + E2E green (90/90) — _last updated 2026-06-24_
+>
+> **E2E (2026-06-24):** the §10 flows are driven through real UI and run headlessly (Playwright-Electron):
+> (1) an invalid draft shows the **Draft** badge + disabled Send with reasons, and fixing it enables Send
+> (slices 2/3); (2) a submitted **Private** send raises the **`responses-arrived`** notification naming the
+> responder → "View results" **deep-links to Results** → **Export CSV writes a real file outside the vault**
+> with the numeric value present and the **Private prose absent** (slices 1/6, the §3.7 boundary). Re-ask,
+> expiry, favorite, and the reminder are covered by unit/component/bridge tests; the remaining §10 matrix rows
+> (every delivery path) are good follow-up E2E.
 >
 > **§11 decisions resolved with the owner (2026-06-23) — all 8 slices in scope:**
 >

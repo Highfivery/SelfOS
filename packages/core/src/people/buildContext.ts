@@ -1,5 +1,10 @@
 import type { FileSystem } from '../host';
-import { insightFeedsContext, listInsightsForPerson, summarizeForContext } from '../insights';
+import {
+  insightFeedsContext,
+  listInsightsForPerson,
+  summarizeForContext,
+  type RelatedForContext,
+} from '../insights';
 import {
   isPersonFieldShared,
   type ContextTopic,
@@ -8,6 +13,8 @@ import {
 } from '../schemas';
 import { getPerson, listPeople } from './peopleService';
 import { listRelationships } from './relationshipService';
+import { relationshipTypesFromSubjectToViewer } from './relationshipScope';
+import { buildSharedIntakeAnswerLines } from './sharedIntakeAnswers';
 
 /**
  * A person's descriptive profile fields (13-dream-images §4.6) formatted as "Label: value" lines, gated by
@@ -91,7 +98,8 @@ export async function buildContext(
     (relationship) =>
       relationship.fromPersonId === personId || relationship.toPersonId === personId,
   );
-  const related: { id: string; displayName: string }[] = [];
+  const related: RelatedForContext[] = [];
+  const seenRelated = new Set<string>();
   if (theirs.length > 0) {
     lines.push('People in their life:');
     for (const relationship of theirs) {
@@ -101,7 +109,28 @@ export async function buildContext(
           : relationship.fromPersonId;
       const other = byId.get(otherId);
       if (!other) continue;
-      related.push({ id: other.id, displayName: other.displayName });
+      // Resolve cross-sharing ONCE per related person, even with several edges (42 §5.2): the type(s)
+      // describing how the related person relates to THIS viewer, and their shared structured intake answers.
+      if (!seenRelated.has(other.id)) {
+        seenRelated.add(other.id);
+        const grantedTypes = relationshipTypesFromSubjectToViewer(
+          other.id,
+          personId,
+          relationships,
+        );
+        const sharedAnswerLines = await buildSharedIntakeAnswerLines(
+          fs,
+          key,
+          other.id,
+          grantedTypes,
+        );
+        related.push({
+          id: other.id,
+          displayName: other.displayName,
+          grantedTypes,
+          ...(sharedAnswerLines.length > 0 ? { sharedAnswerLines } : {}),
+        });
+      }
       // Only data the owner has left SHARED reaches a related person's context (15-shareability §5). The
       // relationship's notes flow only when `notesShared !== false`.
       const relNote =
@@ -115,7 +144,14 @@ export async function buildContext(
 
   // Insight / memory layer (08-questionnaires §4.4): their own approved insights + shareable facts about
   // the people they relate to. Others' private facts are never included (the shareable-vs-private split).
-  const insightContext = await summarizeForContext(fs, key, personId, related, topic);
+  const insightContext = await summarizeForContext(
+    fs,
+    key,
+    personId,
+    related,
+    topic,
+    person.displayName,
+  );
   if (insightContext) lines.push(insightContext);
 
   return lines.join('\n');

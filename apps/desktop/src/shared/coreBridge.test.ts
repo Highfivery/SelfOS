@@ -1093,6 +1093,48 @@ describe('createCoreBridge', () => {
     expect(seenByB.some((i) => i.subjectPersonId === a.id)).toBe(false);
   });
 
+  it('memoryOutboundSharing reports the active person’s OWN shared items + recipients; gated on memory.own (42 §5.3)', async () => {
+    const { bridge, host, ownerId } = await freshOwner();
+    const ctx = (await host.host.vaultAndKey())!;
+    const partner = await bridge.peopleSave({ displayName: 'Pat', isSubject: true, tags: [] });
+    await bridge.relationshipsSave({
+      fromPersonId: ownerId,
+      toPersonId: partner.id,
+      type: 'partner',
+    });
+    const at = new Date().toISOString();
+    await saveInsight(ctx.fs, ctx.key, {
+      id: 'os1',
+      schemaVersion: 1,
+      source: 'session',
+      subjectPersonId: ownerId,
+      summary: 's',
+      facts: [
+        { id: 'fp', text: 'a partner-scoped thing', shareable: false, shareableTypes: ['partner'] },
+        { id: 'fpriv', text: 'a private thing', shareable: false },
+      ],
+      confidence: 'low',
+      categories: [],
+      approved: true,
+      provenance: { at },
+      createdAt: at,
+      updatedAt: at,
+    });
+
+    const out = await bridge.memoryOutboundSharing();
+    const fp = out.items.find((i) => i.id === 'fp');
+    expect(fp?.types).toEqual(['partner']);
+    expect(fp?.recipients.map((r) => r.id)).toEqual([partner.id]);
+    // A private fact is not outbound at all.
+    expect(out.items.some((i) => i.id === 'fpriv')).toBe(false);
+
+    // A Guest (no memory.own) gets nothing — own-scoped + capability-gated in the bridge.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    expect((await bridge.sessionSetActive({ personId: guest.id })).ok).toBe(true);
+    expect(await bridge.memoryOutboundSharing()).toEqual({ items: [] });
+  });
+
   it('flags a fact (excluded from context, kept in Memory) and refreshes memory via reconciliation (spec 20 §3.5/§3.6)', async () => {
     const { bridge, host, ownerId } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });

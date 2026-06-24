@@ -1,6 +1,8 @@
 # 15 — Unified shareability: per-item "may inform others" control
 
-> **Status:** Approved · _last updated 2026-06-14_
+> **Status:** Approved · _last updated 2026-06-23_ · **Amended by [`42`](42-relationship-scoped-sharing.md):**
+> Insight facts + intake answers gain **relationship-type scoping** (`shareableTypes`/`answerSharing`) on top of
+> this spec's broadcast/per-person model; Person _fields_ keep the `privateFields` boolean lock unchanged (42 §2).
 >
 > Today, what one person's data the AI may use in **another** related person's coaching context is decided by
 > **fixed buckets** — People split notes/fields into a hard-coded "shareable" vs "private" set, and Dreams are

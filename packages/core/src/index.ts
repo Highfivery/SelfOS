@@ -5,3 +5,4 @@ export * from './schemas';
 export * from './capabilities';
 export * from './usageTypes';
 export * from './appearance';
+export * from './sharing';

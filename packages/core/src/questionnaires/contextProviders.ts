@@ -1,8 +1,9 @@
 import type { FileSystem } from '../host';
-import { summarizeForContext } from '../insights';
+import { summarizeForContext, type RelatedForContext } from '../insights';
 import { isPersonFieldShared } from '../schemas';
 import { getPerson, listPeople } from '../people/peopleService';
 import { listRelationships } from '../people/relationshipService';
+import { relationshipTypesFromSubjectToViewer } from '../people/relationshipScope';
 import { questionnaireTopic } from './questionnaireTopic';
 
 /**
@@ -96,11 +97,20 @@ const insightsProvider: ContextProvider = {
   gather: async (fs, key, req) => {
     if (!req.includeAuthor) return '';
     // The author's own approved Insights, plus the **target's shareable** facts when that source is
-    // selected. `summarizeForContext` enforces the shareable-vs-private split for the related person.
-    let related: { id: string; displayName: string }[] = [];
+    // selected. `summarizeForContext` enforces the shareable-vs-private split for the related person —
+    // including relationship-type scoping (42), resolved as how the target relates to the author (viewer).
+    const author = await getPerson(fs, key, req.authorPersonId);
+    let related: RelatedForContext[] = [];
     if (req.targetPersonId && req.includeTarget) {
       const target = await getPerson(fs, key, req.targetPersonId);
-      if (target) related = [{ id: target.id, displayName: target.displayName }];
+      if (target) {
+        const grantedTypes = relationshipTypesFromSubjectToViewer(
+          target.id,
+          req.authorPersonId,
+          await listRelationships(fs, key),
+        );
+        related = [{ id: target.id, displayName: target.displayName, grantedTypes }];
+      }
     }
     return summarizeForContext(
       fs,
@@ -108,6 +118,7 @@ const insightsProvider: ContextProvider = {
       req.authorPersonId,
       related,
       questionnaireTopic(req.questionnaireType),
+      author?.displayName,
     );
   },
 };

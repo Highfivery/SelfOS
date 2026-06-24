@@ -62,6 +62,7 @@ import {
   type Insight,
   type IntimacyTopicsView,
   type MemoryReconcileResult,
+  type OutboundSharing,
   IntakeAnswerValueSchema,
   type IntakeState,
   type ProfileUpdateSuggestion,
@@ -152,10 +153,12 @@ import {
   getPerson,
   listDevices,
   listInvitesForPerson,
+  listOutboundSharing,
   listPeople,
   listRelatedPeople,
   listRelationships,
   redeemInvite,
+  relationshipTypesFromSubjectToViewer,
   registerThisDevice,
   removeAccount,
   renameDevice,
@@ -1905,7 +1908,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // Related people contribute ONLY their shareable, non-restricted facts (the `summarizeForContext`
       // boundary, re-gated at read via `listRelatedPeople`); their summaries + private/restricted facts
       // never cross over.
-      const related = await listRelatedPeople(ctx.fs, ctx.key, personId);
+      // Enrich each related person with the relationship type(s) describing how THEY relate to this viewer
+      // (42 §5.2), so type-scoped facts resolve against the live graph at read time.
+      const relationships = await listRelationships(ctx.fs, ctx.key);
+      const related = (await listRelatedPeople(ctx.fs, ctx.key, personId)).map((other) => ({
+        ...other,
+        grantedTypes: relationshipTypesFromSubjectToViewer(other.id, personId, relationships),
+      }));
       const relatedShareable = await listRelatedShareableInsights(
         ctx.fs,
         ctx.key,
@@ -1913,6 +1922,16 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         related,
       );
       return [...own, ...relatedShareable];
+    },
+    memoryOutboundSharing: async (): Promise<OutboundSharing> => {
+      // The transparency read (42 §5.3): the active person's OWN outbound sharing only. Gated on `memory.own`
+      // + scoped to the active person — a person never sees another's sharing.
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'memory.own'))) return { items: [] };
+      const personId = await activePersonId();
+      if (!personId) return { items: [] };
+      const relationships = await listRelationships(ctx.fs, ctx.key);
+      return listOutboundSharing(ctx.fs, ctx.key, personId, relationships);
     },
     insightsAnalyze: async (input): Promise<QuestionnaireAnalyzeResult> => {
       const deps = await aiDeps('questionnaires.viewResults');

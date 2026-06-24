@@ -13,6 +13,7 @@ export { Textarea } from './Textarea';
 export { Select } from './Select';
 export { Switch } from './Switch';
 export { ShareToggle } from './ShareToggle';
+export { RelationshipScopePicker } from './RelationshipScopePicker';
 export { Slider } from './Slider';
 export { SegmentedControl, type SegmentOption } from './SegmentedControl';
 export { TitlebarControl } from './TitlebarControl';

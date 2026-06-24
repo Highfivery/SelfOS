@@ -3656,6 +3656,90 @@ test('dreams: share an approved insight fact into a related person’s coaching 
   }
 });
 
+test('relationship-scoped sharing: a partner-scoped fact reaches the partner, not the sibling (42 §10)', async () => {
+  // The headline privacy guard — decrypt the assembled context so it can't silently regress.
+  const { userData, vault } = await seedReadyVault();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('seed: master key missing');
+  const at = new Date().toISOString();
+
+  // owner-1 (Alex) is Bri's PARTNER and Cory's SIBLING.
+  for (const [id, displayName] of [
+    ['bri', 'Bri'],
+    ['cory', 'Cory'],
+  ] as const) {
+    await savePerson(fs, key, {
+      id,
+      schemaVersion: 1,
+      displayName,
+      isSubject: true,
+      tags: [],
+      createdAt: at,
+      updatedAt: at,
+    });
+  }
+  await saveRelationship(fs, key, {
+    id: 'ab',
+    schemaVersion: 1,
+    fromPersonId: 'owner-1',
+    toPersonId: 'bri',
+    type: 'partner',
+    createdAt: at,
+    updatedAt: at,
+  });
+  await saveRelationship(fs, key, {
+    id: 'ac',
+    schemaVersion: 1,
+    fromPersonId: 'owner-1',
+    toPersonId: 'cory',
+    type: 'sibling',
+    createdAt: at,
+    updatedAt: at,
+  });
+  // Alex owns a fact scoped to PARTNER only.
+  await saveInsight(fs, key, {
+    id: 'i1',
+    schemaVersion: 1,
+    source: 'session',
+    subjectPersonId: 'owner-1',
+    summary: 'A theme',
+    facts: [
+      {
+        id: 'f1',
+        text: 'Alex wants to feel closer at home',
+        shareable: false,
+        shareableTypes: ['partner'],
+      },
+    ],
+    confidence: 'medium',
+    categories: [],
+    approved: true,
+    provenance: { at },
+    createdAt: at,
+    updatedAt: at,
+  });
+
+  // The partner's session context HAS it, wrapped under the confidentiality preamble ("shared ≠ shown").
+  const partnerCtx = await buildContext(fs, key, 'bri');
+  expect(partnerCtx).toContain('Alex wants to feel closer at home');
+  expect(partnerCtx).toContain('Treat them as private background');
+  expect(partnerCtx).toContain('never quote them');
+
+  // The sibling's context does NOT — wrong relationship type → excluded, and no preamble at all.
+  const siblingCtx = await buildContext(fs, key, 'cory');
+  expect(siblingCtx).not.toContain('Alex wants to feel closer at home');
+  expect(siblingCtx).not.toContain('Treat them as private background');
+
+  // Remove the partner edge → the fact disappears from the partner's context at once (read-time re-gate).
+  await fs.remove('relationships/ab.enc');
+  const afterRemoval = await buildContext(fs, key, 'bri');
+  expect(afterRemoval).not.toContain('Alex wants to feel closer at home');
+
+  await rm(userData, { recursive: true, force: true });
+  await rm(vault, { recursive: true, force: true });
+});
+
 async function seedReadyVault(
   settingsValues: Record<string, unknown> = {},
 ): Promise<{ userData: string; vault: string }> {

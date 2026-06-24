@@ -58,6 +58,7 @@ import type {
   SendAnswer,
   SendResult,
   MemoryReconcileResult,
+  OutboundSharing,
   PersonInput,
   PrivacyMode,
   Questionnaire,
@@ -180,6 +181,7 @@ export const IpcChannels = {
   questionnairesImproveQuestion: 'questionnaires:improveQuestion',
   gapfinderSuggest: 'gapfinder:suggest',
   insightsList: 'insights:list',
+  memoryOutboundSharing: 'memory:outboundSharing',
   insightsAnalyze: 'insights:analyze',
   insightsApprove: 'insights:approve',
   insightsUpdate: 'insights:update',
@@ -608,6 +610,11 @@ export interface SelfosBridge {
    * shareable facts only — scoped + gated on `memory.own` in the bridge (the trust boundary).
    */
   insightsList(): Promise<Insight[]>;
+  /**
+   * The active person's OWN outbound sharing (42-relationship-scoped-sharing §5.3): every shareable item
+   * they own + the concrete related people currently receiving it. Own-scoped + gated on `memory.own`.
+   */
+  memoryOutboundSharing(): Promise<OutboundSharing>;
   /** Analyze a submitted assignment's answers into an UNapproved Insight. Budget-gated + metered. */
   insightsAnalyze(input: { assignmentId: string }): Promise<QuestionnaireAnalyzeResult>;
   /** Approve an Insight (apply edits + chosen shareable facts) so it enters the coach's context. */

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/Highfivery/SelfOS/compare/v0.8.1...v0.9.0) (2026-06-24)
+
+
+### Features
+
+* **memory:** collapsible portrait + onboarding sharing layout redesign ([#58](https://github.com/Highfivery/SelfOS/issues/58)) ([b4f1c25](https://github.com/Highfivery/SelfOS/commit/b4f1c25daf50a51faee8cf81df218956f1c0e9ff))
+
 ## [0.8.1](https://github.com/Highfivery/SelfOS/compare/v0.8.0...v0.8.1) (2026-06-24)
 
 

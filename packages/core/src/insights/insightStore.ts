@@ -242,7 +242,7 @@ export async function insightFeedsContext(
 }
 
 /** Filter a list of insights to those that may currently feed context (15-shareability §4.2). */
-async function feedableInsights(
+export async function feedableInsights(
   fs: FileSystem,
   key: Uint8Array,
   insights: Insight[],

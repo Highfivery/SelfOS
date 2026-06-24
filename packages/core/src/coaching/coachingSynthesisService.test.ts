@@ -4,6 +4,7 @@ import { memFileSystem } from '../host/memFileSystem';
 import type { ClaudeClient, FileSystem } from '../host';
 import type { Insight } from '../schemas';
 import { saveInsight } from '../insights';
+import { saveDream } from '../dreams';
 import { queryUsage } from '../usage';
 import { setPersonBudget } from '../usage';
 import {
@@ -221,5 +222,76 @@ describe('synthesize (40 §3.3)', () => {
     expect(captured).toContain('a shareable visible fact');
     expect(captured).not.toContain('RESTRICTED secret');
     expect(captured).not.toContain('FLAGGED wrong fact');
+  });
+
+  it('excludes a MUTED dream’s insight from the digest (informsContext:false, §8)', async () => {
+    let captured = '';
+    const capturing: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (options) => {
+        captured = options.messages.at(-1)?.content ?? '';
+        return Promise.resolve({
+          text: JSON.stringify({ observation: 'ok', sources: [] }),
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    // A dream the user muted to "private journal entry" — its insight must NOT feed the synthesis pass.
+    await saveDream(fs, key, {
+      id: 'd1',
+      schemaVersion: 1,
+      personId: 'p1',
+      narrative: 'a private dream',
+      lucid: false,
+      nightmare: false,
+      tags: [],
+      people: [],
+      sensitivity: 'standard',
+      informsContext: false,
+      status: 'analyzed',
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    });
+    await saveInsight(
+      fs,
+      key,
+      insight('di', {
+        source: 'dream',
+        summary: 'a MUTED dream observation',
+        facts: [{ id: 'df', text: 'a MUTED dream fact', shareable: false }],
+        provenance: { dreamId: 'd1', at: now.toISOString() },
+      }),
+    );
+    await saveInsight(fs, key, insight('s1'));
+    await saveInsight(fs, key, insight('s2'));
+    await synthesize(deps(capturing));
+    expect(captured).not.toContain('MUTED dream');
+  });
+
+  it('drops a WHOLLY-flagged insight’s summary from the digest (§8)', async () => {
+    let captured = '';
+    const capturing: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (options) => {
+        captured = options.messages.at(-1)?.content ?? '';
+        return Promise.resolve({
+          text: JSON.stringify({ observation: 'ok', sources: [] }),
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    // Every fact flagged → the whole insight is dropped (its summary restates the corrected claim).
+    await saveInsight(
+      fs,
+      key,
+      insight('wf', {
+        summary: 'a WHOLLY corrected summary',
+        facts: [{ id: 'f', text: 'flagged', shareable: false, flaggedInaccurate: true }],
+      }),
+    );
+    await saveInsight(fs, key, insight('s1'));
+    await saveInsight(fs, key, insight('s2'));
+    await synthesize(deps(capturing));
+    expect(captured).not.toContain('WHOLLY corrected');
   });
 });

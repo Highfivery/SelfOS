@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  classifyParseFailure,
   classifyParseOutcome,
   extractJsonObject,
   salvageJsonObjectField,
@@ -247,7 +248,12 @@ export async function endAndSummarize(deps: EndAndSummarizeDeps): Promise<Sessio
   // produces a usable insight (37 "show any partial"). Only a genuinely-empty/no-JSON reply is classified
   // (TRUNCATED vs MALFORMED vs REFUSED) — distinct reasons, never a misleading catch-all (37 §3.2).
   let draft = SessionAnalysisDraftSchema.safeParse(extractJsonObject(result.text)).data;
-  if (!draft) {
+  // Summary-only salvage is for a complete-but-malformed reply (e.g. an off-spec field). Do NOT salvage a
+  // TRUNCATED reply: `crisisFlag` is the LAST key in the contract, so a cut-off reply would yield a partial
+  // insight with the crisis signal silently dropped. Report TRUNCATED instead so the user re-runs and the
+  // flag can surface — matching the dream-synthesis path's truncation handling (37 §8 safety). (Dream
+  // synthesis is stricter still: it never salvages a summary; session analysis keeps that for MALFORMED.)
+  if (!draft && classifyParseFailure(result.text) !== 'TRUNCATED') {
     const summary = salvageJsonObjectField(result.text, 'summary');
     if (summary?.trim()) draft = SessionAnalysisDraftSchema.parse({ summary });
   }

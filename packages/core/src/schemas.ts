@@ -543,7 +543,10 @@ export const InsightFactSchema = z.object({
   // bookkeeping). Absent/empty ⇒ not type-shared (still own-context-only unless the legacy
   // `shareable`/`shareableWith` paths apply). A `restricted` fact is NEVER shared regardless (§8).
   // Additive-optional — the new sharing UIs set THIS, never broadcast `shareable: true`.
-  shareableTypes: z.array(RelationshipTypeSchema).optional(),
+  // `.catch(undefined)` makes a corrupt scope FAIL CLOSED to own-only (42 §7): a malformed value degrades
+  // this fact to private rather than throwing — otherwise one bad fact in person A's vault would crash
+  // `buildContext(B)` for every related viewer B (`listInsightsForPerson` reads A on each related read).
+  shareableTypes: z.array(RelationshipTypeSchema).optional().catch(undefined),
   // Break-glass-only (18-personal-onboarding §8.4): a fact derived from a `restricted` intake section
   // ("what weighs on you" / intimacy). It still feeds the subject's OWN coaching context, but is withheld
   // from the owner's normal People/Memory views — reachable only via the audited reveal. Additive-optional.
@@ -874,7 +877,9 @@ export const IntakeSectionSchema = z.object({
   // types whose related people may have THIS answer inform their coaching. Absent question ⇒ that answer is
   // not type-shared (own-context-only). Written by the onboarding per-question UI (43); read into a related
   // person's context here (42 §5.2). Additive-optional — pre-spec sections parse unchanged, no migration.
-  answerSharing: z.record(z.string(), z.array(RelationshipTypeSchema)).optional(),
+  // `.catch(undefined)` fails closed (42 §7): a corrupt scope map degrades to "nothing shared" rather than
+  // throwing, mirroring `InsightFact.shareableTypes` and the `safeParse` read paths.
+  answerSharing: z.record(z.string(), z.array(RelationshipTypeSchema)).optional().catch(undefined),
 });
 export type IntakeSection = z.infer<typeof IntakeSectionSchema>;
 

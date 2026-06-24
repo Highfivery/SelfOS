@@ -252,6 +252,14 @@ show a tiny per-group count on each life-area header (recommended, cheap).
 
 ## 12. Changelog
 
+- 2026-06-24 — **Audit follow-up** (`fix/relationship-sharing-audit-followups`): the per-fact
+  `RelationshipScopePicker` was editable for **onboarding (`source: 'intake'`)** facts, but an intake fact's
+  scope is **derived from its answer's `answerSharing`** (spec 43 §4) and **recomputed on every
+  re-synthesis** — so a direct Memory edit silently reverted (and could re-widen a narrowed scope). Intake
+  facts now show their scope **read-only** in both the insight card (a "Set by your onboarding answer" chip)
+  and the SharingPanel; you change their sharing via **Edit answer** / the answer's scope control (the single
+  source of truth). AI-inferred facts stay directly editable. +RTL assertion (no editable picker on an
+  intake fact). Gate green with spec 42's audit fixes.
 - 2026-06-24 — **Built.** Stats summary header (`StatsSummary` — overview/confidence/sharing, pure `stats.ts`
   derivations), **Trends promoted to the top** (open by default), **split-by-source corrections** in
   `InsightCard` (onboarding facts → **Edit answer** deep-link + Delete, no flag; AI-inferred → the relabelled

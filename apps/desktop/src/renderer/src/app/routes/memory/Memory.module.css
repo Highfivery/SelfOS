@@ -281,6 +281,20 @@
   font-size: var(--text-xs);
 }
 
+/* Read-only scope chip for an onboarding-derived fact (44 §3.4): its sharing is set by the answer, so
+   Memory shows it but doesn't edit it (you change it via "Edit answer"). */
+.derivedScope {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-alt);
+  color: var(--color-text-tertiary);
+  font-size: var(--text-xs);
+}
+
 /* --- Meta row (confidence + categories + provenance) --- */
 .metaRow {
   display: flex;

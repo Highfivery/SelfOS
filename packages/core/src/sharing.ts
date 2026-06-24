@@ -19,6 +19,23 @@ export const RELATIONSHIP_TYPE_LABELS: Record<RelationshipType, string> = {
   other: 'Other',
 };
 
+/**
+ * The inverse of a relationship type — how the OTHER end of an edge relates back (42 §5.1). Symmetric types
+ * map to themselves; parent↔child invert (04 §4.2). The single source of truth, imported by both the core
+ * resolver (`relationshipScope`) and the renderer's `availableRelationshipTypes` (this module is crypto-free,
+ * so the renderer can import it without pulling the host-only `@selfos/core/people` barrel).
+ */
+export const INVERSE_RELATIONSHIP_TYPE: Record<RelationshipType, RelationshipType> = {
+  partner: 'partner',
+  parent: 'child',
+  child: 'parent',
+  sibling: 'sibling',
+  friend: 'friend',
+  coworker: 'coworker',
+  ex: 'ex',
+  other: 'other',
+};
+
 /** The relationship types in picker order (partner first — the motivating couples/intimacy case). */
 export const RELATIONSHIP_TYPE_ORDER: RelationshipType[] = [
   'partner',

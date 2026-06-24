@@ -1,17 +1,7 @@
 import type { Relationship, RelationshipType } from '@shared/schemas';
-
-/** The relationship type a related person holds to the subject (the inverse of the stored edge, 42 §5.1).
- * Inlined here so renderer files stay free of the host-only `@selfos/core/people` barrel. */
-const INVERSE: Record<RelationshipType, RelationshipType> = {
-  partner: 'partner',
-  parent: 'child',
-  child: 'parent',
-  sibling: 'sibling',
-  friend: 'friend',
-  coworker: 'coworker',
-  ex: 'ex',
-  other: 'other',
-};
+// The inverse map lives in the crypto-free `@selfos/core/sharing` (the single source of truth), so the
+// renderer imports it without pulling the host-only `@selfos/core/people` barrel (42 §5.1).
+import { INVERSE_RELATIONSHIP_TYPE as INVERSE } from '@selfos/core/sharing';
 
 /**
  * The relationship types present FROM the active person TO anyone in their graph — the types the sharing

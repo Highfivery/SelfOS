@@ -389,6 +389,28 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-24 — **Audit + fix (relationship-scoped sharing specs 42–44 post-merge review; on
+  `fix/relationship-sharing-audit-followups`, PR pending).** A complete audit of the merged 42/43/44 work
+  (privacy gate, context-assembly, trust boundary, E2E) — the core boundary (`factSharedWithViewer` +
+  `relationshipTypesFromSubjectToViewer`, reused by `summarizeForContext`/`listRelatedShareableInsights`)
+  is airtight: restricted/flagged short-circuit, fail-closed, partner-vs-sibling guarded by a decrypt-level
+  E2E. The `code-reviewer` agent + an independent read found **3 should-fixes**, all fixed: **(1)**
+  `buildLinkedPeopleContext` (the **dreams** linked-people context) bypassed the centralized gate — it now
+  routes through `factSharedWithViewer` (honoring `shareableTypes`, excluding `flaggedInaccurate` — a
+  **pre-existing** leak on the dreams surface) **and emits the §3.4 confidentiality preamble**, so "shared ≠
+  shown" holds on dreams too. **(2)** Memory's per-fact scope picker was editable for **onboarding** facts,
+  whose scope is **derived from `answerSharing`** and recomputed on re-synthesis → a Memory edit silently
+  reverted (could **re-widen** a narrowed scope); intake facts are now **read-only** in the card + SharingPanel
+  (change via "Edit answer", the single source of truth). **(3)** a corrupt scope now **fails closed** —
+  `InsightFact.shareableTypes` + `IntakeSection.answerSharing` gained `.catch(undefined)`, so a malformed
+  value degrades to own-only instead of throwing out of a related viewer's whole `buildContext`. Plus nits:
+  removed a non-null `!` (CLAUDE.md §4) and deduped the inverse-type map into a single
+  `INVERSE_RELATIONSHIP_TYPE` in `@selfos/core/sharing`. Gate green: typecheck, lint, format, **719 core + 11
+  relay + 768 desktop** unit (+4), **105 E2E**. **Lesson: when a feature centralizes a privacy gate into one
+  function, grep EVERY context-assembly caller and migrate them all — `buildLinkedPeopleContext` was left on
+  the old inline filter, so the new relationship-type scoping AND the confidentiality rule silently didn't
+  apply on the dreams surface; and a derived value (an intake fact's scope, from `answerSharing`) must not get
+  an independent editable control that a recompute silently reverts.**
 - 2026-06-24 — **Build (Memory dashboard overhaul — SPEC 44 BUILT; on `feat/memory-dashboard-overhaul`, PR
   pending).** The Memory half of the relationship-sharing group (consumes spec 42, amends spec 20) — making
   Memory **readable, consumable, and trustworthy**. **(1) Stats summary header** (`StatsSummary` + pure

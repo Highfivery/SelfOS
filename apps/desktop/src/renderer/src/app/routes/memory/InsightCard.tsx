@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowUpRight, PencilLine, Trash2 } from 'lucide-react';
+import { ArrowUpRight, Lock, PencilLine, ShieldAlert, Trash2, Users } from 'lucide-react';
 import type { Insight, InsightFact, RelationshipType } from '@shared/schemas';
+import { describeScope } from '@selfos/core/sharing';
 import { useInsightStore } from '../../../stores/insightStore';
 import {
   Banner,
@@ -218,8 +219,11 @@ export function InsightCard({
                   ) : null}
                   <div className={styles.factControls}>
                     {/* A flagged fact is excluded from everyone's context + from outbound sharing, so a
-                        sharing picker on it would be misleading — hide it until the flag is cleared. */}
-                    {isOwn && !fact.flaggedInaccurate ? (
+                        sharing picker on it would be misleading — hide it until the flag is cleared. An
+                        ONBOARDING fact's scope is DERIVED from its answer (43 §4) and recomputed on every
+                        re-synthesis, so editing it directly here would silently revert — show it READ-ONLY
+                        and change sharing via "Edit answer". AI-inferred facts stay directly editable. */}
+                    {isOwn && !fact.flaggedInaccurate && !isIntake ? (
                       <FactSharingControl
                         insightId={insight.id}
                         subjectPersonId={insight.subjectPersonId}
@@ -227,6 +231,35 @@ export function InsightCard({
                         disabled={busy}
                         {...(availableTypes ? { availableTypes } : {})}
                       />
+                    ) : null}
+                    {isOwn && !fact.flaggedInaccurate && isIntake ? (
+                      fact.restricted ? (
+                        // A sensitive (restricted) onboarding fact is own-coaching-only. Sharing it is an
+                        // opt-in on the onboarding ANSWER (43 §8 / §3.1), so Memory shows it READ-ONLY —
+                        // change it via "Edit answer", never a fact-level write that re-synthesis reverts.
+                        <span
+                          className={styles.sensitiveTag}
+                          title="Sensitive — only your own coach uses this. Change sharing via “Edit answer”."
+                        >
+                          <ShieldAlert size={12} aria-hidden="true" /> sensitive · only your coach
+                        </span>
+                      ) : (
+                        <span
+                          className={styles.derivedScope}
+                          title="Set by your onboarding answer — use “Edit answer” to change who this informs"
+                        >
+                          {(fact.shareableTypes?.length ?? 0) > 0 ? (
+                            <>
+                              <Users size={12} aria-hidden="true" /> Shared:{' '}
+                              {describeScope(fact.shareableTypes ?? [])}
+                            </>
+                          ) : (
+                            <>
+                              <Lock size={12} aria-hidden="true" /> Private
+                            </>
+                          )}
+                        </span>
+                      )
                     ) : null}
                     {/* AI-INFERRED facts can be pushed back on ("this isn't right about me"); ONBOARDING facts
                         are what you told us — you fix them by editing the answer, not flagging (§3.4). */}

@@ -155,8 +155,9 @@ export function IntakeFormPanel({
   // The section bulk scope — a common value when every question agrees, else "mixed" (43 §3.2).
   const questionIds = (meta.questions ?? []).map((q) => q.id);
   const bulkScope: RelationshipType[] | null = (() => {
-    if (questionIds.length === 0) return [];
-    const first = scopes[questionIds[0]!] ?? [];
+    const [firstId] = questionIds;
+    if (firstId === undefined) return [];
+    const first = scopes[firstId] ?? [];
     return questionIds.every((qid) => sameScope(scopes[qid] ?? [], first)) ? first : null;
   })();
   const applyBulk = (types: RelationshipType[]): void => {

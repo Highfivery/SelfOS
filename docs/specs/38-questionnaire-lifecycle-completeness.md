@@ -632,9 +632,14 @@ decisions). Recommended order, smallest-risk first:
    the bridge runs), so the Draft state + Send-disable react instantly. The sender-facing status label for an
    in-progress draft is now **"Started"** (the recipient opened + saved a draft but hasn't submitted — never
    the draft answers; §11 #8). Renderer + derivation only; expiry surfacing lands in slice 4.
-4. **Link lifecycle: revoke-on-reask/reshare + expiry surfacing.** Make re-ask + reshare revoke the prior
-   open link (per §11 #4); surface `expiresAt` in Results; ensure Revoke reaches every relay-linked send
-   shape. Verify across all delivery paths. (§11 #4.)
+4. **Link lifecycle: revoke-on-reask/reshare + expiry surfacing.** ✅ **Built (2026-06-23).** Verified
+   reshare **already auto-revokes** the prior mailbox before minting a fresh link (`reshareLink` →
+   `revokeRelayForDeletion` → `relay.revoke`), so an old emailed link stops working on reshare (§11 #4 —
+   the §1.1 ground-truth note was stale). `SendResult` now carries `expiresAt` (bridge-included only for a
+   still-open relay-linked send), and Results shows a **"Link expires in N days" / "today" / "Link expired"**
+   countdown so the sender knows when to re-share before the recipient hits a dead link (§3.6). Revoke
+   already reaches every relay-linked open send (gated on `relayLinked && isOpen`, not `channel`).
+   **Revoke-on-re-ask lands with re-ask in slice 5.**
 5. **Re-ask in one action (+ optional reminder).** `assignments:reAsk` re-sends the same snapshot to the
    same recipient with `reAskOf` chaining + the §11-decided prior-link handling; the optional in-app
    reminder if §11 #3 keeps it in v1. (§11 #3, #4.)

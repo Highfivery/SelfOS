@@ -31,6 +31,16 @@ import styles from './Questionnaires.module.css';
 
 const OPEN_STATUSES: AssignmentStatus[] = ['sent', 'opened', 'inProgress'];
 
+/** A human countdown for a relay link's expiry, so the sender knows when to re-share (38 §3.6). */
+export function formatLinkExpiry(expiresAt: string, now: number = Date.now()): string {
+  const ms = new Date(expiresAt).getTime() - now;
+  if (!Number.isFinite(ms)) return '';
+  if (ms <= 0) return 'Link expired';
+  const days = Math.ceil(ms / (24 * 60 * 60 * 1000));
+  if (days <= 1) return 'Link expires today';
+  return `Link expires in ${days} days`;
+}
+
 // Sender-facing lifecycle labels (38 §3.5). "Started" = the recipient opened and saved a draft (inProgress)
 // but hasn't submitted — the sender sees only that it's underway, never the draft answers.
 const STATUS_LABEL: Record<AssignmentStatus, string> = {
@@ -338,6 +348,12 @@ function SendCard({
             {send.channel === 'relay'
               ? 'Sent via a private link.'
               : 'In their Inbox — also answerable via the link you shared.'}
+          </Text>
+        ) : null}
+
+        {send.expiresAt ? (
+          <Text size="sm" tone="secondary">
+            {formatLinkExpiry(send.expiresAt)}
           </Text>
         ) : null}
 

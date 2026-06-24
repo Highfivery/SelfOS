@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import type { SendResult } from '@shared/schemas';
-import { QuestionnaireResults } from './QuestionnaireResults';
+import { QuestionnaireResults, formatLinkExpiry } from './QuestionnaireResults';
 import { useResultsStore } from '../../../stores/resultsStore';
 import { useNotificationStore } from '../../../stores/notificationStore';
 import { useSettingsStore } from '../../../settings/settingsStore';
@@ -71,6 +71,18 @@ describe('QuestionnaireResults', () => {
     expect(slot()).toBe(false); // unread before the sender opens Results
     renderResults();
     await waitFor(() => expect(slot()).toBe(true)); // opening Results = "seen"
+  });
+
+  it('surfaces a relay link’s expiry on an open send (38 §3.6)', async () => {
+    const future = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+    installMockBridge({
+      assignmentsResults: () =>
+        Promise.resolve([
+          send({ relayLinked: true, channel: 'relay', status: 'sent', expiresAt: future }),
+        ]),
+    });
+    renderResults();
+    expect(await screen.findByText(/link expires in 3 days/i)).toBeInTheDocument();
   });
 
   it('shows the raw answers for a Standard, submitted send', async () => {
@@ -316,5 +328,16 @@ describe('QuestionnaireResults', () => {
     ).toBeInTheDocument();
     expect(screen.getByDisplayValue('112233')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^email$/i })).toBeInTheDocument();
+  });
+});
+
+describe('formatLinkExpiry (38 §3.6)', () => {
+  const now = Date.UTC(2026, 5, 23);
+  it('counts down days, names today, and reports an expired link', () => {
+    expect(formatLinkExpiry(new Date(now + 3 * 864e5).toISOString(), now)).toBe(
+      'Link expires in 3 days',
+    );
+    expect(formatLinkExpiry(new Date(now + 1000).toISOString(), now)).toBe('Link expires today');
+    expect(formatLinkExpiry(new Date(now - 864e5).toISOString(), now)).toBe('Link expired');
   });
 });

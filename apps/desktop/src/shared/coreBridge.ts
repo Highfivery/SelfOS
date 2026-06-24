@@ -2223,6 +2223,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           privacy: a.privacy,
           createdAt: a.createdAt,
           analyzed: analyzed.has(a.id),
+          // Surface the link expiry only for a still-open relay-linked send — once submitted/revoked/expired
+          // the countdown is moot (38 §3.6).
+          ...(a.relay &&
+          a.expiresAt &&
+          (a.status === 'sent' || a.status === 'opened' || a.status === 'inProgress')
+            ? { expiresAt: a.expiresAt }
+            : {}),
           ...(a.status === 'submitted' ? { submittedAt: a.updatedAt } : {}),
           ...(a.declineNote !== undefined ? { declineNote: a.declineNote } : {}),
           ...(answers ? { answers } : {}),

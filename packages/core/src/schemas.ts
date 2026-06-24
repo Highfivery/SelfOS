@@ -1785,6 +1785,9 @@ export interface SendResult {
   status: AssignmentStatus;
   privacy: PrivacyMode;
   createdAt: string;
+  // When a relay-linked send's link stops working (default 60 days). Surfaced so the sender knows when to
+  // re-share, before the recipient hits a dead link (38 §3.6). Absent on a link-less in-app send.
+  expiresAt?: string;
   submittedAt?: string;
   declineNote?: string;
   analyzed: boolean;

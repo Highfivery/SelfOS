@@ -209,6 +209,7 @@ import {
   reapOrphanShares,
   reconcileInsights,
   resolveMergeProposal,
+  retroTagLegacyPortraits,
   shouldAutoReconcile,
   updateInsight,
 } from '@selfos/core/insights';
@@ -2059,6 +2060,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const deps = await aiDeps('memory.own');
       if (!deps)
         return { ok: false, reason: auto ? 'SKIPPED' : 'DENIED', message: 'Not available.' };
+      // Free no-AI step that rides this pass (39 §4.5): retro-tag a legacy untagged portrait's facts with a
+      // life-area so it topic-narrows in context like a fresh one. Idempotent; never bumps updatedAt.
+      await retroTagLegacyPortraits(deps.fs, deps.key, deps.personId);
       return reconcileInsights(deps);
     },
     memoryReconcileState: async (): Promise<MemoryReconcileState> => {

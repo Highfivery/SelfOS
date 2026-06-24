@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { classifyParseOutcome, extractJsonObject, tolerantArray } from '../ai/jsonSalvage';
 import type { ClaudeClient, FileSystem } from '../host';
 import { uuid } from '../id';
 import type { Insight, InsightProvenance, MemoryReconcileResult, UsageEvent } from '../schemas';
@@ -23,19 +24,28 @@ import { deleteInsight, getInsight, listInsightsForPerson, saveInsight } from '.
 
 const ConfidenceSchema = z.enum(['low', 'medium', 'high']);
 
-/** The model returns operations over the supplied insight ids — never new content, never other subjects. */
+/**
+ * The model returns operations over the supplied insight ids — never new content, never other subjects.
+ * Tolerant (37 §3.1): one malformed op (bad confidence, missing id) drops without discarding the batch.
+ */
+const RECONCILE_OP_SENTINEL = { id: '', confidence: 'medium' as const };
+const RECONCILE_MERGE_SENTINEL = { from: '', into: '' };
 const ReconcileOpsSchema = z.object({
-  insights: z
-    .array(
-      z.object({
-        id: z.string().min(1),
-        confidence: ConfidenceSchema,
-        rationale: z.string().optional(),
-        categories: z.array(z.string()).optional(),
-      }),
-    )
-    .default([]),
-  merges: z.array(z.object({ from: z.string().min(1), into: z.string().min(1) })).default([]),
+  insights: tolerantArray(
+    z.object({
+      id: z.string().min(1),
+      confidence: ConfidenceSchema,
+      rationale: z.string().optional(),
+      categories: z.array(z.string()).optional(),
+    }),
+    RECONCILE_OP_SENTINEL,
+    (op) => op.id.trim() !== '',
+  ),
+  merges: tolerantArray(
+    z.object({ from: z.string().min(1), into: z.string().min(1) }),
+    RECONCILE_MERGE_SENTINEL,
+    (m) => m.from.trim() !== '' && m.into.trim() !== '',
+  ),
 });
 
 const RECONCILE_SYSTEM = `You maintain a person's private "memory" — a set of insights a wellness coach has \
@@ -66,18 +76,6 @@ function digestInsight(insight: Insight): unknown {
       ...(fact.flaggedInaccurate ? { flaggedInaccurate: true } : {}),
     })),
   };
-}
-
-function extractJsonObject(text: string): unknown {
-  const fenced = text.replace(/```json|```/gi, '');
-  const start = fenced.indexOf('{');
-  const end = fenced.lastIndexOf('}');
-  if (start === -1 || end === -1 || end < start) return null;
-  try {
-    return JSON.parse(fenced.slice(start, end + 1));
-  } catch {
-    return null;
-  }
 }
 
 const norm = (s: string): string => s.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -155,12 +153,9 @@ export async function reconcileInsights(deps: ReconcileDeps): Promise<MemoryReco
 
   const parsed = ReconcileOpsSchema.safeParse(extractJsonObject(streamed.text));
   if (!parsed.success) {
-    return {
-      ok: false,
-      usage,
-      reason: 'REFUSED',
-      message: 'The refresh came back in an unexpected shape.',
-    };
+    // Distinct honest reason (cut off vs unexpected shape vs a detected refusal) — 37 §3.2.
+    const { reason, message } = classifyParseOutcome(streamed.text, 'refresh');
+    return { ok: false, usage, reason, message };
   }
 
   const ids = new Set(active.map((i) => i.id));

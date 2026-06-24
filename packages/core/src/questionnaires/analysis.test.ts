@@ -153,12 +153,43 @@ describe('analyzeAssignment', () => {
     expect((await listAllInsights(fs, key)).length).toBe(1); // not duplicated
   });
 
-  it('degrades to REFUSED on unusable model output', async () => {
+  it('degrades to REFUSED on a refusal-shaped reply', async () => {
     const fs = memFileSystem();
     const assignmentId = await seedAnswered(fs);
     expect(
       await analyzeAssignment(deps(fs, fakeClient('I cannot help.')), { assignmentId }),
     ).toMatchObject({ ok: false, reason: 'REFUSED' });
+  });
+
+  it('returns an honest MALFORMED (not a data blame) on no-JSON junk', async () => {
+    const fs = memFileSystem();
+    const assignmentId = await seedAnswered(fs);
+    expect(
+      await analyzeAssignment(deps(fs, fakeClient('just some prose, no json')), { assignmentId }),
+    ).toMatchObject({ ok: false, reason: 'MALFORMED' });
+  });
+
+  it('salvages the good facts, dropping a malformed one (per-element, 37 §3.1)', async () => {
+    const fs = memFileSystem();
+    const assignmentId = await seedAnswered(fs);
+    // The 2nd fact is missing `shareable` → it drops; the 1st survives.
+    const text = JSON.stringify({
+      summary: 'A useful summary.',
+      facts: [{ text: 'Good fact', shareable: true }, { text: 'No shareable flag' }],
+    });
+    const result = await analyzeAssignment(deps(fs, fakeClient(text)), { assignmentId });
+    expect(result.ok).toBe(true);
+    expect(result.insight?.facts.map((f) => f.text)).toEqual(['Good fact']);
+  });
+
+  it('salvages the summary from a TRUNCATED reply (produces a partial Insight)', async () => {
+    const fs = memFileSystem();
+    const assignmentId = await seedAnswered(fs);
+    const truncated = '{"summary":"They want more connection.","facts":[{"text":"incomp';
+    const result = await analyzeAssignment(deps(fs, fakeClient(truncated)), { assignmentId });
+    expect(result.ok).toBe(true);
+    expect(result.insight?.summary).toBe('They want more connection.');
+    expect(result.insight?.facts).toEqual([]); // the cut-off fact is dropped
   });
 });
 

@@ -162,14 +162,52 @@ describe('dreamAnalysisService', () => {
     expect(res).toBeNull();
   });
 
-  it('returns ERROR when the synthesis output is not valid JSON', async () => {
+  it('returns an honest MALFORMED when the synthesis output is not valid JSON', async () => {
     const fs = memFileSystem();
     await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
     const res = await synthesizeAnalysis(
       deps(fs, fakeClient({ synthesisText: 'sorry, no json here' })),
     );
     expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.reason).toBe('ERROR');
+    // 37 §3.2: a no-JSON reply is MALFORMED ("unexpected shape"), distinct from a transport ERROR.
+    if (!res.ok) expect(res.reason).toBe('MALFORMED');
+  });
+
+  it('reports TRUNCATED on a cut-off reply (37 §3.2)', async () => {
+    const fs = memFileSystem();
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+    const res = await synthesizeAnalysis(
+      deps(fs, fakeClient({ synthesisText: '{"summary":"A dream of shifting roo' })),
+    );
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.reason).toBe('TRUNCATED');
+      expect(res.message).toMatch(/cut off/i);
+    }
+  });
+
+  it('tolerates an off-spec optional field — salvages the analysis (37 §3.1)', async () => {
+    const fs = memFileSystem();
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+    // `metrics` is a non-object (off-spec) and one reflectiveQuestion is a non-string — both salvage away,
+    // the analysis still completes from `summary` + the prose fields.
+    const text = JSON.stringify({
+      summary: 'A vivid dream.',
+      emotionalLandscape: 'Unsettled.',
+      wakingLifeConnections: 'Maybe work.',
+      notableImages: 'A long hallway.',
+      reflectiveQuestions: ['What felt unfinished?', 42],
+      tags: { emotions: [], symbols: [], settings: [], themes: [], people: [] },
+      metrics: 'not-an-object',
+      crisisFlag: true,
+    });
+    const res = await synthesizeAnalysis(deps(fs, fakeClient({ synthesisText: text })));
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.analysis.summary).toBe('A vivid dream.');
+      expect(res.analysis.reflectiveQuestions).toEqual(['What felt unfinished?']); // bad element dropped
+      expect(res.analysis.crisisFlag).toBe(true); // crisis signal preserved (§8)
+    }
   });
 
   it('requires an API key', async () => {

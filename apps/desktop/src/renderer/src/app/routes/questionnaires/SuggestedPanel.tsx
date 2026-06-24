@@ -17,7 +17,7 @@ export function toSeed(suggestion: QuestionnaireSuggestion): BuilderSeed {
     id: genId(),
     type: q.type,
     prompt: q.prompt,
-    required: q.required,
+    required: q.required ?? false, // a suggestion's sample question may omit `required` (37 §3.3)
   }));
   return { title: suggestion.title, type: suggestion.type, questions };
 }

@@ -1,4 +1,10 @@
 import { z } from 'zod';
+import {
+  classifyParseOutcome,
+  extractJsonObject,
+  salvageJsonObjectField,
+  tolerantArray,
+} from '../ai/jsonSalvage';
 import { uuid } from '../id';
 import { listInsightsForPerson, normalizeCategories, saveInsight } from '../insights';
 import type { AnswerValue } from './answering';
@@ -7,6 +13,9 @@ import { ANALYSIS_SYSTEM, buildAnalysisUserMessage } from './aiPrompts';
 import { getAssignment, getAssignmentSnapshot } from './assignmentService';
 import { runClaude, type AiDeps } from './generationService';
 import { getResponse } from './responseService';
+
+// Re-exported so existing importers (alignmentService, tests) keep one source of truth for the extractor.
+export { extractJsonObject } from '../ai/jsonSalvage';
 
 /**
  * Questionnaire **analysis** (08-questionnaires §3.7/§13.4): turn a recipient's submitted answers into a
@@ -19,26 +28,20 @@ import { getResponse } from './responseService';
  * the Memory surface are built here.
  */
 
+// Tolerant by design (37 §3.1): require only `summary`; a bad fact catches to a droppable sentinel; the
+// `crisisFlag` is preserved (.catch(undefined), never coerced — §8) so a per-fact salvage can't drop it.
+const FACT_SENTINEL = { text: '', shareable: false };
 const AnalysisSchema = z.object({
   summary: z.string().min(1),
-  facts: z.array(z.object({ text: z.string().min(1), shareable: z.boolean() })),
-  confidence: z.enum(['low', 'medium', 'high']).optional(),
-  crisisFlag: z.boolean().optional(),
-  categories: z.array(z.string()).optional(),
+  facts: tolerantArray(
+    z.object({ text: z.string().min(1), shareable: z.boolean() }),
+    FACT_SENTINEL,
+    (f) => f.text.trim() !== '',
+  ),
+  confidence: z.enum(['low', 'medium', 'high']).optional().catch(undefined),
+  crisisFlag: z.boolean().optional().catch(undefined),
+  categories: z.array(z.string()).catch([]).optional(),
 });
-
-/** Pull the first JSON object out of a model reply (tolerates fences / surrounding prose). */
-export function extractJsonObject(text: string): unknown {
-  const fenced = text.replace(/```json|```/gi, '');
-  const start = fenced.indexOf('{');
-  const end = fenced.lastIndexOf('}');
-  if (start === -1 || end === -1 || end < start) return null;
-  try {
-    return JSON.parse(fenced.slice(start, end + 1));
-  } catch {
-    return null;
-  }
-}
 
 function formatAnswer(value: AnswerValue): string {
   if (Array.isArray(value)) return value.join(', ');
@@ -81,15 +84,18 @@ export async function analyzeAssignment(
   );
   if (!call.ok) return { ok: false, reason: call.reason, message: call.message };
 
-  const validated = AnalysisSchema.safeParse(extractJsonObject(call.text));
-  if (!validated.success) {
-    return {
-      ok: false,
-      reason: 'REFUSED',
-      usage: call.usage,
-      message: 'Couldn’t analyze those answers.',
-    };
+  // Tolerant parse; on a truncated object, salvage at least the leading `summary` so a partial result still
+  // produces an Insight (37 "show any partial"). Only a genuinely-empty/no-JSON reply is classified.
+  let data = AnalysisSchema.safeParse(extractJsonObject(call.text)).data;
+  if (!data) {
+    const summary = salvageJsonObjectField(call.text, 'summary');
+    if (summary?.trim()) data = { summary, facts: [] };
   }
+  if (!data) {
+    const { reason, message } = classifyParseOutcome(call.text, 'analysis');
+    return { ok: false, reason, usage: call.usage, message };
+  }
+  const validated = { data } as const;
 
   // Metrics from questions that declared a `metricKey` (§4.3) — forward-compatible; empty until
   // metricKey authoring (owned by spec 11) exists, so today this stays {} for normal questionnaires.

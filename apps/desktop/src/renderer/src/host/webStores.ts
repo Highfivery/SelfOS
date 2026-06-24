@@ -170,6 +170,27 @@ export function webFakeClaudeClient(): ClaudeClient {
           usage: { inputTokens: 150, outputTokens: 60, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
       }
+      // The gap-finder "Suggested" turn (08 §3.7) — return a set whose sample questions OMIT `required`,
+      // deliberately imperfect so the offline path exercises the tolerant salvage (37 §10).
+      if (userText.includes('Suggest up to 3 questionnaires')) {
+        return Promise.resolve({
+          text: JSON.stringify([
+            {
+              title: 'Weekly partner check-in',
+              type: 'role-feedback',
+              rationale: 'You value quality time together.',
+              questions: [{ type: 'rating', prompt: 'How connected did you feel this week?' }],
+            },
+            {
+              title: 'What we each need',
+              type: 'general',
+              rationale: 'Surfacing needs early prevents drift.',
+              questions: [{ type: 'shortText', prompt: 'One thing you need more of right now?' }],
+            },
+          ]),
+          usage: { inputTokens: 120, outputTokens: 60, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
       // The session-analysis turn (09 §5) asks to "summarize this session" — return a valid
       // SessionAnalysisDraft so the preview renders a real wrap-up card with facts + mood.
       if (userText.includes('summarize this session')) {

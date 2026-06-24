@@ -94,9 +94,12 @@ describe('suggestGuidedSessions', () => {
     expect(await getCachedSuggestions(fs, key, 'p1')).toBeNull();
   });
 
-  it('returns REFUSED when nothing usable comes back (and does not cache)', async () => {
+  it('returns an honest MALFORMED (not a data blame) when nothing usable comes back (and does not cache)', async () => {
     const result = await suggestGuidedSessions(deps('no json here'), { adultAllowed: false });
-    expect(result).toMatchObject({ ok: false, reason: 'REFUSED' });
+    // 37 §3.2: a no-JSON reply is MALFORMED ("unexpected shape, try again"), never a "add more about
+    // yourself" data blame.
+    expect(result).toMatchObject({ ok: false, reason: 'MALFORMED' });
+    expect((result as { message: string }).message).not.toMatch(/add more about/i);
     expect(await getCachedSuggestions(fs, key, 'p1')).toBeNull();
   });
 });

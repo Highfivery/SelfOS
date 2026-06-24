@@ -385,6 +385,40 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-23 — **Build (AI output robustness & honest failures — SPEC 37 BUILT; on `feat/ai-output-robustness`,
+  PR open).** A whole class of bugs came from brittle handling of Claude's JSON: an all-or-nothing `safeParse`
+  that drops a good batch over one bad element, a strict `.parse` that nukes an otherwise-perfect result over one
+  off-spec field, and messages that **blame the user's data** when the real cause was a parse failure / truncation
+  / refusal. **Fixed the reported gap-finder bug** end-to-end ("No suggestions… add more about the people" fired
+  AFTER a successful call because `QuestionnaireSuggestionSchema.questions[].required` was `z.boolean()` [the model
+  omits it] + an all-or-nothing array parse + a data-blame message). Built ONE shared `@selfos/core/ai/jsonSalvage`
+  utility (the §11 "centralize" decision): non-throwing `extractJsonObject`/`extractJsonArray`, a string-aware
+  balanced-brace `salvageJsonArray`/`salvageJsonObjectArrayField` (generalizing the gold-standard portrait
+  salvage) + `salvageJsonObjectField` (recover a leading essential string from a truncated object), a
+  `tolerantArray(element, sentinel, keep)` Zod helper (per-element `.catch` → drop the bad, keep the rest), and
+  `classifyParseFailure`/`aiFailureMessage`/`classifyParseOutcome` — an **honest taxonomy**: `TRUNCATED` (empty/
+  unclosed → "cut off, try again"), `REFUSED` (refusal-prose, no JSON — **last-resort, never assumed first**),
+  else `MALFORMED` ("unexpected shape"). Widened `AiFailureReason` (+`TRUNCATED`/`MALFORMED`) + the inline result
+  unions; loosened the suggestion schema's `required` → optional; converted the strict draft schemas to tolerant
+  (require only the essential field, `.catch` optionals, `tolerantArray` batches) and adopted the shared
+  parse+classify across **gap-finder, generation, improve, variant, analysis, alignment, context-only distill,
+  session analysis, dream synthesis, reconcile, the guided-suggest twin, and the portrait** (migrated onto the
+  shared helpers). **Owner decisions (asked first, all recommendations):** proposed wording approved; show any
+  partial (≥1); NO one-retry on TRUNCATED (no surprise spend); empty-context kept as a **PRE-CALL** check
+  (`isThinContext` — the gap-finder hint fires without spending; a post-call zero is now an honest parse-outcome,
+  never a data blame). **Invariants verified:** meter-before-parse preserved everywhere; `crisisFlag`/
+  `distressSignal` preserved with `.catch(undefined)` (never coerced, never dropped by per-element salvage, §8);
+  privacy boundaries untouched (salvage operates only on the reply). Offline fakes made **imperfect by default**
+  (gap-finder fake omits `required`) so the suite exercises real salvage. Code-reviewer **ship** (meter-before-
+  parse, crisis-signal, privacy, variant option-count safety all verified; applied the 2 nits — fixed a split
+  comment + "suggestion set" noun so the message reads cleanly). Gate green: typecheck, lint, format, **599 core +
+  11 relay + 660 desktop** unit (+27 shared-helper, +gap-finder regression [3 `required`-less → 3 shown, was 0],
+  +per-service salvage/truncation/refusal cases, +`SuggestedPanel` RTL), **88/88 E2E** (+1 driving Suggested with
+  an imperfect fake → suggestions appear, no data blame). Synced spec 37 (→ Built). **Lesson: a strict `.parse` on
+  a model reply is the wrong contract — one off-spec optional field or one bad batch element must never discard an
+  otherwise-usable result, and the parse boundary must own a balanced-brace salvage for truncation; classify a
+  "no usable output" as TRUNCATED/MALFORMED first and REFUSED only on detected refusal-prose (never assume a
+  refusal); and offline fakes that return flawless JSON HIDE this class of bug — make them imperfect by default.**
 - 2026-06-23 — **Build (onboarding intimacy-matrix redesign — 5-point + gender/orientation-aware; spec 27 §4.2 +
   18 §14.5; on `feat/intimacy-matrix-redesign`, PR open).** Owner-approved decisions (implemented, not re-asked).
   The intake `activities` matrix went from a 3-state scale (Hard limit · Curious · Into it) to a **5-point ordered

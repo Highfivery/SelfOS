@@ -119,6 +119,29 @@ export function fakeClaudeClient(): ClaudeClient {
         });
       }
 
+      // The gap-finder "Suggested" turn (08 §3.7) asks to "Suggest up to 3 questionnaires". Return a set
+      // whose sample questions OMIT `required` — deliberately imperfect so the offline path exercises the
+      // tolerant salvage (37 §10: the fakes must not only return flawless JSON, or they hide live bugs).
+      if (userText.includes('Suggest up to 3 questionnaires')) {
+        return Promise.resolve({
+          text: JSON.stringify([
+            {
+              title: 'Weekly partner check-in',
+              type: 'role-feedback',
+              rationale: 'You value quality time together.',
+              questions: [{ type: 'rating', prompt: 'How connected did you feel this week?' }],
+            },
+            {
+              title: 'What we each need',
+              type: 'general',
+              rationale: 'Surfacing needs early prevents drift.',
+              questions: [{ type: 'shortText', prompt: 'One thing you need more of right now?' }],
+            },
+          ]),
+          usage: { inputTokens: 120, outputTokens: 60, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+
       // Questionnaire analysis + the context-only distillation (08 §3.7/§13.4/§16.2) ask to "Produce the
       // Insight JSON". Return a valid analysis object so the offline Analyze / contextOnly paths parse.
       if (userText.includes('Produce the Insight JSON')) {

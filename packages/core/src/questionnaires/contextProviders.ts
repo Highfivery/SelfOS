@@ -149,3 +149,23 @@ export async function gatherGenerationContext(
     .filter((s) => s !== '')
     .join('\n\n');
 }
+
+/**
+ * The boilerplate identity lines the profiles provider ALWAYS emits even when the author/target has no
+ * substantive data (so a literally-empty `gatherGenerationContext` never happens). Kept here next to the
+ * provider that produces them so the coupling lives in one place.
+ */
+const IDENTITY_PREFIXES = ['The questionnaire is created by', 'It is about'];
+
+/**
+ * Whether gathered context has NO substantive signal — only the identity boilerplate (37 §11). The
+ * gap-finder uses this for its PRE-CALL empty-state hint: with nothing to work from, say so without
+ * spending, instead of calling Claude and then blaming the user's data on a parse miss.
+ */
+export function isThinContext(context: string): boolean {
+  const lines = context
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l !== '');
+  return lines.every((l) => IDENTITY_PREFIXES.some((p) => l.startsWith(p)));
+}

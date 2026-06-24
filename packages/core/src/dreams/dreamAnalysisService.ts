@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { classifyParseOutcome, extractJsonObject, tolerantArray } from '../ai/jsonSalvage';
 import type { ClaudeClient, FileSystem } from '../host';
 import { uuid } from '../id';
 import { DreamTagsSchema } from '../schemas';
@@ -61,18 +62,26 @@ JSON object (no markdown fences, no prose outside it) with these keys:
 - "crisisFlag": true ONLY if self-harm, suicide, or acute crisis is disclosed (boolean)
 - "distressSignal": true if there are signs of significant trauma or recurring distress worth gently noting (boolean)`;
 
-/** The AI-output contract for synthesis — validated before it's trusted (the host owns ids/timestamps). */
+const EMPTY_TAGS = { emotions: [], symbols: [], settings: [], themes: [], people: [] };
+
+/**
+ * The AI-output contract for synthesis — validated before it's trusted (the host owns ids/timestamps).
+ * Tolerant by design (37 §3.1): require only `summary` (the analysis anchor); the other prose fields
+ * `.catch('')`, reflectiveQuestions is per-element salvaging, tags fall back to empty, metrics/optionals
+ * `.catch`. `crisisFlag`/`distressSignal` are preserved (.catch(undefined), never coerced — §8) so a
+ * per-element salvage can't drop a crisis/distress signal.
+ */
 const DreamAnalysisDraftSchema = z.object({
-  summary: z.string(),
-  emotionalLandscape: z.string(),
-  wakingLifeConnections: z.string(),
-  notableImages: z.string(),
-  reflectiveQuestions: z.array(z.string()),
-  coachingPrompt: z.string().optional(),
-  tags: DreamTagsSchema, // reuse the canonical tags shape so the validator can't drift
-  metrics: z.record(z.string(), z.number()).optional(),
-  crisisFlag: z.boolean().optional(),
-  distressSignal: z.boolean().optional(),
+  summary: z.string().min(1),
+  emotionalLandscape: z.string().catch(''),
+  wakingLifeConnections: z.string().catch(''),
+  notableImages: z.string().catch(''),
+  reflectiveQuestions: tolerantArray(z.string(), '', (q) => q.trim() !== ''),
+  coachingPrompt: z.string().optional().catch(undefined),
+  tags: DreamTagsSchema.catch(EMPTY_TAGS), // reuse the canonical tags shape so the validator can't drift
+  metrics: z.record(z.string(), z.number()).optional().catch(undefined),
+  crisisFlag: z.boolean().optional().catch(undefined),
+  distressSignal: z.boolean().optional().catch(undefined),
 });
 
 export interface DreamAnalysisTurnDeps {
@@ -248,15 +257,6 @@ export async function runAnalysisTurn(deps: DreamAnalysisTurnDeps): Promise<Chat
   return { ok: true, conversation, usage };
 }
 
-function extractJson(text: string): unknown {
-  // Strip markdown code fences first, then brace-match — models sometimes wrap JSON in ```json … ```.
-  const stripped = text.replace(/```json/gi, '').replace(/```/g, '');
-  const start = stripped.indexOf('{');
-  const end = stripped.lastIndexOf('}');
-  if (start === -1 || end === -1 || end < start) throw new Error('No JSON object in model output');
-  return JSON.parse(stripped.slice(start, end + 1));
-}
-
 /**
  * Synthesize the dream (+ any guided-chat transcript) into a structured, schema-validated `DreamAnalysis`,
  * persist it, and mark the dream `analyzed`. Re-synthesizing replaces the prior analysis and drops its
@@ -305,15 +305,12 @@ export async function synthesizeAnalysis(deps: DreamSynthesisDeps): Promise<Drea
   const usage = buildUsage(model, dreamId, personId, at, result.usage);
   await recordUsage(fs, key, usage);
 
-  let draft;
-  try {
-    draft = DreamAnalysisDraftSchema.parse(extractJson(result.text));
-  } catch {
-    return {
-      ok: false,
-      reason: 'ERROR',
-      message: 'The analysis came back in an unexpected shape. Please try again.',
-    };
+  // Tolerant parse; only a genuinely-empty/no-JSON reply (no salvageable `summary`) fails, classified into
+  // distinct honest reasons (TRUNCATED cut-off vs MALFORMED unexpected-shape vs REFUSED) — 37 §3.2.
+  const draft = DreamAnalysisDraftSchema.safeParse(extractJsonObject(result.text)).data;
+  if (!draft) {
+    const { reason, message } = classifyParseOutcome(result.text, 'analysis');
+    return { ok: false, reason, message, usage };
   }
 
   // Re-synthesis: drop the prior analysis's Insight so a stale reading can't keep feeding the coach.

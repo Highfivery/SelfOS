@@ -1,4 +1,10 @@
 import { z } from 'zod';
+import {
+  classifyParseFailure,
+  extractJsonObject,
+  salvageJsonObjectArrayField,
+  salvageJsonObjectField,
+} from '../ai/jsonSalvage';
 import type { ClaudeClient, FileSystem } from '../host';
 import { uuid } from '../id';
 import {
@@ -491,62 +497,23 @@ export async function skipIntakeSection(
 
 // --- Synthesis ---
 
-function extractJson(text: string): unknown {
-  const stripped = text.replace(/```json/gi, '').replace(/```/g, '');
-  const start = stripped.indexOf('{');
-  const end = stripped.lastIndexOf('}');
-  if (start === -1 || end === -1 || end < start) throw new Error('No JSON object in model output');
-  return JSON.parse(stripped.slice(start, end + 1));
-}
-
 /**
  * Recover a usable portrait from a TRUNCATED reply (fix 2026-06-23, issue #19): on a maximal intake the model
- * can emit a portrait JSON that exceeds the output budget and gets cut off mid-`facts`, so `JSON.parse` of the
- * whole thing throws. But the summary comes FIRST and is almost always intact, and most facts completed — so
- * rather than dead-end the user, pull the `portrait` string + every COMPLETE fact object (skipping the
- * truncated trailing one). Returns null only if even the summary didn't come through.
+ * can emit a portrait JSON that exceeds the output budget and gets cut off mid-`facts`, so a whole-reply parse
+ * fails. But the summary comes FIRST and is almost always intact, and most facts completed — so rather than
+ * dead-end the user, pull the `portrait` string + every COMPLETE fact object (skipping the truncated trailing
+ * one). Now built on the shared `@selfos/core/ai` salvage helpers (37-ai-output-robustness §5.1) so the
+ * gold-standard logic lives in one place. Returns null only if even the summary didn't come through.
  */
 function salvageTruncatedPortrait(
   text: string,
 ): { portrait: string; facts: { text: string; section?: string; lifeArea?: string }[] } | null {
-  const stripped = text.replace(/```json/gi, '').replace(/```/g, '');
-  const pm = stripped.match(/"portrait"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-  if (!pm?.[1]) return null;
-  let portrait: string;
-  try {
-    portrait = JSON.parse(`"${pm[1]}"`) as string;
-  } catch {
-    return null;
-  }
-  if (!portrait.trim()) return null;
-
-  const facts: { text: string; section?: string; lifeArea?: string }[] = [];
-  const arrStart = stripped.indexOf('[', stripped.indexOf('"facts"'));
-  if (stripped.includes('"facts"') && arrStart !== -1) {
-    let depth = 0;
-    let objStart = -1;
-    for (let i = arrStart + 1; i < stripped.length; i++) {
-      const c = stripped[i];
-      if (c === '{') {
-        if (depth === 0) objStart = i;
-        depth++;
-      } else if (c === '}') {
-        depth--;
-        if (depth === 0 && objStart !== -1) {
-          try {
-            const o = JSON.parse(stripped.slice(objStart, i + 1)) as { text?: unknown };
-            if (o && typeof o.text === 'string')
-              facts.push(o as { text: string; section?: string; lifeArea?: string });
-          } catch {
-            /* skip a malformed object */
-          }
-          objStart = -1;
-        }
-      } else if (c === ']' && depth === 0) {
-        break;
-      }
-    }
-  }
+  const portrait = salvageJsonObjectField(text, 'portrait');
+  if (!portrait?.trim()) return null;
+  const facts = salvageJsonObjectArrayField(text, 'facts').filter(
+    (o): o is { text: string; section?: string; lifeArea?: string } =>
+      typeof (o as { text?: unknown }).text === 'string',
+  );
   return { portrait, facts };
 }
 
@@ -558,8 +525,9 @@ const ReflectionDraftSchema = z.object({ reflection: z.string() });
 // field from the model — a non-numeric `metric`, a malformed fact, a non-array `values` — must NOT discard
 // an otherwise-complete portrait. Only `portrait` (a string) is hard-required; every other field falls back
 // to a safe default via `.catch`, and empty-text facts (a caught/malformed fact becomes `{text:''}`) are
-// dropped downstream. (A TRUNCATED reply is a different failure — incomplete JSON throws in `extractJson`
-// before this runs, and is reported distinctly as "cut off"; the larger output budget makes it rare.)
+// dropped downstream. (A TRUNCATED reply is a different failure — the shared extractor returns null, then
+// `salvageTruncatedPortrait` recovers the summary + complete facts; if even that fails it's reported
+// distinctly as "cut off" via `classifyParseFailure`; the larger output budget makes it rare.)
 const PortraitDraftSchema = z.object({
   portrait: z.string(),
   facts: z
@@ -825,12 +793,10 @@ async function synthesizeSection(
   const usage = buildUsage('intake.synthesize', model, session.id, personId, at, result.usage);
   await recordUsage(fs, key, usage);
 
-  let reflection: string | undefined;
-  try {
-    reflection = ReflectionDraftSchema.parse(extractJson(result.text)).reflection;
-  } catch {
-    reflection = undefined;
-  }
+  // A best-effort section reflection — uses the shared non-throwing extractor (37 §5.2); a miss just skips
+  // the reflection (the section still completes), so no honest-failure classification is needed here.
+  const reflection = ReflectionDraftSchema.safeParse(extractJsonObject(result.text)).data
+    ?.reflection;
   if (reflection) section.reflection = reflection;
   session.updatedAt = at;
   await writeEncryptedJson(fs, intakePath(personId), session, key);
@@ -928,17 +894,9 @@ async function synthesizePortrait(deps: IntakeSynthesizeDeps): Promise<IntakeSyn
   const usage = buildUsage('intake.synthesize', model, session.id, personId, at, result.usage);
   await recordUsage(fs, key, usage);
 
-  // Parse resiliently (fix 2026-06-22). `extractJson` THROWS on a truncated/absent JSON object; the tolerant
-  // schema then salvages any off-spec optional fields. So a failure here means there was no parseable JSON —
-  // almost always a draft cut off mid-stream. Distinguish that (the model emitted SOMETHING with a `{`) from a
-  // genuinely empty/no-JSON reply, and tell the user it's a retry, not a dead end.
-  let json: unknown = null;
-  try {
-    json = extractJson(result.text);
-  } catch {
-    json = null;
-  }
-  let parsed = PortraitDraftSchema.safeParse(json);
+  // Parse resiliently (fix 2026-06-22; 37 §5.2). The shared non-throwing extractor returns null on a
+  // truncated/absent object; the tolerant schema then salvages any off-spec optional fields.
+  let parsed = PortraitDraftSchema.safeParse(extractJsonObject(result.text));
   if (!parsed.success) {
     // Truncated mid-stream (issue #19): salvage the summary + the facts that DID come through, so a maximal
     // intake completes instead of dead-ending. The larger budget makes this the rare backstop, not the norm.
@@ -946,13 +904,15 @@ async function synthesizePortrait(deps: IntakeSynthesizeDeps): Promise<IntakeSyn
     if (salvaged) parsed = PortraitDraftSchema.safeParse(salvaged);
   }
   if (!parsed.success) {
-    const looksCutOff = result.text.includes('{');
+    // Distinct honest reasons (37 §3.2): TRUNCATED (cut off — a retry) vs MALFORMED (unexpected shape).
+    const reason = classifyParseFailure(result.text);
     return {
       ok: false,
-      reason: 'ERROR',
-      message: looksCutOff
-        ? 'The portrait was cut off before it finished. Please try again.'
-        : 'The portrait came back in an unexpected shape. Please try again.',
+      reason: reason === 'TRUNCATED' ? 'TRUNCATED' : 'MALFORMED',
+      message:
+        reason === 'TRUNCATED'
+          ? 'The portrait was cut off before it finished. Please try again.'
+          : 'The portrait came back in an unexpected shape. Please try again.',
     };
   }
   const draft = parsed.data;

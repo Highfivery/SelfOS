@@ -947,11 +947,12 @@ describe('createCoreBridge', () => {
       sensitivity: 'standard' as const,
       existingPrompts: [],
     };
-    // Owner with a key: the call runs past the gate + reaches Claude (the fake host returns non-JSON,
-    // so it gracefully REFUSEs — proving the gate passed and the metered path executed).
+    // Owner with a key: the call runs past the gate + reaches Claude (the fake host returns non-JSON, so it
+    // gracefully fails with an honest MALFORMED — proving the gate passed and the metered path executed; 37
+    // §3.2 reclassified a no-JSON reply from the old catch-all REFUSED to MALFORMED).
     const gen = await bridge.questionnairesGenerate(req);
     expect(gen.ok).toBe(false);
-    expect(gen.reason).toBe('REFUSED');
+    expect(gen.reason).toBe('MALFORMED');
 
     // A Guest (no questionnaires.create) is denied before any Claude call.
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });

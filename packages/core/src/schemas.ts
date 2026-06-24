@@ -953,13 +953,30 @@ export const QuestionnaireSuggestionSchema = z.object({
   type: z.string().min(1),
   rationale: z.string(),
   questions: z.array(
-    z.object({ type: AnswerTypeSchema, prompt: z.string().min(1), required: z.boolean() }),
+    // `required` is tolerant (37 §3.3): the model routinely omits it and it isn't essential to a
+    // *suggestion*. A whole-batch parse must never fail over a missing `required` (the gap-finder bug).
+    z.object({
+      type: AnswerTypeSchema,
+      prompt: z.string().min(1),
+      required: z.boolean().optional(),
+    }),
   ),
 });
 export type QuestionnaireSuggestion = z.infer<typeof QuestionnaireSuggestionSchema>;
 
-/** Outcome shapes for the AI authoring calls (08-questionnaires §13.3) — shared by the IPC + services. */
-export type AiFailureReason = 'NO_KEY' | 'DENIED' | 'BUDGET' | 'REFUSED' | 'ERROR';
+/**
+ * Outcome shapes for the AI authoring/analysis calls — shared by the IPC + services. `TRUNCATED` (cut off,
+ * a retry) and `MALFORMED` (a reply arrived but no usable JSON could be salvaged) are the honest, distinct
+ * parse-failure reasons (37 §3.2); `REFUSED` now means a *detected* refusal, not any parse miss.
+ */
+export type AiFailureReason =
+  | 'NO_KEY'
+  | 'DENIED'
+  | 'BUDGET'
+  | 'REFUSED'
+  | 'TRUNCATED'
+  | 'MALFORMED'
+  | 'ERROR';
 export interface QuestionnaireGenerateResult {
   ok: boolean;
   questions?: Question[];
@@ -1543,8 +1560,18 @@ export type SessionSummaryResult =
   | { ok: true; insight: Insight; usage: UsageEvent }
   | {
       ok: false;
-      reason: 'NO_KEY' | 'BUDGET' | 'ERROR' | 'MEMORY_DISABLED' | 'NOT_FOUND';
+      // TRUNCATED/MALFORMED/REFUSED are the honest parse-failure reasons (37 §3.2).
+      reason:
+        | 'NO_KEY'
+        | 'BUDGET'
+        | 'ERROR'
+        | 'MEMORY_DISABLED'
+        | 'NOT_FOUND'
+        | 'REFUSED'
+        | 'TRUNCATED'
+        | 'MALFORMED';
       message: string;
+      usage?: UsageEvent;
     };
 
 /**
@@ -1599,7 +1626,8 @@ export type GuidedSuggestResult =
   | { ok: true; generatedAt: string; suggestions: GuidedSuggestion[]; usage: UsageEvent }
   | {
       ok: false;
-      reason: 'NO_KEY' | 'BUDGET' | 'ERROR' | 'REFUSED' | 'DENIED';
+      // TRUNCATED/MALFORMED join the honest parse-failure reasons (37 §3.2).
+      reason: 'NO_KEY' | 'BUDGET' | 'ERROR' | 'REFUSED' | 'TRUNCATED' | 'MALFORMED' | 'DENIED';
       message: string;
       usage?: UsageEvent;
     };
@@ -1659,7 +1687,12 @@ export type IntakeSynthesisResult =
       // Absent when a section completes with no AI spend (best-effort reflection skipped, §11.3).
       usage?: UsageEvent;
     }
-  | { ok: false; reason: 'NO_KEY' | 'BUDGET' | 'ERROR'; message: string };
+  // TRUNCATED (cut off) vs MALFORMED (unexpected shape) are now distinct (37 §3.2; was both ERROR).
+  | {
+      ok: false;
+      reason: 'NO_KEY' | 'BUDGET' | 'ERROR' | 'TRUNCATED' | 'MALFORMED';
+      message: string;
+    };
 
 /**
  * One Inbox row for the recipient (08-questionnaires §3.3). A **derived** view — the recipient sees the
@@ -1815,8 +1848,18 @@ export type AlignmentResult =
   | { ok: true; report: AlignmentReport; usage: UsageEvent }
   | {
       ok: false;
-      reason: 'NO_KEY' | 'DENIED' | 'BUDGET' | 'REFUSED' | 'ERROR' | 'NOT_READY';
+      // TRUNCATED/MALFORMED join the honest parse-failure reasons (37 §3.2).
+      reason:
+        | 'NO_KEY'
+        | 'DENIED'
+        | 'BUDGET'
+        | 'REFUSED'
+        | 'TRUNCATED'
+        | 'MALFORMED'
+        | 'ERROR'
+        | 'NOT_READY';
       message: string;
+      usage?: UsageEvent;
     };
 
 /**
@@ -1828,7 +1871,16 @@ export type ContextOnlyResult =
   | { ok: true; updated: number; usage: UsageEvent[] }
   | {
       ok: false;
-      reason: 'NO_KEY' | 'DENIED' | 'BUDGET' | 'REFUSED' | 'ERROR' | 'NOT_READY';
+      // TRUNCATED/MALFORMED join the honest parse-failure reasons (37 §3.2).
+      reason:
+        | 'NO_KEY'
+        | 'DENIED'
+        | 'BUDGET'
+        | 'REFUSED'
+        | 'TRUNCATED'
+        | 'MALFORMED'
+        | 'ERROR'
+        | 'NOT_READY';
       message: string;
     };
 
@@ -1879,14 +1931,29 @@ export type CompatibilitySendResult =
     }
   | {
       ok: false;
-      reason: 'NO_KEY' | 'DENIED' | 'BUDGET' | 'REFUSED' | 'ERROR' | 'INVALID';
+      // TRUNCATED/MALFORMED propagate from a variant-generation parse failure (37 §3.2).
+      reason:
+        | 'NO_KEY'
+        | 'DENIED'
+        | 'BUDGET'
+        | 'REFUSED'
+        | 'TRUNCATED'
+        | 'MALFORMED'
+        | 'ERROR'
+        | 'INVALID';
       message: string;
     };
 
 /** The result of synthesizing a dream (+ guided transcript) into a structured analysis (12 §3.2). */
 export type DreamSynthesisResult =
   | { ok: true; analysis: DreamAnalysis; usage: UsageEvent }
-  | { ok: false; reason: 'NO_KEY' | 'BUDGET' | 'ERROR' | 'NOT_FOUND'; message: string };
+  | {
+      ok: false;
+      // TRUNCATED/MALFORMED/REFUSED are the honest parse-failure reasons (37 §3.2).
+      reason: 'NO_KEY' | 'BUDGET' | 'ERROR' | 'NOT_FOUND' | 'REFUSED' | 'TRUNCATED' | 'MALFORMED';
+      message: string;
+      usage?: UsageEvent;
+    };
 
 /** The result of approving a dream's analysis into the coach's memory (→ Insight, 12 §3.3). */
 export type DreamApproveResult =

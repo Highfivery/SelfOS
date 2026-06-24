@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { classifyParseOutcome, salvageJsonObjectField, tolerantArray } from '../ai/jsonSalvage';
 import type { FileSystem } from '../host';
 import { uuid } from '../id';
 import { listInsightsForPerson, saveInsight } from '../insights';
@@ -37,17 +38,28 @@ import { getResponse } from './responseService';
  * encrypted under the group folder, never the raw answers.
  */
 
+// Tolerant by design (37 §3.1): require only `summary`; per-question verdicts (`items`) and `facts` are
+// per-element salvaging — a bad verdict/fact drops, the rest survive, and an un-verdicted prompt simply
+// defaults to `mixed` downstream (the report is partial-safe). `crisisFlag` is preserved, never coerced (§8).
+const ALIGN_ITEM_SENTINEL = { canonicalId: '', agreement: 'mixed' as const, note: '' };
+const ALIGN_FACT_SENTINEL = { text: '', shareable: false };
 const AlignmentAiSchema = z.object({
   summary: z.string().min(1),
-  items: z.array(
+  items: tolerantArray(
     z.object({
       canonicalId: z.string(),
       agreement: z.enum(['aligned', 'mixed', 'divergent']),
       note: z.string(),
     }),
+    ALIGN_ITEM_SENTINEL,
+    (i) => i.canonicalId.trim() !== '',
   ),
-  crisisFlag: z.boolean().optional(),
-  facts: z.array(z.object({ text: z.string().min(1), shareable: z.boolean() })),
+  crisisFlag: z.boolean().optional().catch(undefined),
+  facts: tolerantArray(
+    z.object({ text: z.string().min(1), shareable: z.boolean() }),
+    ALIGN_FACT_SENTINEL,
+    (f) => f.text.trim() !== '',
+  ),
 });
 
 /** Read a group's stored alignment report; null if not generated yet. */
@@ -146,14 +158,18 @@ export async function generateAlignment(
   );
   if (!call.ok) return { ok: false, reason: call.reason, message: call.message };
 
-  const validated = AlignmentAiSchema.safeParse(extractJsonObject(call.text));
-  if (!validated.success) {
-    return {
-      ok: false,
-      reason: 'REFUSED',
-      message: 'Couldn’t align these responses. Please try again.',
-    };
+  // Tolerant parse; on a truncated object salvage the leading `summary` (the report is still useful — every
+  // aligned prompt defaults to `mixed`). Only a genuinely-empty/no-JSON reply is classified honestly.
+  let aiData = AlignmentAiSchema.safeParse(extractJsonObject(call.text)).data;
+  if (!aiData) {
+    const summary = salvageJsonObjectField(call.text, 'summary');
+    if (summary?.trim()) aiData = { summary, items: [], facts: [] };
   }
+  if (!aiData) {
+    const { reason, message } = classifyParseOutcome(call.text, 'comparison');
+    return { ok: false, reason, usage: call.usage, message };
+  }
+  const validated = { data: aiData } as const;
 
   // Merge the model's per-question verdicts back onto our aligned prompts (the canonicalId is the join).
   const verdictByCanon = new Map(validated.data.items.map((i) => [i.canonicalId, i]));
@@ -211,11 +227,17 @@ export async function generateAlignment(
   return { ok: true, report, usage: call.usage };
 }
 
+// Tolerant by design (37 §3.1): require only `summary`; per-fact salvage; `crisisFlag` preserved (§8).
+const DISTILL_FACT_SENTINEL = { text: '' };
 const ContextOnlyDistillSchema = z.object({
   summary: z.string().min(1),
-  facts: z.array(z.object({ text: z.string().min(1) })),
-  confidence: z.enum(['low', 'medium', 'high']).optional(),
-  crisisFlag: z.boolean().optional(),
+  facts: tolerantArray(
+    z.object({ text: z.string().min(1) }),
+    DISTILL_FACT_SENTINEL,
+    (f) => f.text.trim() !== '',
+  ),
+  confidence: z.enum(['low', 'medium', 'high']).optional().catch(undefined),
+  crisisFlag: z.boolean().optional().catch(undefined),
 });
 
 /**
@@ -267,10 +289,16 @@ export async function distillContextOnly(
     );
     if (!call.ok) return { ok: false, reason: call.reason, message: call.message };
 
-    const validated = ContextOnlyDistillSchema.safeParse(extractJsonObject(call.text));
-    if (!validated.success) {
-      return { ok: false, reason: 'REFUSED', message: 'Couldn’t distil those answers.' };
+    let distill = ContextOnlyDistillSchema.safeParse(extractJsonObject(call.text)).data;
+    if (!distill) {
+      const summary = salvageJsonObjectField(call.text, 'summary');
+      if (summary?.trim()) distill = { summary, facts: [] };
     }
+    if (!distill) {
+      const { reason, message } = classifyParseOutcome(call.text, 'summary');
+      return { ok: false, reason, message };
+    }
+    const validated = { data: distill } as const;
     usages.push(call.usage);
 
     const at = deps.now.toISOString();

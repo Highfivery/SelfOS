@@ -38,6 +38,9 @@
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-3);
+  /* Longer card titles (e.g. "Something I'm noticing") + a trailing link must wrap, not overflow, at
+     phone width (40 §9 — no horizontal scroll). */
+  flex-wrap: wrap;
 }
 
 .cardLink {

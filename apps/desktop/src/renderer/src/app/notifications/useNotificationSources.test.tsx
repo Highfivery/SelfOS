@@ -95,6 +95,101 @@ describe('useNotificationSources — responses-arrived (38 §3.1)', () => {
     });
   });
 
+  it('surfaces a stale goal as a goal-followup nudge (40 §3.2)', async () => {
+    const old = new Date(Date.now() - 40 * 86400000).toISOString();
+    installMockBridge({
+      goalsList: () =>
+        Promise.resolve([
+          {
+            id: 'g1',
+            schemaVersion: 1,
+            subjectPersonId: 'owner-1',
+            text: 'finish the deck',
+            status: 'open',
+            provenance: { at: old },
+            createdAt: old,
+            updatedAt: old,
+            lastTouchedAt: old,
+          },
+        ]),
+    });
+    asOwner();
+    await useNotificationStore.getState().load();
+    render(<Harness />);
+    await waitFor(() => {
+      const goal = useNotificationStore
+        .getState()
+        .notifications.find((n) => n.coalesceKey === 'goal-followup');
+      expect(goal?.body).toContain('finish the deck');
+      expect(goal?.action).toEqual({ type: 'navigate', to: '/memory' });
+    });
+  });
+
+  it('surfaces the synthesis observation, but yields to a same-area depth invitation (40 §3.3/§3.7)', async () => {
+    const synthesis = {
+      schemaVersion: 1,
+      subjectPersonId: 'owner-1',
+      observation: 'Connection keeps surfacing across your reflections.',
+      sources: ['sessions'],
+      lifeArea: 'Relationships',
+      computedAt: '2026-06-24T00:00:00.000Z',
+    };
+    // No competing depth nudge → the synthesis surfaces.
+    installMockBridge({ coachingGetSynthesis: () => Promise.resolve(synthesis) });
+    asOwner();
+    await useNotificationStore.getState().load();
+    const { unmount } = render(<Harness />);
+    await waitFor(() => {
+      const syn = useNotificationStore
+        .getState()
+        .notifications.find((n) => n.coalesceKey === 'coaching-synthesis');
+      expect(syn?.body).toContain('Connection keeps surfacing');
+    });
+    unmount();
+    clearMockBridge();
+    useNotificationStore.getState().reset();
+
+    // A depth invitation for the SAME life-area → the synthesis nudge yields (the actionable one wins).
+    installMockBridge({
+      coachingGetSynthesis: () => Promise.resolve(synthesis),
+      profileSuggestions: () =>
+        Promise.resolve([
+          {
+            id: 'd1',
+            schemaVersion: 1,
+            subjectPersonId: 'owner-1',
+            kind: 'depth' as const,
+            lifeArea: 'Relationships',
+            observed: 'your family',
+            rationale: 'family keeps coming up',
+            sourceInsightId: 'i1',
+            sourceKind: 'session' as const,
+            restricted: false,
+            status: 'pending' as const,
+            createdAt: 'now',
+            updatedAt: 'now',
+          },
+        ]),
+    });
+    asOwner();
+    await useNotificationStore.getState().load();
+    render(<Harness />);
+    await waitFor(() => {
+      // The depth/freshness nudge is present…
+      expect(
+        useNotificationStore
+          .getState()
+          .notifications.find((n) => n.coalesceKey === 'profile-freshness'),
+      ).toBeDefined();
+    });
+    // …and the synthesis nudge is suppressed for the same area.
+    expect(
+      useNotificationStore
+        .getState()
+        .notifications.find((n) => n.coalesceKey === 'coaching-synthesis'),
+    ).toBeUndefined();
+  });
+
   it('summarizes multiple responses without naming any one responder', async () => {
     installMockBridge({
       notificationsResponsesArrived: () =>

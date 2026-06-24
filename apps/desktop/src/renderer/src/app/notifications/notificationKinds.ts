@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { ClipboardCheck, Clock, Download, RefreshCw, Sparkles } from 'lucide-react';
+import { ClipboardCheck, Clock, Download, RefreshCw, Sparkles, Target } from 'lucide-react';
 import type {
   Notification,
   NotificationAction,
@@ -48,6 +48,13 @@ export const NOTIFICATION_KIND_DEFS: Record<NotificationKind, KindDef> = {
   // unless ANOTHER send passes the window — answering/resolving some never re-pops it.
   'reminder-due': { icon: Clock, severity: 'info', resurfaces: onIncrease },
   'sync-conflict': { icon: RefreshCw, severity: 'warning', resurfaces: onIncrease },
+  // A gentle check-in on a stale/due goal (40 §3.2). onChange: acting on the goal changes its signature
+  // (id + updatedAt) so a dismissed nudge stays dismissed until the goal itself changes, and resolving the
+  // stalest one surfaces the next (≤1 open at a time, coalesced by the fixed 'goal-followup' key).
+  'goal-followup': { icon: Target, severity: 'info', resurfaces: onChange },
+  // The cross-feature synthesis observation (40 §3.3). onChange: a NEW synthesis (a later computedAt)
+  // supersedes a dismissed one; a same-area depth/freshness nudge suppresses it upstream (§3.7).
+  'coaching-synthesis': { icon: Sparkles, severity: 'info', resurfaces: onChange },
 };
 
 /** The icon for a kind (used by the bell rows + toasts). */

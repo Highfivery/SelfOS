@@ -237,6 +237,11 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     goalsSetStatus: () => Promise.resolve(null),
     goalsUpdate: () => Promise.resolve(null),
     goalsDelete: () => Promise.resolve(),
+    coachingGetPrefs: () => Promise.resolve({ schemaVersion: 1 }),
+    coachingSetPrefs: (input) => Promise.resolve({ schemaVersion: 1, ...input }),
+    coachingGetSynthesis: () => Promise.resolve(null),
+    coachingSynthesize: () =>
+      Promise.resolve({ ok: false, reason: 'EMPTY', message: 'Nothing yet.' }),
     assignmentsCreate: (input) =>
       Promise.resolve({
         assignment: {

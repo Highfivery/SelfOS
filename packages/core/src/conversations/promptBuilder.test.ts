@@ -98,4 +98,36 @@ describe('buildSystemPrompt', () => {
     const free = await buildSystemPrompt(fs, key, 'p1');
     expect(withEmpty).toBe(free);
   });
+
+  it('appends the in-session goal-raise AFTER persona+safety+context (40 §3.1)', async () => {
+    await savePerson(fs, key, person('p1', 'Alex'));
+    const goalRaise = {
+      goals: [{ text: 'finish the memoir', stale: true }],
+      level: 'gentle' as const,
+    };
+    const prompt = await buildSystemPrompt(
+      fs,
+      key,
+      'p1',
+      undefined,
+      undefined,
+      undefined,
+      goalRaise,
+    );
+    expect(prompt).toContain('finish the memoir'); // the commitment is named
+    expect(prompt).toMatch(/safety/i); // yields to safety
+    // The boundary always leads — the raise comes after persona + safety.
+    expect(prompt.indexOf(SAFETY)).toBeLessThan(prompt.indexOf('finish the memoir'));
+    // …and before the formatting contract, which is always last.
+    expect(prompt.indexOf('finish the memoir')).toBeLessThan(prompt.indexOf(FORMATTING));
+  });
+
+  it('adds no goal-raise when there are no active goals to raise', async () => {
+    await savePerson(fs, key, person('p1', 'Alex'));
+    const withEmpty = await buildSystemPrompt(fs, key, 'p1', undefined, undefined, undefined, {
+      goals: [],
+    });
+    const free = await buildSystemPrompt(fs, key, 'p1');
+    expect(withEmpty).toBe(free);
+  });
 });

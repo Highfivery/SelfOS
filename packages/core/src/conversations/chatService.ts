@@ -3,6 +3,7 @@ import { uuid } from '../id';
 import type { ChatTurnResult, Conversation, UsageEvent } from '../schemas';
 import { checkBudget, costOf, recordUsage } from '../usage';
 import type { DepthAskContext } from '../profile';
+import type { GoalRaiseContext } from '../coaching/goalRaise';
 import { getConversation, saveConversation } from './conversationService';
 import { buildSystemPrompt } from './promptBuilder';
 import { WRAP_UP_INSTRUCTION, WRAP_UP_MARKER } from './wrapUp';
@@ -25,6 +26,9 @@ export interface ChatTurnDeps {
   /** The optional in-session depth ask (29 §3.5) — the unexplored invited sections to gently invite. The host
    *  computes this (setting on + intake read + 18+-ack adult filtering); absent ⇒ no in-session ask. */
   depthAsk?: DepthAskContext;
+  /** The optional in-session goal-raise (40 §3.1) — the host computes this (proactivity on + active goals);
+   *  absent ⇒ no proactive follow-up this turn. Rides the same turn; no extra Claude call. */
+  goalRaise?: GoalRaiseContext;
   now: Date;
   override?: boolean;
 }
@@ -134,7 +138,7 @@ export async function runChatTurn(deps: ChatTurnDeps): Promise<ChatTurnResult> {
 
   // The wrap-up instruction teaches the coach the private completion-marker convention; the guided
   // addendum (if `guideId` is set) steers the turn after persona+safety+context (16 §5).
-  const system = `${await buildSystemPrompt(fs, key, personId, conversation.guideId, deps.depthAsk, topicOverride)}\n\n${WRAP_UP_INSTRUCTION}`;
+  const system = `${await buildSystemPrompt(fs, key, personId, conversation.guideId, deps.depthAsk, topicOverride, deps.goalRaise)}\n\n${WRAP_UP_INSTRUCTION}`;
   let result;
   try {
     result = await client.stream(

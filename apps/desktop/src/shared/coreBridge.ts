@@ -45,6 +45,11 @@ import {
   SessionStatusSchema,
   SettingsFileSchema,
   conversationStatus,
+  effectiveGoalStatus,
+  ProactivityLevelSchema,
+  type CoachingPrefs,
+  type CoachingSynthesis,
+  type CoachingSynthesisResult,
   type AiKeyStatus,
   type AlignmentResult,
   type DeviceView,
@@ -214,6 +219,16 @@ import {
   updateInsight,
 } from '@selfos/core/insights';
 import { deleteGoal, listGoals, setGoalStatus, updateGoal } from '@selfos/core/goals';
+import {
+  countNewInsights,
+  getCoachingPrefs,
+  getProactivity,
+  getSynthesis,
+  setCoachingPrefs,
+  shouldSynthesize,
+  synthesize,
+  type GoalRaiseGoal,
+} from '@selfos/core/coaching';
 import { INTIMACY_ACTIVITIES, INTIMACY_FANTASIES } from '@selfos/core/intimacy';
 import {
   addCustomIntimacyTopic,
@@ -607,6 +622,11 @@ const GoalUpdateSchema = z.object({
   horizon: z.string().optional(),
 });
 const GoalDeleteSchema = z.object({ goalId: z.string().min(1) });
+// Proactive coaching (40 §6) — the per-person proactivity preference write.
+const CoachingSetPrefsSchema = z.object({ proactivity: ProactivityLevelSchema });
+// `auto` (renderer cadence) applies the throttle/threshold gate; absent/false = a manual force (still
+// budget/key-gated, throttle bypassed).
+const CoachingSynthesizeSchema = z.object({ auto: z.boolean().optional() });
 const ResolveProposalSchema = z.object({
   proposalId: z.string().min(1),
   action: z.enum(['merge', 'keepBoth']),
@@ -1580,6 +1600,20 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         const sections = unfilledInvitedSections(session).filter((s) => !s.adult || adultAcked);
         if (sections.length > 0) depthAsk = { sections };
       }
+      // 40 §3.1 — in-session proactivity (per-person `coaching.proactivity`, default 'gentle'). When NOT off,
+      // hand the turn the person's active (open/in-progress/stale) commitments so the coach may gently follow
+      // up on ONE when relevant — free, riding this turn (no extra call). Bounded + ordered stale-first so the
+      // prime follow-up candidates lead; the builder withholds it entirely when there's nothing active.
+      const now = new Date();
+      const proactivity = await getProactivity(ctx.fs, ctx.key, personId);
+      let goalRaise: { goals: GoalRaiseGoal[]; level: 'gentle' | 'active' } | undefined;
+      if (proactivity !== 'off') {
+        const active = (await listGoals(ctx.fs, ctx.key, personId))
+          .filter((g) => g.status === 'open' || g.status === 'inProgress')
+          .map((g) => ({ text: g.text, stale: effectiveGoalStatus(g, now) === 'stale' }))
+          .sort((a, b) => Number(b.stale) - Number(a.stale)); // stale-first
+        if (active.length > 0) goalRaise = { goals: active, level: proactivity };
+      }
       return runChatTurn({
         fs: ctx.fs,
         key: ctx.key,
@@ -1591,7 +1625,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         userText,
         onDelta: (text) => host.emitChatChunk(text),
         ...(depthAsk ? { depthAsk } : {}),
-        now: new Date(),
+        ...(goalRaise ? { goalRaise } : {}),
+        now,
       });
     },
 
@@ -2132,6 +2167,82 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // The delete path is `people/<activePerson>/goals/<id>` — inherently scoped to the active person's
       // OWN goals, so a person can never remove another's (the trust boundary).
       await deleteGoal(ctx.fs, personId, p.goalId);
+    },
+    // --- Proactive coaching (40-proactive-coaching) — gated `sessions.own`, active-person-scoped ---
+    coachingGetPrefs: async (): Promise<CoachingPrefs | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'sessions.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      return getCoachingPrefs(ctx.fs, ctx.key, personId);
+    },
+    coachingSetPrefs: async (input): Promise<CoachingPrefs | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'sessions.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const p = CoachingSetPrefsSchema.parse(input);
+      // Scoped to the active person's OWN coaching prefs (the trust boundary) — each persona tunes their own.
+      return setCoachingPrefs(ctx.fs, ctx.key, personId, { proactivity: p.proactivity });
+    },
+    coachingGetSynthesis: async (): Promise<CoachingSynthesis | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'sessions.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      return getSynthesis(ctx.fs, ctx.key, personId);
+    },
+    coachingSynthesize: async (input): Promise<CoachingSynthesisResult> => {
+      const { auto } = CoachingSynthesizeSchema.parse(input ?? {});
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'sessions.own'))) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      // AI off → skip silently (40 §7) — no dead button (the card gates on `configured`), no alarming log.
+      if ((await readVaultSettingsValues(ctx.fs))['ai.enabled'] === false) {
+        return { ok: false, reason: 'AI_OFF', message: 'Turn on AI in Settings to use this.' };
+      }
+      // Proactivity `off` disables the synthesis pass entirely (40 §3.6) — a calm skip, never spends.
+      const level = await getProactivity(ctx.fs, ctx.key, personId);
+      if (level === 'off') {
+        return { ok: false, reason: 'EMPTY', message: 'Proactive coaching is turned off.' };
+      }
+      // An AUTOMATIC pass (renderer cadence) only runs when warranted (throttle window + new-insight delta);
+      // a MANUAL force bypasses just the throttle (still budget/key-gated). The marker is device-local/per-person.
+      const now = new Date();
+      if (auto) {
+        const insights = await listInsightsForPerson(ctx.fs, ctx.key, personId);
+        const device = await host.readDeviceState();
+        const lastSynthesizedAt = device.coachingSynthesizedAt?.[personId];
+        const newInsightCount = countNewInsights(insights, lastSynthesizedAt);
+        if (
+          !shouldSynthesize(
+            {
+              level,
+              newInsightCount,
+              ...(lastSynthesizedAt ? { lastSynthesizedAt } : {}),
+            },
+            now,
+          )
+        ) {
+          return { ok: false, reason: 'EMPTY', message: 'Nothing new to notice yet.' };
+        }
+      }
+      const deps = await aiDeps('sessions.own');
+      if (!deps) return { ok: false, reason: 'ERROR', message: 'Not available.' };
+      const result = await synthesize(deps);
+      // Stamp the throttle marker on a successful run (auto or manual) so auto won't re-fire within the window.
+      if (result.ok) {
+        const device = await host.readDeviceState();
+        await host.updateDeviceState({
+          coachingSynthesizedAt: {
+            ...(device.coachingSynthesizedAt ?? {}),
+            [personId]: new Date().toISOString(),
+          },
+        });
+      }
+      return result;
     },
     assignmentsCreate: async (input): Promise<InAppSendResult> => {
       const ctx = await host.vaultAndKey();

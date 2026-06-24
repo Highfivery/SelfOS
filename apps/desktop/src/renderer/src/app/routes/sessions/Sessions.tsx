@@ -277,6 +277,7 @@ export function Sessions(): JSX.Element {
             configured={configured}
             onStartFree={startFree}
             onPickGuided={startGuidedSession}
+            seedText={(location.state as { seedText?: string } | null)?.seedText ?? ''}
           />
         ) : (
           <>

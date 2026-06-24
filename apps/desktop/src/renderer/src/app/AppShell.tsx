@@ -32,10 +32,12 @@ import { useDreamPatternStore } from '../stores/dreamPatternStore';
 import { useResultsStore } from '../stores/resultsStore';
 import { useGuidanceStore } from '../stores/guidanceStore';
 import { useIntakeStore } from '../stores/intakeStore';
+import { useSynthesisStore } from '../stores/synthesisStore';
 import { useNotificationStore } from '../stores/notificationStore';
 import { useNotificationSources } from './notifications/useNotificationSources';
 import { useUpdateChecks } from './notifications/useUpdateChecks';
 import { useMemoryReconcile } from './notifications/useMemoryReconcile';
+import { useCoachingSynthesis } from './notifications/useCoachingSynthesis';
 import { ToastViewport } from './notifications/ToastViewport';
 import { Onboarding } from './routes/onboarding/Onboarding';
 import { AppHeader } from './AppHeader';
@@ -91,6 +93,8 @@ export function AppShell(): JSX.Element {
   useUpdateChecks();
   // Drive the automatic memory-reconcile cadence (launch + focus, gated + throttled); 39-living-memory §3.3.
   useMemoryReconcile();
+  // Drive the automatic cross-feature synthesis cadence (launch + focus, gated in the bridge); 40 §3.4.
+  useCoachingSynthesis();
 
   // When the signed-in person changes, drop the previous account's per-person data and load this
   // person's — sessions/usage/budget are per-user, so nothing from the prior login may linger
@@ -108,6 +112,7 @@ export function AppShell(): JSX.Element {
     useIntakeStore.getState().reset(); // the intake is per-person (18-personal-onboarding §7)
     useInsightStore.getState().reset(); // Memory is per-person — own + relationships only (20 §5.1)
     useGoalStore.getState().reset(); // tracked goals are per-person (39-living-memory §5.4)
+    useSynthesisStore.getState().reset(); // the cached cross-feature synthesis is per-person (40 §5.3)
     useNotificationStore.getState().reset(); // notifications are per-person, device-local (35 §4)
     void useNotificationStore.getState().load();
     void useConversationStore.getState().load();

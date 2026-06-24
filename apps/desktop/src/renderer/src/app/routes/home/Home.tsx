@@ -8,20 +8,26 @@ import { useInsightStore } from '../../../stores/insightStore';
 import { unansweredCount, useInboxStore } from '../../../stores/inboxStore';
 import { useGuidanceStore } from '../../../stores/guidanceStore';
 import { useIntakeStore } from '../../../stores/intakeStore';
+import { useSynthesisStore } from '../../../stores/synthesisStore';
+import { useGoalStore } from '../../../stores/goalStore';
 import { useSetting } from '../../../settings/useSetting';
+import { aggregateCrisisSignal } from '@selfos/core/coaching';
 import { CrisisFooter } from '../sessions/CrisisFooter';
+import { CrisisSupportBanner } from './CrisisSupportBanner';
 import { OnboardingCard } from './OnboardingCard';
 import { ProfileFreshnessCard } from './ProfileFreshnessCard';
 import { DepthInvitationCard } from './DepthInvitationCard';
 import { ContinueCard } from './ContinueCard';
 import { SuggestionsCard } from './SuggestionsCard';
 import { WellbeingCard } from './WellbeingCard';
+import { InsightOfTheWeekCard } from './InsightOfTheWeekCard';
+import { GoalFollowupCard } from './GoalFollowupCard';
 import { DreamsCard } from './DreamsCard';
 import { MemoryCard } from './MemoryCard';
 import { InboxCard } from './InboxCard';
 import { GettingStarted } from './GettingStarted';
 import { buildStatusLine, timeOfDayGreeting } from './greeting';
-import { hasRecentCrisis, sessionMoodPoints, wellbeingRead } from './wellbeing';
+import { sessionMoodPoints, wellbeingRead } from './wellbeing';
 import styles from './Home.module.css';
 
 /**
@@ -46,6 +52,7 @@ export function Home(): JSX.Element {
   const patternStats = useDreamPatternStore((s) => s.stats);
   const insights = useInsightStore((s) => s.insights);
   const inboxItems = useInboxStore((s) => s.items);
+  const goals = useGoalStore((s) => s.goals);
 
   const [aiEnabled] = useSetting('ai.enabled');
   const [hasKey, setHasKey] = useState(false);
@@ -68,6 +75,8 @@ export function Home(): JSX.Element {
       useInboxStore.getState().load(),
       useGuidanceStore.getState().load(),
       useIntakeStore.getState().load(),
+      useSynthesisStore.getState().load(),
+      useGoalStore.getState().load(), // bridge gates on memory.own → [] when not permitted
     ]).then(() => {
       if (!cancelled) setReady(true);
     });
@@ -87,7 +96,14 @@ export function Home(): JSX.Element {
     (i) => i.approved && i.subjectPersonId === activePersonId,
   );
   const moodPoints = activePersonId ? sessionMoodPoints(insights, activePersonId) : [];
-  const crisis = activePersonId ? hasRecentCrisis(insights, activePersonId) : false;
+  // Cross-insight crisis awareness (40 §3.5): recurring distress across the person's OWN approved insights +
+  // the dream nightmare nudge → a supportive, resources-first surface. Deterministic, no AI, no spend, and
+  // NOT governed by the proactivity setting (it's safety). Per-person — only this person's insights.
+  const crisis = aggregateCrisisSignal({
+    insights: approvedInsights,
+    nightmareNudge: patternStats?.nightmareNudge === true,
+    now: new Date(),
+  }).recurring;
   const inboxCount = unansweredCount(inboxItems);
 
   const greeting = `${timeOfDayGreeting(new Date().getHours())}, ${activePerson?.displayName ?? 'there'}`;
@@ -102,7 +118,8 @@ export function Home(): JSX.Element {
     conversations.length === 0 &&
     dreams.length === 0 &&
     approvedInsights.length === 0 &&
-    inboxCount === 0;
+    inboxCount === 0 &&
+    goals.length === 0;
 
   return (
     <div className={styles.home}>
@@ -110,6 +127,8 @@ export function Home(): JSX.Element {
         <h1 className={styles.greeting}>{greeting}</h1>
         {statusLine ? <p className={styles.status}>{statusLine}</p> : null}
       </header>
+
+      {ready && crisis ? <CrisisSupportBanner /> : null}
 
       {ready ? <OnboardingCard /> : null}
       {ready ? <ProfileFreshnessCard /> : null}
@@ -134,7 +153,14 @@ export function Home(): JSX.Element {
               canCreateQuestionnaires={canCreateQuestionnaires}
             />
           ) : null}
-          <WellbeingCard points={moodPoints} crisis={crisis} />
+          {canViewMemory ? <GoalFollowupCard /> : null}
+          <WellbeingCard points={moodPoints} />
+          {hasSessions ? (
+            <InsightOfTheWeekCard
+              configured={configured}
+              canSynthesize={approvedInsights.length >= 2}
+            />
+          ) : null}
           <DreamsCard dreams={dreams} stats={patternStats} />
           <MemoryCard insights={approvedInsights} canView={canViewMemory} />
           <InboxCard count={inboxCount} />

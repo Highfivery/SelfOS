@@ -1,23 +1,17 @@
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
-import { Banner, Card, Heading, LineChart, Stack } from '../../../design-system/components';
+import { Card, Heading, LineChart, Stack } from '../../../design-system/components';
 import type { MoodPoint } from './wellbeing';
 import { wellbeingRead } from './wellbeing';
 import styles from './Home.module.css';
 
 /**
  * "Wellbeing" — a gentle look at the mood signal from analyzed sessions (09 §14), as a two-series line
- * (valence + energy, −1..1). Framed plainly, never clinically (§7): a deterministic one-line read, a
- * not-medical line, and — if a recent session flagged a concern — a supportive banner leading with
- * resources. Hidden until there are ≥2 analyzed sessions.
+ * (valence + energy, −1..1). Framed plainly, never clinically (§7): a deterministic one-line read and a
+ * not-medical line. Hidden until there are ≥2 analyzed sessions. The recurring-distress supportive banner
+ * lives at the Home level (40 §3.5 `CrisisSupportBanner`) so it can show even without a mood chart.
  */
-export function WellbeingCard({
-  points,
-  crisis,
-}: {
-  points: MoodPoint[];
-  crisis: boolean;
-}): JSX.Element | null {
+export function WellbeingCard({ points }: { points: MoodPoint[] }): JSX.Element | null {
   const navigate = useNavigate();
   if (points.length < 2) return null;
 
@@ -37,14 +31,6 @@ export function WellbeingCard({
             <ArrowRight size={14} aria-hidden="true" />
           </button>
         </div>
-
-        {crisis ? (
-          <Banner tone="warning">
-            Some recent sessions sounded heavy. If things feel like too much, you deserve support
-            from someone who can help directly — call or text <strong>988</strong> (US &amp; Canada)
-            or your local emergency services.
-          </Banner>
-        ) : null}
 
         <LineChart
           series={series}

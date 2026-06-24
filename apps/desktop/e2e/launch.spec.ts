@@ -564,6 +564,254 @@ test('update awareness: the manual About check shows up-to-date, and a calm erro
   }
 });
 
+test('proactive coaching: the Coaching setting is per-person, member-reachable, persists; no overflow (40)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  await seedMemberWithPortrait(vault, userData, 'mara-1', 'Mara', 'a private fact');
+  const app = await launch(userData);
+  const label = { exact: true };
+  try {
+    const w = await app.firstWindow();
+
+    // Owner → Settings → the member-visible Coaching section → defaults to gentle → choose Active.
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'Coaching', exact: true }).click();
+    await expect(w.getByLabel('How proactive your coach is', label)).toHaveValue('gentle');
+    await w.getByLabel('How proactive your coach is', label).selectOption('active');
+
+    // Read-after-write through the live bridge: leaving + returning re-fetches the persisted (decrypted)
+    // value, so this confirms the write actually landed in the vault — no file-flush race.
+    await w.getByRole('link', { name: 'Home' }).click();
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'Coaching', exact: true }).click();
+    await expect(w.getByLabel('How proactive your coach is', label)).toHaveValue('active');
+
+    // No horizontal overflow at phone width while the control renders.
+    await w.setViewportSize({ width: 390, height: 780 });
+    const fits = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      return (
+        !!main &&
+        main.scrollWidth <= main.clientWidth &&
+        document.documentElement.scrollWidth <= window.innerWidth
+      );
+    });
+    expect(fits).toBe(true);
+    await w.setViewportSize({ width: 1024, height: 780 });
+
+    // Switch to the member — they can reach Coaching (per-person) but NOT the admin-only Sessions section.
+    await w.getByRole('button', { name: /signed in as/i }).click();
+    await w.getByRole('menuitem', { name: 'Switch person' }).click();
+    await w
+      .getByRole('dialog', { name: /who.s here/i })
+      .getByRole('button', { name: 'Mara' })
+      .click();
+    await expect(w.getByRole('button', { name: 'Signed in as Mara' })).toBeVisible();
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await expect(w.getByRole('button', { name: 'Coaching', exact: true })).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Sessions', exact: true })).toHaveCount(0); // admin-only
+
+    // The member tunes their OWN coach (default gentle, independent of the owner's 'active').
+    await w.getByRole('button', { name: 'Coaching', exact: true }).click();
+    await expect(w.getByLabel('How proactive your coach is', label)).toHaveValue('gentle');
+    await w.getByLabel('How proactive your coach is', label).selectOption('off');
+    await w.getByRole('link', { name: 'Home' }).click(); // leave + return to flush the write
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'Coaching', exact: true }).click();
+    await expect(w.getByLabel('How proactive your coach is', label)).toHaveValue('off');
+  } finally {
+    await app.close();
+  }
+
+  // Decrypt the vault: the owner kept 'active', the member chose 'off' — per-person isolation.
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  expect(await readEncryptedJson(fs, 'people/owner-1/coaching/prefs.enc', key!)).toMatchObject({
+    proactivity: 'active',
+  });
+  expect(await readEncryptedJson(fs, 'people/mara-1/coaching/prefs.enc', key!)).toMatchObject({
+    proactivity: 'off',
+  });
+  await rm(userData, { recursive: true, force: true });
+  await rm(vault, { recursive: true, force: true });
+});
+
+test('proactive coaching: recurring distress surfaces a supportive, resources-first banner on Home (40 §3.5)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  // Seed two recent crisis-flagged session insights for the owner (the deterministic ≥2-in-14-days signal).
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('master key missing');
+  const recent = (n: number): string =>
+    new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString();
+  for (const [id, days] of [
+    ['cr1', 1],
+    ['cr2', 4],
+  ] as const) {
+    await saveInsight(fs, key, {
+      id,
+      schemaVersion: 1,
+      source: 'session',
+      subjectPersonId: 'owner-1',
+      summary: 'A heavy session',
+      facts: [],
+      confidence: 'medium',
+      categories: [],
+      approved: true,
+      crisisFlag: true,
+      provenance: { conversationId: id, at: recent(days) },
+      createdAt: recent(days),
+      updatedAt: recent(days),
+    });
+  }
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    // Home is the default route — the supportive banner leads with real resources, never a metric/alarm.
+    await expect(w.getByText(/carrying a lot/i)).toBeVisible();
+    await expect(w.getByText('988')).toBeVisible();
+    // It is NOT a dismissible notification (no bell item, no dismiss control on the banner).
+    await expect(w.getByRole('button', { name: /dismiss/i })).toHaveCount(0);
+    // The always-present crisis footer is also there.
+    await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('proactive coaching: the synthesis card shows the cached observation and seeds a session (40 §3.3)', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('master key missing');
+  const at = new Date().toISOString();
+  // Two approved insights so the card isn't self-hidden, but below gentle's auto threshold (3) so the
+  // launch cadence stays a no-op — the pre-seeded cached observation is what we assert.
+  for (const id of ['s1', 's2']) {
+    await saveInsight(fs, key, {
+      id,
+      schemaVersion: 1,
+      source: 'session',
+      subjectPersonId: 'owner-1',
+      summary: `reflected on ${id}`,
+      facts: [{ id: `${id}f`, text: `a fact ${id}`, shareable: false }],
+      confidence: 'medium',
+      categories: ['Relationships'],
+      approved: true,
+      provenance: { conversationId: id, at },
+      createdAt: at,
+      updatedAt: at,
+    });
+  }
+  const observation =
+    'Connection keeps surfacing across your recent dreams and last week’s session.';
+  await writeEncryptedJson(
+    fs,
+    'people/owner-1/coaching/synthesis.enc',
+    {
+      schemaVersion: 1,
+      subjectPersonId: 'owner-1',
+      observation,
+      sources: ['sessions', 'dreams'],
+      lifeArea: 'Relationships',
+      computedAt: at,
+    },
+    key,
+  );
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    // Home surfaces the cross-feature observation as a gentle, non-clinical nudge.
+    await expect(w.getByRole('heading', { name: /something i.m noticing/i })).toBeVisible();
+    // Scope to the card (main) — the observation also appears in the coaching-synthesis toast (role=status).
+    await expect(w.getByRole('main').getByText(/connection keeps surfacing/i)).toBeVisible();
+    // Polish guard (§9): the proactive cards reflow with no horizontal overflow at phone width.
+    await w.setViewportSize({ width: 360, height: 780 });
+    const offenders = await w.evaluate(() => {
+      const out: string[] = [];
+      for (const el of Array.from(document.querySelectorAll('main *'))) {
+        if (el.scrollWidth > el.clientWidth + 1) {
+          const cs = getComputedStyle(el);
+          out.push(
+            `${el.tagName}.${el.className} sw=${el.scrollWidth} cw=${el.clientWidth} ox=${cs.overflowX}`,
+          );
+        }
+      }
+      return out;
+    });
+    expect(offenders).toEqual([]);
+    await w.setViewportSize({ width: 1024, height: 780 });
+    // "Talk it through" seeds a session prefilled with the observation (the §3.3 seed-handoff).
+    await w.getByRole('button', { name: /talk it through/i }).click();
+    await expect(w.getByLabel('Message')).toHaveValue(observation);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('proactive coaching: a stale goal surfaces a nudge + Home card; Mark done closes it (40 §3.2)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('master key missing');
+  const old = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString(); // 40 days → stale (>21)
+  await saveGoal(fs, key, {
+    id: 'g1',
+    schemaVersion: 1,
+    subjectPersonId: 'owner-1',
+    text: 'finish the side project',
+    status: 'open',
+    provenance: { conversationId: 'c0', at: old },
+    createdAt: old,
+    updatedAt: old,
+    lastTouchedAt: old,
+  });
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    // The Home goal-followup card surfaces the stale goal with the calm actions (exact: the card's
+    // <strong>, not the longer notification body that also names the goal).
+    await expect(w.getByRole('heading', { name: /still working on it/i })).toBeVisible();
+    await expect(w.getByText('finish the side project', { exact: true })).toBeVisible();
+    // The 3-action row wraps rather than overflowing at phone width (§9).
+    await w.setViewportSize({ width: 360, height: 780 });
+    const offenders = await w.evaluate(() => {
+      const out: string[] = [];
+      for (const el of Array.from(document.querySelectorAll('main *'))) {
+        if (el.scrollWidth > el.clientWidth + 1) {
+          out.push(`${el.tagName}.${el.className} sw=${el.scrollWidth} cw=${el.clientWidth}`);
+        }
+      }
+      return out;
+    });
+    expect(offenders).toEqual([]);
+    await w.setViewportSize({ width: 1024, height: 780 });
+    // …and the same signal is a (non-spammy) notification.
+    await expect(w.getByRole('button', { name: /Notifications, \d+ unread/ })).toBeVisible();
+    await w.getByRole('button', { name: /^Notifications/ }).click();
+    await expect(
+      w.getByRole('menu', { name: 'Notifications' }).getByText(/a goal worth a check-in/i),
+    ).toBeVisible();
+    await w.keyboard.press('Escape');
+
+    // Mark done closes the goal → the card drops away (acting un-stales/closes it).
+    await w.getByRole('button', { name: 'Mark done' }).click();
+    await expect(w.getByRole('heading', { name: /still working on it/i })).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+
+  // Decrypt: the goal is now done (the nudge can never return for it).
+  const goal = await getGoal(fs, key, 'owner-1', 'g1');
+  expect(goal?.status).toBe('done');
+  await rm(userData, { recursive: true, force: true });
+  await rm(vault, { recursive: true, force: true });
+});
+
 test('first-time setup creates the owner and enters the app', async () => {
   const userData = await mkdtemp(join(tmpdir(), 'selfos-e2e-ud-'));
   const vault = await mkdtemp(join(tmpdir(), 'selfos-e2e-vault-'));

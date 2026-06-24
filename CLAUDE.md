@@ -389,6 +389,37 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-24 — **Build (proactive coaching — SPEC 40 BUILT, all 5 slices; on `feat/proactive-coaching`, PR
+  pending).** The behaviour layer that ACTS on what spec 39's memory/goals know. **§11 resolved with the owner
+  first (all decisions recorded in spec 40 §11):** a single per-person `coaching.proactivity` enum
+  (off/gentle/active, **default gentle**, depth-ask kept separate); nudges live **in-session + Home cards +
+  spec-35 notifications, coalesced**; synthesis on a **weekly throttle + ≥3-new-insight** launch/focus cadence
+  (active = 3d/≥2) + a manual "What are you noticing lately?"; cross-insight crisis at **≥2 crisis flags in 14d
+  OR the nightmare nudge** → the Home supportive banner (never a notification, never disabled by the setting); a
+  synthesis observation **yields** to a same-area depth/freshness nudge. **Slice 1 (in-session, free):**
+  `@selfos/core/coaching` `goalRaiseInstruction` (the `depthAskInstruction` sibling, appended AFTER
+  persona+safety+context) + per-person `CoachingPrefs` read in the bridge; `coaching:getPrefs/setPrefs`; a
+  **member-visible Coaching settings section** (per-person via a `CoachingPrefs` file, NOT the household
+  registry) + `ProactivityControl`. **Slice 2 (crisis, no-AI):** `aggregateCrisisSignal` (renderer-computed,
+  the `hasRecentCrisis` precedent — no IPC channel) + a Home `CrisisSupportBanner` (non-dismissible,
+  resources-first, independent of the mood chart; supersedes the WellbeingCard's session-only banner). **Slice 3
+  (the one extra AI spend):** `coachingSynthesisService` (`synthesize`/`getSynthesis`/pure
+  `shouldSynthesize`/`countNewInsights`) + `CoachingSynthesis` cache + `coaching.synthesize` usage type +
+  per-person device-state throttle marker; tolerant-parse + **meter-before-parse**; digest is structured-only
+  (own insights' summaries + **non-restricted/non-flagged** facts + dream stats, never transcripts); a cadence
+  hook + `synthesisStore` + Home `InsightOfTheWeekCard` ("Talk it through" seeds a session via a Composer
+  `initialText` handoff). **Slice 4 (goal nudges):** the `goal-followup` notification kind + source (≤1,
+  stalest-first, onChange) + Home `GoalFollowupCard` (Still on it / Mark done / Let it go → `goals:setStatus`;
+  a tracked goal now counts toward "not new"). **Slice 5 (coordination):** the `coaching-synthesis` notification
+  kind + the same-area yield to depth/freshness; phone-width overflow polish (`.cardHead` flex-wrap + `Inline`
+  wrap). Code-reviewer **ship after one should-fix** (the synthesis EMPTY gate now counts RECENT in-window
+  insights so an all-stale history can't bill an empty digest; +per-person setting scope `device`; honest
+  `AI_OFF`). Gate green: typecheck, lint, format, **697 core + 11 relay + 715 desktop** unit, **99 E2E** (+4).
+  Synced spec 40 (→ Built; the two as-built deviations recorded). **Lesson: a synthesis/EMPTY gate must use the
+  SAME recency window the digest does (counting all-time approved insights let an all-stale history pay for an
+  empty pass); and a per-person preference belongs in a `CoachingPrefs` file read in the bridge, not the
+  household/device settings registry — its `vault`/`device` scopes can't express per-active-person, so the
+  registry entry stays inert while the custom control owns the real state via `coaching:get/setPrefs`.**
 - 2026-06-24 — **Feedback — HARD RULE (forceful): ALWAYS create _AND RUN_ E2E to verify work — never defer or
   skip it.** I shipped spec 38's PR with E2E "pending on-machine verification" on a bogus "needs a display"
   excuse. The user corrected this firmly. E2E **runs headlessly here**: `pnpm --filter @selfos/desktop exec

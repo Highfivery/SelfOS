@@ -55,6 +55,8 @@ export const NOTIFICATION_KINDS = [
   'responses-arrived',
   'reminder-due',
   'sync-conflict',
+  'goal-followup', // 40-proactive-coaching §3.2 — a gentle check-in on a stale/due goal
+  'coaching-synthesis', // 40 §3.3 — the cross-feature observation nudge
 ] as const;
 export const NotificationKindSchema = z.enum(NOTIFICATION_KINDS);
 export type NotificationKind = z.infer<typeof NotificationKindSchema>;
@@ -189,6 +191,12 @@ export const DeviceStateSchema = z.object({
    * precedent — no schemaVersion bump).
    */
   memoryReconcileCheckedAt: z.record(z.string(), z.string()).optional(),
+  /**
+   * When this device last RAN an automatic cross-feature synthesis, keyed by subject person id
+   * (40-proactive-coaching §4.2). The renderer-driven cadence throttle marker — device-local + per-person, the
+   * `memoryReconcileCheckedAt` precedent (ephemeral UI cadence state, must not sync). Additive-optional.
+   */
+  coachingSynthesizedAt: z.record(z.string(), z.string()).optional(),
 });
 export type DeviceState = z.infer<typeof DeviceStateSchema>;
 
@@ -1775,6 +1783,62 @@ export const GuidancePrefsSchema = z.object({
   adultAcknowledged: z.boolean().optional(), // one-time 18+ acknowledgement for the Intimacy group
 });
 export type GuidancePrefs = z.infer<typeof GuidancePrefsSchema>;
+
+/**
+ * Proactive-coaching intensity (40-proactive-coaching §3.6/§4.1a). Per-person, read in the bridge.
+ * `off` = no in-session goal-raising, no synthesis pass, no goal-followup nudges (cross-insight crisis
+ * awareness §3.5 is safety and is NEVER disabled by this). `gentle` (default when absent) = in-session
+ * goal-raising + a slow synthesis cadence + ≤1 open nudge. `active` = a faster synthesis cadence + a
+ * slightly more present in-session coach.
+ */
+export const ProactivityLevelSchema = z.enum(['off', 'gentle', 'active']);
+export type ProactivityLevel = z.infer<typeof ProactivityLevelSchema>;
+
+/** Per-person coaching preferences (40 §4.1a) — `people/<id>/coaching/prefs.enc`. Absent ⇒ `gentle`. */
+export const CoachingPrefsSchema = z.object({
+  schemaVersion: z.number().int().positive(),
+  proactivity: ProactivityLevelSchema.optional(), // absent ⇒ DEFAULT_PROACTIVITY ('gentle')
+});
+export type CoachingPrefs = z.infer<typeof CoachingPrefsSchema>;
+
+/** The proactivity level when a person hasn't chosen one (40 §3.6). */
+export const DEFAULT_PROACTIVITY: ProactivityLevel = 'gentle';
+
+/**
+ * The cached cross-feature synthesis (40-proactive-coaching §4.1) — one gentle observation connecting signals
+ * across the person's recent sessions + dreams + questionnaires + intake. Stored per-subject at
+ * `people/<id>/coaching/synthesis.enc`; re-running OVERWRITES it (one current observation, not history). It is
+ * NOT an Insight and is NEVER promoted into `summarizeForContext` — it's a surfaced nudge, not grounding.
+ * Tolerant-parsed (spec 37): only `observation` is required; the rest `.catch` to defaults.
+ */
+export const CoachingSynthesisSchema = z.object({
+  schemaVersion: z.number().int().positive(),
+  subjectPersonId: z.string().min(1), // per-person isolation
+  observation: z.string(), // the one gentle cross-feature observation (the only required field)
+  sources: z.array(z.string()).catch([]).default([]), // which surfaces fed it (e.g. "dreams", "sessions")
+  lifeArea: z.string().optional(), // from LIFE_AREAS, normalized server-side — drives coalescing (§3.7)
+  computedAt: z.string(),
+  windowFrom: z.string().optional(),
+  windowTo: z.string().optional(),
+});
+export type CoachingSynthesis = z.infer<typeof CoachingSynthesisSchema>;
+
+/** The result of running the cross-feature synthesis pass (40 §6) — budget-gated `coaching.synthesize`. */
+export type CoachingSynthesisResult =
+  | { ok: true; synthesis: CoachingSynthesis }
+  | {
+      ok: false;
+      reason:
+        | 'NO_KEY'
+        | 'BUDGET'
+        | 'AI_OFF'
+        | 'EMPTY'
+        | 'REFUSED'
+        | 'TRUNCATED'
+        | 'MALFORMED'
+        | 'ERROR';
+      message: string;
+    };
 
 /**
  * What the launcher reads on open (16 §6) — cached suggestions (no spend) + the 18+ ack state. `cache`

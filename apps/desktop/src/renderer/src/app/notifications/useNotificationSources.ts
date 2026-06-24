@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import type { ReminderDueSummary, ResponsesArrivedSummary } from '@shared/channels';
+import type { CoachingSynthesis, Goal } from '@shared/schemas';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useNotificationStore } from '../../stores/notificationStore';
 import { useUpdateStore } from '../../stores/updateStore';
+import { stalestGoal } from './goalFollowup';
 import type { NotificationCandidate } from './notificationKinds';
 
 /**
@@ -17,6 +19,8 @@ export function useNotificationSources(conflicts: string[]): void {
   const activePersonId = useSessionStore((s) => s.activePerson?.id ?? null);
   const canViewResults = useSessionStore((s) => s.can('questionnaires.viewResults'));
   const canIntake = useSessionStore((s) => s.can('intake.own'));
+  const canMemory = useSessionStore((s) => s.can('memory.own'));
+  const canSessions = useSessionStore((s) => s.can('sessions.own'));
   const setCandidates = useNotificationStore((s) => s.setCandidates);
   // The update result is app-global (NOT per-person) — it survives a person switch (36 §11).
   const update = useUpdateStore((s) => s.result);
@@ -24,6 +28,11 @@ export function useNotificationSources(conflicts: string[]): void {
   const [suggestionIds, setSuggestionIds] = useState<string[]>([]);
   const [responses, setResponses] = useState<ResponsesArrivedSummary[]>([]);
   const [reminders, setReminders] = useState<ReminderDueSummary[]>([]);
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [synthesis, setSynthesis] = useState<CoachingSynthesis | null>(null);
+  // The life-areas covered by active DEPTH invitations — a synthesis observation for the same area yields
+  // to the more specific, actionable nudge (§3.7).
+  const [freshnessAreas, setFreshnessAreas] = useState<string[]>([]);
 
   // One-shot reads per active person. Guarded so a fetch resolving after a person switch is ignored.
   useEffect(() => {
@@ -31,8 +40,11 @@ export function useNotificationSources(conflicts: string[]): void {
     setSuggestionIds([]);
     setResponses([]);
     setReminders([]);
+    setGoals([]);
+    setSynthesis(null);
+    setFreshnessAreas([]);
     void (async () => {
-      const [sugg, resp, rem] = await Promise.all([
+      const [sugg, resp, rem, gls, syn] = await Promise.all([
         canIntake
           ? (window.selfos?.profileSuggestions() ?? Promise.resolve([]))
           : Promise.resolve([]),
@@ -42,16 +54,23 @@ export function useNotificationSources(conflicts: string[]): void {
         canViewResults
           ? (window.selfos?.notificationsRemindersDue() ?? Promise.resolve([]))
           : Promise.resolve([]),
+        canMemory ? (window.selfos?.goalsList() ?? Promise.resolve([])) : Promise.resolve([]),
+        canSessions
+          ? (window.selfos?.coachingGetSynthesis() ?? Promise.resolve(null))
+          : Promise.resolve(null),
       ]);
       if (!active || useSessionStore.getState().activePerson?.id !== activePersonId) return;
       setSuggestionIds(sugg.map((s) => s.id).sort());
+      setFreshnessAreas(sugg.map((s) => s.lifeArea).filter((a): a is string => Boolean(a)));
       setResponses(resp);
       setReminders(rem);
+      setGoals(gls);
+      setSynthesis(syn);
     })();
     return () => {
       active = false;
     };
-  }, [activePersonId, canIntake, canViewResults]);
+  }, [activePersonId, canIntake, canViewResults, canMemory, canSessions]);
 
   // Rebuild the candidate list whenever any source changes; conflicts arrive reactively via the prop.
   useEffect(() => {
@@ -130,6 +149,48 @@ export function useNotificationSources(conflicts: string[]): void {
       });
     }
 
+    // A gentle goal check-in (40 §3.2) — at most ONE open at a time (the stalest), coalesced. The action
+    // links to Memory where the goal + its Still on it / Mark done / Let it go actions live; the Home
+    // GoalFollowupCard offers those inline. Acting changes the goal (signature) so a dismissed nudge stays
+    // dismissed until the goal changes; resolving the stalest surfaces the next.
+    const stale = stalestGoal(goals, new Date());
+    if (stale) {
+      candidates.push({
+        kind: 'goal-followup',
+        coalesceKey: 'goal-followup',
+        signature: `${stale.id}:${stale.updatedAt}`,
+        title: 'A goal worth a check-in',
+        body: `You set a goal a while back: “${stale.text}”. Still working on it?`,
+        action: { type: 'navigate', to: '/memory' },
+      });
+    }
+
+    // The cross-feature synthesis observation (40 §3.3) as a nudge — UNLESS a same-life-area depth/freshness
+    // invitation is already active (§3.7: the more specific, actionable nudge wins, so the user sees one
+    // coherent prompt about that area). The Home InsightOfTheWeekCard is the persistent action surface; this
+    // is the transient alert (the profile-freshness card+notification coexistence precedent, 17 §11).
+    if (synthesis && !(synthesis.lifeArea && freshnessAreas.includes(synthesis.lifeArea))) {
+      candidates.push({
+        kind: 'coaching-synthesis',
+        coalesceKey: 'coaching-synthesis',
+        signature: synthesis.computedAt, // a newer synthesis supersedes a dismissed one (onChange)
+        title: 'Something I’m noticing',
+        body: synthesis.observation,
+        createdAt: synthesis.computedAt,
+        action: { type: 'navigate', to: '/' },
+      });
+    }
+
     setCandidates(candidates);
-  }, [conflicts, suggestionIds, responses, reminders, update, setCandidates]);
+  }, [
+    conflicts,
+    suggestionIds,
+    responses,
+    reminders,
+    goals,
+    synthesis,
+    freshnessAreas,
+    update,
+    setCandidates,
+  ]);
 }

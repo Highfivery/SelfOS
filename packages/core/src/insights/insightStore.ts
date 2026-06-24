@@ -17,6 +17,16 @@ import { readEncryptedJson, writeEncryptedJson } from '../vault';
  * them back. Questionnaire analysis is the first producer; session analysis (09) is the second.
  */
 
+/**
+ * Session-analysis labels a goal fact `Goal: <text>` (sessionAnalysisService `addFacts('Goal', …)`). Those
+ * facts stay on the insight — they're shown on the Sessions wrap-up card and are per-fact shareable — but
+ * they are EXCLUDED from the subject's own coaching context here, because a person's open goals reach the
+ * coach through the richer structured "Open commitments" line (`summarizeOpenCommitments`, 39-living-memory
+ * §5.2) which carries status / due / staleness. Emitting them both ways double-grounded every goal (39 §4.4).
+ * The format is locked by sessionAnalysisService's tests, so this prefix can't silently drift.
+ */
+export const GOAL_FACT_PREFIX = 'Goal: ';
+
 // v1 stores every insight under its subject person's folder (keyed by `subjectPersonId`). Spec §4.1 also
 // defines `relationships/<rel-id>/insights/` for relationship-scoped insights — deferred to slice 11 (the
 // tracking dashboard's producer); `Insight.relationshipId` is carried in the schema but not yet routed.
@@ -242,7 +252,7 @@ export async function insightFeedsContext(
 }
 
 /** Filter a list of insights to those that may currently feed context (15-shareability §4.2). */
-async function feedableInsights(
+export async function feedableInsights(
   fs: FileSystem,
   key: Uint8Array,
   insights: Insight[],
@@ -389,7 +399,13 @@ export async function summarizeForContext(
         insight.source === 'intake'
           ? selectPortraitFacts(liveFacts, topic, insight.crisisFlag ?? false)
           : liveFacts;
-      for (const fact of emit) lines.push(`  · ${fact.text}`);
+      // Goal facts are surfaced to the coach via the structured "Open commitments" line, not here — drop them
+      // from the own-insight emit so a person's goals aren't double-grounded (39 §4.4). (Cross-shared goal
+      // facts to OTHER people, below, are unaffected — the dedup only concerns the subject's own goals.)
+      for (const fact of emit) {
+        if (fact.text.startsWith(GOAL_FACT_PREFIX)) continue;
+        lines.push(`  · ${fact.text}`);
+      }
     }
   }
 

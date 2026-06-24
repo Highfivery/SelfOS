@@ -2066,6 +2066,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // An AUTOMATIC pass (renderer cadence) only runs when warranted: the opt-out setting is honored, and the
       // threshold/gap/throttle gate must pass — otherwise it's a calm SKIPPED no-op that never spends. A MANUAL
       // Refresh always forces (skips this gate). The throttle marker is device-local + per-person.
+      let autoStamp: { personId: string } | null = null;
       if (auto) {
         const ctx = await host.vaultAndKey();
         const personId = await activePersonId();
@@ -2083,13 +2084,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         if (!shouldAutoReconcile({ insights: approved, lastCheckedAt, now: new Date() })) {
           return { ok: false, reason: 'SKIPPED' };
         }
-        // Stamp BEFORE running, so even a pass that spends won't re-trigger within the throttle window.
-        await host.updateDeviceState({
-          memoryReconcileCheckedAt: {
-            ...(device.memoryReconcileCheckedAt ?? {}),
-            [personId]: new Date().toISOString(),
-          },
-        });
+        autoStamp = { personId };
       }
       // Reuse the AI-deps assembly (gates on `memory.own`, reads the key host-side, never to the renderer).
       const deps = await aiDeps('memory.own');
@@ -2098,7 +2093,23 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // Free no-AI step that rides this pass (39 §4.5): retro-tag a legacy untagged portrait's facts with a
       // life-area so it topic-narrows in context like a fresh one. Idempotent; never bumps updatedAt.
       await retroTagLegacyPortraits(deps.fs, deps.key, deps.personId);
-      return reconcileInsights(deps);
+      const result = await reconcileInsights(deps);
+      // Consume the 24h throttle window only when the pass DIDN'T fail for a no-spend transient reason
+      // (AI off / over budget / a stream ERROR — all bail before metering). Those should retry on the next
+      // launch, not be suppressed for 24h (the §3.3 "falls back to manual" intent). A pass that DID spend —
+      // success, nothing-to-do, or a billed-but-unparseable reply — stamps, so it can't re-spend every tick.
+      const noSpend =
+        result.reason === 'AI_OFF' || result.reason === 'BUDGET' || result.reason === 'ERROR';
+      if (autoStamp && !noSpend) {
+        const device = await host.readDeviceState();
+        await host.updateDeviceState({
+          memoryReconcileCheckedAt: {
+            ...(device.memoryReconcileCheckedAt ?? {}),
+            [autoStamp.personId]: new Date().toISOString(),
+          },
+        });
+      }
+      return result;
     },
     memoryReconcileState: async (): Promise<MemoryReconcileState> => {
       const ctx = await host.vaultAndKey();

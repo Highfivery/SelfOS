@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  classifyParseFailure,
   classifyParseOutcome,
   extractJsonObject,
   salvageJsonObjectField,
@@ -247,7 +248,12 @@ export async function endAndSummarize(deps: EndAndSummarizeDeps): Promise<Sessio
   // produces a usable insight (37 "show any partial"). Only a genuinely-empty/no-JSON reply is classified
   // (TRUNCATED vs MALFORMED vs REFUSED) — distinct reasons, never a misleading catch-all (37 §3.2).
   let draft = SessionAnalysisDraftSchema.safeParse(extractJsonObject(result.text)).data;
-  if (!draft) {
+  // Summary-only salvage is for a complete-but-malformed reply (e.g. an off-spec field). Do NOT salvage a
+  // TRUNCATED reply: `crisisFlag` is the LAST key in the contract, so a cut-off reply would yield a partial
+  // insight with the crisis signal silently dropped. Report TRUNCATED instead so the user re-runs and the
+  // flag can surface — matching the dream-synthesis path's truncation handling (37 §8 safety). (Dream
+  // synthesis is stricter still: it never salvages a summary; session analysis keeps that for MALFORMED.)
+  if (!draft && classifyParseFailure(result.text) !== 'TRUNCATED') {
     const summary = salvageJsonObjectField(result.text, 'summary');
     if (summary?.trim()) draft = SessionAnalysisDraftSchema.parse({ summary });
   }
@@ -321,8 +327,10 @@ export async function endAndSummarize(deps: EndAndSummarizeDeps): Promise<Sessio
   await saveInsight(fs, key, insight);
 
   // First-class tracked goals (39-living-memory §4.1/§5.2): structure the SAME `goals` the analysis already
-  // returned into tracked Goal entities (no extra AI spend — they're also kept as `Goal:` facts above for the
-  // existing context/de-dup). A re-mentioned commitment folds into the existing open goal (§4.3).
+  // returned into tracked Goal entities (no extra AI spend). The `Goal:` facts above are kept for the Sessions
+  // wrap-up card + per-fact sharing, but are EXCLUDED from the coach's own-context (insightStore
+  // `GOAL_FACT_PREFIX`) so goals reach the coach once, via the structured "Open commitments" line, not twice
+  // (39 §4.4). A re-mentioned commitment folds into the existing open goal (§4.3).
   await extractGoals({
     fs,
     key,

@@ -239,6 +239,41 @@ describe('buildContext', () => {
     expect(ctx).not.toContain('a closed one'); // closed goals aren't grounding
   });
 
+  it('does NOT double-ground goals: a "Goal:" insight fact is dropped from own-context (the commitments line carries it) (39 §4.4)', async () => {
+    const fs = memFileSystem();
+    await savePerson(fs, key, person('a', 'Alex'));
+    await saveInsight(
+      fs,
+      key,
+      insight('i1', 'a', {
+        source: 'session',
+        summary: 'A good session',
+        facts: [
+          { id: 'f1', text: 'Theme: feeling stretched', shareable: false },
+          { id: 'f2', text: 'Goal: finish the thesis', shareable: false },
+        ],
+      }),
+    );
+    const { saveGoal } = await import('../goals/goalService');
+    await saveGoal(fs, key, {
+      schemaVersion: 1,
+      subjectPersonId: 'a',
+      id: 'g1',
+      text: 'finish the thesis',
+      status: 'open',
+      provenance: { at: '2026-06-20T00:00:00.000Z' },
+      createdAt: '2026-06-20T00:00:00.000Z',
+      updatedAt: '2026-06-20T00:00:00.000Z',
+    });
+
+    const ctx = await buildContext(fs, key, 'a');
+    // The goal appears exactly once — in the structured commitments line, NOT as a bare "Goal:" own-fact.
+    expect(ctx).toContain('Open commitments');
+    expect(ctx).toContain('finish the thesis');
+    expect(ctx).not.toContain('Goal: finish the thesis'); // the duplicate own-fact form is gone
+    expect(ctx).toContain('Theme: feeling stretched'); // non-goal facts still feed context
+  });
+
   it('returns empty for an unknown person', async () => {
     expect(await buildContext(memFileSystem(), key, 'nope')).toBe('');
   });

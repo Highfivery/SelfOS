@@ -127,7 +127,10 @@ export function salvageJsonObjectArrayField(text: string, field: string): unknow
  */
 export function salvageJsonObjectField(text: string, field: string): string | null {
   const stripped = stripFences(text);
-  const match = stripped.match(new RegExp(`"${field}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`));
+  // Escape the field name so a name with regex metacharacters can't misbehave (all callers pass literals
+  // today, but this keeps the helper safe for any field).
+  const safe = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = stripped.match(new RegExp(`"${safe}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`));
   if (!match?.[1]) return null;
   try {
     return JSON.parse(`"${match[1]}"`) as string;

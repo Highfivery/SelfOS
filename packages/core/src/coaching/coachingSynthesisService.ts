@@ -11,9 +11,9 @@ import {
   type ProactivityLevel,
   type UsageEvent,
 } from '../schemas';
-import { checkBudget, costOf, recordUsage } from '../usage';
+import { checkBudget, costOf, queryUsage, recordUsage } from '../usage';
 import { PERSONA, SAFETY } from '../conversations/promptBuilder';
-import { listInsightsForPerson } from '../insights';
+import { feedableInsights, listInsightsForPerson } from '../insights';
 import { getPatternStats } from '../dreams';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 
@@ -37,6 +37,13 @@ const SYNTHESIS_WINDOW_DAYS = 30;
 const MAX_INSIGHTS = 12;
 /** Below this many in-window insights there isn't enough to say anything honest → EMPTY (no spend). */
 const MIN_INSIGHTS = 2;
+/**
+ * A proactivity-specific cap on synthesis passes in any rolling 7 days (40 §3.4 / §11 Q4): the auto cadence
+ * self-throttles (≤ once per 3–7 days), but the MANUAL "Look again" / "What are you noticing lately?" path
+ * bypasses that throttle, so without this a user could spend it repeatedly. ~one/day is far above any genuine
+ * use, so it only ever stops runaway spend. The owner budget-override bypasses it (like a budget stop).
+ */
+const SYNTHESIS_WEEKLY_CAP = 7;
 
 /** Cadence windows + new-insight thresholds per proactivity level (40 §3.4 / §11 Q4). */
 const CADENCE: Record<
@@ -102,15 +109,24 @@ function recentApprovedInsights(insights: Insight[], now: Date): Insight[] {
 
 /** Assemble the bounded, structured, transcript-free digest (§5.2). Restricted + flagged facts are excluded. */
 function buildDigest(recent: Insight[], dreamLines: string): string {
-  const lines = recent.map((i) => {
-    const facts = i.facts
-      .filter((f) => !f.restricted && !f.flaggedInaccurate)
-      .map((f) => f.text)
-      .slice(0, 4)
-      .join('; ');
-    const area = i.categories[0] ? ` {${i.categories[0]}}` : '';
-    return `- [${i.source}]${area} "${i.summary}"${facts ? ` — ${facts}` : ''}`;
-  });
+  const lines = recent
+    // A WHOLLY-flagged insight (had facts, all now flagged-inaccurate) is dropped entirely — its summary
+    // restates the corrected claim, so it must not reach the synthesis pass either. Mirrors
+    // `summarizeForContext` (insightStore.ts) EXACTLY — it keys off `flaggedInaccurate` only (restricted
+    // facts are already excluded on the facts line below) — so the digest can't re-assert a corrected claim.
+    .filter((i) => {
+      const liveFacts = i.facts.filter((f) => !f.flaggedInaccurate);
+      return !(i.facts.length > 0 && liveFacts.length === 0);
+    })
+    .map((i) => {
+      const facts = i.facts
+        .filter((f) => !f.restricted && !f.flaggedInaccurate)
+        .map((f) => f.text)
+        .slice(0, 4)
+        .join('; ');
+      const area = i.categories[0] ? ` {${i.categories[0]}}` : '';
+      return `- [${i.source}]${area} "${i.summary}"${facts ? ` — ${facts}` : ''}`;
+    });
 
   return [
     'Recent reflections across this person’s life (most recent first):',
@@ -205,7 +221,11 @@ export async function synthesize(deps: SynthesizeDeps): Promise<CoachingSynthesi
   const { fs, key, client, apiKey, model, personId, now } = deps;
   if (!apiKey) return { ok: false, reason: 'NO_KEY', message: 'Add your Claude API key first.' };
 
-  const insights = await listInsightsForPerson(fs, key, personId);
+  // Run BEHIND the context-feed boundary (15-shareability §4.2): a dream the user muted to "private journal"
+  // (`informsContext: false`) must NOT leak its insight into this AI pass — exactly the cross-feature link the
+  // synthesis is most likely to surface. `feedableInsights` drops those (and missing/corrupt-dream cases
+  // fail-closed), matching `summarizeForContext`.
+  const insights = await feedableInsights(fs, key, await listInsightsForPerson(fs, key, personId));
   // Gate on RECENT (in-window) approved insights, not all-time — so an all-stale history can't bill an
   // empty digest (the digest itself only covers the same window).
   const recent = recentApprovedInsights(insights, now);
@@ -226,6 +246,26 @@ export async function synthesize(deps: SynthesizeDeps): Promise<CoachingSynthesi
   const app = await checkBudget(fs, key, { scope: 'app', now, override: deps.override });
   if (person.state === 'over' || app.state === 'over') {
     return { ok: false, reason: 'BUDGET', message: 'AI budget reached for this period.' };
+  }
+
+  // Proactivity-specific cap (40 §3.4): count this person's synthesis passes in the trailing 7 days and stop
+  // before spending a (cap+1)th — so the manual "Look again" path can't run away on cost. The owner override
+  // bypasses it, like a budget stop. Counted from the SAME metered `coaching.synthesize` events.
+  if (!deps.override) {
+    const weekAgo = new Date(now.getTime() - 7 * DAY_MS).toISOString();
+    const passes = await queryUsage(fs, key, {
+      from: weekAgo,
+      to: now.toISOString(),
+      personId,
+      type: 'coaching.synthesize',
+    });
+    if (passes.length >= SYNTHESIS_WEEKLY_CAP) {
+      return {
+        ok: false,
+        reason: 'CAPPED',
+        message: 'You’ve reached this week’s reflections — check back in a few days.',
+      };
+    }
   }
 
   const stats = await getPatternStats(fs, key, personId, 'all', now);

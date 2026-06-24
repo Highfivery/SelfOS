@@ -6,7 +6,8 @@ import { Info } from 'lucide-react';
 import { SettingField } from './SettingField';
 import { defineSetting } from './types';
 import { useSettingsStore } from './settingsStore';
-import { __resetRegistry, registerSection, registerSettings } from './registry';
+import { __resetRegistry, getDefinition, registerSection, registerSettings } from './registry';
+import { __resetBuiltins, registerBuiltinSettings } from './builtins';
 
 function CustomBody(): JSX.Element {
   return <p>custom-content-here</p>;
@@ -151,6 +152,19 @@ describe('SettingField', () => {
     // Distinct SR names so the two never read as one.
     expect(screen.getByLabelText('Synced across devices')).toBeInTheDocument();
     expect(screen.queryByLabelText('Admin only')).not.toBeInTheDocument(); // AdminOnlyBadge carries visible text, no aria-label
+  });
+
+  it('marks the API-key settings as device-local secrets (never "Synced")', () => {
+    // Regression: API keys are device-local secrets (00 §6.2), not synced. They MUST read "This device only" —
+    // a "Synced" badge next to a secret misleads the user about where their key lives (41 §3.4).
+    __resetRegistry();
+    __resetBuiltins();
+    registerBuiltinSettings();
+    for (const key of ['ai.apiKey', 'ai.test', 'dreams.imageApiKey', 'dreams.imageTest']) {
+      const def = getDefinition(key);
+      expect(def, key).toBeDefined();
+      expect(def?.scope, key).toBe('device');
+    }
   });
 
   it('renders a legacy/unknown stored value as a fallback option in a grouped select', () => {

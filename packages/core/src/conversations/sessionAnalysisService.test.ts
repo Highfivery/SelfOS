@@ -275,13 +275,28 @@ describe('endAndSummarize', () => {
     expect(conv?.status).not.toBe('complete'); // a failed parse doesn't complete the session
   });
 
-  it('salvages the summary from a TRUNCATED reply (37 §3.1) into a usable insight', async () => {
+  it('salvages the summary from a complete-but-malformed reply (37 §3.1) into a usable insight', async () => {
     await savePerson(fs, key, person('p1', 'Alex'));
     await saveConversation(fs, key, conversation('c1', 'p1'));
-    const truncated = '{"summary":"A calmer end to a hard day.","themes":["work str';
-    const result = await endAndSummarize(deps({ client: analysisClient(truncated) }));
+    // Bracket-balanced but unparseable (a trailing comma) — NOT truncated, so the leading summary is salvaged.
+    const malformed = '{"summary":"A calmer end to a hard day.","themes":"x",}';
+    const result = await endAndSummarize(deps({ client: analysisClient(malformed) }));
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.insight.summary).toBe('A calmer end to a hard day.');
+  });
+
+  it('reports TRUNCATED (not a silent partial) when the crisis tail is cut off (§8 safety)', async () => {
+    await savePerson(fs, key, person('p1', 'Alex'));
+    await saveConversation(fs, key, conversation('c1', 'p1'));
+    // The summary is complete, but the object is cut off BEFORE `crisisFlag` (the last key). Salvaging just
+    // the summary would silently default crisisFlag→false and lose a possible crisis signal — so this must be
+    // reported TRUNCATED (a retry) so the flag can surface, matching the dream-synthesis path.
+    const truncated = '{"summary":"A calmer end to a hard day.","themes":["work str';
+    const result = await endAndSummarize(deps({ client: analysisClient(truncated) }));
+    expect(result).toMatchObject({ ok: false, reason: 'TRUNCATED' });
+    // The session is NOT marked complete on a truncated reply, so re-running can still surface the flag.
+    const conv = await getConversation(fs, key, 'p1', 'c1');
+    expect(conv?.status).not.toBe('complete');
   });
 
   it('preserves the crisis flag even when a list element is malformed (§8)', async () => {

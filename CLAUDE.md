@@ -389,6 +389,39 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-24 — **Audit + fixes (specs 37–41 post-merge review; on `fix/audit-37-41-followups`, PR open).** A
+  deep audit of the five merged specs (one code-reviewer per spec) surfaced **1 BLOCKER + several should-fixes**,
+  all now fixed with tests on a branch (full gate green: typecheck, lint, format, **700 core + 11 relay + 745
+  desktop** unit; E2E 103/103 — the lone `dreams: link a household person` failure is a pre-existing
+  Playwright-Electron timing flake that passes in isolation, unrelated to these changes). Fixes: **(spec 40
+  BLOCKER — privacy leak)** the cross-feature synthesis digest never ran insights through the context-feed
+  boundary, so a **muted dream** (`informsContext:false`) and **wholly-flagged** insights leaked into the AI
+  pass — it now filters via the newly-exported `feedableInsights` + skips wholly-flagged summaries, mirroring
+  `summarizeForContext` exactly (the docstring already CLAIMED this; the code didn't). **(spec 41)** the Claude +
+  OpenAI **API keys rendered "Synced across devices"** — they're device-local secrets; added `scope:'device'` to
+  `ai.apiKey`/`ai.test`/`dreams.imageApiKey`/`dreams.imageTest` (+ a `__resetBuiltins()` test hook + regression
+  test — the gap that let it ship). **(spec 37 — safety)** a **TRUNCATED** session-analysis reply was salvaged to
+  a summary-only insight, silently dropping the trailing `crisisFlag`; it now reports `TRUNCATED` (a retry) so the
+  flag can surface, matching the dream path — a complete-but-malformed reply still salvages (`classifyParseFailure`
+  gate); also escaped the field name in `salvageJsonObjectField`. **(spec 39)** auto-reconcile **stamped its 24h
+  throttle before the AI/budget gate**, so a transient AI-off/over-budget/**stream-ERROR** launch suppressed the
+  cadence for 24h — the stamp moved to AFTER the pass and is skipped for the no-spend reasons (AI_OFF/BUDGET/ERROR)
+  while a billed-but-unparseable pass still stamps (no re-spend). **(spec 38 — test gap)** added a bridge test
+  proving **re-ask auto-revokes the prior relay link** (the old link → 404, the anti-double-submit §3.6 claim that
+  was previously asserted only by a comment). **Then fixed the two items first flagged for a decision (owner: "fix
+  anything that needs to be addressed"):** (39 §4.4) goals were **double-grounded** into coaching context — once as
+  legacy `Goal:` insight facts AND via the new "Open commitments" line; now the `Goal:` facts are EXCLUDED from the
+  subject's own-context emit (a shared `GOAL_FACT_PREFIX` in insightStore), so a goal reaches the coach once (the
+  structured line, which carries status/due/staleness) — the facts stay on the insight for the Sessions wrap-up
+  card + per-fact sharing, and a goal SHARED with another person still reaches their context. (40 §3.4/§11-Q4) added
+  the resolved **proactivity-specific per-week synthesis cap** (`SYNTHESIS_WEEKLY_CAP=7`, rolling 7-day count of
+  `coaching.synthesize` events, new `CAPPED` reason, owner-override bypass) so the manual "Look again" path can't run
+  away on cost. +tests for both (no double-ground in assembled context + a goal still reaches a sharee; the 8th
+  weekly pass is CAPPED with no spend). **Lesson: a digest/grounding
+  builder that reads insights directly must run them through the SAME `feedableInsights` boundary as
+  `summarizeForContext`, or muted/flagged content leaks into an AI pass — a docstring claiming the boundary isn't
+  the boundary; and a throttle/cooldown must be stamped only after a pass that actually SPENT, never before the
+  availability gate, or a transient blip silences the cadence for the whole window.**
 - 2026-06-24 — **Build (discoverability, empty states & first-run polish — SPEC 41 BUILT, all 5 slices; on
   `feat/discoverability-empty-states`, PR pending).** A renderer-only UX polish pass to make the app
   self-explaining. **§11 resolved with the owner first (recorded in spec 41 §11):** full empty-state audit;

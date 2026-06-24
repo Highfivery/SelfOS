@@ -1397,6 +1397,62 @@ describe('createCoreBridge', () => {
     });
   });
 
+  it('auto-reconcile: a transient ERROR (no spend) does NOT consume the 24h throttle — it retries (39 §3.3)', async () => {
+    const { bridge, host, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const ctx = (await host.host.vaultAndKey())!;
+    const at = new Date().toISOString();
+    for (const id of ['a1', 'a2', 'a3', 'a4', 'a5']) {
+      await saveInsight(ctx.fs, ctx.key, {
+        id,
+        schemaVersion: 1,
+        source: 'session',
+        subjectPersonId: ownerId,
+        summary: `summary-${id}`,
+        facts: [{ id: `f-${id}`, text: `fact ${id}`, shareable: false }],
+        confidence: 'low',
+        categories: [],
+        approved: true,
+        provenance: { conversationId: id, at },
+        createdAt: at,
+        updatedAt: at,
+      });
+    }
+    // First auto pass: the stream THROWS before any tokens are spent → a transient ERROR.
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: () => Promise.reject(new Error('network blip')),
+    };
+    expect(await bridge.memoryRefresh({ auto: true })).toMatchObject({
+      ok: false,
+      reason: 'ERROR',
+    });
+
+    // The throttle was NOT stamped (no spend), so the very next auto pass still RUNS — a network blip
+    // doesn't suppress the cadence for 24h.
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (_options, onDelta) => {
+        const text = JSON.stringify({
+          insights: ['a1', 'a2', 'a3', 'a4', 'a5'].map((id) => ({ id, confidence: 'high' })),
+          merges: [],
+        });
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    expect(await bridge.memoryRefresh({ auto: true })).toMatchObject({ ok: true });
+
+    // …and now that a pass actually ran, the throttle IS stamped — the following auto pass is SKIPPED.
+    expect(await bridge.memoryRefresh({ auto: true })).toMatchObject({
+      ok: false,
+      reason: 'SKIPPED',
+    });
+  });
+
   it('reaps orphaned shareableWith from other people’s facts when a person is deleted (39 §4.5)', async () => {
     const { bridge, host, ownerId } = await freshOwner();
     const friend = await bridge.peopleSave({ displayName: 'Friend', isSubject: true, tags: [] });
@@ -3190,6 +3246,46 @@ describe('notifications (35)', () => {
     const results = await bridge.assignmentsResults(q.id);
     expect(results).toHaveLength(2);
     void ownerId;
+  });
+
+  it('re-ask auto-revokes the prior relay link so it can’t double-submit (38 §3.6)', async () => {
+    const { host, bridge } = await freshOwner();
+    await bridge.relayConnect({ apiToken: 'cf-token', accountId: 'acct' });
+    const q = await bridge.questionnairesSave({
+      title: 'Outside view',
+      type: 'blind-spots',
+      sensitivity: 'standard',
+      recipient: { kind: 'external', displayName: 'Alex' },
+      questions: [{ id: 'a', type: 'shortText', prompt: 'How do I come across?', required: true }],
+    });
+    // First send mints a relay link the recipient could unlock.
+    const first = await bridge.assignmentsCreateRelayLink({
+      questionnaireId: q.id,
+      senderVisibleToRecipient: true,
+    });
+    const relayFetch = host.host.relay.fetch;
+    const oldToken = first.link.split('/q/')[1]?.split('#')[0] ?? '';
+    expect(oldToken).not.toBe(''); // a real token, so the 404 below can't pass for the wrong reason
+    const okBefore = await relayFetch('https://relay/api/unlock', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: oldToken, pin: first.pin }),
+    });
+    expect(okBefore.status).toBe(200); // the old link works before the re-ask
+
+    // Re-ask → a brand-new send + fresh link, and the prior mailbox is revoked.
+    const reAsked = await bridge.assignmentsReAsk({ questionnaireId: q.id });
+    expect(reAsked.assignment.id).not.toBe(first.assignmentId);
+    expect(reAsked.link).toMatch(/\.workers\.dev\/q\//);
+    expect(reAsked.link).not.toBe(first.link);
+
+    // The OLD link can no longer be unlocked — no duplicate-submit window (the central §3.6 claim).
+    const after = await relayFetch('https://relay/api/unlock', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: oldToken, pin: first.pin }),
+    });
+    expect(after.status).toBe(404);
   });
 
   it('refuses to re-ask a compatibility questionnaire (use Duplicate instead, 38 §3.3)', async () => {

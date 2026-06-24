@@ -74,6 +74,11 @@ const dreamImagesEnabled = (values: Readonly<Record<string, unknown>>): boolean 
 
 let registered = false;
 
+/** Test-only: clear the idempotency guard so a `__resetRegistry()` + re-register works in isolation. */
+export function __resetBuiltins(): void {
+  registered = false;
+}
+
 /** Register the built-in sections and settings (idempotent). */
 export function registerBuiltinSettings(): void {
   if (registered) return;
@@ -251,6 +256,9 @@ export function registerBuiltinSettings(): void {
       schema: z.null(),
       default: null,
       control: { type: 'custom', render: ApiKeyControl },
+      // The key is a device-local secret in the main-process secret store — never synced (00 §6.2). A
+      // household-shared key is the separate, opt-in encrypted `ai.shareCredentials`, not key-syncing.
+      scope: 'device',
       order: 3,
       visibleWhen: aiEnabled,
     }),
@@ -261,6 +269,7 @@ export function registerBuiltinSettings(): void {
       schema: z.null(),
       default: null,
       control: { type: 'custom', render: TestConnectionControl },
+      scope: 'device',
       order: 4,
       visibleWhen: aiEnabled,
     }),
@@ -462,6 +471,8 @@ export function registerBuiltinSettings(): void {
       default: null,
       control: { type: 'custom', render: OpenAiKeyControl },
       adminOnly: true,
+      // Device-local secret (00 §6.2) — never synced, like the Claude key above.
+      scope: 'device',
       order: 6,
       visibleWhen: dreamImagesEnabled,
     }),
@@ -472,6 +483,7 @@ export function registerBuiltinSettings(): void {
       schema: z.null(),
       default: null,
       control: { type: 'custom', render: OpenAiTestConnectionControl },
+      scope: 'device',
       order: 7,
       visibleWhen: dreamImagesEnabled,
     }),

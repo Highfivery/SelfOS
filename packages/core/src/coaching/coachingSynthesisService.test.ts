@@ -4,6 +4,7 @@ import { memFileSystem } from '../host/memFileSystem';
 import type { ClaudeClient, FileSystem } from '../host';
 import type { Insight } from '../schemas';
 import { saveInsight } from '../insights';
+import { saveDream } from '../dreams';
 import { queryUsage } from '../usage';
 import { setPersonBudget } from '../usage';
 import {
@@ -193,6 +194,34 @@ describe('synthesize (40 §3.3)', () => {
     ).toHaveLength(0);
   });
 
+  it('caps synthesis at 7 passes per rolling week, then returns CAPPED without spending (40 §3.4)', async () => {
+    await saveInsight(fs, key, insight('s1'));
+    await saveInsight(fs, key, insight('s2'));
+    // Seven passes succeed (each meters one coaching.synthesize event)…
+    for (let i = 0; i < 7; i++) {
+      expect(await synthesize(deps(jsonClient()))).toMatchObject({ ok: true });
+    }
+    // …the eighth within the same week is CAPPED, and bills nothing more.
+    const before = await queryUsage(fs, key, {
+      from: '2026-01-01',
+      to: '2026-12-31',
+      personId: 'p1',
+      type: 'coaching.synthesize',
+    });
+    expect(before).toHaveLength(7);
+    expect(await synthesize(deps(jsonClient()))).toMatchObject({ ok: false, reason: 'CAPPED' });
+    const after = await queryUsage(fs, key, {
+      from: '2026-01-01',
+      to: '2026-12-31',
+      personId: 'p1',
+      type: 'coaching.synthesize',
+    });
+    expect(after).toHaveLength(7); // no extra spend
+
+    // The owner budget-override bypasses the cap (like a budget stop).
+    expect(await synthesize(deps(jsonClient(), { override: true }))).toMatchObject({ ok: true });
+  });
+
   it('excludes restricted + flagged facts from the digest (privacy boundary, §8)', async () => {
     let captured = '';
     const capturing: ClaudeClient = {
@@ -221,5 +250,76 @@ describe('synthesize (40 §3.3)', () => {
     expect(captured).toContain('a shareable visible fact');
     expect(captured).not.toContain('RESTRICTED secret');
     expect(captured).not.toContain('FLAGGED wrong fact');
+  });
+
+  it('excludes a MUTED dream’s insight from the digest (informsContext:false, §8)', async () => {
+    let captured = '';
+    const capturing: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (options) => {
+        captured = options.messages.at(-1)?.content ?? '';
+        return Promise.resolve({
+          text: JSON.stringify({ observation: 'ok', sources: [] }),
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    // A dream the user muted to "private journal entry" — its insight must NOT feed the synthesis pass.
+    await saveDream(fs, key, {
+      id: 'd1',
+      schemaVersion: 1,
+      personId: 'p1',
+      narrative: 'a private dream',
+      lucid: false,
+      nightmare: false,
+      tags: [],
+      people: [],
+      sensitivity: 'standard',
+      informsContext: false,
+      status: 'analyzed',
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    });
+    await saveInsight(
+      fs,
+      key,
+      insight('di', {
+        source: 'dream',
+        summary: 'a MUTED dream observation',
+        facts: [{ id: 'df', text: 'a MUTED dream fact', shareable: false }],
+        provenance: { dreamId: 'd1', at: now.toISOString() },
+      }),
+    );
+    await saveInsight(fs, key, insight('s1'));
+    await saveInsight(fs, key, insight('s2'));
+    await synthesize(deps(capturing));
+    expect(captured).not.toContain('MUTED dream');
+  });
+
+  it('drops a WHOLLY-flagged insight’s summary from the digest (§8)', async () => {
+    let captured = '';
+    const capturing: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (options) => {
+        captured = options.messages.at(-1)?.content ?? '';
+        return Promise.resolve({
+          text: JSON.stringify({ observation: 'ok', sources: [] }),
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    // Every fact flagged → the whole insight is dropped (its summary restates the corrected claim).
+    await saveInsight(
+      fs,
+      key,
+      insight('wf', {
+        summary: 'a WHOLLY corrected summary',
+        facts: [{ id: 'f', text: 'flagged', shareable: false, flaggedInaccurate: true }],
+      }),
+    );
+    await saveInsight(fs, key, insight('s1'));
+    await saveInsight(fs, key, insight('s2'));
+    await synthesize(deps(capturing));
+    expect(captured).not.toContain('WHOLLY corrected');
   });
 });

@@ -15,7 +15,8 @@ export function Composer({
   onSend: (text: string) => void;
   placeholder?: string;
   autoFocus?: boolean;
-  /** Seed text to prefill (e.g. a synthesis observation handed off from Home, 40 §3.3). The user edits/sends. */
+  /** Seed text to prefill (e.g. a synthesis observation handed off from Home, 40 §3.3). The user edits/sends.
+   *  Read ONCE at mount (the launcher remounts on navigation, so a fresh seed always seeds a fresh composer). */
   initialText?: string;
 }): JSX.Element {
   const [text, setText] = useState(initialText);

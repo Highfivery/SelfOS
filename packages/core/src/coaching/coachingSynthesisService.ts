@@ -88,17 +88,20 @@ export function countNewInsights(insights: Insight[], since: string | undefined)
   return insights.filter((i) => i.approved && (!since || i.updatedAt > since)).length;
 }
 
-/** Assemble the bounded, structured, transcript-free digest (§5.2). Restricted + flagged facts are excluded. */
-function buildDigest(insights: Insight[], dreamLines: string, now: Date): string {
+/** The active person's own approved insights within the recency window (undated kept), bounded. */
+function recentApprovedInsights(insights: Insight[], now: Date): Insight[] {
   const horizon = now.getTime() - SYNTHESIS_WINDOW_DAYS * DAY_MS;
-  const recent = insights
+  return insights
     .filter((i) => i.approved)
     .filter((i) => {
       const t = new Date(i.provenance.at).getTime();
       return !Number.isFinite(t) || t >= horizon; // keep undated insights; drop clearly-old ones
     })
     .slice(0, MAX_INSIGHTS);
+}
 
+/** Assemble the bounded, structured, transcript-free digest (§5.2). Restricted + flagged facts are excluded. */
+function buildDigest(recent: Insight[], dreamLines: string): string {
   const lines = recent.map((i) => {
     const facts = i.facts
       .filter((f) => !f.restricted && !f.flaggedInaccurate)
@@ -203,8 +206,10 @@ export async function synthesize(deps: SynthesizeDeps): Promise<CoachingSynthesi
   if (!apiKey) return { ok: false, reason: 'NO_KEY', message: 'Add your Claude API key first.' };
 
   const insights = await listInsightsForPerson(fs, key, personId);
-  const inWindow = insights.filter((i) => i.approved).length;
-  if (inWindow < MIN_INSIGHTS) {
+  // Gate on RECENT (in-window) approved insights, not all-time — so an all-stale history can't bill an
+  // empty digest (the digest itself only covers the same window).
+  const recent = recentApprovedInsights(insights, now);
+  if (recent.length < MIN_INSIGHTS) {
     return {
       ok: false,
       reason: 'EMPTY',
@@ -224,7 +229,7 @@ export async function synthesize(deps: SynthesizeDeps): Promise<CoachingSynthesi
   }
 
   const stats = await getPatternStats(fs, key, personId, 'all', now);
-  const digest = buildDigest(insights, dreamPatternLine(stats), now);
+  const digest = buildDigest(recent, dreamPatternLine(stats));
   const at = now.toISOString();
 
   let result;

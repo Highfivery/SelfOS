@@ -2199,6 +2199,10 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'sessions.own'))) {
         return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
       }
+      // AI off → skip silently (40 §7) — no dead button (the card gates on `configured`), no alarming log.
+      if ((await readVaultSettingsValues(ctx.fs))['ai.enabled'] === false) {
+        return { ok: false, reason: 'AI_OFF', message: 'Turn on AI in Settings to use this.' };
+      }
       // Proactivity `off` disables the synthesis pass entirely (40 §3.6) — a calm skip, never spends.
       const level = await getProactivity(ctx.fs, ctx.key, personId);
       if (level === 'off') {

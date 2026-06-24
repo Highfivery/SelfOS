@@ -128,6 +128,17 @@ describe('synthesize (40 §3.3)', () => {
     ).toHaveLength(0); // never called the model
   });
 
+  it('counts only RECENT insights for EMPTY — an all-stale history never bills an empty digest', async () => {
+    const old = '2026-04-01T00:00:00.000Z'; // > 30 days before `now`
+    await saveInsight(fs, key, insight('o1', { provenance: { conversationId: 'o1', at: old } }));
+    await saveInsight(fs, key, insight('o2', { provenance: { conversationId: 'o2', at: old } }));
+    const out = await synthesize(deps(jsonClient())); // 2 approved, but both out of the window
+    expect(out).toMatchObject({ ok: false, reason: 'EMPTY' });
+    expect(
+      await queryUsage(fs, key, { from: '2026-01-01', to: '2026-12-31', personId: 'p1' }),
+    ).toHaveLength(0); // no spend on a stale-only history
+  });
+
   it('produces + caches one observation, metered coaching.synthesize', async () => {
     await saveInsight(fs, key, insight('s1'));
     await saveInsight(fs, key, insight('s2'));

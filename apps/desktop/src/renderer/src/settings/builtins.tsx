@@ -335,10 +335,13 @@ export function registerBuiltinSettings(): void {
       label: 'Proactive check-ins',
       description:
         'How much your coach follows up on its own — gently raising a goal you set when it’s relevant, and noticing themes across your sessions, dreams, and reflections. This is gentle reflection, never a checklist or a watcher, and it’s just for you. (Support for a hard moment is always available, whatever you choose here.)',
+      // The registry value is INERT (always null) — ProactivityControl owns the real per-person state via
+      // coaching:getPrefs/setPrefs (the bridge is the trust boundary). `device` keeps the inert placeholder
+      // off the synced vault, so it can never be mistaken for a household-wide write.
       schema: z.null(),
       default: null,
       control: { type: 'custom', render: ProactivityControl },
-      scope: 'vault',
+      scope: 'device',
       order: 1,
     }),
     defineSetting({

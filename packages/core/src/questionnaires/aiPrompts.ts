@@ -289,8 +289,8 @@ export function buildAlignmentUserMessage(input: {
   return `Questionnaire: "${input.title}"\nAnswerers: ${input.personAName} and ${input.personBName}\n\nAligned answers:\n${blocks}\n\nProduce the compatibility report JSON.`;
 }
 
+// The caller guarantees non-empty context (the gap-finder returns an empty-state hint pre-call, 37 §11),
+// so this only ever builds the with-context prompt.
 export function buildGapFinderUserMessage(context: string): string {
-  return context.trim()
-    ? `Here is the structured context about this person and their relationships:\n${context.trim()}\n\nSuggest up to 3 questionnaires that would help them learn something useful next.`
-    : `There is little context yet. Suggest up to 3 broadly useful starter questionnaires (e.g. a check-in with a partner, friend feedback, a role review).`;
+  return `Here is the structured context about this person and their relationships:\n${context.trim()}\n\nSuggest up to 3 questionnaires that would help them learn something useful next.`;
 }

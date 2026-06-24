@@ -1,4 +1,11 @@
 import { z } from 'zod';
+import {
+  classifyParseOutcome,
+  extractJsonArray,
+  extractJsonObject,
+  salvageJsonArray,
+  tolerantArray,
+} from '../ai/jsonSalvage';
 import type { ClaudeClient, FileSystem } from '../host';
 import { uuid } from '../id';
 import {
@@ -56,37 +63,24 @@ const GeneratedQuestionSchema = z.object({
   scale: z.object({ min: z.number(), max: z.number() }).optional(),
 });
 
-/** Generation returns an object: a short `title` (08 §16.4) + the questions array. */
+/** A bad generated question catches to this sentinel (empty prompt → dropped by the keep filter). */
+const QUESTION_SENTINEL: z.infer<typeof GeneratedQuestionSchema> = {
+  type: 'shortText',
+  prompt: '',
+};
+
+/**
+ * Generation returns an object: a short `title` (08 §16.4) + the questions array. The questions are parsed
+ * per-element (37 §3.1): one malformed/out-of-enum question drops, the rest survive.
+ */
 const GeneratedSetSchema = z.object({
   title: z.string().optional(),
-  questions: z.array(GeneratedQuestionSchema),
+  questions: tolerantArray(
+    GeneratedQuestionSchema,
+    QUESTION_SENTINEL,
+    (q) => q.prompt.trim() !== '',
+  ),
 });
-
-/** Pull the first JSON array out of a model reply (tolerates ```json fences / surrounding prose). */
-export function extractJsonArray(text: string): unknown {
-  const fenced = text.replace(/```json|```/gi, '');
-  const start = fenced.indexOf('[');
-  const end = fenced.lastIndexOf(']');
-  if (start === -1 || end === -1 || end < start) return null;
-  try {
-    return JSON.parse(fenced.slice(start, end + 1));
-  } catch {
-    return null;
-  }
-}
-
-/** Pull the first JSON object out of a model reply (tolerates fences / surrounding prose). */
-function extractJsonObject(text: string): unknown {
-  const fenced = text.replace(/```json|```/gi, '');
-  const start = fenced.indexOf('{');
-  const end = fenced.lastIndexOf('}');
-  if (start === -1 || end === -1 || end < start) return null;
-  try {
-    return JSON.parse(fenced.slice(start, end + 1));
-  } catch {
-    return null;
-  }
-}
 
 const OPTION_TYPES = new Set(['singleChoice', 'multiChoice', 'ranking', 'thisOrThat']);
 const SCALE_TYPES = new Set(['rating', 'slider']);
@@ -219,30 +213,27 @@ export async function generateQuestions(
   const call = await runClaude(deps, GENERATION_SYSTEM, user, 'questionnaire.generate', 2500);
   if (!call.ok) return { ok: false, reason: call.reason, message: call.message };
 
-  // Generation returns {title, questions}. Tolerate a legacy bare-array reply too, so an older model
-  // response still yields questions (just no title).
-  const validated = GeneratedSetSchema.safeParse(extractJsonObject(call.text));
-  const legacyArray = validated.success
-    ? null
-    : z.array(GeneratedQuestionSchema).safeParse(extractJsonArray(call.text));
-  const set = validated.success
-    ? validated.data
-    : legacyArray?.success
-      ? { questions: legacyArray.data }
-      : null;
+  // Generation returns {title, questions}. Tolerate a legacy bare-array reply (older model responses) and a
+  // truncated array (salvage the complete elements). Each is per-element tolerant (one bad question drops).
+  const objParse = GeneratedSetSchema.safeParse(extractJsonObject(call.text));
+  let set: z.infer<typeof GeneratedSetSchema> | null = null;
+  if (objParse.success) {
+    set = objParse.data;
+  } else {
+    const whole = extractJsonArray(call.text);
+    const rawArray = Array.isArray(whole) ? whole : salvageJsonArray(call.text);
+    const arr = tolerantArray(
+      GeneratedQuestionSchema,
+      QUESTION_SENTINEL,
+      (q) => q.prompt.trim() !== '',
+    ).parse(rawArray);
+    if (arr.length > 0) set = { questions: arr };
+  }
   if (!set) {
-    // Diagnostic (08 §17.9): distinguish an empty/cut-off reply (the model returned nothing parseable — often
-    // a truncated draft) from a reply that came back but contained no JSON. A cut-off draft is a "try again",
-    // not a brief problem.
-    const cutOff = call.text.trim() === '';
-    return {
-      ok: false,
-      reason: 'REFUSED',
-      usage: call.usage,
-      message: cutOff
-        ? 'The AI’s draft was cut off before it finished. Please try again.'
-        : 'No usable questions came back. Try a clearer brief.',
-    };
+    // The call succeeded but no parseable JSON came back — classify it honestly (cut off vs unexpected
+    // shape vs a detected refusal), never blame the brief (37 §3.1/§3.2).
+    const { reason, message } = classifyParseOutcome(call.text, 'draft');
+    return { ok: false, reason, usage: call.usage, message };
   }
   const seen = new Set(request.existingPrompts.map(norm));
   const questions: Question[] = [];
@@ -254,14 +245,16 @@ export async function generateQuestions(
     }
   }
   if (questions.length === 0) {
+    // A set parsed but yielded nothing new/usable (all duplicates or unbuildable) — a calm retry, not a
+    // parse failure and not a data blame.
     return {
       ok: false,
-      reason: 'REFUSED',
+      reason: 'MALFORMED',
       usage: call.usage,
-      message: 'No usable questions came back. Try a clearer brief.',
+      message: 'No new questions came back. Please try again.',
     };
   }
-  const title = 'title' in set ? set.title?.trim() : undefined;
+  const title = set.title?.trim();
   return { ok: true, questions, ...(title ? { title } : {}), usage: call.usage };
 }
 
@@ -304,22 +297,25 @@ export async function generateVariant(
   // The model returns one object per question: { prompt, options }. Both the prompt AND options are
   // personalized — options carry the partner's gendered pronouns (§17.14e), so leaving them un-rewritten
   // was the "answers read as if the other person were answering" bug.
-  const variantSchema = z.array(
-    z.object({ prompt: z.string(), options: z.array(z.string()).nullable().optional() }),
-  );
-  const validated = variantSchema.safeParse(extractJsonArray(call.text));
-  if (!validated.success || validated.data.length !== input.questions.length) {
-    return {
-      ok: false,
-      reason: 'REFUSED',
-      usage: call.usage,
-      message: 'Couldn’t personalize this questionnaire. Please try again.',
-    };
+  const variantElement = z.object({
+    prompt: z.string(),
+    options: z.array(z.string()).nullable().optional(),
+  });
+  const VARIANT_SENTINEL: z.infer<typeof variantElement> = { prompt: '' };
+  // Per-element + truncation tolerant (37 §3.1): map what came back; a short/partial reply just means the
+  // trailing questions keep their canonical (un-personalized but still aligned) form. Index-aligned, so a
+  // dropped element is NOT compacted — keep the empty sentinel so indices still line up with the questions.
+  const whole = extractJsonArray(call.text);
+  const rawArray = Array.isArray(whole) ? whole : salvageJsonArray(call.text);
+  const variants = z.array(variantElement.catch(VARIANT_SENTINEL)).catch([]).parse(rawArray);
+  if (variants.length === 0) {
+    const { reason, message } = classifyParseOutcome(call.text, 'personalized questionnaire');
+    return { ok: false, reason, usage: call.usage, message };
   }
   // SAFETY: an option rewrite is only accepted when it preserves the option COUNT (so the two variants stay
   // aligned + the answer structure is intact); otherwise keep the canonical options for that question.
   const questions: Question[] = input.questions.map((q, i) => {
-    const out = validated.data[i];
+    const out = variants[i];
     const personalized = out?.prompt.trim();
     const rewrittenOptions =
       q.options && out?.options && out.options.length === q.options.length
@@ -348,12 +344,10 @@ export async function improveQuestion(
     .replace(/^["']|["']$/g, '')
     .trim();
   if (text === '') {
-    return {
-      ok: false,
-      reason: 'REFUSED',
-      usage: call.usage,
-      message: 'Couldn’t reword that one.',
-    };
+    // Empty after stripping — classify honestly off the raw reply (an empty reply is a cut-off retry; a
+    // decline is REFUSED) rather than the old catch-all "couldn't reword" (37 §3.2).
+    const { reason, message } = classifyParseOutcome(call.text, 'reworded question');
+    return { ok: false, reason, usage: call.usage, message };
   }
   return { ok: true, prompt: text, usage: call.usage };
 }

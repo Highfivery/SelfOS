@@ -1743,6 +1743,56 @@ test('questionnaires: the AI draft panel + Suggested surface fit at phone width'
   }
 });
 
+test('questionnaires: Suggested returns suggestions even when the model omits `required` (the gap-finder bug, 37)', async () => {
+  // Give the owner some substantive context so the gap-finder calls the model (not the pre-call thin-context
+  // hint). The offline fake returns a suggestion set whose sample questions OMIT `required` — the exact shape
+  // that used to discard the whole batch and show "add more about the people in your life".
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  {
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('seed insight: master key missing');
+    const now = new Date().toISOString();
+    await saveInsight(fs, key, {
+      id: 'owner-context',
+      schemaVersion: 1,
+      source: 'intake',
+      subjectPersonId: 'owner-1',
+      summary: 'Values quality time and honest communication.',
+      facts: [{ id: 'f1', text: 'Prefers weekends free for connection.', shareable: true }],
+      confidence: 'high',
+      categories: [],
+      approved: true,
+      provenance: { intakeSection: 'your-story', at: now },
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    // Configure a (fake) key so the AI surfaces become ready.
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'AI', exact: true }).click();
+    await w.getByLabel('Claude API key').fill('sk-ant-e2e');
+    await w.getByRole('button', { name: /save key/i }).click();
+    await expect(w.getByText(/key is configured/i)).toBeVisible();
+
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await w.getByRole('button', { name: 'Suggested' }).click();
+    await w.getByRole('button', { name: /suggest questionnaires/i }).click();
+
+    // The suggestions render (the bug's user-visible fix) — and the data-blame line never appears.
+    await expect(w.getByText('Weekly partner check-in')).toBeVisible();
+    await expect(w.getByText('What we each need')).toBeVisible();
+    await expect(w.getByText(/add more about the people/i)).toHaveCount(0);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('memory: the Insights surface shows its empty state + crisis affordance', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);

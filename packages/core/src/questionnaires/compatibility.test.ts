@@ -197,7 +197,9 @@ describe('generateVariant', () => {
     expect(result.questions?.[0]?.prompt).toBe('Pick one (for Alex)'); // prompt still personalized
   });
 
-  it('REFUSES when the model returns the wrong number of questions', async () => {
+  it('maps what the model returns and keeps the canonical for the rest when fewer come back (37 §3.1)', async () => {
+    // A short/partial reply (one variant for two questions) no longer fails — it personalizes the first and
+    // keeps the second canonical (still aligned, just un-personalized), per the tolerant-mapping decision.
     const fs = memFileSystem();
     const result = await generateVariant(
       deps(fs, fakeClient(JSON.stringify([{ prompt: 'only one', options: null }]))),
@@ -208,7 +210,22 @@ describe('generateVariant', () => {
         targetContext: targetCtx,
       },
     );
-    expect(result).toMatchObject({ ok: false, reason: 'REFUSED' });
+    expect(result.ok).toBe(true);
+    expect(result.questions).toHaveLength(2);
+    expect(result.questions?.[0]?.prompt).toBe('only one'); // first personalized
+    expect(result.questions?.[1]?.prompt).toBe('Do you want more time together?'); // second canonical kept
+    expect(result.questions?.[1]?.canonicalId).toBe('c2'); // alignment key still set
+  });
+
+  it('returns an honest parse-failure (not REFUSED) when the variant reply is unparseable', async () => {
+    const fs = memFileSystem();
+    const result = await generateVariant(deps(fs, fakeClient('no json here at all')), {
+      forName: 'Alex',
+      aboutName: 'Sam',
+      questions: canonicalQuestions,
+      targetContext: targetCtx,
+    });
+    expect(result).toMatchObject({ ok: false, reason: 'MALFORMED' });
   });
 });
 

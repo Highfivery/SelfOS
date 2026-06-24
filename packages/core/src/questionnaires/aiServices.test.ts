@@ -14,12 +14,8 @@ import {
   registerContextProvider,
   resetContextProviders,
 } from './contextProviders';
-import {
-  extractJsonArray,
-  generateQuestions,
-  improveQuestion,
-  type AiDeps,
-} from './generationService';
+import { extractJsonArray } from '../ai/jsonSalvage';
+import { generateQuestions, improveQuestion, type AiDeps } from './generationService';
 import { suggestQuestionnaires } from './gapFinderService';
 
 const key = generateMasterKey();
@@ -238,7 +234,9 @@ describe('generateQuestions', () => {
       },
       existingPrompts: [],
     });
-    expect(result).toMatchObject({ ok: false, reason: 'REFUSED' });
+    // 37 §3.2: an empty reply is TRUNCATED (cut off / token-starved), distinct from a refusal or a brief
+    // problem — the message still says "cut off", but the reason is honest.
+    expect(result).toMatchObject({ ok: false, reason: 'TRUNCATED' });
     expect(result.message).toMatch(/cut off/i);
   });
 
@@ -466,5 +464,117 @@ describe('improveQuestion + gap-finder', () => {
     expect(result.ok).toBe(true);
     expect(result.suggestions?.[0]?.title).toBe('Weekly partner check-in');
     expect(result.usage?.type).toBe('questionnaire.suggest');
+  });
+
+  // The reported bug (37 §3.3): the live model returns suggestions WITHOUT `required` on the sample
+  // questions; the old all-or-nothing parse + over-strict `required: z.boolean()` discarded the whole batch
+  // and showed "add more about the people in your life" — a data blame AFTER a successful call. This is the
+  // test that would have caught it.
+  it('REGRESSION: keeps suggestions whose sample questions omit `required` (the gap-finder bug)', async () => {
+    const fs = memFileSystem();
+    const { author } = await seedHousehold(fs);
+    const text = JSON.stringify([
+      {
+        title: 'Partner check-in',
+        type: 'role-feedback',
+        rationale: 'a',
+        questions: [{ type: 'rating', prompt: 'How was this week?' }], // no `required`
+      },
+      {
+        title: 'Friend feedback',
+        type: 'role-feedback',
+        rationale: 'b',
+        questions: [{ type: 'yesNo', prompt: 'Do you feel heard?' }], // no `required`
+      },
+      {
+        title: 'Role review',
+        type: 'role-feedback',
+        rationale: 'c',
+        questions: [{ type: 'shortText', prompt: 'One thing to change?' }], // no `required`
+      },
+    ]);
+    const result = await suggestQuestionnaires(deps(fs, fakeClient(text), author));
+    expect(result.ok).toBe(true);
+    expect(result.suggestions).toHaveLength(3); // today this yields ZERO without the fix
+  });
+
+  it('salvages the good suggestions, dropping a malformed one (per-element, 37 §3.1)', async () => {
+    const fs = memFileSystem();
+    const { author } = await seedHousehold(fs);
+    const text = JSON.stringify([
+      {
+        title: 'Good one',
+        type: 'role-feedback',
+        rationale: 'a',
+        questions: [{ type: 'yesNo', prompt: 'Q?' }],
+      },
+      {
+        title: 'Bad one',
+        type: 'role-feedback',
+        rationale: 'b',
+        questions: [{ type: 'not-a-type', prompt: 'X' }],
+      },
+    ]);
+    const result = await suggestQuestionnaires(deps(fs, fakeClient(text), author));
+    expect(result.ok).toBe(true);
+    expect(result.suggestions?.map((s) => s.title)).toEqual(['Good one']);
+  });
+
+  it('salvages the complete suggestions from a TRUNCATED array', async () => {
+    const fs = memFileSystem();
+    const { author } = await seedHousehold(fs);
+    // Two complete suggestions, then a third cut off mid-object.
+    const text =
+      '[{"title":"One","type":"x","rationale":"a","questions":[{"type":"yesNo","prompt":"Q1?"}]},' +
+      '{"title":"Two","type":"x","rationale":"b","questions":[{"type":"yesNo","prompt":"Q2?"}]},' +
+      '{"title":"Three","type":"x","rationale":"c","questions":[{"type":"yesN';
+    const result = await suggestQuestionnaires(deps(fs, fakeClient(text), author));
+    expect(result.ok).toBe(true);
+    expect(result.suggestions?.map((s) => s.title)).toEqual(['One', 'Two']);
+  });
+
+  it('returns an honest MALFORMED (not a data blame) when no JSON comes back, AND still meters', async () => {
+    const fs = memFileSystem();
+    const { author } = await seedHousehold(fs);
+    const result = await suggestQuestionnaires(deps(fs, fakeClient('no json here'), author));
+    expect(result).toMatchObject({ ok: false, reason: 'MALFORMED' });
+    expect((result as { message: string }).message).not.toMatch(/add more about/i);
+    // The call succeeded, so the tokens were metered (meter-before-parse).
+    const billed = await queryUsage(fs, key, {
+      personId: author,
+      from: '2026-06-01T00:00:00.000Z',
+      to: '2026-07-01T00:00:00.000Z',
+    });
+    expect(billed.some((e) => e.type === 'questionnaire.suggest')).toBe(true);
+  });
+
+  it('reports REFUSED when the reply is refusal-shaped prose', async () => {
+    const fs = memFileSystem();
+    const { author } = await seedHousehold(fs);
+    const result = await suggestQuestionnaires(
+      deps(fs, fakeClient('I cannot help with that.'), author),
+    );
+    expect(result).toMatchObject({ ok: false, reason: 'REFUSED' });
+  });
+
+  it('PRE-CALL: shows the empty-state hint without spending when there is no context (37 §11)', async () => {
+    const fs = memFileSystem();
+    // A bare subject with no notes/tags/relationships/insights → gatherGenerationContext returns ''.
+    const bare = await upsertPerson(fs, key, { displayName: 'Solo', isSubject: true, tags: [] });
+    // A client that throws if called — proving no Claude call is made.
+    const noCall: ClaudeClient = {
+      send: () => Promise.reject(new Error('should not be called')),
+      stream: () => Promise.reject(new Error('should not be called')),
+    };
+    const result = await suggestQuestionnaires(deps(fs, noCall, bare.id));
+    expect(result.ok).toBe(false);
+    expect((result as { message: string }).message).toMatch(/add more about the people/i);
+    expect((result as { reason?: string }).reason).toBeUndefined(); // an empty state, not an AI failure
+    const billed = await queryUsage(fs, key, {
+      personId: bare.id,
+      from: '2026-06-01T00:00:00.000Z',
+      to: '2026-07-01T00:00:00.000Z',
+    });
+    expect(billed).toHaveLength(0); // no spend
   });
 });

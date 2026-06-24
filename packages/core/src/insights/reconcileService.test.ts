@@ -126,6 +126,41 @@ describe('reconcileInsights', () => {
     });
   });
 
+  it('tolerates one malformed op — applies the good ones, drops the bad (37 §3.1)', async () => {
+    const fs = memFileSystem();
+    await saveInsight(fs, key, insight({ id: 'i1' }));
+    await saveInsight(fs, key, insight({ id: 'i2' }));
+    const client = fakeClient({
+      insights: [
+        { id: 'i1', confidence: 'high', rationale: 'solid' },
+        { id: 'i2', confidence: 'not-a-level' }, // invalid enum → dropped, not a whole-batch failure
+      ],
+      merges: [],
+    });
+    const result = await reconcileInsights(deps(fs, client));
+    expect(result.ok).toBe(true);
+    expect((await getInsight(fs, key, 'p1', 'i1'))?.confidence).toBe('high'); // good op applied
+  });
+
+  it('returns an honest MALFORMED (not a refusal) when no JSON comes back', async () => {
+    const fs = memFileSystem();
+    await saveInsight(fs, key, insight({ id: 'i1' }));
+    const raw: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (_o, onDelta) => {
+        onDelta('just prose, no json');
+        return Promise.resolve({
+          text: 'just prose, no json',
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    expect(await reconcileInsights(deps(fs, raw))).toMatchObject({
+      ok: false,
+      reason: 'MALFORMED',
+    });
+  });
+
   it('only ever loads the subject’s OWN insights (never another person’s)', async () => {
     const fs = memFileSystem();
     await saveInsight(fs, key, insight({ id: 'mine', subjectPersonId: 'p1' }));

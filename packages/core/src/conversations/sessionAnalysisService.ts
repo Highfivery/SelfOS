@@ -1,4 +1,10 @@
 import { z } from 'zod';
+import {
+  classifyParseOutcome,
+  extractJsonObject,
+  salvageJsonObjectField,
+  tolerantArray,
+} from '../ai/jsonSalvage';
 import type { ClaudeClient, FileSystem } from '../host';
 import { uuid } from '../id';
 import {
@@ -58,21 +64,38 @@ stated — propose an update (array of {"field": one of the known profile field 
 "observed": the new value, "current": the prior value if known, "rationale": a short human reason}). Omit or \
 leave empty when nothing changed — do not guess.`;
 
-/** AI-output contract for the analysis — validated before it's trusted (the host owns ids/timestamps). */
+/** A string-list field that drops bad elements instead of failing the whole array (37 §3.1). */
+const strList = tolerantArray(z.string(), '', (s) => s.trim() !== '');
+
+/**
+ * AI-output contract for the analysis — validated before it's trusted (the host owns ids/timestamps).
+ * Tolerant by design (37 §3.1): require only `summary`; every list is per-element salvaging; mood numbers
+ * `.catch` to neutral; `crisisFlag` is preserved (.catch(undefined), never coerced — §8) so a per-element
+ * salvage can't drop the crisis signal.
+ */
 const SessionAnalysisDraftSchema = z.object({
-  summary: z.string(),
-  themes: z.array(z.string()).default([]),
-  goals: z.array(z.string()).default([]),
-  followUps: z.array(z.string()).default([]),
-  people: z.array(z.string()).default([]),
-  moodValence: z.number().default(0),
-  moodEnergy: z.number().default(0),
-  crisisFlag: z.boolean().optional(),
-  categories: z.array(z.string()).default([]),
-  profileSuggestions: z.array(RawProfileSuggestionSchema).default([]),
+  summary: z.string().min(1),
+  themes: strList,
+  goals: strList,
+  followUps: strList,
+  people: strList,
+  moodValence: z.number().catch(0).default(0),
+  moodEnergy: z.number().catch(0).default(0),
+  crisisFlag: z.boolean().optional().catch(undefined),
+  categories: strList,
+  profileSuggestions: tolerantArray(
+    RawProfileSuggestionSchema,
+    { field: '', observed: '', rationale: '' },
+    (s) => s.field.trim() !== '',
+  ),
   // 29 — depth invitations: ONLY when the session keeps circling an unexplored profile area (the same free
-  // pass, no extra spend). Validated/resolved server-side before any is recorded.
-  depthInvitations: z.array(RawDepthInvitationSchema).default([]),
+  // pass, no extra spend). Validated/resolved server-side before any is recorded. A real invitation needs a
+  // theme AND either a sectionId or a lifeArea — keep those, drop the empty sentinel.
+  depthInvitations: tolerantArray(
+    RawDepthInvitationSchema,
+    { theme: '', rationale: '' },
+    (d) => d.theme.trim() !== '',
+  ),
 });
 
 export interface SetSessionStatusDeps {
@@ -114,14 +137,6 @@ export interface EndAndSummarizeDeps {
   intakeSession?: IntakeSession | null;
   now: Date;
   override?: boolean;
-}
-
-function extractJson(text: string): unknown {
-  const stripped = text.replace(/```json/gi, '').replace(/```/g, '');
-  const start = stripped.indexOf('{');
-  const end = stripped.lastIndexOf('}');
-  if (start === -1 || end === -1 || end < start) throw new Error('No JSON object in model output');
-  return JSON.parse(stripped.slice(start, end + 1));
 }
 
 const clampUnit = (n: number): number => Math.max(-1, Math.min(1, n));
@@ -227,15 +242,17 @@ export async function endAndSummarize(deps: EndAndSummarizeDeps): Promise<Sessio
   const usage = buildUsage(model, conversationId, personId, at, result.usage);
   await recordUsage(fs, key, usage);
 
-  let draft;
-  try {
-    draft = SessionAnalysisDraftSchema.parse(extractJson(result.text));
-  } catch {
-    return {
-      ok: false,
-      reason: 'ERROR',
-      message: 'The summary came back in an unexpected shape. Please try again.',
-    };
+  // Tolerant parse; on a truncated object salvage at least the leading `summary` so a cut-off reply still
+  // produces a usable insight (37 "show any partial"). Only a genuinely-empty/no-JSON reply is classified
+  // (TRUNCATED vs MALFORMED vs REFUSED) — distinct reasons, never a misleading catch-all (37 §3.2).
+  let draft = SessionAnalysisDraftSchema.safeParse(extractJsonObject(result.text)).data;
+  if (!draft) {
+    const summary = salvageJsonObjectField(result.text, 'summary');
+    if (summary?.trim()) draft = SessionAnalysisDraftSchema.parse({ summary });
+  }
+  if (!draft) {
+    const { reason, message } = classifyParseOutcome(result.text, 'summary');
+    return { ok: false, reason, message, usage };
   }
 
   const insightId = conversation.insightId ?? uuid();

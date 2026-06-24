@@ -1,4 +1,9 @@
-import { z } from 'zod';
+import {
+  classifyParseOutcome,
+  extractJsonArray,
+  salvageJsonArray,
+  tolerantArray,
+} from '../ai/jsonSalvage';
 import type { FileSystem } from '../host';
 import {
   GuidancePrefsSchema,
@@ -101,17 +106,6 @@ function buildSuggestUser(context: string): string {
     : `There is little context yet. Suggest a few broadly useful starter exercises.`;
 }
 
-function extractJsonArray(text: string): unknown {
-  const start = text.indexOf('[');
-  const end = text.lastIndexOf(']');
-  if (start === -1 || end === -1 || end < start) return [];
-  try {
-    return JSON.parse(text.slice(start, end + 1));
-  } catch {
-    return [];
-  }
-}
-
 /**
  * Generate (or refresh) the person's suggestions and cache them. `adultAllowed` filters the intimacy group
  * out of the catalog AND out of validation until the 18+ ack (§8.3). Budget-gated + metered via runClaude.
@@ -137,23 +131,28 @@ export async function suggestGuidedSessions(
   );
   if (!call.ok) return { ok: false, reason: call.reason, message: call.message };
 
-  const parsed = z.array(GuidedSuggestionSchema).safeParse(extractJsonArray(call.text));
+  // Per-element + truncation tolerant (37 §3.1): one malformed suggestion drops, the rest survive; a
+  // truncated array still yields its complete elements.
+  const whole = extractJsonArray(call.text);
+  const raw = Array.isArray(whole) ? whole : salvageJsonArray(call.text);
+  const parsed = tolerantArray(
+    GuidedSuggestionSchema,
+    { guideId: '', reason: '' },
+    (s) => s.guideId.trim() !== '',
+  ).parse(raw);
   const valid = new Set(candidates.map((e) => e.id));
   const seen = new Set<string>();
   const suggestions: GuidedSuggestion[] = [];
-  for (const s of parsed.success ? parsed.data : []) {
+  for (const s of parsed) {
     if (!valid.has(s.guideId) || seen.has(s.guideId)) continue; // drop non-catalog / gated / duplicate ids
     seen.add(s.guideId);
     suggestions.push(s);
     if (suggestions.length >= 4) break;
   }
   if (suggestions.length === 0) {
-    return {
-      ok: false,
-      reason: 'REFUSED',
-      usage: call.usage,
-      message: 'No suggestions right now — add more about yourself and the people in your life.',
-    };
+    // The call succeeded but no usable suggestion survived — an honest parse outcome, never a data blame.
+    const { reason, message } = classifyParseOutcome(call.text, 'suggestion set');
+    return { ok: false, reason, usage: call.usage, message };
   }
 
   const generatedAt = deps.now.toISOString();

@@ -249,7 +249,8 @@ describe('endAndSummarize', () => {
 
   it('meters even when the JSON fails to validate (tokens were spent)', async () => {
     const result = await endAndSummarize(deps({ client: analysisClient('not json at all') }));
-    expect(result).toMatchObject({ ok: false, reason: 'ERROR' });
+    // 37 §3.2: a no-JSON reply is MALFORMED ("unexpected shape"), distinct from a transport ERROR.
+    expect(result).toMatchObject({ ok: false, reason: 'MALFORMED' });
     expect(await listInsightsForPerson(fs, key, 'p1')).toHaveLength(0); // no insight
     // but a usage event WAS recorded (the tokens were spent)
     const billed = await queryUsage(fs, key, {
@@ -261,6 +262,39 @@ describe('endAndSummarize', () => {
     expect(billed).toHaveLength(1);
     const conv = await getConversation(fs, key, 'p1', 'c1');
     expect(conv?.status).not.toBe('complete'); // a failed parse doesn't complete the session
+  });
+
+  it('salvages the summary from a TRUNCATED reply (37 §3.1) into a usable insight', async () => {
+    await savePerson(fs, key, person('p1', 'Alex'));
+    await saveConversation(fs, key, conversation('c1', 'p1'));
+    const truncated = '{"summary":"A calmer end to a hard day.","themes":["work str';
+    const result = await endAndSummarize(deps({ client: analysisClient(truncated) }));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.insight.summary).toBe('A calmer end to a hard day.');
+  });
+
+  it('preserves the crisis flag even when a list element is malformed (§8)', async () => {
+    await savePerson(fs, key, person('p1', 'Alex'));
+    await saveConversation(fs, key, conversation('c1', 'p1'));
+    // One theme is a non-string (drops), but crisisFlag must survive the per-element salvage.
+    const text =
+      '{"summary":"Concerning session.","themes":["ok",123],"crisisFlag":true,"goals":[],"followUps":[],"people":[]}';
+    const result = await endAndSummarize(deps({ client: analysisClient(text) }));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.insight.crisisFlag).toBe(true);
+  });
+
+  it('reports TRUNCATED distinctly from MALFORMED (37 §3.2)', async () => {
+    await savePerson(fs, key, person('p1', 'Alex'));
+    await saveConversation(fs, key, conversation('c1', 'p1'));
+    // Cut off before the summary string even closes → nothing salvageable → TRUNCATED.
+    const cutOff = await endAndSummarize(
+      deps({ client: analysisClient('{"summary":"a calmer end to a ') }),
+    );
+    expect(cutOff).toMatchObject({ ok: false, reason: 'TRUNCATED' });
+    await saveConversation(fs, key, conversation('c1', 'p1')); // reset status
+    const junk = await endAndSummarize(deps({ client: analysisClient('totally not json') }));
+    expect(junk).toMatchObject({ ok: false, reason: 'MALFORMED' });
   });
 
   it('re-runs on the stale path: reuses the insight id + carries per-fact sharing forward', async () => {

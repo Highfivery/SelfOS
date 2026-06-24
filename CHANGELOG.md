@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.8.0](https://github.com/Highfivery/SelfOS/compare/v0.7.0...v0.8.0) (2026-06-24)
+
+
+### Features
+
+* **ai:** tolerant model-JSON parsing + honest failure taxonomy (spec 37) ([#44](https://github.com/Highfivery/SelfOS/issues/44)) ([5172b7b](https://github.com/Highfivery/SelfOS/commit/5172b7bdad3b380e9ea282c3c93768feb198db00))
+* **coaching:** proactive coaching — goal follow-through, synthesis, crisis awareness (spec 40) ([#48](https://github.com/Highfivery/SelfOS/issues/48)) ([e3113ff](https://github.com/Highfivery/SelfOS/commit/e3113ffb805826fda6e39b3461aa20dc98d0355e))
+* **discoverability:** empty states, AI-unavailable copy, scope & orientation (spec 41) ([#49](https://github.com/Highfivery/SelfOS/issues/49)) ([e7127a0](https://github.com/Highfivery/SelfOS/commit/e7127a0c83878e681dee3520640cb230f5cd06ac))
+* **memory:** dashboard overhaul — stats header, scoped sharing, transparency surface (spec 44) ([#52](https://github.com/Highfivery/SelfOS/issues/52)) ([d467e61](https://github.com/Highfivery/SelfOS/commit/d467e61a3eeaef3a67df3593ed1e46adcb17a8da))
+* **memory:** living memory & continuity — auto-reconcile, tracked goals, share cleanup (spec 39) ([#46](https://github.com/Highfivery/SelfOS/issues/46)) ([cb5e1c5](https://github.com/Highfivery/SelfOS/commit/cb5e1c50d70d86886ccb8f7b731f9455523a9019))
+* **onboarding:** per-question relationship-scoped sharing in the intake flow (spec 43) ([#51](https://github.com/Highfivery/SelfOS/issues/51)) ([a6ef6ae](https://github.com/Highfivery/SelfOS/commit/a6ef6ae5681d0ef36a855ca0f0b4d554167fde4b))
+* **questionnaires:** lifecycle completeness — discoverability, validation, re-ask, export, favorites (spec 38) ([#47](https://github.com/Highfivery/SelfOS/issues/47)) ([5347321](https://github.com/Highfivery/SelfOS/commit/5347321f2329a13a6c7cc4cdfa136f2ea461c6bf))
+* relationship-scoped sharing — the foundational model (spec 42) ([#43](https://github.com/Highfivery/SelfOS/issues/43)) ([4d83c4f](https://github.com/Highfivery/SelfOS/commit/4d83c4f4e6c0e2fc51b341e7e8a551cf4d5efb81))
+
+
+### Bug Fixes
+
+* audit follow-ups for specs 37-41 (synthesis privacy leak + should-fixes) ([#50](https://github.com/Highfivery/SelfOS/issues/50)) ([0d49936](https://github.com/Highfivery/SelfOS/commit/0d49936293eee4f21f8640db2593dc26b3ddc1d5))
+* **sharing:** audit follow-ups for relationship-scoped sharing (specs 42-44) ([#53](https://github.com/Highfivery/SelfOS/issues/53)) ([6aa3c01](https://github.com/Highfivery/SelfOS/commit/6aa3c013cc83cb84fca0bd434b1b4e44a370b95f))
+
 ## [0.7.0](https://github.com/Highfivery/SelfOS/compare/v0.6.0...v0.7.0) (2026-06-23)
 
 

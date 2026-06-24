@@ -184,7 +184,7 @@ export function registerIpcHandlers(): void {
       const filePath = fakeDir
         ? join(fakeDir, suggestedName)
         : await dialog
-            .showSaveDialog({ title: 'Export dream image', defaultPath: suggestedName })
+            .showSaveDialog({ title: 'Save file', defaultPath: suggestedName })
             .then((r) => (r.canceled ? null : r.filePath));
       if (!filePath) return null;
       await writeFile(filePath, Buffer.from(bytes));
@@ -316,6 +316,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.assignmentsRevoke, bridge.assignmentsRevoke);
   handle(IpcChannels.assignmentsReshare, bridge.assignmentsReshare);
   handle(IpcChannels.assignmentsReAsk, bridge.assignmentsReAsk);
+  handle(IpcChannels.assignmentsExportResults, bridge.assignmentsExportResults);
   handle(IpcChannels.relayStatus, bridge.relayStatus);
   handle(IpcChannels.relayConnect, bridge.relayConnect);
   handle(IpcChannels.relayUpdate, bridge.relayUpdate);

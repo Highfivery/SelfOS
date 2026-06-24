@@ -208,6 +208,7 @@ export const IpcChannels = {
   assignmentsRevoke: 'assignments:revoke',
   assignmentsReshare: 'assignments:reshare',
   assignmentsReAsk: 'assignments:reAsk',
+  assignmentsExportResults: 'assignments:exportResults',
   relayStatus: 'relay:status',
   relayConnect: 'relay:connect',
   relayUpdate: 'relay:update',
@@ -755,6 +756,16 @@ export interface SelfosBridge {
    * Duplicate). Requires `questionnaires.create`; the recipient is re-validated in the bridge.
    */
   assignmentsReAsk(input: { questionnaireId: string }): Promise<InAppSendResult>;
+  /**
+   * Export a questionnaire's results to a file OUTSIDE the encrypted vault (38 §3.7) — CSV or JSON. Built
+   * host-side over the same privacy-filtered SendResult shape Results uses (a Private send contributes only
+   * its numeric values, never prose), then written via a save dialog. Returns the written path, or null if
+   * the sender cancels. Requires `questionnaires.viewResults`; sender-scoped.
+   */
+  assignmentsExportResults(input: {
+    questionnaireId: string;
+    format: 'csv' | 'json';
+  }): Promise<string | null>;
   /** The relay connection status (no secrets) for the send panel + admin Relay setup. */
   relayStatus(): Promise<RelayStatus>;
   /** Connect + deploy the household relay to Cloudflare (admin-only). Returns the new status. */

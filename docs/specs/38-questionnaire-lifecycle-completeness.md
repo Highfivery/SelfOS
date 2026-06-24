@@ -652,8 +652,14 @@ decisions). Recommended order, smallest-risk first:
    (`notifications:remindersDue`, no network/scheduler) and re-surfacing on `onIncrease`. **No
    `lastReminderAt` field after all** — the notification framework's device-local dismiss already prevents
    re-nagging (the §4.3 "device-local = no schema change" path), so no migration.
-6. **Export raw answers / results.** `assignments:exportResults` + the host save op + the pure export
-   builder over `SendResult[]` (privacy boundary inherited). (§11 #7.)
+6. **Export raw answers / results.** ✅ **Built (2026-06-23).** `assignments:exportResults({ questionnaireId,
+format })` builds the export **host-side** (the privacy boundary lives in the bridge, not the UI: a
+   Standard send exports all answers; a **Private send exports only its numeric values** — rating/slider/
+   matrix/allocation — never prose, §11 #7) via a pure `buildResultsExport` (CSV long-form with RFC-4180
+   escaping, or JSON), then writes it **outside the encrypted vault** through the existing `saveImageFile`
+   host save op (the spec-13 precedent; dialog title genericized to "Save file"). Results offers **Export
+   CSV / Export JSON** once there's a submitted send, with a "outside your encrypted vault" confirmation.
+   Gated `questionnaires.viewResults`, sender-scoped.
 7. **Document & finish `contextOnly`.** Builder picker copy, Results "Update both coaches" reconciliation,
    recipient disclosure, and the 08 §3.6 doc update listing all four modes. (§11 #10.)
 8. **Templates / favorites (if in scope).** Only if §11 #5 chooses a model beyond Duplicate — its own

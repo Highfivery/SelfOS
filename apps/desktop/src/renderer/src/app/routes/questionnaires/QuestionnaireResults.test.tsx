@@ -73,6 +73,20 @@ describe('QuestionnaireResults', () => {
     await waitFor(() => expect(slot()).toBe(true)); // opening Results = "seen"
   });
 
+  it('exports results to a file outside the vault and confirms the path (38 §3.7)', async () => {
+    const assignmentsExportResults = vi.fn(() => Promise.resolve('/tmp/our-week.csv'));
+    installMockBridge({
+      assignmentsExportResults,
+      assignmentsResults: () =>
+        Promise.resolve([send({ status: 'submitted', answers: [{ prompt: 'Q', answer: 'A' }] })]),
+    });
+    renderResults();
+    await screen.findByText('Mara');
+    await userEvent.click(screen.getByRole('button', { name: /export csv/i }));
+    expect(assignmentsExportResults).toHaveBeenCalledWith({ questionnaireId: 'q1', format: 'csv' });
+    expect(await screen.findByText(/outside your encrypted vault/i)).toBeInTheDocument();
+  });
+
   it('surfaces a relay link’s expiry on an open send (38 §3.6)', async () => {
     const future = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
     installMockBridge({

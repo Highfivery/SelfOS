@@ -285,6 +285,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
           updatedAt: 'now',
         },
       }),
+    assignmentsExportResults: () => Promise.resolve('/tmp/results.csv'),
     relayStatus: () => Promise.resolve({ configured: false, updateAvailable: false }),
     relayConnect: () => Promise.resolve({ configured: false, updateAvailable: false }),
     relayUpdate: () => Promise.resolve({ configured: false, updateAvailable: false }),

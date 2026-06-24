@@ -256,7 +256,10 @@ import {
   submitResponse,
   suggestQuestionnaires,
   validateQuestionnaire,
+  buildResultsExport,
+  exportMimeType,
   type AiDeps,
+  type ExportSend,
   type TrendSend,
 } from '@selfos/core/questionnaires';
 import {
@@ -2961,6 +2964,60 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           linkError: 'We couldn’t create the link — open Results to resend it.',
         };
       }
+    },
+    assignmentsExportResults: async (input): Promise<string | null> => {
+      // Export a questionnaire's results to a file OUTSIDE the vault (38 §3.7). The privacy boundary is
+      // enforced HERE (the bridge), not the renderer: a Standard send exports all answers; a Private send
+      // exports only its NUMERIC values (rating/slider/matrix/allocation), never prose — exactly as Results.
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.viewResults')))
+        throw new Error('Not permitted');
+      const personId = await activePersonId();
+      if (!personId) throw new Error('No active person');
+      const { questionnaireId, format } = z
+        .object({ questionnaireId: z.string().min(1), format: z.enum(['csv', 'json']) })
+        .parse(input);
+      const def = await getQuestionnaire(ctx.fs, ctx.key, questionnaireId);
+      if (!def) throw new Error('Questionnaire not found');
+      const sends = (await listAssignments(ctx.fs, ctx.key, { senderPersonId: personId })).filter(
+        (a) => a.questionnaireId === questionnaireId,
+      );
+      const numericTypes = new Set(['rating', 'slider', 'matrix', 'allocation']);
+      const exportSends: ExportSend[] = [];
+      for (const a of sends) {
+        const recipientName = await recipientDisplayName(ctx.fs, ctx.key, a);
+        const answers: { prompt: string; answer: string }[] = [];
+        if (a.status === 'submitted') {
+          const snapshot = await getAssignmentSnapshot(ctx.fs, ctx.key, a.id);
+          const response = await getResponse(ctx.fs, ctx.key, a.id);
+          if (snapshot && response) {
+            const byId = new Map(response.answers.map((ans) => [ans.questionId, ans.value]));
+            for (const q of snapshot.questions) {
+              // Private sends contribute ONLY numeric values (consistent with trends, §3.2); prose excluded.
+              if (a.privacy === 'private' && !numericTypes.has(q.type)) continue;
+              answers.push({ prompt: q.prompt, answer: formatAnswerForDisplay(q, byId.get(q.id)) });
+            }
+          }
+        }
+        exportSends.push({
+          recipientName,
+          status: a.status,
+          privacy: a.privacy,
+          ...(a.status === 'submitted' ? { submittedAt: a.updatedAt } : {}),
+          answers,
+        });
+      }
+      const text = buildResultsExport(def.title, exportSends, format);
+      const slug =
+        def.title
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '') || 'results';
+      return host.saveImageFile(
+        `${slug}.${format}`,
+        new TextEncoder().encode(text),
+        exportMimeType(format),
+      );
     },
     questionnairesShareLink: async (
       questionnaireId,

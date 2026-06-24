@@ -2905,6 +2905,55 @@ describe('notifications (35)', () => {
     expect(await bridge.notificationsRemindersDue()).toEqual([]);
   });
 
+  it('exports results to a file outside the vault; a Private send contributes numeric only (38 §3.7)', async () => {
+    const { bridge, ownerId, host } = await freshOwner();
+    // Capture what gets written to disk (the export bytes) without a real save dialog.
+    const saved: { name: string; bytes: Uint8Array }[] = [];
+    host.host.saveImageFile = (name, bytes) => {
+      saved.push({ name, bytes });
+      return Promise.resolve(`/tmp/${name}`);
+    };
+    const recipient = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: recipient.id, roleId: 'member', pin: null });
+    const q = await bridge.questionnairesSave({
+      title: 'Weekly check-in',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: recipient.id },
+      questions: [
+        { id: 'prose', type: 'shortText', prompt: 'Anything to add?', required: false },
+        {
+          id: 'rate',
+          type: 'rating',
+          prompt: 'Rate it',
+          required: true,
+          scale: { min: 1, max: 5 },
+        },
+      ],
+    });
+    // PRIVATE send → the prose answer must be excluded from the export (numeric only).
+    const { assignment } = await bridge.assignmentsCreate({
+      questionnaireId: q.id,
+      privacy: 'private',
+    });
+    await bridge.sessionSetActive({ personId: recipient.id });
+    await bridge.assignmentsSubmit({
+      assignmentId: assignment.id,
+      answers: [
+        { questionId: 'prose', value: 'secret prose' },
+        { questionId: 'rate', value: 4 },
+      ],
+    });
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+
+    const path = await bridge.assignmentsExportResults({ questionnaireId: q.id, format: 'csv' });
+    expect(path).toBe('/tmp/weekly-check-in.csv');
+    const csv = new TextDecoder().decode(saved[0]?.bytes);
+    expect(csv).toContain('Rate it'); // the numeric question is exported
+    expect(csv).toContain(',4'); // its value
+    expect(csv).not.toContain('secret prose'); // a Private send's prose never reaches the file
+  });
+
   it('opens only http(s) URLs externally, via the host shell', async () => {
     const host = makeHost();
     const opened: string[] = [];

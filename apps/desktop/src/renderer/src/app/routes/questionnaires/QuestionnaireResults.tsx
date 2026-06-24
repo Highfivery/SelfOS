@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Brain, Link2, Link2Off, Lock, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
+import { Brain, Download, Link2, Link2Off, Lock, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 import { aiKeyResolved } from '../../aiAvailability';
 import type {
   AssignmentStatus,
@@ -102,6 +102,24 @@ function StandardResults({ questionnaireId }: { questionnaireId: string }): JSX.
   // A relay-backed send is drainable whether it's an external ('relay') or a household ('inApp') send that
   // also minted a link (§17.13) — key off the relay material, NOT the channel.
   const hasRelayLink = results.some((r) => r.relayLinked);
+  // Export is offered once there's at least one submitted/analyzed send to export (38 §3.7).
+  const hasAnswers = results.some((r) => r.status === 'submitted' || r.status === 'analyzed');
+  const [exporting, setExporting] = useState(false);
+  const [exportMsg, setExportMsg] = useState<string | null>(null);
+
+  const onExport = async (format: 'csv' | 'json'): Promise<void> => {
+    setExporting(true);
+    setExportMsg(null);
+    try {
+      const path = await window.selfos?.assignmentsExportResults({ questionnaireId, format });
+      // null = the sender cancelled the save dialog — no message (not an error).
+      if (path) setExportMsg(`Exported to ${path} — this file is outside your encrypted vault.`);
+    } catch {
+      setExportMsg('Couldn’t export the results. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const runDrain = async (): Promise<void> => {
     setDraining(true);
@@ -204,14 +222,33 @@ function StandardResults({ questionnaireId }: { questionnaireId: string }): JSX.
     <Stack gap={3}>
       <div className={styles.resultsHead}>
         <Heading level={3}>Results</Heading>
-        {hasRelayLink ? (
-          <Button variant="secondary" onClick={() => void runDrain()} disabled={draining}>
-            <RefreshCw size={15} aria-hidden="true" />
-            {draining ? 'Checking…' : 'Check for responses'}
-          </Button>
-        ) : null}
+        <Inline gap={2} align="center">
+          {hasAnswers ? (
+            <>
+              <Button variant="secondary" onClick={() => void onExport('csv')} disabled={exporting}>
+                <Download size={15} aria-hidden="true" />
+                Export CSV
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => void onExport('json')}
+                disabled={exporting}
+              >
+                <Download size={15} aria-hidden="true" />
+                Export JSON
+              </Button>
+            </>
+          ) : null}
+          {hasRelayLink ? (
+            <Button variant="secondary" onClick={() => void runDrain()} disabled={draining}>
+              <RefreshCw size={15} aria-hidden="true" />
+              {draining ? 'Checking…' : 'Check for responses'}
+            </Button>
+          ) : null}
+        </Inline>
       </div>
       {drainMsg ? <Banner tone="info">{drainMsg}</Banner> : null}
+      {exportMsg ? <Banner tone="info">{exportMsg}</Banner> : null}
       {!aiReady ? (
         <Banner tone="info">
           Turn on AI in <Link to="/settings">Settings</Link> to analyze responses into insights.

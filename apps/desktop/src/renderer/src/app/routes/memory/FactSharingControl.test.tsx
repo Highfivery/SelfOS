@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { InsightFact } from '@shared/schemas';
 import { FactSharingControl } from './FactSharingControl';
@@ -39,54 +39,28 @@ describe('FactSharingControl', () => {
     });
   });
 
-  it('requires a deliberate two-step to un-restrict a sensitive fact, then scopes it', async () => {
+  it('a legacy broadcast fact reads as all available types, narrowable on edit', async () => {
     const update = vi.fn(() => Promise.resolve(null));
     installMockBridge({ insightsUpdate: update });
     render(
       <FactSharingControl
         insightId="i1"
         subjectPersonId="p1"
-        fact={fact({ id: 'f1', text: 'A trauma detail', restricted: true })}
-        availableTypes={['partner']}
+        fact={fact({ id: 'f1', text: 'Broadcast fact', shareable: true })}
+        availableTypes={['partner', 'sibling']}
       />,
     );
-    // Sensitive: own-coaching-only, no picker yet.
-    expect(screen.getByText(/sensitive · only your coach/)).toBeInTheDocument();
-    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /Share with someone/ }));
-    await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
-    await userEvent.click(screen.getByRole('button', { name: /A trauma detail/ }));
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Partner' }));
+    // Honest: a broadcast fact currently reaches every related person → shown as all available types.
+    expect(
+      screen.getByRole('button', { name: /shared with Partner, Sibling/i }),
+    ).toBeInTheDocument();
+    // Narrowing it to just Partner re-scopes (and drops the broadcast — the scoped model never broadcasts).
+    await userEvent.click(screen.getByRole('button', { name: /Broadcast fact/ }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Sibling' }));
     expect(update).toHaveBeenCalledWith({
       subjectPersonId: 'p1',
       id: 'i1',
-      facts: [
-        {
-          id: 'f1',
-          text: 'A trauma detail',
-          shareable: false,
-          shareableTypes: ['partner'],
-          restricted: false,
-        },
-      ],
+      facts: [{ id: 'f1', text: 'Broadcast fact', shareable: false, shareableTypes: ['partner'] }],
     });
-  });
-
-  it('cancels the sensitive two-step without writing', async () => {
-    const update = vi.fn(() => Promise.resolve(null));
-    installMockBridge({ insightsUpdate: update });
-    render(
-      <FactSharingControl
-        insightId="i1"
-        subjectPersonId="p1"
-        fact={fact({ id: 'f1', text: 'A trauma detail', restricted: true })}
-      />,
-    );
-    await userEvent.click(screen.getByRole('button', { name: /Share with someone/ }));
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    await waitFor(() =>
-      expect(screen.getByText(/sensitive · only your coach/)).toBeInTheDocument(),
-    );
-    expect(update).not.toHaveBeenCalled();
   });
 });

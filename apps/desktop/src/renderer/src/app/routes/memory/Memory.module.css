@@ -127,20 +127,6 @@
   }
 }
 
-/* --- Sensitive-fact share two-step (42 §8 / 44 §3.4) --- */
-.sensitiveConfirm {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  margin-left: auto;
-  max-width: 280px;
-}
-
-.sensitiveConfirmActions {
-  display: flex;
-  gap: var(--space-2);
-}
-
 /* --- Life-area / section groups --- */
 .group {
   display: flex;

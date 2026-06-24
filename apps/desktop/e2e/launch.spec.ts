@@ -725,7 +725,24 @@ test('proactive coaching: the synthesis card shows the cached observation and se
     const w = await app.firstWindow();
     // Home surfaces the cross-feature observation as a gentle, non-clinical nudge.
     await expect(w.getByRole('heading', { name: /something i.m noticing/i })).toBeVisible();
-    await expect(w.getByText(/connection keeps surfacing/i)).toBeVisible();
+    // Scope to the card (main) — the observation also appears in the coaching-synthesis toast (role=status).
+    await expect(w.getByRole('main').getByText(/connection keeps surfacing/i)).toBeVisible();
+    // Polish guard (§9): the proactive cards reflow with no horizontal overflow at phone width.
+    await w.setViewportSize({ width: 360, height: 780 });
+    const offenders = await w.evaluate(() => {
+      const out: string[] = [];
+      for (const el of Array.from(document.querySelectorAll('main *'))) {
+        if (el.scrollWidth > el.clientWidth + 1) {
+          const cs = getComputedStyle(el);
+          out.push(
+            `${el.tagName}.${el.className} sw=${el.scrollWidth} cw=${el.clientWidth} ox=${cs.overflowX}`,
+          );
+        }
+      }
+      return out;
+    });
+    expect(offenders).toEqual([]);
+    await w.setViewportSize({ width: 1024, height: 780 });
     // "Talk it through" seeds a session prefilled with the observation (the §3.3 seed-handoff).
     await w.getByRole('button', { name: /talk it through/i }).click();
     await expect(w.getByLabel('Message')).toHaveValue(observation);
@@ -760,6 +777,19 @@ test('proactive coaching: a stale goal surfaces a nudge + Home card; Mark done c
     // <strong>, not the longer notification body that also names the goal).
     await expect(w.getByRole('heading', { name: /still working on it/i })).toBeVisible();
     await expect(w.getByText('finish the side project', { exact: true })).toBeVisible();
+    // The 3-action row wraps rather than overflowing at phone width (§9).
+    await w.setViewportSize({ width: 360, height: 780 });
+    const offenders = await w.evaluate(() => {
+      const out: string[] = [];
+      for (const el of Array.from(document.querySelectorAll('main *'))) {
+        if (el.scrollWidth > el.clientWidth + 1) {
+          out.push(`${el.tagName}.${el.className} sw=${el.scrollWidth} cw=${el.clientWidth}`);
+        }
+      }
+      return out;
+    });
+    expect(offenders).toEqual([]);
+    await w.setViewportSize({ width: 1024, height: 780 });
     // …and the same signal is a (non-spammy) notification.
     await expect(w.getByRole('button', { name: /Notifications, \d+ unread/ })).toBeVisible();
     await w.getByRole('button', { name: /^Notifications/ }).click();

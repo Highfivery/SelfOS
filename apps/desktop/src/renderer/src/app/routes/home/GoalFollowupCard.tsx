@@ -37,7 +37,7 @@ export function GoalFollowupCard(): JSX.Element | null {
           You set a goal a while back: <strong>{goal.text}</strong>
         </Text>
 
-        <Inline gap={2}>
+        <Inline gap={2} wrap>
           <Button variant="secondary" onClick={() => void setStatus(goal.id, 'inProgress')}>
             Still on it
           </Button>

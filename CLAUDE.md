@@ -402,6 +402,37 @@ electron-vite build` once, then `pnpm exec playwright test [-g "<name>"]` (the `
   `feat/questionnaire-lifecycle` (PR [#47]). **Lesson: E2E is runnable in this environment — the "no display"
   claim was wrong; build once then `playwright test`, and treat green E2E as a non-negotiable gate, not a TODO.**
 
+- 2026-06-23 — **Build (living memory & continuity — SPEC 39 BUILT, all 5 slices; on
+  `feat/living-memory-continuity`, PR open).** Memory **accreted but never self-healed** (reconciliation ran
+  only on a manual "Refresh"), goals were just `Goal: …` text facts (no follow-through), and two share-cleanup
+  leaks existed. **§11 resolved with the owner first (all recommendations confirmed):** auto-reconcile on
+  threshold(≥5 new insights)+gap(>14d) at launch/focus, 24h device-local per-person throttle,
+  `memory.autoReconcile` opt-out (default on); **confirm-before-apply merges** (propose-only → "Needs your
+  review"); a **new `@selfos/core/goals` store** + `GoalSchema` (open/inProgress/done/stale/abandoned); stale =
+  past-due OR ≥21d untouched (derived, persisted on confirm); flag strips share + `retractedShareAt`; legacy
+  retro-tag via no-AI `SECTION_LIFE_AREA`/keyword map during reconcile; a bounded "open commitments" grounding
+  line in `summarizeForContext`. **Slice 1 (cleanup):** `reapOrphanShares` on `people:delete` + share-retraction
+  on `flagInsightFact` (closes §1 C1/C2). **Slice 2 (goals backend):** `goalService` (extract/de-dup/setStatus/
+  update/delete + pure `isGoalStale`/`effectiveGoalStatus`), wired into `sessionAnalysisService` (no extra
+  spend), `goals:*` IPC gated `memory.own` + active-person scoped. **Slice 3 (goals UI):** the Memory **Goals &
+  commitments** section + `GoalCard` + `GoalStatusChip` (→ `/gallery`) + per-person `goalStore`; a gentle stale
+  "still working on it?" prompt. **Slice 4 (auto-reconcile):** `shouldAutoReconcile` + `useMemoryReconcile`
+  cadence + `memory:refresh({auto})` (calm `SKIPPED` no-op when not warranted) + `MergeProposal` store +
+  `memory:reconcileState`/`memory:resolveProposal` + the "Memory last tidied …" signal; reconciliation now
+  **queues** merge proposals instead of silently folding (confidence/category still auto-applies). **Slice 5
+  (retro-tag):** `retroTagLegacyPortraits` rides any reconcile pass — **prefers `Emotions & patterns`** when a
+  legacy distress fact also matches an earlier-ordered keyword (the §28/§8 never-narrow-distress invariant, the
+  code-reviewer's one should-fix). All schemas additive-optional (no migration). Code-reviewer **ship** (privacy/
+  trust-boundary, confirm-before-apply, flag-retraction, metering-before-parse all verified; applied the retro-tag
+  distress fix). Gate green: typecheck, lint, format, **633 core + 11 relay + 670 desktop** unit (+goals/cadence/
+  proposals/retro-tag/retraction/reap), **92/92 E2E** (+4: goals lifecycle, share-retraction decrypt, reap-on-
+  delete decrypt, auto-reconcile usage event). Visual QA at desktop + 360px. Synced spec 39 (→ Built) + spec 20
+  §3.5/§4.3 (amended: reconciliation is cadence-gated + confirm-before-apply). **Lesson: a no-AI keyword
+  retro-tagger picks the FIRST taxonomy match, which silently demotes a distress fact off the always-on CORE
+  guarantee if an earlier-ordered area (Work/Money) also matches — mirror the emotions-first safety rule
+  (`selectPortraitFacts`) and prefer `Emotions & patterns` whenever it's among the matches; and "confirm-before-
+  apply" means reconciliation must NEVER fold/delete an insight inline — queue a `MergeProposal` and delete the
+  source only on the user's accept.**
 - 2026-06-23 — **Build (AI output robustness & honest failures — SPEC 37 BUILT; on `feat/ai-output-robustness`,
   PR open).** A whole class of bugs came from brittle handling of Claude's JSON: an all-or-nothing `safeParse`
   that drops a good batch over one bad element, a strict `.parse` that nukes an otherwise-perfect result over one

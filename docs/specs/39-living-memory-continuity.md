@@ -1,6 +1,7 @@
 # 39 — Living memory & continuity
 
-> **Status:** Approved — _last updated 2026-06-23_ (§11 resolved with the owner; see §11)
+> **Status:** Built — _last updated 2026-06-23_ (§11 resolved with the owner; see §11. All 5 slices on
+> `feat/living-memory-continuity`.)
 >
 > SelfOS's memory **accretes but never self-heals**: reconciliation (dedup, confidence, merge,
 > contradiction-avoidance) runs **only** when the user manually taps "Refresh memory" — which most
@@ -494,6 +495,21 @@ consumes slices 2–4's structured goals + clean memory.)
 
 ## 13. Changelog
 
+- 2026-06-23 — **BUILT (all 5 slices) on `feat/living-memory-continuity`.** Slice 1: `reapOrphanShares`
+  on `people:delete` + share-retraction (`retractedShareAt`) on `flagInsightFact` (closes §1 C1/C2). Slice
+  2: `GoalSchema` + `@selfos/core/goals` `goalService` (extract/de-dup/setStatus/update/delete +
+  `isGoalStale`/`effectiveGoalStatus`), wired into `sessionAnalysisService` (no extra spend) + a bounded
+  "open commitments" grounding line in `buildContext`; `goals:*` IPC gated on `memory.own` + active-person
+  scoped. Slice 3: the Memory **Goals & commitments** section + `GoalCard` + `GoalStatusChip` (→ `/gallery`)
+  - `goalStore` (per-person reset). Slice 4: `shouldAutoReconcile` + the `useMemoryReconcile` launch/focus
+    cadence + `memory:refresh({auto})` (threshold ≥5-new OR >14-day gap, 24h device-local per-person throttle,
+    `memory.autoReconcile` opt-out, calm `SKIPPED`); **confirm-before-apply merges** — reconciliation queues a
+    `MergeProposal` (Merge / Keep both in "Needs your review") instead of silently folding; confidence/category
+    still auto-applies; a "Memory last tidied …" signal. Slice 5: `retroTagLegacyPortraits` (no-AI keyword
+    tagging) rides any reconcile pass. Additive-optional schemas only (no migration). Tested: unit (goals,
+    cadence, proposals, retro-tag, retraction, reap), bridge integration (auto gate + throttle + opt-out +
+    resolve, decrypt-asserted), RTL (Goals section, proposal review, kept-tidy), and 4 E2E (goals lifecycle,
+    share-retraction decrypt, reap-on-delete decrypt, auto-reconcile usage event). Visual QA at desktop + 360px.
 - 2026-06-23 — §11 resolved with the owner (all recommendations confirmed) → **Approved**; build
   begins on `feat/living-memory-continuity`. Decisions: auto-reconcile on threshold(≥5)+gap(>14d) at
   launch/focus, 24h throttle, `memory.autoReconcile` opt-out (default on); confirm-before-apply merges

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Insight } from '@shared/schemas';
-import { hasRecentCrisis, sessionMoodPoints, wellbeingRead } from './wellbeing';
+import { sessionMoodPoints, wellbeingRead } from './wellbeing';
 
 function insight(over: Partial<Insight> & { id: string }): Insight {
   return {
@@ -79,34 +79,5 @@ describe('wellbeingRead', () => {
   });
 });
 
-describe('hasRecentCrisis', () => {
-  it('is true only for an approved session insight flagged for the person', () => {
-    expect(
-      hasRecentCrisis(
-        [insight({ id: 'x', crisisFlag: true, metrics: { moodValence: -0.8 } })],
-        'me',
-      ),
-    ).toBe(true);
-    expect(hasRecentCrisis([insight({ id: 'y', crisisFlag: true })], 'someone-else')).toBe(false);
-    expect(hasRecentCrisis([insight({ id: 'z' })], 'me')).toBe(false);
-  });
-
-  it('ignores a crisis flag older than the recent window', () => {
-    const recent = [4, 5, 6, 7].map((d) =>
-      insight({ id: `r${d}`, provenance: { at: `2026-06-0${d}T00:00:00.000Z` } }),
-    );
-    const oldFlag = insight({
-      id: 'old',
-      crisisFlag: true,
-      provenance: { at: '2026-06-01T00:00:00.000Z' },
-    });
-    expect(hasRecentCrisis([...recent, oldFlag], 'me')).toBe(false);
-    // …but a flag inside the latest three still surfaces.
-    const newFlag = insight({
-      id: 'new',
-      crisisFlag: true,
-      provenance: { at: '2026-06-08T00:00:00.000Z' },
-    });
-    expect(hasRecentCrisis([...recent, newFlag], 'me')).toBe(true);
-  });
-});
+// Cross-insight crisis awareness moved to @selfos/core/coaching `aggregateCrisisSignal` (40 §3.5) — the
+// deterministic threshold (≥2 crisis flags in 14 days OR the dream nightmare nudge). Tested in core.

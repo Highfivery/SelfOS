@@ -635,6 +635,51 @@ test('proactive coaching: the Coaching setting is per-person, member-reachable, 
   await rm(vault, { recursive: true, force: true });
 });
 
+test('proactive coaching: recurring distress surfaces a supportive, resources-first banner on Home (40 §3.5)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  // Seed two recent crisis-flagged session insights for the owner (the deterministic ≥2-in-14-days signal).
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('master key missing');
+  const recent = (n: number): string =>
+    new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString();
+  for (const [id, days] of [
+    ['cr1', 1],
+    ['cr2', 4],
+  ] as const) {
+    await saveInsight(fs, key, {
+      id,
+      schemaVersion: 1,
+      source: 'session',
+      subjectPersonId: 'owner-1',
+      summary: 'A heavy session',
+      facts: [],
+      confidence: 'medium',
+      categories: [],
+      approved: true,
+      crisisFlag: true,
+      provenance: { conversationId: id, at: recent(days) },
+      createdAt: recent(days),
+      updatedAt: recent(days),
+    });
+  }
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    // Home is the default route — the supportive banner leads with real resources, never a metric/alarm.
+    await expect(w.getByText(/carrying a lot/i)).toBeVisible();
+    await expect(w.getByText('988')).toBeVisible();
+    // It is NOT a dismissible notification (no bell item, no dismiss control on the banner).
+    await expect(w.getByRole('button', { name: /dismiss/i })).toHaveCount(0);
+    // The always-present crisis footer is also there.
+    await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('first-time setup creates the owner and enters the app', async () => {
   const userData = await mkdtemp(join(tmpdir(), 'selfos-e2e-ud-'));
   const vault = await mkdtemp(join(tmpdir(), 'selfos-e2e-vault-'));

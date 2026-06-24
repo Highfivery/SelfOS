@@ -226,4 +226,46 @@ describe('Home', () => {
       expect(screen.getByRole('heading', { name: /suggested next steps/i })).toBeInTheDocument(),
     );
   });
+
+  // --- cross-insight crisis awareness (40 §3.5) ---
+  const recentCrisis = (id: string, daysAgo: number): Insight => ({
+    id,
+    schemaVersion: 1,
+    source: 'session',
+    subjectPersonId: ME.id,
+    summary: 'A heavy check-in',
+    facts: [],
+    confidence: 'medium',
+    categories: [],
+    approved: true,
+    crisisFlag: true,
+    provenance: {
+      conversationId: id,
+      at: new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString(),
+    },
+    createdAt: 'now',
+    updatedAt: 'now',
+  });
+
+  it('surfaces the supportive crisis banner when distress recurs (≥2 recent flags), even without a mood chart', async () => {
+    installMockBridge({
+      insightsList: () => Promise.resolve([recentCrisis('x1', 1), recentCrisis('x2', 5)]),
+    });
+    renderHome();
+    expect(await screen.findByText(/carrying a lot/i)).toBeInTheDocument();
+    // It's resources-first (988) and NOT dismissible (no dismiss control on the banner).
+    expect(screen.getByText('988')).toBeInTheDocument();
+    // The mood chart needs ≥2 mood points; these crisis insights carry none, so the banner stands alone.
+    expect(screen.queryByRole('heading', { name: 'Wellbeing' })).toBeNull();
+  });
+
+  it('does not surface the crisis banner for a single recent flag', async () => {
+    installMockBridge({
+      conversationsList: () => Promise.resolve([meta('c1', 'A week', 'inProgress')]),
+      insightsList: () => Promise.resolve([recentCrisis('x1', 1)]),
+    });
+    renderHome();
+    await screen.findByRole('heading', { name: /pick up where/i });
+    expect(screen.queryByText(/carrying a lot/i)).toBeNull();
+  });
 });

@@ -22,6 +22,7 @@ import {
   saveRelationship,
   setAccount,
 } from '@selfos/core/people';
+import { getGoal, saveGoal } from '@selfos/core/goals';
 import { hashPin } from '@selfos/core/crypto';
 import { queryUsage, recordUsage } from '@selfos/core/usage';
 import { readEncryptedJson, writeEncryptedJson } from '@selfos/core/vault';
@@ -1988,6 +1989,254 @@ test('memory: the dashboard groups by life-area, flags a fact (decrypt-persisted
       return Math.max(max, main ? main.scrollWidth - main.clientWidth : 0);
     });
     expect(overflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('goals: a tracked goal shows in Memory with status; marking it Done moves it to closed (39 §3.1)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('master key missing');
+  const at = '2026-06-20T10:00:00.000Z';
+  await saveGoal(fs, key, {
+    id: 'goal-1',
+    schemaVersion: 1,
+    subjectPersonId: 'owner-1',
+    text: 'Finish the budget spreadsheet',
+    status: 'open',
+    lifeArea: 'Goals & growth',
+    provenance: { conversationId: 'conv-1', at },
+    createdAt: at,
+    updatedAt: at,
+    lastTouchedAt: at,
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Memory' }).click();
+
+    // The goal appears under "Goals & commitments" with an Open status.
+    await expect(w.getByRole('heading', { name: /Goals & commitments/ })).toBeVisible();
+    await expect(w.getByText('Finish the budget spreadsheet')).toBeVisible();
+
+    // Mark it Done via the per-goal status control → it moves to the collapsed "Completed & closed".
+    await w
+      .getByRole('combobox', { name: /Set status for: Finish the budget spreadsheet/ })
+      .selectOption('done');
+    await expect(w.getByText(/Completed & closed \(1\)/)).toBeVisible();
+
+    // Decrypt-level proof: the goal persisted as done.
+    await expect
+      .poll(async () => (await getGoal(fs, key, 'owner-1', 'goal-1'))?.status)
+      .toBe('done');
+
+    // No horizontal overflow at phone width with the Goals section present.
+    await w.setViewportSize({ width: 390, height: 800 });
+    const overflow = await w.evaluate(() => {
+      let max = 0;
+      for (const el of Array.from(document.querySelectorAll('*'))) {
+        const style = getComputedStyle(el);
+        if (
+          (style.overflowX === 'auto' || style.overflowX === 'scroll') &&
+          el.scrollWidth - el.clientWidth > max
+        ) {
+          max = el.scrollWidth - el.clientWidth;
+        }
+      }
+      const main = document.querySelector('main');
+      return Math.max(max, main ? main.scrollWidth - main.clientWidth : 0);
+    });
+    expect(overflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('memory cleanup: flagging a previously-shared fact retracts it from a related person’s context (39 §4.2)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('master key missing');
+  const at = '2026-06-20T10:00:00.000Z';
+  // A related contact 'friend-1', related to the owner, so the owner's shared facts flow into friend's context.
+  await savePerson(fs, key, {
+    id: 'friend-1',
+    schemaVersion: 1,
+    displayName: 'Casey',
+    isSubject: true,
+    tags: [],
+    createdAt: at,
+    updatedAt: at,
+  });
+  await saveRelationship(fs, key, {
+    id: 'rel-1',
+    schemaVersion: 1,
+    fromPersonId: 'owner-1',
+    toPersonId: 'friend-1',
+    type: 'friend',
+    createdAt: at,
+    updatedAt: at,
+  });
+  // The owner has an insight whose fact is targeted-shared with Casey.
+  await saveInsight(fs, key, {
+    id: 'ins-share',
+    schemaVersion: 1,
+    source: 'session',
+    subjectPersonId: 'owner-1',
+    summary: 'Reflections from a session',
+    facts: [
+      {
+        id: 'fshare',
+        text: 'PLANNING-A-SURPRISE-PARTY',
+        shareable: false,
+        shareableWith: ['friend-1'],
+      },
+    ],
+    confidence: 'medium',
+    categories: ['Other'],
+    approved: true,
+    provenance: { conversationId: 'gone', at },
+    createdAt: at,
+    updatedAt: at,
+  });
+
+  // Before flagging: the shared fact reaches Casey's assembled context.
+  expect(await buildContext(fs, key, 'friend-1')).toContain('PLANNING-A-SURPRISE-PARTY');
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Memory' }).click();
+    await expect(w.getByText('PLANNING-A-SURPRISE-PARTY')).toBeVisible();
+
+    // Flag it inaccurate → the share is retracted (Memory shows "sharing withdrawn").
+    await w.getByRole('button', { name: 'Flag as inaccurate: PLANNING-A-SURPRISE-PARTY' }).click();
+    await expect(w.getByText('sharing withdrawn')).toBeVisible();
+
+    // Decrypt-level proof: Casey's context no longer carries the corrected claim.
+    await expect
+      .poll(async () =>
+        (await buildContext(fs, key, 'friend-1')).includes('PLANNING-A-SURPRISE-PARTY'),
+      )
+      .toBe(false);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('memory cleanup: deleting a person reaps the orphaned shareableWith from others’ facts (39 §4.5)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('master key missing');
+  const at = '2026-06-20T10:00:00.000Z';
+  await savePerson(fs, key, {
+    id: 'friend-2',
+    schemaVersion: 1,
+    displayName: 'Devon',
+    isSubject: false,
+    tags: [],
+    createdAt: at,
+    updatedAt: at,
+  });
+  await saveInsight(fs, key, {
+    id: 'ins-orphan',
+    schemaVersion: 1,
+    source: 'session',
+    subjectPersonId: 'owner-1',
+    summary: 'About the owner',
+    facts: [
+      {
+        id: 'forphan',
+        text: 'A shared note',
+        shareable: false,
+        shareableWith: ['friend-2', 'keep'],
+      },
+    ],
+    confidence: 'low',
+    categories: [],
+    approved: true,
+    provenance: { conversationId: 'c', at },
+    createdAt: at,
+    updatedAt: at,
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    // Delete Devon from People → the reap runs in the delete handler.
+    await w.getByRole('link', { name: 'People' }).click();
+    await w.getByText('Devon').click();
+    await w.getByRole('button', { name: 'Delete person' }).click();
+
+    // Decrypt-level proof: the dangling id is gone from the owner's fact; the other share is untouched.
+    await expect
+      .poll(async () => {
+        const insight = await getInsight(fs, key, 'owner-1', 'ins-orphan');
+        return insight?.facts.find((f) => f.id === 'forphan')?.shareableWith ?? [];
+      })
+      .toEqual(['keep']);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('memory: automatic reconciliation fires on launch when warranted, recording a memory.reconcile usage event (39 §3.3)', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('master key missing');
+  const at = '2026-06-20T10:00:00.000Z';
+  // Seed 5 approved insights (never reconciled) so the threshold trips on launch.
+  for (const n of [1, 2, 3, 4, 5]) {
+    await saveInsight(fs, key, {
+      id: `ins-${n}`,
+      schemaVersion: 1,
+      source: 'session',
+      subjectPersonId: 'owner-1',
+      summary: `Insight number ${n}`,
+      facts: [{ id: 'f1', text: `fact ${n}`, shareable: false }],
+      confidence: 'low',
+      categories: [],
+      approved: true,
+      provenance: { conversationId: `c${n}`, at },
+      createdAt: at,
+      updatedAt: at,
+    });
+  }
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    // The AppShell mounts on launch and drives the auto-reconcile cadence; it runs once (threshold met,
+    // un-throttled, AI on) and meters a `memory.reconcile` usage event — even before visiting Memory.
+    await expect(w.getByRole('button', { name: /signed in as/i })).toBeVisible();
+    await expect
+      .poll(
+        async () =>
+          (
+            await queryUsage(fs, key, {
+              from: '2026-01-01',
+              to: '2027-01-01',
+              personId: 'owner-1',
+              type: 'memory.reconcile',
+            })
+          ).length,
+        { timeout: 10_000 },
+      )
+      .toBeGreaterThanOrEqual(1);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

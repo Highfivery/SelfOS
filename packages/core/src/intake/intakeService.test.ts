@@ -11,6 +11,7 @@ import { SHARING_PRESETS } from '../people/sharingPresets';
 import { queryUsage } from '../usage';
 import {
   ensureIntakeSession,
+  formatIntakeForGeneration,
   getIntakeSession,
   redactRestrictedFacts,
   runIntakeTurn,
@@ -344,6 +345,40 @@ describe('intakeService', () => {
     // verbatim by stable key. Neither is dropped.
     expect(body).toContain('Receiving oral: Love it');
     expect(body).toContain('oral-giving-vulva: Like it');
+  });
+
+  // 08 §19.1: the known-data fed to generation includes the RAW onboarding answers (incl. the intimacy matrix
+  // ratings, anatomy-resolved) so generation never re-asks them; plus the covered acts for the framing.
+  it('formatIntakeForGeneration returns the raw answers + the rated intimacy acts (§19.1/§19.3)', async () => {
+    const fs = await setup();
+    await submitSectionForm(fs, key, 'p1', 'basics', { occupation: 'nurse' }, NOW);
+    await submitSectionForm(
+      fs,
+      key,
+      'p1',
+      'intimacy',
+      {
+        getSpecific: true,
+        ownAnatomy: 'Cock (penis)',
+        partnerAnatomy: ['Pussy (vulva)'],
+        activities: { 'oral-receiving': 5, 'oral-giving-vulva': 4 },
+      },
+      NOW,
+    );
+    const session = await getIntakeSession(fs, key, 'p1');
+    if (!session) throw new Error('no session');
+    const { text, coveredActs } = formatIntakeForGeneration(session);
+    // The raw answers reach the ledger (a non-intimacy answer + the anatomy-resolved matrix ratings).
+    expect(text).toContain('What do you do for work?: nurse');
+    expect(text).toContain('Receiving oral (blowjob): Love it');
+    expect(text).toContain('Going down on her (oral): Like it');
+    // The covered acts are extracted structurally (label + rating) for the intimacy framing reframe.
+    expect(coveredActs).toEqual(
+      expect.arrayContaining([
+        { label: 'Receiving oral (blowjob)', rating: 'Love it' },
+        { label: 'Going down on her (oral)', rating: 'Like it' },
+      ]),
+    );
   });
 
   it('drops a branch-hidden (cleared-trigger) answer from synthesis (47 §3.3/§7)', async () => {

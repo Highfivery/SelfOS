@@ -332,6 +332,7 @@ import {
 } from '@selfos/core/dreams';
 import {
   ensureIntakeSession,
+  formatIntakeForGeneration,
   getIntakeSection,
   getIntakeSession,
   intakeSectionMeta,
@@ -830,6 +831,31 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         now: new Date(),
       });
     }
+  };
+
+  /**
+   * Assemble the full author-blind known-data for a household recipient (08 §19.1): the §17.4 recipient
+   * history (profile + insights + already-asked prompts + prior answers) PLUS the RAW onboarding answers
+   * (incl. the intimacy-matrix act ratings), and the set of intimacy acts already rated (so the intimacy
+   * framing goes deeper instead of re-asking). All host-side; never returned to the author.
+   */
+  const recipientKnownData = async (
+    fs: FileSystem,
+    key: Uint8Array,
+    recipientPersonId: string,
+  ): Promise<{ history: string; coveredActs: { label: string; rating: string }[] }> => {
+    const history = await gatherRecipientHistory(fs, key, recipientPersonId);
+    const session = await getIntakeSession(fs, key, recipientPersonId);
+    const intake = session
+      ? formatIntakeForGeneration(session)
+      : { text: '', coveredActs: [] as { label: string; rating: string }[] };
+    const combined = [
+      history,
+      intake.text.trim() ? `What they have already answered in onboarding:\n${intake.text}` : '',
+    ]
+      .filter((s) => s.trim() !== '')
+      .join('\n\n');
+    return { history: combined, coveredActs: intake.coveredActs };
   };
 
   /**
@@ -2066,9 +2092,11 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const recipientIsHousehold =
         p.recipientPersonId !== undefined &&
         (await getPerson(deps.fs, deps.key, p.recipientPersonId)) !== null;
-      const recipientHistory = recipientIsHousehold
-        ? await gatherRecipientHistory(deps.fs, deps.key, p.recipientPersonId as string)
-        : '';
+      // Knowledge-aware de-dup (08 §19): the recipient's history + RAW onboarding answers, and the intimacy
+      // acts already rated — so generation goes deeper instead of repeating what's known. Author-blind.
+      const known = recipientIsHousehold
+        ? await recipientKnownData(deps.fs, deps.key, p.recipientPersonId as string)
+        : { history: '', coveredActs: [] };
       return generateQuestions(deps, {
         type: p.type,
         sensitivity: p.sensitivity,
@@ -2082,7 +2110,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           includeRelationship: recipientIsHousehold,
         },
         existingPrompts: p.existingPrompts,
-        ...(recipientHistory ? { recipientHistory } : {}),
+        ...(known.history ? { recipientHistory: known.history } : {}),
+        ...(known.coveredActs.length ? { coveredIntimacyActs: known.coveredActs } : {}),
         ...(p.intimacyMode !== undefined ? { intimacyMode: p.intimacyMode } : {}),
       });
     },
@@ -2119,9 +2148,10 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!recipient) {
         return { ok: false, reason: 'DENIED', message: 'Choose someone in your household.' };
       }
-      // Their full answered content as avoid-only grounding (§17.4 / §18.2) + the ideas already saved, so a
-      // "Suggest more" returns genuinely new ones. Assembled host-side; the author never sees the raw content.
-      const recipientHistory = await gatherRecipientHistory(deps.fs, deps.key, recipientPersonId);
+      // Their full answered content as avoid-only grounding (§17.4 / §18.2 / §19.1: now incl. raw onboarding
+      // answers) + the ideas already saved, so a "Suggest more" returns genuinely new ones. Author-blind.
+      const recipientHistory = (await recipientKnownData(deps.fs, deps.key, recipientPersonId))
+        .history;
       const existing = await listSavedSuggestions(
         deps.fs,
         deps.key,
@@ -2174,6 +2204,56 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         suggestionId,
         new Date(),
       );
+    },
+    questionnaireSuggestionMaterialize: async (input): Promise<QuestionnaireGenerateResult> => {
+      // "Create from this" (08 §19.4) runs a FULL knowledge-aware generation from the suggestion's idea —
+      // producing a complete, de-duped, deep questionnaire with proper options (so a choice question is never
+      // blank). Falls back (in the renderer) to seeding the sample questions if this fails.
+      const deps = await aiDeps();
+      if (!deps) return { ok: false, reason: 'DENIED', message: 'Not available.' };
+      const { recipientPersonId, suggestionId } = SavedSuggestionDeleteSchema.parse(input);
+      const recipient = await getPerson(deps.fs, deps.key, recipientPersonId);
+      if (!recipient)
+        return { ok: false, reason: 'DENIED', message: 'Choose someone in your household.' };
+      const suggestion = (
+        await listSavedSuggestions(deps.fs, deps.key, deps.personId, recipientPersonId)
+      ).find((s) => s.id === suggestionId);
+      if (!suggestion) {
+        return {
+          ok: false,
+          reason: 'MALFORMED',
+          message: 'That suggestion is no longer available.',
+        };
+      }
+      const known = await recipientKnownData(deps.fs, deps.key, recipientPersonId);
+      const brief = [
+        `Build a full, specific questionnaire from this idea: "${suggestion.title}".`,
+        suggestion.rationale ? `Why now: ${suggestion.rationale}.` : '',
+        suggestion.questions.length
+          ? `Sample directions to expand on: ${suggestion.questions.map((q) => q.prompt).join('; ')}.`
+          : '',
+      ]
+        .filter((s) => s !== '')
+        .join(' ');
+      return generateQuestions(deps, {
+        type: suggestion.type,
+        sensitivity: 'standard',
+        brief,
+        context: {
+          authorPersonId: deps.personId,
+          includeAuthor: true,
+          targetPersonId: recipientPersonId,
+          includeTarget: true,
+          includeRelationship: true,
+        },
+        existingPrompts: [],
+        count: 6,
+        ...(known.history ? { recipientHistory: known.history } : {}),
+        // `coveredActs` only affects the prompt for an explicit-tier intimacy draft; a materialize is
+        // standard-tier, so this is inert here today. Passed for symmetry (de-dup still runs via `history`)
+        // and so it works automatically if a future materialize carries the suggestion's sensitivity.
+        ...(known.coveredActs.length ? { coveredIntimacyActs: known.coveredActs } : {}),
+      });
     },
 
     // --- Memory / insights (20-memory-dashboard §5.1/§6) — gated by `memory.own`, active-person-scoped.

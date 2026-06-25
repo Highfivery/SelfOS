@@ -176,9 +176,12 @@ export interface GenerateRequest {
   count?: number;
   // Intimacy draft format (08 §17.12-C): direct questions, described scenarios, or a mix.
   intimacyMode?: IntimacyGenerateMode;
-  // The recipient's full answered content (08 §17.4), assembled host-side by the caller (bridge). Fed to the
-  // model ONLY to avoid repeating what they've already covered — never surfaced to the author.
+  // The recipient's full answered content (08 §17.4/§19.1), assembled host-side by the caller (bridge). Fed to
+  // the model ONLY to avoid repeating + to go deeper — never surfaced to the author.
   recipientHistory?: string;
+  // The intimacy acts the recipient already rated in onboarding (08 §19.3) — reframes the intimacy seeding so
+  // it goes deeper on rated acts instead of re-asking them.
+  coveredIntimacyActs?: readonly { label: string; rating: string }[];
 }
 
 /** Generate questions from a brief and/or the configured structured context. */
@@ -205,6 +208,9 @@ export async function generateQuestions(
     ...(request.intimacyMode !== undefined ? { intimacyMode: request.intimacyMode } : {}),
     ...(request.recipientHistory !== undefined
       ? { recipientHistory: request.recipientHistory }
+      : {}),
+    ...(request.coveredIntimacyActs !== undefined
+      ? { coveredIntimacyActs: request.coveredIntimacyActs }
       : {}),
   });
 

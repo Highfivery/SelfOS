@@ -292,6 +292,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.questionnaireSuggestionsList, bridge.questionnaireSuggestionsList);
   handle(IpcChannels.questionnaireSuggestionsGenerate, bridge.questionnaireSuggestionsGenerate);
   handle(IpcChannels.questionnaireSuggestionDelete, bridge.questionnaireSuggestionDelete);
+  handle(IpcChannels.questionnaireSuggestionMaterialize, bridge.questionnaireSuggestionMaterialize);
   handle(IpcChannels.insightsList, bridge.insightsList);
   handle(IpcChannels.memoryOutboundSharing, bridge.memoryOutboundSharing);
   handle(IpcChannels.insightsAnalyze, bridge.insightsAnalyze);

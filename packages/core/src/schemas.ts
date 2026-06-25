@@ -1206,6 +1206,9 @@ export const SuggestionQuestionSchema = z.object({
   type: SuggestableAnswerTypeSchema,
   prompt: z.string().min(1),
   required: z.boolean().optional(),
+  // Choice options for choice-type sample questions (08 §19.4) — so a seeded multiple-choice question is
+  // never blank. Optional (non-choice types omit it); tolerated per-element like the rest of the suggestion.
+  options: z.array(z.string()).optional(),
 });
 export type SuggestionQuestion = z.infer<typeof SuggestionQuestionSchema>;
 

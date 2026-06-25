@@ -199,6 +199,7 @@ export const IpcChannels = {
   questionnaireSuggestionsList: 'questionnaires:suggestionsList',
   questionnaireSuggestionsGenerate: 'questionnaires:suggestionsGenerate',
   questionnaireSuggestionDelete: 'questionnaires:suggestionDelete',
+  questionnaireSuggestionMaterialize: 'questionnaires:suggestionMaterialize',
   insightsList: 'insights:list',
   memoryOutboundSharing: 'memory:outboundSharing',
   insightsAnalyze: 'insights:analyze',
@@ -704,6 +705,13 @@ export interface SelfosBridge {
     recipientPersonId: string;
     suggestionId: string;
   }): Promise<SavedSuggestion[]>;
+  /** "Create from this" (08 §19.4): run a full, knowledge-aware generation from a saved suggestion's idea —
+   * a complete, de-duped questionnaire with proper options. Budget-gated + metered; the renderer falls back
+   * to seeding the sample questions on failure. */
+  questionnaireSuggestionMaterialize(input: {
+    recipientPersonId: string;
+    suggestionId: string;
+  }): Promise<QuestionnaireGenerateResult>;
   /**
    * The ACTIVE person's memory (20-memory-dashboard §5.1): their own insights + their relationships'
    * shareable facts only — scoped + gated on `memory.own` in the bridge (the trust boundary).

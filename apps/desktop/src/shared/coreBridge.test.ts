@@ -20,6 +20,7 @@ import {
   type RelayEnv,
 } from '@selfos/core/relay';
 import { saveInsight, summarizeForContext } from '@selfos/core/insights';
+import { submitSectionForm } from '@selfos/core/intake';
 import { saveGoal } from '@selfos/core/goals';
 import { buildContext } from '@selfos/core/people';
 import { ANTHROPIC_API_KEY_ID, OPENAI_API_KEY_ID } from './channels';
@@ -1221,6 +1222,124 @@ describe('createCoreBridge', () => {
     expect(result.ok).toBe(true);
     expect(JSON.stringify(result.questions)).not.toContain('secret codeword');
     expect(JSON.stringify(result)).not.toContain('secret codeword');
+  });
+
+  it('intimacy generation feeds the recipient’s RAW onboarding ratings as "go deeper", never returns them (§19)', async () => {
+    const { host, bridge, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    // Seed Mara's onboarding intimacy answers directly (the raw matrix ratings) — the data generation used to
+    // ignore, so it re-asked them. Owner stays active (the author); we write Mara's intake host-side.
+    const ctx = (await host.host.vaultAndKey())!;
+    await submitSectionForm(
+      ctx.fs,
+      ctx.key,
+      mara.id,
+      'intimacy',
+      {
+        getSpecific: true,
+        ownAnatomy: 'Cock (penis)',
+        partnerAnatomy: ['Pussy (vulva)'],
+        activities: { 'oral-receiving': 5 },
+      },
+      new Date(),
+    );
+
+    let sentUserText = '';
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        sentUserText = options.messages.map((m) => m.content).join('\n');
+        const json = JSON.stringify({
+          title: 'X',
+          questions: [{ type: 'shortText', prompt: 'A fresh, deeper question?', required: true }],
+        });
+        onDelta(json);
+        return Promise.resolve({
+          text: json,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+
+    const result = await bridge.questionnairesGenerate({
+      type: 'intimacy',
+      sensitivity: 'unfiltered',
+      existingPrompts: [],
+      recipientPersonId: mara.id,
+    });
+    expect(result.ok).toBe(true);
+    // The rated act reached the MODEL as "already rated — go deeper", anatomy-resolved…
+    expect(sentUserText).toContain('Receiving oral (blowjob)');
+    expect(sentUserText).toMatch(/ALREADY RATED/);
+    expect(sentUserText).toMatch(/go DEEPER/i);
+    // …but the raw rating text is NEVER returned to the author (author-blind §17.4/§19.1).
+    expect(JSON.stringify(result)).not.toContain('Receiving oral (blowjob)');
+    expect(ownerId).toBeTruthy();
+  });
+
+  it('materializes a suggestion into a full generation; gated + non-household refused (§19.4)', async () => {
+    const { host, bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const mara = await bridge.peopleSave({
+      displayName: 'Mara',
+      isSubject: true,
+      tags: [],
+      notes: 'Loves cooking; new job.',
+    });
+
+    // Stub the model: gap-finder returns a suggestion; generation returns a questionnaire WITH options.
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        const userText = options.messages.map((m) => m.content).join('\n');
+        const text = userText.includes('Suggest up to 3 questionnaires')
+          ? JSON.stringify([
+              {
+                title: 'Energy & rest',
+                type: 'general',
+                rationale: 'Worth a look.',
+                questions: [{ type: 'yesNo', prompt: 'Rested lately?' }],
+              },
+            ])
+          : JSON.stringify({
+              title: 'Energy & rest',
+              questions: [
+                {
+                  type: 'multiChoice',
+                  prompt: 'Which drain you?',
+                  required: false,
+                  options: ['Meetings', 'Conflict', 'Noise'],
+                },
+              ],
+            });
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+
+    // Generate + save a suggestion, then materialize it.
+    const gen = await bridge.questionnaireSuggestionsGenerate({ recipientPersonId: mara.id });
+    const suggestionId = gen.saved?.[0]?.id ?? 'x';
+    const result = await bridge.questionnaireSuggestionMaterialize({
+      recipientPersonId: mara.id,
+      suggestionId,
+    });
+    expect(result.ok).toBe(true);
+    // The full generation came back WITH options (the blank-options bug is gone, §19.4).
+    expect(result.questions?.[0]?.type).toBe('multiChoice');
+    expect(result.questions?.[0]?.options).toEqual(['Meetings', 'Conflict', 'Noise']);
+
+    // A non-household recipient is refused (no spend on an untailorable target).
+    expect(
+      await bridge.questionnaireSuggestionMaterialize({
+        recipientPersonId: 'not-a-person',
+        suggestionId,
+      }),
+    ).toMatchObject({ ok: false, reason: 'DENIED' });
   });
 
   it('recipient-first saved suggestions (§18): generate tailors + accumulates, list reads with no spend, delete removes, non-household is denied', async () => {

@@ -433,6 +433,53 @@ describe('generateQuestions', () => {
     expect(sentUserText).toMatch(/ALREADY shared/i); // the avoid framing
     expect(sentUserText).toMatch(/never quote, restate, reference/i); // the never-reference safety clause
     expect(sentUserText).toMatch(/steer clear, NOT mention/i);
+    // 08 §19.2: the knowledge-aware contract tells the model to go deeper / explore the unknown / be creative.
+    expect(sentUserText).toMatch(/GO DEEPER/);
+    expect(sentUserText).toMatch(/UNKNOWN/);
+    expect(sentUserText).toMatch(/CREATIVE/);
+    expect(sentUserText).toMatch(/do NOT offer a multiple-choice OPTION that repeats/i);
+  });
+
+  // 08 §19.3: for an intimacy draft, the acts the recipient already rated are reframed as "go deeper, don't
+  // re-ask" instead of being re-seeded as the inventory — the core fix for the repeats-known-data bug.
+  it('reframes already-rated intimacy acts as "go deeper, don’t re-ask" (§19.3)', async () => {
+    const fs = memFileSystem();
+    const { author } = await seedHousehold(fs);
+    let sentUserText = '';
+    const capturing: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        sentUserText = options.messages.map((m) => m.content).join('\n');
+        const text = JSON.stringify({
+          title: 'X',
+          questions: [{ type: 'shortText', prompt: 'A fresh, deeper question?', required: true }],
+        });
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    const result = await generateQuestions(deps(fs, capturing, author), {
+      type: 'intimacy',
+      sensitivity: 'unfiltered',
+      context: {
+        authorPersonId: author,
+        includeAuthor: false,
+        includeTarget: false,
+        includeRelationship: false,
+      },
+      existingPrompts: [],
+      coveredIntimacyActs: [{ label: 'Receiving oral (blowjob)', rating: 'Love it' }],
+    });
+    expect(result.ok).toBe(true);
+    expect(sentUserText).toMatch(/ALREADY RATED/); // the reframe header
+    expect(sentUserText).toMatch(/go DEEPER/i);
+    expect(sentUserText).toContain('Receiving oral (blowjob) (Love it)'); // the rated act, labelled
+    expect(sentUserText).toMatch(/do NOT re-ask whether they like them/i);
+    expect(sentUserText).toMatch(/FAVOR acts, fantasies, and scenarios they have NOT yet rated/i);
+    expect(sentUserText).toMatch(/never minors/i); // the safety boundary is unchanged
   });
 });
 
@@ -466,6 +513,34 @@ describe('improveQuestion + gap-finder', () => {
     expect(result.ok).toBe(true);
     expect(result.suggestions?.[0]?.title).toBe('Weekly partner check-in');
     expect(result.usage?.type).toBe('questionnaire.suggest');
+  });
+
+  // 08 §19.4: a choice-type sample question keeps its options through the parse, so "Create from this" never
+  // seeds a blank multiple-choice question (the reported bug).
+  it('keeps a sample question’s options (no blank multiple-choice on seed, §19.4)', async () => {
+    const fs = memFileSystem();
+    const { author } = await seedHousehold(fs);
+    const text = JSON.stringify([
+      {
+        title: 'Depletion check',
+        type: 'general',
+        rationale: 'a',
+        questions: [
+          {
+            type: 'multiChoice',
+            prompt: 'Which of these leave you depleted?',
+            options: ['Big social events', 'Conflict', 'Long meetings'],
+          },
+        ],
+      },
+    ]);
+    const result = await suggestQuestionnaires(deps(fs, fakeClient(text), author));
+    expect(result.ok).toBe(true);
+    expect(result.suggestions?.[0]?.questions[0]?.options).toEqual([
+      'Big social events',
+      'Conflict',
+      'Long meetings',
+    ]);
   });
 
   // 08 §18.2: the recipient-first path feeds the recipient's name + their full answered content (avoid-only)

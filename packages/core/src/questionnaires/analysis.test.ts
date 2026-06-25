@@ -144,6 +144,67 @@ describe('analyzeAssignment', () => {
     );
   });
 
+  it('drops a branch-hidden orphan answer from analysis (47 §3.3/§7)', async () => {
+    const fs = memFileSystem();
+    const q = await saveQuestionnaire(fs, key, {
+      title: 'Branchy',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      questions: [
+        {
+          id: 'gate',
+          type: 'singleChoice',
+          prompt: 'Any concerns?',
+          required: false,
+          options: ['Yes', 'No'],
+        },
+        {
+          id: 'detail',
+          type: 'shortText',
+          prompt: 'Tell me more',
+          required: false,
+          branch: { whenQuestionId: 'gate', equals: 'Yes', action: 'show' },
+        },
+      ],
+    });
+    const a = await createAssignment(fs, key, {
+      questionnaireId: q.id,
+      senderPersonId: 'p1',
+      recipient: { kind: 'person', personId: 'p2' },
+      channel: 'inApp',
+      privacy: 'standard',
+      senderVisibleToRecipient: true,
+    });
+    // The gate is "No" (so `detail` is hidden), but a stale orphan `detail` answer persists (a draft from
+    // before the submit-side fix). Analysis must not feed it to the model as if it were chosen.
+    await saveResponse(fs, key, {
+      id: 'r1',
+      schemaVersion: 1,
+      assignmentId: a.id,
+      answers: [
+        { questionId: 'gate', value: 'No' },
+        { questionId: 'detail', value: 'ORPHAN-SECRET' },
+      ],
+      submittedAt: now.toISOString(),
+    });
+    let userMsg = '';
+    const client: ClaudeClient = {
+      send: () => Promise.resolve(ANALYSIS),
+      stream: (options, onDelta) => {
+        userMsg = String(options.messages.at(-1)?.content ?? '');
+        onDelta(ANALYSIS);
+        return Promise.resolve({
+          text: ANALYSIS,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    const result = await analyzeAssignment(deps(fs, client), { assignmentId: a.id });
+    expect(result.ok).toBe(true);
+    expect(userMsg).toContain('Any concerns?'); // the visible question is analyzed
+    expect(userMsg).not.toContain('ORPHAN-SECRET'); // the hidden orphan is not
+  });
+
   it('re-analyzing the same assignment overwrites its Insight (no duplicate)', async () => {
     const fs = memFileSystem();
     const assignmentId = await seedAnswered(fs);

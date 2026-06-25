@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PERSON_FIELD_KEYS } from '../schemas';
+import { type AnswerMap, type AnswerValue, visibleQuestions } from '../questionnaires/answering';
 import {
   INTAKE_CATALOG,
   buildInterviewerAddendum,
@@ -217,5 +218,83 @@ describe('intakeCatalog', () => {
       }
     }
     expect(missing).toEqual([]);
+  });
+
+  it('no two questions share an identical prompt across the catalog (47 §3.2 collision guard)', () => {
+    const seen = new Map<string, string>();
+    const dupes: string[] = [];
+    for (const section of INTAKE_CATALOG) {
+      for (const m of section.questions ?? []) {
+        const key = m.q.prompt.trim().toLowerCase();
+        const at = `${section.id}.${m.q.id}`;
+        const prior = seen.get(key);
+        if (prior) dupes.push(`${prior} == ${at}: "${m.q.prompt}"`);
+        else seen.set(key, at);
+      }
+    }
+    expect(dupes).toEqual([]);
+  });
+
+  it('every branch trigger can actually produce its match value (no stranded follow-up, 47 §3.3)', () => {
+    for (const section of INTAKE_CATALOG) {
+      const byId = new Map((section.questions ?? []).map((m) => [m.q.id, m.q]));
+      for (const m of section.questions ?? []) {
+        const branch = m.q.branch;
+        if (!branch) continue;
+        const trigger = byId.get(branch.whenQuestionId);
+        expect(trigger, `${m.q.id} branches on missing ${branch.whenQuestionId}`).toBeTruthy();
+        if (!trigger) continue;
+        const wanted = branch.equalsAny ?? (branch.equals !== undefined ? [branch.equals] : []);
+        expect(wanted.length, `${m.q.id} declares no branch value`).toBeGreaterThan(0);
+        for (const v of wanted) {
+          if (trigger.type === 'yesNo') {
+            expect(typeof v, `${m.q.id} yes/no trigger needs a boolean value`).toBe('boolean');
+          } else if (trigger.options) {
+            // The match value must be one the trigger can actually produce — else the follow-up is stranded.
+            expect(
+              trigger.options,
+              `${m.q.id} branch value "${String(v)}" not in ${trigger.id} options`,
+            ).toContain(v);
+          }
+        }
+      }
+    }
+  });
+
+  it('a follow-up shows when its trigger matches and HIDES when the trigger is cleared (47 §3.3/§7)', () => {
+    for (const section of INTAKE_CATALOG) {
+      const questions = (section.questions ?? []).map((m) => m.q);
+      for (const q of questions) {
+        const branch = q.branch;
+        if (!branch) continue;
+        const trigger = questions.find((t) => t.id === branch.whenQuestionId);
+        if (!trigger) continue; // covered by the stranded-trigger test above
+        const match = branch.equalsAny?.[0] ?? branch.equals;
+        const setVal: AnswerValue =
+          trigger.type === 'multiChoice' ? [String(match)] : (match as AnswerValue);
+        const shown: AnswerMap = { [branch.whenQuestionId]: setVal };
+        expect(
+          visibleQuestions(questions, shown).map((x) => x.id),
+          `${q.id} should show when ${trigger.id} matches`,
+        ).toContain(q.id);
+        // Clear the trigger but leave the follow-up's would-be answer (an orphan) → it must hide.
+        const cleared: AnswerMap = { [q.id]: 'orphan' };
+        expect(
+          visibleQuestions(questions, cleared).map((x) => x.id),
+          `${q.id} should hide when ${trigger.id} is cleared`,
+        ).not.toContain(q.id);
+      }
+    }
+  });
+
+  it('coachStyle reads distinctly from supportStyle — no "same question" prompt collision (47 §3.2)', () => {
+    const want = getIntakeSection('want');
+    const coach = want?.questions?.find((m) => m.q.id === 'coachStyle')?.q;
+    const support = want?.questions?.find((m) => m.q.id === 'supportStyle')?.q;
+    // The two controls must not read like the same question (the §7 collision). coachStyle is now about TONE,
+    // supportStyle about WHAT support you want. (Option labels can overlap — a single-choice answer is stored
+    // by its label, so a rename would orphan an existing answer; the prompts carry the distinction.)
+    expect(coach?.prompt).toMatch(/tone/i);
+    expect(coach?.prompt).not.toBe(support?.prompt);
   });
 });

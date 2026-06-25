@@ -23,6 +23,7 @@ import {
   Text,
   TextInput,
 } from '../../../design-system/components';
+import { matrixRowLabel } from '@shared/schemas';
 import type {
   AnswerType,
   BranchRule,
@@ -212,7 +213,9 @@ function fromQuestion(q: Question): QDraft {
     help: q.help ?? '',
     required: q.required,
     options: toTextRows(q.options),
-    rows: toTextRows(q.matrix?.rows),
+    // The builder authors plain-string matrix rows; a { key, label } row (intake only, 46 §4.2) is edited by
+    // its label and re-serialized as a string on save.
+    rows: toTextRows(q.matrix?.rows?.map(matrixRowLabel)),
     min: range?.min ?? 1,
     max: range?.max ?? 5,
     minLabel: range?.minLabel ?? '',

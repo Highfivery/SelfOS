@@ -11,6 +11,8 @@ import {
   IntakeSessionSchema,
   LIFE_AREAS,
   type IntakeAnswerValue,
+  matrixRowKey,
+  matrixRowLabel,
   type Insight,
   type IntakeSession,
   type IntakeSection,
@@ -30,6 +32,7 @@ import { checkBudget, costOf, recordUsage } from '../usage';
 import { getInsight, normalizeCategories, saveInsight } from '../insights';
 import { isAnswered } from '../questionnaires/answering';
 import { activityRowContext, withResolvedActivityRows } from './activityContext';
+import { migrateActivityMatrixValue } from '../intimacy/activityRows';
 import { defaultScopeForQuestion, effectiveAnswerScope } from './sharingCategory';
 import {
   INTAKE_CATALOG,
@@ -204,17 +207,23 @@ function formatAnswerForSynthesis(q: Question, value: IntakeAnswerValue | undefi
   const labels = matrixLabels(q.matrix);
   if (!labels || Array.isArray(value)) return answerToString(value);
   const { min, rows } = q.matrix;
-  const map = value as Record<string, number>;
-  // The activity-matrix rows are re-resolved from (gender, drawnTo) — so a rating stored under a row label that
-  // a LATER gender/drawnTo edit no longer resolves to (an "orphaned" key) would otherwise vanish from the
-  // portrait. Append any such stored keys verbatim (the key IS the label), so a re-synthesis never silently
-  // drops a prior rating. For a plain matrix (rows already cover every key) this is a no-op.
-  const orphaned = Object.keys(map).filter((k) => !rows.includes(k));
-  return [...rows, ...orphaned]
-    .map((row) => {
-      const point = map[row];
+  // The activity-matrix rows now carry stable keys (46 §4.2) re-resolved from anatomy; a pre-46 answer is keyed
+  // by old label strings, so migrate it to stable keys first (idempotent for an already-stable value). A rating
+  // stored under a key the current rows no longer include (an "orphaned" key — e.g. a neutral giving row after
+  // partner anatomy was added) is appended verbatim so a re-synthesis never silently drops a prior rating. Scope
+  // the legacy re-key to the `activities` matrix (the only intake matrix) so a future intake matrix whose row
+  // label happens to collide with an intimacy label is never silently re-keyed.
+  const map =
+    q.id === 'activities'
+      ? migrateActivityMatrixValue(value as Record<string, number>)
+      : (value as Record<string, number>);
+  const labelByKey = new Map(rows.map((r) => [matrixRowKey(r), matrixRowLabel(r)]));
+  const orphaned = Object.keys(map).filter((k) => !labelByKey.has(k));
+  return [...labelByKey.keys(), ...orphaned]
+    .map((key) => {
+      const point = map[key];
       if (typeof point !== 'number') return null;
-      return `${row}: ${labels[point - min] ?? point}`;
+      return `${labelByKey.get(key) ?? key}: ${labels[point - min] ?? point}`;
     })
     .filter((s): s is string => s !== null)
     .join('; ');

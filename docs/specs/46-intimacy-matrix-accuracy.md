@@ -1,6 +1,6 @@
 # 46 — Intimacy activity-matrix accuracy (anatomy-driven labels + stable keys)
 
-> **Status:** Draft — _last updated 2026-06-25_
+> **Status:** Built — _last updated 2026-06-25_
 >
 > The onboarding intimacy **activity matrix** ([`18`](18-personal-onboarding.md) §14.5,
 > [`27`](27-intimacy-redesign.md) §4.2) shows a sexual-act row that is **wrong** for some people
@@ -363,30 +363,26 @@ member → **decrypt the persisted `activities` value and assert it is keyed by 
 390px no-overflow + control-geometry guards while the matrix renders. Run `pnpm typecheck` after writing
 tests (Vitest does not typecheck).
 
-## 11. Open questions
+## 11. Open questions — RESOLVED (2026-06-25, build session)
 
-1. **Anatomy option wording + inclusivity review.** Exact prompts and option labels for `ownAnatomy`
-   (Penis / Vulva / Both or intersex / Prefer not to say?) and `partnerAnatomy` (Penis / Vulva, plus a
-   "no preference / not sure"?). Needs an inclusivity read — plain, affirming, non-pathologizing, never
-   assuming gender from anatomy. (Default proposal in §3/§4.1.)
-2. **Is the partner-anatomy question new, or derivable?** Should we add an explicit `partnerAnatomy` multi,
-   or derive partner anatomy from existing answers (e.g. a combination of `drawnTo` + a lighter prompt)?
-   The spec assumes a **new explicit question** (deriving from orientation is exactly the flaw we're
-   fixing), but the user should confirm we want a second new question vs. one own-anatomy question +
-   keeping giving rows neutral.
-3. **The `Question.matrix` key model — Option A (`{key,label}[]` union rows) vs Option B (parallel
-   `rowKeys?: string[]`).** §4.2 prefers A (a first-class, reusable key/label split, questionnaire matrices
-   untouched); B is smaller-blast-radius but a looser contract. **User to approve which.**
-4. **Where the anatomy questions sit** — inside the existing `getSpecific` "Getting specific (optional)"
-   opt-in group (branching `when('getSpecific', true)`, like the matrix), or always-visible in the
-   identity block? If gated, a person who skips "get specific" gets neutral oral labels (acceptable, since
-   the matrix is also gated there); if always-visible, anatomy is asked of everyone who acks 18+. Confirm.
-5. **Coordination/sequencing with [`47`](47-onboarding-quality-pass.md)** (the wider intimacy-section
-   wording/length pass). This spec adds two questions and changes the matrix row model; spec 47 reviews
-   the rest of the section's wording and length. Decide ordering (build 46 first so 47 reviews the final
-   anatomy wording, or interleave) so the two don't conflict on the catalog.
-6. **Deferred non-goal confirmation** — tailoring stays oral-only. Confirm we are NOT expanding
-   anatomy-specific tailoring to other acts (penetration giving/receiving, etc.) in this spec.
+1. **Anatomy option wording + inclusivity review.** ✅ Resolved (owner, casual/euphemistic, non-clinical):
+   `ownAnatomy` (single) = _"What are you packing down there?"_ → **Cock (penis) / Pussy (vulva) / Both or
+   intersex / Rather not say**; `partnerAnatomy` (multi) = _"What do you like a partner to have down there?"_
+   → **Cock (penis) / Pussy (vulva) / Don't mind**. The dual euphemism/term option labels keep clarity for
+   the oral-row mapping while dropping the clinical "genitals."
+2. **Is the partner-anatomy question new, or derivable?** ✅ Resolved — a **new explicit `partnerAnatomy`
+   multi** (deriving partner anatomy from orientation is the flaw being fixed).
+3. **The `Question.matrix` key model — Option A vs Option B.** ✅ Resolved — **Option A** (`MatrixRowSchema`
+   = `string | { key, label }`; new `matrixRowKey`/`matrixRowLabel` helpers in core `schemas.ts`).
+   Questionnaire matrices keep plain-string rows (key === label, byte-identical).
+4. **Where the anatomy questions sit.** ✅ Resolved — **inside the `getSpecific` "Getting specific (optional)"
+   group**, branched `when('getSpecific', true)`, before the matrix. A person who skips "get specific" gets
+   neutral oral labels (consistent — the matrix is gated there too).
+5. **Coordination/sequencing with [`47`](47-onboarding-quality-pass.md).** Built 46 first; 47 reviews the
+   rest of the section's wording around the final anatomy questions. 46 only rewrote the resolver + added
+   the two questions; it never mutated the shared `INTIMACY_ACTIVITIES` inventory (§11.1 held).
+6. **Deferred non-goal confirmation** — tailoring stays **oral-only** (confirmed; not expanded to
+   penetration giving/receiving, etc.).
 
 ### 11.1 Concurrency / shared-surface coordination
 
@@ -405,6 +401,28 @@ and the intimacy inventory. Sequence to avoid clobbering:
 
 ## 12. Changelog
 
+- 2026-06-25 — **BUILT** (on `feat/intimacy-matrix-accuracy`). All §11 open questions resolved with the owner
+  (above). Shipped: **Option A** `MatrixRowSchema` (`string | {key,label}`) + `matrixRowKey`/`matrixRowLabel`
+  helpers in core `schemas.ts` (questionnaire matrices byte-identical); the **anatomy-driven** resolver rewrite
+  (`activityRows.ts` — `ActivityRowContext` = `{ownAnatomy, partnerAnatomy}`, returns `MatrixRow[]` with stable
+  keys `oral-receiving`/`oral-giving-penis`/`oral-giving-vulva`/`oral-giving` + a slug per universal act/dynamic;
+  `slugifyActivity`, `LEGACY_ACTIVITY_KEY_MAP`/`legacyKeyFor`/`migrateActivityMatrixValue`); the two **casual-worded
+  18+/`restricted`** catalog questions in the `getSpecific` group before the matrix; and the wiring through
+  `activityContext` (reads anatomy from the intimacy section), `formatAnswerForSynthesis` (legacy-migrate scoped to
+  `activities`, then key→label), core `answering.ts` (`isAnswered`/`formatAnswerForDisplay` by stable key),
+  `questionnaires/trends.ts`, the `@selfos/answering` matrix render, `IntakeFormPanel` (live re-resolve from the
+  anatomy answers + migrate the seeded value; dropped `profileGender`), `Onboarding.tsx` (dropped the gender read),
+  and `QuestionnaireBuilder` (edits rows by label). **Diagnosis gate (§1):** the reporter's encrypted vault could
+  not be decrypted from the build environment (master key is in the app Keychain); the redesign fixes BOTH the
+  orientation-inference model flaw (a) and the cross-section read path (b) regardless, so it was built rather than
+  shipping an unverified single-cause guess. Code-reviewer **ship** (privacy rails, migration idempotency/no-loss,
+  Option-A additivity all verified; applied the nit — scope the legacy re-key to the `activities` matrix). Gate
+  green: typecheck, lint, format, **757 core + 11 relay + 803 desktop** unit (+resolver truth table incl. the
+  trans/nb-erasure regression + drawnTo-decoupling, +stable-key/slug/migration units, +synthesis stable-key &
+  legacy carry-forward, +`IntakeFormPanel` live-resolve & no-orphan-on-edit RTL), E2E (the comprehensive onboarding
+  flow now drives the anatomy answers → asserts the #62 wrong row is absent → decrypts the matrix value keyed by
+  STABLE keys; + a focused **edit-anatomy-without-orphaning** regression with the 390px matrix guard). Amends
+  [`27`](27-intimacy-redesign.md) §4.2/§5 and [`18`](18-personal-onboarding.md) §14.5.
 - 2026-06-25 — created (Draft). Addresses GitHub issue #62 (a wrong sexual-act row in the onboarding
   intimacy activity matrix). Replaces orientation-inferred oral labels with direct, sensitively-worded
   anatomy questions (own + partner anatomy, 18+/`restricted`), fixing the trans/non-binary erasure; and

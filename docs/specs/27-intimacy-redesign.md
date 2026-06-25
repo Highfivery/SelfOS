@@ -288,13 +288,17 @@ they toggle "want to get specific?". Explicit content is unchanged for those who
   supplemented by an **intake-local `intakeAnswered`** that counts a matrix answered when **any** row is rated;
   (5) `formatAnswerForSynthesis` maps the points to `pointLabels` for the portrait input. The buttons stay
   flex-wrapped (`.scale`/`.matrixRow` wrap), so the 5 labelled options fit / wrap cleanly at ~360px.
-- **Gender/orientation-aware rows (2026-06-23).** A pure `resolveIntakeActivityRows({ gender, drawnTo })`
-  (`@selfos/core/intimacy`) tailors **only the oral rows** by anatomy (own anatomy → receiving label; partner
-  anatomy from `drawnTo` → giving rows: a straight man sees only the cunnilingus-giving variant, a bi person
-  both), with a **safe full-neutral fallback the moment either input is ambiguous** (never erase on
-  uncertainty). The shared `INTIMACY_ACTIVITIES` inventory is **not** mutated; the resolver runs at the
-  **render layer** (renderer, live from `gender` + the `drawnTo` answer) and synthesis **re-resolves with the
-  same context** so the stored answer keys map back to labels. See 18 §14.5 + `activityRows.ts`.
+- **Anatomy-driven rows + stable keys ([`46`](46-intimacy-matrix-accuracy.md), 2026-06-25 — SUPERSEDES the
+  2026-06-23 gender/orientation-inferred model).** `resolveIntakeActivityRows({ ownAnatomy, partnerAnatomy })`
+  (`@selfos/core/intimacy`) now tailors **only the oral rows** from **direct anatomy answers** — own anatomy →
+  the receiving label, partner anatomy → the giving row(s) — never inferred from `gender`/`drawnTo` (which
+  conflated who-you-date with what-they-have and erased trans/non-binary people; GitHub #62). Neutral labels
+  only for a genuine non-answer. Each row is a stable `{ key, label }` (`MatrixRow`): the matrix value is keyed
+  by the anatomy-independent key, so editing anatomy/gender/orientation re-labels a row without orphaning a
+  rating. The shared `INTIMACY_ACTIVITIES` inventory is still **not** mutated; the resolver runs at the render
+  layer (live from the anatomy answers in the same form) and synthesis re-resolves with the same context.
+  `legacyKeyFor`/`migrateActivityMatrixValue` carry pre-46 label-keyed answers forward. `drawnTo` stays
+  standalone coaching context. See 46 + `activityRows.ts`.
 - **Synthesis** — the whole `intimacy` section is `restricted`, so all its facts flag restricted via
   `RESTRICTED_SECTION_REFS` ([`18`](18-personal-onboarding.md) §14.8). A new `formatAnswerForSynthesis` maps a
   3-point labelled matrix answer to readable label text for the portrait input ("oral: Into it; choking: Hard
@@ -317,10 +321,12 @@ the bridge before the intimacy section's questions are served ([`18`](18-persona
   ([`26`](26-intake-catalog-redesign.md) §7).
 - **18+ not acknowledged** — the section stays gated; unchanged.
 - **Matrix partially filled** — blank rows = no answer (no fact); only filled rows produce facts.
-- **Gender/drawnTo edited AFTER rating the matrix (2026-06-23).** The activity rows are re-resolved from
-  `(gender, drawnTo)`, so changing either later can leave a rating stored under a row label the new context no
-  longer resolves (an "orphaned" key). The on-disk answer is untouched, and synthesis **appends any orphaned
-  stored keys verbatim** (the key is itself the label), so a re-synthesis never silently drops a prior rating.
+- **Anatomy edited AFTER rating the matrix ([`46`](46-intimacy-matrix-accuracy.md), 2026-06-25).** Rows now
+  carry **stable keys** (`MatrixRow`), so editing anatomy/gender/orientation **re-labels** a row without
+  orphaning its rating — the value is keyed by the anatomy-independent key. Removing a partner-anatomy option
+  hides a giving row but preserves its stored rating under the stable key (re-appears if re-selected); any key
+  the current rows no longer include is still appended verbatim at synthesis (no data loss). Pre-46 label-keyed
+  answers are re-attached via `migrateActivityMatrixValue`.
 - **Branch staleness** — handled by the existing `resolveBranch` pruning ([`08`](08-questionnaires.md)).
 - **Crisis / trauma disclosure mid-block** — leads with warmth + resources; the optional pointer to **What
   weighs on you** is available; footer always present.

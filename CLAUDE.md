@@ -389,6 +389,44 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-25 — **Build (intimacy activity-matrix accuracy — SPEC 46 BUILT; GitHub issue #62; on
+  `feat/intimacy-matrix-accuracy`).** The onboarding intimacy activity matrix showed a sexual-act oral row that
+  was **wrong** for some people because the oral labels were **inferred** (own anatomy from `gender`, partner
+  anatomy from `drawnTo`/orientation) — conflating who-you-date with what-they-have and giving trans/non-binary
+  people generic fallbacks; worse, the resolved **label WAS the answer key**, so editing gender/orientation
+  orphaned prior ratings. **Decisions (asked, owner-confirmed):** proceed with the redesign (diagnosis gate §1
+  could not be met — the reporter's vault is encrypted behind the app Keychain, unreachable from the build env;
+  the redesign fixes both the model flaw and the read-path regardless, so I did NOT ship an unverified
+  single-cause guess); **Option A** matrix key model; anatomy questions live **inside the `getSpecific`** opt-in
+  group; **casual/euphemistic wording** (not clinical "genitals"). Built: **`MatrixRowSchema`** (`string | {key,
+label}`) + `matrixRowKey`/`matrixRowLabel` in core `schemas.ts` — questionnaire matrices keep plain-string rows
+  (key === label, byte-identical); a rewritten anatomy-driven `activityRows.ts` (`ActivityRowContext` =
+  `{ownAnatomy, partnerAnatomy}`, returns `MatrixRow[]` with **stable keys** `oral-receiving`/`oral-giving-penis`
+  /`-vulva`/`oral-giving` + a `slugifyActivity` key per universal act/dynamic; `LEGACY_ACTIVITY_KEY_MAP`/
+  `legacyKeyFor`/`migrateActivityMatrixValue` for pre-46 carry-forward, idempotent, no-data-loss, no
+  `schemaVersion` bump); two **18+/`restricted`** catalog questions — `ownAnatomy` single _"What are you packing
+  down there?"_ (Cock (penis) / Pussy (vulva) / Both or intersex / Rather not say) + `partnerAnatomy` multi
+  _"What do you like a partner to have down there?"_ (Cock (penis) / Pussy (vulva) / Don't mind); wired through
+  `activityContext` (reads anatomy from the intimacy section, not cross-section gender), `formatAnswerForSynthesis`
+  (legacy-migrate scoped to the `activities` matrix, then key→label), core `answering.ts`
+  (`isAnswered`/`formatAnswerForDisplay` by stable key), `questionnaires/trends.ts`, the `@selfos/answering` matrix
+  render, `IntakeFormPanel` (live re-resolve from the anatomy answers + migrate the seeded value; dropped
+  `profileGender`), `Onboarding.tsx` (dropped the gender read), `QuestionnaireBuilder` (edits rows by label).
+  Anatomy is a `restricted` intake answer only — never a `Person` field, never in `buildDepictionNote`, never
+  broadcast-shareable; `gender` stays a basics identity field, `drawnTo` standalone coaching context.
+  Code-reviewer **ship** (privacy rails, migration idempotency/no-loss, Option-A additivity verified; applied the
+  one nit — scope the legacy re-key to the `activities` matrix so a future intake matrix can't be silently
+  re-keyed). Gate green: typecheck, lint, format, **757 core + 11 relay + 803 desktop** unit (+resolver truth
+  table incl. the trans/nb-erasure regression + drawnTo-decoupling, +stable-key/slug/migration units, +synthesis
+  stable-key & legacy carry-forward, +`IntakeFormPanel` live-resolve & no-orphan RTL), full E2E (the comprehensive
+  onboarding flow drives the anatomy answers → asserts the #62 wrong row is absent → decrypts the matrix value
+  keyed by STABLE keys; + a focused **edit-anatomy-without-orphaning** regression with the 390px matrix guard).
+  Synced specs 46 (→ Built), 27 §4.2/§5/§7, 18 §14.5, 08 (`Question.matrix` rows). NOTE: `site/index.html` is
+  prettier-unclean on `main` already (no CI format job; lint-staged only checks staged files) — pre-existing,
+  left untouched. **Lesson: when a feature uses the resolved display LABEL as the persisted answer KEY, any
+  re-resolution (an anatomy/gender edit) orphans prior ratings — split a stable `{key}` from the `{label}` and
+  migrate legacy label-keyed answers read-time; and asking anatomy DIRECTLY (a `restricted` question) beats
+  inferring it from gender/orientation, which both conflates concepts and erases trans/non-binary users.**
 - 2026-06-25 — **Build (Session image attachments — SPEC 45 BUILT; on `feat/session-attachments`, a worktree,
   PR pending).** Lets a person attach images to a Session message so the AI coach can SEE them (Claude vision) —
   the issue-#63 "show the coach a screenshot" affordance. **§11 decisions asked first (all confirmed):** 5

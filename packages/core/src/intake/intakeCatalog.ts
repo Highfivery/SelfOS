@@ -2,6 +2,8 @@ import { INTIMACY_FANTASIES } from '../intimacy/topics';
 import {
   ACTIVITY_LIMIT_LABELS,
   ACTIVITY_POINT_LABELS,
+  OWN_ANATOMY_OPTIONS,
+  PARTNER_ANATOMY_OPTIONS,
   resolveIntakeActivityRows,
 } from '../intimacy/activityRows';
 import type { SharingCategory } from '../people/sharingPresets';
@@ -1674,11 +1676,34 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ),
           { restricted: true },
         ),
+        // Anatomy questions (46) — asked DIRECTLY, never inferred from gender/orientation. They sit before the
+        // activity matrix so its oral rows resolve when it renders: own anatomy → the receiving-oral label,
+        // partner anatomy → the giving-oral row(s). Casual, non-clinical wording; both 18+/`restricted`.
+        f(
+          single(
+            'ownAnatomy',
+            'What are you packing down there?',
+            [...OWN_ANATOMY_OPTIONS],
+            when('getSpecific', true),
+          ),
+          {
+            restricted: true,
+          },
+        ),
+        f(
+          multi(
+            'partnerAnatomy',
+            'What do you like a partner to have down there?',
+            [...PARTNER_ANATOMY_OPTIONS],
+            when('getSpecific', true),
+          ),
+          { restricted: true },
+        ),
         // The activity inventory as ONE 5-point feeling matrix — Hard no · Not interested · Curious · Like it
         // · Love it (27 §4.2). Rows default to the NEUTRAL list (= `resolveIntakeActivityRows({})`); the
-        // renderer re-resolves them per-person from gender + drawnTo (oral directionality only), and synthesis
-        // re-resolves with the same context so the keys line up. The two relationship dynamics + the boundary
-        // ("Hard no") tone are folded in by the resolver / labels.
+        // renderer re-resolves them per-person from the anatomy answers above (oral directionality only, 46),
+        // and synthesis re-resolves with the same context so the STABLE keys line up. The two relationship
+        // dynamics + the boundary ("Hard no") tone are folded in by the resolver / labels.
         f(
           {
             id: 'activities',

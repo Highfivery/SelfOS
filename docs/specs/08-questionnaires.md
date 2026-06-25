@@ -347,7 +347,10 @@ interface Question {
   options?: string[]; // choice/ranking/thisOrThat/allocation buckets
   scale?: { min: number; max: number; minLabel?: string; maxLabel?: string; step?: number };
   matrix?: {
-    rows: string[];
+    // A row is a display label OR a { key, label } pair (46 §4.2 — `MatrixRow`). Questionnaire matrices pass
+    // plain strings (key === label, byte-identical); the intake activity matrix passes { key, label } so a
+    // relabelled oral row never orphans a rating. Use matrixRowKey/matrixRowLabel — never assume a string.
+    rows: (string | { key: string; label: string })[];
     min: number;
     max: number;
     minLabel?: string;

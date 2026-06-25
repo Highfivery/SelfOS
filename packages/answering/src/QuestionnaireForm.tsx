@@ -6,7 +6,7 @@ import {
   isRosterList,
 } from '@selfos/core/questionnaires';
 import type { AnswerValue, AnswerMap, RosterRow } from '@selfos/core/questionnaires';
-import type { Question } from '@selfos/core/schemas';
+import { matrixRowKey, matrixRowLabel, type Question } from '@selfos/core/schemas';
 import { CrisisFooter } from './CrisisFooter';
 import { QuestionImage, type LoadImage } from './QuestionImage';
 import styles from './styles.module.css';
@@ -652,20 +652,28 @@ function Control({
       const pointLabels = matrixPointLabels(matrix);
       return (
         <div className={styles.matrix}>
-          {matrix.rows.map((row) => (
-            <div key={row} className={styles.matrixRow}>
-              <span className={styles.matrixLabel}>{row}</span>
-              <ScalePicker
-                min={matrix.min}
-                max={matrix.max}
-                value={current[row]}
-                onPick={(n) => set({ ...current, [row]: n })}
-                ariaLabel={`${question.prompt} — ${row}`}
-                {...(pointLabels ? { labels: pointLabels } : {})}
-                {...(pointLabels && matrix.limitLabels ? { limitLabels: matrix.limitLabels } : {})}
-              />
-            </div>
-          ))}
+          {matrix.rows.map((row) => {
+            // A row is a plain string (key === label) OR a { key, label } pair (46 §4.2): key the answer by
+            // the stable key, display the label.
+            const key = matrixRowKey(row);
+            const label = matrixRowLabel(row);
+            return (
+              <div key={key} className={styles.matrixRow}>
+                <span className={styles.matrixLabel}>{label}</span>
+                <ScalePicker
+                  min={matrix.min}
+                  max={matrix.max}
+                  value={current[key]}
+                  onPick={(n) => set({ ...current, [key]: n })}
+                  ariaLabel={`${question.prompt} — ${label}`}
+                  {...(pointLabels ? { labels: pointLabels } : {})}
+                  {...(pointLabels && matrix.limitLabels
+                    ? { limitLabels: matrix.limitLabels }
+                    : {})}
+                />
+              </div>
+            );
+          })}
         </div>
       );
     }

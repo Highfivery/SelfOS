@@ -5719,7 +5719,7 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
     await w
       .getByLabel('How would you describe how you look?', { exact: true })
       .fill('tall, curly hair');
-    // Gender drives the intimacy activity matrix's anatomy-aware oral rows (27 §4.2).
+    // Gender is a basics identity field (it no longer drives the intimacy matrix — anatomy does, 46).
     await w.getByRole('radio', { name: 'Man', exact: true }).click();
     // Ethnicity is now a multi-select (pick one or more) → joined into the string `ethnicity` field.
     // Multi options render as role="checkbox" cards; `exact` avoids "East Asian" matching "Southeast Asian".
@@ -5785,13 +5785,18 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
       w.getByText('Consent, safety, or boundaries SelfOS should always hold'),
     ).toHaveCount(0);
     await expect(w.getByRole('radio', { name: 'Love it' })).toHaveCount(0); // matrix gated by default
-    await w.getByRole('checkbox', { name: 'Women', exact: true }).click(); // drawnTo → tailors giving-oral
+    // drawnTo is captured as coaching context (no longer drives the matrix, 46).
+    await w.getByRole('checkbox', { name: 'Women', exact: true }).click();
     await w
       .getByRole('radiogroup', { name: /Want to get into the explicit specifics/ })
       .getByRole('radio', { name: 'Yes' })
       .click();
-    // The 5-point labelled matrix renders, tailored to a straight man: cunnilingus-giving + receiving-blowjob,
-    // never the blowjob-giving variant (27 §4.2).
+    // 46: the oral rows are driven by the DIRECT anatomy questions, not gender/orientation. Answer own + partner
+    // anatomy → the matrix resolves the receiving + giving-oral labels for THIS anatomy.
+    await w.getByRole('radio', { name: 'Cock (penis)', exact: true }).click(); // own anatomy → receiving label
+    await w.getByRole('checkbox', { name: 'Pussy (vulva)', exact: true }).click(); // partner → giving label
+    // The 5-point labelled matrix renders, tailored by anatomy: cunnilingus-giving + receiving-blowjob, never
+    // the blowjob-giving variant (no partner has a penis) — the GitHub #62 wrong row is gone (46).
     await expect(w.getByRole('radio', { name: 'Love it' }).first()).toBeVisible();
     await expect(w.getByRole('radiogroup', { name: /Receiving oral \(blowjob\)/ })).toBeVisible();
     await expect(w.getByRole('radiogroup', { name: /Going down on her/ })).toBeVisible();
@@ -5856,13 +5861,16 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
     expect(filled?.ethnicity).toContain('East Asian'); // multi-select → joined string
     expect(filled?.ethnicity).toContain('Mixed / Multiple');
     expect(filled?.importantDates).toEqual([{ label: 'Anniversary', date: '2014-06-21' }]); // dateList
-    // The intimacy activity matrix persists (it is no longer dropped on submit) and is keyed by the
-    // gender-aware ROW the renderer resolved for a straight man (27 §4.2): "Going down on her (oral)" → Love it.
+    // The intimacy activity matrix persists, keyed by the STABLE row key (46 §4.2) — NOT the display label —
+    // so a later anatomy/gender/orientation edit can never orphan it. The rated giving-oral row resolves to
+    // the anatomy-independent `oral-giving-vulva`, and the direct anatomy answers persist as coaching context.
     const intimacyAnswers = (await getIntakeSession(fs, key, 'owner-1'))?.sections.find(
       (s) => s.id === 'intimacy',
     )?.answers;
     expect(intimacyAnswers?.drawnTo).toEqual(['Women']);
-    expect(intimacyAnswers?.activities).toEqual({ 'Going down on her (oral)': 5 });
+    expect(intimacyAnswers?.ownAnatomy).toBe('Cock (penis)');
+    expect(intimacyAnswers?.partnerAnatomy).toEqual(['Pussy (vulva)']);
+    expect(intimacyAnswers?.activities).toEqual({ 'oral-giving-vulva': 5 });
     // The porn follow-ups persisted (revealed by watchPorn = Sometimes).
     expect(intimacyAnswers?.watchPorn).toBe('Sometimes');
     expect(intimacyAnswers?.pornGenres).toEqual(['Amateur']);
@@ -6343,6 +6351,86 @@ test('onboarding: intimacy conditionals reveal under their trigger (partner / op
       .click();
     await expect(w.getByText('What turns you on or gets you in the mood?')).toBeVisible();
     await expect(w.getByText('Dirty talk — things you love to hear')).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+// 46 §7/§10: editing anatomy after rating the matrix re-LABELS the oral rows but must NOT orphan a rating —
+// each row is keyed by a STABLE key, so the stored ratings stay attached through the edit. This is the headline
+// orphan regression the spec calls out, driven through the real UI + a decrypt before/after.
+test('onboarding: editing anatomy re-labels the oral rows WITHOUT orphaning a rating (46)', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  {
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('orphan e2e: master key missing');
+    // Seed an intimacy section already opted into "get specific", with anatomy answered (own=penis, partner=
+    // vulva) and three ratings keyed by STABLE keys: the receiving row, the vulva-giving row, and a universal.
+    await writeEncryptedJson(
+      fs,
+      'people/owner-1/intake/session.enc',
+      {
+        id: 'intake-orphan',
+        schemaVersion: 1,
+        personId: 'owner-1',
+        status: 'inProgress',
+        sections: ['basics', 'intimacy'].map((id) => ({
+          id,
+          status: id === 'intimacy' ? 'inProgress' : 'skipped',
+          restricted: id === 'intimacy',
+          messages: [],
+          answers:
+            id === 'intimacy'
+              ? {
+                  getSpecific: true,
+                  ownAnatomy: 'Cock (penis)',
+                  partnerAnatomy: ['Pussy (vulva)'],
+                  activities: { 'oral-receiving': 3, 'oral-giving-vulva': 5, bondage: 4 },
+                }
+              : {},
+        })),
+        startedAt: 'now',
+        updatedAt: 'now',
+      },
+      key,
+    );
+  }
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: /Onboarding/ }).click();
+    await w.getByRole('button', { name: /Intimacy & sexuality/ }).click();
+    await w.getByRole('button', { name: /18 or older/ }).click();
+
+    // The seeded ratings show against the anatomy-resolved rows: receiving = blowjob (own penis), giving =
+    // going-down (partner vulva).
+    await expect(w.getByRole('radiogroup', { name: /Receiving oral \(blowjob\)/ })).toBeVisible();
+    await expect(w.getByRole('radiogroup', { name: /Going down on her/ })).toBeVisible();
+
+    // EDIT own anatomy penis → vulva. The receiving row RE-LABELS live to "going down on you" — but its rating
+    // (and the giving/universal ratings) must survive, because they're keyed by stable keys, not the label.
+    await w.getByRole('radio', { name: 'Pussy (vulva)', exact: true }).click(); // ownAnatomy single-select
+    await expect(
+      w.getByRole('radiogroup', { name: /Receiving oral \(going down on you\)/ }),
+    ).toBeVisible();
+    await w.getByRole('button', { name: 'Continue', exact: true }).click();
+
+    // Decrypt: the stored matrix keys are UNCHANGED (no orphan) — the relabel touched only the display label.
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('orphan e2e: master key missing');
+    const activities = (await getIntakeSession(fs, key, 'owner-1'))?.sections.find(
+      (s) => s.id === 'intimacy',
+    )?.answers?.activities;
+    expect(activities).toEqual({ 'oral-receiving': 3, 'oral-giving-vulva': 5, bondage: 4 });
+    expect(
+      (await getIntakeSession(fs, key, 'owner-1'))?.sections.find((s) => s.id === 'intimacy')
+        ?.answers?.ownAnatomy,
+    ).toBe('Pussy (vulva)');
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

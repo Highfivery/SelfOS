@@ -745,6 +745,22 @@ as activities to pursue. Within that line it is fully explicit and unfiltered.
 > - **Fixed:** the renderer's `toSubmit` previously dropped the matrix (an object-valued answer), so the activity
 >   ratings never persisted; it now passes the row→point record through, with an RTL + E2E decrypt guarding it.
 
+> **Amendment ([`46`](46-intimacy-matrix-accuracy.md), 2026-06-25) — oral labels are now ANATOMY-driven (not
+> gender/orientation-inferred), and matrix rows carry STABLE keys. Supersedes the "Anatomy-aware oral" bullet
+> above.** Two new casual-worded **18+/`restricted`** questions in the intimacy `getSpecific` group, **before**
+> the matrix, drive the oral labels directly: **`ownAnatomy`** (single — _"What are you packing down there?"_ →
+> Cock (penis) / Pussy (vulva) / Both or intersex / Rather not say) sets the **receiving** label, and
+> **`partnerAnatomy`** (multi — _"What do you like a partner to have down there?"_ → Cock (penis) / Pussy (vulva)
+> / Don't mind) sets the **giving** row(s). `resolveIntakeActivityRows` now takes `{ ownAnatomy, partnerAnatomy }`
+> (not `{ gender, drawnTo }`) — fixing the trans/non-binary erasure and the who-you-date-vs-what-they-have
+> conflation (GitHub #62). Neutral labels only for a genuine non-answer. Each row is a `{ key, label }`
+> (`MatrixRow`): the value is keyed by the anatomy-independent **stable key** (`oral-receiving`,
+> `oral-giving-penis`/`-vulva`, a slug per universal act), so editing anatomy/gender/orientation re-labels a row
+> **without orphaning** a rating. `legacyKeyFor`/`migrateActivityMatrixValue` carry pre-46 label-keyed answers
+> forward (read-time, idempotent, no `schemaVersion` bump). Anatomy is a `restricted` intake answer only — never
+> a `Person` field, never in `buildDepictionNote`. `gender` stays a basics identity field; `drawnTo` stays
+> standalone coaching context. See 46 + `activityRows.ts`.
+
 > **Shared topic inventory (08 §16.5a, built 2026-06-15):** the consensual-adult **activity** checklist
 > (into-it / curious-to-try / hard-limits) and the **common-fantasies** list below are now the shared
 > `@selfos/core/intimacy` `INTIMACY_TOPICS` constant — ONE source of truth imported by both this intake block

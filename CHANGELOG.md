@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.10.0](https://github.com/Highfivery/SelfOS/compare/v0.9.1...v0.10.0) (2026-06-25)
+
+
+### Features
+
+* **onboarding:** anatomy-driven intimacy matrix labels + stable row keys ([#62](https://github.com/Highfivery/SelfOS/issues/62)) ([#70](https://github.com/Highfivery/SelfOS/issues/70)) ([e505f89](https://github.com/Highfivery/SelfOS/commit/e505f8944088df29185a1dadeea9e0767e679193))
+* **questionnaires:** knowledge-aware generation — feed raw answers, go deeper, fix blank options ([#72](https://github.com/Highfivery/SelfOS/issues/72)) ([5a7cf33](https://github.com/Highfivery/SelfOS/commit/5a7cf3332321382fcc0a3c2aa4cb0baf3a8cb761))
+* **questionnaires:** recipient-first Suggested + saved, tailored gap-finder suggestions ([#67](https://github.com/Highfivery/SelfOS/issues/67)) ([971bc7d](https://github.com/Highfivery/SelfOS/commit/971bc7da99cda6b81541c493b4b07ce15225e720))
+* **sessions:** attach images to a session so the coach can see them (spec 45) ([#69](https://github.com/Highfivery/SelfOS/issues/69)) ([45a9963](https://github.com/Highfivery/SelfOS/commit/45a9963efb240ad25cd7a4fdb248c097dfb98c9b))
+
+
+### Bug Fixes
+
+* **onboarding:** intake quality pass — cleared-trigger orphans + wording collisions (spec 47) ([#71](https://github.com/Highfivery/SelfOS/issues/71)) ([cbec72e](https://github.com/Highfivery/SelfOS/commit/cbec72e7b6442535df7e453212dff7e500335ec8))
+
 ## [0.9.1](https://github.com/Highfivery/SelfOS/compare/v0.9.0...v0.9.1) (2026-06-25)
 
 

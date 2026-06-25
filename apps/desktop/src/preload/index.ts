@@ -128,6 +128,12 @@ const bridge: SelfosBridge = {
   questionnairesImproveQuestion: (input) =>
     ipcRenderer.invoke(IpcChannels.questionnairesImproveQuestion, input),
   gapfinderSuggest: (input) => ipcRenderer.invoke(IpcChannels.gapfinderSuggest, input),
+  questionnaireSuggestionsList: (input) =>
+    ipcRenderer.invoke(IpcChannels.questionnaireSuggestionsList, input),
+  questionnaireSuggestionsGenerate: (input) =>
+    ipcRenderer.invoke(IpcChannels.questionnaireSuggestionsGenerate, input),
+  questionnaireSuggestionDelete: (input) =>
+    ipcRenderer.invoke(IpcChannels.questionnaireSuggestionDelete, input),
   insightsList: () => ipcRenderer.invoke(IpcChannels.insightsList),
   memoryOutboundSharing: () => ipcRenderer.invoke(IpcChannels.memoryOutboundSharing),
   insightsAnalyze: (input) => ipcRenderer.invoke(IpcChannels.insightsAnalyze, input),

@@ -31,6 +31,20 @@
   align-items: center;
   gap: var(--space-2);
   color: var(--color-accent-text);
+  /* Let the title wrap within the card instead of pushing the trailing Delete button out (flexbox footgun). */
+  min-width: 0;
+}
+
+/* The card title row: the accent title block grows, the Delete (×) sits at the far end, top-aligned. */
+.suggestionTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.suggestionTop .suggestionHead {
+  flex: 1 1 auto;
 }
 
 .suggestionQuestions {

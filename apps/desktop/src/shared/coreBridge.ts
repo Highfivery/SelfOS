@@ -87,6 +87,8 @@ import {
   type QuestionnaireGenerateResult,
   type QuestionnaireImproveResult,
   type QuestionnaireSuggestResult,
+  type SavedSuggestion,
+  type SavedSuggestionsResult,
   type BootState,
   type Budget,
   type Conversation,
@@ -283,6 +285,9 @@ import {
   storeQuestionnaireImage,
   submitResponse,
   suggestQuestionnaires,
+  listSavedSuggestions,
+  accumulateSavedSuggestions,
+  deleteSavedSuggestion,
   validateQuestionnaire,
   setFavorite,
   buildResultsExport,
@@ -584,6 +589,12 @@ const ImproveSchema = z.object({
   instruction: z.string().min(1),
 });
 const SuggestSchema = z.object({ targetPersonId: z.string().min(1).optional() });
+// Recipient-first saved suggestions (08 §18.5) — a household recipient, validated in the bridge.
+const SavedSuggestionsSchema = z.object({ recipientPersonId: z.string().min(1) });
+const SavedSuggestionDeleteSchema = z.object({
+  recipientPersonId: z.string().min(1),
+  suggestionId: z.string().min(1),
+});
 const AnalyzeSchema = z.object({ assignmentId: z.string().min(1) });
 const CreateRelayLinkSchema = z.object({
   questionnaireId: z.string().min(1),
@@ -1984,6 +1995,84 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!deps) return { ok: false, reason: 'DENIED', message: 'Not available.' };
       const { targetPersonId } = SuggestSchema.parse(input);
       return suggestQuestionnaires(deps, targetPersonId !== undefined ? { targetPersonId } : {});
+    },
+
+    // --- Recipient-first saved suggestions (08 §18) — author = the active person, gated `questionnaires.create`.
+    // The saved set lives under the author's folder, so reads/writes are structurally per-active-person. The
+    // recipient must be a household person (the tailoring needs their data); the bridge is the trust boundary. ---
+    questionnaireSuggestionsList: async (input): Promise<SavedSuggestion[]> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      const { recipientPersonId } = SavedSuggestionsSchema.parse(input);
+      return listSavedSuggestions(ctx.fs, ctx.key, personId, recipientPersonId);
+    },
+    questionnaireSuggestionsGenerate: async (input): Promise<SavedSuggestionsResult> => {
+      const deps = await aiDeps();
+      if (!deps) return { ok: false, reason: 'DENIED', message: 'Not available.' };
+      const { recipientPersonId } = SavedSuggestionsSchema.parse(input);
+      // Tailoring needs a real household recipient (profile + insights + already-asked questions). A bad/external
+      // id has no household context, so refuse rather than spend on a generic result on the persisted path.
+      const recipient = await getPerson(deps.fs, deps.key, recipientPersonId);
+      if (!recipient) {
+        return { ok: false, reason: 'DENIED', message: 'Choose someone in your household.' };
+      }
+      // Their full answered content as avoid-only grounding (§17.4 / §18.2) + the ideas already saved, so a
+      // "Suggest more" returns genuinely new ones. Assembled host-side; the author never sees the raw content.
+      const recipientHistory = await gatherRecipientHistory(deps.fs, deps.key, recipientPersonId);
+      const existing = await listSavedSuggestions(
+        deps.fs,
+        deps.key,
+        deps.personId,
+        recipientPersonId,
+      );
+      const result = await suggestQuestionnaires(deps, {
+        targetPersonId: recipientPersonId,
+        recipientName: recipient.displayName,
+        ...(recipientHistory ? { recipientHistory } : {}),
+        ...(existing.length ? { avoidSuggestions: existing.map((s) => s.title) } : {}),
+      });
+      if (!result.ok || !result.suggestions) {
+        // A failed generate preserves the prior saved set (§18.5) — the panel keeps what it had.
+        return {
+          ok: false,
+          saved: existing,
+          added: 0,
+          ...(result.reason ? { reason: result.reason } : {}),
+          ...(result.usage ? { usage: result.usage } : {}),
+          ...(result.message ? { message: result.message } : {}),
+        };
+      }
+      const saved = await accumulateSavedSuggestions(
+        deps.fs,
+        deps.key,
+        deps.personId,
+        recipientPersonId,
+        result.suggestions,
+        deps.now,
+      );
+      return {
+        ok: true,
+        saved,
+        added: result.suggestions.length,
+        ...(result.usage ? { usage: result.usage } : {}),
+      };
+    },
+    questionnaireSuggestionDelete: async (input): Promise<SavedSuggestion[]> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      const { recipientPersonId, suggestionId } = SavedSuggestionDeleteSchema.parse(input);
+      return deleteSavedSuggestion(
+        ctx.fs,
+        ctx.key,
+        personId,
+        recipientPersonId,
+        suggestionId,
+        new Date(),
+      );
     },
 
     // --- Memory / insights (20-memory-dashboard §5.1/§6) — gated by `memory.own`, active-person-scoped.

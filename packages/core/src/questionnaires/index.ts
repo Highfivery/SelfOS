@@ -16,6 +16,7 @@ export * from './contextProviders';
 export * from './recipientHistory';
 export * from './generationService';
 export * from './gapFinderService';
+export * from './suggestionStore';
 export * from './analysisService';
 export * from './questionnaireTopic';
 export * from './resultsExport';

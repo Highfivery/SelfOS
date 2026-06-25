@@ -34,6 +34,7 @@ import {
   getResponse,
   listAssignments,
   listQuestionnaires,
+  listSavedSuggestions,
   readCustomIntimacyTopics,
   saveQuestionnaire,
   submitResponse,
@@ -1927,10 +1928,12 @@ test('questionnaires: AI draft + Suggested surfaces show calm enable-AI states',
       w.getByRole('button', { name: /Set up Claude in Settings/i }).first(),
     ).toBeVisible();
 
-    // Suggested (gap-finder) opens its own surface with the same calm state — reached from the list.
+    // Suggested (gap-finder) opens its own surface; after picking a recipient (08 §18.1) the same calm
+    // AI-off state shows (generating needs AI).
     await backToQuestionnaires(w);
     await w.getByRole('button', { name: 'Suggested' }).click();
     await expect(w.getByRole('heading', { name: /suggested for you/i })).toBeVisible();
+    await w.getByLabel('Who do you want ideas for?').selectOption('owner-1');
     await expect(w.getByText(/isn.t set up yet/i).first()).toBeVisible();
 
     const overflow = await w.evaluate(() => {
@@ -1986,7 +1989,9 @@ test('questionnaires: the AI draft panel + Suggested surface fit at phone width'
     await resize(1100);
     await backToQuestionnaires(w);
     await w.getByRole('button', { name: 'Suggested' }).click();
-    await expect(w.getByRole('button', { name: /suggest questionnaires/i })).toBeVisible();
+    // Pick a recipient first (08 §18.1) so the generate button renders, then measure the fit.
+    await w.getByLabel('Who do you want ideas for?').selectOption('owner-1');
+    await expect(w.getByRole('button', { name: /suggest questionnaires for/i })).toBeVisible();
     await resize(390);
     await w.waitForTimeout(150);
     expect(await overflow()).toBeLessThanOrEqual(1);
@@ -1997,16 +2002,27 @@ test('questionnaires: the AI draft panel + Suggested surface fit at phone width'
   }
 });
 
-test('questionnaires: Suggested returns suggestions even when the model omits `required` (the gap-finder bug, 37)', async () => {
-  // Give the owner some substantive context so the gap-finder calls the model (not the pre-call thin-context
-  // hint). The offline fake returns a suggestion set whose sample questions OMIT `required` — the exact shape
-  // that used to discard the whole batch and show "add more about the people in your life".
+test('questionnaires: recipient-first Suggested — tailor, persist, delete, create-binds-recipient (08 §18)', async () => {
+  // A household recipient ("Partner") to get ideas for; the owner gets some substantive context so the
+  // gap-finder calls the model (not the pre-call thin-context hint). The offline fake returns a suggestion
+  // set whose sample questions OMIT `required` and include one OFF-SPEC `type` ("text") — the salvage drops
+  // only the bad question, keeping the suggestion (the "unexpected shape" fix, 37).
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
   {
     const fs = createNodeFileSystem(vault);
     const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
-    if (!key) throw new Error('seed insight: master key missing');
+    if (!key) throw new Error('seed: master key missing');
     const now = new Date().toISOString();
+    await savePerson(fs, key, {
+      id: 'partner-1',
+      schemaVersion: 1,
+      displayName: 'Partner',
+      isSubject: true,
+      tags: [],
+      notes: 'Loves cooking together; just started a new job.',
+      createdAt: now,
+      updatedAt: now,
+    });
     await saveInsight(fs, key, {
       id: 'owner-context',
       schemaVersion: 1,
@@ -2034,21 +2050,67 @@ test('questionnaires: Suggested returns suggestions even when the model omits `r
 
     await w.getByRole('link', { name: 'Questionnaires' }).click();
     await w.getByRole('button', { name: 'Suggested' }).click();
-    await w.getByRole('button', { name: /suggest questionnaires/i }).click();
+    // Recipient FIRST (08 §18.1), then generate — tailored to Partner.
+    await w.getByLabel('Who do you want ideas for?').selectOption('partner-1');
+    await w.getByRole('button', { name: /suggest questionnaires for partner/i }).click();
 
-    // The suggestions render (the bug's user-visible fix) — and the data-blame line + the "unexpected
-    // shape" error never appear.
+    // The suggestions render — no data-blame, no "unexpected shape", and the off-spec sample question is
+    // dropped while its valid sibling survives (the suggestion is not sunk).
     await expect(w.getByText('Weekly partner check-in')).toBeVisible();
     await expect(w.getByText('What we each need')).toBeVisible();
     await expect(w.getByText(/add more about the people/i)).toHaveCount(0);
     await expect(w.getByText(/unexpected shape/i)).toHaveCount(0);
-
-    // The first suggestion's sample questions include one with an OFF-SPEC `type` ("text") the model
-    // guessed — the inner per-element salvage drops ONLY that question, keeping the suggestion + its valid
-    // sample question. So the good prompt shows and the off-spec one is absent (the "unexpected shape" fix:
-    // one bad sample question no longer sinks the whole suggestion).
     await expect(w.getByText('How connected did you feel this week?')).toBeVisible();
     await expect(w.getByText('Anything left unsaid this week?')).toHaveCount(0);
+
+    // PERSISTED in the vault under the AUTHOR, keyed by recipient (decrypt-assert, 08 §18.3).
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('decrypt: master key missing');
+    const savedAfterGen = await listSavedSuggestions(fs, key, 'owner-1', 'partner-1');
+    expect(savedAfterGen.map((s) => s.title)).toEqual([
+      'Weekly partner check-in',
+      'What we each need',
+    ]);
+
+    // Re-opening the surface for the SAME person re-shows the saved set with NO regenerate (no AI spend) —
+    // the button now reads "Suggest more".
+    await backToQuestionnaires(w);
+    await w.getByRole('button', { name: 'Suggested' }).click();
+    await w.getByLabel('Who do you want ideas for?').selectOption('partner-1');
+    await expect(w.getByText('Weekly partner check-in')).toBeVisible();
+    await expect(w.getByRole('button', { name: /suggest more/i })).toBeVisible();
+
+    // Delete one card → it's gone from the UI and the vault.
+    await w.getByRole('button', { name: /delete suggestion “What we each need”/i }).click();
+    await expect(w.getByText('What we each need')).toHaveCount(0);
+    expect(
+      (await listSavedSuggestions(fs, key, 'owner-1', 'partner-1')).map((s) => s.title),
+    ).toEqual(['Weekly partner check-in']);
+
+    // "Create from this" goes STRAIGHT to the builder bound to Partner — no "Who is this for?" re-ask
+    // (08 §18.1); the title is pre-filled.
+    await w.getByRole('button', { name: /create from this/i }).click();
+    await expect(w.getByText('Who is this for?')).toHaveCount(0);
+    await expect(w.getByLabel('Title')).toHaveValue('Weekly partner check-in');
+
+    // Saving the new questionnaire removes the suggestion it came from (08 §18.4).
+    await w.getByRole('button', { name: 'Create draft' }).click();
+    await expect(w.getByRole('button', { name: 'Save' })).toBeVisible(); // saved → button flips to Save
+    await expect
+      .poll(async () => (await listSavedSuggestions(fs, key, 'owner-1', 'partner-1')).length)
+      .toBe(0);
+
+    // Back in Suggested, the consumed person has no saved ideas left — no suggestion cards, and the button
+    // is back to the first-time label (not "Suggest more"). (Asserted via controls, not the title text, since
+    // the just-created questionnaire now carries that title in the list pane.)
+    await backToQuestionnaires(w);
+    await w.getByRole('button', { name: 'Suggested' }).click();
+    await w.getByLabel('Who do you want ideas for?').selectOption('partner-1');
+    await expect(
+      w.getByRole('button', { name: /suggest questionnaires for partner/i }),
+    ).toBeVisible();
+    await expect(w.getByRole('button', { name: /create from this/i })).toHaveCount(0);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

@@ -25,7 +25,15 @@ type Selection =
   | { mode: 'none' }
   // Step 1 of creating: choose the recipient / compatibility BEFORE authoring (08 §17.3).
   | { mode: 'start'; seed?: BuilderSeed }
-  | { mode: 'new'; seed?: BuilderSeed; recipient?: Recipient; compat: boolean }
+  | {
+      mode: 'new';
+      seed?: BuilderSeed;
+      recipient?: Recipient;
+      compat: boolean;
+      // Set when this builder was opened from a saved suggestion (08 §18.4): on first save we remove that
+      // suggestion so a created idea stops being offered (opening-then-cancelling keeps it).
+      fromSuggestion?: { recipientPersonId: string; suggestionId: string };
+    }
   | { mode: 'edit'; id: string; share?: boolean; view?: 'results' }
   | { mode: 'suggested' };
 
@@ -38,6 +46,7 @@ export function Questionnaires(): JSX.Element {
   const remove = useQuestionnaireStore((s) => s.remove);
   const setFavorite = useQuestionnaireStore((s) => s.setFavorite);
   const loadTypes = useQuestionnaireStore((s) => s.loadTypes);
+  const deleteSuggestion = useQuestionnaireStore((s) => s.deleteSuggestion);
   // Favorited (pinned) questionnaires sort to the top (38 §13.8); the rest keep their existing order.
   // (Coerce to 0/1 — Number(undefined) is NaN, which would break the comparator.)
   const ordered = [...questionnaires].sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0));
@@ -53,6 +62,13 @@ export function Questionnaires(): JSX.Element {
   // otherwise — surfaced calmly here.
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // After a new questionnaire is saved from a suggestion, drop that suggestion (08 §18.4). Takes the optional
+  // link so the call site needn't narrow it across the JSX closure boundary.
+  const removeSuggestion = (from?: { recipientPersonId: string; suggestionId: string }): void => {
+    if (!from) return;
+    void deleteSuggestion(from.recipientPersonId, from.suggestionId);
+  };
 
   const onDeleteFromList = async (id: string): Promise<void> => {
     setConfirmDeleteId(null);
@@ -210,7 +226,22 @@ export function Questionnaires(): JSX.Element {
           Questionnaires
         </button>
         {selection.mode === 'suggested' ? (
-          <SuggestedPanel onCreate={(seed) => setSelection({ mode: 'start', seed })} />
+          // Recipient-first (08 §18): the suggestion already knows who it's for, so go straight to the builder
+          // bound to that person (no re-asking) and remember the suggestion to remove on save.
+          <SuggestedPanel
+            onCreate={(create) =>
+              setSelection({
+                mode: 'new',
+                seed: create.seed,
+                recipient: { kind: 'person', personId: create.recipientPersonId },
+                compat: false,
+                fromSuggestion: {
+                  recipientPersonId: create.recipientPersonId,
+                  suggestionId: create.suggestionId,
+                },
+              })
+            }
+          />
         ) : selection.mode === 'start' ? (
           <NewQuestionnaireStart
             onCancel={() => setSelection({ mode: 'none' })}
@@ -230,6 +261,9 @@ export function Questionnaires(): JSX.Element {
             compat={selection.compat}
             {...(selection.recipient ? { initialRecipient: selection.recipient } : {})}
             {...(selection.seed ? { seed: selection.seed } : {})}
+            {...(selection.fromSuggestion
+              ? { onCreated: () => removeSuggestion(selection.fromSuggestion) }
+              : {})}
             onDuplicate={(seed) => setSelection({ mode: 'start', seed })}
             onDone={() => setSelection({ mode: 'none' })}
           />

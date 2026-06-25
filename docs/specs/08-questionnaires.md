@@ -2305,3 +2305,87 @@ shown only for reference.
   recipient sees." The builder passes `readOnly` from the **sent/locked** branch only; the **unsent** Preview
   mode keeps the interactive Finish (a real dry-run on a draft). Test: the lock-view test asserts no `Finish`
   button is present.
+
+## 18. 2026-06-25 amendment — recipient-first Suggested + saved suggestions — BUILT
+
+The gap-finder "Suggested for you" surface (§3.7) generated **generic, ephemeral** suggestions: it ran with no
+recipient (so the ideas weren't tailored to anyone), the recipient was only picked **after** selection ("Create
+from this" → the §17.3 start step → a redundant re-ask of who it's for), and the suggestions were thrown away on
+regenerate / navigate. This amendment makes the Suggested flow **recipient-first**, **deeply tailored**, and
+**persisted**. Resolved with the owner (2026-06-25); the four decisions are recorded inline.
+
+### 18.1 Recipient-first (decision: household people only)
+
+- The Suggested panel asks **"who do you want ideas for?"** FIRST — a single **household person** (the people
+  with stored data the tailoring needs; external/compatibility stay in the regular **New** flow, which can't be
+  deeply tailored because an external recipient has no household history). This mirrors the §17.3 recipient-first
+  model already used everywhere else.
+- Because the recipient is chosen up front, **"Create from this" skips the §17.3 start step** and binds the new
+  questionnaire straight to that person — removing the current double-ask of who it's for (the §17.12
+  flow-coherence rule: never pick the same thing twice).
+
+### 18.2 Deep tailoring (the quality bar: dive deeper into the known, open the unknown)
+
+- Generation feeds the recipient's **shareable** context (profile/relationship/shareable insights, the §13.3
+  boundary) for **relevance**, AND their **full answered content** via the existing host-side
+  `gatherRecipientHistory` (§17.4) for **de-dup** — profile facts, every Insight (intake/sessions/dreams/prior
+  questionnaires distilled), and the **exact prompts already asked** of them. The same author-blind, output-safe
+  boundary as §17.4 applies (the author never sees the raw content; the model must never quote/allude to it).
+- The `GAP_FINDER_SYSTEM` prompt is sharpened: tailor to THIS named person; **go deeper** on partially-known
+  themes; **open entirely new areas** with no data yet; **never** repeat a question they've been asked or restate
+  a fact already known; and (for accumulate) **never re-propose an idea already in the saved list** (their
+  titles/prompts are fed as additional avoid-grounding).
+
+### 18.3 Persistence — accumulate (decision: accumulate into a capped list)
+
+- Generated suggestions are **persisted in the vault**, per author, **keyed by recipient**:
+  `people/<authorId>/questionnaires/suggestions.enc` (the `guidanceService` cache precedent). A new core
+  `suggestionStore` owns it; new view schemas `SavedSuggestion` (a `QuestionnaireSuggestion` + `id` + `createdAt`)
+  and the per-author doc.
+- Re-opening the panel **reads the saved set with no AI spend**. **"Suggest more" ACCUMULATES** — it adds a fresh
+  batch (the existing ones fed as avoid so each batch is genuinely new), capped at **`SUGGESTION_CAP = 9`**
+  (newest kept). Per-active-person isolation: the file is per-author, and the panel reloads on
+  recipient/active-person change.
+
+### 18.4 Delete + remove-on-create (decision: remove when a questionnaire is saved from it)
+
+- Each saved suggestion card has a **Delete** (×) → removes it from the set.
+- **Auto-remove on creation:** "Create from this" threads the `suggestionId`; the builder fires an **`onCreated`**
+  callback the FIRST time it persists a new questionnaire; the container then deletes that suggestion. So a
+  suggestion you open-but-cancel **stays** (only a real, saved questionnaire consumes it).
+
+### 18.5 IPC + capabilities
+
+- New ops, all gated by **`questionnaires.create`** + active-person-scoped (the author), with `recipientPersonId`
+  validated as a household person in the bridge (the trust boundary; `gatherRecipientHistory` reads with the
+  master key host-side and never crosses IPC):
+  - `questionnaireSuggestionsList({ recipientPersonId })` → `SavedSuggestion[]` (no spend; read on open/select).
+  - `questionnaireSuggestionsGenerate({ recipientPersonId })` → generate tailored + accumulate-save → returns
+    the updated `SavedSuggestion[]` (+ `usage`/honest `reason`/`message` on failure; the saved set is preserved
+    on a failed generate).
+  - `questionnaireSuggestionDelete({ recipientPersonId, suggestionId })` → updated `SavedSuggestion[]`.
+- The existing `gapfinderSuggest` (generic, no recipient, ephemeral) is **unchanged** and still backs the Home
+  dashboard teaser (decision: leave Home, link into Suggested). The persisted ops are separate so Home's generic
+  path is untouched.
+
+### 18.6 Build status (2026-06-25, `feat/suggested-questionnaires-recipient-first`) — BUILT
+
+All four decisions built. **Core:** `SavedSuggestion`/`SavedSuggestionSet`/`QuestionnaireSuggestionsDoc` schemas +
+`SUGGESTION_CAP = 9` + `SavedSuggestionsResult`; a new `suggestionStore`
+(`listSavedSuggestions`/`accumulateSavedSuggestions`[prepend + cap]/`deleteSavedSuggestion`) at
+`people/<authorId>/questionnaires/suggestions.enc`; `suggestQuestionnaires` extended with
+`recipientName`/`recipientHistory`/`avoidSuggestions`, and `GAP_FINDER_SYSTEM` + `buildGapFinderUserMessage`
+sharpened for recipient tailoring (avoid-known, dive-deeper, never-reveal). **Bridge (trust boundary):** three new
+ops gated `questionnaires.create` + author-scoped — `questionnaireSuggestionsList` (no spend),
+`questionnaireSuggestionsGenerate` (gather history host-side → tailor → accumulate; refuses a non-household
+recipient; preserves the prior set on failure), `questionnaireSuggestionDelete`; `gapfinderSuggest` left unchanged
+for Home. **Renderer:** recipient-first `SuggestedPanel` (person Select → saved cards + per-card Delete → "Suggest
+more"); the container routes "Create from this" straight to a recipient-bound builder; `QuestionnaireBuilder` gains
+an `onCreated` (fires once on first persist) → the container deletes the source suggestion. Home untouched.
+Code-reviewer **ship**. Gate green: typecheck, lint, format, **735 core + 11 relay + 772 desktop** unit
+(suggestionStore [8], gap-finder tailoring, a bridge generate→list→delete + gating round-trip, SuggestedPanel RTL
+[5], the container recipient-first flow), **E2E** (recipient-first generate + off-spec salvage + decrypt-persist +
+delete + create-binds-recipient-no-reask + remove-on-save). **Lesson: the recipient's full content is fed to the
+gap-finder as avoid-only grounding (the §17.4 author-blind boundary) — the same relaxation generation already
+makes; persistence lives under the AUTHOR keyed by recipient so per-active-person isolation is structural, and
+"remove on save" needs a once-only `onCreated` (not the async `saved` state) to avoid a double-fire.**

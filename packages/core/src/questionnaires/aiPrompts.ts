@@ -169,6 +169,7 @@ export function buildImproveUserMessage(input: {
 
 export const GAP_FINDER_SYSTEM = `${SAFETY}\n\nYou suggest the NEXT questionnaires a person could send to people in their life to understand them better. Base suggestions only on the structured context provided (profiles, relationships, prior Insights) — never invent facts. Return a JSON array of up to 3 objects, each:
 {"title": string, "type": string, "rationale": short string (why this, now), "questions": [{"type": string, "prompt": string, "required": boolean}] (2-4 sample questions)}.
+When a specific recipient and what is already known about them are provided, tailor EVERY suggestion to that one person: go deeper on themes they have only partly explored, and open entirely new areas there is no data on yet. NEVER repeat a question they have already been asked, and never restate something already known about them — steer clear of it, do not mention it. Make the sample questions concrete and specific to this person, not generic.
 Each sample question's "type" MUST be one of EXACTLY these values: ${SUGGESTABLE_ANSWER_TYPES.join(', ')}. Use no other type. Return ONLY the JSON array.`;
 
 export const ANALYSIS_SYSTEM = `${SAFETY}
@@ -289,8 +290,42 @@ export function buildAlignmentUserMessage(input: {
   return `Questionnaire: "${input.title}"\nAnswerers: ${input.personAName} and ${input.personBName}\n\nAligned answers:\n${blocks}\n\nProduce the compatibility report JSON.`;
 }
 
-// The caller guarantees non-empty context (the gap-finder returns an empty-state hint pre-call, 37 §11),
-// so this only ever builds the with-context prompt.
-export function buildGapFinderUserMessage(context: string): string {
-  return `Here is the structured context about this person and their relationships:\n${context.trim()}\n\nSuggest up to 3 questionnaires that would help them learn something useful next.`;
+// The caller guarantees non-empty context (the gap-finder returns an empty-state hint pre-call, 37 §11).
+// `recipientName`/`recipientHistory`/`avoidSuggestions` drive the recipient-first tailoring (08 §18.2): the
+// history is the recipient's full answered content as AVOID-only grounding (the §17.4 author-blind boundary —
+// the model must never quote or allude to it), and `avoidSuggestions` are the titles of ideas already saved
+// (so "Suggest more" returns genuinely NEW ones). All optional — the generic Home path passes only `context`.
+export function buildGapFinderUserMessage(input: {
+  context: string;
+  recipientName?: string;
+  recipientHistory?: string;
+  avoidSuggestions?: string[];
+}): string {
+  const parts: string[] = [
+    `Here is the structured context about this person and their relationships:\n${input.context.trim()}`,
+  ];
+  if (input.recipientName?.trim()) {
+    parts.push(
+      `\nThese suggestions are specifically for ${input.recipientName.trim()}. Tailor every questionnaire to them — fit it to who they are and what would deepen this relationship.`,
+    );
+  }
+  if (input.recipientHistory?.trim()) {
+    parts.push(
+      [
+        `\n${input.recipientName?.trim() ?? 'This person'} has ALREADY shared the material below with the app (their onboarding, past sessions, earlier questionnaires, and profile). Use it ONLY to avoid repetition: do NOT suggest a questionnaire that re-asks what they have already answered, and steer clear of topics they have already covered.`,
+        `Instead, go DEEPER on themes they have only partly explored, and open ENTIRELY NEW areas there is no data on yet.`,
+        `CRITICAL: never quote, restate, reference, hint at, or reveal any of this material in a question — the questions must stand on their own. "Avoid overlap" means steer clear, NOT mention.`,
+        input.recipientHistory.trim(),
+      ].join('\n'),
+    );
+  }
+  if (input.avoidSuggestions && input.avoidSuggestions.length > 0) {
+    parts.push(
+      `\nYou have ALREADY proposed these questionnaire ideas — propose DIFFERENT ones this time (do not repeat or lightly reword them):\n${input.avoidSuggestions
+        .map((t) => `- ${t}`)
+        .join('\n')}`,
+    );
+  }
+  parts.push(`\nSuggest up to 3 questionnaires that would help them learn something useful next.`);
+  return parts.join('\n');
 }

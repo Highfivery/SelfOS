@@ -312,6 +312,7 @@ export function QuestionnaireBuilder({
   initialShare,
   initialView,
   onDuplicate,
+  onCreated,
   onDone,
 }: {
   questionnaire: Questionnaire | null;
@@ -325,6 +326,9 @@ export function QuestionnaireBuilder({
   // Opened via a `responses-arrived` notification's "View results" deep-link (38 §3.1) — start on Results.
   initialView?: 'results';
   onDuplicate?: (seed: BuilderSeed) => void;
+  // Fired ONCE, the first time a NEW questionnaire is persisted (08 §18.4) — lets the parent remove the
+  // suggestion it was created from. Not called when editing an existing questionnaire.
+  onCreated?: (id: string) => void;
   onDone: () => void;
 }): JSX.Element {
   const save = useQuestionnaireStore((s) => s.save);
@@ -412,6 +416,15 @@ export function QuestionnaireBuilder({
   // updates it and KEEPS us here (no close); Send is only offered once it's saved. So the flow reads
   // create → then send, with no strand.
   const [saved, setSaved] = useState<Questionnaire | null>(questionnaire);
+  // Fire `onCreated` exactly once, the first time a NEW questionnaire is persisted (08 §18.4). A ref (not the
+  // async `saved` state) guards against a double-fire if the user saves twice quickly.
+  const createdFired = useRef(false);
+  const markCreated = (q: Questionnaire): void => {
+    if (questionnaire === null && !createdFired.current) {
+      createdFired.current = true;
+      onCreated?.(q.id);
+    }
+  };
   const [justSaved, setJustSaved] = useState(false);
   // Whether this questionnaire has been sent (08 §17.14) — drives the header "Sent · <date>" line so a
   // reopened, already-sent questionnaire is clearly distinct from one that's still a draft.
@@ -615,6 +628,7 @@ export function QuestionnaireBuilder({
       const result = await save(input());
       if (result) {
         setSaved(result);
+        markCreated(result);
         setJustSaved(true);
         setProblems(null);
       }
@@ -674,6 +688,7 @@ export function QuestionnaireBuilder({
         return;
       }
       setSaved(result);
+      markCreated(result);
       setJustSaved(false);
       setProblems(null);
       setSendId(result.id);

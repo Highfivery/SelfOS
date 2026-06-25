@@ -489,7 +489,7 @@ describe('Questionnaires', () => {
     expect(await screen.findByDisplayValue('How are we really doing lately?')).toBeInTheDocument();
   });
 
-  it('suggests questionnaires and creates one from a suggestion', async () => {
+  it('recipient-first Suggested: pick a person → generate → create binds them with no re-ask (08 §18)', async () => {
     enableAi();
     installMockBridge({
       questionnairesList: () => Promise.resolve([]),
@@ -501,11 +501,14 @@ describe('Questionnaires', () => {
           resolvedReady: true,
           source: 'device' as const,
         }),
-      gapfinderSuggest: () =>
+      questionnaireSuggestionsGenerate: () =>
         Promise.resolve({
           ok: true,
-          suggestions: [
+          added: 1,
+          saved: [
             {
+              id: 'sg-1',
+              createdAt: '2026-06-25T00:00:00.000Z',
               title: 'Partner check-in',
               type: 'role-feedback',
               rationale: 'You value quality time.',
@@ -521,15 +524,21 @@ describe('Questionnaires', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Suggested' }));
     expect(screen.getByRole('heading', { name: /suggested for you/i })).toBeInTheDocument();
-    await userEvent.click(await screen.findByRole('button', { name: /suggest questionnaires/i }));
+    // Recipient FIRST (08 §18.1).
+    await userEvent.selectOptions(
+      await screen.findByLabelText('Who do you want ideas for?'),
+      'p-mara',
+    );
+    await userEvent.click(
+      await screen.findByRole('button', { name: /suggest questionnaires for mara/i }),
+    );
     expect(await screen.findByText('Partner check-in')).toBeInTheDocument();
 
-    // A suggestion still picks a recipient first (08 §17.3), then opens the builder pre-filled.
+    // "Create from this" goes STRAIGHT to the builder bound to Mara — no "Who is this for?" re-ask (§18.1).
     await userEvent.click(screen.getByRole('button', { name: /create from this/i }));
-    await userEvent.selectOptions(await screen.findByLabelText('Who is this for?'), 'p-mara');
-    await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
     expect(await screen.findByLabelText('Title')).toHaveValue('Partner check-in');
     expect(screen.getByDisplayValue('How was this week together?')).toBeInTheDocument();
+    expect(screen.queryByText('Who is this for?')).not.toBeInTheDocument();
   });
 
   it('previews the in-progress draft as the recipient would see it', async () => {

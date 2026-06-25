@@ -64,7 +64,16 @@ const SUGGESTION_SENTINEL: QuestionnaireSuggestion = {
 
 export async function suggestQuestionnaires(
   deps: AiDeps,
-  input: { targetPersonId?: string } = {},
+  input: {
+    targetPersonId?: string;
+    // Recipient-first tailoring (08 §18.2). `recipientName` + `recipientHistory` (the recipient's full
+    // answered content, assembled host-side, author-blind — §17.4) make the suggestions specific to one
+    // person and avoid what they've covered; `avoidSuggestions` are titles already saved so "Suggest more"
+    // returns new ideas. All optional — the generic (Home) path passes none.
+    recipientName?: string;
+    recipientHistory?: string;
+    avoidSuggestions?: string[];
+  } = {},
 ): Promise<SuggestResult> {
   const context = await gatherGenerationContext(deps.fs, deps.key, {
     authorPersonId: deps.personId,
@@ -87,7 +96,12 @@ export async function suggestQuestionnaires(
   const call = await runClaude(
     deps,
     GAP_FINDER_SYSTEM,
-    buildGapFinderUserMessage(context),
+    buildGapFinderUserMessage({
+      context,
+      ...(input.recipientName !== undefined ? { recipientName: input.recipientName } : {}),
+      ...(input.recipientHistory !== undefined ? { recipientHistory: input.recipientHistory } : {}),
+      ...(input.avoidSuggestions !== undefined ? { avoidSuggestions: input.avoidSuggestions } : {}),
+    }),
     'questionnaire.suggest',
     1200,
   );

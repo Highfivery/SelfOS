@@ -76,6 +76,8 @@ import type {
   QuestionnaireInput,
   QuestionnaireSendState,
   QuestionnaireSuggestResult,
+  SavedSuggestion,
+  SavedSuggestionsResult,
   RelayLinkResult,
   QuestionTrend,
   Relationship,
@@ -190,6 +192,9 @@ export const IpcChannels = {
   questionnairesGenerate: 'questionnaires:generate',
   questionnairesImproveQuestion: 'questionnaires:improveQuestion',
   gapfinderSuggest: 'gapfinder:suggest',
+  questionnaireSuggestionsList: 'questionnaires:suggestionsList',
+  questionnaireSuggestionsGenerate: 'questionnaires:suggestionsGenerate',
+  questionnaireSuggestionDelete: 'questionnaires:suggestionDelete',
   insightsList: 'insights:list',
   memoryOutboundSharing: 'memory:outboundSharing',
   insightsAnalyze: 'insights:analyze',
@@ -650,6 +655,20 @@ export interface SelfosBridge {
   }): Promise<QuestionnaireImproveResult>;
   /** Gap-finder: propose the next questionnaires from structured context. Budget-gated + metered. */
   gapfinderSuggest(input: { targetPersonId?: string }): Promise<QuestionnaireSuggestResult>;
+  /** Recipient-first saved suggestions (08 §18). Read the author's saved set for one household recipient — no
+   * AI spend. */
+  questionnaireSuggestionsList(input: { recipientPersonId: string }): Promise<SavedSuggestion[]>;
+  /** Generate a fresh, recipient-tailored batch (de-dup against their history + the already-saved ideas) and
+   * accumulate it into the saved set. Budget-gated + metered; the prior set is preserved on failure. */
+  questionnaireSuggestionsGenerate(input: {
+    recipientPersonId: string;
+  }): Promise<SavedSuggestionsResult>;
+  /** Remove one saved suggestion (the card Delete, or the auto-remove once a questionnaire is created from it).
+   * Returns the recipient's remaining set. */
+  questionnaireSuggestionDelete(input: {
+    recipientPersonId: string;
+    suggestionId: string;
+  }): Promise<SavedSuggestion[]>;
   /**
    * The ACTIVE person's memory (20-memory-dashboard §5.1): their own insights + their relationships'
    * shareable facts only — scoped + gated on `memory.own` in the bridge (the trust boundary).

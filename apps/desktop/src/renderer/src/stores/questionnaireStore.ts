@@ -13,6 +13,11 @@ type ImproveInput = Parameters<SelfosBridge['questionnairesImproveQuestion']>[0]
 type ImproveResult = Awaited<ReturnType<SelfosBridge['questionnairesImproveQuestion']>>;
 type SuggestInput = Parameters<SelfosBridge['gapfinderSuggest']>[0];
 type SuggestResult = Awaited<ReturnType<SelfosBridge['gapfinderSuggest']>>;
+// Recipient-first saved suggestions (08 §18).
+type SavedSuggestionList = Awaited<ReturnType<SelfosBridge['questionnaireSuggestionsList']>>;
+type SavedSuggestionsGenerateResult = Awaited<
+  ReturnType<SelfosBridge['questionnaireSuggestionsGenerate']>
+>;
 
 const AI_UNAVAILABLE = {
   ok: false as const,
@@ -39,6 +44,13 @@ interface QuestionnaireState {
   generate: (input: GenerateInput) => Promise<GenerateResult>;
   improveQuestion: (input: ImproveInput) => Promise<ImproveResult>;
   suggest: (input: SuggestInput) => Promise<SuggestResult>;
+  /** Recipient-first saved suggestions (08 §18): read (no spend), generate (accumulate), delete. */
+  listSavedSuggestions: (recipientPersonId: string) => Promise<SavedSuggestionList>;
+  generateSuggestions: (recipientPersonId: string) => Promise<SavedSuggestionsGenerateResult>;
+  deleteSuggestion: (
+    recipientPersonId: string,
+    suggestionId: string,
+  ) => Promise<SavedSuggestionList>;
   save: (input: QuestionnaireInput) => Promise<Questionnaire | null>;
   remove: (id: string) => Promise<void>;
   validate: (input: QuestionnaireInput) => Promise<string[]>;
@@ -76,6 +88,13 @@ export const useQuestionnaireStore = create<QuestionnaireState>((set, get) => ({
   improveQuestion: async (input) =>
     (await window.selfos?.questionnairesImproveQuestion(input)) ?? AI_UNAVAILABLE,
   suggest: async (input) => (await window.selfos?.gapfinderSuggest(input)) ?? AI_UNAVAILABLE,
+  listSavedSuggestions: async (recipientPersonId) =>
+    (await window.selfos?.questionnaireSuggestionsList({ recipientPersonId })) ?? [],
+  generateSuggestions: async (recipientPersonId) =>
+    (await window.selfos?.questionnaireSuggestionsGenerate({ recipientPersonId })) ??
+    ({ ...AI_UNAVAILABLE, saved: [], added: 0 } as SavedSuggestionsGenerateResult),
+  deleteSuggestion: async (recipientPersonId, suggestionId) =>
+    (await window.selfos?.questionnaireSuggestionDelete({ recipientPersonId, suggestionId })) ?? [],
   save: async (input) => {
     const saved = (await window.selfos?.questionnairesSave(input)) ?? null;
     await get().load();

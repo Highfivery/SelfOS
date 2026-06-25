@@ -1,6 +1,7 @@
 import { create } from 'zustand';
-import type { ChatMessage, Insight, SessionStatus } from '@shared/schemas';
+import type { AttachmentRef, ChatMessage, Insight, SessionStatus } from '@shared/schemas';
 import type { BudgetState, ConversationMeta, SessionCost } from '@shared/channels';
+import type { PendingAttachment } from '../app/routes/sessions/downscaleImage';
 import { useBudgetStore } from './budgetStore';
 
 interface ConversationState {
@@ -15,6 +16,8 @@ interface ConversationState {
   /** Current step index for a structured guided exercise; null otherwise. */
   activeGuideStep: number | null;
   messages: ChatMessage[];
+  /** Decrypted attachment data URLs, keyed by attachment id (45 §5.5) — avoids re-fetching a thumbnail. */
+  attachmentUrls: Record<string, string>;
   streaming: string;
   sending: boolean;
   /** AI's turn-embedded "this feels wrapped up" hint for the open session (09 §14.1). */
@@ -32,7 +35,13 @@ interface ConversationState {
   /** Start a guided session from a catalog exercise (16 §3.3); opens it. Returns the new id, or null. */
   startGuided: (guideId: string) => Promise<string | null>;
   open: (id: string) => Promise<void>;
-  send: (text: string) => Promise<void>;
+  /** Send a message. Resolves `false` only when a total attachment-store failure aborted before sending (so
+   *  the composer can keep the pending thumbnails to retry); `true` otherwise. */
+  send: (text: string, attachments?: PendingAttachment[]) => Promise<boolean>;
+  /** Resolve + cache a stored attachment's data URL for a thumbnail/lightbox (45 §3.3). */
+  loadAttachment: (ref: AttachmentRef) => Promise<void>;
+  /** Export a stored attachment to a file outside the vault (45 §11); returns the saved path or null. */
+  exportAttachment: (ref: AttachmentRef) => Promise<string | null>;
   rename: (id: string, title: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
   setStatus: (id: string, status: SessionStatus) => Promise<void>;
@@ -54,6 +63,7 @@ const EMPTY = {
   activeGuideId: null,
   activeGuideStep: null,
   messages: [] as ChatMessage[],
+  attachmentUrls: {} as Record<string, string>,
   streaming: '',
   sending: false,
   wrapUpSuggested: false,
@@ -82,6 +92,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       activeGuideId: null,
       activeGuideStep: null,
       messages: [],
+      attachmentUrls: {},
       streaming: '',
       runningCostUsd: 0,
       wrapUpSuggested: false,
@@ -106,6 +117,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       activeGuideId: conversation?.guideId ?? null,
       activeGuideStep: conversation?.guideStep ?? null,
       messages: conversation?.messages ?? [],
+      attachmentUrls: {},
       streaming: '',
       runningCostUsd: 0,
       wrapUpSuggested: false,
@@ -114,25 +126,63 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       error: null,
     });
   },
-  send: async (text) => {
+  send: async (text, attachments = []) => {
     const trimmed = text.trim();
-    if (!trimmed || get().sending) return;
+    if ((!trimmed && attachments.length === 0) || get().sending) return true;
     let conversationId = get().activeId;
     if (!conversationId) {
       conversationId = crypto.randomUUID();
       set({ activeId: conversationId });
     }
+    // Store-on-send (45 §3.2/§11): encrypt each pending image to the vault, collecting the refs. A failed
+    // store surfaces a calm error but never blocks the rest; the in-memory preview seeds the thumbnail cache
+    // so the just-sent image renders instantly (no getAttachment round-trip).
+    const refs: AttachmentRef[] = [];
+    const urls: Record<string, string> = {};
+    let storeError: string | null = null;
+    for (const pending of attachments) {
+      const stored = await window.selfos?.conversationStoreAttachment({
+        conversationId,
+        base64: pending.base64,
+        mime: pending.mime,
+        width: pending.width,
+        height: pending.height,
+        bytes: pending.bytes,
+      });
+      if (stored && !('ok' in stored)) {
+        refs.push(stored);
+        urls[stored.id] = pending.previewUrl;
+      } else {
+        storeError = stored && 'message' in stored ? stored.message : 'Couldn’t attach that image.';
+      }
+    }
+    if (refs.length === 0 && !trimmed) {
+      // Nothing could be stored and there's no text — abort and signal failure so the composer keeps the
+      // pending thumbnails for a retry (rather than silently losing the user's images).
+      set({ error: storeError ?? 'Couldn’t attach that image.' });
+      return false;
+    }
     set((state) => ({
       messages: [
         ...state.messages,
-        { role: 'user', content: trimmed, ts: new Date().toISOString() },
+        {
+          role: 'user',
+          content: trimmed,
+          ts: new Date().toISOString(),
+          ...(refs.length > 0 ? { attachments: refs } : {}),
+        },
       ],
+      attachmentUrls: { ...state.attachmentUrls, ...urls },
       streaming: '',
       sending: true,
       wrapUp: null,
-      error: null,
+      error: storeError,
     }));
-    const result = await window.selfos?.chatStream({ conversationId, userText: trimmed });
+    const result = await window.selfos?.chatStream({
+      conversationId,
+      userText: trimmed,
+      ...(refs.length > 0 ? { attachments: refs } : {}),
+    });
     if (result?.ok) {
       set((state) => ({
         messages: result.conversation.messages,
@@ -154,6 +204,29 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     } else {
       set({ sending: false, streaming: '', error: result?.message ?? 'Something went wrong.' });
     }
+    return true; // a turn was attempted (attachments stored) — don't restore pending in the composer
+  },
+  loadAttachment: async (ref) => {
+    if (get().attachmentUrls[ref.id]) return; // already cached (just-sent preview or a prior fetch)
+    const conversationId = get().activeId;
+    if (!conversationId) return;
+    const got = await window.selfos?.conversationGetAttachment({ conversationId, path: ref.path });
+    if (got) {
+      set((state) => ({
+        attachmentUrls: {
+          ...state.attachmentUrls,
+          [ref.id]: `data:${got.mime};base64,${got.dataBase64}`,
+        },
+      }));
+    }
+  },
+  exportAttachment: async (ref) => {
+    const conversationId = get().activeId;
+    if (!conversationId) return null;
+    return (
+      (await window.selfos?.conversationExportAttachment({ conversationId, path: ref.path })) ??
+      null
+    );
   },
   rename: async (id, title) => {
     const trimmed = title.trim();

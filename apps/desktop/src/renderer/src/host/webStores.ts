@@ -5,6 +5,7 @@ import type {
   ImageGenerateOutcome,
 } from '@selfos/core/host';
 import type { SecretStore } from '@selfos/core/host';
+import { flattenContent } from '@selfos/core/host';
 import { fromBase64 } from '@selfos/core/encoding';
 import { DeviceStateSchema, type DeviceState, type DeviceStatePatch } from '@shared/schemas';
 
@@ -132,7 +133,9 @@ export function webFakeClaudeClient(): ClaudeClient {
   return {
     send: () => Promise.resolve('ok'),
     stream: (options, onDelta): Promise<ClaudeStreamResult> => {
-      const userText = options.messages.map((message) => message.content).join('\n');
+      const userText = options.messages
+        .map((message) => flattenContent(message.content))
+        .join('\n');
       // Compatibility variant personalization (08 §3.6/§17.12/§17.14e) asks for a JSON array of objects
       // { prompt, options } — echo each prompt tagged with the OTHER participant + preserve the options, so
       // the preview exercises the full compatibility send (matching the Electron offline fake).
@@ -216,7 +219,9 @@ export function webFakeClaudeClient(): ClaudeClient {
       // The dream-analysis synthesis turn asks for a single JSON object (12-dreams §3.2) — return a
       // valid DreamAnalysis draft so the preview can render the full synthesis card; every other turn
       // streams the canned reflective reply.
-      if (options.messages.some((message) => message.content.includes('JSON object'))) {
+      if (
+        options.messages.some((message) => flattenContent(message.content).includes('JSON object'))
+      ) {
         const draft = JSON.stringify({
           summary: 'A dream of shifting rooms and open skies.',
           emotionalLandscape: 'A mix of **unease** and quiet wonder.',

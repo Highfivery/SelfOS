@@ -14,6 +14,7 @@ import type {
   Answer,
   AnswerType,
   Assignment,
+  AttachmentRef,
   BootState,
   Budget,
   BudgetState,
@@ -162,6 +163,9 @@ export const IpcChannels = {
   budgetStatus: 'budget:status',
   chatStream: 'chat:stream',
   chatChunk: 'chat:chunk', // main → renderer event
+  conversationStoreAttachment: 'conversation:storeAttachment',
+  conversationGetAttachment: 'conversation:getAttachment',
+  conversationExportAttachment: 'conversation:exportAttachment',
   conversationsList: 'conversations:list',
   conversationsGet: 'conversations:get',
   conversationsRename: 'conversations:rename',
@@ -528,10 +532,41 @@ export interface SelfosBridge {
   budgetSetPerson(input: { personId: string; budget: Budget | null }): Promise<void>;
   /** Current budget state for the active person + the app (drives progress + chat warnings). */
   budgetStatus(): Promise<{ person: BudgetState; app: BudgetState }>;
-  /** Send a chat message: streams reply chunks via `onChatChunk`, resolves with the final turn. */
-  chatStream(input: { conversationId: string; userText: string }): Promise<ChatTurnResult>;
+  /** Send a chat message: streams reply chunks via `onChatChunk`, resolves with the final turn. The optional
+   *  image `attachments` (45) are stored refs from `conversationStoreAttachment`, re-read host-side per turn. */
+  chatStream(input: {
+    conversationId: string;
+    userText: string;
+    attachments?: AttachmentRef[];
+  }): Promise<ChatTurnResult>;
   /** Subscribe to streamed reply chunks; returns an unsubscribe function. */
   onChatChunk(listener: (delta: string) => void): () => void;
+  /**
+   * Encrypt + store an image attachment (base64 in) for a Session message (45 §6) → an `AttachmentRef`, or a
+   * calm reject. mime + size re-validated in main; scoped to the active person's conversation.
+   */
+  conversationStoreAttachment(input: {
+    conversationId: string;
+    base64: string;
+    mime: string;
+    width?: number;
+    height?: number;
+    bytes?: number;
+  }): Promise<
+    | AttachmentRef
+    | { ok: false; reason: 'UNSUPPORTED' | 'TOO_LARGE' | 'NOT_FOUND'; message: string }
+  >;
+  /** Read + decrypt a stored attachment as base64 for a thumbnail/lightbox; null if absent/out-of-bounds. */
+  conversationGetAttachment(input: {
+    conversationId: string;
+    path: string;
+  }): Promise<{ mime: string; dataBase64: string } | null>;
+  /** Export a stored attachment to a file the user chooses OUTSIDE the encrypted vault (45 §11). Saved path,
+   *  or null if cancelled. */
+  conversationExportAttachment(input: {
+    conversationId: string;
+    path: string;
+  }): Promise<string | null>;
   /** The active person's conversations (newest first), metadata only. */
   conversationsList(): Promise<ConversationMeta[]>;
   /** Load a full conversation transcript. */
@@ -1057,6 +1092,7 @@ export type {
   AlignmentResult,
   Answer,
   Assignment,
+  AttachmentRef,
   BootState,
   Budget,
   BudgetState,

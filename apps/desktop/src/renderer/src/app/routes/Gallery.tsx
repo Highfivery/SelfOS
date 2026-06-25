@@ -11,10 +11,12 @@ import {
 } from 'lucide-react';
 import {
   AdminOnlyBadge,
+  AttachmentThumb,
   ScopeBadge,
   OneTimeTip,
   Button,
   Card,
+  Lightbox,
   Field,
   FrequencyBars,
   Heading,
@@ -46,6 +48,12 @@ import { GuidedExerciseCard } from './sessions/GuidedExerciseCard';
 import { GuidedStepper } from './sessions/GuidedStepper';
 import { NotificationCenter } from '../notifications/NotificationCenter';
 import styles from './Gallery.module.css';
+
+// Two inline SVG data URLs so the attachment showcase never touches the network.
+const GALLERY_SAMPLE_IMAGE =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Crect width='160' height='160' fill='%234f8a8b'/%3E%3Ccircle cx='80' cy='80' r='44' fill='%23fbd46d'/%3E%3C/svg%3E";
+const GALLERY_SAMPLE_IMAGE_ALT =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Crect width='160' height='160' fill='%238a4f6d'/%3E%3Crect x='40' y='40' width='80' height='80' fill='%23d4e09b'/%3E%3C/svg%3E";
 
 const SAMPLE_NOTIFICATIONS: Notification[] = [
   {
@@ -123,6 +131,7 @@ export function Gallery(): JSX.Element {
   const [scope, setScope] = useState<RelationshipType[]>(['partner']);
   const [align, setAlign] = useState<Align>('center');
   const [textScale, setTextScale] = useState(100);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   return (
     <div className={styles.gallery}>
@@ -300,6 +309,36 @@ export function Gallery(): JSX.Element {
                 with the Admin marker when both appear.
               </Text>
             </Inline>
+          </Stack>
+        </Section>
+
+        <Section title="Attachments (Sessions)">
+          <Stack gap={3}>
+            <Inline gap={2} wrap>
+              <AttachmentThumb src={GALLERY_SAMPLE_IMAGE} alt="Sample attachment" />
+              <AttachmentThumb
+                src={GALLERY_SAMPLE_IMAGE}
+                alt="Click to open the lightbox"
+                onActivate={() => setLightboxIndex(0)}
+              />
+              <AttachmentThumb src={null} alt="A missing/unavailable attachment" />
+            </Inline>
+            <Text tone="secondary" size="sm">
+              Image attachments on a Session message — a thumbnail grid (clickable opens a
+              focus-trapped lightbox; a missing one shows the calm placeholder).
+            </Text>
+            {lightboxIndex !== null ? (
+              <Lightbox
+                images={[
+                  { src: GALLERY_SAMPLE_IMAGE, alt: 'Sample 1 of 2' },
+                  { src: GALLERY_SAMPLE_IMAGE_ALT, alt: 'Sample 2 of 2' },
+                ]}
+                index={lightboxIndex}
+                onClose={() => setLightboxIndex(null)}
+                onIndexChange={setLightboxIndex}
+                onSave={() => {}}
+              />
+            ) : null}
           </Stack>
         </Section>
 

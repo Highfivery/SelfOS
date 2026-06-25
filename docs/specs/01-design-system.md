@@ -164,7 +164,11 @@ this is the v1 inventory:
 - **Typography:** `Heading`, `Text`, `Prose` (Lora long-form).
 - **Forms:** `Button` (primary/secondary/ghost/danger), `IconButton`, `TextInput`, `Textarea`,
   `Select`, `Checkbox`, `Radio`, `Switch`, `Slider`, `Field` (label/help/error wrapper).
-- **Surfaces:** `Card`, `Panel`, `Modal`/`Dialog`, `Popover`, `Tooltip`, `Toast`.
+- **Surfaces:** `Card`, `Panel`, `Modal`/`Dialog`, `Popover`, `Tooltip`, `Toast`, `Lightbox` (a focus-trapped
+  full-image overlay — Esc/scrim/close to dismiss, prev/next for several, an optional "Save image" action;
+  [`45`](45-session-attachments.md) §3.3).
+- **Media:** `AttachmentThumb` — a square image thumbnail (a `src` data URL or a calm "image unavailable"
+  placeholder; opens a `Lightbox` when interactive; [`45`](45-session-attachments.md) §3.3).
 - **Navigation:** `Tabs`, `Menu`, `SidebarItem`, `Breadcrumb`.
 - **Feedback / status:** `Badge`, `AdminOnlyBadge` (the "Admin only" lock pill — marks any
   control/section only admins can see; CLAUDE.md §12), `ScopeBadge` (a quiet borderless "Synced" /

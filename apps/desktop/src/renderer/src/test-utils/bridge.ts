@@ -148,7 +148,14 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
           createdAt: 'now',
           updatedAt: 'now',
           messages: [
-            { role: 'user', content: input.userText, ts: 'now' },
+            {
+              role: 'user',
+              content: input.userText,
+              ts: 'now',
+              ...(input.attachments && input.attachments.length > 0
+                ? { attachments: input.attachments }
+                : {}),
+            },
             { role: 'assistant', content: 'I hear you.', ts: 'now' },
           ],
         },
@@ -167,6 +174,23 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         },
       }),
     onChatChunk: () => () => {},
+    conversationStoreAttachment: (input) =>
+      Promise.resolve({
+        id: 'att-1',
+        kind: 'image',
+        mime: input.mime,
+        path: `people/owner-1/conversations/${input.conversationId}/attachments/att-1.enc`,
+        ...(input.width !== undefined ? { width: input.width } : {}),
+        ...(input.height !== undefined ? { height: input.height } : {}),
+        ...(input.bytes !== undefined ? { bytes: input.bytes } : {}),
+      }),
+    conversationGetAttachment: () =>
+      Promise.resolve({
+        mime: 'image/png',
+        dataBase64:
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+      }),
+    conversationExportAttachment: () => Promise.resolve('/tmp/session-image.png'),
     conversationsList: () => Promise.resolve([]),
     conversationsGet: () => Promise.resolve(null),
     conversationsRename: () => Promise.resolve(),

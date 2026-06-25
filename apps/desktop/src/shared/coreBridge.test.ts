@@ -4,6 +4,7 @@ import { memFileSystem } from '@selfos/core/host';
 import { loadMasterKey, MASTER_KEY_ID } from '@selfos/core/crypto';
 import { toBase64 } from '@selfos/core/encoding';
 import type { ClaudeClient, FileSystem, ImageClient, SecretStore } from '@selfos/core/host';
+import { flattenContent } from '@selfos/core/host';
 import {
   contentKeyFromFragment,
   drain as kvDrain,
@@ -178,7 +179,9 @@ function makeHost(): {
       }
       // Dream synthesis asks for a single JSON object — return a valid DreamAnalysis draft so the
       // synthesize path can parse it; every other turn just streams a short reply.
-      const wantsJson = options.messages.some((m) => m.content.includes('JSON object'));
+      const wantsJson = options.messages.some((m) =>
+        flattenContent(m.content).includes('JSON object'),
+      );
       const text = wantsJson
         ? JSON.stringify({
             summary: 'A dream of shifting rooms.',
@@ -646,7 +649,7 @@ describe('createCoreBridge', () => {
     host.host.claude = {
       send: () => Promise.resolve(''),
       stream: (options, onDelta) => {
-        const last = options.messages.at(-1)?.content ?? '';
+        const last = flattenContent(options.messages.at(-1)?.content ?? '');
         if (last.includes('summarize this session')) {
           const text = JSON.stringify({
             summary: 'A check-in about a new job.',
@@ -707,7 +710,7 @@ describe('createCoreBridge', () => {
     host.host.claude = {
       send: () => Promise.resolve(''),
       stream: (options, onDelta) => {
-        const last = options.messages.at(-1)?.content ?? '';
+        const last = flattenContent(options.messages.at(-1)?.content ?? '');
         if (last.includes('summarize this session')) {
           // The same paid pass was handed the unexplored-areas context (29 §5.2).
           expect(options.system ?? '').toContain('Profile areas they have not explored yet');
@@ -865,7 +868,7 @@ describe('createCoreBridge', () => {
     host.host.claude = {
       send: () => Promise.resolve(''),
       stream: (options, onDelta) => {
-        const last = options.messages.at(-1)?.content ?? '';
+        const last = flattenContent(options.messages.at(-1)?.content ?? '');
         if (last.includes('Recent reflections across this person')) {
           return Promise.resolve({
             text: JSON.stringify({
@@ -980,6 +983,83 @@ describe('createCoreBridge', () => {
     expect(await bridge.sessionsEndAndSummarize({ conversationId: 'c1' })).toMatchObject({
       ok: false,
       reason: 'ERROR',
+    });
+  });
+
+  describe('session attachments (45 §6)', () => {
+    const base64 = toBase64(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3, 4]));
+
+    it('store → get round-trips (mime sniffed), exports outside the vault, and is denied without sessions.own', async () => {
+      const { bridge } = await freshOwner();
+      const ref = await bridge.conversationStoreAttachment({
+        conversationId: 'conv1',
+        base64,
+        mime: 'image/png',
+      });
+      if ('ok' in ref) throw new Error('expected a ref');
+      expect(ref.path).toMatch(/^people\/.+\/conversations\/conv1\/attachments\/.+\.enc$/);
+
+      const got = await bridge.conversationGetAttachment({
+        conversationId: 'conv1',
+        path: ref.path,
+      });
+      expect(got).toEqual({ mime: 'image/png', dataBase64: base64 });
+      expect(
+        await bridge.conversationExportAttachment({ conversationId: 'conv1', path: ref.path }),
+      ).toContain('/tmp/session-image.');
+
+      // A guest (no sessions.own) is denied store / get / export — the bridge is the trust boundary.
+      const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
+      await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+      await bridge.sessionSetActive({ personId: guest.id });
+      expect(
+        await bridge.conversationStoreAttachment({
+          conversationId: 'conv1',
+          base64,
+          mime: 'image/png',
+        }),
+      ).toMatchObject({ ok: false, reason: 'NOT_FOUND' });
+      expect(
+        await bridge.conversationGetAttachment({ conversationId: 'conv1', path: ref.path }),
+      ).toBeNull();
+      expect(
+        await bridge.conversationExportAttachment({ conversationId: 'conv1', path: ref.path }),
+      ).toBeNull();
+    });
+
+    it('rejects reading/exporting an attachment addressed via a DIFFERENT conversation (prefix re-check)', async () => {
+      const { bridge } = await freshOwner();
+      const ref = await bridge.conversationStoreAttachment({
+        conversationId: 'conv1',
+        base64,
+        mime: 'image/png',
+      });
+      if ('ok' in ref) throw new Error('expected a ref');
+      // Same file, but a path that doesn't sit under conv2's attachments dir → null.
+      expect(
+        await bridge.conversationGetAttachment({ conversationId: 'conv2', path: ref.path }),
+      ).toBeNull();
+      expect(
+        await bridge.conversationExportAttachment({ conversationId: 'conv2', path: ref.path }),
+      ).toBeNull();
+    });
+
+    it('rejects a traversal conversationId on store (no path escape) and re-validates mime', async () => {
+      const { bridge } = await freshOwner();
+      await expect(
+        bridge.conversationStoreAttachment({
+          conversationId: '../../config',
+          base64,
+          mime: 'image/png',
+        }),
+      ).rejects.toThrow();
+      expect(
+        await bridge.conversationStoreAttachment({
+          conversationId: 'conv1',
+          base64,
+          mime: 'image/heic',
+        }),
+      ).toMatchObject({ ok: false, reason: 'UNSUPPORTED' });
     });
   });
 

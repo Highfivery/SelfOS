@@ -4,9 +4,27 @@
  * (the Anthropic SDK in Electron's main process; a browser-mode SDK / native-HTTP plugin on iOS, §11 Q1).
  * The API key is passed per call and never reaches the renderer.
  */
+/**
+ * A Claude message content block (45-session-attachments §5.3). A message's `content` is either a plain
+ * string (text-only, today's behaviour) or an array of blocks mixing text + base64 images for vision. All
+ * shipped Claude 4.x models support vision; the block shapes mirror the Anthropic SDK's text/image params.
+ */
+export type ContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } };
+
 export interface ClaudeMessage {
   role: 'user' | 'assistant';
-  content: string;
+  content: string | ContentBlock[];
+}
+
+/** Flatten a message's content to its text (drops image blocks) — for the offline fakes + any text-only use. */
+export function flattenContent(content: string | ContentBlock[]): string {
+  if (typeof content === 'string') return content;
+  return content
+    .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
+    .map((block) => block.text)
+    .join('');
 }
 
 export interface ClaudeSendOptions {

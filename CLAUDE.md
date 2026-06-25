@@ -389,6 +389,37 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-25 — **Build (Session image attachments — SPEC 45 BUILT; on `feat/session-attachments`, a worktree,
+  PR pending).** Lets a person attach images to a Session message so the AI coach can SEE them (Claude vision) —
+  the issue-#63 "show the coach a screenshot" affordance. **§11 decisions asked first (all confirmed):** 5
+  images/message + ~1568px downscale + no session cap; **store-on-send** (no orphans); **export, guided sessions,
+  AND the iOS picker INCLUDED** (dream-analysis chat NOT). Built: a reusable **`@selfos/core/media`** core
+  (`storeMedia`/`getMedia`/`deleteMedia` behind a caller-supplied path guard + `sniffImageMime` +
+  `ALLOWED_IMAGE_MIME`/`MAX_IMAGE_BYTES`, the 08 §13.2 `encryptBytes` envelope generalized — surfaced only in
+  Sessions, §12); additive `ChatMessage.attachments` (`AttachmentRefSchema`, **no schemaVersion bump**); widened
+  `ClaudeMessage.content` to `string | ContentBlock[]` + a `flattenContent` helper, with BOTH transports
+  (`anthropicClient` + the iOS `browserClaudeClient`) mapping image blocks to the SDK; `chatService`'s async
+  vision mapper that **re-reads stored bytes host-side every turn** (Claude is stateless) and **skips a
+  missing/corrupt attachment** so the turn still completes; metered as the existing `chat` event (no new usage
+  type); `deleteConversation` purges the sibling attachments folder. IPC seam
+  (`conversation:storeAttachment`/`:getAttachment`/`:exportAttachment` + `chatStream attachments?`), gated
+  `sessions.own` + **path-scoped to the active person's named conversation in the bridge** (a path can't reach
+  another person's/conversation's attachment); mime+size re-validated in main; the 5-cap re-enforced server-side.
+  Renderer: client-side `downscaleImage` (canvas re-encode also strips EXIF), an **opt-in** `Composer`
+  (`allowAttachments`) with paste/drop/file-picker + pending thumbnails + calm 5-cap/unsupported errors (so the
+  shared Composer stays text-only on dream/intake surfaces), `MessageAttachments` grid, the `AttachmentThumb` +
+  `Lightbox` design-system primitives (→ `/gallery`), `conversationStore` store-on-send + an attachment-url cache
+  - "Save image" export. Code-review fixes applied. Gate green: typecheck (all packages), lint, format, **740
+    core + 794 desktop** unit (+media core, +conversation attachments, +vision mapping both clients + fake flatten,
+    +chatService vision/re-supply/missing-skip, +`scaledDimensions`, +Composer/AttachmentThumb/Lightbox/
+    MessageAttachments RTL), + an E2E (attach → AES-GCM envelope on disk + PNG-magic decrypt → bubble thumbnail →
+    lightbox + export-outside-vault → delete-purges-folder → 390px guard); sessions/guided E2E green. Synced spec
+    45 (→ Built) + 05 (ChatMessage/ClaudeMessage amendment) + 01 (Lightbox/AttachmentThumb). Did the work in a
+    `git worktree` since a concurrent agent is touching the shared IPC seam files (§11.1). **Lesson: widening a
+    shared host type (`ClaudeMessage.content` → a union) ripples into every inline test fake that read `.content`
+    as a string — a `flattenContent(content)` helper fixes them all; Electron's `createImageBitmap` rejects some
+    hand-picked 1×1 PNG blobs, so build a real PNG (zlib IDAT + CRC32) for an attachment E2E; and the strict CSP
+    blocks `fetch('data:…')` but `img-src 'self' data:` lets data-URL thumbnails render.**
 - 2026-06-24 — **Fix (Questionnaires AI "Suggested" STILL hit "The suggestion set came back in an unexpected
   shape" — a SECOND root cause spec 37's fix missed; user-reported; on `fix/gap-finder-suggestion-shape`).**
   Diagnosed (not assumed) by tracing the parse path: the MALFORMED message fires when the gap-finder's Claude

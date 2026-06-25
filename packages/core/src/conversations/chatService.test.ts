@@ -1,13 +1,19 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { generateMasterKey } from '../crypto';
-import type { ClaudeClient } from '../host';
+import { toBase64 } from '../encoding';
+import type { ClaudeClient, ClaudeMessage } from '../host';
 import { memFileSystem } from '../host/memFileSystem';
-import type { Person } from '../schemas';
+import type { AttachmentRef, Person } from '../schemas';
 import { savePerson } from '../people';
 import { queryUsage, recordUsage, setPersonBudget } from '../usage';
 import { saveInsight } from '../insights';
 import type { Insight } from '../schemas';
-import { getConversation, listConversations, saveConversation } from './conversationService';
+import {
+  getConversation,
+  listConversations,
+  saveConversation,
+  storeConversationAttachment,
+} from './conversationService';
 import { runChatTurn } from './chatService';
 
 const key = generateMasterKey();
@@ -523,5 +529,128 @@ describe('runChatTurn — free-form topic classifier (28 §13.2)', () => {
     const result = await runChatTurn(turn({ client, userText: 'I am stressed about money' }));
     expect(result.ok).toBe(true); // the reply still lands
     expect((await getConversation(fs, key, 'p1', 'c1'))?.topicLifeAreas).toBeUndefined();
+  });
+});
+
+describe('runChatTurn — image attachments (45 §6.1 vision)', () => {
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 13, 10, 26, 10, 42]);
+
+  async function storeRef(conversationId: string): Promise<AttachmentRef> {
+    const ref = await storeConversationAttachment(fs, key, 'p1', conversationId, png, 'image/png');
+    if ('ok' in ref) throw new Error('store failed');
+    return ref;
+  }
+
+  function capturing(captured: { messages: ClaudeMessage[] }): ClaudeClient {
+    return {
+      send: () => Promise.resolve('ok'),
+      stream: (options, onDelta) => {
+        captured.messages = options.messages;
+        onDelta('I see it.');
+        return Promise.resolve({
+          text: 'I see it.',
+          usage: { inputTokens: 200, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+  }
+
+  it('assembles a vision content-block array with the re-read base64 + meters as a chat event', async () => {
+    await base();
+    const ref = await storeRef('c1');
+    const captured = { messages: [] as ClaudeMessage[] };
+    const result = await runChatTurn({
+      fs,
+      key,
+      client: capturing(captured),
+      apiKey: 'sk-test',
+      model: 'claude-sonnet-4-6',
+      personId: 'p1',
+      conversationId: 'c1',
+      userText: 'what do you make of this?',
+      attachments: [ref],
+      onDelta: () => {},
+      now,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.usage.type).toBe('chat'); // no new usage type
+
+    // The (only) user message went to Claude as text + an image block carrying the stored bytes' base64.
+    const userMsg = captured.messages.find((m) => m.role === 'user');
+    expect(Array.isArray(userMsg?.content)).toBe(true);
+    const blocks = userMsg?.content as Exclude<ClaudeMessage['content'], string>;
+    expect(blocks[0]).toEqual({ type: 'text', text: 'what do you make of this?' });
+    expect(blocks[1]).toEqual({
+      type: 'image',
+      source: { type: 'base64', media_type: 'image/png', data: toBase64(png) },
+    });
+
+    // Persisted on the transcript.
+    const saved = await getConversation(fs, key, 'p1', 'c1');
+    expect(saved?.messages[0]?.attachments?.[0]?.id).toBe(ref.id);
+  });
+
+  it('re-reads an earlier message’s attachment on a later turn (stateless re-supply)', async () => {
+    await base();
+    const ref = await storeRef('c1');
+    await runChatTurn({
+      fs,
+      key,
+      client: capturing({ messages: [] }),
+      apiKey: 'sk-test',
+      model: 'claude-sonnet-4-6',
+      personId: 'p1',
+      conversationId: 'c1',
+      userText: 'look at this',
+      attachments: [ref],
+      onDelta: () => {},
+      now,
+    });
+    // A later, text-only turn must STILL re-supply the earlier image (Claude is stateless).
+    const captured = { messages: [] as ClaudeMessage[] };
+    await runChatTurn({
+      fs,
+      key,
+      client: capturing(captured),
+      apiKey: 'sk-test',
+      model: 'claude-sonnet-4-6',
+      personId: 'p1',
+      conversationId: 'c1',
+      userText: 'and now?',
+      onDelta: () => {},
+      now,
+    });
+    const firstUser = captured.messages[0];
+    expect(Array.isArray(firstUser?.content)).toBe(true);
+    const blocks = firstUser?.content as Exclude<ClaudeMessage['content'], string>;
+    expect(blocks.some((b) => b.type === 'image')).toBe(true);
+  });
+
+  it('skips a missing/corrupt attachment so the turn still completes', async () => {
+    await base();
+    const ghost: AttachmentRef = {
+      id: 'gone',
+      kind: 'image',
+      mime: 'image/png',
+      path: 'people/p1/conversations/c1/attachments/gone.enc', // never stored
+    };
+    const captured = { messages: [] as ClaudeMessage[] };
+    const result = await runChatTurn({
+      fs,
+      key,
+      client: capturing(captured),
+      apiKey: 'sk-test',
+      model: 'claude-sonnet-4-6',
+      personId: 'p1',
+      conversationId: 'c1',
+      userText: 'this should still send',
+      attachments: [ghost],
+      onDelta: () => {},
+      now,
+    });
+    expect(result.ok).toBe(true); // degrades to text, never throws
+    // No image block survived; the user message fell back to plain text.
+    const userMsg = captured.messages.find((m) => m.role === 'user');
+    expect(userMsg?.content).toBe('this should still send');
   });
 });

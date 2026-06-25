@@ -473,11 +473,31 @@ export const BudgetsConfigSchema = z.object({
 });
 export type BudgetsConfig = z.infer<typeof BudgetsConfigSchema>;
 
+/**
+ * A user-attached image on a Session message (45-session-attachments §4.2). Stored ENCRYPTED at
+ * `people/<personId>/conversations/<conversationId>/attachments/<uuid>.enc`; the message references it by
+ * this ref. `content` stays a plain string — the Claude vision content-block assembly is a runtime mapping
+ * (§6.1), never a stored shape. Bytes never live in the transcript; `path` is used only host-side to re-read.
+ */
+export const AttachmentRefSchema = z.object({
+  id: z.string().min(1), // the attachment uuid (also the basename of <uuid>.enc)
+  kind: z.literal('image'), // forward-compat discriminant; only 'image' in v1 (PDFs/text are a non-goal)
+  mime: z.string().min(1), // re-validated against ALLOWED_IMAGE_MIME in main
+  path: z.string().min(1), // vault-relative path to <uuid>.enc — host-side re-read only
+  width: z.number().int().positive().optional(), // stored (downscaled) pixel dimensions, for thumbnail layout
+  height: z.number().int().positive().optional(),
+  bytes: z.number().int().nonnegative().optional(), // stored byte length (display / sanity)
+});
+export type AttachmentRef = z.infer<typeof AttachmentRefSchema>;
+
 /** Conversations (05-conversations) — encrypted per-person chat transcripts. */
 export const ChatMessageSchema = z.object({
   role: z.enum(['user', 'assistant']),
   content: z.string(),
   ts: z.string(),
+  // 45-session-attachments §4.2 — additive-optional image attachments on a (user) message. Absent ⇒ a plain
+  // text message (today's behaviour) — NO Conversation.schemaVersion bump, NO migration (the additive habit).
+  attachments: z.array(AttachmentRefSchema).optional(),
 });
 export type ChatMessage = z.infer<typeof ChatMessageSchema>;
 

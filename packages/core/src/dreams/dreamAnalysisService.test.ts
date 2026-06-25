@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { generateMasterKey } from '../crypto';
 import { memFileSystem } from '../host/memFileSystem';
 import type { ClaudeClient } from '../host';
+import { flattenContent } from '../host';
 import type { Dream } from '../schemas';
 import { listConversations } from '../conversations';
 import { getInsight, listInsightsForPerson, saveInsight, summarizeForContext } from '../insights';
@@ -49,7 +50,7 @@ function fakeClient(over: { synthesisText?: string; reply?: string } = {}): Clau
   return {
     send: () => Promise.resolve(''),
     stream: (options, onDelta) => {
-      const last = options.messages.at(-1)?.content ?? '';
+      const last = flattenContent(options.messages.at(-1)?.content ?? '');
       const text = last.includes('JSON object')
         ? (over.synthesisText ?? JSON.stringify(VALID_DRAFT))
         : (over.reply ?? 'What feeling stayed with you from the dream?');

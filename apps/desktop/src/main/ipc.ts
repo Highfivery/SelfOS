@@ -404,11 +404,17 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IpcChannels.chatStream, async (event, raw: unknown) => {
     chatSender = event.sender;
     try {
-      return await bridge.chatStream(raw as { conversationId: string; userText: string });
+      return await bridge.chatStream(
+        raw as { conversationId: string; userText: string; attachments?: never },
+      );
     } finally {
       chatSender = undefined;
     }
   });
+  // Session image attachments (45) — thin delegates; the bridge owns validation + active-person scoping.
+  handle(IpcChannels.conversationStoreAttachment, bridge.conversationStoreAttachment);
+  handle(IpcChannels.conversationGetAttachment, bridge.conversationGetAttachment);
+  handle(IpcChannels.conversationExportAttachment, bridge.conversationExportAttachment);
 
   // dreamAnalyzeTurn streams the guided-analysis reply on its own channel (kept separate from chat so the
   // Sessions and Dreams streams never cross). Same per-turn sender binding + reset as chatStream.

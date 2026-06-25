@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { generateMasterKey } from '../crypto';
 import { memFileSystem } from '../host/memFileSystem';
-import type { ClaudeClient } from '../host';
+import type { ClaudeClient, ClaudeMessage } from '../host';
+import { flattenContent } from '../host';
 import { factSharedWithViewer, type Insight, type Person } from '../schemas';
 import { listConversations } from '../conversations';
 import { getInsight, saveInsight, summarizeForContext, updateInsight } from '../insights';
@@ -45,7 +46,7 @@ function fakeClient(
     portrait?: unknown;
     portraitText?: string;
     capture?: (s: string) => void;
-    captureMessages?: (m: { role: string; content: string }[]) => void;
+    captureMessages?: (m: ClaudeMessage[]) => void;
     captureOptions?: (o: { maxTokens?: number; extendedThinking?: boolean }) => void;
   } = {},
 ): ClaudeClient {
@@ -56,7 +57,7 @@ function fakeClient(
       over.capture?.(options.system);
       over.captureMessages?.(options.messages);
       over.captureOptions?.(options);
-      const last = options.messages.at(-1)?.content ?? '';
+      const last = flattenContent(options.messages.at(-1)?.content ?? '');
       let text: string;
       if (last.includes('closing portrait'))
         text = over.portraitText ?? JSON.stringify(over.portrait ?? PORTRAIT);
@@ -278,10 +279,10 @@ describe('intakeService', () => {
     expect(sec?.answers.activities).toEqual(activities); // the partial matrix is kept, not dropped
 
     // Synthesis feeds the answers to the model as readable LABELS, not bare "1/5" or "[object Object]".
-    let messages: { role: string; content: string }[] = [];
+    let messages: ClaudeMessage[] = [];
     const client = fakeClient({ captureMessages: (m) => (messages = m) });
     await synthesizeIntake(synth(fs, client));
-    const body = messages.map((m) => m.content).join('\n');
+    const body = messages.map((m) => flattenContent(m.content)).join('\n');
     expect(body).toContain(`${r0}: Love it`);
     expect(body).toContain(`${r1}: Hard no`);
     expect(body).not.toContain('[object Object]');
@@ -299,10 +300,10 @@ describe('intakeService', () => {
     };
     await submitSectionForm(fs, key, 'p1', 'intimacy', { activities }, NOW);
 
-    let messages: { role: string; content: string }[] = [];
+    let messages: ClaudeMessage[] = [];
     const client = fakeClient({ captureMessages: (m) => (messages = m) });
     await synthesizeIntake(synth(fs, client));
-    const body = messages.map((m) => m.content).join('\n');
+    const body = messages.map((m) => flattenContent(m.content)).join('\n');
     // The resolved rows map back to their labels — never a straight man's "blowjob"-giving variant.
     expect(body).toContain('Receiving oral (blowjob): Love it');
     expect(body).toContain('Going down on her (oral): Like it');
@@ -325,10 +326,10 @@ describe('intakeService', () => {
     // The edit: gender → Woman (drawnTo still Women → now uncertain pairing → neutral rows).
     await submitSectionForm(fs, key, 'p1', 'basics', { gender: 'Woman' }, NOW);
 
-    let messages: { role: string; content: string }[] = [];
+    let messages: ClaudeMessage[] = [];
     const client = fakeClient({ captureMessages: (m) => (messages = m) });
     await synthesizeIntake(synth(fs, client));
-    const body = messages.map((m) => m.content).join('\n');
+    const body = messages.map((m) => flattenContent(m.content)).join('\n');
     expect(body).toContain('Receiving oral (blowjob): Love it'); // orphaned key still surfaces with its label
   });
 
@@ -529,9 +530,12 @@ describe('intakeService', () => {
     const client: ClaudeClient = {
       send: () => Promise.resolve(''),
       stream: (options, onDelta) => {
-        const last = options.messages.at(-1)?.content ?? '';
+        const last = flattenContent(options.messages.at(-1)?.content ?? '');
         if (last.includes('closing portrait')) {
-          captured = options.messages.map((m) => ({ role: m.role, content: m.content }));
+          captured = options.messages.map((m) => ({
+            role: m.role,
+            content: flattenContent(m.content),
+          }));
           const text = JSON.stringify({
             portrait: 'A thoughtful person.',
             facts: [
@@ -589,8 +593,8 @@ describe('intakeService', () => {
     const client: ClaudeClient = {
       send: () => Promise.resolve(''),
       stream: (options, onDelta) => {
-        if ((options.messages.at(-1)?.content ?? '').includes('closing portrait')) {
-          captured = options.messages.map((m) => m.content).join('\n');
+        if (flattenContent(options.messages.at(-1)?.content ?? '').includes('closing portrait')) {
+          captured = options.messages.map((m) => flattenContent(m.content)).join('\n');
         }
         const text = JSON.stringify({ portrait: 'p', facts: [], crisisFlag: false });
         onDelta(text);

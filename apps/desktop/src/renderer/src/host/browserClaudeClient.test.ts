@@ -82,6 +82,48 @@ describe('browserClaudeClient', () => {
     });
   });
 
+  it('maps an image content block to the SDK base64 image param (45 §5.3)', async () => {
+    let captured: unknown;
+    stream.mockImplementation((args: { messages: unknown }): StreamMock => {
+      captured = args.messages;
+      return {
+        on: () => {},
+        finalMessage: () =>
+          Promise.resolve({
+            content: [{ type: 'text', text: 'ok' }],
+            usage: { input_tokens: 1, output_tokens: 1 },
+          }),
+      };
+    });
+    await browserClaudeClient().stream(
+      {
+        apiKey: 'sk',
+        model: 'm',
+        system: '',
+        maxTokens: 16,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'see this' },
+              { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'QUFB' } },
+            ],
+          },
+        ],
+      },
+      () => {},
+    );
+    expect(captured).toEqual([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'see this' },
+          { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'QUFB' } },
+        ],
+      },
+    ]);
+  });
+
   it('defaults missing cache usage fields to 0', async () => {
     stream.mockImplementation(
       (): StreamMock => ({

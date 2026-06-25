@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/Highfivery/SelfOS/compare/v0.9.0...v0.9.1) (2026-06-25)
+
+
+### Bug Fixes
+
+* **questionnaires:** gap-finder "unexpected shape" — name answer types + tolerant inner parse ([#60](https://github.com/Highfivery/SelfOS/issues/60)) ([124b0ba](https://github.com/Highfivery/SelfOS/commit/124b0ba6351a5bc07707f6857e41746df925c212))
+
 ## [0.9.0](https://github.com/Highfivery/SelfOS/compare/v0.8.1...v0.9.0) (2026-06-24)
 
 

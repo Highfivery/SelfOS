@@ -1143,6 +1143,108 @@ describe('createCoreBridge', () => {
     expect(JSON.stringify(result)).not.toContain('secret codeword');
   });
 
+  it('recipient-first saved suggestions (§18): generate tailors + accumulates, list reads with no spend, delete removes, non-household is denied', async () => {
+    const { host, bridge, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    // Notes give the gap-finder substantive context (else the §11 thin-context pre-call guard would short-circuit).
+    const mara = await bridge.peopleSave({
+      displayName: 'Mara',
+      isSubject: true,
+      tags: [],
+      notes: 'Enjoys cooking together; just started a new job.',
+    });
+
+    // A questionnaire ALREADY asked of Mara — its distinctive prompt must reach the model as de-dup grounding.
+    const prior = await bridge.questionnairesSave({
+      title: 'Earlier',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: mara.id },
+      questions: [
+        { id: 'p1', type: 'shortText', prompt: 'What is your secret codeword?', required: true },
+      ],
+    });
+    await bridge.assignmentsCreate({ questionnaireId: prior.id });
+
+    // Capture what reaches the model; return DISTINCT ideas on a "Suggest more" (avoid-list present) call.
+    let sentUserText = '';
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        sentUserText = options.messages.map((m) => m.content).join('\n');
+        const second = sentUserText.includes('ALREADY proposed these');
+        const titles = second ? ['Deeper dive'] : ['First idea', 'Second idea'];
+        const json = JSON.stringify(
+          titles.map((t) => ({
+            title: t,
+            type: 'general',
+            rationale: 'r',
+            questions: [{ type: 'yesNo', prompt: `${t}?` }],
+          })),
+        );
+        onDelta(json);
+        return Promise.resolve({
+          text: json,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+
+    // First generate: tailored to Mara, fed her history as avoid-only grounding, and accumulates 2.
+    const first = await bridge.questionnaireSuggestionsGenerate({ recipientPersonId: mara.id });
+    expect(first.ok).toBe(true);
+    expect(first.added).toBe(2);
+    expect(first.saved?.map((s) => s.title)).toEqual(['First idea', 'Second idea']);
+    expect(sentUserText).toContain('specifically for Mara'); // recipient-first tailoring
+    expect(sentUserText).toContain('What is your secret codeword?'); // their history reaches the model
+    expect(sentUserText).toMatch(/never quote, restate, reference/i); // the never-reveal safety clause
+    // The recipient's private prior content is NEVER returned to the author — only generated ideas.
+    expect(JSON.stringify(first.saved)).not.toContain('secret codeword');
+
+    // List reads the persisted set (no AI spend — the captured text doesn't change).
+    sentUserText = '';
+    const listed = await bridge.questionnaireSuggestionsList({ recipientPersonId: mara.id });
+    expect(listed.map((s) => s.title)).toEqual(['First idea', 'Second idea']);
+    expect(sentUserText).toBe(''); // no model call on a read
+
+    // "Suggest more" accumulates a genuinely NEW idea (prior titles fed as avoid).
+    const more = await bridge.questionnaireSuggestionsGenerate({ recipientPersonId: mara.id });
+    expect(more.added).toBe(1);
+    expect(more.saved?.map((s) => s.title)).toEqual(['Deeper dive', 'First idea', 'Second idea']);
+    expect(sentUserText).toMatch(/ALREADY proposed these/i);
+    expect(sentUserText).toContain('First idea'); // the saved titles are the avoid list
+
+    // Delete one — the rest remain.
+    const target = more.saved?.find((s) => s.title === 'First idea');
+    const remaining = await bridge.questionnaireSuggestionDelete({
+      recipientPersonId: mara.id,
+      suggestionId: target?.id ?? 'x',
+    });
+    expect(remaining.map((s) => s.title)).toEqual(['Deeper dive', 'Second idea']);
+
+    // A non-household recipient id is refused on the persisted path (no spend on an untailorable target).
+    expect(
+      await bridge.questionnaireSuggestionsGenerate({ recipientPersonId: 'not-a-person' }),
+    ).toMatchObject({ ok: false, reason: 'DENIED' });
+
+    // The saved set lives under the AUTHOR — a Guest (no questionnaires.create) is gated out everywhere.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    expect((await bridge.sessionSetActive({ personId: guest.id })).ok).toBe(true);
+    expect(await bridge.questionnaireSuggestionsList({ recipientPersonId: mara.id })).toEqual([]);
+    expect(
+      await bridge.questionnaireSuggestionsGenerate({ recipientPersonId: mara.id }),
+    ).toMatchObject({ ok: false, reason: 'DENIED' });
+    // Back as the owner (returning to the Owner requires their PIN) — the set is intact (the guest's gated
+    // read/generate never touched it).
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    expect(
+      (await bridge.questionnaireSuggestionsList({ recipientPersonId: mara.id })).map(
+        (s) => s.title,
+      ),
+    ).toEqual(['Deeper dive', 'Second idea']);
+  });
+
   it('gates analyze on viewResults + memory list on memory.own; analyze with no answers returns NO_RESPONSE', async () => {
     const { bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });

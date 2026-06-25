@@ -1173,6 +1173,50 @@ export const QuestionnaireSuggestionSchema = z.object({
 export type QuestionnaireSuggestion = z.infer<typeof QuestionnaireSuggestionSchema>;
 
 /**
+ * A **persisted** gap-finder suggestion (08-questionnaires §18.3): a proposal plus a stable `id` (so it can be
+ * deleted or auto-removed once a questionnaire is created from it) and when it was generated. Saved per author,
+ * keyed by recipient; accumulates across "Suggest more" up to `SUGGESTION_CAP`.
+ */
+export const SavedSuggestionSchema = QuestionnaireSuggestionSchema.extend({
+  id: z.string().min(1),
+  createdAt: z.string(),
+});
+export type SavedSuggestion = z.infer<typeof SavedSuggestionSchema>;
+
+/**
+ * The per-author saved-suggestions document (08-questionnaires §18.3) at
+ * `people/<authorId>/questionnaires/suggestions.enc`. Holds one set per recipient the author has generated
+ * ideas for. Additive view doc — no migration (a missing file ⇒ no saved suggestions).
+ */
+export const SavedSuggestionSetSchema = z.object({
+  recipientPersonId: z.string().min(1),
+  suggestions: z.array(SavedSuggestionSchema),
+  updatedAt: z.string(),
+});
+export type SavedSuggestionSet = z.infer<typeof SavedSuggestionSetSchema>;
+
+export const QuestionnaireSuggestionsDocSchema = z.object({
+  schemaVersion: z.number().int().positive(),
+  sets: z.array(SavedSuggestionSetSchema),
+});
+export type QuestionnaireSuggestionsDoc = z.infer<typeof QuestionnaireSuggestionsDocSchema>;
+
+/** The accumulate cap per recipient (08-questionnaires §18.3) — newest kept when a new batch overflows. */
+export const SUGGESTION_CAP = 9;
+
+/** Result of a persisted gap-finder generate (08-questionnaires §18.5): the updated saved set + honest
+ * outcome. On failure the prior saved set is preserved (the caller returns it unchanged). */
+export interface SavedSuggestionsResult {
+  ok: boolean;
+  saved?: SavedSuggestion[];
+  // How many NEW suggestions were added this round (0 when the model returned nothing usable).
+  added?: number;
+  usage?: UsageEvent;
+  reason?: AiFailureReason;
+  message?: string;
+}
+
+/**
  * Outcome shapes for the AI authoring/analysis calls — shared by the IPC + services. `TRUNCATED` (cut off,
  * a retry) and `MALFORMED` (a reply arrived but no usable JSON could be salvaged) are the honest, distinct
  * parse-failure reasons (37 §3.2); `REFUSED` now means a *detected* refusal, not any parse miss.

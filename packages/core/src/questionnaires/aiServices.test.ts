@@ -468,6 +468,47 @@ describe('improveQuestion + gap-finder', () => {
     expect(result.usage?.type).toBe('questionnaire.suggest');
   });
 
+  // 08 §18.2: the recipient-first path feeds the recipient's name + their full answered content (avoid-only)
+  // and the already-saved idea titles, so the model tailors deeply, never repeats, and "Suggest more" is new.
+  it('feeds the recipient name, their history (avoid-only) + already-saved titles to the model (§18.2)', async () => {
+    const fs = memFileSystem();
+    const { author } = await seedHousehold(fs);
+    let sentUserText = '';
+    const capturing: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        sentUserText = options.messages.map((m) => m.content).join('\n');
+        const text = JSON.stringify([
+          {
+            title: 'New idea',
+            type: 'general',
+            rationale: 'r',
+            questions: [{ type: 'yesNo', prompt: 'Q?' }],
+          },
+        ]);
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    const result = await suggestQuestionnaires(deps(fs, capturing, author), {
+      targetPersonId: author, // any household person id is fine for the message-content assertions
+      recipientName: 'Mara',
+      recipientHistory: 'Themes they have already explored:\n- Burnout at work.',
+      avoidSuggestions: ['Weekly partner check-in'],
+    });
+    expect(result.ok).toBe(true);
+    expect(sentUserText).toContain('specifically for Mara'); // tailoring to the named person
+    expect(sentUserText).toContain('Burnout at work.'); // their history reaches the model
+    expect(sentUserText).toMatch(/ALREADY shared/i); // the avoid framing
+    expect(sentUserText).toMatch(/go DEEPER/i); // dive-deeper instruction
+    expect(sentUserText).toMatch(/never quote, restate, reference/i); // the never-reveal safety clause
+    expect(sentUserText).toMatch(/ALREADY proposed these/i); // accumulate-avoid the saved ideas
+    expect(sentUserText).toContain('Weekly partner check-in'); // the saved title is the avoid list
+  });
+
   // The reported bug (37 §3.3): the live model returns suggestions WITHOUT `required` on the sample
   // questions; the old all-or-nothing parse + over-strict `required: z.boolean()` discarded the whole batch
   // and showed "add more about the people in your life" — a data blame AFTER a successful call. This is the

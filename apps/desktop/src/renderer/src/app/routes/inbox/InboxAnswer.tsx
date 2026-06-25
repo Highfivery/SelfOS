@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Lock } from 'lucide-react';
-import { compatibilityDisclosure, unansweredRequired } from '@selfos/core/questionnaires';
+import {
+  compatibilityDisclosure,
+  unansweredRequired,
+  visibleAnswers,
+} from '@selfos/core/questionnaires';
 import type { AnswerMap, AnswerValue } from '@selfos/core/questionnaires';
 import type { Answer, InboxAssignmentDetail } from '@shared/channels';
 import type { InboxCompatibilityView, Question } from '@shared/schemas';
@@ -27,10 +31,14 @@ const loadImage = (imagePath: string): Promise<string | null> =>
 const toAnswerMap = (answers: Answer[]): AnswerMap =>
   Object.fromEntries(answers.map((a) => [a.questionId, a.value]));
 
+// Only currently-VISIBLE questions are persisted (47 §3.3/§7): a follow-up whose branch trigger was later
+// cleared/changed hides in the form, but its answer lingers in `map` — submitting it would have the analysis
+// treat it as chosen. `visibleAnswers` drops those orphans, matching the relay answering page exactly.
 const toAnswerList = (questions: Question[], map: AnswerMap): Answer[] => {
+  const visible = visibleAnswers(questions, map);
   const out: Answer[] = [];
   for (const q of questions) {
-    const value = map[q.id];
+    const value = visible[q.id];
     if (value !== undefined) out.push({ questionId: q.id, value });
   }
   return out;

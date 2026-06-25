@@ -389,6 +389,33 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-25 — **Build (onboarding intake quality pass — SPEC 47 BUILT; on `feat/onboarding-quality-pass`, a
+  worktree, PR pending).** A holistic audit-and-remediate pass over the personal-onboarding intake (spec 18), after
+  several user-reported bugs. **Owner decisions (asked first):** **Conservative** trim (fix wording/collisions/
+  branching/layout + the synthesis bug; **cut nothing**), **keep section order**, **non-empty** placeholder guard,
+  and scope = **onboarding intake AND the questionnaire builder** (the user overrode the spec's onboarding-only
+  recommendation). 46 is already merged, so the sequencing question was moot. **Audit findings:** the catalog is
+  clean — no two questions share an identical prompt (167 Qs), no id reused across sections, every branch trigger is
+  earlier/same-section/discrete and can actually produce its match value (no stranded follow-ups), intimacy flows
+  low→high with safety always before the `getSpecific` gate. **One real engine defect (audit-proven, §5/§7):**
+  orphaned answers for branch-**hidden** questions (a trigger cleared after answering its follow-up) fed synthesis/
+  analysis as if chosen. The **relay** answering page already filtered visible answers; the **Inbox**
+  (`toAnswerList`) and the **intake** (synthesis `formAnswersMessages` + `factScopeForSection`) did not. Fix: one
+  shared `visibleAnswers(questions, answers)` in `@selfos/core/questionnaires/answering` — Inbox + relay (refactored
+  DRY) filter at submit, intake filters at synthesis (keeps the stored answer so a re-toggle restores it),
+  `analyzeAssignment` defensively filters against the snapshot for pre-fix drafts. **Wording fixes (ids preserved):**
+  `coachStyle` reframed to TONE ("What coaching tone do you respond to best?") dropping the "Challenge me" option that
+  duplicated `supportStyle`; `appearanceDescription` "…how you look?" → "…your appearance?"; `importantDates` "Any
+  important dates to remember?" → "Any dates you'd like me to remember?". **No schema/IPC change.** Tests: catalog
+  collision + branching truth-table + cleared-trigger + coachStyle-distinct units, a `visibleAnswers` unit, intake +
+  questionnaire-analysis drop-orphan units, and the intimacy conditional-reveal E2E extended with the cleared-trigger
+  hide; updated the E2E's reworded labels + made 4 intake-synthesis tests realistic (they set the branch trigger the
+  new filter requires). Gate green: typecheck, lint, format, **764 core + 803 desktop + 11 relay** unit; onboarding
+  (13) + questionnaire/inbox/relay/compatibility (20) E2E green. Synced spec 47 (→ Built). **Lesson: a "submit/analyze
+  the answers" path must filter to currently-VISIBLE questions or a cleared-trigger orphan feeds the model as if
+  chosen — the relay had it right and the Inbox/intake didn't; centralize the rule (`visibleAnswers`) so surfaces
+  can't drift. And a test that submits a branch-gated answer WITHOUT its trigger is an impossible-in-UI setup — a
+  correct visibility filter exposes it, so make the setup realistic rather than weaken the filter.**
 - 2026-06-25 — **Build (intimacy activity-matrix accuracy — SPEC 46 BUILT; GitHub issue #62; on
   `feat/intimacy-matrix-accuracy`).** The onboarding intimacy activity matrix showed a sexual-act oral row that
   was **wrong** for some people because the oral labels were **inferred** (own anatomy from `gender`, partner

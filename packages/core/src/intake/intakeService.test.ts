@@ -274,7 +274,8 @@ describe('intakeService', () => {
     const r0 = 'bondage';
     const r1 = 'choking-giving';
     const activities = { [r0]: 5, [r1]: 1 }; // r0 = Love it (5), r1 = Hard no (1)
-    await submitSectionForm(fs, key, 'p1', 'intimacy', { activities }, NOW);
+    // The matrix sits behind the `getSpecific` opt-in (27 §4.3) — set it so the row is actually visible.
+    await submitSectionForm(fs, key, 'p1', 'intimacy', { getSpecific: true, activities }, NOW);
     const sec = (await getIntakeSession(fs, key, 'p1'))?.sections.find((s) => s.id === 'intimacy');
     expect(sec?.answers.activities).toEqual(activities); // the partial matrix is kept, not dropped
 
@@ -298,6 +299,8 @@ describe('intakeService', () => {
       'p1',
       'intimacy',
       {
+        // The anatomy questions + the matrix all sit behind the `getSpecific` opt-in (27 §4.3 / 46).
+        getSpecific: true,
         ownAnatomy: 'Cock (penis)',
         partnerAnatomy: ['Pussy (vulva)'],
         activities: { 'oral-receiving': 5, 'oral-giving-vulva': 4 },
@@ -324,7 +327,11 @@ describe('intakeService', () => {
       key,
       'p1',
       'intimacy',
-      { activities: { 'Receiving oral (blowjob)': 5, 'Going down on her (oral)': 4 } },
+      // Behind the `getSpecific` opt-in (27 §4.3); set it so the matrix is visible at synthesis.
+      {
+        getSpecific: true,
+        activities: { 'Receiving oral (blowjob)': 5, 'Going down on her (oral)': 4 },
+      },
       NOW,
     );
 
@@ -337,6 +344,29 @@ describe('intakeService', () => {
     // verbatim by stable key. Neither is dropped.
     expect(body).toContain('Receiving oral: Love it');
     expect(body).toContain('oral-giving-vulva: Like it');
+  });
+
+  it('drops a branch-hidden (cleared-trigger) answer from synthesis (47 §3.3/§7)', async () => {
+    const fs = await setup();
+    // `getSpecific` = No, but an explicit follow-up (`turnOns`, gated on `getSpecific`) lingers in the
+    // persisted answers as an orphan (the trigger was toggled off after answering). It must NOT feed the
+    // portrait as if chosen — synthesis filters to the currently-visible questions.
+    await submitSectionForm(
+      fs,
+      key,
+      'p1',
+      'intimacy',
+      { getSpecific: false, turnOns: ['Kissing', 'Dirty talk'] },
+      NOW,
+    );
+    let messages: ClaudeMessage[] = [];
+    const client = fakeClient({ captureMessages: (m) => (messages = m) });
+    await synthesizeIntake(synth(fs, client));
+    const body = messages.map((m) => flattenContent(m.content)).join('\n');
+    // The visible gate answer still feeds; the orphaned explicit answer is absent.
+    expect(body).toContain('explicit specifics');
+    expect(body).not.toContain('Kissing');
+    expect(body).not.toContain('gets you in the mood');
   });
 
   it('ignores answers not declared for the section (the trust boundary)', async () => {
@@ -583,7 +613,11 @@ describe('intakeService', () => {
       key,
       'p1',
       'life-now',
-      { children: [{ name: 'Emma', gender: 'Girl', dob: '2018-05-14' }] },
+      // The children roster is gated on having kids (whenAny parentalStatus) — set the trigger so it shows.
+      {
+        parentalStatus: 'Have young kids',
+        children: [{ name: 'Emma', gender: 'Girl', dob: '2018-05-14' }],
+      },
       NOW,
     );
     // Stored in the section answers; NOT promoted to a Person field (storage is portrait/context only).

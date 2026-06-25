@@ -1,6 +1,6 @@
 # 47 — Onboarding intake quality pass
 
-> **Status:** Draft · _last updated 2026-06-25_
+> **Status:** Built · _last updated 2026-06-25_
 >
 > A holistic **audit-and-remediate** pass over the personal-onboarding intake ([`18`](18-personal-onboarding.md)),
 > after several user-reported onboarding bugs. It does **not** redesign the producer/synthesis/safety model or
@@ -91,9 +91,12 @@ The four areas are the user's explicit, **locked** priorities — all four are i
   the audit proves it's needed (§5), and stays additive.
 - **The producer/synthesis/safety model.** [`18`](18-personal-onboarding.md) §8/§14.8/§14.10 (restricted
   facts, 18+ gate, own-context-only defaults, crisis routing) is unchanged; 47 must not weaken any of it.
-- **The questionnaire-authoring flow.** 47 touches **strictly the personal onboarding intake** (the
-  `INTAKE_CATALOG` + the onboarding renderer), not the questionnaire builder — even though both reuse the
-  `Question` shape (§11 records this recommendation for confirmation).
+- **The questionnaire-authoring flow.** The §11.4 recommendation was onboarding-only, but the **owner chose to
+  include the questionnaire builder too** (2026-06-25). In practice the only cross-over the audit found is the
+  **shared branching engine**: the cleared-trigger orphan bug (§5/§7) affected the in-app Inbox answer/analysis
+  path the same way it affected intake, so the one shared `visibleAnswers` fix is applied to both surfaces (the
+  relay page already did it). No catalog/wording work applies to the builder (its questions are user-authored,
+  not a fixed catalog).
 - **Progressive depth / freshness** ([`29`](29-progressive-profile-building.md) / [`18`](18-personal-onboarding.md)
   §15) — kept intact; 47 must not break the depth-invitation routing or the staleness nudge.
 - **Auto-creating the people graph** from family/relationship answers — still phase 2
@@ -490,6 +493,44 @@ Decisions for the user — **not** silently assumed:
 
 ## 12. Changelog
 
+- 2026-06-25 — **Built.** Owner decisions (asked first): **Conservative** trim (fix wording/collisions/
+  branching/layout + the synthesis bug, **cut no questions**), **keep the section order**, **non-empty**
+  placeholder guard (no verbatim-copy assertion), and scope is **both the onboarding intake AND the
+  questionnaire builder** (the user overrode the §11.4 onboarding-only recommendation). Sequencing vs
+  [`46`](46-intimacy-matrix-accuracy.md) is moot — 46 is already merged to `main`.
+  **Audit outcome (the four deliverables):**
+  - **A (clarity/wording):** the catalog is clean — **no two questions share an identical prompt** (167
+    questions) and **no id is reused across sections** (both now locked by tests). One genuine collision fixed:
+    `want.coachStyle` ("How do you like to be coached?") read like its neighbour `want.supportStyle` and shared
+    the literal option **"Challenge me"** → reframed to **"What coaching tone do you respond to best?"** with
+    "Challenge me" → "Push me hard" (TONE vs the support MODES). Two clarity rewords (ids preserved):
+    `basics.appearanceDescription` "How would you describe how you look?" → "…your appearance?" (dropped the
+    double-"how"); `basics.importantDates` "Any important dates to remember?" → "Any dates you'd like me to
+    remember?". Every free-text placeholder is meaningful (guard kept); every form group already renders
+    `<details open>` (no default-collapse).
+  - **B (branching correctness):** **no defects** — every branch trigger is an earlier, same-section, discrete
+    question whose `options`/type can actually produce the match value (no stranded follow-up), now asserted by a
+    truth-table test (+ a cleared-trigger case).
+  - **C (intimacy flow):** reviewed, **sound** — low→high exposure (orientation → story → current sex life →
+    body → consent/safety/meaning [always visible] → the `getSpecific` opt-in → the explicit specifics), safety
+    never behind the gate, the matrix stacks at ~360px, in band (~42). No content change (anatomy/labels are
+    [`46`](46-intimacy-matrix-accuracy.md)).
+  - **D (pacing):** Conservative — core gate stays ~27 (≤30 guard), resume/progress intact, no cuts.
+    **The one engine defect found & fixed (§5/§7, audit-proven):** orphaned answers for branch-**hidden**
+    questions (a trigger cleared after the follow-up was answered) reached synthesis/analysis as if chosen. The
+    relay answering page already filtered visible answers; the in-app **Inbox** (`toAnswerList`) and the **intake**
+    (synthesis `formAnswersMessages` + `factScopeForSection`) did not. Added one shared `visibleAnswers(questions,
+answers)` to `@selfos/core/questionnaires/answering` (it **iterates to a fixed point**, so a multi-level branch
+    chain — e.g. the intimacy `getSpecific → watchPorn → pornGenres` — drops the deeper orphan too, not just the
+    direct one); the Inbox + the relay (refactored, DRY) filter at submit,
+    intake filters at synthesis (keeps the stored answer so a re-toggle restores it — the §5 preferred shape), and
+    `analyzeAssignment` defensively filters against the snapshot for pre-fix drafts. **No schema/IPC change.**
+    Tests: catalog collision + branching truth-table + cleared-trigger + coachStyle-distinct units; a
+    `visibleAnswers` unit; intake synthesis drops-orphan unit; questionnaire analysis drops-orphan unit; the
+    intimacy conditional-reveal E2E extended with the cleared-trigger hide. Gate green: typecheck, lint, format,
+    **764 core + 803 desktop + 11 relay** unit; onboarding (13) + questionnaire/inbox/relay/compatibility (20) E2E
+    green. Four existing intake-synthesis tests submitted a branch-gated answer without its trigger (an
+    impossible-in-UI setup the new filter correctly drops) — made realistic (set the trigger) in the same change.
 - 2026-06-25 — created (Draft). A holistic audit-and-remediate pass over the personal-onboarding intake
   ([`18`](18-personal-onboarding.md)), after several user-reported onboarding bugs. Four locked areas
   (clarity/wording · branching correctness · intimacy section flow/length/tone · pacing & length), an audit

@@ -30,7 +30,7 @@ import { buildContext, getPerson, savePerson } from '../people';
 import { FORMATTING, PERSONA, SAFETY } from '../conversations/promptBuilder';
 import { checkBudget, costOf, recordUsage } from '../usage';
 import { getInsight, normalizeCategories, saveInsight } from '../insights';
-import { isAnswered } from '../questionnaires/answering';
+import { isAnswered, isQuestionVisible, type AnswerMap } from '../questionnaires/answering';
 import { activityRowContext, withResolvedActivityRows } from './activityContext';
 import { migrateActivityMatrixValue } from '../intimacy/activityRows';
 import { defaultScopeForQuestion, effectiveAnswerScope } from './sharingCategory';
@@ -736,9 +736,14 @@ function formAnswersMessages(session: IntakeSession): { role: 'user'; content: s
     if (!def.questions) continue;
     const section = session.sections.find((s) => s.id === def.id);
     if (!section || Object.keys(section.answers).length === 0) continue;
+    // Drop answers for questions a branch now HIDES (47 §3.3/§7): if a trigger was later cleared/changed,
+    // its follow-up's orphaned answer lingers in `section.answers` but must not feed the portrait as if
+    // chosen. `isQuestionVisible` re-filters against the current answers, so an orphan is excluded here.
+    const answerMap = section.answers as unknown as AnswerMap;
     const normal: string[] = [];
     const sensitive: string[] = [];
     for (const m of def.questions) {
+      if (!isQuestionVisible(m.q, answerMap)) continue;
       const q = withResolvedActivityRows(m.q, actCtx);
       const str = formatAnswerForSynthesis(q, section.answers[m.q.id]);
       if (!str) continue;
@@ -839,9 +844,11 @@ function factScopeForSection(
     return m.restricted !== true;
   });
 
+  const answerMap = section.answers as unknown as AnswerMap;
   let intersection: RelationshipType[] | null = null;
   for (const m of candidates) {
     if (section.answers[m.q.id] === undefined) continue; // only answered questions contribute
+    if (!isQuestionVisible(m.q, answerMap)) continue; // skip a branch-hidden orphan (47 §3.3/§7)
     // Backfill: an answered question with no explicit `answerSharing` (a portrait synthesized before
     // per-question sharing existed) falls back to its category default — so existing portraits share by
     // default on the next refresh; restricted answers stay Private (their default is []). An explicit

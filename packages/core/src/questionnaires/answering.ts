@@ -74,6 +74,28 @@ export function visibleQuestions(questions: Question[], answers: AnswerMap): Que
   return questions.filter((q) => isQuestionVisible(q, answers));
 }
 
+/**
+ * The answer map restricted to currently-**visible** questions (47-onboarding-quality-pass §3.3/§7). When a
+ * branch trigger is later cleared/changed its follow-up hides in the UI, but the follow-up's prior answer
+ * lingers in the host's answer map (an orphan). Persisting or analyzing that orphan would treat it as
+ * chosen, so every submit/synthesis path filters through this first. The relay answering page already did
+ * this inline; this is the one shared implementation the Inbox + the intake synthesis reuse so the behaviour
+ * can't drift between surfaces. A question not present in `questions` is dropped (it's not part of this form).
+ */
+export function visibleAnswers(questions: Question[], answers: AnswerMap): AnswerMap {
+  // Iterate to a fixed point: dropping a hidden answer can itself hide a DEEPER follow-up whose trigger was
+  // that just-dropped answer (a 2+-level chain, e.g. the intake's getSpecific → watchPorn → pornGenres). A
+  // single pass would leave the deeper orphan, so re-filter against the shrinking map until it stops changing.
+  let cur = answers;
+  for (;;) {
+    const visible = new Set(visibleQuestions(questions, cur).map((q) => q.id));
+    const next: AnswerMap = {};
+    for (const [id, value] of Object.entries(cur)) if (visible.has(id)) next[id] = value;
+    if (Object.keys(next).length === Object.keys(cur).length) return next;
+    cur = next;
+  }
+}
+
 /** The running total of an allocation answer (buckets distributing toward 100). */
 export function allocationTotal(value: AnswerValue | undefined): number {
   if (value !== null && typeof value === 'object' && !Array.isArray(value)) {

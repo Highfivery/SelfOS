@@ -7,7 +7,7 @@ import {
 } from '../ai/jsonSalvage';
 import { uuid } from '../id';
 import { listInsightsForPerson, normalizeCategories, saveInsight } from '../insights';
-import type { AnswerValue } from './answering';
+import { visibleQuestions, type AnswerMap, type AnswerValue } from './answering';
 import type { Insight, QuestionnaireAnalyzeResult } from '../schemas';
 import { ANALYSIS_SYSTEM, buildAnalysisUserMessage } from './aiPrompts';
 import { getAssignment, getAssignmentSnapshot } from './assignmentService';
@@ -70,7 +70,15 @@ export async function analyzeAssignment(
   }
 
   const byId = new Map(snapshot.questions.map((q) => [q.id, q]));
-  const qa = response.answers.flatMap((a) => {
+  // Defensively drop answers for questions a branch now hides (47 §3.3/§7): the submit paths already filter
+  // orphans, but a draft persisted before that fix could still carry a cleared-trigger answer — never analyze
+  // (or meter on) one as if it were chosen.
+  const answerMap: AnswerMap = Object.fromEntries(
+    response.answers.map((a) => [a.questionId, a.value as AnswerValue]),
+  );
+  const visibleIds = new Set(visibleQuestions(snapshot.questions, answerMap).map((q) => q.id));
+  const liveAnswers = response.answers.filter((a) => visibleIds.has(a.questionId));
+  const qa = liveAnswers.flatMap((a) => {
     const q = byId.get(a.questionId);
     return q ? [{ prompt: q.prompt, answer: formatAnswer(a.value) }] : [];
   });
@@ -100,7 +108,7 @@ export async function analyzeAssignment(
   // Metrics from questions that declared a `metricKey` (§4.3) — forward-compatible; empty until
   // metricKey authoring (owned by spec 11) exists, so today this stays {} for normal questionnaires.
   const metrics: Record<string, number> = {};
-  for (const a of response.answers) {
+  for (const a of liveAnswers) {
     const q = byId.get(a.questionId);
     if (q?.metricKey && typeof a.value === 'number') metrics[q.metricKey] = a.value;
   }

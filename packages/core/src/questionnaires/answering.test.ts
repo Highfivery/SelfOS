@@ -9,6 +9,7 @@ import {
   isQuestionVisible,
   responseSizeGuard,
   unansweredRequired,
+  visibleAnswers,
   visibleQuestions,
 } from './answering';
 
@@ -49,6 +50,40 @@ describe('answering — branch visibility', () => {
   it('filters the list to visible questions in order', () => {
     expect(visibleQuestions([q1, q2], {}).map((x) => x.id)).toEqual(['q1']);
     expect(visibleQuestions([q1, q2], { q1: 'Yes' }).map((x) => x.id)).toEqual(['q1', 'q2']);
+  });
+
+  it('visibleAnswers drops an orphaned answer whose trigger was cleared (47 §3.3/§7)', () => {
+    // q2's answer lingers in the map after its trigger flips to "No" — it must be dropped.
+    expect(visibleAnswers([q1, q2], { q1: 'Yes', q2: 'kept' })).toEqual({ q1: 'Yes', q2: 'kept' });
+    expect(visibleAnswers([q1, q2], { q1: 'No', q2: 'orphan' })).toEqual({ q1: 'No' });
+    // An answer for a question not in this form is dropped (it's not part of the surface).
+    expect(visibleAnswers([q1], { q1: 'Yes', stray: 'x' })).toEqual({ q1: 'Yes' });
+  });
+
+  it('visibleAnswers drops a DEEPER orphan in a 2-level branch chain (fixed point, 47 §7)', () => {
+    // q1 → q2 → q3 (the intake's getSpecific → watchPorn → pornGenres shape). Clearing q1 must drop BOTH
+    // q2 (direct) and q3 (whose trigger q2 is now itself hidden) — a single pass would leave q3.
+    const q3 = q({
+      id: 'q3',
+      type: 'shortText',
+      branch: { whenQuestionId: 'q2', equals: 'deep', action: 'show' },
+    });
+    const q2deep = q({
+      id: 'q2',
+      type: 'singleChoice',
+      options: ['deep', 'shallow'],
+      branch: { whenQuestionId: 'q1', equals: 'Yes', action: 'show' },
+    });
+    // Fully present: all three survive.
+    expect(visibleAnswers([q1, q2deep, q3], { q1: 'Yes', q2: 'deep', q3: 'kept' })).toEqual({
+      q1: 'Yes',
+      q2: 'deep',
+      q3: 'kept',
+    });
+    // Clear q1 → q2 and the deeper q3 both drop.
+    expect(visibleAnswers([q1, q2deep, q3], { q1: 'No', q2: 'deep', q3: 'orphan' })).toEqual({
+      q1: 'No',
+    });
   });
 
   it('shows a question when a multiChoice trigger CONTAINS the branch value', () => {

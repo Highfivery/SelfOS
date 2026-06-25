@@ -7,11 +7,7 @@ import {
   openResult,
   sealResponse,
 } from '@selfos/core/relay';
-import {
-  responseSizeGuard,
-  unansweredRequired,
-  visibleQuestions,
-} from '@selfos/core/questionnaires';
+import { responseSizeGuard, unansweredRequired, visibleAnswers } from '@selfos/core/questionnaires';
 import type { AnswerMap, AnswerValue } from '@selfos/core/questionnaires';
 import { toBase64 } from '@selfos/core/encoding';
 import type {
@@ -263,12 +259,11 @@ function ConsentScreen({
 }
 
 function answersToArray(content: RelayContent, answers: AnswerMap): Answer[] {
-  const visibleIds = new Set(
-    visibleQuestions(content.questionnaire.questions, answers).map((q) => q.id),
+  // Drop orphaned answers for branch-hidden questions (47 §3.3/§7) via the one shared helper, so the relay
+  // and the in-app Inbox can't drift on this rule.
+  return Object.entries(visibleAnswers(content.questionnaire.questions, answers)).map(
+    ([questionId, value]) => ({ questionId, value }),
   );
-  return Object.entries(answers)
-    .filter(([id]) => visibleIds.has(id))
-    .map(([questionId, value]) => ({ questionId, value }));
 }
 
 function FormScreen({

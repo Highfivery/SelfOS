@@ -208,7 +208,7 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         { field: 'gender' },
       ),
       f(dateQ('birthday', 'Your birthday'), { field: 'birthday' }),
-      f(dateList('importantDates', 'Any important dates to remember?'), {
+      f(dateList('importantDates', 'Any dates you’d like me to remember?'), {
         field: 'importantDates',
       }),
       f(shortText('location', 'Where do you live?', 'e.g. Seattle, WA'), { field: 'location' }),
@@ -236,7 +236,7 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
       f(
         longText(
           'appearanceDescription',
-          'How would you describe how you look?',
+          'How would you describe your appearance?',
           'Hair, build, distinctive features — helps SelfOS picture you (e.g. for dream images).',
         ),
         { field: 'appearanceDescription' },
@@ -470,7 +470,11 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         ]),
       ),
       f(
-        single('coachStyle', 'How do you like to be coached?', [
+        // 47 §3.2 collision fix: this used to read "How do you like to be coached?", which collided with
+        // `supportStyle` above ("How do you want SelfOS to support you?") — two controls reading like the same
+        // question. Reframed to be clearly about TONE/manner. Option labels are left unchanged (a single-choice
+        // answer is stored by its label, so a rename would orphan an existing answer — §7 no-data-loss).
+        single('coachStyle', 'What coaching tone do you respond to best?', [
           'Gently',
           'Directly',
           'Challenge me',

@@ -927,6 +927,28 @@ export const AnswerTypeSchema = z.enum([
 export type AnswerType = z.infer<typeof AnswerTypeSchema>;
 
 /**
+ * The answer types the model may choose for AI-generated / AI-suggested questions. Authoring-only types
+ * (`matrix`, `allocation`, `dateList`, `roster` — they need extra structure a sample question can't carry)
+ * are intentionally excluded. The single source shared by the generation guide, the gap-finder prompt, AND
+ * the gap-finder's parse schema (`SuggestionQuestionSchema`), so the prompt names exactly the enum values
+ * the parse will accept — the gap-finder "unexpected shape" bug was the prompt omitting this list, leaving
+ * the model to guess type names like "text"/"scale" that then failed validation.
+ */
+export const SUGGESTABLE_ANSWER_TYPES = [
+  'shortText',
+  'longText',
+  'singleChoice',
+  'multiChoice',
+  'rating',
+  'slider',
+  'ranking',
+  'thisOrThat',
+  'yesNo',
+  'date',
+] as const;
+export const SuggestableAnswerTypeSchema = z.enum(SUGGESTABLE_ANSWER_TYPES);
+
+/**
  * A `roster` column definition — a labeled per-row field: free `text`, a `select` with options, or a
  * `date` (rendered as a native date picker; e.g. a child's date of birth, which — unlike an age — never
  * goes stale). A `date` value is the ISO `YYYY-MM-DD` string the input emits.
@@ -1125,20 +1147,28 @@ export interface IntimacyTopicsView {
   custom: IntimacyTopicGroups;
 }
 
+/**
+ * One sample question on a gap-finder proposal. `required` is tolerant (37 §3.3): the model routinely omits
+ * it and it isn't essential to a *suggestion*. `type` is validated against the answer-type enum — the
+ * gap-finder parses an array of these TOLERANTLY (per-element), so a single off-spec `type` drops only that
+ * sample question, never the whole suggestion (the gap-finder "unexpected shape" bug). Exported so the
+ * service can wrap it in a `tolerantArray` without re-declaring the shape (DRY).
+ */
+export const SuggestionQuestionSchema = z.object({
+  // Restricted to the AI-suggestable subset (not the full AnswerTypeSchema): a sample question with an
+  // authoring-only type (matrix/allocation/…) can't seed a usable builder draft, so the gap-finder drops it.
+  type: SuggestableAnswerTypeSchema,
+  prompt: z.string().min(1),
+  required: z.boolean().optional(),
+});
+export type SuggestionQuestion = z.infer<typeof SuggestionQuestionSchema>;
+
 /** A gap-finder proposal (08-questionnaires §3.7): a questionnaire idea + a few sample questions. */
 export const QuestionnaireSuggestionSchema = z.object({
   title: z.string().min(1),
   type: z.string().min(1),
   rationale: z.string(),
-  questions: z.array(
-    // `required` is tolerant (37 §3.3): the model routinely omits it and it isn't essential to a
-    // *suggestion*. A whole-batch parse must never fail over a missing `required` (the gap-finder bug).
-    z.object({
-      type: AnswerTypeSchema,
-      prompt: z.string().min(1),
-      required: z.boolean().optional(),
-    }),
-  ),
+  questions: z.array(SuggestionQuestionSchema),
 });
 export type QuestionnaireSuggestion = z.infer<typeof QuestionnaireSuggestionSchema>;
 

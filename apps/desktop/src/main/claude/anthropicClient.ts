@@ -120,8 +120,12 @@ export function fakeClaudeClient(): ClaudeClient {
       }
 
       // The gap-finder "Suggested" turn (08 §3.7) asks to "Suggest up to 3 questionnaires". Return a set
-      // whose sample questions OMIT `required` — deliberately imperfect so the offline path exercises the
-      // tolerant salvage (37 §10: the fakes must not only return flawless JSON, or they hide live bugs).
+      // that is deliberately imperfect so the offline path exercises the tolerant salvage (37 §10: the fakes
+      // must not only return flawless JSON, or they hide live bugs). The imperfections mirror the real
+      // failure modes: sample questions OMIT `required` (37 §3.3), and the first suggestion mixes a VALID
+      // sample question with an OFF-SPEC `type` ("text") the live model guesses — the inner per-element
+      // salvage must drop only the bad question, keeping the suggestion + its good question (the
+      // "unexpected shape" bug, where one bad type used to sink the whole suggestion).
       if (userText.includes('Suggest up to 3 questionnaires')) {
         return Promise.resolve({
           text: JSON.stringify([
@@ -129,7 +133,10 @@ export function fakeClaudeClient(): ClaudeClient {
               title: 'Weekly partner check-in',
               type: 'role-feedback',
               rationale: 'You value quality time together.',
-              questions: [{ type: 'rating', prompt: 'How connected did you feel this week?' }],
+              questions: [
+                { type: 'rating', prompt: 'How connected did you feel this week?' },
+                { type: 'text', prompt: 'Anything left unsaid this week?' }, // off-spec type → dropped
+              ],
             },
             {
               title: 'What we each need',

@@ -170,8 +170,10 @@ export function webFakeClaudeClient(): ClaudeClient {
           usage: { inputTokens: 150, outputTokens: 60, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
       }
-      // The gap-finder "Suggested" turn (08 §3.7) — return a set whose sample questions OMIT `required`,
-      // deliberately imperfect so the offline path exercises the tolerant salvage (37 §10).
+      // The gap-finder "Suggested" turn (08 §3.7) — deliberately imperfect so the offline path exercises the
+      // tolerant salvage (37 §10): sample questions OMIT `required`, and the first suggestion mixes a VALID
+      // question with an OFF-SPEC `type` ("text") the inner per-element salvage must drop without sinking the
+      // whole suggestion (the "unexpected shape" bug).
       if (userText.includes('Suggest up to 3 questionnaires')) {
         return Promise.resolve({
           text: JSON.stringify([
@@ -179,7 +181,10 @@ export function webFakeClaudeClient(): ClaudeClient {
               title: 'Weekly partner check-in',
               type: 'role-feedback',
               rationale: 'You value quality time together.',
-              questions: [{ type: 'rating', prompt: 'How connected did you feel this week?' }],
+              questions: [
+                { type: 'rating', prompt: 'How connected did you feel this week?' },
+                { type: 'text', prompt: 'Anything left unsaid this week?' }, // off-spec type → dropped
+              ],
             },
             {
               title: 'What we each need',

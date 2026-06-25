@@ -389,6 +389,29 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-24 — **Fix (Questionnaires AI "Suggested" STILL hit "The suggestion set came back in an unexpected
+  shape" — a SECOND root cause spec 37's fix missed; user-reported; on `fix/gap-finder-suggestion-shape`).**
+  Diagnosed (not assumed) by tracing the parse path: the MALFORMED message fires when the gap-finder's Claude
+  call SUCCEEDS but zero usable suggestions survive parsing — two compounding causes. **(1)** the prompt bug —
+  `GAP_FINDER_SYSTEM` said _"Use the same answer types as generation"_ but never listed them (the model never
+  sees the generation prompt in that call), so the live model guessed invalid `AnswerType` values
+  ("text"/"scale"/"open"); **(2)** the INNER `questions` array on `QuestionnaireSuggestionSchema` was still
+  strict (spec 37 only loosened `required` + the OUTER array), so one off-spec sample `type` failed the whole
+  suggestion → with every suggestion losing one question the batch went empty → MALFORMED. Fix: one shared
+  `SUGGESTABLE_ANSWER_TYPES` constant (`schemas.ts`) feeds the generation guide, the gap-finder prompt (now
+  names the exact enum values), AND the parse (`SuggestionQuestionSchema.type` = the suggestable subset, so an
+  authoring-only `matrix`/`roster` sample drops rather than seeding a broken builder draft); the gap-finder
+  parses with a per-element-tolerant inner `questions` array (37 §3.1) so a bad sample question drops only
+  itself + a suggestion with one good + one bad question survives; `type`/`rationale` tolerate omission (only
+  a `title` + ≥1 usable question are required). Both offline fakes made imperfect (a mixed valid/off-spec
+  sample question, 37 §10) so the E2E exercises the salvage. Tests: a regression where 3 suggestions each mix
+  a valid + an off-spec `type` → all 3 kept (was 0), a prompt-lists-the-types guard, a missing-`type`/
+  `rationale` tolerance case, and the Suggested E2E asserts the off-spec sample question is dropped while its
+  sibling + the suggestion survive. Code-reviewer **ship**. Gate green: typecheck, lint, format, **727 core +
+  769 desktop** unit, questionnaire E2E green. Synced spec 37 §12. **Lesson: a prompt that references a list
+  it doesn't include ("same types as generation") leaves the model guessing invalid enum values — inline the
+  enum; and the spec-37 tolerance must reach NESTED arrays (the inner `questions`), not just the top-level
+  batch, or one bad child still sinks the whole parent.**
 - 2026-06-24 — **Fix — collapsible life-area portrait (user-reported "IT LOOKS EXACTLY THE SAME"; on
   `fix/onboarding-sharing-ux`).** My flat grouping (faint gray uppercase headers + dividers) was too subtle to
   register as an improvement — the user still saw a wall of gray facts. **This time I showed an interactive

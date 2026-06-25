@@ -15,6 +15,8 @@ import {
   resetContextProviders,
 } from './contextProviders';
 import { extractJsonArray } from '../ai/jsonSalvage';
+import { SUGGESTABLE_ANSWER_TYPES } from '../schemas';
+import { GAP_FINDER_SYSTEM } from './aiPrompts';
 import { generateQuestions, improveQuestion, type AiDeps } from './generationService';
 import { suggestQuestionnaires } from './gapFinderService';
 
@@ -498,7 +500,7 @@ describe('improveQuestion + gap-finder', () => {
     expect(result.suggestions).toHaveLength(3); // today this yields ZERO without the fix
   });
 
-  it('salvages the good suggestions, dropping a malformed one (per-element, 37 §3.1)', async () => {
+  it('salvages the good suggestions, dropping a wholly-malformed one (per-element, 37 §3.1)', async () => {
     const fs = memFileSystem();
     const { author } = await seedHousehold(fs);
     const text = JSON.stringify([
@@ -512,12 +514,83 @@ describe('improveQuestion + gap-finder', () => {
         title: 'Bad one',
         type: 'role-feedback',
         rationale: 'b',
-        questions: [{ type: 'not-a-type', prompt: 'X' }],
+        questions: [{ type: 'not-a-type', prompt: 'X' }], // its ONLY question is off-spec → suggestion drops
       },
     ]);
     const result = await suggestQuestionnaires(deps(fs, fakeClient(text), author));
     expect(result.ok).toBe(true);
     expect(result.suggestions?.map((s) => s.title)).toEqual(['Good one']);
+  });
+
+  // The reported "unexpected shape" bug: the live model guesses answer-type names (e.g. "text"/"scale")
+  // because the prompt never listed the valid ones. A single off-spec sample `type` used to fail the WHOLE
+  // `questions` array → the whole suggestion was discarded; with every suggestion losing one sample question
+  // the batch went EMPTY → MALFORMED. The inner array is now per-element tolerant (37 §3.1): a bad sample
+  // question drops only ITSELF, so a suggestion with one good + one bad question survives with the good one.
+  it('REGRESSION: keeps suggestions whose sample questions mix a valid + an off-spec `type` (the “unexpected shape” bug)', async () => {
+    const fs = memFileSystem();
+    const { author } = await seedHousehold(fs);
+    const text = JSON.stringify([
+      {
+        title: 'Partner check-in',
+        type: 'role-feedback',
+        rationale: 'a',
+        questions: [
+          { type: 'rating', prompt: 'How connected this week?' }, // valid → kept
+          { type: 'text', prompt: 'Anything unsaid?' }, // off-spec → dropped, suggestion survives
+        ],
+      },
+      {
+        title: 'What we each need',
+        type: 'general',
+        rationale: 'b',
+        questions: [
+          { type: 'scale', prompt: 'Bad type first' }, // off-spec → dropped
+          { type: 'shortText', prompt: 'One thing you need more of?' }, // valid → kept
+        ],
+      },
+      {
+        title: 'Friend feedback',
+        type: 'role-feedback',
+        rationale: 'c',
+        questions: [
+          { type: 'open', prompt: 'Bad' },
+          { type: 'yesNo', prompt: 'Do you feel heard?' },
+        ],
+      },
+    ]);
+    const result = await suggestQuestionnaires(deps(fs, fakeClient(text), author));
+    expect(result.ok).toBe(true);
+    // All three survive (previously ZERO did) — each keeping only its valid sample question.
+    expect(result.suggestions?.map((s) => s.title)).toEqual([
+      'Partner check-in',
+      'What we each need',
+      'Friend feedback',
+    ]);
+    expect(result.suggestions?.every((s) => s.questions.length === 1)).toBe(true);
+    expect(result.suggestions?.[0]?.questions[0]?.type).toBe('rating');
+    expect(result.suggestions?.[1]?.questions[0]?.type).toBe('shortText');
+    expect(result.suggestions?.[2]?.questions[0]?.type).toBe('yesNo');
+  });
+
+  // The root cause: the gap-finder prompt told the model to "use the same answer types as generation" but
+  // never listed them (the model can't see the generation prompt) — so it guessed invalid types. The system
+  // prompt must now name the exact enum values, and never carry the dangling reference.
+  it('the gap-finder system prompt lists the valid answer types (no dangling “same as generation”)', () => {
+    for (const t of SUGGESTABLE_ANSWER_TYPES) expect(GAP_FINDER_SYSTEM).toContain(t);
+    expect(GAP_FINDER_SYSTEM).not.toMatch(/same answer types as generation/i);
+  });
+
+  it('tolerates a suggestion missing `type`/`rationale` (only a title + a usable question are required)', async () => {
+    const fs = memFileSystem();
+    const { author } = await seedHousehold(fs);
+    const text = JSON.stringify([
+      { title: 'Just a title', questions: [{ type: 'yesNo', prompt: 'Q?' }] }, // no type, no rationale
+    ]);
+    const result = await suggestQuestionnaires(deps(fs, fakeClient(text), author));
+    expect(result.ok).toBe(true);
+    expect(result.suggestions?.[0]?.title).toBe('Just a title');
+    expect(result.suggestions?.[0]?.type).toBe('general'); // defaulted, not dropped
   });
 
   it('salvages the complete suggestions from a TRUNCATED array', async () => {

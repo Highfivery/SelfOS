@@ -496,3 +496,24 @@ Tests are the proof that imperfect output is handled — and that the offline fa
   refusal/MALFORMED cases, an RTL for `SuggestedPanel`, and an E2E driving the Suggested flow with an
   imperfect fake reply. Offline fakes made imperfect by default (omit `required`). Gate green: typecheck,
   lint, format, **599 core + 11 relay + 660 desktop** unit, **88/88 E2E**. Code-reviewer **ship**.
+- 2026-06-24 — **Follow-up fix (gap-finder STILL hit "The suggestion set came back in an unexpected shape"
+  — a SECOND root cause the 2026-06-23 fix missed; user-reported).** The 2026-06-23 work loosened
+  `required` + made the OUTER suggestions array tolerant, but two compounding causes remained: **(1)** the
+  prompt bug — `GAP_FINDER_SYSTEM` said _"Use the same answer types as generation"_ but never listed them
+  (the model never sees the generation prompt in this call), so the live model guessed invalid `AnswerType`
+  values ("text"/"scale"/"open"); and **(2)** the INNER `questions` array on `QuestionnaireSuggestionSchema`
+  was still strict — one off-spec sample `type` failed the whole suggestion → with every suggestion losing a
+  question the batch went empty → MALFORMED. Fix: a single `SUGGESTABLE_ANSWER_TYPES` constant in
+  `schemas.ts` now feeds the generation guide, the gap-finder prompt (which names the exact enum values), AND
+  the parse (`SuggestionQuestionSchema.type` = the suggestable subset, so an authoring-only `matrix`/`roster`
+  sample is dropped, not seeded); the gap-finder parses with a per-element-tolerant inner `questions` array
+  (37 §3.1) so a bad sample question drops only itself + a suggestion with one good + one bad question
+  survives; `type`/`rationale` tolerate omission (only a `title` + ≥1 usable question are required). Both
+  offline fakes made imperfect (a mixed valid/off-spec sample question, 37 §10). Tests: a regression where 3
+  suggestions each mix a valid + an off-spec `type` → all 3 kept (was 0), a prompt-lists-the-types guard, a
+  missing-`type`/`rationale` tolerance case, and the Suggested E2E asserts the off-spec sample question is
+  dropped while its sibling + the suggestion survive. Gate green: typecheck, lint, format, **727 core + 769
+  desktop** unit, Suggested E2E green. Code-reviewer **ship**. **Lesson: a prompt that references a list it
+  doesn't include ("same types as generation") leaves the model guessing — inline the enum; and the 37
+  tolerance must reach NESTED arrays (the inner `questions`), not just the top-level batch, or one bad child
+  still sinks the whole parent.**

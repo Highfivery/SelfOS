@@ -1,5 +1,5 @@
 import type { IntimacyTopics } from '../intimacy/topics';
-import { LIFE_AREAS, type SensitivityTier } from '../schemas';
+import { LIFE_AREAS, SUGGESTABLE_ANSWER_TYPES, type SensitivityTier } from '../schemas';
 
 /**
  * Prompt builders for AI question generation + the gap-finder (08-questionnaires §3.1/§3.7/§5.1). The
@@ -11,7 +11,7 @@ import { LIFE_AREAS, type SensitivityTier } from '../schemas';
 
 /** The answer-type catalog the model must choose from, with the fields each type needs. */
 const ANSWER_TYPE_GUIDE = `Each question is an object with:
-- "type": one of shortText, longText, singleChoice, multiChoice, rating, slider, ranking, thisOrThat, yesNo, date.
+- "type": one of ${SUGGESTABLE_ANSWER_TYPES.join(', ')}.
 - "prompt": the question text (warm, clear, first- or second-person as fits).
 - "required": boolean.
 - "help": optional one-line clarifier.
@@ -169,7 +169,7 @@ export function buildImproveUserMessage(input: {
 
 export const GAP_FINDER_SYSTEM = `${SAFETY}\n\nYou suggest the NEXT questionnaires a person could send to people in their life to understand them better. Base suggestions only on the structured context provided (profiles, relationships, prior Insights) — never invent facts. Return a JSON array of up to 3 objects, each:
 {"title": string, "type": string, "rationale": short string (why this, now), "questions": [{"type": string, "prompt": string, "required": boolean}] (2-4 sample questions)}.
-Use the same answer types as generation. Return ONLY the JSON array.`;
+Each sample question's "type" MUST be one of EXACTLY these values: ${SUGGESTABLE_ANSWER_TYPES.join(', ')}. Use no other type. Return ONLY the JSON array.`;
 
 export const ANALYSIS_SYSTEM = `${SAFETY}
 

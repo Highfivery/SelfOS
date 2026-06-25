@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="SelfOS">
+  <rect width="32" height="32" rx="8" fill="#ecf1f5" />
+  <g transform="translate(2 2)">
+    <path d="M14 17 C 9.5 17.5 6 14 5.5 8 C 11 8.5 13.5 12.5 14 17 Z" fill="#4f7388" opacity="0.5" />
+    <path d="M14 15 C 18.5 15.5 22 12 22.5 6 C 17 6.5 14.5 10.5 14 15 Z" fill="#4f7388" />
+    <path d="M14 25 C 13 21 13.4 17 14 13" fill="none" stroke="#4f7388" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+</svg>

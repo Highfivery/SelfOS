@@ -2036,10 +2036,19 @@ test('questionnaires: Suggested returns suggestions even when the model omits `r
     await w.getByRole('button', { name: 'Suggested' }).click();
     await w.getByRole('button', { name: /suggest questionnaires/i }).click();
 
-    // The suggestions render (the bug's user-visible fix) — and the data-blame line never appears.
+    // The suggestions render (the bug's user-visible fix) — and the data-blame line + the "unexpected
+    // shape" error never appear.
     await expect(w.getByText('Weekly partner check-in')).toBeVisible();
     await expect(w.getByText('What we each need')).toBeVisible();
     await expect(w.getByText(/add more about the people/i)).toHaveCount(0);
+    await expect(w.getByText(/unexpected shape/i)).toHaveCount(0);
+
+    // The first suggestion's sample questions include one with an OFF-SPEC `type` ("text") the model
+    // guessed — the inner per-element salvage drops ONLY that question, keeping the suggestion + its valid
+    // sample question. So the good prompt shows and the off-spec one is absent (the "unexpected shape" fix:
+    // one bad sample question no longer sinks the whole suggestion).
+    await expect(w.getByText('How connected did you feel this week?')).toBeVisible();
+    await expect(w.getByText('Anything left unsaid this week?')).toHaveCount(0);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

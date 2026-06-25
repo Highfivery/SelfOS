@@ -147,6 +147,14 @@ export function fakeClaudeClient(): ClaudeClient {
             questions: [
               { type: 'shortText', prompt: 'What felt hardest this week?', required: false },
               { type: 'yesNo', prompt: 'Do you feel heard lately?', required: true },
+              // A choice question WITH options so the materialize path (08 §19.4) proves the blank-options bug
+              // is gone — a generated multiple-choice question always carries real options.
+              {
+                type: 'multiChoice',
+                prompt: 'Which of these drained you most?',
+                required: false,
+                options: ['Big social events', 'Conflict', 'Long meetings'],
+              },
             ],
           }),
           usage: { inputTokens: 120, outputTokens: 60, cacheWriteTokens: 0, cacheReadTokens: 0 },

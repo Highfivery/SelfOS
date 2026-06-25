@@ -140,6 +140,8 @@ const bridge: SelfosBridge = {
     ipcRenderer.invoke(IpcChannels.questionnaireSuggestionsGenerate, input),
   questionnaireSuggestionDelete: (input) =>
     ipcRenderer.invoke(IpcChannels.questionnaireSuggestionDelete, input),
+  questionnaireSuggestionMaterialize: (input) =>
+    ipcRenderer.invoke(IpcChannels.questionnaireSuggestionMaterialize, input),
   insightsList: () => ipcRenderer.invoke(IpcChannels.insightsList),
   memoryOutboundSharing: () => ipcRenderer.invoke(IpcChannels.memoryOutboundSharing),
   insightsAnalyze: (input) => ipcRenderer.invoke(IpcChannels.insightsAnalyze, input),

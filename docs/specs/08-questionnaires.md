@@ -2392,3 +2392,78 @@ delete + create-binds-recipient-no-reask + remove-on-save). **Lesson: the recipi
 gap-finder as avoid-only grounding (the §17.4 author-blind boundary) — the same relaxation generation already
 makes; persistence lives under the AUTHOR keyed by recipient so per-active-person isolation is structural, and
 "remove on save" needs a once-only `onCreated` (not the async `saved` state) to avoid a double-fire.**
+
+## 19. 2026-06-25 amendment — knowledge-aware generation (deeper, never-repeat, creative) — BUILT
+
+Generated questionnaires **repeated questions and offered options the recipient had already answered in
+onboarding** — most glaringly intimacy, where the explicit framing re-seeded the very act inventory the
+onboarding matrix already rated. Two compounding causes: (1) the de-dup grounding (`gatherRecipientHistory`,
+§17.4) fed only **synthesized insight facts + already-asked _prompts_**, never the **raw onboarding answers**
+(so the model couldn't see the actual matrix ratings); (2) the intimacy framing seeded the full act inventory
+as "ask about these," competing with — and overriding — the "avoid overlap" instruction. Plus a separate bug:
+a gap-finder suggestion's sample questions carry no `options`, so "Create from this" seeded a `multiChoice`
+question with **blank options**. Resolved with the owner (2026-06-25); four decisions recorded inline.
+
+### 19.1 Feed the raw known data (decision: feed raw onboarding answers + prior questionnaire answers)
+
+- The de-dup grounding is extended from derived facts to the **raw answered content**: the recipient's
+  **onboarding intake answers** (incl. the intimacy activity-matrix ratings, formatted "act — rating") AND the
+  **answers to prior questionnaires** (not just the prompts). Assembled **host-side** in the bridge; the same
+  **author-blind, output-safe §17.4 boundary** holds — the author never sees the raw content, and the model is
+  forbidden to quote/allude to it. A new `@selfos/core/intake` formatter (`formatIntakeForGeneration`) builds the
+  intake block + extracts the **covered acts** (it already imports `questionnaires/answering` one-way, so no new
+  cycle); the bridge concatenates it onto `gatherRecipientHistory` and threads the covered acts to the framing.
+
+### 19.2 Smarter generation contract (deeper · unknown · escalate · creative)
+
+- `GENERATION_SYSTEM` + `buildGenerationUserMessage` gain a strong **knowledge-aware** instruction: do NOT
+  re-ask anything in the known-data block or offer a choice option the person already picked/rated; instead
+  **(a) go DEEPER** on the known (the how/when/why, what would improve it, the feelings/fantasies around it),
+  **(b) explore the UNKNOWN** (topics/acts/scenarios with no data yet), **(c) escalate thoughtfully** (push
+  depth and new edges), and **(d) be creative** (scenarios, would-you-rather, this-or-that, roleplay setups,
+  hypotheticals — not only flat questions). Choice **options must EXCLUDE** anything already chosen/rated.
+
+### 19.3 Intimacy reframe (decision: push boundaries = deeper/edgier WITHIN consent — safety unchanged)
+
+- For an intimacy questionnaire when the recipient has done the onboarding matrix, `intimacyExplicitFraming`
+  **stops seeding already-rated acts as "ask"** and instead: lists them as **"already rated — go DEEPER, do not
+  re-ask the rating,"** and seeds **only the NOT-yet-rated acts + fantasies + scenarios** as new territory to
+  explore. "Push boundaries" is **deeper/edgier within the EXISTING consensual-adult, in-policy boundary** — the
+  shared `SAFETY` prefix and the consent/never-minors/never-illegal clauses are **unchanged**; nothing is loosened.
+
+### 19.4 Blank options + Create-from-this runs a full generation (decision: full deep generation on create)
+
+- The gap-finder `SuggestionQuestionSchema` gains an additive `options` (the prompt requests them for choice
+  types; `toSeed` maps them) — so a seeded sample question is never blank.
+- **"Create from this" now runs a full, knowledge-aware generation** for that recipient (the suggestion's
+  title/rationale/sample prompts become the brief) — producing a complete, de-duped, deep questionnaire with
+  proper options, rather than seeding the few illustrative samples. A new bridge op
+  `questionnaireSuggestionMaterialize({ recipientPersonId, suggestionId })` (gated `questionnaires.create` +
+  author-scoped) returns `{ title, type, questions }`; on AI-off/over-budget/refusal it falls back to seeding
+  the (now option-complete) sample questions with a calm note, so create never dead-ends.
+
+### 19.5 Build status (2026-06-25, `feat/knowledge-aware-generation`) — BUILT
+
+All four §19 pieces built. **Core:** `@selfos/core/intake` `formatIntakeForGeneration(session)` → the raw
+onboarding answers as a text block (reusing `formatAnswerForSynthesis`'s anatomy-resolved labels) + the
+`CoveredAct[]` rated from the activity matrix; `intimacyExplicitFraming` takes `coveredActs` and reframes
+already-rated acts as "go deeper, don't re-ask" while seeding only un-rated territory; `buildGenerationUserMessage`
+
+- `GENERATION_SYSTEM` carry the knowledge-aware contract (go deeper / explore the unknown / push within consent /
+  be creative + EXCLUDE already-chosen options); `GenerateRequest`/`generateQuestions` thread `coveredIntimacyActs`;
+  `SuggestionQuestionSchema` gains `options` + the gap-finder prompt requests them + `toSeed` maps them. **Bridge:** a
+  `recipientKnownData` helper combines `gatherRecipientHistory` with the raw intake answers (author-blind, host-side)
+- the covered acts, fed into `questionnairesGenerate` and the gap-finder; a new `questionnaireSuggestionMaterialize`
+  op (gated `questionnaires.create`, author-scoped, non-household refused) runs a full generation from a suggestion.
+  **Renderer:** "Create from this" → `materializeSuggestion` (full generation, "Building…") with a calm fallback to
+  the sample-question seed. **Safety unchanged:** the shared `SAFETY` prefix + consent/never-minors/never-illegal
+  clauses are untouched — "push boundaries" is deeper/edgier within them. Code-reviewer **ship**. Gate green:
+  typecheck, lint, format, **768 core + 11 relay + 807 desktop** unit (formatIntakeForGeneration incl. intimacy
+  ratings; the intimacy reframe + knowledge-aware contract; gap-finder options; a bridge intimacy-de-dup decrypt-level
+  test [rated act reaches the model, never returned] + materialize + non-household-refused; SuggestedPanel materialize
+- fallback RTL), **E2E** (the recipient-first lifecycle now proves "Create from this" generates options, not a blank
+  choice question). **Lesson: the raw onboarding answers — not just the derived insight facts — are what generation
+  needs to stop repeating; reuse the SAME `formatAnswerForSynthesis` so the anatomy-resolved matrix labels match, keep
+  the assembly in the bridge (intake imports `questionnaires/answering` one-way, so a core `recipientHistory→intake`
+  import would risk a cycle), and reframe a seeded inventory ("ask these") into "go deeper on the rated ones, explore
+  the rest" rather than fighting it with a separate avoid instruction.**

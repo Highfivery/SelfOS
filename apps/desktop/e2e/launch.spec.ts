@@ -2203,11 +2203,14 @@ test('questionnaires: recipient-first Suggested — tailor, persist, delete, cre
       (await listSavedSuggestions(fs, key, 'owner-1', 'partner-1')).map((s) => s.title),
     ).toEqual(['Weekly partner check-in']);
 
-    // "Create from this" goes STRAIGHT to the builder bound to Partner — no "Who is this for?" re-ask
-    // (08 §18.1); the title is pre-filled.
+    // "Create from this" runs a FULL knowledge-aware generation (08 §19.4) → the builder opens bound to
+    // Partner (no "Who is this for?" re-ask, §18.1) with GENERATED questions that carry real options.
     await w.getByRole('button', { name: /create from this/i }).click();
+    await expect(w.getByLabel('Title')).toHaveValue('A gentle weekly check-in');
     await expect(w.getByText('Who is this for?')).toHaveCount(0);
-    await expect(w.getByLabel('Title')).toHaveValue('Weekly partner check-in');
+    // The generated multiple-choice question is NOT blank — its option inputs carry real values (the
+    // reported blank-options bug is fixed, §19.4).
+    await expect(w.getByLabel('Option 1').first()).toHaveValue('Big social events');
 
     // Saving the new questionnaire removes the suggestion it came from (08 §18.4).
     await w.getByRole('button', { name: 'Create draft' }).click();

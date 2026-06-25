@@ -51,6 +51,11 @@ interface QuestionnaireState {
     recipientPersonId: string,
     suggestionId: string,
   ) => Promise<SavedSuggestionList>;
+  /** "Create from this" → a full knowledge-aware generation from a suggestion (08 §19.4). */
+  materializeSuggestion: (
+    recipientPersonId: string,
+    suggestionId: string,
+  ) => Promise<GenerateResult>;
   save: (input: QuestionnaireInput) => Promise<Questionnaire | null>;
   remove: (id: string) => Promise<void>;
   validate: (input: QuestionnaireInput) => Promise<string[]>;
@@ -95,6 +100,11 @@ export const useQuestionnaireStore = create<QuestionnaireState>((set, get) => ({
     ({ ...AI_UNAVAILABLE, saved: [], added: 0 } as SavedSuggestionsGenerateResult),
   deleteSuggestion: async (recipientPersonId, suggestionId) =>
     (await window.selfos?.questionnaireSuggestionDelete({ recipientPersonId, suggestionId })) ?? [],
+  materializeSuggestion: async (recipientPersonId, suggestionId) =>
+    (await window.selfos?.questionnaireSuggestionMaterialize({
+      recipientPersonId,
+      suggestionId,
+    })) ?? AI_UNAVAILABLE,
   save: async (input) => {
     const saved = (await window.selfos?.questionnairesSave(input)) ?? null;
     await get().load();

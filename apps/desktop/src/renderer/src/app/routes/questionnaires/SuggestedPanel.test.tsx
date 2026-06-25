@@ -36,7 +36,10 @@ const saved = (title: string): SavedSuggestion => ({
 
 /** Mount with AI ready (enabled + a resolved key), Mara in the household, and the given overrides. The
  * people store is seeded directly (deterministic — no async-load race between tests). */
-function renderReady(overrides: Partial<SelfosBridge> = {}): void {
+function renderReady(
+  overrides: Partial<SelfosBridge> = {},
+  onCreate: Parameters<typeof SuggestedPanel>[0]['onCreate'] = () => {},
+): void {
   useSettingsStore.setState({ values: { 'ai.enabled': true } });
   usePeopleStore.setState({ people: [mara], relationships: [], loaded: true });
   installMockBridge({
@@ -52,7 +55,7 @@ function renderReady(overrides: Partial<SelfosBridge> = {}): void {
   });
   render(
     <MemoryRouter>
-      <SuggestedPanel onCreate={() => {}} />
+      <SuggestedPanel onCreate={onCreate} />
     </MemoryRouter>,
   );
 }
@@ -94,6 +97,57 @@ describe('SuggestedPanel', () => {
     expect(await screen.findByText('Already saved')).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: /suggest more/i })).toBeInTheDocument();
     expect(generate).not.toHaveBeenCalled();
+  });
+
+  it('“Create from this” runs a full generation and hands back the generated questions (with options, §19.4)', async () => {
+    const onCreate = vi.fn();
+    renderReady(
+      {
+        questionnaireSuggestionsList: () => Promise.resolve([saved('Energy & rest')]),
+        questionnaireSuggestionMaterialize: () =>
+          Promise.resolve({
+            ok: true,
+            title: 'Energy & rest, deeper',
+            questions: [
+              {
+                id: 'gq1',
+                type: 'multiChoice',
+                prompt: 'Which drain you?',
+                required: false,
+                options: ['Meetings', 'Conflict'],
+              },
+            ],
+          }),
+      },
+      onCreate,
+    );
+    await pickMara();
+    await userEvent.click(await screen.findByRole('button', { name: /create from this/i }));
+    await waitFor(() => expect(onCreate).toHaveBeenCalled());
+    const arg = onCreate.mock.calls[0]?.[0];
+    const q0 = arg?.seed.questions[0];
+    // The seed carries the GENERATED questions (with options) — not the optionless sample (§19.4).
+    expect(q0?.type).toBe('multiChoice');
+    expect(q0?.options).toEqual(['Meetings', 'Conflict']);
+    expect(arg?.recipientPersonId).toBe('p1');
+  });
+
+  it('falls back to seeding the sample questions if materialize fails (never dead-ends, §19.4)', async () => {
+    const onCreate = vi.fn();
+    renderReady(
+      {
+        questionnaireSuggestionsList: () => Promise.resolve([saved('Energy & rest')]),
+        questionnaireSuggestionMaterialize: () =>
+          Promise.resolve({ ok: false, reason: 'BUDGET', message: 'AI budget reached.' }),
+      },
+      onCreate,
+    );
+    await pickMara();
+    await userEvent.click(await screen.findByRole('button', { name: /create from this/i }));
+    await waitFor(() => expect(onCreate).toHaveBeenCalled());
+    // The fallback seeds the suggestion's own sample question (its prompt), so create still opens the builder.
+    const arg = onCreate.mock.calls[0]?.[0];
+    expect(arg?.seed.questions[0]?.prompt).toContain('Energy & rest');
   });
 
   it('deletes a saved suggestion', async () => {

@@ -772,6 +772,66 @@ function formAnswersMessages(session: IntakeSession): { role: 'user'; content: s
   return out;
 }
 
+/** A single rated intimacy act from the onboarding activity matrix (label + the chosen feeling), used to tell
+ * generation what's already covered so it goes DEEPER instead of re-asking the rating (08 §19.3). */
+export interface CoveredAct {
+  label: string;
+  rating: string;
+}
+
+/** Extract the rated acts from the onboarding `activities` matrix answer (anatomy-resolved labels, migrated
+ * legacy keys) as structured {label, rating} — the structured twin of `formatAnswerForSynthesis`'s string. */
+function parseCoveredActs(q: Question, value: IntakeAnswerValue | undefined): CoveredAct[] {
+  if (q.type !== 'matrix' || !q.matrix || value === null || typeof value !== 'object') return [];
+  const labels = matrixLabels(q.matrix);
+  if (!labels || Array.isArray(value)) return [];
+  const { min, rows } = q.matrix;
+  const map = migrateActivityMatrixValue(value as Record<string, number>);
+  const labelByKey = new Map(rows.map((r) => [matrixRowKey(r), matrixRowLabel(r)]));
+  const out: CoveredAct[] = [];
+  for (const [key, point] of Object.entries(map)) {
+    if (typeof point !== 'number') continue;
+    out.push({ label: labelByKey.get(key) ?? key, rating: labels[point - min] ?? String(point) });
+  }
+  return out;
+}
+
+/**
+ * Format a person's completed onboarding answers as AVOID-ONLY known-data grounding for questionnaire
+ * generation (08 §19.1). Reuses the SAME per-question formatting + anatomy-resolved matrix labels as synthesis,
+ * but returns one text block (every visible answer across every section — incl. restricted ones; the §17.4
+ * author-blind boundary makes this safe, the author never sees it) PLUS the set of intimacy acts already rated
+ * (so the intimacy framing can go DEEPER instead of re-asking, §19.3). Hidden/orphaned answers are excluded
+ * (the §47 cleared-trigger rule), exactly as synthesis does.
+ */
+export function formatIntakeForGeneration(session: IntakeSession): {
+  text: string;
+  coveredActs: CoveredAct[];
+} {
+  const actCtx = activityRowContext(session);
+  const lines: string[] = [];
+  const coveredActs: CoveredAct[] = [];
+  for (const def of INTAKE_CATALOG) {
+    if (!def.questions) continue;
+    const section = session.sections.find((s) => s.id === def.id);
+    if (!section || Object.keys(section.answers).length === 0) continue;
+    const answerMap = section.answers as unknown as AnswerMap;
+    const sectionLines: string[] = [];
+    for (const m of def.questions) {
+      if (!isQuestionVisible(m.q, answerMap)) continue;
+      const q = withResolvedActivityRows(m.q, actCtx);
+      const value = section.answers[m.q.id];
+      const str = formatAnswerForSynthesis(q, value);
+      if (str) sectionLines.push(`${m.q.prompt}: ${str}`);
+      if (m.q.id === 'activities') coveredActs.push(...parseCoveredActs(q, value));
+    }
+    if (sectionLines.length > 0) {
+      lines.push(`From "${def.title}":`, ...sectionLines.map((l) => `  ${l}`));
+    }
+  }
+  return { text: lines.join('\n'), coveredActs };
+}
+
 /** The set of section refs (id or title, lowercased) whose facts are `restricted` (§8.4): every restricted
  * SECTION, plus the synthetic "(sensitive)" sub-block of any non-restricted section that has a per-question
  * `restricted` answer (§14.8). Computed once from the trusted catalog. */

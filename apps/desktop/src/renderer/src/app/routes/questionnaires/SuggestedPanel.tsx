@@ -33,6 +33,8 @@ export function toSeed(suggestion: QuestionnaireSuggestion): BuilderSeed {
     type: q.type,
     prompt: q.prompt,
     required: q.required ?? false, // a suggestion's sample question may omit `required` (37 §3.3)
+    // Carry the sample question's options through so a seeded choice question isn't blank (08 §19.4).
+    ...(q.options && q.options.length > 0 ? { options: q.options } : {}),
   }));
   return { title: suggestion.title, type: suggestion.type, questions };
 }
@@ -60,6 +62,7 @@ export function SuggestedPanel({
   const generateSuggestions = useQuestionnaireStore((s) => s.generateSuggestions);
   const listSavedSuggestions = useQuestionnaireStore((s) => s.listSavedSuggestions);
   const deleteSuggestion = useQuestionnaireStore((s) => s.deleteSuggestion);
+  const materializeSuggestion = useQuestionnaireStore((s) => s.materializeSuggestion);
   const people = usePeopleStore((s) => s.people);
   const peopleLoaded = usePeopleStore((s) => s.loaded);
   const loadPeople = usePeopleStore((s) => s.load);
@@ -70,6 +73,7 @@ export function SuggestedPanel({
   const [recipientId, setRecipientId] = useState('');
   const [saved, setSaved] = useState<SavedSuggestion[]>([]);
   const [busy, setBusy] = useState(false);
+  const [materializingId, setMaterializingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
@@ -116,6 +120,35 @@ export function SuggestedPanel({
 
   const onDelete = async (suggestionId: string): Promise<void> => {
     setSaved(await deleteSuggestion(recipientId, suggestionId));
+  };
+
+  // "Create from this" (08 §19.4): run a full, knowledge-aware generation from the suggestion's idea — a
+  // complete, de-duped questionnaire with proper options. Falls back to seeding the sample questions if the
+  // generation can't run (over budget / refusal), so create never dead-ends.
+  const onCreateFromSuggestion = async (s: SavedSuggestion): Promise<void> => {
+    setMaterializingId(s.id);
+    setNotice(null);
+    try {
+      const result = await materializeSuggestion(recipientId, s.id);
+      if (result.ok && result.questions && result.questions.length > 0) {
+        onCreate({
+          seed: {
+            title: result.title?.trim() || s.title,
+            type: s.type,
+            questions: result.questions,
+          },
+          recipientPersonId: recipientId,
+          suggestionId: s.id,
+        });
+      } else {
+        setNotice(
+          'Couldn’t expand that one with AI — opening it with the sample questions to edit.',
+        );
+        onCreate({ seed: toSeed(s), recipientPersonId: recipientId, suggestionId: s.id });
+      }
+    } finally {
+      setMaterializingId(null);
+    }
   };
 
   return (
@@ -207,11 +240,10 @@ export function SuggestedPanel({
             <div>
               <Button
                 variant="secondary"
-                onClick={() =>
-                  onCreate({ seed: toSeed(s), recipientPersonId: recipientId, suggestionId: s.id })
-                }
+                disabled={materializingId !== null}
+                onClick={() => void onCreateFromSuggestion(s)}
               >
-                Create from this
+                {materializingId === s.id ? 'Building…' : 'Create from this'}
               </Button>
             </div>
           </Stack>

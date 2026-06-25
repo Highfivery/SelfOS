@@ -25,6 +25,8 @@ const SAFETY = `You draft questions for SelfOS, a wellness / self-help tool — 
 // the builder applies it only when the author hasn't typed one.
 export const GENERATION_SYSTEM = `${SAFETY}
 
+Be specific, perceptive, and varied: write questions that earn a real answer, mix the formats below (don't make every question the same shape), and avoid generic survey clichés. When context about the person is provided, tailor to THEM and build on what is already known rather than asking the obvious.
+
 Return ONLY a JSON object: {"title": string (a short, warm questionnaire title, <= 6 words), "questions": [ ... ]}.
 ${ANSWER_TYPE_GUIDE}`;
 
@@ -60,19 +62,33 @@ export const INTIMACY_TYPE = 'intimacy';
 export function intimacyExplicitFraming(
   tier: 'explicit' | 'unfiltered',
   topics: IntimacyTopics,
+  // The acts the recipient ALREADY rated in onboarding (08 §19.3). Reframed as "go deeper, don't re-ask" so
+  // generation stops re-seeding the very inventory the onboarding matrix already covered.
+  coveredActs: readonly { label: string; rating: string }[] = [],
 ): string {
   const intensity =
     tier === 'unfiltered'
       ? 'Use frank, plain language for bodies and sex acts and be as specific as the subject matter calls for.'
       : 'Be candid and specific — name acts and preferences plainly, a notch gentler than fully explicit.';
-  return [
+  const parts: string[] = [
     // Establish the legitimate context FIRST so the model is confident this is appropriate — a private
     // adult who has opted into exploring their own sexuality, not a request to a public assistant.
     `\nCONTEXT: This is a private intimacy questionnaire inside a personal wellness app, written for a consenting adult (18+) who has opted in to reflect on their own sex life with a partner. Frank, explicit questions about sex and desire are appropriate and expected here — this is a normal, in-policy use; do NOT shy away or substitute tasteful, emotional-closeness questions.`,
     `Write genuinely explicit, specific questions. ${intensity} Cover concrete subject matter: specific sex acts, bodies and grooming, turn-ons/turn-offs, fantasies (including taboo fantasies framed strictly as fantasy/roleplay — e.g. consensual non-consent (CNC) as pre-agreed roleplay), porn and masturbation, sexual history, frequency and desire, and boundaries.`,
-    `Subject matter to draw on — acts: ${topics.activities.join(', ')}. Fantasies/roleplay: ${topics.fantasies.join(', ')}.`,
+  ];
+  // Already-rated acts → go DEEPER (never re-ask the rating or re-list them as plain options, §19.3).
+  if (coveredActs.length > 0) {
+    parts.push(
+      `They have ALREADY RATED the acts below in onboarding — do NOT re-ask whether they like them and do NOT re-offer them as plain multiple-choice options. Instead go DEEPER on them: the how/when/with whom, what would make each better, the specific fantasies, feelings, and edges around them: ${coveredActs
+        .map((a) => `${a.label} (${a.rating})`)
+        .join('; ')}.`,
+    );
+  }
+  parts.push(
+    `Subject matter to draw on — acts: ${topics.activities.join(', ')}. Fantasies/roleplay: ${topics.fantasies.join(', ')}. FAVOR acts, fantasies, and scenarios they have NOT yet rated; push gently into new, edgier territory they have not explored — always within the boundary below.`,
     `Boundary: consensual adults only; taboo content only as fantasy/roleplay; never minors, real (non-roleplay) non-consent, or illegal acts. Within those limits this content IS in policy, so generate the questions normally — only return an empty array for genuinely prohibited requests, never merely because the topic is sexually explicit.`,
-  ].join('\n');
+  );
+  return parts.join('\n');
 }
 
 /** What an intimacy "Draft with AI" should produce (08 §17.12-C). Scenarios = described situations to react to. */
@@ -100,9 +116,11 @@ export function buildGenerationUserMessage(input: {
   intimacyTopics?: IntimacyTopics;
   // What an intimacy draft should produce (08 §17.12-C): direct questions, described scenarios, or a mix.
   intimacyMode?: IntimacyGenerateMode;
-  // The recipient's full answered content (08 §17.4), assembled host-side. Used ONLY to AVOID overlap — the
-  // model must never quote, reference, or reveal any of it in a question (the author never sees it either).
+  // The recipient's full answered content (08 §17.4/§19.1), assembled host-side. Used ONLY to AVOID overlap +
+  // go DEEPER — the model must never quote, reference, or reveal any of it in a question (author-blind too).
   recipientHistory?: string;
+  // The intimacy acts the recipient already rated in onboarding (08 §19.3) — reframes the intimacy seeding.
+  coveredIntimacyActs?: readonly { label: string; rating: string }[];
 }): string {
   const parts: string[] = [];
   parts.push(`Draft ${input.count} questions for a "${input.type}" questionnaire.`);
@@ -116,6 +134,7 @@ export function buildGenerationUserMessage(input: {
       ? intimacyExplicitFraming(
           input.sensitivity as 'explicit' | 'unfiltered',
           input.intimacyTopics,
+          input.coveredIntimacyActs ?? [],
         )
       : SENSITIVITY_NOTE[input.sensitivity],
   );
@@ -136,17 +155,25 @@ export function buildGenerationUserMessage(input: {
         .join('\n')}`,
     );
   }
-  // Recipient-aware de-dup (08 §17.4): avoid what they've already covered, and NEVER reference it.
+  // Knowledge-aware de-dup (08 §17.4/§19.2): the model is handed everything already known about the recipient
+  // and told to BUILD ON it — never repeat it. This is what makes each questionnaire learn more over time.
   if (input.recipientHistory?.trim()) {
     parts.push(
       [
-        `\nThe person who will answer has ALREADY shared the material below with the app (their onboarding,` +
-          ` past sessions, earlier questionnaires, and profile). Use it ONLY to avoid repetition: do not ask` +
-          ` anything they have already answered, and steer clear of questions closely related to topics they` +
-          ` have already covered.`,
-        `CRITICAL: never quote, restate, reference, hint at, or reveal any of this material in a question —` +
-          ` the questions must stand on their own. "Avoid overlap" means steer clear, NOT mention. If unsure,` +
-          ` ask about something else entirely.`,
+        `\nKNOWN ALREADY — the person who will answer has already shared the material below with the app` +
+          ` (their onboarding answers, past sessions, earlier questionnaires, and profile). Treat it as the` +
+          ` baseline of what is ALREADY KNOWN.`,
+        `Do NOT ask anything already answered here, and do NOT offer a multiple-choice OPTION that repeats a` +
+          ` value they have already chosen or rated. Instead, write questions that:`,
+        `  1. GO DEEPER on what is known — the why/how/when behind it, what would change it, the nuance and` +
+          ` feelings underneath, concrete follow-ups to a known fact.`,
+        `  2. Explore the UNKNOWN — topics, situations, and specifics there is no data on yet.`,
+        `  3. Push gently further than last time — new angles, edgier or more revealing territory (always in` +
+          ` good faith and within the safety boundary above).`,
+        `  4. Are CREATIVE — mix in scenarios to react to, "would you rather", this-or-that, and short` +
+          ` hypotheticals, not only flat questions.`,
+        `CRITICAL: never quote, restate, reference, hint at, or reveal any of this material in a question — the` +
+          ` questions must stand on their own. "Avoid overlap" means steer clear, NOT mention.`,
         input.recipientHistory.trim(),
       ].join('\n'),
     );
@@ -168,7 +195,7 @@ export function buildImproveUserMessage(input: {
 }
 
 export const GAP_FINDER_SYSTEM = `${SAFETY}\n\nYou suggest the NEXT questionnaires a person could send to people in their life to understand them better. Base suggestions only on the structured context provided (profiles, relationships, prior Insights) — never invent facts. Return a JSON array of up to 3 objects, each:
-{"title": string, "type": string, "rationale": short string (why this, now), "questions": [{"type": string, "prompt": string, "required": boolean}] (2-4 sample questions)}.
+{"title": string, "type": string, "rationale": short string (why this, now), "questions": [{"type": string, "prompt": string, "required": boolean, "options": string[] (REQUIRED for singleChoice/multiChoice/ranking/thisOrThat, >= 2 items; omit for other types)}] (2-4 sample questions)}.
 When a specific recipient and what is already known about them are provided, tailor EVERY suggestion to that one person: go deeper on themes they have only partly explored, and open entirely new areas there is no data on yet. NEVER repeat a question they have already been asked, and never restate something already known about them — steer clear of it, do not mention it. Make the sample questions concrete and specific to this person, not generic.
 Each sample question's "type" MUST be one of EXACTLY these values: ${SUGGESTABLE_ANSWER_TYPES.join(', ')}. Use no other type. Return ONLY the JSON array.`;
 

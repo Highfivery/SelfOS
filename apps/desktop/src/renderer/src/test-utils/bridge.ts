@@ -250,6 +250,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     questionnaireSuggestionsList: () => Promise.resolve([]),
     questionnaireSuggestionsGenerate: () => Promise.resolve({ ok: true, saved: [], added: 0 }),
     questionnaireSuggestionDelete: () => Promise.resolve([]),
+    questionnaireSuggestionMaterialize: () => Promise.resolve({ ok: true, questions: [] }),
     insightsList: () => Promise.resolve([]),
     memoryOutboundSharing: () => Promise.resolve({ items: [] }),
     insightsAnalyze: () => Promise.resolve({ ok: false, reason: 'NO_RESPONSE' }),

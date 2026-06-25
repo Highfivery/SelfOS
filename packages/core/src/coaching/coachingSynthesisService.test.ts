@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { generateMasterKey } from '../crypto';
 import { memFileSystem } from '../host/memFileSystem';
 import type { ClaudeClient, FileSystem } from '../host';
+import { flattenContent } from '../host';
 import type { Insight } from '../schemas';
 import { saveInsight } from '../insights';
 import { saveDream } from '../dreams';
@@ -227,7 +228,7 @@ describe('synthesize (40 §3.3)', () => {
     const capturing: ClaudeClient = {
       send: () => Promise.resolve(''),
       stream: (options) => {
-        captured = options.messages.at(-1)?.content ?? '';
+        captured = flattenContent(options.messages.at(-1)?.content ?? '');
         return Promise.resolve({
           text: JSON.stringify({ observation: 'ok', sources: [] }),
           usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
@@ -257,7 +258,7 @@ describe('synthesize (40 §3.3)', () => {
     const capturing: ClaudeClient = {
       send: () => Promise.resolve(''),
       stream: (options) => {
-        captured = options.messages.at(-1)?.content ?? '';
+        captured = flattenContent(options.messages.at(-1)?.content ?? '');
         return Promise.resolve({
           text: JSON.stringify({ observation: 'ok', sources: [] }),
           usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
@@ -301,7 +302,7 @@ describe('synthesize (40 §3.3)', () => {
     const capturing: ClaudeClient = {
       send: () => Promise.resolve(''),
       stream: (options) => {
-        captured = options.messages.at(-1)?.content ?? '';
+        captured = flattenContent(options.messages.at(-1)?.content ?? '');
         return Promise.resolve({
           text: JSON.stringify({ observation: 'ok', sources: [] }),
           usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },

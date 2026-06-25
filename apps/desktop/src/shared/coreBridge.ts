@@ -4,6 +4,7 @@ import {
   MIN_OWNER_PIN_LENGTH,
   OPENAI_API_KEY_ID,
   type AccessView,
+  type AttachmentRef,
   type BudgetState,
   type ChatTurnResult,
   type ClaudeTestResult,
@@ -32,6 +33,7 @@ import {
   AiProviderSchema,
   AnswerSchema,
   AnswerTypeSchema,
+  AttachmentRefSchema,
   BudgetSchema,
   DreamAnalysisEditsSchema,
   DreamInputSchema,
@@ -195,18 +197,23 @@ import {
 } from '@selfos/core/usage';
 import {
   acknowledgeAdult,
+  conversationAttachmentsDir,
   deleteConversation,
   endAndSummarize,
   getConversation,
+  getConversationAttachment,
   getGuidancePrefs,
   getGuidanceState,
+  isConversationAttachmentPath,
   listConversations,
   runChatTurn,
   saveConversation,
   setSessionStatus,
   startGuided,
+  storeConversationAttachment,
   suggestGuidedSessions,
 } from '@selfos/core/conversations';
+import { sniffImageMime } from '@selfos/core/media';
 import {
   deleteInsight,
   flagInsightFact,
@@ -493,9 +500,30 @@ const UsageSummarySchema = z.object({
   period: z.enum(['week', 'month']),
   personId: z.string().min(1).optional(),
 });
+// A conversation id is a renderer-minted uuid; restrict it to a safe path SEGMENT (no `/` or `..`) so a
+// crafted id can't traverse out of the active person's vault tree when a file path is built from it (45 §6).
+const ConversationIdSchema = z
+  .string()
+  .min(1)
+  .regex(/^[A-Za-z0-9_-]+$/, 'Invalid conversation id');
 const ChatStreamSchema = z.object({
-  conversationId: z.string().min(1),
-  userText: z.string().min(1),
+  conversationId: ConversationIdSchema,
+  // Allow an empty string for an image-only message (45 §3.1) — at least text OR ≥1 attachment is required.
+  userText: z.string(),
+  // The per-message cap (~5, 45 §4.4) is re-enforced here — the renderer is not the trust boundary.
+  attachments: z.array(AttachmentRefSchema).max(5).optional(),
+});
+const StoreAttachmentSchema = z.object({
+  conversationId: ConversationIdSchema,
+  base64: z.string().min(1),
+  mime: z.string().min(1),
+  width: z.number().int().positive().optional(),
+  height: z.number().int().positive().optional(),
+  bytes: z.number().int().nonnegative().optional(),
+});
+const ConversationAttachmentRefSchema = z.object({
+  conversationId: ConversationIdSchema,
+  path: z.string().min(1),
 });
 const ChatConversationIdSchema = z.object({ conversationId: z.string().min(1) });
 const StartGuidedSchema = z.object({ guideId: z.string().min(1) });
@@ -1607,7 +1635,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       await deleteConversation(ctx.fs, personId, PersonIdSchema.parse(id));
     },
     chatStream: async (input): Promise<ChatTurnResult> => {
-      const { conversationId, userText } = ChatStreamSchema.parse(input);
+      const { conversationId, userText, attachments } = ChatStreamSchema.parse(input);
       const ctx = await host.vaultAndKey();
       const personId = ctx ? await activePersonId() : null;
       if (!ctx || !personId) {
@@ -1651,11 +1679,84 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         personId,
         conversationId,
         userText,
+        ...(attachments && attachments.length > 0 ? { attachments } : {}),
         onDelta: (text) => host.emitChatChunk(text),
         ...(depthAsk ? { depthAsk } : {}),
         ...(goalRaise ? { goalRaise } : {}),
         now,
       });
+    },
+
+    // --- Session image attachments (45 §6) — gated by `sessions.own`, scoped to the active person ---
+    conversationStoreAttachment: async (
+      input,
+    ): Promise<
+      | AttachmentRef
+      | { ok: false; reason: 'UNSUPPORTED' | 'TOO_LARGE' | 'NOT_FOUND'; message: string }
+    > => {
+      const { conversationId, base64, mime, width, height } = StoreAttachmentSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'sessions.own'))) {
+        return { ok: false, reason: 'NOT_FOUND', message: 'SelfOS isn’t ready yet.' };
+      }
+      // Store under the ACTIVE person's conversation tree. The id is restricted to a safe path segment by
+      // `ConversationIdSchema` (no `/`/`..`), and `storeConversationAttachment` re-checks the built path against
+      // the attachment guard, so a crafted id can't traverse out of the person's tree. mime + size are
+      // re-validated inside `storeConversationAttachment`.
+      const dims =
+        width !== undefined || height !== undefined
+          ? {
+              ...(width !== undefined ? { width } : {}),
+              ...(height !== undefined ? { height } : {}),
+            }
+          : undefined;
+      return storeConversationAttachment(
+        ctx.fs,
+        ctx.key,
+        personId,
+        conversationId,
+        fromBase64(base64),
+        mime,
+        dims,
+      );
+    },
+    conversationGetAttachment: async (
+      input,
+    ): Promise<{ mime: string; dataBase64: string } | null> => {
+      const { conversationId, path } = ConversationAttachmentRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'sessions.own')))
+        return null;
+      // Re-check it's one of OUR attachment files AND under the active person's NAMED conversation (so a
+      // path can't reach another person's — or another conversation's — attachment).
+      const prefix = `${conversationAttachmentsDir(personId, conversationId)}/`;
+      if (!isConversationAttachmentPath(path) || !path.startsWith(prefix)) return null;
+      const bytes = await getConversationAttachment(ctx.fs, ctx.key, path);
+      return bytes ? { mime: sniffImageMime(bytes), dataBase64: toBase64(bytes) } : null;
+    },
+    conversationExportAttachment: async (input): Promise<string | null> => {
+      const { conversationId, path } = ConversationAttachmentRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'sessions.own')))
+        return null;
+      const prefix = `${conversationAttachmentsDir(personId, conversationId)}/`;
+      if (!isConversationAttachmentPath(path) || !path.startsWith(prefix)) return null;
+      const bytes = await getConversationAttachment(ctx.fs, ctx.key, path);
+      if (!bytes) return null;
+      const mime = sniffImageMime(bytes);
+      const ext =
+        mime === 'image/webp'
+          ? 'webp'
+          : mime === 'image/jpeg'
+            ? 'jpg'
+            : mime === 'image/gif'
+              ? 'gif'
+              : 'png';
+      // The bytes leave the encrypted vault by the user's explicit choice (45 §11).
+      return host.saveImageFile(`session-image.${ext}`, bytes, mime);
     },
 
     // --- Session lifecycle + analysis (09-session-analysis §14) — gated by `sessions.own` ---

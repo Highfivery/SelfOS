@@ -194,6 +194,90 @@
   gap: var(--space-3);
 }
 
+.composerWrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.dragOver {
+  outline: 2px dashed var(--color-accent-text);
+  outline-offset: 4px;
+  border-radius: var(--radius-md);
+}
+
+.dropHint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-surface) 80%, transparent);
+  color: var(--color-accent-text);
+  font-weight: 600;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.pendingRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pendingItem {
+  position: relative;
+}
+
+.removeAttach {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: var(--radius-full, 999px);
+  background: var(--color-text-primary);
+  color: var(--color-surface);
+  cursor: pointer;
+}
+
+.removeAttach:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 1px;
+}
+
+.countChip {
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-text-secondary);
+}
+
+.attachError {
+  margin: 0;
+  color: var(--color-danger-text, var(--color-text-secondary));
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.fileInput {
+  display: none;
+}
+
+.attachmentGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
 .composer {
   display: flex;
   align-items: flex-end;

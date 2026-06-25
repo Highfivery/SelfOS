@@ -74,11 +74,18 @@ limit) surface inline with the same typed envelope as the connection test (03/05
 
 ### 4.1 Conversation (encrypted, per person)
 
+> **Amended by [`45`](45-session-attachments.md):** `ChatMessage` gains an additive-optional
+> `attachments?: AttachmentRef[]` (image attachments on a user message; no `schemaVersion` bump), and the
+> `ClaudeMessage.content` host type is widened to `string | ContentBlock[]` for Claude vision. `content` stays
+> a plain string here — the vision content-block assembly is a runtime mapping in `chatService`, not a stored
+> shape.
+
 ```ts
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   ts: string; // ISO
+  attachments?: AttachmentRef[]; // 45 — image attachments (additive-optional)
 }
 interface Conversation {
   id: string;

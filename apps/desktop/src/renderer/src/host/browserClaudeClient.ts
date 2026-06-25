@@ -1,5 +1,26 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { ClaudeClient, ClaudeStreamResult } from '@selfos/core/host';
+import type { ClaudeClient, ClaudeMessage, ClaudeStreamResult } from '@selfos/core/host';
+
+/** Map our content union (string | text/image blocks, 45 §5.3) to the Anthropic SDK content param. */
+function toSdkContent(content: ClaudeMessage['content']): Anthropic.MessageParam['content'] {
+  if (typeof content === 'string') return content;
+  return content.map((block) =>
+    block.type === 'text'
+      ? { type: 'text' as const, text: block.text }
+      : {
+          type: 'image' as const,
+          source: {
+            type: 'base64' as const,
+            media_type: block.source.media_type as
+              | 'image/png'
+              | 'image/jpeg'
+              | 'image/gif'
+              | 'image/webp',
+            data: block.source.data,
+          },
+        },
+  );
+}
 
 /**
  * Real Claude on iOS (07-mobile-platform §5.3/§11.3, slice iii-c2): the Anthropic SDK in **browser
@@ -21,7 +42,10 @@ export function browserClaudeClient(): ClaudeClient {
         model,
         max_tokens: maxTokens,
         ...(system ? { system } : {}),
-        messages: messages.map((message) => ({ role: message.role, content: message.content })),
+        messages: messages.map((message) => ({
+          role: message.role,
+          content: toSdkContent(message.content),
+        })),
       });
       let text = '';
       for (const block of response.content) {
@@ -41,7 +65,10 @@ export function browserClaudeClient(): ClaudeClient {
         ...(extendedThinking === false ? {} : { thinking: { type: 'adaptive' } }),
         // cache_control on the stable system prefix → repeat turns read it at ~0.1× (06 §7).
         system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
-        messages: messages.map((message) => ({ role: message.role, content: message.content })),
+        messages: messages.map((message) => ({
+          role: message.role,
+          content: toSdkContent(message.content),
+        })),
       });
       stream.on('text', (delta) => onDelta(delta));
 

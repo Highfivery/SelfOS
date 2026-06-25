@@ -1,6 +1,6 @@
 # 45 — Session image attachments (show the coach a screenshot)
 
-> **Status:** **Draft** · _last updated 2026-06-25_
+> **Status:** **Built** · _last updated 2026-06-25_
 >
 > Coaching sessions ([`05`](05-conversations.md)) are text-only, but real reflection often points at something
 > visual — a screenshot of a tense text-message thread, a photo of a journal page, a meme a friend sent. This
@@ -566,25 +566,28 @@ _Locked decisions (recorded, do not re-open):_ images-only (PDFs/text deferred);
 stay in full context for the whole session; paste + drag-and-drop + file-picker; session analysis stays
 text-only; deleting a conversation purges its attachments.
 
-_Still needing the user's decision:_
+_User decisions (confirmed 2026-06-25, as built):_
 
-- **Per-message and per-session caps + the downscale target** — proposed **5 images/message** and **~1568px**
-  longest edge. Confirm these exact numbers (and whether there's any per-session total cap, given images stay
-  in context every turn → recurring input-token cost). _Recommend: 5/message, 1568px, no separate session
-  cap for v1._
-- **Export an attachment back out of the vault** — should a stored attachment get a "Save image…" action (via
-  the existing `saveImageFile` op, [`13`](13-dream-images.md))? _Recommend: later — not in v1; it's the
-  user's own image either way._
-- **Attachments on guided sessions + the dream-analysis chat** — both are conversations; should they also get
-  attachments, or stay Sessions-only for now? _Recommend: a later follow-up once the Sessions surface is
-  proven._
-- **iOS / Capacitor file/photo picker** — the storage + vision seam is host-agnostic and works on iOS now;
-  should the iOS **picker UI** ship in this spec or a later iOS slice? _Recommend: design the seam now (done),
-  defer the iOS picker UI; paste/drop work where the WebView exposes them._
-- **Store-on-add vs store-on-send** — should an attachment be encrypted to the vault the moment it's added
-  (instant thumbnail, but a removed-before-send file must be GC'd, the [`08`](08-questionnaires.md) §13.2
-  lesson) or only at Send (no orphans, but the pending thumbnail is an in-memory data URL)? _Recommend:
-  store-on-send to avoid orphans; render pending thumbnails from the in-memory downscaled blob._
+- **Caps + downscale target** — **5 images/message, ~1568px longest edge, NO separate per-session cap** (images
+  stay in full context the whole session). Enforced in the composer **and** re-checked in main (`ChatStreamSchema`
+  caps `attachments` at 5; `storeConversationAttachment` re-validates mime + size).
+- **Store-on-send** — pending attachments are held as in-memory downscaled blobs and only encrypted to the vault
+  on Send (no orphaned media; the [`08`](08-questionnaires.md) §13.2 lesson). Pending thumbnails render from the
+  in-memory data URL; just-sent ones seed the store's attachment-url cache so they show with no re-fetch.
+- **Export INCLUDED** — the lightbox has a **"Save image"** action (`conversation:exportAttachment` →
+  the existing `saveImageFile` host op) that writes the decrypted bytes to a file the user picks OUTSIDE the
+  vault, by their explicit choice.
+- **Guided sessions INCLUDED** — attachments are opt-in on the shared `Composer` (`allowAttachments`), enabled
+  on free **and** structured Sessions (a guided session is an ordinary Conversation, so it's covered). The
+  **dream-analysis chat stays text-only** (it reuses the Composer without the flag).
+- **iOS picker** — the file-picker is a standard `<input type="file" accept="image/*">`, which triggers iOS's
+  native photo/file picker in a WKWebView, and the storage + vision seam is host-agnostic (`createCoreBridge`),
+  so iOS gets attachments for free; paste/drop also work where the WebView exposes them. No custom Capacitor
+  plugin was needed.
+
+_Locked at draft (unchanged):_ images-only (PDFs/text deferred); the reusable `@selfos/core/media` core
+surfaced only in Sessions; paste + drag-and-drop + file-picker; session analysis stays text-only; deleting a
+conversation purges its attachments.
 
 ### 11.1 Concurrency / shared-surface coordination
 
@@ -604,6 +607,28 @@ questionnaire work also touches — sequence to avoid clobbering:
 
 ## 12. Changelog
 
+- 2026-06-25 — **BUILT** (on `feat/session-attachments`, off `main` in a worktree). All §11 decisions
+  confirmed with the user first: 5/message + ~1568px + no session cap; store-on-send; export, guided sessions,
+  and the iOS picker INCLUDED (dream-analysis chat NOT). Shipped: the reusable **`@selfos/core/media`** core
+  (`storeMedia`/`getMedia`/`deleteMedia` + `sniffImageMime` + `ALLOWED_IMAGE_MIME`/`MAX_IMAGE_BYTES`); the
+  additive `ChatMessage.attachments` (`AttachmentRefSchema`, no schemaVersion bump); the widened
+  `ClaudeMessage.content` (`string | ContentBlock[]`) + a `flattenContent` helper, with both transports
+  (`anthropicClient`, `browserClaudeClient`) mapping image blocks to the SDK; `conversationService`
+  attachment helpers + `deleteConversation` folder-purge; `chatService`'s async vision mapper (stateless
+  re-supply, missing-attachment-skip); the IPC seam (`conversation:storeAttachment`/`:getAttachment`/
+  `:exportAttachment` + `chatStream` `attachments?`), gated `sessions.own` + path-scoped to the active person's
+  conversation in the bridge; the renderer (`downscaleImage` + `PendingAttachment`, an opt-in `Composer` with
+  paste/drop/file-picker + pending thumbnails + 5-cap/unsupported calm errors, `MessageAttachments` grid, the
+  `AttachmentThumb` + `Lightbox` design-system primitives [+ `/gallery`], `conversationStore` store-on-send +
+  attachment-url cache + export). Tests: media core (round-trip/guard/mime/size/sniff), conversation
+  attachments (store/get/delete-purges), vision mapping (both clients + fake flatten), `chatService` (vision
+  blocks + re-supply + missing-skip + metered as `chat`, no new usage type), `scaledDimensions`, RTL for
+  Composer/AttachmentThumb/Lightbox/MessageAttachments, and an E2E (attach → assert AES-GCM envelope on disk +
+  PNG-magic decrypt → bubble thumbnail → lightbox + "Save image" export outside the vault → delete purges the
+  attachments folder → 390px overflow guard). Gate green: typecheck (all packages), lint, format, **740 core +
+  794 desktop** unit, sessions/guided E2E green. **Lesson: Electron's `createImageBitmap` rejects some
+  hand-picked 1×1 PNG blobs — build a real PNG (zlib IDAT + CRC32) for an attachment E2E; and the strict CSP
+  blocks `fetch('data:…')` but `img-src 'self' data:` allows data-URL thumbnails.**
 - 2026-06-25 — created (Draft). Addresses issue #63 (attach images to a Session so the coach can see them).
   Locked decisions recorded in §11: images-only first cut; reusable `@selfos/core/media` core surfaced only in
   Sessions; client-side downscale ~1568px + ~5/message cap, images in full context for the whole session;

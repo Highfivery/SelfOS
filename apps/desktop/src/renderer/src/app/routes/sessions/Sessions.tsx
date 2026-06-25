@@ -19,6 +19,8 @@ import {
   TextInput,
 } from '../../../design-system/components';
 import { Composer } from './Composer';
+import type { PendingAttachment } from './downscaleImage';
+import { MessageAttachments } from './MessageAttachments';
 import { CrisisFooter } from './CrisisFooter';
 import { SessionLauncher } from './SessionLauncher';
 import { GuidedStepper } from './GuidedStepper';
@@ -96,9 +98,9 @@ export function Sessions(): JSX.Element {
     setView('thread');
   };
   // Free-start from the launcher: send creates the conversation, then the pane flips to the thread.
-  const startFree = (text: string): void => {
+  const startFree = (text: string, attachments: PendingAttachment[]): void => {
     setView('thread');
-    void send(text);
+    void send(text, attachments);
   };
   // Pick a guided exercise from the launcher/suggestions → start it and open the thread.
   const startGuidedSession = (guideId: string): void => {
@@ -311,7 +313,12 @@ export function Sessions(): JSX.Element {
                       className={message.role === 'user' ? styles.userMsg : styles.coachMsg}
                     >
                       {message.role === 'user' ? (
-                        message.content
+                        <>
+                          {message.content}
+                          {message.attachments && message.attachments.length > 0 ? (
+                            <MessageAttachments attachments={message.attachments} />
+                          ) : null}
+                        </>
                       ) : (
                         // Coach prose renders Markdown; strip any coach markers first (order matters, §7).
                         <Markdown>{stripCoachMarkers(message.content)}</Markdown>
@@ -360,7 +367,12 @@ export function Sessions(): JSX.Element {
             {error ? <Banner tone="warning">{error}</Banner> : null}
 
             {configured ? (
-              <Composer disabled={sending} onSend={(text) => void send(text)} />
+              <Composer
+                disabled={sending}
+                allowAttachments
+                // Return the send promise so the composer keeps pending attachments if a store fails.
+                onSend={(text, attachments) => send(text, attachments)}
+              />
             ) : (
               <AiUnavailableNotice />
             )}

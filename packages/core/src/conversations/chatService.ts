@@ -1,10 +1,21 @@
-import type { ClaudeClient, FileSystem } from '../host';
+import type { ClaudeClient, ClaudeMessage, ContentBlock, FileSystem } from '../host';
+import { toBase64 } from '../encoding';
 import { uuid } from '../id';
-import type { ChatTurnResult, Conversation, UsageEvent } from '../schemas';
+import type {
+  AttachmentRef,
+  ChatMessage,
+  ChatTurnResult,
+  Conversation,
+  UsageEvent,
+} from '../schemas';
 import { checkBudget, costOf, recordUsage } from '../usage';
 import type { DepthAskContext } from '../profile';
 import type { GoalRaiseContext } from '../coaching/goalRaise';
-import { getConversation, saveConversation } from './conversationService';
+import {
+  getConversation,
+  getConversationAttachment,
+  saveConversation,
+} from './conversationService';
 import { buildSystemPrompt } from './promptBuilder';
 import { WRAP_UP_INSTRUCTION, WRAP_UP_MARKER } from './wrapUp';
 import { getExercise } from './guidedCatalog';
@@ -22,6 +33,9 @@ export interface ChatTurnDeps {
   personId: string;
   conversationId: string;
   userText: string;
+  /** Image attachments on the NEW user message (45 §3.2). Already stored (refs from `storeAttachment`); the
+   *  bytes are re-read host-side each turn to build vision content blocks (§6.1). Absent ⇒ a text-only turn. */
+  attachments?: AttachmentRef[];
   onDelta: (text: string) => void;
   /** The optional in-session depth ask (29 §3.5) — the unexplored invited sections to gently invite. The host
    *  computes this (setting on + intake read + 18+-ack adult filtering); absent ⇒ no in-session ask. */
@@ -36,6 +50,46 @@ export interface ChatTurnDeps {
 function deriveTitle(text: string): string {
   const trimmed = text.trim().replace(/\s+/g, ' ');
   return trimmed.length > 48 ? `${trimmed.slice(0, 48)}…` : trimmed || 'New conversation';
+}
+
+/**
+ * Build the Claude message list for a turn (45 §6.1). Claude is stateless, so EVERY turn re-supplies the full
+ * history — for any message carrying `attachments`, re-read each stored `.enc` host-side (via `fs` + the
+ * master key), base64-encode, and emit a content-block array. A message with no attachments stays a plain
+ * string. A missing/corrupt attachment is SKIPPED (the message degrades to its text), never throwing, so the
+ * turn still completes. Image bytes never round-trip through the renderer for the model call.
+ */
+async function buildClaudeMessages(
+  fs: FileSystem,
+  key: Uint8Array,
+  messages: ChatMessage[],
+): Promise<ClaudeMessage[]> {
+  const out: ClaudeMessage[] = [];
+  for (const message of messages) {
+    if (!message.attachments || message.attachments.length === 0) {
+      out.push({ role: message.role, content: message.content });
+      continue;
+    }
+    const images: ContentBlock[] = [];
+    for (const ref of message.attachments) {
+      const bytes = await getConversationAttachment(fs, key, ref.path);
+      if (!bytes) continue; // skip a missing/corrupt attachment; the turn still completes
+      images.push({
+        type: 'image',
+        source: { type: 'base64', media_type: ref.mime, data: toBase64(bytes) },
+      });
+    }
+    // If no image survived, degrade to the plain-string text message (never an empty content array).
+    if (images.length === 0) {
+      out.push({ role: message.role, content: message.content });
+      continue;
+    }
+    const blocks: ContentBlock[] = message.content
+      ? [{ type: 'text', text: message.content }, ...images]
+      : images;
+    out.push({ role: message.role, content: blocks });
+  }
+  return out;
 }
 
 /** A `session.topic` usage event for the (cheap, Haiku) free-form topic classifier (28 §13.2). */
@@ -95,7 +149,11 @@ export async function runChatTurn(deps: ChatTurnDeps): Promise<ChatTurnResult> {
     id: conversationId,
     schemaVersion: 1,
     personId,
-    title: deriveTitle(userText),
+    title: userText.trim()
+      ? deriveTitle(userText)
+      : deps.attachments && deps.attachments.length > 0
+        ? 'Shared an image'
+        : deriveTitle(userText),
     createdAt: at,
     updatedAt: at,
     messages: [],
@@ -112,7 +170,12 @@ export async function runChatTurn(deps: ChatTurnDeps): Promise<ChatTurnResult> {
   const priorAssistant = [...conversation.messages]
     .reverse()
     .find((message) => message.role === 'assistant')?.content;
-  conversation.messages.push({ role: 'user', content: userText, ts: at });
+  conversation.messages.push({
+    role: 'user',
+    content: userText,
+    ts: at,
+    ...(deps.attachments && deps.attachments.length > 0 ? { attachments: deps.attachments } : {}),
+  });
 
   // Free-form session topic (28 §13.2): infer the relevant life-areas from the message with a cheap Haiku
   // classifier so the pinned portrait surfaces the facts that matter here. Cached on the conversation and
@@ -139,6 +202,9 @@ export async function runChatTurn(deps: ChatTurnDeps): Promise<ChatTurnResult> {
   // The wrap-up instruction teaches the coach the private completion-marker convention; the guided
   // addendum (if `guideId` is set) steers the turn after persona+safety+context (16 §5).
   const system = `${await buildSystemPrompt(fs, key, personId, conversation.guideId, deps.depthAsk, topicOverride, deps.goalRaise)}\n\n${WRAP_UP_INSTRUCTION}`;
+  // 45 §6.1 — re-read any attached images host-side and assemble vision content blocks for this turn (and for
+  // every earlier attached message still in history, since Claude is stateless).
+  const claudeMessages = await buildClaudeMessages(fs, key, conversation.messages);
   let result;
   try {
     result = await client.stream(
@@ -146,10 +212,7 @@ export async function runChatTurn(deps: ChatTurnDeps): Promise<ChatTurnResult> {
         apiKey,
         model,
         system,
-        messages: conversation.messages.map((message) => ({
-          role: message.role,
-          content: message.content,
-        })),
+        messages: claudeMessages,
         maxTokens: 1024,
       },
       deps.onDelta,

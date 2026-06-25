@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { deflateSync } from 'node:zlib';
 import {
   _electron as electron,
   expect,
@@ -47,7 +48,12 @@ import {
   summarizeForContext,
 } from '@selfos/core/insights';
 import { listDreams, saveAnalysis, saveDream } from '@selfos/core/dreams';
-import { saveConversation } from '@selfos/core/conversations';
+import {
+  conversationAttachmentsDir,
+  getConversationAttachment,
+  listConversations,
+  saveConversation,
+} from '@selfos/core/conversations';
 import { listProfileSuggestions } from '@selfos/core/profile';
 
 const MAIN = join(__dirname, '..', 'out', 'main', 'index.js');
@@ -225,6 +231,40 @@ function launch(userDataDir: string): Promise<ElectronApplication> {
 async function writeJson(file: string, data: unknown): Promise<void> {
   await mkdir(dirname(file), { recursive: true });
   await writeFile(file, JSON.stringify(data, null, 2), 'utf8');
+}
+
+/** A valid RGB PNG built from scratch (Electron's `createImageBitmap` rejects some hand-picked 1×1 blobs). */
+function makePng(width = 8, height = 8): Buffer {
+  const crc32 = (buf: Buffer): number => {
+    let c = ~0;
+    for (let i = 0; i < buf.length; i += 1) {
+      c ^= buf[i]!;
+      for (let k = 0; k < 8; k += 1) c = (c >>> 1) ^ (0xedb88320 & -(c & 1));
+    }
+    return ~c >>> 0;
+  };
+  const chunk = (type: string, data: Buffer): Buffer => {
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(data.length);
+    const typed = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(typed));
+    return Buffer.concat([len, typed, crc]);
+  };
+  const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 2; // colour type RGB
+  const row = Buffer.concat([Buffer.from([0]), Buffer.alloc(width * 3, 180)]); // filter 0 + grey pixels
+  const raw = Buffer.concat(Array.from({ length: height }, () => row));
+  return Buffer.concat([
+    sig,
+    chunk('IHDR', ihdr),
+    chunk('IDAT', deflateSync(raw)),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
 }
 
 /** Recursively find the first file with `name` under `dir` (used to assert encrypted blobs on disk). */
@@ -1286,6 +1326,81 @@ test('sessions: send a message, stream a reply, and show the usage header + cris
     await app.close();
     await rm(userData, { recursive: true, force: true });
     await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('sessions: attach an image → encrypted on disk → thumbnail + lightbox + export → delete purges (45)', async () => {
+  const saveDir = await mkdtemp(join(tmpdir(), 'selfos-save-'));
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const app = await electron.launch({
+    args: [`--user-data-dir=${userData}`, MAIN],
+    env: { ...e2eEnv(), SELFOS_FAKE_SAVE_DIR: saveDir },
+  });
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Sessions' }).click();
+
+    // Attach a real PNG through the composer's hidden file input → a pending thumbnail.
+    await w.locator('input[type="file"]').setInputFiles({
+      name: 'screenshot.png',
+      mimeType: 'image/png',
+      buffer: makePng(),
+    });
+    await expect(w.getByRole('img', { name: 'Attached image 1' })).toBeVisible();
+
+    await w.getByLabel('Message').fill('what do you make of this?');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/hear you/i).first()).toBeVisible(); // offline fake reply
+
+    // The user bubble shows the attachment as an interactive thumbnail.
+    const thumb = w.getByRole('button', { name: 'Attached image' }).first();
+    await expect(thumb).toBeVisible();
+
+    // On disk: the attachment is an AES-GCM envelope (not the raw PNG), and it decrypts back to PNG bytes.
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('attachments e2e: master key missing');
+    const convos = await listConversations(fs, key, 'owner-1');
+    const conv = convos[0];
+    const ref = conv?.messages.find((m) => m.role === 'user')?.attachments?.[0];
+    if (!conv || !ref) throw new Error('attachments e2e: stored attachment ref missing');
+    const onDisk = await fs.read(ref.path);
+    expect(new TextDecoder().decode(onDisk!)).toContain('aes-256-gcm');
+    const decrypted = await getConversationAttachment(fs, key, ref.path);
+    expect(decrypted?.slice(0, 4)).toEqual(new Uint8Array([0x89, 0x50, 0x4e, 0x47])); // PNG magic
+
+    // Lightbox opens; "Save image" exports a file OUTSIDE the vault; Esc closes.
+    await thumb.click();
+    await expect(w.getByRole('dialog')).toBeVisible();
+    await w.getByRole('button', { name: 'Save image' }).click();
+    await expect.poll(async () => (await readdir(saveDir)).length).toBeGreaterThanOrEqual(1);
+    await w.keyboard.press('Escape');
+    await expect(w.getByRole('dialog')).toHaveCount(0);
+
+    // Delete the conversation → the sibling attachments folder is purged (no orphaned media).
+    await w
+      .getByRole('complementary', { name: 'Conversations' })
+      .getByRole('button', { name: /Session options for/ })
+      .first()
+      .click();
+    await w.getByRole('menuitem', { name: 'Delete' }).click();
+    await expect
+      .poll(async () => fs.list(conversationAttachmentsDir('owner-1', conv.id)))
+      .toEqual([]);
+
+    // Mobile-width: no horizontal overflow on the composer + thumbnail grid.
+    await w.setViewportSize({ width: 390, height: 800 });
+    const overflow = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      return main ? main.scrollWidth - main.clientWidth : 0;
+    });
+    expect(overflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+    await rm(saveDir, { recursive: true, force: true });
   }
 });
 

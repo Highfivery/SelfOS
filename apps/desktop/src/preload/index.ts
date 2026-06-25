@@ -89,6 +89,12 @@ const bridge: SelfosBridge = {
       ipcRenderer.removeListener(IpcChannels.chatChunk, handler);
     };
   },
+  conversationStoreAttachment: (input) =>
+    ipcRenderer.invoke(IpcChannels.conversationStoreAttachment, input),
+  conversationGetAttachment: (input) =>
+    ipcRenderer.invoke(IpcChannels.conversationGetAttachment, input),
+  conversationExportAttachment: (input) =>
+    ipcRenderer.invoke(IpcChannels.conversationExportAttachment, input),
   conversationsList: () => ipcRenderer.invoke(IpcChannels.conversationsList),
   conversationsGet: (id) => ipcRenderer.invoke(IpcChannels.conversationsGet, id),
   conversationsRename: (input) => ipcRenderer.invoke(IpcChannels.conversationsRename, input),

@@ -1,5 +1,31 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { ClaudeClient, ClaudeStreamResult } from '@selfos/core/host';
+import type { ClaudeClient, ClaudeMessage, ClaudeStreamResult } from '@selfos/core/host';
+import { flattenContent } from '@selfos/core/host';
+
+/**
+ * Map our `ClaudeMessage.content` union (string | text/image blocks, 45 §5.3) to the Anthropic SDK's
+ * content param. A plain string passes through; image blocks become Base64ImageSource params. The mime was
+ * already validated against `ALLOWED_IMAGE_MIME` in main, so narrowing it to the SDK's literal union is safe.
+ */
+function toSdkContent(content: ClaudeMessage['content']): Anthropic.MessageParam['content'] {
+  if (typeof content === 'string') return content;
+  return content.map((block) =>
+    block.type === 'text'
+      ? { type: 'text' as const, text: block.text }
+      : {
+          type: 'image' as const,
+          source: {
+            type: 'base64' as const,
+            media_type: block.source.media_type as
+              | 'image/png'
+              | 'image/jpeg'
+              | 'image/gif'
+              | 'image/webp',
+            data: block.source.data,
+          },
+        },
+  );
+}
 
 /** Real Claude client backed by the official Anthropic SDK. */
 export function anthropicClient(): ClaudeClient {
@@ -10,7 +36,10 @@ export function anthropicClient(): ClaudeClient {
         model,
         max_tokens: maxTokens,
         ...(system ? { system } : {}),
-        messages: messages.map((message) => ({ role: message.role, content: message.content })),
+        messages: messages.map((message) => ({
+          role: message.role,
+          content: toSdkContent(message.content),
+        })),
       });
 
       let text = '';
@@ -33,7 +62,10 @@ export function anthropicClient(): ClaudeClient {
         ...(extendedThinking === false ? {} : { thinking: { type: 'adaptive' } }),
         // cache_control on the stable system prefix → repeat turns read it at ~0.1× (06 §7).
         system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
-        messages: messages.map((message) => ({ role: message.role, content: message.content })),
+        messages: messages.map((message) => ({
+          role: message.role,
+          content: toSdkContent(message.content),
+        })),
       });
       stream.on('text', (delta) => onDelta(delta));
 
@@ -61,7 +93,9 @@ export function fakeClaudeClient(): ClaudeClient {
   return {
     send: () => Promise.resolve('ok'),
     stream: (options, onDelta) => {
-      const userText = options.messages.map((message) => message.content).join('\n');
+      const userText = options.messages
+        .map((message) => flattenContent(message.content))
+        .join('\n');
 
       // Compatibility variant personalization (08 §3.6/§17.12/§17.14e) asks for a JSON array of objects
       // { prompt, options } — one per question, prompt + options both personalized. Echo each prompt tagged
@@ -291,7 +325,9 @@ export function fakeClaudeClient(): ClaudeClient {
       // The dream-analysis synthesis turn asks for a single JSON object (12-dreams §3.2). Return a valid
       // DreamAnalysis draft so the offline synthesize path parses deterministically; every other turn is
       // the reflective chat reply.
-      if (options.messages.some((message) => message.content.includes('JSON object'))) {
+      if (
+        options.messages.some((message) => flattenContent(message.content).includes('JSON object'))
+      ) {
         const draft = JSON.stringify({
           summary: 'A dream of shifting rooms and open skies.',
           emotionalLandscape: 'A mix of **unease** and quiet wonder.',

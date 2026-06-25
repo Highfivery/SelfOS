@@ -350,10 +350,13 @@ inclusivity cases the old model failed:
 formats by **stable key → current label** ("oral (receiving): Love it; …"); a preserved legacy/orphaned
 rating still reaches the portrait. Anatomy facts are `restricted`, owner-visible, never a `Person` field.
 
-**Component (RTL) — `@selfos/answering`:** a matrix with `{key,label}` (or `rowKeys`) rows renders the
-**label**, stores the answer under the **key**; questionnaire matrices (plain-string rows) unchanged
-(key === label). `IntakeFormPanel` re-resolves the matrix live from the anatomy answers; editing
-`partnerAnatomy` adds/removes a giving row without dropping other ratings.
+**Component (RTL):** a matrix with `{key,label}` (or `rowKeys`) rows renders the **label** and stores the
+answer under the **key**; questionnaire matrices (plain-string rows) unchanged (key === label). _As-built note
+(2026-06-25 audit):_ `@selfos/answering` has no test harness of its own, so this render-by-key behavior is
+covered where it's exercised — the **`IntakeFormPanel` RTL** tests (`persists a matrix answer under its STABLE
+key`, live-resolve, no-orphan-on-edit) + the onboarding **E2E** (decrypts the vault to assert the stable key) —
+rather than by a standalone `@selfos/answering` test. `IntakeFormPanel` re-resolves the matrix live from the
+anatomy answers; editing `partnerAnatomy` adds/removes a giving row without dropping other ratings.
 
 **E2E (Playwright, the real built app):** 18+ ack → the intimacy form → answer **own anatomy + partner
 anatomy** → assert the matrix shows the **correct** oral labels for that anatomy (and the wrong-for-them
@@ -401,6 +404,11 @@ and the intimacy inventory. Sequence to avoid clobbering:
 
 ## 12. Changelog
 
+- 2026-06-25 — **Audit follow-up** (on `fix/audit-followups-specs-45-47`). A post-merge audit confirmed the
+  feature is fully built (all four invariants verified in code + tests). One §10 wording fix: the spec named a
+  standalone **`@selfos/answering` RTL** test for the `{key,label}` render-by-key behavior, but that package has
+  no test harness — the behavior is covered by the **`IntakeFormPanel` RTL** tests + the onboarding **E2E**
+  (decrypt-asserts the stable key). §10 corrected to point at the real coverage; no code change.
 - 2026-06-25 — **BUILT** (on `feat/intimacy-matrix-accuracy`). All §11 open questions resolved with the owner
   (above). Shipped: **Option A** `MatrixRowSchema` (`string | {key,label}`) + `matrixRowKey`/`matrixRowLabel`
   helpers in core `schemas.ts` (questionnaire matrices byte-identical); the **anatomy-driven** resolver rewrite

@@ -163,9 +163,11 @@ mime })`** → main validates (mime + size, §4.4), encrypts to `attachments/<uu
   existing connect/over-budget states already gate the composer; the attach controls are present but Send is
   gated exactly as today (an image-only message can't be sent when AI is unavailable). Attachments don't
   introduce a new spend gate — they ride the existing `chat` budget check.
-- **A model without vision** — all shipped Claude 4.x models support vision, so this can't happen with the
-  app's model options; defensively, if a configured model is non-vision, sending with attachments surfaces a
-  calm "this model can't read images — switch model in Settings" rather than a provider error (§7).
+- **A model without vision** — **NOT built (intentionally deferred, 2026-06-25 audit).** The `ai.model` setting
+  is a fixed two-option enum (`claude-sonnet-4-6` / `claude-opus-4-8`), both vision-capable, so a non-vision
+  selection is **unreachable** — a "switch model" notice would be dead code that can never fire (CLAUDE.md §12,
+  no scaffolding for conditions that can't occur). The guard lands **if/when a non-vision model is added to the
+  enum**; until then sending with attachments always reaches a vision model.
 
 ## 4. Data model (vault files & schemas)
 
@@ -429,7 +431,8 @@ mapper (§5.2) walks `conversation.messages`; for any message with `attachments`
   already records (`chatService` ~L187). The cost note: an attached image meaningfully raises `inputTokens`
   for that turn and every later turn it's still in history; `costOf` is unchanged.
 - **Failure handling** ([`05`](05-conversations.md)) — a vision-capable model that errors on an image surfaces
-  the existing calm chat-error state; a non-vision configured model surfaces the §3.5 "switch model" hint.
+  the existing calm chat-error state. (The §3.5 non-vision "switch model" hint is **deferred** — unreachable
+  with the current vision-only model enum.)
 
 ### 6.3 Session analysis stays text-only (locked)
 
@@ -457,8 +460,8 @@ Per [`00`](00-architecture.md) §7 — every surface handles loading / empty / e
 - **Deleting a conversation purges its attachments** — `deleteConversation` removes the `<conversationId>.enc`
   file **and** the `<conversationId>/attachments` folder (the orphaned-media lesson, [`08`](08-questionnaires.md)
   §13.2 / [`13`](13-dream-images.md) §3.3). An E2E asserts the folder is gone.
-- **Model without vision** — defensively surfaces the §3.5 "switch model" hint rather than a raw provider
-  error; all shipped models are vision-capable so this is a guardrail, not a normal path.
+- **Model without vision** — **deferred (not built)**; unreachable with the current vision-only model enum, so
+  the §3.5 "switch model" hint would be dead code. Lands if/when a non-vision model is added to the enum.
 - **Re-read of a missing/corrupt attachment** on a later turn — the mapper **skips** it (the message degrades
   to text), never throwing, so the turn completes (§6.1).
 - **Sync conflict on an attachment file** — a binary `.enc` conflict copy is handled by the standard vault
@@ -607,6 +610,14 @@ questionnaire work also touches — sequence to avoid clobbering:
 
 ## 12. Changelog
 
+- 2026-06-25 — **Audit follow-up** (on `fix/audit-followups-specs-45-47`). A post-merge audit flagged two §10
+  claims not honored: the **EXIF-stripped unit test** was missing (the behavior was real — canvas re-encode —
+  but unasserted), and the §3.5 **non-vision "switch model" hint** was never built. Added the EXIF test
+  (`downscaleImage.test.ts`): mocks the decode+canvas pipeline and proves the output is the re-encode (no trace
+  of the source's "Exif"/"GPS" markers, downscaled to 1568px), so source metadata is dropped by construction.
+  **Reconciled** the non-vision hint as **intentionally deferred** (not built): the `ai.model` setting is a
+  fixed vision-only enum, so a non-vision selection is unreachable and a notice would be dead code (CLAUDE.md
+  §12); the guard lands if/when a non-vision model is added to the enum. Spec §3.5/§7 corrected to match.
 - 2026-06-25 — **BUILT** (on `feat/session-attachments`, off `main` in a worktree). All §11 decisions
   confirmed with the user first: 5/message + ~1568px + no session cap; store-on-send; export, guided sessions,
   and the iOS picker INCLUDED (dream-analysis chat NOT). Shipped: the reusable **`@selfos/core/media`** core

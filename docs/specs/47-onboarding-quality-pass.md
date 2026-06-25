@@ -493,6 +493,14 @@ Decisions for the user — **not** silently assumed:
 
 ## 12. Changelog
 
+- 2026-06-25 — **Audit follow-up** (on `fix/audit-followups-specs-45-47`). A post-merge audit confirmed the
+  engine fix + rewords + all 8 named tests are present and correct, but found **two factual errors in the
+  §A changelog entry** below (the **code is right**; the doc overstated). Both corrected inline with dated
+  markers: (1) the **"Push me hard" option rename never shipped** — the `coachStyle`/`supportStyle` "Challenge
+  me" collision was fixed at the **prompt** level only (the option label stays "Challenge me" in both lists, to
+  avoid orphaning stored answers, §7); (2) **"no id is reused across sections, locked by tests" is overstated**
+  — cross-section id reuse (e.g. `boundaries`) is intentional and **not** test-locked; only per-section id
+  uniqueness + the identical-prompt guard are asserted. No code change.
 - 2026-06-25 — **Built.** Owner decisions (asked first): **Conservative** trim (fix wording/collisions/
   branching/layout + the synthesis bug, **cut no questions**), **keep the section order**, **non-empty**
   placeholder guard (no verbatim-copy assertion), and scope is **both the onboarding intake AND the
@@ -500,10 +508,16 @@ Decisions for the user — **not** silently assumed:
   [`46`](46-intimacy-matrix-accuracy.md) is moot — 46 is already merged to `main`.
   **Audit outcome (the four deliverables):**
   - **A (clarity/wording):** the catalog is clean — **no two questions share an identical prompt** (167
-    questions) and **no id is reused across sections** (both now locked by tests). One genuine collision fixed:
+    questions), locked by a test. _[Corrected 2026-06-25 audit: an earlier draft of this line also claimed "no
+    id is reused across sections, locked by tests" — that is **inaccurate**. Cross-section id reuse is
+    **intentional** (e.g. `boundaries` in relationships + intimacy, see the §A.4 note) and is **not**
+    test-locked; the id test asserts uniqueness **per-section** only.]_ One genuine collision fixed:
     `want.coachStyle` ("How do you like to be coached?") read like its neighbour `want.supportStyle` and shared
-    the literal option **"Challenge me"** → reframed to **"What coaching tone do you respond to best?"** with
-    "Challenge me" → "Push me hard" (TONE vs the support MODES). Two clarity rewords (ids preserved):
+    the literal option **"Challenge me"** → the **prompt** was reframed to **"What coaching tone do you respond
+    to best?"** (TONE vs the support MODES). _[Corrected 2026-06-25 audit: the **option** label "Challenge me"
+    was **NOT** renamed to "Push me hard" — it deliberately stays "Challenge me" in both lists to avoid
+    orphaning stored answers (§7 no-data-loss). The collision was resolved at the **prompt** level only.]_ Two
+    clarity rewords (ids preserved):
     `basics.appearanceDescription` "How would you describe how you look?" → "…your appearance?" (dropped the
     double-"how"); `basics.importantDates` "Any important dates to remember?" → "Any dates you'd like me to
     remember?". Every free-text placeholder is meaningful (guard kept); every form group already renders

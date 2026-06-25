@@ -1,4 +1,10 @@
-import type { Answer, Question, SendAnswer } from '../schemas';
+import {
+  matrixRowKey,
+  matrixRowLabel,
+  type Answer,
+  type Question,
+  type SendAnswer,
+} from '../schemas';
 import { MAX_RESPONSE_BYTES } from '../relay/relayLimits';
 
 /**
@@ -145,7 +151,7 @@ export function isAnswered(question: Question, value: AnswerValue | undefined): 
       ) {
         return false;
       }
-      return rows.every((row) => typeof value[row] === 'number');
+      return rows.every((row) => typeof value[matrixRowKey(row)] === 'number');
     }
     case 'allocation':
       return allocationTotal(value) === 100;
@@ -197,10 +203,15 @@ export function formatAnswerForDisplay(question: Question, value: AnswerValue | 
       ? value.map((v, i) => `${i + 1}. ${v}`).join(', ')
       : value.join(', ');
   }
-  // matrix (rows → rating) / allocation (option → amount): print in the authored order.
-  const keys =
-    question.type === 'matrix' ? (question.matrix?.rows ?? []) : (question.options ?? []);
-  return keys
+  // matrix (rows → rating) / allocation (option → amount): print in the authored order. A matrix row may be a
+  // { key, label } pair (46 §4.2) — look up by stable key, display the label.
+  if (question.type === 'matrix') {
+    return (question.matrix?.rows ?? [])
+      .filter((r) => value[matrixRowKey(r)] !== undefined)
+      .map((r) => `${matrixRowLabel(r)}: ${value[matrixRowKey(r)]}`)
+      .join(', ');
+  }
+  return (question.options ?? [])
     .filter((k) => value[k] !== undefined)
     .map((k) => `${k}: ${value[k]}`)
     .join(', ');

@@ -5,7 +5,7 @@ import {
   questionDefaultsPrivate,
   stripIntakeFieldMarkers,
 } from '@selfos/core/intake';
-import { resolveIntakeActivityRows } from '@selfos/core/intimacy';
+import { migrateActivityMatrixValue, resolveIntakeActivityRows } from '@selfos/core/intimacy';
 import { SHARING_INLINE_EXPLAINER, describeScope } from '@selfos/core/sharing';
 import type { AnswerMap, AnswerValue } from '@selfos/core/questionnaires';
 import type { Question } from '@selfos/core/schemas';
@@ -54,16 +54,12 @@ export function IntakeFormPanel({
   meta,
   section,
   adultAcknowledged,
-  profileGender,
   portraitStale,
   onAdvance,
 }: {
   meta: IntakeSectionMeta;
   section: IntakeSection | undefined;
   adultAcknowledged: boolean;
-  /** The person's gender (from the `basics` section / profile) — tailors the intimacy activity matrix's oral
-   * rows alongside the live `drawnTo` answer (27 §4.2). */
-  profileGender?: string;
   /** The existing portrait is now out of date (§15) — show the inline one-tap refresh (43 §3.5). */
   portraitStale?: boolean;
   onAdvance: () => void;
@@ -84,9 +80,16 @@ export function IntakeFormPanel({
 
   // Local answer state, seeded from any saved answers (resume / edit). The host owns it (§5.3); a Continue
   // persists it through the bridge. Re-seeds when the section identity changes (key on meta.id at the parent).
-  const [answers, setAnswers] = useState<AnswerMap>(
-    () => ({ ...(section?.answers ?? {}) }) as AnswerMap,
-  );
+  const [answers, setAnswers] = useState<AnswerMap>(() => {
+    const seed = { ...(section?.answers ?? {}) } as AnswerMap;
+    // A pre-46 `activities` answer is keyed by old label strings — migrate it to stable keys (46 §4.3) so the
+    // ratings re-attach to the (possibly relabelled) rows the resolver now emits. Idempotent on a stable value.
+    const act = seed['activities'];
+    if (act !== null && typeof act === 'object' && !Array.isArray(act)) {
+      seed['activities'] = migrateActivityMatrixValue(act as Record<string, number>);
+    }
+    return seed;
+  });
   const onChange = (questionId: string, value: AnswerValue): void =>
     setAnswers((a) => {
       const next: AnswerMap = { ...a, [questionId]: value };
@@ -228,12 +231,16 @@ export function IntakeFormPanel({
       ),
   };
 
-  // The intimacy activity matrix's rows are tailored per-person (27 §4.2): only the oral rows are relabelled/
-  // hidden by own anatomy (gender) + partner anatomy (the live `drawnTo` answer in this same form). Re-resolved
-  // here so the customization updates live as they pick "Who are you drawn to?"; synthesis re-resolves with the
-  // same context server-side, so the stored matrix keys line up.
-  const drawnTo = useMemo(() => {
-    const v = answers['drawnTo'];
+  // The intimacy activity matrix's oral rows are tailored per-person from the DIRECT anatomy answers (46 §5):
+  // own anatomy → the receiving label, partner anatomy → the giving row(s) — both live in this same form, so
+  // the rows re-resolve live as they answer. Synthesis re-resolves with the same context server-side, and each
+  // row carries a STABLE key, so the stored ratings line up (and an anatomy edit never orphans them).
+  const ownAnatomy = useMemo(() => {
+    const v = answers['ownAnatomy'];
+    return typeof v === 'string' ? v : undefined;
+  }, [answers]);
+  const partnerAnatomy = useMemo(() => {
+    const v = answers['partnerAnatomy'];
     return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : undefined;
   }, [answers]);
   const questions = useMemo<Question[]>(() => {
@@ -244,12 +251,12 @@ export function IntakeFormPanel({
             ...q,
             matrix: {
               ...q.matrix,
-              rows: resolveIntakeActivityRows({ gender: profileGender, drawnTo }),
+              rows: resolveIntakeActivityRows({ ownAnatomy, partnerAnatomy }),
             },
           }
         : q,
     );
-  }, [meta.questions, profileGender, drawnTo]);
+  }, [meta.questions, ownAnatomy, partnerAnatomy]);
   const locked = meta.adult && !adultAcknowledged;
   const complete = section?.status === 'complete';
 

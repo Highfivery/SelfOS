@@ -194,11 +194,6 @@ export function Onboarding(): JSX.Element {
   const findSection = (id: string): (typeof state.session.sections)[number] | undefined =>
     state.session.sections.find((s) => s.id === id);
 
-  // The person's gender (from the already-answered `basics` section) tailors the intimacy activity matrix's
-  // oral rows (27 §4.2); the intimacy panel pairs it with the live `drawnTo` answer.
-  const basicsGender = findSection('basics')?.answers?.['gender'];
-  const profileGender = typeof basicsGender === 'string' ? basicsGender : undefined;
-
   const renderPanel = (meta: IntakeSectionMeta): JSX.Element =>
     meta.mode === 'form' ? (
       <IntakeFormPanel
@@ -206,7 +201,6 @@ export function Onboarding(): JSX.Element {
         meta={meta}
         section={findSection(meta.id)}
         adultAcknowledged={state.adultAcknowledged}
-        {...(profileGender ? { profileGender } : {})}
         portraitStale={portraitStaleness(state.session).stale}
         onAdvance={() => setActiveId(null)}
       />

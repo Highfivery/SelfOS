@@ -1,9 +1,10 @@
 /**
- * Bridges the per-person intimacy activity-matrix resolution (27 §4.2) between the catalog/renderer and the
- * intake session. `activityRowContext` pulls the two inputs the resolver needs — own anatomy (`gender`, from
- * the `basics` section) and partner anatomy (`drawnTo`, from the `intimacy` section) — out of a session, so
- * synthesis re-resolves the activity rows with the SAME context the renderer used (the keys line up). The
- * renderer reads `gender` from the profile + `drawnTo` from live answers, so it doesn't need the session.
+ * Bridges the per-person intimacy activity-matrix resolution (46-intimacy-matrix-accuracy §5) between the
+ * catalog/renderer and the intake session. `activityRowContext` pulls the two inputs the resolver needs —
+ * **own anatomy** (`ownAnatomy`) and **partner anatomy** (`partnerAnatomy`), both now in the **intimacy**
+ * section — out of a session, so synthesis re-resolves the activity rows with the SAME context the renderer
+ * used (the stable keys line up). Both reads are same-section now (simpler than the pre-46 cross-section
+ * `gender` read, which was also a plumbing-bug surface — 46 §1).
  */
 
 import type { IntakeSession, Question } from '../schemas';
@@ -13,14 +14,15 @@ function sectionAnswers(session: IntakeSession, sectionId: string): Record<strin
   return session.sections.find((s) => s.id === sectionId)?.answers ?? {};
 }
 
-/** Extract the activity-row context (gender + drawnTo) from a saved intake session. */
+/** Extract the activity-row context (own + partner anatomy) from a saved intake session. */
 export function activityRowContext(session: IntakeSession): ActivityRowContext {
-  const gender = sectionAnswers(session, 'basics')['gender'];
-  const drawnTo = sectionAnswers(session, 'intimacy')['drawnTo'];
+  const intimacy = sectionAnswers(session, 'intimacy');
+  const ownAnatomy = intimacy['ownAnatomy'];
+  const partnerAnatomy = intimacy['partnerAnatomy'];
   return {
-    gender: typeof gender === 'string' ? gender : undefined,
-    drawnTo: Array.isArray(drawnTo)
-      ? drawnTo.filter((d): d is string => typeof d === 'string')
+    ownAnatomy: typeof ownAnatomy === 'string' ? ownAnatomy : undefined,
+    partnerAnatomy: Array.isArray(partnerAnatomy)
+      ? partnerAnatomy.filter((d): d is string => typeof d === 'string')
       : undefined,
   };
 }

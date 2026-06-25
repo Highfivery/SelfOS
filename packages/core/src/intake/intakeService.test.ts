@@ -270,9 +270,9 @@ describe('intakeService', () => {
     const fs = await setup();
     // Only TWO of the ~30 activity rows are rated. The shared `isAnswered` requires EVERY matrix row, so it
     // would drop this; the intake's own check accepts a partial matrix, so the ratings persist. Use non-oral
-    // (universal) rows so the gender-aware resolution doesn't relabel them.
-    const r0 = 'Bondage';
-    const r1 = 'Choking (giving)';
+    // (universal) rows, keyed by their stable slug (46 §4.2); synthesis maps the slug → its label.
+    const r0 = 'bondage';
+    const r1 = 'choking-giving';
     const activities = { [r0]: 5, [r1]: 1 }; // r0 = Love it (5), r1 = Hard no (1)
     await submitSectionForm(fs, key, 'p1', 'intimacy', { activities }, NOW);
     const sec = (await getIntakeSession(fs, key, 'p1'))?.sections.find((s) => s.id === 'intimacy');
@@ -283,54 +283,60 @@ describe('intakeService', () => {
     const client = fakeClient({ captureMessages: (m) => (messages = m) });
     await synthesizeIntake(synth(fs, client));
     const body = messages.map((m) => flattenContent(m.content)).join('\n');
-    expect(body).toContain(`${r0}: Love it`);
-    expect(body).toContain(`${r1}: Hard no`);
+    expect(body).toContain('Bondage: Love it'); // r0 slug → its label
+    expect(body).toContain('Choking (giving): Hard no'); // r1 slug → its label
     expect(body).not.toContain('[object Object]');
   });
 
-  it('synthesis resolves the activity matrix oral rows by gender + drawnTo (27 §4.2)', async () => {
+  it('synthesis resolves the activity matrix oral rows by ANATOMY, keyed by stable keys (46 §4.2)', async () => {
     const fs = await setup();
-    // A straight man: own anatomy tailors receiving; partner anatomy (Women) tailors giving to cunnilingus.
-    await submitSectionForm(fs, key, 'p1', 'basics', { gender: 'Man' }, NOW);
-    await submitSectionForm(fs, key, 'p1', 'intimacy', { drawnTo: ['Women'] }, NOW);
-    // Rate the two resolved oral rows (the keys the renderer would have produced for this person).
-    const activities = {
-      'Receiving oral (blowjob)': 5,
-      'Going down on her (oral)': 4,
-    };
-    await submitSectionForm(fs, key, 'p1', 'intimacy', { activities }, NOW);
-
-    let messages: ClaudeMessage[] = [];
-    const client = fakeClient({ captureMessages: (m) => (messages = m) });
-    await synthesizeIntake(synth(fs, client));
-    const body = messages.map((m) => flattenContent(m.content)).join('\n');
-    // The resolved rows map back to their labels — never a straight man's "blowjob"-giving variant.
-    expect(body).toContain('Receiving oral (blowjob): Love it');
-    expect(body).toContain('Going down on her (oral): Like it');
-    expect(body).not.toContain('Giving a blowjob');
-  });
-
-  it('keeps a matrix rating in synthesis even if a later gender/drawnTo edit orphans its row key (27)', async () => {
-    const fs = await setup();
-    // Rated as a straight man, then they change gender — the stored oral key no longer resolves. The rating
-    // must still reach the portrait (appended verbatim), never silently dropped.
-    await submitSectionForm(fs, key, 'p1', 'basics', { gender: 'Man' }, NOW);
+    // A person with a penis, into vulvas: own anatomy → receiving blowjob; partner anatomy → cunnilingus.
+    // Ratings are keyed by the STABLE keys the renderer produced; synthesis re-resolves the labels from anatomy.
     await submitSectionForm(
       fs,
       key,
       'p1',
       'intimacy',
-      { drawnTo: ['Women'], activities: { 'Receiving oral (blowjob)': 5 } },
+      {
+        ownAnatomy: 'Cock (penis)',
+        partnerAnatomy: ['Pussy (vulva)'],
+        activities: { 'oral-receiving': 5, 'oral-giving-vulva': 4 },
+      },
       NOW,
     );
-    // The edit: gender → Woman (drawnTo still Women → now uncertain pairing → neutral rows).
-    await submitSectionForm(fs, key, 'p1', 'basics', { gender: 'Woman' }, NOW);
 
     let messages: ClaudeMessage[] = [];
     const client = fakeClient({ captureMessages: (m) => (messages = m) });
     await synthesizeIntake(synth(fs, client));
     const body = messages.map((m) => flattenContent(m.content)).join('\n');
-    expect(body).toContain('Receiving oral (blowjob): Love it'); // orphaned key still surfaces with its label
+    // The stable keys map back to their anatomy-resolved labels — never a "blowjob"-giving variant for him.
+    expect(body).toContain('Receiving oral (blowjob): Love it');
+    expect(body).toContain('Going down on her (oral): Like it');
+    expect(body).not.toContain('Giving a blowjob');
+  });
+
+  it('carries a PRE-46 label-keyed rating forward at synthesis via the legacy map (46 §4.3)', async () => {
+    const fs = await setup();
+    // No anatomy answered, and the matrix value is keyed by an OLD label string (a vault from before 46). The
+    // legacy map re-keys it to its stable key, so it still reaches the portrait (never silently dropped).
+    await submitSectionForm(
+      fs,
+      key,
+      'p1',
+      'intimacy',
+      { activities: { 'Receiving oral (blowjob)': 5, 'Going down on her (oral)': 4 } },
+      NOW,
+    );
+
+    let messages: ClaudeMessage[] = [];
+    const client = fakeClient({ captureMessages: (m) => (messages = m) });
+    await synthesizeIntake(synth(fs, client));
+    const body = messages.map((m) => flattenContent(m.content)).join('\n');
+    // Both old-label ratings survive: 'Receiving oral (blowjob)' → oral-receiving → the neutral label (no
+    // anatomy answered); 'Going down on her (oral)' → oral-giving-vulva (not a current neutral row) → appended
+    // verbatim by stable key. Neither is dropped.
+    expect(body).toContain('Receiving oral: Love it');
+    expect(body).toContain('oral-giving-vulva: Like it');
   });
 
   it('ignores answers not declared for the section (the trust boundary)', async () => {

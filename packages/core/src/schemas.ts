@@ -999,6 +999,29 @@ export const BranchRuleSchema = z.object({
 });
 export type BranchRule = z.infer<typeof BranchRuleSchema>;
 
+/**
+ * A `matrix` row. Historically each row was a plain `string` used as **both** the display label **and** the
+ * answer key (the matrix value is `Record<string, number>`, keyed by the row string) — every questionnaire
+ * matrix still uses this form, so a plain string keeps key === label and renders byte-identically. The
+ * `{ key, label }` form (46 §4.2) splits the **stable answer key** from the **display label**, so the intake
+ * activity matrix can re-label a row (e.g. an anatomy-driven oral label) without orphaning a prior rating
+ * keyed by the old label. Use {@link matrixRowKey}/{@link matrixRowLabel} — never assume a row is a string.
+ */
+export const MatrixRowSchema = z.union([
+  z.string(),
+  z.object({ key: z.string().min(1), label: z.string().min(1) }),
+]);
+export type MatrixRow = z.infer<typeof MatrixRowSchema>;
+
+/** The stable answer key for a matrix row (the row string itself for a plain-string row). */
+export function matrixRowKey(row: MatrixRow): string {
+  return typeof row === 'string' ? row : row.key;
+}
+/** The display label for a matrix row (the row string itself for a plain-string row). */
+export function matrixRowLabel(row: MatrixRow): string {
+  return typeof row === 'string' ? row : row.label;
+}
+
 export const QuestionSchema = z.object({
   id: z.string().min(1),
   canonicalId: z.string().optional(), // shared across compatibility variants for alignment
@@ -1028,7 +1051,10 @@ export const QuestionSchema = z.object({
     .optional(),
   matrix: z
     .object({
-      rows: z.array(z.string()),
+      // A row is a display label OR a { key, label } pair (46 §4.2). Questionnaire matrices pass plain
+      // strings (key === label, unchanged); the intake activity matrix passes { key, label } so a relabelled
+      // oral row never orphans a rating keyed by the stable key. See MatrixRowSchema / matrixRowKey/Label.
+      rows: z.array(MatrixRowSchema),
       min: z.number(),
       max: z.number(),
       minLabel: z.string().optional(),

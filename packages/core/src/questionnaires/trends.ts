@@ -1,10 +1,12 @@
-import type {
-  AnswerType,
-  Answer,
-  Question,
-  QuestionTrend,
-  TrendPoint,
-  TrendSeries,
+import {
+  matrixRowKey,
+  matrixRowLabel,
+  type AnswerType,
+  type Answer,
+  type Question,
+  type QuestionTrend,
+  type TrendPoint,
+  type TrendSeries,
 } from '../schemas';
 
 /**
@@ -23,9 +25,16 @@ export interface TrendSend {
   answers: Answer[];
 }
 
-/** The keys (rows/buckets) a matrix/allocation question carries, in authored order. */
-function objectKeys(question: Question): string[] {
-  return question.type === 'matrix' ? (question.matrix?.rows ?? []) : (question.options ?? []);
+/** The keys+labels (rows/buckets) a matrix/allocation question carries, in authored order. A matrix row may
+ * be a { key, label } pair (46 §4.2) — look up the value by stable key, label the series with the label. */
+function objectKeys(question: Question): { key: string; label: string }[] {
+  if (question.type === 'matrix') {
+    return (question.matrix?.rows ?? []).map((r) => ({
+      key: matrixRowKey(r),
+      label: matrixRowLabel(r),
+    }));
+  }
+  return (question.options ?? []).map((o) => ({ key: o, label: o }));
 }
 
 export function buildQuestionTrends(sends: TrendSend[]): QuestionTrend[] {
@@ -62,10 +71,10 @@ export function buildQuestionTrends(sends: TrendSend[]): QuestionTrend[] {
           add(send.recipientName, send.submittedAt, value);
         }
       } else if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-        for (const k of objectKeys(question)) {
-          const n = value[k];
+        for (const { key, label } of objectKeys(question)) {
+          const n = value[key];
           if (typeof n === 'number' && Number.isFinite(n)) {
-            add(`${send.recipientName} · ${k}`, send.submittedAt, n);
+            add(`${send.recipientName} · ${label}`, send.submittedAt, n);
           }
         }
       }

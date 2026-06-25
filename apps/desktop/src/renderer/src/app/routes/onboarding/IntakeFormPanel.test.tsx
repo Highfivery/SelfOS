@@ -94,7 +94,8 @@ const healthMeta: IntakeSectionMeta = {
   ],
 };
 
-// An intimacy section carrying the 5-point activity matrix (neutral default rows, as the bridge sends them).
+// An intimacy section carrying the anatomy questions + the 5-point activity matrix (neutral default rows, as
+// the bridge sends them). The renderer re-resolves the matrix's oral rows live from the anatomy answers (46).
 const intimacyMatrixMeta: IntakeSectionMeta = {
   id: 'intimacy',
   title: 'Intimacy & sexuality',
@@ -106,11 +107,18 @@ const intimacyMatrixMeta: IntakeSectionMeta = {
   opener: 'Optional grown-up space.',
   questions: [
     {
-      id: 'drawnTo',
-      type: 'multiChoice',
-      prompt: 'Who are you drawn to?',
+      id: 'ownAnatomy',
+      type: 'singleChoice',
+      prompt: 'What are you packing down there?',
       required: false,
-      options: ['Men', 'Women', 'Everyone', 'Other'],
+      options: ['Cock (penis)', 'Pussy (vulva)', 'Both or intersex', 'Rather not say'],
+    },
+    {
+      id: 'partnerAnatomy',
+      type: 'multiChoice',
+      prompt: 'What do you like a partner to have down there?',
+      required: false,
+      options: ['Cock (penis)', 'Pussy (vulva)', "Don't mind"],
     },
     {
       id: 'activities',
@@ -282,18 +290,21 @@ describe('IntakeFormPanel', () => {
     expect(screen.queryByRole('button', { name: /18 or older/ })).not.toBeInTheDocument();
   });
 
-  it('tailors the activity matrix oral rows to gender + the live drawnTo answer (27 §4.2)', () => {
+  it('tailors the activity matrix oral rows to the live ANATOMY answers (46 §5)', () => {
     installMockBridge({});
     render(
       <IntakeFormPanel
         meta={intimacyMatrixMeta}
-        section={section({ id: 'intimacy', restricted: true, answers: { drawnTo: ['Women'] } })}
+        section={section({
+          id: 'intimacy',
+          restricted: true,
+          answers: { ownAnatomy: 'Cock (penis)', partnerAnatomy: ['Pussy (vulva)'] },
+        })}
         adultAcknowledged={true}
-        profileGender="Man"
         onAdvance={() => {}}
       />,
     );
-    // A straight man: gives oral to a vulva-haver + receives a blowjob; never the blowjob-giving variant.
+    // Own penis + partner vulva: he receives a blowjob + goes down on her; never the blowjob-giving variant.
     expect(screen.getByRole('radiogroup', { name: /Going down on her/ })).toBeInTheDocument();
     expect(
       screen.getByRole('radiogroup', { name: /Receiving oral \(blowjob\)/ }),
@@ -301,7 +312,35 @@ describe('IntakeFormPanel', () => {
     expect(screen.queryByRole('radiogroup', { name: /Giving a blowjob/ })).not.toBeInTheDocument();
   });
 
-  it('persists a matrix answer through the submit (it is no longer dropped as an object)', async () => {
+  it('adds a giving row live when partner anatomy changes, WITHOUT dropping an existing rating (46 §7)', () => {
+    installMockBridge({});
+    render(
+      <IntakeFormPanel
+        meta={intimacyMatrixMeta}
+        section={section({
+          id: 'intimacy',
+          restricted: true,
+          answers: { partnerAnatomy: ['Pussy (vulva)'] },
+        })}
+        adultAcknowledged={true}
+        onAdvance={() => {}}
+      />,
+    );
+    // Rate a universal row, then add penis to partner anatomy → a new "Giving a blowjob" row appears.
+    const bondage = screen.getByRole('radiogroup', { name: /Bondage/ });
+    fireEvent.click(within(bondage).getByRole('radio', { name: 'Love it' }));
+    expect(screen.queryByRole('radiogroup', { name: /Giving a blowjob/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Cock (penis)' }));
+    expect(screen.getByRole('radiogroup', { name: /Giving a blowjob/ })).toBeInTheDocument();
+    // The Bondage rating survives the row re-resolution (keyed by its stable key, not the label).
+    const bondageAfter = screen.getByRole('radiogroup', { name: /Bondage/ });
+    expect(within(bondageAfter).getByRole('radio', { name: 'Love it' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+  });
+
+  it('persists a matrix answer under its STABLE key through the submit (46 §4.2)', async () => {
     const intakeSubmitForm = vi.fn(() =>
       Promise.resolve({
         session: {} as never,
@@ -319,16 +358,17 @@ describe('IntakeFormPanel', () => {
         onAdvance={() => {}}
       />,
     );
-    // Pick "Love it" (point 5) on the universal "Bondage" row, then Continue.
+    // Pick "Love it" (point 5) on the universal "Bondage" row, then Continue. It persists under the stable
+    // slug key, not the display label.
     const bondage = screen.getByRole('radiogroup', { name: /Bondage/ });
     fireEvent.click(within(bondage).getByRole('radio', { name: 'Love it' }));
     fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
     await waitFor(() =>
       expect(intakeSubmitForm).toHaveBeenCalledWith({
         sectionId: 'intimacy',
-        answers: { activities: { Bondage: 5 } },
+        answers: { activities: { bondage: 5 } },
         // The restricted intimacy section defaults every question to Private (43 §8).
-        sharing: { drawnTo: [], activities: [] },
+        sharing: { ownAnatomy: [], partnerAnatomy: [], activities: [] },
       }),
     );
   });

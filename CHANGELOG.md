@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.11.0](https://github.com/Highfivery/SelfOS/compare/v0.10.0...v0.11.0) (2026-06-26)
+
+
+### Features
+
+* **challenges:** challenge/experiment sessions (spec 52) ([b45fa82](https://github.com/Highfivery/SelfOS/commit/b45fa828a8ae752d1390b797a7fd6dd0d6ac2e79))
+* **home:** personalized recommendation engine + Home redesign (spec 53 Slice A) ([#75](https://github.com/Highfivery/SelfOS/issues/75)) ([9747de7](https://github.com/Highfivery/SelfOS/commit/9747de715bcf7ed1541a3da323a9d530da80dbdf))
+* **home:** self-assessment, wellbeing & intimacy recommendations (spec 53 Slice B) ([#82](https://github.com/Highfivery/SelfOS/issues/82)) ([d5af0c1](https://github.com/Highfivery/SelfOS/commit/d5af0c177e6b0b9a5fb0c5db9f731a67aec76b3c))
+* **intimacy:** categorized, tiered activities inventory + grouped matrix (spec 49) ([#78](https://github.com/Highfivery/SelfOS/issues/78)) ([19ff194](https://github.com/Highfivery/SelfOS/commit/19ff194f560a438c7c9bc59559d23248d3b39fbb))
+* **intimacy:** clearer anatomy wording, inventory additions, porn types ([#84](https://github.com/Highfivery/SelfOS/issues/84)) ([b8ccff7](https://github.com/Highfivery/SelfOS/commit/b8ccff7a493e51df33cc7a569456cebd9dab426a))
+* **memory:** redesign Memory — sharing is context not display + relationship insights + test-sharing default (54) ([#86](https://github.com/Highfivery/SelfOS/issues/86)) ([1e2363b](https://github.com/Highfivery/SelfOS/commit/1e2363b00fcaa8f29e058bfb868407378be5c566))
+* **sessions:** expand guided catalog — fuller therapy/coaching, a Family group, + search ([#87](https://github.com/Highfivery/SelfOS/issues/87)) ([4c031fb](https://github.com/Highfivery/SelfOS/commit/4c031fb21288c75564d63c1cea151714d871204f))
+* **sessions:** expand intimacy guided-session group (spec 48) ([#77](https://github.com/Highfivery/SelfOS/issues/77)) ([4ccb930](https://github.com/Highfivery/SelfOS/commit/4ccb9306700b41600972362ab8edaa2083621270))
+* **settings:** owner AI suggester for intimacy topics (08 §16.5a) ([#88](https://github.com/Highfivery/SelfOS/issues/88)) ([2f7896f](https://github.com/Highfivery/SelfOS/commit/2f7896f5a7bc448d8e1e4a9b960729d0626612a0))
+* **tests:** self-assessments engine + "You" hub (spec 50) ([#79](https://github.com/Highfivery/SelfOS/issues/79)) ([171b605](https://github.com/Highfivery/SelfOS/commit/171b60568900aab65fd7871eca32b378d2b1d489))
+* **tests:** wellbeing & neurodivergence self-reflections (spec 51) ([#80](https://github.com/Highfivery/SelfOS/issues/80)) ([0baf2f0](https://github.com/Highfivery/SelfOS/commit/0baf2f0b935e5f4054e1ad1e63e73020fca6b7fb))
+
+
+### Bug Fixes
+
+* **privacy:** exclude wholly-restricted insights from cross-feature AI digests (audit 48–53) ([#83](https://github.com/Highfivery/SelfOS/issues/83)) ([1d3dc5a](https://github.com/Highfivery/SelfOS/commit/1d3dc5a2c76f9308a01c7b283f03a8d4865e2f4e))
+
 ## [0.10.0](https://github.com/Highfivery/SelfOS/compare/v0.9.1...v0.10.0) (2026-06-25)
 
 

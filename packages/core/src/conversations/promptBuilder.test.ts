@@ -71,6 +71,20 @@ describe('buildSystemPrompt', () => {
     expect(chat).not.toContain('[[SELFOS:STEP:n]]');
   });
 
+  it('appends a new (48) intimacy addendum after persona+safety, and the step convention for the builder', async () => {
+    await savePerson(fs, key, person('p1', 'Alex'));
+    // An explicit chat intimacy exercise: addendum appended, boundary still leads.
+    const chat = await buildSystemPrompt(fs, key, 'p1', 'kink-power-exchange');
+    const addendum = getExercise('kink-power-exchange')!.systemPromptAddendum;
+    expect(chat).toContain(addendum);
+    expect(chat.indexOf(PERSONA)).toBeLessThan(chat.indexOf(addendum));
+    expect(chat.indexOf(SAFETY)).toBeLessThan(chat.indexOf(addendum));
+    expect(chat).not.toContain('[[SELFOS:STEP:n]]');
+    // The structured Yes/No/Maybe builder also teaches the step convention.
+    const structured = await buildSystemPrompt(fs, key, 'p1', 'yes-no-maybe-builder');
+    expect(structured).toContain('[[SELFOS:STEP:n]]');
+  });
+
   it('adds nothing for an unknown/retired guideId (§7)', async () => {
     await savePerson(fs, key, person('p1', 'Alex'));
     const guided = await buildSystemPrompt(fs, key, 'p1', 'retired-exercise');

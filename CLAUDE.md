@@ -389,6 +389,39 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-25 — **Build (Intimacy & connection guided sessions — SPEC 48 BUILT; on `feat/intimacy-guided-sessions`,
+  PR pending).** Greatly expanded the `16` guided-session **Intimacy & connection** group from 3 → **20 entries**
+  (17 new: 16 chat + 1 structured `yes-no-maybe-builder`), spanning relational connection → explicit
+  consensual-adult sexual wellness (sensual → kink/power-exchange). **All 4 §11 decisions asked first (all
+  recommended defaults):** ship all 17 as proposed; explicitness **graded per session** (graphic where the topic
+  calls for it — dirty-talk/kink/fantasy/exploring-an-act/edging/sexting/the builder; warm-but-non-explicit for
+  `feeling-desirable`/`intimacy-after-change`); the Yes/No/Maybe builder is **conversation-only** (transcript +
+  SessionInsight, persistence deferred to spec 50); **every entry stays in the 18+-gated intimacy group**
+  (preserving the `adult === (group === 'intimacy')` invariant). **Purely additive content + the one structured
+  exercise — NO schema, IPC, capability, or nav change:** a guided session is already an ordinary `05`/`09`
+  Conversation carrying `guideId` (`16` §4.2), so streaming/metering/lifecycle/summarize/the 18+ ack all reuse
+  unchanged; the builder reuses the existing `[[SELFOS:STEP:n]]` machinery (`kind:'structured'` + `steps`), no new
+  step mechanism. **Safety (§8):** every addendum **leads** with the shared `frame()` not-therapy boundary
+  (appended AFTER PERSONA + SAFETY by `buildSystemPrompt`); every **explicit** addendum states the consensual-adult
+  / within-Anthropic-policy boundary in-prompt (consensual adults only; taboo only as fantasy/roleplay; never
+  minors/real non-consent/illegal); the four trauma-intersecting entries (`sexual-shame`, `feeling-desirable`,
+  `kink-power-exchange`, `exploring-an-act`) carry the §8.4 watch-for-distress → slow-down → validate →
+  route-to-support clause (the code-reviewer's one should-fix: `exploring-an-act` was missing it; added, + a parity
+  clause on kink); partnered entries carry a solo-framing fallback so the coach never presumes a partner who isn't
+  there (§7). The **fake Claude** gained a builder-step branch gated strictly on the builder's unique addendum
+  phrase (`'Yes/No/Maybe model'`, so it can't collide with the existing structured Thought Record E2E), streaming a
+  real `[[SELFOS:STEP:1]]` marker so the stepper-advance E2E exercises genuine marker stripping. Code-reviewer
+  **fix-first** (safety clause + spec-count reconcile applied; all mechanics — the 18+ invariant, structured
+  reuse, fake-Claude isolation, content-correctness — verified). Gate green: typecheck, lint, format, **796 core +
+  800 desktop** unit (catalog integrity + updated structured-set assertion + explicit-boundary + builder-steps;
+  `promptBuilder`/`guidanceService` extended for a new intimacy id; SessionLauncher RTL), **E2E +2** (a new
+  explicit card runs + summarizes [asserts `provenance.guideId` by decrypt] + 18+ gate + 390px overflow; the
+  builder advances the stepper via a marker stripped from visible text). Visual QA at desktop (clean 3-up card
+  grid with the 18+ badge + ⚙ Steps marker) + 390px (no overflow). Synced specs 48 (→ Built; §11 resolved; the
+  spec's 16/19 arithmetic reconciled to 17/20) + 16 (intimacy-group + structured-set cross-refs). **Lesson: an
+  all-in-one E2E that chains TWO full session flows (explicit card + summarize AND the builder + step-advance) +
+  an overflow guard blew the 30s per-test budget under load (2/3 failed on `--repeat-each=3`) — split into two
+  focused tests (~1.5s each, reliably green); each guided-session E2E should cover ONE lifecycle, not two.**
 - 2026-06-25 — **Build (Home dashboard uplift + personalized encouragement engine — SPEC 53 Slice A BUILT; on
   `feat/home-encouragement-engine`, PR pending).** The capstone Home redesign + a deterministic recommendation
   engine. **All 8 §11 product decisions asked first (all recommended defaults):** section named **"For you"**;

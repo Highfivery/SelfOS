@@ -360,6 +360,24 @@ export function fakeClaudeClient(): ClaudeClient {
           usage: { inputTokens: 200, outputTokens: 90, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
       }
+      // The structured Yes/No/Maybe builder (48 §5.2) — detected by its unique addendum framework phrase
+      // so it can't collide with the other structured exercises (e.g. Thought Record). Stream a steering
+      // reply and append a [[SELFOS:STEP:n]] marker so the stepper-advance E2E exercises REAL marker
+      // stripping (the renderer strips it from the streaming buffer + chatService parses the step). The
+      // marker is the last token; advancing to step 1 (the first category) on the first user turn.
+      if ((options.system ?? '').includes('Yes/No/Maybe model')) {
+        const visible =
+          "Great — let's start with sensual and touch: kissing, massage, cuddling. " +
+          'For each, tell me Yes, No, or Maybe.';
+        for (const word of visible.split(' ')) onDelta(`${word} `);
+        const marker = '[[SELFOS:STEP:1]]';
+        onDelta(marker);
+        return Promise.resolve({
+          text: `${visible} ${marker}`,
+          usage: { inputTokens: 120, outputTokens: 22, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+
       // Markdown-bearing reply (34 §10) so streaming + saved rendering exercise the real <Markdown>
       // renderer. "hear you" stays contiguous for the existing /hear you/i assertions.
       const reply =

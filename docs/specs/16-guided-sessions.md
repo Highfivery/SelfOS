@@ -99,7 +99,8 @@ applies. **Group titles are non-clinical; the framework is a per-card tag** (§8
   Review & Reset ⚙ (Reflective practice) · Decision Clarifier ⚙ (Values-based) · Hard Conversation Prep
   (DEAR MAN) · Boundary Setting (Assertiveness) · Burnout & Energy Audit.
 - **`intimacy` → "Intimacy & connection"** (18+, §8.3) — Sensate Focus (Masters & Johnson) · Desire
-  Discrepancy · Talking About Sex.
+  Discrepancy · Talking About Sex. (Expanded to 20 entries — relational through explicit, plus the structured
+  Yes/No/Maybe builder — by [`48`](48-intimacy-guided-sessions.md).)
 
 Card titles avoid the bare word "Therapy" (e.g. "Reflective Session", not "Therapy Session"); the framework tag
 (CBT/ACT/…) carries the recognisability. Each exercise leads with "a self-help exercise inspired by X — not
@@ -303,7 +304,8 @@ the master-detail Sessions layout (`02` §3.4). Reduced-motion respected.
    "self-help inspired by X, not therapy."
 2. **Structured set** — **a few high-value ones** are `structured` (with a stepper): **Thought Record (CBT)**,
    **GROW Goal-Setting**, **Weekly Review & Reset**, **Decision Clarifier**. Everything else is a steered
-   `chat`.
+   `chat`. ([`48`](48-intimacy-guided-sessions.md) adds a fifth structured exercise — the Yes/No/Maybe
+   builder — to this set.)
 3. **Intimacy gating** — **18+ acknowledgement only** for the group (no DOB/consent); excluded from
    suggestions until acknowledged.
 4. **Opening message** — **static opener** per exercise; personalization comes from the first real turn (no

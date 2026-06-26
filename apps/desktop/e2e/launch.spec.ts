@@ -1752,6 +1752,115 @@ test('guided sessions: start a guided exercise → steered reply → complete & 
   }
 });
 
+test('intimacy guided sessions (48): a new explicit card runs + summarizes; 18+ gated; phone-width', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Sessions' }).click();
+
+    // The expanded Intimacy group is gated behind the one-time 18+ ack (§8.3): the NEW cards are hidden too.
+    await w.getByText('Intimacy & connection').click();
+    await expect(w.getByRole('button', { name: /Start Kink & Power Exchange/ })).toHaveCount(0);
+    await w.getByRole('button', { name: /18 or older/i }).click();
+    // After the ack, a new explicit card and the structured builder card both reveal (§3.5).
+    await expect(
+      w.getByRole('button', { name: /Start Kink & Power Exchange/ }).first(),
+    ).toBeVisible();
+    await expect(
+      w.getByRole('button', { name: /Start Yes \/ No \/ Maybe List/ }).first(),
+    ).toBeVisible();
+
+    // No horizontal overflow / inner scrollbar at phone width with the expanded Intimacy group revealed.
+    await w.setViewportSize({ width: 390, height: 780 });
+    const overflow = await w.evaluate(() => {
+      const offenders: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          offenders.push(`${el.tagName}.${el.className}`);
+        }
+      });
+      const main = document.querySelector('main');
+      return { offenders, mainOverflow: main ? main.scrollWidth - main.clientWidth : 0 };
+    });
+    expect(overflow.offenders).toEqual([]);
+    expect(overflow.mainOverflow).toBeLessThanOrEqual(1);
+    await w.setViewportSize({ width: 1100, height: 800 });
+
+    // Start a new explicit chat exercise → its static opener renders (no model call), then a steered reply.
+    await w
+      .getByRole('button', { name: /Start Kink & Power Exchange/ })
+      .first()
+      .click();
+    await expect(w.getByText(/explore kink and power exchange/i)).toBeVisible();
+    await w.getByLabel('Message').fill('I want to understand D/s and how to negotiate a scene.');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/hear you/i).first()).toBeVisible();
+
+    // Complete & summarize → the Insight notes THIS exercise (content-correctness: provenance.guideId).
+    await w
+      .getByRole('complementary', { name: 'Conversations' })
+      .getByRole('button', { name: /Session options for/ })
+      .first()
+      .click();
+    await w.getByRole('menuitem', { name: 'Complete & summarize' }).click();
+    await expect(w.getByRole('heading', { name: 'Session summary' })).toBeVisible();
+
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('intimacy e2e: master key missing');
+    const insights = await listInsightsForPerson(fs, key, 'owner-1');
+    const session = insights.find((i) => i.source === 'session');
+    expect(session?.provenance.guideId).toBe('kink-power-exchange');
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('intimacy guided sessions (48): the Yes/No/Maybe builder advances steps without showing the marker', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Sessions' }).click();
+    await w.getByText('Intimacy & connection').click();
+    await w.getByRole('button', { name: /18 or older/i }).click();
+
+    // The structured Yes/No/Maybe builder (§5.2): opener + stepper, then a turn advances the stepper via a
+    // [[SELFOS:STEP:n]] marker that is NEVER shown to the person (real marker stripping).
+    await w
+      .getByRole('button', { name: /Start Yes \/ No \/ Maybe List/ })
+      .first()
+      .click();
+    await expect(w.getByText(/build a Yes \/ No \/ Maybe list/i)).toBeVisible();
+    // The stepper shows its named steps; "Set up" is the first, and "Sensual & touch" isn't current yet.
+    await expect(w.getByText('Set up', { exact: true })).toBeVisible();
+    expect(
+      await w.locator('li', { hasText: 'Sensual & touch' }).getAttribute('aria-current'),
+    ).toBeNull();
+
+    await w.getByLabel('Message').fill('Ready — start the first category.');
+    await w.getByRole('button', { name: 'Send' }).click();
+    // The fake coach's steered reply renders; the step marker is stripped from the visible text.
+    await expect(w.getByText(/start with sensual and touch/i)).toBeVisible();
+    await expect(w.getByText(/SELFOS:STEP/)).toHaveCount(0);
+    // The stepper advanced to the first category (step 1).
+    await expect(w.locator('li', { hasText: 'Sensual & touch' })).toHaveAttribute(
+      'aria-current',
+      'step',
+    );
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('sessions: a member sees a usage bar with no $; memory-off blocks summarizing (09 §14.3/§3.4)', async () => {
   // Memory off + auto-summarize default off; a non-admin member runs a session.
   const { userData, vault } = await seedReadyVault({

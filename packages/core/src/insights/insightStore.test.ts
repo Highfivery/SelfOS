@@ -4,6 +4,7 @@ import { memFileSystem } from '../host/memFileSystem';
 import type { Insight, InsightFact } from '../schemas';
 import {
   deleteInsight,
+  digestableInsights,
   flagInsightFact,
   getInsight,
   listInsightsForPerson,
@@ -37,6 +38,60 @@ const pf = (id: string, lifeArea?: string): InsightFact => ({
   text: `fact-${id}`,
   shareable: false,
   ...(lifeArea ? { lifeArea } : {}),
+});
+
+describe('digestableInsights (topic-free cross-feature digests — 52 §8.4 leak guard)', () => {
+  const restrictedFact = (id: string): InsightFact => ({
+    id,
+    text: `restricted-${id}`,
+    shareable: false,
+    restricted: true,
+    lifeArea: 'Intimacy',
+  });
+
+  it('keeps a normal insight', () => {
+    const i = insight({ id: 'a', subjectPersonId: 'p', facts: [pf('f1')] });
+    expect(digestableInsights([i]).map((x) => x.id)).toEqual(['a']);
+  });
+
+  it('drops a WHOLLY-restricted insight ENTIRELY (e.g. a challenge reflection — its summary restates it)', () => {
+    const i = insight({
+      id: 'r',
+      subjectPersonId: 'p',
+      summary: 'Took on a challenge: "explore X". They reflected: <intimate detail>',
+      facts: [restrictedFact('a'), restrictedFact('b')],
+    });
+    expect(digestableInsights([i])).toEqual([]);
+  });
+
+  it('KEEPS a mixed insight (some restricted facts + a general summary, e.g. the intake portrait)', () => {
+    const i = insight({
+      id: 'portrait',
+      subjectPersonId: 'p',
+      summary: 'A general overview of who they are',
+      facts: [pf('shareable'), restrictedFact('secret')],
+    });
+    // Kept so the digest still names the portrait; its restricted fact is dropped on the facts line elsewhere.
+    expect(digestableInsights([i]).map((x) => x.id)).toEqual(['portrait']);
+  });
+
+  it('drops a wholly-flagged insight (summary restates a corrected claim)', () => {
+    const i = insight({
+      id: 'w',
+      subjectPersonId: 'p',
+      facts: [{ ...pf('f1'), flaggedInaccurate: true }],
+    });
+    expect(digestableInsights([i])).toEqual([]);
+  });
+
+  it('a restricted fact that is ALSO flagged-inaccurate is not "live" → a sibling live fact keeps the insight', () => {
+    const i = insight({
+      id: 'rf',
+      subjectPersonId: 'p',
+      facts: [pf('keepme'), { ...restrictedFact('gone'), flaggedInaccurate: true }],
+    });
+    expect(digestableInsights([i]).map((x) => x.id)).toEqual(['rf']);
+  });
 });
 
 describe('selectPortraitFacts (28 §pillar-2 — per-call portrait relevance)', () => {

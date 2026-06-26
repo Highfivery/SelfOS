@@ -265,6 +265,29 @@ export async function feedableInsights(
 }
 
 /**
+ * Filter for **topic-free cross-feature digests** (the `challenge.suggest` + `coaching.synthesize` passes).
+ * These passes emit each insight's **summary** (not just its facts) into a Claude call, and they carry **no
+ * topic**, so the per-topic relevance gate `summarizeForContext` uses cannot apply here. Two insights must be
+ * dropped WHOLLY:
+ *   1. a **wholly-flagged** insight (had facts, all now `flaggedInaccurate`) — its summary restates a
+ *      corrected claim;
+ *   2. a **wholly-restricted** insight (every live fact `restricted`, e.g. a sexual/intimacy challenge
+ *      reflection, 52 §8.4) — its summary necessarily restates the restricted content, so excluding only the
+ *      restricted *facts* (the facts line) still leaks the summary. Topic-free ⇒ no on-topic exception (cf.
+ *      `summarizeForContext`). A MIXED insight (e.g. the intake portrait: some restricted facts + a general
+ *      summary) is KEPT — its restricted facts are still dropped on the facts line; its general summary is safe.
+ * Pure + exported + tested; both digest builders MUST route through this so the boundary can't drift.
+ */
+export function digestableInsights(insights: Insight[]): Insight[] {
+  return insights.filter((insight) => {
+    const live = insight.facts.filter((fact) => !fact.flaggedInaccurate);
+    if (insight.facts.length > 0 && live.length === 0) return false; // wholly-flagged
+    if (live.length > 0 && live.every((fact) => fact.restricted)) return false; // wholly-restricted: summary leaks
+    return true;
+  });
+}
+
+/**
  * Caps for how much Insight content feeds a single coaching context (08 §4.4). Prioritization is
  * recency-first (§11.7 leaves the exact weighting open to tune); these keep the system prompt bounded.
  */

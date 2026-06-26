@@ -247,10 +247,36 @@ describe('synthesize (40 §3.3)', () => {
       }),
     );
     await saveInsight(fs, key, insight('s2'));
+    // A WHOLLY-restricted insight (every live fact restricted — e.g. an intimacy challenge reflection, 52
+    // §8.4): its SUMMARY must be dropped too, not just its facts (the B1 leak: the summary restates it).
+    await saveInsight(
+      fs,
+      key,
+      insight('s3', {
+        summary: 'SECRET CHALLENGE SUMMARY restating intimate detail',
+        facts: [
+          {
+            id: 's3-a',
+            text: 'restricted a',
+            shareable: false,
+            restricted: true,
+            lifeArea: 'Intimacy',
+          },
+          {
+            id: 's3-b',
+            text: 'restricted b',
+            shareable: false,
+            restricted: true,
+            lifeArea: 'Intimacy',
+          },
+        ],
+      }),
+    );
     await synthesize(deps(capturing));
     expect(captured).toContain('a shareable visible fact');
     expect(captured).not.toContain('RESTRICTED secret');
     expect(captured).not.toContain('FLAGGED wrong fact');
+    expect(captured).not.toContain('SECRET CHALLENGE SUMMARY');
   });
 
   it('excludes a MUTED dream’s insight from the digest (informsContext:false, §8)', async () => {

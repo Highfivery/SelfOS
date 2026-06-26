@@ -1,12 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { QuestionnaireForm, type QuestionSharing } from '@selfos/answering';
-import {
-  defaultScopeForQuestion,
-  questionDefaultsPrivate,
-  stripIntakeFieldMarkers,
-} from '@selfos/core/intake';
+import { defaultScopeForQuestion, stripIntakeFieldMarkers } from '@selfos/core/intake';
 import { migrateActivityMatrixValue, resolvedActivityMatrix } from '@selfos/core/intimacy';
-import { SHARING_INLINE_EXPLAINER, describeScope } from '@selfos/core/sharing';
+import { SHARING_INLINE_EXPLAINER } from '@selfos/core/sharing';
 import type { AnswerMap, AnswerValue } from '@selfos/core/questionnaires';
 import type { Question } from '@selfos/core/schemas';
 import type {
@@ -37,9 +33,6 @@ function sameScope(a: readonly RelationshipType[], b: readonly RelationshipType[
   return a.length === b.length && a.every((t) => b.includes(t));
 }
 
-/** The `pendingShare.qid` sentinel for the per-section bulk control (vs a real question id). */
-const SECTION_BULK = '__section__';
-
 /**
  * A structured **form** intake section (18-personal-onboarding §14.3/§14.6) — renders the section's questions
  * through the shared `@selfos/answering` `QuestionnaireForm` (branch-aware, the host owns the answer state),
@@ -66,6 +59,7 @@ export function IntakeFormPanel({
 }): JSX.Element {
   const busy = useIntakeStore((s) => s.busy);
   const submitForm = useIntakeStore((s) => s.submitForm);
+  const autoSaveForm = useIntakeStore((s) => s.autoSaveForm);
   const skipSection = useIntakeStore((s) => s.skipSection);
   const acknowledgeAdult = useIntakeStore((s) => s.acknowledgeAdult);
   const runTurn = useIntakeStore((s) => s.runTurn);
@@ -134,56 +128,14 @@ export function IntakeFormPanel({
   );
   const hasRelationships = availableTypes !== undefined;
 
-  // A sensitive opt-in (restricted question/section → non-empty scope) asks for an explicit confirm first
-  // (43 §3.1/§8) — `Private` is always one tap away, sharing a sensitive answer is a deliberate gesture. The
-  // confirm renders INLINE in that question's (or the bulk control's) sharing slot, co-located with the click
-  // (`qid` = the question, or SECTION_BULK), never a disconnected top banner that read as "nothing happened".
-  const [pendingShare, setPendingShare] = useState<{
-    qid: string;
-    label: string;
-    apply: () => void;
-  } | null>(null);
-
   const promptOf = (qid: string): string =>
     (meta.questions ?? []).find((q) => q.id === qid)?.prompt ?? qid;
 
+  // One tap applies a scope directly — no confirm (owner decision, 2026-06-26). A sensitive answer still
+  // STARTS Private (its category default), so sharing it stays a deliberate choice; it just takes effect (and
+  // auto-saves) on a single tap instead of a second confirm.
   const applyScope = (qid: string, types: RelationshipType[]): void =>
     setScopes((s) => ({ ...s, [qid]: types }));
-
-  const setScope = (qid: string, types: RelationshipType[]): void => {
-    const current = scopes[qid] ?? [];
-    if (questionDefaultsPrivate(meta.id, qid) && current.length === 0 && types.length > 0) {
-      setPendingShare({
-        qid,
-        label: `“${promptOf(qid)}” is sensitive — share it with ${describeScope(types)}’s coaching?`,
-        apply: () => applyScope(qid, types),
-      });
-      return;
-    }
-    applyScope(qid, types);
-  };
-
-  /** The inline sensitive-share confirm (43 §8) rendered in place of a picker when its scope is pending. */
-  const renderConfirm = (pending: { label: string; apply: () => void }): JSX.Element => (
-    <div className={styles.inlineConfirm} role="group" aria-label="Confirm sensitive sharing">
-      <Text size="sm">{pending.label}</Text>
-      <div className={styles.inlineConfirmActions}>
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={() => {
-            pending.apply();
-            setPendingShare(null);
-          }}
-        >
-          Share it
-        </Button>
-        <Button variant="ghost" size="sm" onClick={() => setPendingShare(null)}>
-          Keep private
-        </Button>
-      </div>
-    </div>
-  );
 
   // The section bulk scope — a common value when every question agrees, else "mixed" (43 §3.2).
   const questionIds = (meta.questions ?? []).map((q) => q.id);
@@ -193,42 +145,22 @@ export function IntakeFormPanel({
     const first = scopes[firstId] ?? [];
     return questionIds.every((qid) => sameScope(scopes[qid] ?? [], first)) ? first : null;
   })();
-  const applyBulk = (types: RelationshipType[]): void => {
-    const doApply = (): void =>
-      setScopes((s) => {
-        const next = { ...s };
-        for (const qid of questionIds) next[qid] = [...types];
-        return next;
-      });
-    // Sharing (non-empty) via the bulk control still needs the §8 confirm when the section is sensitive OR
-    // holds any sensitive (default-private) question — e.g. the substance answers inside the non-restricted
-    // Health section — so bulk-share can't opt a restricted answer in without the explicit gesture. Locking a
-    // section to Private (the safe direction) never confirms.
-    const touchesSensitive =
-      meta.restricted || questionIds.some((qid) => questionDefaultsPrivate(meta.id, qid));
-    if (touchesSensitive && types.length > 0) {
-      setPendingShare({
-        qid: SECTION_BULK,
-        label: `This section includes sensitive answers — share all of it with ${describeScope(types)}’s coaching?`,
-        apply: doApply,
-      });
-      return;
-    }
-    doApply();
-  };
+  const applyBulk = (types: RelationshipType[]): void =>
+    setScopes((s) => {
+      const next = { ...s };
+      for (const qid of questionIds) next[qid] = [...types];
+      return next;
+    });
 
   const sharing: QuestionSharing = {
-    renderControl: (questionId) =>
-      pendingShare?.qid === questionId ? (
-        renderConfirm(pendingShare)
-      ) : (
-        <RelationshipScopePicker
-          value={scopes[questionId] ?? []}
-          onChange={(types) => setScope(questionId, types)}
-          label={promptOf(questionId)}
-          {...(availableTypes ? { availableTypes } : {})}
-        />
-      ),
+    renderControl: (questionId) => (
+      <RelationshipScopePicker
+        value={scopes[questionId] ?? []}
+        onChange={(types) => applyScope(questionId, types)}
+        label={promptOf(questionId)}
+        {...(availableTypes ? { availableTypes } : {})}
+      />
+    ),
   };
 
   // The intimacy activity matrix's oral rows are tailored per-person from the DIRECT anatomy answers (46 §5):
@@ -261,6 +193,22 @@ export function IntakeFormPanel({
   }, [meta.questions, ownAnatomy, partnerAnatomy]);
   const locked = meta.adult && !adultAcknowledged;
   const complete = section?.status === 'complete';
+
+  // Auto-save (2026-06-26): on a COMPLETED section being edited, persist answer + sharing changes the moment
+  // they happen (debounced), so a "share with partner" pick or an answer edit saves right away — no separate
+  // Save click. A first-time section keeps the explicit Continue (which is what marks it complete); auto-save
+  // never completes a section the person is still filling out. `firstRun` skips the initial seed render.
+  const firstRun = useRef(true);
+  useEffect(() => {
+    if (firstRun.current) {
+      firstRun.current = false;
+      return;
+    }
+    if (!complete || locked) return;
+    const t = setTimeout(() => void autoSaveForm(meta.id, toSubmit(), scopes), 600);
+    return () => clearTimeout(t);
+    // Re-run on any answer or sharing change; `complete`/`locked` gate it, the rest are stable.
+  }, [answers, scopes, complete, locked]);
 
   // A matrix answer is a row→point record (Record<string, number>) — keep it; every other intake answer is a
   // scalar/array. Any OTHER non-array object isn't a valid intake answer, so drop it defensively to match the
@@ -328,23 +276,17 @@ export function IntakeFormPanel({
           </Text>
         </div>
 
-        {/* 43 §3.2 — the per-section bulk sharing control. The sensitive-share confirm renders inline here too. */}
+        {/* 43 §3.2 — the per-section bulk sharing control. One tap applies + auto-saves (no confirm). */}
         {questionIds.length > 0 ? (
           <div className={styles.sectionSharing}>
             <span className={styles.sectionSharingLabel}>Sharing for this section</span>
-            {pendingShare?.qid === SECTION_BULK ? (
-              renderConfirm(pendingShare)
-            ) : (
-              <>
-                {bulkScope === null ? <span className={styles.mixedBadge}>Mixed</span> : null}
-                <RelationshipScopePicker
-                  value={bulkScope ?? []}
-                  onChange={applyBulk}
-                  label="this whole section"
-                  {...(availableTypes ? { availableTypes } : {})}
-                />
-              </>
-            )}
+            {bulkScope === null ? <span className={styles.mixedBadge}>Mixed</span> : null}
+            <RelationshipScopePicker
+              value={bulkScope ?? []}
+              onChange={applyBulk}
+              label="this whole section"
+              {...(availableTypes ? { availableTypes } : {})}
+            />
           </div>
         ) : null}
 
@@ -438,7 +380,8 @@ export function IntakeFormPanel({
             disabled={busy}
             onClick={() => void submitForm(meta.id, toSubmit(), scopes).then(onAdvance)}
           >
-            {complete ? 'Save changes' : 'Continue'}
+            {/* A complete section auto-saves as you edit, so this just flushes + moves on. */}
+            {complete ? 'Done' : 'Continue'}
             <ArrowRight size={16} aria-hidden="true" />
           </Button>
           {!complete ? (

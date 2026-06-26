@@ -389,6 +389,32 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-26 — **Fix (onboarding sharing didn't save — one-tap + auto-save; SPEC 43 amended; on
+  `fix/onboarding-share-autosave`, PR pending).** User: "in intimacy & sexuality I click _share with partner all_
+  and Save, and it doesn't save — and let's save right away when clicked, same with all answers." **Diagnosed
+  (not assumed):** traced the code — intake sharing was written ONLY by the "Save changes" button
+  (`submitForm`→`submitSectionForm`). On a sensitive section the bulk "share all" didn't apply on the pick: it
+  popped an inline **confirm** (§8) that REPLACED the picker, so a person who clicked Save without first clicking
+  "Share it" silently lost the choice (Save persisted the old Private scopes). The single-scope `intake:setAnswerSharing`
+  channel existed but the form never called it. **Owner decisions (asked first, both forks):** **one tap, no confirm**
+  - **auto-save sharing AND answers**. Fix: **(1)** removed the §3.1/§8 sensitive-share confirm — `applyScope`/`applyBulk`
+    apply directly on one tap (safety preserved by the **default**: a sensitive answer still STARTS Private, so sharing
+    is still an explicit choice; the confirm machinery — `pendingShare`/`renderConfirm`/`SECTION_BULK` — is gone). **(2)**
+    new silent `intakeStore.autoSaveForm` (re-runs `intake:submitForm` WITHOUT the `busy` toggle, so controls don't
+    flicker) + a debounced (600ms) auto-save effect in `IntakeFormPanel` that fires on any answer or scope change **for a
+    COMPLETED section** (i.e. being edited); the primary button becomes **"Done"** (a flush + advance). A **first-time
+    section is unchanged** — it still uses the explicit **Continue** (which marks it complete; auto-save never completes
+    a section being filled the first time, so no premature portrait). Gate green: typecheck (all), lint, **855 desktop**
+    unit (3 reworked IntakeFormPanel RTL: per-question one-tap+auto-save, bulk share-all auto-save [the reported bug],
+    first-time-does-NOT-auto-save; removed the two confirm tests), **E2E** (the existing per-question-sharing decrypt
+    test extended: re-open the now-complete basics section → widen to +Sibling → it persists to the vault with NO Save
+    click). Visual QA (real Electron screenshot): the section reads clean — honest explainer, one-tap sharing chips, no
+    confirm clutter. Synced spec 43 (amendment). **Lesson: a confirm that REPLACES the control it guards is a silent
+    data-loss trap — a user reads the picker as "done" and the pending choice evaporates on the next click; and
+    per-question intake sharing must be writable on its own (`setAnswerSharing`) OR auto-saved, never gated solely behind
+    a section-level Save the user may not reach. ALSO (repeated my own footgun): `git checkout <file>` reverts UNCOMMITTED
+    work — and I started this fix on `main` without branching; commit/branch BEFORE injecting throwaway screenshots.**
+
 - 2026-06-26 — **Build (owner AI intimacy-topic suggester — SPEC 08 §16.5a AI-assist; on `feat/ai-intimacy-topics`,
   PR pending).** The last item of the 2026-06-26 batch. The owner-only Intimacy Topics settings control gains a
   **"Suggest with AI"** affordance. **All 3 product/UX forks asked first (user-chosen):** lives **in the existing

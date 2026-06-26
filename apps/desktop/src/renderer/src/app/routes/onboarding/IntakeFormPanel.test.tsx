@@ -65,35 +65,6 @@ const intimacyMeta: IntakeSectionMeta = {
   ],
 };
 
-// A NON-restricted section (health) that nonetheless holds a restricted question (substancesUsed) — the
-// catalog decides `restricted`, so the synthetic question ids must be real health ids (43 §8 bulk-confirm).
-const healthMeta: IntakeSectionMeta = {
-  id: 'health',
-  title: 'Health & body',
-  blurb: 'Body & wellbeing.',
-  restricted: false,
-  adult: false,
-  tier: 'invited',
-  mode: 'form',
-  opener: 'A few about your body.',
-  questions: [
-    {
-      id: 'sleepSchedule',
-      type: 'singleChoice',
-      prompt: 'Sleep schedule',
-      required: false,
-      options: ['Early', 'Late'],
-    },
-    {
-      id: 'substancesUsed',
-      type: 'multiChoice',
-      prompt: 'Substances you use',
-      required: false,
-      options: ['Cannabis / weed', 'None'],
-    },
-  ],
-};
-
 // An intimacy section carrying the anatomy questions + the 5-point activity matrix (neutral default rows, as
 // the bridge sends them). The renderer re-resolves the matrix's oral rows live from the anatomy answers (46).
 const intimacyMatrixMeta: IntakeSectionMeta = {
@@ -437,7 +408,7 @@ describe('IntakeFormPanel — per-question sharing (43)', () => {
     expect(screen.getByText('Mixed')).toBeInTheDocument();
   });
 
-  it('confirms before sharing a sensitive (restricted) answer, then carries the scope into the submit', async () => {
+  it('shares a sensitive answer on ONE tap (no confirm) and auto-saves a completed section', async () => {
     const intakeSubmitForm = vi.fn(() =>
       Promise.resolve({
         session: {} as never,
@@ -450,46 +421,87 @@ describe('IntakeFormPanel — per-question sharing (43)', () => {
     render(
       <IntakeFormPanel
         meta={intimacyMeta}
-        section={section({ id: 'intimacy', restricted: true })}
+        section={section({ id: 'intimacy', restricted: true, status: 'complete' })}
         adultAcknowledged={true}
         onAdvance={() => {}}
       />,
     );
-    // The libido chip starts Private (sensitive). Open it and pick Partner → a confirm appears, not applied yet.
+    // The libido chip starts Private (sensitive). Pick Partner → it applies on ONE tap, no confirm.
     fireEvent.click(screen.getByRole('button', { name: /Sex drive: private/i }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Partner' }));
-    expect(await screen.findByText(/is sensitive — share it/i)).toBeInTheDocument();
-    // The confirm renders INLINE in the question's sharing slot (44 audit): it REPLACES the picker — the
-    // checkbox is gone — so it's co-located with the click, not a disconnected top banner.
-    expect(screen.queryByRole('checkbox', { name: 'Partner' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Share it' }));
-
-    fireEvent.click(screen.getByRole('button', { name: /Save changes|Continue/ }));
-    await waitFor(() =>
-      expect(intakeSubmitForm).toHaveBeenCalledWith(
-        expect.objectContaining({
-          sectionId: 'intimacy',
-          sharing: expect.objectContaining({ libido: ['partner'] }),
-        }),
-      ),
+    expect(screen.queryByText(/is sensitive — share it/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Share it' })).not.toBeInTheDocument();
+    // No Save click — the completed section auto-saves the new scope (debounced).
+    await waitFor(
+      () =>
+        expect(intakeSubmitForm).toHaveBeenCalledWith(
+          expect.objectContaining({
+            sectionId: 'intimacy',
+            sharing: expect.objectContaining({ libido: ['partner'] }),
+          }),
+        ),
+      { timeout: 2000 },
     );
   });
 
-  it('confirms a bulk share when a non-restricted section holds a sensitive question (health/substances)', async () => {
-    installMockBridge({ relationshipsList: () => Promise.resolve([]) });
+  it('bulk "share all → partner" on a completed section auto-saves every scope, no confirm (the reported bug)', async () => {
+    const intakeSubmitForm = vi.fn(() =>
+      Promise.resolve({
+        session: {} as never,
+        sections: [],
+        aiAvailable: true,
+        adultAcknowledged: true,
+      }),
+    );
+    installMockBridge({ intakeSubmitForm, relationshipsList: () => Promise.resolve([]) });
     render(
       <IntakeFormPanel
-        meta={healthMeta}
-        section={section({ id: 'health' })}
-        adultAcknowledged={false}
+        meta={intimacyMeta}
+        section={section({ id: 'intimacy', restricted: true, status: 'complete' })}
+        adultAcknowledged={true}
         onAdvance={() => {}}
       />,
     );
-    // Open the per-section bulk control and add Partner → because `substancesUsed` is restricted, the §8
-    // confirm must appear before anything is shared (the bulk control must not bypass it).
+    // Open the per-section bulk control and add Partner → applies to EVERY question on one tap, no confirm.
     fireEvent.click(screen.getByRole('button', { name: /this whole section/i }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Partner' }));
-    expect(await screen.findByText(/includes sensitive answers/i)).toBeInTheDocument();
+    expect(screen.queryByText(/includes sensitive answers/i)).not.toBeInTheDocument();
+    // No Save click — it auto-saves the bulk scope across the section's questions.
+    await waitFor(
+      () =>
+        expect(intakeSubmitForm).toHaveBeenCalledWith(
+          expect.objectContaining({
+            sectionId: 'intimacy',
+            sharing: expect.objectContaining({ libido: ['partner'] }),
+          }),
+        ),
+      { timeout: 2000 },
+    );
+  });
+
+  it('does NOT auto-save a first-time (incomplete) section — that still rides the explicit Continue', async () => {
+    const intakeSubmitForm = vi.fn(() =>
+      Promise.resolve({
+        session: {} as never,
+        sections: [],
+        aiAvailable: true,
+        adultAcknowledged: true,
+      }),
+    );
+    installMockBridge({ intakeSubmitForm, relationshipsList: () => Promise.resolve([]) });
+    render(
+      <IntakeFormPanel
+        meta={intimacyMeta}
+        section={section({ id: 'intimacy', restricted: true })} // no status:'complete' → first-time
+        adultAcknowledged={true}
+        onAdvance={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /this whole section/i }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Partner' }));
+    // Give the debounce window time to pass — a first-time section must NOT auto-submit.
+    await new Promise((r) => setTimeout(r, 800));
+    expect(intakeSubmitForm).not.toHaveBeenCalled();
   });
 
   it('offers the one-tap "refresh your portrait" once an edit makes the portrait stale', () => {

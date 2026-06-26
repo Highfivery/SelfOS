@@ -6592,7 +6592,7 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
   }
 });
 
-test('onboarding per-question sharing: scope a section to Partner → the derived fact reaches the partner, not the sibling (43)', async () => {
+test('onboarding per-question sharing: scope a section to Partner → fact reaches partner not sibling; editing auto-saves (43 + auto-save fix)', async () => {
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
   await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
   // Seed a partner B + a sibling C of the owner, and an in-progress intake with only `basics` to do.
@@ -6734,6 +6734,26 @@ test('onboarding per-question sharing: scope a section to Partner → the derive
     expect(siblingCtx).not.toContain('Works as a nurse');
     expect(siblingCtx).not.toContain('shared by people related to');
     expect(siblingCtx).not.toContain('grief');
+
+    // Auto-save on edit (the reported bug fix): re-open the now-COMPLETE basics section and widen its sharing
+    // to also include Sibling. With NO "Save" click, the change must persist — a completed section auto-saves.
+    await w
+      .getByRole('button', { name: /The basics/i })
+      .first()
+      .click();
+    await expect(w.getByRole('button', { name: 'Done' })).toBeVisible(); // complete → auto-saving, "Done" not "Save"
+    await w.getByRole('button', { name: /this whole section/i }).click();
+    await w.getByRole('checkbox', { name: 'Sibling' }).click(); // Partner is already on; add Sibling
+    await w.keyboard.press('Escape');
+    // No Save/Done click — the auto-save persists the widened scope to the vault within the debounce window.
+    await expect
+      .poll(
+        async () =>
+          (await getIntakeSession(fs, key, 'owner-1'))?.sections.find((s) => s.id === 'basics')
+            ?.answerSharing?.occupation ?? [],
+        { timeout: 4000 },
+      )
+      .toContain('sibling');
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

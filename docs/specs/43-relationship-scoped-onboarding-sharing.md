@@ -1,8 +1,19 @@
 # 43 — Onboarding per-question sharing (share-by-default, in the flow)
 
-> **Status:** Built (2026-06-24) · _last updated 2026-06-24_ ·
+> **Status:** Built (2026-06-24) · _last updated 2026-06-26_ ·
 > **Depends on [`42`](42-relationship-scoped-sharing.md).**
 >
+> **Amendment (2026-06-26, owner decision — share auto-saves; no confirm).** Two UX changes after the user
+> reported "I pick _share with partner all_ and Save, but it doesn't save." **(1) One tap, no confirm:** the
+> §3.1/§8 sensitive-share confirm is **removed** — picking a scope (per-question or the bulk "share all")
+> applies on a single tap. Safety is preserved by the **default**: a sensitive answer still STARTS Private
+> (its category preset), so sharing it is still a deliberate, explicit choice; it just takes effect on one tap
+> instead of a second confirm. **(2) Auto-save on edit:** on a section the person has already **completed**
+> (i.e. is editing), an answer or sharing change **persists immediately** (debounced, silent — `autoSaveForm`
+> re-runs `intake:submitForm`), so a sharing pick saves right away with no separate button; the primary button
+> becomes **"Done"**. A first-time section is unchanged — it still uses the explicit **Continue** (which is what
+> marks it complete; auto-save never completes a section being filled for the first time).
+
 > Today, onboarding answers are **own-context-only** (all intake Insight facts hardcoded
 > `shareable: false`), and the only way to share anything is to finish the intake, run synthesis, then go to
 > Memory and toggle individual facts — broadcasting them to _everyone_ related. This spec moves sharing

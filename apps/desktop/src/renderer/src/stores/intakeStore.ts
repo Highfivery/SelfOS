@@ -26,6 +26,16 @@ interface IntakeStoreState {
     answers: Record<string, IntakeAnswerValue>,
     sharing?: Record<string, RelationshipType[]>,
   ) => Promise<void>;
+  /**
+   * Silent background save (auto-save on edit, 43-followup): persists a completed section's answers + sharing
+   * the instant they change, WITHOUT the `busy` toggle so the editing controls never flicker. Same write as
+   * `submitForm` (the bridge re-persists `answerSharing`); used by the debounced auto-save on a complete section.
+   */
+  autoSaveForm: (
+    sectionId: string,
+    answers: Record<string, IntakeAnswerValue>,
+    sharing?: Record<string, RelationshipType[]>,
+  ) => Promise<void>;
   acknowledgeAdult: () => Promise<void>;
   /** Finish a section: marks it complete + generates a light reflection (best-effort). */
   completeSection: (sectionId: string) => Promise<void>;
@@ -81,6 +91,16 @@ export const useIntakeStore = create<IntakeStoreState>((set, get) => ({
         ...(sharing ? { sharing } : {}),
       })) ?? null;
     set({ busy: false, ...(next ? { state: next } : {}) });
+  },
+  autoSaveForm: async (sectionId, answers, sharing) => {
+    // No `busy` toggle — a background save, so the form's controls don't flicker as the user edits.
+    const next =
+      (await window.selfos?.intakeSubmitForm({
+        sectionId,
+        answers,
+        ...(sharing ? { sharing } : {}),
+      })) ?? null;
+    if (next) set({ state: next });
   },
   acknowledgeAdult: async () => {
     set({ busy: true, error: null });

@@ -86,6 +86,23 @@ describe('suggestGuidedSessions', () => {
       ]);
   });
 
+  it('gates the new (48) intimacy exercises behind the 18+ ack too', async () => {
+    // The expanded explicit set (48) is group:'intimacy' + adult, so it is filtered out until the ack and
+    // eligible after — same gate as the original three, with no per-id wiring.
+    const text = JSON.stringify([
+      { guideId: 'kink-power-exchange', reason: 'an explicit new pick' },
+      { guideId: 'values-clarification', reason: 'safe pick' },
+    ]);
+    const gated = await suggestGuidedSessions(deps(text), { adultAllowed: false });
+    expect(gated.ok).toBe(true);
+    if (gated.ok) expect(gated.suggestions.map((s) => s.guideId)).toEqual(['values-clarification']);
+
+    const allowed = await suggestGuidedSessions(deps(text), { adultAllowed: true });
+    expect(allowed.ok).toBe(true);
+    if (allowed.ok)
+      expect(allowed.suggestions.map((s) => s.guideId)).toContain('kink-power-exchange');
+  });
+
   it('returns NO_KEY without spending when there is no API key', async () => {
     const result = await suggestGuidedSessions(deps('[]', { apiKey: null }), {
       adultAllowed: false,

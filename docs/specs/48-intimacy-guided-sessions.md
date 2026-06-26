@@ -1,6 +1,6 @@
 # 48 — Intimacy & connection guided sessions (expanded set)
 
-> **Status:** Draft · _last updated 2026-06-25_
+> **Status:** Built · _last updated 2026-06-25_
 >
 > The guided-session catalog ([`16`](16-guided-sessions.md)) ships only **three** "Intimacy & connection"
 > exercises (Sensate Focus, Desire Discrepancy, Talking About Sex), all conservative/non-explicit. This spec
@@ -187,7 +187,7 @@ unchanged boundary (§8.3). `kind: 'chat'` unless noted.
 | `edging-mindful-arousal` | Edging & Mindful Arousal         | Mindful sexuality              | Slow down and savour arousal, solo or together.                 | Guide mindful arousal/edging — staying present, building and sustaining arousal, savouring rather than rushing to climax; solo or partnered; explicit where apt; body-positive.                                                                                                  |
 | `aftercare-checkins`     | Aftercare & Post-Sex Check-ins   | Aftercare                      | Care for each other after sex or a scene.                       | Help them build aftercare and post-intimacy check-ins — emotional and physical care, drop, debriefing a scene, what each needs afterward; centre attunement and consent.                                                                                                         |
 
-That is **16 new intimacy entries** (15 chat + 1 structured) on top of the existing 3 → a **19-entry** Intimacy
+That is **17 new intimacy entries** (16 chat + 1 structured) on top of the existing 3 → a **20-entry** Intimacy
 group. The set, the names, and the per-session register are explicitly open for the user to trim/add (§11.1,
 §11.2, §11.4).
 
@@ -221,7 +221,7 @@ content. Nothing new is registered — this extends the existing Sessions module
 
 ### 5.1 Catalog additions (content)
 
-- `packages/core/src/conversations/guidedCatalog.ts` — append the **16 new `GuidedExercise` entries** (§3.5)
+- `packages/core/src/conversations/guidedCatalog.ts` — append the **17 new `GuidedExercise` entries** (§3.5)
   into the existing `GUIDED_CATALOG` array, in the `// ── Intimacy & connection (18+, §8.3)` section after the
   current three. Each new entry: `group:'intimacy'`, `adult:true`, a static `openingMessage`, and a
   `systemPromptAddendum` built with the existing `frame(framework)` preamble + the steering in §3.5. The
@@ -480,7 +480,7 @@ not just the happy path.
 
 ## 11. Open questions
 
-- **§11.1 — The exact final session set.** §3.5 proposes 16 new entries (15 chat + 1 structured) → a 19-entry
+- **§11.1 — The exact final session set.** §3.5 proposes 17 new entries (16 chat + 1 structured) → a 20-entry
   Intimacy group. **Which to keep, drop, merge, rename, or add?** (e.g. is `mismatched-libido` redundant with
   the existing `desire-discrepancy`? Combine `sexting-long-distance` and `dirty-talk-practice`? Add a
   "first-time / new relationship intimacy" or a "reigniting after infidelity" exercise?) The user trims/adds.
@@ -507,8 +507,26 @@ not just the happy path.
 
 ## 12. Changelog
 
+- 2026-06-25 — **Built** (`feat/intimacy-guided-sessions`). Appended **17 new** `GuidedExercise` entries (16
+  chat + 1 structured `yes-no-maybe-builder`) to `GUIDED_CATALOG` → a **20-entry** Intimacy group. All §11
+  resolved with the recommended defaults: ship all 17 as proposed (§11.1); explicitness **graded per session**
+  — graphic where the topic calls for it (dirty-talk/kink/fantasy/exploring-an-act/edging/sexting/the builder),
+  warm-but-non-explicit for `feeling-desirable`/`intimacy-after-change` (§11.2); the Yes/No/Maybe builder is
+  **conversation-only** (transcript + SessionInsight), persistence deferred to spec 50 (§11.3); names/framework
+  tags as built — kink tagged `Kink (D/s · SSC/RACK)` (§11.4); **every entry stays in the 18+-gated intimacy
+  group** (§11.5). Every addendum leads with the `frame()` not-therapy boundary; every explicit addendum states
+  the consensual-adult / within-Anthropic-policy boundary; trauma-intersecting entries
+  (`sexual-shame`/`feeling-desirable`/`kink-power-exchange`/`exploring-an-act`) carry the §8.4 watch-for-distress
+  → slow-down → route-to-support clause; partnered entries carry a solo-framing fallback (§7). Purely additive
+  content + the one structured exercise (reusing the existing `[[SELFOS:STEP:n]]` machinery) + a fake-Claude
+  builder-step branch; **no schema, IPC, capability, or nav change**. Tests: `guidedCatalog.test.ts`
+  structured-set assertion updated (now includes `yes-no-maybe-builder`, §5.2) + new-entry/explicit-boundary/
+  builder-steps assertions; `promptBuilder`/`guidanceService` extended for a new intimacy id; SessionLauncher RTL
+  - 2 E2E (a new explicit card runs + summarizes [provenance.guideId] + 18+ gate + 390px overflow; the builder
+    advances the stepper via a marker stripped from visible text). Gate green: typecheck, lint, format, \*\*796 core
+    - 800 desktop\*\* unit, E2E.
 - 2026-06-25 — created (Draft). Greatly expands the `16-guided-sessions` "Intimacy & connection" group from 3
-  to a proposed 19 entries (16 new: 15 chat + 1 structured Yes/No/Maybe builder), in the `08` §16.5
+  to a proposed 20 entries (17 new: 16 chat + 1 structured Yes/No/Maybe builder), in the `08` §16.5
   consensual-adult sexual-wellness register, all behind the existing 18+ acknowledgement. **Locked decisions
   (§11 / §8.3):** the group ships explicit, in-policy sessions across the full range (sensual → kink/power-
   exchange); all are 18+-gated (`group:'intimacy'` + `adult:true`); the consensual-adult / within-Anthropic-

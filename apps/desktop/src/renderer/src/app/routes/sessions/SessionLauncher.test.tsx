@@ -44,12 +44,32 @@ describe('SessionLauncher', () => {
       guidedAcknowledgeAdult: () => Promise.resolve({ cache: null, adultAcknowledged: true }),
     });
     renderLauncher();
-    // Before ack: the gate button shows; the adult cards do not.
+    // Before ack: the gate button shows; the adult cards (existing AND new, 48) do not.
     expect(screen.queryByRole('button', { name: /Start Sensate Focus/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Start Kink & Power Exchange/ }),
+    ).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /18 or older/i }));
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /Start Sensate Focus/ })).toBeInTheDocument(),
     );
+    // The expanded set (48) renders too — a new explicit card and the structured builder card.
+    expect(screen.getByRole('button', { name: /Start Kink & Power Exchange/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Start Yes \/ No \/ Maybe List/ }),
+    ).toBeInTheDocument();
+  });
+
+  it('picking a new (48) intimacy card calls onPickGuided with its id', async () => {
+    installMockBridge({
+      guidedAcknowledgeAdult: () => Promise.resolve({ cache: null, adultAcknowledged: true }),
+    });
+    const onPickGuided = vi.fn();
+    renderLauncher({ onPickGuided });
+    await userEvent.click(screen.getByRole('button', { name: /18 or older/i }));
+    const card = await screen.findByRole('button', { name: /Start Fantasy Exploration/ });
+    await userEvent.click(card);
+    expect(onPickGuided).toHaveBeenCalledWith('fantasy-exploration');
   });
 });
 

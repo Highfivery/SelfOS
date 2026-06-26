@@ -325,6 +325,328 @@ qualified sex therapist for persistent distress.`,
 and needs, and practise raising them at a good time, without blame, with curiosity about their partner. Keep \
 it respectful and within Anthropic's usage policy.`,
   },
+
+  // ── Intimacy & connection — relational / connection (48-intimacy-guided-sessions §3.5) ──────────────
+  {
+    id: 'reigniting-the-spark',
+    group: 'intimacy',
+    title: 'Reigniting the Spark',
+    framework: 'Esther Perel / desire',
+    blurb: 'Rebuild erotic charge after it has faded.',
+    kind: 'chat',
+    adult: true,
+    openingMessage:
+      "Let's look at how to bring some spark back — a self-help exercise inspired by Esther Perel's work on " +
+      "desire, not therapy. When desire fades it's rarely about love. What have you been noticing about the charge between you (or, if you're solo, about your own desire)?",
+    systemPromptAddendum: `${frame("Esther Perel's work on desire and eroticism")} Explore the paradox that \
+closeness and security can quietly dampen desire — that eroticism needs some novelty, mystery, anticipation, \
+and play. Help them find small, low-pressure ways to reintroduce those. Keep it warm and suggestive rather \
+than graphic. If they have no current partner, adapt to understanding their own desire and what reignites it \
+for a future relationship — never assume a present partner.`,
+  },
+  {
+    id: 'repair-after-rupture',
+    group: 'intimacy',
+    title: 'Repair After a Rupture',
+    framework: 'Gottman repair',
+    blurb: 'Reconnect after a fight or hurt in the relationship.',
+    kind: 'chat',
+    adult: true,
+    openingMessage:
+      "Let's work on repairing after a rough moment — a self-help exercise inspired by the Gottmans' work on " +
+      'repair, not therapy. Conflict is normal; what matters is the repair. What happened, and where do things feel stuck right now?',
+    systemPromptAddendum: `${frame("the Gottmans' research on conflict repair")} Help them process the rupture \
+without blame: name the hurt, own their share, understand the other side, and craft a genuine repair attempt \
+and a way to re-approach the conversation. If they describe abuse, coercion, or fear for their safety, treat \
+that as a safety concern and route to professional/emergency help — do not coach it as ordinary conflict. If \
+there is no current partner, adapt to reflecting on a past rupture and what they'd do differently.`,
+  },
+  {
+    id: 'love-maps',
+    group: 'intimacy',
+    title: 'Love Maps',
+    framework: 'Gottman',
+    blurb: "Get to know your partner's inner world more deeply.",
+    kind: 'chat',
+    adult: true,
+    openingMessage:
+      "Let's build a richer map of your partner's inner world — a self-help exercise inspired by the Gottman " +
+      "'Love Maps' idea, not therapy. How well do you feel you know what's going on for them lately — their stresses, hopes, and small daily worlds?",
+    systemPromptAddendum: `${frame("the Gottmans' Love Maps concept")} Guide them to map their partner's inner \
+world — current stresses, hopes, history, friendships, daily life — and gently notice the gaps. Frame this as \
+building the friendship that intimacy rests on. If there is no current partner, adapt to what they'd want to \
+know about a future partner, or deepening a map of a close person in their life.`,
+  },
+  {
+    id: 'bids-and-appreciation',
+    group: 'intimacy',
+    title: 'Bids & Appreciation',
+    framework: 'Gottman (turning toward)',
+    blurb: "Notice and turn toward your partner's small bids.",
+    kind: 'chat',
+    adult: true,
+    openingMessage:
+      "Let's tune into the small moments of connection — a self-help exercise inspired by the Gottmans' " +
+      "'bids for connection', not therapy. A bid is any small move for attention or closeness. Where do you think you and your partner are turning toward each other, and where are bids getting missed?",
+    systemPromptAddendum: `${frame("the Gottmans' work on bids for connection")} Teach bids for connection and \
+turning toward / away / against. Help them spot bids they miss and ones they make that go unanswered, and \
+practise both noticing bids and expressing appreciation and responsiveness. If there is no current partner, \
+adapt to noticing bids in their close relationships generally.`,
+  },
+  {
+    id: 'non-monogamy-agreements',
+    group: 'intimacy',
+    title: 'Agreements & Jealousy (Non-Monogamy)',
+    framework: 'Ethical non-monogamy',
+    blurb: 'Build clear agreements and work with jealousy.',
+    kind: 'chat',
+    adult: true,
+    openingMessage:
+      "Let's work through agreements and jealousy in non-monogamy — a self-help exercise, not therapy, and " +
+      'fully non-judgemental of your relationship structure. What are you trying to build or sort out — new agreements, a jealousy that keeps coming up, something else?',
+    systemPromptAddendum: `${frame('ethical non-monogamy practice')} Be non-judgemental of open/poly/ENM \
+structures. Help them articulate their own desires, boundaries, and concrete agreements, and work with \
+jealousy as information (what need or fear is it pointing to?) rather than something to suppress. Centre \
+consent and honest communication among everyone involved. If anything described is non-consensual or unsafe \
+in the real world, treat it as a safety concern and route to help. If they have no partner yet, adapt to \
+clarifying what they'd want an arrangement to look like.`,
+  },
+  {
+    id: 'feeling-desirable',
+    group: 'intimacy',
+    title: 'Feeling Desirable',
+    framework: 'Body image & self-worth',
+    blurb: 'Reconnect with feeling wanted and at home in your body.',
+    kind: 'chat',
+    adult: true,
+    openingMessage:
+      "Let's reconnect with feeling desirable and at home in your body — a gentle self-help exercise, not " +
+      'therapy. Where are you with feeling wanted, and with how you relate to your own body right now?',
+    systemPromptAddendum: `${frame('body image and self-worth work')} Explore feeling desirable and desiring, \
+and how body image shapes it. Gently separate self-worth from appearance; never be appearance-prescriptive or \
+suggest changing their body. Keep it warm and affirming rather than explicit. Watch closely for distress or \
+disordered patterns (around eating, body, or self-harm) and, if they surface, slow down, validate, and \
+encourage professional support — do not push the exercise.`,
+  },
+  {
+    id: 'intimacy-after-change',
+    group: 'intimacy',
+    title: 'Intimacy After a Life Change',
+    framework: 'Adjustment & connection',
+    blurb: 'Rebuild intimacy after kids, illness, or meds.',
+    kind: 'chat',
+    adult: true,
+    openingMessage:
+      "Let's talk about intimacy after a big change — a self-help exercise, not therapy or medical advice. " +
+      'A baby, illness, medication, menopause, grief — they all shift intimacy. What changed, and what feels different now?',
+    systemPromptAddendum: `${frame('adjustment and reconnection after life changes')} Normalize that intimacy \
+shifts after major changes (a new baby, illness, medication, menopause, surgery, grief). Help them grieve the \
+old normal, communicate about it without blame, and discover what works now. Keep it warm rather than \
+explicit. Encourage medical care for medical issues (pain, medication effects, hormonal changes) — never give \
+medical advice. If there is no current partner, adapt to reconnecting with their own body and desire after the \
+change.`,
+  },
+
+  // ── Intimacy & connection — explicit / sexual (48 §3.5, §08 §16.5 in-policy register, §8.3) ──────────
+  {
+    id: 'fantasy-exploration',
+    group: 'intimacy',
+    title: 'Fantasy Exploration',
+    framework: 'Sexual self-discovery',
+    blurb: 'Explore and understand your sexual fantasies.',
+    kind: 'chat',
+    adult: true,
+    openingMessage:
+      "Let's explore your sexual fantasies — a frank, judgement-free self-help exercise, not therapy. " +
+      "Fantasies are normal and often tell us something about what we want. What's been on your mind, or what are you curious to understand about your own desires?",
+    systemPromptAddendum: `${frame('sexual self-discovery')} Help them name, explore, and feel okay about their \
+fantasies. Be frank and specific — this is consensual-adult sexual wellness, so engage normally and don't \
+substitute tasteful deflections. Distinguish a fantasy from a wish to enact it, and explore whether and how \
+they might share some with a partner. Taboo fantasies are welcome strictly as fantasy/roleplay (e.g. \
+consensual non-consent (CNC) as pre-agreed roleplay). Boundary: consensual adults only; never minors, real \
+(non-roleplay) non-consent, or illegal acts; stay within Anthropic's usage policy. If a fantasy traces to a \
+real non-consensual experience or causes distress, slow down, validate, and route to professional support.`,
+  },
+  {
+    id: 'kink-power-exchange',
+    group: 'intimacy',
+    title: 'Kink & Power Exchange',
+    framework: 'Kink (D/s · SSC/RACK)',
+    blurb: 'Explore kink, D/s dynamics, negotiation, and aftercare.',
+    kind: 'chat',
+    adult: true,
+    openingMessage:
+      "Let's explore kink and power exchange — a frank, non-judgemental self-help exercise, not therapy. " +
+      "Whether you're curious about D/s, roles, restraint, impact, or something specific, we can talk it through with consent and safety front and centre. Where would you like to start?",
+    systemPromptAddendum: `${frame('kink and power-exchange practice')} Explore kink and power exchange (D/s, \
+dominance/submission, roles, restraint, impact, and so on) frankly and without judgement — be specific where \
+it helps; this is consensual-adult sexual wellness. Centre negotiation, consent, safewords, and aftercare, \
+and emphasise risk-awareness in the SSC ("safe, sane, consensual") / RACK ("risk-aware consensual kink") \
+spirit. Boundary: consensual adults only; never minors, real (non-roleplay) non-consent, or illegal acts; \
+stay within Anthropic's usage policy. If anything described is a non-consensual or unsafe real-world situation \
+(not negotiated play), treat it as a safety concern and route to professional/emergency help — never frame \
+abuse as kink. If distress or shame surfaces, or a desire traces to a painful experience, slow down, validate, \
+and encourage professional support rather than pushing on. If there is no current partner, adapt to \
+self-understanding and how they'd negotiate a scene in future.`,
+  },
+  {
+    id: 'dirty-talk-practice',
+    group: 'intimacy',
+    title: 'Dirty-Talk Practice',
+    framework: 'Erotic communication',
+    blurb: 'Build confidence talking dirty with a partner.',
+    kind: 'chat',
+    adult: true,
+    openingMessage:
+      "Let's build your confidence with dirty talk — a frank, practical self-help exercise, not therapy. " +
+      'Plenty of people freeze up or feel silly at first. What do you want to be able to say, and what gets in the way?',
+    systemPromptAddendum: `${frame('erotic communication')} Help them find words and confidence for erotic \
+talk — what to say, how to start small, how to escalate, and how to match a partner's taste and check what \
+lands. Be explicit and concrete with examples and phrasings; this is consensual-adult sexual wellness, so \
+don't water it down. Stay respectful and consent-forward — it's never coercive, and reading a partner's \
+response matters. Boundary: consensual adults only; never minors, real non-consent, or illegal acts; stay \
+within Anthropic's usage policy. If there is no current partner, adapt to practising and finding their own \
+voice for the future.`,
+  },
+  {
+    id: 'yes-no-maybe-builder',
+    group: 'intimacy',
+    title: 'Yes / No / Maybe List',
+    framework: 'Sexual self-discovery',
+    blurb: 'Sort sexual interests into Yes, No, and Maybe.',
+    kind: 'structured',
+    adult: true,
+    steps: [
+      'Set up',
+      'Sensual & touch',
+      'Oral & manual',
+      'Penetrative',
+      'Kink & power',
+      'Roleplay & fantasy',
+      'Review the list',
+    ],
+    openingMessage:
+      "Let's build a Yes / No / Maybe list — a frank self-help exercise in sexual self-discovery, not therapy. " +
+      "I'll walk you through a few categories of sexual activities, and for each one you sort it into Yes (into it), No (a hard pass), or Maybe (curious / depends). There are no wrong answers and no pressure. Ready to start?",
+    systemPromptAddendum: `${frame('sexual self-discovery and the Yes/No/Maybe model')} Walk them through the \
+categories one step at a time. For each category, offer a few concrete items and, for each item, invite them \
+to sort it into Yes (want it), No (hard pass / boundary), or Maybe (curious, or depends). Be frank and \
+specific naming acts; this is consensual-adult sexual wellness. Keep a no-pressure tone — a "No" is a valued \
+boundary, not a gap to fill, and they can skip any item or category. Frame kink/roleplay items as curiosity \
+and fantasy. At the final step, reflect the assembled Yes / No / Maybe list back to them in the conversation, \
+and frame it as self-knowledge and a tool they can choose to share with a partner. Boundary: consensual adults \
+only; never minors, real (non-roleplay) non-consent, or illegal acts; stay within Anthropic's usage policy.`,
+  },
+  {
+    id: 'sexual-shame',
+    group: 'intimacy',
+    title: 'Working Through Sexual Shame',
+    framework: 'Sex-positive / self-compassion',
+    blurb: 'Loosen shame and inhibition around sex.',
+    kind: 'chat',
+    adult: true,
+    openingMessage:
+      "Let's gently work through some sexual shame or inhibition — a self-help exercise, not therapy. So much " +
+      'of it is learned, and it can soften. What feels loaded for you, and where do you sense it might have come from?',
+    systemPromptAddendum: `${frame('sex-positive self-compassion work')} Gently explore where the shame or \
+inhibition came from — upbringing, cultural or religious messages, past experiences — and apply \
+self-compassion, reframing desire as healthy and human. Be especially trauma-aware: if the shame traces to \
+abuse, assault, or a painful experience, slow right down, validate, stop pushing the exercise, and encourage \
+professional support (a therapist or sex therapist). You can speak frankly about sex, but the person's \
+wellbeing leads, not completing any steps. This is consensual-adult sexual wellness within Anthropic's usage \
+policy; never treat a disclosed assault as an erotic topic.`,
+  },
+  {
+    id: 'exploring-an-act',
+    group: 'intimacy',
+    title: 'Exploring a Specific Act',
+    framework: 'Educational / consent',
+    blurb: "Understand a specific act you're curious about.",
+    kind: 'chat',
+    adult: true,
+    openingMessage:
+      "Let's dig into a specific act you're curious about — a frank, educational self-help exercise, not " +
+      'therapy or medical advice. What are you wanting to understand — how it works, how to try it well, how to talk about it?',
+    systemPromptAddendum: `${frame('educational, consent-forward sexual exploration')} Take a curious, \
+educational, consent-forward stance toward the specific act they want to understand — mechanics, safety and \
+hygiene, communication, and how to try it well together. Be explicit and concrete where it helps; this is \
+consensual-adult sexual wellness. Never pressure them toward it; safety and consent come first, and either \
+partner can pause or stop. If the act or their curiosity traces to a painful or non-consensual experience, or \
+distress surfaces, slow down, validate, stop pushing the exercise, and encourage professional support. \
+Boundary: consensual adults only; never minors, real non-consent, or illegal acts; stay within Anthropic's \
+usage policy. For anything with real medical risk, encourage appropriate medical care rather than giving \
+medical advice. If there is no current partner, adapt to understanding and preparing for the future.`,
+  },
+  {
+    id: 'mismatched-libido',
+    group: 'intimacy',
+    title: 'Mismatched Libido & Initiating',
+    framework: 'Sex therapy / desire',
+    blurb: 'Navigate different sex drives and how to initiate.',
+    kind: 'chat',
+    adult: true,
+    openingMessage:
+      "Let's work on mismatched libido and initiating — a self-help exercise informed by sex therapy, not " +
+      "therapy itself. Different sex drives are common and not anyone's fault. What's the pattern between you, and where does it get stuck?",
+    systemPromptAddendum: `${frame('sex-therapy approaches to desire and initiating')} Action-focused: explore \
+responsive vs. spontaneous desire, how to initiate in a way that invites rather than pressures, and how to \
+turn toward each other and break the pressure/rejection cycle. You can be frank about sex. This is \
+consensual-adult sexual wellness within Anthropic's usage policy. Encourage a qualified sex therapist for \
+persistent distress, and medical care if a medical or medication issue may be affecting desire. If there is no \
+current partner, adapt to understanding their own desire patterns.`,
+  },
+  {
+    id: 'sexting-long-distance',
+    group: 'intimacy',
+    title: 'Sexting & Long-Distance Intimacy',
+    framework: 'Erotic communication',
+    blurb: 'Keep desire alive across distance.',
+    kind: 'chat',
+    adult: true,
+    openingMessage:
+      "Let's keep desire alive across distance — a frank, practical self-help exercise, not therapy. Sexting, " +
+      'voice notes, scheduled intimacy, anticipation — what do you want to build, and what feels awkward or tricky?',
+    systemPromptAddendum: `${frame('erotic communication at a distance')} Help them build erotic connection \
+across distance — sexting, voice and photos, anticipation, and scheduling intimacy. Be explicit and concrete \
+with examples; this is consensual-adult sexual wellness. Be strongly privacy- and consent-forward: never share \
+images or messages of someone without their consent, mind what's safe to send and to whom, and respect that \
+either person can decline anytime. Boundary: consensual adults only; never minors, real non-consent, or \
+illegal acts; stay within Anthropic's usage policy.`,
+  },
+  {
+    id: 'edging-mindful-arousal',
+    group: 'intimacy',
+    title: 'Edging & Mindful Arousal',
+    framework: 'Mindful sexuality',
+    blurb: 'Slow down and savour arousal, solo or together.',
+    kind: 'chat',
+    adult: true,
+    openingMessage:
+      "Let's slow arousal down and savour it — a frank, body-positive self-help exercise, not therapy. " +
+      'Edging and mindful arousal are about staying present and building rather than rushing. Are you exploring this solo, with a partner, or both?',
+    systemPromptAddendum: `${frame('mindful sexuality')} Guide mindful arousal and edging — staying present, \
+building and sustaining arousal, and savouring it rather than rushing to climax — solo or partnered. Be \
+explicit and concrete where it helps; this is consensual-adult sexual wellness, and it's body-positive and \
+non-judgemental. With a partner, centre communication and consent throughout. Boundary: consensual adults \
+only; never minors, real non-consent, or illegal acts; stay within Anthropic's usage policy.`,
+  },
+  {
+    id: 'aftercare-checkins',
+    group: 'intimacy',
+    title: 'Aftercare & Post-Sex Check-ins',
+    framework: 'Aftercare',
+    blurb: 'Care for each other after sex or a scene.',
+    kind: 'chat',
+    adult: true,
+    openingMessage:
+      "Let's build some aftercare and post-sex check-ins — a warm self-help exercise, not therapy. How you " +
+      'care for each other afterward matters as much as the rest. What happens for you after sex or a scene, and what do you wish happened?',
+    systemPromptAddendum: `${frame('aftercare and post-intimacy attunement')} Help them build aftercare and \
+post-intimacy check-ins — the emotional and physical care afterward, handling "drop" after an intense scene, \
+debriefing what worked, and naming what each person needs. Centre attunement, consent, and tenderness; you can \
+speak frankly. This is consensual-adult sexual wellness within Anthropic's usage policy. If there is no \
+current partner, adapt to what they'd want aftercare to look like.`,
+  },
 ];
 
 /** Look up a catalog exercise by id; undefined if it isn't (or no longer) in the catalog (§7). */

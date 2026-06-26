@@ -149,7 +149,7 @@ describe('Memory dashboard', () => {
     expect(screen.getByText(/original source removed/i)).toBeInTheDocument();
   });
 
-  it('renders a related person’s shared facts read-only (no edit) under their section', async () => {
+  it('NEVER displays a related person’s shared facts raw — sharing is context, not display (54)', async () => {
     useSessionStore.setState({ activePerson: activeP1 });
     installMockBridge({
       peopleList: () => Promise.resolve([{ ...activeP1, id: 'p2', displayName: 'Sam' }]),
@@ -159,17 +159,61 @@ describe('Memory dashboard', () => {
           insight({
             id: 'rel',
             subjectPersonId: 'p2',
-            summary: '',
+            summary: 'Sam summary',
             facts: [{ id: 'rf', text: 'Sam started a new job', shareable: true }],
           }),
         ]),
     });
     renderMemory();
-    expect(await screen.findByText('About people you relate to')).toBeInTheDocument();
-    expect(screen.getByText('Sam started a new job')).toBeInTheDocument();
-    expect(screen.getByText(/About Sam/)).toBeInTheDocument();
-    // A related card is read-only — no Edit button for it (only the own insight has one).
-    expect(screen.getAllByRole('button', { name: 'Edit' })).toHaveLength(1);
+    // The viewer's OWN insight shows…
+    expect(await screen.findByText('MY OWN NOTE')).toBeInTheDocument();
+    // …but a related person's shared fact is NEVER shown raw, and the old read-only section is gone (54).
+    expect(screen.queryByText('Sam started a new job')).not.toBeInTheDocument();
+    expect(screen.queryByText('About people you relate to')).not.toBeInTheDocument();
+    expect(screen.queryByText(/About Sam/)).not.toBeInTheDocument();
+  });
+
+  it('the Partners view replaces raw shared data with a relationship-insights card (54)', async () => {
+    useSessionStore.setState({ activePerson: activeP1 });
+    const synth = vi.fn(() =>
+      Promise.resolve({
+        ok: true as const,
+        synthesis: {
+          schemaVersion: 1,
+          subjectPersonId: 'p1',
+          partnerPersonId: 'p2',
+          observations: ['You and Sam both value security.'],
+          computedAt: '2026-06-26T12:00:00.000Z',
+        },
+      }),
+    );
+    installMockBridge({
+      peopleList: () => Promise.resolve([activeP1, { ...activeP1, id: 'p2', displayName: 'Sam' }]),
+      relationshipsList: () =>
+        Promise.resolve([
+          {
+            id: 'r1',
+            schemaVersion: 1,
+            fromPersonId: 'p1',
+            toPersonId: 'p2',
+            type: 'partner',
+            createdAt: 'now',
+            updatedAt: 'now',
+          },
+        ]),
+      relationshipsGetSynthesis: () => Promise.resolve(null),
+      relationshipsSynthesize: synth,
+      insightsList: () => Promise.resolve([insight({ id: 'own', summary: 'MY OWN NOTE' })]),
+    });
+    renderMemory();
+    await screen.findByText('MY OWN NOTE');
+    await userEvent.click(screen.getByRole('button', { name: 'Partners' }));
+    expect(await screen.findByText(/You & Sam/)).toBeInTheDocument();
+    expect(screen.getByText(/never shown.*as their raw answers/i)).toBeInTheDocument();
+    // Generate → an AI observation (synthesis, NOT the partner's raw answers) appears.
+    await userEvent.click(screen.getByRole('button', { name: /Reflect on us/ }));
+    expect(await screen.findByText('You and Sam both value security.')).toBeInTheDocument();
+    expect(synth).toHaveBeenCalledWith({ partnerPersonId: 'p2' });
   });
 
   it('marks an AI-inferred fact "not right about me"', async () => {

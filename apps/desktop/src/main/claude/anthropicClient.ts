@@ -218,6 +218,22 @@ export function fakeClaudeClient(): ClaudeClient {
         });
       }
 
+      // The relationship-insights synthesis (54 §5) — the digest opens "This person and their partner <Name>."
+      // and the GUIDANCE asks for a {observations: string[]} object. Echo the partner name so a test can
+      // verify the synthesis is ABOUT the relationship (and never the partner's raw answers).
+      if (userText.includes('This person and their partner')) {
+        const partner = /This person and their partner (\w+)/.exec(userText)?.[1] ?? 'them';
+        return Promise.resolve({
+          text: JSON.stringify({
+            observations: [
+              `You and ${partner} both lean on security and quality time.`,
+              `You tend to withdraw under conflict while ${partner} pursues — naming it helps.`,
+            ],
+          }),
+          usage: { inputTokens: 90, outputTokens: 40, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+
       // The session-analysis turn (09 §5) asks to "summarize this session" as a JSON object. Return a
       // valid SessionAnalysisDraft so the offline End & summarize path parses + produces facts/mood.
       if (userText.includes('summarize this session')) {

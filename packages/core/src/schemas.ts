@@ -2141,6 +2141,39 @@ export type CoachingSynthesisResult =
     };
 
 /**
+ * A cached **relationship-insights** synthesis (54-memory-redesign) — per (viewer, partner). The AI pass reads
+ * the viewer's OWN insights + what the partner has chosen to SHARE (never the partner's raw answers) and emits
+ * a few gentle observations about the viewer and the dynamic. Cached view-only (explicit-tap, no auto-cadence
+ * in v1); NOT promoted into context. Per-person isolation: `subjectPersonId` is the viewer.
+ */
+export const RelationshipSynthesisSchema = z.object({
+  schemaVersion: z.number().int().positive(),
+  subjectPersonId: z.string().min(1), // the viewer
+  partnerPersonId: z.string().min(1), // the partner this synthesis is about
+  observations: z.array(z.string()).min(1), // the relationship insights (about the viewer + the dynamic)
+  computedAt: z.string(),
+});
+export type RelationshipSynthesis = z.infer<typeof RelationshipSynthesisSchema>;
+
+/** The result of running the relationship-insights synthesis (54 §6) — budget-gated `relationship.synthesize`. */
+export type RelationshipSynthesisResult =
+  | { ok: true; synthesis: RelationshipSynthesis }
+  | {
+      ok: false;
+      reason:
+        | 'NO_KEY'
+        | 'BUDGET'
+        | 'CAPPED'
+        | 'AI_OFF'
+        | 'EMPTY' // not enough signal yet (the viewer has little memory, the partner shares little)
+        | 'REFUSED'
+        | 'TRUNCATED'
+        | 'MALFORMED'
+        | 'ERROR';
+      message: string;
+    };
+
+/**
  * What the launcher reads on open (16 §6) — cached suggestions (no spend) + the 18+ ack state. `cache`
  * is null until the person taps "Get personalized suggestions" (explicit-first-tap, no silent spend).
  */

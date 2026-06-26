@@ -52,11 +52,12 @@ describe('wellbeing reflections — deterministic band scoring + facts (51 §5.1
     const fact = insight!.facts[0]!;
     expect(fact.text).toMatch(/self-reflection, not a clinical finding/);
     expect(fact.text).not.toMatch(CLINICAL_WORDS);
-    // Never shared with anyone else (§8.4).
+    // 54: shared with the PARTNER relationship type by default — but only the GENTLE non-diagnostic text
+    // (never the clinical band/key), partner-only, never broadcast or per-person.
     expect(fact.shareable).toBe(false);
     expect(fact.restricted).toBeUndefined();
     expect(fact.shareableWith).toBeUndefined();
-    expect(fact.shareableTypes).toBeUndefined();
+    expect(fact.shareableTypes).toEqual(['partner']);
   });
 
   it('PHQ-9 item 9 positive raises crisisFlag on BOTH the result and the derived Insight (even at a low band)', async () => {

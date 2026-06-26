@@ -17,6 +17,7 @@ import {
   Card,
   Heading,
   LineChart,
+  SegmentedControl,
   Select,
   Stack,
   Switch,
@@ -26,6 +27,7 @@ import {
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { InsightCard } from './InsightCard';
 import { GoalCard } from './GoalCard';
+import { RelationshipInsightsCard } from './RelationshipInsightsCard';
 import { StatsSummary } from './StatsSummary';
 import { confidenceStats, overviewStats, sharingStats } from './stats';
 import { buildTrendSeries } from './trends';
@@ -60,10 +62,11 @@ function relativeDate(iso: string): string {
 }
 
 /**
- * "Memory" — the active person's living view of what SelfOS has learned about them (20-memory-dashboard §3).
- * The bridge scopes the list to their own insights + relationships' shareable facts (§5.1). Header with
- * search + Refresh + filters; a "Needs your review" section for drafts; a Trends section; then their own
- * insights grouped by life-area, and a read-only section for what people they relate to have shared.
+ * "Memory" — the active person's living view of what SelfOS has learned (20-memory-dashboard, redesigned in
+ * 54-memory-redesign). A summary strip + an "About you" / "Partners" toggle: "About you" is their OWN data
+ * (search/filters, drafts, goals, trends, insights by life-area); "Partners" shows AI relationship insights
+ * per partner. A partner's shared data feeds the AI's context + that synthesis but is NEVER shown raw here —
+ * sharing is context, not display (§1).
  */
 export function Memory(): JSX.Element {
   const navigate = useNavigate();
@@ -86,9 +89,9 @@ export function Memory(): JSX.Element {
   const loadReconcileState = useInsightStore((s) => s.loadReconcileState);
   const resolveProposal = useInsightStore((s) => s.resolveProposal);
 
+  const [view, setView] = useState<'you' | 'relationships'>('you');
   const [query, setQuery] = useState('');
   const [source, setSource] = useState<SourceFilter>('all');
-  const [subject, setSubject] = useState<string>('all'); // 'all' | 'you' | a related person id
   const [confidence, setConfidence] = useState<ConfidenceFilter>('all');
   const [flaggedOnly, setFlaggedOnly] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -121,7 +124,6 @@ export function Memory(): JSX.Element {
     [goals],
   );
 
-  const nameOf = (id: string): string => people.find((p) => p.id === id)?.displayName ?? 'someone';
   const liveConversationIds = useMemo(
     () => new Set(conversations.map((c) => c.id)),
     [conversations],
@@ -142,9 +144,23 @@ export function Memory(): JSX.Element {
   };
 
   const q = query.trim().toLowerCase();
+  // Only the person's OWN insights are ever displayed (54): a related person's shared facts feed the AI's
+  // context + the relationship synthesis, but are NEVER shown raw — sharing is context, not display.
   const own = insights.filter((i) => i.subjectPersonId === activePersonId);
-  const related = insights.filter((i) => i.subjectPersonId !== activePersonId);
-  const relatedSubjects = [...new Set(related.map((i) => i.subjectPersonId))];
+
+  // The viewer's PARTNER relationships (the `partner` edge is symmetric) → the "Partners" view's cards.
+  const partners = useMemo(() => {
+    if (!activePersonId) return [] as { id: string; name: string }[];
+    const ids = new Set<string>();
+    for (const r of relationships) {
+      if (r.type !== 'partner') continue;
+      if (r.fromPersonId === activePersonId) ids.add(r.toPersonId);
+      else if (r.toPersonId === activePersonId) ids.add(r.fromPersonId);
+    }
+    return [...ids]
+      .map((id) => ({ id, name: people.find((p) => p.id === id)?.displayName }))
+      .filter((p): p is { id: string; name: string } => p.name !== undefined);
+  }, [relationships, activePersonId, people]);
 
   const passesFilters = (insight: Insight): boolean =>
     matchesText(insight, q) &&
@@ -152,14 +168,7 @@ export function Memory(): JSX.Element {
     (confidence === 'all' || insight.confidence === confidence) &&
     (!flaggedOnly || insight.facts.some((f) => f.flaggedInaccurate));
 
-  const subjectOk = (insight: Insight): boolean => {
-    if (subject === 'all') return true;
-    if (subject === 'you') return insight.subjectPersonId === activePersonId;
-    return insight.subjectPersonId === subject;
-  };
-
-  const filteredOwn = own.filter((i) => passesFilters(i) && subjectOk(i));
-  const filteredRelated = related.filter((i) => passesFilters(i) && subjectOk(i));
+  const filteredOwn = own.filter((i) => passesFilters(i));
   const drafts = filteredOwn.filter((i) => !i.approved);
   const approvedOwn = filteredOwn.filter((i) => i.approved);
 
@@ -204,90 +213,21 @@ export function Memory(): JSX.Element {
     }
   };
 
-  const nothingShown =
-    loaded && drafts.length === 0 && approvedOwn.length === 0 && filteredRelated.length === 0;
-  const anyInsights = own.length > 0 || related.length > 0;
+  const nothingShown = loaded && drafts.length === 0 && approvedOwn.length === 0;
+  const anyOwn = own.length > 0;
+  const showToggle = loaded && (anyOwn || partners.length > 0);
 
   return (
     <div className={styles.layout}>
       <Stack gap={2}>
         <Heading level={2}>Memory</Heading>
-        <Text tone="secondary">
-          What SelfOS understands about you — and the people you relate to.
-        </Text>
+        <Text tone="secondary">What SelfOS understands about you — and your relationships.</Text>
         {lastReconciledAt ? (
           <Text size="sm" tone="tertiary" aria-live="polite">
             Memory last tidied {relativeDate(lastReconciledAt)}.
           </Text>
         ) : null}
       </Stack>
-
-      {anyInsights ? (
-        <div className={styles.controls}>
-          <div className={styles.searchRow}>
-            <div className={styles.searchBox}>
-              <Search size={15} aria-hidden="true" className={styles.searchIcon} />
-              <TextInput
-                value={query}
-                aria-label="Search memory"
-                placeholder="Search what SelfOS knows…"
-                onChange={(event) => setQuery(event.target.value)}
-              />
-            </div>
-            <Button variant="secondary" onClick={() => void onRefresh()} disabled={refreshing}>
-              <RefreshCw size={14} aria-hidden="true" /> {refreshing ? 'Refreshing…' : 'Refresh'}
-            </Button>
-          </div>
-          <div className={styles.filterRow}>
-            <Select
-              aria-label="Filter by source"
-              value={source}
-              onChange={(event) => setSource(event.target.value as SourceFilter)}
-            >
-              {SOURCE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </Select>
-            <Select
-              aria-label="Filter by subject"
-              value={subject}
-              onChange={(event) => setSubject(event.target.value)}
-            >
-              <option value="all">Everyone</option>
-              <option value="you">You</option>
-              {relatedSubjects.map((id) => (
-                <option key={id} value={id}>
-                  {nameOf(id)}
-                </option>
-              ))}
-            </Select>
-            <Select
-              aria-label="Filter by confidence"
-              value={confidence}
-              onChange={(event) => setConfidence(event.target.value as ConfidenceFilter)}
-            >
-              <option value="all">Any confidence</option>
-              <option value="high">High</option>
-              <option value="medium">Medium</option>
-              <option value="low">Low</option>
-            </Select>
-            <span className={styles.flaggedToggle}>
-              <Switch
-                checked={flaggedOnly}
-                aria-label="Show only flagged"
-                onChange={setFlaggedOnly}
-              />
-              <Text size="sm" aria-hidden="true">
-                Flagged only
-              </Text>
-            </span>
-          </div>
-        </div>
-      ) : null}
-
-      {refreshNote ? <Banner tone="info">{refreshNote}</Banner> : null}
 
       {showStats ? (
         <StatsSummary
@@ -298,174 +238,249 @@ export function Memory(): JSX.Element {
         />
       ) : null}
 
-      {trendSeries.length > 0 ? (
-        <details className={styles.trends} open>
-          <summary className={styles.trendsSummary}>Trends</summary>
-          <div className={styles.trendsBody}>
-            <Text size="sm" tone="tertiary">
-              How your mood and energy have moved across analyzed sessions — a gentle reflection,
-              not a measure.
-            </Text>
-            <LineChart
-              series={trendSeries}
-              ariaLabel="Your mood and energy across analyzed sessions over time"
-              yMin={-1}
-              yMax={1}
-            />
-          </div>
-        </details>
+      {showToggle ? (
+        <SegmentedControl
+          aria-label="Memory view"
+          options={[
+            { value: 'you', label: 'About you' },
+            { value: 'relationships', label: 'Partners' },
+          ]}
+          value={view}
+          onChange={setView}
+        />
       ) : null}
 
-      {loaded && !anyInsights ? (
-        <Card>
-          <Stack gap={3} align="center">
-            <Brain size={24} aria-hidden="true" />
-            <Text tone="secondary">
-              Insights appear here after your sessions, dreams, and questionnaires are analyzed —
-              your own view of what SelfOS is learning about you. Start a session to begin.
-            </Text>
-            {canStartSession ? (
-              <Button variant="secondary" onClick={() => navigate('/sessions')}>
-                <MessageCircle size={16} aria-hidden="true" />
-                Start a session
-              </Button>
-            ) : null}
-          </Stack>
-        </Card>
-      ) : null}
-
-      {drafts.length > 0 || proposals.length > 0 ? (
-        <section className={styles.group} aria-label="Needs your review">
-          <Heading level={3} className={styles.groupTitle}>
-            Needs your review
-          </Heading>
-          <Stack gap={3}>
-            {proposals.map((proposal) => (
-              <Card key={proposal.id} className={styles.proposal}>
-                <Stack gap={2}>
-                  <Text size="sm" tone="secondary">
-                    These two look like the same thing — combine them into one?
-                  </Text>
-                  <Text>· {proposal.intoSummary}</Text>
-                  <Text>· {proposal.fromSummary}</Text>
-                  <div className={styles.proposalActions}>
-                    <Button
-                      variant="secondary"
-                      onClick={() => void resolveProposal(proposal.id, 'merge')}
-                    >
-                      Merge
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      onClick={() => void resolveProposal(proposal.id, 'keepBoth')}
-                    >
-                      Keep both
-                    </Button>
-                  </div>
-                </Stack>
-              </Card>
-            ))}
-            {drafts.length > 0 ? (
-              <Text size="sm" tone="tertiary">
-                Drafts wait here until you approve them — they don’t inform your coaching yet.
-              </Text>
-            ) : null}
-            {drafts.map((insight) => (
-              <InsightCard
-                key={insight.id}
-                insight={insight}
-                subjectName={nameOf(insight.subjectPersonId)}
-                isOwn
-                {...(availableTypes ? { availableTypes } : {})}
-              />
-            ))}
-          </Stack>
-        </section>
-      ) : null}
-
-      {goals.length > 0 || anyInsights ? (
-        <section className={styles.group} aria-label="Goals & commitments">
-          <Heading level={3} className={styles.groupTitle}>
-            Goals &amp; commitments
-          </Heading>
-          {goals.length === 0 ? (
+      {view === 'relationships' ? (
+        <Stack gap={3}>
+          <Text size="sm" tone="tertiary">
+            Insight about you and your partners — drawn from what they share, shown as insight,
+            never their raw answers.
+          </Text>
+          {partners.length === 0 ? (
             <Card>
               <Text tone="secondary">
-                Goals you mention in sessions show up here so SelfOS can help you follow through.
+                Add a partner in People, and relationship insights about the two of you will appear
+                here.
               </Text>
             </Card>
           ) : (
-            <Stack gap={3}>
-              {activeGoals.map((goal) => (
-                <GoalCard key={goal.id} goal={goal} />
-              ))}
-              {closedGoals.length > 0 ? (
-                <details className={styles.trends}>
-                  <summary className={styles.trendsSummary}>
-                    Completed &amp; closed ({closedGoals.length})
-                  </summary>
-                  <div className={styles.trendsBody}>
-                    <Stack gap={3}>
-                      {closedGoals.map((goal) => (
-                        <GoalCard key={goal.id} goal={goal} />
-                      ))}
-                    </Stack>
-                  </div>
-                </details>
-              ) : null}
-            </Stack>
-          )}
-        </section>
-      ) : null}
-
-      {orderedAreas.map((area) => {
-        const areaInsights = byArea.get(area) ?? [];
-        return (
-          <section key={area} className={styles.group} aria-label={area}>
-            <Heading level={3} className={styles.groupTitle}>
-              {area} <span className={styles.groupCount}>({areaInsights.length})</span>
-            </Heading>
-            <Stack gap={3}>
-              {areaInsights.map((insight) => (
-                <InsightCard
-                  key={insight.id}
-                  insight={insight}
-                  subjectName="you"
-                  isOwn
-                  sourceRemoved={sourceRemoved(insight)}
-                  {...(availableTypes ? { availableTypes } : {})}
-                />
-              ))}
-            </Stack>
-          </section>
-        );
-      })}
-
-      {filteredRelated.length > 0 ? (
-        <section className={styles.group} aria-label="About people you relate to">
-          <Heading level={3} className={styles.groupTitle}>
-            About people you relate to
-          </Heading>
-          <Text size="sm" tone="tertiary">
-            What the people in your life have chosen to share — read-only.
-          </Text>
-          <Stack gap={3}>
-            {filteredRelated.map((insight) => (
-              <InsightCard
-                key={insight.id}
-                insight={insight}
-                subjectName={nameOf(insight.subjectPersonId)}
-                isOwn={false}
+            partners.map((p) => (
+              <RelationshipInsightsCard
+                key={p.id}
+                partnerId={p.id}
+                partnerName={p.name}
+                canManageAi={canManageAi}
               />
-            ))}
-          </Stack>
-        </section>
-      ) : null}
+            ))
+          )}
+        </Stack>
+      ) : (
+        <>
+          {anyOwn ? (
+            <div className={styles.controls}>
+              <div className={styles.searchRow}>
+                <div className={styles.searchBox}>
+                  <Search size={15} aria-hidden="true" className={styles.searchIcon} />
+                  <TextInput
+                    value={query}
+                    aria-label="Search memory"
+                    placeholder="Search what SelfOS knows…"
+                    onChange={(event) => setQuery(event.target.value)}
+                  />
+                </div>
+                <Button variant="secondary" onClick={() => void onRefresh()} disabled={refreshing}>
+                  <RefreshCw size={14} aria-hidden="true" />{' '}
+                  {refreshing ? 'Refreshing…' : 'Refresh'}
+                </Button>
+              </div>
+              <div className={styles.filterRow}>
+                <Select
+                  aria-label="Filter by source"
+                  value={source}
+                  onChange={(event) => setSource(event.target.value as SourceFilter)}
+                >
+                  {SOURCE_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </Select>
+                <Select
+                  aria-label="Filter by confidence"
+                  value={confidence}
+                  onChange={(event) => setConfidence(event.target.value as ConfidenceFilter)}
+                >
+                  <option value="all">Any confidence</option>
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </Select>
+                <span className={styles.flaggedToggle}>
+                  <Switch
+                    checked={flaggedOnly}
+                    aria-label="Show only flagged"
+                    onChange={setFlaggedOnly}
+                  />
+                  <Text size="sm" aria-hidden="true">
+                    Flagged only
+                  </Text>
+                </span>
+              </div>
+            </div>
+          ) : null}
 
-      {!nothingShown || !anyInsights ? null : (
-        <Card>
-          <Text tone="secondary">No insights match your filters.</Text>
-        </Card>
+          {refreshNote ? <Banner tone="info">{refreshNote}</Banner> : null}
+
+          {trendSeries.length > 0 ? (
+            <details className={styles.trends} open>
+              <summary className={styles.trendsSummary}>Trends</summary>
+              <div className={styles.trendsBody}>
+                <Text size="sm" tone="tertiary">
+                  How your mood and energy have moved across analyzed sessions — a gentle
+                  reflection, not a measure.
+                </Text>
+                <LineChart
+                  series={trendSeries}
+                  ariaLabel="Your mood and energy across analyzed sessions over time"
+                  yMin={-1}
+                  yMax={1}
+                />
+              </div>
+            </details>
+          ) : null}
+
+          {loaded && !anyOwn ? (
+            <Card>
+              <Stack gap={3} align="center">
+                <Brain size={24} aria-hidden="true" />
+                <Text tone="secondary">
+                  Insights appear here after your sessions, dreams, and questionnaires are analyzed
+                  — your own view of what SelfOS is learning about you. Start a session to begin.
+                </Text>
+                {canStartSession ? (
+                  <Button variant="secondary" onClick={() => navigate('/sessions')}>
+                    <MessageCircle size={16} aria-hidden="true" />
+                    Start a session
+                  </Button>
+                ) : null}
+              </Stack>
+            </Card>
+          ) : null}
+
+          {drafts.length > 0 || proposals.length > 0 ? (
+            <section className={styles.group} aria-label="Needs your review">
+              <Heading level={3} className={styles.groupTitle}>
+                Needs your review
+              </Heading>
+              <Stack gap={3}>
+                {proposals.map((proposal) => (
+                  <Card key={proposal.id} className={styles.proposal}>
+                    <Stack gap={2}>
+                      <Text size="sm" tone="secondary">
+                        These two look like the same thing — combine them into one?
+                      </Text>
+                      <Text>· {proposal.intoSummary}</Text>
+                      <Text>· {proposal.fromSummary}</Text>
+                      <div className={styles.proposalActions}>
+                        <Button
+                          variant="secondary"
+                          onClick={() => void resolveProposal(proposal.id, 'merge')}
+                        >
+                          Merge
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          onClick={() => void resolveProposal(proposal.id, 'keepBoth')}
+                        >
+                          Keep both
+                        </Button>
+                      </div>
+                    </Stack>
+                  </Card>
+                ))}
+                {drafts.length > 0 ? (
+                  <Text size="sm" tone="tertiary">
+                    Drafts wait here until you approve them — they don’t inform your coaching yet.
+                  </Text>
+                ) : null}
+                {drafts.map((insight) => (
+                  <InsightCard
+                    key={insight.id}
+                    insight={insight}
+                    subjectName="you"
+                    isOwn
+                    {...(availableTypes ? { availableTypes } : {})}
+                  />
+                ))}
+              </Stack>
+            </section>
+          ) : null}
+
+          {goals.length > 0 || anyOwn ? (
+            <section className={styles.group} aria-label="Goals & commitments">
+              <Heading level={3} className={styles.groupTitle}>
+                Goals &amp; commitments
+              </Heading>
+              {goals.length === 0 ? (
+                <Card>
+                  <Text tone="secondary">
+                    Goals you mention in sessions show up here so SelfOS can help you follow
+                    through.
+                  </Text>
+                </Card>
+              ) : (
+                <Stack gap={3}>
+                  {activeGoals.map((goal) => (
+                    <GoalCard key={goal.id} goal={goal} />
+                  ))}
+                  {closedGoals.length > 0 ? (
+                    <details className={styles.trends}>
+                      <summary className={styles.trendsSummary}>
+                        Completed &amp; closed ({closedGoals.length})
+                      </summary>
+                      <div className={styles.trendsBody}>
+                        <Stack gap={3}>
+                          {closedGoals.map((goal) => (
+                            <GoalCard key={goal.id} goal={goal} />
+                          ))}
+                        </Stack>
+                      </div>
+                    </details>
+                  ) : null}
+                </Stack>
+              )}
+            </section>
+          ) : null}
+
+          {orderedAreas.map((area) => {
+            const areaInsights = byArea.get(area) ?? [];
+            return (
+              <section key={area} className={styles.group} aria-label={area}>
+                <Heading level={3} className={styles.groupTitle}>
+                  {area} <span className={styles.groupCount}>({areaInsights.length})</span>
+                </Heading>
+                <Stack gap={3}>
+                  {areaInsights.map((insight) => (
+                    <InsightCard
+                      key={insight.id}
+                      insight={insight}
+                      subjectName="you"
+                      isOwn
+                      sourceRemoved={sourceRemoved(insight)}
+                      {...(availableTypes ? { availableTypes } : {})}
+                    />
+                  ))}
+                </Stack>
+              </section>
+            );
+          })}
+
+          {!nothingShown ? null : (
+            <Card>
+              <Text tone="secondary">No insights match your filters.</Text>
+            </Card>
+          )}
+        </>
       )}
 
       <CrisisFooter />

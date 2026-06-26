@@ -55,6 +55,8 @@ import {
   type CoachingPrefs,
   type CoachingSynthesis,
   type CoachingSynthesisResult,
+  type RelationshipSynthesis,
+  type RelationshipSynthesisResult,
   type AiKeyStatus,
   type AlignmentResult,
   type DeviceView,
@@ -255,10 +257,12 @@ import {
   countNewInsights,
   getCoachingPrefs,
   getProactivity,
+  getRelationshipSynthesis,
   getSynthesis,
   setCoachingPrefs,
   shouldSynthesize,
   synthesize,
+  synthesizeRelationship,
   type GoalRaiseGoal,
 } from '@selfos/core/coaching';
 import { INTIMACY_ACTIVITIES, INTIMACY_FANTASIES } from '@selfos/core/intimacy';
@@ -742,6 +746,7 @@ const CoachingSetPrefsSchema = z.object({ proactivity: ProactivityLevelSchema })
 // `auto` (renderer cadence) applies the throttle/threshold gate; absent/false = a manual force (still
 // budget/key-gated, throttle bypassed).
 const CoachingSynthesizeSchema = z.object({ auto: z.boolean().optional() });
+const RelationshipSynthesizeSchema = z.object({ partnerPersonId: z.string().min(1) });
 const ResolveProposalSchema = z.object({
   proposalId: z.string().min(1),
   action: z.enum(['merge', 'keepBoth']),
@@ -2738,6 +2743,50 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         });
       }
       return result;
+    },
+    // --- Relationship insights (54-memory-redesign §6) — gated `memory.own`, active-person-scoped ---
+    relationshipsGetSynthesis: async (input): Promise<RelationshipSynthesis | null> => {
+      const { partnerPersonId } = RelationshipSynthesizeSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'memory.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      return getRelationshipSynthesis(ctx.fs, ctx.key, personId, partnerPersonId);
+    },
+    relationshipsSynthesize: async (input): Promise<RelationshipSynthesisResult> => {
+      const { partnerPersonId } = RelationshipSynthesizeSchema.parse(input);
+      const base = await aiDeps('memory.own');
+      if (!base) return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      if ((await readVaultSettingsValues(base.fs))['ai.enabled'] === false) {
+        return { ok: false, reason: 'AI_OFF', message: 'Turn on AI in Settings to use this.' };
+      }
+      const viewerId = base.personId;
+      // The viewer can only synthesize about their OWN partner — resolve the grant from the live graph and
+      // require a `partner` edge (v1 is partner-only). The same `grantedTypes` the share gate uses (42).
+      const relationships = await listRelationships(base.fs, base.key);
+      const grantedTypes = relationshipTypesFromSubjectToViewer(
+        partnerPersonId,
+        viewerId,
+        relationships,
+      );
+      if (!grantedTypes.includes('partner')) {
+        return { ok: false, reason: 'EMPTY', message: 'Relationship insights are for partners.' };
+      }
+      const partner = await getPerson(base.fs, base.key, partnerPersonId);
+      if (!partner)
+        return { ok: false, reason: 'EMPTY', message: 'That person is no longer here.' };
+      return synthesizeRelationship({
+        fs: base.fs,
+        key: base.key,
+        client: base.client,
+        apiKey: base.apiKey,
+        model: base.model,
+        viewerPersonId: viewerId,
+        partnerPersonId,
+        partnerName: partner.displayName,
+        grantedTypes,
+        now: base.now,
+      });
     },
     // --- Challenges / experiments (52-challenge-sessions) — gated `challenges.own`, active-person-scoped ---
     challengesStart: async (input): Promise<{ conversationId: string } | null> => {

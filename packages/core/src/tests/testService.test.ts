@@ -54,7 +54,7 @@ describe('takeTest — result + Insight bridge', () => {
     expect(insight?.facts.every((f) => !f.restricted)).toBe(true);
   });
 
-  it('a SENSITIVE test (kink) writes restricted, own-only facts tagged lifeArea Intimacy', async () => {
+  it('a SENSITIVE test (kink) writes partner-shareable, own-relevance-gated facts (54)', async () => {
     const fs = memFileSystem();
     const def = getTest('kink-interests')!;
     const result = await takeTest(
@@ -67,9 +67,37 @@ describe('takeTest — result + Insight bridge', () => {
     );
     const insight = await getInsight(fs, key, 'p1', result.insightId!);
     expect(insight?.facts.length).toBeGreaterThan(0);
-    expect(insight?.facts.every((f) => f.restricted === true)).toBe(true);
+    // 54: NOT `restricted` (so they can reach the partner — `restricted` stays reserved for break-glass intake
+    // facts), own-only on the broadcast flag, shared with the `partner` type, tagged lifeArea Intimacy (the
+    // own-context relevance gate keys off the sensitive life-area, so they still surface only in intimacy).
+    expect(insight?.facts.every((f) => !f.restricted)).toBe(true);
     expect(insight?.facts.every((f) => f.shareable === false)).toBe(true);
+    expect(insight?.facts.every((f) => f.shareableTypes?.includes('partner'))).toBe(true);
     expect(insight?.facts.every((f) => f.lifeArea === 'Intimacy')).toBe(true);
+  });
+
+  it('a sensitive test reaches a PARTNER, never a sibling (54)', async () => {
+    const fs = memFileSystem();
+    const def = getTest('kink-interests')!;
+    await takeTest(fs, key, def, { personId: 'p1', answers: maxAnswers(def) }, new Date(), ids);
+    // The viewer who relates to p1 as a PARTNER sees the shared facts (behind the confidentiality preamble).
+    const partnerView = await summarizeForContext(
+      fs,
+      key,
+      'partner',
+      [{ id: 'p1', displayName: 'Pat', grantedTypes: ['partner'] }],
+      { lifeAreas: ['Intimacy'] },
+    );
+    expect(partnerView).toContain('Shareable about Pat');
+    // A sibling (any non-partner type) sees nothing cross over.
+    const siblingView = await summarizeForContext(
+      fs,
+      key,
+      'sib',
+      [{ id: 'p1', displayName: 'Sam', grantedTypes: ['sibling'] }],
+      { lifeAreas: ['Intimacy'] },
+    );
+    expect(siblingView).not.toContain('Shareable about Sam');
   });
 
   it('a retake reuses the insightId (UPDATE, not duplicate), sets reTakeOf, and adds a trend point', async () => {

@@ -15,6 +15,8 @@ import type {
   CoachingPrefs,
   CoachingSynthesis,
   CoachingSynthesisResult,
+  RelationshipSynthesis,
+  RelationshipSynthesisResult,
   ProactivityLevel,
   MemoryReconcileState,
   DeviceView,
@@ -227,6 +229,8 @@ export const IpcChannels = {
   coachingSetPrefs: 'coaching:setPrefs',
   coachingGetSynthesis: 'coaching:getSynthesis',
   coachingSynthesize: 'coaching:synthesize',
+  relationshipsGetSynthesis: 'relationships:getSynthesis',
+  relationshipsSynthesize: 'relationships:synthesize',
   // Challenges / experiments (52-challenge-sessions §6). All gated by `challenges.own` + active-person-scoped.
   challengesStart: 'challenges:start',
   challengesStartReflection: 'challenges:startReflection',
@@ -826,6 +830,19 @@ export interface SelfosBridge {
    * (manual "What are you noticing lately?"). Gated `sessions.own`, active-person-scoped.
    */
   coachingSynthesize(input?: { auto?: boolean }): Promise<CoachingSynthesisResult>;
+  /**
+   * The active person's cached relationship-insights synthesis about a partner (54 §6), or null. Cached read,
+   * no spend. Gated `memory.own`, active-person-scoped.
+   */
+  relationshipsGetSynthesis(input: {
+    partnerPersonId: string;
+  }): Promise<RelationshipSynthesis | null>;
+  /**
+   * Generate (explicit-tap) the relationship-insights synthesis about a partner (54 §5) — budget-gated +
+   * weekly-capped, metered `relationship.synthesize`, tolerant-parsed. Reads the viewer's own digest + the
+   * partner's SHARED facts (never raw answers). Gated `memory.own` + the relationship must be a `partner`.
+   */
+  relationshipsSynthesize(input: { partnerPersonId: string }): Promise<RelationshipSynthesisResult>;
   /**
    * Challenges / experiments (52-challenge-sessions §6). All gated by `challenges.own` + active-person-scoped
    * in the bridge (the trust boundary — a person only ever starts/reads/acts on their OWN challenges). A

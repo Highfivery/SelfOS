@@ -18,6 +18,7 @@ export const USAGE_TYPE_LABELS: Record<string, string> = {
   'intake.synthesize': 'Onboarding — portrait',
   'memory.reconcile': 'Memory — refresh',
   'coaching.synthesize': 'Coaching — weekly synthesis',
+  'relationship.synthesize': 'Memory — relationship insights',
   'test.narrate': 'Self-assessment — what it means',
   'challenge.suggest': 'Challenge suggestion',
 };

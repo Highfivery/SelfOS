@@ -14,7 +14,7 @@
 // challenge", not browsed). Its guides live in `challengeCoach.ts` and are absent from `GUIDED_CATALOG`.
 import { CHALLENGE_GUIDES } from './challengeCoach';
 
-export type GuidedGroupId = 'therapy' | 'coaching' | 'intimacy' | 'challenge';
+export type GuidedGroupId = 'therapy' | 'coaching' | 'family' | 'intimacy' | 'challenge';
 
 export interface GuidedExercise {
   /** Stable id, e.g. 'cbt-thought-record'. */
@@ -41,6 +41,7 @@ export interface GuidedExercise {
 export const GUIDED_GROUPS: ReadonlyArray<{ id: GuidedGroupId; title: string }> = [
   { id: 'therapy', title: 'Reflective & therapy-informed' },
   { id: 'coaching', title: 'Coaching' },
+  { id: 'family', title: 'Family & relationships' },
   { id: 'intimacy', title: 'Intimacy & connection' },
 ];
 
@@ -56,6 +57,7 @@ export function guidedGroupTitle(group: GuidedGroupId): string {
 const GUIDE_LIFE_AREAS: Record<GuidedGroupId, string[]> = {
   therapy: ['Emotions & patterns', 'Family', 'Relationships'],
   coaching: ['Goals & growth', 'Work & purpose', 'Money'],
+  family: ['Family', 'Relationships', 'Emotions & patterns'],
   intimacy: ['Intimacy', 'Relationships'],
   // A challenge spans any domain — foreground the most challengeable areas; the always-on CORE adds the rest.
   challenge: [
@@ -183,6 +185,81 @@ not a personal failing, (3) self-kindness — offering themselves the warmth the
 grief. Normalize that grief is non-linear and has no timeline. Be especially attentive to distress — if it \
 points toward crisis, follow the safety guidance and encourage professional support.`,
   },
+  {
+    id: 'worry-time',
+    group: 'therapy',
+    title: 'Worry Time',
+    framework: 'CBT',
+    blurb: 'Contain spiralling worry by giving it a time and a place.',
+    kind: 'chat',
+    openingMessage:
+      "Let's try a self-help exercise inspired by CBT worry postponement — not therapy. The idea is to give " +
+      "your worries one contained slot instead of all day. What's been looping in your mind lately?",
+    systemPromptAddendum: `${frame('the CBT technique of worry postponement ("worry time")')} Help them name \
+the worry, decide whether it's a solvable problem or an unsolvable hypothetical, and either plan one small \
+next step (solvable) or practise setting it down until a chosen worry slot (unsolvable). Keep it light and \
+practical, not a deep-dive into every fear.`,
+  },
+  {
+    id: 'cognitive-distortions',
+    group: 'therapy',
+    title: 'Spotting Thinking Traps',
+    framework: 'CBT',
+    blurb: 'Catch the common distortions bending a stuck thought.',
+    kind: 'chat',
+    openingMessage:
+      "Let's look at a thought that's been weighing on you — a self-help exercise inspired by CBT, not " +
+      'therapy. Our minds fall into predictable "thinking traps"; naming one loosens its grip. What thought ' +
+      'has been hard to shake?',
+    systemPromptAddendum: `${frame('CBT cognitive-distortion work')} Gently help them notice which common \
+thinking traps may be at play (all-or-nothing, catastrophizing, mind-reading, overgeneralizing, \
+should-statements, emotional reasoning), name it without judgment, and try a more balanced alternative \
+thought in their own words. Ask, don't lecture.`,
+  },
+  {
+    id: 'three-good-things',
+    group: 'therapy',
+    title: 'Three Good Things',
+    framework: 'Positive psychology',
+    blurb: 'Notice what went well today, and why it mattered.',
+    kind: 'chat',
+    openingMessage:
+      "Let's end on what went right — a self-help exercise from positive psychology, not therapy. Even on a " +
+      'hard day, small good things are usually there. What are one to three things that went well today?',
+    systemPromptAddendum: `${frame('the positive-psychology "Three Good Things" practice')} Invite up to three \
+things that went well, and for each gently explore why it happened and what part they played in it — \
+savoring, not toxic positivity. If the day felt bleak, validate that first and look for the small.`,
+  },
+  {
+    id: 'name-the-feeling',
+    group: 'therapy',
+    title: 'Name the Feeling',
+    framework: 'Affect labeling',
+    blurb: 'Put precise words to what you’re feeling to ease its intensity.',
+    kind: 'chat',
+    openingMessage:
+      "Let's put words to what you're feeling — a self-help exercise in affect labeling, not therapy. Naming " +
+      'an emotion precisely tends to turn its volume down. How are you feeling right now, even roughly?',
+    systemPromptAddendum: `${frame('affect labeling ("name it to tame it")')} Help them move from a vague \
+"bad/stressed" toward a more specific emotion word, notice where it sits in the body, and acknowledge it \
+without needing to fix it. Offer a small vocabulary of feelings if they're stuck. Stay with the feeling, \
+gently.`,
+  },
+  {
+    id: 'urge-surfing',
+    group: 'therapy',
+    title: 'Urge Surfing',
+    framework: 'Mindfulness',
+    blurb: 'Ride out a craving or urge without acting on it.',
+    kind: 'chat',
+    openingMessage:
+      "Let's ride out an urge together — a self-help mindfulness exercise, not therapy or addiction " +
+      'treatment. Urges rise, crest, and fall like waves if we let them. What urge would you like to surf?',
+    systemPromptAddendum: `${frame('the mindfulness practice of urge surfing')} Guide them to observe the \
+urge with curiosity — where they feel it, how intense it is (0–10), how it shifts breath by breath — rather \
+than fighting or feeding it, noticing that it peaks and passes. If the urge involves self-harm or a \
+substance crisis, follow the safety guidance and point to professional support.`,
+  },
 
   // ── Coaching ─────────────────────────────────────────────────────────────────────────────────────
   {
@@ -288,6 +365,257 @@ Normalize that boundaries are an act of care, not aggression.`,
     systemPromptAddendum: `${frame('energy management and burnout prevention')} Help them map their drains and \
 restorers across work, relationships, body, and mind, then find one realistic shift toward balance. This is \
 wellness reflection — if they describe symptoms that need medical attention, encourage professional care.`,
+  },
+  {
+    id: 'habit-builder',
+    group: 'coaching',
+    title: 'Building a Habit',
+    framework: 'Tiny Habits',
+    blurb: 'Design a small habit that actually sticks.',
+    kind: 'chat',
+    openingMessage:
+      "Let's build a habit that lasts — a self-help exercise inspired by Tiny Habits and habit science, not " +
+      'therapy. Big resolutions tend to fade; tiny anchored ones stick. What habit would you like to grow?',
+    systemPromptAddendum: `${frame("BJ Fogg's Tiny Habits and habit-formation science")} Help them shrink the \
+habit to something almost too small to fail, anchor it to an existing routine ("after I ___, I will ___"), \
+and plan a tiny celebration. Troubleshoot friction and focus on consistency over intensity.`,
+  },
+  {
+    id: 'procrastination-unblock',
+    group: 'coaching',
+    title: 'Getting Unstuck',
+    framework: 'Behavioral activation',
+    blurb: 'Find the real block behind a task you keep avoiding.',
+    kind: 'chat',
+    openingMessage:
+      "Let's get you unstuck on something you've been putting off — a practical self-help exercise, not " +
+      "therapy. Procrastination is usually protecting us from something. What's the task you keep avoiding?",
+    systemPromptAddendum: `${frame('procrastination coaching and behavioral activation')} Help them surface \
+what's really in the way (fear, ambiguity, perfectionism, overwhelm, low energy), break the task into a \
+two-minute first step, and lower the bar to "good enough to start." Be encouraging, never shaming.`,
+  },
+  {
+    id: 'time-and-priorities',
+    group: 'coaching',
+    title: 'Time & Priorities',
+    framework: 'Prioritization',
+    blurb: 'Sort the urgent from the important and reclaim your week.',
+    kind: 'chat',
+    openingMessage:
+      "Let's sort out where your time is going — a self-help prioritization exercise, not therapy. Often the " +
+      "urgent crowds out the important. What's filling your days, and what keeps getting pushed aside?",
+    systemPromptAddendum: `${frame('prioritization frameworks like the Eisenhower matrix')} Help them sort \
+commitments by urgent vs. important, notice where their time and their values have drifted apart, and choose \
+one thing to protect, delegate, or drop. Keep it concrete and kind.`,
+  },
+  {
+    id: 'strengths-spotlight',
+    group: 'coaching',
+    title: 'Playing to Your Strengths',
+    framework: 'Strengths-based',
+    blurb: 'Name your strengths and use them more deliberately.',
+    kind: 'chat',
+    openingMessage:
+      "Let's spotlight what you're already good at — a strengths-based self-help exercise, not therapy. We " +
+      'grow fastest by leaning into strengths, not just fixing weaknesses. When do you feel most like yourself?',
+    systemPromptAddendum: `${frame('strengths-based coaching')} Help them name a few signature strengths \
+(drawing on moments of energy, flow, and pride), then find one current challenge they could approach by \
+using a strength more deliberately. Affirm without flattering.`,
+  },
+  {
+    id: 'future-self',
+    group: 'coaching',
+    title: 'Meet Your Future Self',
+    framework: 'Visioning',
+    blurb: 'Picture the you a year on, and what they’d ask of you now.',
+    kind: 'chat',
+    openingMessage:
+      "Let's imagine your future self — a self-help visioning exercise, not therapy. Picture yourself a year " +
+      'from now, living a little more like you want to. What does that version of you look like?',
+    systemPromptAddendum: `${frame('future-self visioning and values-based goal-setting')} Help them vividly \
+picture themselves a year ahead — how they spend their time, feel, and relate — then work backward to one \
+small thing their present self could start. Keep it hopeful and grounded, not a fantasy.`,
+  },
+
+  // ── Family & relationships (54-memory-redesign follow-up: family-dynamics guided sessions) ───────────
+  {
+    id: 'family-role',
+    group: 'family',
+    title: 'Your Family Role',
+    framework: 'Family systems',
+    blurb: 'Notice the role you play in your family, and whether it still fits.',
+    kind: 'chat',
+    openingMessage:
+      "Let's look at the role you tend to play in your family — a self-help exercise inspired by family-" +
+      'systems thinking, not therapy. Many of us slip into a familiar part (the fixer, the peacekeeper, the ' +
+      'responsible one). Which feels most like yours?',
+    systemPromptAddendum: `${frame('family-systems thinking')} Help them notice the role they tend to occupy \
+in their family, where it came from, what it costs and protects, and whether they'd like to hold it more \
+lightly. Stay curious and non-blaming about the family as a whole.`,
+  },
+  {
+    id: 'reflecting-on-a-parent',
+    group: 'family',
+    title: 'Reflecting on a Parent',
+    framework: 'Attachment-informed',
+    blurb: 'Make sense of your relationship with a parent, past or present.',
+    kind: 'chat',
+    openingMessage:
+      "Let's reflect on your relationship with a parent — a gentle self-help exercise, not therapy. These " +
+      'bonds shape a lot in us, for better and worse. Which parent would you like to think about, and how are ' +
+      'things between you?',
+    systemPromptAddendum: `${frame('attachment-informed reflection on family relationships')} Help them explore \
+the relationship with honesty and compassion — what they received, what they missed, what they carry — \
+without pushing toward either idealizing or condemning. Hold complexity; if grief or trauma surfaces, slow \
+down, validate, and point to professional support.`,
+  },
+  {
+    id: 'sibling-dynamics',
+    group: 'family',
+    title: 'Sibling Dynamics',
+    framework: 'Family systems',
+    blurb: 'Untangle an old or current dynamic with a sibling.',
+    kind: 'chat',
+    openingMessage:
+      "Let's look at a sibling relationship — a self-help exercise, not therapy. Sibling bonds carry a lot of " +
+      'history: rivalry, loyalty, comparison, love. Which sibling is on your mind, and what’s the dynamic like?',
+    systemPromptAddendum: `${frame('family-systems thinking about sibling relationships')} Help them explore \
+the patterns between them — roles assigned in childhood, comparison, fairness, closeness or distance now — \
+and what they'd like the relationship to be. Avoid taking sides; stay curious about both perspectives.`,
+  },
+  {
+    id: 'boundaries-with-family',
+    group: 'family',
+    title: 'Boundaries with Family',
+    framework: 'Assertiveness',
+    blurb: 'Set a caring boundary with a family member who oversteps.',
+    kind: 'chat',
+    openingMessage:
+      "Let's work on a boundary with someone in your family — a self-help exercise in assertiveness, not " +
+      'therapy. Family boundaries can feel especially loaded. Where do you feel overstepped, guilted, or ' +
+      'stretched thin?',
+    systemPromptAddendum: `${frame('assertiveness and boundary-setting within families')} Help them locate \
+where a boundary is needed, separate the relationship from the behavior, and craft a clear, kind, \
+non-apologetic way to express it — while anticipating guilt-trips or pushback. Normalize that boundaries \
+can coexist with love.`,
+  },
+  {
+    id: 'inlaws-extended',
+    group: 'family',
+    title: 'In-Laws & Extended Family',
+    framework: 'Boundaries',
+    blurb: 'Navigate in-laws or extended family with less friction.',
+    kind: 'chat',
+    openingMessage:
+      "Let's navigate the extended family — in-laws, relatives, the wider web — a self-help exercise, not " +
+      'therapy. These relationships come with their own loyalties and expectations. What’s feeling tricky?',
+    systemPromptAddendum: `${frame('boundary and expectation work with extended family and in-laws')} Help \
+them clarify their own and (if relevant) their partner's needs, find a united approach where a partner is \
+involved, and choose how much to engage. Be even-handed about competing family cultures and loyalties.`,
+  },
+  {
+    id: 'generational-patterns',
+    group: 'family',
+    title: 'Patterns You Inherited',
+    framework: 'Intergenerational',
+    blurb: 'Spot a pattern passed down your family, and choose what to keep.',
+    kind: 'chat',
+    openingMessage:
+      "Let's look at a pattern that runs in your family — a self-help exercise, not therapy. We inherit ways " +
+      'of handling money, conflict, love, and feelings. Which pattern do you notice repeating across ' +
+      'generations?',
+    systemPromptAddendum: `${frame('intergenerational pattern awareness')} Help them name a pattern handed \
+down (around conflict, emotion, money, parenting, secrecy), understand it with compassion for those who \
+passed it on, and decide consciously what to keep and what to change with them. Avoid clinical framing.`,
+  },
+  {
+    id: 'family-conflict-repair',
+    group: 'family',
+    title: 'Repairing a Family Rift',
+    framework: 'Repair',
+    blurb: 'Prepare to reconnect after a falling-out with family.',
+    kind: 'chat',
+    openingMessage:
+      "Let's think about repairing a rift with family — a self-help exercise, not therapy or mediation. " +
+      'Reaching back across a break takes courage. Who is the rift with, and what happened?',
+    systemPromptAddendum: `${frame('relationship-repair principles')} Help them weigh whether and how to \
+re-approach — what they'd want to say, take responsibility for, and ask for — while respecting that repair \
+is not always safe or wanted. Never pressure reconciliation; honor their pace and safety, and validate \
+ambivalence.`,
+  },
+  {
+    id: 'aging-parents',
+    group: 'family',
+    title: 'Caring for an Aging Parent',
+    framework: 'Caregiver support',
+    blurb: 'Tend to the strain and feelings of caring for an aging parent.',
+    kind: 'chat',
+    openingMessage:
+      "Let's make space for what it's like to care for an aging parent — a self-help exercise, not therapy or " +
+      'medical advice. It can hold love, exhaustion, grief, and guilt all at once. How are you holding up?',
+    systemPromptAddendum: `${frame('caregiver support and reflection')} Help them name the emotional load \
+(role reversal, grief, guilt, resentment, logistics), tend to their own needs and limits, and consider \
+support or sharing the load. This is emotional support — direct medical, legal, or care decisions to the \
+right professionals.`,
+  },
+  {
+    id: 'your-parenting',
+    group: 'family',
+    title: 'Reflecting on Your Parenting',
+    framework: 'Reflective parenting',
+    blurb: 'Reflect on the parent you are, without the guilt spiral.',
+    kind: 'chat',
+    openingMessage:
+      "Let's reflect on your own parenting — a warm self-help exercise, not therapy or parenting instruction. " +
+      'No parent gets it all right, and reflection is itself a sign of care. What’s on your mind as a parent?',
+    systemPromptAddendum: `${frame('reflective-parenting practice')} Help them reflect on a moment or pattern \
+with their child with curiosity rather than guilt — what they value, where they want to repair or adjust, \
+and what they're already doing well. Normalize rupture-and-repair; counter all-or-nothing self-judgment.`,
+  },
+  {
+    id: 'coparenting',
+    group: 'family',
+    title: 'Co-Parenting',
+    framework: 'Co-parenting',
+    blurb: 'Work through a co-parenting challenge after separation.',
+    kind: 'chat',
+    openingMessage:
+      "Let's work through a co-parenting situation — a self-help exercise, not therapy or legal advice. " +
+      'Raising kids across two homes is genuinely hard. What’s coming up with your co-parent right now?',
+    systemPromptAddendum: `${frame('co-parenting communication strategies')} Help them keep the focus on the \
+child's wellbeing, separate the parenting relationship from the past romantic one, and find businesslike, \
+low-conflict ways to communicate. Stay neutral about the co-parent; never give legal or custody advice.`,
+  },
+  {
+    id: 'estrangement',
+    group: 'family',
+    title: 'Distance or Estrangement',
+    framework: 'Estrangement support',
+    blurb: 'Sit with the complicated feelings of family distance or no-contact.',
+    kind: 'chat',
+    openingMessage:
+      "Let's make room for the feelings around family distance or estrangement — a gentle self-help exercise, " +
+      'not therapy. Whether the distance is your choice or not, it can be heavy and lonely. Would you like to ' +
+      'tell me about it?',
+    systemPromptAddendum: `${frame('support around family estrangement and distance')} Hold space without \
+pushing toward reconciliation OR cut-off — both can be valid. Validate grief, relief, guilt, and \
+ambivalence equally, and respect the boundaries they've drawn for their own safety. If distress points \
+toward crisis, follow the safety guidance and encourage professional support.`,
+  },
+  {
+    id: 'family-gathering-prep',
+    group: 'family',
+    title: 'Preparing for a Family Gathering',
+    framework: 'Coping planning',
+    blurb: 'Go into a holiday or gathering with a plan to protect your peace.',
+    kind: 'chat',
+    openingMessage:
+      "Let's prepare for a family gathering — a practical self-help exercise, not therapy. Holidays and " +
+      'reunions can stir up old roles and tensions fast. What gathering is coming up, and what do you brace ' +
+      'for?',
+    systemPromptAddendum: `${frame('coping and boundary planning for family gatherings')} Help them anticipate \
+the likely flashpoints, decide ahead which topics and dynamics they'll engage or sidestep, plan exits and \
+recovery breaks, and choose one intention for how they want to show up. Practical and reassuring.`,
   },
 
   // ── Intimacy & connection (18+, §8.3) ──────────────────────────────────────────────────────────────

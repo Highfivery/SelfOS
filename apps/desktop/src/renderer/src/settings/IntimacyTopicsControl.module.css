@@ -34,3 +34,36 @@
   background: var(--color-border);
   color: var(--color-text-primary);
 }
+
+/* The owner-only "Suggest with AI" block — a calm bordered card distinct from the manual add rows. */
+.suggestBox {
+  padding: var(--space-3);
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.suggestions {
+  padding-top: var(--space-1);
+}
+
+/* One reviewable suggestion: a checkbox + an editable label, on a single row. */
+.pickRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.pickRow > :last-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pickCheck {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}

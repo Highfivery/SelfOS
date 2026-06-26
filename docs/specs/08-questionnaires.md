@@ -1558,6 +1558,13 @@ explicitness the **intake** intimacy block already ships, within the **same** co
 > list** (`INTIMACY_ACTIVITIES` = the entry labels); the category/tier metadata is exposed via new symbols only.
 > Generation MAY (08-owned, not required) use the category metadata to seed from a family.
 
+> **AI-assist (Built, 2026-06-26).** The owner control gains a **"Suggest with AI"** affordance: the Owner
+> optionally types a subject (blank → a varied spread) and one metered `intimacy.suggestTopics` pass
+> (`suggestIntimacyTopics`, owner-gated `people.manage`, meter-before-parse, tolerant) proposes consensual-adult
+> **activity + fantasy** topics **deduped** against the merged inventory. It **persists nothing** — the Owner
+> reviews them in a **pick-and-edit checklist** and the existing add path commits the chosen ones. The
+> consensual-adult boundary is in the prompt + the model (never a keyword filter); AI-off is a calm state.
+
 The in-policy topic inventory that seeds generation (and that the **intake** intimacy block already uses as its
 `ACTIVITIES`/`commonFantasies` lists, [`18`](18-personal-onboarding.md)) becomes **one shared, owner-extensible
 source of truth**:

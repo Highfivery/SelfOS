@@ -79,6 +79,7 @@ import {
   type ChallengeSuggestionResult,
   type Insight,
   type IntimacyTopicsView,
+  type IntimacyTopicSuggestResult,
   type MemoryReconcileResult,
   type MemoryReconcileState,
   type OutboundSharing,
@@ -265,7 +266,12 @@ import {
   synthesizeRelationship,
   type GoalRaiseGoal,
 } from '@selfos/core/coaching';
-import { INTIMACY_ACTIVITIES, INTIMACY_FANTASIES } from '@selfos/core/intimacy';
+import {
+  INTIMACY_ACTIVITIES,
+  INTIMACY_FANTASIES,
+  mergedIntimacyTopics,
+  suggestIntimacyTopics,
+} from '@selfos/core/intimacy';
 import {
   addCustomIntimacyTopic,
   addCustomType,
@@ -648,6 +654,7 @@ const IntimacyTopicSchema = z.object({
   kind: z.enum(['activities', 'fantasies']),
   name: z.string().min(1),
 });
+const SuggestIntimacyTopicsSchema = z.object({ subject: z.string().optional() });
 const AssignmentsCreateSchema = z.object({
   questionnaireId: z.string().min(1),
   // No recipient here — it's bound to the questionnaire at creation (08 §17.3) and read from the def.
@@ -2237,6 +2244,24 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         builtIn: { activities: [...INTIMACY_ACTIVITIES], fantasies: [...INTIMACY_FANTASIES] },
         custom: await readCustomIntimacyTopics(ctx.fs),
       };
+    },
+    questionnairesSuggestIntimacyTopics: async (input): Promise<IntimacyTopicSuggestResult> => {
+      // Owner-only (the topics are household-wide) — gated `people.manage`, like the manual add.
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'people.manage'))) {
+        return { ok: false, reason: 'ERROR', message: 'Not permitted.' };
+      }
+      if ((await readVaultSettingsValues(ctx.fs))['ai.enabled'] === false) {
+        return { ok: false, reason: 'AI_OFF', message: 'Turn on AI in Settings to use this.' };
+      }
+      const deps = await aiDeps('people.manage');
+      if (!deps) return { ok: false, reason: 'ERROR', message: 'Not available.' };
+      const { subject } = SuggestIntimacyTopicsSchema.parse(input ?? {});
+      const existing = mergedIntimacyTopics(await readCustomIntimacyTopics(ctx.fs));
+      return suggestIntimacyTopics(deps, {
+        existing,
+        ...(subject?.trim() ? { subject: subject.trim() } : {}),
+      });
     },
     questionnairesStoreImage: async (input): Promise<{ imagePath: string; mime: string }> => {
       const ctx = await host.vaultAndKey();

@@ -389,6 +389,31 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-26 — **Build (owner AI intimacy-topic suggester — SPEC 08 §16.5a AI-assist; on `feat/ai-intimacy-topics`,
+  PR pending).** The last item of the 2026-06-26 batch. The owner-only Intimacy Topics settings control gains a
+  **"Suggest with AI"** affordance. **All 3 product/UX forks asked first (user-chosen):** lives **in the existing
+  owner control** (not a separate panel); driven by a **subject box that falls back to a general varied batch when
+  blank** ("Both"); suggestions are added via a **pick-and-edit checklist** ("tick + edit, then Add selected"). Core
+  `@selfos/core/intimacy/suggestService.ts` (`suggestIntimacyTopics`) — one metered **`intimacy.suggestTopics`** pass
+  (budget-gated, meter-BEFORE-parse, tolerant `extractJsonObject` + honest failures, `extendedThinking:false`) that
+  proposes consensual-adult **activity + fantasy** topics and **dedupes** them case-insensitively against the merged
+  inventory (built-in + custom; an all-dupes result is an honest EMPTY). **Persists nothing** — the owner reviews +
+  the existing `addCustomIntimacyTopic` path commits the chosen ones. The consensual-adult boundary lives in the
+  prompt + the model (never a keyword filter); the Owner is the full-access role so the seam is gated `people.manage`
+  (owner-only), and **AI-off is a calm state** (no dead button). IPC `questionnaires:suggestIntimacyTopics` through
+  the full seam + the offline fake-Claude branch (returns a set incl. an existing built-in, so the dedupe is
+  exercised offline). Renderer: the control gains a subject `Textarea` + "Suggest with AI" → a checklist of
+  checkbox+editable rows → "Add selected (N)". Additive schema (`IntimacyTopicSuggestResult` + the usage type) — no
+  migration. Gate green: typecheck (all), lint, **938 core + 854 desktop** unit (4 core suggester [dedup/meter/ground,
+  no-subject, NO_KEY, EMPTY] + 6 control RTL [suggest/pick/edit/add, EMPTY surface, non-owner hidden] + a coreBridge
+  test [owner deduped, member denied, AI-off calm]), **E2E** (the Settings flow: Suggest → checklist → a built-in
+  deduped out → uncheck one → Add selected → persisted across both kinds). Visual QA (real Electron screenshot): the
+  subject box + the pick-and-edit checklist + "Add selected (3)" read clean + cohesive with Settings. Synced spec 08
+  §16.5a. **Lesson: a "suggest then add" feature is cheapest as an EPHEMERAL pass (persist nothing) layered on the
+  existing add path — the suggester only computes deduped candidates, the owner's checklist drives the existing
+  per-topic add, so there's no new persistence, no migration, and the dedupe is the one real guarantee (the prompt's
+  avoid-list just nudges the model).**
+
 - 2026-06-26 — **Build (guided-sessions expansion — fuller therapy/coaching + a Family group + catalog search;
   on `feat/guided-sessions-expansion`, PR pending).** Additive content + one small UI feature (an extension of
   spec 16/48, no new machinery, no schema/IPC). **New `family` group "Family & relationships"** (12

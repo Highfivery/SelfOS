@@ -4469,7 +4469,7 @@ test('authoring (§16.4): AI draft fills the empty title; Save→Send is a two-s
   }
 });
 
-test('intimacy topics (§16.5a): the owner manages custom topics in Settings + an inline builder add, persisted', async () => {
+test('intimacy topics (§16.5a): the owner manages custom topics in Settings + AI suggest + an inline builder add, persisted', async () => {
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
   await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
   const fs = createNodeFileSystem(vault);
@@ -4493,6 +4493,25 @@ test('intimacy topics (§16.5a): the owner manages custom topics in Settings + a
     await expect
       .poll(async () => (await readCustomIntimacyTopics(fs)).activities)
       .toContain('Sploshing');
+
+    // Suggest with AI: the offline fake proposes a set that INCLUDES an existing built-in ('Sensual
+    // massage') — which is deduped out of the checklist. Uncheck one fresh suggestion, add the rest.
+    await w.getByRole('button', { name: 'Suggest with AI' }).click();
+    await expect(w.getByLabel('Include Mutual edging')).toBeVisible();
+    await expect(w.getByLabel('Include Temperature contrast play')).toBeVisible();
+    await expect(w.getByLabel('Include Sensual massage')).toHaveCount(0); // a built-in → deduped
+    await w.getByLabel('Include Temperature contrast play').uncheck();
+    await w.getByRole('button', { name: /Add selected/ }).click();
+    // The picked suggestions persist (across both kinds); the unchecked one does not.
+    await expect
+      .poll(async () => (await readCustomIntimacyTopics(fs)).activities)
+      .toContain('Mutual edging');
+    await expect
+      .poll(async () => (await readCustomIntimacyTopics(fs)).fantasies)
+      .toContain('Rivals-to-lovers roleplay');
+    expect((await readCustomIntimacyTopics(fs)).activities).not.toContain(
+      'Temperature contrast play',
+    );
 
     // The inline builder add (owner) writes to the SAME shared list: author an intimacy/unfiltered
     // questionnaire and add a fantasy from the AI panel.

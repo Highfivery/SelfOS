@@ -767,6 +767,8 @@ const IntakeSubmitFormSchema = z.object({
   answers: z.record(z.string(), IntakeAnswerValueSchema),
   // Per-question relationship-type sharing scopes (43 §6) — the trust boundary validates the types.
   sharing: z.record(z.string(), z.array(RelationshipTypeSchema)).optional(),
+  // Auto-save passes `false` to persist a draft without completing the section (default complete).
+  complete: z.boolean().optional(),
 });
 const IntakeSetAnswerSharingSchema = z.object({
   sectionId: z.string().min(1),
@@ -4492,7 +4494,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       return buildIntakeState(ctx.fs, ctx.key, personId);
     },
     intakeSubmitForm: async (input): Promise<IntakeState> => {
-      const { sectionId, answers, sharing } = IntakeSubmitFormSchema.parse(input);
+      const { sectionId, answers, sharing, complete } = IntakeSubmitFormSchema.parse(input);
       const ctx = await host.vaultAndKey();
       const personId = ctx ? await activePersonId() : null;
       if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'intake.own'))) {
@@ -4505,7 +4507,17 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         const prefs = await getGuidancePrefs(ctx.fs, ctx.key, personId);
         if (prefs.adultAcknowledged !== true) return buildIntakeState(ctx.fs, ctx.key, personId);
       }
-      await submitSectionForm(ctx.fs, ctx.key, personId, sectionId, answers, new Date(), sharing);
+      // `complete` defaults to true (the Continue/Done button); auto-save passes false to persist a draft.
+      await submitSectionForm(
+        ctx.fs,
+        ctx.key,
+        personId,
+        sectionId,
+        answers,
+        new Date(),
+        sharing,
+        complete ?? true,
+      );
       return buildIntakeState(ctx.fs, ctx.key, personId);
     },
     intakeAcknowledgeAdult: async (): Promise<IntakeState> => {

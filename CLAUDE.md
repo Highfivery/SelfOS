@@ -389,6 +389,33 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-26 — **Fix #2 (onboarding STILL didn't save — auto-save was scoped to COMPLETED sections only; SPEC 43
+  re-amended; on `fix/onboarding-autosave-all-sections`).** The v0.11.1 fix shipped but the user came back
+  (rightly angry): "YOURE OBVIOUSLY NOT PROPERLY TESTING — onboarding questions arent being saved when selected
+  and when changing the private status its not saving automatically." **My failure:** I "verified" with an E2E I
+  wrote to pass (it tested a COMPLETED section) instead of reproducing the user's REAL scenario (first-time
+  onboarding). **This time I reproduced against the running app FIRST:** wrote a decrypt-level E2E driving a
+  first-time section → it FAILED on v0.11.1 (`occupation` stayed `null` after filling + changing sharing, no
+  Continue) — proving the bug, before touching the fix. **Root cause:** the auto-save effect was gated
+  `if (!complete || locked) return` — so it only fired on already-COMPLETED sections; while filling out
+  onboarding (every section `notStarted`/`inProgress`), nothing auto-saved. **Fix:** auto-save now fires for
+  **every** section, persisting a **DRAFT** — `submitSectionForm` gained a `markComplete` param (default `true`);
+  `autoSaveForm` passes **`complete: false`** so a draft persists answers + `answerSharing` but only nudges
+  `notStarted`→`inProgress`, NEVER completing the section (only the explicit Continue/Done does, so no premature
+  portrait). Added a **flush-on-unmount** (a `flushRef` → latest closure) so a quick Back/section-switch inside the
+  ~600ms debounce doesn't drop the last edit, and **cancel-on-explicit-submit** (`cancelAutoSave()` in the
+  Continue/Done/Skip handlers) so a debounced draft can't race in AFTER the completing submit and revert it.
+  Gate green: typecheck (all), lint, **939 core + 855 desktop** unit (the stale "first-time does NOT auto-save"
+  RTL INVERTED to assert it DOES, as `complete:false`; +a core `submitSectionForm` draft test:
+  persists-without-completing then an explicit submit completes), **E2E** (the new first-time decrypt test — fill
+  - change sharing with NO Continue → both the answer AND the scope persist to the vault, section not complete;
+    the existing edit-a-completed-section test still green). **Lessons: (1) NEVER claim verified from a test you
+    wrote to pass — reproduce the user's ACTUAL path (first-time vs editing) against the running app, watch it FAIL,
+    then fix. (2) An auto-save gated on a state the user isn't in yet (`complete`) is no auto-save — onboarding is
+    spent in not-complete sections, so that's exactly where save-on-select had to work. (3) A draft save (a
+    `markComplete:false` flag) is how you persist-as-you-go without the side effects of "submit" (completion +
+    portrait).**
+
 - 2026-06-26 — **Fix (onboarding sharing didn't save — one-tap + auto-save; SPEC 43 amended; on
   `fix/onboarding-share-autosave`, PR pending).** User: "in intimacy & sexuality I click _share with partner all_
   and Save, and it doesn't save — and let's save right away when clicked, same with all answers." **Diagnosed

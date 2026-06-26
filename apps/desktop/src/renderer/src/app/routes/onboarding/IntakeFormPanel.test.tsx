@@ -479,7 +479,7 @@ describe('IntakeFormPanel — per-question sharing (43)', () => {
     );
   });
 
-  it('does NOT auto-save a first-time (incomplete) section — that still rides the explicit Continue', async () => {
+  it('auto-saves a FIRST-TIME section as a DRAFT (complete:false) so a change persists without Continue', async () => {
     const intakeSubmitForm = vi.fn(() =>
       Promise.resolve({
         session: {} as never,
@@ -499,9 +499,15 @@ describe('IntakeFormPanel — per-question sharing (43)', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: /this whole section/i }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Partner' }));
-    // Give the debounce window time to pass — a first-time section must NOT auto-submit.
-    await new Promise((r) => setTimeout(r, 800));
-    expect(intakeSubmitForm).not.toHaveBeenCalled();
+    // A first-time section auto-saves the change too — but as a DRAFT (complete:false), so it never
+    // prematurely completes the section the person is still filling out.
+    await waitFor(
+      () =>
+        expect(intakeSubmitForm).toHaveBeenCalledWith(
+          expect.objectContaining({ sectionId: 'intimacy', complete: false }),
+        ),
+      { timeout: 2000 },
+    );
   });
 
   it('offers the one-tap "refresh your portrait" once an edit makes the portrait stale', () => {

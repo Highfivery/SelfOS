@@ -93,11 +93,14 @@ export const useIntakeStore = create<IntakeStoreState>((set, get) => ({
     set({ busy: false, ...(next ? { state: next } : {}) });
   },
   autoSaveForm: async (sectionId, answers, sharing) => {
-    // No `busy` toggle — a background save, so the form's controls don't flicker as the user edits.
+    // No `busy` toggle — a background save, so the form's controls don't flicker as the user edits. And
+    // `complete: false` — a draft save, so editing/answering NEVER prematurely completes the section (only the
+    // explicit Continue/Done does), yet every answer + sharing change persists the moment it's made.
     const next =
       (await window.selfos?.intakeSubmitForm({
         sectionId,
         answers,
+        complete: false,
         ...(sharing ? { sharing } : {}),
       })) ?? null;
     if (next) set({ state: next });

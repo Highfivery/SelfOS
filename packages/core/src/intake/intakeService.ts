@@ -329,6 +329,12 @@ export async function submitSectionForm(
    * per the visible default. The resolved scope is stored explicitly on `section.answerSharing`.
    */
   sharing?: Record<string, RelationshipType[]>,
+  /**
+   * Whether to mark the section **complete** (default `true` — the Continue/Done button). The auto-save passes
+   * `false` to persist a **draft** (answers + answerSharing) as the person edits, WITHOUT prematurely completing
+   * a first-time section (which is what triggers the portrait flow). A draft just moves `notStarted`→`inProgress`.
+   */
+  markComplete = true,
 ): Promise<IntakeSession> {
   const def = getIntakeSection(sectionId);
   const session = await ensureIntakeSession(fs, key, personId, now);
@@ -363,7 +369,13 @@ export async function submitSectionForm(
     nextSharing[qid] = dedupeTypes(chosen);
   }
   section.answerSharing = nextSharing;
-  if (section.status !== 'skipped') section.status = 'complete';
+  if (markComplete) {
+    if (section.status !== 'skipped') section.status = 'complete';
+  } else if (section.status === 'notStarted') {
+    // A draft auto-save: the person has started this section, but don't complete it (that's the explicit
+    // Continue) and never un-complete an already-complete/skipped one — only nudge notStarted → inProgress.
+    section.status = 'inProgress';
+  }
   session.updatedAt = at;
   await writeEncryptedJson(fs, intakePath(personId), session, key);
   return session;

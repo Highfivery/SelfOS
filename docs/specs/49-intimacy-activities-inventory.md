@@ -1,6 +1,6 @@
 # 49 — Intimacy activities inventory (categorized, tiered expansion)
 
-> **Status:** Draft — _last updated 2026-06-25_
+> **Status:** Built — _last updated 2026-06-25_
 >
 > The shared consensual-adult intimacy inventory `INTIMACY_ACTIVITIES` is a **flat ~30-string list**
 > (`packages/core/src/intimacy/topics.ts`) read by the onboarding intimacy matrix, questionnaire
@@ -649,6 +649,27 @@ touchpoints with the concurrent **questionnaires** work and with [`46`](46-intim
 
 ## 12. Changelog
 
+- 2026-06-25 — **Built.** §11 resolved with the owner (all the spec's recommended defaults): **(a)** shipped the
+  proposed ~94-entry starter inventory across the 14 categories as-is (curatable later — it's a code constant);
+  **(b)** the onboarding matrix renders **all categories, grouped, open by default** (no pick-categories step);
+  **(c)** **5 tiers** (gentle→extreme); **(d)** the two relationship dynamics are **folded into `power-exchange`**
+  (slugs preserved as stable keys → no-loss carry-forward); **(e)** `INTIMACY_ACTIVITIES` keeps pointing at the
+  **flat label list** (least churn) + new `INTIMACY_ACTIVITIES_FULL` is the categorized source; **(f)**
+  `INTIMACY_FANTASIES` left flat. Built: `topics.ts` (`IntimacyActivity`/`IntimacyCategory`/`INTIMACY_CATEGORIES`/
+  `INTIMACY_CATEGORY_LABELS`/`INTIMACY_ACTIVITIES_FULL`/`INTIMACY_ACTIVITY_LABELS`/`intimacyActivitiesByCategory`/
+  `orderedActivities`/`categoryForKey`); `activityRows.ts` iterates the categorized inventory in display order +
+  matches the two oral rows by key + the extended `LEGACY_ACTIVITY_KEY_MAP` (pre-49 splits/renames →
+  closest new key; `'Squirting'` intentionally orphan-preserved); new `grouping.ts`
+  (`groupMatrixRowsByCategory`/`matrixGroupsForRows`/`resolvedActivityMatrix`); additive `Question.matrix.groups`
+  (no `schemaVersion` bump); the `@selfos/answering` matrix renders category headers (every group **open** — a
+  plain heading, never a collapsed `<details>`) when `groups` present, flat byte-identically otherwise; the
+  catalog + `activityContext` + `IntakeFormPanel` pass the grouped matrix. Tests: inventory integrity (unique
+  keys, exhaustive category labels, ~60–100 band, oral stable keys, taboo-fantasy wording guard), grouping/
+  ordering, carry-forward (pre-49 splits + Squirting orphan), synthesis label mapping, generation-still-reads-
+  flat-labels; IntakeFormPanel grouped-render RTL; the onboarding E2E now asserts the grouped headers + the full
+  surface renders to the bottom + no-overflow at 390 **and** 360px; the questionnaire matrix E2E stays green
+  (flat regression). Sequencing: 46 (Built) → **49 (Built)** → 50. Amends [`27`](27-intimacy-redesign.md) §4.2/§5
+  and [`08`](08-questionnaires.md) §16.5a (the inventory shape).
 - 2026-06-25 — created (Draft). Greatly expands AND restructures the shared `INTIMACY_ACTIVITIES` inventory
   from a flat ~30-string list into a **categorized, tiered** inventory (~60–100 entries, ~14 categories,
   intensity tiers gentle→extreme) spanning slow/sensual → extreme/hardcore/kinky/explicit within the

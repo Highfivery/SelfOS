@@ -5,7 +5,7 @@ import {
   questionDefaultsPrivate,
   stripIntakeFieldMarkers,
 } from '@selfos/core/intake';
-import { migrateActivityMatrixValue, resolveIntakeActivityRows } from '@selfos/core/intimacy';
+import { migrateActivityMatrixValue, resolvedActivityMatrix } from '@selfos/core/intimacy';
 import { SHARING_INLINE_EXPLAINER, describeScope } from '@selfos/core/sharing';
 import type { AnswerMap, AnswerValue } from '@selfos/core/questionnaires';
 import type { Question } from '@selfos/core/schemas';
@@ -251,7 +251,9 @@ export function IntakeFormPanel({
             ...q,
             matrix: {
               ...q.matrix,
-              rows: resolveIntakeActivityRows({ ownAnatomy, partnerAnatomy }),
+              // Re-resolve rows + their category groups together (49 §5) so the long matrix renders grouped
+              // by family (sensual→extreme), every group open by default.
+              ...resolvedActivityMatrix({ ownAnatomy, partnerAnatomy }),
             },
           }
         : q,

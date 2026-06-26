@@ -67,10 +67,10 @@ describe('customTypeService', () => {
       const fs = memFileSystem();
       expect(await readCustomIntimacyTopics(fs)).toEqual({ activities: [], fantasies: [] });
 
-      await addCustomIntimacyTopic(fs, 'activities', '  Wax play  ');
+      await addCustomIntimacyTopic(fs, 'activities', '  Sploshing  ');
       await addCustomIntimacyTopic(fs, 'fantasies', 'Pirate roleplay');
       expect(await readCustomIntimacyTopics(fs)).toEqual({
-        activities: ['Wax play'], // trimmed
+        activities: ['Sploshing'], // trimmed
         fantasies: ['Pirate roleplay'],
       });
       // Custom types are unaffected (same prefs file, separate fields).
@@ -79,10 +79,10 @@ describe('customTypeService', () => {
 
     it('a case-insensitive duplicate of a built-in OR a custom topic is a no-op', async () => {
       const fs = memFileSystem();
-      await addCustomIntimacyTopic(fs, 'activities', 'Wax play');
-      await addCustomIntimacyTopic(fs, 'activities', 'wax PLAY'); // dupe custom → no-op
-      await addCustomIntimacyTopic(fs, 'activities', 'oral (giving)', INTIMACY_ACTIVITIES); // dupe built-in → no-op
-      expect((await readCustomIntimacyTopics(fs)).activities).toEqual(['Wax play']);
+      await addCustomIntimacyTopic(fs, 'activities', 'Sploshing');
+      await addCustomIntimacyTopic(fs, 'activities', 'sploshing'); // dupe custom → no-op
+      await addCustomIntimacyTopic(fs, 'activities', 'fingering', INTIMACY_ACTIVITIES); // dupe built-in → no-op
+      expect((await readCustomIntimacyTopics(fs)).activities).toEqual(['Sploshing']);
     });
 
     it('removes a custom topic case-insensitively (built-ins are not stored here, so unaffected)', async () => {

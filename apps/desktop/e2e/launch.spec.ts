@@ -4094,14 +4094,14 @@ test('intimacy topics (§16.5a): the owner manages custom topics in Settings + a
     await w.getByRole('button', { name: 'Questionnaires' }).click();
     await expect(w.getByText('Intimacy topics (18+)')).toBeVisible();
     await expect(w.getByText(/18\+ only/i)).toBeVisible();
-    await w.getByLabel('Add an activity').fill('Wax play');
+    await w.getByLabel('Add an activity').fill('Sploshing');
     await w.getByRole('button', { name: 'Add' }).first().click();
-    await expect(w.getByText('Wax play')).toBeVisible();
+    await expect(w.getByText('Sploshing')).toBeVisible();
 
     // It persisted to the plain prefs file (no master key needed to read it).
     await expect
       .poll(async () => (await readCustomIntimacyTopics(fs)).activities)
-      .toContain('Wax play');
+      .toContain('Sploshing');
 
     // The inline builder add (owner) writes to the SAME shared list: author an intimacy/unfiltered
     // questionnaire and add a fantasy from the AI panel.
@@ -6047,22 +6047,37 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
     await expect(w.getByRole('radiogroup', { name: /Receiving oral \(blowjob\)/ })).toBeVisible();
     await expect(w.getByRole('radiogroup', { name: /Going down on her/ })).toBeVisible();
     await expect(w.getByRole('radiogroup', { name: /Giving a blowjob/ })).toHaveCount(0);
+    // 49: the (now ~90-row) matrix renders GROUPED by category, sensual→extreme, every group OPEN by default —
+    // category headers above their rows, and the FULL surface renders to the bottom (no collapsed accordion).
+    await expect(w.getByRole('heading', { name: 'Sensual & sensory' })).toBeVisible();
+    await expect(w.getByRole('heading', { name: 'Oral' })).toBeVisible();
+    await expect(w.getByRole('heading', { name: 'Taboo fantasy' })).toBeVisible();
+    // A row from the FIRST and the LAST category are both present — nothing hidden in a default-collapsed
+    // <details> (the CLAUDE.md §7/§12 collapsed-accordion bug class).
+    await expect(w.getByRole('radiogroup', { name: /Sensual massage/ })).toBeVisible();
+    await expect(w.getByRole('radiogroup', { name: /Pet play/ })).toBeVisible();
+    expect(await w.locator('details:not([open])').count()).toBe(0);
     // The 5-point matrix must wrap cleanly at phone width — no horizontal scroll on the page or any inner
-    // control (the .scale row wraps the five labelled points). Check WHILE the matrix is on screen.
-    await w.setViewportSize({ width: 390, height: 780 });
-    const matrixGuard = await w.evaluate(() => {
-      const offenders: string[] = [];
-      document.querySelectorAll('*').forEach((el) => {
-        const ox = getComputedStyle(el).overflowX;
-        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
-          offenders.push(`${el.tagName}.${String(el.className)}`);
-        }
+    // control (the .scale row wraps the five labelled points). Check WHILE the long grouped matrix is on screen,
+    // at BOTH 390px and the narrower ~360px (49 §7/§9/§10).
+    const matrixOverflow = () =>
+      w.evaluate(() => {
+        const offenders: string[] = [];
+        document.querySelectorAll('*').forEach((el) => {
+          const ox = getComputedStyle(el).overflowX;
+          if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+            offenders.push(`${el.tagName}.${String(el.className)}`);
+          }
+        });
+        const main = document.querySelector('main');
+        return { offenders, mainOverflow: main ? main.scrollWidth - main.clientWidth : 0 };
       });
-      const main = document.querySelector('main');
-      return { offenders, mainOverflow: main ? main.scrollWidth - main.clientWidth : 0 };
-    });
-    expect(matrixGuard.offenders).toEqual([]);
-    expect(matrixGuard.mainOverflow).toBeLessThanOrEqual(1);
+    for (const width of [390, 360]) {
+      await w.setViewportSize({ width, height: 780 });
+      const guard = await matrixOverflow();
+      expect(guard.offenders, `overflow at ${width}px`).toEqual([]);
+      expect(guard.mainOverflow, `main overflow at ${width}px`).toBeLessThanOrEqual(1);
+    }
     await w.setViewportSize({ width: 1280, height: 800 });
     // Rate the gender-aware giving-oral row "Love it" (point 5) — it must persist through the submit.
     await w
@@ -6649,6 +6664,9 @@ test('onboarding: editing anatomy re-labels the oral rows WITHOUT orphaning a ra
                   getSpecific: true,
                   ownAnatomy: 'Cock (penis)',
                   partnerAnatomy: ['Pussy (vulva)'],
+                  // A PRE-49 value: the receiving + vulva-giving rows keyed by stable keys, plus a universal row
+                  // keyed by the OLD 'bondage' slug (49 split it into the categorized inventory). The panel
+                  // migrates the legacy key to the new stable key on load (49 §4.3 carry-forward, no data loss).
                   activities: { 'oral-receiving': 3, 'oral-giving-vulva': 5, bondage: 4 },
                 }
               : {},
@@ -6679,18 +6697,23 @@ test('onboarding: editing anatomy re-labels the oral rows WITHOUT orphaning a ra
     ).toBeVisible();
     await w.getByRole('button', { name: 'Continue', exact: true }).click();
 
-    // Decrypt: the stored matrix keys are UNCHANGED (no orphan) — the relabel touched only the display label.
+    // Decrypt: the anatomy-keyed ratings are UNCHANGED (no orphan) — the relabel touched only the display label —
+    // and the PRE-49 'bondage' rating carried forward to its new stable key (49 §4.3, no data loss).
     const fs = createNodeFileSystem(vault);
     const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
     if (!key) throw new Error('orphan e2e: master key missing');
-    const activities = (await getIntakeSession(fs, key, 'owner-1'))?.sections.find(
-      (s) => s.id === 'intimacy',
-    )?.answers?.activities;
-    expect(activities).toEqual({ 'oral-receiving': 3, 'oral-giving-vulva': 5, bondage: 4 });
-    expect(
+    const intimacyAnswers = async () =>
       (await getIntakeSession(fs, key, 'owner-1'))?.sections.find((s) => s.id === 'intimacy')
-        ?.answers?.ownAnatomy,
-    ).toBe('Pussy (vulva)');
+        ?.answers;
+    // Poll — the Continue submit persists asynchronously, so the decrypt read must wait for the write to land.
+    await expect
+      .poll(async () => (await intimacyAnswers())?.activities)
+      .toEqual({
+        'oral-receiving': 3,
+        'oral-giving-vulva': 5,
+        'light-bondage-cuffs-ties': 4, // pre-49 'bondage' → new stable key (carry-forward)
+      });
+    expect((await intimacyAnswers())?.ownAnatomy).toBe('Pussy (vulva)');
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

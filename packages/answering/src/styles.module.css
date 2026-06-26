@@ -512,6 +512,22 @@
   overflow-wrap: anywhere;
 }
 
+/* A category group within a grouped matrix (49 §3.1) — a section + a full-width heading above its rows. */
+.matrixGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.matrixGroupHeading {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 /* Allocation: labelled buckets with a small number field. */
 .allocation {
   display: flex;

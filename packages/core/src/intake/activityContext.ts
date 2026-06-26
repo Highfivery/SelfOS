@@ -8,7 +8,8 @@
  */
 
 import type { IntakeSession, Question } from '../schemas';
-import { type ActivityRowContext, resolveIntakeActivityRows } from '../intimacy/activityRows';
+import type { ActivityRowContext } from '../intimacy/activityRows';
+import { resolvedActivityMatrix } from '../intimacy/grouping';
 
 function sectionAnswers(session: IntakeSession, sectionId: string): Record<string, unknown> {
   return session.sections.find((s) => s.id === sectionId)?.answers ?? {};
@@ -33,5 +34,6 @@ export function withResolvedActivityRows(question: Question, ctx: ActivityRowCon
   if (question.id !== 'activities' || question.type !== 'matrix' || !question.matrix) {
     return question;
   }
-  return { ...question, matrix: { ...question.matrix, rows: resolveIntakeActivityRows(ctx) } };
+  // Re-resolve rows + their category groups together so they stay in sync (49 §5).
+  return { ...question, matrix: { ...question.matrix, ...resolvedActivityMatrix(ctx) } };
 }

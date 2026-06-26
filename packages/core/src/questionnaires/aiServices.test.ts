@@ -361,7 +361,7 @@ describe('generateQuestions', () => {
     const fs = memFileSystem();
     const { author } = await seedHousehold(fs);
     // Add an owner custom topic so we can prove the MERGED inventory reaches the model.
-    await addCustomIntimacyTopic(fs, 'activities', 'Wax play');
+    await addCustomIntimacyTopic(fs, 'activities', 'Sploshing');
     let sentUserText = '';
     const capturing: ClaudeClient = {
       send: () => Promise.resolve(''),
@@ -392,8 +392,8 @@ describe('generateQuestions', () => {
     expect(result.ok).toBe(true);
     expect(sentUserText).toMatch(/genuinely explicit/i); // the §16.5 explicit direction
     expect(sentUserText).toMatch(/appropriate and expected/i); // the legitimate-context framing
-    expect(sentUserText).toContain('Oral (giving)'); // a built-in topic
-    expect(sentUserText).toContain('Wax play'); // the owner's custom addition (merged inventory)
+    expect(sentUserText).toContain('Deepthroat'); // a built-in topic
+    expect(sentUserText).toContain('Sploshing'); // the owner's custom addition (merged inventory)
     expect(sentUserText).toMatch(/never minors/i); // the boundary
   });
 

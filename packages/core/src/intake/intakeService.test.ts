@@ -269,11 +269,11 @@ describe('intakeService', () => {
 
   it('persists a PARTIAL intimacy activity matrix and formats it with 5-point labels for the portrait (27)', async () => {
     const fs = await setup();
-    // Only TWO of the ~30 activity rows are rated. The shared `isAnswered` requires EVERY matrix row, so it
+    // Only TWO of the ~90 activity rows are rated. The shared `isAnswered` requires EVERY matrix row, so it
     // would drop this; the intake's own check accepts a partial matrix, so the ratings persist. Use non-oral
     // (universal) rows, keyed by their stable slug (46 §4.2); synthesis maps the slug → its label.
-    const r0 = 'bondage';
-    const r1 = 'choking-giving';
+    const r0 = 'fingering';
+    const r1 = 'deepthroat';
     const activities = { [r0]: 5, [r1]: 1 }; // r0 = Love it (5), r1 = Hard no (1)
     // The matrix sits behind the `getSpecific` opt-in (27 §4.3) — set it so the row is actually visible.
     await submitSectionForm(fs, key, 'p1', 'intimacy', { getSpecific: true, activities }, NOW);
@@ -285,8 +285,8 @@ describe('intakeService', () => {
     const client = fakeClient({ captureMessages: (m) => (messages = m) });
     await synthesizeIntake(synth(fs, client));
     const body = messages.map((m) => flattenContent(m.content)).join('\n');
-    expect(body).toContain('Bondage: Love it'); // r0 slug → its label
-    expect(body).toContain('Choking (giving): Hard no'); // r1 slug → its label
+    expect(body).toContain('Fingering: Love it'); // r0 slug → its label
+    expect(body).toContain('Deepthroat: Hard no'); // r1 slug → its label
     expect(body).not.toContain('[object Object]');
   });
 

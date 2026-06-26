@@ -389,6 +389,45 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-25 — **Build (Intimacy activities inventory — categorized, tiered expansion — SPEC 49 BUILT; on
+  `feat/intimacy-activities-inventory`, PR pending).** Restructured the shared `INTIMACY_ACTIVITIES` from a flat
+  ~30-string list into a **categorized, tiered** inventory `INTIMACY_ACTIVITIES_FULL` (~94 entries `{key, label,
+category, tier}` across **14 categories**, tiers 1 gentle→5 extreme, sensual→extreme) — the foundational shared
+  content the kink test (`50`) consumes as subscales. **All 4 §11 decisions asked first (all recommended
+  defaults):** ship the proposed ~94 starter list as-is; **all categories, grouped, open by default** (no
+  pick-categories step); **5 tiers**; **fold the two relationship dynamics into `power-exchange`** (slugs preserved
+  as stable keys → no-loss carry-forward). Two minor §11 calls took the spec recommendation: keep `INTIMACY_ACTIVITIES`
+  as the **flat label list** (least churn — generation reads it byte-unchanged) + add `INTIMACY_ACTIVITIES_FULL`;
+  `INTIMACY_FANTASIES` left flat. **Builds on 46's stable-key `MatrixRow` model:** `activityRows.ts` iterates the
+  categorized inventory in display order, matches the two oral rows by stable key, and the extended
+  `LEGACY_ACTIVITY_KEY_MAP` carries every pre-49 split/rename (`'Bondage'`→`light-bondage-cuffs-ties`, `'Choking
+(giving)'`→`breath-play-choking-giving`, `'BDSM / dom-sub play'`→`switching`, …) forward read-time (`'Squirting'`
+  intentionally orphan-preserved — no close entry, no data loss); **no `schemaVersion` bump** (additive). New core
+  `grouping.ts` (`groupMatrixRowsByCategory`/`matrixGroupsForRows`/`resolvedActivityMatrix`); additive
+  `Question.matrix.groups` (`{label, rowKeys}[]`, intake-only); the `@selfos/answering` matrix renders **category
+  headers** (plain `<h4>` headings — every group **open by construction**, never a collapsed `<details>`, so the
+  full surface renders to the bottom — CLAUDE.md §7/§12) when `groups` present, **flat byte-identically** otherwise
+  (questionnaire matrices pass none → unchanged). Catalog + `activityContext` + `IntakeFormPanel` pass the grouped
+  matrix. **Safety (§8):** every entry stays in the 18+/`restricted`/owner-visible intimacy matrix; `taboo-fantasy`
+  worded strictly as fantasy/roleplay (a forbidden-substring unit guard); no minors/real-non-consent/illegal as
+  entries; boundary in the prompt + model, never a keyword filter. Code-reviewer **ship** (no blockers/should-fixes;
+  carry-forward audited entry-by-entry, key-uniqueness verified, the grouped/flat render split + the partition
+  invariant confirmed; applied the one nit — a defensive dedupe guard in the grouped render). Gate green: typecheck,
+  lint, format (the pre-existing `site/index.html` prettier-unclean left untouched), **817 core + 801 desktop** unit
+  (inventory integrity: unique keys/exhaustive category labels/~60–100 band/oral stable keys/taboo wording; grouping
+  - ordering; pre-49 carry-forward incl. the `Squirting` orphan; synthesis label mapping; generation-still-reads-flat;
+  - IntakeFormPanel grouped-render RTL), **E2E** (the onboarding intimacy flow now asserts grouped headers +
+    renders-to-the-bottom + no-overflow at 390 **and** 360px; the anatomy-edit test doubles as the carry-forward proof
+    — seeds a pre-49 `bondage` key → migrates to `light-bondage-cuffs-ties` on decrypt; the questionnaire matrix E2E
+    stays green as the flat regression). Synced spec 49 (→ Built, §11 resolved) + cross-refs into 27 §5 and 08 §16.5a.
+    **Sequencing: 46 (Built) → 49 (Built) → 50.** NOTE: a pre-existing, unrelated E2E failure (`progressive profile:
+… depth invitation → Go deeper (29)`) fails identically on clean `main` (verified by stash+rebuild) — not caused
+    by this change. **Lesson: when an inventory's display LABEL changes but the persisted KEY must stay stable, a flat
+    list → categorized one is safe ONLY if `INTIMACY_ACTIVITIES` keeps pointing at the labels (generation is
+    label-driven) and `LEGACY_ACTIVITY_KEY_MAP` maps every renamed old label/slug to the closest new stable key; and
+    a long grouped matrix's "open by default" is best a plain heading (open by construction), never a `<details>`,
+    so the §7 renders-to-the-bottom guard can't regress. A decrypt-the-persisted-value E2E that reads ONCE after an
+    async Continue submit is racy under batch load — poll it.**
 - 2026-06-25 — **Build (Intimacy & connection guided sessions — SPEC 48 BUILT; on `feat/intimacy-guided-sessions`,
   PR pending).** Greatly expanded the `16` guided-session **Intimacy & connection** group from 3 → **20 entries**
   (17 new: 16 chat + 1 structured `yes-no-maybe-builder`), spanning relational connection → explicit

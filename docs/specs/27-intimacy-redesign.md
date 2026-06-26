@@ -269,6 +269,12 @@ they toggle "want to get specific?". Explicit content is unchanged for those who
 
 ## 5. Architecture & modules
 
+> **Amended by [`49`](49-intimacy-activities-inventory.md) (Built).** The activity matrix's inventory is now
+> **categorized + tiered** (`INTIMACY_ACTIVITIES_FULL`), and the onboarding matrix **renders grouped by
+> category** (sensual→extreme, every group open by default) via the additive `Question.matrix.groups`. The
+> 5-point labelled scale + the anatomy-resolved oral rows (46) are unchanged; only the row list grew + gained
+> category grouping.
+
 - **`intakeCatalog.ts`** — rewrite the `intimacy` section to the §4.2 bank. Reuse the shared
   `INTIMACY_ACTIVITIES` / `INTIMACY_FANTASIES` / `TOYS` constants; the activity + toys **matrices** reference
   those same lists (one source of truth with [`08`](08-questionnaires.md) generation — no drift).

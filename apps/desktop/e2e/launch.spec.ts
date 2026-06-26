@@ -6761,6 +6761,96 @@ test('onboarding per-question sharing: scope a section to Partner → fact reach
   }
 });
 
+test('onboarding: a FIRST-TIME section auto-saves answers + sharing on select, before any Continue (the real reported bug)', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('autosave e2e: master key missing');
+  // A partner so the sharing picker offers a type, + an intake with `basics` NOT started (first-time).
+  {
+    const now = new Date().toISOString();
+    await savePerson(fs, key, {
+      id: 'partner-b',
+      schemaVersion: 1,
+      displayName: 'Bee',
+      isSubject: true,
+      tags: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await saveRelationship(fs, key, {
+      id: 'rel-b',
+      schemaVersion: 1,
+      fromPersonId: 'owner-1',
+      toPersonId: 'partner-b',
+      type: 'partner',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await writeEncryptedJson(
+      fs,
+      'people/owner-1/intake/session.enc',
+      {
+        id: 'intake-autosave',
+        schemaVersion: 1,
+        personId: 'owner-1',
+        status: 'inProgress',
+        sections: [
+          { id: 'basics', status: 'notStarted', restricted: false, messages: [], answers: {} },
+          { id: 'life-now', status: 'skipped', restricted: false, messages: [], answers: {} },
+        ],
+        startedAt: 'now',
+        updatedAt: 'now',
+      },
+      key,
+    );
+  }
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Home' }).click();
+    await w.getByRole('button', { name: /Start onboarding|Continue onboarding/ }).click();
+    await expect(w.getByRole('heading', { name: 'The basics' })).toBeVisible();
+
+    // Fill an answer — and DO NOT click Continue/Done. It must auto-save as a draft on its own.
+    await w.getByRole('textbox', { name: 'What do you do for work?' }).fill('nurse');
+    // Then change the section sharing to Partner ONLY (clear to Private, then add Partner) — also no Save click.
+    await w.getByRole('button', { name: /this whole section/i }).click();
+    await w.getByRole('button', { name: 'Private (only me)' }).click();
+    await w.getByRole('checkbox', { name: 'Partner' }).click();
+    await w.keyboard.press('Escape');
+
+    // The first-time section auto-saves the answer (as a draft) the moment it's typed — no Continue click.
+    await expect
+      .poll(
+        async () =>
+          (await getIntakeSession(fs, key, 'owner-1'))?.sections.find((s) => s.id === 'basics')
+            ?.answers?.occupation ?? null,
+        { timeout: 4000 },
+      )
+      .toBe('nurse');
+    // …and the SHARING change auto-saves too (the reported "private status isn't saving" bug).
+    await expect
+      .poll(
+        async () =>
+          (await getIntakeSession(fs, key, 'owner-1'))?.sections.find((s) => s.id === 'basics')
+            ?.answerSharing?.occupation ?? [],
+        { timeout: 4000 },
+      )
+      .toEqual(['partner']);
+    // A draft auto-save must NOT prematurely COMPLETE a section the person is still filling out.
+    const basics = (await getIntakeSession(fs, key, 'owner-1'))?.sections.find(
+      (s) => s.id === 'basics',
+    );
+    expect(basics?.status).not.toBe('complete');
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('memory: an existing (pre-spec) portrait shares by default — Sharing reflects it, cards are clean (share-by-default backfill)', async () => {
   // Reproduces the real bug: a portrait synthesized BEFORE per-question sharing existed (answers present,
   // NO `answerSharing`, facts with NO `shareableTypes`) showed everything as "Private". The backfill resolves

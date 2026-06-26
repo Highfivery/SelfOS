@@ -174,6 +174,30 @@ describe('intakeService', () => {
     expect(usage).toHaveLength(0);
   });
 
+  it('submitSectionForm draft (markComplete:false) persists answers + sharing WITHOUT completing the section', async () => {
+    const fs = await setup();
+    // The auto-save path (43 auto-save fix): persist a change as a draft so it saves the moment it's made.
+    const session = await submitSectionForm(
+      fs,
+      key,
+      'p1',
+      'basics',
+      { occupation: 'nurse' },
+      NOW,
+      { occupation: ['partner'] },
+      false, // draft — do NOT complete
+    );
+    const basics = session.sections.find((s) => s.id === 'basics');
+    expect(basics?.answers.occupation).toBe('nurse'); // the answer persisted…
+    expect(basics?.answerSharing?.occupation).toEqual(['partner']); // …and so did the sharing scope
+    expect(basics?.status).not.toBe('complete'); // a draft NEVER completes a section being filled out
+    expect(basics?.status).toBe('inProgress'); // notStarted → inProgress on a draft save
+
+    // A subsequent explicit submit (default markComplete=true) completes it.
+    const done = await submitSectionForm(fs, key, 'p1', 'basics', { occupation: 'nurse' }, NOW);
+    expect(done.sections.find((s) => s.id === 'basics')?.status).toBe('complete');
+  });
+
   it('fills appearance, importantDates (dateList, incomplete rows dropped), and interests (from passions)', async () => {
     const fs = await setup();
     await submitSectionForm(

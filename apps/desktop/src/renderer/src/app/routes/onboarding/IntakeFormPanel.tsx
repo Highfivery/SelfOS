@@ -194,28 +194,12 @@ export function IntakeFormPanel({
   const locked = meta.adult && !adultAcknowledged;
   const complete = section?.status === 'complete';
 
-  // Auto-save (2026-06-26): on a COMPLETED section being edited, persist answer + sharing changes the moment
-  // they happen (debounced), so a "share with partner" pick or an answer edit saves right away — no separate
-  // Save click. A first-time section keeps the explicit Continue (which is what marks it complete); auto-save
-  // never completes a section the person is still filling out. `firstRun` skips the initial seed render.
-  const firstRun = useRef(true);
-  useEffect(() => {
-    if (firstRun.current) {
-      firstRun.current = false;
-      return;
-    }
-    if (!complete || locked) return;
-    const t = setTimeout(() => void autoSaveForm(meta.id, toSubmit(), scopes), 600);
-    return () => clearTimeout(t);
-    // Re-run on any answer or sharing change; `complete`/`locked` gate it, the rest are stable.
-  }, [answers, scopes, complete, locked]);
-
   // A matrix answer is a row→point record (Record<string, number>) — keep it; every other intake answer is a
   // scalar/array. Any OTHER non-array object isn't a valid intake answer, so drop it defensively to match the
   // bridge contract (IntakeAnswerValueSchema).
-  const toSubmit = (): Record<string, IntakeAnswerValue> => {
+  const toSubmitFrom = (src: AnswerMap): Record<string, IntakeAnswerValue> => {
     const out: Record<string, IntakeAnswerValue> = {};
-    for (const [qid, value] of Object.entries(answers)) {
+    for (const [qid, value] of Object.entries(src)) {
       if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
         if (Object.values(value).every((v) => typeof v === 'number')) {
           out[qid] = value as IntakeAnswerValue;
@@ -226,6 +210,52 @@ export function IntakeFormPanel({
     }
     return out;
   };
+  const toSubmit = (): Record<string, IntakeAnswerValue> => toSubmitFrom(answers);
+
+  // Auto-save (2026-06-26): persist every answer + sharing change the moment it's made (debounced), as a DRAFT
+  // (`autoSaveForm` → `complete: false`) — so picking a scope or answering a question saves right away with no
+  // Save click, whether the section is being filled for the FIRST time or edited later. A draft never completes
+  // the section (only the explicit Continue/Done does). The latest payload is mirrored to a ref so the unmount
+  // flush (Back / switching section within the debounce window) saves the last edit instead of dropping it.
+  const latestRef = useRef({ answers, scopes });
+  latestRef.current = { answers, scopes };
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dirtyRef = useRef(false);
+  const runAutoSave = (): void => {
+    timerRef.current = null;
+    dirtyRef.current = false;
+    void autoSaveForm(meta.id, toSubmitFrom(latestRef.current.answers), latestRef.current.scopes);
+  };
+  /** Drop any pending auto-save — the explicit Continue/Done/Skip owns the write from here (avoids a draft
+   * save racing in AFTER the completing submit and reverting the section to in-progress). */
+  const cancelAutoSave = (): void => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = null;
+    dirtyRef.current = false;
+  };
+  const firstRun = useRef(true);
+  useEffect(() => {
+    if (firstRun.current) {
+      firstRun.current = false;
+      return;
+    }
+    if (locked) return; // a locked (un-acked) section shows the gate, not the form — nothing to save
+    dirtyRef.current = true;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(runAutoSave, 600);
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [answers, scopes, locked]);
+  // Flush a pending draft on unmount so a quick Back / section switch never loses the last edit. `flushRef`
+  // always points at the latest closure (current `locked` + refs), so the unmount cleanup saves correctly.
+  const flushRef = useRef<() => void>(() => {});
+  flushRef.current = (): void => {
+    if (!dirtyRef.current || locked) return;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    runAutoSave();
+  };
+  useEffect(() => () => flushRef.current(), []);
 
   // The intimacy block is gated behind the shared 18+ acknowledgement (§3.3/§14.5).
   if (locked) {
@@ -378,9 +408,12 @@ export function IntakeFormPanel({
           <Button
             variant="primary"
             disabled={busy}
-            onClick={() => void submitForm(meta.id, toSubmit(), scopes).then(onAdvance)}
+            onClick={() => {
+              cancelAutoSave(); // this explicit (completing) submit owns the write — drop any pending draft
+              void submitForm(meta.id, toSubmit(), scopes).then(onAdvance);
+            }}
           >
-            {/* A complete section auto-saves as you edit, so this just flushes + moves on. */}
+            {/* Edits auto-save as a draft as you go; this flushes the latest, completes the section, + moves on. */}
             {complete ? 'Done' : 'Continue'}
             <ArrowRight size={16} aria-hidden="true" />
           </Button>
@@ -388,7 +421,10 @@ export function IntakeFormPanel({
             <Button
               variant="ghost"
               disabled={busy}
-              onClick={() => void skipSection(meta.id).then(onAdvance)}
+              onClick={() => {
+                cancelAutoSave(); // skipping owns the write — don't let a draft save resurrect the answers
+                void skipSection(meta.id).then(onAdvance);
+              }}
             >
               Skip this section
             </Button>

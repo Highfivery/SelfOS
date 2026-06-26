@@ -1132,6 +1132,11 @@ export interface SelfosBridge {
      * its category preset server-side. Empty array ⇒ Private (own context only).
      */
     sharing?: Record<string, RelationshipType[]>;
+    /**
+     * Whether to mark the section complete (default true — the Continue/Done button). Auto-save passes `false`
+     * to persist a draft (answers + sharing) without completing a section being filled for the first time.
+     */
+    complete?: boolean;
   }): Promise<IntakeState>;
   /** The one-time 18+ acknowledgement for the intimacy block (shared with guided sessions). Requires `intake.own`. */
   intakeAcknowledgeAdult(): Promise<IntakeState>;

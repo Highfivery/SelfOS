@@ -4,15 +4,20 @@
 > **Depends on [`42`](42-relationship-scoped-sharing.md).**
 >
 > **Amendment (2026-06-26, owner decision — share auto-saves; no confirm).** Two UX changes after the user
-> reported "I pick _share with partner all_ and Save, but it doesn't save." **(1) One tap, no confirm:** the
-> §3.1/§8 sensitive-share confirm is **removed** — picking a scope (per-question or the bulk "share all")
-> applies on a single tap. Safety is preserved by the **default**: a sensitive answer still STARTS Private
-> (its category preset), so sharing it is still a deliberate, explicit choice; it just takes effect on one tap
-> instead of a second confirm. **(2) Auto-save on edit:** on a section the person has already **completed**
-> (i.e. is editing), an answer or sharing change **persists immediately** (debounced, silent — `autoSaveForm`
-> re-runs `intake:submitForm`), so a sharing pick saves right away with no separate button; the primary button
-> becomes **"Done"**. A first-time section is unchanged — it still uses the explicit **Continue** (which is what
-> marks it complete; auto-save never completes a section being filled for the first time).
+> reported "I pick _share with partner all_ and Save, but it doesn't save," and (corrected) that answers + the
+> private status weren't saving on select either. **(1) One tap, no confirm:** the §3.1/§8 sensitive-share
+> confirm is **removed** — picking a scope (per-question or the bulk "share all") applies on a single tap.
+> Safety is preserved by the **default**: a sensitive answer still STARTS Private (its category preset), so
+> sharing it is still a deliberate, explicit choice; it just takes effect on one tap instead of a second confirm.
+> **(2) Auto-save on edit — EVERY section, as a DRAFT.** Every answer and sharing change **persists immediately**
+> (debounced ~600ms, silent — `autoSaveForm` re-runs `intake:submitForm` with **`complete: false`**), whether
+> the section is being **filled for the first time** OR edited later, with a **flush-on-unmount** so a quick Back
+> / section-switch never drops the last edit. A draft save **never completes** the section (only nudges
+> `notStarted`→`inProgress`); the explicit **Continue** (first-time) / **Done** (completed, relabeled from "Save
+> changes") is the ONLY thing that marks a section complete + advances. `submitSectionForm` gained a
+> `markComplete` param (default `true`) for this. **Correction:** the first build scoped auto-save to
+> already-completed sections only, so first-time onboarding still didn't save on select — the real bug; auto-save
+> now covers all sections.
 
 > Today, onboarding answers are **own-context-only** (all intake Insight facts hardcoded
 > `shareable: false`), and the only way to share anything is to finish the intake, run synthesis, then go to

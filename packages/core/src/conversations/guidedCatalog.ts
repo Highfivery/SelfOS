@@ -9,7 +9,12 @@
  * by X — NOT therapy" and is appended AFTER persona + safety, which always take precedence.
  */
 
-export type GuidedGroupId = 'therapy' | 'coaching' | 'intimacy';
+// `'challenge'` (52-challenge-sessions) is a resolvable group for the reserved challenge guides, but is NOT
+// in `GUIDED_GROUPS` below, so the browsable catalog never renders it (a challenge is launched via "Take on a
+// challenge", not browsed). Its guides live in `challengeCoach.ts` and are absent from `GUIDED_CATALOG`.
+import { CHALLENGE_GUIDES } from './challengeCoach';
+
+export type GuidedGroupId = 'therapy' | 'coaching' | 'intimacy' | 'challenge';
 
 export interface GuidedExercise {
   /** Stable id, e.g. 'cbt-thought-record'. */
@@ -52,6 +57,14 @@ const GUIDE_LIFE_AREAS: Record<GuidedGroupId, string[]> = {
   therapy: ['Emotions & patterns', 'Family', 'Relationships'],
   coaching: ['Goals & growth', 'Work & purpose', 'Money'],
   intimacy: ['Intimacy', 'Relationships'],
+  // A challenge spans any domain — foreground the most challengeable areas; the always-on CORE adds the rest.
+  challenge: [
+    'Goals & growth',
+    'Emotions & patterns',
+    'Relationships',
+    'Work & purpose',
+    'Intimacy',
+  ],
 };
 
 export function guideLifeAreas(group: GuidedGroupId): string[] {
@@ -649,9 +662,11 @@ current partner, adapt to what they'd want aftercare to look like.`,
   },
 ];
 
-/** Look up a catalog exercise by id; undefined if it isn't (or no longer) in the catalog (§7). */
+/** Look up a catalog exercise by id; undefined if it isn't (or no longer) in the catalog (§7). Also resolves
+ * the reserved challenge guides (52 §5.2) so `buildSystemPrompt` picks up their addendum — they are NOT in the
+ * browsable `GUIDED_CATALOG`/`listExercises()`. */
 export function getExercise(id: string): GuidedExercise | undefined {
-  return GUIDED_CATALOG.find((e) => e.id === id);
+  return GUIDED_CATALOG.find((e) => e.id === id) ?? CHALLENGE_GUIDES.find((e) => e.id === id);
 }
 
 /** All exercises (renderer + recommender). */

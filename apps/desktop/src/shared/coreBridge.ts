@@ -35,6 +35,9 @@ import {
   AnswerTypeSchema,
   AttachmentRefSchema,
   BudgetSchema,
+  ChallengeDomainSchema,
+  ChallengeOutcomeSchema,
+  ChallengeStatusSchema,
   DreamAnalysisEditsSchema,
   DreamInputSchema,
   GoalStatusSchema,
@@ -68,6 +71,10 @@ import {
   type InboxCompatibilityView,
   type InboxItem,
   type Goal,
+  type Challenge,
+  type ChallengeCheckInResult,
+  type ChallengeSuggestion,
+  type ChallengeSuggestionResult,
   type Insight,
   type IntimacyTopicsView,
   type MemoryReconcileResult,
@@ -210,6 +217,8 @@ import {
   runChatTurn,
   saveConversation,
   setSessionStatus,
+  startChallenge,
+  startChallengeReflection,
   startGuided,
   storeConversationAttachment,
   suggestGuidedSessions,
@@ -230,6 +239,18 @@ import {
   updateInsight,
 } from '@selfos/core/insights';
 import { deleteGoal, listGoals, setGoalStatus, updateGoal } from '@selfos/core/goals';
+import {
+  clearSuggestion,
+  deleteChallenge,
+  getChallenge,
+  getSuggestion,
+  listChallenges,
+  recordCheckIn,
+  seedGoalFromChallenge,
+  setChallengeStatus,
+  snoozeCheckIn,
+  suggestChallenge,
+} from '@selfos/core/challenges';
 import {
   countNewInsights,
   getCoachingPrefs,
@@ -702,6 +723,20 @@ const GoalUpdateSchema = z.object({
   horizon: z.string().optional(),
 });
 const GoalDeleteSchema = z.object({ goalId: z.string().min(1) });
+// Challenges / experiments (52-challenge-sessions §6). All scoped to the active person in the handler.
+const ChallengeStartSchema = z.object({ domain: ChallengeDomainSchema.optional() });
+const ChallengeStartReflectionSchema = z.object({ challengeId: z.string().min(1) });
+const ChallengeIdSchema = z.object({ challengeId: z.string().min(1) });
+const ChallengeSetStatusSchema = z.object({
+  challengeId: z.string().min(1),
+  status: ChallengeStatusSchema,
+});
+const ChallengeCheckInSchema = z.object({
+  challengeId: z.string().min(1),
+  outcome: ChallengeOutcomeSchema,
+  reflection: z.string().optional(),
+});
+const ChallengeSuggestSchema = z.object({ override: z.boolean().optional() });
 // Proactive coaching (40 §6) — the per-person proactivity preference write.
 const CoachingSetPrefsSchema = z.object({ proactivity: ProactivityLevelSchema });
 // `auto` (renderer cadence) applies the throttle/threshold gate; absent/false = a manual force (still
@@ -2703,6 +2738,152 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         });
       }
       return result;
+    },
+    // --- Challenges / experiments (52-challenge-sessions) — gated `challenges.own`, active-person-scoped ---
+    challengesStart: async (input): Promise<{ conversationId: string } | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'challenges.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const { domain } = ChallengeStartSchema.parse(input ?? {});
+      // A sexual/intimacy domain requires the 18+ ack (§8.3) — enforced in the bridge, not just the UI.
+      if (
+        domain === 'intimacy' &&
+        (await getGuidancePrefs(ctx.fs, ctx.key, personId)).adultAcknowledged !== true
+      ) {
+        return null;
+      }
+      return startChallenge({
+        fs: ctx.fs,
+        key: ctx.key,
+        personId,
+        ...(domain ? { domain } : {}),
+        now: new Date(),
+      });
+    },
+    challengesStartReflection: async (input): Promise<{ conversationId: string } | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'challenges.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const { challengeId } = ChallengeStartReflectionSchema.parse(input);
+      const challenge = await getChallenge(ctx.fs, ctx.key, personId, challengeId);
+      if (!challenge) return null;
+      // A sexual challenge's reflection stays the inline restricted path (§8.4) — no reflection SESSION for it.
+      if (challenge.adult === true) return null;
+      return startChallengeReflection({
+        fs: ctx.fs,
+        key: ctx.key,
+        personId,
+        challengeId,
+        now: new Date(),
+      });
+    },
+    challengesList: async (): Promise<Challenge[]> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'challenges.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return listChallenges(ctx.fs, ctx.key, personId);
+    },
+    challengesGet: async (input): Promise<Challenge | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'challenges.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const { challengeId } = ChallengeIdSchema.parse(input);
+      return getChallenge(ctx.fs, ctx.key, personId, challengeId);
+    },
+    challengesSetStatus: async (input): Promise<Challenge | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'challenges.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const p = ChallengeSetStatusSchema.parse(input);
+      // Scoped to the active person's OWN challenge — a person can only change their own (the trust boundary).
+      return setChallengeStatus(ctx.fs, ctx.key, personId, p.challengeId, p.status, new Date());
+    },
+    challengesCheckIn: async (input): Promise<ChallengeCheckInResult> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'challenges.own'))) {
+        return { ok: false, reason: 'NOT_FOUND', message: 'That challenge is no longer here.' };
+      }
+      const p = ChallengeCheckInSchema.parse(input);
+      // Deterministic — no AI spend; the reflection → Insight bridge runs in `recordCheckIn` (§5.4).
+      return recordCheckIn({
+        fs: ctx.fs,
+        key: ctx.key,
+        personId,
+        challengeId: p.challengeId,
+        outcome: p.outcome,
+        ...(p.reflection !== undefined ? { reflection: p.reflection } : {}),
+        now: new Date(),
+      });
+    },
+    challengesSnooze: async (input): Promise<Challenge | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'challenges.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const { challengeId } = ChallengeIdSchema.parse(input);
+      return snoozeCheckIn(ctx.fs, ctx.key, personId, challengeId, new Date());
+    },
+    challengesSeedGoal: async (input): Promise<Challenge | null> => {
+      const ctx = await host.vaultAndKey();
+      // Seeding writes a 39 Goal, so it also needs `memory.own` (the goals capability). Both Member-default.
+      if (
+        !ctx ||
+        !(await activePersonCan(ctx.fs, ctx.key, 'challenges.own')) ||
+        !(await activePersonCan(ctx.fs, ctx.key, 'memory.own'))
+      ) {
+        return null;
+      }
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const { challengeId } = ChallengeIdSchema.parse(input);
+      return seedGoalFromChallenge(ctx.fs, ctx.key, personId, challengeId, new Date());
+    },
+    challengesDelete: async (input): Promise<void> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'challenges.own'))) return;
+      const personId = await activePersonId();
+      if (!personId) return;
+      const { challengeId } = ChallengeIdSchema.parse(input);
+      // The delete path is `people/<activePerson>/challenges/<id>` — inherently scoped to the active person.
+      await deleteChallenge(ctx.fs, personId, challengeId);
+    },
+    challengesSuggest: async (input): Promise<ChallengeSuggestionResult> => {
+      const { override } = ChallengeSuggestSchema.parse(input ?? {});
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'challenges.own'))) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      // AI off → a calm skip (the card gates on `configured`), no dead button (52 §7 / 31 AI-required).
+      if ((await readVaultSettingsValues(ctx.fs))['ai.enabled'] === false) {
+        return { ok: false, reason: 'AI_OFF', message: 'Turn on AI in Settings to use this.' };
+      }
+      const deps = await aiDeps('challenges.own');
+      if (!deps) return { ok: false, reason: 'ERROR', message: 'Not available.' };
+      // Sexual/intimacy candidates are withheld until the per-person 18+ ack (§8.3) — passed to the suggester.
+      const adultAllowed =
+        (await getGuidancePrefs(ctx.fs, ctx.key, personId)).adultAcknowledged === true;
+      return suggestChallenge({ ...deps, adultAllowed, ...(override ? { override } : {}) });
+    },
+    challengesGetSuggestion: async (): Promise<ChallengeSuggestion | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'challenges.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      return getSuggestion(ctx.fs, ctx.key, personId);
+    },
+    challengesClearSuggestion: async (): Promise<void> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'challenges.own'))) return;
+      const personId = await activePersonId();
+      if (!personId) return;
+      await clearSuggestion(ctx.fs, personId);
     },
     assignmentsCreate: async (input): Promise<InAppSendResult> => {
       const ctx = await host.vaultAndKey();

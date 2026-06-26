@@ -19,6 +19,7 @@ export const USAGE_TYPE_LABELS: Record<string, string> = {
   'memory.reconcile': 'Memory — refresh',
   'coaching.synthesize': 'Coaching — weekly synthesis',
   'test.narrate': 'Self-assessment — what it means',
+  'challenge.suggest': 'Challenge suggestion',
 };
 
 export function usageTypeLabel(type: string): string {

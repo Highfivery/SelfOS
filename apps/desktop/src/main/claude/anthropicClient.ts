@@ -378,6 +378,53 @@ export function fakeClaudeClient(): ClaudeClient {
         });
       }
 
+      // The challenge-coach proposer (52 §3.2) — detected by its unique addendum phrase. It PROPOSES on a
+      // turn with no agreement, and on a turn whose last user message reads as agreement it confirms + appends
+      // a real [[SELFOS:CHALLENGE:{…}]] marker, so the E2E exercises REAL marker stripping + capture (the
+      // renderer strips it from the stream + chatService parses it + the Challenge is created).
+      if ((options.system ?? '').includes('helping them take on a small CHALLENGE')) {
+        const lastUser = [...options.messages].reverse().find((m) => m.role === 'user');
+        const userText =
+          typeof lastUser?.content === 'string' ? lastUser.content.toLowerCase() : '';
+        const agreed = /\b(yes|yeah|sure|let'?s|deal|sounds good|okay|ok|do it)\b/.test(userText);
+        if (agreed) {
+          const visible =
+            "Love it — here's your challenge: strike up one conversation with a stranger this week.";
+          for (const word of visible.split(' ')) onDelta(`${word} `);
+          const marker =
+            '[[SELFOS:CHALLENGE:{"action":"Strike up one conversation with a stranger this week",' +
+            '"comfort":3,"lifeArea":"Relationships","checkInDays":7}]]';
+          onDelta(marker);
+          return Promise.resolve({
+            text: `${visible} ${marker}`,
+            usage: { inputTokens: 140, outputTokens: 30, cacheWriteTokens: 0, cacheReadTokens: 0 },
+          });
+        }
+        const visible =
+          "Here's one small idea to try this week: strike up a short conversation with a stranger — " +
+          'totally fine to tweak it or pick something else. Want to go for it?';
+        for (const word of visible.split(' ')) onDelta(`${word} `);
+        return Promise.resolve({
+          text: visible,
+          usage: { inputTokens: 140, outputTokens: 26, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+      // The proactive challenge suggester (52 §5.3) — detected by its unique guidance phrase. Returns a
+      // valid candidate JSON so the suggest E2E exercises the real tolerant parse + cache.
+      if ((options.system ?? '').includes('proposing ONE small')) {
+        const draft = JSON.stringify({
+          action: 'Take a 10-minute walk after dinner three evenings this week',
+          why: 'You mentioned wanting more movement and steadier evenings.',
+          comfort: 2,
+          lifeArea: 'Health & body',
+          domain: 'habit',
+        });
+        return Promise.resolve({
+          text: draft,
+          usage: { inputTokens: 160, outputTokens: 60, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+
       // Markdown-bearing reply (34 §10) so streaming + saved rendering exercise the real <Markdown>
       // renderer. "hear you" stays contiguous for the existing /hear you/i assertions.
       const reply =

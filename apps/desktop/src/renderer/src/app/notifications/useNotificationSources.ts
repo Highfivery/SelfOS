@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import type { ReminderDueSummary, ResponsesArrivedSummary } from '@shared/channels';
+import type { Challenge, ReminderDueSummary, ResponsesArrivedSummary } from '@shared/channels';
 import type { CoachingSynthesis, Goal } from '@shared/schemas';
+import { checkInDueChallenge } from '@selfos/core/challenges';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useNotificationStore } from '../../stores/notificationStore';
 import { useUpdateStore } from '../../stores/updateStore';
@@ -21,6 +22,7 @@ export function useNotificationSources(conflicts: string[]): void {
   const canIntake = useSessionStore((s) => s.can('intake.own'));
   const canMemory = useSessionStore((s) => s.can('memory.own'));
   const canSessions = useSessionStore((s) => s.can('sessions.own'));
+  const canChallenges = useSessionStore((s) => s.can('challenges.own'));
   const setCandidates = useNotificationStore((s) => s.setCandidates);
   // The update result is app-global (NOT per-person) — it survives a person switch (36 §11).
   const update = useUpdateStore((s) => s.result);
@@ -29,6 +31,7 @@ export function useNotificationSources(conflicts: string[]): void {
   const [responses, setResponses] = useState<ResponsesArrivedSummary[]>([]);
   const [reminders, setReminders] = useState<ReminderDueSummary[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [synthesis, setSynthesis] = useState<CoachingSynthesis | null>(null);
   // The life-areas covered by active DEPTH invitations — a synthesis observation for the same area yields
   // to the more specific, actionable nudge (§3.7).
@@ -41,10 +44,11 @@ export function useNotificationSources(conflicts: string[]): void {
     setResponses([]);
     setReminders([]);
     setGoals([]);
+    setChallenges([]);
     setSynthesis(null);
     setFreshnessAreas([]);
     void (async () => {
-      const [sugg, resp, rem, gls, syn] = await Promise.all([
+      const [sugg, resp, rem, gls, chs, syn] = await Promise.all([
         canIntake
           ? (window.selfos?.profileSuggestions() ?? Promise.resolve([]))
           : Promise.resolve([]),
@@ -55,6 +59,9 @@ export function useNotificationSources(conflicts: string[]): void {
           ? (window.selfos?.notificationsRemindersDue() ?? Promise.resolve([]))
           : Promise.resolve([]),
         canMemory ? (window.selfos?.goalsList() ?? Promise.resolve([])) : Promise.resolve([]),
+        canChallenges
+          ? (window.selfos?.challengesList() ?? Promise.resolve([]))
+          : Promise.resolve([]),
         canSessions
           ? (window.selfos?.coachingGetSynthesis() ?? Promise.resolve(null))
           : Promise.resolve(null),
@@ -65,12 +72,13 @@ export function useNotificationSources(conflicts: string[]): void {
       setResponses(resp);
       setReminders(rem);
       setGoals(gls);
+      setChallenges(chs);
       setSynthesis(syn);
     })();
     return () => {
       active = false;
     };
-  }, [activePersonId, canIntake, canViewResults, canMemory, canSessions]);
+  }, [activePersonId, canIntake, canViewResults, canMemory, canSessions, canChallenges]);
 
   // Rebuild the candidate list whenever any source changes; conflicts arrive reactively via the prop.
   useEffect(() => {
@@ -165,6 +173,22 @@ export function useNotificationSources(conflicts: string[]): void {
       });
     }
 
+    // A gentle "how did your challenge go?" check-in (52 §3.5) when an active challenge's check-in is due —
+    // at most ONE open (the due one), coalesced; the action links to Sessions where the challenge card + its
+    // I-did-it / Not yet / Reflect live (Home's "For you" challenge-checkin (53) offers those inline). Acting
+    // changes the challenge (signature: id + checkInAt) so a dismissed nudge stays dismissed until it changes.
+    const dueChallenge = checkInDueChallenge(challenges, new Date());
+    if (dueChallenge) {
+      candidates.push({
+        kind: 'challenge-followup',
+        coalesceKey: 'challenge-followup',
+        signature: `${dueChallenge.id}:${dueChallenge.checkInAt ?? ''}`,
+        title: 'How did your challenge go?',
+        body: `You took on: “${dueChallenge.action}”. No pressure — just curious how it went.`,
+        action: { type: 'navigate', to: '/sessions' },
+      });
+    }
+
     // The cross-feature synthesis observation (40 §3.3) as a nudge — UNLESS a same-life-area depth/freshness
     // invitation is already active (§3.7: the more specific, actionable nudge wins, so the user sees one
     // coherent prompt about that area). Home's "For you" synthesis recommendation (53) is the persistent
@@ -188,6 +212,7 @@ export function useNotificationSources(conflicts: string[]): void {
     responses,
     reminders,
     goals,
+    challenges,
     synthesis,
     freshnessAreas,
     update,

@@ -7,6 +7,7 @@ import type { ProfileUpdateSuggestion } from '@shared/channels';
 import type { QuestionnaireSuggestion } from '@shared/schemas';
 import { Button, Inline, Markdown, Text } from '../../../design-system/components';
 import { useGoalStore } from '../../../stores/goalStore';
+import { useChallengeStore } from '../../../stores/challengeStore';
 import { useSynthesisStore } from '../../../stores/synthesisStore';
 import { useGuidanceStore } from '../../../stores/guidanceStore';
 import { useConversationStore } from '../../../stores/conversationStore';
@@ -55,12 +56,21 @@ export function RecommendationItem({
   const generating = useGuidanceStore((s) => s.generating);
   const generateGuided = useGuidanceStore((s) => s.generate);
   const startGuided = useConversationStore((s) => s.startGuided);
+  const startChallenge = useConversationStore((s) => s.startChallenge);
+  const challenges = useChallengeStore((s) => s.challenges);
+  const challengeSuggestion = useChallengeStore((s) => s.suggestion);
+  const checkInChallenge = useChallengeStore((s) => s.checkIn);
+  const snoozeChallenge = useChallengeStore((s) => s.snooze);
+  const runSuggestChallenge = useChallengeStore((s) => s.suggest);
+  const clearChallengeSuggestion = useChallengeStore((s) => s.clearSuggestion);
   const suggestQuestionnaires = useQuestionnaireStore((s) => s.suggest);
   const dismissTip = useDiscoveryStore((s) => s.dismiss);
 
   const [qBusy, setQBusy] = useState(false);
   const [qSuggestion, setQSuggestion] = useState<QuestionnaireSuggestion | null>(null);
   const [qNotice, setQNotice] = useState<string | null>(null);
+  const [challengeBusy, setChallengeBusy] = useState(false);
+  const [challengeNotice, setChallengeNotice] = useState<string | null>(null);
 
   const card = (body: JSX.Element): JSX.Element => (
     <RecommendationCard
@@ -260,6 +270,87 @@ export function RecommendationItem({
           Go deeper <ArrowRight size={16} aria-hidden="true" />
         </Button>
       </div>,
+    );
+  }
+
+  // --- An active challenge's check-in is due: quick I-did-it / Not yet, or Reflect on Sessions (52 §3.5). ---
+  if (rec.id === 'challenge-checkin') {
+    const challenge = challenges.find((c) => c.status === 'active');
+    return card(
+      <Inline gap={2} wrap>
+        <Button
+          variant="primary"
+          onClick={() => challenge && void checkInChallenge(challenge.id, 'did')}
+        >
+          I did it
+        </Button>
+        <Button variant="secondary" onClick={() => challenge && void snoozeChallenge(challenge.id)}>
+          Not yet
+        </Button>
+        <Button variant="ghost" onClick={() => navigate('/sessions')}>
+          Reflect <ArrowRight size={14} aria-hidden="true" />
+        </Button>
+      </Inline>,
+    );
+  }
+
+  // --- No active challenge: explicit-tap "Get a challenge idea" → Accept / Dismiss (52 §3.7). ---
+  if (rec.id === 'suggest-challenge') {
+    const getIdea = async (): Promise<void> => {
+      setChallengeBusy(true);
+      setChallengeNotice(null);
+      try {
+        const result = await runSuggestChallenge();
+        if (!result.ok) setChallengeNotice(result.message);
+      } finally {
+        setChallengeBusy(false);
+      }
+    };
+    const accept = async (): Promise<void> => {
+      const domain = challengeSuggestion?.domain;
+      await clearChallengeSuggestion();
+      const id = await startChallenge(domain);
+      if (id) navigate('/sessions');
+    };
+    return card(
+      <>
+        {challengeSuggestion ? (
+          <div className={styles.suggestQuestionnaire}>
+            <Text weight={600}>{challengeSuggestion.action}</Text>
+            {challengeSuggestion.why ? (
+              <Text size="sm" tone="secondary">
+                {challengeSuggestion.why}
+              </Text>
+            ) : null}
+            <Inline gap={2} wrap>
+              <Button variant="secondary" onClick={() => void accept()}>
+                Try this <ArrowRight size={14} aria-hidden="true" />
+              </Button>
+              <Button variant="ghost" onClick={() => void clearChallengeSuggestion()}>
+                Not this one
+              </Button>
+            </Inline>
+          </div>
+        ) : challengeNotice ? (
+          <Text size="sm" tone="secondary">
+            {challengeNotice}
+          </Text>
+        ) : null}
+        {configured ? (
+          <div>
+            <Button variant="secondary" disabled={challengeBusy} onClick={() => void getIdea()}>
+              <Sparkles size={14} aria-hidden="true" />{' '}
+              {challengeBusy
+                ? 'Thinking…'
+                : challengeSuggestion
+                  ? 'Another idea'
+                  : 'Get a challenge idea'}
+            </Button>
+          </div>
+        ) : (
+          <AiUnavailableNotice variant="inline" />
+        )}
+      </>,
     );
   }
 

@@ -278,6 +278,19 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     coachingGetSynthesis: () => Promise.resolve(null),
     coachingSynthesize: () =>
       Promise.resolve({ ok: false, reason: 'EMPTY', message: 'Nothing yet.' }),
+    challengesStart: () => Promise.resolve({ conversationId: 'c-challenge' }),
+    challengesStartReflection: () => Promise.resolve({ conversationId: 'c-reflect' }),
+    challengesList: () => Promise.resolve([]),
+    challengesGet: () => Promise.resolve(null),
+    challengesSetStatus: () => Promise.resolve(null),
+    challengesCheckIn: () => Promise.resolve({ ok: false, reason: 'NOT_FOUND', message: 'Gone.' }),
+    challengesSnooze: () => Promise.resolve(null),
+    challengesSeedGoal: () => Promise.resolve(null),
+    challengesDelete: () => Promise.resolve(),
+    challengesSuggest: () =>
+      Promise.resolve({ ok: false, reason: 'EMPTY', message: 'Nothing yet.' }),
+    challengesGetSuggestion: () => Promise.resolve(null),
+    challengesClearSuggestion: () => Promise.resolve(),
     assignmentsCreate: (input) =>
       Promise.resolve({
         assignment: {

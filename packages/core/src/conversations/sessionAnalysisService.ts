@@ -24,6 +24,9 @@ import { buildContext } from '../people';
 import { checkBudget, costOf, recordUsage } from '../usage';
 import { getInsight, normalizeCategories, saveInsight } from '../insights';
 import { extractGoals } from '../goals';
+// The specific file (not the `../challenges` barrel) so this stays off the barrel's
+// `challengeSuggestService → conversations/promptBuilder` edge — keeps the conversations→challenges edge acyclic.
+import { getChallenge } from '../challenges/challengeService';
 import {
   DEPTH_INVITATION_INSTRUCTION,
   depthDetectionContext,
@@ -208,6 +211,14 @@ export async function endAndSummarize(deps: EndAndSummarizeDeps): Promise<Sessio
 
   const at = now.toISOString();
   const context = await buildContext(fs, key, personId);
+  // 52 §8.4 — defense in depth: if this is a challenge REFLECTION session linked to a SEXUAL challenge, its
+  // facts must be `restricted` (own-context-only), like the inline check-in path. The bridge already refuses
+  // to start an adult reflection session, so this is belt-and-braces — the restricted boundary is enforced
+  // where the insight is built, not only where the session is started.
+  const linkedChallenge = conversation.challengeId
+    ? await getChallenge(fs, key, personId, conversation.challengeId)
+    : null;
+  const restrictFacts = linkedChallenge?.adult === true;
   // If this was a guided exercise (16-guided-sessions §3.5), tell the analyzer so the summary reflects it.
   const exercise = conversation.guideId ? getExercise(conversation.guideId) : undefined;
   const guideNote = exercise
@@ -282,6 +293,7 @@ export async function endAndSummarize(deps: EndAndSummarizeDeps): Promise<Sessio
         id: uuid(),
         text: labelled,
         shareable: false,
+        ...(restrictFacts ? { restricted: true } : {}),
         ...(carried && carried.length > 0 ? { shareableWith: carried } : {}),
       });
     }
@@ -300,6 +312,7 @@ export async function endAndSummarize(deps: EndAndSummarizeDeps): Promise<Sessio
       id: uuid(),
       text: labelled,
       shareable: false,
+      ...(restrictFacts ? { restricted: true } : {}),
       ...(carried && carried.length > 0 ? { shareableWith: carried } : {}),
     });
   }
@@ -319,6 +332,10 @@ export async function endAndSummarize(deps: EndAndSummarizeDeps): Promise<Sessio
       conversationId,
       at,
       ...(conversation.guideId ? { guideId: conversation.guideId } : {}),
+      // A challenge REFLECTION session (52 §5.4) back-links its Insight to the Challenge so Memory deep-links
+      // it. Only set on non-adult challenge reflections (a sexual challenge's reflection stays the inline
+      // restricted path, §8.4) — the renderer offers "Talk it through" only for non-adult challenges.
+      ...(conversation.challengeId ? { challengeId: conversation.challengeId } : {}),
     },
     ...(draft.crisisFlag !== undefined ? { crisisFlag: draft.crisisFlag } : {}),
     createdAt: prior?.createdAt ?? at,

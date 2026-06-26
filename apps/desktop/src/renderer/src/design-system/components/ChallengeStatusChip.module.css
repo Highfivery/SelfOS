@@ -1,0 +1,32 @@
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-pill, 999px);
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+/* Tone reinforces — never replaces — the text label (accessibility §9). */
+.chip[data-status='active'] {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.chip[data-status='done'] {
+  border-color: var(--color-success, var(--color-border-strong));
+  color: var(--color-success, var(--color-text-secondary));
+}
+
+.chip[data-status='proposed'] {
+  border-color: var(--color-border-strong);
+  color: var(--color-text-secondary);
+}
+
+.chip[data-status='abandoned'] {
+  color: var(--color-text-tertiary);
+}

@@ -1,6 +1,6 @@
 # 52 — Challenge / experiment sessions
 
-> **Status:** Draft — _last updated 2026-06-25_
+> **Status:** Built — _last updated 2026-06-26_ (Slices A + B; §11 resolved — see §12)
 >
 > A new **Challenge / experiment** session type: grounded in the person's own data (insights, goals, test
 > profiles), the AI coach **proposes a stretch action**, the person and coach **co-define it
@@ -749,6 +749,14 @@ checkInDays}`; `stripChallengeMarker` removes it (and a **partial mid-stream** m
 
 ## 11. Open questions
 
+**RESOLVED with the user before building (2026-06-26) — all the spec's recommended defaults:** (1) naming =
+**Challenges**; (2) reflection Insight source = **`'session'` + `provenance.challengeId`** (no new enum value);
+(3) push intensity = **fold into the spec-40 `coaching.proactivity`** (no new setting; default `gentle`); (4)
+streaks/gamification = **kept out** (no streak data v1); (5) check-in cadence = **7-day default + the spec-40
+weekly-ish suggest cap**; (6) auto-seed a `39` Goal = **offer to** (confirm-before-create); (7) partner
+coordination = **conversational / own-only v1** (no cross-person challenge object); (8) build slices = **A + B
+together** (the whole feature in one PR). The original list is kept below for the record.
+
 LIST — never silently assumed; resolve with the user before building. (The locked decisions — tracked entity
 with follow-up, both initiators, a new `Challenge` entity reusing the goal-followup plumbing — are recorded in
 §12 and are **not** re-opened here.)
@@ -789,6 +797,62 @@ with follow-up, both initiators, a new `Challenge` entity reusing the goal-follo
 
 ## 12. Changelog
 
+- 2026-06-26 — **BUILT (Slices A + B together).** All eight §11 decisions resolved with the user first (every
+  one the spec's recommended default; see §11). **Core (`@selfos/core`):** the additive `Challenge` /
+  `ChallengeStatus` / `ChallengeDomain` / `ChallengeOutcome` / `ChallengeSuggestion` schemas +
+  `InsightProvenance.challengeId` (no `schemaVersion` bump); `challenges.own` capability (Member ON, not
+  EXPLICIT_GRANT_ONLY); the `challenge.suggest` usage type. A new **`@selfos/core/challenges`** module —
+  `challengeService` (CRUD + `captureFromMarker` [one-active de-dup, server-side normalization] + `recordCheckIn`
+  [the deterministic reflection → Insight bridge: `source:'session'`, `provenance.challengeId`, **restricted facts
+  for a sexual challenge**, re-run reuses `insightId`] + `seedGoalFromChallenge` [offer-to] + the pure
+  `isCheckInDue`/`featuredActiveChallenge`/`checkInDueChallenge` derivations) and `challengeSuggestService`
+  (`suggestChallenge`: budget-gated → transcript-free digest [restricted/flagged facts excluded] → one Claude
+  call → **meter `challenge.suggest` before parse** → tolerant parse [37] → cache; the sexual-candidate safety
+  net; pure `shouldSuggestChallenge`). The **`conversations`** module gains the reserved code-only
+  `challenge-coach` + `challenge-reflect` guides (`challengeCoach.ts`, resolved by `getExercise` but NOT in the
+  browsable catalog; the §8 safety addendum leads with the not-therapy/consent/hard-no/partner-buy-in/crisis-
+  yields boundary, appended AFTER PERSONA+SAFETY+context), the `[[SELFOS:CHALLENGE:…]]` marker parse/strip in
+  `guidedSteps.ts` (partial-mid-stream-safe), `chatService` marker capture (free — rides the paid turn; the one
+  acyclic `conversations → challenges/challengeService` edge), and `challengeSession.ts` (`startChallenge`/
+  `startChallengeReflection`). The reflection-session links via the additive `Conversation.challengeId`
+  (non-adult only; a sexual challenge's check-in stays the inline restricted path). **Seam:** `challenges:*`
+  channels (start/startReflection/list/get/setStatus/checkIn/snooze/seedGoal/delete/suggest/getSuggestion/
+  clearSuggestion), all gated `challenges.own` + active-person-scoped; the intimacy domain is withheld until the
+  18+ ack **in the bridge**; `challenge.suggest` is the only metered call. **Renderer:** the per-person
+  `challengeStore` (reset on switch); the launcher `ChallengeSection` ("Take on a challenge" + domain chooser +
+  the tracked active card with status chip / `ComfortDial` / I-did-it·Reflect·Not-yet·Talk-it-through·Let-it-go +
+  "Past challenges"); the inline "Challenge set ✓" thread confirmation; **spec-53 recommendation providers**
+  `challenge-checkin` + `suggest-challenge` (the engine was pre-wired with `domain:'challenge'` +
+  `activeChallenge` — folded into `RecommendationItem`, NO hand-wired Home card); the `challenge-followup`
+  notification kind + source; `ChallengeStatusChip` + `ComfortDial` primitives (→ `/gallery`). **Push intensity**
+  reuses `coaching.proactivity` (no new setting); proactivity `off` hides the proactive surfacing via the engine.
+  Gate green: typecheck (all pkgs), lint, format, **903 core + 833 desktop** unit (challengeService lifecycle +
+  marker capture + restricted-reflection + reuse-insightId + seed-goal + the suggester [transcript-free,
+  metered, sexual-filtered] + `shouldSuggestChallenge` + the safety-addendum/ordering assertion + the two
+  recommendation providers + the coreBridge round-trip [start → marker → list → check-in → decrypt; 18+ withhold;
+  suggest metered] + `ChallengeSection` RTL) + **1 E2E** (the full loop through the real UI: propose-without-
+  capture [decline] → agree → marker captured [decrypt] → tracked card → "I did it" → done + reflection Insight
+  feeds `buildContext` [decrypt]; 360px no-overflow). Visual QA at desktop + 360px (real Electron screenshots —
+  clean, intentional, reflows to single column). **Code-reviewer fix-first** (1 blocker + 2 should-fixes, all
+  applied): **(B1, safety blocker)** the explicit sexual register was unconditionally in the challenge-coach
+  addendum, so an un-acked person who launched a non-intimacy challenge and steered toward sex could reach it —
+  **the explicit register is now gated on the 18+ ack** (`CHALLENGE_INTIMACY_REGISTER` appended by
+  `buildSystemPrompt` ONLY when acked, threaded from `chatService` via a challenge-scoped ack read; the always-on
+  addendum's gated stance redirects sexual challenges to the 18+ option), with a `buildSystemPrompt` unit gate +
+  a coreBridge end-to-end assertion (un-acked turn lacks the register, acked turn has it). **(S1)** built the
+  resolved §11-Q6 "offer to seed a Goal" affordance (a post-completion "Make it a goal" card calling `seedGoal`),
+  removing the otherwise-dead seam (§12 no-scaffolding). **(S2)** defense-in-depth — `sessionAnalysisService` now
+  marks a challenge **reflection-session** insight's facts `restricted` when the linked challenge is `adult`
+  (belt-and-braces atop the bridge's adult-reflection refusal). **Known v1 limitations (accepted):** the
+  one-active de-dup is within a single session — two DIFFERENT challenge sessions can each leave an active
+  challenge (the renderer features the most recent); and a `didnt` inline check-in closes the experiment as
+  `done` (outcome recorded), while "Not yet" snoozes it active. **Lesson: a challenge session is a normal `05`/`09`
+  conversation carrying a `guideId` — no new chat machinery; the only acyclic-safe way to capture from the
+  marker is `chatService` importing the SPECIFIC `challenges/challengeService` file (never the barrel, which
+  pulls `challengeSuggestService → conversations/promptBuilder`), and keeping the challenge core free of any
+  runtime `conversations` import. A sexual challenge's check-in must stay the INLINE deterministic restricted
+  path (a reflection SESSION produces a non-restricted session Insight), so the reflection-session affordance is
+  offered for non-adult challenges only.**
 - 2026-06-25 — created (Draft). Defines a **Challenge / experiment** session type: the AI proposes a grounded
   stretch action, the person + coach co-define it conversationally, it becomes a tracked **`Challenge`** entity
   (new, not a `Goal`) with a lifecycle + follow-up check-ins + a reflection that feeds an Insight and seeds the

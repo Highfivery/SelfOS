@@ -7,6 +7,7 @@ import { useSetting } from '../../../settings/useSetting';
 import { aiKeyResolved } from '../../aiAvailability';
 import { AiUnavailableNotice } from '../../AiUnavailableNotice';
 import type { SessionStatus } from '@shared/schemas';
+import type { ChallengeDomain } from '@shared/channels';
 import { getExercise, stripCoachMarkers } from '@selfos/core/conversations';
 import { useGuidanceStore } from '../../../stores/guidanceStore';
 import {
@@ -61,6 +62,10 @@ export function Sessions(): JSX.Element {
   const load = useConversationStore((s) => s.load);
   const newConversation = useConversationStore((s) => s.newConversation);
   const startGuided = useConversationStore((s) => s.startGuided);
+  const startChallenge = useConversationStore((s) => s.startChallenge);
+  const startChallengeReflection = useConversationStore((s) => s.startChallengeReflection);
+  const challengeCreated = useConversationStore((s) => s.challengeCreated);
+  const dismissChallengeCreated = useConversationStore((s) => s.dismissChallengeCreated);
   const open = useConversationStore((s) => s.open);
   const send = useConversationStore((s) => s.send);
   const loadGuidance = useGuidanceStore((s) => s.load);
@@ -105,6 +110,18 @@ export function Sessions(): JSX.Element {
   // Pick a guided exercise from the launcher/suggestions → start it and open the thread.
   const startGuidedSession = (guideId: string): void => {
     void startGuided(guideId).then((id) => {
+      if (id) setView('thread');
+    });
+  };
+  // Take on a challenge (52 §3.1) — start the challenge-coach session, then flip to the thread.
+  const startChallengeSession = (domain?: ChallengeDomain): void => {
+    void startChallenge(domain).then((id) => {
+      if (id) setView('thread');
+    });
+  };
+  // "Talk it through" (52 §3.5) — open a reflection session for a non-adult challenge.
+  const talkChallengeThrough = (challengeId: string): void => {
+    void startChallengeReflection(challengeId).then((id) => {
       if (id) setView('thread');
     });
   };
@@ -279,6 +296,8 @@ export function Sessions(): JSX.Element {
             configured={configured}
             onStartFree={startFree}
             onPickGuided={startGuidedSession}
+            onStartChallenge={startChallengeSession}
+            onTalkItThrough={talkChallengeThrough}
             seedText={(location.state as { seedText?: string } | null)?.seedText ?? ''}
           />
         ) : (
@@ -362,6 +381,25 @@ export function Sessions(): JSX.Element {
                 onAccept={() => activeId && completeAndSummarize(activeId)}
                 onDismiss={dismissSuggestion}
               />
+            ) : null}
+
+            {/* 52 §3.2 — a captured challenge confirms inline (a polite live region), with a quiet dismiss. */}
+            {challengeCreated ? (
+              <Banner tone="info" role="status">
+                <Stack gap={2}>
+                  <Text>
+                    <strong>Challenge set ✓</strong> — {challengeCreated.action}
+                  </Text>
+                  <Text tone="secondary" size="sm">
+                    You’ll find it on your Sessions home, and I’ll gently check in later.
+                  </Text>
+                  <div>
+                    <Button variant="ghost" onClick={dismissChallengeCreated}>
+                      Dismiss
+                    </Button>
+                  </div>
+                </Stack>
+              </Banner>
             ) : null}
 
             {error ? <Banner tone="warning">{error}</Banner> : null}

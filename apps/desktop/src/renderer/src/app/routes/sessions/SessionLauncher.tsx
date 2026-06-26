@@ -1,3 +1,4 @@
+import type { ChallengeDomain } from '@shared/channels';
 import { useGuidanceStore } from '../../../stores/guidanceStore';
 import { Heading, Stack, Text } from '../../../design-system/components';
 import { AiUnavailableNotice } from '../../AiUnavailableNotice';
@@ -5,6 +6,7 @@ import { Composer } from './Composer';
 import type { PendingAttachment } from './downscaleImage';
 import { SuggestedSessions } from './SuggestedSessions';
 import { GuidedCatalog } from './GuidedCatalog';
+import { ChallengeSection } from './ChallengeSection';
 import styles from './Launcher.module.css';
 
 /**
@@ -16,11 +18,17 @@ export function SessionLauncher({
   configured,
   onStartFree,
   onPickGuided,
+  onStartChallenge,
+  onTalkItThrough,
   seedText = '',
 }: {
   configured: boolean;
   onStartFree: (text: string, attachments: PendingAttachment[]) => void;
   onPickGuided: (guideId: string) => void;
+  /** Start a challenge-coach session (52 §3.1), optionally domain-seeded. */
+  onStartChallenge: (domain?: ChallengeDomain) => void;
+  /** Open a challenge reflection session for a non-adult challenge (52 §3.5). */
+  onTalkItThrough: (challengeId: string) => void;
   /** Prefill the free-start composer (40 §3.3 — the Home synthesis "Talk it through" seed-handoff). */
   seedText?: string;
 }): JSX.Element {
@@ -55,6 +63,12 @@ export function SessionLauncher({
             </Stack>
           )}
         </section>
+
+        <ChallengeSection
+          adultAcknowledged={adultAcknowledged}
+          onStartChallenge={onStartChallenge}
+          onTalkItThrough={onTalkItThrough}
+        />
 
         <SuggestedSessions configured={configured} onPick={onPickGuided} />
 

@@ -24,6 +24,8 @@ import {
   Inline,
   ConfidenceChip,
   GoalStatusChip,
+  ChallengeStatusChip,
+  ComfortDial,
   LineChart,
   Markdown,
   ProportionBar,
@@ -233,6 +235,23 @@ export function Gallery(): JSX.Element {
               <GoalStatusChip status="abandoned" />
               <Text tone="secondary" size="sm">
                 Goal status — labelled, never colour alone (39 §3.1)
+              </Text>
+            </Inline>
+            <Inline gap={2} align="center" wrap>
+              <ChallengeStatusChip status="proposed" />
+              <ChallengeStatusChip status="active" />
+              <ChallengeStatusChip status="done" />
+              <ChallengeStatusChip status="abandoned" />
+              <Text tone="secondary" size="sm">
+                Challenge status — labelled, never colour alone (52 §3.3)
+              </Text>
+            </Inline>
+            <Inline gap={4} align="center" wrap>
+              <ComfortDial value={1} />
+              <ComfortDial value={3} />
+              <ComfortDial value={5} />
+              <Text tone="secondary" size="sm">
+                Comfort dial — text + shape pips, never colour alone (52 §3.4)
               </Text>
             </Inline>
             <SegmentedControl

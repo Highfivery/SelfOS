@@ -16,10 +16,16 @@ import {
   getConversationAttachment,
   saveConversation,
 } from './conversationService';
+import { getGuidancePrefs } from './guidanceService';
+// Import the specific file (not the `../challenges` barrel) so loading `conversations` never pulls
+// `challengeSuggestService`, which imports `conversations/promptBuilder` — keeping the one runtime edge
+// (`conversations → challenges/challengeService`) acyclic (52 §5.1).
+import { captureFromMarker } from '../challenges/challengeService';
 import { buildSystemPrompt } from './promptBuilder';
 import { WRAP_UP_INSTRUCTION, WRAP_UP_MARKER } from './wrapUp';
 import { getExercise } from './guidedCatalog';
-import { parseLatestStep, stripCoachMarkers } from './guidedSteps';
+import { CHALLENGE_COACH_ID } from './challengeCoach';
+import { parseChallengeMarker, parseLatestStep, stripCoachMarkers } from './guidedSteps';
 import { TOPIC_MODEL, classifyTopic, topicShifted } from './topicClassifier';
 
 export type { ChatTurnResult };
@@ -199,9 +205,16 @@ export async function runChatTurn(deps: ChatTurnDeps): Promise<ChatTurnResult> {
     }
   }
 
+  // 52 §8.3 — the challenge-coach's EXPLICIT sexual register is gated on the per-person 18+ ack. Read it ONLY
+  // for a challenge-coach session (so an un-acked person who steers toward sex is redirected, not engaged); a
+  // single cheap read, scoped to challenge sessions, keeps the ack enforcement in core (not just the bridge).
+  const adultAllowed =
+    conversation.guideId === CHALLENGE_COACH_ID
+      ? (await getGuidancePrefs(fs, key, personId)).adultAcknowledged === true
+      : false;
   // The wrap-up instruction teaches the coach the private completion-marker convention; the guided
   // addendum (if `guideId` is set) steers the turn after persona+safety+context (16 §5).
-  const system = `${await buildSystemPrompt(fs, key, personId, conversation.guideId, deps.depthAsk, topicOverride, deps.goalRaise)}\n\n${WRAP_UP_INSTRUCTION}`;
+  const system = `${await buildSystemPrompt(fs, key, personId, conversation.guideId, deps.depthAsk, topicOverride, deps.goalRaise, adultAllowed)}\n\n${WRAP_UP_INSTRUCTION}`;
   // 45 §6.1 — re-read any attached images host-side and assemble vision content blocks for this turn (and for
   // every earlier attached message still in history, since Claude is stateless).
   const claudeMessages = await buildClaudeMessages(fs, key, conversation.messages);
@@ -221,8 +234,12 @@ export async function runChatTurn(deps: ChatTurnDeps): Promise<ChatTurnResult> {
     return { ok: false, reason: 'ERROR', message: 'The coach couldn’t respond. Please try again.' };
   }
 
-  // Detect + strip the private coach markers (wrap-up + step) so they're never persisted or shown.
+  // Detect + strip the private coach markers (wrap-up + step + challenge) so they're never persisted or shown.
   const wrapUpSuggested = result.text.includes(WRAP_UP_MARKER);
+  // 52 §3.2 — only a challenge-coach session captures an agreed challenge from a marker (parsed from the raw
+  // reply BEFORE stripping; created after the transcript is saved, riding this paid turn — no extra call).
+  const challengeMarker =
+    conversation.guideId === CHALLENGE_COACH_ID ? parseChallengeMarker(result.text) : null;
   conversation.messages.push({
     role: 'assistant',
     content: stripCoachMarkers(result.text),
@@ -262,5 +279,26 @@ export async function runChatTurn(deps: ChatTurnDeps): Promise<ChatTurnResult> {
   // Meter the classifier call too, if it ran (28 §13.2) — a separate `session.topic` event.
   if (topicUsage) await recordUsage(fs, key, topicUsage);
 
-  return { ok: true, conversation, usage, ...(wrapUpSuggested ? { wrapUpSuggested } : {}) };
+  // 52 §3.2 — the agreed challenge is created AFTER the transcript is saved (so its conversationId is real).
+  // The one-active rule lives in `captureFromMarker` (§4.3); a malformed marker already parsed to null.
+  let challengeCreated: { id: string; action: string } | undefined;
+  if (challengeMarker) {
+    const challenge = await captureFromMarker({
+      fs,
+      key,
+      personId,
+      conversationId: conversation.id,
+      marker: challengeMarker,
+      now,
+    });
+    if (challenge) challengeCreated = { id: challenge.id, action: challenge.action };
+  }
+
+  return {
+    ok: true,
+    conversation,
+    usage,
+    ...(wrapUpSuggested ? { wrapUpSuggested } : {}),
+    ...(challengeCreated ? { challengeCreated } : {}),
+  };
 }

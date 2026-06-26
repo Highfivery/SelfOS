@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import type { AttachmentRef, ChatMessage, Insight, SessionStatus } from '@shared/schemas';
-import type { BudgetState, ConversationMeta, SessionCost } from '@shared/channels';
+import type { BudgetState, ChallengeDomain, ConversationMeta, SessionCost } from '@shared/channels';
 import type { PendingAttachment } from '../app/routes/sessions/downscaleImage';
 import { useBudgetStore } from './budgetStore';
+import { useChallengeStore } from './challengeStore';
 
 interface ConversationState {
   conversations: ConversationMeta[];
@@ -22,6 +23,9 @@ interface ConversationState {
   sending: boolean;
   /** AI's turn-embedded "this feels wrapped up" hint for the open session (09 §14.1). */
   wrapUpSuggested: boolean;
+  /** A challenge captured from a coach marker this turn (52 §3.2) — drives the inline "Challenge set ✓"
+   *  confirmation; null until/after one is created. */
+  challengeCreated: { id: string; action: string } | null;
   /** The suggestion is dismissed for now; a later hint re-surfaces it (user decision 2026-06-14). */
   suggestionDismissed: boolean;
   summarizing: boolean;
@@ -34,6 +38,12 @@ interface ConversationState {
   newConversation: () => void;
   /** Start a guided session from a catalog exercise (16 §3.3); opens it. Returns the new id, or null. */
   startGuided: (guideId: string) => Promise<string | null>;
+  /** Start a challenge-coach session (52 §3.1), optionally domain-seeded; opens it. Returns the id, or null. */
+  startChallenge: (domain?: ChallengeDomain) => Promise<string | null>;
+  /** Start a challenge REFLECTION session for a non-adult challenge (52 §3.5); opens it. */
+  startChallengeReflection: (challengeId: string) => Promise<string | null>;
+  /** Dismiss the inline "Challenge set ✓" confirmation. */
+  dismissChallengeCreated: () => void;
   open: (id: string) => Promise<void>;
   /** Send a message. Resolves `false` only when a total attachment-store failure aborted before sending (so
    *  the composer can keep the pending thumbnails to retry); `true` otherwise. */
@@ -67,6 +77,7 @@ const EMPTY = {
   streaming: '',
   sending: false,
   wrapUpSuggested: false,
+  challengeCreated: null,
   suggestionDismissed: false,
   summarizing: false,
   wrapUp: null,
@@ -96,6 +107,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       streaming: '',
       runningCostUsd: 0,
       wrapUpSuggested: false,
+      challengeCreated: null,
       suggestionDismissed: false,
       wrapUp: null,
       error: null,
@@ -107,6 +119,21 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     await get().load();
     return result.conversationId;
   },
+  startChallenge: async (domain) => {
+    const result = await window.selfos?.challengesStart(domain ? { domain } : {});
+    if (!result) return null;
+    await get().open(result.conversationId);
+    await get().load();
+    return result.conversationId;
+  },
+  startChallengeReflection: async (challengeId) => {
+    const result = await window.selfos?.challengesStartReflection({ challengeId });
+    if (!result) return null;
+    await get().open(result.conversationId);
+    await get().load();
+    return result.conversationId;
+  },
+  dismissChallengeCreated: () => set({ challengeCreated: null }),
   open: async (id) => {
     const conversation = (await window.selfos?.conversationsGet(id)) ?? null;
     set({
@@ -197,9 +224,13 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
         // A fresh hint un-dismisses the suggestion so it can re-surface (decision: re-surface on a later hint).
         wrapUpSuggested: result.wrapUpSuggested ?? false,
         suggestionDismissed: result.wrapUpSuggested ? false : state.suggestionDismissed,
+        // 52 §3.2 — a captured challenge surfaces the inline "Challenge set ✓" confirmation.
+        challengeCreated: result.challengeCreated ?? state.challengeCreated,
         runningCostUsd: state.runningCostUsd + result.usage.costUsd,
       }));
       await get().load();
+      // Refresh the per-person challenge tracker so a just-captured challenge appears immediately (52 §3.2).
+      if (result.challengeCreated) await useChallengeStore.getState().load();
       await useBudgetStore.getState().refresh(); // update the global usage header
     } else {
       set({ sending: false, streaming: '', error: result?.message ?? 'Something went wrong.' });

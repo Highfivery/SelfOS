@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Insight } from '@shared/schemas';
-import { sessionMoodPoints, wellbeingRead } from './wellbeing';
+import type { Insight, TestResult } from '@shared/schemas';
+import { checkInMoodPoints, sessionMoodPoints, wellbeingRead } from './wellbeing';
 
 function insight(over: Partial<Insight> & { id: string }): Insight {
   return {
@@ -76,6 +76,42 @@ describe('wellbeingRead', () => {
       { at: '2', valence: 0.1, energy: 0 },
     ]);
     expect(read).toMatch(/steady/i);
+  });
+});
+
+describe('checkInMoodPoints (51 §5.3 — the sibling check-in series)', () => {
+  function moodResult(over: {
+    id: string;
+    testId: string;
+    takenAt: string;
+    normalized: number;
+  }): TestResult {
+    return {
+      id: over.id,
+      schemaVersion: 1,
+      testId: over.testId,
+      testVersion: 1,
+      subjectPersonId: 'me',
+      answers: [],
+      scores: [{ key: 'phq9.total', raw: 0, normalized: over.normalized }],
+      takenAt: over.takenAt,
+      createdAt: over.takenAt,
+      updatedAt: over.takenAt,
+    };
+  }
+
+  it('keeps every dated PHQ-9 mood result (oldest→newest), maps severity → a valence-like value, ignores other tests', () => {
+    const points = checkInMoodPoints([
+      // A heavy check-in (severity 1 → valence −1), out of order.
+      moodResult({ id: 'c2', testId: 'phq9', takenAt: '2026-06-05T00:00:00.000Z', normalized: 1 }),
+      // A light check-in (severity 0 → valence +1).
+      moodResult({ id: 'c1', testId: 'phq9', takenAt: '2026-06-02T00:00:00.000Z', normalized: 0 }),
+      // A non-mood test is ignored.
+      moodResult({ id: 'x', testId: 'gad7', takenAt: '2026-06-06T00:00:00.000Z', normalized: 0.5 }),
+    ]);
+    expect(points).toHaveLength(2);
+    expect(points[0]).toMatchObject({ valence: 1 }); // oldest first
+    expect(points[1]).toMatchObject({ valence: -1 });
   });
 });
 

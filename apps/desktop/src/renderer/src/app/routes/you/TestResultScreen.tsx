@@ -15,7 +15,7 @@ import {
 } from '../../../design-system/components';
 import { useTestStore } from '../../../stores/testStore';
 import { CrisisFooter } from '../sessions/CrisisFooter';
-import { subscaleViews } from './profile';
+import { subscaleViews, wellbeingDisplay } from './profile';
 import styles from './You.module.css';
 import result from './TestResult.module.css';
 
@@ -108,7 +108,10 @@ export function TestResultScreen(): JSX.Element {
     );
   }
 
-  const views = subscaleViews(test, selected.scores);
+  const wb = test.wellbeing ? wellbeingDisplay(test, selected.scores) : undefined;
+  // Non-wellbeing only — a wellbeing result's subscale `band` is the internal clinicalKey, which must never be
+  // rendered (§8.1); the wellbeing branch uses `wb.display` instead. Computed only when it's actually shown.
+  const views = test.wellbeing ? [] : subscaleViews(test, selected.scores);
 
   return (
     <div className={styles.page}>
@@ -122,32 +125,65 @@ export function TestResultScreen(): JSX.Element {
             <span className={styles.eyebrow}>{test.instrument}</span>
             <Heading level={1}>{test.title}</Heading>
             <Text tone="secondary">
-              A snapshot of how you answered on {formatDate(selected.takenAt)} — not a label or a
-              diagnosis.
+              A snapshot of how you answered on {formatDate(selected.takenAt)} — a reflection, not a
+              label or a diagnosis.
             </Text>
           </header>
 
+          {/* Crisis lead (§3.3/§5.2): a flagged result leads with warmth + resources, above the range. */}
           {selected.crisisFlag ? (
-            <Banner tone="warning">
-              Some of what you shared sounds heavy. If you’re struggling, please reach out — you’re
-              not alone. See the resources below.
+            <Banner tone="warning" role="alert">
+              It sounds like you’ve been going through a really hard time. You don’t have to face it
+              alone — please reach out to someone who can help. The resources below are there for
+              you, any time.
             </Banner>
           ) : null}
 
-          <section>
-            <Heading level={2}>Your results</Heading>
-            <Stack gap={3}>
-              {views.map((v) => (
+          {test.wellbeing ? (
+            // 51 §3.3 — a wellbeing reflection shows a GENTLE range (never the clinical band), a low→high
+            // bar with no clinical axis labels, and the ALWAYS-PRESENT professional-help line. Gated on
+            // `test.wellbeing` (not `wb`) so a result's internal clinicalKey can never fall through to bars.
+            <section>
+              <Heading level={2}>Your check-in</Heading>
+              <Stack gap={3}>
+                {wb ? (
+                  <Card className={result.narrative}>
+                    <Text>{wb.display}</Text>
+                  </Card>
+                ) : null}
                 <SubscaleBar
-                  key={v.key}
-                  label={v.label}
-                  normalized={v.normalized}
-                  band={v.band}
-                  signed={v.signed}
+                  label="How today’s answers landed"
+                  normalized={selected.scores[0]?.normalized ?? 0}
+                  signed={false}
                 />
-              ))}
-            </Stack>
-          </section>
+                <Banner tone="info">
+                  This is a reflection, not a medical opinion. If this resonates, it can really help
+                  to talk to a professional — a doctor or therapist can offer support a self-help
+                  tool can’t.
+                </Banner>
+                {test.attribution ? (
+                  <Text size="xs" tone="tertiary">
+                    {test.attribution}
+                  </Text>
+                ) : null}
+              </Stack>
+            </section>
+          ) : (
+            <section>
+              <Heading level={2}>Your results</Heading>
+              <Stack gap={3}>
+                {views.map((v) => (
+                  <SubscaleBar
+                    key={v.key}
+                    label={v.label}
+                    normalized={v.normalized}
+                    band={v.band}
+                    signed={v.signed}
+                  />
+                ))}
+              </Stack>
+            </section>
+          )}
 
           {trends.length > 0 && all.length >= 2 ? (
             <details className={result.trends}>
@@ -222,7 +258,7 @@ export function TestResultScreen(): JSX.Element {
 
           <section className={result.manage}>
             <Button variant="primary" onClick={() => navigate(`/you/${testId}/take`)}>
-              Retake
+              {test.wellbeing ? 'Check in again' : 'Retake'}
             </Button>
             <Button
               variant="ghost"

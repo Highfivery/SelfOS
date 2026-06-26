@@ -31,12 +31,33 @@ and point them to professional support and a crisis line before anything else.`;
 const ADULT_BOUNDARY = `This is a consensual-adult intimacy self-assessment. Keep everything within consensual \
 adults; never reference minors, real non-consent, or illegal acts. Treat their interests as private and valid.`;
 
+const WELLBEING_BOUNDARY = `This is a non-diagnostic WELLBEING REFLECTION, not a clinical screening. Hard rules \
+(51-wellbeing-neurodivergence-reflections §8):
+- NEVER name a diagnosis or condition (do not say "depression", "anxiety disorder", "ADHD", or "autism"), and \
+NEVER say "you have" or "you are". Reflect on patterns and feelings, never label.
+- Use the gentle band given; do not invent a severity. Stay warm, plain, and non-pathologizing.
+- This is a reflection, not a medical opinion. END by gently encouraging them that talking to a professional — a \
+doctor or therapist — can offer support a self-help tool can't.`;
+
 function scoreDigest(def: TestDefinition, result: TestResult): string {
   const labelOf = new Map(def.scoring.subscales.map((sub) => [sub.key, sub.label]));
+  // For a WELLBEING result the score's `band` is the INTERNAL clinicalKey (kept for trends/crisis only); it
+  // must NEVER reach the model (§8.1 rule 1). Map it to the gentle, non-diagnostic `display` copy; if a band
+  // can't be resolved, omit it entirely rather than leak the clinical key. Non-wellbeing descriptor bands
+  // ("leans higher") are non-clinical and pass through.
+  const gentleBandOf = def.wellbeing
+    ? new Map((def.bands ?? []).map((band) => [band.clinicalKey, band.display]))
+    : undefined;
   const lines = result.scores.map((score) => {
     const label = labelOf.get(score.key) ?? score.key;
-    const band = score.band ? ` — ${score.band}` : '';
-    return `- ${label}: ${score.normalized.toFixed(2)}${band}`;
+    const bandText = def.wellbeing
+      ? score.band && gentleBandOf?.get(score.band)
+        ? ` — ${gentleBandOf.get(score.band)}`
+        : ''
+      : score.band
+        ? ` — ${score.band}`
+        : '';
+    return `- ${label}: ${score.normalized.toFixed(2)}${bandText}`;
   });
   return [
     `Instrument: ${def.title} (${def.instrument})`,
@@ -104,6 +125,7 @@ export async function narrateResult(deps: NarrateDeps): Promise<NarrateResult> {
     SAFETY,
     NARRATIVE_GUIDANCE,
     ...(def.sensitive ? [ADULT_BOUNDARY] : []),
+    ...(def.wellbeing ? [WELLBEING_BOUNDARY] : []),
     ...(result.crisisFlag ? [CRISIS_LEAD] : []),
   ].join('\n\n');
 

@@ -25,11 +25,13 @@ function answers(def: TestDefinition): ScoreAnswers {
   return out;
 }
 
-function fakeClient(captured: { system?: string } = {}): ClaudeClient {
+function fakeClient(captured: { system?: string; user?: string } = {}): ClaudeClient {
   return {
     send: async () => '',
     stream: async (options) => {
       captured.system = options.system;
+      const first = options.messages[0]?.content;
+      captured.user = typeof first === 'string' ? first : JSON.stringify(first);
       return {
         text: 'A warm reflection on how you answered.',
         usage: { inputTokens: 100, outputTokens: 50, cacheWriteTokens: 0, cacheReadTokens: 0 },
@@ -126,6 +128,36 @@ describe('narrateResult — the only metered call', () => {
       overBudget: false,
     });
     expect(captured.system).toContain('consensual adults');
+  });
+
+  it('a wellbeing instrument bounds the prompt + NEVER sends the internal clinical key (51 §8.1)', async () => {
+    const fs = memFileSystem();
+    const def = getTest('phq9')!;
+    // A crisis-flagging take (every item maxed) → 'severe' clinicalKey + crisisFlag.
+    const result = await seedResult(fs, 'phq9');
+    expect(result.scores[0]!.band).toBe('severe'); // the INTERNAL clinicalKey
+    expect(result.crisisFlag).toBe(true);
+    const captured: { system?: string; user?: string } = {};
+    await narrateResult({
+      fs,
+      key,
+      client: fakeClient(captured),
+      apiKey: 'k',
+      aiEnabled: true,
+      model: 'm',
+      def,
+      result,
+      personId: 'p1',
+      now,
+      overBudget: false,
+    });
+    // The extra-careful wellbeing bounding + crisis lead are in the system prompt.
+    expect(captured.system).toContain('WELLBEING REFLECTION');
+    expect(captured.system).toContain('NEVER say "you have"');
+    expect(captured.system?.toLowerCase()).toContain('lead with warmth and concern'); // crisis lead
+    // The digest sent to the model carries the GENTLE display copy, never the clinical key.
+    expect(captured.user).not.toContain('severe');
+    expect(captured.user).toContain('really heavy time'); // the gentle 'severe' display copy
   });
 
   it('takeTest itself records NO usage (scoring is free)', async () => {

@@ -14,21 +14,39 @@ import {
 } from '../../../design-system/components';
 import { useTestStore } from '../../../stores/testStore';
 import { CrisisFooter } from '../sessions/CrisisFooter';
-import { topSubscales } from './profile';
+import { topSubscales, wellbeingDisplay } from './profile';
 import styles from './You.module.css';
 
-const GROUP_ORDER: TestGroupId[] = ['personality', 'relationships', 'intimacy'];
+const GROUP_ORDER: TestGroupId[] = ['personality', 'relationships', 'intimacy', 'wellbeing'];
+
+/** Mood/anxiety check-ins are gently invited to re-take after a while (51 §3.4 — passive prompt only). */
+const RECHECK_AFTER_DAYS = 14;
+const RECHECKABLE = new Set(['phq9', 'gad7']);
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString();
 }
 
-/** A profile card for an instrument the person has taken: top dimensions + when, with Open / Retake. */
+function daysSince(iso: string): number {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return 0;
+  return Math.floor((Date.now() - then) / (24 * 60 * 60 * 1000));
+}
+
+/** A profile card for an instrument the person has taken: top dimensions + when, with Open / Retake. A
+ *  wellbeing reflection (51) shows its GENTLE range sentence — never the clinical band or subscale bars — and,
+ *  for mood/anxiety, a passive "check in again" prompt after a while (§3.1/§3.4). */
 function ProfileCard({ test, results }: { test: TestSummary; results: TestResult[] }): JSX.Element {
   const navigate = useNavigate();
   const latest = results[0];
-  const top = latest ? topSubscales(test, latest.scores, 2) : [];
+  const top = !test.wellbeing && latest ? topSubscales(test, latest.scores, 2) : [];
+  const wb = test.wellbeing && latest ? wellbeingDisplay(test, latest.scores) : undefined;
+  const dueForRecheck =
+    test.wellbeing &&
+    RECHECKABLE.has(test.id) &&
+    latest !== undefined &&
+    daysSince(latest.takenAt) >= RECHECK_AFTER_DAYS;
   return (
     <Card className={styles.card}>
       <Stack gap={3}>
@@ -43,27 +61,39 @@ function ProfileCard({ test, results }: { test: TestSummary; results: TestResult
           </span>
           <Heading level={3}>{test.title}</Heading>
         </div>
-        <Stack gap={2}>
-          {top.map((s) => (
-            <SubscaleBar
-              key={s.key}
-              label={s.label}
-              normalized={s.normalized}
-              band={s.band}
-              signed={s.signed}
-            />
-          ))}
-        </Stack>
+        {wb ? (
+          <Text size="sm" tone="secondary" className={styles.blurb}>
+            {wb.display}
+          </Text>
+        ) : (
+          <Stack gap={2}>
+            {top.map((s) => (
+              <SubscaleBar
+                key={s.key}
+                label={s.label}
+                normalized={s.normalized}
+                band={s.band}
+                signed={s.signed}
+              />
+            ))}
+          </Stack>
+        )}
         <Text size="sm" tone="secondary">
-          Taken {results.length === 1 ? 'once' : `${results.length} times`} · last{' '}
+          {test.wellbeing ? 'Last checked in ' : 'Taken '}
+          {results.length === 1 && !test.wellbeing ? 'once · last ' : ''}
           {formatDate(latest?.takenAt ?? '')}
         </Text>
+        {dueForRecheck ? (
+          <Text size="sm" tone="tertiary" className={styles.framing}>
+            It’s been a little while — want to check in again?
+          </Text>
+        ) : null}
         <div className={styles.cardActions}>
           <Button variant="secondary" onClick={() => navigate(`/you/${test.id}`)}>
             Open
           </Button>
           <Button variant="ghost" onClick={() => navigate(`/you/${test.id}/take`)}>
-            Retake
+            {test.wellbeing ? 'Check in again' : 'Retake'}
           </Button>
         </div>
       </Stack>
@@ -92,7 +122,7 @@ function CatalogCard({ test }: { test: TestSummary }): JSX.Element {
         </Text>
         <div className={styles.cardActions}>
           <Button variant="primary" onClick={() => navigate(`/you/${test.id}/take`)}>
-            Take
+            {test.wellbeing ? 'Check in' : 'Take'}
           </Button>
         </div>
       </Stack>
@@ -181,6 +211,12 @@ export function You(): JSX.Element {
                     <Heading level={3} className={styles.groupTitle}>
                       {TEST_GROUP_LABELS[group]}
                     </Heading>
+                    {group === 'wellbeing' ? (
+                      <Text size="sm" tone="secondary" className={styles.groupFraming}>
+                        Gentle check-ins on how you’ve been feeling and how your mind works —
+                        reflections, not diagnoses.
+                      </Text>
+                    ) : null}
                     {isIntimacyGated ? (
                       <Card className={styles.gatedCard}>
                         <Stack gap={3}>

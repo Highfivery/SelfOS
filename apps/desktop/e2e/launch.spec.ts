@@ -7471,3 +7471,177 @@ test('self-assessments (50): the kink test is 18+-gated; a result writes RESTRIC
     await rm(vault, { recursive: true, force: true });
   }
 });
+
+/** Click every PHQ-9 matrix row's point with the given label (e.g. "Not at all" / "Several days"). */
+async function answerEveryRow(w: Page, label: string): Promise<void> {
+  const groups = w.locator('[role="radiogroup"]');
+  const count = await groups.count();
+  for (let i = 0; i < count; i += 1) {
+    await groups.nth(i).getByRole('radio', { name: label, exact: true }).click();
+  }
+}
+
+test('wellbeing (51): mood check-in → GENTLE range + help line; AI-off narrate is calm; retake adds a trend + Home sibling; 360px clean', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'You' }).click();
+
+    // The wellbeing group is distinct and NOT 18+-gated; it invites a "Check in", not "Take".
+    await expect(w.getByRole('heading', { name: 'Reflections & check-ins' })).toBeVisible();
+    await expect(w.getByText(/reflections, not diagnoses/i)).toBeVisible();
+    await w.getByRole('heading', { name: 'Mood check-in' }).scrollIntoViewIfNeeded();
+    await w
+      .locator(
+        'xpath=//h3[normalize-space()="Mood check-in"]/ancestor::*[contains(@class,"card")][1]',
+      )
+      .getByRole('button', { name: 'Check in' })
+      .click();
+
+    // The intro leads with the not-medical framing, then Begin.
+    await expect(w.getByText(/not.*a.*diagnosis, a screening, or medical advice/i)).toBeVisible();
+    await w.getByRole('button', { name: 'Begin' }).click();
+
+    // Answer all 9 items "Not at all" → a benign 'minimal' band.
+    const groups = w.locator('[role="radiogroup"]');
+    await expect(groups).toHaveCount(9);
+    await answerEveryRow(w, 'Not at all');
+    await w.getByRole('button', { name: 'See my check-in' }).scrollIntoViewIfNeeded();
+    await w.getByRole('button', { name: 'See my check-in' }).click();
+
+    // The result shows the GENTLE range + the ALWAYS-PRESENT professional-help line — never the clinical band.
+    await expect(w.getByRole('heading', { name: 'Your check-in' })).toBeVisible();
+    await expect(w.getByText(/your mood has felt mostly okay lately/i)).toBeVisible();
+    await expect(w.getByText(/This is a reflection, not a medical opinion/i)).toBeVisible();
+    await expect(w.getByText('minimal', { exact: true })).toHaveCount(0);
+
+    // AI is off → the narrative button is a calm state, never a blocked result.
+    await w.getByRole('button', { name: /Reflect on my result/ }).click();
+    await expect(w.getByText(/Turn on AI in Settings/i)).toBeVisible();
+
+    // Check in again → a second dated result → the trend appears. Keep item 9 benign (so no crisis flag).
+    await w.getByRole('button', { name: 'Check in again' }).click();
+    await w.getByRole('button', { name: 'Begin' }).click();
+    await expect(w.locator('[role="radiogroup"]')).toHaveCount(9);
+    await answerEveryRow(w, 'Several days');
+    await w
+      .getByRole('radiogroup', { name: /better off dead/i })
+      .getByRole('radio', { name: 'Not at all', exact: true })
+      .click();
+    await w.getByRole('button', { name: 'See my check-in' }).scrollIntoViewIfNeeded();
+    await w.getByRole('button', { name: 'See my check-in' }).click();
+    await expect(w.getByText(/How this has shifted \(2 takes\)/)).toBeVisible();
+
+    // No horizontal overflow / inner scrollbar at phone width on the result surface.
+    await w.setViewportSize({ width: 360, height: 780 });
+    const overflow = await w.evaluate(() => {
+      const offenders: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          offenders.push(`${el.tagName}.${el.className}`);
+        }
+      });
+      const main = document.querySelector('main');
+      return { offenders, mainOverflow: main ? main.scrollWidth - main.clientWidth : 0 };
+    });
+    expect(overflow.offenders).toEqual([]);
+    expect(overflow.mainOverflow).toBeLessThanOrEqual(1);
+    await w.setViewportSize({ width: 1024, height: 800 });
+
+    // The derived Insight is on disk, approved, source 'test', for the mood check-in — and its fact is never shared.
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('wellbeing e2e: master key missing');
+    const insights = await listInsightsForPerson(fs, key, 'owner-1');
+    const mood = insights.find((i) => i.source === 'test' && i.provenance.testId === 'phq9');
+    expect(mood?.approved).toBe(true);
+    expect(mood?.crisisFlag).toBeUndefined();
+    expect(mood?.facts.every((f) => f.shareable === false && f.shareableWith === undefined)).toBe(
+      true,
+    );
+
+    // Home folds the two check-ins into the Wellbeing picture as a distinct sibling series.
+    await w.getByRole('link', { name: 'Home' }).click();
+    await expect(w.getByRole('heading', { name: 'Wellbeing' })).toBeVisible();
+    await expect(w.getByText('Your check-ins')).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('wellbeing (51): PHQ-9 item 9 surfaces crisis resources MID-check-in; the flag is own-only + feeds the Home aggregation (AI off)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  // Seed one recent crisis-flagged session insight so the wellbeing crisis flag makes the §40 signal recur (≥2).
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('wellbeing crisis e2e: master key missing');
+  const recentIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  await saveInsight(fs, key, {
+    id: 'seed-crisis',
+    schemaVersion: 1,
+    source: 'session',
+    subjectPersonId: 'owner-1',
+    summary: 'A heavy session',
+    facts: [],
+    confidence: 'medium',
+    categories: [],
+    approved: true,
+    crisisFlag: true,
+    provenance: { conversationId: 'seed-crisis', at: recentIso },
+    createdAt: recentIso,
+    updatedAt: recentIso,
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'You' }).click();
+    await w.getByRole('heading', { name: 'Mood check-in' }).scrollIntoViewIfNeeded();
+    await w
+      .locator(
+        'xpath=//h3[normalize-space()="Mood check-in"]/ancestor::*[contains(@class,"card")][1]',
+      )
+      .getByRole('button', { name: 'Check in' })
+      .click();
+    await w.getByRole('button', { name: 'Begin' }).click();
+
+    // No crisis surface yet.
+    await expect(w.getByRole('alert')).toHaveCount(0);
+
+    // Answer item 9 ("better off dead…") with any positive value → crisis resources appear IMMEDIATELY, before finishing.
+    const item9 = w.getByRole('radiogroup', { name: /better off dead/i });
+    await item9.getByRole('radio', { name: 'Several days', exact: true }).click();
+    await expect(w.getByRole('alert')).toContainText(/please reach out to someone who can help/i);
+    // The always-present crisis footer resources are there too.
+    await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible();
+
+    // Finish the rest and score. answerEveryRow sets all 9 rows (incl. item 9) to "Not at all"; re-set item 9
+    // positive afterwards so the required matrix is complete AND the crisis flag stands.
+    await answerEveryRow(w, 'Not at all');
+    await item9.getByRole('radio', { name: 'Several days', exact: true }).click();
+    await w.getByRole('button', { name: 'See my check-in' }).scrollIntoViewIfNeeded();
+    await w.getByRole('button', { name: 'See my check-in' }).click();
+    await expect(w.getByRole('alert')).toContainText(/you don’t have to face it alone/i);
+
+    // Decrypt: the derived Insight is crisisFlag, own (owner-1), and never shared (shareable false, no shareableWith).
+    const insights = await listInsightsForPerson(fs, key, 'owner-1');
+    const mood = insights.find((i) => i.source === 'test' && i.provenance.testId === 'phq9');
+    expect(mood?.crisisFlag).toBe(true);
+    expect(mood?.subjectPersonId).toBe('owner-1');
+    expect(mood?.facts.every((f) => f.shareable === false && f.shareableWith === undefined)).toBe(
+      true,
+    );
+
+    // Home: with the seeded crisis flag + this one (≥2 in 14 days), the supportive resources-first banner shows.
+    await w.getByRole('link', { name: 'Home' }).click();
+    await expect(w.getByText('988')).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});

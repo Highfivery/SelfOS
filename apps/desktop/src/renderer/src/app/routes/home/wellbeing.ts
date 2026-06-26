@@ -1,4 +1,4 @@
-import type { Insight } from '@shared/schemas';
+import type { Insight, TestResult } from '@shared/schemas';
 
 /** One analyzed-session mood reading (09 §14): normalized valence + energy, on the session's date. */
 export interface MoodPoint {
@@ -25,6 +25,24 @@ export function sessionMoodPoints(insights: Insight[], personId: string): MoodPo
       at: insight.provenance.at,
       valence: insight.metrics?.moodValence ?? 0,
       energy: insight.metrics?.moodEnergy ?? 0,
+    }))
+    .sort((a, b) => a.at.localeCompare(b.at));
+}
+
+/**
+ * The active person's deliberate MOOD check-in points (51 §5.3), oldest→newest — a SIBLING series to the
+ * inferred session mood, so a deliberate check-in reads distinctly from an AI-inferred reading. Drawn from the
+ * dated PHQ-9 mood-check-in RESULTS (every take is its own trend point; the single derived Insight only keeps
+ * the latest). The instrument's normalized score is severity (0 low … 1 high), so it's mapped to a valence-like
+ * value (+1 = mood felt okay, −1 = heavy) to sit on the same −1..1 axis as session mood. `energy` is unused.
+ */
+export function checkInMoodPoints(moodResults: TestResult[]): MoodPoint[] {
+  return moodResults
+    .filter((result) => result.testId === 'phq9' && result.scores[0]?.normalized !== undefined)
+    .map((result) => ({
+      at: result.takenAt,
+      valence: 1 - 2 * (result.scores[0]?.normalized ?? 0),
+      energy: 0,
     }))
     .sort((a, b) => a.at.localeCompare(b.at));
 }

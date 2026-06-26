@@ -278,6 +278,9 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     coachingGetSynthesis: () => Promise.resolve(null),
     coachingSynthesize: () =>
       Promise.resolve({ ok: false, reason: 'EMPTY', message: 'Nothing yet.' }),
+    relationshipsGetSynthesis: () => Promise.resolve(null),
+    relationshipsSynthesize: () =>
+      Promise.resolve({ ok: false, reason: 'EMPTY', message: 'Nothing yet.' }),
     challengesStart: () => Promise.resolve({ conversationId: 'c-challenge' }),
     challengesStartReflection: () => Promise.resolve({ conversationId: 'c-reflect' }),
     challengesList: () => Promise.resolve([]),

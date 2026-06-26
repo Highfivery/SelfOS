@@ -112,14 +112,16 @@ function buildFacts(
         id: `${insightId}:${total?.key ?? 'wellbeing'}`,
         // The gentle display copy, with the boundary made explicit so the coach treats it as a reflection.
         text: `${band.display} (a self-reflection, not a clinical finding).`,
-        shareable: false, // wellbeing results are NEVER shared with anyone else (§8.4)
+        // 54: shared with the PARTNER relationship type by default — the gentle non-diagnostic text only
+        // (never the clinical band), partner-only. The person can un-share any test result.
+        shareable: false,
+        shareableTypes: ['partner'],
         lifeArea,
       },
     ];
   }
 
   const labelOf = new Map(def.scoring.subscales.map((sub) => [sub.key, sub.label]));
-  const sensitive = def.sensitive ?? false;
   const isKink = def.id === 'kink-interests';
   const facts: InsightFact[] = [];
   for (const score of scores) {
@@ -127,8 +129,12 @@ function buildFacts(
     facts.push({
       id: `${insightId}:${score.key}`,
       text: factText(score, labelOf.get(score.key) ?? score.key),
-      shareable: false, // own-only v1 (50 §11 Q6) — sensitive results are never shareable
-      ...(sensitive ? { restricted: true } : {}),
+      // 54: test results default-share with the PARTNER relationship type. Sensitive (kink/sexuality) facts
+      // are NOT `restricted` (so they can reach the partner) but keep `lifeArea: 'Intimacy'` — the own-context
+      // relevance gate (insightStore) keys off the sensitive life-area, so they still surface only in intimacy
+      // contexts AND never feed the topic-free digests; `restricted` stays reserved for break-glass intake facts.
+      shareable: false,
+      shareableTypes: ['partner'],
       lifeArea,
     });
   }

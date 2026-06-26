@@ -282,9 +282,25 @@ export function digestableInsights(insights: Insight[]): Insight[] {
   return insights.filter((insight) => {
     const live = insight.facts.filter((fact) => !fact.flaggedInaccurate);
     if (insight.facts.length > 0 && live.length === 0) return false; // wholly-flagged
-    if (live.length > 0 && live.every((fact) => fact.restricted)) return false; // wholly-restricted: summary leaks
+    // Wholly-restricted OR wholly-sensitive (every live fact restricted or in a sensitive life-area, e.g. a
+    // kink/sexuality self-assessment, 54): its SUMMARY restates the sensitive content, and the topic-free
+    // digest can't relevance-gate it → exclude entirely. A MIXED insight (the portrait) is kept.
+    if (live.length > 0 && live.every((fact) => fact.restricted || isSensitiveContextFact(fact)))
+      return false;
     return true;
   });
+}
+
+/**
+ * Life-areas whose facts are sensitive enough to be **relevance-gated to an on-topic context** even when NOT
+ * `restricted` — e.g. a partner-shareable kink/sexuality self-assessment (54-memory-redesign). `restricted`
+ * stays the break-glass "never broadcast-shared" flag for intake intimacy/trauma facts; this adds the
+ * un-restricted-but-sensitive case so those facts still surface only in intimacy contexts.
+ */
+export const SENSITIVE_CONTEXT_LIFE_AREAS: ReadonlySet<string> = new Set(['Intimacy']);
+
+function isSensitiveContextFact(fact: { lifeArea?: string | undefined }): boolean {
+  return fact.lifeArea !== undefined && SENSITIVE_CONTEXT_LIFE_AREAS.has(fact.lifeArea);
 }
 
 /**
@@ -419,13 +435,15 @@ export async function summarizeForContext(
       // is exempt (selectPortraitFacts narrows its facts, but the portrait is always present); a crisis-flagged
       // insight is never narrowed (safety). Existing non-intake insights carry no restricted facts → unaffected.
       if (insight.source !== 'intake' && !(insight.crisisFlag ?? false)) {
-        // Fail-closed: if the insight has ANY restricted fact, it only feeds an on-topic context. A
-        // restricted fact with no `lifeArea` contributes no matchable area, so an insight whose restricted
+        // Relevance-gate an insight with `restricted` (break-glass intake) facts OR sensitive-life-area facts
+        // (e.g. a kink/sexuality self-assessment — now partner-shareable, but still own-context-gated, 54): it
+        // only feeds an on-topic context, so it informs an intimacy session but never leaks into a money chat.
+        // Fail-closed: a gated fact with no `lifeArea` contributes no matchable area, so an insight whose gated
         // facts all lack a life-area matches nothing → is withheld entirely (never leaks its summary).
-        const restricted = liveFacts.filter((fact) => fact.restricted);
-        if (restricted.length > 0) {
+        const gated = liveFacts.filter((fact) => fact.restricted || isSensitiveContextFact(fact));
+        if (gated.length > 0) {
           const topicAreas = new Set(topic?.lifeAreas ?? []);
-          const matches = restricted.some(
+          const matches = gated.some(
             (fact) => fact.lifeArea !== undefined && topicAreas.has(fact.lifeArea),
           );
           if (!matches) continue;

@@ -24,9 +24,9 @@ function relativeAgo(iso: string | undefined): string {
  * stale (answers added/edited/cleared since it was generated). Self-hides for someone without `intake.own`,
  * or once complete AND the portrait is up to date.
  *
- * Pending profile-update suggestions (§15) are owned by `ProfileFreshnessCard` (it lists + actions them), so
- * this card deliberately does NOT re-surface them — and "due for a review" is staleness, never a calendar
- * clock (no nagging, matches 29).
+ * Pending profile-update suggestions (§15) are surfaced as the "refresh your portrait" recommendation in the
+ * "For you" zone (53 §3.6), so this card deliberately does NOT re-surface them — and "due for a review" is
+ * staleness, never a calendar clock (no nagging, matches 29).
  */
 export function OnboardingCard(): JSX.Element | null {
   const navigate = useNavigate();

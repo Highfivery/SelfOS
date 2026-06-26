@@ -2,6 +2,14 @@
 
 > **Status:** Built · _last updated 2026-06-24_
 >
+> **As-built amendment (2026-06-25, [`53`](53-home-encouragement.md) Slice A):** the Home `DiscoveryNudge`,
+> `SuggestionsCard`, and `DepthInvitationCard` referenced here were **absorbed into the §53 "For you"
+> recommendation engine** (the `guided-suggestion` / `questionnaire-gap` / `depth-invitation` providers).
+> Everything else this spec built is unchanged — `AiUnavailableNotice`, the actionable empty states,
+> `OneTimeTip`s, `WelcomeOrientationCard`, and the device-local per-person `discovery:getDismissals` /
+> `:setDismissals` seam, which §53 **reuses** for `rec:<id>` dismissals + `celebrate:<key>` celebration
+> signatures (no new IPC).
+>
 > SelfOS is cohesive and capable, but it **under-discovers its own power**: new and non-technical users land
 > without a clear "what next", empty states dead-end instead of nudging, advanced affordances (the
 > questionnaire gap-finder, depth invitations) are easy to miss, AI-unavailable messages point everyone at

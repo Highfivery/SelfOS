@@ -389,6 +389,45 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-25 — **Build (Home dashboard uplift + personalized encouragement engine — SPEC 53 Slice A BUILT; on
+  `feat/home-encouragement-engine`, PR pending).** The capstone Home redesign + a deterministic recommendation
+  engine. **All 8 §11 product decisions asked first (all recommended defaults):** section named **"For you"**;
+  count **scaled 1–3 by proactivity** (off=hidden, gentle ≤2, active ≤3); recommendation phrasing
+  **deterministic** (no per-load AI); momentum = **one warm header line** + 3 reflections (showed-up / explored-
+  areas / goals-moving), **CONFIRMED no streaks/targets/gaps**; celebration = **transient success toast**; crisis
+  suppression = **suppress all pushes while `aggregateCrisisSignal` recurring** (a single low-mood reading does
+  not); the §3.6 **two-zone card map confirmed**; **reuse `coaching.proactivity`** (off = status-grid-only).
+  **Core `@selfos/core/recommendations`:** a Zod-first **registry** (`registerRecommendationProvider`/`list`/
+  `reset`/`registerBuiltIn` — the `contextProviders.ts` pattern) + **8 built-in providers** (continue-session,
+  stale-goal, refresh-portrait, depth-invitation, synthesis-observation, guided-suggestion, questionnaire-gap,
+  refresh-memory) + the pure **`rankRecommendations`** (filter gated/18+ → gather → crisis/off/new-suppress →
+  dismissals → score → variety-dedup → top-N) + pure **`computeMomentum`** (positive counts only — `no streak/gap`
+  is a TYPE-LEVEL guarantee) + **`pendingCelebration`** (newest recent uncelebrated, once). **Home restructured**
+  into the §3.1 hierarchy: greeting + `MomentumLine` → `CrisisSupportBanner` → **`ForYou`** (the focal zone) →
+  `OnboardingCard` (status) → status grid (`ContinueCard`/`WellbeingCard`/`DreamsCard`/`MemoryCard`/`InboxCard`)
+  or `GettingStarted` → `WelcomeOrientationCard` (moved to the bottom so For-you leads) → `CelebrationMoment` toast
+  → `CrisisFooter`. New components `ForYou`/`RecommendationCard`/`RecommendationItem`/`MomentumLine`/
+  `CelebrationMoment`. **DELETED** the 6 absorbed cards — `GoalFollowupCard` + `InsightOfTheWeekCard` (40),
+  `DiscoveryNudge` + `SuggestionsCard` (41/17), `ProfileFreshnessCard` + `DepthInvitationCard` (29) — folding
+  their actions into `RecommendationItem` **verbatim** (goal Still on it / Mark done / Let it go, synthesis run +
+  "Talk it through", guided start/regenerate, questionnaire gap-finder, depth go-deeper); removed `buildStatusLine`.
+  **No new IPC, no new vault schema, no new AI spend:** reuses the spec-41 `discovery:*` device-local per-person
+  seam for `rec:<dismissKey>` dismissals + `celebrate:<key>` signatures, and the spec-40 `coaching.proactivity`
+  dial. Code-reviewer **fix-first** (all applied): the dismissal `dismissKey` is now **signal-aware** (e.g.
+  `stale-goal:<goalId>:<lastTouchedAt>`) so a dismissed rec **re-surfaces when its signal changes** instead of
+  dying forever (§7) — the reviewer's blocker-adjacent should-fix; removed dead `buildStatusLine`; deduped
+  `stalestGoal` into one exported core `stalestOpenGoal` (the notification + the "For you" card can't diverge);
+  fixed a stale test comment. Gate green: typecheck (all packages), lint, format, **791 core + 799 desktop** unit
+  (engine rank/momentum/celebration/registry + re-surface-on-signal-change; Home/ForYou/RecommendationCard/
+  CelebrationMoment RTL), **E2E +2** (the "For you" zone ranks/reflects-momentum/dismisses + 360px guard;
+  proactivity-off hides the zone, keeps the grid). Visual QA at desktop (the focal "For you" zone leads above a
+  clean status grid; warm, non-nagging). Synced specs 53 (→ Slice A Built, §11 resolved) + as-built amendments to
+  17/29/40/41. **Slice B (48–52 providers) deferred** — each registers its own provider with NO `Home.tsx` edit.
+  **Lesson: absorbing N hand-wired Home cards into one ranked engine means moving WHERE/HOW each is surfaced,
+  never WHAT it does — keep each absorbed action verbatim inside the uniform `RecommendationCard`. A dismissal
+  signature must carry the SIGNAL identity (the goal id + touch stamp), not just the provider id, or "Not now"
+  silently kills the feature forever; and a `MomentumReflection` type that can only hold positive counts makes
+  "no streaks/no overdue" a compile-time guarantee, not a review hope.**
 - 2026-06-25 — **Build (onboarding intake quality pass — SPEC 47 BUILT; on `feat/onboarding-quality-pass`, a
   worktree, PR pending).** A holistic audit-and-remediate pass over the personal-onboarding intake (spec 18), after
   several user-reported bugs. **Owner decisions (asked first):** **Conservative** trim (fix wording/collisions/

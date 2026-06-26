@@ -2,6 +2,14 @@
 
 > **Status:** Built — _last updated 2026-06-24_
 >
+> **As-built amendment (2026-06-25, [`53`](53-home-encouragement.md) Slice A):** the Home `GoalFollowupCard`
+> and `InsightOfTheWeekCard` were **absorbed into the §53 "For you" recommendation engine** (the `stale-goal`
+> and `synthesis-observation` providers). Their actions are unchanged — the goal nudge still calls
+> `goals:setStatus` (Still on it / Mark done / Let it go) and the synthesis observation stays explicit-tap
+> (`coaching:synthesize`, cached re-display + "Talk it through" seed) — only the surface moved from a hand-wired
+> Home card into the ranked engine. The `coaching.proactivity` dial, `aggregateCrisisSignal`, the
+> `goal-followup` / `coaching-synthesis` notifications, and the in-session goal-raise are all unchanged.
+>
 > Today SelfOS **remembers** but never **acts** on what it knows: it is a reactive, user-initiated
 > coach. Session analysis already extracts goals, depth-invitations, and profile-suggestions — but
 > these are **recorded, not surfaced into the coach's behaviour**; the live coaching prompt is never

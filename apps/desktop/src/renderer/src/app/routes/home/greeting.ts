@@ -6,20 +6,5 @@ export function timeOfDayGreeting(hour: number): string {
   return 'Good evening';
 }
 
-/**
- * The greeting's one short, non-noisy status line, drawn from the same data the cards use. Picks the
- * single most actionable signal; degrades to '' (just the greeting) when there's nothing notable (§3.1).
- */
-export function buildStatusLine(input: {
-  openSessions: number;
-  inboxCount: number;
-  moodRead: string;
-}): string {
-  const { openSessions, inboxCount, moodRead } = input;
-  if (openSessions > 0)
-    return `${openSessions} session${openSessions === 1 ? '' : 's'} in progress`;
-  if (inboxCount > 0)
-    return `${inboxCount} ${inboxCount === 1 ? 'thing' : 'things'} waiting in your inbox`;
-  if (moodRead) return moodRead;
-  return '';
-}
+// The old single-line status (`buildStatusLine`) was replaced by the gentle momentum reflection
+// (53 §3.3, `computeMomentum` + `MomentumLine`) — what positively happened, never a "things waiting" prod.

@@ -2,6 +2,12 @@
 
 > **Status:** **Built** 2026-06-21 (`feat/progressive-profile`, off `main`) · _last updated 2026-06-21_
 >
+> **As-built amendment (2026-06-25, [`53`](53-home-encouragement.md) Slice A):** the Home `DepthInvitationCard`
+> (§3/§5) and the §15 `ProfileFreshnessCard` were **absorbed into the §53 "For you" recommendation engine** (the
+> `depth-invitation` and `refresh-portrait` providers). The depth records, the `profile:suggestions` /
+> `:acceptSuggestion` / `:dismissSuggestion` channels, the in-session depth-ask, and the `kind:'depth'` vs
+> freshness filtering are all unchanged — only the Home surface moved into the ranked engine.
+>
 > **As built.** Extends the §15 `ProfileUpdateSuggestion` with `kind: 'depth'` (the DRY choice) — depth
 > invitations reuse §15's service/IPC/store/accept-dismiss wholesale; the only seam change is the additive
 > schema widen. Detection rides the **session** analysis pass (the one §15-wired producer; dreams +

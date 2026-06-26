@@ -150,9 +150,9 @@ export function useNotificationSources(conflicts: string[]): void {
     }
 
     // A gentle goal check-in (40 §3.2) — at most ONE open at a time (the stalest), coalesced. The action
-    // links to Memory where the goal + its Still on it / Mark done / Let it go actions live; the Home
-    // GoalFollowupCard offers those inline. Acting changes the goal (signature) so a dismissed nudge stays
-    // dismissed until the goal changes; resolving the stalest surfaces the next.
+    // links to Memory where the goal + its Still on it / Mark done / Let it go actions live; Home's "For you"
+    // goal recommendation (53) offers those inline. Acting changes the goal (signature) so a dismissed nudge
+    // stays dismissed until the goal changes; resolving the stalest surfaces the next.
     const stale = stalestGoal(goals, new Date());
     if (stale) {
       candidates.push({
@@ -167,8 +167,8 @@ export function useNotificationSources(conflicts: string[]): void {
 
     // The cross-feature synthesis observation (40 §3.3) as a nudge — UNLESS a same-life-area depth/freshness
     // invitation is already active (§3.7: the more specific, actionable nudge wins, so the user sees one
-    // coherent prompt about that area). The Home InsightOfTheWeekCard is the persistent action surface; this
-    // is the transient alert (the profile-freshness card+notification coexistence precedent, 17 §11).
+    // coherent prompt about that area). Home's "For you" synthesis recommendation (53) is the persistent
+    // action surface; this is the transient alert (the card+notification coexistence precedent, 17 §11).
     if (synthesis && !(synthesis.lifeArea && freshnessAreas.includes(synthesis.lifeArea))) {
       candidates.push({
         kind: 'coaching-synthesis',

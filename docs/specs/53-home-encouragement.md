@@ -1,6 +1,6 @@
 # 53 — Home dashboard uplift & personalized encouragement engine
 
-> **Status:** Draft · _last updated 2026-06-25_
+> **Status:** Slice A Built · §11 resolved · _last updated 2026-06-25_
 >
 > The Home dashboard ([`17`](17-home-dashboard.md)) has accreted ~10 stacked cards (crisis banner, welcome,
 > onboarding, freshness, depth, discovery nudge, then a grid of continue/suggestions/goal/wellbeing/insight/
@@ -669,13 +669,35 @@ Drive complete flows through the rendered UI, not bridge calls (CLAUDE.md §7).
     warm focal "For you" zone above a clean status grid), recommendation cards are aligned + intentional, the
     momentum line + any celebration are warm and non-nagging, nothing clipped (DoD §7).
 
-## 11. Open questions
+## 11. Resolved decisions (2026-06-25)
 
-> Locked decisions already recorded in §1/§2 (do **not** re-litigate): one capstone spec (redesign + engine
-> together); **light momentum, no punishing streaks** (autonomy-supportive); **reuse the `coaching.proactivity`
-> dial** (no new setting); **Slice A ships early** (before 48–52) over existing features, **Slice B grows** as
-> 48–52 land (§11.1). The following are genuinely-open product/UX/tone decisions — **do not assume**; resolve
-> with the user before building.
+> All the §11 product/UX/tone questions were resolved with the user before building Slice A (all the
+> recommended defaults). The resolutions are recorded here; the original question text is kept below each as
+> rationale. **Built decisions — do not re-litigate.**
+
+- **Q1 Naming →** the section is **"For you"** (heading + concept); momentum is a header line (not its own
+  branded zone).
+- **Q2 Count →** the top N is **scaled 1–3 by proactivity** (`off` = section not rendered; `gentle` ≤2;
+  `active` ≤3 — `COUNT_BY_PROACTIVITY`).
+- **Q3 Phrasing →** **deterministic / free** `reason` strings in v1 (NO AI-personalized copy; the spec-40
+  synthesis card stays the one AI voice).
+- **Q4 Momentum →** a **single warm header line** + the three reflections (showed-up / explored-areas /
+  goals-moving). **CONFIRMED: no streaks, no streak-loss, no missed-day/overdue counts, no targets** — the
+  `MomentumReflection` type can carry only positive counts (enforced by `computeMomentum` + tests).
+- **Q5 Celebration →** a **transient success toast** (`CelebrationMoment` via the spec-35 `Toast`), celebrated
+  **once** per completion per-person/per-device (signature in the `discovery:*` store). Counted completions:
+  onboarding finished, a session wrapped up, a goal marked done.
+- **Q6 Crisis suppression →** while `aggregateCrisisSignal` is **recurring**, suppress **all** pushes ("For
+  you" + momentum + celebration) and lead with `CrisisSupportBanner`; a **single** low-mood reading does NOT
+  suppress.
+- **Q7 Card reconciliation →** the **§3.6 two-zone map is confirmed** — the actionable cards (goal-followup,
+  synthesis, discovery nudge, freshness, depth, guided/questionnaire suggestions) become "For you" providers;
+  the status cards (Continue/Wellbeing/Dreams/Memory/Inbox/Onboarding) stay the grid; the synthesis observation
+  lives **inside** "For you".
+- **Q8 Proactivity mapping →** **reuse `coaching.proactivity`** (no new setting); `off` = a **status-grid-only**
+  calm Home (suppress pushes), `gentle` = a few, `active` = more; crisis support is never governed by the dial.
+
+The original questions, for rationale:
 
 1. **Naming.** What does the recommendation section + the engine concept get called — **"For you"**, **"Your
    next step"**, **"Momentum"**, **"Your path"**, or something else? (Affects copy + headings throughout. The
@@ -745,3 +767,30 @@ Drive complete flows through the rendered UI, not bridge calls (CLAUDE.md §7).
   product/UX/tone decisions (naming · count · phrasing AI-vs-deterministic · momentum shape + the no-streaks
   CONFIRM · celebration transient-vs-persistent · crisis suppression aggressiveness · the exact card
   reconciliation · the proactivity→intensity mapping) in §11 — to resolve with the user before building.
+- 2026-06-25 — **§11 resolved + Slice A BUILT** (on `feat/home-encouragement-engine`). Built
+  **`@selfos/core/recommendations`** — a Zod-first recommendation **registry** (`registerRecommendationProvider`
+  / `list` / `reset` / `registerBuiltIn`, the `contextProviders.ts` pattern) + **8 built-in providers**
+  (continue-session, stale-goal, refresh-portrait, depth-invitation, synthesis-observation, guided-suggestion,
+  questionnaire-gap, refresh-memory) + the pure **`rankRecommendations`** engine (filter gated/18+ → gather →
+  crisis-/off-/new-suppress → dismissals → score → variety-dedup → top-N) + pure **`computeMomentum`** (positive
+  reflections only, no streak/gap by type) + **`pendingCelebration`** (newest recent uncelebrated, once); added
+  `./recommendations` to `packages/core/package.json`. **Home restructured** into the §3.1 hierarchy (greeting +
+  `MomentumLine` → `CrisisSupportBanner` → **`ForYou`** → `OnboardingCard` status → status grid /
+  `GettingStarted` → `WelcomeOrientationCard` → `CelebrationMoment` toast → `CrisisFooter`). New renderer
+  components `ForYou` / `RecommendationCard` / `RecommendationItem` / `MomentumLine` / `CelebrationMoment`.
+  **Deleted** the absorbed Home cards — `GoalFollowupCard` + `InsightOfTheWeekCard` (40), `DiscoveryNudge` +
+  `SuggestionsCard` (41/17), `ProfileFreshnessCard` + `DepthInvitationCard` (29) — folding their actions into the
+  engine (goal Still on it / Mark done / Let it go, synthesis run + "Talk it through", guided start/regenerate,
+  questionnaire gap-finder, depth go-deeper, freshness/memory refresh all preserved); removed `buildStatusLine`
+  from `greeting.ts`. **Reuses** the spec-41 `discovery:*` device-local per-person seam for `rec:<id>` dismissals
+  - `celebrate:<key>` signatures (**no new IPC, no new vault schema, no new AI spend**) and the spec-40
+    `coaching.proactivity` dial for intensity (`off` = status-grid-only). §11 resolved (recommended defaults).
+    Gate green: typecheck (all packages), lint, format, **790 core + 799 desktop** unit (+ engine
+    rank/momentum/celebration/registry units, Home/ForYou/RecommendationCard/CelebrationMoment RTL), **E2E +2**
+    (the "For you" zone ranks/reflects-momentum/dismisses + 360px guard; proactivity-off hides the zone but keeps
+    the grid). Visual QA at desktop (the focal "For you" zone leads above a clean status grid). Synced specs
+    17 / 29 / 40 / 41 (as-built amendments). **Slice B (48–52 providers) deferred** — each registers its own
+    provider with no `Home.tsx` edit. **Lesson: absorbing N hand-wired Home cards into one ranked engine means
+    moving WHERE/HOW each is surfaced, never WHAT it does — keep each absorbed card's action verbatim inside the
+    uniform `RecommendationCard`; and a deterministic `MomentumReflection` type that can only hold positive counts
+    makes "no streaks/no overdue" a compile-time guarantee, not a code-review hope.**

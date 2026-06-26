@@ -898,6 +898,25 @@ test('home (53): the "For you" zone ranks recommendations, reflects momentum, di
     lastTouchedAt: old,
   });
   await seedTwoAreas(fs, key);
+  // A profile self-assessment already taken, so the `take-a-test` invite is satisfied and this test stays
+  // focused on the goal + guided ranking (53 Slice B adds take-a-test, covered by its own test).
+  await writeEncryptedJson(
+    fs,
+    'people/owner-1/tests/r-bigfive.enc',
+    {
+      id: 'r-bigfive',
+      schemaVersion: 1,
+      testId: 'bigfive-ipip-120',
+      testVersion: 1,
+      subjectPersonId: 'owner-1',
+      answers: [],
+      scores: [],
+      takenAt: old,
+      createdAt: old,
+      updatedAt: old,
+    },
+    key,
+  );
 
   const app = await launch(userData);
   try {
@@ -981,6 +1000,161 @@ test('home (53): proactivity OFF hides the "For you" zone + momentum, but the st
     await expect(w.getByRole('heading', { name: /a goal worth a check-in/i })).toHaveCount(0);
     // The status grid is unaffected — it reflects existing data, it isn't a nudge.
     await expect(w.getByRole('heading', { name: /what the coach knows/i })).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('home (53 Slice B): self-assessment / wellbeing / intimacy recommendations surface (50/51/48); the 18+ one only after the ack', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('master key missing');
+
+  // `active` proactivity → the cap fits all three Slice-B recommendations alongside the others.
+  await writeEncryptedJson(
+    fs,
+    'people/owner-1/coaching/prefs.enc',
+    { schemaVersion: 1, proactivity: 'active' },
+    key,
+  );
+  // Not a brand-new person (so the "For you" zone is shown, not getting-started).
+  await seedTwoAreas(fs, key);
+
+  // A mood check-in that has gone quiet (>14 days) → the gentle wellbeing-checkin invite (51).
+  const old = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString();
+  await writeEncryptedJson(
+    fs,
+    'people/owner-1/tests/r-phq9.enc',
+    {
+      id: 'r-phq9',
+      schemaVersion: 1,
+      testId: 'phq9',
+      testVersion: 1,
+      subjectPersonId: 'owner-1',
+      answers: [],
+      scores: [],
+      takenAt: old,
+      createdAt: old,
+      updatedAt: old,
+    },
+    key,
+  );
+  // An intimacy-group self-assessment taken → the intimacy-exercise engagement signal (48) — but it is
+  // adult-gated, so it must NOT surface until the per-person 18+ ack exists.
+  await writeEncryptedJson(
+    fs,
+    'people/owner-1/tests/r-kink.enc',
+    {
+      id: 'r-kink',
+      schemaVersion: 1,
+      testId: 'kink-interests',
+      testVersion: 1,
+      subjectPersonId: 'owner-1',
+      answers: [],
+      scores: [],
+      takenAt: old,
+      createdAt: old,
+      updatedAt: old,
+    },
+    key,
+  );
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    const forYou = w.getByRole('region', { name: 'For you' });
+    await expect(forYou).toBeVisible();
+
+    // take-a-test fires (no personality/relationships profile taken) + wellbeing-checkin fires (overdue).
+    await expect(
+      forYou.getByRole('heading', { name: /discover how you see yourself/i }),
+    ).toBeVisible();
+    await expect(forYou.getByRole('heading', { name: /a gentle check-in/i })).toBeVisible();
+
+    // The intimacy exercise is 18+-gated → withheld even though the intimacy profile exists (no premature
+    // exposure; the gate is the boundary, 48 §8). Without the ack, an intimacy test is also not in the
+    // adult-filtered catalog, so the candidate never forms.
+    await expect(
+      forYou.getByRole('heading', { name: /build on your intimacy profile/i }),
+    ).toHaveCount(0);
+
+    // The take-a-test primary action routes into the You hub.
+    await forYou.getByRole('button', { name: /take a quick assessment/i }).click();
+    await expect(w.getByRole('heading', { name: /you — how you see yourself/i })).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('home (53 Slice B): the intimacy exercise surfaces once the 18+ ack is given (48)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('master key missing');
+
+  await writeEncryptedJson(
+    fs,
+    'people/owner-1/coaching/prefs.enc',
+    { schemaVersion: 1, proactivity: 'active' },
+    key,
+  );
+  // The shared per-person 18+ ack (16 §8.3 / 48) — without it the intimacy test is withheld + filtered.
+  await writeEncryptedJson(
+    fs,
+    'people/owner-1/guidance/prefs.enc',
+    { schemaVersion: 1, adultAcknowledged: true },
+    key,
+  );
+  await seedTwoAreas(fs, key);
+  const old = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString();
+  await writeEncryptedJson(
+    fs,
+    'people/owner-1/tests/r-kink.enc',
+    {
+      id: 'r-kink',
+      schemaVersion: 1,
+      testId: 'kink-interests',
+      testVersion: 1,
+      subjectPersonId: 'owner-1',
+      answers: [],
+      scores: [],
+      takenAt: old,
+      createdAt: old,
+      updatedAt: old,
+    },
+    key,
+  );
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    const forYou = w.getByRole('region', { name: 'For you' });
+    await expect(forYou).toBeVisible();
+    // Now acked + an intimacy profile taken → the gentle, invitation-only exercise card appears.
+    await expect(
+      forYou.getByRole('heading', { name: /build on your intimacy profile/i }),
+    ).toBeVisible();
+
+    // 360px: the full surface renders with no horizontal overflow / inner scrollbar.
+    await w.setViewportSize({ width: 360, height: 800 });
+    const overflow = await w.evaluate(() => {
+      const offenders: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          offenders.push(`${el.tagName}.${el.className}`);
+        }
+      });
+      const main = document.querySelector('main');
+      return { offenders, mainOverflow: main ? main.scrollWidth - main.clientWidth : 0 };
+    });
+    expect(overflow.offenders).toEqual([]);
+    expect(overflow.mainOverflow).toBeLessThanOrEqual(1);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

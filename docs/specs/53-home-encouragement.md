@@ -1,6 +1,6 @@
 # 53 — Home dashboard uplift & personalized encouragement engine
 
-> **Status:** Slice A Built · §11 resolved · _last updated 2026-06-25_
+> **Status:** Built (Slice A + Slice B) · §11 resolved · _last updated 2026-06-26_
 >
 > The Home dashboard ([`17`](17-home-dashboard.md)) has accreted ~10 stacked cards (crisis banner, welcome,
 > onboarding, freshness, depth, discovery nudge, then a grid of continue/suggestions/goal/wellbeing/insight/
@@ -375,7 +375,9 @@ export interface PersonRecommendationState {
   approvedInsights: { source: string; createdAt: string; lifeArea?: string }[];
   portraitStale: boolean; // 29/18 §15
   memoryStale: boolean; // 39 reconcile
-  testResults: { instrument: string; takenAt: string }[]; // 50 (Slice B)
+  testResults: { instrument: string; group: string; takenAt: string }[]; // 50/51 (Slice B)
+  wellbeingCheckinDue: boolean; // 51 §3.4 — gentle ~14-day re-check (Slice B)
+  lastWellbeingCheckinAt?: string; // 51 — the wellbeing-checkin dismissal signature (Slice B)
   activeChallenge: boolean; // 52 (Slice B)
   // …extended additively as features register; absent fields default safely.
 }
@@ -419,9 +421,11 @@ Built-in providers (Slice A — over **existing** features), each a pure `releva
 - **`refresh-memory`** (domain `memory`, gate `memory.own`) — memory has drifted (39 reconcile threshold) →
   "Tidy up memory."
 
-Slice B providers register from their own modules (no Home edits): **`take-a-test`** / **`wellbeing-checkin`**
-(50/51, the latter gated gently — §8), **`intimacy-exercise`** (48, `adultGate: true`), **`challenge-checkin`** / **`suggest-challenge`**
-(52, explicit-tap). Sexual/intimacy candidates carry `adultGate: true` and are filtered until the 18+ ack.
+Slice B providers are added as engine built-ins (`BUILT_IN_RECOMMENDATION_PROVIDERS`, no Home card-wiring):
+**`take-a-test`** / **`wellbeing-checkin`** (50/51, the latter gated gently — §8), **`intimacy-exercise`** (48,
+`adultGate: true`), **`challenge-checkin`** / **`suggest-challenge`** (52, explicit-tap). Sexual/intimacy
+candidates carry `adultGate: true` and are filtered until the 18+ ack. (Home only assembles the signals into
+`PersonRecommendationState` + lists each provider's capability gate in its `can(...)` snapshot — §11.1.)
 
 ### 5.2 The ranking engine (pure)
 
@@ -741,15 +745,45 @@ The original questions, for rationale:
   guided-suggestion, questionnaire-gap, refresh-memory — §5.1), and (d) light momentum + celebration over
   existing completions. This is the **early UI/UX win** that immediately improves discovery + motivation for
   the features that exist **today** — it does not wait on 48–52.
-- **Slice B grows the engine as 48–52 land.** Each new feature **registers its own recommendation provider**
-  from its own core module (the `registerContextProvider` precedent) — `take-a-test` / `wellbeing-checkin`
-  (50/51), `intimacy-exercise` (48, `adultGate`), `challenge-checkin` + `suggest-challenge` (52) — and appears in "For
-  you" automatically when relevant + permitted, with **no edits to `Home.tsx`**. This is the payoff of the
-  registry: the motivational front door extends itself as the app grows, instead of Home accreting another
-  hand-wired card per feature (the very problem this spec fixes).
+- **Slice B grows the engine as 48–52 land.** Each new feature's recommendation provider is added as an
+  engine built-in (the `BUILT_IN_RECOMMENDATION_PROVIDERS` set) — `take-a-test` / `wellbeing-checkin` (50/51),
+  `intimacy-exercise` (48, `adultGate`), `challenge-checkin` + `suggest-challenge` (52) — and appears in "For
+  you" automatically when relevant + permitted, with **no edits to `Home.tsx`** (Home only assembles the signals
+  into `PersonRecommendationState`). This is the payoff of the registry: the motivational front door extends
+  itself as the app grows, instead of Home accreting another hand-wired card per feature (the very problem this
+  spec fixes). **BUILT 2026-06-26** — see the changelog.
 
 ## 12. Changelog
 
+- 2026-06-26 — **Slice B BUILT** (on `feat/home-encouragement-slice-b`). The three remaining feature providers
+  added as engine built-ins (`BUILT_IN_RECOMMENDATION_PROVIDERS`), no `Home.tsx` card-wiring (the §5.5 payoff):
+  **`take-a-test`** (50, gate `tests.own`) — invites a first personality/relationships self-assessment when none
+  is taken, satisfied the moment one is; **`wellbeing-checkin`** (51, gate `tests.own`, NOT 18+) — a gentle
+  mood/anxiety re-check when a prior PHQ-9/GAD-7 check-in has gone ≥14 days quiet (a soft invitation on the §51
+  §3.4 window, **never** for someone who never checked in, **never** escalating — §8), with a signal-aware
+  `wellbeing-checkin:<lastAt>` dismissKey so the same overdue won't re-nag but a future one re-surfaces;
+  **`intimacy-exercise`** (48, gate `sessions.own` + `adultGate: true`) — invites a guided intimacy exercise only
+  once the per-person 18+ ack exists AND an intimacy-group test has been taken (so it reads "for them", never a
+  premature/unsolicited sexual push). The shared mood/anxiety re-check window (`RECHECK_AFTER_DAYS` /
+  `RECHECKABLE_INSTRUMENTS` / `daysSince` + a new `wellbeingCheckin` aggregate) was extracted into
+  `home/wellbeing.ts` and **You.tsx refactored onto it (DRY)**. **Home** now loads the `testStore` (catalog +
+  per-test results) in its per-person effect — consolidating the previously-separate PHQ-9 fetch — and assembles
+  the `testResults` (instrument + group + when), `wellbeingCheckinDue`, and `lastWellbeingCheckinAt` signals into
+  `PersonRecommendationState`; the Slice-B state placeholders (`testResults` gained a `group`; the unused
+  `intimacyExerciseAvailable` removed; `lastWellbeingCheckinAt` added) were refined. **Also fixed a latent
+  spec-52 wiring bug:** Home's reactive capability snapshot omitted `challenges.own` (and `tests.own`), so the
+  challenge providers were filtered out and never surfaced — both are now added to the set. No new IPC, no new
+  vault schema, no new AI spend (the §6 model holds). Gate green: typecheck (all packages), lint, format,
+  **918 core + 844 desktop** unit (the three providers' relevance/gating/scoring/dismiss-signal + the
+  `wellbeingCheckin` helper's due/calm/never-checked-in cases + Home RTL for each new card incl. the 18+ gate
+  hiding the intimacy card even when the profile exists), **E2E +2** (the self-assessment/wellbeing recommendations
+  surface + the take-a-test route, and the intimacy exercise only after the 18+ ack + 360px clean). **Lesson:
+  adding a provider changes WHAT competes for the capped "For you" slots, so existing Home/For-you tests that
+  asserted a specific runner-up (the guided invite) must seed the new provider's "satisfied" state (a taken
+  profile test) to stay focused — the engine's ranking is the contract, not a fixed card set. And a renderer
+  capability snapshot that gates the engine must list EVERY provider's gate (the spec-52 challenge providers were
+  silently dead because `challenges.own` was missing) — a provider unit-tested with the gate in its state set
+  passes while the real app filters it out.**
 - 2026-06-25 — created (Draft). The **capstone** Home redesign + personalized recommendation/encouragement
   engine: a sleeker, warmer Home (greeting + gentle momentum reflection + a focal "Your next step / For you"
   recommendation section + a clean two-zone status/actionable hierarchy + warm celebration moments) and a

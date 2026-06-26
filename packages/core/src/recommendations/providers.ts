@@ -241,7 +241,83 @@ const suggestChallenge: RecommendationProvider = {
       : null,
 };
 
-/** The Slice-A built-ins, registered by `registerBuiltInRecommendationProviders`. */
+/** Invite a first self-assessment when none of the personality/relationships profile tests are taken
+ *  (50-self-assessments). A "discover yourself" invite — never wellbeing/intimacy (those have their own
+ *  gentle/18+ providers); stops firing the moment a profile test is taken. */
+const takeATest: RecommendationProvider = {
+  id: 'take-a-test',
+  domain: 'test',
+  capabilityGate: 'tests.own',
+  relevance: (s): RecommendationCandidate | null => {
+    const taken = s.testResults ?? [];
+    const profileTaken = taken.some(
+      (r) => r.group === 'personality' || r.group === 'relationships',
+    );
+    if (profileTaken) return null;
+    return {
+      id: 'take-a-test',
+      label: 'Discover how you see yourself',
+      reason:
+        'A quick self-assessment helps your coach, dreams, and reflections fit you better — take one when you’re ready.',
+      route: '/you',
+      score: 38,
+      // Durable invite — taking any profile test stops it firing; a "not now" keeps it quiet.
+      dismissKey: 'take-a-test',
+    };
+  },
+};
+
+/** A gentle mood/anxiety check-in when the last one is overdue on the ~14-day window (51 §3.4). A soft
+ *  invitation, NEVER a schedule, NEVER escalating — SelfOS never pressures a person to log their mood (§8).
+ *  Not 18+-gated; gated only on `tests.own`. */
+const wellbeingCheckin: RecommendationProvider = {
+  id: 'wellbeing-checkin',
+  domain: 'wellbeing',
+  capabilityGate: 'tests.own',
+  relevance: (s): RecommendationCandidate | null =>
+    s.wellbeingCheckinDue
+      ? {
+          id: 'wellbeing-checkin',
+          label: 'A gentle check-in',
+          reason:
+            'It’s been a little while since you checked in on how you’ve been feeling — only if it’d help, no pressure.',
+          route: '/you',
+          score: 48,
+          // The last check-in date: dismissing won't re-nag the SAME overdue, but a fresh check-in (then ≥14
+          // days later) re-surfaces — never an escalating schedule (§8).
+          dismissKey: `wellbeing-checkin:${s.lastWellbeingCheckinAt ?? 'due'}`,
+        }
+      : null,
+};
+
+/** Build on the person's intimacy profile with a guided exercise (48-intimacy-guided-sessions). 18+-gated
+ *  (filtered until the per-person ack) AND relevance-gated on having taken an intimacy-group test — so it
+ *  reads as "for them", never pushes sexual content at someone who hasn't engaged it. */
+const intimacyExercise: RecommendationProvider = {
+  id: 'intimacy-exercise',
+  domain: 'intimacy',
+  capabilityGate: 'sessions.own',
+  adultGate: true,
+  relevance: (s): RecommendationCandidate | null => {
+    const engaged = (s.testResults ?? []).some((r) => r.group === 'intimacy');
+    if (!engaged) return null;
+    return {
+      id: 'intimacy-exercise',
+      label: 'Build on your intimacy profile',
+      reason:
+        'You’ve explored your intimacy profile — a guided exercise can turn that into more connection, whenever it feels right.',
+      route: '/sessions',
+      score: 36,
+      dismissKey: 'intimacy-exercise',
+    };
+  },
+};
+
+/**
+ * The built-in recommendation providers, registered by `registerBuiltInRecommendationProviders`. Slice A is
+ * the existing-feature set; Slice B grows it as the 2026-06 features land (50/51/48/52) — each registered
+ * here (the engine built-ins), so they appear in "For you" when relevant + permitted with NO `Home.tsx` edit.
+ */
 export const BUILT_IN_RECOMMENDATION_PROVIDERS: readonly RecommendationProvider[] = [
   continueSession,
   staleGoal,
@@ -253,4 +329,8 @@ export const BUILT_IN_RECOMMENDATION_PROVIDERS: readonly RecommendationProvider[
   refreshMemory,
   challengeCheckin,
   suggestChallenge,
+  // Slice B (50/51/48): self-assessments, wellbeing check-ins, intimacy exercises.
+  takeATest,
+  wellbeingCheckin,
+  intimacyExercise,
 ];

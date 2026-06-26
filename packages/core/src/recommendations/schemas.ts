@@ -102,8 +102,17 @@ export interface PersonRecommendationState {
   /** A stable signature of the queued merge proposals — NEW drift re-surfaces a dismissal. */
   memorySignature?: string;
 
-  // --- Slice-B signals (additive-optional; absent ⇒ the provider contributes nothing) ---
-  testResults?: { instrument: string; takenAt: string }[];
+  // --- Slice-B signals (50/51/48; additive-optional — absent ⇒ the provider contributes nothing) ---
+  /** The active person's taken self-assessments (50) — instrument + `group` + when. Drives `take-a-test`
+   *  (no personality/relationships test taken yet → invite a first one) and `intimacy-exercise` (an
+   *  intimacy-group test taken = the person has engaged intimacy, so a guided exercise is "for them"). */
+  testResults?: { instrument: string; group: string; takenAt: string }[];
+  /** A mood/anxiety check-in is overdue on the gentle ~14-day window (51 §3.4) — a soft invitation, NEVER a
+   *  schedule and NEVER escalating; absent/false ⇒ no nudge. The provider it feeds is not 18+-gated. */
+  wellbeingCheckinDue?: boolean;
+  /** When the most recent mood/anxiety check-in was taken — the wellbeing-checkin dismissal signature, so a
+   *  NEW overdue (after a fresh check-in, then ≥14 days) re-surfaces while the same overdue won't re-nag. */
+  lastWellbeingCheckinAt?: string;
   /** There is an ACTIVE challenge (52) — suppresses the "take on a challenge" suggestion (one at a time). */
   activeChallenge?: boolean;
   /** An active challenge's check-in is due (52 §3.5) — surface the gentle "how did it go?" nudge. */
@@ -115,8 +124,6 @@ export interface PersonRecommendationState {
   challengeSuggestable?: boolean;
   /** A cached challenge suggestion's `computedAt` — drives the suggest dismissal signature (a NEW idea re-surfaces). */
   challengeSuggestionComputedAt?: string;
-  intimacyExerciseAvailable?: boolean;
-  wellbeingCheckinDue?: boolean;
 }
 
 /**

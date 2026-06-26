@@ -25,6 +25,9 @@ const LINK_CTA: Record<string, string> = {
   'continue-session': 'Open Sessions',
   'refresh-portrait': 'Refresh my portrait',
   'refresh-memory': 'Review memory',
+  'take-a-test': 'Take a quick assessment',
+  'wellbeing-checkin': 'Check in',
+  'intimacy-exercise': 'Open Sessions',
 };
 
 /**

@@ -14,24 +14,15 @@ import {
 } from '../../../design-system/components';
 import { useTestStore } from '../../../stores/testStore';
 import { CrisisFooter } from '../sessions/CrisisFooter';
+import { RECHECK_AFTER_DAYS, RECHECKABLE_INSTRUMENTS, daysSince } from '../home/wellbeing';
 import { topSubscales, wellbeingDisplay } from './profile';
 import styles from './You.module.css';
 
 const GROUP_ORDER: TestGroupId[] = ['personality', 'relationships', 'intimacy', 'wellbeing'];
 
-/** Mood/anxiety check-ins are gently invited to re-take after a while (51 §3.4 — passive prompt only). */
-const RECHECK_AFTER_DAYS = 14;
-const RECHECKABLE = new Set(['phq9', 'gad7']);
-
 function formatDate(iso: string): string {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString();
-}
-
-function daysSince(iso: string): number {
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return 0;
-  return Math.floor((Date.now() - then) / (24 * 60 * 60 * 1000));
 }
 
 /** A profile card for an instrument the person has taken: top dimensions + when, with Open / Retake. A
@@ -44,9 +35,9 @@ function ProfileCard({ test, results }: { test: TestSummary; results: TestResult
   const wb = test.wellbeing && latest ? wellbeingDisplay(test, latest.scores) : undefined;
   const dueForRecheck =
     test.wellbeing &&
-    RECHECKABLE.has(test.id) &&
+    RECHECKABLE_INSTRUMENTS.has(test.id) &&
     latest !== undefined &&
-    daysSince(latest.takenAt) >= RECHECK_AFTER_DAYS;
+    daysSince(latest.takenAt, Date.now()) >= RECHECK_AFTER_DAYS;
   return (
     <Card className={styles.card}>
       <Stack gap={3}>

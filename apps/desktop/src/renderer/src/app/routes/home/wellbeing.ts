@@ -47,6 +47,38 @@ export function checkInMoodPoints(moodResults: TestResult[]): MoodPoint[] {
     .sort((a, b) => a.at.localeCompare(b.at));
 }
 
+/** Mood/anxiety check-ins are gently invited to re-take after a while (51 §3.4 — a soft prompt, never a schedule). */
+export const RECHECK_AFTER_DAYS = 14;
+/** The instruments that get the gentle "check in again" invitation (mood + anxiety). */
+export const RECHECKABLE_INSTRUMENTS = new Set(['phq9', 'gad7']);
+
+/** Whole days between an ISO timestamp and `now` (0 on an unparseable value). */
+export function daysSince(iso: string, now: number): number {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return 0;
+  return Math.floor((now - then) / (24 * 60 * 60 * 1000));
+}
+
+/**
+ * Whether a gentle mood/anxiety check-in is due (53 §5.1 / 51 §3.4): the person HAS checked in before but
+ * their most recent recheckable check-in (PHQ-9 / GAD-7) is ≥14 days old. A soft invitation — it never fires
+ * for someone who has never checked in (that's the You hub's catalog), and never escalates (§8). Returns the
+ * last check-in date as the dismissal signature, so a fresh check-in re-surfaces a FUTURE overdue without
+ * re-nagging the same one. `resultsByTest` values are newest-first (the testStore contract).
+ */
+export function wellbeingCheckin(
+  resultsByTest: Record<string, TestResult[]>,
+  now: number,
+): { due: boolean; lastAt?: string } {
+  let lastAt: string | undefined;
+  for (const id of RECHECKABLE_INSTRUMENTS) {
+    const latest = resultsByTest[id]?.[0]?.takenAt;
+    if (latest && (lastAt === undefined || latest > lastAt)) lastAt = latest;
+  }
+  if (lastAt === undefined) return { due: false };
+  return { due: daysSince(lastAt, now) >= RECHECK_AFTER_DAYS, lastAt };
+}
+
 /**
  * A gentle, non-clinical one-line read of the recent mood direction (§7). Never a score, diagnosis, or
  * alarming framing — it's a reflection aid. Compares the most recent half of the points to the earlier

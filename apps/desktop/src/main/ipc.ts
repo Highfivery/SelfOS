@@ -269,6 +269,14 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.guidedGetState, bridge.guidedGetState);
   handle(IpcChannels.guidedSuggest, bridge.guidedSuggest);
   handle(IpcChannels.guidedAcknowledgeAdult, bridge.guidedAcknowledgeAdult);
+  handle(IpcChannels.testsList, bridge.testsList);
+  handle(IpcChannels.testsGet, bridge.testsGet);
+  handle(IpcChannels.testsTake, bridge.testsTake);
+  handle(IpcChannels.testsResults, bridge.testsResults);
+  handle(IpcChannels.testsNarrate, bridge.testsNarrate);
+  handle(IpcChannels.testsAcknowledgeAdult, bridge.testsAcknowledgeAdult);
+  handle(IpcChannels.testsDeleteResult, bridge.testsDeleteResult);
+  handle(IpcChannels.testsDeleteAll, bridge.testsDeleteAll);
   handle(IpcChannels.usageSessionCosts, bridge.usageSessionCosts);
   handle(IpcChannels.questionnairesList, bridge.questionnairesList);
   handle(IpcChannels.questionnairesSendStates, bridge.questionnairesSendStates);

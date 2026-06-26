@@ -28,6 +28,7 @@
     "./questionnaires": "./src/questionnaires/index.ts",
     "./dreams": "./src/dreams/index.ts",
     "./intake": "./src/intake/index.ts",
+    "./tests": "./src/tests/index.ts",
     "./intimacy": "./src/intimacy/index.ts",
     "./profile": "./src/profile/index.ts",
     "./relay": "./src/relay/index.ts",

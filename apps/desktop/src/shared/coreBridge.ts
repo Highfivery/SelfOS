@@ -112,6 +112,7 @@ import {
   type RelayStatus,
   type SessionCost,
   type SessionSummaryResult,
+  type TestResult,
   type UpdateCheckResult,
 } from './schemas';
 import { OWNER_ROLE_ID, roleAllows, type CapabilityKey } from './capabilities';
@@ -343,6 +344,21 @@ import {
   synthesizeIntake,
 } from '@selfos/core/intake';
 import {
+  deleteAllResults,
+  deleteResult,
+  getTest,
+  listResults,
+  listTestSummaries,
+  narrateResult,
+  registerTestContextProvider,
+  takeTest,
+  testForm,
+  type ScoreAnswers,
+  type TestForm,
+  type TestNarrateResponse,
+  type TestSummary,
+} from '@selfos/core/tests';
+import {
   acceptSuggestion,
   dismissSuggestion,
   listPendingSuggestions,
@@ -363,6 +379,12 @@ import { fromBase64, toBase64 } from '@selfos/core/encoding';
  * This module must stay **node/electron-free** — the web build imports it. Inputs from the (untrusted)
  * renderer are Zod-validated here so the trust boundary holds on both platforms.
  */
+
+// Register the test-profile context provider into 08's registry (50 §5.5) so questionnaire generation +
+// the gap-finder pull self-assessment profiles automatically. Idempotent by id (the built-ins register on
+// their own module load, before this runs since this module imports them).
+registerTestContextProvider();
+
 export interface BridgeHost {
   // --- Vault access ---
   /** The active vault's `FileSystem` + decrypted master key, or null when not unlocked / not set up. */
@@ -528,6 +550,14 @@ const ConversationAttachmentRefSchema = z.object({
 });
 const ChatConversationIdSchema = z.object({ conversationId: z.string().min(1) });
 const StartGuidedSchema = z.object({ guideId: z.string().min(1) });
+// Self-assessments (50). The answer value mirrors the questionnaire `Answer.value` union; `scoreTest` is
+// total (clamps/omits bad cells) so loose validation is safe — we only need a record of answered questions.
+const TestIdSchema = z.object({ testId: z.string().min(1) });
+const TestResultRefSchema = z.object({ testId: z.string().min(1), resultId: z.string().min(1) });
+const TestTakeSchema = z.object({
+  testId: z.string().min(1),
+  answers: z.record(z.string(), z.unknown()),
+});
 const SessionSetStatusSchema = z.object({
   conversationId: z.string().min(1),
   status: SessionStatusSchema,
@@ -1870,6 +1900,136 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       }
       await acknowledgeAdult(ctx.fs, ctx.key, personId);
       return getGuidanceState(ctx.fs, ctx.key, personId);
+    },
+    // --- Self-assessments / "Tests" (50-self-assessments §6). Gated `tests.own` + active-person-scoped; the
+    // 18+ group's items/results are withheld here (the trust boundary), not just the UI. Only narrate spends. ---
+    testsList: async (): Promise<{ tests: TestSummary[]; adultAcknowledged: boolean }> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'tests.own'))) {
+        return { tests: [], adultAcknowledged: false };
+      }
+      const ack = (await getGuidancePrefs(ctx.fs, ctx.key, personId)).adultAcknowledged === true;
+      return { tests: listTestSummaries(ack), adultAcknowledged: ack };
+    },
+    testsGet: async (input): Promise<TestForm | null> => {
+      const { testId } = TestIdSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'tests.own'))) return null;
+      const def = getTest(testId);
+      if (!def) return null;
+      // A sensitive test's items are withheld until the 18+ ack (§3.5) — in the bridge, not just the UI.
+      if (
+        def.adult &&
+        (await getGuidancePrefs(ctx.fs, ctx.key, personId)).adultAcknowledged !== true
+      ) {
+        return null;
+      }
+      return testForm(def);
+    },
+    testsTake: async (input): Promise<TestResult | null> => {
+      const { testId, answers } = TestTakeSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'tests.own'))) return null;
+      const def = getTest(testId);
+      if (!def) return null;
+      if (
+        def.adult &&
+        (await getGuidancePrefs(ctx.fs, ctx.key, personId)).adultAcknowledged !== true
+      ) {
+        return null;
+      }
+      // Deterministic + free — no budget check, no AI. `scoreTest` is total, so loosely-typed answers are safe.
+      return takeTest(
+        ctx.fs,
+        ctx.key,
+        def,
+        { personId, answers: answers as ScoreAnswers },
+        new Date(),
+      );
+    },
+    testsResults: async (input): Promise<TestResult[]> => {
+      const { testId } = TestIdSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'tests.own'))) return [];
+      const def = getTest(testId);
+      if (
+        def?.adult &&
+        (await getGuidancePrefs(ctx.fs, ctx.key, personId)).adultAcknowledged !== true
+      ) {
+        return [];
+      }
+      return listResults(ctx.fs, ctx.key, personId, testId);
+    },
+    testsNarrate: async (input): Promise<TestNarrateResponse> => {
+      const { testId, resultId } = TestResultRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'tests.own'))) {
+        return { ok: false, reason: 'AI_OFF', message: 'Not available.' };
+      }
+      const def = getTest(testId);
+      if (!def) return { ok: false, reason: 'ERROR', message: 'That assessment is gone.' };
+      if (
+        def.adult &&
+        (await getGuidancePrefs(ctx.fs, ctx.key, personId)).adultAcknowledged !== true
+      ) {
+        return { ok: false, reason: 'AI_OFF', message: 'Not available.' };
+      }
+      const result = (await listResults(ctx.fs, ctx.key, personId, testId)).find(
+        (r) => r.id === resultId,
+      );
+      if (!result) return { ok: false, reason: 'ERROR', message: 'That result is gone.' };
+      const now = new Date();
+      const person = await checkBudget(ctx.fs, ctx.key, { scope: 'person', personId, now });
+      const app = await checkBudget(ctx.fs, ctx.key, { scope: 'app', now });
+      const out = await narrateResult({
+        fs: ctx.fs,
+        key: ctx.key,
+        client: host.claude,
+        apiKey: (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null,
+        aiEnabled: (await readVaultSettingsValues(ctx.fs))['ai.enabled'] === true,
+        model: await host.activeModel(),
+        def,
+        result,
+        personId,
+        now,
+        overBudget: person.state === 'over' || app.state === 'over',
+      });
+      if (!out.ok) return out;
+      // Cost ($) is admin-only (the budgets.manage gate, redacted here like everywhere else, 06).
+      const showCost = await activePersonCan(ctx.fs, ctx.key, 'budgets.manage');
+      return { ok: true, text: out.text, ...(showCost ? { costUsd: out.costUsd } : {}) };
+    },
+    testsAcknowledgeAdult: async (): Promise<{
+      tests: TestSummary[];
+      adultAcknowledged: boolean;
+    }> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'tests.own'))) {
+        return { tests: [], adultAcknowledged: false };
+      }
+      await acknowledgeAdult(ctx.fs, ctx.key, personId);
+      return { tests: listTestSummaries(true), adultAcknowledged: true };
+    },
+    testsDeleteResult: async (input): Promise<TestResult[]> => {
+      const { testId, resultId } = TestResultRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'tests.own'))) return [];
+      await deleteResult(ctx.fs, ctx.key, personId, testId, resultId);
+      return listResults(ctx.fs, ctx.key, personId, testId);
+    },
+    testsDeleteAll: async (input): Promise<void> => {
+      const { testId } = TestIdSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'tests.own'))) return;
+      await deleteAllResults(ctx.fs, ctx.key, personId, testId);
     },
     usageSessionCosts: async (): Promise<Record<string, SessionCost>> => {
       const ctx = await host.vaultAndKey();

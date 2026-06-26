@@ -7344,3 +7344,130 @@ test('discoverability: the first-run orientation shows, is dismissed, is re-open
     await rm(vault, { recursive: true, force: true });
   }
 });
+
+test('self-assessments (50): take ECR-R → profile bars → retake adds a trend; AI-off narrate is calm; 360px clean', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'You' }).click();
+    await expect(w.getByRole('heading', { name: /how you see yourself/i })).toBeVisible();
+
+    // Take the Attachment (ECR-R) test through the rendered UI — its catalog card's "Take" button.
+    await w.getByRole('heading', { name: 'Attachment style' }).scrollIntoViewIfNeeded();
+    await w
+      .locator(
+        'xpath=//h3[normalize-space()="Attachment style"]/ancestor::*[contains(@class,"card")][1]',
+      )
+      .getByRole('button', { name: 'Take' })
+      .click();
+    await w.getByRole('button', { name: 'Begin' }).click();
+    const groups1 = w.locator('[role="radiogroup"]');
+    await expect(groups1).toHaveCount(36);
+    for (let i = 0; i < 36; i += 1) await groups1.nth(i).getByRole('radio').last().click();
+    const score1 = w.getByRole('button', { name: 'See my result' });
+    await score1.scrollIntoViewIfNeeded();
+    await score1.click();
+
+    // The result profile renders subscale bars (text + band).
+    await expect(w.getByRole('heading', { name: 'Your results' })).toBeVisible();
+    await expect(w.getByText('Attachment anxiety')).toBeVisible();
+    await expect(w.getByText('Attachment avoidance')).toBeVisible();
+
+    // AI is off → the narrative button shows a calm state, never a blocked result.
+    await w.getByRole('button', { name: /Reflect on my result/ }).click();
+    await expect(w.getByText(/Turn on AI in Settings/i)).toBeVisible();
+
+    // Retake → a second dated result → the trends + history sections appear.
+    await w.getByRole('button', { name: 'Retake' }).click();
+    await w.getByRole('button', { name: 'Begin' }).click();
+    const groups2 = w.locator('[role="radiogroup"]');
+    await expect(groups2).toHaveCount(36);
+    for (let i = 0; i < 36; i += 1) await groups2.nth(i).getByRole('radio').last().click();
+    await w.getByRole('button', { name: 'See my result' }).scrollIntoViewIfNeeded();
+    await w.getByRole('button', { name: 'See my result' }).click();
+    await expect(w.getByText(/How this has shifted \(2 takes\)/)).toBeVisible();
+    await expect(w.getByRole('heading', { name: 'History' })).toBeVisible();
+
+    // The derived Insight is on disk, approved, source 'test'.
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('tests e2e: master key missing');
+    const insights = await listInsightsForPerson(fs, key, 'owner-1');
+    const testInsight = insights.find(
+      (i) => i.source === 'test' && i.provenance.testId === 'ecr-r',
+    );
+    expect(testInsight?.approved).toBe(true);
+
+    // No horizontal overflow / inner scrollbar at phone width on the result surface.
+    await w.setViewportSize({ width: 360, height: 780 });
+    const overflow = await w.evaluate(() => {
+      const offenders: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          offenders.push(`${el.tagName}.${el.className}`);
+        }
+      });
+      const main = document.querySelector('main');
+      return { offenders, mainOverflow: main ? main.scrollWidth - main.clientWidth : 0 };
+    });
+    expect(overflow.offenders).toEqual([]);
+    expect(overflow.mainOverflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('self-assessments (50): the kink test is 18+-gated; a result writes RESTRICTED own-only facts (decrypt)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'You' }).click();
+
+    // The Intimacy & sexuality group is 18+-gated — the cards are withheld until acknowledged.
+    await expect(w.getByText(/These are 18\+/)).toBeVisible();
+    await expect(w.getByRole('heading', { name: 'Kink & intimacy interests' })).toHaveCount(0);
+    await w.getByRole('button', { name: /18 or older/i }).click();
+    await expect(w.getByRole('heading', { name: 'Kink & intimacy interests' })).toBeVisible();
+
+    // Take it: opt into a category (reveals its matrix), rate one item, score.
+    await w
+      .locator(
+        'xpath=//h3[normalize-space()="Kink & intimacy interests"]/ancestor::*[contains(@class,"card")][1]',
+      )
+      .getByRole('button', { name: 'Take' })
+      .click();
+    await w.getByRole('button', { name: 'Begin' }).click();
+    await w.getByText('Sensual & sensory', { exact: true }).click(); // a kink-areas multiChoice option
+    // The revealed category matrix → rate the first row's last point.
+    await w.locator('[role="radiogroup"]').first().getByRole('radio').last().click();
+    await w.getByRole('button', { name: 'See my result' }).scrollIntoViewIfNeeded();
+    await w.getByRole('button', { name: 'See my result' }).click();
+    await expect(w.getByRole('heading', { name: 'Your results' })).toBeVisible();
+
+    // Decrypt: the derived Insight's facts are RESTRICTED + tagged Intimacy (own-context-only, never broadcast).
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('kink e2e: master key missing');
+    const insights = await listInsightsForPerson(fs, key, 'owner-1');
+    const kink = insights.find(
+      (i) => i.source === 'test' && i.provenance.testId === 'kink-interests',
+    );
+    expect(kink).toBeTruthy();
+    expect(kink!.facts.length).toBeGreaterThan(0);
+    expect(kink!.facts.every((f) => f.restricted === true && f.shareable === false)).toBe(true);
+    // Reaches the OWN intimacy context, but not a non-intimacy one.
+    const intimacy = await summarizeForContext(fs, key, 'owner-1', [], { lifeAreas: ['Intimacy'] });
+    expect(intimacy).toContain('intimacy interests');
+    const money = await summarizeForContext(fs, key, 'owner-1', [], { lifeAreas: ['Money'] });
+    expect(money).not.toContain('intimacy interests');
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});

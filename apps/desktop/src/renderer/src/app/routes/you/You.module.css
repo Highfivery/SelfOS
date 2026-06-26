@@ -1,0 +1,90 @@
+.page {
+  height: 100%;
+  overflow-y: auto;
+}
+
+.inner {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: var(--space-5);
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.memoryLink {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--color-accent);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.memoryLink:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm, 4px);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-4);
+  margin-top: var(--space-3);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+}
+
+.gatedCard {
+  margin-top: var(--space-3);
+}
+
+.eyebrow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-tertiary);
+  margin-bottom: var(--space-1);
+}
+
+.privateTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--color-text-secondary);
+}
+
+.blurb {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.framing {
+  font-style: italic;
+}
+
+.groupTitle {
+  margin-bottom: var(--space-1);
+}
+
+.cardActions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: auto;
+}

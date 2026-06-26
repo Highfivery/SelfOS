@@ -545,9 +545,12 @@ export function conversationStatus(c: Pick<Conversation, 'status'>): SessionStat
  * questionnaires produce them now; session analysis (09), the tracking dashboards (11), and dreams (12)
  * build on the same shape. Stored encrypted per subject person; `metrics` is the extensible basis for
  * every trend. `'dream'` is the third producer (12-dreams §1.1) and `'intake'` the fourth
- * (18-personal-onboarding §4.1) — both additive, so existing Insights parse unchanged.
+ * (18-personal-onboarding §4.1) — both additive, so existing Insights parse unchanged. `'test'` is the
+ * fifth producer (50-self-assessments §4.4): a deterministically-scored self-assessment result. Additive
+ * enum widening — `summarizeForContext`/`feedableInsights` don't branch on `source`, so a test insight feeds
+ * context exactly like a session/intake one; no `schemaVersion` bump (the `'dream'`/`'intake'` precedent).
  */
-export const InsightSourceSchema = z.enum(['questionnaire', 'session', 'dream', 'intake']);
+export const InsightSourceSchema = z.enum(['questionnaire', 'session', 'dream', 'intake', 'test']);
 export type InsightSource = z.infer<typeof InsightSourceSchema>;
 
 export const InsightFactSchema = z.object({
@@ -658,6 +661,8 @@ export const InsightProvenanceSchema = z.object({
   compatibilityGroupId: z.string().optional(), // set for compatibility alignment insights (08 §13.5d)
   guideId: z.string().optional(), // set when the session was a guided exercise (16-guided-sessions §3.5)
   intakeSection: z.string().optional(), // set for intake-sourced facts (18-personal-onboarding §4.1)
+  testId: z.string().optional(), // set for test-sourced insights → deep-link to /you/:testId (50 §4.4)
+  testResultId: z.string().optional(), // the specific TestResult this insight was built from (50 §4.4)
   at: z.string(),
 });
 export type InsightProvenance = z.infer<typeof InsightProvenanceSchema>;
@@ -740,6 +745,56 @@ export const GoalSchema = z.object({
   lastTouchedAt: z.string().optional(), // last time the person/coach engaged it (the staleness basis)
 });
 export type Goal = z.infer<typeof GoalSchema>;
+
+/**
+ * A scored subscale within a self-assessment result (50-self-assessments §4.3). `key` matches a
+ * `SubscaleSpec.key` (e.g. `'bigfive.neuroticism'`, `'ecr.anxiety'`, `'kink.power-exchange'`); `raw` is the
+ * deterministic aggregate (sum/mean) before normalization; `normalized` is what charts + `Insight.metrics`
+ * use (0..1 for `'unit'`, −1..1 for `'signed'`); `band` is the plain, non-pathologizing descriptor label
+ * resolved at score time (§3.3/§8.1).
+ */
+export const TestSubscaleScoreSchema = z.object({
+  key: z.string().min(1),
+  raw: z.number(),
+  normalized: z.number(),
+  band: z.string().optional(),
+});
+export type TestSubscaleScore = z.infer<typeof TestSubscaleScoreSchema>;
+
+/**
+ * One taking of a self-assessment ("Test"), per-person + encrypted at `people/<id>/tests/<result-id>.enc`
+ * (50-self-assessments §4.3). A retake is a NEW file (`reTakeOf` set) + a new trend point; prior results are
+ * kept (never overwritten) so trends are honest. `answers.value` reuses the questionnaire `Answer.value`
+ * union (08 §4.3) so the `@selfos/answering` renderer round-trips test items unchanged (matrix →
+ * `Record<string, number>`). The `TestDefinition` itself is curated code, never vaulted.
+ */
+export const TestResultSchema = z.object({
+  id: z.string().min(1),
+  schemaVersion: z.number().int().positive(),
+  testId: z.string().min(1), // the TestDefinition.id
+  testVersion: z.number().int().nonnegative(), // the definition's content version at score time (honesty)
+  subjectPersonId: z.string().min(1), // the taker (always self — there is no other recipient)
+  answers: z.array(
+    z.object({
+      questionId: z.string().min(1),
+      value: z.union([
+        z.string(),
+        z.number(),
+        z.boolean(),
+        z.array(z.string()),
+        z.record(z.string(), z.number()), // matrix / allocation
+      ]),
+    }),
+  ),
+  scores: z.array(TestSubscaleScoreSchema), // the deterministic result
+  reTakeOf: z.string().optional(), // prior TestResult id → the longitudinal chain (trends)
+  insightId: z.string().optional(), // the derived Insight this result produced (source: 'test')
+  crisisFlag: z.boolean().optional(), // a heuristic answer-level flag → lead with resources (§8.2)
+  takenAt: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type TestResult = z.infer<typeof TestResultSchema>;
 
 /** A goal is "stale" past its `due`, or (no `due`) after this many days untouched (39 §11 Q4). */
 export const STALE_AFTER_DAYS = 21;

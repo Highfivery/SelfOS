@@ -19,8 +19,10 @@ import {
   unlock as kvUnlock,
   type RelayEnv,
 } from '@selfos/core/relay';
-import { saveInsight, summarizeForContext } from '@selfos/core/insights';
+import { listInsightsForPerson, saveInsight, summarizeForContext } from '@selfos/core/insights';
 import { submitSectionForm } from '@selfos/core/intake';
+import { getTest } from '@selfos/core/tests';
+import { matrixRowKey } from '@selfos/core/schemas';
 import { saveGoal } from '@selfos/core/goals';
 import { buildContext } from '@selfos/core/people';
 import { ANTHROPIC_API_KEY_ID, OPENAI_API_KEY_ID } from './channels';
@@ -3945,5 +3947,114 @@ describe('update awareness (36)', () => {
     host.host.checkForUpdate = () => Promise.resolve(null);
     expect(await bridge.updatesCheck()).toBeNull();
     expect(await bridge.updatesGetState()).toEqual(good);
+  });
+
+  describe('self-assessments (50 §6)', () => {
+    /** Max-rate every matrix cell of a test, so subscales land high — exercises take + bridge end-to-end. */
+    const maxAnswers = (testId: string): Record<string, unknown> => {
+      const def = getTest(testId)!;
+      const answers: Record<string, unknown> = {};
+      for (const item of def.items) {
+        if (item.type === 'matrix' && item.matrix) {
+          const record: Record<string, number> = {};
+          for (const row of item.matrix.rows) record[matrixRowKey(row)] = item.matrix.max;
+          answers[item.id] = record;
+        }
+      }
+      return answers;
+    };
+
+    it('lists the catalog (18+ filtered until acked) and takes a test → a TestResult + a test Insight', async () => {
+      const { bridge, ownerId, host } = await freshOwner();
+
+      // 18+ tests are withheld from the catalog AND `testsGet`/`testsTake` until acknowledged (the trust boundary).
+      let list = await bridge.testsList();
+      expect(list.adultAcknowledged).toBe(false);
+      expect(list.tests.map((t) => t.id)).toContain('bigfive-ipip-120');
+      expect(list.tests.map((t) => t.id)).not.toContain('kink-interests');
+      expect(await bridge.testsGet({ testId: 'kink-interests' })).toBeNull();
+      expect(await bridge.testsTake({ testId: 'kink-interests', answers: {} })).toBeNull();
+
+      // A non-sensitive take scores + persists + bridges an approved test Insight (own context).
+      const result = await bridge.testsTake({ testId: 'ecr-r', answers: maxAnswers('ecr-r') });
+      expect(result?.testId).toBe('ecr-r');
+      expect(result?.scores).toHaveLength(2);
+      const { fs, key } = (await host.host.vaultAndKey())!;
+      const testInsight = (await listInsightsForPerson(fs, key, ownerId)).find(
+        (i) => i.source === 'test',
+      );
+      expect(testInsight?.approved).toBe(true);
+      expect(testInsight?.facts.every((f) => !f.restricted)).toBe(true);
+
+      // After acknowledging, the 18+ group appears + becomes takeable.
+      list = await bridge.testsAcknowledgeAdult();
+      expect(list.adultAcknowledged).toBe(true);
+      expect(list.tests.map((t) => t.id)).toContain('kink-interests');
+      expect((await bridge.testsGet({ testId: 'kink-interests' }))?.id).toBe('kink-interests');
+    });
+
+    it('a sensitive (kink) result is restricted + reaches the OWN intimacy context, not a non-intimacy one', async () => {
+      const { bridge, ownerId, host } = await freshOwner();
+      await bridge.testsAcknowledgeAdult();
+      const result = await bridge.testsTake({
+        testId: 'kink-interests',
+        answers: maxAnswers('kink-interests'),
+      });
+      expect(result?.insightId).toBeTruthy();
+      const { fs, key } = (await host.host.vaultAndKey())!;
+      const insight = (await listInsightsForPerson(fs, key, ownerId)).find(
+        (i) => i.source === 'test',
+      )!;
+      expect(insight.facts.length).toBeGreaterThan(0);
+      expect(insight.facts.every((f) => f.restricted === true)).toBe(true);
+
+      const intimacy = await summarizeForContext(fs, key, ownerId, [], { lifeAreas: ['Intimacy'] });
+      expect(intimacy).toContain('intimacy interests');
+      const money = await summarizeForContext(fs, key, ownerId, [], { lifeAreas: ['Money'] });
+      expect(money).not.toContain('intimacy interests');
+    });
+
+    it('a retake reuses the insight + chains; delete-all removes the derived Insight', async () => {
+      const { bridge, ownerId, host } = await freshOwner();
+      const first = await bridge.testsTake({ testId: 'ecr-r', answers: maxAnswers('ecr-r') });
+      const second = await bridge.testsTake({ testId: 'ecr-r', answers: maxAnswers('ecr-r') });
+      expect(second?.reTakeOf).toBe(first?.id);
+      expect(second?.insightId).toBe(first?.insightId);
+      expect(await bridge.testsResults({ testId: 'ecr-r' })).toHaveLength(2);
+
+      await bridge.testsDeleteAll({ testId: 'ecr-r' });
+      expect(await bridge.testsResults({ testId: 'ecr-r' })).toHaveLength(0);
+      const { fs, key } = (await host.host.vaultAndKey())!;
+      expect(
+        (await listInsightsForPerson(fs, key, ownerId)).filter((i) => i.source === 'test'),
+      ).toHaveLength(0);
+    });
+
+    it('narrate is the ONLY metered call (take records nothing); $ is admin-only', async () => {
+      const { bridge } = await freshOwner();
+      await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+      await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+      const result = await bridge.testsTake({ testId: 'ecr-r', answers: maxAnswers('ecr-r') });
+      // take spends nothing — no usage event of any type.
+      expect((await bridge.usageSummary({ scope: 'person', period: 'month' })).byType).toEqual({});
+
+      const out = await bridge.testsNarrate({ testId: 'ecr-r', resultId: result!.id });
+      expect(out.ok).toBe(true);
+      if (out.ok) expect(out.costUsd).toBeDefined(); // owner is admin → $ shown
+      expect(
+        (await bridge.usageSummary({ scope: 'person', period: 'month' })).byType['test.narrate']
+          ?.count,
+      ).toBe(1);
+    });
+
+    it('denies tests to a person without tests.own (Guest)', async () => {
+      const { bridge } = await freshOwner();
+      const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
+      await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+      await bridge.sessionSetActive({ personId: guest.id });
+      expect((await bridge.testsList()).tests).toHaveLength(0);
+      expect(await bridge.testsGet({ testId: 'ecr-r' })).toBeNull();
+      expect(await bridge.testsTake({ testId: 'ecr-r', answers: {} })).toBeNull();
+    });
   });
 });

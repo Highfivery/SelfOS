@@ -90,10 +90,12 @@ import type {
   SessionCost,
   SessionStatus,
   SessionSummaryResult,
+  TestResult,
   UpdateCheckResult,
   UsageEvent,
   UsageSummary,
 } from './schemas';
+import type { TestForm, TestNarrateResponse, TestSummary } from '@selfos/core/tests';
 
 /**
  * IPC channel names + the renderer-facing bridge type. This module is zod-free so it is safe to
@@ -280,6 +282,16 @@ export const IpcChannels = {
   intakeAcknowledgeAdult: 'intake:acknowledgeAdult',
   intakeSetAnswerSharing: 'intake:setAnswerSharing',
   intakeSynthesize: 'intake:synthesize',
+  // Self-assessments / "Tests" (50-self-assessments §6). All gated `tests.own` + active-person-scoped; the
+  // 18+ group's items/results are withheld in the bridge until `adultAcknowledged`. Only `tests:narrate` spends.
+  testsList: 'tests:list',
+  testsGet: 'tests:get',
+  testsTake: 'tests:take',
+  testsResults: 'tests:results',
+  testsNarrate: 'tests:narrate',
+  testsAcknowledgeAdult: 'tests:acknowledgeAdult',
+  testsDeleteResult: 'tests:deleteResult',
+  testsDeleteAll: 'tests:deleteAll',
   profileSuggestions: 'profile:suggestions',
   profileAcceptSuggestion: 'profile:acceptSuggestion',
   profileDismissSuggestion: 'profile:dismissSuggestion',
@@ -1052,6 +1064,38 @@ export interface SelfosBridge {
    * portrait (→ the portrait Insight + inferred field fills + completion). Requires `intake.own`.
    */
   intakeSynthesize(input: { sectionId?: string }): Promise<IntakeSynthesisResult>;
+  // --- Self-assessments / "Tests" (50-self-assessments §6) — own-scoped, gated `tests.own` ---
+  /**
+   * The catalog the active person may take (display metadata only — never the scoring spec). The 18+ group is
+   * filtered out unless `adultAcknowledged` (resolved in the bridge, §3.5). Also reports the ack state so the
+   * hub can show the "acknowledge to view" affordance. Empty for a person without `tests.own`.
+   */
+  testsList(): Promise<{ tests: TestSummary[]; adultAcknowledged: boolean }>;
+  /** One test's items + metadata for the Take screen; null (withheld) for a sensitive test when not acked. */
+  testsGet(input: { testId: string }): Promise<TestForm | null>;
+  /**
+   * Deterministically score a take (free, no AI/budget), persist a `TestResult`, bridge the Insight (§5.4), and
+   * return the result. Validates the answers + testId; withheld for a sensitive test when not acked. Null if
+   * not permitted.
+   */
+  testsTake(input: {
+    testId: string;
+    answers: Record<string, unknown>;
+  }): Promise<TestResult | null>;
+  /** All of the active person's dated results for a test, newest first (history + trend series). */
+  testsResults(input: { testId: string }): Promise<TestResult[]>;
+  /**
+   * The OPTIONAL "what this means for you" AI narrative (§3.3) — explicitly user-triggered, metered
+   * `test.narrate`, budget-gated. `costUsd` is admin-only (redacted at the bridge). Typed envelopes for
+   * AI-off / no-key / budget / error; the deterministic profile renders regardless.
+   */
+  testsNarrate(input: { testId: string; resultId: string }): Promise<TestNarrateResponse>;
+  /** Record the one-time 18+ acknowledgement (shared with guided sessions + intake); returns the new state. */
+  testsAcknowledgeAdult(): Promise<{ tests: TestSummary[]; adultAcknowledged: boolean }>;
+  /** Delete one result; if it was the last for that test, its derived Insight is removed too. Returns remaining. */
+  testsDeleteResult(input: { testId: string; resultId: string }): Promise<TestResult[]>;
+  /** Delete ALL results for a test + the derived Insight. */
+  testsDeleteAll(input: { testId: string }): Promise<void>;
   // --- Self-maintaining profile (18-personal-onboarding §15) — own-scoped, gated `intake.own` ---
   /** The active person's pending profile-update suggestions (stale answers noticed by analysis, §15). */
   profileSuggestions(): Promise<ProfileUpdateSuggestion[]>;

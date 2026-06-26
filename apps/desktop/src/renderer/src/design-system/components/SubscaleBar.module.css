@@ -1,0 +1,65 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.label {
+  font-size: 0.875rem;
+  color: var(--color-text-primary);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.figure {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex: none;
+}
+
+.band {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+
+.value {
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-primary);
+}
+
+.track {
+  position: relative;
+  height: 10px;
+  border-radius: var(--radius-pill, 999px);
+  background: var(--color-surface-alt);
+  overflow: hidden;
+}
+
+.fill {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: var(--color-accent);
+  border-radius: inherit;
+}
+
+/* A signed bar shows a faint centre mark so the lean reads against the neutral midpoint. */
+.center {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 1px;
+  height: 100%;
+  background: var(--color-border-strong);
+  transform: translateX(-0.5px);
+}

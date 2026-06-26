@@ -4,7 +4,7 @@
 >
 > The shared consensual-adult intimacy inventory `INTIMACY_ACTIVITIES` is a **flat ~30-string list**
 > (`packages/core/src/intimacy/topics.ts`) read by the onboarding intimacy matrix, questionnaire
-> generation, and — soon — the kink-inventory test ([`50`](50-self-assessments.md)). This spec
+> generation, and the kink-inventory test ([`50`](50-self-assessments.md)). This spec
 > **greatly expands and restructures** it into a **categorized, tiered inventory** (~60–100 activities
 > across ~14 categories, each entry carrying a stable `key`, a display `label`, a `category`, and an
 > intensity `tier` from gentle→extreme), spanning slow/sensual through extreme/hardcore/kinky/explicit

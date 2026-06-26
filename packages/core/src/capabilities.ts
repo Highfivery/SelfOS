@@ -43,6 +43,10 @@ export const CAPABILITIES = [
   // Devices & key rotation (32-device-management §4.2) — list/rename/revoke devices + rotate the master
   // key. Owner-only (not in any non-owner default); the Owner has it via the full-access bypass.
   'devices.manage',
+  // Self-assessments / "Tests" (50-self-assessments §4.5). `tests.own` = take + view + retake + delete one's
+  // OWN self-assessments. Member default ON (taking a test about yourself is ordinary — not break-glass).
+  // The intimacy/kink + sexuality tests are ADDITIONALLY gated by the shared 18+ ack (§3.5), not a capability.
+  'tests.own',
 ] as const;
 
 export type CapabilityKey = (typeof CAPABILITIES)[number];
@@ -69,6 +73,7 @@ export const CAPABILITY_LABELS: Record<CapabilityKey, string> = {
   'intake.readRestricted': 'Reveal restricted intake content (break-glass)',
   'memory.own': 'View & manage their own memory',
   'devices.manage': 'Manage devices & re-key the vault',
+  'tests.own': 'Take their own self-assessments',
 };
 
 /**
@@ -120,6 +125,7 @@ export const DEFAULT_ROLES: Role[] = [
       'dreams.generateImage',
       'intake.own',
       'memory.own',
+      'tests.own',
     ]),
   },
   {

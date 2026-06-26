@@ -10,6 +10,9 @@ import { Memory } from './routes/memory/Memory';
 import { SharingPanel } from './routes/memory/SharingPanel';
 import { Dreams } from './routes/dreams/Dreams';
 import { DreamPatterns } from './routes/dreams/DreamPatterns';
+import { You } from './routes/you/You';
+import { TestTake } from './routes/you/TestTake';
+import { TestResultScreen } from './routes/you/TestResultScreen';
 import { Onboarding } from './routes/onboarding/Onboarding';
 import { People } from './routes/people/People';
 import { Roles } from './routes/roles/Roles';
@@ -38,6 +41,9 @@ const GUARDED_ROUTES: { path: string; capability: CapabilityKey; element: JSX.El
   { path: 'memory/sharing', capability: 'memory.own', element: <SharingPanel /> },
   { path: 'dreams', capability: 'dreams.own', element: <Dreams /> },
   { path: 'dreams/patterns', capability: 'dreams.own', element: <DreamPatterns /> },
+  { path: 'you', capability: 'tests.own', element: <You /> },
+  { path: 'you/:testId/take', capability: 'tests.own', element: <TestTake /> },
+  { path: 'you/:testId', capability: 'tests.own', element: <TestResultScreen /> },
   { path: 'people', capability: 'people.manage', element: <People /> },
   { path: 'roles', capability: 'roles.manage', element: <Roles /> },
   // Usage is reachable with `sessions.own`; it filters cost/the Everyone scope internally via

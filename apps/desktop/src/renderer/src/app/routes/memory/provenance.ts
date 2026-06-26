@@ -21,6 +21,7 @@ const SOURCE_NOUN: Record<InsightSource, string> = {
   dream: 'a dream',
   questionnaire: 'a questionnaire',
   intake: 'onboarding',
+  test: 'a self-assessment',
 };
 
 export function provenanceTarget(insight: Insight): ProvenanceTarget {
@@ -54,6 +55,14 @@ export function provenanceTarget(insight: Insight): ProvenanceTarget {
       ...(insight.provenance.intakeSection
         ? { state: { openSection: insight.provenance.intakeSection } }
         : {}),
+      source: { kind: 'other' },
+    };
+  }
+  if (insight.source === 'test') {
+    // A self-assessment result deep-links to its result profile (50 §4.4) — the You hub reads `/you/:testId`.
+    return {
+      label,
+      to: insight.provenance.testId ? `/you/${insight.provenance.testId}` : '/you',
       source: { kind: 'other' },
     };
   }

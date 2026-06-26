@@ -57,7 +57,7 @@ the **derived Insight**, never the raw answers wholesale.
 
 ### 1.1 The shared Insight / metrics layer
 
-`Insight` is a single, source-discriminated record (`source: 'questionnaire' | 'session' | 'dream'`) stored
+`Insight` is a single, source-discriminated record (`source: 'questionnaire' | 'session' | 'dream' | 'intake' | 'test'`) stored
 encrypted per person/relationship — the app's **long-term memory** (the thing `05` deferred). It carries
 free-text facts **and** a `metrics` map of named, normalized numeric signals (e.g. `connection`,
 `desire`, `moodValence`) that are **chartable over time**. Questionnaires define and own this layer here;
@@ -448,7 +448,7 @@ interface ResponseSet {
 ### 4.4 Insight (the shared Insight / metrics layer)
 
 ```ts
-type InsightSource = 'questionnaire' | 'session' | 'dream'; // 'session' by spec 09, 'dream' by spec 12
+type InsightSource = 'questionnaire' | 'session' | 'dream' | 'intake' | 'test'; // 'session' by 09, 'dream' by 12, 'intake' by 18, 'test' by 50
 
 interface InsightFact {
   id: string;

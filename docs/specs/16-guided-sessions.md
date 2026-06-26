@@ -79,9 +79,11 @@ launcher (the conversation **list** stays in the left pane as today):
 - **Suggested for you** (§3.4): a row/cards of 2–4 AI-recommended exercises (or a calm "turn on AI" / "add
   more about yourself" state). Each card → starts that guided session.
 - **The grouped catalog** (§3.2): collapsible groups — **Reflective & therapy-informed**, **Coaching**,
-  **Intimacy & connection** — each a grid of exercise cards (title + framework tag + one-line blurb). The
-  Intimacy & connection group is gated (§8.3). (Group titles are deliberately non-clinical; the recognisable
-  framework lives in each card's tag — §8.1.)
+  **Family & relationships**, **Intimacy & connection** — each a grid of exercise cards (title + framework
+  tag + one-line blurb), above a **search** that filters every group by name, framework, or topic (a
+  non-matching group collapses away; the gated Intimacy group is never surfaced via search before the ack).
+  The Intimacy & connection group is gated (§8.3). (Group titles are deliberately non-clinical; the
+  recognisable framework lives in each card's tag — §8.1.)
 
 Picking an exercise (or free-start) opens a normal session thread; the launcher returns whenever there's no
 active session.
@@ -92,12 +94,21 @@ Each exercise is a built-in definition (§4.1) with a title, group, framework ta
 applies. **Group titles are non-clinical; the framework is a per-card tag** (§8.1). The **initial catalog**
 (groups shown with their internal id → display title; **structured** exercises marked ⚙):
 
-- **`therapy` → "Reflective & therapy-informed"** — Reflective Session (Integrative) · Thought Record ⚙ (CBT) ·
-  Worry Decatastrophizing (CBT) · Behavioral Activation Plan (Behavioral Activation) · Values Clarification
-  (ACT) · Self-Compassion Break (Self-Compassion) · Grief & Loss Check-in (Grief work).
-- **`coaching` → "Coaching"** — Life Coaching Session (Integrative) · GROW Goal-Setting ⚙ (GROW) · Weekly
+- **`therapy` → "Reflective & therapy-informed"** (~12) — Reflective Session (Integrative) · Thought Record ⚙
+  (CBT) · Worry Decatastrophizing (CBT) · Behavioral Activation Plan (Behavioral Activation) · Values
+  Clarification (ACT) · Self-Compassion Break (Self-Compassion) · Grief & Loss Check-in (Grief work) · Worry
+  Time (CBT) · Spotting Thinking Traps (CBT) · Three Good Things (Positive psychology) · Name the Feeling
+  (Affect labeling) · Urge Surfing (Mindfulness).
+- **`coaching` → "Coaching"** (~12) — Life Coaching Session (Integrative) · GROW Goal-Setting ⚙ (GROW) · Weekly
   Review & Reset ⚙ (Reflective practice) · Decision Clarifier ⚙ (Values-based) · Hard Conversation Prep
-  (DEAR MAN) · Boundary Setting (Assertiveness) · Burnout & Energy Audit.
+  (DEAR MAN) · Boundary Setting (Assertiveness) · Burnout & Energy Audit · Building a Habit (Tiny Habits) ·
+  Getting Unstuck (Behavioral activation) · Time & Priorities (Prioritization) · Playing to Your Strengths
+  (Strengths-based) · Meet Your Future Self (Visioning).
+- **`family` → "Family & relationships"** (12, never adult-gated) — Your Family Role (Family systems) ·
+  Reflecting on a Parent (Attachment-informed) · Sibling Dynamics · Boundaries with Family (Assertiveness) ·
+  In-Laws & Extended Family · Patterns You Inherited (Intergenerational) · Repairing a Family Rift (Repair) ·
+  Caring for an Aging Parent (Caregiver support) · Reflecting on Your Parenting (Reflective parenting) ·
+  Co-Parenting · Distance or Estrangement · Preparing for a Family Gathering.
 - **`intimacy` → "Intimacy & connection"** (18+, §8.3) — Sensate Focus (Masters & Johnson) · Desire
   Discrepancy · Talking About Sex. (Expanded to 20 entries — relational through explicit, plus the structured
   Yes/No/Maybe builder — by [`48`](48-intimacy-guided-sessions.md).)

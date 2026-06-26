@@ -389,6 +389,27 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-26 — **Build (guided-sessions expansion — fuller therapy/coaching + a Family group + catalog search;
+  on `feat/guided-sessions-expansion`, PR pending).** Additive content + one small UI feature (an extension of
+  spec 16/48, no new machinery, no schema/IPC). **New `family` group "Family & relationships"** (12
+  family-dynamics chat sessions — family role, a parent, siblings, boundaries, in-laws, inherited patterns,
+  repairing a rift, aging parents, your parenting, co-parenting, estrangement, gathering prep), and the
+  **Reflective** + **Coaching** groups grow to a fuller ~12 each (+worry time, thinking traps, three good
+  things, name the feeling, urge surfing; +habit builder, getting unstuck, time & priorities, strengths,
+  future self). Plumbing: `GuidedGroupId += 'family'`, `GUIDED_GROUPS`, `GUIDE_LIFE_AREAS.family`. Every entry
+  leads with the shared `frame()` not-therapy boundary; **family is never adult-gated** (the `adult ===
+(group === 'intimacy')` catalog invariant holds — a unit asserts it). With ~56 browsable sessions now, a
+  **catalog search** filters across every group by name/framework/topic (non-matching groups collapse away, a
+  calm empty state when nothing matches, and the **18+ intimacy group is never surfaced via search before the
+  ack** — the no-leak guard). Gate green: typecheck (all), lint, **934 core + 851 desktop** unit (the new
+  family group + fuller-set assertions; 4 GuidedCatalog RTL incl. the no-leak guard), **E2E +1** (browse the
+  Family group + filter across groups + empty state + clear). Visual QA (real Electron screenshots): the
+  search sits cleanly above the catalog; filtering to "boundaries" shows only the matching Family cards —
+  sleek + intentional. Synced spec 16 §3.1/§3.2. **Lesson: `git checkout <file>` reverts UNCOMMITTED changes
+  too — injecting a throwaway screenshot into an uncommitted E2E then `git checkout`-ing to revert the
+  screenshot wipes the whole new test; commit the test first, then inject/revert screenshots over the committed
+  baseline.**
+
 - 2026-06-26 — **Build (Memory redesign — sharing is context not display + relationship insights + test-sharing
   default; SPEC 54 BUILT; on `feat/memory-redesign`, PR pending).** Two user-reported problems: Memory DISPLAYED a
   partner's raw shared answers, and it was a wall of text. **The concept fix (the core):** a partner's shared data

@@ -156,6 +156,9 @@ const STABLE_KEYS: ReadonlySet<string> = new Set<string>([
  * preserved verbatim as an orphan (no data loss).
  */
 const PRE_49_LEGACY_KEYS: Readonly<Record<string, string>> = {
+  // Dedup (user, 2026-06-26): 'Sensory deprivation (blindfold-only)' merged into 'Blindfolds'.
+  'Sensory deprivation (blindfold-only)': 'blindfolds',
+  'sensory-deprivation-blindfold-only': 'blindfolds',
   // 'Butt plugs / anal toys' → 'Anal toys / butt plugs'.
   'Butt plugs / anal toys': 'anal-toys-butt-plugs',
   'butt-plugs-anal-toys': 'anal-toys-butt-plugs',

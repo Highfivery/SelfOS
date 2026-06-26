@@ -1686,7 +1686,7 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         f(
           single(
             'ownAnatomy',
-            'What are you packing down there?',
+            'Which of the following do you have?',
             [...OWN_ANATOMY_OPTIONS],
             when('getSpecific', true),
           ),
@@ -1697,7 +1697,7 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
         f(
           multi(
             'partnerAnatomy',
-            'What do you like a partner to have down there?',
+            'What do you like your partner(s) to have?',
             [...PARTNER_ANATOMY_OPTIONS],
             when('getSpecific', true),
           ),
@@ -1792,7 +1792,13 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
               'Straight',
               'Lesbian',
               'Gay',
+              'Solo male',
+              'Solo female',
               'Bi / threesome',
+              'MMF',
+              'FFM',
+              'MMM',
+              'FFF',
               'Trans',
               'BDSM / kink',
               'Rough',

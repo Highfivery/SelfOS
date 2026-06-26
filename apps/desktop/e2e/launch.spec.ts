@@ -6291,6 +6291,9 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
       .getByRole('radiogroup', { name: /Want to get into the explicit specifics/ })
       .getByRole('radio', { name: 'Yes' })
       .click();
+    // The anatomy questions use the updated, clearer wording (2026-06-26).
+    await expect(w.getByText('Which of the following do you have?')).toBeVisible();
+    await expect(w.getByText('What do you like your partner(s) to have?')).toBeVisible();
     // 46: the oral rows are driven by the DIRECT anatomy questions, not gender/orientation. Answer own + partner
     // anatomy → the matrix resolves the receiving + giving-oral labels for THIS anatomy.
     await w.getByRole('radio', { name: 'Cock (penis)', exact: true }).click(); // own anatomy → receiving label
@@ -6310,6 +6313,8 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
     // <details> (the CLAUDE.md §7/§12 collapsed-accordion bug class).
     await expect(w.getByRole('radiogroup', { name: /Sensual massage/ })).toBeVisible();
     await expect(w.getByRole('radiogroup', { name: /Pet play/ })).toBeVisible();
+    // A 2026-06-26 inventory addition renders as a matrix row in its category (sensual).
+    await expect(w.getByRole('radiogroup', { name: /Watch partner masturbate/ })).toBeVisible();
     expect(await w.locator('details:not([open])').count()).toBe(0);
     // The 5-point matrix must wrap cleanly at phone width — no horizontal scroll on the page or any inner
     // control (the .scale row wraps the five labelled points). Check WHILE the long grouped matrix is on screen,

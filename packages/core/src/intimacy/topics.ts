@@ -118,9 +118,9 @@ export const INTIMACY_ACTIVITIES_FULL: readonly IntimacyActivity[] = [
   a('Body worship', 'sensual', 2),
   a('Feather / soft-touch teasing', 'sensual', 1),
   a('Temperature play (ice / warm)', 'sensual', 2),
-  a('Sensory deprivation (blindfold-only)', 'sensual', 2),
   a('Blindfolds', 'sensual', 2),
   a('Mutual masturbation', 'sensual', 2),
+  a('Watch partner masturbate', 'sensual', 2),
   // Oral (t2–3). Receiving + giving are anatomy-resolved (46); the rest are universal.
   a('Receiving oral', 'oral', 2, KEY_ORAL_RECEIVING),
   a('Giving oral', 'oral', 2, KEY_ORAL_GIVING),
@@ -138,10 +138,12 @@ export const INTIMACY_ACTIVITIES_FULL: readonly IntimacyActivity[] = [
   a('Strap-on play', 'manual-toys', 3),
   a('Anal toys / butt plugs', 'manual-toys', 3),
   a('Cock rings', 'manual-toys', 2),
+  a('Thrusting machine', 'manual-toys', 3),
   // Penetration (t2–3).
   a('Vaginal sex', 'penetration', 2),
   a('Different positions / variety', 'penetration', 2),
   a('Slow & sensual', 'penetration', 2),
+  a('Teasing penetration', 'penetration', 2),
   a('Rough / hard', 'penetration', 3),
   a('Quickies', 'penetration', 2),
   // Anal (t2–4).
@@ -158,6 +160,8 @@ export const INTIMACY_ACTIVITIES_FULL: readonly IntimacyActivity[] = [
   a('Teacher / student', 'roleplay', 3),
   a('Doctor / patient', 'roleplay', 3),
   a('Captor / captive (fantasy)', 'roleplay', 4),
+  a('Wearing lingerie', 'roleplay', 2),
+  a('Partner wearing lingerie', 'roleplay', 2),
   // Dirty talk & verbal (t1–3).
   a('Light dirty talk', 'dirty-talk', 1),
   a('Explicit dirty talk', 'dirty-talk', 2),
@@ -194,6 +198,7 @@ export const INTIMACY_ACTIVITIES_FULL: readonly IntimacyActivity[] = [
   a('Wax play', 'impact', 3),
   a('Nipple clamps', 'impact', 3),
   a('Pinching / scratching', 'impact', 2),
+  a('Pussy patting/slapping', 'impact', 2),
   // Exhibitionism & voyeurism (t2–4).
   a('Exhibitionism', 'exhibition', 3),
   a('Voyeurism', 'exhibition', 3),

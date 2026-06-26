@@ -189,8 +189,17 @@ describe('legacy carry-forward (46 §4.3, 49 §4.3)', () => {
     expect(legacyKeyFor('Dirty talk')).toBe('light-dirty-talk');
     expect(legacyKeyFor('Vibrators / dildos')).toBe('vibrators');
     expect(legacyKeyFor('Butt plugs / anal toys')).toBe('anal-toys-butt-plugs');
+    // Dedup (2026-06-26): 'Sensory deprivation (blindfold-only)' merged into 'Blindfolds' — old label + slug.
+    expect(legacyKeyFor('Sensory deprivation (blindfold-only)')).toBe('blindfolds');
+    expect(legacyKeyFor('sensory-deprivation-blindfold-only')).toBe('blindfolds');
     // 'Squirting' is intentionally unmapped — no close new entry → preserved verbatim (no data loss).
     expect(legacyKeyFor('Squirting')).toBeUndefined();
+  });
+
+  it('migrates a stored blindfold-only rating onto the kept Blindfolds row (no data loss)', () => {
+    expect(migrateActivityMatrixValue({ 'sensory-deprivation-blindfold-only': 4 })).toEqual({
+      blindfolds: 4,
+    });
   });
 
   it('migrates a label-keyed value to stable keys; keeps an unmapped key verbatim', () => {

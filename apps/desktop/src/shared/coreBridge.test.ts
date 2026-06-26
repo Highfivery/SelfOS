@@ -4139,7 +4139,7 @@ describe('update awareness (36)', () => {
       expect((await bridge.testsGet({ testId: 'kink-interests' }))?.id).toBe('kink-interests');
     });
 
-    it('a sensitive (kink) result is restricted + reaches the OWN intimacy context, not a non-intimacy one', async () => {
+    it('a sensitive (kink) result is partner-shareable + own-context-gated to intimacy, not a money chat (54)', async () => {
       const { bridge, ownerId, host } = await freshOwner();
       await bridge.testsAcknowledgeAdult();
       const result = await bridge.testsTake({
@@ -4152,7 +4152,12 @@ describe('update awareness (36)', () => {
         (i) => i.source === 'test',
       )!;
       expect(insight.facts.length).toBeGreaterThan(0);
-      expect(insight.facts.every((f) => f.restricted === true)).toBe(true);
+      // 54: NOT `restricted` (so it can be shared with the partner type — `restricted` stays reserved for
+      // break-glass intake), but partner-scoped + tagged lifeArea Intimacy so the own-context gate keeps it
+      // in intimacy only.
+      expect(insight.facts.every((f) => !f.restricted)).toBe(true);
+      expect(insight.facts.every((f) => f.shareableTypes?.includes('partner'))).toBe(true);
+      expect(insight.facts.every((f) => f.lifeArea === 'Intimacy')).toBe(true);
 
       const intimacy = await summarizeForContext(fs, key, ownerId, [], { lifeAreas: ['Intimacy'] });
       expect(intimacy).toContain('intimacy interests');

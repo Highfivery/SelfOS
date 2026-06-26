@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.2](https://github.com/Highfivery/SelfOS/compare/v0.11.1...v0.11.2) (2026-06-26)
+
+
+### Bug Fixes
+
+* **onboarding:** auto-save EVERY section as a draft, not just completed ones (43) ([#91](https://github.com/Highfivery/SelfOS/issues/91)) ([061d30a](https://github.com/Highfivery/SelfOS/commit/061d30a4abc05c9bf3bc765c4f57a8fd8276a5bd))
+
 ## [0.11.1](https://github.com/Highfivery/SelfOS/compare/v0.11.0...v0.11.1) (2026-06-26)
 
 

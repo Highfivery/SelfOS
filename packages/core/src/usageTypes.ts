@@ -21,6 +21,7 @@ export const USAGE_TYPE_LABELS: Record<string, string> = {
   'relationship.synthesize': 'Memory — relationship insights',
   'test.narrate': 'Self-assessment — what it means',
   'challenge.suggest': 'Challenge suggestion',
+  'intimacy.suggestTopics': 'Intimacy topics — AI suggestions',
 };
 
 export function usageTypeLabel(type: string): string {

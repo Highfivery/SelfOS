@@ -837,6 +837,33 @@ export type ChallengeSuggestionResult =
     };
 
 /**
+ * AI-suggested intimacy topics for the owner to review (08-questionnaires §16.5a, AI-assist follow-up).
+ * Deduped activity + fantasy candidates the owner picks/edits before adding to the shared inventory — the
+ * suggester PERSISTS NOTHING (the owner's "Add selected" reuses the existing add path). The only AI spend is
+ * the `intimacy.suggestTopics` pass, owner-gated + metered before parse.
+ */
+export interface IntimacyTopicSuggestions {
+  activities: string[];
+  fantasies: string[];
+}
+
+export type IntimacyTopicSuggestResult =
+  | { ok: true; suggestions: IntimacyTopicSuggestions }
+  | {
+      ok: false;
+      reason:
+        | 'NO_KEY'
+        | 'BUDGET'
+        | 'AI_OFF'
+        | 'EMPTY'
+        | 'REFUSED'
+        | 'TRUNCATED'
+        | 'MALFORMED'
+        | 'ERROR';
+      message: string;
+    };
+
+/**
  * The result of an inline check-in (52 §6). The status + outcome ALWAYS persist (free, no AI); the optional
  * reflection → Insight bridge (§5.4) is deterministic in v1, so a check-in never spends. `challenge` carries
  * the updated record (status moved to `done`/`active`/`abandoned`); `insightId` is the derived reflection

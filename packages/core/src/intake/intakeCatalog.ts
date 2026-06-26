@@ -4,8 +4,8 @@ import {
   ACTIVITY_POINT_LABELS,
   OWN_ANATOMY_OPTIONS,
   PARTNER_ANATOMY_OPTIONS,
-  resolveIntakeActivityRows,
 } from '../intimacy/activityRows';
+import { resolvedActivityMatrix } from '../intimacy/grouping';
 import type { SharingCategory } from '../people/sharingPresets';
 import type {
   BranchRule,
@@ -1703,11 +1703,11 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           ),
           { restricted: true },
         ),
-        // The activity inventory as ONE 5-point feeling matrix — Hard no · Not interested · Curious · Like it
-        // · Love it (27 §4.2). Rows default to the NEUTRAL list (= `resolveIntakeActivityRows({})`); the
-        // renderer re-resolves them per-person from the anatomy answers above (oral directionality only, 46),
-        // and synthesis re-resolves with the same context so the STABLE keys line up. The two relationship
-        // dynamics + the boundary ("Hard no") tone are folded in by the resolver / labels.
+        // The categorized activity inventory as ONE 5-point feeling matrix — Hard no · Not interested · Curious
+        // · Like it · Love it (27 §4.2), grouped by category sensual→extreme (49 §3.1). Rows + groups default to
+        // the NEUTRAL list (= `resolvedActivityMatrix({})`); the renderer re-resolves both per-person from the
+        // anatomy answers above (oral directionality only, 46), and synthesis re-resolves with the same context
+        // so the STABLE keys line up. The relationship dynamics are folded into the inventory (power-exchange).
         f(
           {
             id: 'activities',
@@ -1716,7 +1716,9 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
               'For each, tap where you stand — a hard no, not for you, curious, or something you’re into:',
             required: false,
             matrix: {
-              rows: resolveIntakeActivityRows(),
+              // The categorized inventory in display order + its category groups (49 §5); the renderer
+              // re-resolves both per-person from the anatomy answers (oral directionality only, 46).
+              ...resolvedActivityMatrix(),
               min: 1,
               max: 5,
               pointLabels: [...ACTIVITY_POINT_LABELS],

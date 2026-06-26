@@ -327,14 +327,14 @@ describe('IntakeFormPanel', () => {
       />,
     );
     // Rate a universal row, then add penis to partner anatomy → a new "Giving a blowjob" row appears.
-    const bondage = screen.getByRole('radiogroup', { name: /Bondage/ });
-    fireEvent.click(within(bondage).getByRole('radio', { name: 'Love it' }));
+    const fingering = screen.getByRole('radiogroup', { name: /Fingering/ });
+    fireEvent.click(within(fingering).getByRole('radio', { name: 'Love it' }));
     expect(screen.queryByRole('radiogroup', { name: /Giving a blowjob/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('checkbox', { name: 'Cock (penis)' }));
     expect(screen.getByRole('radiogroup', { name: /Giving a blowjob/ })).toBeInTheDocument();
-    // The Bondage rating survives the row re-resolution (keyed by its stable key, not the label).
-    const bondageAfter = screen.getByRole('radiogroup', { name: /Bondage/ });
-    expect(within(bondageAfter).getByRole('radio', { name: 'Love it' })).toHaveAttribute(
+    // The Fingering rating survives the row re-resolution (keyed by its stable key, not the label).
+    const fingeringAfter = screen.getByRole('radiogroup', { name: /Fingering/ });
+    expect(within(fingeringAfter).getByRole('radio', { name: 'Love it' })).toHaveAttribute(
       'aria-checked',
       'true',
     );
@@ -358,19 +358,44 @@ describe('IntakeFormPanel', () => {
         onAdvance={() => {}}
       />,
     );
-    // Pick "Love it" (point 5) on the universal "Bondage" row, then Continue. It persists under the stable
+    // Pick "Love it" (point 5) on the universal "Fingering" row, then Continue. It persists under the stable
     // slug key, not the display label.
-    const bondage = screen.getByRole('radiogroup', { name: /Bondage/ });
-    fireEvent.click(within(bondage).getByRole('radio', { name: 'Love it' }));
+    const fingering = screen.getByRole('radiogroup', { name: /Fingering/ });
+    fireEvent.click(within(fingering).getByRole('radio', { name: 'Love it' }));
     fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
     await waitFor(() =>
       expect(intakeSubmitForm).toHaveBeenCalledWith({
         sectionId: 'intimacy',
-        answers: { activities: { bondage: 5 } },
+        answers: { activities: { fingering: 5 } },
         // The restricted intimacy section defaults every question to Private (43 §8).
         sharing: { ownAnatomy: [], partnerAnatomy: [], activities: [] },
       }),
     );
+  });
+
+  it('renders the activity matrix GROUPED by category, every group OPEN to the bottom (49 §3.1, no collapsed accordion)', () => {
+    installMockBridge({});
+    render(
+      <IntakeFormPanel
+        meta={intimacyMatrixMeta}
+        section={section({
+          id: 'intimacy',
+          restricted: true,
+          answers: { ownAnatomy: 'Cock (penis)', partnerAnatomy: ['Pussy (vulva)'] },
+        })}
+        adultAcknowledged={true}
+        onAdvance={() => {}}
+      />,
+    );
+    // Category headers render, sensual→extreme.
+    expect(screen.getByRole('heading', { name: 'Sensual & sensory' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Power exchange / D-s' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Taboo fantasy' })).toBeInTheDocument();
+    // The FULL surface renders to the bottom — a row from the FIRST and the LAST category are both present,
+    // and NO group is hidden in a default-collapsed accordion (CLAUDE.md §7/§12).
+    expect(screen.getByRole('radiogroup', { name: /Sensual massage/ })).toBeInTheDocument();
+    expect(screen.getByRole('radiogroup', { name: /Pet play/ })).toBeInTheDocument();
+    expect(document.querySelectorAll('details:not([open])')).toHaveLength(0);
   });
 });
 

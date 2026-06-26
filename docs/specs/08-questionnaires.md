@@ -1552,6 +1552,12 @@ explicitness the **intake** intimacy block already ships, within the **same** co
 
 ### 16.5a Owner-extensible intimacy topic inventory (shared with the intake)
 
+> **Amended by [`49`](49-intimacy-activities-inventory.md) (Built).** The shared activities inventory is now
+> **categorized + tiered** (`INTIMACY_ACTIVITIES_FULL` = `{key, label, category, tier}` entries). Generation is
+> **unaffected**: `INTIMACY_TOPICS.activities` / `mergedIntimacyTopics().activities` still expose a **flat label
+> list** (`INTIMACY_ACTIVITIES` = the entry labels); the category/tier metadata is exposed via new symbols only.
+> Generation MAY (08-owned, not required) use the category metadata to seed from a family.
+
 The in-policy topic inventory that seeds generation (and that the **intake** intimacy block already uses as its
 `ACTIVITIES`/`commonFantasies` lists, [`18`](18-personal-onboarding.md)) becomes **one shared, owner-extensible
 source of truth**:

@@ -1071,6 +1071,11 @@ export const QuestionSchema = z.object({
       // Labels (a subset of `pointLabels`) rendered with a distinct boundary/limit tone rather than the
       // neutral feeling tone — e.g. ['Hard no'], so a hard limit reads as a boundary, not just another option.
       limitLabels: z.array(z.string()).optional(),
+      // Optional display GROUPING (49 §5): category headers above row groups, each listing the row keys it
+      // contains (in render order). The intake activity matrix passes groups so its ~90 rows read grouped
+      // sensual→extreme, every group open by default; questionnaire matrices pass none → flat byte-identical
+      // render. Display only — the stored value is still the numeric row→point map keyed by stable keys.
+      groups: z.array(z.object({ label: z.string(), rowKeys: z.array(z.string()) })).optional(),
     })
     .optional(),
   metricKey: z.string().optional(), // rating/slider/matrix → populates Insight.metrics

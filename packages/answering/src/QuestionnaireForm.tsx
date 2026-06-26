@@ -650,32 +650,54 @@ function Control({
       const matrix = question.matrix ?? { rows: [], min: 1, max: 5 };
       const current = asNumberMap(value);
       const pointLabels = matrixPointLabels(matrix);
-      return (
-        <div className={styles.matrix}>
-          {matrix.rows.map((row) => {
-            // A row is a plain string (key === label) OR a { key, label } pair (46 §4.2): key the answer by
-            // the stable key, display the label.
-            const key = matrixRowKey(row);
-            const label = matrixRowLabel(row);
-            return (
-              <div key={key} className={styles.matrixRow}>
-                <span className={styles.matrixLabel}>{label}</span>
-                <ScalePicker
-                  min={matrix.min}
-                  max={matrix.max}
-                  value={current[key]}
-                  onPick={(n) => set({ ...current, [key]: n })}
-                  ariaLabel={`${question.prompt} — ${label}`}
-                  {...(pointLabels ? { labels: pointLabels } : {})}
-                  {...(pointLabels && matrix.limitLabels
-                    ? { limitLabels: matrix.limitLabels }
-                    : {})}
-                />
-              </div>
-            );
-          })}
-        </div>
-      );
+      // A row is a plain string (key === label) OR a { key, label } pair (46 §4.2): key the answer by the
+      // stable key, display the label.
+      const renderRow = (row: (typeof matrix.rows)[number]) => {
+        const key = matrixRowKey(row);
+        const label = matrixRowLabel(row);
+        return (
+          <div key={key} className={styles.matrixRow}>
+            <span className={styles.matrixLabel}>{label}</span>
+            <ScalePicker
+              min={matrix.min}
+              max={matrix.max}
+              value={current[key]}
+              onPick={(n) => set({ ...current, [key]: n })}
+              ariaLabel={`${question.prompt} — ${label}`}
+              {...(pointLabels ? { labels: pointLabels } : {})}
+              {...(pointLabels && matrix.limitLabels ? { limitLabels: matrix.limitLabels } : {})}
+            />
+          </div>
+        );
+      };
+      // Grouped render (49 §3.1): the intake activity matrix passes category groups, so its long row list
+      // reads as full-width category headers above row groups — every group OPEN by default (a plain
+      // heading, never a collapsed <details>, so the full surface renders to the bottom — CLAUDE.md §7/§12).
+      // Questionnaire matrices pass no groups → the flat render below (byte-identical to the pre-49 output).
+      if (matrix.groups && matrix.groups.length > 0) {
+        const rowByKey = new Map(matrix.rows.map((row) => [matrixRowKey(row), row]));
+        const grouped = new Set<string>();
+        return (
+          <div className={styles.matrix}>
+            {matrix.groups.map((group, groupIndex) => (
+              <section key={`${group.label}-${groupIndex}`} className={styles.matrixGroup}>
+                <h4 className={styles.matrixGroupHeading}>{group.label}</h4>
+                {group.rowKeys.map((key) => {
+                  const row = rowByKey.get(key);
+                  // Skip an unknown key, or one already rendered by an earlier group (defensive: groups must
+                  // partition the rows — a duplicate would otherwise collide React keys).
+                  if (!row || grouped.has(key)) return null;
+                  grouped.add(key);
+                  return renderRow(row);
+                })}
+              </section>
+            ))}
+            {/* Any row not covered by a group still renders (never silently dropped) — CLAUDE.md §7. */}
+            {matrix.rows.filter((row) => !grouped.has(matrixRowKey(row))).map(renderRow)}
+          </div>
+        );
+      }
+      return <div className={styles.matrix}>{matrix.rows.map(renderRow)}</div>;
     }
     case 'allocation': {
       const current = asNumberMap(value);

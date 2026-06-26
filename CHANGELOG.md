@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.1](https://github.com/Highfivery/SelfOS/compare/v0.11.0...v0.11.1) (2026-06-26)
+
+
+### Bug Fixes
+
+* **onboarding:** intake sharing saves on one tap + auto-saves on edit (43) ([#89](https://github.com/Highfivery/SelfOS/issues/89)) ([6fb1413](https://github.com/Highfivery/SelfOS/commit/6fb141324e5032268a349f583fe564c1cfc45783))
+
 ## [0.11.0](https://github.com/Highfivery/SelfOS/compare/v0.10.0...v0.11.0) (2026-06-26)
 
 

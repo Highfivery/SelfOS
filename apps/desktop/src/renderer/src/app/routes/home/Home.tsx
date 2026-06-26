@@ -11,6 +11,7 @@ import { useIntakeStore } from '../../../stores/intakeStore';
 import { useSynthesisStore } from '../../../stores/synthesisStore';
 import { useGoalStore } from '../../../stores/goalStore';
 import { useChallengeStore } from '../../../stores/challengeStore';
+import { useTestStore } from '../../../stores/testStore';
 import { useDiscoveryStore } from '../../../stores/discoveryStore';
 import { useSetting } from '../../../settings/useSetting';
 import { aggregateCrisisSignal } from '@selfos/core/coaching';
@@ -29,7 +30,6 @@ import {
   type ProactivityLevel,
 } from '@selfos/core/recommendations';
 import type { ProfileUpdateSuggestion } from '@shared/channels';
-import type { TestResult } from '@shared/schemas';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { CrisisSupportBanner } from './CrisisSupportBanner';
 import { OnboardingCard } from './OnboardingCard';
@@ -44,7 +44,7 @@ import { ForYou } from './ForYou';
 import { MomentumLine } from './MomentumLine';
 import { CelebrationMoment } from './CelebrationMoment';
 import { timeOfDayGreeting } from './greeting';
-import { checkInMoodPoints, sessionMoodPoints } from './wellbeing';
+import { checkInMoodPoints, sessionMoodPoints, wellbeingCheckin } from './wellbeing';
 import styles from './Home.module.css';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -76,6 +76,8 @@ export function Home(): JSX.Element {
   const canOwnDreams = useSessionStore((s) => s.can('dreams.own'));
   const canManagePeople = useSessionStore((s) => s.can('people.manage'));
   const canDoIntake = useSessionStore((s) => s.can('intake.own'));
+  const canTakeTests = useSessionStore((s) => s.can('tests.own'));
+  const canTakeChallenges = useSessionStore((s) => s.can('challenges.own'));
   // The reactive capability snapshot the engine filters gated providers against (§5.2) — built from the
   // active person's `can(...)` checks for the gates the providers use (a new gate adds one line here).
   const capabilities = new Set<string>();
@@ -83,6 +85,8 @@ export function Home(): JSX.Element {
   if (canCreateQuestionnaires) capabilities.add('questionnaires.create');
   if (canViewMemory) capabilities.add('memory.own');
   if (canDoIntake) capabilities.add('intake.own');
+  if (canTakeTests) capabilities.add('tests.own'); // 50/51 — take-a-test + wellbeing-checkin gates
+  if (canTakeChallenges) capabilities.add('challenges.own'); // 52 — challenge providers' gate
 
   const conversations = useConversationStore((s) => s.conversations);
   const sessionCosts = useConversationStore((s) => s.sessionCosts);
@@ -97,6 +101,8 @@ export function Home(): JSX.Element {
   const synthesis = useSynthesisStore((s) => s.synthesis);
   const guidedSuggestions = useGuidanceStore((s) => s.suggestions);
   const adultAcknowledged = useGuidanceStore((s) => s.adultAcknowledged);
+  const testCatalog = useTestStore((s) => s.catalog);
+  const resultsByTest = useTestStore((s) => s.resultsByTest);
   const intake = useIntakeStore((s) => s.state);
   const dismissed = useDiscoveryStore((s) => s.dismissed);
 
@@ -104,7 +110,6 @@ export function Home(): JSX.Element {
   const [hasKey, setHasKey] = useState(false);
   const [proactivity, setProactivity] = useState<ProactivityLevel>('gentle');
   const [profileSuggestions, setProfileSuggestions] = useState<ProfileUpdateSuggestion[]>([]);
-  const [moodCheckIns, setMoodCheckIns] = useState<TestResult[]>([]);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -128,17 +133,16 @@ export function Home(): JSX.Element {
       useSynthesisStore.getState().load(),
       useGoalStore.getState().load(), // bridge gates on memory.own → [] when not permitted
       useChallengeStore.getState().load(), // bridge gates on challenges.own → [] when not permitted (52)
+      // Self-assessments (50/51): the catalog + per-test results feed the WellbeingCard sibling check-in
+      // series, the `take-a-test` / `wellbeing-checkin` / `intimacy-exercise` providers, and the momentum.
+      // Bridge gates on tests.own → empty when not permitted; the 18+ tests are withheld until acked.
+      useTestStore.getState().load(),
       useDiscoveryStore.getState().load(), // recommendation dismissals + celebration signatures
       window.selfos?.coachingGetPrefs().then((p) => {
         if (!cancelled) setProactivity(p?.proactivity ?? 'gentle');
       }),
       window.selfos?.profileSuggestions().then((s) => {
         if (!cancelled) setProfileSuggestions(s ?? []); // bridge gates on intake.own → [] when not permitted
-      }),
-      // The dated mood-check-in results (51 §5.3) → the WellbeingCard's sibling "your check-ins" series. Bridge
-      // gates on tests.own → [] when not permitted; wellbeing isn't 18+-gated.
-      window.selfos?.testsResults({ testId: 'phq9' }).then((r) => {
-        if (!cancelled) setMoodCheckIns(r ?? []);
       }),
     ]).then(() => {
       if (!cancelled) setReady(true);
@@ -161,7 +165,20 @@ export function Home(): JSX.Element {
     (i) => i.approved && i.subjectPersonId === activePersonId,
   );
   const moodPoints = activePersonId ? sessionMoodPoints(insights, activePersonId) : [];
-  const checkInPoints = checkInMoodPoints(moodCheckIns);
+  // The dated PHQ-9 mood-check-in results (51 §5.3) → the WellbeingCard's sibling "your check-ins" series.
+  const moodResults = resultsByTest['phq9'] ?? [];
+  const checkInPoints = checkInMoodPoints(moodResults);
+  // The gentle, never-escalating mood/anxiety re-check signal (51 §3.4): due only when a prior check-in has
+  // gone ≥14 days quiet — never fires for someone who has never checked in (§8).
+  const wbCheckin = wellbeingCheckin(resultsByTest, nowMs);
+  // The person's taken self-assessments (with their group) → the `take-a-test` + `intimacy-exercise` signals.
+  const takenTests = testCatalog
+    .filter((t) => (resultsByTest[t.id]?.length ?? 0) > 0)
+    .map((t) => ({
+      instrument: t.instrument,
+      group: t.group,
+      takenAt: resultsByTest[t.id]?.[0]?.takenAt ?? '',
+    }));
   // Cross-insight crisis awareness (40 §3.5): recurring distress across the person's OWN approved insights +
   // the dream nightmare nudge → a supportive surface. NOT governed by the proactivity dial (it's safety). It
   // also de-escalates encouragement: while recurring, the engine suppresses all pushes (§8).
@@ -250,6 +267,10 @@ export function Home(): JSX.Element {
       .map((p) => p.id)
       .sort()
       .join(','),
+    // Self-assessments / wellbeing / intimacy (50/51/48) — Slice B providers.
+    testResults: takenTests,
+    wellbeingCheckinDue: wbCheckin.due,
+    ...(wbCheckin.lastAt ? { lastWellbeingCheckinAt: wbCheckin.lastAt } : {}),
   };
 
   const dismissedSet = new Set(dismissed);

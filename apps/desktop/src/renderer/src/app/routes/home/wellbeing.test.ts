@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Insight, TestResult } from '@shared/schemas';
-import { checkInMoodPoints, sessionMoodPoints, wellbeingRead } from './wellbeing';
+import { checkInMoodPoints, sessionMoodPoints, wellbeingCheckin, wellbeingRead } from './wellbeing';
 
 function insight(over: Partial<Insight> & { id: string }): Insight {
   return {
@@ -112,6 +112,62 @@ describe('checkInMoodPoints (51 §5.3 — the sibling check-in series)', () => {
     expect(points).toHaveLength(2);
     expect(points[0]).toMatchObject({ valence: 1 }); // oldest first
     expect(points[1]).toMatchObject({ valence: -1 });
+  });
+});
+
+describe('wellbeingCheckin (53 §5.1 / 51 §3.4 — the gentle, never-escalating re-check signal)', () => {
+  const NOW = Date.parse('2026-06-26T12:00:00.000Z');
+  function result(id: string, testId: string, takenAt: string): TestResult {
+    return {
+      id,
+      schemaVersion: 1,
+      testId,
+      testVersion: 1,
+      subjectPersonId: 'me',
+      answers: [],
+      scores: [],
+      takenAt,
+      createdAt: takenAt,
+      updatedAt: takenAt,
+    };
+  }
+
+  it('is NOT due for someone who has never checked in (the You hub invites a first one, not Home)', () => {
+    expect(wellbeingCheckin({}, NOW)).toEqual({ due: false });
+  });
+
+  it('is NOT due when the most recent recheckable check-in is within the window', () => {
+    const out = wellbeingCheckin({ phq9: [result('a', 'phq9', '2026-06-20T00:00:00.000Z')] }, NOW);
+    expect(out.due).toBe(false);
+    expect(out.lastAt).toBe('2026-06-20T00:00:00.000Z');
+  });
+
+  it('is due when the most recent recheckable check-in is ≥14 days old', () => {
+    const out = wellbeingCheckin({ gad7: [result('a', 'gad7', '2026-06-01T00:00:00.000Z')] }, NOW);
+    expect(out.due).toBe(true);
+    expect(out.lastAt).toBe('2026-06-01T00:00:00.000Z');
+  });
+
+  it('uses the MOST RECENT check-in across mood + anxiety (a recent check-in keeps it calm)', () => {
+    // GAD-7 is old, but PHQ-9 is recent → not due (they checked in recently on something).
+    const out = wellbeingCheckin(
+      {
+        phq9: [result('p', 'phq9', '2026-06-25T00:00:00.000Z')],
+        gad7: [result('g', 'gad7', '2026-05-01T00:00:00.000Z')],
+      },
+      NOW,
+    );
+    expect(out.due).toBe(false);
+    expect(out.lastAt).toBe('2026-06-25T00:00:00.000Z');
+  });
+
+  it('ignores non-recheckable instruments (a personality test is not a check-in)', () => {
+    expect(
+      wellbeingCheckin(
+        { 'bigfive-ipip-120': [result('b', 'bigfive-ipip-120', '2026-01-01')] },
+        NOW,
+      ),
+    ).toEqual({ due: false });
   });
 });
 

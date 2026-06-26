@@ -389,6 +389,42 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-26 — **Build (Home encouragement engine — SPEC 53 SLICE B BUILT; on `feat/home-encouragement-slice-b`,
+  PR pending).** The Slice-A engine (the deterministic "For you" recommendation ranker) grows to cover the
+  2026-06 feature batch by adding **3 providers as engine built-ins** (`BUILT_IN_RECOMMENDATION_PROVIDERS`), with
+  **no `Home.tsx` card-wiring** — the §5.5 payoff: **`take-a-test`** (50, gate `tests.own`) invites a first
+  personality/relationships self-assessment when none is taken; **`wellbeing-checkin`** (51, gate `tests.own`, NOT
+  18+) gently invites a mood/anxiety re-check only when a prior PHQ-9/GAD-7 check-in has gone **≥14 days quiet** (a
+  soft invitation on the §51 §3.4 window — **never** for someone who never checked in, **never** escalating, §8) with
+  a signal-aware `wellbeing-checkin:<lastAt>` dismissKey; **`intimacy-exercise`** (48, gate `sessions.own` +
+  `adultGate: true`) invites a guided intimacy exercise **only** once the per-person 18+ ack exists AND an
+  intimacy-group test was taken (so it reads "for them", never a premature/unsolicited sexual push — triple-gated:
+  the engine's adultGate filter, the engagement signal, AND the adult-test catalog withholding). The shared
+  mood/anxiety re-check window (`RECHECK_AFTER_DAYS`/`RECHECKABLE_INSTRUMENTS`/`daysSince` + a new `wellbeingCheckin`
+  aggregate) was extracted into `home/wellbeing.ts` and **You.tsx refactored onto it (DRY)**. Home now loads the
+  `testStore` in its per-person effect (**consolidating** the previously-separate PHQ-9 fetch — the WellbeingCard
+  sibling series now reads `resultsByTest['phq9']`) and assembles `testResults` (instrument + **group** + when),
+  `wellbeingCheckinDue`, `lastWellbeingCheckinAt` into `PersonRecommendationState`; refined the Slice-B state
+  placeholders (added `group` to `testResults`; removed the unused `intimacyExerciseAvailable`; added
+  `lastWellbeingCheckinAt`). **Also fixed a latent spec-52 wiring bug:** Home's reactive capability snapshot omitted
+  `challenges.own` (and `tests.own`), so the challenge providers were filtered out and **never surfaced** — both added
+  to the set. No new IPC, no new vault schema, no new AI spend (§6 holds). Code-reviewer **ship** (no blockers; the
+  18+ triple-gate, wellbeing never-escalating/never-on-never-checked-in, per-person isolation, the testStore
+  consolidation not breaking the sibling series, and the DRY refactor all verified; 2 optional tuning nits). Gate
+  green: typecheck (all packages), lint, format, **918 core + 844 desktop** unit (the 3 providers'
+  relevance/gating/scoring/dismiss-signal + the `wellbeingCheckin` due/calm/never-checked-in cases + Home RTL for each
+  new card incl. the 18+ gate hiding the intimacy card even when the profile exists), **E2E +2** (self-assessment +
+  wellbeing recs surface + take-a-test routes to You; intimacy exercise only after the 18+ ack + 360px clean). Synced
+  spec 53 (→ Built Slice A+B, §5.1/§11.1 + changelog). NOTE: the heavy spec-52 challenge two-flow E2E (`co-create a
+challenge…`) times out at 30s when run as the ~5th test in a batch — a **pre-existing accumulated-load flake**
+  (verified: it fails 5th after four UNRELATED session tests that never touch Home, passes reliably in isolation; my
+  changes touch no path it exercises). **Lesson: adding a provider changes WHAT competes for the capped "For you"
+  slots, so an existing For-you test that asserts a specific runner-up must seed the new provider's satisfied state to
+  stay focused — the ranking is the contract, not a fixed card set; and a renderer capability snapshot that gates the
+  engine must list EVERY provider's gate (the spec-52 challenge providers were silently dead because `challenges.own`
+  was missing — they passed their unit test, which put the gate in the state set, while the real app filtered them
+  out).**
+
 - 2026-06-26 — **Build (Wellbeing & neurodivergence self-reflections — SPEC 51 BUILT; on
   `feat/wellbeing-reflections`, PR pending).** The most safety-sensitive feature in the app — clinically-validated
   instruments embedded as **non-diagnostic reflections**, reusing the spec-50 Tests engine wholesale (no new engine,

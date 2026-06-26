@@ -3,8 +3,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import '../../../settings/builtins';
 import { DEFAULT_ROLES } from '@shared/capabilities';
+import type { TestGroupId, TestSummary } from '@selfos/core/tests';
 import type { ConversationMeta, Dream } from '@shared/channels';
-import type { Goal, Insight, Person } from '@shared/schemas';
+import type { Goal, Insight, Person, TestResult } from '@shared/schemas';
 import { Home } from './Home';
 import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
 import { useSessionStore } from '../../../stores/sessionStore';
@@ -102,6 +103,57 @@ function staleGoal(id: string, text: string): Goal {
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     lastTouchedAt: '2026-01-01T00:00:00.000Z', // long untouched → stale
+  };
+}
+
+/** A minimal catalog summary for a test the person has taken (drives the `take-a-test` / `intimacy-exercise`
+ *  signals). The shape is the crypto-free `TestSummary` the bridge returns. */
+function testSummary(id: string, group: TestGroupId, instrument: string): TestSummary {
+  return {
+    id,
+    group,
+    title: `${instrument} test`,
+    instrument,
+    blurb: 'A reflection.',
+    framing: 'Not a diagnosis.',
+    estimatedMinutes: 5,
+    itemCount: 10,
+    adult: group === 'intimacy',
+    sensitive: group === 'intimacy',
+    subscales: [],
+    wellbeing: group === 'wellbeing',
+  };
+}
+
+function testResult(id: string, testId: string, takenAt: string): TestResult {
+  return {
+    id,
+    schemaVersion: 1,
+    testId,
+    testVersion: 1,
+    subjectPersonId: ME.id,
+    answers: [],
+    scores: [],
+    takenAt,
+    createdAt: takenAt,
+    updatedAt: takenAt,
+  };
+}
+
+/** Mock-bridge seed making the given catalog tests appear ALREADY TAKEN (so `take-a-test` is satisfied). */
+function tookTests(...tests: { id: string; group: TestGroupId; instrument: string }[]): {
+  testsList: () => Promise<{ tests: TestSummary[]; adultAcknowledged: boolean }>;
+  testsResults: (args: { testId: string }) => Promise<TestResult[]>;
+} {
+  const summaries = tests.map((t) => testSummary(t.id, t.group, t.instrument));
+  return {
+    testsList: () => Promise.resolve({ tests: summaries, adultAcknowledged: true }),
+    testsResults: ({ testId }) =>
+      Promise.resolve(
+        tests.some((t) => t.id === testId)
+          ? [testResult(`${testId}-r`, testId, '2026-06-20T00:00:00.000Z')]
+          : [],
+      ),
   };
 }
 
@@ -232,6 +284,9 @@ describe('Home — hierarchy & status grid', () => {
 describe('Home — the "For you" engine', () => {
   it('invites a near-empty person to try a guided session', async () => {
     installMockBridge({
+      // `active` widens the "For you" cap to 3 so the gentle guided invite surfaces alongside the
+      // open-session + take-a-test recommendations a near-empty person also gets.
+      coachingGetPrefs: () => Promise.resolve({ schemaVersion: 1, proactivity: 'active' as const }),
       conversationsList: () => Promise.resolve([meta('c1', 'A first talk', 'inProgress')]),
     });
     renderHome();
@@ -242,6 +297,73 @@ describe('Home — the "For you" engine', () => {
     });
     expect(region).toHaveTextContent(/try a guided session/i);
     expect(screen.queryByRole('heading', { name: /welcome to selfos/i })).toBeNull();
+  });
+
+  it('invites a first self-assessment when no profile test is taken (50)', async () => {
+    installMockBridge({
+      conversationsList: () => Promise.resolve([meta('c1', 'A first talk', 'inProgress')]),
+    });
+    renderHome();
+    const region = await waitFor(() => {
+      const r = forYouRegion();
+      expect(r).not.toBeNull();
+      return r as HTMLElement;
+    });
+    expect(region).toHaveTextContent(/discover how you see yourself/i);
+  });
+
+  it('gently invites a mood check-in when a prior one has gone quiet (51)', async () => {
+    installMockBridge({
+      conversationsList: () => Promise.resolve([meta('c1', 'A past talk', 'complete')]),
+      testsList: () =>
+        Promise.resolve({
+          tests: [testSummary('phq9', 'wellbeing', 'PHQ-9')],
+          adultAcknowledged: false,
+        }),
+      testsResults: ({ testId }) =>
+        Promise.resolve(
+          testId === 'phq9' ? [testResult('r', 'phq9', '2026-01-01T00:00:00.000Z')] : [],
+        ),
+    });
+    renderHome();
+    const region = await waitFor(() => {
+      const r = forYouRegion();
+      expect(r).not.toBeNull();
+      return r as HTMLElement;
+    });
+    expect(region).toHaveTextContent(/a gentle check-in/i);
+  });
+
+  it('invites an intimacy exercise once 18+ is acked AND an intimacy profile is taken (48)', async () => {
+    installMockBridge({
+      conversationsList: () => Promise.resolve([meta('c1', 'A past talk', 'complete')]),
+      guidedGetState: () => Promise.resolve({ cache: null, adultAcknowledged: true }),
+      ...tookTests({ id: 'kink-interests', group: 'intimacy', instrument: 'Kink interests' }),
+    });
+    renderHome();
+    const region = await waitFor(() => {
+      const r = forYouRegion();
+      expect(r).not.toBeNull();
+      return r as HTMLElement;
+    });
+    expect(region).toHaveTextContent(/build on your intimacy profile/i);
+  });
+
+  it('hides the intimacy exercise before the 18+ ack even though the profile exists (the gate is the boundary, 48 §8)', async () => {
+    installMockBridge({
+      conversationsList: () => Promise.resolve([meta('c1', 'A past talk', 'complete')]),
+      // The intimacy profile is present in the catalog, but the per-person 18+ ack is NOT given...
+      guidedGetState: () => Promise.resolve({ cache: null, adultAcknowledged: false }),
+      ...tookTests({ id: 'kink-interests', group: 'intimacy', instrument: 'Kink interests' }),
+    });
+    renderHome();
+    const region = await waitFor(() => {
+      const r = forYouRegion();
+      expect(r).not.toBeNull();
+      return r as HTMLElement;
+    });
+    // ...so the engine never even considers it (no premature 18+ exposure).
+    expect(region).not.toHaveTextContent(/build on your intimacy profile/i);
   });
 
   it('surfaces the synthesis observation only when AI is configured', async () => {
@@ -284,6 +406,8 @@ describe('Home — the "For you" engine', () => {
           meta('c2', 'B', 'complete'),
           meta('c3', 'C', 'complete'),
         ]),
+      // A taken profile test satisfies `take-a-test`, so the engine has genuinely nothing to recommend.
+      ...tookTests({ id: 'bigfive', group: 'personality', instrument: 'IPIP' }),
     });
     renderHome();
     const region = await waitFor(() => {

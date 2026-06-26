@@ -104,7 +104,17 @@ export interface PersonRecommendationState {
 
   // --- Slice-B signals (additive-optional; absent ⇒ the provider contributes nothing) ---
   testResults?: { instrument: string; takenAt: string }[];
+  /** There is an ACTIVE challenge (52) — suppresses the "take on a challenge" suggestion (one at a time). */
   activeChallenge?: boolean;
+  /** An active challenge's check-in is due (52 §3.5) — surface the gentle "how did it go?" nudge. */
+  challengeCheckInDue?: boolean;
+  /** A stable signature of the due challenge (its id + checkInAt) — the dismissal re-surfaces on a NEW one. */
+  challengeCheckInSignature?: string;
+  /** `shouldSuggestChallenge` holds (no active challenge, proactivity on, throttle clear) — surface the
+   *  explicit-tap "get a challenge idea" card (52 §3.7). Requires `configured` (the suggester needs AI). */
+  challengeSuggestable?: boolean;
+  /** A cached challenge suggestion's `computedAt` — drives the suggest dismissal signature (a NEW idea re-surfaces). */
+  challengeSuggestionComputedAt?: string;
   intimacyExerciseAvailable?: boolean;
   wellbeingCheckinDue?: boolean;
 }

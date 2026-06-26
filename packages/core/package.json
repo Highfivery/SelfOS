@@ -23,6 +23,7 @@
     "./conversations": "./src/conversations/index.ts",
     "./insights": "./src/insights/index.ts",
     "./goals": "./src/goals/index.ts",
+    "./challenges": "./src/challenges/index.ts",
     "./coaching": "./src/coaching/index.ts",
     "./recommendations": "./src/recommendations/index.ts",
     "./questionnaires": "./src/questionnaires/index.ts",

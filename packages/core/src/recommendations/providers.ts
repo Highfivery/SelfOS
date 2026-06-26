@@ -199,6 +199,48 @@ const refreshMemory: RecommendationProvider = {
       : null,
 };
 
+/** An active challenge's check-in is due — a gentle "how did it go?" (52-challenge-sessions §3.5). The most
+ *  concrete challenge step: a commitment they made, now due. Capability-gated; not adult-gated (the action
+ *  text is non-sexual even for a sexual challenge). */
+const challengeCheckin: RecommendationProvider = {
+  id: 'challenge-checkin',
+  domain: 'challenge',
+  capabilityGate: 'challenges.own',
+  relevance: (s): RecommendationCandidate | null =>
+    s.challengeCheckInDue
+      ? {
+          id: 'challenge-checkin',
+          label: 'How did your challenge go?',
+          reason: 'You took on a challenge — no pressure, just curious how it went.',
+          route: '/sessions',
+          score: 78,
+          // Re-surfaces on a NEW due challenge / a pushed-out check-in (the challenge id + checkInAt).
+          dismissKey: `challenge-checkin:${s.challengeCheckInSignature ?? 'due'}`,
+        }
+      : null,
+};
+
+/** No active challenge → an explicit-tap invite to take one on (52 §3.7). Needs AI (`configured`) — the
+ *  suggester spends on tap; the card itself costs nothing. The throttle/level live in `challengeSuggestable`. */
+const suggestChallenge: RecommendationProvider = {
+  id: 'suggest-challenge',
+  domain: 'challenge',
+  capabilityGate: 'challenges.own',
+  relevance: (s): RecommendationCandidate | null =>
+    !s.activeChallenge && s.challengeSuggestable && s.configured
+      ? {
+          id: 'suggest-challenge',
+          label: 'Ready to stretch a little?',
+          reason:
+            'Want a small challenge to try this week, picked from what SelfOS knows about you?',
+          route: '/sessions',
+          score: 42,
+          // A NEW cached idea re-surfaces a dismissal; the bare invite has a durable "not now" key.
+          dismissKey: `suggest-challenge:${s.challengeSuggestionComputedAt ?? 'invite'}`,
+        }
+      : null,
+};
+
 /** The Slice-A built-ins, registered by `registerBuiltInRecommendationProviders`. */
 export const BUILT_IN_RECOMMENDATION_PROVIDERS: readonly RecommendationProvider[] = [
   continueSession,
@@ -209,4 +251,6 @@ export const BUILT_IN_RECOMMENDATION_PROVIDERS: readonly RecommendationProvider[
   guidedSuggestion,
   questionnaireGap,
   refreshMemory,
+  challengeCheckin,
+  suggestChallenge,
 ];

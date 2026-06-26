@@ -5,6 +5,7 @@ import { depthAskInstruction, type DepthAskContext } from '../profile';
 import { goalRaiseInstruction, type GoalRaiseContext } from '../coaching/goalRaise';
 import { getExercise, guideLifeAreas } from './guidedCatalog';
 import { buildStepInstruction } from './guidedSteps';
+import { CHALLENGE_COACH_ID, CHALLENGE_INTIMACY_REGISTER } from './challengeCoach';
 
 /** The fixed v1 coach voice (05-conversations §11.5). Warm, reflective, non-clinical. */
 export const PERSONA = `You are SelfOS — a warm, reflective wellness companion and life coach. \
@@ -51,6 +52,9 @@ export async function buildSystemPrompt(
   // 40-proactive-coaching §3.1 — the optional in-session goal-raise (proactivity setting on + active goals).
   // The host assembles it (proactivity level + the open/stale goal set); absent ⇒ no proactive follow-up.
   goalRaise?: GoalRaiseContext,
+  // 52-challenge-sessions §8.3 — the per-person 18+ ack. The challenge-coach's EXPLICIT sexual register is
+  // appended ONLY when this is true; un-acked, the addendum's gated stance steers away from sexual content.
+  adultAllowed?: boolean,
 ): Promise<string> {
   const exercise = guideId ? getExercise(guideId) : undefined;
   // A guided session foregrounds its group's life-areas in the (pinned) portrait selection (28 §4.4); a
@@ -62,6 +66,11 @@ export async function buildSystemPrompt(
     parts.push(exercise.systemPromptAddendum);
     if (exercise.kind === 'structured' && exercise.steps) {
       parts.push(buildStepInstruction(exercise.steps));
+    }
+    // The explicit sexual register is gated on the 18+ ack (52 §8.3) — appended AFTER the addendum so the
+    // boundary still leads. Without the ack, the addendum's gated stance keeps the challenge non-sexual.
+    if (guideId === CHALLENGE_COACH_ID && adultAllowed) {
+      parts.push(CHALLENGE_INTIMACY_REGISTER);
     }
   }
   // 29 — the optional in-session depth ask (a setting, default on): a guarded, prompt-level invitation to go

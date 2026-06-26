@@ -54,6 +54,7 @@ import {
   listConversations,
   saveConversation,
 } from '@selfos/core/conversations';
+import { listChallenges } from '@selfos/core/challenges';
 import { listProfileSuggestions } from '@selfos/core/profile';
 
 const MAIN = join(__dirname, '..', 'out', 'main', 'index.js');
@@ -1745,6 +1746,85 @@ test('guided sessions: start a guided exercise → steered reply → complete & 
       return offenders;
     });
     expect(desktopOffenders).toEqual([]);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('challenges (52): co-create a challenge → propose-then-agree captures a tracked Challenge → check-in feeds memory; decline path; 360px clean', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('challenge e2e: master key missing');
+
+    await w.getByRole('link', { name: 'Sessions' }).click();
+    // The launcher offers "Take on a challenge" with a light domain chooser (§3.1).
+    await expect(w.getByRole('heading', { name: 'Take on a challenge' })).toBeVisible();
+    await w.getByRole('button', { name: 'Surprise me' }).click();
+    // The static opener seeds offline (no model call, §3.1).
+    await expect(w.getByText(/small challenge to try|stretch your comfort zone/i)).toBeVisible();
+
+    // Turn 1 — ask for one: the coach PROPOSES but, with no agreement, captures NOTHING (the decline-shaped
+    // common path, §7). Decrypt to prove no Challenge yet.
+    await w.getByLabel('Message').fill('give me a challenge');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/want to go for it/i)).toBeVisible();
+    expect(await listChallenges(fs, key, 'owner-1')).toHaveLength(0);
+
+    // Turn 2 — agree: the coach confirms + emits a private marker → "Challenge set ✓" (the marker never shows).
+    await w.getByLabel('Message').fill("yes let's do it");
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/Challenge set/i)).toBeVisible();
+    await expect(w.getByText(/SELFOS:CHALLENGE/)).toHaveCount(0);
+
+    // Decrypt the vault: a real active Challenge exists, back-linked to its conversation.
+    await expect
+      .poll(async () => (await listChallenges(fs, key, 'owner-1')).length)
+      .toBeGreaterThan(0);
+    const captured = (await listChallenges(fs, key, 'owner-1'))[0]!;
+    expect(captured.status).toBe('active');
+    expect(captured.action).toContain('stranger');
+    expect(captured.conversationId).toBeTruthy();
+
+    // It appears tracked on the launcher; check in "I did it".
+    await w.getByRole('button', { name: 'New session' }).click();
+    await expect(w.getByText(captured.action)).toBeVisible();
+    await w.getByRole('button', { name: 'I did it' }).click();
+
+    // The card closes into "Past challenges" (proves the IPC write + store reload landed) → decrypt the outcome.
+    await expect(w.getByText('Past challenges (1)')).toBeVisible();
+    const done = (await listChallenges(fs, key, 'owner-1'))[0]!;
+    expect(done.status).toBe('done');
+    expect(done.outcome).toBe('did');
+    expect(done.insightId).toBeTruthy();
+    // The reflection Insight feeds the person's OWN later context (provenance.challengeId, §5.4).
+    const reflection = (await listInsightsForPerson(fs, key, 'owner-1')).find(
+      (i) => i.provenance.challengeId === captured.id,
+    );
+    expect(reflection?.source).toBe('session');
+    expect(await buildContext(fs, key, 'owner-1')).toContain('stranger');
+
+    // No horizontal overflow / inner scrollbar at phone width on the challenge surfaces (§9/§12).
+    await w.setViewportSize({ width: 360, height: 780 });
+    const layout = await w.evaluate(() => {
+      const offenders: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          offenders.push(`${el.tagName}.${el.className}`);
+        }
+      });
+      const main = document.querySelector('main');
+      return { offenders, mainOverflow: main ? main.scrollWidth - main.clientWidth : 0 };
+    });
+    expect(layout.offenders).toEqual([]);
+    expect(layout.mainOverflow).toBeLessThanOrEqual(1);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

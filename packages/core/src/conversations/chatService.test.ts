@@ -8,6 +8,7 @@ import { savePerson } from '../people';
 import { queryUsage, recordUsage, setPersonBudget } from '../usage';
 import { saveInsight } from '../insights';
 import type { Insight } from '../schemas';
+import { listChallenges } from '../challenges/challengeService';
 import {
   getConversation,
   listConversations,
@@ -324,6 +325,76 @@ describe('runChatTurn — guided sessions (16)', () => {
     const conversation = await getConversation(fs, key, 'p1', 'g2');
     // GROW has 4 steps → max index 3.
     expect(conversation?.guideStep).toBe(3);
+  });
+
+  it('captures a Challenge from a marker in a challenge-coach session + strips it (52 §3.2)', async () => {
+    await base();
+    await saveConversation(fs, key, {
+      id: 'ch1',
+      schemaVersion: 1,
+      personId: 'p1',
+      title: 'Take on a challenge',
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      status: 'inProgress',
+      guideId: 'challenge-coach',
+      messages: [{ role: 'assistant', content: 'opener', ts: now.toISOString() }],
+    });
+    const result = await runChatTurn({
+      fs,
+      key,
+      client: markerClient(
+        'Set — go for it. [[SELFOS:CHALLENGE:{"action":"Call one friend","comfort":2,"lifeArea":"Relationships","checkInDays":7}]]',
+      ),
+      apiKey: 'sk-test',
+      model: 'claude-sonnet-4-6',
+      personId: 'p1',
+      conversationId: 'ch1',
+      userText: "yes let's do it",
+      onDelta: () => {},
+      now,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.challengeCreated?.action).toBe('Call one friend');
+    // the marker never persists in the visible transcript
+    const conversation = await getConversation(fs, key, 'p1', 'ch1');
+    expect(conversation?.messages.at(-1)?.content).toBe('Set — go for it.');
+    expect(conversation?.messages.at(-1)?.content).not.toContain('SELFOS:CHALLENGE');
+    // a real Challenge entity exists, active, back-linked to the conversation
+    const challenges = await listChallenges(fs, key, 'p1');
+    expect(challenges).toHaveLength(1);
+    expect(challenges[0]!.status).toBe('active');
+    expect(challenges[0]!.action).toBe('Call one friend');
+    expect(challenges[0]!.conversationId).toBe('ch1');
+    expect(challenges[0]!.provenance.conversationId).toBe('ch1');
+  });
+
+  it('does NOT capture a challenge from a marker in a NON-challenge session', async () => {
+    await base();
+    await saveConversation(fs, key, {
+      id: 'free1',
+      schemaVersion: 1,
+      personId: 'p1',
+      title: 'free',
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      messages: [],
+    });
+    const result = await runChatTurn({
+      fs,
+      key,
+      client: markerClient('Sure. [[SELFOS:CHALLENGE:{"action":"sneaky"}]]'),
+      apiKey: 'sk-test',
+      model: 'claude-sonnet-4-6',
+      personId: 'p1',
+      conversationId: 'free1',
+      userText: 'hi',
+      onDelta: () => {},
+      now,
+    });
+    expect(result.ok && result.challengeCreated).toBeUndefined();
+    expect(await listChallenges(fs, key, 'p1')).toHaveLength(0);
   });
 });
 

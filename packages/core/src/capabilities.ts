@@ -47,6 +47,10 @@ export const CAPABILITIES = [
   // OWN self-assessments. Member default ON (taking a test about yourself is ordinary — not break-glass).
   // The intimacy/kink + sexuality tests are ADDITIONALLY gated by the shared 18+ ack (§3.5), not a capability.
   'tests.own',
+  // Challenges / experiments (52-challenge-sessions §4.5). `challenges.own` = take on + track + check in on
+  // one's OWN challenges. Member default ON (taking on a challenge about yourself is ordinary — not
+  // break-glass). A sexual/explicit challenge is ADDITIONALLY gated by the shared 18+ ack (§8.3), not a capability.
+  'challenges.own',
 ] as const;
 
 export type CapabilityKey = (typeof CAPABILITIES)[number];
@@ -74,6 +78,7 @@ export const CAPABILITY_LABELS: Record<CapabilityKey, string> = {
   'memory.own': 'View & manage their own memory',
   'devices.manage': 'Manage devices & re-key the vault',
   'tests.own': 'Take their own self-assessments',
+  'challenges.own': 'Take on their own challenges',
 };
 
 /**
@@ -126,6 +131,7 @@ export const DEFAULT_ROLES: Role[] = [
       'intake.own',
       'memory.own',
       'tests.own',
+      'challenges.own',
     ]),
   },
   {

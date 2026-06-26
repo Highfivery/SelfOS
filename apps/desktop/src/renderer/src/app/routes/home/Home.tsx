@@ -10,9 +10,15 @@ import { useGuidanceStore } from '../../../stores/guidanceStore';
 import { useIntakeStore } from '../../../stores/intakeStore';
 import { useSynthesisStore } from '../../../stores/synthesisStore';
 import { useGoalStore } from '../../../stores/goalStore';
+import { useChallengeStore } from '../../../stores/challengeStore';
 import { useDiscoveryStore } from '../../../stores/discoveryStore';
 import { useSetting } from '../../../settings/useSetting';
 import { aggregateCrisisSignal } from '@selfos/core/coaching';
+import {
+  checkInDueChallenge,
+  featuredActiveChallenge,
+  shouldSuggestChallenge,
+} from '@selfos/core/challenges';
 import {
   computeMomentum,
   listRecommendationProviders,
@@ -86,6 +92,8 @@ export function Home(): JSX.Element {
   const proposals = useInsightStore((s) => s.proposals);
   const inboxItems = useInboxStore((s) => s.items);
   const goals = useGoalStore((s) => s.goals);
+  const challenges = useChallengeStore((s) => s.challenges);
+  const challengeSuggestion = useChallengeStore((s) => s.suggestion);
   const synthesis = useSynthesisStore((s) => s.synthesis);
   const guidedSuggestions = useGuidanceStore((s) => s.suggestions);
   const adultAcknowledged = useGuidanceStore((s) => s.adultAcknowledged);
@@ -119,6 +127,7 @@ export function Home(): JSX.Element {
       useIntakeStore.getState().load(),
       useSynthesisStore.getState().load(),
       useGoalStore.getState().load(), // bridge gates on memory.own → [] when not permitted
+      useChallengeStore.getState().load(), // bridge gates on challenges.own → [] when not permitted (52)
       useDiscoveryStore.getState().load(), // recommendation dismissals + celebration signatures
       window.selfos?.coachingGetPrefs().then((p) => {
         if (!cancelled) setProactivity(p?.proactivity ?? 'gentle');
@@ -212,6 +221,29 @@ export function Home(): JSX.Element {
     guidedSuggestionCount: guidedSuggestions?.items.length ?? 0,
     ...(guidedSuggestions?.generatedAt ? { guidedGeneratedAt: guidedSuggestions.generatedAt } : {}),
     lightActivity,
+    // Challenges (52) — the active-challenge check-in nudge + the proactive "take one on" invite.
+    activeChallenge: featuredActiveChallenge(challenges) !== undefined,
+    challengeCheckInDue: checkInDueChallenge(challenges, now) !== undefined,
+    ...(checkInDueChallenge(challenges, now)
+      ? {
+          challengeCheckInSignature: `${checkInDueChallenge(challenges, now)?.id}:${
+            checkInDueChallenge(challenges, now)?.checkInAt ?? ''
+          }`,
+        }
+      : {}),
+    challengeSuggestable: shouldSuggestChallenge(
+      {
+        hasActiveChallenge: featuredActiveChallenge(challenges) !== undefined,
+        level: proactivity,
+        ...(challengeSuggestion?.computedAt
+          ? { lastSuggestedAt: challengeSuggestion.computedAt }
+          : {}),
+      },
+      now,
+    ),
+    ...(challengeSuggestion?.computedAt
+      ? { challengeSuggestionComputedAt: challengeSuggestion.computedAt }
+      : {}),
     questionnaireGapHint: configured && inboxCount === 0,
     memoryStale: proposals.length > 0,
     memorySignature: proposals

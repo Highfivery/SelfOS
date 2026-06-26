@@ -11,7 +11,14 @@ import { useGuidanceStore } from '../../../stores/guidanceStore';
 function renderLauncher(props: Partial<Parameters<typeof SessionLauncher>[0]> = {}): void {
   render(
     <MemoryRouter>
-      <SessionLauncher configured onStartFree={() => {}} onPickGuided={() => {}} {...props} />
+      <SessionLauncher
+        configured
+        onStartFree={() => {}}
+        onPickGuided={() => {}}
+        onStartChallenge={() => {}}
+        onTalkItThrough={() => {}}
+        {...props}
+      />
     </MemoryRouter>,
   );
 }

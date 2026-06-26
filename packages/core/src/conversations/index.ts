@@ -10,3 +10,5 @@ export * from './guidedSteps';
 export * from './guidedSessionService';
 export * from './guidanceService';
 export * from './topicClassifier';
+export * from './challengeCoach';
+export * from './challengeSession';

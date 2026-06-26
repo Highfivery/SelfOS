@@ -5,6 +5,13 @@ import type {
   AlignmentResult,
   Goal,
   GoalStatus,
+  Challenge,
+  ChallengeStatus,
+  ChallengeDomain,
+  ChallengeOutcome,
+  ChallengeSuggestion,
+  ChallengeSuggestionResult,
+  ChallengeCheckInResult,
   CoachingPrefs,
   CoachingSynthesis,
   CoachingSynthesisResult,
@@ -220,6 +227,19 @@ export const IpcChannels = {
   coachingSetPrefs: 'coaching:setPrefs',
   coachingGetSynthesis: 'coaching:getSynthesis',
   coachingSynthesize: 'coaching:synthesize',
+  // Challenges / experiments (52-challenge-sessions §6). All gated by `challenges.own` + active-person-scoped.
+  challengesStart: 'challenges:start',
+  challengesStartReflection: 'challenges:startReflection',
+  challengesList: 'challenges:list',
+  challengesGet: 'challenges:get',
+  challengesSetStatus: 'challenges:setStatus',
+  challengesCheckIn: 'challenges:checkIn',
+  challengesSnooze: 'challenges:snooze',
+  challengesSeedGoal: 'challenges:seedGoal',
+  challengesDelete: 'challenges:delete',
+  challengesSuggest: 'challenges:suggest',
+  challengesGetSuggestion: 'challenges:getSuggestion',
+  challengesClearSuggestion: 'challenges:clearSuggestion',
   assignmentsCreate: 'assignments:create',
   assignmentsInbox: 'assignments:inbox',
   assignmentsGet: 'assignments:get',
@@ -807,6 +827,49 @@ export interface SelfosBridge {
    */
   coachingSynthesize(input?: { auto?: boolean }): Promise<CoachingSynthesisResult>;
   /**
+   * Challenges / experiments (52-challenge-sessions §6). All gated by `challenges.own` + active-person-scoped
+   * in the bridge (the trust boundary — a person only ever starts/reads/acts on their OWN challenges). A
+   * sexual/intimacy domain additionally requires the 18+ ack, enforced in the bridge. The metered calls are
+   * `challenges:suggest` (and nothing else here); starting + status changes + an inline check-in are free.
+   */
+  /** Start a challenge-coach session (§3.1), optionally seeded with a domain. Returns the new conversation id. */
+  challengesStart(input?: { domain?: ChallengeDomain }): Promise<{ conversationId: string } | null>;
+  /** Start a challenge REFLECTION session (§3.5) for a non-adult challenge. Returns the conversation id. */
+  challengesStartReflection(input: {
+    challengeId: string;
+  }): Promise<{ conversationId: string } | null>;
+  /** The active person's challenges (own only) — the current active + closed, newest-first. */
+  challengesList(): Promise<Challenge[]>;
+  /** One of the active person's OWN challenges, or null. */
+  challengesGet(input: { challengeId: string }): Promise<Challenge | null>;
+  /** Set status on the active person's OWN challenge (the card's "I did it" / "Let it go"). */
+  challengesSetStatus(input: {
+    challengeId: string;
+    status: ChallengeStatus;
+  }): Promise<Challenge | null>;
+  /** Record an inline check-in (§3.5): writes outcome/reflection, marks `done`, runs the reflection → Insight
+   *  bridge (deterministic, no spend). `insightId` is the derived reflection Insight. */
+  challengesCheckIn(input: {
+    challengeId: string;
+    outcome: ChallengeOutcome;
+    reflection?: string;
+  }): Promise<ChallengeCheckInResult>;
+  /** "Not yet" — keep the challenge active and push its check-in out (§3.5), never a nag. */
+  challengesSnooze(input: { challengeId: string }): Promise<Challenge | null>;
+  /** Offer-to-seed a 39 Goal from a completed challenge (§11 Q6 — confirm-before-create). */
+  challengesSeedGoal(input: { challengeId: string }): Promise<Challenge | null>;
+  /** Delete one of the active person's OWN challenges (its derived Insight follows the Memory delete). */
+  challengesDelete(input: { challengeId: string }): Promise<void>;
+  /**
+   * Run the proactive suggester (§3.7) — budget-gated, metered `challenge.suggest`, tolerant-parsed. The
+   * renderer fires it only on an explicit tap; sexual candidates are withheld until the 18+ ack.
+   */
+  challengesSuggest(input?: { override?: boolean }): Promise<ChallengeSuggestionResult>;
+  /** The cached challenge suggestion (no spend) — for re-display. */
+  challengesGetSuggestion(): Promise<ChallengeSuggestion | null>;
+  /** Clear the cached suggestion (after the person accepts or dismisses it). */
+  challengesClearSuggestion(): Promise<void>;
+  /**
    * Send a questionnaire to its BOUND household recipient (in-app), freezing an immutable snapshot at send.
    * The recipient is set on the questionnaire at creation (08 §17.3) — it is NOT passed here. Returns the
    * assignment plus, when a relay is connected, a `link` + `pin` so the recipient can answer in their Inbox
@@ -1214,3 +1277,14 @@ export type {
   UsageEvent,
   UsageSummary,
 };
+
+// Challenges / experiments (52-challenge-sessions) — re-exported for the renderer (stores, cards, providers).
+export type {
+  Challenge,
+  ChallengeCheckInResult,
+  ChallengeDomain,
+  ChallengeOutcome,
+  ChallengeStatus,
+  ChallengeSuggestion,
+  ChallengeSuggestionResult,
+} from './schemas';

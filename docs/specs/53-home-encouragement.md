@@ -420,7 +420,7 @@ Built-in providers (Slice A — over **existing** features), each a pure `releva
   "Tidy up memory."
 
 Slice B providers register from their own modules (no Home edits): **`take-a-test`** / **`wellbeing-checkin`**
-(50/51, the latter gated gently — §8), **`intimacy-exercise`** (48, `adultGate: true`), **`get-a-challenge`**
+(50/51, the latter gated gently — §8), **`intimacy-exercise`** (48, `adultGate: true`), **`challenge-checkin`** / **`suggest-challenge`**
 (52, explicit-tap). Sexual/intimacy candidates carry `adultGate: true` and are filtered until the 18+ ack.
 
 ### 5.2 The ranking engine (pure)
@@ -487,7 +487,7 @@ editing Home**:
 - Slice A registers the built-ins (§5.1) from `@selfos/core/recommendations` (and from the existing
   guided/questionnaire/goal/memory cores where the data lives).
 - Slice B: spec 50/51 register `take-a-test` / `wellbeing-checkin`; spec 48 registers `intimacy-exercise`
-  (`adultGate`); spec 52 registers `get-a-challenge`. None touch `Home.tsx` — they appear in "For you"
+  (`adultGate`); spec 52 registers `challenge-checkin` + `suggest-challenge` (BUILT 2026-06-26). None touch `Home.tsx` — they appear in "For you"
   automatically when relevant + permitted.
 
 ## 6. IPC / API contracts
@@ -743,7 +743,7 @@ The original questions, for rationale:
   the features that exist **today** — it does not wait on 48–52.
 - **Slice B grows the engine as 48–52 land.** Each new feature **registers its own recommendation provider**
   from its own core module (the `registerContextProvider` precedent) — `take-a-test` / `wellbeing-checkin`
-  (50/51), `intimacy-exercise` (48, `adultGate`), `get-a-challenge` (52, explicit-tap) — and appears in "For
+  (50/51), `intimacy-exercise` (48, `adultGate`), `challenge-checkin` + `suggest-challenge` (52) — and appears in "For
   you" automatically when relevant + permitted, with **no edits to `Home.tsx`**. This is the payoff of the
   registry: the motivational front door extends itself as the app grows, instead of Home accreting another
   hand-wired card per feature (the very problem this spec fixes).
@@ -790,7 +790,10 @@ The original questions, for rationale:
     (the "For you" zone ranks/reflects-momentum/dismisses + 360px guard; proactivity-off hides the zone but keeps
     the grid). Visual QA at desktop (the focal "For you" zone leads above a clean status grid). Synced specs
     17 / 29 / 40 / 41 (as-built amendments). **Slice B (48–52 providers) deferred** — each registers its own
-    provider with no `Home.tsx` edit. **Lesson: absorbing N hand-wired Home cards into one ranked engine means
-    moving WHERE/HOW each is surfaced, never WHAT it does — keep each absorbed card's action verbatim inside the
-    uniform `RecommendationCard`; and a deterministic `MomentumReflection` type that can only hold positive counts
-    makes "no streaks/no overdue" a compile-time guarantee, not a code-review hope.**
+    provider with no `Home.tsx` edit. \_(2026-06-26: spec 52 built the first Slice-B providers — `challenge-checkin`
+    - `suggest-challenge` — as engine built-ins with no `Home.tsx` edit; the `activeChallenge` /
+      `challengeCheckInDue` / `challengeSuggestable` / `challengeSuggestionComputedAt` state fields it reads were
+      already wired in §5.2's `PersonRecommendationState`.)\_ **Lesson: absorbing N hand-wired Home cards into one ranked engine means
+      moving WHERE/HOW each is surfaced, never WHAT it does — keep each absorbed card's action verbatim inside the
+      uniform `RecommendationCard`; and a deterministic `MomentumReflection` type that can only hold positive counts
+      makes "no streaks/no overdue" a compile-time guarantee, not a code-review hope.**

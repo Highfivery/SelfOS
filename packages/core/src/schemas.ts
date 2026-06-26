@@ -57,6 +57,7 @@ export const NOTIFICATION_KINDS = [
   'sync-conflict',
   'goal-followup', // 40-proactive-coaching §3.2 — a gentle check-in on a stale/due goal
   'coaching-synthesis', // 40 §3.3 — the cross-feature observation nudge
+  'challenge-followup', // 52-challenge-sessions §3.5 — a gentle "how did your challenge go?" check-in
 ] as const;
 export const NotificationKindSchema = z.enum(NOTIFICATION_KINDS);
 export type NotificationKind = z.infer<typeof NotificationKindSchema>;
@@ -527,6 +528,10 @@ export const ConversationSchema = z.object({
   // (today's behaviour). `guideStep` is the current step index for structured exercises only.
   guideId: z.string().optional(),
   guideStep: z.number().int().nonnegative().optional(),
+  // Challenge sessions (52-challenge-sessions §5.4). When this conversation is a challenge REFLECTION
+  // session (the `challenge-reflect` guide), this back-links the Challenge it reflects on so End &
+  // summarize stamps `provenance.challengeId`. Additive-optional — absent ⇒ a normal/guided session.
+  challengeId: z.string().optional(),
   // Free-form session topic cache (28 §13.2). The life-areas a Haiku classifier inferred from the
   // conversation, reused across turns and re-run only on a subject shift, so context selects the relevant
   // pinned portrait facts. Additive-optional — absent ⇒ unclassified (⇒ core + fill). Guided sessions don't
@@ -663,6 +668,7 @@ export const InsightProvenanceSchema = z.object({
   intakeSection: z.string().optional(), // set for intake-sourced facts (18-personal-onboarding §4.1)
   testId: z.string().optional(), // set for test-sourced insights → deep-link to /you/:testId (50 §4.4)
   testResultId: z.string().optional(), // the specific TestResult this insight was built from (50 §4.4)
+  challengeId: z.string().optional(), // set for a challenge reflection's insight → deep-link to the Challenge (52 §4.4)
   at: z.string(),
 });
 export type InsightProvenance = z.infer<typeof InsightProvenanceSchema>;
@@ -745,6 +751,100 @@ export const GoalSchema = z.object({
   lastTouchedAt: z.string().optional(), // last time the person/coach engaged it (the staleness basis)
 });
 export type Goal = z.infer<typeof GoalSchema>;
+
+/**
+ * A tracked challenge / experiment (52-challenge-sessions §4.2) — a small, deliberately-stretching action the
+ * person co-creates with the coach and commits to between sessions, with a check-in and a reflection that
+ * feeds memory. It is its OWN entity, NOT a `Goal` subtype (§2/§4.2): a goal is a standing commitment; a
+ * challenge is a time-boxed experiment with a `comfort` dial and a check-in. They relate (`seededGoalId`) but
+ * never share a schema. Stored encrypted per-person at `people/<id>/challenges/<id>.enc`. `schemaVersion` 1.
+ */
+export const ChallengeStatusSchema = z.enum(['proposed', 'active', 'done', 'abandoned']);
+export type ChallengeStatus = z.infer<typeof ChallengeStatusSchema>;
+
+/** The challenge family — drives filtering, suggestion sourcing, and the 18+ gate (`intimacy`). */
+export const ChallengeDomainSchema = z.enum([
+  'overcome',
+  'habit',
+  'horizons',
+  'novelty',
+  'intimacy',
+]);
+export type ChallengeDomain = z.infer<typeof ChallengeDomainSchema>;
+
+/** A light structured outcome captured at check-in (§3.5) alongside the free-text reflection. */
+export const ChallengeOutcomeSchema = z.enum(['did', 'partly', 'didnt']);
+export type ChallengeOutcome = z.infer<typeof ChallengeOutcomeSchema>;
+
+export const ChallengeSchema = z.object({
+  id: z.string().min(1),
+  schemaVersion: z.number().int().positive(),
+  subjectPersonId: z.string().min(1), // per-person isolation — the challenge's owner (always self)
+  action: z.string(), // the agreed stretch action, in the person's terms ("strike up one conversation…")
+  status: ChallengeStatusSchema, // 'active' on capture; 'proposed' for a suggestion not yet agreed (§3.7)
+  comfort: z.number().int().min(1).max(5), // the person's chosen stretch (1 gentle nudge … 5 big leap) — the dial
+  lifeArea: z.string().optional(), // from LIFE_AREAS, normalized server-side (mirrors InsightFact/Goal)
+  domain: ChallengeDomainSchema.optional(), // the challenge family — for filtering/suggestion (§4.2)
+  adult: z.boolean().optional(), // a sexual/explicit challenge → 18+-gated surfaces + restricted reflection facts
+  conversationId: z.string().optional(), // the challenge session this was agreed in (back-reference)
+  provenance: InsightProvenanceSchema, // reuse the existing schema (carries conversationId + at)
+  agreedAt: z.string().optional(), // set when status → 'active' (the person committed)
+  checkInAt: z.string().optional(), // when the app should gently ask "how did it go?" (§3.5)
+  reflection: z.string().optional(), // the person's outcome reflection (on check-in)
+  outcome: ChallengeOutcomeSchema.optional(), // a light structured outcome from the check-in
+  insightId: z.string().optional(), // the reflection's derived Insight (source:'session', §4.4)
+  seededGoalId: z.string().optional(), // if completing seeded a 39 Goal (§11 Q6) — the back-link
+  seededFromChallengeId: z.string().optional(), // the prior challenge this was seeded from (§3.7 chain)
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type Challenge = z.infer<typeof ChallengeSchema>;
+
+/**
+ * The cached proactive suggestion (52 §3.7) — `people/<id>/challenges/suggestion.enc`, one current,
+ * overwritten on each `challenge.suggest` pass. View-only re-display costs nothing; accepting it (not the
+ * suggestion) is what creates a `Challenge`. Tolerant-parsed (spec 37): only `action` is required.
+ */
+export const ChallengeSuggestionSchema = z.object({
+  schemaVersion: z.number().int().positive(),
+  subjectPersonId: z.string().min(1),
+  action: z.string().min(1), // the candidate stretch action, in the person's terms (the only required field)
+  why: z.string().catch('').default(''), // why-it-fits (drawn from their own data) — calm, never a verdict
+  comfort: z.number().int().min(1).max(5).optional(), // a suggested stretch level (the person can re-dial)
+  lifeArea: z.string().optional(), // from LIFE_AREAS, normalized server-side
+  domain: ChallengeDomainSchema.optional(),
+  adult: z.boolean().optional(), // a sexual/intimacy candidate (only surfaced once the 18+ ack is present)
+  computedAt: z.string(),
+});
+export type ChallengeSuggestion = z.infer<typeof ChallengeSuggestionSchema>;
+
+/** The result of the proactive suggester (52 §6) — budget-gated `challenge.suggest`, tolerant-parsed (37). */
+export type ChallengeSuggestionResult =
+  | { ok: true; suggestion: ChallengeSuggestion }
+  | {
+      ok: false;
+      reason:
+        | 'NO_KEY'
+        | 'BUDGET'
+        | 'CAPPED' // the per-period suggest cap (§5.3) — distinct from a hard BUDGET stop
+        | 'AI_OFF'
+        | 'EMPTY'
+        | 'REFUSED'
+        | 'TRUNCATED'
+        | 'MALFORMED'
+        | 'ERROR';
+      message: string;
+    };
+
+/**
+ * The result of an inline check-in (52 §6). The status + outcome ALWAYS persist (free, no AI); the optional
+ * reflection → Insight bridge (§5.4) is deterministic in v1, so a check-in never spends. `challenge` carries
+ * the updated record (status moved to `done`/`active`/`abandoned`); `insightId` is the derived reflection
+ * Insight when one was produced.
+ */
+export type ChallengeCheckInResult =
+  | { ok: true; challenge: Challenge; insightId?: string }
+  | { ok: false; reason: 'NOT_FOUND'; message: string };
 
 /**
  * A scored subscale within a self-assessment result (50-self-assessments §4.3). `key` matches a
@@ -1918,6 +2018,10 @@ export type ChatTurnResult =
       // Assessed as part of the turn the user already paid for (no extra Claude call). The renderer shows a
       // dismissible "mark complete & summarize?" prompt when set and the session isn't already complete.
       wrapUpSuggested?: boolean;
+      // 52-challenge-sessions §3.2: the coach emitted a `[[SELFOS:CHALLENGE:…]]` marker this turn and a
+      // Challenge was captured (free — rides this turn). The renderer shows an inline "Challenge set ✓"
+      // confirmation linking to the tracked card and refreshes the challenge store. Absent ⇒ no capture.
+      challengeCreated?: { id: string; action: string };
     }
   | { ok: false; reason: 'NO_KEY' | 'BUDGET' | 'ERROR'; message: string };
 

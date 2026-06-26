@@ -28,6 +28,7 @@ import { unansweredCount, useInboxStore } from '../stores/inboxStore';
 import { useDreamStore } from '../stores/dreamStore';
 import { useInsightStore } from '../stores/insightStore';
 import { useGoalStore } from '../stores/goalStore';
+import { useChallengeStore } from '../stores/challengeStore';
 import { useTestStore } from '../stores/testStore';
 import { useDreamAnalysisStore } from '../stores/dreamAnalysisStore';
 import { useDreamPatternStore } from '../stores/dreamPatternStore';
@@ -116,6 +117,7 @@ export function AppShell(): JSX.Element {
     useIntakeStore.getState().reset(); // the intake is per-person (18-personal-onboarding §7)
     useInsightStore.getState().reset(); // Memory is per-person — own + relationships only (20 §5.1)
     useGoalStore.getState().reset(); // tracked goals are per-person (39-living-memory §5.4)
+    useChallengeStore.getState().reset(); // challenges + cached suggestion are per-person (52 §5.5)
     useTestStore.getState().reset(); // self-assessments are per-person (50 §5.6)
     useSynthesisStore.getState().reset(); // the cached cross-feature synthesis is per-person (40 §5.3)
     useNotificationStore.getState().reset(); // notifications are per-person, device-local (35 §4)
@@ -130,6 +132,7 @@ export function AppShell(): JSX.Element {
     void useIntakeStore.getState().load();
     void useInsightStore.getState().load();
     void useGoalStore.getState().load();
+    void useChallengeStore.getState().load();
   }, [activePersonId]);
 
   // Collapse any open drawer when the viewport grows back to desktop (where the sidebar is permanent).

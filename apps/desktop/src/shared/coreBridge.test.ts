@@ -24,6 +24,7 @@ import { submitSectionForm } from '@selfos/core/intake';
 import { getTest } from '@selfos/core/tests';
 import { matrixRowKey } from '@selfos/core/schemas';
 import { saveGoal } from '@selfos/core/goals';
+import { listChallenges } from '@selfos/core/challenges';
 import { buildContext } from '@selfos/core/people';
 import { ANTHROPIC_API_KEY_ID, OPENAI_API_KEY_ID } from './channels';
 import { DeviceStateSchema } from './schemas';
@@ -911,6 +912,151 @@ describe('createCoreBridge', () => {
     await bridge.coachingSetPrefs({ proactivity: 'off' });
     expect((await bridge.coachingSynthesize({})).ok).toBe(false);
     expect((await bridge.coachingGetSynthesis())?.observation).toContain('Connection');
+  });
+
+  it('challenges (52): start → capture a marker → list → check in → decrypt the Insight', async () => {
+    const { bridge, host, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    // The challenge-coach turn emits a real marker on an agreement message; everything else streams 'ok'.
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        if ((options.system ?? '').includes('helping them take on a small CHALLENGE')) {
+          const marker =
+            '[[SELFOS:CHALLENGE:{"action":"Call one friend","comfort":2,"lifeArea":"Relationships","checkInDays":7}]]';
+          onDelta('Set.');
+          return Promise.resolve({
+            text: `Set. ${marker}`,
+            usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+          });
+        }
+        onDelta('ok');
+        return Promise.resolve({
+          text: 'ok',
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    const started = await bridge.challengesStart({});
+    expect(started?.conversationId).toBeTruthy();
+    const turn = await bridge.chatStream({
+      conversationId: started!.conversationId,
+      userText: "yes let's do it",
+    });
+    expect(turn.ok).toBe(true);
+    if (turn.ok) expect(turn.challengeCreated?.action).toBe('Call one friend');
+
+    const list = await bridge.challengesList();
+    expect(list).toHaveLength(1);
+    expect(list[0]!.status).toBe('active');
+
+    // Decrypt the vault to assert the persisted record is real + own-scoped.
+    const ctx = (await host.host.vaultAndKey())!;
+    const persisted = await listChallenges(ctx.fs, ctx.key, ownerId);
+    expect(persisted[0]!.action).toBe('Call one friend');
+    expect(persisted[0]!.conversationId).toBe(started!.conversationId);
+
+    // Inline check-in → done + a reflection Insight that feeds the person's OWN context (provenance.challengeId).
+    const checkIn = await bridge.challengesCheckIn({
+      challengeId: list[0]!.id,
+      outcome: 'did',
+      reflection: 'went better than I feared',
+    });
+    expect(checkIn.ok).toBe(true);
+    expect((await bridge.challengesGet({ challengeId: list[0]!.id }))?.status).toBe('done');
+    const insights = await listInsightsForPerson(ctx.fs, ctx.key, ownerId);
+    expect(insights.some((i) => i.provenance.challengeId === list[0]!.id)).toBe(true);
+  });
+
+  it('challenges (52 §8.3): an intimacy-domain start is withheld until the 18+ ack', async () => {
+    const { bridge } = await freshOwner();
+    // Un-acked → refused (enforced in the bridge, not just the UI).
+    expect(await bridge.challengesStart({ domain: 'intimacy' })).toBeNull();
+    // A non-intimacy domain works regardless.
+    expect(await bridge.challengesStart({ domain: 'habit' })).not.toBeNull();
+    // Acknowledging unlocks the intimacy domain.
+    await bridge.guidedAcknowledgeAdult();
+    expect(await bridge.challengesStart({ domain: 'intimacy' })).not.toBeNull();
+  });
+
+  it('challenges (52 §8.3): the EXPLICIT sexual register is withheld from a challenge turn until the ack', async () => {
+    const { bridge, host } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const systems: string[] = [];
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        systems.push(options.system ?? '');
+        onDelta('ok');
+        return Promise.resolve({
+          text: 'ok',
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    // Un-acked: a (non-intimacy) challenge session's turn must NOT carry the explicit register, even though the
+    // person could steer toward sex — the addendum's gated stance redirects to the 18+ option instead.
+    const started = (await bridge.challengesStart({}))!;
+    await bridge.chatStream({
+      conversationId: started.conversationId,
+      userText: 'tell me about sex',
+    });
+    expect(systems.at(-1)).not.toContain('consensual adults only');
+    expect(systems.at(-1)).toContain('keep THIS challenge non-sexual');
+    // After the ack, a fresh challenge turn DOES carry the explicit register.
+    await bridge.guidedAcknowledgeAdult();
+    const acked = (await bridge.challengesStart({}))!;
+    await bridge.chatStream({ conversationId: acked.conversationId, userText: 'hi' });
+    expect(systems.at(-1)).toContain('consensual adults only');
+  });
+
+  it('challenges (52 §5.3): the suggester is metered challenge.suggest + caches the candidate', async () => {
+    const { bridge, host, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const ctx = (await host.host.vaultAndKey())!;
+    await saveInsight(ctx.fs, ctx.key, {
+      id: 'i1',
+      schemaVersion: 1,
+      source: 'session',
+      subjectPersonId: ownerId,
+      summary: 'wants steadier evenings',
+      facts: [{ id: 'f1', text: 'mentioned wanting more movement', shareable: false }],
+      confidence: 'medium',
+      categories: ['Health & body'],
+      approved: true,
+      provenance: { conversationId: 'i1', at: new Date().toISOString() },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (options) => {
+        if ((options.system ?? '').includes('proposing ONE small')) {
+          return Promise.resolve({
+            text: JSON.stringify({
+              action: 'Take a 10-minute walk after dinner three times this week',
+              why: 'You mentioned wanting more movement.',
+              comfort: 2,
+              lifeArea: 'Health & body',
+              domain: 'habit',
+            }),
+            usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+          });
+        }
+        return Promise.resolve({
+          text: 'ok',
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    const result = await bridge.challengesSuggest({});
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.suggestion.action).toContain('10-minute walk');
+    expect(
+      (await bridge.usageSummary({ scope: 'person', period: 'month' })).byType['challenge.suggest']
+        ?.count,
+    ).toBe(1);
+    expect((await bridge.challengesGetSuggestion())?.action).toContain('10-minute walk');
   });
 
   it('refuses to summarize when session memory is disabled', async () => {

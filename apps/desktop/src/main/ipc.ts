@@ -319,6 +319,18 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.coachingSetPrefs, bridge.coachingSetPrefs);
   handle(IpcChannels.coachingGetSynthesis, bridge.coachingGetSynthesis);
   handle(IpcChannels.coachingSynthesize, bridge.coachingSynthesize);
+  handle(IpcChannels.challengesStart, bridge.challengesStart);
+  handle(IpcChannels.challengesStartReflection, bridge.challengesStartReflection);
+  handle(IpcChannels.challengesList, bridge.challengesList);
+  handle(IpcChannels.challengesGet, bridge.challengesGet);
+  handle(IpcChannels.challengesSetStatus, bridge.challengesSetStatus);
+  handle(IpcChannels.challengesCheckIn, bridge.challengesCheckIn);
+  handle(IpcChannels.challengesSnooze, bridge.challengesSnooze);
+  handle(IpcChannels.challengesSeedGoal, bridge.challengesSeedGoal);
+  handle(IpcChannels.challengesDelete, bridge.challengesDelete);
+  handle(IpcChannels.challengesSuggest, bridge.challengesSuggest);
+  handle(IpcChannels.challengesGetSuggestion, bridge.challengesGetSuggestion);
+  handle(IpcChannels.challengesClearSuggestion, bridge.challengesClearSuggestion);
   handle(IpcChannels.assignmentsCreate, bridge.assignmentsCreate);
   handle(IpcChannels.assignmentsInbox, bridge.assignmentsInbox);
   handle(IpcChannels.assignmentsGet, bridge.assignmentsGet);

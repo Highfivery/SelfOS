@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { ClipboardCheck, Clock, Download, RefreshCw, Sparkles, Target } from 'lucide-react';
+import { ClipboardCheck, Clock, Download, Flag, RefreshCw, Sparkles, Target } from 'lucide-react';
 import type {
   Notification,
   NotificationAction,
@@ -55,6 +55,10 @@ export const NOTIFICATION_KIND_DEFS: Record<NotificationKind, KindDef> = {
   // The cross-feature synthesis observation (40 §3.3). onChange: a NEW synthesis (a later computedAt)
   // supersedes a dismissed one; a same-area depth/freshness nudge suppresses it upstream (§3.7).
   'coaching-synthesis': { icon: Sparkles, severity: 'info', resurfaces: onChange },
+  // A gentle "how did your challenge go?" check-in (52 §3.5). onChange: acting on the challenge changes its
+  // signature (id + checkInAt) so a dismissed nudge stays dismissed until the challenge changes; ≤1 open at a
+  // time, coalesced by the fixed 'challenge-followup' key.
+  'challenge-followup': { icon: Flag, severity: 'info', resurfaces: onChange },
 };
 
 /** The icon for a kind (used by the bell rows + toasts). */

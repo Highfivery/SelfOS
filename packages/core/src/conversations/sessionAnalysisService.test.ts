@@ -11,6 +11,7 @@ import { queryUsage, recordUsage, setPersonBudget } from '../usage';
 import { listGoals } from '../goals';
 import { getConversation, saveConversation } from './conversationService';
 import { endAndSummarize, setSessionStatus } from './sessionAnalysisService';
+import { saveChallenge } from '../challenges/challengeService';
 
 const key = generateMasterKey();
 const now = new Date('2026-06-15T12:00:00.000Z');
@@ -144,6 +145,58 @@ describe('endAndSummarize', () => {
     if (!result.ok) return;
     expect(result.insight.provenance.guideId).toBe('cbt-thought-record');
     expect(result.insight.facts[0]?.text).toBe('Exercise: Thought Record (CBT)');
+  });
+
+  it('a challenge reflection links provenance.challengeId; a SEXUAL challenge restricts the facts (52 §8.4)', async () => {
+    // A non-adult challenge reflection: links the challenge, facts stay non-restricted.
+    await saveChallenge(fs, key, {
+      id: 'ch-plain',
+      schemaVersion: 1,
+      subjectPersonId: 'p1',
+      action: 'reach out to a friend',
+      status: 'active',
+      comfort: 2,
+      provenance: { at: now.toISOString() },
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    });
+    await saveConversation(
+      fs,
+      key,
+      conversation('cr1', 'p1', { guideId: 'challenge-reflect', challengeId: 'ch-plain' }),
+    );
+    const plain = await endAndSummarize(deps({ conversationId: 'cr1' }));
+    expect(plain.ok).toBe(true);
+    if (plain.ok) {
+      expect(plain.insight.provenance.challengeId).toBe('ch-plain');
+      expect(plain.insight.facts.every((f) => !f.restricted)).toBe(true);
+    }
+
+    // A SEXUAL (adult) challenge reflection: defense-in-depth → every fact is restricted (own-context-only).
+    await saveChallenge(fs, key, {
+      id: 'ch-adult',
+      schemaVersion: 1,
+      subjectPersonId: 'p1',
+      action: 'an intimacy experiment',
+      status: 'active',
+      comfort: 3,
+      adult: true,
+      lifeArea: 'Intimacy',
+      provenance: { at: now.toISOString() },
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    });
+    await saveConversation(
+      fs,
+      key,
+      conversation('cr2', 'p1', { guideId: 'challenge-reflect', challengeId: 'ch-adult' }),
+    );
+    const adult = await endAndSummarize(deps({ conversationId: 'cr2' }));
+    expect(adult.ok).toBe(true);
+    if (adult.ok) {
+      expect(adult.insight.facts.length).toBeGreaterThan(0);
+      expect(adult.insight.facts.every((f) => f.restricted === true)).toBe(true);
+    }
   });
 
   it('produces an auto-approved SessionInsight with mood metrics + completes the session', async () => {

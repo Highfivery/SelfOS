@@ -27,6 +27,8 @@ export { SubscaleBar } from './SubscaleBar';
 export { TrendLine, type TrendPoint } from './TrendLine';
 export { ConfidenceChip, type ConfidenceLevel } from './ConfidenceChip';
 export { GoalStatusChip, type GoalStatusValue } from './GoalStatusChip';
+export { ChallengeStatusChip, type ChallengeStatusValue } from './ChallengeStatusChip';
+export { ComfortDial } from './ComfortDial';
 export { AttachmentThumb } from './AttachmentThumb';
 export { Lightbox, type LightboxImage } from './Lightbox';
 // The shared rich-text renderer lives in @selfos/answering (so the relay page + iOS reuse it); re-export

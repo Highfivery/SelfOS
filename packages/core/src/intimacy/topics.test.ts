@@ -28,6 +28,24 @@ describe('INTIMACY_ACTIVITIES_FULL — inventory integrity (49 §10)', () => {
     }
   });
 
+  it('carries the 2026-06-26 additions in the right categories and dedups the blindfold entry', () => {
+    const byLabel = new Map(INTIMACY_ACTIVITIES_FULL.map((a) => [a.label, a]));
+    const added: [string, string][] = [
+      ['Watch partner masturbate', 'sensual'],
+      ['Thrusting machine', 'manual-toys'],
+      ['Teasing penetration', 'penetration'],
+      ['Wearing lingerie', 'roleplay'],
+      ['Partner wearing lingerie', 'roleplay'],
+      ['Pussy patting/slapping', 'impact'],
+    ];
+    for (const [label, category] of added) {
+      expect(byLabel.get(label)?.category, label).toBe(category);
+    }
+    // Dedup: the blindfold-only entry is gone; exactly one 'Blindfolds' remains.
+    expect(byLabel.has('Sensory deprivation (blindfold-only)')).toBe(false);
+    expect(INTIMACY_ACTIVITIES_FULL.filter((a) => a.label === 'Blindfolds')).toHaveLength(1);
+  });
+
   it('INTIMACY_CATEGORY_LABELS has an entry for EVERY category (exhaustive)', () => {
     for (const category of INTIMACY_CATEGORIES) {
       expect(INTIMACY_CATEGORY_LABELS[category]?.length).toBeGreaterThan(0);

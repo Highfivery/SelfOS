@@ -1,18 +1,10 @@
-import type { Goal } from '@shared/schemas';
-import { effectiveGoalStatus } from '@shared/schemas';
-
 /**
  * Pick the single stale goal to gently check in on (40-proactive-coaching §3.2) — at most one open
  * goal-followup at a time. "Stale" is the spec-39 derived state (past due / long untouched); among the
- * stale ones we surface the LEAST-recently-touched (the one most worth a nudge). Returns null when none
- * are stale. Pure + deterministic so the nudge + the Home card agree and it's unit-testable.
+ * stale ones we surface the LEAST-recently-touched.
+ *
+ * This is a SINGLE SOURCE OF TRUTH in `@selfos/core/recommendations` (`stalestOpenGoal`), re-exported here
+ * under the established `stalestGoal` name so the goal NOTIFICATION (35), the "For you" recommendation (53),
+ * and its inline action all resolve the SAME goal — they can never diverge (53 §5.4).
  */
-export function stalestGoal(goals: Goal[], now: Date): Goal | null {
-  const stale = goals.filter((g) => effectiveGoalStatus(g, now) === 'stale');
-  if (stale.length === 0) return null;
-  return stale.reduce((oldest, g) => {
-    const a = g.lastTouchedAt ?? g.updatedAt;
-    const b = oldest.lastTouchedAt ?? oldest.updatedAt;
-    return a < b ? g : oldest;
-  });
-}
+export { stalestOpenGoal as stalestGoal } from '@selfos/core/recommendations';

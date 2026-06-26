@@ -164,7 +164,7 @@ describe('OnboardingCard', () => {
     });
     await renderCard();
     await waitFor(() => expect(useIntakeStore.getState().loaded).toBe(true));
-    // Pending suggestions do NOT resurrect this card — ProfileFreshnessCard surfaces them with actions.
+    // Pending suggestions do NOT resurrect this card — the "refresh your portrait" recommendation (53) surfaces them.
     expect(screen.queryByText(/profile review/i)).not.toBeInTheDocument();
   });
 

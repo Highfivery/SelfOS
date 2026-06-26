@@ -20,6 +20,21 @@
   color: var(--color-text-secondary);
 }
 
+/* "For you" — the focal recommendation zone (53 §3.1.3), above the status overview grid. */
+.forYou {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--color-text-primary);
+}
+
 /* Reflowing card grid — one column on phones, fills the row on wider screens. */
 .grid {
   display: grid;

@@ -24,6 +24,7 @@
     "./insights": "./src/insights/index.ts",
     "./goals": "./src/goals/index.ts",
     "./coaching": "./src/coaching/index.ts",
+    "./recommendations": "./src/recommendations/index.ts",
     "./questionnaires": "./src/questionnaires/index.ts",
     "./dreams": "./src/dreams/index.ts",
     "./intake": "./src/intake/index.ts",

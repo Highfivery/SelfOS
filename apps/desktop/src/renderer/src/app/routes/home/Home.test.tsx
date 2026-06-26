@@ -1,10 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import '../../../settings/builtins';
 import { DEFAULT_ROLES } from '@shared/capabilities';
 import type { ConversationMeta, Dream } from '@shared/channels';
-import type { Insight, Person } from '@shared/schemas';
+import type { Goal, Insight, Person } from '@shared/schemas';
 import { Home } from './Home';
 import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
 import { useSessionStore } from '../../../stores/sessionStore';
@@ -14,6 +14,8 @@ import { useDreamPatternStore } from '../../../stores/dreamPatternStore';
 import { useInsightStore } from '../../../stores/insightStore';
 import { useInboxStore } from '../../../stores/inboxStore';
 import { useGuidanceStore } from '../../../stores/guidanceStore';
+import { useGoalStore } from '../../../stores/goalStore';
+import { useDiscoveryStore } from '../../../stores/discoveryStore';
 import { useSettingsStore } from '../../../settings/settingsStore';
 
 const ME: Person = {
@@ -42,6 +44,15 @@ function setAi(enabled: boolean): void {
 
 function meta(id: string, title: string, status: ConversationMeta['status']): ConversationMeta {
   return { id, title, updatedAt: 'now', status };
+}
+
+/** A conversation updated just now (counts toward the rolling momentum window). */
+function recentMeta(
+  id: string,
+  title: string,
+  status: ConversationMeta['status'],
+): ConversationMeta {
+  return { id, title, updatedAt: new Date().toISOString(), status };
 }
 
 function sessionInsight(id: string, valence: number): Insight {
@@ -80,6 +91,20 @@ function dream(id: string, title: string): Dream {
   };
 }
 
+function staleGoal(id: string, text: string): Goal {
+  return {
+    id,
+    schemaVersion: 1,
+    subjectPersonId: ME.id,
+    text,
+    status: 'open',
+    provenance: { at: '2026-01-01T00:00:00.000Z' },
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    lastTouchedAt: '2026-01-01T00:00:00.000Z', // long untouched → stale
+  };
+}
+
 function renderHome(): void {
   render(
     <MemoryRouter>
@@ -87,6 +112,8 @@ function renderHome(): void {
     </MemoryRouter>,
   );
 }
+
+const forYouRegion = (): HTMLElement | null => screen.queryByRole('region', { name: 'For you' });
 
 beforeEach(() => {
   setAi(false);
@@ -100,36 +127,25 @@ afterEach(() => {
   useDreamPatternStore.getState().reset();
   useInboxStore.getState().reset();
   useGuidanceStore.getState().reset();
-  useInsightStore.setState({ insights: [], loaded: false });
+  useGoalStore.getState().reset();
+  useDiscoveryStore.getState().reset();
+  useInsightStore.setState({ insights: [], proposals: [], loaded: false });
   useSessionStore.setState({ activePerson: null, access: null });
 });
 
-describe('Home', () => {
-  it('shows the getting-started state for a brand-new person', async () => {
+describe('Home — hierarchy & status grid', () => {
+  it('shows getting-started for a brand-new person — and NO "For you" section or momentum', async () => {
     installMockBridge();
     renderHome();
     expect(await screen.findByRole('heading', { name: /welcome to selfos/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /start a session/i })).toBeInTheDocument();
-    // Discovery: the owner is pointed at sending a questionnaire too (41 §3.1).
-    expect(screen.getByRole('button', { name: /send a questionnaire/i })).toBeInTheDocument();
-    // No real cards yet.
-    expect(screen.queryByRole('heading', { name: /pick up where you left off/i })).toBeNull();
+    // The encouragement zone is suppressed for a brand-new person (getting-started owns the screen).
+    expect(forYouRegion()).toBeNull();
     // Crisis footer is always present (§7).
     expect(screen.getByRole('button', { name: /get help now/i })).toBeInTheDocument();
   });
 
-  it('shows the discovery nudge for a near-empty person (one session, nothing else)', async () => {
-    installMockBridge({
-      conversationsList: () => Promise.resolve([meta('c1', 'A first talk', 'inProgress')]),
-    });
-    renderHome();
-    // Not brand-new (so no Welcome card), but light enough to nudge discovery.
-    expect(await screen.findByText(/a few things to explore/i)).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: /welcome to selfos/i })).toBeNull();
-    expect(screen.getByRole('button', { name: /log a dream/i })).toBeInTheDocument();
-  });
-
-  it('renders the cards a seeded person has, and hides the empty ones', async () => {
+  it('renders the status grid a seeded person has, with a "For you" zone above it', async () => {
     installMockBridge({
       conversationsList: () =>
         Promise.resolve([meta('c1', 'A hard week', 'inProgress'), meta('c2', 'Done', 'complete')]),
@@ -152,11 +168,17 @@ describe('Home', () => {
     });
     renderHome();
 
-    // Greeting + status line (open sessions wins the status line).
     expect(await screen.findByRole('heading', { name: /ben/i, level: 1 })).toBeInTheDocument();
-    expect(screen.getByText('1 session in progress')).toBeInTheDocument();
 
-    // Continue card (only the in-progress one), wellbeing, dreams, memory, inbox.
+    // "For you" zone: an open session seeds a "Continue your session" recommendation.
+    const region = await waitFor(() => {
+      const r = forYouRegion();
+      expect(r).not.toBeNull();
+      return r as HTMLElement;
+    });
+    expect(region).toHaveTextContent(/continue your session/i);
+
+    // Status overview grid (distinct from the actionable zone).
     expect(
       screen.getByRole('heading', { name: /pick up where you left off/i }),
     ).toBeInTheDocument();
@@ -164,12 +186,8 @@ describe('Home', () => {
     expect(screen.queryByText('Done')).toBeNull(); // completed → not in Continue
     expect(screen.getByRole('heading', { name: 'Wellbeing' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Recent dreams' })).toBeInTheDocument();
-    expect(screen.getByText('The shifting city')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /what the coach knows/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Inbox' })).toBeInTheDocument();
-    expect(screen.getByText(/1 questionnaire waiting/i)).toBeInTheDocument();
-
-    // Getting-started is gone once there's real content.
     expect(screen.queryByRole('heading', { name: /welcome to selfos/i })).toBeNull();
   });
 
@@ -209,19 +227,36 @@ describe('Home', () => {
     expect(screen.queryByText('$0.42')).toBeNull();
     expect(screen.getByLabelText(/% of your period allowance/i)).toBeInTheDocument();
   });
+});
 
-  it('hides Suggested next steps when AI is off and shows it when configured', async () => {
+describe('Home — the "For you" engine', () => {
+  it('invites a near-empty person to try a guided session', async () => {
     installMockBridge({
-      secretHas: () => Promise.resolve(false),
-      conversationsList: () => Promise.resolve([meta('c1', 'A hard week', 'inProgress')]),
+      conversationsList: () => Promise.resolve([meta('c1', 'A first talk', 'inProgress')]),
+    });
+    renderHome();
+    const region = await waitFor(() => {
+      const r = forYouRegion();
+      expect(r).not.toBeNull();
+      return r as HTMLElement;
+    });
+    expect(region).toHaveTextContent(/try a guided session/i);
+    expect(screen.queryByRole('heading', { name: /welcome to selfos/i })).toBeNull();
+  });
+
+  it('surfaces the synthesis observation only when AI is configured', async () => {
+    installMockBridge({
+      conversationsList: () => Promise.resolve([meta('c1', 'A hard week', 'complete')]),
+      insightsList: () => Promise.resolve([sessionInsight('s1', -0.4), sessionInsight('s2', 0.5)]),
     });
     setAi(false);
     renderHome();
-    await screen.findByRole('heading', { name: /pick up where/i });
-    expect(screen.queryByRole('heading', { name: /suggested next steps/i })).toBeNull();
+    await waitFor(() => expect(forYouRegion()).not.toBeNull());
+    expect(screen.queryByRole('heading', { name: /something i.m noticing/i })).toBeNull();
 
     clearMockBridge();
     useConversationStore.getState().reset();
+    useInsightStore.setState({ insights: [], proposals: [], loaded: false });
     installMockBridge({
       secretHas: () => Promise.resolve(true),
       aiKeyStatus: () =>
@@ -231,48 +266,148 @@ describe('Home', () => {
           resolvedReady: true,
           source: 'device' as const,
         }),
-      conversationsList: () => Promise.resolve([meta('c1', 'A hard week', 'inProgress')]),
+      conversationsList: () => Promise.resolve([meta('c1', 'A hard week', 'complete')]),
+      insightsList: () => Promise.resolve([sessionInsight('s1', -0.4), sessionInsight('s2', 0.5)]),
     });
     setAi(true);
     renderHome();
     await waitFor(() =>
-      expect(screen.getByRole('heading', { name: /suggested next steps/i })).toBeInTheDocument(),
+      expect(screen.getByRole('heading', { name: /something i.m noticing/i })).toBeInTheDocument(),
     );
   });
 
-  // --- cross-insight crisis awareness (40 §3.5) ---
-  const recentCrisis = (id: string, daysAgo: number): Insight => ({
-    id,
-    schemaVersion: 1,
-    source: 'session',
-    subjectPersonId: ME.id,
-    summary: 'A heavy check-in',
-    facts: [],
-    confidence: 'medium',
-    categories: [],
-    approved: true,
-    crisisFlag: true,
-    provenance: {
-      conversationId: id,
-      at: new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString(),
-    },
-    createdAt: 'now',
-    updatedAt: 'now',
+  it('shows a calm, satisfied line when there is nothing to recommend', async () => {
+    installMockBridge({
+      conversationsList: () =>
+        Promise.resolve([
+          meta('c1', 'A', 'complete'),
+          meta('c2', 'B', 'complete'),
+          meta('c3', 'C', 'complete'),
+        ]),
+    });
+    renderHome();
+    const region = await waitFor(() => {
+      const r = forYouRegion();
+      expect(r).not.toBeNull();
+      return r as HTMLElement;
+    });
+    expect(region).toHaveTextContent(/you.re all set for now/i);
   });
 
-  it('surfaces the supportive crisis banner when distress recurs (≥2 recent flags), even without a mood chart', async () => {
+  it('a goal recommendation keeps the Still on it / Mark done / Let it go actions', async () => {
+    const setStatus = vi.fn(() => Promise.resolve(null));
     installMockBridge({
+      goalsList: () => Promise.resolve([staleGoal('g1', 'finish the memoir')]),
+      goalsSetStatus: setStatus,
+    });
+    renderHome();
+    expect(
+      await screen.findByRole('heading', { name: /a goal worth a check-in/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/finish the memoir/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /mark done/i }));
+    await waitFor(() => expect(setStatus).toHaveBeenCalledWith({ goalId: 'g1', status: 'done' }));
+  });
+
+  it('dismissing a recommendation ("Not now") suppresses it and persists per-person', async () => {
+    const setDismissals = vi.fn(() => Promise.resolve());
+    installMockBridge({
+      goalsList: () => Promise.resolve([staleGoal('g1', 'finish the memoir')]),
+      setDiscoveryDismissals: setDismissals,
+    });
+    renderHome();
+    const card = await screen.findByRole('heading', { name: /a goal worth a check-in/i });
+    expect(card).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /a goal worth a check-in.*for now/i }));
+    await waitFor(() =>
+      expect(screen.queryByRole('heading', { name: /a goal worth a check-in/i })).toBeNull(),
+    );
+    // The persisted signature is signal-aware (the goal id + its touch stamp), so it re-surfaces only when
+    // the underlying signal changes — never a permanent kill (§7).
+    expect(setDismissals).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.stringMatching(/^rec:stale-goal:g1:/)]),
+    );
+  });
+});
+
+describe('Home — proactivity & safety', () => {
+  it('proactivity off: no "For you" zone, no momentum push — but the status grid still shows', async () => {
+    installMockBridge({
+      coachingGetPrefs: () => Promise.resolve({ schemaVersion: 1, proactivity: 'off' as const }),
+      conversationsList: () =>
+        Promise.resolve([
+          recentMeta('c1', 'A week', 'inProgress'),
+          recentMeta('c2', 'B', 'inProgress'),
+        ]),
+      goalsList: () => Promise.resolve([staleGoal('g1', 'finish the memoir')]),
+    });
+    renderHome();
+    // The status grid is unaffected (it reflects existing data, it isn't a push).
+    expect(await screen.findByRole('heading', { name: /pick up where/i })).toBeInTheDocument();
+    expect(forYouRegion()).toBeNull();
+    expect(screen.queryByRole('heading', { name: /a goal worth a check-in/i })).toBeNull();
+    expect(screen.queryByText(/you.ve shown up/i)).toBeNull();
+  });
+
+  it('reflects momentum as a warm header line when the person has shown up', async () => {
+    installMockBridge({
+      conversationsList: () =>
+        Promise.resolve([recentMeta('c1', 'A', 'complete'), recentMeta('c2', 'B', 'complete')]),
+    });
+    renderHome();
+    expect(await screen.findByText(/you.ve shown up 2 times this week/i)).toBeInTheDocument();
+  });
+
+  it('surfaces the supportive crisis banner on recurring distress, and suppresses "For you"', async () => {
+    const recentCrisis = (id: string, daysAgo: number): Insight => ({
+      id,
+      schemaVersion: 1,
+      source: 'session',
+      subjectPersonId: ME.id,
+      summary: 'A heavy check-in',
+      facts: [],
+      confidence: 'medium',
+      categories: [],
+      approved: true,
+      crisisFlag: true,
+      provenance: {
+        conversationId: id,
+        at: new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      createdAt: 'now',
+      updatedAt: 'now',
+    });
+    installMockBridge({
+      goalsList: () => Promise.resolve([staleGoal('g1', 'finish the memoir')]),
       insightsList: () => Promise.resolve([recentCrisis('x1', 1), recentCrisis('x2', 5)]),
     });
     renderHome();
     expect(await screen.findByText(/carrying a lot/i)).toBeInTheDocument();
-    // It's resources-first (988) and NOT dismissible (no dismiss control on the banner).
     expect(screen.getByText('988')).toBeInTheDocument();
-    // The mood chart needs ≥2 mood points; these crisis insights carry none, so the banner stands alone.
-    expect(screen.queryByRole('heading', { name: 'Wellbeing' })).toBeNull();
+    // Encouragement de-escalates: no "For you" pushes during distress.
+    expect(forYouRegion()).toBeNull();
+    expect(screen.queryByRole('heading', { name: /a goal worth a check-in/i })).toBeNull();
   });
 
   it('does not surface the crisis banner for a single recent flag', async () => {
+    const recentCrisis = (id: string, daysAgo: number): Insight => ({
+      id,
+      schemaVersion: 1,
+      source: 'session',
+      subjectPersonId: ME.id,
+      summary: 'A heavy check-in',
+      facts: [],
+      confidence: 'medium',
+      categories: [],
+      approved: true,
+      crisisFlag: true,
+      provenance: {
+        conversationId: id,
+        at: new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      createdAt: 'now',
+      updatedAt: 'now',
+    });
     installMockBridge({
       conversationsList: () => Promise.resolve([meta('c1', 'A week', 'inProgress')]),
       insightsList: () => Promise.resolve([recentCrisis('x1', 1)]),

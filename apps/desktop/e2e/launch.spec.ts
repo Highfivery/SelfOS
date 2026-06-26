@@ -814,10 +814,10 @@ test('proactive coaching: a stale goal surfaces a nudge + Home card; Mark done c
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    // The Home goal-followup card surfaces the stale goal with the calm actions (exact: the card's
-    // <strong>, not the longer notification body that also names the goal).
-    await expect(w.getByRole('heading', { name: /still working on it/i })).toBeVisible();
-    await expect(w.getByText('finish the side project', { exact: true })).toBeVisible();
+    // The Home "For you" goal recommendation surfaces the stale goal with the calm actions (scoped to main,
+    // not the notification body / toast that also names the goal).
+    await expect(w.getByRole('heading', { name: /a goal worth a check-in/i })).toBeVisible();
+    await expect(w.getByRole('main').getByText(/finish the side project/i)).toBeVisible();
     // The 3-action row wraps rather than overflowing at phone width (§9).
     await w.setViewportSize({ width: 360, height: 780 });
     const offenders = await w.evaluate(() => {
@@ -841,7 +841,7 @@ test('proactive coaching: a stale goal surfaces a nudge + Home card; Mark done c
 
     // Mark done closes the goal → the card drops away (acting un-stales/closes it).
     await w.getByRole('button', { name: 'Mark done' }).click();
-    await expect(w.getByRole('heading', { name: /still working on it/i })).toHaveCount(0);
+    await expect(w.getByRole('heading', { name: /a goal worth a check-in/i })).toHaveCount(0);
   } finally {
     await app.close();
   }
@@ -851,6 +851,140 @@ test('proactive coaching: a stale goal surfaces a nudge + Home card; Mark done c
   expect(goal?.status).toBe('done');
   await rm(userData, { recursive: true, force: true });
   await rm(vault, { recursive: true, force: true });
+});
+
+/** Seed two approved session insights (distinct life-areas → momentum "explored 2 areas" + a Memory card). */
+async function seedTwoAreas(
+  fs: ReturnType<typeof createNodeFileSystem>,
+  key: Uint8Array,
+): Promise<void> {
+  const at = new Date().toISOString();
+  const areas = ['Relationships', 'Work & purpose'];
+  for (let i = 0; i < 2; i += 1) {
+    await saveInsight(fs, key, {
+      id: `area-${i}`,
+      schemaVersion: 1,
+      source: 'session',
+      subjectPersonId: 'owner-1',
+      summary: `reflected (${i})`,
+      facts: [],
+      metrics: { moodValence: i === 0 ? -0.2 : 0.3, moodEnergy: 0.1 },
+      confidence: 'medium',
+      categories: [areas[i] as string],
+      approved: true,
+      provenance: { conversationId: `area-${i}`, at },
+      createdAt: at,
+      updatedAt: at,
+    });
+  }
+}
+
+test('home (53): the "For you" zone ranks recommendations, reflects momentum, dismisses, and sits above the status grid; 360px clean', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('master key missing');
+  const old = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString(); // stale (>21 days)
+  await saveGoal(fs, key, {
+    id: 'g1',
+    schemaVersion: 1,
+    subjectPersonId: 'owner-1',
+    text: 'finish the memoir',
+    status: 'open',
+    provenance: { conversationId: 'c0', at: old },
+    createdAt: old,
+    updatedAt: old,
+    lastTouchedAt: old,
+  });
+  await seedTwoAreas(fs, key);
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    // The focal "For you" zone (a labelled region) ranks the relevant next steps for this person.
+    const forYou = w.getByRole('region', { name: 'For you' });
+    await expect(forYou).toBeVisible();
+    await expect(forYou.getByRole('heading', { name: /a goal worth a check-in/i })).toBeVisible();
+    await expect(forYou.getByRole('heading', { name: /try a guided session/i })).toBeVisible();
+    // Each recommendation carries a person-specific REASON (not just a generic CTA).
+    await expect(forYou.getByText(/finish the memoir/i)).toBeVisible();
+
+    // Gentle momentum reflection in the header — what positively happened, never a streak/target.
+    await expect(w.getByText(/you’ve explored 2 areas of yourself/i)).toBeVisible();
+
+    // The status overview grid (where you ARE) sits below the actionable zone, distinct from it.
+    await expect(w.getByRole('heading', { name: 'Wellbeing' })).toBeVisible();
+    await expect(w.getByRole('heading', { name: /what the coach knows/i })).toBeVisible();
+
+    // Dismiss ("Not now") suppresses a recommendation calmly; the guided one stays.
+    await forYou.getByRole('button', { name: /a goal worth a check-in.*for now/i }).click();
+    await expect(forYou.getByRole('heading', { name: /a goal worth a check-in/i })).toHaveCount(0);
+    await expect(forYou.getByRole('heading', { name: /try a guided session/i })).toBeVisible();
+
+    // 360px: the full surface renders with NO horizontal overflow — not page-level, not an inner scrollbar.
+    await w.setViewportSize({ width: 360, height: 800 });
+    const overflow = await w.evaluate(() => {
+      const offenders: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          offenders.push(`${el.tagName}.${el.className}`);
+        }
+      });
+      const main = document.querySelector('main');
+      return { offenders, mainOverflow: main ? main.scrollWidth - main.clientWidth : 0 };
+    });
+    expect(overflow.offenders).toEqual([]);
+    expect(overflow.mainOverflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('home (53): proactivity OFF hides the "For you" zone + momentum, but the status grid stays', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('master key missing');
+  // Per-person calm Home: proactivity off ⇒ no pushes.
+  await writeEncryptedJson(
+    fs,
+    'people/owner-1/coaching/prefs.enc',
+    { schemaVersion: 1, proactivity: 'off' },
+    key,
+  );
+  const old = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString();
+  await saveGoal(fs, key, {
+    id: 'g1',
+    schemaVersion: 1,
+    subjectPersonId: 'owner-1',
+    text: 'finish the memoir',
+    status: 'open',
+    provenance: { conversationId: 'c0', at: old },
+    createdAt: old,
+    updatedAt: old,
+    lastTouchedAt: old,
+  });
+  await seedTwoAreas(fs, key);
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    // Wait for the page to settle on a real card, then assert the encouragement zone is absent.
+    await expect(w.getByRole('heading', { name: 'Wellbeing' })).toBeVisible(); // a status card (not a push)
+    await expect(w.getByRole('region', { name: 'For you' })).toHaveCount(0);
+    await expect(w.getByText(/you’ve explored/i)).toHaveCount(0); // no momentum push
+    await expect(w.getByRole('heading', { name: /a goal worth a check-in/i })).toHaveCount(0);
+    // The status grid is unaffected — it reflects existing data, it isn't a nudge.
+    await expect(w.getByRole('heading', { name: /what the coach knows/i })).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
 });
 
 test('first-time setup creates the owner and enters the app', async () => {

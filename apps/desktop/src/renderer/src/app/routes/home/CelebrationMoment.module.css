@@ -1,0 +1,15 @@
+/* A single celebration toast, pinned bottom-centre so it reads as a warm aside, distinct from the
+   top-right notification toasts (35) — never overlapping them. */
+.viewport {
+  position: fixed;
+  bottom: var(--space-4);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-toast, 60);
+  width: min(420px, calc(100vw - var(--space-6)));
+  pointer-events: none;
+}
+
+.viewport > * {
+  pointer-events: auto;
+}

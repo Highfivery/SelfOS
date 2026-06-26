@@ -2,6 +2,14 @@
 
 > **Status:** Approved · _last updated 2026-06-14_
 >
+> **As-built amendment (2026-06-25, [`53`](53-home-encouragement.md) Slice A):** Home was restructured into the
+> §53 two-zone hierarchy — a ranked **"For you"** recommendation zone (the `ForYou` component over
+> `@selfos/core/recommendations`) **above** the **status overview grid** documented here. `SuggestionsCard` was
+> **deleted** and its role folded into the engine (the `guided-suggestion` / `questionnaire-gap` providers);
+> `greeting.ts`'s `buildStatusLine` was **removed** (a gentle momentum line replaced the one-line status). The
+> status cards (`ContinueCard` / `WellbeingCard` / `DreamsCard` / `MemoryCard` / `InboxCard` / `OnboardingCard`)
+> remain as documented here.
+>
 > The Home route (`/`) is a static placeholder today. This spec replaces it with a **living, per-person
 > overview** — what's going on right now: sessions to continue, suggested next steps, a gentle wellbeing
 > trend, recent dreams and their patterns, what the coach has learned (memory), anything in the inbox, and

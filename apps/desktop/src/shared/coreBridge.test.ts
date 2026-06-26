@@ -143,6 +143,17 @@ function makeHost(): {
           usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
       }
+      // The owner intimacy-topic suggester (08 §16.5a) — the brief lists existing topics. Return a set
+      // including one EXISTING built-in ('Sensual massage') so the bridge test exercises the dedupe.
+      if (userText.includes('Topics the Owner ALREADY has')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            activities: ['Sensual massage', 'Mutual edging'],
+            fantasies: ['Rivals-to-lovers roleplay'],
+          }),
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
       // Compatibility alignment → a report object (items merge by canonicalId in the service).
       if (userText.includes('compatibility report JSON')) {
         return Promise.resolve({
@@ -2143,6 +2154,36 @@ describe('createCoreBridge', () => {
     });
     expect(afterRemove.custom.activities).toEqual([]);
     expect(afterRemove.custom.fantasies).toEqual(['Pirate roleplay']);
+  });
+
+  it('intimacy topics AI suggest (§16.5a): owner gets DEDUPED suggestions; a member is denied; AI-off is calm', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+
+    const res = await bridge.questionnairesSuggestIntimacyTopics({ subject: 'sensory play' });
+    expect(res.ok).toBe(true);
+    if (!res.ok) throw new Error('expected ok');
+    // The fake returns a built-in ('Sensual massage') + fresh ones → the built-in is deduped out.
+    expect(res.suggestions.activities).toEqual(['Mutual edging']);
+    expect(res.suggestions.fantasies).toEqual(['Rivals-to-lovers roleplay']);
+
+    // A member cannot suggest (owner-only, people.manage) — a calm failure, never a throw.
+    const member = await bridge.peopleSave({ displayName: 'Mem', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: member.id, roleId: 'member', pin: null });
+    await bridge.sessionSetActive({ personId: member.id });
+    const denied = await bridge.questionnairesSuggestIntimacyTopics({ subject: 'x' });
+    expect(denied.ok).toBe(false);
+    if (denied.ok) throw new Error('expected denial');
+    expect(denied.reason).toBe('ERROR');
+
+    // AI off → a calm AI_OFF for the owner (no dead button).
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    await bridge.setSetting({ key: 'ai.enabled', value: false, scope: 'vault' });
+    const off = await bridge.questionnairesSuggestIntimacyTopics({});
+    expect(off.ok).toBe(false);
+    if (off.ok) throw new Error('expected AI_OFF');
+    expect(off.reason).toBe('AI_OFF');
   });
 
   it('stores, reads back, and deletes an encrypted question image; gated + validated', async () => {

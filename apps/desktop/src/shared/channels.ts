@@ -54,6 +54,7 @@ import type {
   InboxAssignmentDetail,
   InboxItem,
   IntimacyTopicsView,
+  IntimacyTopicSuggestResult,
   InviteSummary,
   Insight,
   InsightFact,
@@ -201,6 +202,7 @@ export const IpcChannels = {
   questionnairesIntimacyTopics: 'questionnaires:intimacyTopics',
   questionnairesAddIntimacyTopic: 'questionnaires:addIntimacyTopic',
   questionnairesRemoveIntimacyTopic: 'questionnaires:removeIntimacyTopic',
+  questionnairesSuggestIntimacyTopics: 'questionnaires:suggestIntimacyTopics',
   questionnairesStoreImage: 'questionnaires:storeImage',
   questionnairesGetImage: 'questionnaires:getImage',
   questionnairesDeleteImage: 'questionnaires:deleteImage',
@@ -697,6 +699,10 @@ export interface SelfosBridge {
     kind: 'activities' | 'fantasies';
     name: string;
   }): Promise<IntimacyTopicsView>;
+  /** Owner-only: AI-suggest fresh intimacy topics around an optional subject (deduped). Persists nothing. */
+  questionnairesSuggestIntimacyTopics(input: {
+    subject?: string;
+  }): Promise<IntimacyTopicSuggestResult>;
   /** Encrypt + store an author-attached question image (base64 in); returns its vault path + mime. */
   questionnairesStoreImage(input: { base64: string; mime: string }): Promise<{
     imagePath: string;

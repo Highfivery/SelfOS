@@ -234,6 +234,19 @@ export function fakeClaudeClient(): ClaudeClient {
         });
       }
 
+      // The owner intimacy-topic suggester (08 §16.5a AI assist) — the brief lists what the owner already
+      // has. Return a small {activities, fantasies} set; include one EXISTING topic ('Sensual massage', a
+      // built-in) so the post-parse dedupe is exercised in the offline path (37 §10).
+      if (userText.includes('Topics the Owner ALREADY has')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            activities: ['Sensual massage', 'Mutual edging', 'Temperature contrast play'],
+            fantasies: ['Rivals-to-lovers roleplay', 'Voyeurism'],
+          }),
+          usage: { inputTokens: 90, outputTokens: 50, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+
       // The session-analysis turn (09 §5) asks to "summarize this session" as a JSON object. Return a
       // valid SessionAnalysisDraft so the offline End & summarize path parses + produces facts/mood.
       if (userText.includes('summarize this session')) {

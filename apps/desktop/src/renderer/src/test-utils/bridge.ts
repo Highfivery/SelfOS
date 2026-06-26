@@ -248,6 +248,11 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         builtIn: { activities: [], fantasies: [] },
         custom: { activities: [], fantasies: [] },
       }),
+    questionnairesSuggestIntimacyTopics: () =>
+      Promise.resolve({
+        ok: true as const,
+        suggestions: { activities: [], fantasies: [] },
+      }),
     questionnairesStoreImage: (input) =>
       Promise.resolve({ imagePath: 'questionnaires/media/mock.enc', mime: input.mime }),
     questionnairesGetImage: () => Promise.resolve(null),

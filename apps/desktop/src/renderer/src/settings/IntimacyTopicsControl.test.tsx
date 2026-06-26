@@ -96,5 +96,60 @@ describe('IntimacyTopicsControl (§16.5a)', () => {
     expect(screen.getByText('Wax play')).toBeInTheDocument(); // still shown, just not removable
     expect(screen.queryByRole('button', { name: 'Remove Wax play' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Add activities/i)).not.toBeInTheDocument();
+    // The owner-only AI suggester is hidden for a non-owner.
+    expect(screen.queryByRole('button', { name: 'Suggest with AI' })).not.toBeInTheDocument();
+  });
+
+  it('suggests with AI, then adds only the picked + edited suggestions', async () => {
+    asOwner();
+    const add = vi.fn((input: { kind: 'activities' | 'fantasies'; name: string }) =>
+      Promise.resolve(view({ activities: [input.name], fantasies: [] })),
+    );
+    const suggest = vi.fn(() =>
+      Promise.resolve({
+        ok: true as const,
+        suggestions: { activities: ['Wax play', 'Edging'], fantasies: ['Roleplay'] },
+      }),
+    );
+    installMockBridge({
+      questionnairesIntimacyTopics: () => Promise.resolve(view({ activities: [], fantasies: [] })),
+      questionnairesSuggestIntimacyTopics: suggest,
+      questionnairesAddIntimacyTopic: add,
+    });
+    render(<IntimacyTopicsControl />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Suggest with AI' }));
+    // Suggestions render as an editable checklist (all checked by default).
+    expect(await screen.findByLabelText('Edit suggestion: Wax play')).toBeInTheDocument();
+    // Uncheck 'Edging'.
+    await userEvent.click(screen.getByLabelText('Include Edging'));
+    // Edit 'Roleplay' → 'Pirate roleplay' (the label keys on the original text, so it still resolves).
+    const roleplay = screen.getByLabelText('Edit suggestion: Roleplay');
+    await userEvent.clear(roleplay);
+    await userEvent.type(roleplay, 'Pirate roleplay');
+
+    await userEvent.click(screen.getByRole('button', { name: /Add selected \(2\)/ }));
+    await waitFor(() => {
+      expect(add).toHaveBeenCalledWith({ kind: 'activities', name: 'Wax play' });
+      expect(add).toHaveBeenCalledWith({ kind: 'fantasies', name: 'Pirate roleplay' });
+    });
+    expect(add).not.toHaveBeenCalledWith({ kind: 'activities', name: 'Edging' }); // unchecked
+  });
+
+  it('surfaces an AI-suggestion failure calmly (nothing fresh)', async () => {
+    asOwner();
+    installMockBridge({
+      questionnairesIntimacyTopics: () => Promise.resolve(view({ activities: [], fantasies: [] })),
+      questionnairesSuggestIntimacyTopics: () =>
+        Promise.resolve({
+          ok: false as const,
+          reason: 'EMPTY' as const,
+          message: 'No fresh topics came back — try a different subject.',
+        }),
+    });
+    render(<IntimacyTopicsControl />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Suggest with AI' }));
+    expect(await screen.findByText(/No fresh topics came back/)).toBeInTheDocument();
   });
 });

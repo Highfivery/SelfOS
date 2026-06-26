@@ -18,7 +18,7 @@
 New feature spec; **supersedes** the questionnaire-era Memory surface (08 §13.4). Reworks the shared Insight
 layer ([`08`](08-questionnaires.md) §1.1/§4.4) consumed by [`05`](05-conversations.md)/[`09`](09-session-analysis.md)
 (sessions), [`12`](12-dreams.md)/[`13`](13-dream-images.md) (dreams), [`08`](08-questionnaires.md)
-(questionnaires/compatibility), and [`18`](18-personal-onboarding.md) (intake) — the four producers. Honors the
+(questionnaires/compatibility), [`18`](18-personal-onboarding.md) (intake), and [`50`](50-self-assessments.md) (self-assessments) — the five producers. Honors the
 per-item shareability of [`15`](15-shareability.md) and the per-person isolation rule. References
 [`00`](00-architecture.md)/[`01`](01-design-system.md)/[`06`](06-ai-usage-and-budgets.md).
 

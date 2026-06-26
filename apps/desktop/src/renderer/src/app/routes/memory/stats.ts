@@ -32,13 +32,14 @@ export interface SharingStat {
   broadcastCount: number;
 }
 
-const SOURCE_ORDER: InsightSource[] = ['intake', 'session', 'dream', 'questionnaire'];
+const SOURCE_ORDER: InsightSource[] = ['intake', 'session', 'dream', 'questionnaire', 'test'];
 
 export const SOURCE_LABEL: Record<InsightSource, string> = {
   intake: 'Onboarding',
   session: 'Sessions',
   dream: 'Dreams',
   questionnaire: 'Questionnaires',
+  test: 'Self-assessments',
 };
 
 /** "What SelfOS knows" — live-fact counts by source + when it last changed (§3.2). */

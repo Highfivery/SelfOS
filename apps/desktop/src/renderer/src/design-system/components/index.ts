@@ -23,6 +23,7 @@ export { Toast, type ToastSeverity } from './Toast';
 export { LineChart, type LineChartSeries, type LineChartPoint } from './LineChart';
 export { FrequencyBars, type FrequencyItem } from './FrequencyBars';
 export { ProportionBar } from './ProportionBar';
+export { SubscaleBar } from './SubscaleBar';
 export { TrendLine, type TrendPoint } from './TrendLine';
 export { ConfidenceChip, type ConfidenceLevel } from './ConfidenceChip';
 export { GoalStatusChip, type GoalStatusValue } from './GoalStatusChip';

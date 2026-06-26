@@ -390,6 +390,24 @@ export async function summarizeForContext(
       // A WHOLLY-flagged insight (had facts, all now flagged — e.g. the user flagged the whole insight) is
       // dropped entirely: its summary restates the corrected claim, so it must not reach the coach either.
       if (insight.facts.length > 0 && liveFacts.length === 0) continue;
+      // A SENSITIVE non-portrait insight (a kink/sexuality self-assessment, 50-self-assessments §3.4): its
+      // restricted facts are relevance-gated to an intimacy-topic context — gate the WHOLE insight (summary +
+      // facts) so it informs an intimacy session but never leaks into a money chat. The PINNED intake portrait
+      // is exempt (selectPortraitFacts narrows its facts, but the portrait is always present); a crisis-flagged
+      // insight is never narrowed (safety). Existing non-intake insights carry no restricted facts → unaffected.
+      if (insight.source !== 'intake' && !(insight.crisisFlag ?? false)) {
+        // Fail-closed: if the insight has ANY restricted fact, it only feeds an on-topic context. A
+        // restricted fact with no `lifeArea` contributes no matchable area, so an insight whose restricted
+        // facts all lack a life-area matches nothing → is withheld entirely (never leaks its summary).
+        const restricted = liveFacts.filter((fact) => fact.restricted);
+        if (restricted.length > 0) {
+          const topicAreas = new Set(topic?.lifeAreas ?? []);
+          const matches = restricted.some(
+            (fact) => fact.lifeArea !== undefined && topicAreas.has(fact.lifeArea),
+          );
+          if (!matches) continue;
+        }
+      }
       lines.push(`- ${insight.summary}`);
       // The PINNED onboarding portrait is large and feeds EVERY call — emit the facts relevant to THIS
       // call's topic, bounded to a budget (28-portrait-synthesis-optimization §pillar-2). Session/dream

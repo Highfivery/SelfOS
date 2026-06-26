@@ -1,6 +1,6 @@
 # 50 — Self-assessments ("Tests") & the personalization profile layer
 
-> **Status:** Draft — _last updated 2026-06-25_
+> **Status:** Built — _last updated 2026-06-26_ (on `feat/self-assessments-tests`; §11 resolved; PR pending)
 >
 > A new **Self-assessments ("Tests")** engine + a first battery of four self-administered, **deterministically-scored**
 > standardized instruments (Big Five personality, attachment style, sexuality/orientation spectrum, and an
@@ -628,7 +628,26 @@ vault** to assert data, not just the UI; run `pnpm typecheck` after tests (memor
 
 ## 11. Open questions
 
-LIST — never silently assumed:
+### Resolved (2026-06-26 — asked the owner before building)
+
+1. **Naming** → **"You"** (`/you`). The hub reads as distinct from Memory (the AI's _inferred_ facts).
+2. **Item counts** → **fuller**: Big Five **IPIP-120** (5 domains × 24 items) + Attachment **full ECR-R (36)**.
+3. **Auto-feed vs review** → **auto-feed own-context** (recommended): a scored result becomes an `approved: true`
+   Insight feeding the taker's own context, reviewable/editable/deletable in Memory.
+4. **Kink subscale model** → use **spec 49's 14 `INTIMACY_CATEGORIES`** (`@selfos/core/intimacy/topics`, now built)
+   as the kink subscales; the inventory's items are **generated from `intimacyActivitiesByCategory()`** so the two
+   stay one source of truth (no hand-authored row list to drift). A per-category branching opt-in reveals each
+   category's depth items (`equalsAny` on a multiChoice).
+5. **Narrative sensitivity bound** → the optional narrative **may name specifics** (interests/orientation). It still
+   leads with the not-medical framing + (when crisis-flagged) resources, and the consensual-adult boundary holds.
+6. **Partner-shareability of non-sensitive results** → **own-only v1** (relationship-scoped sharing is a later
+   additive slice; sensitive results are never shareable).
+7. **Crisis-adjacent flagging** → **conservative**: the four shipped instruments contain **no** distress/self-harm
+   items, so no item raises `crisisFlag` in v1. The mechanism (`TestResult`/`Insight.crisisFlag` + a lead-with-
+   resources result/narrative) is retained for future instruments; the always-present crisis footer + not-medical
+   line are on every surface regardless.
+
+### Original list (LIST — never silently assumed):
 
 1. **Feature / hub naming** — **"You"** (the working title) vs **"Discover"** vs **"Profiles"** (or another). The
    nav label + route (`/you`) hinge on this; it must read as distinct from **Memory** (the AI's inferred facts).
@@ -657,6 +676,28 @@ LIST — never silently assumed:
 
 ## 12. Changelog
 
+- 2026-06-26 — **BUILT** on `feat/self-assessments-tests` (PR pending). The whole feature: the deterministic
+  `@selfos/core/tests` engine (`scoreTest` — reverse-scoring/sum/mean/normalize unit|signed/bands, total/
+  never-throws) + four `TestDefinition`s (Big Five IPIP-120, Attachment ECR-R 36, Kinsey/Klein sexuality, the
+  **kink inventory generated from spec 49's `intimacyActivitiesByCategory()`** — 14 category subscales, branched
+  opt-in); the result→Insight bridge (`source:'test'`, `approved:true`, retake reuses `insightId` + `reTakeOf`,
+  sensitive results write `restricted` facts tagged `lifeArea:'Intimacy'`); the optional metered narrative
+  (`test.narrate`, admin-only `$`); the `tests.own` capability (Member ON) + the shared 18+ ack; the
+  test-profile context provider; the IPC seam (`tests:list/get/take/results/narrate/acknowledgeAdult/
+deleteResult/deleteAll`, gated + active-person-scoped + 18+-withheld in the bridge); and the "You" hub
+  (`/you`, `/you/:testId/take`, `/you/:testId`) with the new `SubscaleBar` primitive (→ `/gallery`). **Privacy:**
+  a new relevance gate in `summarizeForContext` (insightStore) feeds a sensitive test insight to the taker's OWN
+  intimacy-topic context only — never a money chat, never another person's context (fail-closed when a restricted
+  fact lacks a life-area). Additive schema (`InsightSource += 'test'`, provenance `testId`/`testResultId`,
+  `TestResult`) — no version bump. Gate green: typecheck/lint/format, **840 core + 816 desktop** unit + a
+  coreBridge integration block + 2 E2E (full ECR-R take→profile→retake→trends + AI-off calm narrate + 360px; the
+  kink 18+ gate + restricted-fact decrypt + own-vs-non-intimacy context). Code-reviewer **ship** (privacy boundary
+  airtight; applied two fail-closed hardenings — `sensitive ⇒ adult` catalog invariant + the no-life-area gate).
+- 2026-06-26 — §11 resolved (owner-confirmed) + status → Building on `feat/self-assessments-tests`: hub = **"You"**
+  (`/you`); battery = **IPIP-120 + ECR-R 36** + Kinsey/Klein + the kink inventory; results **auto-feed** own context
+  (reviewable in Memory); the kink subscales = spec 49's **14 `INTIMACY_CATEGORIES`** with items **generated** from
+  `intimacyActivitiesByCategory()`; the narrative **may name specifics**; non-sensitive results **own-only v1**;
+  conservative crisis flagging (no v1 item flags; mechanism retained).
 - 2026-06-25 — created (Draft). Defines the Self-assessments ("Tests") engine + a first battery of four
   deterministically-scored instruments (Big Five/IPIP, attachment/ECR-R, sexuality/Kinsey-Klein, an original
   kink & intimacy-interests inventory), a dedicated **"You" hub**, the result → Insight (`source: 'test'`) bridge

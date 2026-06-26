@@ -27,6 +27,7 @@ import {
   LineChart,
   Markdown,
   ProportionBar,
+  SubscaleBar,
   SegmentedControl,
   Select,
   ShareToggle,
@@ -400,6 +401,21 @@ export function Gallery(): JSX.Element {
               <Stack gap={2}>
                 <ProportionBar label="Lucid dreams" value={3} total={12} />
                 <ProportionBar label="Nightmares" value={5} total={12} tone="warning" />
+              </Stack>
+            </div>
+            <div>
+              <Text size="sm" weight={600} tone="secondary">
+                SubscaleBar — a self-assessment subscale (unit 0..1 or signed −1..1; value as text)
+              </Text>
+              <Stack gap={2}>
+                <SubscaleBar label="Openness" normalized={0.72} band="leans higher" />
+                <SubscaleBar label="Attachment anxiety" normalized={0.31} band="lower" />
+                <SubscaleBar
+                  label="Overall orientation"
+                  normalized={-0.4}
+                  band="leans other-sex"
+                  signed
+                />
               </Stack>
             </div>
             <div>

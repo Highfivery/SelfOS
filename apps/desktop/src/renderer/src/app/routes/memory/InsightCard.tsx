@@ -47,6 +47,7 @@ const SOURCE_EYEBROW: Record<Insight['source'], string> = {
   session: 'Session',
   dream: 'Dream',
   questionnaire: 'Questionnaire',
+  test: 'Self-assessment',
 };
 
 /** Above this many facts, a long insight (the onboarding portrait) groups its facts by life-area so it's

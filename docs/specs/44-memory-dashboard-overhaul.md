@@ -112,7 +112,7 @@ Per [`20`](20-memory-dashboard.md) §3.2, plus the correction redesign:
   that intake section/question via the existing provenance target — [`18`](18-personal-onboarding.md)) +
   **Delete**. Copy: editing the source answer is how you correct what you told SelfOS; a tooltip explains
   re-synthesizing updates the fact.
-- **AI-inferred facts** (`source: 'session' | 'dream' | 'questionnaire'`): keep the flag mechanism but
+- **AI-inferred facts** (`source: 'session' | 'dream' | 'questionnaire' | 'test'`): keep the flag mechanism but
   **relabel** it **"This isn't right about me"** (a clear toggle, not a bare flag icon) — it still excludes
   the fact from the coach immediately + feeds the correction into future analysis
   ([`20`](20-memory-dashboard.md) §3.6). Flagged facts stay visible, marked, reversible.

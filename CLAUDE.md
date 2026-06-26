@@ -389,6 +389,46 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-26 — **Build (Self-assessments / "Tests" engine + the "You" hub — SPEC 50 BUILT; on
+  `feat/self-assessments-tests`, PR pending).** The personalization backbone: deterministically-scored standardized
+  instruments that produce a structured profile feeding the coach app-wide. **All 4 material §11 decisions asked
+  first:** hub = **"You"** (`/you`); depth = **fuller** (Big Five **IPIP-120** + Attachment **ECR-R 36**); **one
+  slice**; the AI narrative **may name specifics**. Recommendation-takes for the rest (auto-feed own-context +
+  reviewable in Memory; kink subscales = spec 49's 14 `INTIMACY_CATEGORIES`; non-sensitive results own-only v1;
+  conservative crisis flagging — no v1 item flags, mechanism retained). **Core `@selfos/core/tests`:** a pure,
+  AI-free **`scoreTest`** (reverse-scoring `-`-prefix → `min+max−value`; `sum`/`mean` aggregate; normalize unit
+  0..1 / signed −1..1; descriptor bands; **total — never throws**, clamps/omits bad cells) + four `TestDefinition`s
+  (Big Five IPIP-120, ECR-R 36, Kinsey/Klein sexuality, and the **kink inventory GENERATED from spec 49's
+  `intimacyActivitiesByCategory()`** — 14 category subscales, a branched per-category opt-in, so the two stay one
+  source of truth). **The result→Insight bridge (`testService`):** scores → an encrypted `TestResult` (retake =
+  NEW file + `reTakeOf`, trends keep every take) → an Insight (`source:'test'`, `approved:true`, retake **reuses
+  `insightId`** [UPDATE not duplicate] + preserves `createdAt`); **sensitive (kink/sexuality) results write
+  `restricted` facts tagged `lifeArea:'Intimacy'`**; the **only metered call** is the optional `test.narrate`
+  (admin-only `$`, meter-before-return); a context provider registers into 08's registry. **Privacy (the central
+  guarantee):** a new relevance gate in `summarizeForContext` (insightStore) feeds a sensitive test insight to the
+  taker's OWN intimacy-topic context **only** — never a money chat, never another person's context; **fail-closed**
+  when a restricted fact has no life-area, and a `sensitive ⇒ adult` catalog invariant (both code-reviewer
+  hardenings). **Seam:** `tests:list/get/take/results/narrate/acknowledgeAdult/deleteResult/deleteAll`, all gated
+  `tests.own` + active-person-scoped + the 18+ group withheld in the bridge (not just the UI); `tests.own`
+  capability (Member ON, not EXPLICIT_GRANT_ONLY); reuses the shared `adultAcknowledged` ack. **Renderer:** the
+  "You" hub (`/you` — catalog grouped Personality/Relationships/Intimacy & sexuality, 18+-gated; profile cards) +
+  Take (`/you/:testId/take`, the `@selfos/answering` form, required-Likert not auto-seeded, renders-to-the-bottom)
+  - the result profile (`/you/:testId` — `SubscaleBar` primitive [→ `/gallery`], per-subscale `TrendLine` trends,
+    the optional narrative + calm AI-off/budget states, history, Retake/Delete), a per-person `testStore` (reset on
+    `activePerson.id`). **Additive schema** (`InsightSource += 'test'`, provenance `testId`/`testResultId`,
+    `TestResult`) — no version bump; the 3 Memory `Record<InsightSource>` maps extended. Code-reviewer **ship** (the
+    privacy boundary verified airtight end-to-end; both fail-closed hardenings applied). Gate green: typecheck, lint,
+    format, **840 core + 816 desktop** unit (scoring engine incl. reverse/midpoint-neutral integrity, bridge
+    take/restricted/retake/18+/Guest-denial/narrate-metered, You-hub + result-screen + SubscaleBar RTL, the new
+    relevance-gate + fail-closed insightStore units) + **2 E2E** (full ECR-R take→profile→retake→trends + AI-off calm
+    narrate + 360px guard; the kink 18+ gate → restricted-fact decrypt → own-vs-non-intimacy context) + visual QA at
+    desktop + 360px (real Electron screenshots — clean, intentional, responsive; caught + fixed a misleading
+    itemCount that counted matrix CONTAINERS not rows → "36 questions"). Synced spec 50 (→ Built, §11 resolved) +
+    drift fixes into 08 §1.1/§4.4, 20, 44, 49. **Lesson: a sensitive own insight's SUMMARY also feeds own context
+    (not just its facts), so relevance-gating restricted content means gating the WHOLE insight on the call topic —
+    per-fact lifeArea gating alone leaks the summary into a money chat; and the gate must fail CLOSED when a
+    restricted fact carries no life-area. The user-facing "N questions" count must be answerable LEAF items (matrix
+    rows), never the matrix-container count.**
 - 2026-06-25 — **Build (Intimacy activities inventory — categorized, tiered expansion — SPEC 49 BUILT; on
   `feat/intimacy-activities-inventory`, PR pending).** Restructured the shared `INTIMACY_ACTIVITIES` from a flat
   ~30-string list into a **categorized, tiered** inventory `INTIMACY_ACTIVITIES_FULL` (~94 entries `{key, label,

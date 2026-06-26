@@ -173,6 +173,54 @@ describe('insightStore', () => {
       expect(out).not.toContain('not yet approved'); // unapproved insights never enter context
     });
 
+    it('gates a SENSITIVE (restricted) own insight to its life-area topic — feeds intimacy, not money (50 §3.4)', async () => {
+      const fs = memFileSystem();
+      await saveInsight(
+        fs,
+        key,
+        insight({
+          id: 'i1',
+          subjectPersonId: 'p1',
+          source: 'test',
+          summary: 'their intimacy interests',
+          facts: [
+            {
+              id: 'f1',
+              text: 'strong draw to impact',
+              shareable: false,
+              restricted: true,
+              lifeArea: 'Intimacy',
+            },
+          ],
+        }),
+      );
+      expect(await summarizeForContext(fs, key, 'p1', [], { lifeAreas: ['Intimacy'] })).toContain(
+        'their intimacy interests',
+      );
+      expect(await summarizeForContext(fs, key, 'p1', [], { lifeAreas: ['Money'] })).not.toContain(
+        'their intimacy interests',
+      );
+    });
+
+    it('fail-closed: a restricted fact with NO life-area is withheld from EVERY context (50 §8)', async () => {
+      const fs = memFileSystem();
+      await saveInsight(
+        fs,
+        key,
+        insight({
+          id: 'i1',
+          subjectPersonId: 'p1',
+          source: 'test',
+          summary: 'untagged sensitive summary',
+          facts: [{ id: 'f1', text: 'sensitive fact', shareable: false, restricted: true }],
+        }),
+      );
+      // No life-area to match → withheld even when the topic is Intimacy (never leaks the summary).
+      expect(
+        await summarizeForContext(fs, key, 'p1', [], { lifeAreas: ['Intimacy'] }),
+      ).not.toContain('untagged sensitive summary');
+    });
+
     it("includes related people's SHAREABLE facts but never their private ones", async () => {
       const fs = memFileSystem();
       await saveInsight(

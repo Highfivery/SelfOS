@@ -5,6 +5,7 @@ import {
   BarChart3,
   Brain,
   ClipboardList,
+  Compass,
   House,
   Inbox,
   MessageCircle,
@@ -27,6 +28,7 @@ import { unansweredCount, useInboxStore } from '../stores/inboxStore';
 import { useDreamStore } from '../stores/dreamStore';
 import { useInsightStore } from '../stores/insightStore';
 import { useGoalStore } from '../stores/goalStore';
+import { useTestStore } from '../stores/testStore';
 import { useDreamAnalysisStore } from '../stores/dreamAnalysisStore';
 import { useDreamPatternStore } from '../stores/dreamPatternStore';
 import { useResultsStore } from '../stores/resultsStore';
@@ -64,6 +66,7 @@ export function AppShell(): JSX.Element {
   const inboxItems = useInboxStore((s) => s.items);
   const inboxCount = unansweredCount(inboxItems);
   const canOwnDreams = useSessionStore((s) => s.can('dreams.own'));
+  const canTakeTests = useSessionStore((s) => s.can('tests.own'));
   const canDoIntake = useSessionStore((s) => s.can('intake.own'));
   const intakeLoaded = useIntakeStore((s) => s.loaded);
   const intakeState = useIntakeStore((s) => s.state);
@@ -113,6 +116,7 @@ export function AppShell(): JSX.Element {
     useIntakeStore.getState().reset(); // the intake is per-person (18-personal-onboarding §7)
     useInsightStore.getState().reset(); // Memory is per-person — own + relationships only (20 §5.1)
     useGoalStore.getState().reset(); // tracked goals are per-person (39-living-memory §5.4)
+    useTestStore.getState().reset(); // self-assessments are per-person (50 §5.6)
     useSynthesisStore.getState().reset(); // the cached cross-feature synthesis is per-person (40 §5.3)
     useNotificationStore.getState().reset(); // notifications are per-person, device-local (35 §4)
     useDiscoveryStore.getState().reset(); // orientation/tip dismissals are per-person, device-local (41 §4)
@@ -307,6 +311,18 @@ export function AppShell(): JSX.Element {
               >
                 <Moon size={18} aria-hidden="true" />
                 <span className={styles.label}>Dreams</span>
+              </NavLink>
+            ) : null}
+            {canTakeTests ? (
+              <NavLink
+                to="/you"
+                className={navClass}
+                aria-label="You"
+                title={tip('You')}
+                onClick={closeDrawer}
+              >
+                <Compass size={18} aria-hidden="true" />
+                <span className={styles.label}>You</span>
               </NavLink>
             ) : null}
             {canManagePeople ? (

@@ -2810,6 +2810,112 @@ test('memory: a member sees only their OWN insights, never another member’s (t
   }
 });
 
+test('memory redesign (54): a partner’s shared facts never show raw; the Partners view shows AI relationship insights', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  {
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('memory-redesign e2e: master key missing');
+    const now = new Date().toISOString();
+    // A partner (Pat) + the symmetric `partner` edge to the owner (the viewer).
+    await savePerson(fs, key, {
+      id: 'pat-1',
+      schemaVersion: 1,
+      displayName: 'Pat',
+      isSubject: true,
+      tags: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await saveRelationship(fs, key, {
+      id: 'rel-pat',
+      schemaVersion: 1,
+      fromPersonId: 'owner-1',
+      toPersonId: 'pat-1',
+      type: 'partner',
+      createdAt: now,
+      updatedAt: now,
+    });
+    // The owner's OWN insight (shown in About you) + Pat's insight: one fact SHARED with the partner type,
+    // one PRIVATE — NEITHER may ever appear raw in the owner's Memory (54 §1).
+    await saveInsight(fs, key, {
+      id: 'own-note',
+      schemaVersion: 1,
+      source: 'session',
+      subjectPersonId: 'owner-1',
+      summary: 'OWNER-OWN-NOTE',
+      facts: [{ id: 'of', text: 'owner reflects on connection', shareable: false }],
+      confidence: 'medium',
+      categories: ['Relationships'],
+      approved: true,
+      provenance: { conversationId: 'c-own', at: now },
+      createdAt: now,
+      updatedAt: now,
+    });
+    await saveInsight(fs, key, {
+      id: 'pat-note',
+      schemaVersion: 1,
+      source: 'session',
+      subjectPersonId: 'pat-1',
+      summary: 'PAT-SUMMARY',
+      facts: [
+        { id: 'sf', text: 'PARTNER-SHARED-FACT', shareable: false, shareableTypes: ['partner'] },
+        { id: 'pf', text: 'PARTNER-PRIVATE-FACT', shareable: false },
+      ],
+      confidence: 'medium',
+      categories: ['Relationships'],
+      approved: true,
+      provenance: { conversationId: 'c-pat', at: now },
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Memory' }).click();
+
+    // "About you" shows the owner's OWN note…
+    await expect(w.getByText('OWNER-OWN-NOTE')).toBeVisible();
+    // …but a partner's shared/private facts are NEVER shown raw (sharing is context, not display, 54 §1).
+    await expect(w.getByText('PARTNER-SHARED-FACT')).toHaveCount(0);
+    await expect(w.getByText('PARTNER-PRIVATE-FACT')).toHaveCount(0);
+    await expect(w.getByText('About people you relate to')).toHaveCount(0);
+
+    // The Partners view: a relationship-insights card. Generate → AI observations (a synthesis, never raw).
+    await w.getByRole('button', { name: 'Partners' }).click();
+    await expect(w.getByText(/You & Pat/)).toBeVisible();
+    await w.getByRole('button', { name: /Reflect on us/ }).click();
+    await expect(w.getByText(/both lean on security/)).toBeVisible();
+    // Even after the synthesis, the partner's raw shared fact is still never displayed.
+    await expect(w.getByText('PARTNER-SHARED-FACT')).toHaveCount(0);
+
+    // Decrypt: Pat's shared fact is partner-scoped (it CAN feed the viewer's synthesis); the cache exists.
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('memory-redesign e2e: key missing (2)');
+    const patFacts = (await listInsightsForPerson(fs, key, 'pat-1')).flatMap((i) => i.facts);
+    expect(
+      patFacts.find((f) => f.text === 'PARTNER-SHARED-FACT')?.shareableTypes?.includes('partner'),
+    ).toBe(true);
+    const synthRaw = await fs.read('people/owner-1/relationships/pat-1/synthesis.enc');
+    expect(synthRaw).not.toBeNull(); // the synthesis was cached
+
+    // Phone width: no horizontal overflow with the Partners card on screen.
+    await w.setViewportSize({ width: 360, height: 800 });
+    const overflow = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      return main ? main.scrollWidth - main.clientWidth : 0;
+    });
+    expect(overflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('memory: the dashboard groups by life-area, flags a fact (decrypt-persisted), shows "source removed", and fits 390px (spec 20 §3)', async () => {
   const { userData, vault } = await seedReadyVault();
   const fs = createNodeFileSystem(vault);

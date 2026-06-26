@@ -389,6 +389,47 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-26 — **Build (Wellbeing & neurodivergence self-reflections — SPEC 51 BUILT; on
+  `feat/wellbeing-reflections`, PR pending).** The most safety-sensitive feature in the app — clinically-validated
+  instruments embedded as **non-diagnostic reflections**, reusing the spec-50 Tests engine wholesale (no new engine,
+  hub, or routes; a new `wellbeing` test group). **All 4 material §11 decisions asked first:** autism = **both**
+  AQ-10 + RAADS-R; mood/anxiety re-take = **passive card prompt only** (NO §40 nudge, even on a worsening trend);
+  Home = a **sibling "Your check-ins" series** on the `WellbeingCard`; copy = **proceed with the proposed gentle
+  wording**. Recommendation-takes for the rest (no extra opt-in setting — the framing-first intro IS the opt-in;
+  ADHD/autism retake-allowed-not-nudged; adult-framed, no extra age gate). **Four instruments** as spec-50
+  `TestDefinition`s flagged `wellbeing`: **PHQ-9** (mood; item 9 = the crisis trigger), **GAD-7** (anxiety), **ASRS
+  v1.1 Part A** (focus), **AQ-10 + RAADS-R** (social/sensory). **The safety core (§8):** a pure, AI-free
+  `@selfos/core/tests/wellbeingCrisis.ts` (`detectWellbeingCrisis`/`answerTriggersCrisis`/`crisisItemPositive`/
+  `resolveWellbeingBand`) flags a positive PHQ-9 item 9 **or** a high `crisis` band → sets `crisisFlag` on **both**
+  the `TestResult` and the derived Insight → feeds the §40 `aggregateCrisisSignal` + Home `CrisisSupportBanner`
+  unchanged; the renderer escalates a prominent `role="alert"` banner **mid-check-in, before scoring** (client-
+  evaluable from the definition); crisis routing is **independent of every setting + works AI-off**. **The
+  non-diagnostic reframe (§8.1):** the internal clinical band (`clinicalKey`) is kept on the result for trends/crisis
+  ONLY and **never shown** — the person sees a gentle `WellbeingBand.display` range + a low→high bar (no clinical
+  axis) + the **always-present professional-help line**; the optional `test.narrate` is extra-bounded **and never
+  receives the clinical key** (`scoreDigest` maps it to the gentle display). **Privacy (§8.4):** wellbeing facts are
+  `shareable:false` with no `shareableWith`/`shareableTypes`, own-context only. **Additive schema** (`TestDefinition`
+  gains `wellbeing`/`crisisItems`/`bands`/`attribution`/`lifeArea`; `TestGroupId += 'wellbeing'`; `TestSummary`
+  display fields) — no migration. `deleteResult` now **re-derives** the Insight from the latest remaining take so a
+  partial delete never leaves a stale trend/crisis flag. Renderer: the You-hub "Reflections & check-ins" group, the
+  framing-first intro + Stop affordance, the gentle-band result, the Home sibling check-in series (read from dated
+  PHQ-9 results), a passive ~14-day "check in again" prompt. `Banner` gained an additive `role` prop. Code-reviewer
+  **ship-after-one-should-fix** (the narrative clinical-key leak — fixed; + the partial-delete re-derivation +
+  dead-compute nit). Gate green: typecheck, lint, format, **863 core + 823 desktop** unit (the crisis hook +
+  per-instrument band vectors + the bridge + the partial-delete re-derive + the narrative gentle-band-only guard +
+  RTL for hub/take/result/Home) + **2 E2E** (mood check-in → gentle result + help line + retake trend + Home sibling
+  - 360px; PHQ-9 item-9 mid-check-in crisis + decrypt own-only `crisisFlag` + Home aggregation, AI off; spec-50 E2E
+    no-regression). Visual QA at desktop + 360px (real web-preview screenshots — the wellbeing group, framing-first
+    intro, the mid-check-in crisis banner, the gentle result; no overflow, no console errors). Synced spec 51
+    (→ Built, §11 resolved) + spec 17 drift (the WellbeingCard sibling series). **Instrument-items note:**
+    PHQ-9/GAD-7/ASRS/AQ-10 embed the actual items with attribution; RAADS-R's 80 items are register-faithful
+    adaptations (not verbatim) with the Ritvo citation, scored as a single summative total into gentle bands —
+    mirroring the spec-50 precedent. **Lesson: the internal clinical band must be firewalled from EVERY user/model
+    surface — the result render gates on `test.wellbeing` (not on the band resolving) so a degenerate result can't
+    fall through to clinical bars, and the narrative digest maps the clinicalKey→gentle display before the prompt;
+    and a per-instrument derived Insight only keeps the LATEST take, so a Home trend "sibling series" must read the
+    dated RESULTS, not the single Insight's metric.**
+
 - 2026-06-26 — **Build (Self-assessments / "Tests" engine + the "You" hub — SPEC 50 BUILT; on
   `feat/self-assessments-tests`, PR pending).** The personalization backbone: deterministically-scored standardized
   instruments that produce a structured profile feeding the coach app-wide. **All 4 material §11 decisions asked

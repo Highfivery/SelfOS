@@ -1,6 +1,6 @@
 # 51 — Wellbeing & neurodivergence self-reflections
 
-> **Status:** Draft — _last updated 2026-06-25_
+> **Status:** Built — _last updated 2026-06-26_
 >
 > A second battery on top of the [`50`](50-self-assessments.md) Tests engine: **non-diagnostic wellbeing &
 > neurodivergence self-reflections** — mood, anxiety, ADHD-traits, and autism-traits instruments, presented as
@@ -687,35 +687,66 @@ vault** to assert data, not just the UI; run `pnpm typecheck` after tests (memor
 
 ## 11. Open questions
 
-LIST — never silently assumed:
+**All resolved (owner, 2026-06-26) — recorded below.**
 
-1. **Autism instrument(s)** — ship **AQ-10** (short, 10 items, lighter), **RAADS-R** (long, 80 items, more
-   sensitive), or **both** (AQ-10 as a quick reflection + RAADS-R as a deeper one)? A trade-off of completion vs
-   depth. _Need a call (the catalog ids encode it)._
-2. **An extra explicit opt-in setting beyond `tests.own`?** Given their sensitivity, do wellbeing reflections want
-   their own enable toggle, or is the framing-first intro (§3.2) the opt-in with **no extra setting**?
-   _Recommendation: **no extra setting** — the intro is the opt-in; an "enable" toggle risks a person disabling a
-   safety-routed reflection. **Crisis routing is never behind any setting regardless** (§8.2)._
-3. **Exact non-diagnostic result copy** — the gentle band wording per instrument/band (e.g. PHQ-9 'moderately-severe'
-   → _"your responses suggest you've been carrying a lot of low mood lately"_) and the always-present
-   professional-help line. _Proposed in §3.3/§8.1 — **flag for the user's review/sign-off** (this is the
-   highest-stakes copy in the app)._
-4. **Re-take cadence / reminders for mood-anxiety** — how often to gently invite a re-check (passive card prompt
-   vs a §40-coordinated nudge), and **whether a worsening trend should proactively nudge (via [`40`](40-proactive-coaching.md))
-   or stay passive**. _Recommendation: **gentle + passive by default** (a card prompt), with any proactive nudge
-   never alarmist + never a diagnosis (§8.2); confirm whether to wire the §40 nudge at all._
-5. **ADHD/autism: retakeable vs one-time** — these reflect **stable traits**, so a trend is less meaningful than
-   for mood/anxiety. One-time (a single reflection, retake allowed but not encouraged) vs retakeable like
-   mood/anxiety? _Recommendation: **retake allowed, not nudged**; no proactive re-check for traits._
-6. **Age-gating** — these are **adult-framed** mental-health instruments. Keep them adult-framed with appropriate
-   crisis resources (no explicit age gate), or add an age affordance / a youth-appropriate path? _Recommendation:
-   **adult-framed, no extra gate v1**; ensure crisis resources are appropriate; revisit a youth path later._
-7. **The Home wellbeing-picture blend** — fold mood/anxiety check-in points into the **same** `WellbeingCard`
-   series as the session mood metrics, or show a **sibling** "your check-ins" series? _A small §5.3 refinement —
-   recommendation: a sibling series so a deliberate check-in reads distinctly from inferred session mood; confirm._
+1. **Autism instrument(s)** — RESOLVED: **both** (AQ-10 `aq10` as a quick reflection + RAADS-R `raads-r` as a
+   deeper one). Both shipped in `wellbeingCatalog`.
+2. **An extra explicit opt-in setting beyond `tests.own`?** — RESOLVED (recommendation): **no extra setting**; the
+   framing-first intro (§3.2) IS the opt-in. Crisis routing is never behind any setting (§8.2).
+3. **Exact non-diagnostic result copy** — RESOLVED: **proceed with the proposed gentle wording** (the owner
+   reviews it in the built result / PR). Built per §3.3/§8.1 — gentle ranges per band, never a clinical label,
+   the always-present professional-help line. The per-band `display` strings live on each `WellbeingBand`.
+4. **Re-take cadence / reminders for mood-anxiety** — RESOLVED: **passive card prompt only** (a gentle "want to
+   check in again?" on the You-hub profile card after ~14 days). **NO §40 proactive nudge** — even on a worsening
+   trend. No new provider registered.
+5. **ADHD/autism: retakeable vs one-time** — RESOLVED (recommendation): **retake allowed, not nudged** (no
+   re-check prompt for the trait instruments; only mood/anxiety get the passive prompt).
+6. **Age-gating** — RESOLVED (recommendation): **adult-framed, no extra age gate v1**; the wellbeing group is NOT
+   18+-gated (`adult` unset). Crisis resources apply regardless.
+7. **The Home wellbeing-picture blend** — RESOLVED: a **sibling** "Your check-ins" series on the `WellbeingCard`
+   (distinct from the inferred session-mood series). Sourced from the dated PHQ-9 RESULTS (see §5.3 as-built).
+
+### As-built notes (deviations / clarifications)
+
+- **`TestDefinition.attribution` is OPTIONAL** (additive), not required — existing spec-50 tests omit it; every
+  wellbeing definition sets it. The display flows to `TestSummary` for the intro + result.
+- **Instrument items.** PHQ-9 / GAD-7 / ASRS v1.1 Part A / AQ-10 embed the actual instrument items with
+  attribution (free-to-use; PHQ-9/GAD-7 = Pfizer no-permission; ASRS = WHO notice; AQ-10 = ARC citation).
+  **RAADS-R's 80 items are register-faithful adaptations (not verbatim) with the Ritvo citation**, mirroring the
+  spec-50 precedent for instrument items, and it is scored as a **single summative total** (not the clinical
+  per-subscale breakdown) into gentle non-clinical bands — its four areas render as all-open display `groups`.
+- **The Home sibling series reads from the dated PHQ-9 RESULTS** (loaded on Home via `tests:results`), since the
+  single derived Insight only keeps the latest take's metric — the results history is the real trend.
+- **`deleteResult` re-derives the Insight** from the latest remaining take (51 §5.4 as-built) so a partial delete
+  never leaves a stale trend or a stale `crisisFlag` feeding `aggregateCrisisSignal`.
+- **The optional narrative never receives the internal clinical key** — `scoreDigest` maps a wellbeing result's
+  `clinicalKey` to the gentle `display` copy before building the prompt (§8.1).
 
 ## 12. Changelog
 
+- 2026-06-26 — **Built** (`feat/wellbeing-reflections`). All four instruments shipped as spec-50
+  `TestDefinition`s flagged `wellbeing` + a new `wellbeing` test group: **PHQ-9** (mood, item-9 crisis trigger),
+  **GAD-7** (anxiety), **ASRS v1.1** (focus), and **AQ-10 + RAADS-R** (social/sensory — §11 Q1 = both). The
+  safety core (§8): a pure, AI-free `wellbeingCrisis.ts` (`detectWellbeingCrisis` / `answerTriggersCrisis` /
+  `crisisItemPositive` / `resolveWellbeingBand`) detects a positive PHQ-9 item 9 (or a high `crisis` band) and
+  raises `crisisFlag` on BOTH the `TestResult` and the derived Insight → feeds the §40 `aggregateCrisisSignal` +
+  Home `CrisisSupportBanner`; the renderer escalates a prominent `role="alert"` banner **mid-check-in** (before
+  scoring); the result leads with resources when flagged. The non-diagnostic reframe (§8.1): the internal
+  clinical band (`clinicalKey`) is kept on the result for trends/crisis ONLY and **never shown** — the person
+  sees a gentle `WellbeingBand.display` range + the always-present professional-help line; the narrative is
+  extra-bounded and never receives the clinical key. Privacy (§8.4): wellbeing facts are `shareable: false` with
+  no `shareableWith`/`shareableTypes`, own-context only. Reuses the spec-50 engine wholesale (`scoreTest`,
+  `TestResult`, `tests:*` channels gated `tests.own` + active-person-scoped, the "You" hub, the `source: 'test'`
+  Insight bridge) — additive `TestDefinition` flags (`wellbeing`/`crisisItems`/`bands`/`attribution`/`lifeArea`),
+  no schema/migration. Mood/anxiety re-takes feed a per-instrument `LineChart` trend + a sibling "Your check-ins"
+  series on the Home `WellbeingCard` (§5.3); a passive "check in again" prompt after ~14 days (no §40 nudge). The
+  `Banner` primitive gained an additive `role` prop (`status`/`alert`). All §11 decisions resolved (§11). Gate
+  green: typecheck, lint, format, **863 core + 823 desktop** unit (the crisis hook + per-instrument band vectors
+  - the result→Insight bridge + the partial-delete re-derivation + the narrative gentle-band-only guard + RTL for
+    the hub/take/result/Home), **2 E2E** (mood check-in → gentle result + help line + retake trend + Home sibling
+  - 360px; PHQ-9 item-9 mid-check-in crisis + decrypt own-only `crisisFlag` + Home aggregation, AI off). Visual
+    QA at desktop + 360px (the wellbeing group, the framing-first intro, the mid-check-in crisis banner, the gentle
+    result). Code-reviewer ship-after-one-should-fix (the narrative clinical-key leak — fixed).
 - 2026-06-25 — created (Draft). Adds **wellbeing & neurodivergence self-reflections** on top of the
   [`50`](50-self-assessments.md) Tests engine: PHQ-9 (mood, item-9 crisis trigger), GAD-7 (anxiety), ASRS v1.1
   (ADHD traits, WHO — unmodified + cited), and AQ-10 and/or RAADS-R (autism traits, ARC/Ritvo — unmodified +

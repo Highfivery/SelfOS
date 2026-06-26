@@ -23,6 +23,7 @@ import {
   type ProactivityLevel,
 } from '@selfos/core/recommendations';
 import type { ProfileUpdateSuggestion } from '@shared/channels';
+import type { TestResult } from '@shared/schemas';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { CrisisSupportBanner } from './CrisisSupportBanner';
 import { OnboardingCard } from './OnboardingCard';
@@ -37,7 +38,7 @@ import { ForYou } from './ForYou';
 import { MomentumLine } from './MomentumLine';
 import { CelebrationMoment } from './CelebrationMoment';
 import { timeOfDayGreeting } from './greeting';
-import { sessionMoodPoints } from './wellbeing';
+import { checkInMoodPoints, sessionMoodPoints } from './wellbeing';
 import styles from './Home.module.css';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -95,6 +96,7 @@ export function Home(): JSX.Element {
   const [hasKey, setHasKey] = useState(false);
   const [proactivity, setProactivity] = useState<ProactivityLevel>('gentle');
   const [profileSuggestions, setProfileSuggestions] = useState<ProfileUpdateSuggestion[]>([]);
+  const [moodCheckIns, setMoodCheckIns] = useState<TestResult[]>([]);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -124,6 +126,11 @@ export function Home(): JSX.Element {
       window.selfos?.profileSuggestions().then((s) => {
         if (!cancelled) setProfileSuggestions(s ?? []); // bridge gates on intake.own → [] when not permitted
       }),
+      // The dated mood-check-in results (51 §5.3) → the WellbeingCard's sibling "your check-ins" series. Bridge
+      // gates on tests.own → [] when not permitted; wellbeing isn't 18+-gated.
+      window.selfos?.testsResults({ testId: 'phq9' }).then((r) => {
+        if (!cancelled) setMoodCheckIns(r ?? []);
+      }),
     ]).then(() => {
       if (!cancelled) setReady(true);
     });
@@ -145,6 +152,7 @@ export function Home(): JSX.Element {
     (i) => i.approved && i.subjectPersonId === activePersonId,
   );
   const moodPoints = activePersonId ? sessionMoodPoints(insights, activePersonId) : [];
+  const checkInPoints = checkInMoodPoints(moodCheckIns);
   // Cross-insight crisis awareness (40 §3.5): recurring distress across the person's OWN approved insights +
   // the dream nightmare nudge → a supportive surface. NOT governed by the proactivity dial (it's safety). It
   // also de-escalates encouragement: while recurring, the engine suppresses all pushes (§8).
@@ -299,7 +307,7 @@ export function Home(): JSX.Element {
             sessionCosts={sessionCosts}
             isAdmin={isAdmin}
           />
-          <WellbeingCard points={moodPoints} />
+          <WellbeingCard points={moodPoints} checkIns={checkInPoints} />
           <DreamsCard dreams={dreams} stats={patternStats} />
           <MemoryCard insights={approvedInsights} canView={canViewMemory} />
           <InboxCard count={inboxCount} />

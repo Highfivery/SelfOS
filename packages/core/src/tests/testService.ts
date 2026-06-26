@@ -12,6 +12,7 @@ import {
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 import { scoresToMetrics, scoreTest, type ScoreAnswers } from './scoring';
 import type { TestDefinition, TestGroupId } from './types';
+import { detectWellbeingCrisis, resolveWellbeingBand } from './wellbeingCrisis';
 
 /**
  * 50-self-assessments §5.4 — the result → Insight bridge. `takeTest` deterministically scores a take
@@ -32,12 +33,19 @@ function resultPath(personId: string, resultId: string): string {
   return `${testsDir(personId)}/${resultId}.enc`;
 }
 
-/** The life-area an instrument's insight is tagged with (drives Memory grouping + the relevance gate). */
+/** The life-area an instrument's insight is tagged with (drives Memory grouping + the relevance gate). A
+ *  wellbeing instrument may override via `def.lifeArea` (mood/anxiety → Emotions; ADHD/autism → Health). */
 const GROUP_LIFE_AREA: Record<TestGroupId, LifeArea> = {
   personality: 'Emotions & patterns',
   relationships: 'Relationships',
   intimacy: 'Intimacy',
+  wellbeing: 'Emotions & patterns',
 };
+
+/** The life-area for a definition: its explicit `lifeArea`, else the group default. */
+function lifeAreaFor(def: TestDefinition): LifeArea {
+  return def.lifeArea ?? GROUP_LIFE_AREA[def.group];
+}
 
 /** Persist (or overwrite) a result under its taker's encrypted folder. */
 async function saveResult(fs: FileSystem, key: Uint8Array, result: TestResult): Promise<void> {
@@ -84,14 +92,33 @@ function factText(score: TestSubscaleScore, label: string): string {
 
 /** The salient facts for an insight. Non-sensitive tests emit one fact per subscale (concise); a sensitive
  * (kink) test emits only the categories that drew real interest (normalized ≥ 0.5), so the coach gets the
- * signal, not 14 "little pull" lines. Sexuality emits all (orientation is meaningful at any point). */
+ * signal, not 14 "little pull" lines. Sexuality emits all (orientation is meaningful at any point). A WELLBEING
+ * reflection (51) emits a single plain, non-pathologizing fact from the resolved band's NON-diagnostic display
+ * copy — never the clinical key, never "you have," always framed as a self-reflection (§5.4/§8.1); it is
+ * `shareable: false` with NO `shareableWith`/`shareableTypes` ever (§8.4 — never shared with anyone else). */
 function buildFacts(
   def: TestDefinition,
   scores: TestSubscaleScore[],
   insightId: string,
 ): InsightFact[] {
+  const lifeArea = lifeAreaFor(def);
+
+  if (def.wellbeing) {
+    const total = scores[0];
+    const band = total ? resolveWellbeingBand(def, total.raw) : undefined;
+    if (!band) return [];
+    return [
+      {
+        id: `${insightId}:${total?.key ?? 'wellbeing'}`,
+        // The gentle display copy, with the boundary made explicit so the coach treats it as a reflection.
+        text: `${band.display} (a self-reflection, not a clinical finding).`,
+        shareable: false, // wellbeing results are NEVER shared with anyone else (§8.4)
+        lifeArea,
+      },
+    ];
+  }
+
   const labelOf = new Map(def.scoring.subscales.map((sub) => [sub.key, sub.label]));
-  const lifeArea = GROUP_LIFE_AREA[def.group];
   const sensitive = def.sensitive ?? false;
   const isKink = def.id === 'kink-interests';
   const facts: InsightFact[] = [];
@@ -119,6 +146,9 @@ function buildSummary(def: TestDefinition): string {
       return def.id === 'kink-interests'
         ? 'Their consensual-adult intimacy interests (a private self-assessment).'
         : 'How they see their own sexuality & orientation (a private self-assessment).';
+    case 'wellbeing':
+      // A gentle, non-diagnostic header — a self-reflection check-in, never a screening or diagnosis (§8.1).
+      return `A wellbeing self-reflection (${def.title.toLowerCase()}) — a check-in, not a diagnosis.`;
   }
 }
 
@@ -137,6 +167,17 @@ export async function takeTest(
 ): Promise<TestResult> {
   const at = now.toISOString();
   const scores = scoreTest(def, input.answers);
+
+  // Wellbeing (51): resolve the internal clinical band from the total raw and stamp it as the score's `band`
+  // (the clinicalKey — kept for trends, NEVER shown clinically; the display copy is resolved at render). Then
+  // run the deterministic, AI-free crisis hook (item-level PHQ-9 item-9 OR band-level high score, §5.2).
+  let crisisFlag = false;
+  if (def.wellbeing) {
+    const total = scores[0];
+    const band = total ? resolveWellbeingBand(def, total.raw) : undefined;
+    if (total && band) total.band = band.clinicalKey;
+    crisisFlag = detectWellbeingCrisis(def, input.answers, band);
+  }
 
   // A retake reuses the single derived Insight (UPDATE, not duplicate) + chains via `reTakeOf` to the prior
   // result. The new TestResult is always a NEW file (trends keep every dated take).
@@ -157,48 +198,78 @@ export async function takeTest(
       })),
     scores,
     ...(prior ? { reTakeOf: prior.id } : {}),
+    ...(crisisFlag ? { crisisFlag: true } : {}),
     insightId,
     takenAt: at,
     createdAt: at,
     updatedAt: at,
   };
   await saveResult(fs, key, result);
-
-  const insight: Insight = {
-    id: insightId,
-    schemaVersion: INSIGHT_SCHEMA_VERSION,
-    source: 'test',
-    subjectPersonId: input.personId,
-    summary: buildSummary(def),
-    facts: buildFacts(def, scores, insightId),
-    metrics: scoresToMetrics(scores),
-    confidence: 'high', // a deterministic self-report is high-confidence about what they answered
-    categories: [GROUP_LIFE_AREA[def.group]],
-    approved: true, // auto-feed own context (50 §3.4 / §11 Q3), reviewable + editable in Memory
-    provenance: { testId: def.id, testResultId: result.id, at },
-    createdAt: prior
-      ? ((await getInsight(fs, key, input.personId, insightId))?.createdAt ?? at)
-      : at,
-    updatedAt: at,
-  };
-  await saveInsight(fs, key, insight);
+  await saveInsight(fs, key, await buildInsightForResult(fs, key, def, result, at));
   return result;
 }
 
-/** Delete one result file. If it was the LAST result for that test, the derived Insight is removed too. */
+/**
+ * Build the derived `Insight` for a stored `TestResult` (deterministically, from its persisted `scores` +
+ * `crisisFlag`). Reused by `takeTest` and by `deleteResult`'s re-derivation, so the single Insight always
+ * reflects whichever result it points at. Preserves the Insight's original `createdAt` on update.
+ */
+async function buildInsightForResult(
+  fs: FileSystem,
+  key: Uint8Array,
+  def: TestDefinition,
+  result: TestResult,
+  fallbackCreatedAt: string,
+): Promise<Insight> {
+  const insightId = result.insightId ?? uuid();
+  const existing = result.insightId
+    ? await getInsight(fs, key, result.subjectPersonId, insightId)
+    : null;
+  return {
+    id: insightId,
+    schemaVersion: INSIGHT_SCHEMA_VERSION,
+    source: 'test',
+    subjectPersonId: result.subjectPersonId,
+    summary: buildSummary(def),
+    facts: buildFacts(def, result.scores, insightId),
+    metrics: scoresToMetrics(result.scores),
+    confidence: 'high', // a deterministic self-report is high-confidence about what they answered
+    categories: [lifeAreaFor(def)],
+    approved: true, // auto-feed own context (50 §3.4 / §11 Q3), reviewable + editable in Memory
+    // A crisis-flagged wellbeing result (51 §5.2) feeds `aggregateCrisisSignal` (40 §3.5) like any flag.
+    ...(result.crisisFlag ? { crisisFlag: true } : {}),
+    provenance: { testId: def.id, testResultId: result.id, at: result.takenAt },
+    createdAt: existing?.createdAt ?? fallbackCreatedAt,
+    updatedAt: result.takenAt,
+  };
+}
+
+/**
+ * Delete one result file. If it was the LAST result for that test, the derived Insight is removed too; if
+ * results remain (and the definition is supplied), the Insight is RE-DERIVED from the new latest remaining
+ * result — so deleting the most recent take never leaves a stale trend or a stale `crisisFlag` feeding
+ * `aggregateCrisisSignal` (40 §3.5). `def` omitted (legacy callers) ⇒ the Insight is left untouched.
+ */
 export async function deleteResult(
   fs: FileSystem,
   key: Uint8Array,
   personId: string,
   testId: string,
   resultId: string,
+  def?: TestDefinition,
 ): Promise<void> {
   const all = await listResults(fs, key, personId, testId);
   const target = all.find((result) => result.id === resultId);
   await fs.remove(resultPath(personId, resultId));
   const remaining = all.filter((result) => result.id !== resultId);
-  if (remaining.length === 0 && target?.insightId) {
-    await deleteInsight(fs, personId, target.insightId);
+  if (remaining.length === 0) {
+    if (target?.insightId) await deleteInsight(fs, personId, target.insightId);
+    return;
+  }
+  // listResults is newest-first → remaining[0] is the latest surviving take.
+  const latest = remaining[0];
+  if (def && latest) {
+    await saveInsight(fs, key, await buildInsightForResult(fs, key, def, latest, latest.takenAt));
   }
 }
 

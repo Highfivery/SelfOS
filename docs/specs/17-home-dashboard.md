@@ -78,8 +78,10 @@ build, §11):
    `16`) **and a questionnaire worth sending** (`08` gap-finder), clearly labelled, capped ~4 total. Each card
    starts/opens the thing. Calm state if AI off (§3.3). Cached + refreshable, reusing `16`'s suggestions.
 3. **Wellbeing trend** — the `moodValence`/`moodEnergy` signal (`09`) across recent completed sessions as a
-   gentle `TrendLine`/`LineChart`, with a one-line plain-language read ("steadier than last week"). Hidden
-   until there are ≥2 analyzed sessions.
+   gentle `TrendLine`/`LineChart`, with a one-line plain-language read ("steadier than last week"). It also
+   folds in a distinct sibling "your check-ins" series from deliberate mood check-ins
+   ([`51`](51-wellbeing-neurodivergence-reflections.md) §5.3). Hidden until there are ≥2 points from either
+   source.
 4. **Recent dreams** — the latest 2–3 dreams (title/snippet + thumbnail if an image exists, `13`) + a
    **pattern highlight** (a top recurring symbol/theme via `FrequencyBars`, `12 §3.5`). Links to Dreams /
    Patterns. Hidden if no dreams.
@@ -100,7 +102,8 @@ manage people — "Add someone to your circle"). As they use the app, real cards
 - **AI off / no key** — Suggested next steps and the wellbeing-trend's narrative read show a quiet "Turn on
   AI in Settings" or simply hide; deterministic cards (recent dreams, inbox, usage) still render.
 - **Feature off** — e.g. dream memory disabled → the dreams card still lists entries but no insight line;
-  session memory disabled → no wellbeing trend.
+  session memory disabled → no session mood trend (the wellbeing card can still show a deliberate check-in
+  series, `51`).
 - **Over budget** — no Home action spends budget on load (suggestions use the cache); nothing breaks.
 
 ### 3.4 Refresh & freshness
@@ -113,14 +116,14 @@ triggers a model call on load.
 
 **No new persisted data.** Home is a pure **read/compose** surface over existing sources:
 
-| Card                    | Source                                                               |
-| ----------------------- | -------------------------------------------------------------------- |
-| Continue                | `conversationStore` list + the `09 §14` `status` field               |
-| Suggested next steps    | `16` `guided:suggest` cache (+ optionally `08` gap-finder)           |
-| Wellbeing trend         | approved session Insights' `moodValence`/`moodEnergy` metrics (`09`) |
-| Recent dreams + pattern | `dreamStore` + `dreamPatternStore` (`12`)                            |
-| Memory                  | `insightStore` approved Insights (`08`/`09`)                         |
-| Inbox                   | `inboxStore` unanswered count (`08`)                                 |
+| Card                    | Source                                                                                               |
+| ----------------------- | ---------------------------------------------------------------------------------------------------- |
+| Continue                | `conversationStore` list + the `09 §14` `status` field                                               |
+| Suggested next steps    | `16` `guided:suggest` cache (+ optionally `08` gap-finder)                                           |
+| Wellbeing trend         | approved session Insights' `moodValence`/`moodEnergy` metrics (`09`) + PHQ-9 check-in results (`51`) |
+| Recent dreams + pattern | `dreamStore` + `dreamPatternStore` (`12`)                                                            |
+| Memory                  | `insightStore` approved Insights (`08`/`09`)                                                         |
+| Inbox                   | `inboxStore` unanswered count (`08`)                                                                 |
 
 **Resolved:** Home composes on the **renderer from the existing per-person stores** (no new IPC). If load ever
 feels chatty, an optional **`home:overview`** bridge aggregator (slim, capability-aware, admin-$ redacted) can

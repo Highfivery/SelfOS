@@ -1,4 +1,4 @@
-import type { Question } from '../schemas';
+import type { LifeArea, Question } from '../schemas';
 
 /**
  * 50-self-assessments §4.2 — the curated `TestDefinition` contract (CODE, not vault — the `guidedCatalog`
@@ -6,7 +6,7 @@ import type { Question } from '../schemas';
  * engine (`scoring.ts`). Items reuse the questionnaire `Question` shape so we never fork a second item model.
  */
 
-export type TestGroupId = 'personality' | 'relationships' | 'intimacy';
+export type TestGroupId = 'personality' | 'relationships' | 'intimacy' | 'wellbeing';
 
 /** How a subscale's normalized value maps for charts + `Insight.metrics`: 0..1 (`'unit'`) or −1..1 (`'signed'`). */
 export type NormalizeOut = 'unit' | 'signed';
@@ -65,6 +65,49 @@ export interface TestDefinition {
   /** The instrument's items — the questionnaire `Question` shape (08 §4.2). Mostly Likert (matrix/rating). */
   items: Question[];
   scoring: ScoringSpec;
+
+  // --- 51-wellbeing-neurodivergence-reflections additions (additive; a spec-50 personality test omits them) ---
+
+  /** This instrument is a wellbeing/neurodivergence reflection (51). Drives the "Reflections & check-ins" hub
+   *  group, the stronger non-diagnostic result copy (§3.3/§8.1 — a gentle range from {@link bands}, never the
+   *  clinical label), and the always-present professional-help line. Personality tests leave it unset. */
+  wellbeing?: boolean;
+  /** Item / matrix-row ids that, when answered at/above `atOrAbove`, raise the result's `crisisFlag`
+   *  IMMEDIATELY (mid-check-in, §5.2/§8.2) — PHQ-9's item 9 is the canonical case. Deterministic + AI-free.
+   *  Multiple allowed. Omitted ⇒ no item-level trigger (only an overall-band trigger, if any, applies). */
+  crisisItems?: CrisisItem[];
+  /** The internal clinical band thresholds (kept on the result as `clinicalKey`, NEVER shown clinically).
+   *  Each maps a raw total ≤ `upToRaw` → an INTERNAL `clinicalKey` + a non-diagnostic `display` copy; the
+   *  highest band(s) may set `crisis: true` to raise `crisisFlag` on a high overall score (§5.2). The first
+   *  band (ascending `upToRaw`) whose bound covers the raw total wins. */
+  bands?: WellbeingBand[];
+  /** The required instrument licence attribution shown on intro + result for transparency (§8.1). For
+   *  WHO/ARC instruments (ASRS/AQ/RAADS) this carries the mandatory copyright / citation notice. */
+  attribution?: string;
+  /** The Memory life-area the derived Insight is tagged with (drives grouping + the never-narrow-distress
+   *  rules, §5.4). Wellbeing mood/anxiety → 'Emotions & patterns'; ADHD/autism → 'Health & body'. Falls back
+   *  to the group default when unset. */
+  lifeArea?: LifeArea;
+}
+
+/** A crisis trigger: a question id OR a matrix row key that, answered at/above `atOrAbove`, flags the result. */
+export interface CrisisItem {
+  /** A standalone question id OR a matrix ROW KEY (PHQ-9 item 9 is a matrix row). */
+  questionId: string;
+  /** The (inclusive) threshold on the item's numeric scale — e.g. 1 on PHQ-9's 0..3 (any non-"Not at all"). */
+  atOrAbove: number;
+}
+
+/** An internal clinical band → a non-diagnostic display copy (§4.2/§8.1). `clinicalKey` is NEVER shown. */
+export interface WellbeingBand {
+  /** Inclusive upper bound of the raw total for this band. */
+  upToRaw: number;
+  /** INTERNAL only — e.g. 'minimal' | 'mild' | 'moderate' | 'moderately-severe' | 'severe'. Drives trends. */
+  clinicalKey: string;
+  /** The NON-diagnostic, plain-language copy shown to the person (§3.3/§8.1). */
+  display: string;
+  /** A high overall band that should also raise `crisisFlag` (§5.2) — e.g. PHQ-9 'severe'. */
+  crisis?: boolean;
 }
 
 /** Subscale display metadata (label + chart orientation) the result screen needs — never the scoring formula
@@ -89,6 +132,19 @@ export interface TestSummary {
   sensitive: boolean;
   /** Subscale labels + orientation so the result screen can render bars/trends without the scoring spec. */
   subscales: SubscaleMeta[];
+
+  // --- 51 wellbeing display metadata (crypto-free; the renderer never sees the scoring spec) ---
+  /** A wellbeing/neurodivergence reflection (51): the hub's "Reflections & check-ins" group + the gentle-range
+   *  result handling + the always-present professional-help line. */
+  wellbeing: boolean;
+  /** The instrument licence attribution shown for transparency (§8.1) — absent for non-wellbeing tests. */
+  attribution?: string;
+  /** clinicalKey → the non-diagnostic display copy (§3.3/§8.1). The result screen maps a wellbeing result's
+   *  internal `band` (clinicalKey) → this gentle sentence; the clinical key itself is never shown. */
+  bandDisplays?: Record<string, string>;
+  /** Crisis trigger items (§5.2) — the renderer evaluates these mid-check-in to escalate the crisis surface
+   *  immediately when PHQ-9 item 9 is answered positive. References question ids / matrix row keys. */
+  crisisItems?: CrisisItem[];
 }
 
 export function testSummary(def: TestDefinition): TestSummary {
@@ -114,6 +170,16 @@ export function testSummary(def: TestDefinition): TestSummary {
       label: sub.label,
       signed: (sub.normalize.out ?? (defaultSigned ? 'signed' : 'unit')) === 'signed',
     })),
+    wellbeing: def.wellbeing ?? false,
+    ...(def.attribution !== undefined ? { attribution: def.attribution } : {}),
+    ...(def.bands
+      ? {
+          bandDisplays: Object.fromEntries(
+            def.bands.map((band) => [band.clinicalKey, band.display]),
+          ),
+        }
+      : {}),
+    ...(def.crisisItems ? { crisisItems: def.crisisItems } : {}),
   };
 }
 
@@ -121,6 +187,7 @@ export const TEST_GROUP_LABELS: Record<TestGroupId, string> = {
   personality: 'Personality',
   relationships: 'Relationships',
   intimacy: 'Intimacy & sexuality',
+  wellbeing: 'Reflections & check-ins',
 };
 
 /** What `tests:get` returns to the Take screen: the summary + the items to render (never the scoring spec). */

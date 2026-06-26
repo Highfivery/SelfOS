@@ -40,3 +40,19 @@ export function topSubscales(
 function distance(v: SubscaleView): number {
   return Math.abs(v.normalized - (v.signed ? 0 : 0.5));
 }
+
+/**
+ * 51 §3.3 — a wellbeing result's GENTLE, non-diagnostic display copy, resolved from the result's internal
+ * clinical band (`scores[0].band` = clinicalKey) via the catalog's `bandDisplays`. The clinical key itself is
+ * NEVER shown; this returns the plain-language sentence. The gentle low→high value is `scores[0].normalized`.
+ */
+export function wellbeingDisplay(
+  test: TestSummary,
+  scores: TestSubscaleScore[],
+): { display: string; normalized: number } | undefined {
+  const total = scores[0];
+  if (!total || total.band === undefined) return undefined;
+  const display = test.bandDisplays?.[total.band];
+  if (display === undefined) return undefined;
+  return { display, normalized: total.normalized };
+}

@@ -2021,7 +2021,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const ctx = await host.vaultAndKey();
       const personId = ctx ? await activePersonId() : null;
       if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'tests.own'))) return [];
-      await deleteResult(ctx.fs, ctx.key, personId, testId, resultId);
+      // Pass the definition so a partial delete re-derives the Insight from the latest remaining take
+      // (keeps trends + the crisis flag honest — 51 §5.4).
+      await deleteResult(ctx.fs, ctx.key, personId, testId, resultId, getTest(testId));
       return listResults(ctx.fs, ctx.key, personId, testId);
     },
     testsDeleteAll: async (input): Promise<void> => {

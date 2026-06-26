@@ -83,6 +83,10 @@
   margin-bottom: var(--space-1);
 }
 
+.groupFraming {
+  margin-bottom: var(--space-3);
+}
+
 .cardActions {
   display: flex;
   gap: var(--space-2);

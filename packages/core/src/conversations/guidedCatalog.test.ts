@@ -3,6 +3,7 @@ import {
   GUIDED_CATALOG,
   GUIDED_GROUPS,
   getExercise,
+  guideLifeAreas,
   guidedGroupTitle,
   listExercises,
 } from './guidedCatalog';
@@ -116,7 +117,24 @@ describe('guidedCatalog integrity', () => {
   it('guidedGroupTitle maps ids to the non-clinical display titles', () => {
     expect(guidedGroupTitle('therapy')).toBe('Reflective & therapy-informed');
     expect(guidedGroupTitle('coaching')).toBe('Coaching');
+    expect(guidedGroupTitle('family')).toBe('Family & relationships');
     expect(guidedGroupTitle('intimacy')).toBe('Intimacy & connection');
+  });
+
+  it('offers a Family & relationships group — family-dynamics chats, never adult-gated (expansion)', () => {
+    expect(GUIDED_GROUPS.map((g) => g.id)).toContain('family');
+    const family = listExercises().filter((e) => e.group === 'family');
+    expect(family.length).toBeGreaterThanOrEqual(10);
+    // Family sessions are NOT in the 18+ intimacy group → never adult-gated (the catalog invariant holds).
+    expect(family.every((e) => !e.adult && e.kind === 'chat')).toBe(true);
+    // They foreground the Family life-area for portrait-fact selection.
+    expect(guideLifeAreas('family')).toContain('Family');
+  });
+
+  it('the reflective and coaching groups each offer a fuller set (~12) (expansion)', () => {
+    const all = listExercises();
+    expect(all.filter((e) => e.group === 'therapy').length).toBeGreaterThanOrEqual(12);
+    expect(all.filter((e) => e.group === 'coaching').length).toBeGreaterThanOrEqual(12);
   });
 
   it('listExercises returns the full catalog', () => {

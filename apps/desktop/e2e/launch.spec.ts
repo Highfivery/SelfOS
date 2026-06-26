@@ -1927,6 +1927,37 @@ test('guided sessions: start a guided exercise → steered reply → complete & 
   }
 });
 
+test('guided sessions: the Family group is browsable and the search filters across groups (expansion)', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Sessions' }).click();
+
+    // The new Family & relationships group + its cards browse alongside the existing groups.
+    await expect(w.getByText('Family & relationships')).toBeVisible();
+    await expect(w.getByText('Your Family Role')).toBeVisible();
+    await expect(w.getByText('Sibling Dynamics')).toBeVisible();
+
+    // Search filters across every group; non-matching groups disappear.
+    await w.getByLabel('Search guided sessions').fill('boundaries');
+    await expect(w.getByText('Boundaries with Family')).toBeVisible();
+    await expect(w.getByText('Your Family Role')).toHaveCount(0); // filtered out
+    await expect(w.getByText('Building a Habit')).toHaveCount(0); // a coaching entry, filtered out
+
+    // A no-match query shows the calm empty state; clearing it restores the catalog.
+    await w.getByLabel('Search guided sessions').fill('zzznotathing');
+    await expect(w.getByText(/No sessions match/)).toBeVisible();
+    await w.getByLabel('Search guided sessions').fill('');
+    await expect(w.getByText('Your Family Role')).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('challenges (52): co-create a challenge → propose-then-agree captures a tracked Challenge → check-in feeds memory; decline path; 360px clean', async () => {
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
   await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');

@@ -389,6 +389,37 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-26 — **Build (Memory redesign — sharing is context not display + relationship insights + test-sharing
+  default; SPEC 54 BUILT; on `feat/memory-redesign`, PR pending).** Two user-reported problems: Memory DISPLAYED a
+  partner's raw shared answers, and it was a wall of text. **The concept fix (the core):** a partner's shared data
+  feeds the viewer's AI context but is **NEVER shown raw** — the spec-44 "about people you relate to" section is
+  GONE. **The redesign:** a summary strip + an **"About you" / "Partners" toggle** (renamed from "Relationships" to
+  avoid colliding with the "Relationships" life-area). "About you" = own data (search/filters [subject filter
+  dropped], drafts, goals, trends, insights by life-area). "Partners" = a per-partner **`RelationshipInsightsCard`**
+  showing a **new AI relationship-insights synthesis** (`relationshipSynthesisService` — reads the viewer's own
+  digest + the partner's SHARED facts via `factSharedWithViewer`, emits gentle observations about the viewer + the
+  dynamic; explicit-tap "Reflect on us" / Refresh, cached per `(viewer, partner)`, budget-gated + weekly-capped,
+  metered `relationship.synthesize` before parse; the prompt forbids quoting the partner's raw answers), with the
+  explicit "used as insight for your coach, never shown as their raw answers" footer. **The test-sharing default
+  (bundled):** test results (incl. sensitive intimacy + wellbeing) now default-share with the **`partner`**
+  relationship type. **The privacy-critical fork, resolved the SAFE way:** sensitive (kink/sexuality) facts are no
+  longer `restricted` (so they can reach a partner) — `restricted` stays reserved for break-glass **intake**
+  trauma/intimacy facts (UNCHANGED, reach no one) — and the own-context relevance gate now keys off the sensitive
+  **life-area** (`SENSITIVE_CONTEXT_LIFE_AREAS = {'Intimacy'}`) in both `summarizeForContext` and `digestableInsights`,
+  so kink still surfaces only in intimacy contexts and never the topic-free digests. Proven: every existing
+  intake/cross-person privacy test still passes + new tests (a sensitive test reaches a PARTNER never a sibling; the
+  synthesis digest sees only shared facts). Schemas additive (`RelationshipSynthesis`, `relationship.synthesize`
+  usage type); IPC `relationships:synthesize`/`:getSynthesis` gated `memory.own` + partner-only. Gate green:
+  typecheck (all), lint, **932 core + 847 desktop** unit (+relationship synthesis [5], +Memory RTL "never displays
+  related raw" + Partners-view card/generate, +the updated kink-partner-shareable bridge test), **E2E +1** (decrypt-
+  level: a partner's shared/private facts never show raw, the Partners view shows AI insights, the synthesis caches,
+  360px clean). Visual QA (real Electron screenshots, desktop): the summary strip + toggle read sleek/scannable; the
+  Partners card shows insight-bullets + the "never their raw answers" footer. **Lesson: keep `restricted` as the
+  pure break-glass "never broadcast-shared" flag (intake trauma/intimacy) and drive own-context relevance-gating off
+  a SENSITIVE life-area set instead — that lets a sensitive test result be partner-shareable AND still intimacy-only
+  in the viewer's own context, without touching the gate that keeps intake facts private (every existing privacy
+  test stayed green, the empirical proof the gate change was safe).**
+
 - 2026-06-26 — **Build (Home encouragement engine — SPEC 53 SLICE B BUILT; on `feat/home-encouragement-slice-b`,
   PR pending).** The Slice-A engine (the deterministic "For you" recommendation ranker) grows to cover the
   2026-06 feature batch by adding **3 providers as engine built-ins** (`BUILT_IN_RECOMMENDATION_PROVIDERS`), with

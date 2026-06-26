@@ -1,6 +1,6 @@
 # 54 — Memory redesign: sharing is context, not display; + relationship insights
 
-> **Status:** Draft — _last updated 2026-06-26_
+> **Status:** **Built** (on `feat/memory-redesign`, PR pending) — _last updated 2026-06-26_
 >
 > Memory today has a **conceptual privacy mistake** and a **readability problem**. It DISPLAYS a related
 > person's raw shared facts/answers directly to the viewer (the [`44`](44-memory-dashboard-overhaul.md)

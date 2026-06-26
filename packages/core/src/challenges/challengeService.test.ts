@@ -192,6 +192,39 @@ describe('lifecycle + check-in', () => {
     expect(insight.facts.every((f) => f.shareable === false)).toBe(true);
   });
 
+  it('an adult challenge with NO life-area defaults the reflection to Intimacy (SF1 — stays usable on-topic)', async () => {
+    // domain:'intimacy' makes it adult, but with NO explicit lifeArea. Restricted facts with no life-area
+    // fail CLOSED in summarizeForContext (withheld everywhere) — so default to 'Intimacy' to keep it usable.
+    const c = await captureFromMarker({
+      fs,
+      key,
+      personId: 'p1',
+      conversationId: 'c1',
+      marker: {
+        action: 'Try something new with a partner',
+        comfort: 3,
+        checkInDays: 7,
+        domain: 'intimacy',
+      },
+      now,
+    });
+    expect(c?.adult).toBe(true);
+    expect(c?.lifeArea).toBeUndefined();
+    const result = await recordCheckIn({
+      fs,
+      key,
+      personId: 'p1',
+      challengeId: c!.id,
+      outcome: 'did',
+      now,
+    });
+    expect(result.ok).toBe(true);
+    const insight = (await listInsightsForPerson(fs, key, 'p1'))[0]!;
+    expect(insight.facts.every((f) => f.restricted === true)).toBe(true);
+    expect(insight.facts.every((f) => f.lifeArea === 'Intimacy')).toBe(true);
+    expect(insight.categories).toContain('Intimacy');
+  });
+
   it('a re-check-in REUSES the insightId (preserving createdAt)', async () => {
     const id = await active();
     const first = await recordCheckIn({

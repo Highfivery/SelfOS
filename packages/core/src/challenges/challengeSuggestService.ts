@@ -12,7 +12,7 @@ import {
 import { uuid } from '../id';
 import { checkBudget, costOf, queryUsage, recordUsage } from '../usage';
 import { PERSONA, SAFETY } from '../conversations/promptBuilder';
-import { feedableInsights, listInsightsForPerson } from '../insights';
+import { digestableInsights, feedableInsights, listInsightsForPerson } from '../insights';
 import { summarizeOpenCommitments } from '../goals';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 import { clampComfort, normalizeDomain, normalizeLifeArea } from './challengeService';
@@ -100,22 +100,21 @@ function recentApprovedInsights(insights: Insight[], now: Date): Insight[] {
     .slice(0, MAX_INSIGHTS);
 }
 
-/** Assemble the bounded, structured, transcript-free digest (§5.3). Restricted + flagged facts are excluded. */
+/**
+ * Assemble the bounded, structured, transcript-free digest (§5.3). This pass emits each insight's SUMMARY and
+ * carries no topic, so `digestableInsights` drops wholly-flagged AND restricted-fact insights ENTIRELY — a
+ * sexual/intimacy challenge reflection (restricted, 52 §8.4) must not reach the suggester via its summary.
+ */
 function buildDigest(recent: Insight[], commitments: string): string {
-  const lines = recent
-    .filter((i) => {
-      const liveFacts = i.facts.filter((f) => !f.flaggedInaccurate);
-      return !(i.facts.length > 0 && liveFacts.length === 0); // drop wholly-flagged
-    })
-    .map((i) => {
-      const facts = i.facts
-        .filter((f) => !f.restricted && !f.flaggedInaccurate)
-        .map((f) => f.text)
-        .slice(0, 4)
-        .join('; ');
-      const area = i.categories[0] ? ` {${i.categories[0]}}` : '';
-      return `- [${i.source}]${area} "${i.summary}"${facts ? ` — ${facts}` : ''}`;
-    });
+  const lines = digestableInsights(recent).map((i) => {
+    const facts = i.facts
+      .filter((f) => !f.restricted && !f.flaggedInaccurate)
+      .map((f) => f.text)
+      .slice(0, 4)
+      .join('; ');
+    const area = i.categories[0] ? ` {${i.categories[0]}}` : '';
+    return `- [${i.source}]${area} "${i.summary}"${facts ? ` — ${facts}` : ''}`;
+  });
   return [
     'What this person has been reflecting on lately (most recent first):',
     lines.join('\n'),

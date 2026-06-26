@@ -28,17 +28,23 @@ export function subscaleViews(test: TestSummary, scores: TestSubscaleScore[]): S
     .filter((v): v is SubscaleView => v !== null);
 }
 
-/** The N most distinctive subscales (furthest from neutral) — for the compact profile card summary. */
+/**
+ * The N strongest subscales for the compact profile-card summary. A **non-signed** (0..1, unipolar
+ * interest/trait — e.g. kink draws, Big Five) subscale ranks by its **value** (highest first — a 0% "little
+ * pull" must never headline a summary, the bug behind the lopsided kink card); a **signed** (−1..1, bipolar —
+ * e.g. attachment anxiety/avoidance) subscale ranks by how far it leans from neutral (the most pronounced
+ * pole). Ties keep definition order (a stable sort).
+ */
 export function topSubscales(
   test: TestSummary,
   scores: TestSubscaleScore[],
   n: number,
 ): SubscaleView[] {
-  return [...subscaleViews(test, scores)].sort((a, b) => distance(b) - distance(a)).slice(0, n);
+  return [...subscaleViews(test, scores)].sort((a, b) => prominence(b) - prominence(a)).slice(0, n);
 }
 
-function distance(v: SubscaleView): number {
-  return Math.abs(v.normalized - (v.signed ? 0 : 0.5));
+function prominence(v: SubscaleView): number {
+  return v.signed ? Math.abs(v.normalized) : v.normalized;
 }
 
 /**

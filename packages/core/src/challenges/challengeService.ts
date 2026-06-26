@@ -288,7 +288,10 @@ export async function recordCheckIn(input: RecordCheckInInput): Promise<Challeng
   const at = now.toISOString();
   const reflection = input.reflection?.trim() || undefined;
   const restricted = challenge.adult === true;
-  const lifeArea = challenge.lifeArea;
+  // An adult/intimacy reflection's facts are `restricted` and so feed ONLY the person's own intimacy-topic
+  // context (insightStore relevance gate, fail-closed on a restricted fact with no life-area). Default the
+  // life-area to 'Intimacy' so the reflection stays usable on-topic instead of being fail-closed everywhere.
+  const lifeArea = challenge.lifeArea ?? (restricted ? 'Intimacy' : undefined);
   const insightId = challenge.insightId ?? uuid();
   const prior = challenge.insightId
     ? await getInsight(fs, key, personId, challenge.insightId)

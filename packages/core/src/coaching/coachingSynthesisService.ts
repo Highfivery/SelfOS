@@ -13,7 +13,7 @@ import {
 } from '../schemas';
 import { checkBudget, costOf, queryUsage, recordUsage } from '../usage';
 import { PERSONA, SAFETY } from '../conversations/promptBuilder';
-import { feedableInsights, listInsightsForPerson } from '../insights';
+import { digestableInsights, feedableInsights, listInsightsForPerson } from '../insights';
 import { getPatternStats } from '../dreams';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 
@@ -107,26 +107,22 @@ function recentApprovedInsights(insights: Insight[], now: Date): Insight[] {
     .slice(0, MAX_INSIGHTS);
 }
 
-/** Assemble the bounded, structured, transcript-free digest (§5.2). Restricted + flagged facts are excluded. */
+/**
+ * Assemble the bounded, structured, transcript-free digest (§5.2). This pass emits each insight's SUMMARY and
+ * carries no topic, so `digestableInsights` drops wholly-flagged AND restricted-fact insights ENTIRELY —
+ * mirroring `summarizeForContext`'s boundary but without an on-topic exception (there's no topic here), so a
+ * restricted reflection's summary (e.g. an intimacy challenge, 52 §8.4) can't re-assert via the synthesis pass.
+ */
 function buildDigest(recent: Insight[], dreamLines: string): string {
-  const lines = recent
-    // A WHOLLY-flagged insight (had facts, all now flagged-inaccurate) is dropped entirely — its summary
-    // restates the corrected claim, so it must not reach the synthesis pass either. Mirrors
-    // `summarizeForContext` (insightStore.ts) EXACTLY — it keys off `flaggedInaccurate` only (restricted
-    // facts are already excluded on the facts line below) — so the digest can't re-assert a corrected claim.
-    .filter((i) => {
-      const liveFacts = i.facts.filter((f) => !f.flaggedInaccurate);
-      return !(i.facts.length > 0 && liveFacts.length === 0);
-    })
-    .map((i) => {
-      const facts = i.facts
-        .filter((f) => !f.restricted && !f.flaggedInaccurate)
-        .map((f) => f.text)
-        .slice(0, 4)
-        .join('; ');
-      const area = i.categories[0] ? ` {${i.categories[0]}}` : '';
-      return `- [${i.source}]${area} "${i.summary}"${facts ? ` — ${facts}` : ''}`;
-    });
+  const lines = digestableInsights(recent).map((i) => {
+    const facts = i.facts
+      .filter((f) => !f.restricted && !f.flaggedInaccurate)
+      .map((f) => f.text)
+      .slice(0, 4)
+      .join('; ');
+    const area = i.categories[0] ? ` {${i.categories[0]}}` : '';
+    return `- [${i.source}]${area} "${i.summary}"${facts ? ` — ${facts}` : ''}`;
+  });
 
   return [
     'Recent reflections across this person’s life (most recent first):',

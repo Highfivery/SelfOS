@@ -7231,9 +7231,11 @@ test('progressive profile: a session circling an unexplored area surfaces a dept
     expect(depth[0]?.sectionId).toBe('family');
     expect(depth[0]?.status).toBe('pending');
 
-    // Home shows the calm depth card; it fits phone width with no horizontal overflow.
+    // §53 absorbed the standalone depth card into the ranked "For you" engine; the invitation now renders as
+    // a recommendation ("Want to go a little deeper?" naming the area) carrying the same "Go deeper" action.
     await w.getByRole('link', { name: 'Home', exact: true }).click();
-    await expect(w.getByText(/Tell me more about Family & roots/)).toBeVisible();
+    await expect(w.getByText(/Want to go a little deeper\?/)).toBeVisible();
+    await expect(w.getByText(/coming back to Family & roots/)).toBeVisible();
     await w.setViewportSize({ width: 390, height: 800 });
     const overflow = await w.evaluate(() => {
       const main = document.querySelector('main');

@@ -7158,6 +7158,94 @@ test('onboarding: intimacy conditionals reveal under their trigger (partner / op
   }
 });
 
+test('onboarding: clicking "share with partner" on a section saves immediately, even before answering (the screenshot bug)', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('share-instant e2e: master key missing');
+  // A partner so the picker offers a type, + a FRESH intimacy section (nothing answered yet) — the exact
+  // state in the user's screenshot.
+  {
+    const now = new Date().toISOString();
+    await savePerson(fs, key, {
+      id: 'partner-b',
+      schemaVersion: 1,
+      displayName: 'Bee',
+      isSubject: true,
+      tags: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await saveRelationship(fs, key, {
+      id: 'rel-b',
+      schemaVersion: 1,
+      fromPersonId: 'owner-1',
+      toPersonId: 'partner-b',
+      type: 'partner',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await writeEncryptedJson(
+      fs,
+      'people/owner-1/intake/session.enc',
+      {
+        id: 'intake-share-instant',
+        schemaVersion: 1,
+        personId: 'owner-1',
+        status: 'inProgress',
+        sections: ['basics', 'life-now', 'values', 'want', 'intimacy'].map((id) => ({
+          id,
+          status: id === 'intimacy' ? 'notStarted' : 'skipped',
+          restricted: id === 'intimacy',
+          messages: [],
+          answers: {},
+        })),
+        startedAt: 'now',
+        updatedAt: 'now',
+      },
+      key,
+    );
+  }
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: /Onboarding/ }).click();
+    await w.getByRole('button', { name: /Intimacy & sexuality/ }).click();
+    await w.getByRole('button', { name: /18 or older/ }).click();
+    await expect(w.getByText('Who are you drawn to?')).toBeVisible();
+
+    // Open the section sharing and click Partner — WITHOUT answering any question first (the screenshot).
+    await w.getByRole('button', { name: /this whole section/i }).click();
+    await w.getByRole('button', { name: 'Private (only me)' }).click();
+    await w.getByRole('checkbox', { name: 'Partner', exact: true }).click(); // the picker checkbox, not an answer option
+    await w.keyboard.press('Escape');
+
+    // It must persist to the vault right away — even though NOTHING is answered yet. (Pre-fix: answerSharing
+    // is only written for ANSWERED questions, so a fresh-section bulk-share saved nothing.)
+    await expect
+      .poll(
+        async () => {
+          const intimacy = (await getIntakeSession(fs, key, 'owner-1'))?.sections.find(
+            (s) => s.id === 'intimacy',
+          );
+          return Object.values(intimacy?.answerSharing ?? {}).length;
+        },
+        { timeout: 4000 },
+      )
+      .toBeGreaterThan(0);
+    const intimacy = (await getIntakeSession(fs, key, 'owner-1'))?.sections.find(
+      (s) => s.id === 'intimacy',
+    );
+    const scopes = Object.values(intimacy?.answerSharing ?? {});
+    expect(scopes.every((v) => v.length === 1 && v[0] === 'partner')).toBe(true); // every question → Partner
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 // 46 §7/§10: editing anatomy after rating the matrix re-LABELS the oral rows but must NOT orphan a rating —
 // each row is keyed by a STABLE key, so the stored ratings stay attached through the edit. This is the headline
 // orphan regression the spec calls out, driven through the real UI + a decrypt before/after.

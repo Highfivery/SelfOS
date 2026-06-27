@@ -357,12 +357,16 @@ export async function submitSectionForm(
   }
 
   section.answers = { ...section.answers, ...clean };
-  // Resolve + persist a sharing scope for EVERY currently-answered question in this section (43 §4): the
-  // renderer's choice wins, else a prior stored scope, else the category preset. Drop scopes for questions no
-  // longer answered. Storing the resolved scope explicitly keeps the read side (42 §5.2) honest and makes a
-  // no-interaction default share per the chip the person saw, never a hidden one.
+  // Resolve + persist a sharing scope for every question the person has ANSWERED *or* explicitly SCOPED (the
+  // renderer sends a scope for each question in `sharing`). Persisting an explicit scope for a not-yet-answered
+  // question is how "share this whole section with Partner" sticks the MOMENT it's clicked — before anything is
+  // filled in (the reported bug: a fresh-section bulk-share saved nothing because it keyed off answers only). It
+  // stays safe: an unanswered question has no derived fact, so a scope on it shares nothing until it's answered,
+  // at which point the person's pre-set choice (e.g. Partner) is honored instead of silently reverting to the
+  // category default. The renderer's choice wins, else a prior stored scope, else the category preset.
+  const scopedQids = new Set([...Object.keys(section.answers), ...Object.keys(sharing ?? {})]);
   const nextSharing: Record<string, RelationshipType[]> = {};
-  for (const qid of Object.keys(section.answers)) {
+  for (const qid of scopedQids) {
     if (!byId.has(qid)) continue; // only this section's catalog questions
     const chosen =
       sharing?.[qid] ?? section.answerSharing?.[qid] ?? defaultScopeForQuestion(sectionId, qid);

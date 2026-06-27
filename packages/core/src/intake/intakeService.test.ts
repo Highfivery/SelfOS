@@ -198,6 +198,26 @@ describe('intakeService', () => {
     expect(done.sections.find((s) => s.id === 'basics')?.status).toBe('complete');
   });
 
+  it('submitSectionForm persists a sharing scope for an UNANSWERED question (share-before-answer, the screenshot bug)', async () => {
+    const fs = await setup();
+    // Click "share with Partner" on the whole section BEFORE answering anything — the scope must stick (pre-fix
+    // it keyed off answered questions only, so a fresh-section bulk-share saved nothing).
+    const session = await submitSectionForm(
+      fs,
+      key,
+      'p1',
+      'basics',
+      {}, // NO answers yet
+      NOW,
+      { occupation: ['partner'], pronouns: ['partner'] }, // explicit scopes for not-yet-answered questions
+      false,
+    );
+    const basics = session.sections.find((s) => s.id === 'basics');
+    expect(basics?.answerSharing?.occupation).toEqual(['partner']);
+    expect(basics?.answerSharing?.pronouns).toEqual(['partner']);
+    expect(basics?.answers.occupation).toBeUndefined(); // …and it did NOT invent an answer
+  });
+
   it('fills appearance, importantDates (dateList, incomplete rows dropped), and interests (from passions)', async () => {
     const fs = await setup();
     await submitSectionForm(

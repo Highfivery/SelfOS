@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.3](https://github.com/Highfivery/SelfOS/compare/v0.11.2...v0.11.3) (2026-06-27)
+
+
+### Bug Fixes
+
+* **onboarding:** persist sharing for unanswered questions + save on click (43) ([#93](https://github.com/Highfivery/SelfOS/issues/93)) ([e44cf54](https://github.com/Highfivery/SelfOS/commit/e44cf54389212da03936ac07d6eefbdabf4b82cf))
+
 ## [0.11.2](https://github.com/Highfivery/SelfOS/compare/v0.11.1...v0.11.2) (2026-06-26)
 
 

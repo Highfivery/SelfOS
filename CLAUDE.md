@@ -389,6 +389,30 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-06-26 — **Fix #3 (onboarding sharing STILL didn't save — `answerSharing` was written for ANSWERED questions
+  only; SPEC 43 re-amended again; on `fix/intimacy-sharing-instant-save`).** Third report, with a screenshot: on a
+  fresh **intimacy** section the user clicks "share with Partner" on the whole section and it doesn't save. **My
+  prior two fixes never tested the intimacy section OR the share-before-answer case** — both my E2Es used `basics`
+  with an answer present. **Reproduced FIRST (decrypt E2E driving the exact screenshot):** fresh intimacy section,
+  ack 18+, open section sharing → Partner, NO answer → `answerSharing` came back **empty** on the current build →
+  proving the bug before any change. **Root cause:** `submitSectionForm`'s `nextSharing` loop iterated
+  `Object.keys(section.answers)` — ANSWERED questions only — so a section with nothing answered persisted no scope.
+  **Fix (core):** iterate the **union** of answered questions **and** the questions the renderer explicitly scoped
+  (`Object.keys(sharing)`), so a fresh-section bulk-share persists for every question (safe: an unanswered question
+  has no derived fact, so the scope shares nothing until it IS answered, at which point the pre-set choice is
+  honored instead of reverting to the category default). **Fix (panel, "right away"):** a sharing change now saves
+  **immediately** (`saveScopesNow` → `autoSaveForm` on the click, `complete:false`), not on the ~600ms debounce —
+  only answer TYPING stays debounced (the effect deps dropped `scopes`). Extracted a module-level `cleanAnswers`
+  shared by both. Gate green: typecheck (all), lint, **940 core + 855 desktop** unit (+core: persists a scope for
+  an UNANSWERED question without inventing an answer; the existing draft test), **E2E +1** (the screenshot repro:
+  fresh intimacy section → share Partner with nothing answered → every question's scope persists to the vault; the
+  prior first-time + edit-a-completed E2Es still green). **Lessons: (1) test the EXACT surface the user is on — all
+  three of my fixes used `basics`; the bug lived on the 18+-gated INTIMACY section + the share-BEFORE-answer path I
+  never drove. (2) `answerSharing` keyed off answers means sharing can't precede answering — key it off what the
+  user explicitly SCOPED (the renderer sends a scope per question), so "share this whole section" sticks on the
+  click. (3) "save right away" means on the CLICK — a debounce that's correct for typing is wrong for a discrete
+  sharing tap.**
+
 - 2026-06-26 — **Fix #2 (onboarding STILL didn't save — auto-save was scoped to COMPLETED sections only; SPEC 43
   re-amended; on `fix/onboarding-autosave-all-sections`).** The v0.11.1 fix shipped but the user came back
   (rightly angry): "YOURE OBVIOUSLY NOT PROPERLY TESTING — onboarding questions arent being saved when selected

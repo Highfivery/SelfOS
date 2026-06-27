@@ -34,6 +34,25 @@ function sameScope(a: readonly RelationshipType[], b: readonly RelationshipType[
 }
 
 /**
+ * Normalize the host answer map to the bridge contract: a matrix answer is a row→point record
+ * (`Record<string, number>`) — keep it; every other answer is a scalar/array; any OTHER non-array object isn't
+ * a valid intake answer, so drop it defensively (`IntakeAnswerValueSchema`). Pure — shared by the immediate
+ * sharing save + the debounced answer save.
+ */
+function cleanAnswers(src: AnswerMap): Record<string, IntakeAnswerValue> {
+  const out: Record<string, IntakeAnswerValue> = {};
+  for (const [qid, value] of Object.entries(src)) {
+    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+      if (Object.values(value).every((v) => typeof v === 'number'))
+        out[qid] = value as IntakeAnswerValue;
+      continue;
+    }
+    out[qid] = value as IntakeAnswerValue;
+  }
+  return out;
+}
+
+/**
  * A structured **form** intake section (18-personal-onboarding §14.3/§14.6) — renders the section's questions
  * through the shared `@selfos/answering` `QuestionnaireForm` (branch-aware, the host owns the answer state),
  * with Continue (submit, fills the profile, no AI) + Skip. The intimacy block is gated behind the one-time 18+
@@ -131,11 +150,20 @@ export function IntakeFormPanel({
   const promptOf = (qid: string): string =>
     (meta.questions ?? []).find((q) => q.id === qid)?.prompt ?? qid;
 
-  // One tap applies a scope directly — no confirm (owner decision, 2026-06-26). A sensitive answer still
-  // STARTS Private (its category default), so sharing it stays a deliberate choice; it just takes effect (and
-  // auto-saves) on a single tap instead of a second confirm.
-  const applyScope = (qid: string, types: RelationshipType[]): void =>
-    setScopes((s) => ({ ...s, [qid]: types }));
+  // A sharing change saves RIGHT AWAY (not debounced) — it's a discrete tap, and "share with partner" must
+  // persist the moment it's clicked. One tap applies directly, no confirm (owner decision, 2026-06-26); a
+  // sensitive answer still STARTS Private, so sharing it stays a deliberate choice. `complete: false` (a draft)
+  // so it never completes a section being filled out, and it persists for EVERY question — answered or not —
+  // because the renderer sends a scope for each (the core `submitSectionForm` keys off the `sharing` payload).
+  const saveScopesNow = (nextScopes: Record<string, RelationshipType[]>): void => {
+    if (meta.adult && !adultAcknowledged) return; // a locked (un-acked) section has no form to save
+    void autoSaveForm(meta.id, cleanAnswers(answers), nextScopes);
+  };
+  const applyScope = (qid: string, types: RelationshipType[]): void => {
+    const next = { ...scopes, [qid]: types };
+    setScopes(next);
+    saveScopesNow(next);
+  };
 
   // The section bulk scope — a common value when every question agrees, else "mixed" (43 §3.2).
   const questionIds = (meta.questions ?? []).map((q) => q.id);
@@ -145,12 +173,12 @@ export function IntakeFormPanel({
     const first = scopes[firstId] ?? [];
     return questionIds.every((qid) => sameScope(scopes[qid] ?? [], first)) ? first : null;
   })();
-  const applyBulk = (types: RelationshipType[]): void =>
-    setScopes((s) => {
-      const next = { ...s };
-      for (const qid of questionIds) next[qid] = [...types];
-      return next;
-    });
+  const applyBulk = (types: RelationshipType[]): void => {
+    const next = { ...scopes };
+    for (const qid of questionIds) next[qid] = [...types];
+    setScopes(next);
+    saveScopesNow(next);
+  };
 
   const sharing: QuestionSharing = {
     renderControl: (questionId) => (
@@ -194,29 +222,13 @@ export function IntakeFormPanel({
   const locked = meta.adult && !adultAcknowledged;
   const complete = section?.status === 'complete';
 
-  // A matrix answer is a row→point record (Record<string, number>) — keep it; every other intake answer is a
-  // scalar/array. Any OTHER non-array object isn't a valid intake answer, so drop it defensively to match the
-  // bridge contract (IntakeAnswerValueSchema).
-  const toSubmitFrom = (src: AnswerMap): Record<string, IntakeAnswerValue> => {
-    const out: Record<string, IntakeAnswerValue> = {};
-    for (const [qid, value] of Object.entries(src)) {
-      if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-        if (Object.values(value).every((v) => typeof v === 'number')) {
-          out[qid] = value as IntakeAnswerValue;
-        }
-        continue;
-      }
-      out[qid] = value as IntakeAnswerValue;
-    }
-    return out;
-  };
-  const toSubmit = (): Record<string, IntakeAnswerValue> => toSubmitFrom(answers);
+  const toSubmit = (): Record<string, IntakeAnswerValue> => cleanAnswers(answers);
 
-  // Auto-save (2026-06-26): persist every answer + sharing change the moment it's made (debounced), as a DRAFT
-  // (`autoSaveForm` → `complete: false`) — so picking a scope or answering a question saves right away with no
-  // Save click, whether the section is being filled for the FIRST time or edited later. A draft never completes
-  // the section (only the explicit Continue/Done does). The latest payload is mirrored to a ref so the unmount
-  // flush (Back / switching section within the debounce window) saves the last edit instead of dropping it.
+  // Auto-save (2026-06-26): a DRAFT save (`autoSaveForm` → `complete: false`) so nothing prematurely completes a
+  // section being filled out. SHARING changes save immediately (above, `saveScopesNow`); ANSWER typing is
+  // debounced here (~600ms) so we don't write on every keystroke — whether the section is being filled for the
+  // FIRST time or edited later. The latest payload is mirrored to a ref so the unmount flush (Back / switching
+  // section within the debounce window) saves the last edit instead of dropping it.
   const latestRef = useRef({ answers, scopes });
   latestRef.current = { answers, scopes };
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -224,7 +236,7 @@ export function IntakeFormPanel({
   const runAutoSave = (): void => {
     timerRef.current = null;
     dirtyRef.current = false;
-    void autoSaveForm(meta.id, toSubmitFrom(latestRef.current.answers), latestRef.current.scopes);
+    void autoSaveForm(meta.id, cleanAnswers(latestRef.current.answers), latestRef.current.scopes);
   };
   /** Drop any pending auto-save — the explicit Continue/Done/Skip owns the write from here (avoids a draft
    * save racing in AFTER the completing submit and reverting the section to in-progress). */
@@ -246,7 +258,8 @@ export function IntakeFormPanel({
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [answers, scopes, locked]);
+    // Only ANSWER edits are debounced here; sharing changes save immediately via `saveScopesNow`.
+  }, [answers, locked]);
   // Flush a pending draft on unmount so a quick Back / section switch never loses the last edit. `flushRef`
   // always points at the latest closure (current `locked` + refs), so the unmount cleanup saves correctly.
   const flushRef = useRef<() => void>(() => {});

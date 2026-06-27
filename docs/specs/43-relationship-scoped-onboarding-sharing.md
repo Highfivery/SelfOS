@@ -18,6 +18,14 @@
 > `markComplete` param (default `true`) for this. **Correction:** the first build scoped auto-save to
 > already-completed sections only, so first-time onboarding still didn't save on select — the real bug; auto-save
 > now covers all sections.
+>
+> **(3) Sharing saves on the CLICK, even before answering (2026-06-26).** Two more root causes the user hit on a
+> fresh intimacy section: (a) `submitSectionForm` only wrote `answerSharing` for **answered** questions, so
+> clicking "share with Partner" on a section you hadn't filled in yet persisted **nothing** — it now persists a
+> scope for every question the renderer explicitly **scopes** (the union of answered + the `sharing` payload), so
+> a fresh-section bulk-share sticks and is honored when that question is later answered (an unanswered question
+> has no derived fact, so the scope shares nothing until then — safe). (b) A sharing change now saves
+> **immediately** (`saveScopesNow`), not on the ~600ms debounce — only answer **typing** stays debounced.
 
 > Today, onboarding answers are **own-context-only** (all intake Insight facts hardcoded
 > `shareable: false`), and the only way to share anything is to finish the intake, run synthesis, then go to

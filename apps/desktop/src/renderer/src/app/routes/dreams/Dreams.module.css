@@ -19,9 +19,23 @@
 
 .grid {
   display: grid;
-  /* minmax low enough that even a ~320px content area (a 360px phone) still fits two columns. */
-  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
-  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-4);
+}
+
+/* On a phone, shrink the tile min so a ~305px content area still fits two columns (never one giant card),
+   and stack the insight strip so its items + "See patterns" never fight for one line. */
+@media (max-width: 540px) {
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: var(--space-3);
+  }
+
+  .insightStrip {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
 }
 
 /* The slim insight strip (12 §16.2): recurring theme + counts + a gentle mood cue, then "See patterns". */
@@ -323,12 +337,16 @@
   background: var(--color-surface-alt);
 }
 
+/* Show the generated image at its NATIVE aspect ratio (never cropped), bounded to a sensible size.
+   align-self:flex-start stops the parent Stack (a column flex) from stretching it to full width. */
 .dreamImage {
+  align-self: flex-start;
   display: block;
-  width: 100%;
-  max-width: 420px;
-  aspect-ratio: 1 / 1;
-  object-fit: cover;
+  max-width: 100%;
+  max-height: 360px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
   border-radius: var(--radius-md);
   background: var(--color-surface);
 }
@@ -341,12 +359,17 @@
   background: transparent;
 }
 
+/* The detail's lead image: shown at its NATIVE aspect ratio (uncropped), bounded so a square/portrait image
+   isn't a giant full-width banner. align-self:flex-start keeps the parent Stack (a column flex) from
+   stretching it to full width; left-aligned to sit with the read-first content below it. */
 .dreamHeroImage {
+  align-self: flex-start;
   display: block;
-  width: 100%;
-  max-height: 340px;
-  aspect-ratio: 16 / 9;
-  object-fit: cover;
+  max-width: 100%;
+  max-height: 420px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
   border-radius: 14px;
   background: var(--color-surface);
 }

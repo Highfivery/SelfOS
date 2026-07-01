@@ -386,7 +386,7 @@
   border-top: 1px solid var(--color-border);
 }
 
-/* A titled, collapsible reflection row: title (click to expand) + share toggle, always visible. */
+/* A titled, collapsible reflection row: title (click to read the reflection) over person chips. */
 .shareFactHead {
   display: flex;
   align-items: center;
@@ -425,6 +425,45 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Toggleable recipient chips — tap a name to share this reflection with them (multi-person). Aligned
+   under the title, past the chevron; wrap freely at narrow widths. */
+.sharePeople {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-left: calc(16px + var(--space-2));
+}
+
+.personChip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border-strong, var(--color-border));
+  border-radius: var(--radius-pill, 999px);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+}
+
+.personChip > svg {
+  flex: none;
+}
+
+/* Shared: filled accent + a check (not colour alone — the check icon + fill both signal "on"). */
+.personChipOn {
+  background: var(--color-accent-subtle-bg);
+  border-color: var(--color-accent);
+  color: var(--color-accent-text);
+  font-weight: 500;
+}
+
+.personChip:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
 }
 
 /* The expanded reflection sits under the title, indented past the chevron. */

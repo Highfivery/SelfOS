@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.2](https://github.com/Highfivery/SelfOS/compare/v0.12.1...v0.12.2) (2026-07-01)
+
+
+### Bug Fixes
+
+* **dreams:** titled, collapsible, markdown-rendered dream share controls ([65fa3e3](https://github.com/Highfivery/SelfOS/commit/65fa3e387de87e3f0946f7285f77b2fe8f7e23c0))
+
 ## [0.12.1](https://github.com/Highfivery/SelfOS/compare/v0.12.0...v0.12.1) (2026-07-01)
 
 

@@ -86,7 +86,7 @@ describe('Dreams', () => {
     );
     await userEvent.click(screen.getByRole('switch', { name: 'Lucid dream' }));
     await userEvent.selectOptions(screen.getByLabelText('Waking mood'), 'Good');
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Just save' }));
 
     expect(save).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -112,7 +112,7 @@ describe('Dreams', () => {
     await userEvent.click(
       screen.getByRole('switch', { name: 'Let this dream inform coaching context' }),
     );
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Just save' }));
 
     expect(save).toHaveBeenCalledWith(expect.objectContaining({ informsContext: false }));
   });
@@ -144,7 +144,7 @@ describe('Dreams', () => {
     const picker = screen.getByLabelText('Link a person you know');
     expect(picker).not.toHaveTextContent('Me');
     await userEvent.selectOptions(picker, 'p-sam');
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Just save' }));
 
     expect(save).toHaveBeenCalledWith(expect.objectContaining({ people: [{ personId: 'p-sam' }] }));
   });
@@ -153,7 +153,7 @@ describe('Dreams', () => {
     installMockBridge({ dreamsList: () => Promise.resolve([]) });
     renderDreams();
     await userEvent.click(screen.getByRole('button', { name: 'Log a dream' }));
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Just save' })).toBeDisabled();
   });
 
   it('surfaces a calm error when saving fails', async () => {
@@ -165,7 +165,7 @@ describe('Dreams', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Log a dream' }));
     await userEvent.type(screen.getByLabelText('What happened?'), 'A dream.');
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Just save' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/couldn.t save this dream/i);
   });
@@ -176,9 +176,21 @@ describe('Dreams', () => {
     renderDreams();
 
     await userEvent.click(await screen.findByText('Mountain flight'));
+    // Delete lives in the editable form now (read-first detail), a step behind "Edit dream" (12 §15.3).
+    await userEvent.click(screen.getByRole('button', { name: /edit dream/i }));
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
     // A confirm step appears before the destructive action runs.
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
     expect(remove).toHaveBeenCalledWith('d1');
+  });
+
+  it('opening a saved dream leads with the read-first detail; edit is a step away', async () => {
+    installMockBridge({ dreamsList: () => Promise.resolve([baseDream]) });
+    renderDreams();
+    await userEvent.click(await screen.findByText('Mountain flight'));
+    expect(screen.getByRole('button', { name: /start reflection/i })).toBeInTheDocument();
+    expect(screen.queryByLabelText('What happened?')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /edit dream/i }));
+    expect(await screen.findByLabelText('What happened?')).toBeInTheDocument();
   });
 });

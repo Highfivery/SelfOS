@@ -199,8 +199,8 @@
   background: var(--color-surface);
 }
 
-/* --- Analyze entry (shown on a saved dream, above the composer) --- */
-.analyzeEntry {
+/* --- Read-first dream detail: the reflection entry leads over a compact read (12 §15.3) --- */
+.reflectEntry {
   display: flex;
   align-items: center;
   gap: var(--space-4);
@@ -211,9 +211,32 @@
   background: var(--color-surface-alt);
 }
 
-.analyzeEntry > p {
+.reflectEntry > p {
   flex: 1;
   min-width: 12ch;
+}
+
+.detailRead {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--color-text);
+  line-height: 1.6;
+}
+
+.detailChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.detailChip {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface-alt);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
 }
 
 /* --- Guided-analysis pane --- */

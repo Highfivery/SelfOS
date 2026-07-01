@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, BarChart3, Moon, Plus, Sparkles } from 'lucide-react';
-import type { Dream } from '@shared/channels';
+import { ArrowLeft, BarChart3, Moon, Plus } from 'lucide-react';
 import { useDreamStore } from '../../../stores/dreamStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { Button, Card, Heading, Inline, Stack, Text } from '../../../design-system/components';
 import { DreamComposer } from './DreamComposer';
+import { DreamDetailView } from './DreamDetailView';
 import { DreamAnalysisPane } from './DreamAnalysisPane';
 import { SharedDreamImages } from './SharedDreamImages';
 import styles from './Dreams.module.css';
@@ -22,19 +22,6 @@ function dayLabel(dream: { dreamDate?: string | undefined; createdAt: string }):
   return (dream.dreamDate ?? dream.createdAt).slice(0, 10);
 }
 
-/** The analyze entry-point label depends on how far along the dream's analysis is (12-dreams §3). */
-function analyzeLabel(status: Dream['status']): string {
-  if (status === 'analyzed') return 'View analysis';
-  if (status === 'analyzing') return 'Resume analysis';
-  return 'Analyze this dream';
-}
-
-function analyzeHint(status: Dream['status']): string {
-  if (status === 'analyzed') return 'Read it, edit it, or add it to your coaching context.';
-  if (status === 'analyzing') return 'Pick up the reflection where you left off.';
-  return 'Reflect on it with your coach when you have a moment.';
-}
-
 /** The Dreams journal: a master–detail of captured dreams + the capture composer (12-dreams §3). */
 export function Dreams(): JSX.Element {
   const dreams = useDreamStore((s) => s.dreams);
@@ -44,8 +31,10 @@ export function Dreams(): JSX.Element {
   const navigate = useNavigate();
   const location = useLocation();
   const [selection, setSelection] = useState<Selection>({ mode: 'none' });
-  // Within a saved dream, the detail toggles between the editor and the in-pane analysis surface.
+  // Within a saved dream, the detail leads with the read-first view; it opens into the analysis pane
+  // (`analyzing`) or the editable composer (`editing`) on demand (12 §15.3).
   const [analyzing, setAnalyzing] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   // Deep-link from Memory's provenance link (20-memory-dashboard §3.3): open the referenced dream.
   useEffect(() => {
@@ -53,10 +42,18 @@ export function Dreams(): JSX.Element {
     if (focus) setSelection({ mode: 'edit', id: focus });
   }, [location.state]);
 
-  // Changing the selected dream (or starting a new one) always returns to the editor view.
+  // Changing the selected dream (or starting a new one) always returns to the read-first detail.
   const select = (next: Selection): void => {
     setSelection(next);
     setAnalyzing(false);
+    setEditing(false);
+  };
+
+  // "Start reflection" from a fresh capture: select the saved dream and open its guided session directly.
+  const startReflectionFor = (id: string): void => {
+    setSelection({ mode: 'edit', id });
+    setEditing(false);
+    setAnalyzing(true);
   };
 
   useEffect(() => {
@@ -75,6 +72,7 @@ export function Dreams(): JSX.Element {
     }
     setSelection({ mode: 'none' });
     setAnalyzing(false);
+    setEditing(false);
   }, [activePersonId]);
 
   const selected =
@@ -155,27 +153,23 @@ export function Dreams(): JSX.Element {
           </button>
         ) : null}
         {selection.mode === 'new' ? (
-          <DreamComposer key="new" dream={null} onDone={() => select({ mode: 'none' })} />
+          <DreamComposer
+            key="new"
+            dream={null}
+            onStartReflection={startReflectionFor}
+            onDone={() => select({ mode: 'none' })}
+          />
         ) : selected ? (
           analyzing ? (
             <DreamAnalysisPane dream={selected} onBack={() => setAnalyzing(false)} />
+          ) : editing ? (
+            <DreamComposer key={selected.id} dream={selected} onDone={() => setEditing(false)} />
           ) : (
-            <Stack gap={4}>
-              <div className={styles.analyzeEntry}>
-                <Button variant="primary" onClick={() => setAnalyzing(true)}>
-                  <Sparkles size={16} aria-hidden="true" />
-                  {analyzeLabel(selected.status)}
-                </Button>
-                <Text size="sm" tone="secondary">
-                  {analyzeHint(selected.status)}
-                </Text>
-              </div>
-              <DreamComposer
-                key={selected.id}
-                dream={selected}
-                onDone={() => select({ mode: 'none' })}
-              />
-            </Stack>
+            <DreamDetailView
+              dream={selected}
+              onReflect={() => setAnalyzing(true)}
+              onEdit={() => setEditing(true)}
+            />
           )
         ) : (
           <div className={styles.empty}>

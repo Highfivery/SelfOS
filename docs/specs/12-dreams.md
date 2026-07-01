@@ -1110,6 +1110,24 @@ instead of Save → re-select → a form with an "Analyze" button on top.
      E2E/visual-QA (the UI + E2E are slice 2)._
 2. **Reflection UX** — composer "Start reflection"/"Just save"; `Dreams.tsx` detail restructure (session-led,
    "Edit dream" tucked); `DreamAnalysisPane` opens coach-first + the analyze suggestion. RTL + E2E + 390px.
+   - \_**Built 2026-07-01:** `dreamAnalysisStore` gained `loaded`/`opening`/`analysisReady` + a
+     `startReflection` action (idempotent; refreshes budget + dream status); `sendTurn` carries a **sticky**
+     `analysisReady`. `DreamComposer` — new-dream mode gets primary **"Start reflection"** (save → open the
+     session; gated on AI-ready) + secondary **"Just save"** (AI-off shows only Just save + a connect note);
+     edit mode keeps a single **"Save."** `Dreams.tsx` restructured into a **read-first detail**
+     (`DreamDetailView` — reflection entry over a compact read; `DreamImagePanel` moved here from the form;
+     "Edit dream" tucks the composer). `DreamAnalysisPane` opens **coach-first** (an effect fires
+     `startReflection` for a `captured` dream once `loaded && configured && !analysis`, gated on `loaded` to
+     avoid the load race), drops the blank-chat placeholder, strips `[[SELFOS:DREAM_READY]]` from the streamed
+     - saved text (`stripDreamMarkers`), and surfaces a **`DreamAnalyzeSuggestion`** (sibling of
+       `WrapUpSuggestion`) when `analysisReady` — one analyze affordance at a time, never a gate. Gate green:
+       typecheck (node + web/DOM-lib), lint, format, **947 core + 861 desktop** unit (+6 dream RTL: composer
+       Start/Just-save + AI-off; coach-first-no-placeholder; the analyze suggestion on readiness; the read-first
+       detail; journal tests reworked for "Just save" + "Edit dream"), **E2E** (the analyze flow drives
+       **"Start reflection" → coach opens → turn → Create analysis → approve → grounding**; capture / link /
+       visualize / export / provenance re-pointed through the read-first detail — all 8 dream E2E + the
+       provenance deep-link green). A pre-existing, unrelated spec-50 kink E2E failure (fails identically on
+       `main`) is not touched by this change. Visual QA over the committed baseline.\_
 3. **People quick-add** — `DreamPeopleEditor` inline create + optional relationship + ref upgrade. RTL + E2E.
 
 ### 15.10 Open questions

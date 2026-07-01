@@ -3493,9 +3493,11 @@ test('memory: a provenance link opens the live source (dream deep-link survives 
     await w.getByRole('link', { name: 'Memory' }).click();
     await expect(w.getByText('A recurring flying dream')).toBeVisible();
     // Clicking the provenance link opens the referenced dream — NOT the empty Dreams list (the per-person
-    // reset effect must not clobber the deep-link on mount).
+    // reset effect must not clobber the deep-link on mount). It lands on the read-first detail (12 §15.3).
     await w.getByRole('button', { name: /From a dream/ }).click();
-    await expect(w.getByLabel('What happened?')).toHaveValue('I was flying over a calm silver sea');
+    await expect(
+      w.getByRole('paragraph').filter({ hasText: /flying over a calm silver sea/i }),
+    ).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -4602,13 +4604,15 @@ test('dreams: log a dream, persist through the encrypted vault, reopen, no overf
     await w.getByLabel('Vividness').selectOption('5');
     // Keep it a private journal entry (15-shareability §3.2) — informsContext defaults on, toggle it off.
     await w.getByRole('switch', { name: 'Let this dream inform coaching context' }).click();
-    await w.getByRole('button', { name: 'Save' }).click();
+    // AI is off here → the new-dream composer's only action is "Just save" (12 §15.2).
+    await w.getByRole('button', { name: 'Just save' }).click();
 
     // It appears in the journal.
     await expect(w.getByRole('button', { name: /The rearranging house/ })).toBeVisible();
 
-    // Reopen → the fields round-tripped through the encrypted vault.
+    // Reopen → the read-first detail (12 §15.3); "Edit dream" reveals the form to check the round-trip.
     await w.getByRole('button', { name: /The rearranging house/ }).click();
+    await w.getByRole('button', { name: /edit dream/i }).click();
     await expect(w.getByLabel('Title (optional)')).toHaveValue('The rearranging house');
     await expect(w.getByLabel('What happened?')).toHaveValue(
       'I was back in my childhood house, rooms rearranging.',
@@ -4651,9 +4655,9 @@ test('dreams: visualize a dream — sensitive warning, generate, encrypted round
     await w.getByLabel('What happened?').fill('A bright surreal place of open doors.');
     await w.getByLabel('Title (optional)').fill('Visualize me');
     await w.getByLabel('Sensitivity').selectOption({ label: 'Explicit' });
-    await w.getByRole('button', { name: 'Save' }).click();
+    await w.getByRole('button', { name: 'Just save' }).click();
 
-    // Reopen the saved dream → the image panel sits on the detail.
+    // Reopen the saved dream → the image panel sits on the read-first detail (12 §15.3).
     await w.getByRole('button', { name: /Visualize me/ }).click();
 
     // Pick an expanded, family-grouped preset (beyond the original four) for this image.
@@ -4743,7 +4747,7 @@ test('dreams: export an image to a file + share it; the recipient sees it in "Sh
     await w.getByRole('button', { name: 'Log a dream' }).click();
     await w.getByLabel('What happened?').fill('A field of light.');
     await w.getByLabel('Title (optional)').fill('Shareable dream');
-    await w.getByRole('button', { name: 'Save' }).click();
+    await w.getByRole('button', { name: 'Just save' }).click();
     await w.getByRole('button', { name: /Shareable dream/ }).click();
     await w.getByRole('button', { name: /visualize this dream/i }).click();
     await expect(w.getByRole('img')).toBeVisible();
@@ -4813,11 +4817,13 @@ test('dreams: link a household person to a dream and round-trip the link, no ove
     await w.getByPlaceholder(/add a name/i).fill('a stranger');
     await w.getByPlaceholder(/add a name/i).press('Enter');
     await expect(w.getByRole('button', { name: 'Remove a stranger' })).toBeVisible();
-    await w.getByRole('button', { name: 'Save' }).click();
+    // AI is off here → the new-dream composer's only action is "Just save" (12 §15.2).
+    await w.getByRole('button', { name: 'Just save' }).click();
 
-    // Reopen → the link round-tripped through the encrypted vault. The stored personId resolves back to
-    // the household name "Sam" (the Remove control's label) and still reads as a linked chip.
+    // Reopen → the read-first detail; "Edit dream" reveals the link round-tripped through the vault. The
+    // stored personId resolves back to the household name "Sam" (the Remove control's label), a linked chip.
     await w.getByRole('button', { name: /Walking with Sam/ }).click();
+    await w.getByRole('button', { name: /edit dream/i }).click();
     await expect(w.getByRole('button', { name: 'Remove Sam' })).toBeVisible();
     await expect(w.getByText('linked')).toBeVisible();
 
@@ -4859,17 +4865,16 @@ test('dreams: analyze → synthesize → edit → approve feeds the coach; the t
       .getByLabel('What happened?')
       .fill('I was back in my childhood house, rooms rearranging.');
     await w.getByLabel('Title (optional)').fill('The rearranging house');
-    await w.getByRole('button', { name: 'Save' }).click();
-
-    // Enter the in-pane analysis surface.
-    await w.getByRole('button', { name: /The rearranging house/ }).click();
-    await w.getByRole('button', { name: 'Analyze this dream' }).click();
+    // AI is on → "Start reflection" saves the dream AND opens the guided session directly (12 §15.3).
+    await w.getByRole('button', { name: /start reflection/i }).click();
     await expect(w.getByRole('heading', { name: 'Dream analysis' })).toBeVisible();
+    // The coach OPENS the reflection itself (12 §15.4) — its first message streams in, no blank chat.
+    await expect(w.getByText(/hear you/i).first()).toBeVisible();
 
     // A guided turn streams the reflective reply.
     await w.getByLabel('Message').fill('It felt unsettling but oddly familiar.');
     await w.getByRole('button', { name: 'Send' }).click();
-    await expect(w.getByText(/hear you/i).first()).toBeVisible();
+    await expect(w.getByText('It felt unsettling but oddly familiar.')).toBeVisible();
 
     // Synthesize → the structured card.
     await w.getByRole('button', { name: 'Create analysis' }).click();
@@ -5083,9 +5088,9 @@ test('dreams: share an approved insight fact into a related person’s coaching 
     await w.getByRole('button', { name: 'Log a dream' }).click();
     await w.getByLabel('What happened?').fill('A dream about my partner and our home.');
     await w.getByLabel('Title (optional)').fill('Our home');
-    await w.getByRole('button', { name: 'Save' }).click();
-    await w.getByRole('button', { name: /Our home/ }).click();
-    await w.getByRole('button', { name: 'Analyze this dream' }).click();
+    // "Start reflection" saves + opens the guided session; the coach opens first (12 §15.3/§15.4).
+    await w.getByRole('button', { name: /start reflection/i }).click();
+    await expect(w.getByText(/hear you/i).first()).toBeVisible();
     await w.getByRole('button', { name: 'Create analysis' }).click();
     await expect(w.getByRole('heading', { name: 'Your dream analysis' })).toBeVisible();
     await w.getByRole('button', { name: /add to my coaching context/i }).click();

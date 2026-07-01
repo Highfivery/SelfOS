@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import type { Dream, DreamAnalysis } from '@shared/channels';
 import { Dreams } from './Dreams';
+import { DreamComposer } from './DreamComposer';
 import { DreamAnalysisPane } from './DreamAnalysisPane';
 import { useDreamStore } from '../../../stores/dreamStore';
 import { useDreamAnalysisStore } from '../../../stores/dreamAnalysisStore';
@@ -56,6 +57,15 @@ function enableAi(): void {
   }));
 }
 
+/** The resolved-ready AI-key status (a device override present) most analysis surfaces need. */
+const readyStatus = () =>
+  Promise.resolve({
+    hasSharedKey: false,
+    hasDeviceOverride: true,
+    resolvedReady: true,
+    source: 'device' as const,
+  });
+
 function renderPane(dream: Dream = baseDream): { onBack: ReturnType<typeof vi.fn> } {
   const onBack = vi.fn();
   render(
@@ -103,6 +113,8 @@ describe('Dreams analysis UI', () => {
       dreamGetAnalysis: () => Promise.resolve(null),
     });
     renderPane();
+    // The coach opens the reflection itself (12 §15.4) — wait for that before replying.
+    await screen.findByText(/childhood house/i);
     const input = await screen.findByLabelText('Message');
     await userEvent.type(input, 'It felt freeing.');
     await userEvent.click(screen.getByRole('button', { name: 'Send' }));
@@ -124,6 +136,7 @@ describe('Dreams analysis UI', () => {
       dreamGetAnalysis: () => Promise.resolve(null),
     });
     renderPane();
+    await screen.findByText(/childhood house/i); // coach opens first
     await userEvent.click(await screen.findByRole('button', { name: 'Create analysis' }));
     expect(await screen.findByText('Your dream analysis')).toBeInTheDocument();
     expect(screen.getByText('A dream of shifting rooms.')).toBeInTheDocument();
@@ -260,5 +273,107 @@ describe('Dreams analysis UI', () => {
     await userEvent.type(summaryField, 'Refined wording.');
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
     await waitFor(() => expect(approve).toHaveBeenCalledWith({ dreamId: 'd1' }));
+  });
+
+  // --- §15: the reflection-as-a-session redesign ---
+
+  it('offers "Start reflection" + "Just save" on a new dream when AI is on', async () => {
+    enableAi();
+    installMockBridge({ aiKeyStatus: readyStatus });
+    render(
+      <MemoryRouter>
+        <DreamComposer dream={null} onStartReflection={vi.fn()} onDone={() => {}} />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('button', { name: /start reflection/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Just save' })).toBeInTheDocument();
+  });
+
+  it('shows only "Just save" + a connect note on a new dream when AI is off', async () => {
+    installMockBridge({
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: false,
+          resolvedReady: false,
+          source: 'none' as const,
+        }),
+    });
+    render(
+      <MemoryRouter>
+        <DreamComposer dream={null} onStartReflection={vi.fn()} onDone={() => {}} />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('button', { name: 'Just save' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /start reflection/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/connect ai in settings/i)).toBeInTheDocument();
+  });
+
+  it('opens the reflection coach-first — no blank "share a little" placeholder', async () => {
+    enableAi();
+    installMockBridge({ aiKeyStatus: readyStatus, dreamGetAnalysis: () => Promise.resolve(null) });
+    renderPane();
+    expect(await screen.findByText(/childhood house/i)).toBeInTheDocument();
+    expect(screen.queryByText(/share a little about the dream/i)).not.toBeInTheDocument();
+  });
+
+  it('surfaces an "Analyze this dream" suggestion when the coach signals readiness', async () => {
+    enableAi();
+    installMockBridge({
+      aiKeyStatus: readyStatus,
+      dreamGetAnalysis: () => Promise.resolve(null),
+      dreamAnalyzeTurn: (input) =>
+        Promise.resolve({
+          ok: true as const,
+          analysisReady: true,
+          conversation: {
+            id: input.dreamId,
+            schemaVersion: 1,
+            personId: 'owner-1',
+            title: 'Dream',
+            createdAt: 'now',
+            updatedAt: 'now',
+            messages: [
+              { role: 'user', content: input.userText, ts: 'now' },
+              { role: 'assistant', content: 'Thank you for sharing all of that.', ts: 'now' },
+            ],
+          },
+          usage: {
+            id: 'u',
+            schemaVersion: 1,
+            type: 'dream.analyze',
+            personId: 'owner-1',
+            sessionId: input.dreamId,
+            model: 'claude-sonnet-4-6',
+            at: 'now',
+            inputTokens: 1,
+            outputTokens: 1,
+            cacheWriteTokens: 0,
+            cacheReadTokens: 0,
+            costUsd: 0,
+          },
+        }),
+    });
+    renderPane();
+    await screen.findByText(/childhood house/i);
+    await userEvent.type(await screen.findByLabelText('Message'), 'That is everything.');
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    expect(await screen.findByRole('button', { name: /analyze this dream/i })).toBeInTheDocument();
+  });
+
+  it('opening a captured dream leads with a read-first detail (Start reflection + Edit dream)', async () => {
+    installMockBridge({ dreamsList: () => Promise.resolve([baseDream]) });
+    render(
+      <MemoryRouter>
+        <Dreams />
+      </MemoryRouter>,
+    );
+    await userEvent.click(await screen.findByText(/i was flying/i));
+    expect(screen.getByRole('button', { name: /start reflection/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /edit dream/i })).toBeInTheDocument();
+    // The narrative reads as prose — not an editable field — until "Edit dream".
+    expect(screen.queryByLabelText('What happened?')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /edit dream/i }));
+    expect(await screen.findByLabelText('What happened?')).toBeInTheDocument();
   });
 });

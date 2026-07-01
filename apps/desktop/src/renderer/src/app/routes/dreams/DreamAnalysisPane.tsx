@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Sparkles } from 'lucide-react';
+import { stripDreamMarkers } from '@selfos/core/dreams';
 import type { Dream } from '@shared/channels';
 import { aiKeyResolved } from '../../aiAvailability';
 import { AiUnavailableNotice } from '../../AiUnavailableNotice';
@@ -10,6 +11,7 @@ import { Banner, Button, Heading, Markdown, Stack, Text } from '../../../design-
 import { Composer } from '../sessions/Composer';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { DreamSynthesisCard } from './DreamSynthesisCard';
+import { DreamAnalyzeSuggestion } from './DreamAnalyzeSuggestion';
 import { DreamShareControls } from './DreamShareControls';
 import { DreamImagePanel } from './DreamImagePanel';
 import styles from './Dreams.module.css';
@@ -31,11 +33,14 @@ export function DreamAnalysisPane({ dream, onBack }: DreamAnalysisPaneProps): JS
   const [memoryEnabledSetting] = useSetting('dreams.memoryEnabled');
   const [hasKey, setHasKey] = useState(false);
 
+  const loaded = useDreamAnalysisStore((s) => s.loaded);
   const messages = useDreamAnalysisStore((s) => s.messages);
   const streaming = useDreamAnalysisStore((s) => s.streaming);
+  const opening = useDreamAnalysisStore((s) => s.opening);
   const sending = useDreamAnalysisStore((s) => s.sending);
   const synthesizing = useDreamAnalysisStore((s) => s.synthesizing);
   const approving = useDreamAnalysisStore((s) => s.approving);
+  const analysisReady = useDreamAnalysisStore((s) => s.analysisReady);
   const analysis = useDreamAnalysisStore((s) => s.analysis);
   const insight = useDreamAnalysisStore((s) => s.insight);
   const shareTargets = useDreamAnalysisStore((s) => s.shareTargets);
@@ -43,6 +48,7 @@ export function DreamAnalysisPane({ dream, onBack }: DreamAnalysisPaneProps): JS
   const error = useDreamAnalysisStore((s) => s.error);
   const canShare = useSessionStore((s) => s.can('dreams.shareContext'));
   const open = useDreamAnalysisStore((s) => s.open);
+  const startReflection = useDreamAnalysisStore((s) => s.startReflection);
   const sendTurn = useDreamAnalysisStore((s) => s.sendTurn);
   const synthesize = useDreamAnalysisStore((s) => s.synthesize);
   const saveEdits = useDreamAnalysisStore((s) => s.saveEdits);
@@ -71,14 +77,44 @@ export function DreamAnalysisPane({ dream, onBack }: DreamAnalysisPaneProps): JS
   // Dream memory defaults ON (matches the bridge default) — only an explicit false disables approval.
   const memoryEnabled = memoryEnabledSetting !== false;
 
+  // Coach-first opening (12 §15.4): for a never-reflected dream, once AI is ready, have the coach OPEN the
+  // conversation referencing this dream — so the session is never a blank chat re-asking for the dream. Only
+  // a `captured` dream with no transcript/analysis auto-opens; it waits for `open()` to finish (`loaded`) so
+  // it never races the initial load, and `startReflection` is idempotent server-side (no double-spend).
+  useEffect(() => {
+    if (
+      loaded &&
+      configured &&
+      !analysis &&
+      dream.status === 'captured' &&
+      messages.length === 0 &&
+      !opening &&
+      !sending
+    ) {
+      void startReflection();
+    }
+  }, [
+    loaded,
+    configured,
+    analysis,
+    dream.status,
+    messages.length,
+    opening,
+    sending,
+    startReflection,
+  ]);
+
   const chat = (
     <>
-      <div className={styles.thread} ref={threadRef} aria-live="polite" aria-busy={sending}>
-        {messages.length === 0 && !streaming && !sending ? (
-          <Text tone="secondary">
-            When you’re ready, share a little about the dream — how it felt, what stood out — and
-            I’ll ask a few gentle questions. Or create the analysis straight away.
-          </Text>
+      <div
+        className={styles.thread}
+        ref={threadRef}
+        aria-live="polite"
+        aria-busy={sending || opening}
+      >
+        {messages.length === 0 && !streaming ? (
+          // The coach is opening the reflection (or briefly, before it does) — never a blank prompt.
+          <div className={`${styles.coachMsg} ${styles.thinking}`}>Reading your dream…</div>
         ) : (
           <Stack gap={3}>
             {messages.map((message, index) => (
@@ -86,37 +122,47 @@ export function DreamAnalysisPane({ dream, onBack }: DreamAnalysisPaneProps): JS
                 key={index}
                 className={message.role === 'user' ? styles.userMsg : styles.coachMsg}
               >
-                {message.role === 'user' ? message.content : <Markdown>{message.content}</Markdown>}
+                {message.role === 'user' ? (
+                  message.content
+                ) : (
+                  <Markdown>{stripDreamMarkers(message.content)}</Markdown>
+                )}
               </div>
             ))}
             {streaming ? (
               <div className={styles.coachMsg}>
-                <Markdown>{streaming}</Markdown>
+                <Markdown>{stripDreamMarkers(streaming)}</Markdown>
               </div>
             ) : null}
-            {sending && !streaming ? (
-              <div className={`${styles.coachMsg} ${styles.thinking}`}>Coach is reflecting…</div>
+            {(sending || opening) && !streaming ? (
+              <div className={`${styles.coachMsg} ${styles.thinking}`}>Reflecting…</div>
             ) : null}
           </Stack>
         )}
       </div>
 
-      <Composer disabled={sending} onSend={(text) => void sendTurn(text)} />
+      <Composer disabled={sending || opening} onSend={(text) => void sendTurn(text)} />
 
-      <div className={styles.synthRow}>
-        <Button
-          variant="primary"
-          onClick={() => void synthesize()}
-          disabled={synthesizing || sending}
-        >
-          <Sparkles size={16} aria-hidden="true" />
-          {synthesizing
-            ? 'Writing your analysis…'
-            : analysis
-              ? 'Re-create analysis'
-              : 'Create analysis'}
-        </Button>
-      </div>
+      {/* Once the coach signals it has enough (12 §15.4), a highlighted nudge; otherwise the
+          always-available "Create analysis". Exactly one analyze affordance at a time — never a gate. */}
+      {analysisReady ? (
+        <DreamAnalyzeSuggestion busy={synthesizing} onAnalyze={() => void synthesize()} />
+      ) : (
+        <div className={styles.synthRow}>
+          <Button
+            variant="secondary"
+            onClick={() => void synthesize()}
+            disabled={synthesizing || sending || opening || messages.length === 0}
+          >
+            <Sparkles size={16} aria-hidden="true" />
+            {synthesizing
+              ? 'Writing your analysis…'
+              : analysis
+                ? 'Re-create analysis'
+                : 'Create analysis'}
+          </Button>
+        </div>
+      )}
     </>
   );
 

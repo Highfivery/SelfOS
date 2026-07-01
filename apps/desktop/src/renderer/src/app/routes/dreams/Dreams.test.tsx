@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import type { Dream } from '@shared/channels';
 import { Dreams } from './Dreams';
 import { useDreamStore } from '../../../stores/dreamStore';
+import { useDreamPatternStore } from '../../../stores/dreamPatternStore';
 import { usePeopleStore } from '../../../stores/peopleStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
@@ -21,9 +22,15 @@ function renderDreams(): void {
 afterEach(() => {
   clearMockBridge();
   useDreamStore.setState({ dreams: [], loaded: false });
+  useDreamPatternStore.getState().reset();
   usePeopleStore.setState({ people: [], relationships: [], loaded: false });
   useSessionStore.setState({ activePerson: null });
 });
+
+/** An ISO timestamp `n` days before now — so recency grouping is deterministic against the real clock. */
+function daysAgoIso(n: number): string {
+  return new Date(Date.now() - n * 86_400_000).toISOString();
+}
 
 const baseDream: Dream = {
   id: 'd1',
@@ -192,5 +199,77 @@ describe('Dreams', () => {
     expect(screen.queryByLabelText('What happened?')).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /edit dream/i }));
     expect(await screen.findByLabelText('What happened?')).toBeInTheDocument();
+  });
+
+  it('the quick filter narrows the grid to one kind of dream', async () => {
+    const lucid = {
+      ...baseDream,
+      id: 'l',
+      title: 'Lucid one',
+      lucid: true,
+      dreamDate: daysAgoIso(2),
+    };
+    const nightmare = {
+      ...baseDream,
+      id: 'n',
+      title: 'Bad one',
+      lucid: false,
+      nightmare: true,
+      dreamDate: daysAgoIso(3),
+    };
+    installMockBridge({ dreamsList: () => Promise.resolve([lucid, nightmare]) });
+    renderDreams();
+
+    expect(await screen.findByText('Lucid one')).toBeInTheDocument();
+    expect(screen.getByText('Bad one')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Nightmares' }));
+    expect(screen.getByText('Bad one')).toBeInTheDocument();
+    expect(screen.queryByText('Lucid one')).not.toBeInTheDocument();
+    // Filtered views drop the create tile (a new dream isn't necessarily this kind).
+    expect(screen.queryByRole('button', { name: 'Log a new dream' })).not.toBeInTheDocument();
+
+    // A filter with no matches shows a calm message, not a blank grid.
+    await userEvent.click(screen.getByRole('button', { name: 'Analyzed' }));
+    expect(screen.getByText(/no analyzed dreams yet/i)).toBeInTheDocument();
+  });
+
+  it('groups dreams under recency headers (This week / Earlier)', async () => {
+    const recent = { ...baseDream, id: 'r', title: 'Recent one', dreamDate: daysAgoIso(1) };
+    const old = { ...baseDream, id: 'o', title: 'Old one', dreamDate: daysAgoIso(200) };
+    installMockBridge({ dreamsList: () => Promise.resolve([recent, old]) });
+    renderDreams();
+
+    expect(await screen.findByText('This week')).toBeInTheDocument();
+    expect(screen.getByText('Earlier')).toBeInTheDocument();
+    expect(screen.getByText('Recent one')).toBeInTheDocument();
+    expect(screen.getByText('Old one')).toBeInTheDocument();
+  });
+
+  it('shows the insight strip from deterministic pattern stats (≥2 dreams)', async () => {
+    const a = { ...baseDream, id: 'a', title: 'A', dreamDate: daysAgoIso(2) };
+    const b = { ...baseDream, id: 'b', title: 'B', nightmare: true, dreamDate: daysAgoIso(3) };
+    installMockBridge({
+      dreamsList: () => Promise.resolve([a, b]),
+      dreamPatternStats: (input) =>
+        Promise.resolve({
+          window: input.window,
+          dreamCount: 2,
+          analyzedCount: 0,
+          symbols: [],
+          themes: [{ label: 'falling', count: 2 }],
+          people: [],
+          emotions: [],
+          lucidCount: 0,
+          nightmareCount: 1,
+          moodTrend: [],
+          vividnessTrend: [],
+          nightmareNudge: false,
+        }),
+    });
+    renderDreams();
+
+    expect(await screen.findByText('falling')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /see patterns/i })).toBeInTheDocument();
   });
 });

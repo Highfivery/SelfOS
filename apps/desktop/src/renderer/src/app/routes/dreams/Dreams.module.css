@@ -19,8 +19,82 @@
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
-  gap: var(--space-4);
+  /* minmax low enough that even a ~320px content area (a 360px phone) still fits two columns. */
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: var(--space-3);
+}
+
+/* The slim insight strip (12 §16.2): recurring theme + counts + a gentle mood cue, then "See patterns". */
+.insightStrip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.stripItems {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  min-width: 0;
+}
+
+.stripItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+}
+
+.stripItem strong {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.stripLink {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--color-accent-text);
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.stripLink:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* The quick-filter row (12 §16.2): a segmented control that fits ~360px without an x-scroll (§12). */
+.filters {
+  display: flex;
+}
+
+/* Time-grouping (12 §16.2): "This week / This month / Earlier" section headers over each grid. */
+.group + .group {
+  margin-top: var(--space-5);
+}
+
+.groupHeader {
+  margin: 0 0 var(--space-3);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
 }
 
 /* A tall (3:4) image-forward tile — one button. Image OR themed gradient fills it; a scrim carries the

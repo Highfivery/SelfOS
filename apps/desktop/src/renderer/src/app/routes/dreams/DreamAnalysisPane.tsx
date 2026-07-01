@@ -144,8 +144,10 @@ export function DreamAnalysisPane({ dream, onBack }: DreamAnalysisPaneProps): JS
       <Composer disabled={sending || opening} onSend={(text) => void sendTurn(text)} />
 
       {/* Once the coach signals it has enough (12 §15.4), a highlighted nudge; otherwise the
-          always-available "Create analysis". Exactly one analyze affordance at a time — never a gate. */}
-      {analysisReady ? (
+          always-available "Create analysis" (or "Re-create analysis" once one exists). Exactly one analyze
+          affordance at a time — never a gate. The nudge is only for the not-yet-analyzed path (a reopened
+          chat behind "Continue the conversation" already has an analysis → offer re-create, not the nudge). */}
+      {analysisReady && !analysis ? (
         <DreamAnalyzeSuggestion busy={synthesizing} onAnalyze={() => void synthesize()} />
       ) : (
         <div className={styles.synthRow}>

@@ -793,7 +793,21 @@ proven.)_
 
 ## 14. Changelog
 
-- 2026-07-01 — **§15 amendment drafted (pending approval): "dream reflection as a guided session"
+- 2026-07-01 — **§15 amendment BUILT (all 3 slices) + approved.** The "dream reflection as a guided session"
+  redesign shipped: (1) core+IPC — `openReflection` (coach-first AI opener referencing the dream) + the
+  `[[SELFOS:DREAM_READY]]` readiness marker + `dreams:startReflection` + enriched analyst voice; (2)
+  renderer — "Start reflection"/"Just save" capture, a read-first dream detail (`DreamDetailView`, image
+  panel moved onto it), the coach-first `DreamAnalysisPane` + a marker-driven "Analyze this dream" nudge;
+  (3) `DreamPeopleEditor` people quick-add (typed name → add-as-contact + optional relationship → linked
+  chip). Reused the existing dream-scoped conversation, metering (`dream.analyze`), synthesis, approve→context,
+  and Insight-feeds-`buildContext` plumbing — the only new backend is the opener call + the marker + the
+  quick-add wiring. Gate green each slice (typecheck node + web/DOM-lib, lint, format, **947 core + 865
+  desktop** unit, all 9 dream E2E + the provenance deep-link). Code-reviewer **ship** (metering,
+  coach-first-effect race-safety, marker, and the trust boundary all verified; applied the nit — the
+  readiness nudge is gated `!analysis` so a reopened post-analysis chat offers "Re-create analysis," not the
+  nudge). Visual QA of all four new surfaces (composer, read-first detail, coach-first pane, quick-add
+  prompt). See §15 for the full amendment.
+- 2026-07-01 — **§15 amendment drafted (then approved): "dream reflection as a guided session"
   redesign.** User feedback — the analysis "feels like a form you enter, then save," and the separate
   "Analyze this dream" button opens a blank chat that re-asks for the dream just written. Root cause is
   presentational (the coach already receives the dream via `buildDreamPrompt`; the UI just opens empty and
@@ -804,7 +818,8 @@ proven.)_
   keep "Just save" (capture-first preserved); add typed people as a contact + optional relationship;
   offer the add-person prompt on every sensitivity tier. Reuses the existing dream-scoped conversation,
   metering, synthesis, approve→context, and Insight-feeds-`buildContext` plumbing — no new backend beyond
-  the opener path + the marker + the quick-add wiring. **No code until approved.**
+  the opener path + the marker + the quick-add wiring. (Approved the same day; built in 3 slices — see the
+  entry above + §15.)
 - 2026-06-11 — **Amendment: People-graph linking of "people present"** (§13 item 6; touches §3.1/§4.2/§5.1/
   §8.4) — finishes the §13.2 deferral. The capture composer's people editor is now a hybrid picker (link a
   household person or type a free name); a linked person's **shareable** context (display name + relationship
@@ -956,7 +971,7 @@ string[]`** (no migration; existing facts unaffected) + `summarizeForContext` su
 
 ## 15. Amendment (2026-07) — dream reflection as a guided session
 
-> **Status:** **Approved 2026-07-01** — building in slices (§15.9). This amendment
+> **Status:** **BUILT 2026-07-01** — all 3 slices shipped (§15.9); code-reviewer **ship**. This amendment
 > redesigns the **entry + opening** of the guided analysis (§3.1/§3.2) and adds a **people quick-add**
 > (§3.1). Everything else in this spec — the dream-scoped transcript, streaming, metering
 > (`dream.analyze`), synthesis → `DreamAnalysis`, approve → `Insight` (`source: 'dream'`), and that

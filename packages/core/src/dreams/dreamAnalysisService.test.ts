@@ -573,4 +573,25 @@ describe('dreamAnalysisService', () => {
     expect(stripDreamMarkers('A reflection. [[SELFOS:DREAM_RE')).toBe('A reflection.');
     expect(stripDreamMarkers('Nothing to strip here')).toBe('Nothing to strip here');
   });
+
+  it('synthesis disables adaptive thinking + keeps a generous budget (or the JSON truncates → "cut off")', async () => {
+    const fs = memFileSystem();
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+    let opts: { maxTokens?: number; extendedThinking?: boolean } = {};
+    const capturing: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (options) => {
+        opts = options;
+        return Promise.resolve({
+          text: JSON.stringify(VALID_DRAFT),
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    await synthesizeAnalysis(deps(fs, capturing));
+    // Adaptive thinking shares `maxTokens` with the output; a bounded JSON call MUST disable it, else the
+    // 5-section analysis gets starved + truncated ([[adaptive-thinking-shares-maxtokens]]).
+    expect(opts.extendedThinking).toBe(false);
+    expect(opts.maxTokens ?? 0).toBeGreaterThanOrEqual(4000);
+  });
 });

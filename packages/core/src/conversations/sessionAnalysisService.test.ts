@@ -147,6 +147,26 @@ describe('endAndSummarize', () => {
     expect(result.insight.facts[0]?.text).toBe('Exercise: Thought Record (CBT)');
   });
 
+  it('disables adaptive thinking + keeps a generous budget for the wrap-up JSON (no truncation)', async () => {
+    let opts: { maxTokens?: number; extendedThinking?: boolean } = {};
+    const capturing: ClaudeClient = {
+      send: () => Promise.resolve('ok'),
+      stream: (options, onDelta) => {
+        opts = options;
+        onDelta('');
+        return Promise.resolve({
+          text: ANALYSIS_JSON,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    await endAndSummarize(deps({ client: capturing }));
+    // Adaptive thinking shares `maxTokens`; a bounded JSON call disables it so the wrap-up isn't truncated
+    // ([[adaptive-thinking-shares-maxtokens]]).
+    expect(opts.extendedThinking).toBe(false);
+    expect(opts.maxTokens ?? 0).toBeGreaterThanOrEqual(2000);
+  });
+
   it('a challenge reflection links provenance.challengeId; a SEXUAL challenge restricts the facts (52 §8.4)', async () => {
     // A non-adult challenge reflection: links the challenge, facts stay non-restricted.
     await saveChallenge(fs, key, {

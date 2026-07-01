@@ -308,7 +308,10 @@ export async function generatePatternNarrative(
         model,
         system: [PERSONA, SAFETY, PATTERNS_GUIDANCE].join('\n\n'),
         messages: [{ role: 'user', content: buildDigest(digested) }],
+        // Bounded narrative: disable adaptive thinking so it keeps the whole budget for the prose
+        // (left on, thinking shares `maxTokens` and can starve the narrative to empty).
         maxTokens: 800,
+        extendedThinking: false,
       },
       () => {},
     );

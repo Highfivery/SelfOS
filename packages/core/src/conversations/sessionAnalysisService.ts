@@ -242,7 +242,12 @@ export async function endAndSummarize(deps: EndAndSummarizeDeps): Promise<Sessio
 
   let result;
   try {
-    result = await client.stream({ apiKey, model, system, messages, maxTokens: 1500 }, () => {});
+    // Bounded structured-JSON call: disable adaptive thinking so it doesn't share (and starve) the
+    // `maxTokens` budget and truncate the wrap-up JSON ([[adaptive-thinking-shares-maxtokens]]).
+    result = await client.stream(
+      { apiKey, model, system, messages, maxTokens: 2500, extendedThinking: false },
+      () => {},
+    );
   } catch {
     return {
       ok: false,

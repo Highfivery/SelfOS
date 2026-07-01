@@ -431,7 +431,12 @@ export async function synthesizeAnalysis(deps: DreamSynthesisDeps): Promise<Drea
         model,
         system: await buildDreamPrompt(fs, key, personId, dream),
         messages,
-        maxTokens: 1500,
+        // A bounded structured-JSON call: disable adaptive thinking (it shares `maxTokens` with the
+        // visible output — left on, it starves the JSON and it comes back truncated → the "cut off"
+        // error). Give the 5 prose sections + tags generous headroom (you only pay for tokens generated).
+        // See the intake portrait precedent + [[adaptive-thinking-shares-maxtokens]].
+        maxTokens: 4000,
+        extendedThinking: false,
       },
       () => {},
     );

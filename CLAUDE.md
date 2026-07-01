@@ -389,6 +389,27 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-01 — **Fix (dream "Analyze this dream" → "The analysis was cut off before it finished"; the recurring
+  adaptive-thinking budget bug, this time in the DREAM + SESSION syntheses; on `fix/dream-analysis-truncation`,
+  after the §15 reflection redesign shipped in v0.12.0).** User hit the TRUNCATED message on the live app.
+  **Diagnosed from the code (NOT assumed — the message is the honest TRUNCATED parse-outcome, not a refusal):**
+  `anthropicClient` enables adaptive `thinking` unless a caller passes `extendedThinking: false`, and adaptive
+  thinking **shares the `maxTokens` budget** with the visible output. `dreamAnalysisService.synthesizeAnalysis`
+  streamed with `maxTokens: 1500` and **no `extendedThinking: false`**, so thinking starved the 5-section JSON →
+  truncated/unclosed → `classifyParseOutcome` → the "cut off" error. **Latent since the original dream synthesis
+  (2026-06-11)** — surfaced now the §15 redesign makes analysis easy to reach. The offline fake Claude **hid it**
+  (always returns valid JSON), so every E2E stayed green (the [[adaptive-thinking-shares-maxtokens]] +
+  fakes-hide-model-bugs traps, both documented). A blast-radius audit of every core `client.stream` found the
+  **same defect** in the JSON-producing `sessionAnalysisService` (`maxTokens: 1500`, no flag — would be hit next
+  on "End & summarize") and the `dreamPatternService` narrative (bounded prose starved to empty). Fix (the intake
+  portrait / generation reference pattern): **disable adaptive thinking** on all three bounded syntheses — dream
+  synthesis (`extendedThinking:false` + `maxTokens` 1500→4000), session wrap-up (`false` + 2500), pattern
+  narrative (`false`, 800). Unit guards **capture the stream options** and assert `extendedThinking===false` + a
+  generous budget for the dream + session syntheses, so the fake can't hide a regression again. Gate green:
+  typecheck (node + web/DOM), lint, format, **949 core** unit (+2). No renderer change. **Lesson (again): a
+  bounded structured-JSON `client.stream` MUST pass `extendedThinking:false` or adaptive thinking starves the
+  output to a truncation — audit EVERY JSON-producing stream call for the flag, not just the reported one, since
+  the offline fakes make the whole suite green while the live app truncates.**
 - 2026-06-26 — **Fix #3 (onboarding sharing STILL didn't save — `answerSharing` was written for ANSWERED questions
   only; SPEC 43 re-amended again; on `fix/intimacy-sharing-instant-save`).** Third report, with a screenshot: on a
   fresh **intimacy** section the user clicks "share with Partner" on the whole section and it doesn't save. **My

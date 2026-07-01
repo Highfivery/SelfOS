@@ -1,6 +1,6 @@
 # 12 — Dreams (guided dream journaling, analysis & patterns)
 
-> **Status:** **Approved** (v1 built) · **§15 amendment — "reflection as a guided session" redesign: Approved 2026-07-01, building in slices** · _last updated 2026-07-01_
+> **Status:** **Approved** (v1 built) · **§15 amendment — "reflection as a guided session" redesign: BUILT 2026-07-01 (all 3 slices)** · _last updated 2026-07-01_
 >
 > Dreams lets a person capture dreams in seconds, then — when they choose — work through a **guided AI
 > analysis** that ends in a structured, readable write-up. Once the person approves it, that analysis
@@ -1129,6 +1129,18 @@ instead of Save → re-select → a form with an "Analyze" button on top.
        provenance deep-link green). A pre-existing, unrelated spec-50 kink E2E failure (fails identically on
        `main`) is not touched by this change. Visual QA over the committed baseline.\_
 3. **People quick-add** — `DreamPeopleEditor` inline create + optional relationship + ref upgrade. RTL + E2E.
+   - _**Built 2026-07-01:** `DreamPeopleEditor` — when a **genuinely-new** name is typed (not one matching an
+     existing household person, who should be linked not duplicated), an inline **"Add “{name}” to your
+     people?"** prompt offers **"Add as contact"** / **"Not now."** Adding calls `peopleSave({ isSubject:
+false })` (a contact — no login/onboarding), reloads the household, **upgrades the free chip to a linked
+     one** (`{ personId, name }` — name kept as a fallback label until the reload propagates), then offers an
+     **optional relationship** (`saveRelationship` dreamer→contact, gated `relationships.manage`, which
+     Members have). The prompt appears on **every** sensitivity tier (§15.2 #4). Gate green: typecheck (node +
+     web/DOM-lib), lint, format, **947 core + 865 desktop** unit (+4 RTL: offer→create→linked-upgrade; the
+     optional relationship saved; no offer for an existing person; "Not now" keeps the free name — the test
+     uses a stateful harness so `values` updates like the composer), **E2E +1** (type a new name → Add as
+     contact → linked → Friend → the contact [`isSubject:false`] + relationship persist household-wide,
+     decrypt-asserted). Visual QA over the committed baseline. **§15 is fully built.**_
 
 ### 15.10 Open questions
 

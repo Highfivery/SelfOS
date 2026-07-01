@@ -19,6 +19,7 @@ import {
   getAccessConfig,
   getPerson,
   listPeople,
+  listRelationships,
   savePerson,
   saveRelationship,
   setAccount,
@@ -4844,6 +4845,52 @@ test('dreams: link a household person to a dream and round-trip the link, no ove
       return fits(main) && fits(inner);
     });
     expect(noOverflow).toBe(true);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('dreams: a typed new name offers to be added as a contact + optional relationship (12 §15.6)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Dreams' }).click();
+    await w.getByRole('button', { name: 'Log a dream' }).click();
+    await w.getByLabel('What happened?').fill('Sarah appeared and we talked for hours.');
+    await w.getByLabel('Title (optional)').fill('Talking with Sarah');
+
+    // Type a NEW name (not an existing household person) → the "add them?" prompt appears.
+    await w.getByPlaceholder(/add a name/i).fill('Sarah');
+    await w.getByPlaceholder(/add a name/i).press('Enter');
+    // force: the prompt sits mid-form and Playwright's pre-click scroll aligns it under the window-spanning
+    // sticky titlebar (02 §13) which intercepts the hit-test. The prompt's rendering + actionability are
+    // covered by DreamPeopleEditor RTL; here we just drive the persist-to-vault round-trip.
+    await w.getByRole('button', { name: /add as contact/i }).click({ force: true });
+    // The chip upgrades to linked, and the optional relationship step appears.
+    await expect(w.getByText('linked')).toBeVisible();
+    await w.getByLabel('Relationship').selectOption({ label: 'Friend' });
+    await w.getByRole('button', { name: 'Save', exact: true }).click({ force: true });
+
+    // The new contact + relationship persist household-wide the moment they're created (decrypt the vault) —
+    // independent of whether the dream is saved. This is the core of the quick-add feature.
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('master key missing');
+    await expect
+      .poll(async () => (await listPeople(fs, key)).some((p) => p.displayName === 'Sarah'))
+      .toBe(true);
+    const sarah = (await listPeople(fs, key)).find((p) => p.displayName === 'Sarah');
+    expect(sarah?.isSubject).toBe(false); // added as a contact, never a subject/login
+    await expect
+      .poll(async () =>
+        (await listRelationships(fs, key)).some(
+          (r) => r.toPersonId === sarah?.id && r.type === 'friend',
+        ),
+      )
+      .toBe(true);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

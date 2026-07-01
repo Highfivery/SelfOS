@@ -44,6 +44,7 @@ import type {
   DreamPatternSummary,
   DreamPatternWindow,
   DreamPersonRef,
+  DreamReflectionResult,
   DreamSharedImage,
   DreamShareResult,
   DreamShareTarget,
@@ -276,6 +277,7 @@ export const IpcChannels = {
   dreamGet: 'dreams:get',
   dreamSave: 'dreams:save',
   dreamDelete: 'dreams:delete',
+  dreamStartReflection: 'dreams:startReflection',
   dreamAnalyzeTurn: 'dreams:analyzeTurn',
   dreamChunk: 'dreams:chunk', // main → renderer event
   dreamGetAnalysis: 'dreams:getAnalysis',
@@ -1034,6 +1036,12 @@ export interface SelfosBridge {
   /** Delete a dream (purges its folder: dream + analysis + transcript). Requires `dreams.own`. */
   dreamDelete(id: string): Promise<void>;
   /**
+   * Open (or resume) a dream's guided reflection: the coach speaks first with an AI opener that reflects
+   * the dream back (streams via `onDreamChunk`); idempotent on an already-opened reflection. Falls back to
+   * a static opener when AI can't run, so it always opens. Requires `dreams.own` (12 §15.4).
+   */
+  dreamStartReflection(input: { dreamId: string }): Promise<DreamReflectionResult>;
+  /**
    * One turn of a dream's guided-analysis chat: streams reply chunks via `onDreamChunk`, resolves with
    * the final turn. The transcript persists under the dream (never in Sessions). Requires `dreams.own`.
    */
@@ -1256,6 +1264,7 @@ export type {
   DreamPatternSummary,
   DreamPatternWindow,
   DreamPersonRef,
+  DreamReflectionResult,
   DreamSharedImage,
   DreamShareResult,
   DreamShareTarget,

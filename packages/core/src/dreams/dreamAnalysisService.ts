@@ -11,6 +11,7 @@ import type {
   DreamAnalysis,
   DreamAnalysisEdits,
   DreamApproveResult,
+  DreamReflectionResult,
   DreamSynthesisResult,
   Insight,
   InsightFact,
@@ -38,13 +39,60 @@ import {
  */
 
 /** Blended, honest dream-work voice (12 §8.1): evidence-based reflection + symbolic readings as imagination. */
-export const DREAM_ANALYSIS_GUIDANCE = `The person is reflecting on a dream. Guide them gently, one \
-focused question at a time — explore the dream's feelings, its vivid images, and what it might connect to \
-in their waking life (the continuity between dreams and daily concerns), in an exploration → insight → \
-action arc. You MAY offer symbolic or archetypal readings of images, but ALWAYS frame them as imaginative \
-reflections to consider — never as fixed meanings, facts, science, or diagnosis. Stay warm and curious; \
-favour one good question over a wall of interpretation. When the person is ready, they can ask you to \
-write up an analysis.`;
+export const DREAM_ANALYSIS_GUIDANCE = `You are reflecting on a dream with the person as a warm, insightful \
+dream-analysis guide — drawing on established, evidence-informed dream-work approaches: the continuity \
+hypothesis (dreams echo waking concerns, relationships, and feelings), imagery and metaphor exploration, \
+and — for distressing or recurring dreams — a gentle imagery-rehearsal framing (imagining a different, \
+safer version of the dream). You MAY invite Gestalt-style exploration ("if that image could speak, what \
+would it say?"; "become the house for a moment — how does it feel?") and offer symbolic or archetypal \
+readings, but ALWAYS frame any symbolism as imaginative reflection to consider — never as fixed meaning, \
+fact, science, or diagnosis. Guide gently, ONE focused question at a time, following the material the \
+person brings — the felt emotions, the images that stood out, and what it might connect to in their waking \
+life — in an unhurried exploration → insight → gentle-action arc. Favour one good question over a wall of \
+interpretation; stay curious, never clinical. This is reflective self-help, not therapy, diagnosis, or \
+treatment. When you have enough to write a meaningful reflection, the person can ask you to write up an \
+analysis (and you may gently offer).`;
+
+/** The private "I have enough to write an analysis now" signal (12 §15.4) — mirrors `05`/`09`'s wrap-up
+ * marker. Deliberately unlikely to occur in natural prose; never shown to the person. */
+export const DREAM_READY_MARKER = '[[SELFOS:DREAM_READY]]';
+
+/** Teaches the coach the readiness-marker convention (appended to dream-analysis chat turns only). */
+export const DREAM_READY_INSTRUCTION = `Privately, once you have gathered enough about this dream to write \
+a meaningful reflection — the person has shared the feelings, the images that stood out, and any \
+waking-life echoes you need — append the exact token ${DREAM_READY_MARKER} as the very last thing in your \
+reply, on its own. It is a silent signal to the app that an analysis can now be written; it is never shown \
+to the person, so never mention it, explain it, or use it before you genuinely have enough. If you still \
+need more from them first, do not include it.`;
+
+/** The (non-persisted) instruction that has the coach OPEN the reflection referencing this specific dream. */
+const OPENER_INSTRUCTION = `Open the reflection now. Greet the person warmly and briefly, reflect their \
+dream back to them in a sentence or two — mentioning something specific from it — so it's clear you've \
+really read it, then ask ONE gentle opening question to begin exploring it together. Do not analyze, \
+interpret, list symbols, or summarize the whole dream yet — just warmly begin the conversation.`;
+
+/** A warm, AI-free opener used when the coach can't open the reflection (no key / over budget / error). */
+function staticOpener(): string {
+  return `Let's take some time with this dream together. What stands out most as you sit with it — a \
+feeling, an image, a moment? We'll start there.`;
+}
+
+/**
+ * Remove the dream-readiness marker (and any trailing partial still mid-stream) from a reply, trimming
+ * trailing whitespace. Safe on every streamed delta-accumulation so the token never flashes (12 §15.4).
+ * Mirrors `stripWrapUpMarker`.
+ */
+export function stripDreamMarkers(text: string): string {
+  let out = text.split(DREAM_READY_MARKER).join('');
+  for (let i = DREAM_READY_MARKER.length - 1; i > 0; i--) {
+    const partial = DREAM_READY_MARKER.slice(0, i);
+    if (out.endsWith(partial)) {
+      out = out.slice(0, -partial.length);
+      break;
+    }
+  }
+  return out.replace(/\s+$/, '');
+}
 
 const SYNTHESIS_INSTRUCTION = `Now write a structured reflection on this dream. The prose fields (summary, \
 emotionalLandscape, wakingLifeConnections, notableImages, coachingPrompt) may use light Markdown — \
@@ -226,7 +274,9 @@ export async function runAnalysisTurn(deps: DreamAnalysisTurnDeps): Promise<Chat
   };
   conversation.messages.push({ role: 'user', content: userText, ts: at });
 
-  const system = await buildDreamPrompt(fs, key, personId, dream);
+  // Teach the coach the readiness-marker convention on chat turns (never on synthesis), mirroring `05`'s
+  // wrap-up instruction — so it can silently signal when it has enough to write an analysis.
+  const system = `${await buildDreamPrompt(fs, key, personId, dream)}\n\n${DREAM_READY_INSTRUCTION}`;
   let result;
   try {
     result = await client.stream(
@@ -243,7 +293,13 @@ export async function runAnalysisTurn(deps: DreamAnalysisTurnDeps): Promise<Chat
     return { ok: false, reason: 'ERROR', message: 'The coach couldn’t respond. Please try again.' };
   }
 
-  conversation.messages.push({ role: 'assistant', content: result.text, ts: at });
+  // Detect the readiness marker, then strip it (and any mid-stream partial) so it never persists or shows.
+  const analysisReady = result.text.includes(DREAM_READY_MARKER);
+  conversation.messages.push({
+    role: 'assistant',
+    content: stripDreamMarkers(result.text),
+    ts: at,
+  });
   conversation.updatedAt = at;
   await saveDreamConversation(fs, key, conversation);
 
@@ -254,7 +310,93 @@ export async function runAnalysisTurn(deps: DreamAnalysisTurnDeps): Promise<Chat
 
   const usage = buildUsage(model, dreamId, personId, at, result.usage);
   await recordUsage(fs, key, usage);
-  return { ok: true, conversation, usage };
+  return { ok: true, conversation, usage, ...(analysisReady ? { analysisReady } : {}) };
+}
+
+export interface DreamOpenReflectionDeps {
+  fs: FileSystem;
+  key: Uint8Array;
+  client: ClaudeClient;
+  apiKey: string | null;
+  model: string;
+  personId: string;
+  dreamId: string;
+  onDelta: (text: string) => void;
+  now: Date;
+  override?: boolean;
+}
+
+/**
+ * Open (or resume) a dream's guided reflection (12 §15.2/§15.4): the coach speaks first with an
+ * AI-generated opener that reflects THIS dream back and asks one gentle question — so the session never
+ * opens as a blank chat re-asking for the dream. Idempotent: an already-opened reflection (a transcript
+ * with messages) is returned as-is with no spend. Metered `dream.analyze`. Degrades gracefully — no key,
+ * over budget, or a transport error seeds a warm static opener (still `ok: true`) so the session always
+ * opens. The synthetic opener instruction is NEVER persisted (only the coach's reply is), mirroring how
+ * `synthesizeAnalysis` sends a non-persisted instruction.
+ */
+export async function openReflection(
+  deps: DreamOpenReflectionDeps,
+): Promise<DreamReflectionResult> {
+  const { fs, key, client, apiKey, model, personId, dreamId, now } = deps;
+  const dream = await getDream(fs, key, personId, dreamId);
+  if (!dream)
+    return { ok: false, reason: 'ERROR', message: 'That dream could no longer be found.' };
+
+  const at = now.toISOString();
+  const existing = await getDreamConversation(fs, key, personId, dreamId);
+  // Idempotent — a reflection that's already been opened just resumes (no model call, no spend).
+  if (existing && existing.messages.length > 0) return { ok: true, conversation: existing };
+
+  const base: Conversation = existing ?? {
+    id: dreamId,
+    schemaVersion: 1,
+    personId,
+    title: deriveTitle(dream.title ?? dream.narrative),
+    createdAt: at,
+    updatedAt: at,
+    messages: [],
+  };
+
+  // Persist the opener as the conversation's first (assistant) message + advance the dream to `analyzing`.
+  const persist = async (text: string, usage?: UsageEvent): Promise<DreamReflectionResult> => {
+    const conversation: Conversation = {
+      ...base,
+      messages: [{ role: 'assistant', content: text, ts: at }],
+      updatedAt: at,
+    };
+    await saveDreamConversation(fs, key, conversation);
+    if (dream.status === 'captured') {
+      await saveDream(fs, key, { ...dream, status: 'analyzing', updatedAt: at });
+    }
+    return { ok: true, conversation, ...(usage ? { usage } : {}) };
+  };
+
+  // No key or over budget → open gracefully with a warm static opener (no spend).
+  if (!apiKey) return persist(staticOpener());
+  if (await overBudget(fs, key, personId, now, deps.override)) return persist(staticOpener());
+
+  let result;
+  try {
+    result = await client.stream(
+      {
+        apiKey,
+        model,
+        system: await buildDreamPrompt(fs, key, personId, dream),
+        messages: [{ role: 'user', content: OPENER_INSTRUCTION }],
+        maxTokens: 512,
+      },
+      deps.onDelta,
+    );
+  } catch {
+    return persist(staticOpener()); // transport error → still open, statically
+  }
+
+  const usage = buildUsage(model, dreamId, personId, at, result.usage);
+  await recordUsage(fs, key, usage);
+  // The opener shouldn't carry the readiness marker, but strip defensively; empty reply → static opener.
+  const text = stripDreamMarkers(result.text).trim() || staticOpener();
+  return persist(text, usage);
 }
 
 /**

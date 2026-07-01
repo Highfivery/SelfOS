@@ -15,6 +15,7 @@ import {
   type DreamApproveResult,
   type DreamImageResult,
   type DreamNarrativeResult,
+  type DreamReflectionResult,
   type DreamSharedImage,
   type AppPlatform,
   type DreamShareResult,
@@ -354,6 +355,7 @@ import {
   listDreams,
   listDreamShareTargets,
   deleteDream,
+  openReflection,
   removeFromContext,
   removePatternNarrativeFromContext,
   runAnalysisTurn,
@@ -4150,6 +4152,27 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // insight is the coach's lasting memory and persists when its source is gone (its provenance link then
       // shows "source removed"). To remove the insight too, the dreamer uses Memory's explicit delete.
       await deleteDream(ctx.fs, personId, PersonIdSchema.parse(id));
+    },
+    dreamStartReflection: async (input): Promise<DreamReflectionResult> => {
+      const { dreamId } = DreamIdSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      // Key host-side; streamed opener deltas go to the dedicated dream sink (never the Sessions stream).
+      const apiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
+      return openReflection({
+        fs: ctx.fs,
+        key: ctx.key,
+        client: host.claude,
+        apiKey,
+        model: await host.activeModel(),
+        personId,
+        dreamId,
+        onDelta: (text) => host.emitDreamChunk(text),
+        now: new Date(),
+      });
     },
     dreamAnalyzeTurn: async (input): Promise<ChatTurnResult> => {
       const { dreamId, userText } = DreamAnalyzeTurnSchema.parse(input);

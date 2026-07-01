@@ -378,6 +378,26 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         updatedAt: 'now',
       }),
     dreamDelete: () => Promise.resolve(),
+    dreamStartReflection: (input) =>
+      Promise.resolve({
+        ok: true,
+        conversation: {
+          id: input.dreamId,
+          schemaVersion: 1,
+          personId: 'owner-1',
+          title: 'Dream',
+          createdAt: 'now',
+          updatedAt: 'now',
+          messages: [
+            {
+              role: 'assistant',
+              content:
+                'You were back in your childhood house, the rooms rearranging. What were you feeling as it shifted?',
+              ts: 'now',
+            },
+          ],
+        },
+      }),
     dreamAnalyzeTurn: (input) =>
       Promise.resolve({
         ok: true,

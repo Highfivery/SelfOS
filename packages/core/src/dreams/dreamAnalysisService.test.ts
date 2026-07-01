@@ -7,7 +7,7 @@ import type { Dream } from '../schemas';
 import { listConversations } from '../conversations';
 import { getInsight, listInsightsForPerson, saveInsight, summarizeForContext } from '../insights';
 import { savePerson, saveRelationship } from '../people';
-import { queryUsage } from '../usage';
+import { queryUsage, setPersonBudget } from '../usage';
 import {
   deleteDream,
   getAnalysis,
@@ -16,9 +16,12 @@ import {
   saveDream,
 } from './dreamService';
 import {
+  DREAM_READY_MARKER,
   approveAnalysis,
+  openReflection,
   removeFromContext,
   runAnalysisTurn,
+  stripDreamMarkers,
   synthesizeAnalysis,
   updateAnalysis,
 } from './dreamAnalysisService';
@@ -434,5 +437,140 @@ describe('dreamAnalysisService', () => {
     expect(captured).toContain('(sibling)');
     expect(captured).toContain('Alex’s sister, a teacher'); // shared notes reach the prompt
     expect(captured).not.toContain('ROBIN-PRIVATE-NOTE'); // a LOCKED field never reaches the prompt
+  });
+
+  // --- §15.4: the coach-first opener + the DREAM_READY readiness marker ---
+
+  it('opens the reflection coach-first (assistant speaks first), meters dream.analyze, and stays out of Sessions', async () => {
+    const fs = memFileSystem();
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+
+    const res = await openReflection({
+      ...deps(
+        fs,
+        fakeClient({ reply: 'You were back in your childhood home. What stood out most?' }),
+      ),
+      onDelta: () => {},
+    });
+
+    expect(res.ok).toBe(true);
+    if (!res.ok) throw new Error('opener failed');
+    // The coach speaks FIRST — a single assistant message, no synthetic user instruction persisted.
+    expect(res.conversation.messages.map((m) => m.role)).toEqual(['assistant']);
+    expect(res.conversation.messages[0]?.content).toContain('childhood home');
+    expect(res.usage?.type).toBe('dream.analyze');
+    expect((await getDream(fs, key, 'p1', 'd1'))?.status).toBe('analyzing');
+    // Persisted under the dream — never in the Sessions list.
+    expect(await listConversations(fs, key, 'p1')).toEqual([]);
+    const stored = await getDreamConversation(fs, key, 'p1', 'd1');
+    expect(stored?.messages).toHaveLength(1);
+  });
+
+  it('is idempotent — an already-opened reflection resumes with no extra spend', async () => {
+    const fs = memFileSystem();
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+    await openReflection({ ...deps(fs, fakeClient()), onDelta: () => {} });
+
+    let calls = 0;
+    const counting: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (_options, onDelta) => {
+        calls += 1;
+        onDelta('again');
+        return Promise.resolve({
+          text: 'again',
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    const res = await openReflection({ ...deps(fs, counting), onDelta: () => {} });
+
+    expect(calls).toBe(0); // no second model call
+    expect(res.ok && res.conversation.messages).toHaveLength(1);
+    expect(res.ok && res.usage).toBeUndefined();
+  });
+
+  it('falls back to a warm static opener (no spend) when there is no key', async () => {
+    const fs = memFileSystem();
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+
+    const res = await openReflection({
+      ...deps(fs, fakeClient()),
+      apiKey: null,
+      onDelta: () => {},
+    });
+
+    expect(res.ok).toBe(true);
+    if (!res.ok) throw new Error('opener failed');
+    expect(res.conversation.messages).toHaveLength(1);
+    expect(res.conversation.messages[0]?.role).toBe('assistant');
+    expect(res.usage).toBeUndefined();
+    expect(
+      await queryUsage(fs, key, {
+        from: '2000-01-01T00:00:00.000Z',
+        to: '2100-01-01T00:00:00.000Z',
+      }),
+    ).toEqual([]); // nothing metered
+  });
+
+  it('falls back to a static opener (no spend) when over budget', async () => {
+    const fs = memFileSystem();
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+    await setPersonBudget(fs, key, 'p1', { limitUsd: 0, period: 'week', warnRatio: 0.8 });
+
+    const res = await openReflection({ ...deps(fs, fakeClient()), onDelta: () => {} });
+
+    expect(res.ok).toBe(true);
+    if (!res.ok) throw new Error('opener failed');
+    expect(res.conversation.messages).toHaveLength(1);
+    expect(res.usage).toBeUndefined();
+    expect(
+      await queryUsage(fs, key, {
+        from: '2000-01-01T00:00:00.000Z',
+        to: '2100-01-01T00:00:00.000Z',
+      }),
+    ).toEqual([]);
+  });
+
+  it('surfaces analysisReady + strips the marker when the coach signals it has enough', async () => {
+    const fs = memFileSystem();
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+
+    const res = await runAnalysisTurn({
+      ...deps(
+        fs,
+        fakeClient({ reply: `Thank you for sharing all of that. ${DREAM_READY_MARKER}` }),
+      ),
+      userText: 'That is everything I remember.',
+      onDelta: () => {},
+    });
+
+    expect(res.ok).toBe(true);
+    if (!res.ok) throw new Error('turn failed');
+    expect(res.analysisReady).toBe(true);
+    // The marker never persists or shows.
+    const saved = res.conversation.messages.at(-1)?.content ?? '';
+    expect(saved).not.toContain(DREAM_READY_MARKER);
+    expect(saved).toBe('Thank you for sharing all of that.');
+  });
+
+  it('leaves analysisReady unset on an ordinary turn (no marker)', async () => {
+    const fs = memFileSystem();
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+
+    const res = await runAnalysisTurn({
+      ...deps(fs, fakeClient({ reply: 'Tell me more about how it felt.' })),
+      userText: 'It was strange.',
+      onDelta: () => {},
+    });
+
+    expect(res.ok && res.analysisReady).toBeUndefined();
+  });
+
+  it('stripDreamMarkers removes the full token and a mid-stream partial', () => {
+    expect(stripDreamMarkers(`A reflection. ${DREAM_READY_MARKER}`)).toBe('A reflection.');
+    // A partial marker still arriving mid-stream is trimmed too (no flash).
+    expect(stripDreamMarkers('A reflection. [[SELFOS:DREAM_RE')).toBe('A reflection.');
+    expect(stripDreamMarkers('Nothing to strip here')).toBe('Nothing to strip here');
   });
 });

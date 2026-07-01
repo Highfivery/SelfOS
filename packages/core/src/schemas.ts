@@ -2049,6 +2049,10 @@ export type ChatTurnResult =
       // Challenge was captured (free — rides this turn). The renderer shows an inline "Challenge set ✓"
       // confirmation linking to the tracked card and refreshes the challenge store. Absent ⇒ no capture.
       challengeCreated?: { id: string; action: string };
+      // 12-dreams §15.4: in a dream-analysis turn, the coach emitted a `[[SELFOS:DREAM_READY]]` marker —
+      // it has gathered enough to write a meaningful analysis. The renderer surfaces a highlighted
+      // "Analyze this dream" suggestion (never a gate — synthesis stays available). Absent ⇒ not yet ready.
+      analysisReady?: boolean;
     }
   | { ok: false; reason: 'NO_KEY' | 'BUDGET' | 'ERROR'; message: string };
 
@@ -2567,6 +2571,17 @@ export type DreamSynthesisResult =
       message: string;
       usage?: UsageEvent;
     };
+
+/**
+ * The result of opening (or resuming) a dream's guided reflection (12 §15.4). The coach opens the
+ * conversation itself with an AI-generated first message that reflects the specific dream back. Falls back
+ * to a static opener (still `ok: true`) when AI can't run (no key / over budget / transport error), so the
+ * session always opens; `usage` is present only when the AI opener actually ran + was metered. `ok: false`
+ * only for a genuinely-missing dream.
+ */
+export type DreamReflectionResult =
+  | { ok: true; conversation: Conversation; usage?: UsageEvent }
+  | { ok: false; reason: 'ERROR'; message: string };
 
 /** The result of approving a dream's analysis into the coach's memory (→ Insight, 12 §3.3). */
 export type DreamApproveResult =

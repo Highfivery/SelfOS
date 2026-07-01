@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.3](https://github.com/Highfivery/SelfOS/compare/v0.12.2...v0.12.3) (2026-07-01)
+
+
+### Bug Fixes
+
+* **dreams:** share a dream reflection with multiple people (per-person chips) ([0dc7b3d](https://github.com/Highfivery/SelfOS/commit/0dc7b3dcaacdcc03f587fb44f3ecf70329533f00))
+
 ## [0.12.2](https://github.com/Highfivery/SelfOS/compare/v0.12.1...v0.12.2) (2026-07-01)
 
 

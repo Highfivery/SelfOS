@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.13.0](https://github.com/Highfivery/SelfOS/compare/v0.12.3...v0.13.0) (2026-07-01)
+
+
+### Features
+
+* **dreams:** dashboard insight strip, quick filters, time grouping ([#106](https://github.com/Highfivery/SelfOS/issues/106)) ([2a8b4e3](https://github.com/Highfivery/SelfOS/commit/2a8b4e3c1368de1f3d4b14938bfc7dc022ed294e))
+* **dreams:** image-forward dashboard card grid + immersive detail ([#104](https://github.com/Highfivery/SelfOS/issues/104)) ([54b4501](https://github.com/Highfivery/SelfOS/commit/54b45019f5d044798bcb6146ca31c096b2b23abb))
+
 ## [0.12.3](https://github.com/Highfivery/SelfOS/compare/v0.12.2...v0.12.3) (2026-07-01)
 
 

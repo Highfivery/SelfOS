@@ -4754,6 +4754,22 @@ test('dreams: visualize a dream — sensitive warning, generate, encrypted round
     await w.getByRole('button', { name: 'Continue' }).click();
     await expect(w.getByRole('img')).toBeVisible();
 
+    // The hero image is shown at its NATIVE aspect ratio, never cropped/stretched (12 §16.4): inject a
+    // known 2:1 source and assert the rendered box keeps ~2:1 (not squashed to a 16:9 or full-width box).
+    const ratio = await w.evaluate(async () => {
+      const img = document.querySelector('img') as HTMLImageElement;
+      const c = document.createElement('canvas');
+      c.width = 800;
+      c.height = 400;
+      c.getContext('2d')!.fillRect(0, 0, 800, 400);
+      img.src = c.toDataURL();
+      await img.decode();
+      const r = img.getBoundingClientRect();
+      return { rendered: r.width / r.height, fit: getComputedStyle(img).objectFit };
+    });
+    expect(Math.abs(ratio.rendered - 2)).toBeLessThan(0.1);
+    expect(ratio.fit).toBe('contain');
+
     // The generated image reaches the dashboard grid (the store refresh, 12 §16): go back → the card now
     // shows the decrypted image as its background (not the fallback gradient) → reopen into the hero.
     await w.getByRole('button', { name: 'Dreams' }).click();
@@ -8401,6 +8417,68 @@ test('wellbeing (51): PHQ-9 item 9 surfaces crisis resources MID-check-in; the f
     // Home: with the seeded crisis flag + this one (≥2 in 14 days), the supportive resources-first banner shows.
     await w.getByRole('link', { name: 'Home' }).click();
     await expect(w.getByText('988')).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('QATEMP find overflow 360', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('seed: master key missing');
+  const iso = new Date().toISOString();
+  for (let i = 0; i < 4; i++) {
+    await saveDream(fs, key, {
+      id: `d${i}`,
+      schemaVersion: 1,
+      personId: 'owner-1',
+      title: `Dream ${i}`,
+      narrative: 'x',
+      lucid: i === 0,
+      nightmare: i === 1,
+      tags: [],
+      people: [],
+      sensitivity: 'standard',
+      status: 'captured',
+      createdAt: iso,
+      updatedAt: iso,
+      dreamDate: iso,
+    } as Parameters<typeof saveDream>[2]);
+  }
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Dreams' }).click();
+    await expect(w.getByText('This week')).toBeVisible();
+    await app.evaluate(async ({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows()[0];
+      if (win) {
+        win.setMinimumSize(360, 480);
+        win.setSize(360, 800);
+      }
+    });
+    await w.waitForTimeout(400);
+    const wide = await w.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>('*')]
+        .filter(
+          (el) =>
+            el.children.length === 0 ||
+            el.className.toString().includes('strip') ||
+            el.className.toString().includes('insight'),
+        )
+        .map((el) => ({
+          cls: el.className.toString().slice(0, 30),
+          tag: el.tagName,
+          right: Math.round(el.getBoundingClientRect().right),
+          w: Math.round(el.getBoundingClientRect().width),
+        }))
+        .filter((e) => e.right > 361)
+        .slice(0, 12),
+    );
+    console.log('WIDE=' + JSON.stringify(wide));
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

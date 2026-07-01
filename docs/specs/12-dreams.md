@@ -1213,10 +1213,12 @@ are the most visual, evocative content in the app; the dashboard should feel lik
 
 ### 16.4 Detail (immersive)
 
-- The grid is replaced full-width by the dream detail: an **image hero** (or, without one, a themed banner +
-  the Visualize affordance) → the read-first dream content (§15.3 `DreamDetailView`: narrative, chips, "Edit
-  dream") → the analysis surface (§15) → the share controls (§3.4). A **back-to-grid** control returns to the
-  dashboard. Reuses the existing detail/analysis/share components — only the framing (hero + full-width) is
+- The grid is replaced full-width by the dream detail: the generated **image** shown at its **native aspect
+  ratio** (never cropped), bounded (`max-height`, `object-fit: contain`, left-aligned) so a square/portrait
+  image isn't a giant full-width banner (a follow-up to the first cut, which force-cropped it to 16:9) → the
+  read-first dream content (§15.3 `DreamDetailView`: narrative, chips, "Edit dream") → the analysis surface
+  (§15) → the share controls (§3.4). A **back-to-grid** control returns to the dashboard. Reuses the existing
+  detail/analysis/share components — only the framing (image + full-width) is
   new.
 
 ### 16.5 Data & safety
@@ -1281,6 +1283,20 @@ are the most visual, evocative content in the app; the dashboard should feel lik
    `dreamPatternStore`) so the dashboard summary is stable and consistent with the unfiltered grid rather than
    silently inheriting whatever window the Patterns screen was last set to — this also aligns the ≥2-dreams
    load gate with the strip's windowed `dreamCount` self-hide; + tightened `moodCue` to need ≥3 readings._
+
+**Follow-up (2026-07-01, user feedback; `fix/dream-card-size-and-image-display`):** (1) the grid cards were
+**too small** — the slice-2 `minmax(148px)` (chosen for two-columns-at-360) shrank desktop cards; the grid is
+now `minmax(200px)` on desktop with a `max-width:540px` override back to `minmax(140px)` so a phone keeps two
+columns (a bigger min at 360 dropped to one giant card). (2) the detail image was **force-cropped to 16:9**
+(`object-fit:cover` + a fixed `aspect-ratio`), mangling the square/native generated image, and a native-ratio
+full-width top banner would be huge — both `.dreamImage` + `.dreamHeroImage` now show the image at its
+**native ratio, uncropped** (`width:auto; height:auto; max-height; object-fit:contain`), **`align-self:flex-start`**
+so the parent `Stack` (a column flex, `align-items:stretch`) can't stretch it to full width (the real bug — the
+img was being stretched to the container width then squashed to `max-height`, `object-fit:fill`). A new E2E
+guard injects a 2:1 source and asserts the rendered box stays ~2:1 with `object-fit:contain`. **Lesson: an
+`<img>` inside a flex column is stretched to full width by the default `align-items:stretch`, so `width:auto`
+alone won't preserve its aspect ratio — it also needs `align-self:flex-start` (or the parent must not stretch);
+measuring `naturalWidth` vs the rendered rect is how you catch a silent stretch that a screenshot can miss.**
 
 ### 16.7 Open questions
 

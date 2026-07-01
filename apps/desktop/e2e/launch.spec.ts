@@ -4670,6 +4670,16 @@ test('dreams: visualize a dream — sensitive warning, generate, encrypted round
     await w.getByRole('button', { name: 'Continue' }).click();
     await expect(w.getByRole('img')).toBeVisible();
 
+    // The generated image reaches the dashboard grid (the store refresh, 12 §16): go back → the card now
+    // shows the decrypted image as its background (not the fallback gradient) → reopen into the hero.
+    await w.getByRole('button', { name: 'Dreams' }).click();
+    const gridCard = w.getByRole('button', { name: /Visualize me/ });
+    await expect
+      .poll(async () => (await gridCard.getAttribute('style')) ?? '')
+      .toContain('data:image');
+    await gridCard.click();
+    await expect(w.getByRole('img')).toBeVisible();
+
     // The chosen preset is stamped onto the dream's image descriptor on disk.
     const key = await loadMasterKey(secrets);
     if (!key) throw new Error('master key missing');
@@ -5143,9 +5153,9 @@ test('dreams: share an approved insight fact into a related person’s coaching 
     await w.getByRole('button', { name: /add to my coaching context/i }).click();
     await expect(w.getByText(/in your coaching context/i)).toBeVisible();
 
-    // The share controls appear; share the first fact with Partner (the only switches on this surface).
-    await expect(w.getByText('Share with someone in your life')).toBeVisible();
-    await w.getByRole('switch').first().click();
+    // The share controls appear; share the first fact with Partner via its per-person toggle chip.
+    await expect(w.getByText('Share with people in your life')).toBeVisible();
+    await w.getByRole('button', { name: 'Partner', pressed: false }).first().click();
 
     // From the vault: the fact is now targeted at Partner AND reaches THEIR coaching grounding.
     await expect

@@ -1,6 +1,8 @@
 # 12 — Dreams (guided dream journaling, analysis & patterns)
 
-> **Status:** **Approved** (v1 built) · **§15 amendment — "reflection as a guided session" redesign: BUILT 2026-07-01 (all 3 slices)** · _last updated 2026-07-01_
+> **Status:** **Approved** (v1 built) · **§15 "reflection as a guided session": BUILT** · **§16 "Dreams
+> dashboard redesign": slice 1 (card grid + immersive detail) BUILT 2026-07-01; slice 2 (chrome) pending** ·
+> _last updated 2026-07-01_
 >
 > Dreams lets a person capture dreams in seconds, then — when they choose — work through a **guided AI
 > analysis** that ends in a structured, readable write-up. Once the person approves it, that analysis
@@ -1163,3 +1165,108 @@ false })` (a contact — no login/onboarding), reloads the household, **upgrades
 - **Static-opener fallback copy** when the AI opener can't run — tuned in slice 1.
 - Whether the readiness suggestion should also appear in the **compact detail** (not only inside the pane) —
   decided in slice 2 with visual QA.
+
+## 16. Amendment (2026-07) — Dreams dashboard redesign (image-forward card grid)
+
+> **Status:** **Approved 2026-07-01** — building in slices (§16.6). Renderer-only; **no schema/IPC/backend
+> change** — it re-presents data that already exists (dreams, generated images via `dreams:getImage`, mood/
+> tags/flags, and the deterministic pattern stats from `dreamPatternService`). Reviewed against an interactive
+> mockup before approval.
+
+### 16.1 Why
+
+The Dreams journal is a narrow text-list master–detail with a large empty **"Select a dream, or log a new
+one"** pane by default — flat and utilitarian, and it never uses the AI images the app can generate. Dreams
+are the most visual, evocative content in the app; the dashboard should feel like one.
+
+### 16.2 Decisions (confirmed with the user via mockup review, 2026-07-01)
+
+1. **Card grid, not master–detail.** A responsive grid of **tall (3:4), image-forward cards** replaces the
+   list; the empty detail pane is **removed**.
+2. **Use the generated image.** A dream with an image shows it (object-fit cover) with a bottom gradient
+   **scrim** so the overlaid title/date stay legible over any image.
+3. **No-image fallback = a dreamy card**, not a blank one: a soft themed gradient + a short **narrative
+   snippet** (serif "voice" font) + a moon motif + a small **"Visualize"** hint to generate an image.
+4. **Immersive full-view detail.** Tapping a card opens a **full-width** detail — the image as a **hero
+   banner**, then the narrative + the analysis surface (§15) + sharing (§3.4) — with a back-to-grid arrow.
+   (No side pane; no new route — an in-page mode switch within `/dreams`, so the Memory provenance deep-link
+   [`focusDreamId`, 20 §3.3] still lands on the dream.)
+5. **Dashboard chrome (all three):** a slim **insight strip** (recurring theme, lucid/nightmare counts, a
+   gentle mood-trend cue, "See patterns →"), **quick filters** (All / Analyzed / Lucid / Nightmares), and
+   **time-grouping** headers ("This week / This month / Earlier").
+6. **A "Log a dream" create tile** as the first grid cell (alongside the header button).
+
+### 16.3 Card model
+
+- **Aspect 3:4**, `border-radius: 12px`, in a `repeat(auto-fill, minmax(…))` grid (≈4–5/row desktop, 2/row
+  phone, 1 on the narrowest). Hover: a gentle lift.
+- **With image:** the decrypted image (lazy-fetched per shown card via `dreams:getImage`, the Home
+  `DreamsCard` precedent — no spend, deterministic) fills the tile; a bottom scrim carries **title + date**;
+  top-right **status badges** (nightmare bolt, lucid half-moon, analyzed check — icon + shape, never colour
+  alone, §9).
+- **Without image:** a themed gradient (seeded by id so cards look distinct) + a centred **moon motif**
+  watermark + the same title/date scrim + a compact **"Visualize"** pill in the footer (opens the existing
+  `DreamImagePanel` generate flow, gated on `dreams.generateImage`; hidden otherwise). _(Built: the earlier
+  narrative-snippet idea was dropped in slice-1 visual QA — a mid-card snippet fought the bottom title for
+  space and overlapped it; a clean bottom-anchored title [2-line clamp] + moon watermark reads better.)_
+- **Nightmare cards** get a cooler, calmer tint — evocative, never alarming (§8.2 tone).
+
+### 16.4 Detail (immersive)
+
+- The grid is replaced full-width by the dream detail: an **image hero** (or, without one, a themed banner +
+  the Visualize affordance) → the read-first dream content (§15.3 `DreamDetailView`: narrative, chips, "Edit
+  dream") → the analysis surface (§15) → the share controls (§3.4). A **back-to-grid** control returns to the
+  dashboard. Reuses the existing detail/analysis/share components — only the framing (hero + full-width) is
+  new.
+
+### 16.5 Data & safety
+
+- **No new data.** Images come from `dreams:getImage` (decrypted host-side, base64 over IPC — the `08` §13.2
+  pattern); counts/recurring-theme/mood from `dreamPatternService.computePatternStats` (deterministic, no
+  AI); filters + grouping are pure client-side over the dream list. No new metering, no AI spend on the
+  dashboard.
+- **Privacy:** thumbnails are the dreamer's own images (fetched in a `Dreams.tsx` effect keyed on the
+  per-person `dreamStore` list, so a switch clears them); a **sensitive-tier** dream still never
+  auto-generates — the fallback shows the moon motif + Visualize only, and Visualize keeps the §8.3
+  sensitive-tier warning. Nothing new crosses the trust boundary.
+- **A11y / responsive:** cards are focusable/operable buttons with a meaningful accessible name (title +
+  date + status), badges have text equivalents (never colour alone, §9), and the grid + hero work
+  ~360px→desktop (the DoD 390px + no-overflow guards); the title clamps to 2 lines and the date never breaks
+  mid-value over the fallback gradient.
+
+### 16.6 Build slices (after approval)
+
+1. **The card grid + immersive detail** — replace the master–detail list with the 3:4 card grid (image /
+   fallback / badges / create tile) and the full-width immersive detail (image hero when `dream.image` is
+   set, else the visualize panel lower); remove the empty pane. RTL + E2E + visual QA (desktop + 390px).
+   _**Built 2026-07-01** (on `feat/dreams-dashboard-redesign`): new `DreamCard` (image-forward 3:4 tile —
+   generated image as the background else a seeded themed gradient [nightmare = a cool calm tint] + a centred
+   moon watermark; top-right nightmare/lucid/analyzed badges; a bottom scrim with a 2-line-clamped title +
+   date + a footer "Visualize" pill gated on `dreams.generateImage`; one button, accessible name = title +
+   date + status). `Dreams.tsx` rebuilt into a `.grid` (a "Log a dream" create tile + the cards) with a
+   lazy per-person `thumbs` effect (fetches `dreams:getImage` data URLs for dreams with `.image`, re-runs on
+   the store list so a switch clears them), and a full-width immersive detail with a back-to-grid control;
+   the empty "Select a dream" pane is gone. `DreamDetailView` leads with `<DreamImagePanel hero />` only when
+   `dream.image` is set (else the visualize panel stays lower, so a "set up dream images" note never
+   dominates the top); `DreamImagePanel` gained a `hero` prop. Renderer-only — no schema/IPC/backend change.
+   Gate green: typecheck, lint, **870 desktop** unit (+3 `DreamCard` RTL; updated `Dreams` RTL), **9 dream
+   E2E** (also fixed two stale share-E2E assertions the earlier multi-person merge left broken — the heading
+   text + the per-person toggle now being an `aria-pressed` chip, not a `switch`). Visual QA at desktop +
+   390px (real Electron screenshots: a clean image-forward grid, no snippet/title overlap, the date never
+   breaking mid-value, the immersive detail). **Code-reviewer fix-first (both applied):** (1) `DreamImagePanel`
+   now refreshes the dream store (`dreamStore.load()`) after generate/delete — since `Dream.image` now drives
+   the grid thumbnail AND the hero-vs-lower placement, without it the grid kept a stale thumbnail and the hero
+   never promoted / a deleted-in-hero image left an orphaned CTA; the extended visualize E2E drives the
+   back-to-grid → thumbnail → reopen-hero path that proves it. (2) The back-to-grid control was `display:none`
+   at desktop (a dead master-detail holdover) — in the new full-width detail that trapped the user with no way
+   back; it's now always shown (dead `.layout`/`.list`/`.detail` media rules removed). The per-person image
+   isolation, the `dreams.generateImage` gate, and card a11y were verified clean._
+2. **Dashboard chrome** — the insight strip (from pattern stats), quick filters, and time-grouping headers.
+   RTL + E2E (filter to Nightmares; a grouped header renders) + visual QA.
+
+### 16.7 Open questions
+
+- ~~Exact gradient palettes for the fallback + nightmare tints~~ — **resolved in slice 1**: five seeded
+  mid-tone dreamy gradients (`FALLBACK_GRADIENTS`) + one cooler nightmare tint (`NIGHTMARE_GRADIENT`), tuned
+  via visual QA at desktop + 390px.
+- Whether the insight strip's mood cue is a tiny sparkline or a one-word trend — decided in slice 2 visual QA.

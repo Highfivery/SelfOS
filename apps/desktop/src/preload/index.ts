@@ -231,6 +231,7 @@ const bridge: SelfosBridge = {
   dreamGet: (id) => ipcRenderer.invoke(IpcChannels.dreamGet, id),
   dreamSave: (input) => ipcRenderer.invoke(IpcChannels.dreamSave, input),
   dreamDelete: (id) => ipcRenderer.invoke(IpcChannels.dreamDelete, id),
+  dreamStartReflection: (input) => ipcRenderer.invoke(IpcChannels.dreamStartReflection, input),
   dreamAnalyzeTurn: (input) => ipcRenderer.invoke(IpcChannels.dreamAnalyzeTurn, input),
   onDreamChunk: (listener) => {
     const handler = (_event: unknown, delta: string): void => listener(delta);

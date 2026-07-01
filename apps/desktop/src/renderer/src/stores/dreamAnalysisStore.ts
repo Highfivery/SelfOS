@@ -16,11 +16,16 @@ import { useDreamStore } from './dreamStore';
  */
 interface DreamAnalysisState {
   dreamId: string | null;
+  /** True once `open()` has finished loading — so the coach-opener effect never races the initial load. */
+  loaded: boolean;
   messages: ChatMessage[];
   streaming: string;
+  opening: boolean; // awaiting the coach's opener (12 §15.4)
   sending: boolean; // awaiting a guided turn
   synthesizing: boolean; // awaiting the synthesis
   approving: boolean;
+  /** The coach signalled (via `[[SELFOS:DREAM_READY]]`) it has enough to write an analysis (12 §15.4). */
+  analysisReady: boolean;
   analysis: DreamAnalysis | null;
   /** The approved Insight this dream produced (facts + per-person sharing), once approved (12 §3.4). */
   insight: Insight | null;
@@ -29,6 +34,8 @@ interface DreamAnalysisState {
   error: string | null;
   /** Enter a dream's Analysis view: load its transcript + any existing analysis. */
   open: (dreamId: string) => Promise<void>;
+  /** Have the coach open the reflection (first turn) referencing this dream; no-op if already opened. */
+  startReflection: () => Promise<void>;
   /** Send one guided-chat turn; the streamed reply arrives via `appendChunk`. */
   sendTurn: (text: string) => Promise<void>;
   /** Synthesize the dream (+ transcript) into a structured analysis. */
@@ -49,11 +56,14 @@ interface DreamAnalysisState {
 
 const EMPTY = {
   dreamId: null,
+  loaded: false,
   messages: [] as ChatMessage[],
   streaming: '',
+  opening: false,
   sending: false,
   synthesizing: false,
   approving: false,
+  analysisReady: false,
   analysis: null,
   insight: null,
   shareTargets: [] as DreamShareTarget[],
@@ -70,8 +80,27 @@ export const useDreamAnalysisStore = create<DreamAnalysisState>((set, get) => ({
     ]);
     // Guard against a late resolve after the user moved to a different dream.
     if (get().dreamId !== dreamId) return;
-    set({ messages: conversation?.messages ?? [], analysis: analysis ?? null });
+    set({ messages: conversation?.messages ?? [], analysis: analysis ?? null, loaded: true });
     if (analysis?.insightId) await get().loadSharing();
+  },
+  startReflection: async () => {
+    const dreamId = get().dreamId;
+    // Only ever opens an EMPTY reflection — a transcript that already has messages just resumes (no spend).
+    if (!dreamId || get().opening || get().messages.length > 0) return;
+    set({ opening: true, streaming: '', error: null });
+    const result = await window.selfos?.dreamStartReflection({ dreamId });
+    if (get().dreamId !== dreamId) return; // moved on to another dream mid-open
+    if (result?.ok) {
+      set({ messages: result.conversation.messages, streaming: '', opening: false });
+      await useBudgetStore.getState().refresh(); // the AI opener is metered → update the usage ring
+      await useDreamStore.getState().load(); // status may flip captured → analyzing
+    } else {
+      set({
+        opening: false,
+        streaming: '',
+        error: result?.message ?? 'Couldn’t open the reflection. Please try again.',
+      });
+    }
   },
   sendTurn: async (text) => {
     const trimmed = text.trim();
@@ -88,7 +117,13 @@ export const useDreamAnalysisStore = create<DreamAnalysisState>((set, get) => ({
     }));
     const result = await window.selfos?.dreamAnalyzeTurn({ dreamId, userText: trimmed });
     if (result?.ok) {
-      set({ messages: result.conversation.messages, streaming: '', sending: false });
+      // `analysisReady` is sticky — once the coach signals it has enough, the suggestion stays offered.
+      set((s) => ({
+        messages: result.conversation.messages,
+        streaming: '',
+        sending: false,
+        analysisReady: s.analysisReady || Boolean(result.analysisReady),
+      }));
       await useBudgetStore.getState().refresh(); // dream.analyze is metered → update the usage ring
       await useDreamStore.getState().load(); // status may flip captured → analyzing
     } else {

@@ -1,6 +1,6 @@
 # 12 — Dreams (guided dream journaling, analysis & patterns)
 
-> **Status:** **Approved** · _last updated 2026-06-11_
+> **Status:** **Approved** (v1 built) · **§15 amendment — "reflection as a guided session" redesign: BUILT 2026-07-01 (all 3 slices)** · _last updated 2026-07-01_
 >
 > Dreams lets a person capture dreams in seconds, then — when they choose — work through a **guided AI
 > analysis** that ends in a structured, readable write-up. Once the person approves it, that analysis
@@ -114,6 +114,11 @@ A new **Dreams** feature module registers a nav entry (gated by `dreams.own`) an
 
 ### 3.1 Capture (fast-first)
 
+> **Amended by [§15](#15-amendment-2026-07--dream-reflection-as-a-guided-session):** capture gains a
+> primary **"Start reflection"** action (saves + opens the session, gated on AI) alongside **"Just save"**
+> (this fast/offline path, unchanged); and the people editor's free-name path now offers to **add the
+> typed person as a contact** (+ optional relationship). The capture model below is otherwise unchanged.
+
 1. **Log a dream** opens a lightweight composer with the narrative field focused immediately — a person can
    type (later: speak) the dream and **Save** in seconds. Nothing else is required.
 2. **Optional quick fields** (collapsed by default so they never slow capture):
@@ -136,6 +141,13 @@ A new **Dreams** feature module registers a nav entry (gated by `dreams.own`) an
    choice.
 
 ### 3.2 Guided analysis
+
+> **Amended by [§15](#15-amendment-2026-07--dream-reflection-as-a-guided-session):** the reflection now
+> **opens coach-first** — an AI-generated opener that reflects the specific dream back and asks one gentle
+> question (no more blank chat / re-asking for the dream) — is entered directly via **"Start reflection"**
+> from capture, and the coach signals readiness with a `[[SELFOS:DREAM_READY]]` marker that surfaces a
+> highlighted **"Analyze this dream"** suggestion. The dream-scoped-transcript, streaming, metering,
+> synthesis, and approve→context mechanics below are all **reused unchanged**.
 
 1. From a dream's detail, **Analyze** opens a **dream-scoped reflective chat** (reuses `05`'s streaming
    engine + crisis footer; budget-checked first, §6). The transcript is stored **with the dream** and
@@ -781,6 +793,33 @@ proven.)_
 
 ## 14. Changelog
 
+- 2026-07-01 — **§15 amendment BUILT (all 3 slices) + approved.** The "dream reflection as a guided session"
+  redesign shipped: (1) core+IPC — `openReflection` (coach-first AI opener referencing the dream) + the
+  `[[SELFOS:DREAM_READY]]` readiness marker + `dreams:startReflection` + enriched analyst voice; (2)
+  renderer — "Start reflection"/"Just save" capture, a read-first dream detail (`DreamDetailView`, image
+  panel moved onto it), the coach-first `DreamAnalysisPane` + a marker-driven "Analyze this dream" nudge;
+  (3) `DreamPeopleEditor` people quick-add (typed name → add-as-contact + optional relationship → linked
+  chip). Reused the existing dream-scoped conversation, metering (`dream.analyze`), synthesis, approve→context,
+  and Insight-feeds-`buildContext` plumbing — the only new backend is the opener call + the marker + the
+  quick-add wiring. Gate green each slice (typecheck node + web/DOM-lib, lint, format, **947 core + 865
+  desktop** unit, all 9 dream E2E + the provenance deep-link). Code-reviewer **ship** (metering,
+  coach-first-effect race-safety, marker, and the trust boundary all verified; applied the nit — the
+  readiness nudge is gated `!analysis` so a reopened post-analysis chat offers "Re-create analysis," not the
+  nudge). Visual QA of all four new surfaces (composer, read-first detail, coach-first pane, quick-add
+  prompt). See §15 for the full amendment.
+- 2026-07-01 — **§15 amendment drafted (then approved): "dream reflection as a guided session"
+  redesign.** User feedback — the analysis "feels like a form you enter, then save," and the separate
+  "Analyze this dream" button opens a blank chat that re-asks for the dream just written. Root cause is
+  presentational (the coach already receives the dream via `buildDreamPrompt`; the UI just opens empty and
+  waits). §15 redesigns the entry + opening as a real guided session (coach opens with an AI opener that
+  reflects the specific dream back; a `[[SELFOS:DREAM_READY]]` readiness marker; "Start reflection" +
+  "Just save" on capture) and adds a **people quick-add** (a typed name → add-as-contact + optional
+  relationship). Four decisions confirmed with the user (§15.2): AI opener (spends one turn on Start);
+  keep "Just save" (capture-first preserved); add typed people as a contact + optional relationship;
+  offer the add-person prompt on every sensitivity tier. Reuses the existing dream-scoped conversation,
+  metering, synthesis, approve→context, and Insight-feeds-`buildContext` plumbing — no new backend beyond
+  the opener path + the marker + the quick-add wiring. (Approved the same day; built in 3 slices — see the
+  entry above + §15.)
 - 2026-06-11 — **Amendment: People-graph linking of "people present"** (§13 item 6; touches §3.1/§4.2/§5.1/
   §8.4) — finishes the §13.2 deferral. The capture composer's people editor is now a hybrid picker (link a
   household person or type a free name); a linked person's **shareable** context (display name + relationship
@@ -929,3 +968,198 @@ string[]`** (no migration; existing facts unaffected) + `summarizeForContext` su
   capture→analyze→approve→share flow asserting the fact reaches the related person's grounding + a 390px
   guard; visual QA at desktop). On `feat/dreams-slice-5b`. **The Dreams spec (§13.1–§13.5) is now fully
   built.** Only the deferred image-gen companion spec remains.
+
+## 15. Amendment (2026-07) — dream reflection as a guided session
+
+> **Status:** **BUILT 2026-07-01** — all 3 slices shipped (§15.9); code-reviewer **ship**. This amendment
+> redesigns the **entry + opening** of the guided analysis (§3.1/§3.2) and adds a **people quick-add**
+> (§3.1). Everything else in this spec — the dream-scoped transcript, streaming, metering
+> (`dream.analyze`), synthesis → `DreamAnalysis`, approve → `Insight` (`source: 'dream'`), and that
+> Insight feeding `buildContext` app-wide (Sessions, questionnaire generation, other dream analysis,
+> coaching, goals) — is **reused unchanged**. This is a UX redesign plus three small, well-precedented
+> mechanisms, not a rebuild.
+
+### 15.1 Why
+
+Two user-reported problems: (1) capturing a dream "feels like a form you enter, then save," and (2) the
+separate **"Analyze this dream"** button opens a **blank chat** whose placeholder asks the person to
+"share a little about the dream — how it felt, what stood out" — **re-requesting what they just wrote**.
+
+The root cause is **presentational, not architectural**: the coach _already_ receives the full dream in
+its system prompt (`buildDreamPrompt` injects `The dream: "<narrative>"` + the dreamer's context + linked
+people), but the UI ([`DreamAnalysisPane`](../../apps/desktop/src/renderer/src/app/routes/dreams/DreamAnalysisPane.tsx))
+opens an empty thread and waits for the user to speak first. The fix is to make the **coach open the
+conversation** (proving it read the dream) and to enter that conversation **directly from capture**,
+instead of Save → re-select → a form with an "Analyze" button on top.
+
+### 15.2 Decisions (confirmed with the user, 2026-07-01)
+
+1. **Coach opener = AI-generated, reads _this_ dream.** On "Start reflection," the coach's first message
+   reflects the specific dream back and asks one gentle opening question. This **spends one `dream.analyze`
+   turn on Start** — acceptable because tapping Start is explicit consent (not a silent load-time spend,
+   which the app otherwise avoids). If the opener call cannot run (no key / over budget / transport error),
+   it **falls back to a warm static opener** so the session still opens gracefully.
+2. **Capture-first preserved.** Capture keeps a pure **"Just save"** path (journal with no AI, works
+   offline / AI-off). "Start reflection" is the primary action but is **gated on AI availability**; when AI
+   is unavailable only "Just save" shows, with a calm "connect AI to reflect" note.
+3. **People quick-add = contact + optional relationship.** Typing a new name (not an existing person)
+   offers to add them as a **contact** (`isSubject: false` — no login, no onboarding); on confirm, an
+   **optional** relationship picker (partner/parent/friend/…) can be set, which also sharpens future
+   context (the dream's life-areas widen by relationship type, per `dreamTopic`).
+4. **Sensitivity:** the add-person prompt appears on **every** tier (the person trusts themselves to
+   decline). **Recorded consequence:** the People list is household-wide, so a quick-added contact is
+   visible to the household like any other contact — but they are added as a **plain contact**, never a
+   subject, and the created record carries no dream reference (the dream stays private to the dreamer).
+
+### 15.3 Target flow
+
+1. **Capture → reflect.** The composer's primary action is **"Start reflection"** (saves the dream, then
+   opens its reflection session directly — no re-selecting, no intermediate form); the secondary is
+   **"Just save"** (journal-only).
+2. **Coach opens.** Entering the session with no prior transcript triggers the AI opener: a warm greeting
+   that reflects the specific dream back in a sentence or two and asks **one** gentle question. No blank
+   chat, no generic "share a little about the dream" placeholder.
+3. **A real analyst/therapist session.** The chat guides the dreamer through the dream one focused question
+   at a time, using named, evidence-based techniques (continuity hypothesis; imagery-rehearsal framing for
+   nightmares; Gestalt "become the image"), with the honesty / not-medical boundary kept (§8.1). Streaming,
+   crisis footer, and metering are the existing `05`/`06` reuse.
+4. **Readiness → "Analyze this dream."** When the coach judges it has gathered enough, it silently appends a
+   `[[SELFOS:DREAM_READY]]` marker; the app surfaces a **highlighted "Analyze this dream" suggestion**
+   (mirroring the `09` wrap-up suggestion). The synthesize action stays available the whole time — the
+   marker is a nudge, **never a gate**.
+5. **Analyze → app-wide.** Synthesis → the existing structured analysis card → approve → coaching context
+   (all unchanged; already flows into Sessions, questionnaire generation, other dream analysis, coaching,
+   and goals).
+6. **Existing dreams re-enter as a session.** Opening a started/analyzed dream leads with the
+   session/analysis surface (Resume reflection / View analysis), with the editable dream fields tucked
+   behind an **"Edit dream"** affordance — so re-opening a dream no longer presents a form.
+
+### 15.4 Core changes (`@selfos/core/dreams/dreamAnalysisService`)
+
+- **Enriched voice.** `DREAM_ANALYSIS_GUIDANCE` is expanded into a fuller dream-analyst/therapist framing
+  that names the techniques above and the one-question-at-a-time arc, keeping the §8.1 honesty boundary
+  (symbolic readings framed as imaginative reflection, never fact/diagnosis) verbatim.
+- **`openReflection(...)` (new).** Generates the coach's first assistant message when the dream conversation
+  has **no messages yet**: one `client.stream` call over the dream system prompt + a synthetic instruction
+  ("Open warmly; reflect this dream back in a sentence or two to show you've read it; ask ONE gentle
+  question; do **not** analyze or summarize the whole dream yet"), seeded as the first assistant message of
+  the dream-scoped conversation. Budget-checked + metered `dream.analyze` (charged to the dreamer). Idempotent
+  (a second call on an already-opened conversation is a no-op). On `NO_KEY`/`BUDGET`/`ERROR`, returns a
+  **static opener** so the pane still opens.
+- **`[[SELFOS:DREAM_READY]]` marker (new), a direct analog of [`wrapUp.ts`](../../packages/core/src/conversations/wrapUp.ts).**
+  A `DREAM_READY_MARKER` constant + a `DREAM_READY_INSTRUCTION` appended to the dream system prompt (teaching
+  the coach to append the token, alone, at the end of a reply **only** once it has enough to write a
+  meaningful analysis; never shown, never mid-conversation). `runAnalysisTurn` detects it → returns
+  `analysisReady: boolean` on the `ChatTurnResult`, and a `stripDreamMarkers()` (tolerant of mid-stream
+  partials, mirroring `stripWrapUpMarker`) removes it from **both** the saved message and every streamed
+  delta so the token never persists or flashes.
+
+### 15.5 IPC changes (gated `dreams.own`, dreamer-scoped; API key stays host-side)
+
+- **`dreams:startReflection({ dreamId })` (new)** → runs `openReflection`; returns the opened conversation.
+- **`dreams:analyzeTurn` result gains `analysisReady`** (the marker signal), alongside the existing streamed
+  transcript. No other channel changes; synthesize/approve/remove/share are unchanged.
+
+### 15.6 Renderer changes
+
+- **`DreamComposer`** — primary **"Start reflection"** (save → open the session) + secondary **"Just save"**;
+  "Start reflection" is hidden/disabled when AI is unavailable, with a calm connect note. On the Start path,
+  saving transitions straight into the analysis pane for the new dream.
+- **`Dreams.tsx`** — opening a **started/analyzed** dream leads with the session/analysis surface; the
+  editable fields move behind **"Edit dream."** A new dream's "Start reflection" routes directly into the
+  pane (no return-to-list round-trip).
+- **`DreamAnalysisPane`** — remove the empty-chat placeholder; the coach's opener is the first message
+  (fetched via `dreams:startReflection` when the transcript is empty). Add a **marker-driven "Analyze this
+  dream" suggestion** component (a sibling of `WrapUpSuggestion`) shown when `analysisReady` and not yet
+  analyzed; strip `DREAM_READY` from the streaming buffer on render.
+- **`DreamPeopleEditor`** — when a **free name** is added, show an inline **"Add {name} to your people?"**
+  confirm → on accept, `peopleSave({ displayName, isSubject: false })` then an **optional** relationship
+  picker (`upsertRelationship`, gated `relationships.manage` which Members have) → **upgrade the dream ref**
+  from `{ name }` to `{ personId }` (it becomes a linked chip). "Not now" keeps today's free-text behavior.
+
+### 15.7 Safety, privacy & honesty (amends §8)
+
+- **Honesty of the opener.** The opener reflects the dream back and asks a question; it **does not analyze,
+  decode, or diagnose** — the not-medical boundary and imaginative-reflection framing (§8.1) hold. The
+  crisis footer + not-medical line remain on every state; the synthesis `crisisFlag`/`distressSignal` paths
+  (§8.2) are unchanged.
+- **Capture-first / offline.** "Just save" guarantees a dream can always be captured with **no AI** and
+  offline (§7); only "Start reflection" and the opener require the network + a key.
+- **People quick-add.** Creates a **contact** (`isSubject: false`) only — never a login/subject. The
+  household-wide visibility of contacts is inherent (§8.4 owner-access model) and accepted (§15.2 #4); the
+  created record carries no back-reference to the dream, so the dream itself stays dreamer-private.
+- **No new capability.** Uses the existing `dreams.own`; person/relationship creation uses the existing
+  ungated `people:save` + `relationships.manage` (Members have it), so a Member dreamer can quick-add.
+
+### 15.8 Testing (DoD)
+
+- **Unit (core):** `openReflection` seeds a first assistant message referencing the dream + meters
+  `dream.analyze` + is idempotent + falls back to a static opener on `NO_KEY`/`BUDGET`; `DREAM_READY` marker
+  detected → `analysisReady`, and `stripDreamMarkers` removes full + mid-stream-partial tokens.
+- **Component (RTL):** composer shows "Start reflection" + "Just save" (and hides Start when AI is off);
+  the pane opens coach-first (no placeholder) and surfaces the analyze suggestion on `analysisReady`;
+  `DreamPeopleEditor` add-person confirm → create → linked chip (+ the optional relationship step).
+- **E2E (Playwright, `SELFOS_FAKE_CLAUDE`):** capture → **Start reflection** → the coach opens referencing
+  the dream → a turn → the readiness suggestion → **Analyze** → **approve** → the dream Insight feeds a
+  later session's grounding (decrypt-asserted) and the transcript stays **absent from the Sessions list**;
+  **Just save** captures with AI off; **quick-add** a person from a dream → contact persists + the ref
+  upgrades to linked. No-overflow + 390px guards on every touched surface.
+
+### 15.9 Build slices (after approval)
+
+1. **Core + IPC** — enriched `DREAM_ANALYSIS_GUIDANCE`; `openReflection` + `dreams:startReflection`; the
+   `DREAM_READY` marker (instruction + `stripDreamMarkers` + `analysisReady` on `analyzeTurn`). Unit tests.
+   - _**Built 2026-07-01:** enriched the analyst voice (continuity hypothesis / imagery-rehearsal / Gestalt,
+     honesty boundary intact); `DreamReflectionResult` type + `analysisReady?` on `ChatTurnResult` (both
+     additive); `openReflection` (coach-first AI opener referencing the dream — synthetic instruction NEVER
+     persisted; idempotent no-op on an already-opened reflection; metered `dream.analyze`; graceful static
+     opener on no-key/over-budget/error, still `ok: true`, no spend); the `DREAM_READY_MARKER` +
+     `DREAM_READY_INSTRUCTION` + `stripDreamMarkers` (tolerant of mid-stream partials, mirroring
+     `stripWrapUpMarker`); `runAnalysisTurn` now detects → returns `analysisReady` + strips the marker from
+     the saved reply. Full IPC seam: `dreams:startReflection` through channels → coreBridge (gated
+     `dreams.own`, dreamer-scoped, key host-side) → `ipc.ts` (per-turn dream-sender binding, like
+     `analyzeTurn`) → preload → test-utils mock. Gate green: typecheck (node + web/DOM-lib), lint, format,
+     **947 core** (+8: opener seeds coach-first + meters; idempotent; static fallback on no-key + on
+     over-budget with no spend; `analysisReady`+strip on the marker; absent on an ordinary turn;
+     `stripDreamMarkers` full + partial) **+ 855 desktop** unit. No new user-facing surface, so no
+     E2E/visual-QA (the UI + E2E are slice 2)._
+2. **Reflection UX** — composer "Start reflection"/"Just save"; `Dreams.tsx` detail restructure (session-led,
+   "Edit dream" tucked); `DreamAnalysisPane` opens coach-first + the analyze suggestion. RTL + E2E + 390px.
+   - \_**Built 2026-07-01:** `dreamAnalysisStore` gained `loaded`/`opening`/`analysisReady` + a
+     `startReflection` action (idempotent; refreshes budget + dream status); `sendTurn` carries a **sticky**
+     `analysisReady`. `DreamComposer` — new-dream mode gets primary **"Start reflection"** (save → open the
+     session; gated on AI-ready) + secondary **"Just save"** (AI-off shows only Just save + a connect note);
+     edit mode keeps a single **"Save."** `Dreams.tsx` restructured into a **read-first detail**
+     (`DreamDetailView` — reflection entry over a compact read; `DreamImagePanel` moved here from the form;
+     "Edit dream" tucks the composer). `DreamAnalysisPane` opens **coach-first** (an effect fires
+     `startReflection` for a `captured` dream once `loaded && configured && !analysis`, gated on `loaded` to
+     avoid the load race), drops the blank-chat placeholder, strips `[[SELFOS:DREAM_READY]]` from the streamed
+     - saved text (`stripDreamMarkers`), and surfaces a **`DreamAnalyzeSuggestion`** (sibling of
+       `WrapUpSuggestion`) when `analysisReady` — one analyze affordance at a time, never a gate. Gate green:
+       typecheck (node + web/DOM-lib), lint, format, **947 core + 861 desktop** unit (+6 dream RTL: composer
+       Start/Just-save + AI-off; coach-first-no-placeholder; the analyze suggestion on readiness; the read-first
+       detail; journal tests reworked for "Just save" + "Edit dream"), **E2E** (the analyze flow drives
+       **"Start reflection" → coach opens → turn → Create analysis → approve → grounding**; capture / link /
+       visualize / export / provenance re-pointed through the read-first detail — all 8 dream E2E + the
+       provenance deep-link green). A pre-existing, unrelated spec-50 kink E2E failure (fails identically on
+       `main`) is not touched by this change. Visual QA over the committed baseline.\_
+3. **People quick-add** — `DreamPeopleEditor` inline create + optional relationship + ref upgrade. RTL + E2E.
+   - _**Built 2026-07-01:** `DreamPeopleEditor` — when a **genuinely-new** name is typed (not one matching an
+     existing household person, who should be linked not duplicated), an inline **"Add “{name}” to your
+     people?"** prompt offers **"Add as contact"** / **"Not now."** Adding calls `peopleSave({ isSubject:
+false })` (a contact — no login/onboarding), reloads the household, **upgrades the free chip to a linked
+     one** (`{ personId, name }` — name kept as a fallback label until the reload propagates), then offers an
+     **optional relationship** (`saveRelationship` dreamer→contact, gated `relationships.manage`, which
+     Members have). The prompt appears on **every** sensitivity tier (§15.2 #4). Gate green: typecheck (node +
+     web/DOM-lib), lint, format, **947 core + 865 desktop** unit (+4 RTL: offer→create→linked-upgrade; the
+     optional relationship saved; no offer for an existing person; "Not now" keeps the free name — the test
+     uses a stateful harness so `values` updates like the composer), **E2E +1** (type a new name → Add as
+     contact → linked → Friend → the contact [`isSubject:false`] + relationship persist household-wide,
+     decrypt-asserted). Visual QA over the committed baseline. **§15 is fully built.**_
+
+### 15.10 Open questions
+
+- **Opener wording register** per sensitivity tier (a standard vs. an intimate dream) — tuned in slice 2.
+- **Static-opener fallback copy** when the AI opener can't run — tuned in slice 1.
+- Whether the readiness suggestion should also appear in the **compact detail** (not only inside the pane) —
+  decided in slice 2 with visual QA.

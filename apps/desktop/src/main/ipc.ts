@@ -443,8 +443,17 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.conversationGetAttachment, bridge.conversationGetAttachment);
   handle(IpcChannels.conversationExportAttachment, bridge.conversationExportAttachment);
 
-  // dreamAnalyzeTurn streams the guided-analysis reply on its own channel (kept separate from chat so the
-  // Sessions and Dreams streams never cross). Same per-turn sender binding + reset as chatStream.
+  // dreamStartReflection + dreamAnalyzeTurn stream the guided-analysis reply on their own channel (kept
+  // separate from chat so the Sessions and Dreams streams never cross). Same per-turn sender binding +
+  // reset as chatStream — the coach's opener streams too (12 §15.4).
+  ipcMain.handle(IpcChannels.dreamStartReflection, async (event, raw: unknown) => {
+    dreamSender = event.sender;
+    try {
+      return await bridge.dreamStartReflection(raw as { dreamId: string });
+    } finally {
+      dreamSender = undefined;
+    }
+  });
   ipcMain.handle(IpcChannels.dreamAnalyzeTurn, async (event, raw: unknown) => {
     dreamSender = event.sender;
     try {

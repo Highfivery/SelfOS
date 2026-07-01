@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { Sparkles, Trash2 } from 'lucide-react';
 import type { Dream, DreamInput, DreamPersonRef } from '@shared/channels';
 import type { SensitivityTier } from '@shared/schemas';
+import { aiKeyResolved } from '../../aiAvailability';
 import { useDreamStore } from '../../../stores/dreamStore';
 import { usePeopleStore } from '../../../stores/peopleStore';
 import { useSessionStore } from '../../../stores/sessionStore';
+import { useSetting } from '../../../settings/useSetting';
 import {
   Button,
   Field,
@@ -18,20 +20,31 @@ import {
 } from '../../../design-system/components';
 import { ChipEditor } from './ChipEditor';
 import { DreamPeopleEditor } from './DreamPeopleEditor';
-import { DreamImagePanel } from './DreamImagePanel';
 import styles from './Dreams.module.css';
 
 interface DreamComposerProps {
   dream: Dream | null;
   onDone: () => void;
+  /**
+   * When provided (new-dream capture), the composer offers a primary **"Start reflection"** that saves the
+   * dream then hands its id back to open the guided session, plus a secondary **"Just save"** (12 §15.3).
+   * Omitted (edit mode) ⇒ a single **"Save"** (the classic journal action).
+   */
+  onStartReflection?: (dreamId: string) => void;
 }
 
 const numOrEmpty = (n: number | undefined): string => (n === undefined ? '' : String(n));
 
 /** Capture or edit a dream (12-dreams §3.1). Narrative-first; every other field is optional. */
-export function DreamComposer({ dream, onDone }: DreamComposerProps): JSX.Element {
+export function DreamComposer({
+  dream,
+  onDone,
+  onStartReflection,
+}: DreamComposerProps): JSX.Element {
   const save = useDreamStore((s) => s.save);
   const remove = useDreamStore((s) => s.remove);
+  const [aiEnabled] = useSetting('ai.enabled');
+  const [hasKey, setHasKey] = useState(false);
   const householdPeople = usePeopleStore((s) => s.people);
   const peopleLoaded = usePeopleStore((s) => s.loaded);
   const loadPeople = usePeopleStore((s) => s.load);
@@ -45,6 +58,12 @@ export function DreamComposer({ dream, onDone }: DreamComposerProps): JSX.Elemen
   useEffect(() => {
     if (!peopleLoaded) void loadPeople();
   }, [peopleLoaded, loadPeople]);
+
+  useEffect(() => {
+    void (async () => {
+      setHasKey(await aiKeyResolved('anthropic'));
+    })();
+  }, []);
 
   const [title, setTitle] = useState(dream?.title ?? '');
   const [narrative, setNarrative] = useState(dream?.narrative ?? '');
@@ -63,35 +82,51 @@ export function DreamComposer({ dream, onDone }: DreamComposerProps): JSX.Elemen
   const [error, setError] = useState<string | null>(null);
 
   const canSave = narrative.trim().length > 0 && !saving;
+  // "Start reflection" needs AI (it opens the coach); when unavailable, only "Just save" shows (12 §15.2).
+  const configured = aiEnabled && hasKey;
 
-  const onSave = async (): Promise<void> => {
-    if (!canSave) return;
+  const buildInput = (): DreamInput => ({
+    ...(dream?.id ? { id: dream.id } : {}),
+    ...(title.trim() ? { title: title.trim() } : {}),
+    narrative: narrative.trim(),
+    ...(dreamDate ? { dreamDate } : {}),
+    ...(mood !== '' ? { mood: Number(mood) } : {}),
+    ...(vividness !== '' ? { vividness: Number(vividness) } : {}),
+    ...(sleepQuality !== '' ? { sleepQuality: Number(sleepQuality) } : {}),
+    lucid,
+    nightmare,
+    tags,
+    people,
+    sensitivity,
+    informsContext,
+  });
+
+  /** Save the dream; returns the saved record (or null on failure, with an error surfaced). */
+  const persist = async (): Promise<Dream | null> => {
+    if (!canSave) return null;
     setSaving(true);
     setError(null);
-    const input: DreamInput = {
-      ...(dream?.id ? { id: dream.id } : {}),
-      ...(title.trim() ? { title: title.trim() } : {}),
-      narrative: narrative.trim(),
-      ...(dreamDate ? { dreamDate } : {}),
-      ...(mood !== '' ? { mood: Number(mood) } : {}),
-      ...(vividness !== '' ? { vividness: Number(vividness) } : {}),
-      ...(sleepQuality !== '' ? { sleepQuality: Number(sleepQuality) } : {}),
-      lucid,
-      nightmare,
-      tags,
-      people,
-      sensitivity,
-      informsContext,
-    };
+    let saved: Dream | null;
     try {
-      await save(input);
+      saved = await save(buildInput());
     } catch {
       setError('Couldn’t save this dream — please try again.');
       setSaving(false);
-      return;
+      return null;
     }
     setSaving(false);
-    onDone();
+    return saved;
+  };
+
+  // "Save" / "Just save": persist to the journal and return to it.
+  const onJustSave = async (): Promise<void> => {
+    if ((await persist()) !== null) onDone();
+  };
+
+  // "Start reflection": persist, then hand the id back to open the guided session (12 §15.3).
+  const onStart = async (): Promise<void> => {
+    const saved = await persist();
+    if (saved) onStartReflection?.(saved.id);
   };
 
   const onDelete = async (): Promise<void> => {
@@ -231,9 +266,6 @@ export function DreamComposer({ dream, onDone }: DreamComposerProps): JSX.Elemen
         </p>
       ) : null}
 
-      {/* A saved dream can be visualized as an AI image (13-dream-images §3.1). */}
-      {dream ? <DreamImagePanel dream={dream} /> : null}
-
       <div className={styles.footer}>
         {dream ? (
           confirmingDelete ? (
@@ -257,11 +289,31 @@ export function DreamComposer({ dream, onDone }: DreamComposerProps): JSX.Elemen
           <Button variant="secondary" onClick={onDone}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={() => void onSave()} disabled={!canSave}>
-            Save
-          </Button>
+          {onStartReflection ? (
+            <>
+              <Button variant="secondary" onClick={() => void onJustSave()} disabled={!canSave}>
+                Just save
+              </Button>
+              {configured ? (
+                <Button variant="primary" onClick={() => void onStart()} disabled={!canSave}>
+                  <Sparkles size={16} aria-hidden="true" />
+                  Start reflection
+                </Button>
+              ) : null}
+            </>
+          ) : (
+            <Button variant="primary" onClick={() => void onJustSave()} disabled={!canSave}>
+              Save
+            </Button>
+          )}
         </div>
       </div>
+      {onStartReflection && !configured ? (
+        <Text size="xs" tone="tertiary">
+          Connect AI in Settings to reflect on this dream with your coach. You can still save it to
+          your journal.
+        </Text>
+      ) : null}
     </Stack>
   );
 }

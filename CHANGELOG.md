@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.1](https://github.com/Highfivery/SelfOS/compare/v0.12.0...v0.12.1) (2026-07-01)
+
+
+### Bug Fixes
+
+* **dreams:** disable adaptive thinking on bounded-JSON syntheses (fixes "analysis cut off") ([5743f2e](https://github.com/Highfivery/SelfOS/commit/5743f2e7996478bb738116f0b921039f69d77ffa))
+
 ## [0.12.0](https://github.com/Highfivery/SelfOS/compare/v0.11.3...v0.12.0) (2026-07-01)
 
 

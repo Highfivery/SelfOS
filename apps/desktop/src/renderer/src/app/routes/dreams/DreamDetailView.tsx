@@ -51,6 +51,10 @@ export function DreamDetailView({
 
   return (
     <Stack gap={4}>
+      {/* A generated image leads the detail as a hero banner (12 §16.4). A dream without one keeps the
+          visualize panel lower (below) so a "set up dream images" prompt never dominates the top. */}
+      {dream.image ? <DreamImagePanel dream={dream} hero /> : null}
+
       <div>
         <Heading level={2}>{dream.title?.trim() || 'Dream'}</Heading>
         <Text size="sm" tone="tertiary">
@@ -85,8 +89,8 @@ export function DreamDetailView({
         </Text>
       ) : null}
 
-      {/* Visualize the dream as an AI image, alongside the read (13-dream-images §3.1). */}
-      <DreamImagePanel dream={dream} />
+      {/* No image yet → the visualize panel lives here (13 §3.1); with an image it's the hero above. */}
+      {dream.image ? null : <DreamImagePanel dream={dream} />}
 
       <div>
         <Button variant="secondary" onClick={onEdit}>

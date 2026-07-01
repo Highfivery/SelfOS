@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Download, ImageIcon, RefreshCw, Share2, Sparkles, Trash2 } from 'lucide-react';
 import type { Dream, DreamShareTarget } from '@shared/channels';
 import { aiKeyResolved } from '../../aiAvailability';
+import { useDreamStore } from '../../../stores/dreamStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useSetting } from '../../../settings/useSetting';
 import {
@@ -22,6 +23,9 @@ import styles from './Dreams.module.css';
 
 interface DreamImagePanelProps {
   dream: Dream;
+  /** Hero framing (12 §16.4): the image fills the width as a banner atop the detail; the "Dream image"
+   * heading + descriptive blurb are dropped (the image speaks for itself). Controls stay below. */
+  hero?: boolean;
 }
 
 type Confirm = 'sensitive' | 'regen' | 'delete' | null;
@@ -34,7 +38,7 @@ type LoadedImage = { mime: string; dataBase64: string; costUsd?: number };
  * cover consent-off / AI-off / no-key / over-budget / content-policy refusal; a sensitive-tier dream shows
  * a warning before sending. The image is dreamlike, never a literal record (12 §8.1).
  */
-export function DreamImagePanel({ dream }: DreamImagePanelProps): JSX.Element | null {
+export function DreamImagePanel({ dream, hero = false }: DreamImagePanelProps): JSX.Element | null {
   const canGenerate = useSessionStore((s) => s.can('dreams.generateImage'));
   const canShare = useSessionStore((s) => s.can('dreams.shareContext'));
   const isAdmin = useSessionStore((s) => s.can('budgets.manage'));
@@ -45,6 +49,10 @@ export function DreamImagePanel({ dream }: DreamImagePanelProps): JSX.Element | 
   const [aiEnabled] = useSetting('ai.enabled');
   const [defaultStyle] = useSetting('dreams.imageStyle');
   const navigate = useNavigate();
+  // Generating/deleting an image changes `Dream.image`, which now drives the dashboard grid thumbnail AND
+  // the detail's hero-vs-lower placement (12 §16) — so refresh the store after either, or the grid keeps a
+  // stale thumbnail and the hero never promotes / a deleted-in-hero image leaves an orphaned CTA.
+  const reloadDreams = useDreamStore((s) => s.load);
 
   const [hasKey, setHasKey] = useState(false);
   const [image, setImage] = useState<LoadedImage | null>(null);
@@ -131,6 +139,8 @@ export function DreamImagePanel({ dream }: DreamImagePanelProps): JSX.Element | 
           : null,
       );
       setSharedWith(fresh?.image?.shareableWith ?? []);
+      // Refresh the store so the new `Dream.image` reaches the grid thumbnail + the hero placement.
+      void reloadDreams();
     } else if (result.reason === 'REFUSED') {
       setError(
         'OpenAI declined to generate this image (its content policy). Your dream is saved — you can edit the description and try again.',
@@ -154,6 +164,8 @@ export function DreamImagePanel({ dream }: DreamImagePanelProps): JSX.Element | 
     await window.selfos?.dreamDeleteImage({ dreamId: dream.id });
     setImage(null);
     setBusy(false);
+    // Clear the store's `Dream.image` so the grid drops the thumbnail and the detail leaves hero framing.
+    void reloadDreams();
   };
 
   const heading = (
@@ -225,12 +237,12 @@ export function DreamImagePanel({ dream }: DreamImagePanelProps): JSX.Element | 
   );
 
   return (
-    <div className={styles.imagePanel}>
-      {heading}
+    <div className={hero ? `${styles.imagePanel} ${styles.imagePanelHero}` : styles.imagePanel}>
+      {hero ? null : heading}
 
       {error ? (
         <Banner tone="warning">{error}</Banner>
-      ) : (
+      ) : hero ? null : (
         <Text size="sm" tone="secondary">
           An AI interpretation of this dream — dreamlike, not a literal record.
         </Text>
@@ -292,7 +304,7 @@ export function DreamImagePanel({ dream }: DreamImagePanelProps): JSX.Element | 
       {loading ? null : image ? (
         <Stack gap={3}>
           <img
-            className={styles.dreamImage}
+            className={hero ? styles.dreamHeroImage : styles.dreamImage}
             src={`data:${image.mime};base64,${image.dataBase64}`}
             alt={`AI-generated ${style} image of ${dream.title?.trim() || 'this dream'}`}
           />

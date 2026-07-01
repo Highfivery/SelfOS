@@ -1,15 +1,7 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, Plus } from 'lucide-react';
 import type { DreamShareTarget, InsightFact } from '@shared/schemas';
-import {
-  Field,
-  Heading,
-  Markdown,
-  Select,
-  Stack,
-  Switch,
-  Text,
-} from '../../../design-system/components';
+import { Heading, Markdown, Stack, Text } from '../../../design-system/components';
 import styles from './Dreams.module.css';
 
 interface DreamShareControlsProps {
@@ -35,27 +27,20 @@ function factTitle(fact: InsightFact): string {
 /**
  * Per-dream sharing controls (12-dreams §3.4), shown on an approved analysis whose dream may inform context
  * (15-shareability §3.2 — available for every sensitivity tier, gated only by the dream-level
- * `informsContext` switch). Pick one of the dreamer's related people, then tick which insight reflections
- * reach that person's coaching context. Each reflection is a **titled, collapsible** row: the title + share
- * toggle are always visible; the full (markdown-rendered) reflection expands on demand — so the section reads
- * as a short list, not a wall of text. Self-hides when there's no one to share with.
+ * `informsContext` switch). Each reflection is a **titled, collapsible** row: the title (click to read the
+ * full markdown reflection) plus a set of **person chips** — tap any of the dreamer's related people to
+ * share that reflection into their coaching context (a filled chip = shared; multiple people at once, since
+ * `InsightFact.shareableWith` is a per-person list). Nothing else from the dream is ever shared, and never
+ * the dream itself. Self-hides when there's no one to share with.
  */
 export function DreamShareControls({
   facts,
   targets,
   onSetShare,
 }: DreamShareControlsProps): JSX.Element | null {
-  const [selected, setSelected] = useState(targets[0]?.id ?? '');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   if (targets.length === 0) return null;
 
-  // Reconcile a stale selection (e.g. the chosen person's relationship was removed since mount) so the
-  // controls never point at a person no longer in `targets`.
-  const active = targets.some((target) => target.id === selected)
-    ? selected
-    : (targets[0]?.id ?? '');
-  const nameOf = (id: string): string =>
-    targets.find((target) => target.id === id)?.displayName ?? 'someone';
   const toggleExpanded = (id: string): void =>
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -66,23 +51,11 @@ export function DreamShareControls({
 
   return (
     <div className={styles.shareSection}>
-      <Heading level={3}>Share with someone in your life</Heading>
+      <Heading level={3}>Share with people in your life</Heading>
       <Text size="xs" tone="tertiary">
-        Only the reflections you tick reach that person’s coaching context — nothing else from this
-        dream, and never the dream itself.
+        Tap a name to add a reflection to that person’s coaching context — you can share each with
+        more than one person. Nothing else from this dream is shared, and never the dream itself.
       </Text>
-
-      <Field label="Share with">
-        {(p) => (
-          <Select {...p} value={active} onChange={(event) => setSelected(event.target.value)}>
-            {targets.map((target) => (
-              <option key={target.id} value={target.id}>
-                {target.displayName}
-              </option>
-            ))}
-          </Select>
-        )}
-      </Field>
 
       <Stack gap={2}>
         {facts.map((fact) => {
@@ -107,21 +80,36 @@ export function DreamShareControls({
                   )}
                   <span className={styles.shareFactTitle}>{title}</span>
                 </button>
-                <Switch
-                  checked={sharedWith.includes(active)}
-                  onChange={(next) => onSetShare(fact.id, active, next)}
-                  aria-label={`Share ${title} with ${nameOf(active)}`}
-                />
               </div>
+
+              <div className={styles.sharePeople} role="group" aria-label={`Share ${title} with`}>
+                {targets.map((target) => {
+                  const on = sharedWith.includes(target.id);
+                  return (
+                    <button
+                      key={target.id}
+                      type="button"
+                      className={
+                        on ? `${styles.personChip} ${styles.personChipOn}` : styles.personChip
+                      }
+                      aria-pressed={on}
+                      onClick={() => onSetShare(fact.id, target.id, !on)}
+                    >
+                      {on ? (
+                        <Check size={13} aria-hidden="true" />
+                      ) : (
+                        <Plus size={13} aria-hidden="true" />
+                      )}
+                      {target.displayName}
+                    </button>
+                  );
+                })}
+              </div>
+
               {isOpen ? (
                 <div id={bodyId} className={styles.shareFactBody}>
                   <Markdown tone="secondary">{fact.text}</Markdown>
                 </div>
-              ) : null}
-              {sharedWith.length > 0 ? (
-                <Text size="xs" tone="tertiary">
-                  Shared with {sharedWith.map(nameOf).join(', ')}
-                </Text>
               ) : null}
             </div>
           );

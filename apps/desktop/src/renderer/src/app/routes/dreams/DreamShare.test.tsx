@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import type { Dream, DreamAnalysis, Insight } from '@shared/channels';
@@ -71,14 +71,32 @@ const insightFixture: Insight = {
 const partner = [{ id: 'p2', displayName: 'Partner' }];
 
 describe('DreamShareControls', () => {
-  it('renders facts with toggles; toggling calls onSetShare for the selected person', async () => {
+  it('shows a person chip per reflection; tapping it shares that fact with the person', async () => {
     const onSetShare = vi.fn();
     render(
       <DreamShareControls facts={insightFixture.facts} targets={partner} onSetShare={onSetShare} />,
     );
     expect(screen.getByText('Feels protective of their partner.')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('switch', { name: /feels protective/i }));
+    // Each reflection has its own recipient chips; scope to the first fact's group.
+    const group = screen.getByRole('group', { name: /feels protective/i });
+    await userEvent.click(within(group).getByRole('button', { name: 'Partner' }));
     expect(onSetShare).toHaveBeenCalledWith('f1', 'p2', true);
+  });
+
+  it('supports multiple recipients — pressed chips reflect sharing; adding a second calls onSetShare', async () => {
+    const two = [
+      { id: 'p2', displayName: 'Angel' },
+      { id: 'p3', displayName: 'Bob' },
+    ];
+    const facts = [{ id: 'f1', text: 'A reflection.', shareable: false, shareableWith: ['p2'] }];
+    const onSetShare = vi.fn();
+    render(<DreamShareControls facts={facts} targets={two} onSetShare={onSetShare} />);
+    // Already shared with Angel → her chip is pressed; Bob's is not.
+    expect(screen.getByRole('button', { name: 'Angel' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Bob' })).toHaveAttribute('aria-pressed', 'false');
+    // Add Bob too — a second recipient.
+    await userEvent.click(screen.getByRole('button', { name: 'Bob' }));
+    expect(onSetShare).toHaveBeenCalledWith('f1', 'p3', true);
   });
 
   it('titles known reflections, renders markdown, and collapses the body until expanded', async () => {
@@ -101,12 +119,12 @@ describe('DreamShareControls', () => {
     expect(screen.queryByText(/\*\*fierce\*\*/)).not.toBeInTheDocument();
   });
 
-  it('shows who a fact is already shared with', () => {
+  it('marks an already-shared person with a pressed chip', () => {
     const facts = [
       { id: 'f1', text: 'A shared reflection.', shareable: false, shareableWith: ['p2'] },
     ];
     render(<DreamShareControls facts={facts} targets={partner} onSetShare={vi.fn()} />);
-    expect(screen.getByText(/shared with partner/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Partner' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('renders nothing when there are no related people to share with', () => {
@@ -144,8 +162,9 @@ describe('DreamAnalysisPane sharing', () => {
       dreamSetFactShare: setShare,
     });
     renderPane();
-    await screen.findByText('Share with someone in your life');
-    await userEvent.click(screen.getByRole('switch', { name: /feels protective/i }));
+    await screen.findByText('Share with people in your life');
+    const group = screen.getByRole('group', { name: /feels protective/i });
+    await userEvent.click(within(group).getByRole('button', { name: 'Partner' }));
     expect(setShare).toHaveBeenCalledWith({
       dreamId: 'd1',
       factId: 'f1',
@@ -170,7 +189,7 @@ describe('DreamAnalysisPane sharing', () => {
       dreamShareTargets: () => Promise.resolve(partner),
     });
     renderPane({ ...baseDream, sensitivity: 'explicit' }); // informsContext undefined ⇒ on
-    expect(await screen.findByText('Share with someone in your life')).toBeInTheDocument();
+    expect(await screen.findByText('Share with people in your life')).toBeInTheDocument();
   });
 
   it('hides sharing with a private-journal note when informsContext is off', async () => {
@@ -194,7 +213,7 @@ describe('DreamAnalysisPane sharing', () => {
         /kept as a private journal entry, so it.+won.t inform coaching context/i,
       ),
     ).toBeInTheDocument();
-    expect(screen.queryByText('Share with someone in your life')).not.toBeInTheDocument();
+    expect(screen.queryByText('Share with people in your life')).not.toBeInTheDocument();
   });
 
   it('hides sharing entirely without the dreams.shareContext capability', async () => {
@@ -214,6 +233,6 @@ describe('DreamAnalysisPane sharing', () => {
     });
     renderPane();
     await screen.findByText('Your dream analysis');
-    expect(screen.queryByText('Share with someone in your life')).not.toBeInTheDocument();
+    expect(screen.queryByText('Share with people in your life')).not.toBeInTheDocument();
   });
 });

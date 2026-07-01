@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/Highfivery/SelfOS/compare/v0.11.3...v0.12.0) (2026-07-01)
+
+
+### Features
+
+* **dreams:** reflection-as-a-session — coach-first opener, read-first detail, people quick-add (12 §15) ([2523fc2](https://github.com/Highfivery/SelfOS/commit/2523fc2bac4ad8e259512ca26c83952270f5699d))
+
 ## [0.11.3](https://github.com/Highfivery/SelfOS/compare/v0.11.2...v0.11.3) (2026-06-27)
 
 

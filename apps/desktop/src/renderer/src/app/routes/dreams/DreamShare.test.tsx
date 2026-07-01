@@ -81,6 +81,26 @@ describe('DreamShareControls', () => {
     expect(onSetShare).toHaveBeenCalledWith('f1', 'p2', true);
   });
 
+  it('titles known reflections, renders markdown, and collapses the body until expanded', async () => {
+    const facts = [
+      {
+        id: 'ins-1:emotional',
+        text: 'A **fierce** protectiveness, and underneath it *fear*.',
+        shareable: false,
+      },
+    ];
+    render(<DreamShareControls facts={facts} targets={partner} onSetShare={vi.fn()} />);
+    // A friendly section title, not the raw reflection.
+    expect(screen.getByText('Emotional landscape')).toBeInTheDocument();
+    // Collapsed by default → the reflection body isn't shown yet.
+    expect(screen.queryByText(/fierce/)).not.toBeInTheDocument();
+    // Expand → the reflection renders as MARKDOWN (a <strong>, never a literal "**fierce**").
+    await userEvent.click(screen.getByRole('button', { name: /emotional landscape/i }));
+    const bold = await screen.findByText('fierce');
+    expect(bold.tagName).toBe('STRONG');
+    expect(screen.queryByText(/\*\*fierce\*\*/)).not.toBeInTheDocument();
+  });
+
   it('shows who a fact is already shared with', () => {
     const facts = [
       { id: 'f1', text: 'A shared reflection.', shareable: false, shareableWith: ['p2'] },

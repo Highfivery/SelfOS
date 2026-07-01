@@ -4640,6 +4640,90 @@ test('dreams: log a dream, persist through the encrypted vault, reopen, no overf
   }
 });
 
+test('dreams: dashboard chrome — insight strip, quick filters, time grouping, no x-scroll at 390px', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('seed: master key missing');
+  const daysAgo = (n: number): string => new Date(Date.now() - n * 86_400_000).toISOString();
+  const seed = async (
+    id: string,
+    title: string,
+    extra: Partial<Parameters<typeof saveDream>[2]>,
+  ): Promise<void> => {
+    await saveDream(fs, key, {
+      id,
+      schemaVersion: 1,
+      personId: 'owner-1',
+      title,
+      narrative: `${title} narrative.`,
+      lucid: false,
+      nightmare: false,
+      tags: [],
+      people: [],
+      sensitivity: 'standard',
+      status: 'captured',
+      createdAt: daysAgo(2),
+      updatedAt: daysAgo(2),
+      ...extra,
+    } as Parameters<typeof saveDream>[2]);
+  };
+  await seed('nm', 'Storm dream', { nightmare: true, dreamDate: daysAgo(2) });
+  await seed('lu', 'Flying dream', { lucid: true, dreamDate: daysAgo(3) });
+  await seed('old', 'Old dream', { dreamDate: daysAgo(200) });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Dreams' }).click();
+
+    // Time-grouping headers (12 §16.2): the two recent dreams under "This week", the old one under "Earlier".
+    await expect(w.getByText('This week')).toBeVisible();
+    await expect(w.getByText('Earlier')).toBeVisible();
+
+    // The deterministic insight strip (no AI): counts from the seeded dreams + a link to the full view.
+    await expect(w.getByText('1 nightmare')).toBeVisible();
+    await expect(w.getByRole('button', { name: /see patterns/i })).toBeVisible();
+
+    // Quick filter → Nightmares narrows the grid; the lucid card drops.
+    await w.getByRole('button', { name: 'Nightmares' }).click();
+    await expect(w.getByRole('button', { name: /Storm dream/ })).toBeVisible();
+    await expect(w.getByRole('button', { name: /Flying dream/ })).toHaveCount(0);
+
+    // A filter with no matches shows a calm message, not a blank grid.
+    await w.getByRole('button', { name: 'Analyzed' }).click();
+    await expect(w.getByText(/no analyzed dreams yet/i)).toBeVisible();
+    await w.getByRole('button', { name: 'All' }).click();
+
+    // No horizontal overflow at phone width — including the filter's segmented control (an inner-scroll scan).
+    await app.evaluate(async ({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows()[0];
+      if (win) {
+        win.setMinimumSize(360, 480);
+        win.setSize(390, 800);
+      }
+    });
+    await w.waitForTimeout(300);
+    const innerScrollers = await w.evaluate(
+      () =>
+        [...document.querySelectorAll<HTMLElement>('*')].filter((el) => {
+          const ox = getComputedStyle(el).overflowX;
+          return (ox === 'auto' || ox === 'scroll') && el.scrollWidth - el.clientWidth > 1;
+        }).length,
+    );
+    expect(innerScrollers).toBe(0);
+    const overflow = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      return main ? main.scrollWidth - main.clientWidth : 0;
+    });
+    expect(overflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('dreams: visualize a dream — sensitive warning, generate, encrypted round-trip, regenerate, delete', async () => {
   const { userData, vault } = await seedReadyVault({
     'ai.enabled': true,
@@ -5067,7 +5151,8 @@ test('dreams: the Patterns screen charts seeded dreams, nudges on recurring nigh
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Dreams' }).click();
-    await w.getByRole('button', { name: 'Patterns' }).click();
+    // The header "Patterns" button (exact — the dashboard insight strip also has a "See patterns" link).
+    await w.getByRole('button', { name: 'Patterns', exact: true }).click();
     await expect(w.getByRole('heading', { name: 'Dream patterns' })).toBeVisible();
 
     // Deterministic charts render from the seeded data (no AI needed).

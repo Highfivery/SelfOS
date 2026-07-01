@@ -1,17 +1,38 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, BarChart3, Moon, Plus } from 'lucide-react';
+import type { DreamPatternStats } from '@shared/schemas';
 import { useDreamStore } from '../../../stores/dreamStore';
 import { useSessionStore } from '../../../stores/sessionStore';
-import { Button, Card, Heading, Inline, Stack, Text } from '../../../design-system/components';
+import {
+  Button,
+  Card,
+  Heading,
+  Inline,
+  SegmentedControl,
+  Stack,
+  Text,
+} from '../../../design-system/components';
 import { DreamCard } from './DreamCard';
 import { DreamComposer } from './DreamComposer';
 import { DreamDetailView } from './DreamDetailView';
 import { DreamAnalysisPane } from './DreamAnalysisPane';
+import { DreamInsightStrip } from './DreamInsightStrip';
 import { SharedDreamImages } from './SharedDreamImages';
+import {
+  DREAM_FILTER_LABELS,
+  type DreamFilter,
+  groupDreamsByRecency,
+  matchesFilter,
+} from './dashboard';
 import styles from './Dreams.module.css';
 
 type Selection = { mode: 'none' } | { mode: 'new' } | { mode: 'edit'; id: string };
+
+const FILTER_OPTIONS = (['all', 'analyzed', 'lucid', 'nightmares'] as const).map((value) => ({
+  value,
+  label: DREAM_FILTER_LABELS[value],
+}));
 
 /**
  * The Dreams dashboard (12-dreams §16): an image-forward grid of dream cards. Selecting a card opens the
@@ -31,6 +52,12 @@ export function Dreams(): JSX.Element {
   const [editing, setEditing] = useState(false);
   // Decrypted image thumbnails for the dreams that have one (data URLs, keyed by dream id).
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
+  // The dashboard quick-filter (12 §16.2): All / Analyzed / Lucid / Nightmares.
+  const [filter, setFilter] = useState<DreamFilter>('all');
+  // Deterministic cross-dream stats for the insight strip (no AI spend). Loaded here for a FIXED all-time
+  // window so the dashboard summary is stable and consistent with the (unfiltered) grid — NOT coupled to
+  // whatever window the Patterns screen last set on the shared store.
+  const [stripStats, setStripStats] = useState<DreamPatternStats | null>(null);
 
   // Deep-link from Memory's provenance link (20-memory-dashboard §3.3): open the referenced dream.
   useEffect(() => {
@@ -54,6 +81,23 @@ export function Dreams(): JSX.Element {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Load the deterministic cross-dream stats for the insight strip once there are ≥2 dreams to summarize
+  // (no AI spend — a local decrypt/aggregate). Re-runs on the dream list changing (a new dream, or a person
+  // switch clearing it → the strip clears with it). A cancel guard drops a stale resolve after a switch.
+  useEffect(() => {
+    if (dreams.length < 2) {
+      setStripStats(null);
+      return;
+    }
+    let cancelled = false;
+    void window.selfos?.dreamPatternStats({ window: 'all' }).then((stats) => {
+      if (!cancelled) setStripStats(stats ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [dreams]);
 
   // Lazily fetch the image thumbnails for dreams that have one (no spend — deterministic reads). Re-runs
   // when the dream list changes (incl. a person switch clearing it, so no stale image leaks across people).
@@ -133,6 +177,9 @@ export function Dreams(): JSX.Element {
   }
 
   // --- The dashboard grid ---
+  const filtered = dreams.filter((dream) => matchesFilter(dream, filter));
+  const groups = groupDreamsByRecency(filtered, Date.now());
+
   return (
     <div className={styles.dashboard} aria-label="Dream journal">
       <div className={styles.header}>
@@ -167,25 +214,51 @@ export function Dreams(): JSX.Element {
           </Stack>
         </Card>
       ) : (
-        <div className={styles.grid}>
-          <button
-            type="button"
-            className={`${styles.card} ${styles.cardCreate}`}
-            aria-label="Log a new dream"
-            onClick={() => select({ mode: 'new' })}
-          >
-            <Plus size={26} aria-hidden="true" />
-            Log a dream
-          </button>
-          {dreams.map((dream) => (
-            <DreamCard
-              key={dream.id}
-              dream={dream}
-              imageUrl={thumbs[dream.id]}
-              onOpen={() => select({ mode: 'edit', id: dream.id })}
+        <>
+          {/* A slim, deterministic insight strip (12 §16.2) — self-hides when there's little to say. */}
+          <DreamInsightStrip stats={stripStats} />
+
+          <div className={styles.filters}>
+            <SegmentedControl
+              options={FILTER_OPTIONS}
+              value={filter}
+              onChange={setFilter}
+              aria-label="Filter dreams"
             />
-          ))}
-        </div>
+          </div>
+
+          {groups.length === 0 ? (
+            <Text tone="tertiary">No {DREAM_FILTER_LABELS[filter].toLowerCase()} dreams yet.</Text>
+          ) : (
+            groups.map((group, groupIndex) => (
+              <section key={group.key} className={styles.group}>
+                <h3 className={styles.groupHeader}>{group.label}</h3>
+                <div className={styles.grid}>
+                  {/* The "Log a dream" create tile leads the first group in the unfiltered view. */}
+                  {groupIndex === 0 && filter === 'all' ? (
+                    <button
+                      type="button"
+                      className={`${styles.card} ${styles.cardCreate}`}
+                      aria-label="Log a new dream"
+                      onClick={() => select({ mode: 'new' })}
+                    >
+                      <Plus size={26} aria-hidden="true" />
+                      Log a dream
+                    </button>
+                  ) : null}
+                  {group.dreams.map((dream) => (
+                    <DreamCard
+                      key={dream.id}
+                      dream={dream}
+                      imageUrl={thumbs[dream.id]}
+                      onOpen={() => select({ mode: 'edit', id: dream.id })}
+                    />
+                  ))}
+                </div>
+              </section>
+            ))
+          )}
+        </>
       )}
     </div>
   );

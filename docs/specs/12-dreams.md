@@ -1,8 +1,8 @@
 # 12 — Dreams (guided dream journaling, analysis & patterns)
 
 > **Status:** **Approved** (v1 built) · **§15 "reflection as a guided session": BUILT** · **§16 "Dreams
-> dashboard redesign": slice 1 (card grid + immersive detail) BUILT 2026-07-01; slice 2 (chrome) pending** ·
-> _last updated 2026-07-01_
+> dashboard redesign": slice 1 (card grid + immersive detail) MERGED + slice 2 (insight strip, quick filters,
+> time grouping) BUILT 2026-07-01** · _last updated 2026-07-01_
 >
 > Dreams lets a person capture dreams in seconds, then — when they choose — work through a **guided AI
 > analysis** that ends in a structured, readable write-up. Once the person approves it, that analysis
@@ -1263,6 +1263,24 @@ are the most visual, evocative content in the app; the dashboard should feel lik
    isolation, the `dreams.generateImage` gate, and card a11y were verified clean._
 2. **Dashboard chrome** — the insight strip (from pattern stats), quick filters, and time-grouping headers.
    RTL + E2E (filter to Nightmares; a grouped header renders) + visual QA.
+   _**Built 2026-07-01** (on `feat/dreams-dashboard-chrome`): a pure `dashboard.ts` (`matchesFilter`,
+   `groupDreamsByRecency(dreams, now)` → "This week / This month / Earlier", `moodCue` — `now` injected for
+   deterministic tests); a slim **`DreamInsightStrip`** reading `DreamPatternStats` (top recurring theme +
+   lucid/nightmare counts + a gentle mood cue + "See patterns →"), self-hiding when there's little to say; a
+   quick-filter `SegmentedControl` (All / Analyzed / Lucid / Nightmares) + time-group section headers over the
+   grid in `Dreams.tsx`. The strip's stats come from the existing per-person `dreamPatternStore`
+   (`dreams:patternStats`, deterministic, **no AI spend, no new IPC**), loaded only when there are ≥2 dreams;
+   the create tile leads the first group in the unfiltered view; a filter with no matches shows a calm message.
+   The grid `minmax` was lowered to 148px so a 360px phone shows two columns. Gate green: typecheck, lint,
+   **882 desktop** unit (+`dashboard`/`DreamInsightStrip` tests; +3 `Dreams` RTL for filter/grouping/strip),
+   **10 dream E2E** (a new chrome test asserting the grouping headers + strip + filter + a 390px inner-scroll
+   guard on the segmented control; the Patterns E2E pinned to `{exact:true}` so it doesn't match the new "See
+   patterns" link). Visual QA at desktop + 360px (real Electron screenshots: the strip on one line, all four
+   filters fitting with no x-scroll, two-column grid at 360px). **Code-reviewer ship**; applied its finding #1:
+   the strip loads its stats directly for a FIXED all-time window (local state, not the shared
+   `dreamPatternStore`) so the dashboard summary is stable and consistent with the unfiltered grid rather than
+   silently inheriting whatever window the Patterns screen was last set to — this also aligns the ≥2-dreams
+   load gate with the strip's windowed `dreamCount` self-hide; + tightened `moodCue` to need ≥3 readings._
 
 ### 16.7 Open questions
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.1](https://github.com/Highfivery/SelfOS/compare/v0.13.0...v0.13.1) (2026-07-01)
+
+
+### Bug Fixes
+
+* **dreams:** bigger grid cards + native-ratio detail image ([#107](https://github.com/Highfivery/SelfOS/issues/107)) ([8039b3b](https://github.com/Highfivery/SelfOS/commit/8039b3bfdc3b42a97c95842622d2a6475fb21090))
+
 ## [0.13.0](https://github.com/Highfivery/SelfOS/compare/v0.12.3...v0.13.0) (2026-07-01)
 
 

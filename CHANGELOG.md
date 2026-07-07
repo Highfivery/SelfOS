@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.1](https://github.com/Highfivery/SelfOS/compare/v0.14.0...v0.14.1) (2026-07-07)
+
+
+### Bug Fixes
+
+* **questionnaires:** scope the edit/authoring list to what you authored ([#117](https://github.com/Highfivery/SelfOS/issues/117)) ([2a5bab6](https://github.com/Highfivery/SelfOS/commit/2a5bab63b5b782c6761edddb892a6104c834f30c))
+
 ## [0.14.0](https://github.com/Highfivery/SelfOS/compare/v0.13.1...v0.14.0) (2026-07-07)
 
 

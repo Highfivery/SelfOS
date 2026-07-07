@@ -68,6 +68,7 @@ export function Sessions(): JSX.Element {
   const dismissChallengeCreated = useConversationStore((s) => s.dismissChallengeCreated);
   const open = useConversationStore((s) => s.open);
   const send = useConversationStore((s) => s.send);
+  const retry = useConversationStore((s) => s.retry);
   const loadGuidance = useGuidanceStore((s) => s.load);
   const remove = useConversationStore((s) => s.remove);
   const rename = useConversationStore((s) => s.rename);
@@ -402,7 +403,22 @@ export function Sessions(): JSX.Element {
               </Banner>
             ) : null}
 
-            {error ? <Banner tone="warning">{error}</Banner> : null}
+            {error ? (
+              <Banner tone="warning">
+                <Stack gap={2}>
+                  <Text>{error}</Text>
+                  {/* Offer a retry when the last turn didn't complete (the last message is the user's) — the
+                      message is still on screen, so "Try again" re-sends it without re-typing (05 §4.1). */}
+                  {messages[messages.length - 1]?.role === 'user' ? (
+                    <div>
+                      <Button variant="secondary" onClick={() => void retry()} disabled={sending}>
+                        Try again
+                      </Button>
+                    </div>
+                  ) : null}
+                </Stack>
+              </Banner>
+            ) : null}
 
             {configured ? (
               <Composer

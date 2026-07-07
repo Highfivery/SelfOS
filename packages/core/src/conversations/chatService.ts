@@ -30,6 +30,40 @@ import { TOPIC_MODEL, classifyTopic, topicShifted } from './topicClassifier';
 
 export type { ChatTurnResult };
 
+// The visible-reply token ceiling for a coaching turn. Generous because a reply can run several paragraphs AND
+// adaptive thinking shares this budget — a small ceiling starved replies to empty (the "thinking then nothing"
+// bug). A ceiling isn't a target (you pay only for tokens generated), so this doesn't raise normal-turn cost.
+const CHAT_MAX_TOKENS = 4096;
+
+/** Build the `chat` usage event for one turn (billed even when the reply came back empty). */
+function buildChatUsage(
+  sessionId: string,
+  personId: string,
+  model: string,
+  at: string,
+  u: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheWriteTokens: number;
+    cacheReadTokens: number;
+  },
+): UsageEvent {
+  return {
+    id: uuid(),
+    schemaVersion: 1,
+    type: 'chat',
+    personId,
+    sessionId,
+    model,
+    at,
+    inputTokens: u.inputTokens,
+    outputTokens: u.outputTokens,
+    cacheWriteTokens: u.cacheWriteTokens,
+    cacheReadTokens: u.cacheReadTokens,
+    costUsd: costOf(model, u),
+  };
+}
+
 export interface ChatTurnDeps {
   fs: FileSystem;
   key: Uint8Array;
@@ -226,12 +260,34 @@ export async function runChatTurn(deps: ChatTurnDeps): Promise<ChatTurnResult> {
         model,
         system,
         messages: claudeMessages,
-        maxTokens: 1024,
+        // A coaching reply can run several paragraphs, and adaptive thinking SHARES this budget — too small a
+        // ceiling starved the visible reply to empty/truncated (the reported "thinking then nothing" bug). This
+        // is a ceiling, not a target (you only pay for tokens generated), so a generous budget is safe.
+        maxTokens: CHAT_MAX_TOKENS,
       },
       deps.onDelta,
     );
   } catch {
-    return { ok: false, reason: 'ERROR', message: 'The coach couldn’t respond. Please try again.' };
+    return {
+      ok: false,
+      reason: 'ERROR',
+      message: 'The coach couldn’t respond — check your connection and try again.',
+    };
+  }
+
+  // Meter the billed call FIRST (even a blank reply consumed input + thinking tokens) — then decide.
+  const usage = buildChatUsage(conversation.id, personId, model, at, result.usage);
+  await recordUsage(fs, key, usage);
+
+  // A blank reply is a FAILURE, not a silently-saved empty message (05 §4.1). It happens when adaptive thinking
+  // starves the max_tokens budget (stop_reason max_tokens, no visible text). Surface it so the user can retry —
+  // and never persist an empty assistant turn into the transcript.
+  if (result.text.trim() === '') {
+    return {
+      ok: false,
+      reason: 'EMPTY',
+      message: 'The coach’s reply came back empty — please try again.',
+    };
   }
 
   // Detect + strip the private coach markers (wrap-up + step + challenge) so they're never persisted or shown.
@@ -256,26 +312,6 @@ export async function runChatTurn(deps: ChatTurnDeps): Promise<ChatTurnResult> {
   conversation.updatedAt = at;
   await saveConversation(fs, key, conversation);
 
-  const usage: UsageEvent = {
-    id: uuid(),
-    schemaVersion: 1,
-    type: 'chat',
-    personId,
-    sessionId: conversation.id,
-    model,
-    at,
-    inputTokens: result.usage.inputTokens,
-    outputTokens: result.usage.outputTokens,
-    cacheWriteTokens: result.usage.cacheWriteTokens,
-    cacheReadTokens: result.usage.cacheReadTokens,
-    costUsd: costOf(model, {
-      inputTokens: result.usage.inputTokens,
-      outputTokens: result.usage.outputTokens,
-      cacheWriteTokens: result.usage.cacheWriteTokens,
-      cacheReadTokens: result.usage.cacheReadTokens,
-    }),
-  };
-  await recordUsage(fs, key, usage);
   // Meter the classifier call too, if it ran (28 §13.2) — a separate `session.topic` event.
   if (topicUsage) await recordUsage(fs, key, topicUsage);
 

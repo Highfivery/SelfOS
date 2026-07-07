@@ -88,6 +88,10 @@ export function anthropicClient(): ClaudeClient {
   };
 }
 
+// E2E fail-safe hook (05-conversations §4.1): whether the one forced-empty chat reply has been served yet.
+// Module-level so it persists across turns within a launch, regardless of client re-instantiation.
+let fakeChatEmptyServed = false;
+
 /** Offline stub (gated by SELFOS_FAKE_CLAUDE) so chat + the connection test are deterministic. */
 export function fakeClaudeClient(): ClaudeClient {
   return {
@@ -451,6 +455,22 @@ export function fakeClaudeClient(): ClaudeClient {
         return Promise.resolve({
           text: draft,
           usage: { inputTokens: 160, outputTokens: 60, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+
+      // E2E fail-safe hook (05 §4.1): serve ONE empty chat reply (as adaptive-thinking starvation would) so the
+      // "Try again" retry path can be driven through the real UI. Gated by SELFOS_FAKE_CHAT_EMPTY; the retry
+      // then gets a normal reply. Skip the topic-classifier call (haiku, which also lands here) so the empty is
+      // spent on the actual chat turn, not the classifier that precedes it.
+      if (
+        process.env['SELFOS_FAKE_CHAT_EMPTY'] &&
+        !fakeChatEmptyServed &&
+        !options.model.includes('haiku')
+      ) {
+        fakeChatEmptyServed = true;
+        return Promise.resolve({
+          text: '',
+          usage: { inputTokens: 200, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
       }
 

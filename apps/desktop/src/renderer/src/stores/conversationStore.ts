@@ -1,9 +1,39 @@
 import { create } from 'zustand';
 import type { AttachmentRef, ChatMessage, Insight, SessionStatus } from '@shared/schemas';
-import type { BudgetState, ChallengeDomain, ConversationMeta, SessionCost } from '@shared/channels';
+import type {
+  BudgetState,
+  ChallengeDomain,
+  ChatTurnResult,
+  ConversationMeta,
+  SessionCost,
+} from '@shared/channels';
 import type { PendingAttachment } from '../app/routes/sessions/downscaleImage';
 import { useBudgetStore } from './budgetStore';
 import { useChallengeStore } from './challengeStore';
+
+type ChatTurnOk = Extract<ChatTurnResult, { ok: true }>;
+
+/** The state patch applied on a successful turn — shared by `send` + `retry` so they can't drift. */
+function successPatch(state: ConversationState, result: ChatTurnOk): Partial<ConversationState> {
+  return {
+    messages: result.conversation.messages,
+    streaming: '',
+    sending: false,
+    error: null,
+    // A continued turn reopens a completed session (chatService flips status server-side).
+    activeStatus: result.conversation.status ?? 'inProgress',
+    activeInsightStale: result.conversation.insightStale ?? false,
+    // Structured guided exercises advance the stepper server-side (16 §3.3).
+    activeGuideId: result.conversation.guideId ?? null,
+    activeGuideStep: result.conversation.guideStep ?? null,
+    // A fresh hint un-dismisses the suggestion so it can re-surface (decision: re-surface on a later hint).
+    wrapUpSuggested: result.wrapUpSuggested ?? false,
+    suggestionDismissed: result.wrapUpSuggested ? false : state.suggestionDismissed,
+    // 52 §3.2 — a captured challenge surfaces the inline "Challenge set ✓" confirmation.
+    challengeCreated: result.challengeCreated ?? state.challengeCreated,
+    runningCostUsd: state.runningCostUsd + result.usage.costUsd,
+  };
+}
 
 interface ConversationState {
   conversations: ConversationMeta[];
@@ -48,6 +78,9 @@ interface ConversationState {
   /** Send a message. Resolves `false` only when a total attachment-store failure aborted before sending (so
    *  the composer can keep the pending thumbnails to retry); `true` otherwise. */
   send: (text: string, attachments?: PendingAttachment[]) => Promise<boolean>;
+  /** Re-run the last (failed) turn — re-sends the last user message without adding a new bubble. No-op unless
+   *  the last message is the user's (an incomplete turn). Used by the "Try again" affordance on an error. */
+  retry: () => Promise<void>;
   /** Resolve + cache a stored attachment's data URL for a thumbnail/lightbox (45 §3.3). */
   loadAttachment: (ref: AttachmentRef) => Promise<void>;
   /** Export a stored attachment to a file outside the vault (45 §11); returns the saved path or null. */
@@ -211,23 +244,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       ...(refs.length > 0 ? { attachments: refs } : {}),
     });
     if (result?.ok) {
-      set((state) => ({
-        messages: result.conversation.messages,
-        streaming: '',
-        sending: false,
-        // A continued turn reopens a completed session (chatService flips status server-side).
-        activeStatus: result.conversation.status ?? 'inProgress',
-        activeInsightStale: result.conversation.insightStale ?? false,
-        // Structured guided exercises advance the stepper server-side (16 §3.3).
-        activeGuideId: result.conversation.guideId ?? null,
-        activeGuideStep: result.conversation.guideStep ?? null,
-        // A fresh hint un-dismisses the suggestion so it can re-surface (decision: re-surface on a later hint).
-        wrapUpSuggested: result.wrapUpSuggested ?? false,
-        suggestionDismissed: result.wrapUpSuggested ? false : state.suggestionDismissed,
-        // 52 §3.2 — a captured challenge surfaces the inline "Challenge set ✓" confirmation.
-        challengeCreated: result.challengeCreated ?? state.challengeCreated,
-        runningCostUsd: state.runningCostUsd + result.usage.costUsd,
-      }));
+      set((state) => successPatch(state, result));
       await get().load();
       // Refresh the per-person challenge tracker so a just-captured challenge appears immediately (52 §3.2).
       if (result.challengeCreated) await useChallengeStore.getState().load();
@@ -236,6 +253,29 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       set({ sending: false, streaming: '', error: result?.message ?? 'Something went wrong.' });
     }
     return true; // a turn was attempted (attachments stored) — don't restore pending in the composer
+  },
+  retry: async () => {
+    // Re-run the last turn after a failure (empty reply, transport error, …) — the user's message is still on
+    // screen (and its attachments already stored), so we re-send it WITHOUT adding a second bubble. Only fires
+    // when the last message is the user's (i.e. no assistant reply landed — an incomplete/failed turn).
+    const state = get();
+    if (state.sending || !state.activeId) return;
+    const last = state.messages[state.messages.length - 1];
+    if (!last || last.role !== 'user') return;
+    set({ sending: true, streaming: '', error: null, wrapUp: null });
+    const result = await window.selfos?.chatStream({
+      conversationId: state.activeId,
+      userText: last.content,
+      ...(last.attachments && last.attachments.length > 0 ? { attachments: last.attachments } : {}),
+    });
+    if (result?.ok) {
+      set((s) => successPatch(s, result));
+      await get().load();
+      if (result.challengeCreated) await useChallengeStore.getState().load();
+      await useBudgetStore.getState().refresh();
+    } else {
+      set({ sending: false, streaming: '', error: result?.message ?? 'Something went wrong.' });
+    }
   },
   loadAttachment: async (ref) => {
     if (get().attachmentUrls[ref.id]) return; // already cached (just-sent preview or a prior fetch)

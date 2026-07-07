@@ -69,6 +69,72 @@ describe('Sessions', () => {
     expect(screen.getByText('I had a hard day')).toBeInTheDocument();
   });
 
+  it('surfaces a failed turn with the error + a working "Try again" (56/05 §4.1)', async () => {
+    const okConversation = (userText: string) => ({
+      id: 'c1',
+      schemaVersion: 1 as const,
+      personId: 'owner-1',
+      title: userText,
+      createdAt: 'now',
+      updatedAt: 'now',
+      messages: [
+        { role: 'user' as const, content: userText, ts: 'now' },
+        { role: 'assistant' as const, content: 'Welcome back.', ts: 'now' },
+      ],
+    });
+    const usage = {
+      id: 'u',
+      schemaVersion: 1 as const,
+      type: 'chat' as const,
+      personId: 'owner-1',
+      model: 'claude-sonnet-4-6',
+      at: 'now',
+      inputTokens: 100,
+      outputTokens: 10,
+      cacheWriteTokens: 0,
+      cacheReadTokens: 0,
+      costUsd: 0.001,
+    };
+    // First turn fails with an empty reply; the retry succeeds.
+    const chatStream = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        reason: 'EMPTY',
+        message: 'The coach’s reply came back empty — please try again.',
+      })
+      .mockResolvedValueOnce({ ok: true, conversation: okConversation('I had a hard day'), usage });
+    installMockBridge({
+      secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
+      chatStream,
+    });
+    setAiEnabled(true);
+    renderSessions();
+    await waitFor(() => expect(screen.getByLabelText('Message')).toBeInTheDocument());
+    await userEvent.type(screen.getByLabelText('Message'), 'I had a hard day');
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    // The failure is shown (not swallowed) + the user's message stays on screen; a Try again is offered.
+    await waitFor(() => expect(screen.getByText(/came back empty/i)).toBeInTheDocument());
+    expect(screen.getByText('I had a hard day')).toBeInTheDocument();
+    const retry = screen.getByRole('button', { name: 'Try again' });
+
+    // Retrying re-runs the turn (same message, no re-typing) → the reply lands and the error clears.
+    await userEvent.click(retry);
+    await waitFor(() => expect(screen.getByText('Welcome back.')).toBeInTheDocument());
+    expect(screen.queryByText(/came back empty/i)).not.toBeInTheDocument();
+    expect(chatStream).toHaveBeenCalledTimes(2);
+    // The retry re-sent the SAME user text (didn't lose it).
+    expect(chatStream.mock.calls[1]?.[0]).toMatchObject({ userText: 'I had a hard day' });
+  });
+
   it('renders a coach reply as Markdown (bold + a list), not literal markdown (34)', async () => {
     installMockBridge({
       secretHas: () => Promise.resolve(true),

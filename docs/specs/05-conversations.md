@@ -70,6 +70,19 @@ prompt, calls the streaming proxy, forwards `chunk` events → renderer appends 
 `done`, the full turn is persisted to the encrypted transcript. Errors (no key, auth, network, rate
 limit) surface inline with the same typed envelope as the connection test (03/05).
 
+**§4.1 Fail-safe turn handling (2026-07-08).** A turn must never silently dead-end (the reported "thinking
+then nothing" bug):
+
+- **Empty reply = an honest failure.** A blank/whitespace reply (e.g. adaptive thinking starving the
+  `max_tokens` budget → `stop_reason: max_tokens` with no visible text) returns `{ ok: false, reason: 'EMPTY' }`
+  and is **never persisted** as a blank assistant turn. The billed call is still metered (input + thinking
+  tokens were consumed). The chat `max_tokens` ceiling is generous (a reply can run several paragraphs and
+  adaptive thinking shares the budget) so normal turns aren't starved/truncated.
+- **The error is always shown + retryable.** On any failure (EMPTY, ERROR, BUDGET, NO_KEY) the store sets
+  `error`; the user's typed message stays on screen (it isn't saved on a failed turn); and a **"Try again"**
+  affordance re-runs the last turn (re-sending the same message + its already-stored attachments, without a
+  second bubble). `ChatTurnResult` gains the `EMPTY` failure reason.
+
 ## 4. Data model
 
 ### 4.1 Conversation (encrypted, per person)

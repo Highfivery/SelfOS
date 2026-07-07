@@ -1721,6 +1721,38 @@ test('sessions: send a message, stream a reply, and show the usage header + cris
   }
 });
 
+test('sessions (05 §4.1): an empty reply surfaces an error + a working "Try again", never silent', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  // SELFOS_FAKE_CHAT_EMPTY makes the FIRST chat reply come back empty (as adaptive-thinking starvation would);
+  // the retry then gets a normal reply.
+  const app = await electron.launch({
+    args: [`--user-data-dir=${userData}`, MAIN],
+    env: { ...e2eEnv(), SELFOS_FAKE_CHAT_EMPTY: '1' },
+  });
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Sessions' }).click();
+    await w.getByLabel('Message').fill('A long, hard message about my week');
+    await w.getByRole('button', { name: 'Send' }).click();
+
+    // NOT silent: the empty reply becomes an honest error, the user's message stays on screen, Try again shows.
+    await expect(w.getByText(/came back empty/i)).toBeVisible();
+    await expect(w.getByText('A long, hard message about my week').first()).toBeVisible();
+    const retry = w.getByRole('button', { name: 'Try again' });
+    await expect(retry).toBeVisible();
+
+    // Retry re-runs the SAME turn (no re-typing) → the coach replies → the error clears.
+    await retry.click();
+    await expect(w.getByText(/hear you/i).first()).toBeVisible();
+    await expect(w.getByText(/came back empty/i)).toHaveCount(0);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('sessions: attach an image → encrypted on disk → thumbnail + lightbox + export → delete purges (45)', async () => {
   const saveDir = await mkdtemp(join(tmpdir(), 'selfos-save-'));
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
@@ -2215,7 +2247,9 @@ test('intimacy guided sessions (48): the Yes/No/Maybe builder advances steps wit
     await w.getByLabel('Message').fill('Ready — start the first category.');
     await w.getByRole('button', { name: 'Send' }).click();
     // The fake coach's steered reply renders; the step marker is stripped from the visible text.
-    await expect(w.getByText(/start with sensual and touch/i)).toBeVisible();
+    // `.first()` tolerates the brief stream→persist handoff where the streaming bubble + the saved message
+    // both match (the same guard the other streaming assertions use).
+    await expect(w.getByText(/start with sensual and touch/i).first()).toBeVisible();
     await expect(w.getByText(/SELFOS:STEP/)).toHaveCount(0);
     // The stepper advanced to the first category (step 1).
     await expect(w.locator('li', { hasText: 'Sensual & touch' })).toHaveAttribute(

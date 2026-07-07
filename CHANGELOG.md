@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.14.0](https://github.com/Highfivery/SelfOS/compare/v0.13.1...v0.14.0) (2026-07-07)
+
+
+### Features
+
+* **onboarding:** notify when completed onboarding has new/unanswered questions ([#112](https://github.com/Highfivery/SelfOS/issues/112)) ([0c46f95](https://github.com/Highfivery/SelfOS/commit/0c46f95a764b100ad512809a51f7ee3fa097a90d)), closes [#109](https://github.com/Highfivery/SelfOS/issues/109)
+* **questionnaires:** let recipients review + edit + resend answers; nudge the sender to re-analyze ([#116](https://github.com/Highfivery/SelfOS/issues/116)) ([363053b](https://github.com/Highfivery/SelfOS/commit/363053b9fd7d8bc28b5481a4c78c2f790c65c278))
+
+
+### Bug Fixes
+
+* **you:** drop taken tests from the Available catalog ([#110](https://github.com/Highfivery/SelfOS/issues/110)) ([de5ed67](https://github.com/Highfivery/SelfOS/commit/de5ed67951efbbc2788c21937f9e6a13f8af0ca2)), closes [#95](https://github.com/Highfivery/SelfOS/issues/95)
+
 ## [0.13.1](https://github.com/Highfivery/SelfOS/compare/v0.13.0...v0.13.1) (2026-07-01)
 
 

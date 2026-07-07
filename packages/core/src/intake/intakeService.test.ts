@@ -6,6 +6,7 @@ import { flattenContent } from '../host';
 import { factSharedWithViewer, type Insight, type Person } from '../schemas';
 import { listConversations } from '../conversations';
 import { getInsight, saveInsight, summarizeForContext, updateInsight } from '../insights';
+import { intakeCatalogSnapshot } from './intakeCatalog';
 import { getPerson, savePerson } from '../people';
 import { SHARING_PRESETS } from '../people/sharingPresets';
 import { queryUsage } from '../usage';
@@ -528,6 +529,47 @@ describe('intakeService', () => {
     // Inferred fields fill the (empty) Person profile.
     const p = await getPerson(fs, key, 'p1');
     expect(p?.communicationStyle).toBe('direct and warm');
+  });
+
+  it('snapshots the catalog at synthesis so a later update is detectable as new (55)', async () => {
+    const fs = await setup();
+    await runIntakeTurn(turn(fs, fakeClient(), 'basics', 'I am a nurse.'));
+    await synthesizeIntake(synth(fs, fakeClient()));
+    const session = await getIntakeSession(fs, key, 'p1');
+    // The snapshot names every catalog section + `sectionId.questionId` form key that existed now.
+    expect(session?.knownSectionIds).toContain('basics');
+    expect(session?.knownSectionIds).toContain('intimacy');
+    expect(session?.knownQuestionKeys?.some((k) => k.startsWith('basics.'))).toBe(true);
+    // It matches the live catalog snapshot exactly.
+    const snap = intakeCatalogSnapshot();
+    expect(session?.knownSectionIds).toEqual(snap.sectionIds);
+    expect(session?.knownQuestionKeys).toEqual(snap.questionKeys);
+  });
+
+  it('baselines a pre-55 COMPLETE session lacking a snapshot on load, but leaves in-progress ones alone (55)', async () => {
+    const fs = await setup();
+    // A complete session written before 55 (no snapshot) → ensureIntakeSession seeds it to the current catalog.
+    const legacy = {
+      id: 'intake-p1',
+      schemaVersion: 1,
+      personId: 'p1',
+      status: 'complete' as const,
+      sections: [],
+      startedAt: NOW.toISOString(),
+      updatedAt: NOW.toISOString(),
+      completedAt: NOW.toISOString(),
+    };
+    const { writeEncryptedJson } = await import('../vault');
+    await writeEncryptedJson(fs, 'people/p1/intake/session.enc', legacy, key);
+    const reconciled = await ensureIntakeSession(fs, key, 'p1', NOW);
+    expect(reconciled.knownQuestionKeys).toEqual(intakeCatalogSnapshot().questionKeys);
+    expect(reconciled.status).toBe('complete');
+
+    // A fresh in-progress session gets NO snapshot here (it's stamped at synthesis, not before).
+    await savePerson(fs, key, person({ id: 'p2' }));
+    const fresh = await ensureIntakeSession(fs, key, 'p2', NOW);
+    expect(fresh.status).toBe('inProgress');
+    expect(fresh.knownQuestionKeys).toBeUndefined();
   });
 
   it('salvages a portrait when the model reply has off-spec fields (non-numeric metric, malformed fact)', async () => {

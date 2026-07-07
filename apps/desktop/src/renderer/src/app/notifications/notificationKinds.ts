@@ -1,5 +1,14 @@
 import type { LucideIcon } from 'lucide-react';
-import { ClipboardCheck, Clock, Download, Flag, RefreshCw, Sparkles, Target } from 'lucide-react';
+import {
+  ClipboardCheck,
+  ClipboardList,
+  Clock,
+  Download,
+  Flag,
+  RefreshCw,
+  Sparkles,
+  Target,
+} from 'lucide-react';
 import type {
   Notification,
   NotificationAction,
@@ -59,6 +68,9 @@ export const NOTIFICATION_KIND_DEFS: Record<NotificationKind, KindDef> = {
   // signature (id + checkInAt) so a dismissed nudge stays dismissed until the challenge changes; ≤1 open at a
   // time, coalesced by the fixed 'challenge-followup' key.
   'challenge-followup': { icon: Flag, severity: 'info', resurfaces: onChange },
+  // Completed onboarding has new/unanswered questions (55 §3.1). onIncrease so dismissing it never re-nags
+  // unless MORE appears (a later app update adds questions/sections) — answering some never re-pops it.
+  'onboarding-updated': { icon: ClipboardList, severity: 'info', resurfaces: onIncrease },
 };
 
 /** The icon for a kind (used by the bell rows + toasts). */

@@ -58,6 +58,7 @@ export const NOTIFICATION_KINDS = [
   'goal-followup', // 40-proactive-coaching §3.2 — a gentle check-in on a stale/due goal
   'coaching-synthesis', // 40 §3.3 — the cross-feature observation nudge
   'challenge-followup', // 52-challenge-sessions §3.5 — a gentle "how did your challenge go?" check-in
+  'onboarding-updated', // 55-onboarding-attention §3.1 — completed onboarding has new/unanswered questions
 ] as const;
 export const NotificationKindSchema = z.enum(NOTIFICATION_KINDS);
 export type NotificationKind = z.infer<typeof NotificationKindSchema>;
@@ -1099,6 +1100,12 @@ export const IntakeSessionSchema = z.object({
   // Per-answer signature (sectionId.questionId → cheap hash) snapshotted at the LAST portrait synthesis, so a
   // deterministic "your portrait is X% out of date" nudge can detect added/edited/cleared answers since (§15).
   portraitAnswerSig: z.record(z.string(), z.number()).optional(),
+  // The catalog as it stood when onboarding last completed/refreshed (55-onboarding-attention §4) — the section
+  // ids + `sectionId.questionId` keys that existed then. Lets the attention indicator tell a GENUINELY-new
+  // question/section (added by a later app update, ∉ the snapshot) from a deep section simply not yet done, so
+  // the persistent surfaces don't nag about the whole un-started invited catalog. Additive-optional (no bump).
+  knownSectionIds: z.array(z.string()).optional().catch(undefined),
+  knownQuestionKeys: z.array(z.string()).optional().catch(undefined),
   startedAt: z.string(),
   updatedAt: z.string(),
   completedAt: z.string().optional(),

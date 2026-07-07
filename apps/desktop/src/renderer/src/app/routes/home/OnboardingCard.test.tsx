@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { intakeAnswerHashes } from '@selfos/core/intake';
 import { DEFAULT_ROLES } from '@shared/capabilities';
 import type { IntakeSectionMeta, IntakeState, ProfileUpdateSuggestion } from '@shared/channels';
 import type { Person } from '@shared/schemas';
@@ -146,18 +147,40 @@ describe('OnboardingCard', () => {
     expect(screen.getByText('2d ago')).toBeInTheDocument();
   });
 
-  it('self-hides once complete and the portrait is up to date', async () => {
+  /** A complete session with `basics` fully answered → nothing outstanding AND the portrait fresh (its
+   *  snapshot matches the current answers). */
+  function completeAllAnswered(): IntakeState {
     const st = baseState('complete');
-    st.session.portraitAnswerSig = {}; // a portrait exists; no answers changed since → fresh
+    st.session.sections = [
+      {
+        id: 'basics',
+        status: 'complete',
+        restricted: false,
+        messages: [],
+        answers: { a: 'x', b: 'y', c: 'z' },
+      },
+    ];
+    st.session.portraitAnswerSig = intakeAnswerHashes(st.session); // matches → fresh
+    return st;
+  }
+
+  it('self-hides once complete, fresh, and nothing is outstanding', async () => {
+    const st = completeAllAnswered();
     installMockBridge({ intakeGetState: () => Promise.resolve(st) });
-    await renderCard();
+    const { container } = render(
+      <MemoryRouter>
+        <OnboardingCard />
+      </MemoryRouter>,
+    );
+    await useIntakeStore.getState().load();
     await waitFor(() => expect(useIntakeStore.getState().loaded).toBe(true));
     expect(screen.queryByText(/profile review/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/more things to tell/i)).not.toBeInTheDocument();
+    expect(container).toBeEmptyDOMElement();
   });
 
   it('stays hidden when complete + fresh even if profile suggestions are pending (the freshness card owns those)', async () => {
-    const st = baseState('complete');
-    st.session.portraitAnswerSig = {}; // fresh
+    const st = completeAllAnswered();
     installMockBridge({
       intakeGetState: () => Promise.resolve(st),
       profileSuggestions: () => Promise.resolve([PENDING_SUGGESTION]),
@@ -168,12 +191,31 @@ describe('OnboardingCard', () => {
     expect(screen.queryByText(/profile review/i)).not.toBeInTheDocument();
   });
 
-  it('nudges to refresh when the portrait is stale (answers changed since), with the % changed', async () => {
+  it('surfaces new/unanswered onboarding questions once complete (55), with a Continue action', async () => {
     const st = baseState('complete');
+    // basics left inProgress (started, not finished) with `c` blank → 1 area outstanding.
     st.session.sections = [
-      { id: 'basics', status: 'complete', restricted: false, messages: [], answers: { a: 'Sam' } },
+      {
+        id: 'basics',
+        status: 'inProgress',
+        restricted: false,
+        messages: [],
+        answers: { a: 'x', b: 'y' }, // c is unanswered
+      },
     ];
-    // A snapshot hash that won't match the current answer → the portrait is stale.
+    st.session.portraitAnswerSig = { 'basics.a': 999999 }; // ALSO stale — attention must take precedence
+    installMockBridge({ intakeGetState: () => Promise.resolve(st) });
+    await renderCard();
+    expect(await screen.findByText(/more things to tell SelfOS/i)).toBeInTheDocument();
+    expect(screen.getByText(/One area of your profile has/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /continue onboarding/i })).toBeInTheDocument();
+    // Attention wins over staleness — the refresh card is not shown.
+    expect(screen.queryByText(/profile review/i)).not.toBeInTheDocument();
+  });
+
+  it('nudges to refresh when the portrait is stale but nothing is outstanding, with the % changed', async () => {
+    const st = completeAllAnswered();
+    // A snapshot hash that won't match the current answers → the portrait is stale (but all answered).
     st.session.portraitAnswerSig = { 'basics.a': 999999 };
     installMockBridge({ intakeGetState: () => Promise.resolve(st) });
     await renderCard();

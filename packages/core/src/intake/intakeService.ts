@@ -38,6 +38,7 @@ import {
   INTAKE_CATALOG,
   buildInterviewerAddendum,
   getIntakeSection,
+  intakeCatalogSnapshot,
   type IntakeFormQuestion,
   type IntakeSectionDef,
 } from './intakeCatalog';
@@ -110,7 +111,13 @@ export async function ensureIntakeSession(
   }
   const known = new Set(existing.sections.map((s) => s.id));
   const missing = INTAKE_CATALOG.filter((def) => !known.has(def.id));
-  if (missing.length === 0) return existing;
+  // Baseline the catalog snapshot for an already-COMPLETE session from before 55: without it we can't tell a
+  // new section/question from a deep one not yet done, so seed it to the current catalog ("from now on"), which
+  // keeps existing users un-nagged and makes future additions detectable. A fresh/in-progress session gets its
+  // snapshot at synthesis, so only complete-without-a-snapshot needs seeding here.
+  const needsSnapshot = existing.status === 'complete' && existing.knownQuestionKeys === undefined;
+  if (missing.length === 0 && !needsSnapshot) return existing;
+  const snapshot = intakeCatalogSnapshot();
   const reconciled: IntakeSession = {
     ...existing,
     sections: [
@@ -125,6 +132,9 @@ export async function ensureIntakeSession(
         }),
       ),
     ],
+    ...(needsSnapshot
+      ? { knownSectionIds: snapshot.sectionIds, knownQuestionKeys: snapshot.questionKeys }
+      : {}),
     updatedAt: at,
   };
   await writeEncryptedJson(fs, intakePath(personId), reconciled, key);
@@ -1201,6 +1211,11 @@ async function synthesizePortrait(deps: IntakeSynthesizeDeps): Promise<IntakeSyn
   session.portrait = draft.portrait;
   // Snapshot the answers this portrait was built from, so the app can later show "X% out of date" (§15).
   session.portraitAnswerSig = intakeAnswerHashes(session);
+  // Snapshot the catalog as it stands now (55 §4), so a later update's new section/question is detectable
+  // as genuinely new — refreshing the portrait re-baselines, so answered-away news doesn't linger.
+  const snapshot = intakeCatalogSnapshot();
+  session.knownSectionIds = snapshot.sectionIds;
+  session.knownQuestionKeys = snapshot.questionKeys;
   session.updatedAt = at;
   await writeEncryptedJson(fs, intakePath(personId), session, key);
 

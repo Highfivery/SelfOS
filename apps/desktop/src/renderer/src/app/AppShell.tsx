@@ -44,6 +44,7 @@ import { useMemoryReconcile } from './notifications/useMemoryReconcile';
 import { useCoachingSynthesis } from './notifications/useCoachingSynthesis';
 import { ToastViewport } from './notifications/ToastViewport';
 import { Onboarding } from './routes/onboarding/Onboarding';
+import { attentionFromIntakeState } from './routes/onboarding/progress';
 import { AppHeader } from './AppHeader';
 import { Switcher } from './Switcher';
 import { LockScreen } from './LockScreen';
@@ -73,6 +74,14 @@ export function AppShell(): JSX.Element {
   const intakeState = useIntakeStore((s) => s.state);
   const intakeIncomplete =
     canDoIntake && intakeState !== null && intakeState.session.status !== 'complete';
+  // A completed onboarding with new/unanswered questions (55 §3.1) — the nav dot also draws attention here,
+  // so the sidebar signals "there's more to answer" without re-gating the person into full-screen onboarding.
+  const intakeHasAttention =
+    canDoIntake &&
+    intakeState !== null &&
+    intakeState.session.status === 'complete' &&
+    attentionFromIntakeState(intakeState).total > 0;
+  const intakeNeedsAttention = intakeIncomplete || intakeHasAttention;
   // The active person's role is the Owner (the household setter-upper) — the onboarding gate exempts them
   // (decision 2026-06-15: onboarding is a hard requirement for Members only, never the Owner).
   const isOwner = useSessionStore((s) => {
@@ -242,13 +251,21 @@ export function AppShell(): JSX.Element {
               <NavLink
                 to="/onboarding"
                 className={navClass}
-                aria-label={intakeIncomplete ? 'Onboarding, not finished' : 'Onboarding'}
+                aria-label={
+                  intakeIncomplete
+                    ? 'Onboarding, not finished'
+                    : intakeHasAttention
+                      ? 'Onboarding, questions to answer'
+                      : 'Onboarding'
+                }
                 title={tip('Onboarding')}
                 onClick={closeDrawer}
               >
                 <Sparkles size={18} aria-hidden="true" />
                 <span className={styles.label}>Onboarding</span>
-                {intakeIncomplete ? <span className={styles.navDot} aria-hidden="true" /> : null}
+                {intakeNeedsAttention ? (
+                  <span className={styles.navDot} aria-hidden="true" />
+                ) : null}
               </NavLink>
             ) : null}
             {hasSessions ? (

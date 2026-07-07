@@ -1,11 +1,15 @@
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, RefreshCw, Sparkles } from 'lucide-react';
+import { ArrowRight, ClipboardList, RefreshCw, Sparkles } from 'lucide-react';
 import { portraitStaleness } from '@selfos/core/intake';
 import type { AnswerMap } from '@selfos/core/questionnaires';
 import { Button, Card, Heading, Stack, Text } from '../../../design-system/components';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useIntakeStore } from '../../../stores/intakeStore';
-import { intakeQuestionTotals, overallProgress } from '../onboarding/progress';
+import {
+  attentionFromIntakeState,
+  intakeQuestionTotals,
+  overallProgress,
+} from '../onboarding/progress';
 import { relativeTime } from '../../notifications/relativeTime';
 import styles from './Home.module.css';
 
@@ -39,8 +43,35 @@ export function OnboardingCard(): JSX.Element | null {
   const { session, sections } = state;
   const sectionById = new Map(session.sections.map((s) => [s.id, s]));
 
-  // --- Complete: nudge a refresh only when the portrait is out of date (else self-hide). ---
+  // --- Complete: surface new/unanswered onboarding questions, else nudge a portrait refresh, else self-hide. ---
   if (session.status === 'complete') {
+    // 55 §3.1 — new questions in finished sections, new sections from updates, and skipped/blank ones. This
+    // takes precedence over the staleness nudge: filling in a real gap is more actionable than a refresh.
+    const attention = attentionFromIntakeState(state);
+    if (attention.total > 0) {
+      const areas = attention.areas.length;
+      return (
+        <Card>
+          <Stack gap={3}>
+            <Heading level={2}>
+              <ClipboardList size={18} aria-hidden="true" /> A few more things to tell SelfOS
+            </Heading>
+            <Text tone="secondary">
+              {areas === 1 ? 'One area of your profile has' : `${areas} areas of your profile have`}{' '}
+              new or unanswered questions — including anything added in recent updates. Filling them
+              in helps your coaching fit you.
+            </Text>
+            <div>
+              <Button variant="primary" onClick={() => navigate('/onboarding')}>
+                Continue onboarding
+                <ArrowRight size={16} aria-hidden="true" />
+              </Button>
+            </div>
+          </Stack>
+        </Card>
+      );
+    }
+
     const stale = portraitStaleness(session);
     if (!stale.stale) return null;
 

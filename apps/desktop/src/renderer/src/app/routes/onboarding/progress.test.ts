@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { IntakeSectionMeta } from '@shared/channels';
-import { intakeQuestionTotals, isAnswered, overallProgress, sectionProgress } from './progress';
+import {
+  intakeQuestionTotals,
+  isAnswered,
+  onboardingAttention,
+  overallProgress,
+  sectionProgress,
+} from './progress';
 import type { IntakeSectionStatus } from './progress';
 
 const meta = (over: Partial<IntakeSectionMeta>): IntakeSectionMeta => ({
@@ -101,6 +107,166 @@ describe('intakeQuestionTotals', () => {
       })[id] ?? { answers: {} };
     // s1 (2 questions) is skipped → excluded entirely; only s2 counts.
     expect(intakeQuestionTotals(metas, sectionFor)).toEqual({ answered: 1, total: 1 });
+  });
+});
+
+describe('onboardingAttention (55) — new + left-blank only', () => {
+  const q = (id: string): { id: string; type: 'shortText'; prompt: string; required: false } => ({
+    id,
+    type: 'shortText',
+    prompt: id,
+    required: false,
+  });
+  // A full snapshot of the two-section catalog below, so nothing reads as "new" unless deliberately omitted.
+  const fullSnapshot = {
+    adultAcknowledged: true,
+    knownSectionIds: ['s1', 's2', 'story'],
+    knownQuestionKeys: ['s1.a', 's1.b', 's2.c'],
+  };
+
+  it('flags a blank ONLY in a section left inProgress (started, not finished)', () => {
+    const metas = [meta({ id: 's1', questions: [q('a'), q('b')] })];
+    // inProgress with `b` left blank → an unfinished section → flagged.
+    expect(
+      onboardingAttention(
+        metas,
+        () => ({ status: 'inProgress', answers: { a: 'x' } }),
+        fullSnapshot,
+      ),
+    ).toEqual({ areas: ['s1'], total: 1 });
+    // A COMPLETE section's known blank is an intentional optional skip → NOT flagged (no nagging).
+    expect(
+      onboardingAttention(metas, () => ({ status: 'complete', answers: { a: 'x' } }), fullSnapshot)
+        .total,
+    ).toBe(0);
+    // The same blank in a not-yet-started deep section → NOT flagged (no nagging about un-started catalog).
+    expect(
+      onboardingAttention(metas, () => ({ status: 'notStarted', answers: {} }), fullSnapshot).total,
+    ).toBe(0);
+    // A skipped section's old blanks are also not flagged (they declined it).
+    expect(
+      onboardingAttention(metas, () => ({ status: 'skipped', answers: {} }), fullSnapshot).total,
+    ).toBe(0);
+  });
+
+  it('flags a genuinely-new question (∉ snapshot) even in a not-started section', () => {
+    // s2.c exists but is absent from this snapshot → an app update added it after completion.
+    const metas = [meta({ id: 's2', questions: [q('c')] })];
+    const snap = {
+      adultAcknowledged: true,
+      knownSectionIds: ['s2'],
+      knownQuestionKeys: [] as string[],
+    };
+    expect(onboardingAttention(metas, () => ({ status: 'notStarted', answers: {} }), snap)).toEqual(
+      { areas: ['s2'], total: 1 },
+    );
+  });
+
+  it('flags a whole new section (all its questions ∉ snapshot)', () => {
+    const metas = [
+      meta({ id: 's1', questions: [q('a')] }), // known + answered
+      meta({ id: 'brandnew', questions: [q('x'), q('y')] }), // absent from snapshot
+    ];
+    const snap = { adultAcknowledged: true, knownSectionIds: ['s1'], knownQuestionKeys: ['s1.a'] };
+    const a = onboardingAttention(
+      metas,
+      (id) =>
+        id === 's1'
+          ? { status: 'complete', answers: { a: 'v' } }
+          : { status: 'notStarted', answers: {} },
+      snap,
+    );
+    expect(a.total).toBe(2);
+    expect(a.areas).toEqual(['brandnew']);
+  });
+
+  it('flags a NEW chat section un-started (1 topic), never an old un-started one', () => {
+    const metas = [meta({ id: 'story', mode: 'chat', questions: undefined as never })];
+    // Not in snapshot → new → 1.
+    expect(
+      onboardingAttention(metas, () => ({ status: 'notStarted', answers: {} }), {
+        adultAcknowledged: true,
+        knownSectionIds: [],
+        knownQuestionKeys: [],
+      }).total,
+    ).toBe(1);
+    // In snapshot (old) + un-started → not flagged.
+    expect(
+      onboardingAttention(metas, () => ({ status: 'notStarted', answers: {} }), fullSnapshot).total,
+    ).toBe(0);
+  });
+
+  it('never counts branch-hidden follow-ups', () => {
+    const metas = [
+      meta({
+        id: 's1',
+        questions: [
+          { id: 'trigger', type: 'yesNo', prompt: 'T', required: false },
+          {
+            id: 'followup',
+            type: 'shortText',
+            prompt: 'F',
+            required: false,
+            branch: { whenQuestionId: 'trigger', equals: true, action: 'show' },
+          },
+        ],
+      }),
+    ];
+    const snap = {
+      adultAcknowledged: true,
+      knownSectionIds: ['s1'],
+      knownQuestionKeys: ['s1.trigger', 's1.followup'],
+    };
+    // Engaged (inProgress); trigger "No" → follow-up hidden → nothing outstanding.
+    expect(
+      onboardingAttention(
+        metas,
+        () => ({ status: 'inProgress', answers: { trigger: false } }),
+        snap,
+      ).total,
+    ).toBe(0);
+    // Trigger "Yes" → follow-up visible + blank + engaged → 1 outstanding.
+    expect(
+      onboardingAttention(metas, () => ({ status: 'inProgress', answers: { trigger: true } }), snap)
+        .total,
+    ).toBe(1);
+  });
+
+  it('excludes an 18+ section until the ack is given, then includes its new/blank items', () => {
+    const metas = [meta({ id: 'intimacy', adult: true, questions: [q('a')] })];
+    // Engaged so the blank would count once unlocked.
+    const sectionFor = () => ({ status: 'inProgress' as const, answers: {} });
+    const snap = { knownSectionIds: ['intimacy'], knownQuestionKeys: ['intimacy.a'] };
+    expect(
+      onboardingAttention(metas, sectionFor, { adultAcknowledged: false, ...snap }).total,
+    ).toBe(0);
+    expect(onboardingAttention(metas, sectionFor, { adultAcknowledged: true, ...snap }).total).toBe(
+      1,
+    );
+  });
+
+  it('with NO snapshot, nothing reads as new — only engaged blanks count (pre-55, un-baselined)', () => {
+    const metas = [
+      meta({ id: 's1', questions: [q('a')] }),
+      meta({ id: 's2', questions: [q('c')] }),
+    ];
+    // s1 engaged with a blank → counts; s2 not-started → would only count if "new", but no snapshot → not new.
+    const a = onboardingAttention(
+      metas,
+      (id) =>
+        id === 's1' ? { status: 'inProgress', answers: {} } : { status: 'notStarted', answers: {} },
+      { adultAcknowledged: true }, // no knownSectionIds/knownQuestionKeys
+    );
+    expect(a.total).toBe(1);
+    expect(a.areas).toEqual(['s1']);
+  });
+
+  it('is 0 when engaged sections are fully answered and nothing is new', () => {
+    const metas = [meta({ id: 's1', questions: [q('a')] })];
+    expect(
+      onboardingAttention(metas, () => ({ status: 'complete', answers: { a: 'x' } }), fullSnapshot)
+        .total,
+    ).toBe(0);
   });
 });
 

@@ -78,10 +78,18 @@ then nothing" bug):
   and is **never persisted** as a blank assistant turn. The billed call is still metered (input + thinking
   tokens were consumed). The chat `max_tokens` ceiling is generous (a reply can run several paragraphs and
   adaptive thinking shares the budget) so normal turns aren't starved/truncated.
-- **The error is always shown + retryable.** On any failure (EMPTY, ERROR, BUDGET, NO_KEY) the store sets
-  `error`; the user's typed message stays on screen (it isn't saved on a failed turn); and a **"Try again"**
-  affordance re-runs the last turn (re-sending the same message + its already-stored attachments, without a
-  second bubble). `ChatTurnResult` gains the `EMPTY` failure reason.
+- **The user's message is persisted before the reply.** A turn saves the user's message to the encrypted
+  transcript **as soon as it's sent** (before the coach's reply is generated). So a turn that fails — or an
+  app that's closed mid-turn — never loses it: the transcript simply ends on the user's message, and that
+  state is recoverable (below). Only the assistant reply is conditional (a blank one is never saved).
+- **An unanswered turn is always recoverable.** Whenever a session's last message is the user's and nothing
+  is in flight — a live failure (EMPTY, ERROR, BUDGET, NO_KEY), **or a session re-opened later that ended on
+  the user's message** — the UI shows a **"Try again"** affordance (a live failure also shows its `error`; a
+  re-opened one shows a gentle "hasn't been answered yet" prompt). "Try again" calls a dedicated
+  `chat:retry` / `retryReply` that **re-generates the coach's reply for the existing transcript** — it never
+  adds a second user message, so it can't duplicate; it's budget-gated + metered like a normal turn and
+  reopens a completed session the same way a continuation does. `ChatTurnResult` gains the `EMPTY` failure
+  reason.
 
 ## 4. Data model
 

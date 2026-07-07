@@ -440,6 +440,15 @@ export function registerIpcHandlers(): void {
       chatSender = undefined;
     }
   });
+  // chatRetry re-generates a reply for an unanswered turn — same per-turn sender binding as chatStream (05 §4.1).
+  ipcMain.handle(IpcChannels.chatRetry, async (event, raw: unknown) => {
+    chatSender = event.sender;
+    try {
+      return await bridge.chatRetry(raw as string);
+    } finally {
+      chatSender = undefined;
+    }
+  });
   // Session image attachments (45) — thin delegates; the bridge owns validation + active-person scoping.
   handle(IpcChannels.conversationStoreAttachment, bridge.conversationStoreAttachment);
   handle(IpcChannels.conversationGetAttachment, bridge.conversationGetAttachment);

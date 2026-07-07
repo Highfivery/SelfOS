@@ -165,7 +165,7 @@ function buildTopicUsage(
  * transcript, and record a usage event. The API key never leaves the main process.
  */
 export async function runChatTurn(deps: ChatTurnDeps): Promise<ChatTurnResult> {
-  const { fs, key, client, apiKey, model, personId, conversationId, userText, now } = deps;
+  const { fs, key, client, apiKey, personId, conversationId, userText, now } = deps;
   if (!apiKey) return { ok: false, reason: 'NO_KEY', message: 'Add your Claude API key first.' };
 
   const personBudget = await checkBudget(fs, key, {
@@ -216,6 +216,10 @@ export async function runChatTurn(deps: ChatTurnDeps): Promise<ChatTurnResult> {
     ts: at,
     ...(deps.attachments && deps.attachments.length > 0 ? { attachments: deps.attachments } : {}),
   });
+  // Persist the user's message BEFORE the reply (05 §4.1) — so a failed turn never loses it: the transcript
+  // ends with the user's message and can be retried (from here, or after re-opening the session later).
+  conversation.updatedAt = at;
+  await saveConversation(fs, key, conversation);
 
   // Free-form session topic (28 §13.2): infer the relevant life-areas from the message with a cheap Haiku
   // classifier so the pinned portrait surfaces the facts that matter here. Cached on the conversation and
@@ -239,6 +243,36 @@ export async function runChatTurn(deps: ChatTurnDeps): Promise<ChatTurnResult> {
     }
   }
 
+  return generateCoachReply(deps, conversation, topicOverride, topicUsage);
+}
+
+/**
+ * Stream the coach's reply for a conversation whose transcript already ends with the user's message, append +
+ * persist it, meter, and run the post-turn machinery (wrap-up hint, guided step, challenge capture). Shared by
+ * `runChatTurn` (after it appends the new user message) and `retryReply` (which re-runs on the existing
+ * transcript). A blank reply is an honest `EMPTY` failure that is never persisted (05 §4.1).
+ */
+async function generateCoachReply(
+  deps: Pick<
+    ChatTurnDeps,
+    | 'fs'
+    | 'key'
+    | 'client'
+    | 'apiKey'
+    | 'model'
+    | 'personId'
+    | 'now'
+    | 'onDelta'
+    | 'depthAsk'
+    | 'goalRaise'
+  >,
+  conversation: Conversation,
+  topicOverride: { lifeAreas: string[] } | undefined,
+  topicUsage: UsageEvent | undefined,
+): Promise<ChatTurnResult> {
+  const { fs, key, client, apiKey, model, personId, now } = deps;
+  if (!apiKey) return { ok: false, reason: 'NO_KEY', message: 'Add your Claude API key first.' };
+  const at = now.toISOString();
   // 52 §8.3 — the challenge-coach's EXPLICIT sexual register is gated on the per-person 18+ ack. Read it ONLY
   // for a challenge-coach session (so an un-acked person who steers toward sex is redirected, not engaged); a
   // single cheap read, scoped to challenge sessions, keeps the ack enforcement in core (not just the bridge).
@@ -281,7 +315,7 @@ export async function runChatTurn(deps: ChatTurnDeps): Promise<ChatTurnResult> {
 
   // A blank reply is a FAILURE, not a silently-saved empty message (05 §4.1). It happens when adaptive thinking
   // starves the max_tokens budget (stop_reason max_tokens, no visible text). Surface it so the user can retry —
-  // and never persist an empty assistant turn into the transcript.
+  // and never persist an empty assistant turn into the transcript (the user's message stays, already saved).
   if (result.text.trim() === '') {
     return {
       ok: false,
@@ -337,4 +371,46 @@ export async function runChatTurn(deps: ChatTurnDeps): Promise<ChatTurnResult> {
     ...(wrapUpSuggested ? { wrapUpSuggested } : {}),
     ...(challengeCreated ? { challengeCreated } : {}),
   };
+}
+
+/** Deps for `retryReply` — the same as a chat turn, minus the (already-persisted) user text + attachments. */
+export type RetryReplyDeps = Omit<ChatTurnDeps, 'userText' | 'attachments'>;
+
+/**
+ * Re-generate the coach's reply for a conversation whose LAST message is an unanswered user message (05 §4.1) —
+ * e.g. after an empty/failed turn, or on re-opening a session that ended on the user's message. Does NOT add a
+ * new user message (so it never duplicates); reuses the cached topic. Budget-gated + metered like a normal turn.
+ */
+export async function retryReply(deps: RetryReplyDeps): Promise<ChatTurnResult> {
+  const { fs, key, apiKey, model, personId, conversationId, now } = deps;
+  if (!apiKey) return { ok: false, reason: 'NO_KEY', message: 'Add your Claude API key first.' };
+  const personBudget = await checkBudget(fs, key, {
+    scope: 'person',
+    personId,
+    now,
+    override: deps.override,
+  });
+  const appBudget = await checkBudget(fs, key, { scope: 'app', now, override: deps.override });
+  if (personBudget.state === 'over' || appBudget.state === 'over') {
+    return { ok: false, reason: 'BUDGET', message: 'AI budget reached for this period.' };
+  }
+  const conversation = await getConversation(fs, key, personId, conversationId);
+  const last = conversation?.messages[conversation.messages.length - 1];
+  if (!conversation || last?.role !== 'user') {
+    // Nothing to retry — the last turn already has a reply (or the session is gone). A no-op failure.
+    return { ok: false, reason: 'ERROR', message: 'There’s nothing to retry here.' };
+  }
+  // Continuing a completed session reopens it (09 §14.4), mirroring runChatTurn. The reopen persists only on
+  // the success path (inside generateCoachReply) — benign, and in practice unreachable: a completed session
+  // that ends on an un-answered user message never occurs, since runChatTurn persists the reopen up front
+  // before its own reply attempt, so a failed turn already leaves the session `inProgress` on disk.
+  if (conversation.status === 'complete') {
+    conversation.status = 'inProgress';
+    delete conversation.endedAt;
+    if (conversation.insightId) conversation.insightStale = true;
+  }
+  const topicOverride = conversation.topicLifeAreas
+    ? { lifeAreas: conversation.topicLifeAreas }
+    : undefined;
+  return generateCoachReply({ ...deps, model }, conversation, topicOverride, undefined);
 }

@@ -176,6 +176,7 @@ export const IpcChannels = {
   budgetSetPerson: 'budget:setPerson',
   budgetStatus: 'budget:status',
   chatStream: 'chat:stream',
+  chatRetry: 'chat:retry',
   chatChunk: 'chat:chunk', // main → renderer event
   conversationStoreAttachment: 'conversation:storeAttachment',
   conversationGetAttachment: 'conversation:getAttachment',
@@ -583,6 +584,12 @@ export interface SelfosBridge {
     userText: string;
     attachments?: AttachmentRef[];
   }): Promise<ChatTurnResult>;
+  /**
+   * Re-generate the coach's reply for a session whose last message is an unanswered user message (05 §4.1) —
+   * an empty/failed turn, or a re-opened session that ended on the user. Adds no new user message (no
+   * duplication); streams via `chat:chunk`. Scoped to the active person in the bridge.
+   */
+  chatRetry(conversationId: string): Promise<ChatTurnResult>;
   /** Subscribe to streamed reply chunks; returns an unsubscribe function. */
   onChatChunk(listener: (delta: string) => void): () => void;
   /**

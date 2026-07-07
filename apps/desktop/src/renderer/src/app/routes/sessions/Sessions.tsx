@@ -403,21 +403,23 @@ export function Sessions(): JSX.Element {
               </Banner>
             ) : null}
 
-            {error ? (
-              <Banner tone="warning">
+            {/* A turn that didn't get a reply (the last message is the user's + nothing in flight) is always
+                recoverable (05 §4.1): a live failure shows the error, and RE-OPENING a session that ended on the
+                user's message shows a gentle prompt — both offer "Try again" (which asks the coach to reply to
+                the existing transcript, never re-sending/duplicating the message). */}
+            {!sending && messages[messages.length - 1]?.role === 'user' ? (
+              <Banner tone={error ? 'warning' : 'info'}>
                 <Stack gap={2}>
-                  <Text>{error}</Text>
-                  {/* Offer a retry when the last turn didn't complete (the last message is the user's) — the
-                      message is still on screen, so "Try again" re-sends it without re-typing (05 §4.1). */}
-                  {messages[messages.length - 1]?.role === 'user' ? (
-                    <div>
-                      <Button variant="secondary" onClick={() => void retry()} disabled={sending}>
-                        Try again
-                      </Button>
-                    </div>
-                  ) : null}
+                  <Text>{error ?? 'Your last message hasn’t been answered yet.'}</Text>
+                  <div>
+                    <Button variant="secondary" onClick={() => void retry()}>
+                      Try again
+                    </Button>
+                  </div>
                 </Stack>
               </Banner>
+            ) : error ? (
+              <Banner tone="warning">{error}</Banner>
             ) : null}
 
             {configured ? (

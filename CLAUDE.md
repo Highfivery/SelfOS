@@ -389,6 +389,34 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-08 — **Fix (Sessions retry STILL a dead-end on a RE-OPENED unanswered session — the v0.14.2 fix was
+  incomplete; user-reported with a screenshot "im still unable to resend or retry"; spec 05 §4.1 amended; on
+  `fix/sessions-reopen-retry`).** The v0.14.2 fix only showed "Try again" while a live `error` was set (cleared
+  on `open()`), and it retried by **re-sending the user's text via `chatStream`** — which would DUPLICATE the
+  persisted user message. The user's real case: a turn that never got a reply, then the session re-opened —
+  transcript ends on their message, no error state → **no retry affordance at all** (a silent dead-end the
+  screenshot showed). **Reproduced FIRST** (an E2E that seeds a conversation ending on a user message, re-opens
+  it, and asserts the dead-end) before the fix. **Three-part fix: (1)** `chatService` now **persists the user's
+  message BEFORE generating the reply** (05 §4.1) — a failed/interrupted turn never loses it; the transcript
+  simply ends on the user's message. **(2)** extracted a shared `generateCoachReply()` (system prompt → stream →
+  meter-first → empty-check → append+save → guided-step/challenge) used by both `runChatTurn` and a new
+  **`retryReply()`** — which re-generates a reply for a conversation whose LAST message is an unanswered user
+  message (**never adds a new user message → can't duplicate**), budget-gated + metered, reopens a completed
+  session like a continuation. New `chat:retry` IPC through the full seam (channels → coreBridge → ipc [chatSender
+  binding] → preload → test-utils). **(3)** the store `retry()` calls `chatRetry` (not re-sending text); the UI
+  shows "Try again" whenever **`!sending && the last message is the user's`** — covering both a live failure (with
+  its `error`) AND a re-opened unanswered session (a gentle "hasn't been answered yet" prompt). The optional
+  in-session nudges (depth-ask 29, goal-raise 40) are intentionally omitted on a recovery turn. Gate green:
+  typecheck (all), lint, format, **960 core + 905 desktop + 11 relay** unit (chatService: the empty test now
+  asserts the user message IS persisted; +`retryReply` empty→retry→[user,assistant] no-duplication + no-op-when-
+  answered; Sessions RTL: failed-turn retries via `chatRetry` not re-`chatStream`, + a re-opened-session prompt
+  → Try again → reply), **E2E +1** (seed a session ending on a user message → re-open → "Try again" → reply →
+  decrypt asserts exactly `[user, assistant]`, no duplicate; the existing empty→retry E2E now drives `chatRetry`).
+  All 12 Sessions E2E green. Synced spec 05 §4.1. **Lesson: a "retry" that re-SENDS the user's input duplicates
+  it — persist the user's message on send and make retry a REPLY-ONLY op (`retryReply` on the existing
+  transcript); and a recovery affordance gated on a transient `error` flag misses the durable case (a re-opened
+  session that ended on the user's message), so gate it on the transcript shape (`last.role === 'user'`), not on
+  the in-memory error.**
 - 2026-07-08 — **Fix (Sessions "thinking then nothing" — a silent empty-reply dead end; fail-safe error + retry;
   SPEC 05 §4.1; user-reported w/ screenshot; on `fix/sessions-empty-reply-failsafe`, PR pending).** A user sent
   a long message, saw "Coach is thinking…", then it stopped with NO response and NO error. **Diagnosed as a

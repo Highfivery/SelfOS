@@ -27,6 +27,20 @@ const bigFive: TestSummary = {
   subscales: [{ key: 'bigfive.openness', label: 'Openness', signed: false }],
   wellbeing: false,
 };
+const attachment: TestSummary = {
+  id: 'ecr-r',
+  group: 'relationships',
+  title: 'Attachment (ECR-R)',
+  instrument: 'ECR-R',
+  blurb: 'How you connect.',
+  framing: 'A reflection, not a verdict.',
+  estimatedMinutes: 15,
+  itemCount: 36,
+  adult: false,
+  sensitive: false,
+  subscales: [{ key: 'ecr.anxiety', label: 'Anxiety', signed: false }],
+  wellbeing: false,
+};
 const kink: TestSummary = {
   id: 'kink-interests',
   group: 'intimacy',
@@ -106,8 +120,9 @@ const renderYou = (): void => {
 describe('You hub', () => {
   it('shows the catalog + a profile card for a taken test, and gates the 18+ group', async () => {
     installMockBridge({
-      testsList: () => Promise.resolve({ tests: [bigFive], adultAcknowledged: false }),
-      testsResults: () => Promise.resolve([bigFiveResult()]),
+      testsList: () => Promise.resolve({ tests: [bigFive, attachment], adultAcknowledged: false }),
+      testsResults: ({ testId }) =>
+        Promise.resolve(testId === 'bigfive-ipip-120' ? [bigFiveResult()] : []),
     });
     renderYou();
 
@@ -115,10 +130,38 @@ describe('You hub', () => {
     // The profile card surfaces the top subscale + the "taken" line.
     expect(screen.getByText('Openness')).toBeInTheDocument();
     expect(screen.getByText('leans higher')).toBeInTheDocument();
-    // Catalog card for a takeable test.
+    // Catalog card for the still-untaken test.
     expect(screen.getByRole('button', { name: 'Take' })).toBeInTheDocument();
     // The Intimacy & sexuality group is 18+-gated until acknowledged.
     expect(screen.getByText(/These are 18\+/)).toBeInTheDocument();
+  });
+
+  it('drops a taken test from "Available tests" — it lives only under Your profiles (95)', async () => {
+    installMockBridge({
+      testsList: () => Promise.resolve({ tests: [bigFive, attachment], adultAcknowledged: true }),
+      testsResults: ({ testId }) =>
+        Promise.resolve(testId === 'bigfive-ipip-120' ? [bigFiveResult()] : []),
+    });
+    renderYou();
+
+    await waitFor(() => expect(screen.getByText('Your profiles')).toBeInTheDocument());
+    // The taken Big Five appears exactly once (its profile card), never as a catalog "Take" card.
+    expect(screen.getAllByText('Big Five personality')).toHaveLength(1);
+    // The untaken Attachment test remains available to take.
+    expect(screen.getByRole('button', { name: 'Take' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Attachment (ECR-R)' })).toBeInTheDocument();
+  });
+
+  it('hides the "Available tests" section once every test is taken (95)', async () => {
+    installMockBridge({
+      testsList: () => Promise.resolve({ tests: [bigFive], adultAcknowledged: true }),
+      testsResults: () => Promise.resolve([bigFiveResult()]),
+    });
+    renderYou();
+
+    await waitFor(() => expect(screen.getByText('Your profiles')).toBeInTheDocument());
+    expect(screen.queryByRole('heading', { name: 'Available tests' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Take' })).not.toBeInTheDocument();
   });
 
   it('acknowledging 18+ reveals the intimacy tests', async () => {

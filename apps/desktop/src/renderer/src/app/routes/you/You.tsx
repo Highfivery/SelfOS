@@ -140,8 +140,13 @@ export function You(): JSX.Element {
     void load();
   }, [load]);
 
-  const taken = catalog.filter((t) => (resultsByTest[t.id]?.length ?? 0) > 0);
+  const isTaken = (t: TestSummary): boolean => (resultsByTest[t.id]?.length ?? 0) > 0;
+  const taken = catalog.filter(isTaken);
   const anyResults = taken.length > 0;
+  // 95 — a taken test lives at the top under "Your profiles" (with a Retake / Check in again button), so
+  // it drops out of "Available tests" below rather than showing in both places.
+  const available = catalog.filter((t) => !isTaken(t));
+  const anyAvailable = available.length > 0;
 
   const ack = async (): Promise<void> => {
     setAcking(true);
@@ -190,50 +195,57 @@ export function You(): JSX.Element {
             </section>
           ) : null}
 
-          <section>
-            <Heading level={2}>Available tests</Heading>
-            <Stack gap={4}>
-              {GROUP_ORDER.map((group) => {
-                const tests = catalog.filter((t) => t.group === group);
-                const isIntimacyGated = group === 'intimacy' && !adultAcknowledged;
-                if (tests.length === 0 && !isIntimacyGated) return null;
-                return (
-                  <div key={group}>
-                    <Heading level={3} className={styles.groupTitle}>
-                      {TEST_GROUP_LABELS[group]}
-                    </Heading>
-                    {group === 'wellbeing' ? (
-                      <Text size="sm" tone="secondary" className={styles.groupFraming}>
-                        Gentle check-ins on how you’ve been feeling and how your mind works —
-                        reflections, not diagnoses.
-                      </Text>
-                    ) : null}
-                    {isIntimacyGated ? (
-                      <Card className={styles.gatedCard}>
-                        <Stack gap={3}>
-                          <Text>
-                            <Lock size={14} aria-hidden="true" /> These are 18+. Acknowledge to view
-                            the kink-interests inventory and the sexuality & orientation spectrum.
-                          </Text>
-                          <div className={styles.cardActions}>
-                            <Button variant="primary" onClick={() => void ack()} disabled={acking}>
-                              I’m 18 or older — show me
-                            </Button>
-                          </div>
-                        </Stack>
-                      </Card>
-                    ) : (
-                      <div className={styles.grid}>
-                        {tests.map((test) => (
-                          <CatalogCard key={test.id} test={test} />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </Stack>
-          </section>
+          {anyAvailable ? (
+            <section>
+              <Heading level={2}>Available tests</Heading>
+              <Stack gap={4}>
+                {GROUP_ORDER.map((group) => {
+                  const tests = available.filter((t) => t.group === group);
+                  const isIntimacyGated = group === 'intimacy' && !adultAcknowledged;
+                  if (tests.length === 0 && !isIntimacyGated) return null;
+                  return (
+                    <div key={group}>
+                      <Heading level={3} className={styles.groupTitle}>
+                        {TEST_GROUP_LABELS[group]}
+                      </Heading>
+                      {group === 'wellbeing' ? (
+                        <Text size="sm" tone="secondary" className={styles.groupFraming}>
+                          Gentle check-ins on how you’ve been feeling and how your mind works —
+                          reflections, not diagnoses.
+                        </Text>
+                      ) : null}
+                      {isIntimacyGated ? (
+                        <Card className={styles.gatedCard}>
+                          <Stack gap={3}>
+                            <Text>
+                              <Lock size={14} aria-hidden="true" /> These are 18+. Acknowledge to
+                              view the kink-interests inventory and the sexuality & orientation
+                              spectrum.
+                            </Text>
+                            <div className={styles.cardActions}>
+                              <Button
+                                variant="primary"
+                                onClick={() => void ack()}
+                                disabled={acking}
+                              >
+                                I’m 18 or older — show me
+                              </Button>
+                            </div>
+                          </Stack>
+                        </Card>
+                      ) : (
+                        <div className={styles.grid}>
+                          {tests.map((test) => (
+                            <CatalogCard key={test.id} test={test} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </Stack>
+            </section>
+          ) : null}
 
           <CrisisFooter />
         </Stack>

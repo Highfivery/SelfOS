@@ -135,9 +135,13 @@ about you lives in **Memory**"). Top to bottom:
    instrument name, a compact **subscale summary** (the top 1–2 dimensions as labelled bars), `takenAt`/"taken N
    times," and **Open** (→ §3.3) / **Retake** (→ §3.2). Sensitive instruments (kink/sexuality) show their card
    only to the person themselves (own data) and carry a small **"private — only you"** marker.
-3. **Available tests** — a grouped catalog of the four instruments (Personality · Relationships · Intimacy &
-   sexuality), each a card: name, what it measures, item count + estimated time, a **non-diagnostic** one-liner,
-   and **Take**. The Intimacy & sexuality group cards are **18+-gated** (§3.5).
+3. **Available tests** — a grouped catalog of the instruments (Personality · Relationships · Intimacy &
+   sexuality · Reflections & check-ins), each a card: name, what it measures, item count + estimated time, a
+   **non-diagnostic** one-liner, and **Take**. A test the person has **already taken drops out of this catalog**
+   (95) — it lives only under **Your profiles** above, where **Retake** (or **Check in again** for a wellbeing
+   reflection) is the re-run affordance — so a taken instrument never appears in two places at once; a group with
+   no remaining untaken tests, and the whole section once everything is taken, self-hides. The Intimacy &
+   sexuality group cards are **18+-gated** (§3.5).
 
 Empty state: a warm "Take a test to see how SelfOS understands you — and to make your coach, dreams, and
 questionnaires fit you better." (`tests.own` is on for Members, so the catalog is always reachable; the

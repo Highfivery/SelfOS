@@ -5,8 +5,14 @@ import type { ClaudeClient, FileSystem } from '../host';
 import { listAllInsights, updateInsight } from '../insights';
 import { createAssignment } from './assignmentService';
 import { saveQuestionnaire } from './questionnaireService';
-import { saveResponse } from './responseService';
-import { analyzeAssignment, extractJsonObject } from './analysisService';
+import { getResponse, saveResponse } from './responseService';
+import {
+  analyzeAssignment,
+  extractJsonObject,
+  isAnalysisStale,
+  responseRevision,
+} from './analysisService';
+import type { Insight, ResponseSet } from '../schemas';
 import type { AiDeps } from './generationService';
 
 const key = generateMasterKey();
@@ -214,6 +220,19 @@ describe('analyzeAssignment', () => {
     expect((await listAllInsights(fs, key)).length).toBe(1); // not duplicated
   });
 
+  it('stamps analyzedRevision from the response (56 §4) — defaulting a pre-56 response to 1', async () => {
+    const fs = memFileSystem();
+    const assignmentId = await seedAnswered(fs); // seeded response has no `revision` → reads as 1
+    const result = await analyzeAssignment(deps(fs, fakeClient(ANALYSIS)), { assignmentId });
+    expect(result.insight?.provenance.analyzedRevision).toBe(1);
+
+    // Re-submit at revision 2 → re-analyze stamps 2.
+    const r = await getResponse(fs, key, assignmentId);
+    await saveResponse(fs, key, { ...r!, revision: 2, submittedAt: now.toISOString() });
+    const re = await analyzeAssignment(deps(fs, fakeClient(ANALYSIS)), { assignmentId });
+    expect(re.insight?.provenance.analyzedRevision).toBe(2);
+  });
+
   it('degrades to REFUSED on a refusal-shaped reply', async () => {
     const fs = memFileSystem();
     const assignmentId = await seedAnswered(fs);
@@ -251,6 +270,41 @@ describe('analyzeAssignment', () => {
     expect(result.ok).toBe(true);
     expect(result.insight?.summary).toBe('They want more connection.');
     expect(result.insight?.facts).toEqual([]); // the cut-off fact is dropped
+  });
+});
+
+describe('isAnalysisStale + responseRevision (56)', () => {
+  const resp = (over: Partial<ResponseSet> = {}): ResponseSet => ({
+    id: 'r1',
+    schemaVersion: 1,
+    assignmentId: 'a1',
+    answers: [],
+    submittedAt: '2026-06-11T12:00:00.000Z',
+    ...over,
+  });
+  const ins = (analyzedRevision?: number): Insight =>
+    ({
+      id: 'i1',
+      provenance: {
+        assignmentId: 'a1',
+        at: 'now',
+        ...(analyzedRevision ? { analyzedRevision } : {}),
+      },
+    }) as Insight;
+
+  it('a pre-56 response reads as revision 1', () => {
+    expect(responseRevision(resp())).toBe(1);
+    expect(responseRevision(resp({ revision: 3 }))).toBe(3);
+  });
+
+  it('is false with no insight, no submission, or matching revisions; true when the response is ahead', () => {
+    expect(isAnalysisStale(resp({ revision: 2 }), null)).toBe(false); // never analyzed
+    expect(isAnalysisStale(resp({ submittedAt: undefined }), ins(1))).toBe(false); // an unsubmitted draft
+    expect(isAnalysisStale(resp({ revision: 1 }), ins(1))).toBe(false); // analyzed at the current revision
+    expect(isAnalysisStale(resp({ revision: 2 }), ins(1))).toBe(true); // edited since → stale
+    // pre-56 insight (no analyzedRevision → 1): an un-edited (revision 1) send is NOT falsely stale.
+    expect(isAnalysisStale(resp(), ins())).toBe(false);
+    expect(isAnalysisStale(resp({ revision: 2 }), ins())).toBe(true);
   });
 });
 

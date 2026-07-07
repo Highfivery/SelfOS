@@ -2451,6 +2451,112 @@ describe('createCoreBridge', () => {
     expect(await bridge.assignmentsResults(q.id)).toEqual([]);
   });
 
+  it('recipient re-opens + edits + resubmits → Results stale + answers-updated nudge; re-analyze clears it (56)', async () => {
+    const { host, bridge, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const recipient = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: recipient.id, roleId: 'member', pin: null });
+    const q = await bridge.questionnairesSave({
+      title: 'Weekly check-in',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: recipient.id },
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'How are we doing?', required: true }],
+    });
+    // A PRIVATE send so we also prove the answers-updated summary carries no raw answers.
+    const { assignment } = await bridge.assignmentsCreate({
+      questionnaireId: q.id,
+      privacy: 'private',
+    });
+
+    // Recipient submits.
+    await bridge.sessionSetActive({ personId: recipient.id });
+    await bridge.assignmentsSubmit({
+      assignmentId: assignment.id,
+      answers: [{ questionId: 'q1', value: 'first answer' }],
+    });
+
+    // Owner analyzes (a Claude returning valid JSON).
+    const claude = {
+      send: () => Promise.resolve('{}'),
+      stream: (_options: unknown, onDelta: (s: string) => void) => {
+        const json = JSON.stringify({ summary: 'A summary.', facts: [], confidence: 'medium' });
+        onDelta(json);
+        return Promise.resolve({
+          text: json,
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    host.host.claude = claude;
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    expect((await bridge.insightsAnalyze({ assignmentId: assignment.id })).ok).toBe(true);
+    let results = await bridge.assignmentsResults(q.id);
+    expect(results[0]).toMatchObject({ analyzed: true, analysisStale: false, revision: 1 });
+    expect(await bridge.notificationsAnswersUpdated()).toEqual([]); // nothing edited yet
+
+    // Recipient re-opens, edits, and resubmits → revision 2.
+    await bridge.sessionSetActive({ personId: recipient.id });
+    await bridge.assignmentsReopen(assignment.id);
+    expect((await bridge.assignmentsGet(assignment.id))?.answerable).toBe(true); // editable again
+    await bridge.assignmentsSubmit({
+      assignmentId: assignment.id,
+      answers: [{ questionId: 'q1', value: 'a much better answer' }],
+    });
+
+    // Owner: Results flags the analysis stale; the answers-updated nudge names the recipient, carries the
+    // revision (the re-surface signature) + questionnaire link, and NO raw answers (a Private send).
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    results = await bridge.assignmentsResults(q.id);
+    expect(results[0]).toMatchObject({ analyzed: true, analysisStale: true, revision: 2 });
+    const nudges = await bridge.notificationsAnswersUpdated();
+    expect(nudges).toHaveLength(1);
+    expect(nudges[0]).toMatchObject({
+      assignmentId: assignment.id,
+      questionnaireId: q.id,
+      recipientName: 'Mara',
+      revision: 2,
+    });
+    expect(JSON.stringify(nudges[0])).not.toContain('better answer'); // no raw answers in the summary
+
+    // Re-analyze → analyzedRevision catches up → no longer stale, the nudge clears.
+    host.host.claude = claude;
+    expect((await bridge.insightsAnalyze({ assignmentId: assignment.id })).ok).toBe(true);
+    expect((await bridge.assignmentsResults(q.id))[0]?.analysisStale).toBe(false);
+    expect(await bridge.notificationsAnswersUpdated()).toEqual([]);
+  });
+
+  it('reopen is recipient-scoped — the sender can’t re-open the recipient’s send (56)', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    const recipient = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: recipient.id, roleId: 'member', pin: null });
+    const q = await bridge.questionnairesSave({
+      title: 'Weekly check-in',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: recipient.id },
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'How?', required: true }],
+    });
+    const { assignment } = await bridge.assignmentsCreate({
+      questionnaireId: q.id,
+      privacy: 'standard',
+    });
+    await bridge.sessionSetActive({ personId: recipient.id });
+    await bridge.assignmentsSubmit({
+      assignmentId: assignment.id,
+      answers: [{ questionId: 'q1', value: 'x' }],
+    });
+
+    // The SENDER (owner) is not the recipient → reopen is refused (recipient-scoped in the bridge).
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    await expect(bridge.assignmentsReopen(assignment.id)).rejects.toThrow(/permitted/);
+
+    // The recipient CAN re-open their own submitted send.
+    await bridge.sessionSetActive({ personId: recipient.id });
+    await bridge.assignmentsReopen(assignment.id);
+    expect((await bridge.assignmentsGet(assignment.id))?.answerable).toBe(true);
+  });
+
   it('deletion: owner purges any stage; a member-creator only deletes their own while unsent', async () => {
     const { bridge, ownerId } = await freshOwner();
     const member = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });

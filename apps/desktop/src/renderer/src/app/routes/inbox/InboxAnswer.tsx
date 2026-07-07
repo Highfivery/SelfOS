@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react';
 import { Lock } from 'lucide-react';
 import {
   compatibilityDisclosure,
+  formatAnswerForDisplay,
   unansweredRequired,
   visibleAnswers,
+  visibleQuestions,
 } from '@selfos/core/questionnaires';
 import type { AnswerMap, AnswerValue } from '@selfos/core/questionnaires';
-import type { Answer, InboxAssignmentDetail } from '@shared/channels';
+import type { Answer, InboxAssignmentDetail, SendAnswer } from '@shared/channels';
 import type { InboxCompatibilityView, Question } from '@shared/schemas';
 import {
   Banner,
@@ -47,7 +49,9 @@ const toAnswerList = (questions: Question[], map: AnswerMap): Answer[] => {
 /**
  * The recipient's answering pane for one Inbox assignment (08-questionnaires §3.3). Shows who's asking
  * + the privacy mode, renders the shared answering form (save/resume), and offers Submit or Decline
- * (silently or with a short note). Locked once submitted/declined.
+ * (silently or with a short note). Once submitted, it becomes a read-only **review** of their answers with
+ * an **Edit answers** affordance to update + resend (56-answer-review-edit §3.1) — except a compatibility
+ * send, which stays a joint-report view. A declined send stays locked.
  */
 export function InboxAnswer({
   assignmentId,
@@ -59,6 +63,7 @@ export function InboxAnswer({
   const getDetail = useInboxStore((s) => s.getDetail);
   const open = useInboxStore((s) => s.open);
   const saveProgress = useInboxStore((s) => s.saveProgress);
+  const reopen = useInboxStore((s) => s.reopen);
   const submit = useInboxStore((s) => s.submit);
   const decline = useInboxStore((s) => s.decline);
 
@@ -70,6 +75,10 @@ export function InboxAnswer({
   const [saved, setSaved] = useState(false);
   const [declining, setDeclining] = useState(false);
   const [declineNote, setDeclineNote] = useState('');
+  // 56 §3.1 — editing a previously-submitted send: the review is shown until the recipient taps "Edit answers",
+  // which flips this on and renders the (pre-filled) form. Reopening the assignment is deferred to the update
+  // submit, so Cancel is a true no-op (the send stays submitted).
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -163,6 +172,31 @@ export function InboxAnswer({
     }
   };
 
+  // Resubmit edited answers (56 §3.1): re-open the submitted send, then submit — the revision bump tells the
+  // sender their analysis is now stale. Validates required questions like a first submit.
+  const onUpdate = async (): Promise<void> => {
+    const unanswered = unansweredRequired(detail.questionnaire.questions, answers);
+    if (unanswered.length > 0) {
+      setError(
+        `Answer the ${unanswered.length} required question${
+          unanswered.length === 1 ? '' : 's'
+        } to resend.`,
+      );
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await reopen(assignmentId);
+      await submit(assignmentId, toAnswerList(detail.questionnaire.questions, answers));
+      onDone();
+    } catch {
+      setError('Could not update your answers. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const onDecline = async (): Promise<void> => {
     setBusy(true);
     setError(null);
@@ -176,9 +210,14 @@ export function InboxAnswer({
     }
   };
 
-  // Locked: already submitted or declined — no post-submit answer review (§3.3), EXCEPT a compatibility
-  // send shows the answerer the joint report (and, for eachSeesOwn, their own answers) per §3.6.
-  if (!detail.answerable) {
+  // Submitted/declined and NOT re-editing → review (56 §3.1): a recipient can now see + edit their own
+  // answers, EXCEPT a compatibility send (its joint report + dual-answer alignment stays as-is, §3.6).
+  const submitted = detail.status === 'submitted' || detail.status === 'analyzed';
+  const canEdit = submitted && !detail.compatibility;
+  if (!detail.answerable && !editing) {
+    const review: SendAnswer[] = visibleQuestions(detail.questionnaire.questions, answers).map(
+      (q) => ({ prompt: q.prompt, answer: formatAnswerForDisplay(q, answers[q.id]) }),
+    );
     return (
       <Stack gap={3}>
         <Heading level={3}>{detail.questionnaire.title}</Heading>
@@ -190,6 +229,23 @@ export function InboxAnswer({
         {detail.status !== 'declined' && detail.compatibility ? (
           <JointReport compatibility={detail.compatibility} asker={asker} />
         ) : null}
+        {canEdit ? (
+          <Card>
+            <Stack gap={3}>
+              <Heading level={3}>Your answers</Heading>
+              <AnswerList answers={review} />
+              <Text size="sm" tone="secondary">
+                You can update your answers and resend — {asker} will be able to review the update.
+              </Text>
+              <div>
+                <Button variant="primary" onClick={() => setEditing(true)}>
+                  Edit answers
+                </Button>
+              </div>
+            </Stack>
+          </Card>
+        ) : null}
+        {error ? <Banner tone="warning">{error}</Banner> : null}
         <div className={styles.footer}>
           <Button variant="secondary" onClick={onDone}>
             Back to Inbox
@@ -253,17 +309,36 @@ export function InboxAnswer({
           {saved ? <Banner tone="info">Saved — you can come back and finish later.</Banner> : null}
           {error ? <Banner tone="warning">{error}</Banner> : null}
 
-          <div className={styles.footer}>
-            <Button variant="primary" onClick={() => void onSubmit()} disabled={busy}>
-              Submit
-            </Button>
-            <Button variant="secondary" onClick={() => void onSave()} disabled={busy}>
-              Save for later
-            </Button>
-            <Button variant="secondary" onClick={() => setDeclining(true)} disabled={busy}>
-              Decline
-            </Button>
-          </div>
+          {editing ? (
+            <div className={styles.footer}>
+              <Button variant="primary" onClick={() => void onUpdate()} disabled={busy}>
+                Update answers
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setEditing(false);
+                  setError(null);
+                  setAnswers(toAnswerMap(detail.answers)); // discard edits — restore the submitted answers
+                }}
+                disabled={busy}
+              >
+                Cancel
+              </Button>
+            </div>
+          ) : (
+            <div className={styles.footer}>
+              <Button variant="primary" onClick={() => void onSubmit()} disabled={busy}>
+                Submit
+              </Button>
+              <Button variant="secondary" onClick={() => void onSave()} disabled={busy}>
+                Save for later
+              </Button>
+              <Button variant="secondary" onClick={() => setDeclining(true)} disabled={busy}>
+                Decline
+              </Button>
+            </div>
+          )}
         </>
       )}
     </Stack>

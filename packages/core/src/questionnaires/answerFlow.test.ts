@@ -9,7 +9,9 @@ import { getResponse } from './responseService';
 import {
   declineAssignment,
   isAnswerable,
+  isReopenable,
   openAssignment,
+  reopenAssignment,
   saveProgress,
   submitResponse,
 } from './answerService';
@@ -113,6 +115,59 @@ describe('answer lifecycle', () => {
     });
     expect(declined.status).toBe('declined');
     expect(declined.declineNote).toBe('Not a good time'); // trimmed
+  });
+
+  it('submit stamps revision 1; re-open + resubmit bumps it (56)', async () => {
+    const fs = memFileSystem();
+    const id = await seedSentAssignment(fs);
+    const first = await submitResponse(fs, key, {
+      assignmentId: id,
+      answers: [{ questionId: 'q1', value: 'v1' }],
+    });
+    expect(first.revision).toBe(1);
+    expect(isReopenable('submitted')).toBe(true);
+
+    // Re-open → editable again (inProgress), answers + revision preserved.
+    const reopened = await reopenAssignment(fs, key, id);
+    expect(reopened.status).toBe('inProgress');
+    expect((await getResponse(fs, key, id))?.revision).toBe(1);
+
+    // Editing via a draft carries the revision forward, and the resubmit bumps it.
+    await saveProgress(fs, key, { assignmentId: id, answers: [{ questionId: 'q1', value: 'v2' }] });
+    expect((await getResponse(fs, key, id))?.revision).toBe(1); // still last-submitted revision while drafting
+    const second = await submitResponse(fs, key, {
+      assignmentId: id,
+      answers: [{ questionId: 'q1', value: 'v2' }],
+    });
+    expect(second.id).toBe(first.id); // same ResponseSet identity
+    expect(second.revision).toBe(2);
+
+    // A third edit → revision 3.
+    await reopenAssignment(fs, key, id);
+    const third = await submitResponse(fs, key, {
+      assignmentId: id,
+      answers: [{ questionId: 'q1', value: 'v3' }],
+    });
+    expect(third.revision).toBe(3);
+  });
+
+  it('re-open is idempotent on an editable send and refuses a non-reopenable status (56)', async () => {
+    const fs = memFileSystem();
+    const id = await seedSentAssignment(fs);
+    // A never-submitted (sent) send can't be re-opened — it was never locked.
+    expect(isReopenable('sent')).toBe(false);
+    await expect(reopenAssignment(fs, key, id)).rejects.toThrow(/no longer be edited/);
+    // A declined send stays locked.
+    const declinedId = await seedSentAssignment(fs);
+    await declineAssignment(fs, key, { assignmentId: declinedId });
+    await expect(reopenAssignment(fs, key, declinedId)).rejects.toThrow(/no longer be edited/);
+    // Re-opening an already-inProgress send is a no-op.
+    await submitResponse(fs, key, {
+      assignmentId: id,
+      answers: [{ questionId: 'q1', value: 'x' }],
+    });
+    await reopenAssignment(fs, key, id);
+    expect((await reopenAssignment(fs, key, id)).status).toBe('inProgress');
   });
 
   it('locks the assignment after submit — no further answering or declining', async () => {

@@ -190,18 +190,21 @@ function StandardResults({ questionnaireId }: { questionnaireId: string }): JSX.
     }
   };
 
-  // autoAnalyze (default OFF): when on, draft an insight for each new response one at a time. Each
-  // attempt is recorded so a failure (e.g. over budget) is never retried in a loop. The effect re-fires
-  // on `results` (each analyze reloads them), so it walks the list one send per run — `runAnalyze` is
-  // deliberately omitted from the deps (it isn't memoized and `results` is the real trigger).
+  // autoAnalyze (default OFF): when on, draft an insight for each new response — AND re-draft when a recipient
+  // edits + resubmits (a stale analysis, 56 §3.2) — one at a time. Each attempt is recorded keyed by the send's
+  // REVISION, so a failure (e.g. over budget) is never retried in a loop, yet a genuine re-edit (a higher
+  // revision) IS re-analyzed. The effect re-fires on `results` (each analyze reloads them), walking one send
+  // per run — `runAnalyze` is deliberately omitted from the deps (`results` is the real trigger).
   const autoAttempted = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (autoAnalyze !== true || !aiReady) return;
-    const next = results.find(
-      (r) => r.status === 'submitted' && !r.analyzed && !autoAttempted.current.has(r.assignmentId),
-    );
+    const next = results.find((r) => {
+      if (r.status !== 'submitted') return false;
+      const needs = !r.analyzed || r.analysisStale; // never analyzed, or answers changed since
+      return needs && !autoAttempted.current.has(`${r.assignmentId}:${r.revision ?? 1}`);
+    });
     if (!next) return;
-    autoAttempted.current.add(next.assignmentId);
+    autoAttempted.current.add(`${next.assignmentId}:${next.revision ?? 1}`);
     void runAnalyze(next.assignmentId);
   }, [results, autoAnalyze, aiReady]);
 
@@ -421,7 +424,25 @@ function SendCard({
           <Text tone="secondary">Couldn’t load these answers.</Text>
         ) : null}
 
-        {isSubmitted && send.analyzed ? (
+        {/* Analyzed + the recipient edited since (56 §3.2): flag it stale + offer a Re-analyze (the manual path;
+            autoAnalyze refreshes it automatically when on). */}
+        {isSubmitted && send.analyzed && send.analysisStale ? (
+          <Banner tone="warning">
+            <Stack gap={2}>
+              <Text>
+                Answers updated since your last analysis — re-analyze to refresh the insight.
+              </Text>
+              {aiReady ? (
+                <div>
+                  <Button variant="secondary" onClick={onAnalyze} disabled={analyzing}>
+                    <Sparkles size={16} aria-hidden="true" />
+                    {analyzing ? 'Analyzing…' : 'Re-analyze'}
+                  </Button>
+                </div>
+              ) : null}
+            </Stack>
+          </Banner>
+        ) : isSubmitted && send.analyzed ? (
           <Banner tone="info">
             Insight drafted from this response. <Link to="/memory">Review it in Memory →</Link>
           </Banner>

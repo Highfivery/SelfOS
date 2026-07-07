@@ -175,7 +175,10 @@ version; in-flight assignments keep their original questions so answers always m
 
 Appears in the recipient's **Inbox** when they're the active person. They answer (save/resume), see the
 **purpose, who's asking, the privacy mode, and a clear "Decline"** (silently, or with an optional short
-note), then submit. Editable until submit, then locked.
+note), then submit. **Amended by [`56-answer-review-edit-reanalyze`](56-answer-review-edit-reanalyze.md)
+(2026-07-07):** a submitted in-app send is no longer a dead end — the recipient can **review their answers
+and Edit + resend** (a resubmit bumps `ResponseSet.revision`), which flags the sender's analysis stale
+(the `answers-updated` nudge → Re-analyze). Household/Inbox only; compatibility + relay stay single-submission.
 
 ### 3.4 Recipient — external (relay page)
 

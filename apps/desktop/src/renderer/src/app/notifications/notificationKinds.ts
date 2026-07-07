@@ -5,6 +5,7 @@ import {
   Clock,
   Download,
   Flag,
+  PencilLine,
   RefreshCw,
   Sparkles,
   Target,
@@ -71,6 +72,9 @@ export const NOTIFICATION_KIND_DEFS: Record<NotificationKind, KindDef> = {
   // Completed onboarding has new/unanswered questions (55 §3.1). onIncrease so dismissing it never re-nags
   // unless MORE appears (a later app update adds questions/sections) — answering some never re-pops it.
   'onboarding-updated': { icon: ClipboardList, severity: 'info', resurfaces: onIncrease },
+  // A recipient edited + resubmitted after the sender analyzed them (56 §3.2) — nudges a re-analyze. onIncrease
+  // by revision: dismissing (or re-analyzing, which drops the candidate) never re-nags until they edit again.
+  'answers-updated': { icon: PencilLine, severity: 'info', resurfaces: onIncrease },
 };
 
 /** The icon for a kind (used by the bell rows + toasts). */

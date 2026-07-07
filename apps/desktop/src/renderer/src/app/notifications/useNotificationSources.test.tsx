@@ -270,6 +270,36 @@ describe('useNotificationSources — responses-arrived (38 §3.1)', () => {
     ).toBeUndefined();
   });
 
+  it('nudges the sender when a recipient edited their answers after analysis (answers-updated, 56)', async () => {
+    installMockBridge({
+      notificationsAnswersUpdated: () =>
+        Promise.resolve([
+          {
+            assignmentId: 'as1',
+            questionnaireId: 'q7',
+            title: 'Our week',
+            recipientName: 'Angel',
+            revision: 2,
+            at: '2026-07-07T10:00:00.000Z',
+          },
+        ]),
+    });
+    asOwner();
+    await useNotificationStore.getState().load();
+    render(<Harness />);
+    await waitFor(() => {
+      const n = useNotificationStore
+        .getState()
+        .notifications.find((x) => x.coalesceKey === 'answers-updated:as1');
+      expect(n?.title).toBe('Angel updated their answers to “Our week”');
+      expect(n?.signature).toBe('2'); // the revision — onIncrease re-surfaces on a further edit
+      expect(n?.action).toEqual({
+        type: 'navigate',
+        to: '/questionnaires?focus=q7&view=results',
+      });
+    });
+  });
+
   it('summarizes multiple responses without naming any one responder', async () => {
     installMockBridge({
       notificationsResponsesArrived: () =>

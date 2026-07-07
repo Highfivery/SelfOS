@@ -389,6 +389,36 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-07 — **Build (Questionnaire answer review / edit / resend + sender re-analyze — SPEC 56 BUILT; on
+  `feat/answer-review-edit`, PR pending).** User: after someone answers a questionnaire there's no way to review
+  their answers/questions, no way to edit + resend, and the sender isn't told answers changed so their analysis
+  goes stale. **Scope asked first (one genuine fork): household (Inbox) ONLY** — external relay recipients
+  (purge-on-drain mailbox) + compatibility sends (dual-answer alignment) are explicitly deferred; the edit
+  affordance is hidden for them. **Recipient (Inbox):** a submitted send is no longer a dead end — it shows a
+  **read-only review** of their questions + answers (`AnswerList` + `formatAnswerForDisplay`) with **"Edit
+  answers"** → an editable pre-filled form → **"Update answers"** (reopen THEN submit; Cancel is a true no-op —
+  reopen is lazy). **Sender (Results):** each resubmit bumps **`ResponseSet.revision`** (additive-optional,
+  `(existing ?? 0) + 1`; `saveProgress` carries it forward during an edit); `analyzeAssignment` stamps
+  **`Insight.provenance.analyzedRevision`**; a pure **`isAnalysisStale`** (insight exists AND `revision >
+analyzedRevision`, pre-56 defaults to 1 so an un-edited send is never falsely stale) drives an **"Answers
+  updated — re-analyze"** chip + a new **`answers-updated`** notification (sender-scoped, `onIncrease` by
+  revision). Re-analyzing overwrites the same Insight (idempotent) + catches `analyzedRevision` up → chip +
+  nudge clear; `autoAnalyze` re-runs for stale sends (guard keyed `${assignmentId}:${revision}`). **Trust
+  boundary:** `assignments:reopen` is recipient-scoped + rejects compatibility (NOT relay — an Inbox item is
+  always the household-person recipient, and its relay mailbox was already revoked at first submit);
+  `notifications:answersUpdated` is `viewResults`-gated + **carries no raw answers**, so a Private send's boundary
+  holds. **No new AI spend** (re-analyze = the existing metered `questionnaire.analyze`); additive schema only
+  (no `schemaVersion` bump), one new notification kind. Code-reviewer: pending. Gate green: typecheck (all),
+  lint, format, **956 core + 901 desktop** unit (+reopen/revision/reopenable, +analyzedRevision/isAnalysisStale,
+  +bridge reopen recipient-scoping + full stale-loop with a decrypt + no-raw-answers-for-Private, +Inbox
+  review/edit/compat-hidden RTL, +Results stale-chip RTL, +answers-updated candidate RTL), **E2E +1** (a self
+  check-in: answer → analyze → review → Edit → Update → Results stale chip → decrypt `revision===2` → Re-analyze
+  clears it + decrypt `analyzedRevision===2`; 360px review guard). Synced specs 56 (Approved→Built) + 08 §3.3
+  (amended). **Lesson: the `answers-updated` bell is a one-shot per-person read (no mid-session polling), so it
+  surfaces on NEXT LAUNCH, not instantly after an in-session edit — the E2E asserts the Results stale chip
+  (which DOES refresh on navigation) + a decrypt, and leaves the bell to the bridge + RTL tests; and the reopen
+  guard must reject compatibility but NOT relay-linked in-app sends (the mailbox is already dead post-submit),
+  or the common household-send-with-a-link case can't be edited.**
 - 2026-07-07 — **Build (Onboarding attention indicator — SPEC 55 BUILT; closes #109; on `feat/onboarding-attention`,
   PR pending) + Fix (#95 hide taken tests, PR [#110]).** Two GitHub issues from the member (amarshall1011).
   **#95** (small You-hub fix, `fix/hide-taken-tests`): a test the person has taken now drops out of "Available

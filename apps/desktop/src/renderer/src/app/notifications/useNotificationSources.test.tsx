@@ -2,9 +2,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { render, waitFor } from '@testing-library/react';
 import { DEFAULT_ROLES } from '@shared/capabilities';
 import type { Person } from '@shared/schemas';
+import type { IntakeState } from '@shared/channels';
 import { useNotificationSources } from './useNotificationSources';
 import { useNotificationStore } from '../../stores/notificationStore';
 import { useSessionStore } from '../../stores/sessionStore';
+import { useIntakeStore } from '../../stores/intakeStore';
 import { clearMockBridge, installMockBridge } from '../../test-utils/bridge';
 
 const ME: Person = {
@@ -36,8 +38,52 @@ function Harness(): JSX.Element {
 afterEach(() => {
   clearMockBridge();
   useNotificationStore.getState().reset();
+  useIntakeStore.getState().reset();
   useSessionStore.setState({ activePerson: null, access: null });
 });
+
+/** A completed intake with `basics` left inProgress (started, not finished), `c` blank → 1 area (55). */
+function completeIntakeWithGap(): IntakeState {
+  return {
+    session: {
+      id: 'intake-1',
+      schemaVersion: 1,
+      personId: ME.id,
+      status: 'complete',
+      sections: [
+        {
+          id: 'basics',
+          status: 'inProgress',
+          restricted: false,
+          messages: [],
+          answers: { a: 'x', b: 'y' }, // c unanswered
+        },
+      ],
+      startedAt: 'now',
+      updatedAt: 'now',
+    },
+    sections: [
+      {
+        id: 'basics',
+        title: 'basics',
+        blurb: '',
+        restricted: false,
+        adult: false,
+        tier: 'core',
+        mode: 'form',
+        opener: '',
+        questions: ['a', 'b', 'c'].map((id) => ({
+          id,
+          type: 'shortText' as const,
+          prompt: id,
+          required: false,
+        })),
+      },
+    ],
+    aiAvailable: true,
+    adultAcknowledged: false,
+  };
+}
 
 describe('useNotificationSources — responses-arrived (38 §3.1)', () => {
   it('names a single response and deep-links to that questionnaire’s Results', async () => {
@@ -187,6 +233,40 @@ describe('useNotificationSources — responses-arrived (38 §3.1)', () => {
       useNotificationStore
         .getState()
         .notifications.find((n) => n.coalesceKey === 'coaching-synthesis'),
+    ).toBeUndefined();
+  });
+
+  it('raises onboarding-updated when a completed intake has unanswered questions (55)', async () => {
+    installMockBridge({ intakeGetState: () => Promise.resolve(completeIntakeWithGap()) });
+    asOwner();
+    await useNotificationStore.getState().load();
+    await useIntakeStore.getState().load();
+    render(<Harness />);
+    await waitFor(() => {
+      const n = useNotificationStore
+        .getState()
+        .notifications.find((x) => x.coalesceKey === 'onboarding-updated');
+      expect(n).toBeDefined();
+      expect(n?.title).toBe('More of your profile to fill in');
+      expect(n?.body).toContain('1 area');
+      expect(n?.signature).toBe('1'); // the outstanding total (onIncrease keys off it)
+      expect(n?.action).toEqual({ type: 'navigate', to: '/onboarding' });
+    });
+  });
+
+  it('does NOT raise onboarding-updated for a still-in-progress intake (first-run owns it)', async () => {
+    const st = completeIntakeWithGap();
+    st.session.status = 'inProgress';
+    installMockBridge({ intakeGetState: () => Promise.resolve(st) });
+    asOwner();
+    await useNotificationStore.getState().load();
+    await useIntakeStore.getState().load();
+    render(<Harness />);
+    await waitFor(() => expect(useIntakeStore.getState().loaded).toBe(true));
+    expect(
+      useNotificationStore
+        .getState()
+        .notifications.find((x) => x.coalesceKey === 'onboarding-updated'),
     ).toBeUndefined();
   });
 

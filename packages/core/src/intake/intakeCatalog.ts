@@ -1859,6 +1859,21 @@ export function getIntakeSection(id: string): IntakeSectionDef | undefined {
   return INTAKE_CATALOG.find((s) => s.id === id);
 }
 
+/**
+ * A snapshot of the catalog as it stands NOW (55-onboarding-attention §4): every section id + every
+ * `sectionId.questionId` form-question key. Captured onto the session at portrait synthesis so a later
+ * app update that adds a section/question is detectable as GENUINELY new (∉ the snapshot).
+ */
+export function intakeCatalogSnapshot(): { sectionIds: string[]; questionKeys: string[] } {
+  const sectionIds: string[] = [];
+  const questionKeys: string[] = [];
+  for (const s of INTAKE_CATALOG) {
+    sectionIds.push(s.id);
+    for (const item of s.questions ?? []) questionKeys.push(`${s.id}.${item.q.id}`);
+  }
+  return { sectionIds, questionKeys };
+}
+
 /** The renderer-facing catalog metadata (the host-only field/restricted mapping is stripped). */
 export function intakeSectionMeta(): IntakeSectionMeta[] {
   return INTAKE_CATALOG.map((s) => ({

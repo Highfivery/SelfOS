@@ -41,7 +41,7 @@ import {
   saveQuestionnaire,
   submitResponse,
 } from '@selfos/core/questionnaires';
-import { getIntakeSession } from '@selfos/core/intake';
+import { getIntakeSession, intakeCatalogSnapshot } from '@selfos/core/intake';
 import {
   getInsight,
   listInsightsForPerson,
@@ -424,6 +424,88 @@ test('notifications: bell + center surface conflicts and freshness; an action na
       return bad;
     });
     expect(offenders).toEqual([]);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('onboarding attention (55): a completed profile with a NEW section surfaces the card, nav dot + bell; dismiss persists', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('onboarding-attention e2e: master key missing');
+  const now = new Date().toISOString();
+  // Simulate: the owner finished onboarding BEFORE the 'work-money' section existed — the completion snapshot
+  // omits it, so it reads as GENUINELY new (an app update added it). It's not-yet-started with unanswered
+  // questions → the "new" branch (55) flags it, without nagging about any deep section already known.
+  const snap = intakeCatalogSnapshot();
+  await writeEncryptedJson(
+    fs,
+    'people/owner-1/intake/session.enc',
+    {
+      id: 'intake-owner-1',
+      schemaVersion: 1,
+      personId: 'owner-1',
+      status: 'complete',
+      sections: [
+        { id: 'work-money', status: 'notStarted', restricted: false, messages: [], answers: {} },
+      ],
+      knownSectionIds: snap.sectionIds.filter((id) => id !== 'work-money'),
+      knownQuestionKeys: snap.questionKeys.filter((k) => !k.startsWith('work-money.')),
+      startedAt: now,
+      updatedAt: now,
+      completedAt: now,
+    },
+    key,
+  );
+
+  let app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    // 1) Home card.
+    await expect(w.getByRole('heading', { name: /more things to tell SelfOS/i })).toBeVisible();
+    await expect(w.getByRole('button', { name: /continue onboarding/i })).toBeVisible();
+    // 2) Nav dot — conveyed via the aria-label so it's never color-only (§9).
+    await expect(w.getByRole('link', { name: 'Onboarding, questions to answer' })).toBeVisible();
+    // 3) Bell: exactly one unread onboarding notification (no update/conflict/freshness seeded).
+    await expect(w.getByRole('button', { name: 'Notifications, 1 unread' })).toBeVisible();
+    await w.getByRole('button', { name: /^Notifications/ }).click();
+    const center = w.getByRole('menu', { name: 'Notifications' });
+    await center
+      .getByRole('menuitem')
+      .filter({ hasText: 'More of your profile to fill in' })
+      .getByRole('button', { name: 'Dismiss notification' })
+      .click();
+    await expect(center.getByText('More of your profile to fill in')).toHaveCount(0);
+
+    // ~360px: the Home attention card renders with no horizontal overflow / inner scrollbar.
+    await w.setViewportSize({ width: 360, height: 800 });
+    const overflow = await w.evaluate(() => {
+      const offenders: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          offenders.push(`${el.tagName}.${el.className}`);
+        }
+      });
+      const main = document.querySelector('main');
+      return { offenders, mainOverflow: main ? main.scrollWidth - main.clientWidth : 0 };
+    });
+    expect(overflow.offenders).toEqual([]);
+    expect(overflow.mainOverflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+  }
+
+  // Relaunch: the Home card + nav dot persist (live state), but the dismissed bell stays quiet (onIncrease,
+  // device-local, per-person) until MORE appears.
+  app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await expect(w.getByRole('heading', { name: /more things to tell SelfOS/i })).toBeVisible();
+    await expect(w.getByRole('button', { name: /Notifications, \d+ unread/ })).toHaveCount(0);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

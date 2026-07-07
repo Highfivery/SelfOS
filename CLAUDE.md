@@ -389,6 +389,36 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-07 — **Build (Onboarding attention indicator — SPEC 55 BUILT; closes #109; on `feat/onboarding-attention`,
+  PR pending) + Fix (#95 hide taken tests, PR [#110]).** Two GitHub issues from the member (amarshall1011).
+  **#95** (small You-hub fix, `fix/hide-taken-tests`): a test the person has taken now drops out of "Available
+  tests" (it already lives at the top under "Your profiles" with Retake / Check in again); a group with no untaken
+  tests, and the whole section once everything's taken, self-hides; the 18+ intimacy gate still shows for untaken
+  intimacy tests. **#109** (spec 55): a gentle, dismissible **attention indicator** — a `onboarding-updated`
+  **notification (bell + toast)**, the Home **`OnboardingCard`** attention branch, and the **Onboarding nav dot** —
+  when a person's **completed** onboarding has genuinely-new content or an unfinished section. **All decisions asked
+  first (2 rounds):** what counts + where (all three surfaces); then, on surfacing a material consequence, the
+  aggressiveness. **The key restraint:** the deep `invited` intake catalog is left `notStarted` by design after
+  completion (only `core` is required), so "count every unanswered question" would keep the card + dot lit for
+  **every** user forever (always-on). So the rule (pure `onboardingAttention` helper in `routes/onboarding/progress.ts`,
+  reusing `visibleQuestions`/`isAnswered`) flags a visible unanswered question only when it is **NEW** (its
+  `sectionId.questionId` ∉ a per-person **completion snapshot**) **OR** its section is **`inProgress`** (started, not
+  finished) — a `complete` section's remaining optional blanks are deliberate skips and are never nagged about; a
+  new chat section un-started counts 1; `adult` sections excluded until the 18+ ack; fires only when
+  `session.status === 'complete'`. The snapshot is additive-optional `IntakeSession.knownSectionIds` /
+  `knownQuestionKeys` (no `schemaVersion` bump, `.catch(undefined)`), written at portrait synthesis via
+  `intakeCatalogSnapshot()` and **baselined for pre-55 complete sessions in `ensureIntakeSession`** (write-once, so
+  existing users aren't retroactively nagged and future app updates ARE detectable). **No AI, no spend, no new IPC
+  channel, no new vault file** — one additive `'onboarding-updated'` core enum literal; the bell uses `onIncrease`
+  (dismiss stays quiet until MORE appears). Gate green: typecheck (all), lint, format, **951 core + 893 desktop**
+  unit (+onboardingAttention rule matrix, +snapshot write/baseline core, +OnboardingCard attention branch RTL,
+  +useNotificationSources candidate RTL, +the #95 You-hub RTL), **E2E** (#109: a completed session whose snapshot
+  omits a real section → card + nav dot + bell → dismiss persists across relaunch + 360px guard; #95: the ECR-R
+  flow now asserts the taken test is absent from Available). Synced specs 55 (Approved→Built), 18 §15 (amended), 50
+  §3.1. **Lesson: a "flag unanswered onboarding questions" feature is naggy-by-default because intake questions are
+  ALL optional and the deep catalog is `notStarted` by design — so "unanswered" ≈ "everyone, forever." The
+  non-naggy signal is a per-person COMPLETION SNAPSHOT (detect genuinely-new content) + the `inProgress` status
+  (a section left unfinished), never "any blank"; surface that always-on consequence to the user before building.**
 - 2026-07-01 — **Fix (dream "Analyze this dream" → "The analysis was cut off before it finished"; the recurring
   adaptive-thinking budget bug, this time in the DREAM + SESSION syntheses; on `fix/dream-analysis-truncation`,
   after the §15 reflection redesign shipped in v0.12.0).** User hit the TRUNCATED message on the live app.

@@ -1004,6 +1004,12 @@ questions. Meters `intake.interview` per turn.
 
 ## 15. Keeping the profile fresh — drift detection & update invitations
 
+> **Amended by [`55-onboarding-attention`](55-onboarding-attention.md) (2026-07-07):** a sibling signal to §15's
+> AI-noticed drift — a deterministic **attention indicator** (bell + toast, Home card, nav dot) when a
+> **completed** onboarding has **genuinely-new** questions/sections (added by a later app update, ∉ a completion
+> snapshot on `IntakeSession.knownSectionIds`/`knownQuestionKeys`) or a section left **`inProgress`**. No AI, no
+> spend; closes #109.
+
 > **Built 2026-06-15 (sessions producer):** the model (`ProfileUpdateSuggestion`), the
 > `@selfos/core/profile` service (record/list/accept/dismiss with dedup + no-re-nag), the **session-analysis**
 > producer wiring (it emits `profileSuggestions` on the pass that already runs — no extra AI spend), the

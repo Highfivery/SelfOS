@@ -5,6 +5,8 @@ import { checkInDueChallenge } from '@selfos/core/challenges';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useNotificationStore } from '../../stores/notificationStore';
 import { useUpdateStore } from '../../stores/updateStore';
+import { useIntakeStore } from '../../stores/intakeStore';
+import { attentionFromIntakeState } from '../routes/onboarding/progress';
 import { stalestGoal } from './goalFollowup';
 import type { NotificationCandidate } from './notificationKinds';
 
@@ -26,6 +28,9 @@ export function useNotificationSources(conflicts: string[]): void {
   const setCandidates = useNotificationStore((s) => s.setCandidates);
   // The update result is app-global (NOT per-person) — it survives a person switch (36 §11).
   const update = useUpdateStore((s) => s.result);
+  // The intake state is loaded + reset per active person by AppShell (18 §7); the onboarding-attention
+  // notification (55) derives from it, so no extra fetch here.
+  const intake = useIntakeStore((s) => s.state);
 
   const [suggestionIds, setSuggestionIds] = useState<string[]>([]);
   const [responses, setResponses] = useState<ResponsesArrivedSummary[]>([]);
@@ -205,6 +210,27 @@ export function useNotificationSources(conflicts: string[]): void {
       });
     }
 
+    // Completed onboarding has genuinely-new or unfinished questions (55 §3.1) — a calm, dismissible invitation
+    // to fill in more of the profile. Only after onboarding is COMPLETE (first-run is already gated into the
+    // flow); the "new + inProgress" rule keeps it from nagging about the whole un-started invited catalog.
+    if (canIntake && intake && intake.session.status === 'complete') {
+      const attention = attentionFromIntakeState(intake);
+      if (attention.total > 0) {
+        const areas = attention.areas.length;
+        candidates.push({
+          kind: 'onboarding-updated',
+          coalesceKey: 'onboarding-updated',
+          signature: String(attention.total), // more outstanding → re-surfaces (onIncrease); fewer never does
+          title: 'More of your profile to fill in',
+          body:
+            areas === 1
+              ? 'You have unanswered onboarding questions in 1 area — including anything added in recent updates.'
+              : `You have unanswered onboarding questions in ${areas} areas — including anything added in recent updates.`,
+          action: { type: 'navigate', to: '/onboarding' },
+        });
+      }
+    }
+
     setCandidates(candidates);
   }, [
     conflicts,
@@ -216,6 +242,8 @@ export function useNotificationSources(conflicts: string[]): void {
     synthesis,
     freshnessAreas,
     update,
+    canIntake,
+    intake,
     setCandidates,
   ]);
 }

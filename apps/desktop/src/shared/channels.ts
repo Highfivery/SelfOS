@@ -73,6 +73,7 @@ import type {
   PersonNotificationState,
   Person,
   ProfileUpdateSuggestion,
+  AnswersUpdatedSummary,
   ReminderDueSummary,
   ResponsesArrivedSummary,
   SendAnswer,
@@ -252,6 +253,7 @@ export const IpcChannels = {
   assignmentsGet: 'assignments:get',
   assignmentsOpen: 'assignments:open',
   assignmentsSaveProgress: 'assignments:saveProgress',
+  assignmentsReopen: 'assignments:reopen',
   assignmentsSubmit: 'assignments:submit',
   assignmentsDecline: 'assignments:decline',
   assignmentsResults: 'assignments:results',
@@ -333,6 +335,7 @@ export const IpcChannels = {
   getNotificationState: 'notifications:getState',
   setNotificationState: 'notifications:setState',
   notificationsResponsesArrived: 'notifications:responsesArrived',
+  notificationsAnswersUpdated: 'notifications:answersUpdated',
   notificationsRemindersDue: 'notifications:remindersDue',
   openExternal: 'shell:openExternal',
   // Update awareness (36-update-awareness §6) — a notify-only check against the public GitHub Releases API.
@@ -917,6 +920,12 @@ export interface SelfosBridge {
   assignmentsOpen(assignmentId: string): Promise<void>;
   /** Save resumable draft answers without submitting. Recipient-only; requires `questionnaires.answer`. */
   assignmentsSaveProgress(input: { assignmentId: string; answers: Answer[] }): Promise<void>;
+  /**
+   * Re-open a submitted (in-app) assignment so the recipient can edit + resend (56 §3.1). Keeps the existing
+   * answers + revision; rejects a **compatibility** send (a relay-linked in-app send is fine — its mailbox was
+   * already revoked at first submit, §17.13). Recipient-only; requires `questionnaires.answer`.
+   */
+  assignmentsReopen(assignmentId: string): Promise<void>;
   /** Submit the recipient's answers (locks the assignment). Recipient-only; requires `questionnaires.answer`. */
   assignmentsSubmit(input: { assignmentId: string; answers: Answer[] }): Promise<void>;
   /** Decline an assignment, silently or with a short note. Recipient-only; requires `questionnaires.answer`. */
@@ -1222,6 +1231,12 @@ export interface SelfosBridge {
    */
   notificationsResponsesArrived(): Promise<ResponsesArrivedSummary[]>;
   /**
+   * The active sender's analyzed sends whose recipient has since edited + resubmitted — the `answers-updated`
+   * source (56 §3.2), nudging a re-analyze. Sender-scoped, gated `questionnaires.viewResults`, local-only;
+   * carries no raw answers.
+   */
+  notificationsAnswersUpdated(): Promise<AnswersUpdatedSummary[]>;
+  /**
    * The active sender's sends still unanswered past the 7-day reminder window — the `reminder-due` source
    * (38 §3.3). Sender-scoped, gated `questionnaires.viewResults`, local-only (no network, no scheduler).
    */
@@ -1299,6 +1314,7 @@ export type {
   QuestionnaireSendState,
   QuestionTrend,
   RelayLinkResult,
+  AnswersUpdatedSummary,
   ReminderDueSummary,
   ResponsesArrivedSummary,
   Relationship,

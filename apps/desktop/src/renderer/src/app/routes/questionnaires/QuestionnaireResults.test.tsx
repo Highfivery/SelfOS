@@ -43,6 +43,7 @@ const send = (over: Partial<SendResult> = {}): SendResult => ({
   privacy: 'standard',
   createdAt: 'now',
   analyzed: false,
+  analysisStale: false,
   ...over,
 });
 
@@ -159,6 +160,35 @@ describe('QuestionnaireResults', () => {
       '/memory',
     );
     expect(screen.queryByRole('button', { name: /analyze/i })).not.toBeInTheDocument();
+  });
+
+  it('flags a stale analysis (recipient edited) with a Re-analyze action (56)', async () => {
+    enableAi();
+    const insightsAnalyze = vi.fn(() => Promise.resolve({ ok: true as const }));
+    installMockBridge({
+      secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
+      assignmentsResults: () =>
+        Promise.resolve([
+          send({ privacy: 'private', analyzed: true, analysisStale: true, revision: 2 }),
+        ]),
+      insightsAnalyze,
+    });
+    renderResults();
+    // The stale banner appears instead of the plain "insight drafted" link.
+    expect(
+      await screen.findByText(/answers updated since your last analysis/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/insight drafted from this response/i)).not.toBeInTheDocument();
+    // Re-analyze runs the analysis again.
+    await userEvent.click(screen.getByRole('button', { name: 'Re-analyze' }));
+    expect(insightsAnalyze).toHaveBeenCalledWith({ assignmentId: 'a1' });
   });
 
   it('analyzes a response and confirms with a Memory pointer', async () => {

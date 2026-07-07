@@ -8,7 +8,7 @@ import {
 import { uuid } from '../id';
 import { listInsightsForPerson, normalizeCategories, saveInsight } from '../insights';
 import { visibleQuestions, type AnswerMap, type AnswerValue } from './answering';
-import type { Insight, QuestionnaireAnalyzeResult } from '../schemas';
+import type { Insight, QuestionnaireAnalyzeResult, ResponseSet } from '../schemas';
 import { ANALYSIS_SYSTEM, buildAnalysisUserMessage } from './aiPrompts';
 import { getAssignment, getAssignmentSnapshot } from './assignmentService';
 import { runClaude, type AiDeps } from './generationService';
@@ -42,6 +42,26 @@ const AnalysisSchema = z.object({
   crisisFlag: z.boolean().optional().catch(undefined),
   categories: z.array(z.string()).catch([]).optional(),
 });
+
+/** A response's effective revision (56 §4): a pre-56 submitted response with no `revision` reads as 1. */
+export function responseRevision(response: ResponseSet): number {
+  return response.revision ?? 1;
+}
+
+/**
+ * Whether a send's analysis is out of date because the recipient edited + resubmitted after it was analyzed
+ * (56 §3.2). True only when an analysis Insight exists AND the current response revision is past the revision
+ * the Insight was built from (`analyzedRevision`, defaulting to 1 for a pre-56 insight — so an un-edited send
+ * is never falsely flagged). A never-analyzed send is never "stale" (the sender simply hasn't analyzed yet).
+ */
+export function isAnalysisStale(
+  response: ResponseSet | null | undefined,
+  insight: Insight | null | undefined,
+): boolean {
+  if (!response || response.submittedAt === undefined || !insight) return false;
+  const analyzedRevision = insight.provenance.analyzedRevision ?? 1;
+  return responseRevision(response) > analyzedRevision;
+}
 
 function formatAnswer(value: AnswerValue): string {
   if (Array.isArray(value)) return value.join(', ');
@@ -130,7 +150,8 @@ export async function analyzeAssignment(
     confidence: validated.data.confidence ?? 'medium',
     categories: normalizeCategories(validated.data.categories ?? []),
     approved: false, // requires the approve-step before it feeds buildContext (§3.7)
-    provenance: { assignmentId: assignment.id, at },
+    // Stamp the revision analyzed (56 §4) so a later recipient edit (a higher revision) reads as stale.
+    provenance: { assignmentId: assignment.id, analyzedRevision: responseRevision(response), at },
     createdAt: prior?.createdAt ?? at,
     updatedAt: at,
     ...(Object.keys(metrics).length > 0 ? { metrics } : {}),

@@ -115,6 +115,7 @@ import {
   type DreamShareTarget,
   type Person,
   type PersonNotificationState,
+  type AnswersUpdatedSummary,
   type ReminderDueSummary,
   type ResponsesArrivedSummary,
   type Questionnaire,
@@ -311,10 +312,12 @@ import {
   isAnswerable,
   listAssignments,
   listCustomTypes,
+  isAnalysisStale,
   listQuestionnaires,
   MAX_IMAGE_BYTES,
   openAssignment,
   publishRelayResult,
+  reopenAssignment,
   purgeQuestionnaire,
   readCustomIntimacyTopics,
   removeCustomIntimacyTopic,
@@ -3127,6 +3130,18 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!resolved) throw new Error('Not permitted');
       await saveProgress(resolved.fs, resolved.key, { assignmentId, answers });
     },
+    assignmentsReopen: async (assignmentId): Promise<void> => {
+      // 56 §3.1 — the recipient re-opens their own submitted send to edit + resend. Recipient-scoped (an Inbox
+      // item is always the household-person recipient); the core fn rejects a non-reopenable status. A
+      // compatibility send is withheld (its dual-participant alignment report would be invalidated). A relay
+      // link, if this send also had one, was already revoked at first submit (§17.13), so editing is in-app only.
+      const resolved = await recipientAssignment(AssignmentIdSchema.parse(assignmentId));
+      if (!resolved) throw new Error('Not permitted');
+      if (resolved.assignment.compatibilityGroupId) {
+        throw new Error('A compatibility questionnaire can’t be edited after sending.');
+      }
+      await reopenAssignment(resolved.fs, resolved.key, resolved.assignment.id);
+    },
     assignmentsSubmit: async (input): Promise<void> => {
       const { assignmentId, answers } = AnswersSchema.parse(input);
       const resolved = await recipientAssignment(assignmentId);
@@ -3180,9 +3195,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const sends = (await listAssignments(ctx.fs, ctx.key, { senderPersonId: personId })).filter(
         (a) => a.questionnaireId === qid,
       );
-      const analyzed = new Set(
+      const insightByAssignment = new Map(
         (await listInsightsForPerson(ctx.fs, ctx.key, personId)).flatMap((i) =>
-          i.provenance.assignmentId ? [i.provenance.assignmentId] : [],
+          i.provenance.assignmentId ? [[i.provenance.assignmentId, i] as const] : [],
         ),
       );
       const results: SendResult[] = [];
@@ -3191,12 +3206,18 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           a.recipient.kind === 'person'
             ? ((await getPerson(ctx.fs, ctx.key, a.recipient.personId))?.displayName ?? 'Unknown')
             : (a.recipient.displayName ?? 'External');
+        const insight = insightByAssignment.get(a.id);
+        // Fetch the response once when it's needed — for the Standard-submitted answers view, the submission
+        // revision, AND/OR to detect a stale analysis (the recipient edited + resubmitted since it was
+        // analyzed, 56 §3.2). Any submitted send (or one with an insight) needs it; the answers stay gated on
+        // Standard below, so a Private send's raw responses still never reach the sender.
+        const needsResponse = a.status === 'submitted' || insight !== undefined;
+        const response = needsResponse ? await getResponse(ctx.fs, ctx.key, a.id) : null;
         // Privacy boundary: only a Standard, submitted send exposes the raw answers to the sender.
         let answers: SendAnswer[] | undefined;
-        if (a.privacy === 'standard' && a.status === 'submitted') {
+        if (a.privacy === 'standard' && a.status === 'submitted' && response) {
           const snapshot = await getAssignmentSnapshot(ctx.fs, ctx.key, a.id);
-          const response = await getResponse(ctx.fs, ctx.key, a.id);
-          if (snapshot && response) {
+          if (snapshot) {
             const byId = new Map(response.answers.map((ans) => [ans.questionId, ans.value]));
             answers = snapshot.questions.map((q) => ({
               prompt: q.prompt,
@@ -3212,7 +3233,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           status: a.status,
           privacy: a.privacy,
           createdAt: a.createdAt,
-          analyzed: analyzed.has(a.id),
+          analyzed: insight !== undefined,
+          analysisStale: isAnalysisStale(response, insight),
+          ...(response?.submittedAt !== undefined ? { revision: response.revision ?? 1 } : {}),
           // Surface the link expiry only for a still-open relay-linked send — once submitted/revoked/expired
           // the countdown is moot (38 §3.6).
           ...(a.relay &&
@@ -4726,6 +4749,39 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           submittedCount,
           latestRecipientName: await recipientDisplayName(ctx.fs, ctx.key, newest),
           at: newest.updatedAt,
+        });
+      }
+      return out;
+    },
+    notificationsAnswersUpdated: async (): Promise<AnswersUpdatedSummary[]> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.viewResults')))
+        return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      // The sender's sends whose recipient EDITED their answers since the sender analyzed them (56 §3.2) —
+      // one entry per stale send. Local read; carries NO raw answers, so a Private send's boundary holds.
+      const insightByAssignment = new Map(
+        (await listInsightsForPerson(ctx.fs, ctx.key, personId)).flatMap((i) =>
+          i.provenance.assignmentId ? [[i.provenance.assignmentId, i] as const] : [],
+        ),
+      );
+      const sends = await listAssignments(ctx.fs, ctx.key, { senderPersonId: personId });
+      const out: AnswersUpdatedSummary[] = [];
+      for (const a of sends) {
+        const insight = insightByAssignment.get(a.id);
+        if (!insight) continue; // never analyzed → not "stale"; the responses-arrived nudge covers a first look
+        const response = await getResponse(ctx.fs, ctx.key, a.id);
+        if (!isAnalysisStale(response, insight) || !response) continue;
+        const def = await getQuestionnaire(ctx.fs, ctx.key, a.questionnaireId);
+        if (!def) continue; // a deleted questionnaire — nothing to navigate to
+        out.push({
+          assignmentId: a.id,
+          questionnaireId: a.questionnaireId,
+          title: def.title,
+          recipientName: await recipientDisplayName(ctx.fs, ctx.key, a),
+          revision: response.revision ?? 1,
+          at: response.submittedAt ?? a.updatedAt,
         });
       }
       return out;

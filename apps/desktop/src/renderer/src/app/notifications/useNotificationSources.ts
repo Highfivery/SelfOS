@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react';
-import type { Challenge, ReminderDueSummary, ResponsesArrivedSummary } from '@shared/channels';
+import type {
+  AnswersUpdatedSummary,
+  Challenge,
+  ReminderDueSummary,
+  ResponsesArrivedSummary,
+} from '@shared/channels';
 import type { CoachingSynthesis, Goal } from '@shared/schemas';
 import { checkInDueChallenge } from '@selfos/core/challenges';
 import { useSessionStore } from '../../stores/sessionStore';
@@ -34,6 +39,7 @@ export function useNotificationSources(conflicts: string[]): void {
 
   const [suggestionIds, setSuggestionIds] = useState<string[]>([]);
   const [responses, setResponses] = useState<ResponsesArrivedSummary[]>([]);
+  const [answerEdits, setAnswerEdits] = useState<AnswersUpdatedSummary[]>([]);
   const [reminders, setReminders] = useState<ReminderDueSummary[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
@@ -47,18 +53,22 @@ export function useNotificationSources(conflicts: string[]): void {
     let active = true;
     setSuggestionIds([]);
     setResponses([]);
+    setAnswerEdits([]);
     setReminders([]);
     setGoals([]);
     setChallenges([]);
     setSynthesis(null);
     setFreshnessAreas([]);
     void (async () => {
-      const [sugg, resp, rem, gls, chs, syn] = await Promise.all([
+      const [sugg, resp, edits, rem, gls, chs, syn] = await Promise.all([
         canIntake
           ? (window.selfos?.profileSuggestions() ?? Promise.resolve([]))
           : Promise.resolve([]),
         canViewResults
           ? (window.selfos?.notificationsResponsesArrived() ?? Promise.resolve([]))
+          : Promise.resolve([]),
+        canViewResults
+          ? (window.selfos?.notificationsAnswersUpdated() ?? Promise.resolve([]))
           : Promise.resolve([]),
         canViewResults
           ? (window.selfos?.notificationsRemindersDue() ?? Promise.resolve([]))
@@ -75,6 +85,7 @@ export function useNotificationSources(conflicts: string[]): void {
       setSuggestionIds(sugg.map((s) => s.id).sort());
       setFreshnessAreas(sugg.map((s) => s.lifeArea).filter((a): a is string => Boolean(a)));
       setResponses(resp);
+      setAnswerEdits(edits);
       setReminders(rem);
       setGoals(gls);
       setChallenges(chs);
@@ -143,6 +154,20 @@ export function useNotificationSources(conflicts: string[]): void {
         ...(single ? {} : { body: `${r.submittedCount} responses are ready to review.` }),
         createdAt: r.at,
         action: { type: 'navigate', to: `/questionnaires?focus=${r.questionnaireId}&view=results` },
+      });
+    }
+
+    for (const e of answerEdits) {
+      // A recipient edited + resubmitted after the sender analyzed them (56 §3.2) — nudge a re-analyze. One
+      // slot per send; the revision is the re-surface signature (a further edit → higher → re-surfaces).
+      candidates.push({
+        kind: 'answers-updated',
+        coalesceKey: `answers-updated:${e.assignmentId}`,
+        signature: String(e.revision),
+        title: `${e.recipientName} updated their answers to “${e.title}”`,
+        body: 'Re-analyze to refresh what SelfOS learned.',
+        createdAt: e.at,
+        action: { type: 'navigate', to: `/questionnaires?focus=${e.questionnaireId}&view=results` },
       });
     }
 
@@ -236,6 +261,7 @@ export function useNotificationSources(conflicts: string[]): void {
     conflicts,
     suggestionIds,
     responses,
+    answerEdits,
     reminders,
     goals,
     challenges,

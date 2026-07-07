@@ -3829,6 +3829,101 @@ test('results: a Standard response surfaces the raw answers in the sender’s Re
   }
 });
 
+test('answer review/edit (56): recipient reviews + edits + resends → Results goes stale → re-analyze clears it', async () => {
+  // AI on + a key so Analyze/Re-analyze run (via the offline fake). A SELF check-in (owner = sender = recipient)
+  // avoids the account-switch dance — the recipient-scoping is proven in the coreBridge test.
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    // Author + send a Standard self check-in.
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await startNewQuestionnaire(w);
+    await w.getByLabel('Title').fill('Weekly check-in');
+    await w.getByLabel('Question 1', { exact: true }).fill('How are we doing?');
+    await w.getByRole('button', { name: 'Create draft' }).click();
+    await w.getByRole('button', { name: 'Send' }).click();
+    await w.getByRole('button', { name: 'Standard' }).click();
+    await w.getByRole('button', { name: 'Send' }).last().click();
+    await expect(w.getByText(/Sent to Tester/)).toBeVisible();
+    await w.getByRole('button', { name: 'Done' }).click();
+
+    // Answer + submit from the Inbox.
+    await w.getByRole('link', { name: /Inbox/ }).click();
+    await w.getByRole('button', { name: /^Weekly check-in/ }).click();
+    await w.getByLabel('How are we doing?').fill('Doing okay');
+    await w.getByRole('button', { name: 'Submit' }).click();
+    await expect(w.getByText('Submitted')).toBeVisible();
+
+    // Analyze it in Results → an insight is drafted.
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await w.getByRole('button', { name: /^Weekly check-in/ }).click();
+    await w.getByRole('button', { name: 'Results' }).click();
+    await w.getByRole('button', { name: 'Analyze', exact: true }).click();
+    await expect(w.getByText(/insight drafted from this response/i)).toBeVisible();
+
+    // Back to the Inbox: review the submitted answers, then EDIT + resend (56 §3.1).
+    await w.getByRole('link', { name: /Inbox/ }).click();
+    await w.getByRole('button', { name: /^Weekly check-in/ }).click();
+    await expect(w.getByRole('heading', { name: 'Your answers' })).toBeVisible();
+    await expect(w.getByText('Doing okay')).toBeVisible();
+    await w.getByRole('button', { name: 'Edit answers' }).click();
+    const field = w.getByLabel('How are we doing?');
+    await field.fill('Actually, really well now');
+    await w.getByRole('button', { name: 'Update answers' }).click();
+    await expect(w.getByText('Submitted')).toBeVisible();
+
+    // The sender's Results now flags the analysis stale + offers Re-analyze (the `answers-updated` bell nudge is
+    // a one-shot per-person read that surfaces on next launch — covered by the bridge + notification tests).
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await w.getByRole('button', { name: /^Weekly check-in/ }).click();
+    await w.getByRole('button', { name: 'Results' }).click();
+    await expect(w.getByText(/answers updated since your last analysis/i)).toBeVisible();
+
+    // Decrypt: the response revision climbed to 2 (a resubmit), the answers updated.
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('answer-edit e2e: master key missing');
+    const send = (await listAssignments(fs, key)).find((a) => a.senderPersonId === 'owner-1');
+    if (!send) throw new Error('expected a send');
+    const response = await getResponse(fs, key, send.id);
+    expect(response?.revision).toBe(2);
+    expect(response?.answers[0]?.value).toBe('Actually, really well now');
+
+    // Re-analyze → the insight's analyzedRevision catches up → the stale chip clears.
+    await w.getByRole('button', { name: 'Re-analyze' }).click();
+    await expect(w.getByText(/insight drafted from this response/i)).toBeVisible();
+    await expect(w.getByText(/answers updated since your last analysis/i)).toHaveCount(0);
+    const insights = await listInsightsForPerson(fs, key, 'owner-1');
+    const insight = insights.find((i) => i.provenance.assignmentId === send.id);
+    expect(insight?.provenance.analyzedRevision).toBe(2);
+
+    // No horizontal overflow at phone width on the review.
+    await w.getByRole('link', { name: /Inbox/ }).click();
+    await w.getByRole('button', { name: /^Weekly check-in/ }).click();
+    await w.setViewportSize({ width: 360, height: 800 });
+    const overflow = await w.evaluate(() => {
+      const offenders: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          offenders.push(`${el.tagName}.${el.className}`);
+        }
+      });
+      const main = document.querySelector('main');
+      return { offenders, mainOverflow: main ? main.scrollWidth - main.clientWidth : 0 };
+    });
+    expect(overflow.offenders).toEqual([]);
+    expect(overflow.mainOverflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('results: re-asks chart a trend, a send deletes, and the questionnaire purges', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);

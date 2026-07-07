@@ -14,6 +14,7 @@ interface InboxState {
   getDetail: (assignmentId: string) => Promise<InboxAssignmentDetail | null>;
   open: (assignmentId: string) => Promise<void>;
   saveProgress: (assignmentId: string, answers: Answer[]) => Promise<void>;
+  reopen: (assignmentId: string) => Promise<void>;
   submit: (assignmentId: string, answers: Answer[]) => Promise<void>;
   decline: (assignmentId: string, note?: string) => Promise<void>;
 }
@@ -33,6 +34,10 @@ export const useInboxStore = create<InboxState>((set, get) => ({
   },
   saveProgress: async (assignmentId, answers) => {
     await window.selfos?.assignmentsSaveProgress({ assignmentId, answers });
+    await get().load();
+  },
+  reopen: async (assignmentId) => {
+    await window.selfos?.assignmentsReopen(assignmentId);
     await get().load();
   },
   submit: async (assignmentId, answers) => {

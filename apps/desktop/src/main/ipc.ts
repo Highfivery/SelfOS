@@ -342,6 +342,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.assignmentsGet, bridge.assignmentsGet);
   handle(IpcChannels.assignmentsOpen, bridge.assignmentsOpen);
   handle(IpcChannels.assignmentsSaveProgress, bridge.assignmentsSaveProgress);
+  handle(IpcChannels.assignmentsReopen, bridge.assignmentsReopen);
   handle(IpcChannels.assignmentsSubmit, bridge.assignmentsSubmit);
   handle(IpcChannels.assignmentsDecline, bridge.assignmentsDecline);
   handle(IpcChannels.assignmentsResults, bridge.assignmentsResults);
@@ -404,6 +405,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.getNotificationState, bridge.getNotificationState);
   handle(IpcChannels.setNotificationState, bridge.setNotificationState);
   handle(IpcChannels.notificationsResponsesArrived, bridge.notificationsResponsesArrived);
+  handle(IpcChannels.notificationsAnswersUpdated, bridge.notificationsAnswersUpdated);
   handle(IpcChannels.notificationsRemindersDue, bridge.notificationsRemindersDue);
   handle(IpcChannels.openExternal, bridge.openExternal);
   handle(IpcChannels.updatesCheck, bridge.updatesCheck);

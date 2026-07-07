@@ -193,6 +193,8 @@ const bridge: SelfosBridge = {
   assignmentsOpen: (assignmentId) => ipcRenderer.invoke(IpcChannels.assignmentsOpen, assignmentId),
   assignmentsSaveProgress: (input) =>
     ipcRenderer.invoke(IpcChannels.assignmentsSaveProgress, input),
+  assignmentsReopen: (assignmentId) =>
+    ipcRenderer.invoke(IpcChannels.assignmentsReopen, assignmentId),
   assignmentsSubmit: (input) => ipcRenderer.invoke(IpcChannels.assignmentsSubmit, input),
   assignmentsDecline: (input) => ipcRenderer.invoke(IpcChannels.assignmentsDecline, input),
   assignmentsResults: (questionnaireId) =>
@@ -287,6 +289,7 @@ const bridge: SelfosBridge = {
   setNotificationState: (state) => ipcRenderer.invoke(IpcChannels.setNotificationState, state),
   notificationsResponsesArrived: () =>
     ipcRenderer.invoke(IpcChannels.notificationsResponsesArrived),
+  notificationsAnswersUpdated: () => ipcRenderer.invoke(IpcChannels.notificationsAnswersUpdated),
   notificationsRemindersDue: () => ipcRenderer.invoke(IpcChannels.notificationsRemindersDue),
   openExternal: (url) => ipcRenderer.invoke(IpcChannels.openExternal, url),
   updatesCheck: (force) => ipcRenderer.invoke(IpcChannels.updatesCheck, force),

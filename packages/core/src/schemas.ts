@@ -59,6 +59,7 @@ export const NOTIFICATION_KINDS = [
   'coaching-synthesis', // 40 §3.3 — the cross-feature observation nudge
   'challenge-followup', // 52-challenge-sessions §3.5 — a gentle "how did your challenge go?" check-in
   'onboarding-updated', // 55-onboarding-attention §3.1 — completed onboarding has new/unanswered questions
+  'answers-updated', // 56-answer-review-edit §3.2 — a recipient edited answers after the sender analyzed them
 ] as const;
 export const NotificationKindSchema = z.enum(NOTIFICATION_KINDS);
 export type NotificationKind = z.infer<typeof NotificationKindSchema>;
@@ -670,6 +671,10 @@ export const InsightProvenanceSchema = z.object({
   testId: z.string().optional(), // set for test-sourced insights → deep-link to /you/:testId (50 §4.4)
   testResultId: z.string().optional(), // the specific TestResult this insight was built from (50 §4.4)
   challengeId: z.string().optional(), // set for a challenge reflection's insight → deep-link to the Challenge (52 §4.4)
+  // The ResponseSet.revision this analysis was built from (56-answer-review-edit §4). Lets the sender detect a
+  // stale analysis (`response.revision > analyzedRevision`) after a recipient edits + resubmits. Absent on a
+  // pre-56 insight → treated as 1, so an un-edited send is never falsely flagged stale.
+  analyzedRevision: z.number().int().positive().optional().catch(undefined),
   at: z.string(),
 });
 export type InsightProvenance = z.infer<typeof InsightProvenanceSchema>;
@@ -1610,6 +1615,10 @@ export const ResponseSetSchema = z.object({
   // lifecycle marker; `submittedAt` is the submission timestamp. Relaxing required→optional is
   // additive (existing submitted responses still parse) — no schemaVersion bump.
   submittedAt: z.string().optional(),
+  // Monotonic submission revision (56-answer-review-edit §4): 1 on first submit, incremented each time the
+  // recipient edits + resubmits. Additive-optional (a pre-56 submitted response reads as revision 1), so the
+  // sender can tell a re-analysis is due (`revision > analyzedRevision`). No schemaVersion bump.
+  revision: z.number().int().positive().optional().catch(undefined),
 });
 export type ResponseSet = z.infer<typeof ResponseSetSchema>;
 
@@ -2393,6 +2402,13 @@ export interface SendResult {
   submittedAt?: string;
   declineNote?: string;
   analyzed: boolean;
+  // True when this send was analyzed but the recipient has since edited + resubmitted their answers, so the
+  // Insight is out of date (56-answer-review-edit §3.2: `response.revision > insight.analyzedRevision`). Drives
+  // the "Answers updated — re-analyze" chip. Always false for a never-analyzed or in-app-editing-disabled send.
+  analysisStale: boolean;
+  // The recipient's current submission revision (56 §4), so the auto-analyze guard can distinguish a genuine
+  // re-edit from a retry of the same attempt. Present for a submitted send (a re-edit bumps it).
+  revision?: number;
   answers?: SendAnswer[]; // present only for a Standard, submitted send
 }
 
@@ -2435,6 +2451,21 @@ export interface ResponsesArrivedSummary {
   latestRecipientName: string;
   /** The newest response's time (the assignment's submit timestamp) — orders the notification (38 §4.2). */
   at: string;
+}
+
+/**
+ * One send whose recipient EDITED their answers after the sender analyzed them (56-answer-review-edit §3.2) —
+ * the source for the `answers-updated` notification. Derived in the bridge from the sender's assignments +
+ * insights (local read; carries NO raw answers, so a Private send's boundary holds). `revision` is the
+ * re-surface signature (a further edit → higher revision → re-surfaces; onIncrease).
+ */
+export interface AnswersUpdatedSummary {
+  assignmentId: string; // the specific send that was edited — the notification coalesces per send
+  questionnaireId: string; // for the Results deep-link + title
+  title: string;
+  recipientName: string; // who edited (names the nudge)
+  revision: number; // the recipient's current response revision — the re-surface signature (onIncrease)
+  at: string; // the newest edit's submit timestamp — orders the notification
 }
 
 /** One of the two paired sends of a compatibility questionnaire, as the sender sees it (08 §3.6). */

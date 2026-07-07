@@ -21,9 +21,21 @@ const ANSWERABLE_STATUSES: ReadonlySet<AssignmentStatus> = new Set<AssignmentSta
   'inProgress',
 ]);
 
+/** Statuses a recipient can RE-OPEN to edit + resubmit (56-answer-review-edit §3.1): a submitted send, or one
+ *  the sender already analyzed. Re-opening keeps the existing answers + revision; the next submit bumps it. */
+const REOPENABLE_STATUSES: ReadonlySet<AssignmentStatus> = new Set<AssignmentStatus>([
+  'submitted',
+  'analyzed',
+]);
+
 /** Whether the recipient can still act on an assignment in this status. */
 export function isAnswerable(status: AssignmentStatus): boolean {
   return ANSWERABLE_STATUSES.has(status);
+}
+
+/** Whether the recipient can re-open a submitted assignment to edit + resubmit (56 §3.1). */
+export function isReopenable(status: AssignmentStatus): boolean {
+  return REOPENABLE_STATUSES.has(status);
 }
 
 /** Read an answerable assignment or throw — the shared guard for every recipient mutation. */
@@ -70,11 +82,34 @@ export async function saveProgress(
     assignmentId: input.assignmentId,
     answers: input.answers,
     ...(existing?.reAskOf !== undefined ? { reAskOf: existing.reAskOf } : {}),
+    // Carry the last-submitted revision forward while editing (56 §5) — a draft is unsubmitted (no
+    // `submittedAt`), but the resubmit must know the prior revision to increment it.
+    ...(existing?.revision !== undefined ? { revision: existing.revision } : {}),
     // no `submittedAt` — a draft is unsubmitted; the assignment status carries the lifecycle
   };
   await saveResponse(fs, key, draft);
   await updateAssignmentStatus(fs, key, input.assignmentId, 'inProgress');
   return draft;
+}
+
+/**
+ * Re-open a submitted (or already-analyzed) assignment so the recipient can edit + resend (56 §3.1). Moves the
+ * status back to `inProgress`, keeping the existing ResponseSet (answers + `submittedAt` + `revision`) intact —
+ * the next `submitResponse` bumps the revision, which is how the sender detects a stale analysis. Recipient
+ * authorization is enforced in the bridge.
+ */
+export async function reopenAssignment(
+  fs: FileSystem,
+  key: Uint8Array,
+  assignmentId: string,
+): Promise<Assignment> {
+  const assignment = await getAssignment(fs, key, assignmentId);
+  if (!assignment) throw new Error(`Assignment not found: ${assignmentId}`);
+  if (assignment.status === 'inProgress') return assignment; // already editable — idempotent
+  if (!isReopenable(assignment.status)) {
+    throw new Error('This questionnaire can no longer be edited.');
+  }
+  return updateAssignmentStatus(fs, key, assignmentId, 'inProgress');
 }
 
 /**
@@ -94,6 +129,9 @@ export async function submitResponse(
     assignmentId: input.assignmentId,
     answers: input.answers,
     submittedAt: new Date().toISOString(),
+    // Monotonic revision (56 §5): first submit → 1, each resubmit → prior + 1. The recipient re-opens to edit
+    // (keeping the prior revision), then this bump tells the sender their analysis is now stale.
+    revision: (existing?.revision ?? 0) + 1,
     ...(existing?.reAskOf !== undefined ? { reAskOf: existing.reAskOf } : {}),
   };
   await saveResponse(fs, key, response);

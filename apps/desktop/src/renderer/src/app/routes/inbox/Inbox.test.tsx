@@ -158,16 +158,86 @@ describe('Inbox', () => {
     expect(decline).toHaveBeenCalledWith({ assignmentId: 'a1', note: 'Not a good time' });
   });
 
-  it('locks a submitted assignment (no answer review)', async () => {
+  it('reviews a submitted assignment + offers Edit answers (56)', async () => {
     installMockBridge({
       assignmentsInbox: () => Promise.resolve([item({ status: 'submitted', answerable: false })]),
-      assignmentsGet: () => Promise.resolve(detail({ status: 'submitted', answerable: false })),
+      assignmentsGet: () =>
+        Promise.resolve(
+          detail({
+            status: 'submitted',
+            answerable: false,
+            answers: [{ questionId: 'qq1', value: 'Pretty well' }],
+          }),
+        ),
     });
     renderInbox();
 
     await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
     expect(await screen.findByText(/submitted this questionnaire/i)).toBeInTheDocument();
+    // The recipient sees their own answer + an Edit affordance (56 §3.1); no live Submit.
+    expect(screen.getByRole('heading', { name: 'Your answers' })).toBeInTheDocument();
+    expect(screen.getByText('Pretty well')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit answers' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Submit' })).not.toBeInTheDocument();
+  });
+
+  it('edits + resends a submitted assignment → reopen then submit (56)', async () => {
+    const reopen = vi.fn(() => Promise.resolve());
+    const submit = vi.fn(() => Promise.resolve());
+    installMockBridge({
+      assignmentsInbox: () => Promise.resolve([item({ status: 'submitted', answerable: false })]),
+      assignmentsGet: () =>
+        Promise.resolve(
+          detail({
+            status: 'submitted',
+            answerable: false,
+            answers: [{ questionId: 'qq1', value: 'Pretty well' }],
+          }),
+        ),
+      assignmentsReopen: reopen,
+      assignmentsSubmit: submit,
+    });
+    renderInbox();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit answers' }));
+
+    // The form appears, pre-filled with the submitted answer.
+    const field = screen.getByLabelText('How are we doing?');
+    expect(field).toHaveValue('Pretty well');
+    await userEvent.clear(field);
+    await userEvent.type(field, 'Actually, much better');
+    await userEvent.click(screen.getByRole('button', { name: 'Update answers' }));
+
+    // Update = re-open the submitted send, then submit the edited answers.
+    expect(reopen).toHaveBeenCalledWith('a1');
+    expect(submit).toHaveBeenCalledWith({
+      assignmentId: 'a1',
+      answers: [{ questionId: 'qq1', value: 'Actually, much better' }],
+    });
+  });
+
+  it('does NOT offer Edit answers on a submitted compatibility send (56)', async () => {
+    installMockBridge({
+      assignmentsInbox: () => Promise.resolve([item({ status: 'submitted', answerable: false })]),
+      assignmentsGet: () =>
+        Promise.resolve(
+          detail({
+            status: 'submitted',
+            answerable: false,
+            compatibility: {
+              visibility: 'sharedReport',
+              otherParticipantName: 'Bri',
+              viewerIsSender: false,
+              report: null,
+            },
+          }),
+        ),
+    });
+    renderInbox();
+    await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
+    expect(await screen.findByText(/submitted this questionnaire/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit answers' })).not.toBeInTheDocument();
   });
 
   it('shows the compatibility disclosure derived from the visibility mode', async () => {

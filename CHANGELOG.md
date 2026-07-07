@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.3](https://github.com/Highfivery/SelfOS/compare/v0.14.2...v0.14.3) (2026-07-07)
+
+
+### Bug Fixes
+
+* **sessions:** recover a re-opened session that ended on the user's message ([#121](https://github.com/Highfivery/SelfOS/issues/121)) ([a8b42ba](https://github.com/Highfivery/SelfOS/commit/a8b42bae80a0e44b5ca234cfd6ad7e9e5a53c8c6))
+
 ## [0.14.2](https://github.com/Highfivery/SelfOS/compare/v0.14.1...v0.14.2) (2026-07-07)
 
 

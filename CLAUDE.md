@@ -389,6 +389,25 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-07 — **Fix (the Questionnaires edit/authoring list was NOT author-scoped — a questionnaire someone
+  SENT you showed in your edit list; user-reported "that doesnt make any sense"; on
+  `fix/questionnaire-list-author-scope`, PR pending).** Diagnosed: `questionnairesList` (bridge) returned core
+  `listQuestionnaires` (ALL defs in the shared `questionnaires/defs/` dir) gated only on the
+  `questionnaires.create` capability — never by author — so every person saw every household questionnaire,
+  including ones others authored + **sent to them** (which belong in the **Inbox**, not the edit list). Fix (one
+  scoping filter at the bridge, the trust boundary): the list now returns only defs the active person authored
+  (`creatorPersonId === activePersonId`), plus a **legacy creator-less def** (pre-38, no author recorded) stays
+  visible to the **Owner** so it isn't orphaned (matches §3.9's "legacy → Owner-deletable-only"). Core
+  `listQuestionnaires` stays a low-level list-all (its only caller is the bridge). No schema/IPC change. Gate
+  green: typecheck (all), lint, format, **956 core + 903 desktop** unit (+2 bridge: author-scoping [a member
+  sees own not the owner's send-to-them, and it IS in their Inbox; the owner sees own not the member's] +
+  legacy-creator-less-visible-to-Owner-hidden-from-members), **E2E +1** (seed a foreign-authored questionnaire
+  sent to the owner + an owner-authored one → the edit list shows only the owner's, the friend's is absent, and
+  the friend's IS in the Inbox). Synced spec 08 §6 (`questionnaires:list` is author-scoped). **Lesson: a list
+  read over a SHARED store (`questionnaires/defs/` is household-wide, not per-person) must scope by the owning
+  field (`creatorPersonId`) at the bridge, or every person sees everyone's — the `questionnaires.create`
+  capability gates WHO can author, not WHICH defs are theirs; and legacy rows lacking the owning field need a
+  fallback owner (the Owner) so scoping doesn't orphan them.**
 - 2026-07-07 — **Build (Questionnaire answer review / edit / resend + sender re-analyze — SPEC 56 BUILT; on
   `feat/answer-review-edit`, PR pending).** User: after someone answers a questionnaire there's no way to review
   their answers/questions, no way to edit + resend, and the sender isn't told answers changed so their analysis

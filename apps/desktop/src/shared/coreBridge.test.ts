@@ -19,6 +19,8 @@ import {
   unlock as kvUnlock,
   type RelayEnv,
 } from '@selfos/core/relay';
+import { getQuestionnaire } from '@selfos/core/questionnaires';
+import { writeEncryptedJson } from '@selfos/core/vault';
 import { listInsightsForPerson, saveInsight, summarizeForContext } from '@selfos/core/insights';
 import { submitSectionForm } from '@selfos/core/intake';
 import { getTest } from '@selfos/core/tests';
@@ -2555,6 +2557,74 @@ describe('createCoreBridge', () => {
     await bridge.sessionSetActive({ personId: recipient.id });
     await bridge.assignmentsReopen(assignment.id);
     expect((await bridge.assignmentsGet(assignment.id))?.answerable).toBe(true);
+  });
+
+  it('the edit list is author-scoped — a questionnaire sent to you does NOT show in your list', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    const member = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: member.id, roleId: 'member', pin: null });
+
+    // The OWNER authors a questionnaire and sends it to the member.
+    const ownerQ = await bridge.questionnairesSave({
+      title: 'Owner asks the member',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: member.id },
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'How?', required: true }],
+    });
+    await bridge.assignmentsCreate({ questionnaireId: ownerQ.id, privacy: 'standard' });
+
+    // The MEMBER authors their own questionnaire.
+    await bridge.sessionSetActive({ personId: member.id });
+    const memberQ = await bridge.questionnairesSave({
+      title: 'Member’s own',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: ownerId },
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'Hi?', required: true }],
+    });
+
+    // The member's edit list shows ONLY their own — the owner's send-to-them is in their Inbox, not here.
+    const memberList = (await bridge.questionnairesList()).map((q) => q.id);
+    expect(memberList).toContain(memberQ.id);
+    expect(memberList).not.toContain(ownerQ.id);
+    // …but it IS in their Inbox (as a recipient).
+    expect((await bridge.assignmentsInbox()).map((i) => i.assignmentId).length).toBe(1);
+
+    // The owner's edit list shows their own, not the member's authored one.
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    const ownerList = (await bridge.questionnairesList()).map((q) => q.id);
+    expect(ownerList).toContain(ownerQ.id);
+    expect(ownerList).not.toContain(memberQ.id);
+  });
+
+  it('a legacy creator-less questionnaire stays visible to the Owner (not orphaned), hidden from members', async () => {
+    const { host, bridge } = await freshOwner();
+    const member = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: member.id, roleId: 'member', pin: null });
+    // Author a def, then strip its creatorPersonId on disk to simulate a pre-38 (creator-less) questionnaire.
+    const legacy = await bridge.questionnairesSave({
+      title: 'Legacy',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'Hi?', required: true }],
+    });
+    const ctx = await host.host.vaultAndKey();
+    if (!ctx) throw new Error('no vault');
+    const full = await getQuestionnaire(ctx.fs, ctx.key, legacy.id);
+    const withoutCreator: Record<string, unknown> = { ...full };
+    delete withoutCreator.creatorPersonId;
+    await writeEncryptedJson(
+      ctx.fs,
+      `questionnaires/defs/${legacy.id}.enc`,
+      withoutCreator,
+      ctx.key,
+    );
+
+    // The Owner still sees it (so it isn't orphaned / becomes deletable per §3.9); a member does not.
+    expect((await bridge.questionnairesList()).map((q) => q.id)).toContain(legacy.id);
+    await bridge.sessionSetActive({ personId: member.id });
+    expect((await bridge.questionnairesList()).map((q) => q.id)).not.toContain(legacy.id);
   });
 
   it('deletion: owner purges any stage; a member-creator only deletes their own while unsent', async () => {

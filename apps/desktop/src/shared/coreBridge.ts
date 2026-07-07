@@ -2117,7 +2117,15 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     questionnairesList: async (): Promise<Questionnaire[]> => {
       const ctx = await host.vaultAndKey();
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) return [];
-      return listQuestionnaires(ctx.fs, ctx.key);
+      // Authoring/edit list = the active person's OWN questionnaires. A questionnaire someone else authored
+      // (incl. one they SENT to you) belongs in your Inbox, not your edit list — showing it here made no
+      // sense (08 §4.2). A legacy creator-less def (pre-38) has no author recorded, so it stays visible to
+      // the Owner (the full-access role, and the only one who can delete it — §3.9) rather than orphaning.
+      const personId = await activePersonId();
+      const isOwner = await activePersonCan(ctx.fs, ctx.key, 'people.manage');
+      return (await listQuestionnaires(ctx.fs, ctx.key)).filter(
+        (q) => q.creatorPersonId === personId || (q.creatorPersonId === undefined && isOwner),
+      );
     },
     questionnairesSendStates: async (): Promise<Record<string, QuestionnaireSendState>> => {
       const ctx = await host.vaultAndKey();

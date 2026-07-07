@@ -8167,6 +8167,19 @@ test('self-assessments (50): take ECR-R → profile bars → retake adds a trend
     await expect(w.getByText(/How this has shifted \(2 takes\)/)).toBeVisible();
     await expect(w.getByRole('heading', { name: 'History' })).toBeVisible();
 
+    // 95 — back on the hub, the taken test drops out of "Available tests": Attachment lives ONLY under
+    // "Your profiles" (with Retake), never a second time as a catalog "Take" card.
+    await w.getByRole('link', { name: 'You' }).click();
+    await expect(w.getByRole('heading', { name: /how you see yourself/i })).toBeVisible();
+    const profiles = w.locator('section', {
+      has: w.getByRole('heading', { name: 'Your profiles' }),
+    });
+    await expect(profiles.getByRole('heading', { name: 'Attachment style' })).toBeVisible();
+    const available = w.locator('section', {
+      has: w.getByRole('heading', { name: 'Available tests' }),
+    });
+    await expect(available.getByRole('heading', { name: 'Attachment style' })).toHaveCount(0);
+
     // The derived Insight is on disk, approved, source 'test'.
     const fs = createNodeFileSystem(vault);
     const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));

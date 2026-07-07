@@ -83,6 +83,73 @@ describe('runChatTurn', () => {
     }
   });
 
+  it('sends a generous max_tokens budget (a small ceiling starved replies to empty)', async () => {
+    await base();
+    let sentMax: number | undefined;
+    const capture: ClaudeClient = {
+      send: () => Promise.resolve('ok'),
+      stream: (options, onDelta) => {
+        sentMax = options.maxTokens;
+        onDelta('Hi.');
+        return Promise.resolve({
+          text: 'Hi.',
+          usage: { inputTokens: 5, outputTokens: 2, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    await runChatTurn({
+      fs,
+      key,
+      client: capture,
+      apiKey: 'sk-test',
+      model: 'claude-sonnet-4-6',
+      personId: 'p1',
+      conversationId: 'c1',
+      userText: 'Hello',
+      onDelta: () => {},
+      now,
+    });
+    expect(sentMax).toBeGreaterThanOrEqual(4096);
+  });
+
+  it('treats an empty/whitespace reply as EMPTY — never persists it, but still meters the billed call', async () => {
+    await base();
+    for (const [label, blank] of [
+      ['empty', ''],
+      ['whitespace', '   \n  '],
+    ] as const) {
+      const emptyClient: ClaudeClient = {
+        send: () => Promise.resolve(''),
+        stream: () =>
+          Promise.resolve({
+            text: blank,
+            usage: { inputTokens: 200, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0 },
+          }),
+      };
+      const cid = `c-${label}`;
+      const result = await runChatTurn({
+        fs,
+        key,
+        client: emptyClient,
+        apiKey: 'sk-test',
+        model: 'claude-sonnet-4-6',
+        personId: 'p1',
+        conversationId: cid,
+        userText: 'A long, hard message',
+        onDelta: () => {},
+        now,
+      });
+      // It's an honest failure the user can retry — NOT a silently-saved blank assistant turn.
+      expect(result).toMatchObject({ ok: false, reason: 'EMPTY' });
+      // Nothing is persisted for a failed turn — the transcript isn't polluted (the store keeps the user's
+      // message on screen for a retry; a successful retry then saves the real [user, assistant] pair).
+      expect(await getConversation(fs, key, 'p1', cid)).toBeNull();
+    }
+    // The billed calls were still metered (input + thinking tokens were consumed).
+    const usage = await queryUsage(fs, key, { from: '2026-01-01', to: '2027-01-01', type: 'chat' });
+    expect(usage.length).toBe(2);
+  });
+
   it('refuses to start with no API key', async () => {
     await base();
     const result = await runChatTurn({

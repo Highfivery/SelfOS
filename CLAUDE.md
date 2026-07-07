@@ -389,6 +389,36 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-08 — **Fix (Sessions "thinking then nothing" — a silent empty-reply dead end; fail-safe error + retry;
+  SPEC 05 §4.1; user-reported w/ screenshot; on `fix/sessions-empty-reply-failsafe`, PR pending).** A user sent
+  a long message, saw "Coach is thinking…", then it stopped with NO response and NO error. **Diagnosed as a
+  VERIFIED code bug (not assumed — a transport error WOULD have shown the banner):** chat turns ran with
+  `maxTokens: 1024` (too small for a coaching reply) AND adaptive thinking (chat keeps it on, by design) which
+  **shares** that budget → the model returned empty/truncated text (`stop_reason: max_tokens`), and the empty
+  reply was **swallowed at every layer** (`anthropicClient` → `{text:''}`; `runChatTurn` persisted a blank
+  assistant message + returned `ok:true`; the store cleared "thinking" with no error). The recurring
+  [[adaptive-thinking-shares-maxtokens]] trap, this time in the CHAT turn. **Fix (fail-safe, the user's ask —
+  "retry, resend, show error messages"):** (1) raised the chat ceiling to `CHAT_MAX_TOKENS=4096` (a ceiling, not
+  a target — no normal-turn cost bump — so replies aren't starved/truncated); (2) a blank/whitespace reply is now
+  an honest `{ok:false, reason:'EMPTY'}` (new `ChatTurnResult` reason) that is **never persisted** as a blank
+  turn, with the billed call **metered first** (meter-before-bail); (3) the store's `error` surfaces on every
+  failure + a **"Try again"** button (Sessions error Banner) re-runs the last turn (re-sending the last user
+  message + its already-stored attachments, no second bubble, only when the last message is the user's — the
+  typed message is preserved since a failed turn saves nothing). Extracted `successPatch` (shared by send +
+  retry) + `buildChatUsage`. **Also fixed a pre-existing FLAKY E2E** (`intimacy guided sessions: Yes/No/Maybe
+builder advances steps`) — its reply assertion lacked `.first()`, so during the stream→persist handoff it
+  matched BOTH the streaming bubble + the saved message (a strict-mode violation) → the "load flake" flagged in
+  earlier sessions was actually a missing-`.first()` bug; +`.first()` → 4/4 green. Gate green: typecheck (all),
+  lint, format, **958 core + 904 desktop** unit (+empty→EMPTY/not-persisted/still-metered/budget-raised, +Sessions
+  RTL error+Try-again re-sends same text, +the retry store path), **E2E +1** (real UI via a narrow
+  `SELFOS_FAKE_CHAT_EMPTY` hook gated `!haiku` so the topic-classifier stream — which precedes the chat turn —
+  doesn't consume the one-shot: empty → error + Try again → success). Code-reviewer: pending. Synced spec 05 §3.3
+  (→ §4.1 fail-safe turn handling). **Lessons: (1) any bounded model `stream` (chat too) needs an empty-reply
+  guard that returns an honest failure + never persists a blank turn — silence is the worst failure; a small
+  max_tokens ceiling + adaptive thinking sharing it starves the reply. (2) A streaming-reply E2E assertion MUST
+  use `.first()` (the stream bubble + saved message both match mid-handoff). (3) The topic classifier streams
+  BEFORE the chat turn on haiku and lands in the fake's default branch — a "first stream" test hook must exclude
+  it.**
 - 2026-07-07 — **Fix (the Questionnaires edit/authoring list was NOT author-scoped — a questionnaire someone
   SENT you showed in your edit list; user-reported "that doesnt make any sense"; on
   `fix/questionnaire-list-author-scope`, PR pending).** Diagnosed: `questionnairesList` (bridge) returned core

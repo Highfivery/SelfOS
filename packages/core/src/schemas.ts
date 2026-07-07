@@ -2070,7 +2070,9 @@ export type ChatTurnResult =
       // "Analyze this dream" suggestion (never a gate — synthesis stays available). Absent ⇒ not yet ready.
       analysisReady?: boolean;
     }
-  | { ok: false; reason: 'NO_KEY' | 'BUDGET' | 'ERROR'; message: string };
+  // EMPTY = the model returned no visible text (e.g. adaptive thinking starved the max_tokens budget). It's a
+  // real failure the user can retry, never a silently-saved blank reply (05-conversations §4.1).
+  | { ok: false; reason: 'NO_KEY' | 'BUDGET' | 'ERROR' | 'EMPTY'; message: string };
 
 /**
  * Result of "End & summarize" (09-session-analysis §6). On success carries the produced (auto-approved)

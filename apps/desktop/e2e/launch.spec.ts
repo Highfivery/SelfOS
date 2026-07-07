@@ -8199,7 +8199,7 @@ test('self-assessments (50): take ECR-R → profile bars → retake adds a trend
   }
 });
 
-test('self-assessments (50): the kink test is 18+-gated; a result writes RESTRICTED own-only facts (decrypt)', async () => {
+test('self-assessments (50): the kink test is 18+-gated; a result writes partner-scoped, Intimacy-gated facts (decrypt)', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);
   try {
@@ -8227,7 +8227,10 @@ test('self-assessments (50): the kink test is 18+-gated; a result writes RESTRIC
     await w.getByRole('button', { name: 'See my result' }).click();
     await expect(w.getByRole('heading', { name: 'Your results' })).toBeVisible();
 
-    // Decrypt: the derived Insight's facts are RESTRICTED + tagged Intimacy (own-context-only, never broadcast).
+    // Decrypt: the derived Insight's facts are PARTNER-scoped + tagged Intimacy (spec 54 §4.3, Option A).
+    // Sensitive kink facts are NOT `restricted` (so they can reach a partner) but are never broadcast
+    // (`shareable: false`) and are scoped strictly to the `partner` relationship type — so a sibling/parent/
+    // coworker never sees them. `lifeArea: 'Intimacy'` keeps them own-context-gated to an intimacy topic.
     const fs = createNodeFileSystem(vault);
     const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
     if (!key) throw new Error('kink e2e: master key missing');
@@ -8237,7 +8240,17 @@ test('self-assessments (50): the kink test is 18+-gated; a result writes RESTRIC
     );
     expect(kink).toBeTruthy();
     expect(kink!.facts.length).toBeGreaterThan(0);
-    expect(kink!.facts.every((f) => f.restricted === true && f.shareable === false)).toBe(true);
+    expect(
+      kink!.facts.every(
+        (f) =>
+          f.restricted !== true &&
+          f.shareable === false &&
+          f.lifeArea === 'Intimacy' &&
+          Array.isArray(f.shareableTypes) &&
+          f.shareableTypes.length === 1 &&
+          f.shareableTypes[0] === 'partner',
+      ),
+    ).toBe(true);
     // Reaches the OWN intimacy context, but not a non-intimacy one.
     const intimacy = await summarizeForContext(fs, key, 'owner-1', [], { lifeAreas: ['Intimacy'] });
     expect(intimacy).toContain('intimacy interests');

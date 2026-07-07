@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.2](https://github.com/Highfivery/SelfOS/compare/v0.14.1...v0.14.2) (2026-07-07)
+
+
+### Bug Fixes
+
+* **sessions:** surface empty/failed replies with a retry, never a silent dead end ([#119](https://github.com/Highfivery/SelfOS/issues/119)) ([a05f485](https://github.com/Highfivery/SelfOS/commit/a05f4856a5c9fa80de8338f7834e205b75a655d7))
+
 ## [0.14.1](https://github.com/Highfivery/SelfOS/compare/v0.14.0...v0.14.1) (2026-07-07)
 
 

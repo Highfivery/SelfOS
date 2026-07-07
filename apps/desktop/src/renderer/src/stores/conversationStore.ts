@@ -255,19 +255,16 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     return true; // a turn was attempted (attachments stored) — don't restore pending in the composer
   },
   retry: async () => {
-    // Re-run the last turn after a failure (empty reply, transport error, …) — the user's message is still on
-    // screen (and its attachments already stored), so we re-send it WITHOUT adding a second bubble. Only fires
-    // when the last message is the user's (i.e. no assistant reply landed — an incomplete/failed turn).
+    // Re-generate the coach's reply for an unanswered turn — a failed send, OR a re-opened session whose last
+    // message is the user's (05 §4.1). The user's message is already persisted (saved on send), so this asks
+    // for a reply to the existing transcript WITHOUT re-sending it (no duplicate bubble). Only when the last
+    // message is the user's and nothing is in flight.
     const state = get();
     if (state.sending || !state.activeId) return;
     const last = state.messages[state.messages.length - 1];
     if (!last || last.role !== 'user') return;
     set({ sending: true, streaming: '', error: null, wrapUp: null });
-    const result = await window.selfos?.chatStream({
-      conversationId: state.activeId,
-      userText: last.content,
-      ...(last.attachments && last.attachments.length > 0 ? { attachments: last.attachments } : {}),
-    });
+    const result = await window.selfos?.chatRetry(state.activeId);
     if (result?.ok) {
       set((s) => successPatch(s, result));
       await get().load();

@@ -15,7 +15,7 @@ import {
   saveConversation,
   storeConversationAttachment,
 } from './conversationService';
-import { runChatTurn } from './chatService';
+import { retryReply, runChatTurn } from './chatService';
 
 const key = generateMasterKey();
 const now = new Date('2026-06-15T12:00:00.000Z');
@@ -141,13 +141,88 @@ describe('runChatTurn', () => {
       });
       // It's an honest failure the user can retry — NOT a silently-saved blank assistant turn.
       expect(result).toMatchObject({ ok: false, reason: 'EMPTY' });
-      // Nothing is persisted for a failed turn — the transcript isn't polluted (the store keeps the user's
-      // message on screen for a retry; a successful retry then saves the real [user, assistant] pair).
-      expect(await getConversation(fs, key, 'p1', cid)).toBeNull();
+      // The USER's message IS persisted (saved on send, 05 §4.1) so it's never lost + can be retried; only the
+      // empty ASSISTANT reply is withheld → the transcript ends on the user's message.
+      const conversation = await getConversation(fs, key, 'p1', cid);
+      expect(conversation?.messages.map((m) => m.role)).toEqual(['user']);
+      expect(conversation?.messages[0]?.content).toBe('A long, hard message');
     }
     // The billed calls were still metered (input + thinking tokens were consumed).
     const usage = await queryUsage(fs, key, { from: '2026-01-01', to: '2027-01-01', type: 'chat' });
     expect(usage.length).toBe(2);
+  });
+
+  it('retryReply re-generates a reply for an unanswered turn without duplicating the user message (05 §4.1)', async () => {
+    await base();
+    // First turn comes back empty → the user's message is persisted, no reply.
+    const empty: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: () =>
+        Promise.resolve({
+          text: '',
+          usage: { inputTokens: 200, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        }),
+    };
+    await runChatTurn({
+      fs,
+      key,
+      client: empty,
+      apiKey: 'sk-test',
+      model: 'claude-sonnet-4-6',
+      personId: 'p1',
+      conversationId: 'c1',
+      userText: 'Please help',
+      onDelta: () => {},
+      now,
+    });
+
+    // Retry → a reply is generated for the EXISTING transcript (no second user message).
+    const result = await retryReply({
+      fs,
+      key,
+      client: fakeClient,
+      apiKey: 'sk-test',
+      model: 'claude-sonnet-4-6',
+      personId: 'p1',
+      conversationId: 'c1',
+      onDelta: () => {},
+      now,
+    });
+    expect(result.ok).toBe(true);
+    const conversation = await getConversation(fs, key, 'p1', 'c1');
+    // Exactly one user message (not duplicated) + the reply.
+    expect(conversation?.messages.map((m) => m.role)).toEqual(['user', 'assistant']);
+    expect(conversation?.messages[0]?.content).toBe('Please help');
+    expect(conversation?.messages[1]?.content).toBe('I hear you.');
+  });
+
+  it('retryReply is a no-op failure when the last message already has a reply', async () => {
+    await base();
+    await runChatTurn({
+      fs,
+      key,
+      client: fakeClient,
+      apiKey: 'sk-test',
+      model: 'claude-sonnet-4-6',
+      personId: 'p1',
+      conversationId: 'c1',
+      userText: 'Hi',
+      onDelta: () => {},
+      now,
+    });
+    // The turn already produced a reply → nothing to retry.
+    const result = await retryReply({
+      fs,
+      key,
+      client: fakeClient,
+      apiKey: 'sk-test',
+      model: 'claude-sonnet-4-6',
+      personId: 'p1',
+      conversationId: 'c1',
+      onDelta: () => {},
+      now,
+    });
+    expect(result).toMatchObject({ ok: false, reason: 'ERROR' });
   });
 
   it('refuses to start with no API key', async () => {

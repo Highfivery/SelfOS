@@ -219,6 +219,7 @@ import {
   getGuidanceState,
   isConversationAttachmentPath,
   listConversations,
+  retryReply,
   runChatTurn,
   saveConversation,
   setSessionStatus,
@@ -1794,6 +1795,31 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         ...(depthAsk ? { depthAsk } : {}),
         ...(goalRaise ? { goalRaise } : {}),
         now,
+      });
+    },
+    chatRetry: async (conversationId): Promise<ChatTurnResult> => {
+      // 05 §4.1 — re-generate a reply for a session whose last message is an unanswered user message (an
+      // empty/failed turn, or a re-opened session that ended on the user). Never adds a new user message, so
+      // it can't duplicate; the cached topic keeps the context relevant. Streams via the same chat:chunk sink.
+      // The optional in-session nudges (depth-ask 29 §3.5, goal-raise 40 §3.1) are intentionally omitted on a
+      // recovery turn — a retry should just deliver the missing reply, not surface a fresh proactive invitation.
+      const cid = z.string().min(1).parse(conversationId);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      const apiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
+      return retryReply({
+        fs: ctx.fs,
+        key: ctx.key,
+        client: host.claude,
+        apiKey,
+        model: await host.activeModel(),
+        personId,
+        conversationId: cid,
+        onDelta: (text) => host.emitChatChunk(text),
+        now: new Date(),
       });
     },
 

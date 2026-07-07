@@ -95,15 +95,15 @@ describe('Sessions', () => {
       cacheReadTokens: 0,
       costUsd: 0.001,
     };
-    // First turn fails with an empty reply; the retry succeeds.
-    const chatStream = vi
+    // First turn (send) fails empty; the retry goes through chatRetry (reply-only, no re-send) and succeeds.
+    const chatStream = vi.fn().mockResolvedValue({
+      ok: false,
+      reason: 'EMPTY',
+      message: 'The coach’s reply came back empty — please try again.',
+    });
+    const chatRetry = vi
       .fn()
-      .mockResolvedValueOnce({
-        ok: false,
-        reason: 'EMPTY',
-        message: 'The coach’s reply came back empty — please try again.',
-      })
-      .mockResolvedValueOnce({ ok: true, conversation: okConversation('I had a hard day'), usage });
+      .mockResolvedValue({ ok: true, conversation: okConversation('I had a hard day'), usage });
     installMockBridge({
       secretHas: () => Promise.resolve(true),
       aiKeyStatus: () =>
@@ -114,6 +114,7 @@ describe('Sessions', () => {
           source: 'device' as const,
         }),
       chatStream,
+      chatRetry,
     });
     setAiEnabled(true);
     renderSessions();
@@ -126,13 +127,78 @@ describe('Sessions', () => {
     expect(screen.getByText('I had a hard day')).toBeInTheDocument();
     const retry = screen.getByRole('button', { name: 'Try again' });
 
-    // Retrying re-runs the turn (same message, no re-typing) → the reply lands and the error clears.
+    // Retrying asks the coach to reply to the existing transcript (chatRetry) → the reply lands, error clears.
     await userEvent.click(retry);
     await waitFor(() => expect(screen.getByText('Welcome back.')).toBeInTheDocument());
     expect(screen.queryByText(/came back empty/i)).not.toBeInTheDocument();
-    expect(chatStream).toHaveBeenCalledTimes(2);
-    // The retry re-sent the SAME user text (didn't lose it).
-    expect(chatStream.mock.calls[1]?.[0]).toMatchObject({ userText: 'I had a hard day' });
+    expect(chatRetry).toHaveBeenCalledTimes(1);
+    expect(chatStream).toHaveBeenCalledTimes(1); // NOT re-sent — retry is reply-only
+  });
+
+  it('offers "Try again" on RE-OPENING a session that ended on the user\'s message (05 §4.1)', async () => {
+    // The reported case: an old session whose last message is the user's, no reply — re-opened with no error.
+    installMockBridge({
+      secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
+      conversationsList: () =>
+        Promise.resolve([{ id: 'c1', title: 'Stuck one', updatedAt: 'now', status: 'inProgress' }]),
+      conversationsGet: () =>
+        Promise.resolve({
+          id: 'c1',
+          schemaVersion: 1,
+          personId: 'owner-1',
+          title: 'Stuck one',
+          createdAt: 'now',
+          updatedAt: 'now',
+          status: 'inProgress',
+          messages: [{ role: 'user', content: 'I feel distant lately', ts: 'now' }],
+        }),
+      chatRetry: () =>
+        Promise.resolve({
+          ok: true,
+          conversation: {
+            id: 'c1',
+            schemaVersion: 1,
+            personId: 'owner-1',
+            title: 'Stuck one',
+            createdAt: 'now',
+            updatedAt: 'now',
+            status: 'inProgress' as const,
+            messages: [
+              { role: 'user' as const, content: 'I feel distant lately', ts: 'now' },
+              { role: 'assistant' as const, content: 'That sounds heavy.', ts: 'now' },
+            ],
+          },
+          usage: {
+            id: 'u',
+            schemaVersion: 1 as const,
+            type: 'chat' as const,
+            personId: 'owner-1',
+            model: 'claude-sonnet-4-6',
+            at: 'now',
+            inputTokens: 100,
+            outputTokens: 10,
+            cacheWriteTokens: 0,
+            cacheReadTokens: 0,
+            costUsd: 0.001,
+          },
+        }),
+    });
+    setAiEnabled(true);
+    renderSessions();
+    // Open the stuck session.
+    await userEvent.click(await screen.findByRole('button', { name: 'Stuck one' }));
+    // No error, but the last message is the user's → a gentle prompt + a Try again (the previous fix missed this).
+    await waitFor(() => expect(screen.getByText(/hasn’t been answered yet/i)).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(screen.getByText('That sounds heavy.')).toBeInTheDocument());
+    expect(screen.queryByText(/hasn’t been answered yet/i)).not.toBeInTheDocument();
   });
 
   it('renders a coach reply as Markdown (bold + a list), not literal markdown (34)', async () => {

@@ -1753,6 +1753,51 @@ test('sessions (05 §4.1): an empty reply surfaces an error + a working "Try aga
   }
 });
 
+test('sessions (05 §4.1): re-opening a session that ended on the user’s message offers a working "Try again"', async () => {
+  // The reported case: a prior turn never got a reply, so the transcript ends on the user's message. Re-opening
+  // it must not be a dead end — a gentle prompt + a Try again that gets a reply (no duplicate of the message).
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('reopen-retry e2e: master key missing');
+  const now = new Date().toISOString();
+  await saveConversation(fs, key, {
+    id: 'stuck-1',
+    schemaVersion: 1,
+    personId: 'owner-1',
+    title: 'Feeling distant',
+    status: 'inProgress',
+    messages: [{ role: 'user', content: 'I have been feeling distant lately', ts: now }],
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  const app = await electron.launch({ args: [`--user-data-dir=${userData}`, MAIN], env: e2eEnv() });
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Sessions' }).click();
+    await w.getByRole('button', { name: 'Feeling distant', exact: true }).click();
+
+    // The un-answered message is visible + a gentle "not answered yet" prompt + Try again (no live error needed).
+    await expect(w.getByText('I have been feeling distant lately').first()).toBeVisible();
+    await expect(w.getByText(/hasn’t been answered yet/i)).toBeVisible();
+    await w.getByRole('button', { name: 'Try again' }).click();
+
+    // The coach replies to the existing transcript; the prompt clears.
+    await expect(w.getByText(/hear you/i).first()).toBeVisible();
+    await expect(w.getByText(/hasn’t been answered yet/i)).toHaveCount(0);
+
+    // Decrypt: the user's message wasn't duplicated — exactly [user, assistant].
+    const convo = (await listConversations(fs, key, 'owner-1')).find((c) => c.id === 'stuck-1');
+    expect(convo?.messages.map((m) => m.role)).toEqual(['user', 'assistant']);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('sessions: attach an image → encrypted on disk → thumbnail + lightbox + export → delete purges (45)', async () => {
   const saveDir = await mkdtemp(join(tmpdir(), 'selfos-save-'));
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });

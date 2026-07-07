@@ -1,6 +1,6 @@
 {
   "name": "@selfos/desktop",
-  "version": "0.14.0",
+  "version": "0.14.1",
   "private": true,
   "description": "SelfOS desktop app (Electron + React + TypeScript).",
   "main": "./out/main/index.js",

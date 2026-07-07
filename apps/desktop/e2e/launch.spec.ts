@@ -3924,6 +3924,64 @@ test('answer review/edit (56): recipient reviews + edits + resends → Results g
   }
 });
 
+test('questionnaires: a questionnaire sent TO you is in your Inbox, NOT your edit list (author-scoped)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('author-scope e2e: master key missing');
+  // A questionnaire authored by SOMEONE ELSE and sent to the owner — it must land in the Inbox, never the
+  // owner's authoring/edit list (fix: the list is scoped to what YOU authored).
+  const foreign = await saveQuestionnaire(
+    fs,
+    key,
+    {
+      title: 'A friend’s questionnaire',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'How are you?', required: true }],
+    },
+    'ghost-author',
+  );
+  await createAssignment(fs, key, {
+    questionnaireId: foreign.id,
+    senderPersonId: 'ghost-author',
+    recipient: { kind: 'person', personId: 'owner-1' },
+    channel: 'inApp',
+    privacy: 'standard',
+    senderVisibleToRecipient: true,
+  });
+  // …and one the owner authored themselves.
+  await saveQuestionnaire(
+    fs,
+    key,
+    {
+      title: 'My own questionnaire',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'What’s up?', required: true }],
+    },
+    'owner-1',
+  );
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    // The edit list shows the owner's OWN, NOT the friend's send-to-them.
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await expect(w.getByRole('button', { name: /My own questionnaire/ }).first()).toBeVisible();
+    await expect(w.getByRole('button', { name: /A friend’s questionnaire/ })).toHaveCount(0);
+
+    // …but the friend's questionnaire IS in the Inbox (as a recipient).
+    await w.getByRole('link', { name: /Inbox/ }).click();
+    await expect(w.getByRole('button', { name: /A friend’s questionnaire/ }).first()).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('results: re-asks chart a trend, a send deletes, and the questionnaire purges', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);

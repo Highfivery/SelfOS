@@ -590,7 +590,10 @@ untouched.
 Typed channels (`src/shared`, Zod-validated both sides; the API key + Cloudflare token never cross to the
 renderer):
 
-- **Authoring** — `questionnaires:list` / `:get` / `:save` (main stamps `creatorPersonId` on create) /
+- **Authoring** — `questionnaires:list` (**author-scoped** — returns only the active person's OWN
+  questionnaires; one authored by someone else, incl. one they SENT to you, appears in your **Inbox**, not
+  your edit list; a legacy creator-less def stays visible to the **Owner** so it isn't orphaned §3.9) /
+  `:get` / `:save` (main stamps `creatorPersonId` on create) /
   `:delete` (**role-aware purge §13.5c** — the Owner purges any stage; a non-owner creator deletes
   own-while-unsent) / `:validate` (→ `problems[]`) /
   `:generate({type, targetId, brief?, useData})` (→ schema-validated draft) / `:improveQuestion` /

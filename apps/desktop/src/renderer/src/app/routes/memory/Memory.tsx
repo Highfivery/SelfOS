@@ -172,6 +172,20 @@ export function Memory(): JSX.Element {
   const drafts = filteredOwn.filter((i) => !i.approved);
   const approvedOwn = filteredOwn.filter((i) => i.approved);
 
+  // Who a sent-questionnaire insight is ABOUT (#129): the recipient of a questionnaire you sent — resolved
+  // from the enriched provenance (a household person id → their name; else an external name). A self
+  // check-in carries no `about*` (the bridge only stamps a non-self recipient), so it reads as `null` and
+  // stays in the life-area cards. These insights inform YOUR coaching (subject = you) but their facts
+  // describe THEIR answers, so they get their own "Responses to your questionnaires" section instead of
+  // masquerading as "about you" facts.
+  const responseAbout = (insight: Insight): { key: string; name: string } | null => {
+    if (insight.source !== 'questionnaire') return null;
+    const pid = insight.provenance.aboutPersonId;
+    if (pid) return { key: pid, name: people.find((p) => p.id === pid)?.displayName ?? 'someone' };
+    const name = insight.provenance.aboutName;
+    return name ? { key: `ext:${name}`, name } : null;
+  };
+
   // Stats summarize the WHOLE memory (own approved), independent of the current filters/search (§3.2).
   const ownApprovedAll = own.filter((i) => i.approved);
   const overviewSummary = overviewStats(ownApprovedAll);
@@ -179,9 +193,25 @@ export function Memory(): JSX.Element {
   const sharingSummary = sharingStats(outbound);
   const showStats = loaded && ownApprovedAll.length > 0;
 
+  // Split approved own insights: responses to questionnaires YOU sent (about the recipient — #129) get their
+  // own section; everything genuinely about you fills the life-area cards.
+  const responseInsights = approvedOwn.filter((i) => responseAbout(i) !== null);
+  const aboutYouApproved = approvedOwn.filter((i) => responseAbout(i) === null);
+
+  // Group responses by the person who answered (recipient), newest first within each.
+  const byRecipient = new Map<string, { key: string; name: string; insights: Insight[] }>();
+  for (const insight of responseInsights) {
+    const about = responseAbout(insight);
+    if (!about) continue;
+    const entry = byRecipient.get(about.key) ?? { key: about.key, name: about.name, insights: [] };
+    entry.insights.push(insight);
+    byRecipient.set(about.key, entry);
+  }
+  const recipientGroups = [...byRecipient.values()].sort((a, b) => a.name.localeCompare(b.name));
+
   // Group the person's own approved insights by their primary life-area (categories[0]; 'Other' if untagged).
   const byArea = new Map<string, Insight[]>();
-  for (const insight of approvedOwn) {
+  for (const insight of aboutYouApproved) {
     const area = insight.categories[0] ?? 'Other';
     byArea.set(area, [...(byArea.get(area) ?? []), insight]);
   }
@@ -474,6 +504,38 @@ export function Memory(): JSX.Element {
               </section>
             );
           })}
+
+          {recipientGroups.length > 0 ? (
+            <section className={styles.group} aria-label="Responses to your questionnaires">
+              <Heading level={3} className={styles.groupTitle}>
+                Responses to your questionnaires
+              </Heading>
+              <Text size="sm" tone="tertiary">
+                What you learned from questionnaires you sent — these reflect their answers, not
+                you.
+              </Text>
+              <Stack gap={4}>
+                {recipientGroups.map((group) => (
+                  <div key={group.key} className={styles.responseGroup}>
+                    <h4 className={styles.responseName}>{group.name}</h4>
+                    <Stack gap={3}>
+                      {group.insights.map((insight) => (
+                        <InsightCard
+                          key={insight.id}
+                          insight={insight}
+                          subjectName="you"
+                          isOwn
+                          aboutName={group.name}
+                          sourceRemoved={sourceRemoved(insight)}
+                          {...(availableTypes ? { availableTypes } : {})}
+                        />
+                      ))}
+                    </Stack>
+                  </div>
+                ))}
+              </Stack>
+            </section>
+          ) : null}
 
           {!nothingShown ? null : (
             <Card>

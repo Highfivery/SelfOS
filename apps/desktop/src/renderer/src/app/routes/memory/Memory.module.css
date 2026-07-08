@@ -146,6 +146,20 @@
   font-size: var(--text-sm);
 }
 
+/* --- Responses to your questionnaires (#129): per-recipient sub-groups --- */
+.responseGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.responseName {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
 /* --- Trends --- */
 .trends {
   border: 1px solid var(--color-border);
@@ -298,6 +312,9 @@
   gap: var(--space-3);
   padding: var(--space-2) 0;
   min-width: 0;
+  /* At narrow widths the non-shrinking actions cluster (sharing picker + "not right") wraps BELOW the fact
+     text instead of forcing a horizontal scrollbar (CLAUDE.md §12 — no inner overflow). */
+  flex-wrap: wrap;
 }
 
 .factItem + .factItem {

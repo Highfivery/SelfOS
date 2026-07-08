@@ -389,6 +389,37 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-08 — **Fix (Memory: a questionnaire YOU sent a partner was mislabelled "About you"; GitHub issue #129;
+  user-reported with a screenshot; specs 08 §13.4 + 54 §3.2; on `fix/memory-questionnaire-responses-section`).**
+  An analysis Insight from a questionnaire the viewer **sent to someone else** keeps `subjectPersonId` = the
+  **sender** (it correctly informs the sender's coaching), but its facts describe the **recipient's** answers —
+  so Memory's "About you" life-area cards showed it with the eyebrow "Questionnaire · About you" (the user:
+  "it's obviously about my partner"). **Decisions asked first (2 forks, user-chosen):** a dedicated **"Responses
+  to your questionnaires"** section (not the Partners tab, not just a relabel); scope = **all sent + any
+  recipient** (standard sends AND compatibility alignments; household + external). **Display-only fix — subject
+  stays the sender, `summarizeForContext`/`buildContext` untouched.** Added additive-optional
+  `InsightProvenance.aboutPersonId` (household recipient) / `aboutName` (external) — **no `schemaVersion` bump**;
+  stamped by `analyzeAssignment` (from `assignment.recipient`) + `generateAlignment` (the other participant),
+  **never for a self check-in** (recipient = sender). A shared **`aboutResolver`** (`aboutFromRecipient` +
+  `resolveInsightAbout`) also resolves it **read-time** in `coreBridge.insightsList` for pre-#129 insights (join
+  the assignment / compat group), so the user's EXISTING confusing insight moves without a re-analyze. Memory
+  groups these by recipient in their own labelled section (out of the life-area cards); the `InsightCard` eyebrow
+  reads **"From `<name>`'s answers."** **Also fixed a pre-existing §12 overflow the new prominent card surfaced:**
+  a broadcast fact's sharing chip listed all 8 relationship types in a non-wrapping row → `describeScope` now
+  returns "everyone you relate to" for the full set (matches the SharingPanel copy), the `.factItem` row wraps,
+  and the `RelationshipScopePicker` chip caps + ellipsizes. Gate green: typecheck (all), lint, format, \*\*972 core
+  - 11 relay + 922 desktop** unit (+aboutResolver [self/person/external/legacy-resolve/compat-group], +analysis
+    about-stamp [recipient/self-none/external], +compat about-stamp, +describeScope full-set, +bridge legacy-enrich,
+    +Memory RTL Responses-grouping), **E2E +1** (send→analyze→approve → Memory groups it under "Responses · Angel"
+    with the "From Angel's answers" eyebrow, absent from life-area cards; a legacy insight resolved read-time; 360px
+    overflow guard). Visual QA: real Electron screenshot of the Responses section — grouped by recipient, eyebrow
+    fixed, compact sharing chip. Synced spec 08 §13.4 + spec 54 §3.2. **Lesson: an insight can belong to person A's
+    memory (`subjectPersonId`) yet be ABOUT person B — the Insight model has no "about" field, so a sent-questionnaire
+    insight's facts (about the recipient) read as "about you" unless you stamp/resolve the recipient
+    (`provenance.aboutPersonId`) and group by it; keep it display-only (subject + context unchanged). And a new,
+    prominently-rendered card can surface a latent §12 overflow living in a shared control (a chip listing all 8
+    types) — fix the intrinsic width at the source (concise label), since `max-width`/ellipsis can't shrink
+    max-content.\*\*
 - 2026-07-08 — **Fix + redesign (Sessions wrap-up card: a crisis-footer OVERLAY bug + a flat bullet-wall summary;
   user-reported with a screenshot; mockup approved first; spec 09 §3.1; on `feat/sessions-wrapup-redesign`).**
   **(1) The overlay bug (diagnosed from the layout, not assumed):** `WrapUpCard` rendered as a sibling AFTER the

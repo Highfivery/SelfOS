@@ -328,6 +328,63 @@ describe('Memory dashboard', () => {
     expect(screen.getByText('Bisexual, monogamous')).toBeInTheDocument();
   });
 
+  it('groups sent-questionnaire insights under "Responses to your questionnaires" by recipient, not in life-area cards (#129)', async () => {
+    useSessionStore.setState({ activePerson: activeP1 });
+    usePeopleStore.setState({
+      people: [activeP1, { ...activeP1, id: 'p2', displayName: 'Angel' }],
+      loaded: true,
+    });
+    installMockBridge({
+      peopleList: () =>
+        Promise.resolve([activeP1, { ...activeP1, id: 'p2', displayName: 'Angel' }]),
+      insightsList: () =>
+        Promise.resolve([
+          // A response from a household partner (about Angel), categorized Relationships.
+          insight({
+            id: 'resp-hh',
+            source: 'questionnaire',
+            summary: 'Angel wants more protected time together',
+            categories: ['Relationships'],
+            provenance: {
+              assignmentId: 'a1',
+              aboutPersonId: 'p2',
+              at: '2026-06-11T12:00:00.000Z',
+            },
+          }),
+          // A response from an external recipient (about a name).
+          insight({
+            id: 'resp-ext',
+            source: 'questionnaire',
+            summary: 'Sam gave candid feedback',
+            categories: ['Work & purpose'],
+            provenance: { assignmentId: 'a2', aboutName: 'Sam', at: '2026-06-11T12:00:00.000Z' },
+          }),
+          // A genuine "about you" session insight stays in a life-area card.
+          insight({
+            id: 'own',
+            source: 'session',
+            summary: 'Values steady routines',
+            categories: ['Health & body'],
+            provenance: { conversationId: 'c1', at: '2026-06-11T12:00:00.000Z' },
+          }),
+        ]),
+    });
+    renderMemory();
+    // The Responses section exists, grouped by who answered.
+    expect(
+      await screen.findByRole('heading', { name: 'Responses to your questionnaires' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Angel' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Sam' })).toBeInTheDocument();
+    // The eyebrow reads "From Angel's answers", never "About you".
+    expect(screen.getByText(/From Angel’s answers/)).toBeInTheDocument();
+    // The response insight is NOT rendered as a Relationships life-area card.
+    expect(screen.queryByRole('heading', { name: /^Relationships/ })).not.toBeInTheDocument();
+    // A genuine own insight still lands in its life-area card.
+    expect(screen.getByRole('heading', { name: /Health & body/ })).toBeInTheDocument();
+    expect(screen.getByText('Values steady routines')).toBeInTheDocument();
+  });
+
   it('filters by search', async () => {
     useSessionStore.setState({ activePerson: activeP1 });
     installMockBridge({

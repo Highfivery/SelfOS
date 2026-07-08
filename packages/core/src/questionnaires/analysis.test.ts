@@ -88,6 +88,10 @@ describe('analyzeAssignment', () => {
     expect(result.insight?.approved).toBe(false); // needs the approve-step first
     expect(result.insight?.source).toBe('questionnaire');
     expect(result.insight?.provenance.assignmentId).toBe(assignmentId);
+    // Stamped WHO it's about (#129) — the recipient (p2), not the sender (p1) — so Memory groups it as a
+    // response, never mislabels it "about you."
+    expect(result.insight?.provenance.aboutPersonId).toBe('p2');
+    expect(result.insight?.provenance.aboutName).toBeUndefined();
     expect(result.insight?.facts.map((f) => f.shareable)).toEqual([true, false]);
     expect(result.usage?.type).toBe('questionnaire.analyze');
 
@@ -96,6 +100,62 @@ describe('analyzeAssignment', () => {
     expect(all.map((i) => i.id)).toContain(result.insight?.id);
     // …but it does NOT yet feed buildContext (unapproved) — proven by listInsightsForPerson approval state.
     expect(all.find((i) => i.id === result.insight?.id)?.approved).toBe(false);
+  });
+
+  it('stamps NO about-person for a self check-in (recipient === sender) — it stays "about you"', async () => {
+    const fs = memFileSystem();
+    const q = await saveQuestionnaire(fs, key, {
+      title: 'Self check-in',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'How am I?', required: true }],
+    });
+    const a = await createAssignment(fs, key, {
+      questionnaireId: q.id,
+      senderPersonId: 'p1',
+      recipient: { kind: 'person', personId: 'p1' }, // sending to yourself
+      channel: 'inApp',
+      privacy: 'standard',
+      senderVisibleToRecipient: true,
+    });
+    await saveResponse(fs, key, {
+      id: 'r-self',
+      schemaVersion: 1,
+      assignmentId: a.id,
+      answers: [{ questionId: 'q1', value: 'Doing okay.' }],
+      submittedAt: now.toISOString(),
+    });
+    const result = await analyzeAssignment(deps(fs, fakeClient(ANALYSIS)), { assignmentId: a.id });
+    expect(result.insight?.provenance.aboutPersonId).toBeUndefined();
+    expect(result.insight?.provenance.aboutName).toBeUndefined();
+  });
+
+  it('stamps an external recipient by name', async () => {
+    const fs = memFileSystem();
+    const q = await saveQuestionnaire(fs, key, {
+      title: 'External send',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'Hi?', required: true }],
+    });
+    const a = await createAssignment(fs, key, {
+      questionnaireId: q.id,
+      senderPersonId: 'p1',
+      recipient: { kind: 'external', displayName: 'Sam Rivers' },
+      channel: 'relay',
+      privacy: 'standard',
+      senderVisibleToRecipient: true,
+    });
+    await saveResponse(fs, key, {
+      id: 'r-ext',
+      schemaVersion: 1,
+      assignmentId: a.id,
+      answers: [{ questionId: 'q1', value: 'Good.' }],
+      submittedAt: now.toISOString(),
+    });
+    const result = await analyzeAssignment(deps(fs, fakeClient(ANALYSIS)), { assignmentId: a.id });
+    expect(result.insight?.provenance.aboutPersonId).toBeUndefined();
+    expect(result.insight?.provenance.aboutName).toBe('Sam Rivers');
   });
 
   it('carries a model crisis flag through to the Insight', async () => {

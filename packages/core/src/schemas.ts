@@ -675,6 +675,15 @@ export const InsightProvenanceSchema = z.object({
   // stale analysis (`response.revision > analyzedRevision`) after a recipient edits + resubmits. Absent on a
   // pre-56 insight → treated as 1, so an un-edited send is never falsely flagged stale.
   analyzedRevision: z.number().int().positive().optional().catch(undefined),
+  // Who a SENT questionnaire's insight is ABOUT — the recipient, when it isn't the subject (the sender). A
+  // questionnaire you send to someone else produces an Insight for YOUR coaching (`subjectPersonId` = you)
+  // whose facts describe THEIR answers, so Memory groups these as "responses to your questionnaires" instead
+  // of mislabelling them "about you" (issue #129). `aboutPersonId` = a household recipient (stable id);
+  // `aboutName` = an external recipient's display name. Absent ⇒ the insight is genuinely about the subject
+  // (a normal session/dream/intake insight, or a self check-in). Additive-optional, no migration; stamped by
+  // the producers + resolved read-time for pre-#129 insights. Never set for a self-recipient.
+  aboutPersonId: z.string().optional().catch(undefined),
+  aboutName: z.string().optional().catch(undefined),
   at: z.string(),
 });
 export type InsightProvenance = z.infer<typeof InsightProvenanceSchema>;

@@ -9,7 +9,10 @@
   flex: none;
   align-items: center;
   gap: var(--space-1);
-  max-width: 100%;
+  /* Cap the width so a long scope summary ("Shared: Partner, Parent, Child, …") ellipsizes instead of
+     forcing a horizontal scrollbar in a narrow row (CLAUDE.md §12); short labels stay their natural size. */
+  min-width: 0;
+  max-width: min(100%, 16rem);
   height: 24px;
   padding: 0 var(--space-2);
   border: 1px solid var(--color-border);
@@ -25,6 +28,7 @@
 }
 
 .chip > span {
+  min-width: 0; /* shrink within the chip's capped width so the ellipsis engages (§12) */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

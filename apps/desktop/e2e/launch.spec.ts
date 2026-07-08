@@ -3096,6 +3096,123 @@ test('memory: a member sees only their OWN insights, never another member’s (t
   }
 });
 
+test('memory (#129): a questionnaire you sent a partner is grouped under "Responses", not mislabelled "About you"', async () => {
+  const { userData, vault } = await seedReadyVault();
+  {
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('memory #129 e2e: master key missing');
+    const now = new Date().toISOString();
+    // The partner the owner (viewer) sent a questionnaire to, + the symmetric `partner` edge.
+    await savePerson(fs, key, {
+      id: 'angel-1',
+      schemaVersion: 1,
+      displayName: 'Angel',
+      isSubject: true,
+      tags: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await saveRelationship(fs, key, {
+      id: 'rel-angel',
+      schemaVersion: 1,
+      fromPersonId: 'owner-1',
+      toPersonId: 'angel-1',
+      type: 'partner',
+      createdAt: now,
+      updatedAt: now,
+    });
+    // A real questionnaire + send owner-1 → Angel, so the insight's recipient is resolvable read-time.
+    const q = await saveQuestionnaire(fs, key, {
+      title: 'How are we doing?',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: 'angel-1' },
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'How are we?', required: true }],
+    });
+    const assignment = await createAssignment(fs, key, {
+      questionnaireId: q.id,
+      senderPersonId: 'owner-1',
+      recipient: { kind: 'person', personId: 'angel-1' },
+      channel: 'inApp',
+      privacy: 'standard',
+      senderVisibleToRecipient: true,
+    });
+    // A PRE-#129 analysis insight from that send: subject = the owner (sender), Relationships-tagged, with NO
+    // `aboutPersonId` stamped — the bridge must resolve it read-time from the assignment (the user's exact case).
+    await saveInsight(fs, key, {
+      id: 'resp-legacy',
+      schemaVersion: 1,
+      source: 'questionnaire',
+      subjectPersonId: 'owner-1',
+      summary: 'Angel wants more protected time together',
+      facts: [{ id: 'f1', text: 'Wants more regular date nights', shareable: true }],
+      confidence: 'medium',
+      categories: ['Relationships'],
+      approved: true,
+      provenance: { assignmentId: assignment.id, at: now }, // legacy: no aboutPersonId
+      createdAt: now,
+      updatedAt: now,
+    });
+    // A genuine "about you" session insight — stays in a life-area card.
+    await saveInsight(fs, key, {
+      id: 'own-session',
+      schemaVersion: 1,
+      source: 'session',
+      subjectPersonId: 'owner-1',
+      summary: 'Values steady routines',
+      facts: [],
+      confidence: 'medium',
+      categories: ['Health & body'],
+      approved: true,
+      provenance: { conversationId: 'c1', at: now },
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Memory' }).click();
+    await expect(w.getByRole('heading', { name: 'Memory' })).toBeVisible();
+
+    // The sent-questionnaire insight lands in its own "Responses" section, grouped under Angel…
+    await expect(
+      w.getByRole('heading', { name: 'Responses to your questionnaires' }),
+    ).toBeVisible();
+    await expect(w.getByRole('heading', { name: 'Angel' })).toBeVisible();
+    // …with the honest "From Angel's answers" eyebrow (never "About you"), resolved read-time from the send.
+    await expect(w.getByText(/From Angel.s answers/)).toBeVisible();
+    await expect(w.getByText('Angel wants more protected time together')).toBeVisible();
+    // It is NOT mislabelled as a Relationships life-area card (the #129 bug).
+    await expect(w.getByRole('heading', { name: /^Relationships/ })).toHaveCount(0);
+    // A genuine own insight still fills its life-area card.
+    await expect(w.getByRole('heading', { name: /Health & body/ })).toBeVisible();
+    await expect(w.getByText('Values steady routines')).toBeVisible();
+
+    // No horizontal overflow / inner scrollbars at phone width (CLAUDE.md §7/§12).
+    await w.setViewportSize({ width: 360, height: 800 });
+    const offenders = await w.evaluate(() => {
+      const out: string[] = [];
+      for (const el of Array.from(document.querySelectorAll('*'))) {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          out.push(`${el.tagName}.${el.className}`);
+        }
+      }
+      const main = document.querySelector('main');
+      return { offenders: out, mainOverflow: main ? main.scrollWidth - main.clientWidth : 0 };
+    });
+    expect(offenders.offenders).toEqual([]);
+    expect(offenders.mainOverflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('memory redesign (54): a partner’s shared facts never show raw; the Partners view shows AI relationship insights', async () => {
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
   await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');

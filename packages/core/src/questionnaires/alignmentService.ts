@@ -23,6 +23,7 @@ import {
   buildAlignmentUserMessage,
   buildAnalysisUserMessage,
 } from './aiPrompts';
+import { aboutFromRecipient, type InsightAbout } from './aboutResolver';
 import { extractJsonObject } from './analysisService';
 import { formatAnswerForDisplay } from './answering';
 import { getAssignmentSnapshot, listAssignments } from './assignmentService';
@@ -189,6 +190,12 @@ export async function generateAlignment(
   const prior = (await listInsightsForPerson(deps.fs, deps.key, deps.personId)).find(
     (i) => i.provenance.compatibilityGroupId === input.compatibilityGroupId,
   );
+  // Who this compatibility report is about — the other participant (#129) — so Memory groups it as a
+  // response, not an "about you" fact. Prefer a household person; else the named participant.
+  const others = group
+    .map((a) => aboutFromRecipient(a.recipient, deps.personId))
+    .filter((o): o is InsightAbout => o !== null);
+  const about = others.find((o) => o.aboutPersonId) ?? others.find((o) => o.aboutName);
   const insight: Insight = {
     id: prior?.id ?? uuid(),
     schemaVersion: 1,
@@ -199,7 +206,7 @@ export async function generateAlignment(
     confidence: 'medium',
     categories: ['Relationships'], // a compatibility report is inherently relational (20-memory §3.1)
     approved: false,
-    provenance: { compatibilityGroupId: input.compatibilityGroupId, at },
+    provenance: { compatibilityGroupId: input.compatibilityGroupId, ...(about ?? {}), at },
     createdAt: prior?.createdAt ?? at,
     updatedAt: at,
     ...(validated.data.crisisFlag ? { crisisFlag: true } : {}),

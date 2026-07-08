@@ -389,6 +389,39 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-08 — **Redesign (Questionnaires landing → a two-section card grid; user asked, mockup approved FIRST;
+  spec 08 §3.1/§3.3; on `feat/questionnaires-page-redesign`).** The old page was a master list + a big empty
+  "Select a questionnaire" detail placeholder (wasted real-estate the user flagged). Replaced with a full-width,
+  responsive **two-section card grid**: **"Sent"** (your authored questionnaires — type eyebrow, title,
+  favourite, **recipient chips with per-person answered state** [✓/⏱], a rich status pill [`Awaiting response` /
+  `N of M answered` / `Answered · analysed` / `Draft · not sent`], a **"N new"** un-reviewed-responses badge, a
+  `Ready to re-send` nudge) and **"Received"** (questionnaires others sent you — sender avatar, status pill, a
+  state-matched CTA Answer/Continue/View; the standalone `/inbox` nav stays per the user). Each section self-hides
+  when empty; opening a card drops into the full-width builder or the shared answering pane; `closeDetail`
+  refreshes both stores on return so a card reflects what just happened. **Process:** reviewed the CURRENT code,
+  then showed an interactive `visualize` mockup with a Calm↔Bold toggle; user picked **Calm** + confirmed 4 forks
+  (both looks shown, responsive grid, keep Inbox nav, rich per-recipient status) BEFORE any code. **Decisions
+  asked up front, not guessed.** New backend: **`questionnaires:sentOverview`** read (sender-scoped, gated
+  **`questionnaires.viewResults`** — recipient detail is results territory, stricter than the create-gated
+  `sendStates`; deduped to each recipient's LATEST send with a deterministic answered-wins tiebreak on an exact
+  timestamp tie; the sender's own **compatibility** half excluded [only when `compatibilityGroupId` set — a plain
+  self check-in stays]; **NEVER** the raw answers — the privacy boundary holds). Additive `InboxItem.fromSelf`
+  (senderPersonId === recipientPersonId) filters a **self check-in** out of the page's Received section (it
+  already shows under Sent) so no card double-renders on one screen; `/inbox` still lists it. Route-local
+  `SentCard`/`ReceivedCard`/`Avatar` (theme-safe accent-subtle initials — colored per-person avatars can't hold
+  contrast across light/dark) + a shared `inbox/inboxStatus.ts` (`receivedStatus`/`receivedCta`, DRY with the
+  Inbox route). No new design-system primitive → no `/gallery` change. Gate green: typecheck, lint, format, **972
+  core + 11 relay + 925 desktop** unit (+`sentOverview` bridge [recipients/answered/new-counts/viewResults-gate/
+  sender-scope], +`fromSelf` assert, +2 Questionnaires RTL [rich Sent card, Received section + open-to-answer]),
+  **E2E +1** (seed-via-vault: owner self-sends [awaiting + answered], a foreign send → Received; assert both
+  sections + the rich statuses + self-send NOT double-shown + answer-from-card round-trips [decrypt] + 360px
+  no-overflow incl. inner scrollers; updated `author-scoped`/`lifecycle`/`compatibility`/`re-asks` for the new
+  layout). Visual QA: real Electron screenshots at desktop + 360px (Calm cards, recipient ✓/⏱ chips, pills, "N
+  new" badge; single-column reflow, no overflow). Synced spec 08 §3.1/§3.3/§6. **Lesson: a self check-in (you're
+  both sender + recipient) legitimately lands in your own Inbox, so once Sent + Received share one screen it
+  double-renders — a derived `fromSelf` flag filters it from Received (it lives under Sent); and a per-recipient
+  "latest send" dedup must be deterministic on a timestamp tie (rapid programmatic sends collide in one ms) —
+  prefer the answered send so the card reflects real engagement regardless of iteration order.**
 - 2026-07-08 — **Fix (Memory: a questionnaire YOU sent a partner was mislabelled "About you"; GitHub issue #129;
   user-reported with a screenshot; specs 08 §13.4 + 54 §3.2; on `fix/memory-questionnaire-responses-section`).**
   An analysis Insight from a questionnaire the viewer **sent to someone else** keeps `subjectPersonId` = the

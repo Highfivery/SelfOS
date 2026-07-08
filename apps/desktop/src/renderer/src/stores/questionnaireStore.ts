@@ -3,6 +3,7 @@ import type {
   Questionnaire,
   QuestionnaireInput,
   QuestionnaireSendState,
+  QuestionnaireSentOverview,
   SelfosBridge,
 } from '@shared/channels';
 
@@ -30,6 +31,9 @@ interface QuestionnaireState {
   loaded: boolean;
   /** Per-questionnaire send state for the author's list (keyed by id): latest send time + count. */
   sendStates: Record<string, QuestionnaireSendState>;
+  /** Richer per-questionnaire "Sent" overview (keyed by id): recipients + answered/new counts. Empty for
+   *  a person without `questionnaires.viewResults` — the landing falls back to `sendStates` then. */
+  sentOverview: Record<string, QuestionnaireSentOverview>;
   /** User-defined custom types (the starter taxonomy lives in the builder). */
   customTypes: string[];
   load: () => Promise<void>;
@@ -67,13 +71,15 @@ export const useQuestionnaireStore = create<QuestionnaireState>((set, get) => ({
   questionnaires: [],
   loaded: false,
   sendStates: {},
+  sentOverview: {},
   customTypes: [],
   load: async () => {
-    const [questionnaires, sendStates] = await Promise.all([
+    const [questionnaires, sendStates, sentOverview] = await Promise.all([
       window.selfos?.questionnairesList() ?? [],
       window.selfos?.questionnairesSendStates() ?? {},
+      window.selfos?.questionnairesSentOverview() ?? {},
     ]);
-    set({ questionnaires, sendStates, loaded: true });
+    set({ questionnaires, sendStates, sentOverview, loaded: true });
   },
   loadTypes: async () => {
     set({ customTypes: (await window.selfos?.questionnairesListTypes()) ?? [] });

@@ -2394,6 +2394,7 @@ describe('createCoreBridge', () => {
       privacy: 'private',
       answerable: true,
       hasDraft: false,
+      fromSelf: false, // Ben sent it to the recipient — not a self check-in (§3.3 Received filter)
     });
 
     // The detail (recipient-scoped) yields the frozen snapshot to answer.
@@ -3395,6 +3396,78 @@ describe('createCoreBridge', () => {
     // the owner's send of `q` does not leak into another person's list.
     await bridge.sessionSetActive({ personId: mara.id });
     expect(await bridge.questionnairesSendStates()).toEqual({});
+  });
+
+  it('questionnairesSentOverview: per-recipient answered status, new-response + analysed counts, gated (§3.1)', async () => {
+    const { bridge, ownerId, host } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: mara.id, roleId: 'member', pin: null });
+    const q = await bridge.questionnairesSave({
+      title: 'Weekly check-in',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: mara.id },
+      questions: [{ id: 'a', type: 'shortText', prompt: 'How?', required: true }],
+    });
+
+    // Never sent → no overview.
+    expect(await bridge.questionnairesSentOverview()).toEqual({});
+
+    // Send it twice to the bound recipient (a re-ask); the recipient is deduped to their latest send.
+    await bridge.assignmentsCreate({ questionnaireId: q.id, privacy: 'standard' });
+    const { assignment: latest } = await bridge.assignmentsCreate({
+      questionnaireId: q.id,
+      privacy: 'standard',
+    });
+    let overview = await bridge.questionnairesSentOverview();
+    expect(overview[q.id]?.recipients).toEqual([{ name: 'Mara', status: 'sent', answered: false }]);
+    expect(overview[q.id]?.answeredCount).toBe(0);
+    expect(overview[q.id]?.newResponses).toBe(0);
+    expect(typeof overview[q.id]?.lastSentAt).toBe('string');
+
+    // Mara answers the latest send → she reads as answered, and it's a "new" (un-analysed) response.
+    await bridge.sessionSetActive({ personId: mara.id });
+    await bridge.assignmentsSubmit({
+      assignmentId: latest.id,
+      answers: [{ questionId: 'a', value: 'Doing well' }],
+    });
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    overview = await bridge.questionnairesSentOverview();
+    expect(overview[q.id]?.recipients[0]).toMatchObject({ name: 'Mara', answered: true });
+    expect(overview[q.id]?.answeredCount).toBe(1);
+    expect(overview[q.id]?.newResponses).toBe(1);
+
+    // Analysing it clears the "new" badge (the sender has reviewed it) but it's still answered.
+    host.host.claude = {
+      send: () => Promise.resolve('{}'),
+      stream: (_options, onDelta) => {
+        const json = JSON.stringify({
+          summary: 'Going well.',
+          facts: [{ text: 'Feels good about it', shareable: true }],
+          confidence: 'high',
+        });
+        onDelta(json);
+        return Promise.resolve({
+          text: json,
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    expect((await bridge.insightsAnalyze({ assignmentId: latest.id })).ok).toBe(true);
+    overview = await bridge.questionnairesSentOverview();
+    expect(overview[q.id]?.answeredCount).toBe(1);
+    expect(overview[q.id]?.newResponses).toBe(0);
+
+    // Sender-scoped: the recipient sees none of the owner's sends in her own overview.
+    await bridge.sessionSetActive({ personId: mara.id });
+    expect(await bridge.questionnairesSentOverview()).toEqual({});
+
+    // Gated on viewResults: a Guest (no viewResults) gets an empty overview even though sends exist.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+    expect(await bridge.questionnairesSentOverview()).toEqual({});
   });
 
   it('compatibility household (§17.14): mints a relay link for the recipient (not self) + reshare mints fresh', async () => {

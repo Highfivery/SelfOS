@@ -215,6 +215,7 @@ describe('Home — hierarchy & status grid', () => {
             createdAt: 'now',
             answerable: true,
             hasDraft: false,
+            fromSelf: false,
           },
         ]),
     });

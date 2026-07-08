@@ -88,6 +88,8 @@ import type {
   QuestionnaireImproveResult,
   QuestionnaireInput,
   QuestionnaireSendState,
+  QuestionnaireSentOverview,
+  SentRecipientSummary,
   QuestionnaireSuggestResult,
   SavedSuggestion,
   SavedSuggestionsResult,
@@ -194,6 +196,7 @@ export const IpcChannels = {
   usageSessionCosts: 'usage:sessionCosts',
   questionnairesList: 'questionnaires:list',
   questionnairesSendStates: 'questionnaires:sendStates',
+  questionnairesSentOverview: 'questionnaires:sentOverview',
   questionnairesShareLink: 'questionnaires:shareLink',
   questionnairesGet: 'questionnaires:get',
   questionnairesSave: 'questionnaires:save',
@@ -670,6 +673,14 @@ export interface SelfosBridge {
    * their questionnaires have gone out. Sender-scoped; requires `questionnaires.create`.
    */
   questionnairesSendStates(): Promise<Record<string, QuestionnaireSendState>>;
+  /**
+   * A richer per-questionnaire "Sent" overview for the landing cards (08 §3.1): keyed by questionnaire id,
+   * the latest send time + the distinct recipients (deduped to their latest send) with their answered status,
+   * plus how many responses are newly in (submitted, not yet analysed). Recipient detail is results
+   * territory, so this is sender-scoped and requires `questionnaires.viewResults` (stricter than send-states).
+   * The raw answers never cross here.
+   */
+  questionnairesSentOverview(): Promise<Record<string, QuestionnaireSentOverview>>;
   /**
    * The shareable link + PIN for a SENT questionnaire's latest open send (08 §17.14d) — for the "Share link"
    * affordance on the sent preview + list kebab. By default RE-SHOWS the existing link/PIN (no regeneration);
@@ -1319,6 +1330,8 @@ export type {
   Questionnaire,
   QuestionnaireInput,
   QuestionnaireSendState,
+  QuestionnaireSentOverview,
+  SentRecipientSummary,
   QuestionTrend,
   RelayLinkResult,
   AnswersUpdatedSummary,

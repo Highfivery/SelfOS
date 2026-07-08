@@ -4256,12 +4256,24 @@ test('questionnaires: a questionnaire sent TO you is in your Inbox, NOT your edi
   try {
     const w = await app.firstWindow();
 
-    // The edit list shows the owner's OWN, NOT the friend's send-to-them.
+    // The authoring "Sent" section shows the owner's OWN, NOT the friend's send-to-them (which now appears
+    // in the page's "Received" section instead — scoped assertion so the two don't get conflated).
     await w.getByRole('link', { name: 'Questionnaires' }).click();
-    await expect(w.getByRole('button', { name: /My own questionnaire/ }).first()).toBeVisible();
-    await expect(w.getByRole('button', { name: /A friend’s questionnaire/ })).toHaveCount(0);
+    const sentSection = w.getByRole('region', { name: 'Sent questionnaires' });
+    await expect(
+      sentSection.getByRole('button', { name: 'My own questionnaire', exact: true }),
+    ).toBeVisible();
+    await expect(
+      sentSection.getByRole('button', { name: 'A friend’s questionnaire', exact: true }),
+    ).toHaveCount(0);
+    // The friend's questionnaire shows in the page's Received section…
+    await expect(
+      w
+        .getByRole('region', { name: 'Received questionnaires' })
+        .getByRole('button', { name: 'A friend’s questionnaire', exact: true }),
+    ).toBeVisible();
 
-    // …but the friend's questionnaire IS in the Inbox (as a recipient).
+    // …and also in the standalone Inbox (as a recipient).
     await w.getByRole('link', { name: /Inbox/ }).click();
     await expect(w.getByRole('button', { name: /A friend’s questionnaire/ }).first()).toBeVisible();
   } finally {
@@ -4406,6 +4418,121 @@ test('lifecycle (§17.14/§16.3/§3.9): draft-save, send shows a Sent badge + dr
     await w.getByRole('button', { name: 'Delete', exact: true }).click();
     await expect(w.getByRole('button', { name: /^Pulse check/ })).toHaveCount(0);
     await expect(w.getByText(/no questionnaires yet/i)).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('questionnaires redesign (§3.1/§3.3): Sent + Received card sections; answered status; self-send not double-shown; 360px clean', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('redesign e2e: master key missing');
+
+  const selfSend = async (title: string, prompt: string): Promise<string> => {
+    const q = await saveQuestionnaire(
+      fs,
+      key,
+      {
+        title,
+        type: 'general',
+        sensitivity: 'standard',
+        questions: [{ id: 'q1', type: 'shortText', prompt, required: true }],
+      },
+      'owner-1',
+    );
+    const a = await createAssignment(fs, key, {
+      questionnaireId: q.id,
+      senderPersonId: 'owner-1',
+      recipient: { kind: 'person', personId: 'owner-1' },
+      channel: 'inApp',
+      privacy: 'standard',
+      senderVisibleToRecipient: true,
+    });
+    return a.id;
+  };
+
+  // (a) An owner self check-in still AWAITING a response.
+  await selfSend('Weekly mood', 'How’s your mood?');
+  // (b) Another owner self check-in that HAS been answered → the Sent card reads "Answered" + a "new" badge.
+  const answeredId = await selfSend('Values check', 'What matters most?');
+  await submitResponse(fs, key, {
+    assignmentId: answeredId,
+    answers: [{ questionId: 'q1', value: 'Honesty' }],
+  });
+  // (c) A questionnaire authored by SOMEONE ELSE and sent to the owner → the Received section.
+  const foreign = await saveQuestionnaire(
+    fs,
+    key,
+    {
+      title: 'A friend’s check-in',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'How are we?', required: true }],
+    },
+    'ghost-author',
+  );
+  await createAssignment(fs, key, {
+    questionnaireId: foreign.id,
+    senderPersonId: 'ghost-author',
+    recipient: { kind: 'person', personId: 'owner-1' },
+    channel: 'inApp',
+    privacy: 'standard',
+    senderVisibleToRecipient: true,
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+
+    // Sent section: both owner questionnaires, with rich per-recipient status.
+    const sent = w.getByRole('region', { name: 'Sent questionnaires' });
+    await expect(w.getByRole('heading', { name: 'Sent' })).toBeVisible();
+    await expect(sent.getByRole('button', { name: /^Weekly mood/ })).toBeVisible();
+    await expect(sent.getByText('Awaiting response')).toBeVisible();
+    await expect(sent.getByText(/Answered/)).toBeVisible();
+    await expect(sent.getByText('1 new')).toBeVisible();
+
+    // Received section: the friend's send — but NOT the owner's own self-sends (filtered so nothing
+    // double-renders across the two sections on one screen, §3.3).
+    const received = w.getByRole('region', { name: 'Received questionnaires' });
+    await expect(w.getByRole('heading', { name: 'Received' })).toBeVisible();
+    await expect(received.getByRole('button', { name: /friend’s check-in/ })).toBeVisible();
+    await expect(received.getByText('New')).toBeVisible();
+    await expect(received.getByRole('button', { name: /Weekly mood/ })).toHaveCount(0);
+
+    // 360px on the populated landing: no horizontal overflow anywhere — page-level OR an inner scroller
+    // (§7/§12) — then back to desktop width for the answering interaction.
+    await w.setViewportSize({ width: 360, height: 900 });
+    const overflow = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      const inner = Array.from(document.querySelectorAll('*')).filter((el) => {
+        const s = getComputedStyle(el);
+        return (
+          (s.overflowX === 'auto' || s.overflowX === 'scroll') &&
+          el.scrollWidth > el.clientWidth + 1
+        );
+      }).length;
+      return { main: main ? main.scrollWidth - main.clientWidth : 0, inner };
+    });
+    expect(overflow.main).toBeLessThanOrEqual(1);
+    expect(overflow.inner).toBe(0);
+    await w.setViewportSize({ width: 1280, height: 900 });
+
+    // Answer the received one straight from its card → submit.
+    await received.getByRole('button', { name: 'Answer' }).click();
+    await w.getByLabel('How are we?').fill('Doing well');
+    await w.getByRole('button', { name: 'Submit' }).click();
+    await expect(w.getByText('Submitted')).toBeVisible();
+
+    // Decrypt proof: the UI answer round-tripped — the friend's send is now submitted in the vault.
+    const submitted = (await listAssignments(fs, key)).find(
+      (a) => a.senderPersonId === 'ghost-author',
+    );
+    expect(submitted?.status).toBe('submitted');
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

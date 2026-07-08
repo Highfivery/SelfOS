@@ -95,7 +95,10 @@ import {
   type RelayLinkResult,
   type SendAnswer,
   type SendResult,
+  type AssignmentStatus,
   type QuestionnaireSendState,
+  type QuestionnaireSentOverview,
+  type SentRecipientSummary,
   type QuestionnaireAnalyzeResult,
   type QuestionnaireGenerateResult,
   type QuestionnaireImproveResult,
@@ -2172,6 +2175,95 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       }
       return states;
     },
+    questionnairesSentOverview: async (): Promise<Record<string, QuestionnaireSentOverview>> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.viewResults')))
+        return {};
+      const personId = await activePersonId();
+      if (!personId) return {};
+      // The active person's own sends, aggregated per questionnaire with per-recipient detail for the
+      // landing "Sent" cards (08 §3.1). Recipient detail (names + answered status, never the raw answers) is
+      // results territory, so this read is `viewResults`-gated — stricter than `questionnairesSendStates`.
+      const sends = await listAssignments(ctx.fs, ctx.key, { senderPersonId: personId });
+      const analyzedAssignmentIds = new Set(
+        (await listInsightsForPerson(ctx.fs, ctx.key, personId)).flatMap((i) =>
+          i.provenance.assignmentId ? [i.provenance.assignmentId] : [],
+        ),
+      );
+      const isAnswered = (status: AssignmentStatus): boolean =>
+        status === 'submitted' || status === 'analyzed';
+      // Group by questionnaire, then dedupe recipients to their LATEST send (a re-ask shows each person once).
+      interface Recip {
+        name: string;
+        at: string;
+        status: AssignmentStatus;
+      }
+      interface Agg {
+        lastSentAt: string;
+        latestByRecipient: Map<string, Recip>;
+        newResponses: number;
+      }
+      const byQuestionnaire = new Map<string, Agg>();
+      for (const a of sends) {
+        // The sender's own COMPATIBILITY half isn't a "recipient" — they answer in-app (08 §3.6/§16.1). A
+        // plain self check-in (recipient = sender, no compat group) IS a real send and stays included.
+        if (
+          a.compatibilityGroupId &&
+          a.recipient.kind === 'person' &&
+          a.recipient.personId === personId
+        ) {
+          continue;
+        }
+        const recipientName =
+          a.recipient.kind === 'person'
+            ? ((await getPerson(ctx.fs, ctx.key, a.recipient.personId))?.displayName ?? 'Unknown')
+            : (a.recipient.displayName ?? 'External');
+        // Dedupe key: the person id for a household recipient, else the external label (best-effort).
+        const recipientKey =
+          a.recipient.kind === 'person' ? `p:${a.recipient.personId}` : `x:${recipientName}`;
+        const agg = byQuestionnaire.get(a.questionnaireId) ?? {
+          lastSentAt: a.createdAt,
+          latestByRecipient: new Map<string, Recip>(),
+          newResponses: 0,
+        };
+        agg.lastSentAt = agg.lastSentAt > a.createdAt ? agg.lastSentAt : a.createdAt;
+        const prior = agg.latestByRecipient.get(recipientKey);
+        // Keep the recipient's LATEST send (a re-ask shows each person once). A strictly-later send always
+        // wins; on an EXACT timestamp tie (two rapid programmatic sends), prefer an answered one so the card
+        // reflects real engagement deterministically rather than depending on iteration order.
+        const supersedes =
+          !prior ||
+          a.createdAt > prior.at ||
+          (a.createdAt === prior.at && isAnswered(a.status) && !isAnswered(prior.status));
+        if (supersedes) {
+          agg.latestByRecipient.set(recipientKey, {
+            name: recipientName,
+            at: a.createdAt,
+            status: a.status,
+          });
+        }
+        // A submitted-but-not-yet-analysed send is a "new response" — tallied over sends (not deduped), so
+        // multiple fresh responses on a re-asked questionnaire each count toward the badge.
+        if (a.status === 'submitted' && !analyzedAssignmentIds.has(a.id)) agg.newResponses += 1;
+        byQuestionnaire.set(a.questionnaireId, agg);
+      }
+      const overview: Record<string, QuestionnaireSentOverview> = {};
+      for (const [questionnaireId, agg] of byQuestionnaire) {
+        const recipients: SentRecipientSummary[] = [...agg.latestByRecipient.values()].map((r) => ({
+          name: r.name,
+          status: r.status,
+          answered: isAnswered(r.status),
+        }));
+        overview[questionnaireId] = {
+          questionnaireId,
+          lastSentAt: agg.lastSentAt,
+          recipients,
+          answeredCount: recipients.filter((r) => r.answered).length,
+          newResponses: agg.newResponses,
+        };
+      }
+      return overview;
+    },
     questionnairesGet: async (id): Promise<Questionnaire | null> => {
       const ctx = await host.vaultAndKey();
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) return null;
@@ -3108,6 +3200,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           createdAt: a.createdAt,
           answerable: isAnswerable(a.status),
           hasDraft: Boolean(draft && draft.submittedAt === undefined),
+          fromSelf: a.senderPersonId === personId,
         });
       }
       return items;

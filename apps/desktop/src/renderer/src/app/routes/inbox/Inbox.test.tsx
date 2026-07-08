@@ -51,6 +51,7 @@ const item = (over: Partial<InboxItem> = {}): InboxItem => ({
   createdAt: '2026-06-11T00:00:00.000Z',
   answerable: true,
   hasDraft: false,
+  fromSelf: false,
   ...over,
 });
 

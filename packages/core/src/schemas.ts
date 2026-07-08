@@ -2331,6 +2331,10 @@ export interface InboxItem {
   createdAt: string;
   answerable: boolean; // still open to answer / decline
   hasDraft: boolean; // saved-but-unsubmitted progress exists
+  // True when the active person is BOTH sender and recipient (a self check-in). The standalone Inbox still
+  // lists it, but the Questionnaires landing's "Received" section (things OTHERS sent you) filters it out —
+  // it already appears there under "Sent" (08 §3.3), so it never double-renders on one screen.
+  fromSelf: boolean;
 }
 
 /**
@@ -2431,6 +2435,38 @@ export interface SendResult {
 export interface QuestionnaireSendState {
   lastSentAt: string;
   total: number;
+}
+
+/**
+ * One recipient of a questionnaire, as summarised on the redesigned Questionnaires landing "Sent" card
+ * (08-questionnaires §3.1). Deduped to the recipient's LATEST send, so a re-asked questionnaire shows each
+ * person once with their current state — never the raw answers (that stays the per-send Results view).
+ */
+export interface SentRecipientSummary {
+  /** Display name (a household person's name, or the external recipient's label). */
+  name: string;
+  /** The recipient's latest send status — drives the per-person state dot. */
+  status: AssignmentStatus;
+  /** True once the recipient has submitted (status `submitted` or `analyzed`). */
+  answered: boolean;
+}
+
+/**
+ * A per-questionnaire "Sent" overview for the landing cards (08-questionnaires §3.1) — richer than
+ * QuestionnaireSendState: who it went to + who's answered, so a card can read "1 of 2 answered". A derived,
+ * sender-scoped view gated on `questionnaires.viewResults` (recipient detail is results territory); the raw
+ * answers never cross here. Recipients are deduped to their latest send; the sender's own compatibility half
+ * is excluded (they answer in-app, not a "recipient").
+ */
+export interface QuestionnaireSentOverview {
+  questionnaireId: string;
+  lastSentAt: string;
+  /** Distinct recipients (deduped), each with their latest status. */
+  recipients: SentRecipientSummary[];
+  /** How many distinct recipients have answered — the numerator of "X of N answered". */
+  answeredCount: number;
+  /** Submitted responses not yet analysed by the sender — drives the "N new" badge. */
+  newResponses: number;
 }
 
 /**

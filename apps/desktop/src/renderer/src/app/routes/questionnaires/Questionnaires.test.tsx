@@ -7,6 +7,7 @@ import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
 import { usePeopleStore } from '../../../stores/peopleStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useSettingsStore } from '../../../settings/settingsStore';
+import { useInboxStore } from '../../../stores/inboxStore';
 import { clearMockBridge, elevateToOwner, installMockBridge } from '../../../test-utils/bridge';
 
 /** A minimal household Person for the recipient picker (08 §17.3: a questionnaire is bound to one). */
@@ -43,9 +44,11 @@ afterEach(() => {
   useQuestionnaireStore.setState({
     questionnaires: [],
     sendStates: {},
+    sentOverview: {},
     loaded: false,
     customTypes: [],
   });
+  useInboxStore.setState({ items: [], loaded: false });
   usePeopleStore.setState({ people: [], loaded: false });
   useSettingsStore.setState({ values: {} });
   useSessionStore.setState({});
@@ -865,9 +868,10 @@ describe('Questionnaires', () => {
     });
     renderApp();
 
-    // The list row carries a "Sent · <date>" chip so a sent questionnaire is distinct from a draft.
+    // The card carries a "Sent · <date>" meta so a sent questionnaire is distinct from a draft (the bare
+    // "Sent" section heading has no trailing date, so this stays specific to the card).
     await screen.findByText(/^Weekly check-in/);
-    expect(screen.getByText(/Sent/)).toBeInTheDocument();
+    expect(screen.getByText(/Sent \d/)).toBeInTheDocument();
     // Opening it, the builder header repeats the sent state (with the re-send count).
     await userEvent.click(screen.getByRole('button', { name: /^Weekly check-in/ }));
     expect(screen.getByText(/For:/)).toHaveTextContent(/Sent .*\(2 times\)/);
@@ -1233,5 +1237,80 @@ describe('Questionnaires', () => {
     // It's collapsible — hiding it removes the preview control.
     await userEvent.click(screen.getByRole('button', { name: 'Hide preview' }));
     expect(screen.queryByRole('radio', { name: 'Yes' })).not.toBeInTheDocument();
+  });
+
+  // --- 2026-07 landing redesign: two card sections (§3.1/§3.3) ---
+
+  it('a Sent card shows per-recipient answered status + a "N new" badge (§3.1)', async () => {
+    installMockBridge({
+      questionnairesList: () =>
+        Promise.resolve([
+          {
+            id: 'q1',
+            schemaVersion: 1,
+            version: 1,
+            title: 'Relationship check-in',
+            type: 'general',
+            sensitivity: 'standard',
+            questions: [{ id: 'qq1', type: 'shortText', prompt: 'How?', required: true }],
+            createdAt: 'now',
+            updatedAt: 'now',
+          },
+        ]),
+      questionnairesSendStates: () =>
+        Promise.resolve({ q1: { lastSentAt: '2026-06-10T00:00:00.000Z', total: 2 } }),
+      questionnairesSentOverview: () =>
+        Promise.resolve({
+          q1: {
+            questionnaireId: 'q1',
+            lastSentAt: '2026-06-10T00:00:00.000Z',
+            recipients: [
+              { name: 'Angel', status: 'submitted', answered: true },
+              { name: 'Sam', status: 'sent', answered: false },
+            ],
+            answeredCount: 1,
+            newResponses: 1,
+          },
+        }),
+    });
+    renderApp();
+
+    await screen.findByText('Relationship check-in');
+    // Rich status: who it went to, who's answered, and un-reviewed responses.
+    expect(screen.getByText('1 of 2 answered')).toBeInTheDocument();
+    expect(screen.getByText('Angel')).toBeInTheDocument();
+    expect(screen.getByText('Sam')).toBeInTheDocument();
+    expect(screen.getByText('1 new')).toBeInTheDocument();
+  });
+
+  it('lists Received questionnaires and opening one shows the answering pane (§3.3)', async () => {
+    installMockBridge({
+      questionnairesList: () => Promise.resolve([]),
+      assignmentsInbox: () =>
+        Promise.resolve([
+          {
+            assignmentId: 'a1',
+            title: 'How we handle money',
+            questionCount: 7,
+            status: 'sent',
+            privacy: 'standard',
+            senderName: 'Sam',
+            createdAt: 'now',
+            answerable: true,
+            hasDraft: false,
+            fromSelf: false,
+          },
+        ]),
+    });
+    renderApp();
+
+    expect(await screen.findByRole('heading', { name: 'Received' })).toBeInTheDocument();
+    expect(screen.getByText('How we handle money')).toBeInTheDocument();
+    expect(screen.getByText(/From Sam/)).toBeInTheDocument();
+    // A new item leads with the "Answer" CTA; opening it enters the answering detail (back link appears,
+    // the landing sections are replaced).
+    await userEvent.click(screen.getByRole('button', { name: 'Answer' }));
+    expect(await screen.findByRole('button', { name: 'Questionnaires' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Received' })).not.toBeInTheDocument();
   });
 });

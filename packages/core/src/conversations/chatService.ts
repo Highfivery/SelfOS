@@ -395,9 +395,23 @@ export async function retryReply(deps: RetryReplyDeps): Promise<ChatTurnResult> 
     return { ok: false, reason: 'BUDGET', message: 'AI budget reached for this period.' };
   }
   const conversation = await getConversation(fs, key, personId, conversationId);
-  const last = conversation?.messages[conversation.messages.length - 1];
-  if (!conversation || last?.role !== 'user') {
-    // Nothing to retry — the last turn already has a reply (or the session is gone). A no-op failure.
+  if (!conversation) {
+    return { ok: false, reason: 'ERROR', message: 'There’s nothing to retry here.' };
+  }
+  // Drop any trailing BLANK assistant message(s) first — the pre-05 §4.1 code persisted an empty
+  // `{ role: 'assistant', content: '' }` bubble when a reply came back empty (adaptive-thinking starvation),
+  // so a session that failed BEFORE the fail-safe shipped ends on that ghost, not on the user's message. We
+  // strip it so the transcript ends on the user's message and can be answered (the cleanup persists on the
+  // success save below); legitimate assistant replies always have content, so this only ever removes ghosts.
+  while (conversation.messages.length > 0) {
+    const tail = conversation.messages[conversation.messages.length - 1];
+    if (tail && tail.role === 'assistant' && tail.content.trim() === '')
+      conversation.messages.pop();
+    else break;
+  }
+  const last = conversation.messages[conversation.messages.length - 1];
+  if (last?.role !== 'user') {
+    // Nothing to retry — the last turn already has a real reply (or the session is empty). A no-op failure.
     return { ok: false, reason: 'ERROR', message: 'There’s nothing to retry here.' };
   }
   // Continuing a completed session reopens it (09 §14.4), mirroring runChatTurn. The reopen persists only on

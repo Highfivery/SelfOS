@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { ArrowLeft, MessageCircle, Plus, Sparkles } from 'lucide-react';
-import { useConversationStore } from '../../../stores/conversationStore';
+import {
+  awaitingReply,
+  isBlankReply,
+  useConversationStore,
+} from '../../../stores/conversationStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useSetting } from '../../../settings/useSetting';
 import { aiKeyResolved } from '../../aiAvailability';
@@ -327,24 +331,28 @@ export function Sessions(): JSX.Element {
                 </div>
               ) : (
                 <Stack gap={3}>
-                  {messages.map((message, index) => (
-                    <div
-                      key={index}
-                      className={message.role === 'user' ? styles.userMsg : styles.coachMsg}
-                    >
-                      {message.role === 'user' ? (
-                        <>
-                          {message.content}
-                          {message.attachments && message.attachments.length > 0 ? (
-                            <MessageAttachments attachments={message.attachments} />
-                          ) : null}
-                        </>
-                      ) : (
-                        // Coach prose renders Markdown; strip any coach markers first (order matters, §7).
-                        <Markdown>{stripCoachMarkers(message.content)}</Markdown>
-                      )}
-                    </div>
-                  ))}
+                  {messages.map((message, index) =>
+                    // Skip a blank assistant bubble — the ghost the pre-05 §4.1 code left when a reply came back
+                    // empty. It rendered as an empty coach bubble + hid the retry; now it's neither shown nor final.
+                    isBlankReply(message) ? null : (
+                      <div
+                        key={index}
+                        className={message.role === 'user' ? styles.userMsg : styles.coachMsg}
+                      >
+                        {message.role === 'user' ? (
+                          <>
+                            {message.content}
+                            {message.attachments && message.attachments.length > 0 ? (
+                              <MessageAttachments attachments={message.attachments} />
+                            ) : null}
+                          </>
+                        ) : (
+                          // Coach prose renders Markdown; strip any coach markers first (order matters, §7).
+                          <Markdown>{stripCoachMarkers(message.content)}</Markdown>
+                        )}
+                      </div>
+                    ),
+                  )}
                   {streaming ? (
                     <div className={styles.coachMsg}>
                       <Markdown>{stripCoachMarkers(streaming)}</Markdown>
@@ -403,11 +411,12 @@ export function Sessions(): JSX.Element {
               </Banner>
             ) : null}
 
-            {/* A turn that didn't get a reply (the last message is the user's + nothing in flight) is always
-                recoverable (05 §4.1): a live failure shows the error, and RE-OPENING a session that ended on the
-                user's message shows a gentle prompt — both offer "Try again" (which asks the coach to reply to
-                the existing transcript, never re-sending/duplicating the message). */}
-            {!sending && messages[messages.length - 1]?.role === 'user' ? (
+            {/* A turn still awaiting a reply (nothing in flight; the last real message is the user's — even if a
+                blank ghost reply trails it) is always recoverable (05 §4.1): a live failure shows the error, a
+                RE-OPENED session that ended on the user's message shows a gentle prompt, and a LEGACY session that
+                dead-ended on an empty reply is caught too — all offer "Try again" (which asks the coach to reply
+                to the existing transcript, never re-sending/duplicating the message). */}
+            {!sending && awaitingReply(messages) ? (
               <Banner tone={error ? 'warning' : 'info'}>
                 <Stack gap={2}>
                   <Text>{error ?? 'Your last message hasn’t been answered yet.'}</Text>

@@ -225,6 +225,44 @@ describe('runChatTurn', () => {
     expect(result).toMatchObject({ ok: false, reason: 'ERROR' });
   });
 
+  it('retryReply recovers a LEGACY session that dead-ended on a blank assistant reply (pre-05 §4.1)', async () => {
+    await base();
+    // The pre-fail-safe code persisted an empty assistant bubble when a reply came back empty. Seed that exact
+    // ghost state: the transcript ends on a blank assistant message, so the old retry (last === 'user') never
+    // fired. Retry must strip the ghost, answer the user's message, and leave a clean [user, assistant] pair.
+    await saveConversation(fs, key, {
+      id: 'c1',
+      schemaVersion: 1,
+      personId: 'p1',
+      title: 'A hard week',
+      status: 'inProgress',
+      messages: [
+        { role: 'user', content: 'I have been feeling distant', ts: now.toISOString() },
+        { role: 'assistant', content: '', ts: now.toISOString() },
+      ],
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    });
+
+    const result = await retryReply({
+      fs,
+      key,
+      client: fakeClient,
+      apiKey: 'sk-test',
+      model: 'claude-sonnet-4-6',
+      personId: 'p1',
+      conversationId: 'c1',
+      onDelta: () => {},
+      now,
+    });
+    expect(result.ok).toBe(true);
+    const conversation = await getConversation(fs, key, 'p1', 'c1');
+    // The ghost is gone; the user's message keeps its place and now has a real reply.
+    expect(conversation?.messages.map((m) => m.role)).toEqual(['user', 'assistant']);
+    expect(conversation?.messages[0]?.content).toBe('I have been feeling distant');
+    expect(conversation?.messages[1]?.content).toBe('I hear you.');
+  });
+
   it('refuses to start with no API key', async () => {
     await base();
     const result = await runChatTurn({

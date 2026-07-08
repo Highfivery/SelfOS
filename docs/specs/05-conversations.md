@@ -82,14 +82,20 @@ then nothing" bug):
   transcript **as soon as it's sent** (before the coach's reply is generated). So a turn that fails — or an
   app that's closed mid-turn — never loses it: the transcript simply ends on the user's message, and that
   state is recoverable (below). Only the assistant reply is conditional (a blank one is never saved).
-- **An unanswered turn is always recoverable.** Whenever a session's last message is the user's and nothing
-  is in flight — a live failure (EMPTY, ERROR, BUDGET, NO_KEY), **or a session re-opened later that ended on
-  the user's message** — the UI shows a **"Try again"** affordance (a live failure also shows its `error`; a
-  re-opened one shows a gentle "hasn't been answered yet" prompt). "Try again" calls a dedicated
-  `chat:retry` / `retryReply` that **re-generates the coach's reply for the existing transcript** — it never
-  adds a second user message, so it can't duplicate; it's budget-gated + metered like a normal turn and
-  reopens a completed session the same way a continuation does. `ChatTurnResult` gains the `EMPTY` failure
-  reason.
+- **An unanswered turn is always recoverable — including legacy dead-ends.** A transcript is "awaiting a
+  reply" whenever, **ignoring any trailing blank assistant bubble**, its last real message is the user's.
+  That covers three cases: a live failure (EMPTY, ERROR, BUDGET, NO_KEY); a session **re-opened later** that
+  ended on the user's message; and a **legacy session created before this fail-safe** — the old code
+  persisted an empty `{ role: 'assistant', content: '' }` bubble on an empty reply, so those transcripts end
+  on that ghost, not on the user's message. Whenever a session is awaiting a reply and nothing is in flight,
+  the UI shows a **"Try again"** affordance (a live failure also shows its `error`; otherwise a gentle
+  "hasn't been answered yet" prompt). The blank ghost bubble is **never rendered**. "Try again" calls a
+  dedicated `chat:retry` / `retryReply` that **strips any trailing blank assistant message and re-generates
+  the coach's reply for the existing transcript** — it never adds a second user message, so it can't
+  duplicate; it's budget-gated + metered like a normal turn and reopens a completed session the same way a
+  continuation does. `ChatTurnResult` gains the `EMPTY` failure reason.
+- **A thrown turn never hangs.** The renderer wraps the `chat:stream` / `chat:retry` calls so a main-process
+  throw or dropped IPC resolves to an honest error the user can retry — "thinking" can never stick forever.
 
 ## 4. Data model
 

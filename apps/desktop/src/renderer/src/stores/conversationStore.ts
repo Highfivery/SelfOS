@@ -13,6 +13,27 @@ import { useChallengeStore } from './challengeStore';
 
 type ChatTurnOk = Extract<ChatTurnResult, { ok: true }>;
 
+/** A blank assistant bubble (no text, no attachments) — the ghost the pre-05 §4.1 code persisted when a reply
+ *  came back empty. Never rendered, and skipped when deciding whether a turn still needs a reply. */
+export function isBlankReply(m: ChatMessage): boolean {
+  return m.role === 'assistant' && m.content.trim() === '';
+}
+
+/**
+ * True when the transcript is still waiting on the coach — i.e., ignoring any trailing blank assistant bubbles
+ * (a failed turn from before the fail-safe shipped), its last real message is the user's. Drives the "Try
+ * again" affordance so BOTH a live failure AND a legacy session that dead-ended on an empty reply are
+ * recoverable (05 §4.1).
+ */
+export function awaitingReply(messages: ChatMessage[]): boolean {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (!m || isBlankReply(m)) continue; // skip ghost blank replies
+    return m.role === 'user';
+  }
+  return false;
+}
+
 /** The state patch applied on a successful turn — shared by `send` + `retry` so they can't drift. */
 function successPatch(state: ConversationState, result: ChatTurnOk): Partial<ConversationState> {
   return {
@@ -78,8 +99,10 @@ interface ConversationState {
   /** Send a message. Resolves `false` only when a total attachment-store failure aborted before sending (so
    *  the composer can keep the pending thumbnails to retry); `true` otherwise. */
   send: (text: string, attachments?: PendingAttachment[]) => Promise<boolean>;
-  /** Re-run the last (failed) turn — re-sends the last user message without adding a new bubble. No-op unless
-   *  the last message is the user's (an incomplete turn). Used by the "Try again" affordance on an error. */
+  /** Ask the coach to reply to an unanswered turn (via `chatRetry`, reply-only — never re-sends/duplicates the
+   *  user's message). Fires when the transcript is `awaitingReply` (last real message is the user's, ignoring a
+   *  trailing blank ghost) and nothing's in flight — covering a live failure, a re-opened session, and a legacy
+   *  empty-reply dead-end. Drives the "Try again" affordance (05 §4.1). */
   retry: () => Promise<void>;
   /** Resolve + cache a stored attachment's data URL for a thumbnail/lightbox (45 §3.3). */
   loadAttachment: (ref: AttachmentRef) => Promise<void>;
@@ -238,11 +261,22 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       wrapUp: null,
       error: storeError,
     }));
-    const result = await window.selfos?.chatStream({
-      conversationId,
-      userText: trimmed,
-      ...(refs.length > 0 ? { attachments: refs } : {}),
-    });
+    // A THROWN turn (main-process error, dropped IPC) must never leave "thinking" stuck forever — always
+    // resolve to an honest error the user can retry (05 §4.1). The user's message was persisted on send.
+    let result: ChatTurnResult | undefined;
+    try {
+      result = await window.selfos?.chatStream({
+        conversationId,
+        userText: trimmed,
+        ...(refs.length > 0 ? { attachments: refs } : {}),
+      });
+    } catch {
+      result = {
+        ok: false,
+        reason: 'ERROR',
+        message: 'The coach couldn’t respond — please try again.',
+      };
+    }
     if (result?.ok) {
       set((state) => successPatch(state, result));
       await get().load();
@@ -255,16 +289,23 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     return true; // a turn was attempted (attachments stored) — don't restore pending in the composer
   },
   retry: async () => {
-    // Re-generate the coach's reply for an unanswered turn — a failed send, OR a re-opened session whose last
-    // message is the user's (05 §4.1). The user's message is already persisted (saved on send), so this asks
-    // for a reply to the existing transcript WITHOUT re-sending it (no duplicate bubble). Only when the last
-    // message is the user's and nothing is in flight.
+    // Re-generate the coach's reply for an unanswered turn — a live failure, OR a re-opened session that
+    // ended on the user's message, OR a legacy session that dead-ended on a blank reply (05 §4.1). The user's
+    // message is already persisted, so this asks for a reply to the existing transcript WITHOUT re-sending it
+    // (no duplicate bubble). Only when the transcript is genuinely awaiting a reply and nothing is in flight.
     const state = get();
-    if (state.sending || !state.activeId) return;
-    const last = state.messages[state.messages.length - 1];
-    if (!last || last.role !== 'user') return;
+    if (state.sending || !state.activeId || !awaitingReply(state.messages)) return;
     set({ sending: true, streaming: '', error: null, wrapUp: null });
-    const result = await window.selfos?.chatRetry(state.activeId);
+    let result: ChatTurnResult | undefined;
+    try {
+      result = await window.selfos?.chatRetry(state.activeId);
+    } catch {
+      result = {
+        ok: false,
+        reason: 'ERROR',
+        message: 'The coach couldn’t respond — please try again.',
+      };
+    }
     if (result?.ok) {
       set((s) => successPatch(s, result));
       await get().load();

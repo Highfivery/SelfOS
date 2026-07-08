@@ -389,6 +389,31 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-08 — **Fix (Sessions retry made ZERO difference for a session created BEFORE the fix — the LEGACY
+  blank-reply ghost; user-reported (furious) with a screenshot; spec 05 §4.1 amended; on
+  `fix/sessions-legacy-blank-reply-retry`).** The v0.14.3 retry only appeared when the transcript's last message
+  was the **user's**. But the **pre-fail-safe code persisted an empty `{role:'assistant', content:''}` bubble**
+  when a reply came back empty (verified against `v0.14.1` — the old `messages.push({role:'assistant', content:
+stripCoachMarkers(result.text)})` had NO empty guard). So every session that dead-ended BEFORE the fix ends on
+  that **ghost** (`last.role === 'assistant'`), not on the user's message → the retry never fired, and the ghost
+  rendered as a blank coach bubble. That's why the user saw no change. **Diagnosed against the code + git history
+  (not assumed)** — confirmed the exact legacy persisted state, then **reproduced it FIRST** (an E2E seeding a
+  conversation ending in `[user, assistant('')]`) before fixing. **Fix: (1)** `retryReply` now **strips any
+  trailing blank assistant message(s)** before the `last.role === 'user'` check, then regenerates (the cleanup
+  persists on the success save; legitimate replies always have content, so only ghosts are removed). **(2)** new
+  pure renderer helpers `isBlankReply()` + **`awaitingReply(messages)`** (the last REAL message is the user's,
+  ignoring trailing blank ghosts) — the store `retry()` guard + the Sessions "Try again" banner now key off
+  `awaitingReply`, and the render **skips blank assistant bubbles** (no more ghost bubble). **(3)** defensive:
+  `send()`/`retry()` wrap the IPC in try/catch so a THROWN turn always resolves to an honest error (never leaves
+  "thinking" stuck forever — the other half of "we need fail-safe measures"). Gate green: typecheck (all), lint,
+  format, **961 core + 906 desktop + 11 relay** unit (+core: retryReply recovers a `[user, assistant('')]` legacy
+  session → clean `[user, assistant]`; +RTL: a legacy blank-reply session renders no ghost + offers a working Try
+  again; the E2E now covers empty-turn, re-opened, AND legacy-ghost), **E2E +1** (seed `[user, assistant('')]` →
+  open → ghost absent + Try again → reply → decrypt asserts clean `[user, assistant]`, non-empty). All 13
+  Sessions/guided E2E green. Synced spec 05 §4.1. **Lesson: "handle the failure" must include the DATA the OLD
+  buggy code already wrote — a fix that only guards the new happy path leaves every pre-fix record stuck; check
+  what state the previous version persisted (here, a blank assistant bubble via git), reproduce THAT exact record,
+  and make recovery key off the transcript's last REAL message (ignoring ghosts), not a raw `last.role`.**
 - 2026-07-08 — **Fix (Sessions retry STILL a dead-end on a RE-OPENED unanswered session — the v0.14.2 fix was
   incomplete; user-reported with a screenshot "im still unable to resend or retry"; spec 05 §4.1 amended; on
   `fix/sessions-reopen-retry`).** The v0.14.2 fix only showed "Try again" while a live `error` was set (cleared

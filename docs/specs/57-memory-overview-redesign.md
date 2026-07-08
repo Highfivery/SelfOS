@@ -1,6 +1,6 @@
 # 57 — Memory overview redesign: a portrait of you, with Goals & Relationships moved out
 
-> **Status:** **Approved** — _last updated 2026-07-08_
+> **Status:** **Built** (on `feat/memory-overview-redesign`) — _last updated 2026-07-08_
 >
 > Memory is still one long, text-heavy scroll that's hard to understand, navigate, and use — even after
 > [`54`](54-memory-redesign.md). Four concerns compete for one vertical scroll ("what it knows about you,"
@@ -533,3 +533,20 @@ Accepted the recommended answers (user, 2026-07-08 — spec **Approved**):
   page as the home for both moved surfaces, and a qualitative label + meter for the "how well it knows you"
   read. Remaining §11 open questions — drill-down routing, sensitive-tile treatment, the Goals gate, and
   whether "responses to your questionnaires" stays in Memory — to confirm before/at build.
+- 2026-07-08 — **Built** on `feat/memory-overview-redesign`, in 3 slices: (1) Goals → `/goals`; (2)
+  Relationships + Sharing → the new `/sharing` "Sharing & relationships" page; (3) the Memory overview redesign
+  (portrait hero + "how well it knows you" read + life-area tile map → area → single-insight detail). **As-built
+  choices:** drill-down is **in-page view state** with back affordances + a `useLocation` reset so re-navigating
+  to `/memory` returns to the overview (§11-Q1 recommendation); life-area **filters** (source/confidence/flagged)
+  were **dropped** in favour of search + the tile map (the old `44` `StatsSummary` is retired — its
+  overview/confidence stats fold into the portrait hero's "N things learned" + the qualitative read via a new
+  pure `overview.ts` `knowsYouRead`/`summarizeAreas`/`areaGist`; `sharingStats`/`SOURCE_LABEL` removed as dead);
+  the life-area gist + "knows you" read are deterministic reuses (no AI spend). New route-local components
+  (`LifeAreaTile`, `InsightRow`, `ConfidenceDots`) + a shared `lifeAreaIcons` module (also adopted by
+  `InsightCard`, de-duplicating its icon map) — no new design-system primitive, so no `/gallery` change. Goals
+  reuse `memory.own`; both new nav entries are `memory.own`-gated. Gate green: typecheck, lint, format, **928
+  desktop unit** (+`overview` helpers, +Goals/Sharing RTL, rewired Memory RTL for the drill-down), **Memory E2E
+  updated** for the overview→drill flow (12 green; the sharing/relationship + #129 + cross-user + provenance +
+  flag paths all re-driven through the tiles/detail). Visual QA at desktop + 360px (real Electron screenshots —
+  the portrait hero, tile map, area/insight drill-down, Goals, and Sharing pages read clean + intentional,
+  matching the approved mockup).

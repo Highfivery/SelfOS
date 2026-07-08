@@ -1,13 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Brain, MessageCircle, RefreshCw, Search } from 'lucide-react';
-import type { Insight, InsightSource, Relationship } from '@shared/schemas';
-import { LIFE_AREAS } from '@shared/schemas';
+import {
+  ArrowLeft,
+  Brain,
+  ClipboardList,
+  LineChart as LineChartIcon,
+  MessageCircle,
+  RefreshCw,
+  Search,
+  Sparkles,
+} from 'lucide-react';
+import type { Insight, Relationship } from '@shared/schemas';
 import { availableRelationshipTypesFor } from '../../availableRelationshipTypes';
 import { useInsightStore } from '../../../stores/insightStore';
 import { usePeopleStore } from '../../../stores/peopleStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { aiUnavailableMessage } from '../../AiUnavailableNotice';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useConversationStore } from '../../../stores/conversationStore';
 import { useDreamStore } from '../../../stores/dreamStore';
 import {
@@ -16,35 +24,34 @@ import {
   Card,
   Heading,
   LineChart,
-  Select,
+  Markdown,
   Stack,
-  Switch,
   Text,
   TextInput,
 } from '../../../design-system/components';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { InsightCard } from './InsightCard';
-import { StatsSummary } from './StatsSummary';
-import { confidenceStats, overviewStats, sharingStats } from './stats';
+import { InsightRow } from './InsightRow';
+import { LifeAreaTile } from './LifeAreaTile';
+import { areaIcon } from './lifeAreaIcons';
+import { confidenceStats, overviewStats } from './stats';
+import { confidenceLabel, knowsYouRead, summarizeAreas } from './overview';
 import { buildTrendSeries } from './trends';
 import styles from './Memory.module.css';
 
-type SourceFilter = 'all' | InsightSource;
-type ConfidenceFilter = 'all' | 'high' | 'medium' | 'low';
+/** Where a "back" from the insight detail returns to. */
+type BackTarget =
+  | { name: 'overview' }
+  | { name: 'area'; area: string }
+  | { name: 'review' }
+  | { name: 'responses' };
 
-const SOURCE_OPTIONS: { value: SourceFilter; label: string }[] = [
-  { value: 'all', label: 'All sources' },
-  { value: 'intake', label: 'Onboarding' },
-  { value: 'session', label: 'Sessions' },
-  { value: 'dream', label: 'Dreams' },
-  { value: 'questionnaire', label: 'Questionnaires' },
-];
-
-function matchesText(insight: Insight, q: string): boolean {
-  if (!q) return true;
-  const hay = [insight.summary, ...insight.facts.map((f) => f.text)].join(' ').toLowerCase();
-  return hay.includes(q);
-}
+type View =
+  | { name: 'overview' }
+  | { name: 'area'; area: string }
+  | { name: 'insight'; insightId: string; back: BackTarget }
+  | { name: 'review' }
+  | { name: 'responses' };
 
 /** A calm relative date for the "Memory last tidied …" signal (39 §3.2). */
 function relativeDate(iso: string): string {
@@ -57,22 +64,23 @@ function relativeDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+function matchesText(insight: Insight, q: string): boolean {
+  const hay = [insight.summary, ...insight.facts.map((f) => f.text)].join(' ').toLowerCase();
+  return hay.includes(q);
+}
+
 /**
- * "Memory" — the active person's living view of what SelfOS has learned about them
- * (20-memory-dashboard → 54-memory-redesign → 57-memory-overview-redesign). Purely "about you": a summary
- * strip, search/filters, drafts to review, trends, and insights grouped by life-area (+ the issue-#129
- * "responses to your questionnaires" own-coaching data). Goals moved to /goals (57 §3.7); the partner
- * relationship synthesis + the outbound-sharing surface moved to /sharing (57 §3.8) — a partner's shared
- * data still feeds the AI's context but is never shown raw here (sharing is context, not display).
- *
- * NOTE (57): the overview-first redesign (portrait hero + life-area tile map → drill-down) lands in a
- * follow-up slice; this slice removes the Partners view + relocates sharing, keeping the current
- * summary+sections layout for the "about you" data.
+ * "Memory" — the active person's overview of what SelfOS understands about them
+ * (20 → 44 → 54 → 57-memory-overview-redesign). Overview-first: a portrait hero + a "how well it knows you"
+ * read, a slim review callout, and a **life-area tile map** you drill into (a life-area → a single insight,
+ * where Edit / correct / scope / provenance live). Purely "about you" — Goals live at /goals (57 §3.7); the
+ * partner relationship synthesis + the outbound-sharing surface live at /sharing (57 §3.8). No AI spend here:
+ * the portrait reuses the onboarding-portrait insight; the "knows you" read + gists are deterministic (§4).
  */
 export function Memory(): JSX.Element {
   const navigate = useNavigate();
+  const location = useLocation();
   const insights = useInsightStore((s) => s.insights);
-  const outbound = useInsightStore((s) => s.outbound);
   const loaded = useInsightStore((s) => s.loaded);
   const load = useInsightStore((s) => s.load);
   const refresh = useInsightStore((s) => s.refresh);
@@ -88,10 +96,8 @@ export function Memory(): JSX.Element {
   const loadReconcileState = useInsightStore((s) => s.loadReconcileState);
   const resolveProposal = useInsightStore((s) => s.resolveProposal);
 
+  const [view, setView] = useState<View>({ name: 'overview' });
   const [query, setQuery] = useState('');
-  const [source, setSource] = useState<SourceFilter>('all');
-  const [confidence, setConfidence] = useState<ConfidenceFilter>('all');
-  const [flaggedOnly, setFlaggedOnly] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshNote, setRefreshNote] = useState<string | null>(null);
   const [relationships, setRelationships] = useState<Relationship[]>([]);
@@ -103,7 +109,13 @@ export function Memory(): JSX.Element {
     void window.selfos?.relationshipsList?.().then((rels) => setRelationships(rels ?? []));
   }, [load, loadPeople, loadReconcileState]);
 
-  // The relationship types in the person's graph — offered by an AI-inferred fact's sharing picker (44 §3.4).
+  // Reset to the overview on a fresh navigation to Memory (the nav link) or an active-person change
+  // (57 §3.6) — so a drill-down never persists across leaving + returning.
+  useEffect(() => {
+    setView({ name: 'overview' });
+    setQuery('');
+  }, [activePersonId, location.key]);
+
   const availableTypes = useMemo(
     () => availableRelationshipTypesFor(activePersonId, relationships),
     [activePersonId, relationships],
@@ -116,39 +128,22 @@ export function Memory(): JSX.Element {
   const liveDreamIds = useMemo(() => new Set(dreams.map((d) => d.id)), [dreams]);
 
   // A session/dream insight whose source no longer exists shows "original source removed" (§3.3/§3.7).
-  // AppShell loads the conversation/dream stores on the active-person change before this mounts, so the
-  // "removed" state reflects the loaded lists (the dashboard re-renders when they arrive).
   const sourceRemoved = (insight: Insight): boolean => {
-    if (insight.source === 'session' && insight.provenance.conversationId) {
+    if (insight.source === 'session' && insight.provenance.conversationId)
       return !liveConversationIds.has(insight.provenance.conversationId);
-    }
-    if (insight.source === 'dream' && insight.provenance.dreamId) {
+    if (insight.source === 'dream' && insight.provenance.dreamId)
       return !liveDreamIds.has(insight.provenance.dreamId);
-    }
     return false;
   };
 
-  const q = query.trim().toLowerCase();
-  // Only the person's OWN insights are ever displayed (54): a related person's shared facts feed the AI's
-  // context + the relationship synthesis, but are NEVER shown raw — sharing is context, not display.
+  // Only the person's OWN insights are ever displayed (54): related shared facts feed the AI's context, never
+  // shown raw. Goals + the partner synthesis live elsewhere now (57).
   const own = insights.filter((i) => i.subjectPersonId === activePersonId);
+  const drafts = own.filter((i) => !i.approved);
+  const approvedOwn = own.filter((i) => i.approved);
 
-  const passesFilters = (insight: Insight): boolean =>
-    matchesText(insight, q) &&
-    (source === 'all' || insight.source === source) &&
-    (confidence === 'all' || insight.confidence === confidence) &&
-    (!flaggedOnly || insight.facts.some((f) => f.flaggedInaccurate));
-
-  const filteredOwn = own.filter((i) => passesFilters(i));
-  const drafts = filteredOwn.filter((i) => !i.approved);
-  const approvedOwn = filteredOwn.filter((i) => i.approved);
-
-  // Who a sent-questionnaire insight is ABOUT (#129): the recipient of a questionnaire you sent — resolved
-  // from the enriched provenance (a household person id → their name; else an external name). A self
-  // check-in carries no `about*` (the bridge only stamps a non-self recipient), so it reads as `null` and
-  // stays in the life-area cards. These insights inform YOUR coaching (subject = you) but their facts
-  // describe THEIR answers, so they get their own "Responses to your questionnaires" section instead of
-  // masquerading as "about you" facts.
+  // Who a sent-questionnaire insight is ABOUT (#129): the recipient of a questionnaire you sent. Their facts
+  // describe THEIR answers, so these get their own "responses" section, not the life-area cards.
   const responseAbout = (insight: Insight): { key: string; name: string } | null => {
     if (insight.source !== 'questionnaire') return null;
     const pid = insight.provenance.aboutPersonId;
@@ -157,38 +152,38 @@ export function Memory(): JSX.Element {
     return name ? { key: `ext:${name}`, name } : null;
   };
 
-  // Stats summarize the WHOLE memory (own approved), independent of the current filters/search (§3.2).
-  const ownApprovedAll = own.filter((i) => i.approved);
-  const overviewSummary = overviewStats(ownApprovedAll);
-  const confidenceSummary = confidenceStats(ownApprovedAll);
-  const sharingSummary = sharingStats(outbound);
-  const showStats = loaded && ownApprovedAll.length > 0;
-
-  // Split approved own insights: responses to questionnaires YOU sent (about the recipient — #129) get their
-  // own section; everything genuinely about you fills the life-area cards.
   const responseInsights = approvedOwn.filter((i) => responseAbout(i) !== null);
   const aboutYouApproved = approvedOwn.filter((i) => responseAbout(i) === null);
 
-  // Group responses by the person who answered (recipient), newest first within each.
-  const byRecipient = new Map<string, { key: string; name: string; insights: Insight[] }>();
-  for (const insight of responseInsights) {
-    const about = responseAbout(insight);
-    if (!about) continue;
-    const entry = byRecipient.get(about.key) ?? { key: about.key, name: about.name, insights: [] };
-    entry.insights.push(insight);
-    byRecipient.set(about.key, entry);
-  }
-  const recipientGroups = [...byRecipient.values()].sort((a, b) => a.name.localeCompare(b.name));
+  // Group responses by recipient (name), for the responses view.
+  const recipientGroups = useMemo(() => {
+    const byRecipient = new Map<string, { key: string; name: string; insights: Insight[] }>();
+    for (const insight of responseInsights) {
+      const about = responseAbout(insight);
+      if (!about) continue;
+      const entry = byRecipient.get(about.key) ?? {
+        key: about.key,
+        name: about.name,
+        insights: [],
+      };
+      entry.insights.push(insight);
+      byRecipient.set(about.key, entry);
+    }
+    return [...byRecipient.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [responseInsights, people]);
 
-  // Group the person's own approved insights by their primary life-area (categories[0]; 'Other' if untagged).
-  const byArea = new Map<string, Insight[]>();
-  for (const insight of aboutYouApproved) {
-    const area = insight.categories[0] ?? 'Other';
-    byArea.set(area, [...(byArea.get(area) ?? []), insight]);
-  }
-  const orderedAreas = LIFE_AREAS.filter((a) => byArea.has(a));
-
+  const areas = useMemo(() => summarizeAreas(aboutYouApproved), [aboutYouApproved]);
+  const overview = overviewStats(aboutYouApproved);
+  const knows = knowsYouRead(confidenceStats(aboutYouApproved));
+  const portraitSummary = approvedOwn.find((i) => i.source === 'intake')?.summary?.trim() ?? '';
   const trendSeries = activePersonId ? buildTrendSeries(insights, activePersonId) : [];
+  const responseCount = responseInsights.length;
+
+  const q = query.trim().toLowerCase();
+  const searchResults = q ? approvedOwn.filter((i) => matchesText(i, q)) : [];
+
+  const anyOwn = own.length > 0;
+  const reviewCount = drafts.length + proposals.length;
 
   const onRefresh = async (): Promise<void> => {
     setRefreshing(true);
@@ -198,7 +193,7 @@ export function Memory(): JSX.Element {
       if (result.ok) {
         const proposed = result.proposedCount ?? 0;
         setRefreshNote(
-          `Memory refreshed — ${result.reconciledCount ?? 0} updated${proposed ? `, ${proposed} merge${proposed === 1 ? '' : 's'} to review below` : ''}.`,
+          `Memory refreshed — ${result.reconciledCount ?? 0} updated${proposed ? `, ${proposed} to review` : ''}.`,
         );
       } else if (result.reason === 'AI_OFF' || result.reason === 'NO_KEY') {
         setRefreshNote(aiUnavailableMessage({ canManageAi }));
@@ -214,230 +209,361 @@ export function Memory(): JSX.Element {
     }
   };
 
-  const nothingShown = loaded && drafts.length === 0 && approvedOwn.length === 0;
-  const anyOwn = own.length > 0;
+  const openInsight = (insightId: string, back: BackTarget): void =>
+    setView({ name: 'insight', insightId, back });
+
+  const findInsight = (id: string): Insight | undefined => own.find((i) => i.id === id);
+
+  const renderInsightCard = (insight: Insight): JSX.Element => {
+    const about = responseAbout(insight);
+    return (
+      <InsightCard
+        insight={insight}
+        subjectName="you"
+        isOwn
+        sourceRemoved={sourceRemoved(insight)}
+        {...(about ? { aboutName: about.name } : {})}
+        {...(availableTypes ? { availableTypes } : {})}
+      />
+    );
+  };
+
+  const back = (target: BackTarget): void => setView(target);
+
+  // ── Drill-down views ───────────────────────────────────────────────────────
+  const renderArea = (area: string): JSX.Element => {
+    const summary = areas.find((a) => a.area === area);
+    const list = summary?.insights ?? [];
+    const Icon = areaIcon(area);
+    return (
+      <Stack gap={3}>
+        <button type="button" className={styles.back} onClick={() => back({ name: 'overview' })}>
+          <ArrowLeft size={15} aria-hidden="true" /> Memory
+        </button>
+        <div className={styles.areaHead}>
+          <span className={styles.areaChip}>
+            <Icon size={22} aria-hidden="true" />
+          </span>
+          <div>
+            <Heading level={2}>{area}</Heading>
+            <Text size="sm" tone="tertiary">
+              {summary?.factCount ?? 0} {(summary?.factCount ?? 0) === 1 ? 'thing' : 'things'}{' '}
+              SelfOS knows · {confidenceLabel(summary?.confidenceLevel ?? 1)}
+            </Text>
+          </div>
+        </div>
+        <div className={styles.insightList}>
+          {list.map((insight) => (
+            <InsightRow
+              key={insight.id}
+              insight={insight}
+              onOpen={() => openInsight(insight.id, { name: 'area', area })}
+            />
+          ))}
+        </div>
+      </Stack>
+    );
+  };
+
+  const renderInsightView = (insightId: string, backTarget: BackTarget): JSX.Element => {
+    const insight = findInsight(insightId);
+    const backLabel =
+      backTarget.name === 'area'
+        ? backTarget.area
+        : backTarget.name === 'review'
+          ? 'Review'
+          : backTarget.name === 'responses'
+            ? 'Responses'
+            : 'Memory';
+    return (
+      <Stack gap={3}>
+        <button type="button" className={styles.back} onClick={() => back(backTarget)}>
+          <ArrowLeft size={15} aria-hidden="true" /> {backLabel}
+        </button>
+        {insight ? (
+          renderInsightCard(insight)
+        ) : (
+          <Card>
+            <Text tone="secondary">That insight is no longer here.</Text>
+          </Card>
+        )}
+      </Stack>
+    );
+  };
+
+  const renderReview = (): JSX.Element => (
+    <Stack gap={3}>
+      <button type="button" className={styles.back} onClick={() => back({ name: 'overview' })}>
+        <ArrowLeft size={15} aria-hidden="true" /> Memory
+      </button>
+      <Heading level={2}>Needs your review</Heading>
+      <Text size="sm" tone="tertiary">
+        Drafts wait here until you approve them — they don’t inform your coaching yet.
+      </Text>
+      {proposals.map((proposal) => (
+        <Card key={proposal.id} className={styles.proposal}>
+          <Stack gap={2}>
+            <Text size="sm" tone="secondary">
+              These two look like the same thing — combine them into one?
+            </Text>
+            <Text>· {proposal.intoSummary}</Text>
+            <Text>· {proposal.fromSummary}</Text>
+            <div className={styles.proposalActions}>
+              <Button
+                variant="secondary"
+                onClick={() => void resolveProposal(proposal.id, 'merge')}
+              >
+                Merge
+              </Button>
+              <Button variant="ghost" onClick={() => void resolveProposal(proposal.id, 'keepBoth')}>
+                Keep both
+              </Button>
+            </div>
+          </Stack>
+        </Card>
+      ))}
+      {drafts.map((insight) => (
+        <div key={insight.id}>{renderInsightCard(insight)}</div>
+      ))}
+      {reviewCount === 0 ? (
+        <Card>
+          <Text tone="secondary">Nothing to review right now.</Text>
+        </Card>
+      ) : null}
+    </Stack>
+  );
+
+  const renderResponses = (): JSX.Element => (
+    <Stack gap={4}>
+      <button type="button" className={styles.back} onClick={() => back({ name: 'overview' })}>
+        <ArrowLeft size={15} aria-hidden="true" /> Memory
+      </button>
+      <Stack gap={1}>
+        <Heading level={2}>Responses to your questionnaires</Heading>
+        <Text size="sm" tone="tertiary">
+          What you learned from questionnaires you sent — these reflect their answers, not you.
+        </Text>
+      </Stack>
+      {recipientGroups.map((group) => (
+        <div key={group.key} className={styles.responseGroup}>
+          <h3 className={styles.responseName}>{group.name}</h3>
+          <div className={styles.insightList}>
+            {group.insights.map((insight) => (
+              <InsightRow
+                key={insight.id}
+                insight={insight}
+                onOpen={() => openInsight(insight.id, { name: 'responses' })}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </Stack>
+  );
+
+  // ── Overview ───────────────────────────────────────────────────────────────
+  const renderOverview = (): JSX.Element => {
+    if (loaded && !anyOwn) {
+      return (
+        <Card>
+          <Stack gap={3} align="center">
+            <Brain size={24} aria-hidden="true" />
+            <Text tone="secondary">
+              As you have sessions, log dreams, answer questionnaires, and take a few tests, what
+              SelfOS learns about you shows up here.
+            </Text>
+            {canStartSession ? (
+              <Button variant="secondary" onClick={() => navigate('/sessions')}>
+                <MessageCircle size={16} aria-hidden="true" />
+                Start a session
+              </Button>
+            ) : null}
+          </Stack>
+        </Card>
+      );
+    }
+
+    return (
+      <Stack gap={4}>
+        {approvedOwn.length > 0 ? (
+          <Card className={styles.hero}>
+            <div className={styles.portrait}>
+              {portraitSummary ? (
+                <Markdown>{portraitSummary}</Markdown>
+              ) : (
+                <Text tone="secondary">
+                  A picture of you is taking shape — the more you reflect, the fuller it gets.
+                </Text>
+              )}
+            </div>
+            <div className={styles.knows}>
+              <span className={styles.knowsLabel}>How well it knows you</span>
+              <span className={styles.knowsValue}>{knows.label}</span>
+              <span className={styles.meter} aria-hidden="true">
+                {[1, 2, 3].map((i) => (
+                  <span key={i} className={i <= knows.level ? styles.meterOn : styles.meterOff} />
+                ))}
+              </span>
+              <Text size="xs" tone="tertiary">
+                {overview.total} {overview.total === 1 ? 'thing' : 'things'} learned
+              </Text>
+            </div>
+          </Card>
+        ) : null}
+
+        {reviewCount > 0 ? (
+          <div className={styles.callout}>
+            <Sparkles size={18} aria-hidden="true" className={styles.calloutIcon} />
+            <Text size="sm" className={styles.calloutText}>
+              {drafts.length > 0 ? (
+                <>
+                  <strong>
+                    {drafts.length} new {drafts.length === 1 ? 'insight' : 'insights'}
+                  </strong>{' '}
+                  to review
+                </>
+              ) : null}
+              {drafts.length > 0 && proposals.length > 0 ? ', and ' : null}
+              {proposals.length > 0 ? (
+                <>
+                  <strong>
+                    {proposals.length} {proposals.length === 1 ? 'pair' : 'pairs'}
+                  </strong>{' '}
+                  that may be duplicates
+                </>
+              ) : null}
+              .
+            </Text>
+            <Button variant="primary" onClick={() => setView({ name: 'review' })}>
+              Review
+            </Button>
+          </div>
+        ) : null}
+
+        <div className={styles.searchRow}>
+          <div className={styles.searchBox}>
+            <Search size={15} aria-hidden="true" className={styles.searchIcon} />
+            <TextInput
+              value={query}
+              aria-label="Search memory"
+              placeholder="Search what SelfOS knows…"
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </div>
+          <Button variant="secondary" onClick={() => void onRefresh()} disabled={refreshing}>
+            <RefreshCw size={14} aria-hidden="true" /> {refreshing ? 'Refreshing…' : 'Refresh'}
+          </Button>
+        </div>
+
+        {refreshNote ? <Banner tone="info">{refreshNote}</Banner> : null}
+
+        {q ? (
+          <Stack gap={2}>
+            <Text size="sm" tone="tertiary">
+              {searchResults.length} {searchResults.length === 1 ? 'result' : 'results'}
+            </Text>
+            <div className={styles.insightList}>
+              {searchResults.map((insight) => (
+                <InsightRow
+                  key={insight.id}
+                  insight={insight}
+                  onOpen={() => openInsight(insight.id, { name: 'overview' })}
+                />
+              ))}
+            </div>
+          </Stack>
+        ) : (
+          <>
+            {areas.length > 0 ? (
+              <Stack gap={3}>
+                <div className={styles.sectionHead}>
+                  <Heading level={3} className={styles.groupTitle}>
+                    By life area
+                  </Heading>
+                  <span className={styles.groupCount}>
+                    {areas.length} {areas.length === 1 ? 'area' : 'areas'}
+                  </span>
+                </div>
+                <div className={styles.tileGrid}>
+                  {areas.map((summary) => (
+                    <LifeAreaTile
+                      key={summary.area}
+                      summary={summary}
+                      onOpen={() => setView({ name: 'area', area: summary.area })}
+                    />
+                  ))}
+                </div>
+              </Stack>
+            ) : null}
+
+            {trendSeries.length > 0 || responseCount > 0 ? (
+              <div className={styles.duo}>
+                {trendSeries.length > 0 ? (
+                  <Card className={styles.panel}>
+                    <div className={styles.panelHead}>
+                      <LineChartIcon size={16} aria-hidden="true" />
+                      <span className={styles.panelName}>Mood &amp; energy</span>
+                    </div>
+                    <Text size="sm" tone="tertiary">
+                      How your mood and energy have moved across analyzed sessions — a gentle
+                      reflection, not a measure.
+                    </Text>
+                    <LineChart
+                      series={trendSeries}
+                      ariaLabel="Your mood and energy across analyzed sessions over time"
+                      yMin={-1}
+                      yMax={1}
+                    />
+                  </Card>
+                ) : null}
+                {responseCount > 0 ? (
+                  <button
+                    type="button"
+                    className={`${styles.panel} ${styles.panelButton}`}
+                    onClick={() => setView({ name: 'responses' })}
+                  >
+                    <div className={styles.panelHead}>
+                      <ClipboardList size={16} aria-hidden="true" />
+                      <span className={styles.panelName}>From questionnaires you sent</span>
+                    </div>
+                    <Text size="sm" tone="tertiary">
+                      What you learned from others’ answers — about them, informing your coaching.
+                    </Text>
+                    <Text size="sm">
+                      {responseCount} {responseCount === 1 ? 'insight' : 'insights'} ·{' '}
+                      {recipientGroups.map((g) => g.name).join(', ')}
+                    </Text>
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </>
+        )}
+      </Stack>
+    );
+  };
 
   return (
     <div className={styles.layout}>
       <Stack gap={2}>
         <Heading level={2}>Memory</Heading>
         <Text tone="secondary">What SelfOS understands about you.</Text>
-        {lastReconciledAt ? (
+        {lastReconciledAt && view.name === 'overview' ? (
           <Text size="sm" tone="tertiary" aria-live="polite">
             Memory last tidied {relativeDate(lastReconciledAt)}.
           </Text>
         ) : null}
       </Stack>
 
-      {showStats ? (
-        <StatsSummary
-          overview={overviewSummary}
-          confidence={confidenceSummary}
-          sharing={sharingSummary}
-          onManageSharing={() => navigate('/sharing')}
-        />
-      ) : null}
-
-      <>
-        {anyOwn ? (
-          <div className={styles.controls}>
-            <div className={styles.searchRow}>
-              <div className={styles.searchBox}>
-                <Search size={15} aria-hidden="true" className={styles.searchIcon} />
-                <TextInput
-                  value={query}
-                  aria-label="Search memory"
-                  placeholder="Search what SelfOS knows…"
-                  onChange={(event) => setQuery(event.target.value)}
-                />
-              </div>
-              <Button variant="secondary" onClick={() => void onRefresh()} disabled={refreshing}>
-                <RefreshCw size={14} aria-hidden="true" /> {refreshing ? 'Refreshing…' : 'Refresh'}
-              </Button>
-            </div>
-            <div className={styles.filterRow}>
-              <Select
-                aria-label="Filter by source"
-                value={source}
-                onChange={(event) => setSource(event.target.value as SourceFilter)}
-              >
-                {SOURCE_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </Select>
-              <Select
-                aria-label="Filter by confidence"
-                value={confidence}
-                onChange={(event) => setConfidence(event.target.value as ConfidenceFilter)}
-              >
-                <option value="all">Any confidence</option>
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
-                <option value="low">Low</option>
-              </Select>
-              <span className={styles.flaggedToggle}>
-                <Switch
-                  checked={flaggedOnly}
-                  aria-label="Show only flagged"
-                  onChange={setFlaggedOnly}
-                />
-                <Text size="sm" aria-hidden="true">
-                  Flagged only
-                </Text>
-              </span>
-            </div>
-          </div>
-        ) : null}
-
-        {refreshNote ? <Banner tone="info">{refreshNote}</Banner> : null}
-
-        {trendSeries.length > 0 ? (
-          <details className={styles.trends} open>
-            <summary className={styles.trendsSummary}>Trends</summary>
-            <div className={styles.trendsBody}>
-              <Text size="sm" tone="tertiary">
-                How your mood and energy have moved across analyzed sessions — a gentle reflection,
-                not a measure.
-              </Text>
-              <LineChart
-                series={trendSeries}
-                ariaLabel="Your mood and energy across analyzed sessions over time"
-                yMin={-1}
-                yMax={1}
-              />
-            </div>
-          </details>
-        ) : null}
-
-        {loaded && !anyOwn ? (
-          <Card>
-            <Stack gap={3} align="center">
-              <Brain size={24} aria-hidden="true" />
-              <Text tone="secondary">
-                Insights appear here after your sessions, dreams, and questionnaires are analyzed —
-                your own view of what SelfOS is learning about you. Start a session to begin.
-              </Text>
-              {canStartSession ? (
-                <Button variant="secondary" onClick={() => navigate('/sessions')}>
-                  <MessageCircle size={16} aria-hidden="true" />
-                  Start a session
-                </Button>
-              ) : null}
-            </Stack>
-          </Card>
-        ) : null}
-
-        {drafts.length > 0 || proposals.length > 0 ? (
-          <section className={styles.group} aria-label="Needs your review">
-            <Heading level={3} className={styles.groupTitle}>
-              Needs your review
-            </Heading>
-            <Stack gap={3}>
-              {proposals.map((proposal) => (
-                <Card key={proposal.id} className={styles.proposal}>
-                  <Stack gap={2}>
-                    <Text size="sm" tone="secondary">
-                      These two look like the same thing — combine them into one?
-                    </Text>
-                    <Text>· {proposal.intoSummary}</Text>
-                    <Text>· {proposal.fromSummary}</Text>
-                    <div className={styles.proposalActions}>
-                      <Button
-                        variant="secondary"
-                        onClick={() => void resolveProposal(proposal.id, 'merge')}
-                      >
-                        Merge
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        onClick={() => void resolveProposal(proposal.id, 'keepBoth')}
-                      >
-                        Keep both
-                      </Button>
-                    </div>
-                  </Stack>
-                </Card>
-              ))}
-              {drafts.length > 0 ? (
-                <Text size="sm" tone="tertiary">
-                  Drafts wait here until you approve them — they don’t inform your coaching yet.
-                </Text>
-              ) : null}
-              {drafts.map((insight) => (
-                <InsightCard
-                  key={insight.id}
-                  insight={insight}
-                  subjectName="you"
-                  isOwn
-                  {...(availableTypes ? { availableTypes } : {})}
-                />
-              ))}
-            </Stack>
-          </section>
-        ) : null}
-
-        {orderedAreas.map((area) => {
-          const areaInsights = byArea.get(area) ?? [];
-          return (
-            <section key={area} className={styles.group} aria-label={area}>
-              <Heading level={3} className={styles.groupTitle}>
-                {area} <span className={styles.groupCount}>({areaInsights.length})</span>
-              </Heading>
-              <Stack gap={3}>
-                {areaInsights.map((insight) => (
-                  <InsightCard
-                    key={insight.id}
-                    insight={insight}
-                    subjectName="you"
-                    isOwn
-                    sourceRemoved={sourceRemoved(insight)}
-                    {...(availableTypes ? { availableTypes } : {})}
-                  />
-                ))}
-              </Stack>
-            </section>
-          );
-        })}
-
-        {recipientGroups.length > 0 ? (
-          <section className={styles.group} aria-label="Responses to your questionnaires">
-            <Heading level={3} className={styles.groupTitle}>
-              Responses to your questionnaires
-            </Heading>
-            <Text size="sm" tone="tertiary">
-              What you learned from questionnaires you sent — these reflect their answers, not you.
-            </Text>
-            <Stack gap={4}>
-              {recipientGroups.map((group) => (
-                <div key={group.key} className={styles.responseGroup}>
-                  <h4 className={styles.responseName}>{group.name}</h4>
-                  <Stack gap={3}>
-                    {group.insights.map((insight) => (
-                      <InsightCard
-                        key={insight.id}
-                        insight={insight}
-                        subjectName="you"
-                        isOwn
-                        aboutName={group.name}
-                        sourceRemoved={sourceRemoved(insight)}
-                        {...(availableTypes ? { availableTypes } : {})}
-                      />
-                    ))}
-                  </Stack>
-                </div>
-              ))}
-            </Stack>
-          </section>
-        ) : null}
-
-        {!nothingShown ? null : (
-          <Card>
-            <Text tone="secondary">No insights match your filters.</Text>
-          </Card>
-        )}
-      </>
+      {view.name === 'overview'
+        ? renderOverview()
+        : view.name === 'area'
+          ? renderArea(view.area)
+          : view.name === 'insight'
+            ? renderInsightView(view.insightId, view.back)
+            : view.name === 'review'
+              ? renderReview()
+              : renderResponses()}
 
       <CrisisFooter />
     </div>

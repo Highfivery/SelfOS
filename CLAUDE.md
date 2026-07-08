@@ -389,6 +389,31 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-08 — **Fix + redesign (Sessions wrap-up card: a crisis-footer OVERLAY bug + a flat bullet-wall summary;
+  user-reported with a screenshot; mockup approved first; spec 09 §3.1; on `feat/sessions-wrapup-redesign`).**
+  **(1) The overlay bug (diagnosed from the layout, not assumed):** `WrapUpCard` rendered as a sibling AFTER the
+  scrollable `.thread` inside `.main` (grid row 1). A tall summary overflowed the 1fr row and painted OVER the
+  pinned crisis footer (`.crisisWrap`, grid row 2) — the "Get help now" + not-medical line floated mid-card. Fix:
+  render the card **inside** the `.thread` scroll container (a `.wrapCardSlot`), so it scrolls with the
+  conversation + is clipped by `overflow-y:auto` and can never overflow onto the footer; a `scrollIntoView` on
+  appear brings its heading to the top. **(2) The redesign:** the card showed `insight.facts` as ONE flat
+  `<ul>` (Themes/Goals/Follow-ups/People all mixed with their `Theme:`/`Goal:`/… prefixes) — an unscannable
+  wall (the user's session had 10 themes, 4 goals, 6 follow-ups, 4 people). Now a pure `groupWrapUpFacts` routes
+  each fact to a section by its code prefix (display-only; stored facts untouched; an unknown prefix → an "Also
+  noted" group so nothing drops), rendered as **grouped sections**: Goals & commitments (a checklist, first),
+  Themes (chips), Follow-ups (collapsible), People (chips). **Decisions asked + approved (2 forks):** condense
+  long lists (themes past 6 → "+N more"; follow-ups collapsed by default); Goals-first order. Gate green:
+  typecheck (all), lint, format, **961 core + 920 desktop + 11 relay** unit (+`groupWrapUpFacts` [prefix routing/
+  strip/substring-safety/other-fallback], +WrapUpCard RTL [grouped sections, +N-more reveal, collapse toggle,
+  Also-noted, section-omitted-when-empty, crisis-leads]; updated the 2 prefixed-text assertions to the stripped
+  display text + the group header), **E2E** (the complete+summarize test asserts the grouped "Goals & commitments"
+  header + a **geometric overlay guard**: `thread.bottom ≤ crisisFooter.top`, via a new `data-testid=session-thread`).
+  **Visual QA:** real Electron screenshot of the rendered card — grouped, scannable, card scrolls inside its own
+  region with the crisis footer pinned below (bug gone). Synced spec 09 §3.1. **Lesson: a grid child with no
+  `overflow` clip will paint over a sibling row when its content exceeds its 1fr cell — a tall transient card
+  belongs INSIDE the scroll container, not as a sibling after it; and grouping a flat fact list is a
+  display-only transform keyed off the code-stamped prefixes (`Goal:`/`Theme:`/…), with an `other` catch-all so
+  a prefix change never silently swallows a fact.**
 - 2026-07-08 — **Build (Sessions: clear the composer on send + a "Wrap up & reflect" button below it; mockup
   approved first; spec 05 §3 + 09 §14.2; on `feat/sessions-clear-field-and-wrap-up`).** Two user asks, mockup
   shown + approved before building (the `visualize` tool — send before/after + the end-button demo). **(1) Bug —

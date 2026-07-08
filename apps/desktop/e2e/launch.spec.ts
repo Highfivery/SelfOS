@@ -2038,8 +2038,17 @@ test('sessions: complete + summarize feeds a later session; status filter + reop
     await w.getByRole('menuitem', { name: 'Complete & summarize' }).click();
     await expect(w.getByRole('heading', { name: 'Session summary' })).toBeVisible();
     await expect(w.getByText(/calmer note/i)).toBeVisible();
-    await expect(w.getByText('Goal: Take a short walk before bed')).toBeVisible();
+    // The redesigned card groups facts into labelled sections; the goal renders under Goals, prefix stripped.
+    await expect(w.getByText('Goals & commitments')).toBeVisible();
+    await expect(w.getByText('Take a short walk before bed')).toBeVisible();
     await expect(w.getByRole('button', { name: /View in Memory/i })).toBeVisible();
+
+    // The wrap-up card lives INSIDE the scrollable thread, so the pinned crisis footer never overlaps it: the
+    // thread's bottom edge sits at/above the "Get help now" footer (the reported overlay bug).
+    const threadBox = await w.getByTestId('session-thread').boundingBox();
+    const crisisBox = await w.getByRole('button', { name: /get help now/i }).boundingBox();
+    if (!threadBox || !crisisBox) throw new Error('overlay guard: missing boxes');
+    expect(threadBox.y + threadBox.height).toBeLessThanOrEqual(crisisBox.y + 2);
 
     // The auto-approved Session Insight feeds the subject's own assembled coaching context.
     const fs = createNodeFileSystem(vault);

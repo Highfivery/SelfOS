@@ -73,8 +73,13 @@ Amends the Sessions surface (`05` §3):
 ### 3.1 End & summarize
 
 - The thread gains an **"End & summarize"** action. It runs analysis (budget check first, §5), then shows a
-  **wrap-up card**: summary, themes, mood, goals/commitments, follow-ups, and (if flagged) **crisis
-  resources first** (§7). The resulting `SessionInsight` auto-enters the subject's own context.
+  **wrap-up card**: summary, mood, and the facts **grouped into scannable sections** — Goals & commitments
+  (your takeaways, a checklist, first), Themes (chips), Follow-ups for next time (collapsed by default), and
+  People mentioned (chips) — rather than one flat bullet list. Long lists condense (themes past ~6 collapse
+  behind a "+N more"; an unrecognized fact never drops — it falls to an "Also noted" group). If the analysis
+  flagged a concern, **crisis resources lead** (§7). The resulting `SessionInsight` auto-enters the subject's
+  own context. The card renders **inside the thread's scroll container**, so a long summary scrolls with the
+  conversation and never overflows onto the pinned crisis footer below.
 - A session **setting `sessions.autoSummarizeOnEnd`** (default **OFF**) runs this automatically whenever a
   session is ended, for users who want it hands-off (no surprise spend by default).
 

@@ -554,7 +554,9 @@ describe('Sessions', () => {
     expect(await screen.findByText(/feels wrapped up/i)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Complete & summarize' }));
     expect(await screen.findByText('A calm close to the day.')).toBeInTheDocument();
-    expect(screen.getByText('Goal: rest tonight')).toBeInTheDocument();
+    // The goal renders in the grouped "Goals & commitments" section, prefix stripped.
+    expect(screen.getByText('Goals & commitments')).toBeInTheDocument();
+    expect(screen.getByText('rest tonight')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /View in Memory/i })).toBeInTheDocument();
   });
 

@@ -83,6 +83,7 @@ export function Sessions(): JSX.Element {
   const appendChunk = useConversationStore((s) => s.appendChunk);
 
   const threadRef = useRef<HTMLDivElement>(null);
+  const wrapUpRef = useRef<HTMLDivElement>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
   // On mobile the two panes stack into a master–detail: the list, then a full-screen thread with a
@@ -144,6 +145,11 @@ export function Sessions(): JSX.Element {
   useEffect(() => {
     threadRef.current?.scrollTo?.(0, threadRef.current.scrollHeight);
   }, [messages, streaming]);
+  // When a wrap-up card appears (summarized), scroll it to the TOP of the thread so its heading leads — it
+  // lives inside the scroll container (not below it), so it can never overflow onto the pinned crisis footer.
+  useEffect(() => {
+    if (wrapUp) wrapUpRef.current?.scrollIntoView?.({ block: 'start' });
+  }, [wrapUp]);
 
   const configured = aiEnabled && hasKey;
   // Summarizing is only meaningful when AI is configured AND session memory is on (the service refuses
@@ -338,7 +344,13 @@ export function Sessions(): JSX.Element {
 
             {stepperSteps ? <GuidedStepper steps={stepperSteps} current={activeGuideStep} /> : null}
 
-            <div className={styles.thread} ref={threadRef} aria-live="polite" aria-busy={sending}>
+            <div
+              className={styles.thread}
+              ref={threadRef}
+              data-testid="session-thread"
+              aria-live="polite"
+              aria-busy={sending}
+            >
               {messages.length === 0 && !streaming && !sending ? (
                 <div className={styles.empty}>
                   <Text tone="secondary">What’s on your mind?</Text>
@@ -379,9 +391,14 @@ export function Sessions(): JSX.Element {
                   ) : null}
                 </Stack>
               )}
+              {/* The wrap-up card lives INSIDE the scroll container so a tall summary scrolls with the thread
+                  and can never overflow its grid row onto the pinned crisis footer below. */}
+              {wrapUp ? (
+                <div ref={wrapUpRef} className={styles.wrapCardSlot}>
+                  <WrapUpCard insight={wrapUp} onDismiss={dismissWrapUp} />
+                </div>
+              ) : null}
             </div>
-
-            {wrapUp ? <WrapUpCard insight={wrapUp} onDismiss={dismissWrapUp} /> : null}
 
             {canSummarizeActive && !wrapUp ? (
               <Button

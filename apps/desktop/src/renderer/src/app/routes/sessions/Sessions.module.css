@@ -141,6 +141,11 @@
   padding-right: var(--space-2);
 }
 
+/* The wrap-up card sits inside the thread scroll; give it clear separation from the last message. */
+.wrapCardSlot {
+  margin-top: var(--space-4);
+}
+
 .connectLink {
   border: none;
   background: transparent;

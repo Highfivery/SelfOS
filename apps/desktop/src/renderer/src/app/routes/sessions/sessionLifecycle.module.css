@@ -179,11 +179,130 @@
   font-size: var(--font-size-xs, 0.75rem);
 }
 
-.factList {
+/* Grouped wrap-up sections (Goals / Themes / Follow-ups / People) — scannable, not one flat list. */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.sectionHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm, 0.875rem);
+  font-weight: 600;
+}
+
+.sectionIcon {
+  flex: none;
+  color: var(--color-text-secondary);
+}
+
+.sectionIconAccent {
+  flex: none;
+  color: var(--color-accent-text);
+}
+
+.sectionCount {
+  color: var(--color-text-secondary);
+  font-weight: 400;
+}
+
+.checklist {
   margin: 0;
-  padding-left: var(--space-4);
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.checkItem {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  color: var(--color-text-primary);
+}
+
+.checkIcon {
+  flex: none;
+  margin-top: 3px;
+  color: var(--color-accent-text);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-pill, 999px);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xs, 0.75rem);
+}
+
+.chipButton {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-pill, 999px);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-accent-text);
+  font: inherit;
+  font-size: var(--font-size-xs, 0.75rem);
+  cursor: pointer;
+}
+
+.chipButton:hover {
+  background: var(--color-surface);
+}
+
+.chipButton:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+/* Collapsible section header (Follow-ups) — a full-width, left-aligned button. */
+.collapseBtn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm, 0.875rem);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.collapseBtn:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.followList {
+  margin: 0;
+  padding-left: var(--space-5);
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  color: var(--color-text-primary);
+  color: var(--color-text-secondary);
+}
+
+.footerNote {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
 }

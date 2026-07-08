@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { confidentialityPreamble, describeScope } from './sharing';
+import { confidentialityPreamble, describeScope, RELATIONSHIP_TYPE_ORDER } from './sharing';
 
 describe('describeScope (42 §3.2)', () => {
   it('empty scope → Private', () => {
@@ -12,6 +12,10 @@ describe('describeScope (42 §3.2)', () => {
 
   it('multiple types → joined in stable display order, de-duped', () => {
     expect(describeScope(['friend', 'partner', 'partner'])).toBe('Partner, Friend');
+  });
+
+  it('a scope covering every type reads concisely, not all eight labels (keeps the chip compact)', () => {
+    expect(describeScope(RELATIONSHIP_TYPE_ORDER)).toBe('everyone you relate to');
   });
 });
 

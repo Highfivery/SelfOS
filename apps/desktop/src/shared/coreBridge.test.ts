@@ -1311,6 +1311,44 @@ describe('createCoreBridge', () => {
     expect(await bridge.questionnairesGet(saved.id)).toBeNull();
   });
 
+  it('insightsList enriches a sent-questionnaire insight with WHO it is about (#129), incl. a pre-#129 one', async () => {
+    const { bridge, ownerId, host } = await freshOwner();
+    const partner = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
+    const ctx = (await host.host.vaultAndKey())!;
+
+    // A questionnaire the owner sent to the partner.
+    const saved = await bridge.questionnairesSave({
+      title: 'How are we doing?',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: partner.id },
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'How are we?', required: true }],
+    });
+    const { assignment } = await bridge.assignmentsCreate({ questionnaireId: saved.id });
+
+    // A PRE-#129 insight from that send: subject = the owner (sender), NO about* stamped in provenance.
+    const at = new Date().toISOString();
+    await saveInsight(ctx.fs, ctx.key, {
+      id: 'i-legacy',
+      schemaVersion: 1,
+      source: 'questionnaire',
+      subjectPersonId: ownerId,
+      summary: 'Angel wants more protected time together.',
+      facts: [{ id: 'f1', text: 'Wants more date nights', shareable: true }],
+      confidence: 'medium',
+      categories: ['Relationships'],
+      approved: true,
+      provenance: { assignmentId: assignment.id, at }, // legacy: no aboutPersonId
+      createdAt: at,
+      updatedAt: at,
+    });
+
+    const listed = await bridge.insightsList();
+    const enriched = listed.find((i) => i.id === 'i-legacy');
+    expect(enriched?.provenance.aboutPersonId).toBe(partner.id); // resolved read-time from the assignment
+    expect(enriched?.subjectPersonId).toBe(ownerId); // unchanged — it still informs the sender's coaching
+  });
+
   it('gates AI authoring on questionnaires.create and runs the metered path for the owner', async () => {
     const { bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });

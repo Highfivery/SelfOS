@@ -1038,6 +1038,19 @@ compatibilityGroupId`, each with its own frozen variant snapshot); blocked when 
 
 ## 14. Changelog
 
+- 2026-07-08 — **Sent-questionnaire insights are "about the recipient," grouped in Memory (issue #129, on
+  `fix/memory-questionnaire-responses-section`).** An analysis Insight from a questionnaire the viewer **sent
+  to someone else** keeps `subjectPersonId` = the sender (it informs their coaching, §1/§13.4) but its facts
+  describe the **recipient's** answers — so it was mislabelled "About you" in Memory. `InsightProvenance` gains
+  additive-optional **`aboutPersonId`** (household recipient) / **`aboutName`** (external recipient), stamped by
+  `analysisService.analyzeAssignment` (from `assignment.recipient`) and `alignmentService.generateAlignment`
+  (the other compatibility participant); **never set for a self check-in** (recipient = sender). A shared
+  `aboutResolver` (`aboutFromRecipient` + `resolveInsightAbout`) also resolves it **read-time** in
+  `coreBridge.insightsList` for pre-#129 insights (join the assignment / compatibility group). Memory then
+  groups these into a **"Responses to your questionnaires"** section by recipient, out of the life-area cards,
+  eyebrow "From `<name>`'s answers" ([`54`](54-memory-redesign.md) §3.2). No new AI spend, no `schemaVersion`
+  bump, no IPC change. (Also, unrelated §12 hygiene surfaced by this: `describeScope` now says "everyone you
+  relate to" for the full type set, and the `RelationshipScopePicker` chip caps + ellipsizes.)
 - 2026-06-15 — **2026-06-15 audit fixes & enhancements added (§16; Review).** A full audit of the built
   feature found a compatibility participant-model mismatch (the sender can't be one of the two compared
   people — yet that's the primary couples case), a confusing Create/Send workflow, and tier-blind intimacy

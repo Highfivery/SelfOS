@@ -322,6 +322,9 @@ describe('generateAlignment', () => {
     const drafted = insights.find((i) => i.provenance.compatibilityGroupId === groupId);
     expect(drafted?.subjectPersonId).toBe('sender');
     expect(drafted?.approved).toBe(false);
+    // Stamped WHO it's about (#129) — a participant other than the sender — so Memory groups it as a
+    // response, not an "about you" fact.
+    expect(['alex', 'bri']).toContain(drafted?.provenance.aboutPersonId);
   });
 
   it('is NOT_READY until both people have submitted', async () => {

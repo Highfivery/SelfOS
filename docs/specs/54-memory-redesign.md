@@ -208,6 +208,17 @@ SelfOS learns shows up here."
   not on screen at a glance); non-sensitive areas may be expanded by default (a §11 tuning call —
   recommended: collapsed by default for density, with the count + gist visible).
 - **Search** filters across the own insights (summary + fact text); a matching area auto-expands.
+- **"Responses to your questionnaires" section** (issue #129) — an insight derived from a questionnaire the
+  viewer **sent to someone else** informs the viewer's coaching (`subjectPersonId` = the sender), but its
+  facts describe the **recipient's** answers, so it is **grouped separately** here — its own labelled section
+  ("What you learned from questionnaires you sent — these reflect their answers, not you"), **grouped by who
+  answered** (the recipient's name), and **pulled out of the life-area cards** so it never masquerades as an
+  "about you" fact. The `InsightCard` eyebrow reads **"From `<name>`'s answers"** (never "About you"). This
+  covers standard sends and compatibility alignments, household + external recipients; a **self check-in**
+  (recipient = the sender) stays a normal life-area "about you" insight. The recipient is resolved from
+  `provenance.aboutPersonId`/`aboutName` (stamped by the producers, resolved read-time in the bridge for
+  pre-#129 insights — [`08`](08-questionnaires.md) §13.4). It stays in the **"About you"** view (it's the
+  viewer's own coaching data) — **not** the "Partners" view, which remains AI relationship synthesis only.
 - Drafts, Trends, and "Manage sharing" stay (§3.1).
 
 ### 3.3 "Relationships" — per-partner insight cards

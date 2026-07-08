@@ -303,6 +303,7 @@ import {
   garbageCollectImages,
   gatherRecipientHistory,
   generateQuestions,
+  resolveInsightAbout,
   getAssignment,
   getAssignmentSnapshot,
   getQuestionnaire,
@@ -2535,6 +2536,17 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // Own insights in full — the user sees ALL their own facts, INCLUDING their own `restricted` intake
       // facts (their own data). Never another member's insights.
       const own = await listInsightsForPerson(ctx.fs, ctx.key, personId);
+      // Enrich a sent-questionnaire insight with WHO it's about (#129) so Memory can group it as a "response
+      // to your questionnaire" instead of mislabelling it "about you." New insights carry this in provenance;
+      // pre-#129 ones are resolved read-time from the originating assignment / compatibility group. A self
+      // check-in (recipient === subject) resolves to null and stays a normal "about you" insight.
+      const ownEnriched = await Promise.all(
+        own.map(async (insight) => {
+          if (insight.provenance.aboutPersonId || insight.provenance.aboutName) return insight;
+          const about = await resolveInsightAbout(ctx.fs, ctx.key, insight);
+          return about ? { ...insight, provenance: { ...insight.provenance, ...about } } : insight;
+        }),
+      );
       // Related people contribute ONLY their shareable, non-restricted facts (the `summarizeForContext`
       // boundary, re-gated at read via `listRelatedPeople`); their summaries + private/restricted facts
       // never cross over.
@@ -2551,7 +2563,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         personId,
         related,
       );
-      return [...own, ...relatedShareable];
+      return [...ownEnriched, ...relatedShareable];
     },
     memoryOutboundSharing: async (): Promise<OutboundSharing> => {
       // The transparency read (42 §5.3): the active person's OWN outbound sharing only. Gated on `memory.own`

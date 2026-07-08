@@ -10,6 +10,7 @@ import { listInsightsForPerson, normalizeCategories, saveInsight } from '../insi
 import { visibleQuestions, type AnswerMap, type AnswerValue } from './answering';
 import type { Insight, QuestionnaireAnalyzeResult, ResponseSet } from '../schemas';
 import { ANALYSIS_SYSTEM, buildAnalysisUserMessage } from './aiPrompts';
+import { aboutFromRecipient } from './aboutResolver';
 import { getAssignment, getAssignmentSnapshot } from './assignmentService';
 import { runClaude, type AiDeps } from './generationService';
 import { getResponse } from './responseService';
@@ -150,8 +151,15 @@ export async function analyzeAssignment(
     confidence: validated.data.confidence ?? 'medium',
     categories: normalizeCategories(validated.data.categories ?? []),
     approved: false, // requires the approve-step before it feeds buildContext (§3.7)
-    // Stamp the revision analyzed (56 §4) so a later recipient edit (a higher revision) reads as stale.
-    provenance: { assignmentId: assignment.id, analyzedRevision: responseRevision(response), at },
+    // Stamp the revision analyzed (56 §4) so a later recipient edit (a higher revision) reads as stale, and
+    // WHO this send was about (#129) — the recipient, when it isn't the sender — so Memory groups it as a
+    // response, not an "about you" fact. Absent for a self check-in (recipient === sender).
+    provenance: {
+      assignmentId: assignment.id,
+      analyzedRevision: responseRevision(response),
+      ...aboutFromRecipient(assignment.recipient, assignment.senderPersonId),
+      at,
+    },
     createdAt: prior?.createdAt ?? at,
     updatedAt: at,
     ...(Object.keys(metrics).length > 0 ? { metrics } : {}),

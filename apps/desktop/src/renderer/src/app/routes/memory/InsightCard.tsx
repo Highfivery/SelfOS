@@ -113,12 +113,16 @@ export function InsightCard({
   subjectName,
   isOwn,
   sourceRemoved,
+  aboutName,
   availableTypes,
 }: {
   insight: Insight;
   subjectName: string;
   isOwn: boolean;
   sourceRemoved?: boolean;
+  /** Who this sent-questionnaire insight is ABOUT — the recipient (#129). When set, the eyebrow reads "From
+   * <name>'s answers" instead of "About you," since the facts describe their answers, not the viewer. */
+  aboutName?: string;
   /** Relationship types in the person's graph — offered by an AI-inferred fact's sharing picker (44 §3.4). */
   availableTypes?: RelationshipType[];
 }): JSX.Element {
@@ -276,7 +280,13 @@ export function InsightCard({
         <div className={styles.head}>
           <div className={styles.headMain}>
             <Text size="xs" tone="tertiary" className={styles.eyebrow}>
-              {`${SOURCE_EYEBROW[insight.source]} · ${isOwn ? 'About you' : `About ${subjectName}`}`}
+              {`${SOURCE_EYEBROW[insight.source]} · ${
+                aboutName
+                  ? `From ${aboutName}’s answers`
+                  : isOwn
+                    ? 'About you'
+                    : `About ${subjectName}`
+              }`}
             </Text>
             {insight.summary && !editing ? (
               <Markdown className={styles.insightSummary}>{insight.summary}</Markdown>

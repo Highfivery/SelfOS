@@ -55,6 +55,9 @@ export const RELATIONSHIP_TYPE_ORDER: RelationshipType[] = [
 export function describeScope(types: readonly RelationshipType[]): string {
   if (types.length === 0) return 'Private';
   const present = RELATIONSHIP_TYPE_ORDER.filter((type) => types.includes(type));
+  // A scope covering every relationship type reads concisely as "everyone you relate to" — clearer than
+  // listing all eight labels, and it keeps the sharing chip compact (matches the SharingPanel broadcast copy).
+  if (present.length === RELATIONSHIP_TYPE_ORDER.length) return 'everyone you relate to';
   return present.map((type) => RELATIONSHIP_TYPE_LABELS[type]).join(', ');
 }
 

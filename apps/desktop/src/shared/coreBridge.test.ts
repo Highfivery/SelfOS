@@ -2394,6 +2394,7 @@ describe('createCoreBridge', () => {
       privacy: 'private',
       answerable: true,
       hasDraft: false,
+      fromSelf: false, // Ben sent it to the recipient — not a self check-in (§3.3 Received filter)
     });
 
     // The detail (recipient-scoped) yields the frozen snapshot to answer.
@@ -3395,6 +3396,134 @@ describe('createCoreBridge', () => {
     // the owner's send of `q` does not leak into another person's list.
     await bridge.sessionSetActive({ personId: mara.id });
     expect(await bridge.questionnairesSendStates()).toEqual({});
+  });
+
+  it('questionnairesSentOverview: per-recipient answered status, new-response + analysed counts, gated (§3.1)', async () => {
+    const { bridge, ownerId, host } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: mara.id, roleId: 'member', pin: null });
+    const q = await bridge.questionnairesSave({
+      title: 'Weekly check-in',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: mara.id },
+      questions: [{ id: 'a', type: 'shortText', prompt: 'How?', required: true }],
+    });
+
+    // Never sent → no overview.
+    expect(await bridge.questionnairesSentOverview()).toEqual({});
+
+    // Send it twice to the bound recipient (a re-ask); the recipient is deduped to their latest send.
+    await bridge.assignmentsCreate({ questionnaireId: q.id, privacy: 'standard' });
+    const { assignment: latest } = await bridge.assignmentsCreate({
+      questionnaireId: q.id,
+      privacy: 'standard',
+    });
+    let overview = await bridge.questionnairesSentOverview();
+    expect(overview[q.id]?.recipients).toEqual([{ name: 'Mara', status: 'sent', answered: false }]);
+    expect(overview[q.id]?.answeredCount).toBe(0);
+    expect(overview[q.id]?.newResponses).toBe(0);
+    expect(typeof overview[q.id]?.lastSentAt).toBe('string');
+
+    // Mara answers the latest send → she reads as answered, and it's a "new" (un-analysed) response.
+    await bridge.sessionSetActive({ personId: mara.id });
+    await bridge.assignmentsSubmit({
+      assignmentId: latest.id,
+      answers: [{ questionId: 'a', value: 'Doing well' }],
+    });
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    overview = await bridge.questionnairesSentOverview();
+    expect(overview[q.id]?.recipients[0]).toMatchObject({ name: 'Mara', answered: true });
+    expect(typeof overview[q.id]?.recipients[0]?.answeredAt).toBe('string');
+    expect(overview[q.id]?.answeredCount).toBe(1);
+    expect(overview[q.id]?.newResponses).toBe(1);
+    // Answered-not-analysed → an answered time + a send the card can one-tap Analyze, and no excerpt yet.
+    expect(typeof overview[q.id]?.answeredAt).toBe('string');
+    expect(overview[q.id]?.analyzed).toBe(false);
+    expect(overview[q.id]?.analyzableAssignmentId).toBe(latest.id);
+    expect(overview[q.id]?.insightSummary).toBeUndefined();
+
+    // Analysing it clears the "new" badge (the sender has reviewed it) but it's still answered.
+    host.host.claude = {
+      send: () => Promise.resolve('{}'),
+      stream: (_options, onDelta) => {
+        const json = JSON.stringify({
+          summary: 'Going well.',
+          facts: [{ text: 'Feels good about it', shareable: true }],
+          confidence: 'high',
+        });
+        onDelta(json);
+        return Promise.resolve({
+          text: json,
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    expect((await bridge.insightsAnalyze({ assignmentId: latest.id })).ok).toBe(true);
+    overview = await bridge.questionnairesSentOverview();
+    expect(overview[q.id]?.answeredCount).toBe(1);
+    expect(overview[q.id]?.newResponses).toBe(0);
+    // Now fully analysed → the excerpt (insight summary) is surfaced + no analyzable send remains.
+    expect(overview[q.id]?.analyzed).toBe(true);
+    expect(overview[q.id]?.insightSummary).toBe('Going well.');
+    expect(overview[q.id]?.analyzableAssignmentId).toBeUndefined();
+
+    // Sender-scoped: the recipient sees none of the owner's sends in her own overview.
+    await bridge.sessionSetActive({ personId: mara.id });
+    expect(await bridge.questionnairesSentOverview()).toEqual({});
+
+    // Gated on viewResults: a Guest (no viewResults) gets an empty overview even though sends exist.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+    expect(await bridge.questionnairesSentOverview()).toEqual({});
+  });
+
+  it('assignmentsInbox: carries the category + answered time; setFavorite pins it (device-local, per-person) (§3.3)', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: mara.id, roleId: 'member', pin: null });
+    const q = await bridge.questionnairesSave({
+      title: 'What you appreciate',
+      type: 'appreciation',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: mara.id },
+      questions: [{ id: 'a', type: 'shortText', prompt: 'What stands out?', required: true }],
+    });
+    const { assignment } = await bridge.assignmentsCreate({
+      questionnaireId: q.id,
+      privacy: 'standard',
+    });
+
+    // The recipient's Inbox item carries the questionnaire's category (for the card eyebrow) + no answer yet.
+    await bridge.sessionSetActive({ personId: mara.id });
+    let inbox = await bridge.assignmentsInbox();
+    expect(inbox[0]).toMatchObject({ type: 'appreciation', favorite: false });
+    expect(inbox[0]?.answeredAt).toBeUndefined();
+
+    // Pin it → favourite sticks (device-local).
+    await bridge.assignmentsSetFavorite({ assignmentId: assignment.id, favorite: true });
+    expect((await bridge.assignmentsInbox())[0]?.favorite).toBe(true);
+
+    // Answering stamps the answered time; the favourite is unaffected.
+    await bridge.assignmentsSubmit({
+      assignmentId: assignment.id,
+      answers: [{ questionId: 'a', value: 'Your patience' }],
+    });
+    inbox = await bridge.assignmentsInbox();
+    expect(typeof inbox[0]?.answeredAt).toBe('string');
+    expect(inbox[0]?.favorite).toBe(true);
+
+    // Per-person + device-local: the owner (a different person) doesn't inherit Mara's favourite, and
+    // unfavouriting clears it.
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    expect(
+      (await bridge.assignmentsInbox()).find((i) => i.assignmentId === assignment.id),
+    ).toBeUndefined();
+    await bridge.sessionSetActive({ personId: mara.id });
+    await bridge.assignmentsSetFavorite({ assignmentId: assignment.id, favorite: false });
+    expect((await bridge.assignmentsInbox())[0]?.favorite).toBe(false);
   });
 
   it('compatibility household (§17.14): mints a relay link for the recipient (not self) + reshare mints fresh', async () => {

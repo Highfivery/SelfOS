@@ -88,6 +88,8 @@ import type {
   QuestionnaireImproveResult,
   QuestionnaireInput,
   QuestionnaireSendState,
+  QuestionnaireSentOverview,
+  SentRecipientSummary,
   QuestionnaireSuggestResult,
   SavedSuggestion,
   SavedSuggestionsResult,
@@ -194,6 +196,7 @@ export const IpcChannels = {
   usageSessionCosts: 'usage:sessionCosts',
   questionnairesList: 'questionnaires:list',
   questionnairesSendStates: 'questionnaires:sendStates',
+  questionnairesSentOverview: 'questionnaires:sentOverview',
   questionnairesShareLink: 'questionnaires:shareLink',
   questionnairesGet: 'questionnaires:get',
   questionnairesSave: 'questionnaires:save',
@@ -251,6 +254,7 @@ export const IpcChannels = {
   challengesClearSuggestion: 'challenges:clearSuggestion',
   assignmentsCreate: 'assignments:create',
   assignmentsInbox: 'assignments:inbox',
+  assignmentsSetFavorite: 'assignments:setFavorite',
   assignmentsGet: 'assignments:get',
   assignmentsOpen: 'assignments:open',
   assignmentsSaveProgress: 'assignments:saveProgress',
@@ -671,6 +675,14 @@ export interface SelfosBridge {
    */
   questionnairesSendStates(): Promise<Record<string, QuestionnaireSendState>>;
   /**
+   * A richer per-questionnaire "Sent" overview for the landing cards (08 §3.1): keyed by questionnaire id,
+   * the latest send time + the distinct recipients (deduped to their latest send) with their answered status,
+   * plus how many responses are newly in (submitted, not yet analysed). Recipient detail is results
+   * territory, so this is sender-scoped and requires `questionnaires.viewResults` (stricter than send-states).
+   * The raw answers never cross here.
+   */
+  questionnairesSentOverview(): Promise<Record<string, QuestionnaireSentOverview>>;
+  /**
    * The shareable link + PIN for a SENT questionnaire's latest open send (08 §17.14d) — for the "Share link"
    * affordance on the sent preview + list kebab. By default RE-SHOWS the existing link/PIN (no regeneration);
    * `regenerate: true` (the manual Refresh) mints a fresh one + revokes the old. Null if there's no relay,
@@ -918,6 +930,11 @@ export interface SelfosBridge {
   }): Promise<InAppSendResult>;
   /** The active person's Inbox — questionnaires sent to them, newest first. Requires `questionnaires.answer`. */
   assignmentsInbox(): Promise<InboxItem[]>;
+  /**
+   * Pin/unpin a received questionnaire (08 §3.3) — a personal, device-local, per-person view preference on
+   * someone else's send. Recipient-scoped; requires `questionnaires.answer`.
+   */
+  assignmentsSetFavorite(input: { assignmentId: string; favorite: boolean }): Promise<void>;
   /**
    * The answering view for one Inbox assignment (frozen snapshot + any saved draft answers). Returns
    * null unless the active person is the recipient. Requires `questionnaires.answer`.
@@ -1319,6 +1336,8 @@ export type {
   Questionnaire,
   QuestionnaireInput,
   QuestionnaireSendState,
+  QuestionnaireSentOverview,
+  SentRecipientSummary,
   QuestionTrend,
   RelayLinkResult,
   AnswersUpdatedSummary,

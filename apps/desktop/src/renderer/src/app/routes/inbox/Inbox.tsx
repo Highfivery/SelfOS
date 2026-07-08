@@ -1,23 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ClipboardList, Inbox as InboxIcon } from 'lucide-react';
-import type { InboxItem } from '@shared/channels';
 import { Button, Card, Heading, Stack, Text } from '../../../design-system/components';
 import { useInboxStore } from '../../../stores/inboxStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { InboxAnswer } from './InboxAnswer';
+import { receivedStatus } from './inboxStatus';
 import styles from './Inbox.module.css';
-
-/** A short status chip for an Inbox row. */
-function statusOf(item: InboxItem): { label: string; isNew: boolean } {
-  if (item.status === 'submitted' || item.status === 'analyzed') {
-    return { label: 'Submitted', isNew: false };
-  }
-  if (item.status === 'declined') return { label: 'Declined', isNew: false };
-  if (!item.answerable) return { label: 'Closed', isNew: false };
-  if (item.hasDraft) return { label: 'In progress', isNew: false };
-  return { label: 'New', isNew: true };
-}
 
 /** The recipient's Inbox (08-questionnaires §3.3): questionnaires sent to the active person. */
 export function Inbox(): JSX.Element {
@@ -60,7 +49,7 @@ export function Inbox(): JSX.Element {
           <Stack gap={2}>
             {items.map((item) => {
               const active = selectedId === item.assignmentId;
-              const status = statusOf(item);
+              const status = receivedStatus(item);
               return (
                 <button
                   key={item.assignmentId}

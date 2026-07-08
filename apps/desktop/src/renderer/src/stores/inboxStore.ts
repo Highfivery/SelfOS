@@ -11,6 +11,8 @@ interface InboxState {
   loaded: boolean;
   load: () => Promise<void>;
   reset: () => void;
+  /** Pin/unpin a received questionnaire (device-local, per-person); reloads so the card reflects it. */
+  setFavorite: (assignmentId: string, favorite: boolean) => Promise<void>;
   getDetail: (assignmentId: string) => Promise<InboxAssignmentDetail | null>;
   open: (assignmentId: string) => Promise<void>;
   saveProgress: (assignmentId: string, answers: Answer[]) => Promise<void>;
@@ -27,6 +29,13 @@ export const useInboxStore = create<InboxState>((set, get) => ({
     set({ items, loaded: true });
   },
   reset: () => set({ items: [], loaded: false }),
+  setFavorite: async (assignmentId, favorite) => {
+    // Optimistic flip so the star responds instantly; the bridge persists it (device-local, per-person).
+    set({
+      items: get().items.map((i) => (i.assignmentId === assignmentId ? { ...i, favorite } : i)),
+    });
+    await window.selfos?.assignmentsSetFavorite({ assignmentId, favorite });
+  },
   getDetail: async (assignmentId) => (await window.selfos?.assignmentsGet(assignmentId)) ?? null,
   open: async (assignmentId) => {
     await window.selfos?.assignmentsOpen(assignmentId);

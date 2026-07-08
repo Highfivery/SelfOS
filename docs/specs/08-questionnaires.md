@@ -153,6 +153,33 @@ Everyone scope) carry the standard **"Admin only"** marker (CLAUDE.md §12). Eve
 A sent questionnaire is an **immutable snapshot** (§4.2): editing a created questionnaire makes a new
 version; in-flight assignments keep their original questions so answers always map.
 
+**Landing redesign (2026-07-08).** The Questionnaires page is a full-width, two-section **card grid** — no
+more master list + empty detail placeholder. **"Sent"** shows the active person's authored questionnaires as
+cards (type eyebrow, title, favourite, **recipient chips with per-person answered state** [✓ answered / ⏱
+awaiting], a rich status pill — `Awaiting response` / `N of M answered` / `Answered · analysed` / `Draft ·
+not sent`, a **"N new"** badge for un-reviewed responses, and a `Ready to re-send` nudge). **"Received"**
+mirrors the Inbox (§3.3). Each section self-hides when empty; opening a card drops into a full-width detail
+(builder or the shared answering pane). The per-recipient status is a new **`questionnaires:sentOverview`**
+read (sender-scoped, gated `questionnaires.viewResults` — recipient detail is results territory; deduped to
+each recipient's latest send, the sender's own compatibility half excluded; **never** the raw answers). The
+basic **`questionnaires:sendStates`** (create-gated `{lastSentAt,total}`) stays for the builder + as a
+graceful fallback when a person lacks `viewResults`.
+
+**Landing enhancements (2026-07-08b).** The two sections are **collapsible**, and "Sent" is organised into
+**collapsible status subgroups** — **Drafts** (dashed cards) · **Awaiting responses** · **Answered · ready to
+analyze** · **Analyzed** (a pure `sentStatusOf`/`SENT_GROUPS` classification). Each section has a quiet toolbar
+(**search** + **status filter** + **sort** — recently sent / recently answered / A–Z; favourites pin to the
+top) and **"Show more"** pagination (`PAGE_SIZE`). Sent/answered/received times show **date AND time**
+(`formatDateTime`). A **Sent card** carries favourite · **share-link** (icon + tooltip, moved out of the kebab)
+· **view** ("See what was sent") icons + a kebab (**Duplicate** · Delete), with an **inline delete confirm**
+(rendered in the card, never off-screen). An **answered-not-analysed** card offers a one-tap **Analyze**
+(reuses `insights:analyze`); an **analysed** card shows the **Insight excerpt** + "View in Memory"; a **stale
+answered** card shows a calm "these answers are N old — duplicate & send for fresh answers" nudge. These need
+extra `sentOverview` fields (`answeredAt`, `analyzed`, `insightSummary`, `analyzableAssignmentId`, per-recipient
+`answeredAt`). **Received** cards gain the **category eyebrow**, received/answered **date·time**, and a
+**favourite** (device-local, per-person via `InboxItem.favorite` + `assignments:setFavorite`; `InboxItem` also
+carries `type` + `answeredAt`).
+
 ### 3.2 Sending
 
 1. **Choose recipient** — a household **subject** (delivered in-app) or an **external person** (relay
@@ -179,6 +206,13 @@ note), then submit. **Amended by [`56-answer-review-edit-reanalyze`](56-answer-r
 (2026-07-07):** a submitted in-app send is no longer a dead end — the recipient can **review their answers
 and Edit + resend** (a resubmit bumps `ResponseSet.revision`), which flags the sender's analysis stale
 (the `answers-updated` nudge → Re-analyze). Household/Inbox only; compatibility + relay stay single-submission.
+
+**Mirrored on the Questionnaires landing (2026-07-08).** The recipient's Inbox items also surface as a
+**"Received"** card section on the Questionnaires page (sender avatar, status pill, a state-matched CTA —
+Answer / Continue / View), so everything questionnaire-related has one home. The standalone **`/inbox`** nav
+stays (it will grow beyond questionnaires). A **self check-in** (you're both sender and recipient) is filtered
+out of this "Received" section — it already appears under "Sent" — via a new derived `InboxItem.fromSelf`
+flag, so the same card never renders twice on one screen. The `/inbox` page still lists it.
 
 ### 3.4 Recipient — external (relay page)
 
@@ -601,7 +635,14 @@ renderer):
   `:deleteImage(path)` / `:generate` / `:improveQuestion`. _(all wired.)_ Image ops are gated by
   `questionnaires.create`, mime + size re-validated in main, and reads/deletes are confined to the media
   dir (`isMediaPath`). `:generate`/`:improveQuestion` + `gapfinder:suggest` are budget-gated + metered (§13.3).
-- **Send/collect** — `assignments:create` (the in-app send — wired) / `:inbox` (the recipient's Inbox) /
+  `questionnaires:sendStates` (create-gated `{lastSentAt,total}` per questionnaire) +
+  `questionnaires:sentOverview` (**viewResults**-gated per-questionnaire recipients + answered/new counts for
+  the landing "Sent" cards §3.1 — deduped to each recipient's latest send, compat self-half excluded, no raw
+  answers). _(both wired, sender-scoped.)_
+- **Send/collect** — `assignments:create` (the in-app send — wired) / `:inbox` (the recipient's Inbox; each
+  item carries `fromSelf` = the active person is both sender + recipient, so the landing's "Received" section
+  can filter out self check-ins that already show under "Sent" §3.3; plus `type`, `answeredAt`, and a
+  device-local per-person `favorite`) / `:setFavorite` (pin/unpin a received questionnaire, recipient-scoped) /
   `:get` (the recipient answering view) / `:open` (sent → opened) — _all wired, recipient-scoped + gated by
   `questionnaires.answer`_; `assignments:results(questionnaireId)` returns the sender's sends + per-send
   outcome (Standard, submitted → raw answers; Private → none), _sender-scoped + gated by

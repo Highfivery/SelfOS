@@ -7,6 +7,7 @@ import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
 import { usePeopleStore } from '../../../stores/peopleStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useSettingsStore } from '../../../settings/settingsStore';
+import { useInboxStore } from '../../../stores/inboxStore';
 import { clearMockBridge, elevateToOwner, installMockBridge } from '../../../test-utils/bridge';
 
 /** A minimal household Person for the recipient picker (08 §17.3: a questionnaire is bound to one). */
@@ -43,9 +44,11 @@ afterEach(() => {
   useQuestionnaireStore.setState({
     questionnaires: [],
     sendStates: {},
+    sentOverview: {},
     loaded: false,
     customTypes: [],
   });
+  useInboxStore.setState({ items: [], loaded: false });
   usePeopleStore.setState({ people: [], loaded: false });
   useSettingsStore.setState({ values: {} });
   useSessionStore.setState({});
@@ -865,9 +868,10 @@ describe('Questionnaires', () => {
     });
     renderApp();
 
-    // The list row carries a "Sent · <date>" chip so a sent questionnaire is distinct from a draft.
+    // The card carries a "Sent · <date · time>" meta so a sent questionnaire is distinct from a draft (the
+    // bare "Sent" section heading has no date, so this stays specific to the card).
     await screen.findByText(/^Weekly check-in/);
-    expect(screen.getByText(/Sent/)).toBeInTheDocument();
+    expect(screen.getByText(/Sent .*2026/)).toBeInTheDocument();
     // Opening it, the builder header repeats the sent state (with the re-send count).
     await userEvent.click(screen.getByRole('button', { name: /^Weekly check-in/ }));
     expect(screen.getByText(/For:/)).toHaveTextContent(/Sent .*\(2 times\)/);
@@ -941,11 +945,8 @@ describe('Questionnaires', () => {
     });
     renderApp();
 
-    // The kebab on a SENT row offers "Share link" → opens the questionnaire + auto-fetches the link.
-    await userEvent.click(
-      await screen.findByRole('button', { name: /Options for Weekly check-in/ }),
-    );
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Share link' }));
+    // A SENT card carries a "Copy share link" icon (moved out of the kebab) → opens it + fetches the link.
+    await userEvent.click(await screen.findByRole('button', { name: 'Copy share link' }));
     expect(questionnairesShareLink).toHaveBeenCalledWith('q1', false);
     expect(
       await screen.findByDisplayValue('https://x.workers.dev/q/shr#k=key'),
@@ -1010,14 +1011,13 @@ describe('Questionnaires', () => {
             updatedAt: 'now',
           },
         ]),
-      // Sent well beyond the cooldown → "Send again" is enabled + the list shows "Ready to re-send".
+      // Sent well beyond the cooldown → opening it, "Send again" is enabled in the builder.
       questionnairesSendStates: () =>
         Promise.resolve({ q1: { lastSentAt: '2026-01-01T00:00:00.000Z', total: 1 } }),
     });
     renderApp();
 
-    expect(await screen.findByText(/Ready to re-send/i)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /^Weekly check-in/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Weekly check-in/ }));
     expect(screen.getByRole('button', { name: /ask again/i })).toBeEnabled();
   });
 
@@ -1093,9 +1093,9 @@ describe('Questionnaires', () => {
     await screen.findByText(/^Weekly check-in/);
     await userEvent.click(screen.getByRole('button', { name: /Options for Weekly check-in/ }));
     await userEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
-    // Confirm gate — nothing deleted until "Delete" in the confirm is pressed.
+    // Confirm gate (now inline in the card, right where you clicked) — nothing deleted until confirmed.
     expect(questionnairesDelete).not.toHaveBeenCalled();
-    expect(screen.getByText(/Delete .Weekly check-in/)).toBeInTheDocument();
+    expect(screen.getByText(/Delete this draft/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
     expect(questionnairesDelete).toHaveBeenCalledWith('q1');
   });
@@ -1233,5 +1233,207 @@ describe('Questionnaires', () => {
     // It's collapsible — hiding it removes the preview control.
     await userEvent.click(screen.getByRole('button', { name: 'Hide preview' }));
     expect(screen.queryByRole('radio', { name: 'Yes' })).not.toBeInTheDocument();
+  });
+
+  // --- 2026-07 landing redesign: two card sections (§3.1/§3.3) ---
+
+  it('a Sent card shows per-recipient answered status + a "N new" badge (§3.1)', async () => {
+    installMockBridge({
+      questionnairesList: () =>
+        Promise.resolve([
+          {
+            id: 'q1',
+            schemaVersion: 1,
+            version: 1,
+            title: 'Relationship check-in',
+            type: 'general',
+            sensitivity: 'standard',
+            questions: [{ id: 'qq1', type: 'shortText', prompt: 'How?', required: true }],
+            createdAt: 'now',
+            updatedAt: 'now',
+          },
+        ]),
+      questionnairesSendStates: () =>
+        Promise.resolve({ q1: { lastSentAt: '2026-06-10T00:00:00.000Z', total: 2 } }),
+      questionnairesSentOverview: () =>
+        Promise.resolve({
+          q1: {
+            questionnaireId: 'q1',
+            lastSentAt: '2026-06-10T00:00:00.000Z',
+            recipients: [
+              { name: 'Angel', status: 'submitted', answered: true },
+              { name: 'Sam', status: 'sent', answered: false },
+            ],
+            answeredCount: 1,
+            newResponses: 1,
+            analyzed: false,
+          },
+        }),
+    });
+    renderApp();
+
+    await screen.findByText('Relationship check-in');
+    // Rich status: who it went to, who's answered, and un-reviewed responses.
+    expect(screen.getByText('1 of 2 answered')).toBeInTheDocument();
+    expect(screen.getByText('Angel')).toBeInTheDocument();
+    expect(screen.getByText('Sam')).toBeInTheDocument();
+    expect(screen.getByText('1 new')).toBeInTheDocument();
+  });
+
+  it('lists Received questionnaires and opening one shows the answering pane (§3.3)', async () => {
+    installMockBridge({
+      questionnairesList: () => Promise.resolve([]),
+      assignmentsInbox: () =>
+        Promise.resolve([
+          {
+            assignmentId: 'a1',
+            title: 'How we handle money',
+            type: 'general',
+            questionCount: 7,
+            status: 'sent',
+            privacy: 'standard',
+            senderName: 'Sam',
+            createdAt: 'now',
+            favorite: false,
+            answerable: true,
+            hasDraft: false,
+            fromSelf: false,
+          },
+        ]),
+    });
+    renderApp();
+
+    expect(await screen.findByRole('heading', { name: 'Received' })).toBeInTheDocument();
+    expect(screen.getByText('How we handle money')).toBeInTheDocument();
+    expect(screen.getByText(/From Sam/)).toBeInTheDocument();
+    // A new item leads with the "Answer" CTA; opening it enters the answering detail (back link appears,
+    // the landing sections are replaced).
+    await userEvent.click(screen.getByRole('button', { name: 'Answer' }));
+    expect(await screen.findByRole('button', { name: 'Questionnaires' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Received' })).not.toBeInTheDocument();
+  });
+
+  // --- 2026-07 enhancements: analyze/excerpt, favourites, grouping, collapse, filter ---
+
+  const sentDef = (id: string, title: string) => ({
+    id,
+    schemaVersion: 1 as const,
+    version: 1,
+    title,
+    type: 'general',
+    sensitivity: 'standard' as const,
+    questions: [{ id: 'qq1', type: 'shortText' as const, prompt: 'How?', required: true }],
+    createdAt: 'now',
+    updatedAt: 'now',
+  });
+
+  it('a sent card offers Analyze when answered-not-analysed, and shows the Insight excerpt once analysed (§3.1)', async () => {
+    const insightsAnalyze = vi.fn(() =>
+      Promise.resolve({ ok: false as const, reason: 'NO_RESPONSE' as const }),
+    );
+    installMockBridge({
+      questionnairesList: () =>
+        Promise.resolve([sentDef('q1', 'Money talk'), sentDef('q2', 'Love languages')]),
+      questionnairesSendStates: () =>
+        Promise.resolve({
+          q1: { lastSentAt: '2026-06-10T00:00:00.000Z', total: 1 },
+          q2: { lastSentAt: '2026-06-09T00:00:00.000Z', total: 1 },
+        }),
+      questionnairesSentOverview: () =>
+        Promise.resolve({
+          q1: {
+            questionnaireId: 'q1',
+            lastSentAt: '2026-06-10T00:00:00.000Z',
+            recipients: [{ name: 'Angel', status: 'submitted', answered: true }],
+            answeredCount: 1,
+            newResponses: 1,
+            analyzed: false,
+            answeredAt: '2026-06-11T09:00:00.000Z',
+            analyzableAssignmentId: 'a1',
+          },
+          q2: {
+            questionnaireId: 'q2',
+            lastSentAt: '2026-06-09T00:00:00.000Z',
+            recipients: [{ name: 'Angel', status: 'submitted', answered: true }],
+            answeredCount: 1,
+            newResponses: 0,
+            analyzed: true,
+            answeredAt: '2026-06-10T09:00:00.000Z',
+            insightSummary: 'They value quality time above gifts.',
+          },
+        }),
+      insightsAnalyze,
+    });
+    renderApp();
+
+    // Analysed → the Insight excerpt is shown on the card.
+    expect(await screen.findByText(/They value quality time above gifts/)).toBeInTheDocument();
+    // Answered-not-analysed → a one-tap Analyze affordance that triggers analysis of the pending send.
+    await userEvent.click(screen.getByRole('button', { name: /Analyze to see the insight/ }));
+    expect(insightsAnalyze).toHaveBeenCalledWith({ assignmentId: 'a1' });
+    // A failure is surfaced calmly, never silent.
+    expect(await screen.findByText(/Couldn’t analyze/)).toBeInTheDocument();
+  });
+
+  it('a received card shows the category and can be favourited (§3.3)', async () => {
+    const assignmentsSetFavorite = vi.fn(() => Promise.resolve());
+    installMockBridge({
+      questionnairesList: () => Promise.resolve([]),
+      assignmentsInbox: () =>
+        Promise.resolve([
+          {
+            assignmentId: 'a1',
+            title: 'How we handle money',
+            type: 'general',
+            questionCount: 7,
+            status: 'sent',
+            privacy: 'standard',
+            senderName: 'Sam',
+            createdAt: '2026-06-10T00:00:00.000Z',
+            favorite: false,
+            answerable: true,
+            hasDraft: false,
+            fromSelf: false,
+          },
+        ]),
+      assignmentsSetFavorite,
+    });
+    renderApp();
+
+    // The category eyebrow ("General") is shown on the received card…
+    expect(await screen.findByText('General')).toBeInTheDocument();
+    // …and it carries a favourite pin.
+    await userEvent.click(screen.getByRole('button', { name: /Pin .How we handle money/ }));
+    expect(assignmentsSetFavorite).toHaveBeenCalledWith({ assignmentId: 'a1', favorite: true });
+  });
+
+  it('groups sent questionnaires by status, and collapsing the section hides them (§3.1)', async () => {
+    installMockBridge({
+      questionnairesList: () =>
+        Promise.resolve([
+          // An unsent one → Drafts group.
+          { ...sentDef('q1', 'Rough idea'), questions: [] },
+          // A sent, awaiting one → Awaiting group.
+          sentDef('q2', 'Weekly mood'),
+        ]),
+      questionnairesSendStates: () =>
+        Promise.resolve({ q2: { lastSentAt: '2026-06-10T00:00:00.000Z', total: 1 } }),
+    });
+    renderApp();
+
+    // Status subgroups appear (the group header is a collapse button, distinct from the filter option).
+    expect(await screen.findByRole('button', { name: /Drafts/ })).toBeInTheDocument();
+    expect(screen.getByText('Awaiting responses')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Weekly mood/ })).toBeInTheDocument();
+
+    // Filtering to Drafts hides the Awaiting group.
+    await userEvent.selectOptions(screen.getByLabelText('Filter sent by status'), 'draft');
+    expect(screen.queryByText('Awaiting responses')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Drafts/ })).toBeInTheDocument();
+
+    // Collapsing the Sent section hides its groups + cards.
+    await userEvent.click(screen.getByRole('button', { name: 'Sent' }));
+    expect(screen.queryByRole('button', { name: /Drafts/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Weekly mood/ })).not.toBeInTheDocument();
   });
 });

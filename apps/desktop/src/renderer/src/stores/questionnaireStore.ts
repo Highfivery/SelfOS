@@ -3,6 +3,7 @@ import type {
   Questionnaire,
   QuestionnaireInput,
   QuestionnaireSendState,
+  QuestionnaireSentOverview,
   SelfosBridge,
 } from '@shared/channels';
 
@@ -13,6 +14,7 @@ type ImproveInput = Parameters<SelfosBridge['questionnairesImproveQuestion']>[0]
 type ImproveResult = Awaited<ReturnType<SelfosBridge['questionnairesImproveQuestion']>>;
 type SuggestInput = Parameters<SelfosBridge['gapfinderSuggest']>[0];
 type SuggestResult = Awaited<ReturnType<SelfosBridge['gapfinderSuggest']>>;
+type AnalyzeResult = Awaited<ReturnType<SelfosBridge['insightsAnalyze']>>;
 // Recipient-first saved suggestions (08 §18).
 type SavedSuggestionList = Awaited<ReturnType<SelfosBridge['questionnaireSuggestionsList']>>;
 type SavedSuggestionsGenerateResult = Awaited<
@@ -30,6 +32,9 @@ interface QuestionnaireState {
   loaded: boolean;
   /** Per-questionnaire send state for the author's list (keyed by id): latest send time + count. */
   sendStates: Record<string, QuestionnaireSendState>;
+  /** Richer per-questionnaire "Sent" overview (keyed by id): recipients + answered/new counts. Empty for
+   *  a person without `questionnaires.viewResults` — the landing falls back to `sendStates` then. */
+  sentOverview: Record<string, QuestionnaireSentOverview>;
   /** User-defined custom types (the starter taxonomy lives in the builder). */
   customTypes: string[];
   load: () => Promise<void>;
@@ -56,6 +61,9 @@ interface QuestionnaireState {
     recipientPersonId: string,
     suggestionId: string,
   ) => Promise<GenerateResult>;
+  /** Analyze a submitted send into an Insight (the card's one-tap "Analyze"); reloads the overview after.
+   *  Returns the result so the caller can surface a calm message on failure (AI off / over budget / denied). */
+  analyze: (assignmentId: string) => Promise<AnalyzeResult>;
   save: (input: QuestionnaireInput) => Promise<Questionnaire | null>;
   remove: (id: string) => Promise<void>;
   validate: (input: QuestionnaireInput) => Promise<string[]>;
@@ -67,13 +75,15 @@ export const useQuestionnaireStore = create<QuestionnaireState>((set, get) => ({
   questionnaires: [],
   loaded: false,
   sendStates: {},
+  sentOverview: {},
   customTypes: [],
   load: async () => {
-    const [questionnaires, sendStates] = await Promise.all([
+    const [questionnaires, sendStates, sentOverview] = await Promise.all([
       window.selfos?.questionnairesList() ?? [],
       window.selfos?.questionnairesSendStates() ?? {},
+      window.selfos?.questionnairesSentOverview() ?? {},
     ]);
-    set({ questionnaires, sendStates, loaded: true });
+    set({ questionnaires, sendStates, sentOverview, loaded: true });
   },
   loadTypes: async () => {
     set({ customTypes: (await window.selfos?.questionnairesListTypes()) ?? [] });
@@ -105,6 +115,11 @@ export const useQuestionnaireStore = create<QuestionnaireState>((set, get) => ({
       recipientPersonId,
       suggestionId,
     })) ?? AI_UNAVAILABLE,
+  analyze: async (assignmentId) => {
+    const result = (await window.selfos?.insightsAnalyze({ assignmentId })) ?? AI_UNAVAILABLE;
+    await get().load();
+    return result;
+  },
   save: async (input) => {
     const saved = (await window.selfos?.questionnairesSave(input)) ?? null;
     await get().load();

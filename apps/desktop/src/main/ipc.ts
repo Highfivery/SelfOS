@@ -280,6 +280,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.usageSessionCosts, bridge.usageSessionCosts);
   handle(IpcChannels.questionnairesList, bridge.questionnairesList);
   handle(IpcChannels.questionnairesSendStates, bridge.questionnairesSendStates);
+  handle(IpcChannels.questionnairesSentOverview, bridge.questionnairesSentOverview);
   handle(IpcChannels.questionnairesShareLink, bridge.questionnairesShareLink);
   handle(IpcChannels.questionnairesGet, bridge.questionnairesGet);
   handle(IpcChannels.questionnairesSave, bridge.questionnairesSave);
@@ -339,6 +340,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.challengesClearSuggestion, bridge.challengesClearSuggestion);
   handle(IpcChannels.assignmentsCreate, bridge.assignmentsCreate);
   handle(IpcChannels.assignmentsInbox, bridge.assignmentsInbox);
+  handle(IpcChannels.assignmentsSetFavorite, bridge.assignmentsSetFavorite);
   handle(IpcChannels.assignmentsGet, bridge.assignmentsGet);
   handle(IpcChannels.assignmentsOpen, bridge.assignmentsOpen);
   handle(IpcChannels.assignmentsSaveProgress, bridge.assignmentsSaveProgress);

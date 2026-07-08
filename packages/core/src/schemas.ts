@@ -207,6 +207,12 @@ export const DeviceStateSchema = z.object({
    * precedent — no schemaVersion bump).
    */
   discoveryDismissals: z.record(z.string(), z.array(z.string())).optional(),
+  /**
+   * Received questionnaires the active person has pinned (08 §3.3), keyed by subject person id → the set of
+   * favourited assignment ids. A favourite is a personal, device-local view preference on someone else's
+   * send — it must not sync or leak across personas. Additive-optional (the `discoveryDismissals` precedent).
+   */
+  inboxFavorites: z.record(z.string(), z.array(z.string())).optional(),
 });
 export type DeviceState = z.infer<typeof DeviceStateSchema>;
 
@@ -2324,13 +2330,20 @@ export type IntakeSynthesisResult =
 export interface InboxItem {
   assignmentId: string;
   title: string;
+  type: string; // the questionnaire's category (from the frozen snapshot), shown as the card eyebrow
   questionCount: number;
   status: AssignmentStatus;
   privacy: PrivacyMode;
   senderName: string | null; // null = the sender stayed anonymous
   createdAt: string;
+  answeredAt?: string; // when the recipient submitted (ISO) — present once submitted
+  favorite: boolean; // the active person pinned it (device-local, per-person)
   answerable: boolean; // still open to answer / decline
   hasDraft: boolean; // saved-but-unsubmitted progress exists
+  // True when the active person is BOTH sender and recipient (a self check-in). The standalone Inbox still
+  // lists it, but the Questionnaires landing's "Received" section (things OTHERS sent you) filters it out —
+  // it already appears there under "Sent" (08 §3.3), so it never double-renders on one screen.
+  fromSelf: boolean;
 }
 
 /**
@@ -2431,6 +2444,49 @@ export interface SendResult {
 export interface QuestionnaireSendState {
   lastSentAt: string;
   total: number;
+}
+
+/**
+ * One recipient of a questionnaire, as summarised on the redesigned Questionnaires landing "Sent" card
+ * (08-questionnaires §3.1). Deduped to the recipient's LATEST send, so a re-asked questionnaire shows each
+ * person once with their current state — never the raw answers (that stays the per-send Results view).
+ */
+export interface SentRecipientSummary {
+  /** Display name (a household person's name, or the external recipient's label). */
+  name: string;
+  /** The recipient's latest send status — drives the per-person state dot. */
+  status: AssignmentStatus;
+  /** True once the recipient has submitted (status `submitted` or `analyzed`). */
+  answered: boolean;
+  /** When this recipient's latest send was submitted (ISO) — present only once answered. */
+  answeredAt?: string;
+}
+
+/**
+ * A per-questionnaire "Sent" overview for the landing cards (08-questionnaires §3.1) — richer than
+ * QuestionnaireSendState: who it went to + who's answered, so a card can read "1 of 2 answered". A derived,
+ * sender-scoped view gated on `questionnaires.viewResults` (recipient detail is results territory); the raw
+ * answers never cross here. Recipients are deduped to their latest send; the sender's own compatibility half
+ * is excluded (they answer in-app, not a "recipient").
+ */
+export interface QuestionnaireSentOverview {
+  questionnaireId: string;
+  lastSentAt: string;
+  /** Distinct recipients (deduped), each with their latest status. */
+  recipients: SentRecipientSummary[];
+  /** How many distinct recipients have answered — the numerator of "X of N answered". */
+  answeredCount: number;
+  /** Submitted responses not yet analysed by the sender — drives the "N new" badge. */
+  newResponses: number;
+  /** The most recent submission time across all sends (ISO) — the card's "Answered <date·time>". */
+  answeredAt?: string;
+  /** True once every submitted send has been analysed (≥1 submitted, none left un-analysed). */
+  analyzed: boolean;
+  /** A short excerpt of the derived Insight's summary (the latest analysed send) — shown on the card. */
+  insightSummary?: string;
+  /** The latest submitted-but-un-analysed send, so the card can offer a one-tap "Analyze". Absent when
+   *  there's nothing new to analyse (nothing submitted, or all analysed). */
+  analyzableAssignmentId?: string;
 }
 
 /**

@@ -118,6 +118,7 @@ const bridge: SelfosBridge = {
   usageSessionCosts: () => ipcRenderer.invoke(IpcChannels.usageSessionCosts),
   questionnairesList: () => ipcRenderer.invoke(IpcChannels.questionnairesList),
   questionnairesSendStates: () => ipcRenderer.invoke(IpcChannels.questionnairesSendStates),
+  questionnairesSentOverview: () => ipcRenderer.invoke(IpcChannels.questionnairesSentOverview),
   questionnairesShareLink: (id, regenerate) =>
     ipcRenderer.invoke(IpcChannels.questionnairesShareLink, id, regenerate),
   questionnairesGet: (id) => ipcRenderer.invoke(IpcChannels.questionnairesGet, id),
@@ -190,6 +191,7 @@ const bridge: SelfosBridge = {
   challengesClearSuggestion: () => ipcRenderer.invoke(IpcChannels.challengesClearSuggestion),
   assignmentsCreate: (input) => ipcRenderer.invoke(IpcChannels.assignmentsCreate, input),
   assignmentsInbox: () => ipcRenderer.invoke(IpcChannels.assignmentsInbox),
+  assignmentsSetFavorite: (input) => ipcRenderer.invoke(IpcChannels.assignmentsSetFavorite, input),
   assignmentsGet: (assignmentId) => ipcRenderer.invoke(IpcChannels.assignmentsGet, assignmentId),
   assignmentsOpen: (assignmentId) => ipcRenderer.invoke(IpcChannels.assignmentsOpen, assignmentId),
   assignmentsSaveProgress: (input) =>

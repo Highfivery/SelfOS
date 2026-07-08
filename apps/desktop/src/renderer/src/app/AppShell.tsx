@@ -6,6 +6,7 @@ import {
   Brain,
   ClipboardList,
   Compass,
+  Flag,
   House,
   Inbox,
   MessageCircle,
@@ -14,6 +15,7 @@ import {
   PanelLeftOpen,
   Settings,
   Shapes,
+  Share2,
   ShieldCheck,
   Sparkles,
   Users,
@@ -321,6 +323,18 @@ export function AppShell(): JSX.Element {
                 <span className={styles.label}>Memory</span>
               </NavLink>
             ) : null}
+            {canViewMemory ? (
+              <NavLink
+                to="/goals"
+                className={navClass}
+                aria-label="Goals"
+                title={tip('Goals')}
+                onClick={closeDrawer}
+              >
+                <Flag size={18} aria-hidden="true" />
+                <span className={styles.label}>Goals</span>
+              </NavLink>
+            ) : null}
             {canOwnDreams ? (
               <NavLink
                 to="/dreams"
@@ -343,6 +357,18 @@ export function AppShell(): JSX.Element {
               >
                 <Compass size={18} aria-hidden="true" />
                 <span className={styles.label}>You</span>
+              </NavLink>
+            ) : null}
+            {canViewMemory ? (
+              <NavLink
+                to="/sharing"
+                className={navClass}
+                aria-label="Sharing & relationships"
+                title={tip('Sharing & relationships')}
+                onClick={closeDrawer}
+              >
+                <Share2 size={18} aria-hidden="true" />
+                <span className={styles.label}>Sharing</span>
               </NavLink>
             ) : null}
             {canManagePeople ? (

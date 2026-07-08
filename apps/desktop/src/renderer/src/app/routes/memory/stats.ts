@@ -1,9 +1,9 @@
-import type { Insight, InsightSource, OutboundSharing, RelationshipType } from '@shared/schemas';
-import { RELATIONSHIP_TYPE_ORDER } from '@selfos/core/sharing';
+import type { Insight, InsightSource } from '@shared/schemas';
 
 /**
- * Pure stat derivations for the Memory dashboard's summary header (44-memory-dashboard §3.2). All computed
- * locally from the already-loaded, already-scoped lists — no extra IPC, no AI. Tested in stats.test.ts.
+ * Pure stat derivations for the Memory overview (44 → 57). Computed locally from the already-loaded,
+ * already-scoped own-insight list — no extra IPC, no AI. Feeds the "N things learned" count + the "how well
+ * it knows you" read (see overview.ts). Tested in stats.test.ts.
  */
 
 export interface OverviewStat {
@@ -23,24 +23,7 @@ export interface ConfidenceStat {
   total: number;
 }
 
-export interface SharingStat {
-  /** Total items the person currently shares (facts + intake answers). */
-  sharedCount: number;
-  /** Per-relationship-type item counts, only types with > 0, in `RELATIONSHIP_TYPE_ORDER`. */
-  byType: { type: RelationshipType; count: number }[];
-  /** Legacy broadcast items (shared with everyone) — surfaced distinctly so the picture stays honest. */
-  broadcastCount: number;
-}
-
 const SOURCE_ORDER: InsightSource[] = ['intake', 'session', 'dream', 'questionnaire', 'test'];
-
-export const SOURCE_LABEL: Record<InsightSource, string> = {
-  intake: 'Onboarding',
-  session: 'Sessions',
-  dream: 'Dreams',
-  questionnaire: 'Questionnaires',
-  test: 'Self-assessments',
-};
 
 /** "What SelfOS knows" — live-fact counts by source + when it last changed (§3.2). */
 export function overviewStats(ownApproved: Insight[]): OverviewStat {
@@ -71,22 +54,4 @@ export function confidenceStats(ownApproved: Insight[]): ConfidenceStat {
     else low += 1;
   }
   return { high, medium, low, total: ownApproved.length };
-}
-
-/** "What you share & with whom" — item totals + a per-type breakdown from `listOutboundSharing` (§3.2). */
-export function sharingStats(outbound: OutboundSharing): SharingStat {
-  const byType = new Map<RelationshipType, number>();
-  let broadcastCount = 0;
-  for (const item of outbound.items) {
-    if (item.broadcast) broadcastCount += 1;
-    for (const type of item.types) byType.set(type, (byType.get(type) ?? 0) + 1);
-  }
-  return {
-    sharedCount: outbound.items.length,
-    byType: RELATIONSHIP_TYPE_ORDER.filter((t) => (byType.get(t) ?? 0) > 0).map((type) => ({
-      type,
-      count: byType.get(type) ?? 0,
-    })),
-    broadcastCount,
-  };
 }

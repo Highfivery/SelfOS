@@ -188,9 +188,9 @@ export function useNotificationSources(conflicts: string[]): void {
     }
 
     // A gentle goal check-in (40 §3.2) — at most ONE open at a time (the stalest), coalesced. The action
-    // links to Memory where the goal + its Still on it / Mark done / Let it go actions live; Home's "For you"
-    // goal recommendation (53) offers those inline. Acting changes the goal (signature) so a dismissed nudge
-    // stays dismissed until the goal changes; resolving the stalest surfaces the next.
+    // links to the Goals page (57 §3.7) where the goal + its Still on it / Mark done / Let it go actions live;
+    // Home's "For you" goal recommendation (53) offers those inline. Acting changes the goal (signature) so a
+    // dismissed nudge stays dismissed until the goal changes; resolving the stalest surfaces the next.
     const stale = stalestGoal(goals, new Date());
     if (stale) {
       candidates.push({
@@ -199,7 +199,7 @@ export function useNotificationSources(conflicts: string[]): void {
         signature: `${stale.id}:${stale.updatedAt}`,
         title: 'A goal worth a check-in',
         body: `You set a goal a while back: “${stale.text}”. Still working on it?`,
-        action: { type: 'navigate', to: '/memory' },
+        action: { type: 'navigate', to: '/goals' },
       });
     }
 

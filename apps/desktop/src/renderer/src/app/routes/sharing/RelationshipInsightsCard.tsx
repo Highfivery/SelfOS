@@ -3,7 +3,7 @@ import { EyeOff, RefreshCw, Sparkles } from 'lucide-react';
 import type { RelationshipSynthesis } from '@shared/schemas';
 import { Banner, Button, Card, Stack, Text } from '../../../design-system/components';
 import { aiUnavailableMessage } from '../../AiUnavailableNotice';
-import styles from './Memory.module.css';
+import styles from './RelationshipInsightsCard.module.css';
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);

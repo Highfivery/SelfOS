@@ -3027,8 +3027,8 @@ test('memory: the Insights surface shows its empty state + crisis affordance', a
     await w.getByRole('link', { name: 'Memory' }).click();
     await expect(w.getByRole('heading', { name: 'Memory' })).toBeVisible();
     // No analyzed answers yet (the live producer wires up with the Inbox, §13.5); the empty state explains
-    // when insights appear (41 §3.1).
-    await expect(w.getByText(/Insights appear here after your sessions/i)).toBeVisible();
+    // when insights appear (57 §3.1).
+    await expect(w.getByText(/what\s+SelfOS learns about you shows up here/i)).toBeVisible();
     // The not-medical line + crisis affordance are always present on this surface.
     await expect(w.getByText(/not medical care/i)).toBeVisible();
     await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible();
@@ -3062,12 +3062,15 @@ test('memory: a member sees only their OWN insights, never another member’s (t
       .click();
     await expect(w.getByRole('button', { name: 'Signed in as Ana' })).toBeVisible();
 
-    // Ana's Memory shows HER portrait — and NEVER Bo's (the closed cross-user leak).
+    // Ana's Memory shows HER portrait (the hero summary + tile gist) — and NEVER Bo's (the cross-user leak).
     await w.getByRole('link', { name: 'Memory' }).click();
-    await expect(w.getByText(/Ana's onboarding portrait/)).toBeVisible();
-    await expect(w.getByText(/Ana keeps a private journal/)).toBeVisible();
+    await expect(w.getByText(/Ana's onboarding portrait/).first()).toBeVisible();
     await expect(w.getByText(/Bo's onboarding portrait/)).toHaveCount(0);
     await expect(w.getByText(/Bo is afraid of heights/)).toHaveCount(0);
+    // Drilling into her own portrait shows her own fact (own data is viewable to her).
+    await w.getByRole('button', { name: /^Other/ }).click();
+    await w.getByRole('button', { name: /Open insight: Ana.s onboarding portrait/ }).click();
+    await expect(w.getByText(/Ana keeps a private journal/)).toBeVisible();
 
     // Decrypt-level proof: Bo's insight DOES exist on disk — it's withheld by scoping, not merely missing.
     const fs = createNodeFileSystem(vault);
@@ -3087,7 +3090,7 @@ test('memory: a member sees only their OWN insights, never another member’s (t
       .click();
     await expect(w.getByRole('button', { name: 'Signed in as Bo' })).toBeVisible();
     await w.getByRole('link', { name: 'Memory' }).click();
-    await expect(w.getByText(/Bo's onboarding portrait/)).toBeVisible();
+    await expect(w.getByText(/Bo's onboarding portrait/).first()).toBeVisible();
     await expect(w.getByText(/Ana's onboarding portrait/)).toHaveCount(0);
   } finally {
     await app.close();
@@ -3177,19 +3180,24 @@ test('memory (#129): a questionnaire you sent a partner is grouped under "Respon
     await w.getByRole('link', { name: 'Memory' }).click();
     await expect(w.getByRole('heading', { name: 'Memory' })).toBeVisible();
 
-    // The sent-questionnaire insight lands in its own "Responses" section, grouped under Angel…
+    // A genuine own insight fills its life-area TILE; the sent-questionnaire insight is NOT a life-area tile.
+    await expect(w.getByRole('button', { name: /^Health & body/ })).toContainText(
+      'Values steady routines',
+    );
+    await expect(w.getByRole('button', { name: /^Relationships/ })).toHaveCount(0);
+
+    // The sent-questionnaire insight lives behind its own tile → the "Responses" view, grouped under Angel…
+    await w.getByRole('button', { name: /From questionnaires you sent/ }).click();
     await expect(
       w.getByRole('heading', { name: 'Responses to your questionnaires' }),
     ).toBeVisible();
     await expect(w.getByRole('heading', { name: 'Angel' })).toBeVisible();
-    // …with the honest "From Angel's answers" eyebrow (never "About you"), resolved read-time from the send.
-    await expect(w.getByText(/From Angel.s answers/)).toBeVisible();
     await expect(w.getByText('Angel wants more protected time together')).toBeVisible();
-    // It is NOT mislabelled as a Relationships life-area card (the #129 bug).
-    await expect(w.getByRole('heading', { name: /^Relationships/ })).toHaveCount(0);
-    // A genuine own insight still fills its life-area card.
-    await expect(w.getByRole('heading', { name: /Health & body/ })).toBeVisible();
-    await expect(w.getByText('Values steady routines')).toBeVisible();
+    // …and opening it shows the honest "From Angel's answers" eyebrow (never "About you"), resolved read-time.
+    await w
+      .getByRole('button', { name: /Open insight: Angel wants more protected time together/ })
+      .click();
+    await expect(w.getByText(/From Angel.s answers/)).toBeVisible();
 
     // No horizontal overflow / inner scrollbars at phone width (CLAUDE.md §7/§12).
     await w.setViewportSize({ width: 360, height: 800 });
@@ -3213,7 +3221,7 @@ test('memory (#129): a questionnaire you sent a partner is grouped under "Respon
   }
 });
 
-test('memory redesign (54): a partner’s shared facts never show raw; the Partners view shows AI relationship insights', async () => {
+test('memory redesign (54/57): a partner’s shared facts never show raw; the Sharing & relationships page shows AI relationship insights', async () => {
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
   await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
   {
@@ -3286,8 +3294,9 @@ test('memory redesign (54): a partner’s shared facts never show raw; the Partn
     await expect(w.getByText('PARTNER-PRIVATE-FACT')).toHaveCount(0);
     await expect(w.getByText('About people you relate to')).toHaveCount(0);
 
-    // The Partners view: a relationship-insights card. Generate → AI observations (a synthesis, never raw).
-    await w.getByRole('button', { name: 'Partners' }).click();
+    // The relationship reflections moved to the "Sharing & relationships" page (57 §3.8): a
+    // relationship-insights card. Generate → AI observations (a synthesis, never raw).
+    await w.getByRole('link', { name: 'Sharing & relationships' }).click();
     await expect(w.getByText(/You & Pat/)).toBeVisible();
     await w.getByRole('button', { name: /Reflect on us/ }).click();
     await expect(w.getByText(/both lean on security/)).toBeVisible();
@@ -3305,7 +3314,7 @@ test('memory redesign (54): a partner’s shared facts never show raw; the Partn
     const synthRaw = await fs.read('people/owner-1/relationships/pat-1/synthesis.enc');
     expect(synthRaw).not.toBeNull(); // the synthesis was cached
 
-    // Phone width: no horizontal overflow with the Partners card on screen.
+    // Phone width: no horizontal overflow with the relationship card on screen.
     await w.setViewportSize({ width: 360, height: 800 });
     const overflow = await w.evaluate(() => {
       const main = document.querySelector('main');
@@ -3396,17 +3405,34 @@ test('memory: the dashboard groups by life-area, flags a fact (decrypt-persisted
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Memory' }).click();
 
-    // The draft is in "Needs your review"; approved insights group by life-area; Trends is present.
-    await expect(w.getByRole('heading', { name: 'Needs your review' })).toBeVisible();
-    await expect(w.getByText('Might want to set firmer work boundaries')).toBeVisible();
-    await expect(w.getByRole('heading', { name: /Health & body/ })).toBeVisible();
-    await expect(w.getByRole('heading', { name: /Relationships/ })).toBeVisible();
-    await expect(w.getByText('Trends')).toBeVisible();
-    await expect(w.getByText('Sleeps better with a wind-down routine')).toBeVisible();
-    // A session insight whose conversation is gone shows "original source removed".
-    await expect(w.getByText(/original source removed/i).first()).toBeVisible();
+    // Approved insights are life-area TILES; the mood trend panel is present.
+    await expect(w.getByRole('button', { name: /^Health & body/ })).toContainText(
+      'Sleeps better with a wind-down routine',
+    );
+    await expect(w.getByRole('button', { name: /^Relationships/ })).toBeVisible();
+    await expect(w.getByText(/Mood & energy/)).toBeVisible();
 
-    // Mark the inaccurate fact "not right about me" (the relabelled correction, 44 §3.4) → persists encrypted.
+    // Search narrows to matching rows.
+    await w.getByLabel('Search memory').fill('routine');
+    await expect(
+      w.getByRole('button', { name: 'Open insight: Sleeps better with a wind-down routine' }),
+    ).toBeVisible();
+    await w.getByLabel('Search memory').fill('');
+
+    // The draft is behind the Review callout.
+    await w.getByRole('button', { name: 'Review' }).click();
+    await expect(w.getByRole('heading', { name: 'Needs your review' })).toBeVisible();
+    await expect(w.getByLabel('Insight summary')).toHaveValue(
+      'Might want to set firmer work boundaries',
+    );
+
+    // Drill into the Health insight → "source removed" + mark the inaccurate fact not right (persists encrypted).
+    await w.getByRole('link', { name: 'Memory' }).click();
+    await w.getByRole('button', { name: /^Health & body/ }).click();
+    await w
+      .getByRole('button', { name: 'Open insight: Sleeps better with a wind-down routine' })
+      .click();
+    await expect(w.getByText(/original source removed/i)).toBeVisible();
     await w.getByRole('button', { name: /This isn.t right about me: This one is wrong/ }).click();
     await expect(w.getByText('marked not right')).toBeVisible();
     await expect
@@ -3415,10 +3441,7 @@ test('memory: the dashboard groups by life-area, flags a fact (decrypt-persisted
         return insight?.facts.find((f) => f.id === 'f2')?.flaggedInaccurate ?? false;
       })
       .toBe(true);
-
-    // Search narrows the list.
-    await w.getByLabel('Search memory').fill('routine');
-    await expect(w.getByText('Sleeps better with a wind-down routine')).toBeVisible();
+    await w.getByRole('link', { name: 'Memory' }).click();
 
     // No horizontal overflow at phone width.
     await w.setViewportSize({ width: 390, height: 800 });
@@ -3444,7 +3467,7 @@ test('memory: the dashboard groups by life-area, flags a fact (decrypt-persisted
   }
 });
 
-test('memory overhaul: stats header, type-scope a fact to partner (decrypt), mark "not right" (decrypt), Edit answer + Manage sharing, 360px (spec 44)', async () => {
+test('memory overview: portrait hero, drill in to type-scope a fact to partner (decrypt), mark "not right" (decrypt), Edit answer, Sharing page, 360px (spec 44/57)', async () => {
   const { userData, vault } = await seedReadyVault();
   const fs = createNodeFileSystem(vault);
   const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
@@ -3510,14 +3533,31 @@ test('memory overhaul: stats header, type-scope a fact to partner (decrypt), mar
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Memory' }).click();
 
-    // Stats header: overview total (3 live facts), confidence distribution, sharing summary.
-    await expect(w.getByText(/SelfOS knows\s*3\s*things about you/)).toBeVisible();
-    await expect(w.getByText(/High\s*1/)).toBeVisible();
-    await expect(w.getByText('You’re not sharing anything yet.')).toBeVisible();
-    // The broadcast ShareToggle is gone — the per-fact control is now the relationship-scope picker chip.
-    await expect(w.getByRole('button', { name: /Enjoys rock climbing: private/i })).toBeVisible();
+    // The portrait hero shows the onboarding-portrait summary + a qualitative "how well it knows you" read.
+    // (The summary also appears as the tile gist, so scope to the first match.)
+    await expect(w.getByText('A grounded, curious person').first()).toBeVisible();
+    await expect(w.getByText(/How well it knows you/i)).toBeVisible();
 
-    // Type-scope "Enjoys rock climbing" to Partner via the card picker → it reaches the partner's context.
+    const overflowAt = async (): Promise<number> =>
+      w.evaluate(() => {
+        let max = 0;
+        for (const el of Array.from(document.querySelectorAll('*'))) {
+          const style = getComputedStyle(el);
+          if (
+            (style.overflowX === 'auto' || style.overflowX === 'scroll') &&
+            el.scrollWidth - el.clientWidth > max
+          ) {
+            max = el.scrollWidth - el.clientWidth;
+          }
+        }
+        const main = document.querySelector('main');
+        return Math.max(max, main ? main.scrollWidth - main.clientWidth : 0);
+      });
+
+    // Drill into the session insight (Emotions & patterns); the per-fact control is the relationship-scope
+    // picker chip (the broadcast ShareToggle is gone). Type-scope "Enjoys rock climbing" to Partner.
+    await w.getByRole('button', { name: /^Emotions & patterns/ }).click();
+    await w.getByRole('button', { name: 'Open insight: From a recent session' }).click();
     await w.getByRole('button', { name: /Enjoys rock climbing: private/i }).click();
     await w.getByRole('checkbox', { name: 'Partner' }).click();
     await w.keyboard.press('Escape'); // close the picker popover so it can't overlay the next control
@@ -3534,28 +3574,13 @@ test('memory overhaul: stats header, type-scope a fact to partner (decrypt), mar
       .poll(async () => (await buildContext(fs, key, 'owner-1')).includes('WRONGLY-INFERRED-CLAIM'))
       .toBe(false);
 
-    // No horizontal overflow at phone width (the §12 inner-scrollbar scan + main check).
-    const overflowAt = async (): Promise<number> =>
-      w.evaluate(() => {
-        let max = 0;
-        for (const el of Array.from(document.querySelectorAll('*'))) {
-          const style = getComputedStyle(el);
-          if (
-            (style.overflowX === 'auto' || style.overflowX === 'scroll') &&
-            el.scrollWidth - el.clientWidth > max
-          ) {
-            max = el.scrollWidth - el.clientWidth;
-          }
-        }
-        const main = document.querySelector('main');
-        return Math.max(max, main ? main.scrollWidth - main.clientWidth : 0);
-      });
+    // No horizontal overflow at phone width on the insight detail (the §12 inner-scrollbar scan + main check).
     await w.setViewportSize({ width: 360, height: 800 });
     expect(await overflowAt()).toBeLessThanOrEqual(1);
     await w.setViewportSize({ width: 1024, height: 800 });
 
-    // Manage sharing → the transparency surface lists the now-shared fact with its scope + recipient.
-    await w.getByRole('button', { name: /Manage sharing/ }).click();
+    // Sharing lives on its own "Sharing & relationships" page now (57 §3.8): it lists the now-shared fact.
+    await w.getByRole('link', { name: 'Sharing & relationships' }).click();
     await expect(w.getByRole('heading', { name: /What you share/ })).toBeVisible();
     await expect(w.getByText('Enjoys rock climbing')).toBeVisible();
     await expect(w.getByText(/Shared with Partner · reaching Pat/)).toBeVisible();
@@ -3563,8 +3588,10 @@ test('memory overhaul: stats header, type-scope a fact to partner (decrypt), mar
     expect(await overflowAt()).toBeLessThanOrEqual(1);
     await w.setViewportSize({ width: 1024, height: 800 });
 
-    // Back to Memory; "Edit answer" on the onboarding portrait deep-links into onboarding (§3.4).
-    await w.getByRole('button', { name: /^Memory$/ }).click();
+    // Back to Memory → drill into the onboarding portrait; "Edit answer" deep-links into onboarding (§3.4).
+    await w.getByRole('link', { name: 'Memory' }).click();
+    await w.getByRole('button', { name: /^Values & beliefs/ }).click();
+    await w.getByRole('button', { name: 'Open insight: A grounded, curious person' }).click();
     await w.getByRole('button', { name: /Edit answer/ }).click();
     await expect.poll(() => w.url()).toContain('onboarding');
   } finally {
@@ -3574,7 +3601,7 @@ test('memory overhaul: stats header, type-scope a fact to partner (decrypt), mar
   }
 });
 
-test('goals: a tracked goal shows in Memory with status; marking it Done moves it to closed (39 §3.1)', async () => {
+test('goals: a tracked goal shows on the Goals page with status; marking it Done moves it to closed (57 §3.7)', async () => {
   const { userData, vault } = await seedReadyVault();
   const fs = createNodeFileSystem(vault);
   const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
@@ -3596,7 +3623,8 @@ test('goals: a tracked goal shows in Memory with status; marking it Done moves i
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'Memory' }).click();
+    // Goals now live on their own top-level page (57 §3.7), not inside Memory.
+    await w.getByRole('link', { name: 'Goals' }).click();
 
     // The goal appears under "Goals & commitments" with an Open status.
     await expect(w.getByRole('heading', { name: /Goals & commitments/ })).toBeVisible();
@@ -3613,7 +3641,13 @@ test('goals: a tracked goal shows in Memory with status; marking it Done moves i
       .poll(async () => (await getGoal(fs, key, 'owner-1', 'goal-1'))?.status)
       .toBe('done');
 
-    // No horizontal overflow at phone width with the Goals section present.
+    // The extraction: Memory no longer carries a Goals section (57 §1.3).
+    await w.getByRole('link', { name: 'Memory' }).click();
+    await expect(w.getByRole('heading', { name: 'Memory' })).toBeVisible();
+    await expect(w.getByRole('heading', { name: /Goals & commitments/ })).toHaveCount(0);
+
+    // No horizontal overflow at phone width on the Goals page.
+    await w.getByRole('link', { name: 'Goals' }).click();
     await w.setViewportSize({ width: 390, height: 800 });
     const overflow = await w.evaluate(() => {
       let max = 0;
@@ -3692,6 +3726,9 @@ test('memory cleanup: flagging a previously-shared fact retracts it from a relat
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Memory' }).click();
+    // Drill into the insight detail where the per-fact correction control lives.
+    await w.getByRole('button', { name: /^Other/ }).click();
+    await w.getByRole('button', { name: 'Open insight: Reflections from a session' }).click();
     await expect(w.getByText('PLANNING-A-SURPRISE-PARTY')).toBeVisible();
 
     // Mark it "not right about me" → the share is retracted (Memory shows "sharing withdrawn").
@@ -3863,7 +3900,9 @@ test('memory: a provenance link opens the live source (dream deep-link survives 
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Memory' }).click();
-    await expect(w.getByText('A recurring flying dream')).toBeVisible();
+    // Drill into the insight detail, where the provenance deep-link lives.
+    await w.getByRole('button', { name: /^Emotions & patterns/ }).click();
+    await w.getByRole('button', { name: 'Open insight: A recurring flying dream' }).click();
     // Clicking the provenance link opens the referenced dream — NOT the empty Dreams list (the per-person
     // reset effect must not clobber the deep-link on mount). It lands on the read-first detail (12 §15.3).
     await w.getByRole('button', { name: /From a dream/ }).click();
@@ -7397,7 +7436,13 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
     // The Owner is the full-access role → sees both the portrait summary AND the restricted ('grief')
     // fact directly in Memory, marked "private" (own-coaching-only; a member would get it redacted, §8.4).
     await w.getByRole('link', { name: 'Memory' }).click();
-    await expect(w.getByText(/thoughtful and steady/)).toBeVisible();
+    await expect(w.getByText(/thoughtful and steady/).first()).toBeVisible();
+    // The restricted 'grief' fact is shown to the Owner in the insight detail (reached via search → drill-in).
+    await w.getByLabel('Search memory').fill('grief');
+    await w
+      .getByRole('button', { name: /Open insight:/ })
+      .first()
+      .click();
     await expect(w.getByText(/Carries grief/)).toBeVisible();
     await expect(w.getByText('private').first()).toBeVisible();
 
@@ -7758,14 +7803,16 @@ test('memory: an existing (pre-spec) portrait shares by default — Sharing refl
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Memory' }).click();
-    // The Sharing summary reflects the backfilled share — NOT the empty "not sharing anything yet".
-    await expect(w.getByText(/You.?re sharing/i)).toBeVisible();
-    await expect(w.getByText(/not sharing anything yet/i)).toHaveCount(0);
-    // Clean cards (44 audit): the portrait fact renders with NO per-fact "Private" chip.
+    // Clean cards (44 audit): drilling into the portrait, the fact renders with NO per-fact "Private" chip.
+    await w.getByRole('button', { name: /^Health & body/ }).click();
+    await w.getByRole('button', { name: /Open insight: A warm portrait/ }).click();
     await expect(w.getByText('Values steady routines')).toBeVisible();
     expect(await w.getByText('Private', { exact: true }).count()).toBe(0);
-    // Manage sharing is the one place — it lists the shared onboarding answer.
-    await w.getByRole('button', { name: /Manage sharing/i }).click();
+    // The Sharing surface (its own page now, 57 §3.8) reflects the backfilled share — the shared onboarding
+    // answer is listed, NOT the empty "not sharing anything yet".
+    await w.getByRole('link', { name: 'Sharing & relationships' }).click();
+    await expect(w.getByRole('heading', { name: /What you share/ })).toBeVisible();
+    await expect(w.getByText(/not sharing anything yet/i)).toHaveCount(0);
     await expect(w.getByText(/Early to bed, early to rise/)).toBeVisible();
   } finally {
     await app.close();

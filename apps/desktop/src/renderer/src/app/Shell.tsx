@@ -7,7 +7,8 @@ import { Sessions } from './routes/sessions/Sessions';
 import { Questionnaires } from './routes/questionnaires/Questionnaires';
 import { Inbox } from './routes/inbox/Inbox';
 import { Memory } from './routes/memory/Memory';
-import { SharingPanel } from './routes/memory/SharingPanel';
+import { Goals } from './routes/goals/Goals';
+import { SharingAndRelationships } from './routes/sharing/SharingAndRelationships';
 import { Dreams } from './routes/dreams/Dreams';
 import { DreamPatterns } from './routes/dreams/DreamPatterns';
 import { You } from './routes/you/You';
@@ -38,7 +39,8 @@ const GUARDED_ROUTES: { path: string; capability: CapabilityKey; element: JSX.El
   { path: 'questionnaires', capability: 'questionnaires.create', element: <Questionnaires /> },
   { path: 'inbox', capability: 'questionnaires.answer', element: <Inbox /> },
   { path: 'memory', capability: 'memory.own', element: <Memory /> },
-  { path: 'memory/sharing', capability: 'memory.own', element: <SharingPanel /> },
+  { path: 'goals', capability: 'memory.own', element: <Goals /> },
+  { path: 'sharing', capability: 'memory.own', element: <SharingAndRelationships /> },
   { path: 'dreams', capability: 'dreams.own', element: <Dreams /> },
   { path: 'dreams/patterns', capability: 'dreams.own', element: <DreamPatterns /> },
   { path: 'you', capability: 'tests.own', element: <You /> },
@@ -73,6 +75,9 @@ export function Shell(): JSX.Element {
               element={<RequireCapability capability={capability}>{element}</RequireCapability>}
             />
           ))}
+          {/* The sharing surface moved to its own "Sharing & relationships" page (57 §3.8); keep the old
+              in-Memory path working for any lingering link. */}
+          <Route path="memory/sharing" element={<Navigate to="/sharing" replace />} />
           <Route path="settings" element={<SettingsScreen />} />
           {import.meta.env.DEV && isOwner ? <Route path="gallery" element={<Gallery />} /> : null}
           {/* Any unknown hash (a typo, or a route the user can't reach — e.g. a non-owner typing

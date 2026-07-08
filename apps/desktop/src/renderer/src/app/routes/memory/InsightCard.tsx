@@ -1,26 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Activity,
-  ArrowUpRight,
-  Brain,
-  Briefcase,
-  ChevronDown,
-  Compass,
-  Flame,
-  Heart,
-  type LucideIcon,
-  PencilLine,
-  ShieldAlert,
-  Sparkles,
-  Tag,
-  Target,
-  Trash2,
-  Users,
-  Wallet,
-} from 'lucide-react';
+import { ArrowUpRight, ChevronDown, PencilLine, ShieldAlert, Trash2 } from 'lucide-react';
 import type { Insight, InsightFact, RelationshipType } from '@shared/schemas';
 import { LIFE_AREAS } from '@shared/schemas';
+import { areaIcon } from './lifeAreaIcons';
 import { useInsightStore } from '../../../stores/insightStore';
 import {
   Banner,
@@ -79,22 +62,6 @@ function groupFactsByArea(
   if (noArea.length > 0) groups.push({ area: 'More', facts: noArea });
   return groups.filter((g) => g.facts.length > 0);
 }
-
-/** An icon per life-area for the collapsible section headers (44 audit — visual hierarchy). */
-const LIFE_AREA_ICON: Record<string, LucideIcon> = {
-  Relationships: Heart,
-  Family: Users,
-  'Work & purpose': Briefcase,
-  'Health & body': Activity,
-  'Emotions & patterns': Brain,
-  'Values & beliefs': Compass,
-  Intimacy: Flame,
-  'Goals & growth': Target,
-  Money: Wallet,
-  Faith: Sparkles,
-  Other: Tag,
-};
-const areaIcon = (area: string): LucideIcon => LIFE_AREA_ICON[area] ?? Tag;
 
 /**
  * One insight on the Memory dashboard (20-memory-dashboard §3.2 + 44 §3.4). For the active person's OWN

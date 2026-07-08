@@ -2,11 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import type { Goal, Insight } from '@shared/schemas';
+import type { Insight } from '@shared/schemas';
 import { DEFAULT_ROLES } from '@shared/capabilities';
 import { Memory } from './Memory';
 import { useInsightStore } from '../../../stores/insightStore';
-import { useGoalStore } from '../../../stores/goalStore';
 import { usePeopleStore } from '../../../stores/peopleStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useConversationStore } from '../../../stores/conversationStore';
@@ -48,16 +47,10 @@ function renderMemory(): void {
   );
 }
 
-function goal(over: Partial<Goal> & { id: string; text: string }): Goal {
-  return {
-    schemaVersion: 1,
-    subjectPersonId: 'p1',
-    status: 'open',
-    provenance: { conversationId: 'c1', at: '2026-06-11T12:00:00.000Z' },
-    createdAt: '2026-06-11T12:00:00.000Z',
-    updatedAt: '2026-06-11T12:00:00.000Z',
-    ...over,
-  };
+/** Drill: overview tile → life-area detail → single-insight detail (where the edit/correct controls live). */
+async function openInsight(summary: string, area: RegExp): Promise<void> {
+  await userEvent.click(await screen.findByRole('button', { name: area }));
+  await userEvent.click(await screen.findByRole('button', { name: `Open insight: ${summary}` }));
 }
 
 afterEach(() => {
@@ -69,14 +62,13 @@ afterEach(() => {
     lastReconciledAt: undefined,
     proposals: [],
   });
-  useGoalStore.setState({ goals: [], loaded: false });
   usePeopleStore.setState({ people: [], loaded: false });
   useConversationStore.setState({ conversations: [] });
   useDreamStore.setState({ dreams: [], loaded: false });
   useSessionStore.setState({ activePerson: null });
 });
 
-describe('Memory dashboard', () => {
+describe('Memory overview', () => {
   it('shows the empty state explaining when insights appear, with a Start-a-session action', async () => {
     useSessionStore.setState({
       activePerson: activeP1,
@@ -88,44 +80,23 @@ describe('Memory dashboard', () => {
     installMockBridge({ insightsList: () => Promise.resolve([]) });
     renderMemory();
     expect(
-      await screen.findByText(/Insights appear here after your sessions/i),
+      await screen.findByText(/what\s+SelfOS learns about you shows up here/i),
     ).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Memory' })).toBeInTheDocument();
-    // A member can own sessions → the gated next action shows.
     expect(screen.getByRole('button', { name: /start a session/i })).toBeInTheDocument();
   });
 
   it('omits the Start-a-session action for a person who cannot own sessions', async () => {
-    useSessionStore.setState({ activePerson: activeP1, access: null }); // no role → can('sessions.own') false
+    useSessionStore.setState({ activePerson: activeP1, access: null });
     installMockBridge({ insightsList: () => Promise.resolve([]) });
     renderMemory();
-    expect(
-      await screen.findByText(/Insights appear here after your sessions/i),
-    ).toBeInTheDocument();
+    await screen.findByText(/what\s+SelfOS learns about you shows up here/i);
     expect(screen.queryByRole('button', { name: /start a session/i })).not.toBeInTheDocument();
   });
 
-  it('puts a draft in "Needs your review" and approves it', async () => {
+  it('shows the portrait + a life-area tile map, and drills into an area then a single insight', async () => {
     useSessionStore.setState({ activePerson: activeP1 });
-    let current = insight({ id: 'd1', approved: false, summary: 'Wants more connection' });
-    const approve = vi.fn(() => {
-      current = { ...current, approved: true };
-      return Promise.resolve(current);
-    });
-    installMockBridge({
-      insightsList: () => Promise.resolve([current]),
-      insightsApprove: approve,
-    });
-    renderMemory();
-    expect(await screen.findByText('Needs your review')).toBeInTheDocument();
-    expect(screen.getByText('Wants more connection')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
-    expect(approve).toHaveBeenCalled();
-  });
-
-  it('groups an approved own insight by life-area with confidence + provenance', async () => {
-    useSessionStore.setState({ activePerson: activeP1 });
-    useConversationStore.setState({ conversations: [] }); // no matching conversation → "source removed"
+    useConversationStore.setState({ conversations: [] }); // cX missing → "source removed" in the detail
     installMockBridge({
       insightsList: () =>
         Promise.resolve([
@@ -137,15 +108,23 @@ describe('Memory dashboard', () => {
             confidence: 'high',
             confidenceRationale: 'echoed across 3 sessions',
             source: 'session',
+            facts: [{ id: 'f1', text: 'Sleeps 8 hours', shareable: false }],
             provenance: { conversationId: 'cX', at: '2026-06-11T12:00:00.000Z' },
           }),
         ]),
     });
     renderMemory();
-    expect(await screen.findByText('Values steady routines')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /Health & body/ })).toBeInTheDocument();
+    // The overview shows the area as a TILE (its gist), not a full card.
+    const tile = await screen.findByRole('button', { name: /^Health & body/ });
+    expect(tile).toHaveTextContent('Values steady routines');
+    // Drill in → the life-area detail heading, then the single insight.
+    await userEvent.click(tile);
+    expect(screen.getByRole('heading', { name: 'Health & body' })).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Open insight: Values steady routines' }),
+    );
+    // The insight detail carries the confidence + "source removed" provenance.
     expect(screen.getByLabelText(/High confidence — echoed across 3 sessions/)).toBeInTheDocument();
-    // The session's source is gone (no matching conversation) → "original source removed".
     expect(screen.getByText(/original source removed/i)).toBeInTheDocument();
   });
 
@@ -165,67 +144,43 @@ describe('Memory dashboard', () => {
         ]),
     });
     renderMemory();
-    // The viewer's OWN insight shows…
+    // The viewer's OWN insight surfaces (as the area tile's gist)…
     expect(await screen.findByText('MY OWN NOTE')).toBeInTheDocument();
-    // …but a related person's shared fact is NEVER shown raw, and the old read-only section is gone (54).
+    // …but a related person's shared fact is NEVER shown raw, anywhere in Memory.
     expect(screen.queryByText('Sam started a new job')).not.toBeInTheDocument();
     expect(screen.queryByText('About people you relate to')).not.toBeInTheDocument();
-    expect(screen.queryByText(/About Sam/)).not.toBeInTheDocument();
   });
 
-  it('the Partners view replaces raw shared data with a relationship-insights card (54)', async () => {
+  it('opens Needs your review from the callout and approves a draft', async () => {
     useSessionStore.setState({ activePerson: activeP1 });
-    const synth = vi.fn(() =>
-      Promise.resolve({
-        ok: true as const,
-        synthesis: {
-          schemaVersion: 1,
-          subjectPersonId: 'p1',
-          partnerPersonId: 'p2',
-          observations: ['You and Sam both value security.'],
-          computedAt: '2026-06-26T12:00:00.000Z',
-        },
-      }),
-    );
+    let current = insight({ id: 'd1', approved: false, summary: 'Wants more connection' });
+    const approve = vi.fn(() => {
+      current = { ...current, approved: true };
+      return Promise.resolve(current);
+    });
     installMockBridge({
-      peopleList: () => Promise.resolve([activeP1, { ...activeP1, id: 'p2', displayName: 'Sam' }]),
-      relationshipsList: () =>
-        Promise.resolve([
-          {
-            id: 'r1',
-            schemaVersion: 1,
-            fromPersonId: 'p1',
-            toPersonId: 'p2',
-            type: 'partner',
-            createdAt: 'now',
-            updatedAt: 'now',
-          },
-        ]),
-      relationshipsGetSynthesis: () => Promise.resolve(null),
-      relationshipsSynthesize: synth,
-      insightsList: () => Promise.resolve([insight({ id: 'own', summary: 'MY OWN NOTE' })]),
+      insightsList: () => Promise.resolve([current]),
+      insightsApprove: approve,
     });
     renderMemory();
-    await screen.findByText('MY OWN NOTE');
-    await userEvent.click(screen.getByRole('button', { name: 'Partners' }));
-    expect(await screen.findByText(/You & Sam/)).toBeInTheDocument();
-    expect(screen.getByText(/never shown.*as their raw answers/i)).toBeInTheDocument();
-    // Generate → an AI observation (synthesis, NOT the partner's raw answers) appears.
-    await userEvent.click(screen.getByRole('button', { name: /Reflect on us/ }));
-    expect(await screen.findByText('You and Sam both value security.')).toBeInTheDocument();
-    expect(synth).toHaveBeenCalledWith({ partnerPersonId: 'p2' });
+    // The slim callout announces the draft; opening Review shows it (in edit mode, summary in a textarea).
+    await userEvent.click(await screen.findByRole('button', { name: 'Review' }));
+    expect(screen.getByRole('heading', { name: 'Needs your review' })).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Wants more connection')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    expect(approve).toHaveBeenCalled();
   });
 
-  it('marks an AI-inferred fact "not right about me"', async () => {
+  it('marks an AI-inferred fact "not right about me" from the insight detail', async () => {
     useSessionStore.setState({ activePerson: activeP1 });
     const flag = vi.fn(() => Promise.resolve(null));
     installMockBridge({
       insightsList: () =>
         Promise.resolve([
-          // A session insight = AI-inferred → keeps the relabelled correction toggle.
           insight({
             id: 'i1',
             source: 'session',
+            summary: 'Dislikes mornings',
             provenance: { conversationId: 'c1', at: '2026-06-11T12:00:00.000Z' },
             facts: [{ id: 'f1', text: 'Dislikes mornings', shareable: false }],
           }),
@@ -233,11 +188,12 @@ describe('Memory dashboard', () => {
       insightsFlag: flag,
     });
     renderMemory();
-    await userEvent.click(await screen.findByRole('button', { name: /This isn’t right about me/ }));
+    await openInsight('Dislikes mornings', /^Other/);
+    await userEvent.click(screen.getByRole('button', { name: /This isn’t right about me/ }));
     expect(flag).toHaveBeenCalledWith({ insightId: 'i1', factId: 'f1', flagged: true });
   });
 
-  it('shows Edit answer + Delete (no correction toggle) for an onboarding fact', async () => {
+  it('shows Edit answer (no correction toggle) for an onboarding fact in the detail', async () => {
     useSessionStore.setState({ activePerson: activeP1 });
     installMockBridge({
       insightsList: () =>
@@ -245,6 +201,7 @@ describe('Memory dashboard', () => {
           insight({
             id: 'p',
             source: 'intake',
+            summary: 'Grew up in Ohio',
             provenance: { intakeSection: 'basics', at: '2026-06-11T12:00:00.000Z' },
             facts: [
               { id: 'f1', text: 'Grew up in Ohio', shareable: false, shareableTypes: ['partner'] },
@@ -253,36 +210,12 @@ describe('Memory dashboard', () => {
         ]),
     });
     renderMemory();
-    expect(await screen.findByRole('button', { name: /Edit answer/ })).toBeInTheDocument();
-    // Onboarding facts are what you told SelfOS — no "this isn't right" toggle, no plain "Edit".
+    await openInsight('Grew up in Ohio', /^Other/);
+    expect(screen.getByRole('button', { name: /Edit answer/ })).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: /This isn’t right about me/ }),
     ).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
-    // Clean cards (44 audit): NO per-fact sharing chip/picker on the card — sharing lives in "Manage sharing".
-    expect(screen.queryByRole('button', { name: /activate to change/ })).not.toBeInTheDocument();
-    expect(screen.queryByText(/Set by your onboarding answer/)).not.toBeInTheDocument();
-  });
-
-  it('shows a restricted onboarding fact with a minimal "sensitive" tag, no sharing control', async () => {
-    useSessionStore.setState({ activePerson: activeP1 });
-    installMockBridge({
-      insightsList: () =>
-        Promise.resolve([
-          insight({
-            id: 'p',
-            source: 'intake',
-            provenance: { intakeSection: 'weighs', at: '2026-06-11T12:00:00.000Z' },
-            facts: [{ id: 'f1', text: 'Carries grief', shareable: false, restricted: true }],
-          }),
-        ]),
-    });
-    renderMemory();
-    // A restricted onboarding fact keeps a small informational "private" tag (own-coaching-only) — but no
-    // sharing control on the card (44 audit); sharing is managed in one place.
-    expect(await screen.findByText('private')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /activate to change/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Share with someone/ })).not.toBeInTheDocument();
   });
 
   it('groups a long portrait into collapsible life-area sections; sensitive ones start collapsed', async () => {
@@ -317,18 +250,17 @@ describe('Memory dashboard', () => {
         ]),
     });
     renderMemory();
-    // Section headers render as expand/collapse buttons.
-    expect(await screen.findByRole('button', { name: /Relationships/ })).toBeInTheDocument();
-    // A non-sensitive section is OPEN by default → its fact is visible.
+    await openInsight('A portrait.', /^Other/);
+    // Section headers render as expand/collapse buttons; a non-sensitive one is OPEN by default.
+    expect(screen.getByRole('button', { name: /Relationships/ })).toBeInTheDocument();
     expect(screen.getByText('Works in RevOps')).toBeInTheDocument();
-    // The sensitive (restricted) Intimacy section is COLLAPSED by default → its fact is NOT rendered yet.
+    // The sensitive (restricted) Intimacy section is COLLAPSED by default.
     expect(screen.queryByText('Bisexual, monogamous')).not.toBeInTheDocument();
-    // Expanding it reveals the fact.
     await userEvent.click(screen.getByRole('button', { name: /Intimacy/ }));
     expect(screen.getByText('Bisexual, monogamous')).toBeInTheDocument();
   });
 
-  it('groups sent-questionnaire insights under "Responses to your questionnaires" by recipient, not in life-area cards (#129)', async () => {
+  it('opens "responses to your questionnaires" from its tile, grouped by recipient (#129)', async () => {
     useSessionStore.setState({ activePerson: activeP1 });
     usePeopleStore.setState({
       people: [activeP1, { ...activeP1, id: 'p2', displayName: 'Angel' }],
@@ -339,19 +271,13 @@ describe('Memory dashboard', () => {
         Promise.resolve([activeP1, { ...activeP1, id: 'p2', displayName: 'Angel' }]),
       insightsList: () =>
         Promise.resolve([
-          // A response from a household partner (about Angel), categorized Relationships.
           insight({
             id: 'resp-hh',
             source: 'questionnaire',
             summary: 'Angel wants more protected time together',
             categories: ['Relationships'],
-            provenance: {
-              assignmentId: 'a1',
-              aboutPersonId: 'p2',
-              at: '2026-06-11T12:00:00.000Z',
-            },
+            provenance: { assignmentId: 'a1', aboutPersonId: 'p2', at: '2026-06-11T12:00:00.000Z' },
           }),
-          // A response from an external recipient (about a name).
           insight({
             id: 'resp-ext',
             source: 'questionnaire',
@@ -359,7 +285,6 @@ describe('Memory dashboard', () => {
             categories: ['Work & purpose'],
             provenance: { assignmentId: 'a2', aboutName: 'Sam', at: '2026-06-11T12:00:00.000Z' },
           }),
-          // A genuine "about you" session insight stays in a life-area card.
           insight({
             id: 'own',
             source: 'session',
@@ -370,22 +295,25 @@ describe('Memory dashboard', () => {
         ]),
     });
     renderMemory();
-    // The Responses section exists, grouped by who answered.
+    // Responses are NOT life-area tiles; they sit behind their own tile → view, grouped by recipient.
+    await userEvent.click(
+      await screen.findByRole('button', { name: /From questionnaires you sent/ }),
+    );
     expect(
-      await screen.findByRole('heading', { name: 'Responses to your questionnaires' }),
+      screen.getByRole('heading', { name: 'Responses to your questionnaires' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Angel' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Sam' })).toBeInTheDocument();
-    // The eyebrow reads "From Angel's answers", never "About you".
+    // Opening one shows the "From Angel’s answers" eyebrow (never "About you").
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: 'Open insight: Angel wants more protected time together',
+      }),
+    );
     expect(screen.getByText(/From Angel’s answers/)).toBeInTheDocument();
-    // The response insight is NOT rendered as a Relationships life-area card.
-    expect(screen.queryByRole('heading', { name: /^Relationships/ })).not.toBeInTheDocument();
-    // A genuine own insight still lands in its life-area card.
-    expect(screen.getByRole('heading', { name: /Health & body/ })).toBeInTheDocument();
-    expect(screen.getByText('Values steady routines')).toBeInTheDocument();
   });
 
-  it('filters by search', async () => {
+  it('search surfaces matching insights as rows', async () => {
     useSessionStore.setState({ activePerson: activeP1 });
     installMockBridge({
       insightsList: () =>
@@ -395,61 +323,17 @@ describe('Memory dashboard', () => {
         ]),
     });
     renderMemory();
-    expect(await screen.findByText('Loves hiking outdoors')).toBeInTheDocument();
+    await screen.findByRole('button', { name: /^Other/ });
     await userEvent.type(screen.getByLabelText('Search memory'), 'hiking');
-    expect(screen.getByText('Loves hiking outdoors')).toBeInTheDocument();
-    expect(screen.queryByText('Prefers quiet evenings')).not.toBeInTheDocument();
-  });
-
-  it('renders the Goals section with status, and marks a goal done (moving it to closed)', async () => {
-    useSessionStore.setState({ activePerson: activeP1 });
-    const setStatus = vi.fn(() => Promise.resolve(null));
-    installMockBridge({
-      insightsList: () => Promise.resolve([insight({ id: 'i1' })]),
-      goalsList: () =>
-        Promise.resolve([goal({ id: 'g1', text: 'Finish the thesis', status: 'open' })]),
-      goalsSetStatus: setStatus,
-    });
-    renderMemory();
-    expect(await screen.findByRole('heading', { name: /Goals & commitments/ })).toBeInTheDocument();
-    expect(screen.getByText('Finish the thesis')).toBeInTheDocument();
-    const setStatusSelect = screen.getByRole('combobox', {
-      name: /Set status for: Finish the thesis/,
-    });
-    expect(setStatusSelect).toHaveValue('open'); // the goal reads Open
-
-    await userEvent.selectOptions(setStatusSelect, 'done');
-    expect(setStatus).toHaveBeenCalledWith({ goalId: 'g1', status: 'done' });
-  });
-
-  it('shows the gentle stale prompt for a goal past its due date', async () => {
-    useSessionStore.setState({ activePerson: activeP1 });
-    installMockBridge({
-      insightsList: () => Promise.resolve([insight({ id: 'i1' })]),
-      goalsList: () =>
-        Promise.resolve([
-          goal({ id: 'g1', text: 'Call the dentist', status: 'open', due: '2000-01-01' }),
-        ]),
-    });
-    renderMemory();
-    expect(await screen.findByText(/still working on it/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Still on it' })).toBeInTheDocument();
-    expect(screen.getByText('Open a while')).toBeInTheDocument(); // the derived stale chip
-  });
-
-  it('shows the warm Goals empty hint when there are insights but no goals', async () => {
-    useSessionStore.setState({ activePerson: activeP1 });
-    installMockBridge({
-      insightsList: () => Promise.resolve([insight({ id: 'i1' })]),
-      goalsList: () => Promise.resolve([]),
-    });
-    renderMemory();
     expect(
-      await screen.findByText(/Goals you mention in sessions show up here/),
+      screen.getByRole('button', { name: 'Open insight: Loves hiking outdoors' }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Open insight: Prefers quiet evenings' }),
+    ).not.toBeInTheDocument();
   });
 
-  it('shows a merge proposal in Needs your review and confirms it + the kept-tidy signal', async () => {
+  it('shows a merge proposal in the review view and confirms it + the kept-tidy signal', async () => {
     useSessionStore.setState({ activePerson: activeP1 });
     const resolve = vi.fn(() => Promise.resolve());
     installMockBridge({
@@ -474,6 +358,7 @@ describe('Memory dashboard', () => {
     });
     renderMemory();
     expect(await screen.findByText(/Memory last tidied/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Review' }));
     expect(screen.getByText(/combine them into one/)).toBeInTheDocument();
     expect(screen.getByText('· Values nature')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Merge' }));
@@ -490,7 +375,6 @@ describe('Memory dashboard', () => {
     renderMemory();
     await userEvent.click(await screen.findByRole('button', { name: /Refresh/ }));
     expect(refresh).toHaveBeenCalled();
-    // No role/access set on the session store, so the role-aware note falls to the safer member copy.
     expect(
       await screen.findByText(/ask the person who set up this household/i),
     ).toBeInTheDocument();

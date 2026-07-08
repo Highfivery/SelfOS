@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Insight, OutboundSharing } from '@shared/schemas';
-import { confidenceStats, overviewStats, sharingStats } from './stats';
+import type { Insight } from '@shared/schemas';
+import { confidenceStats, overviewStats } from './stats';
 
 function insight(over: Partial<Insight> & { id: string }): Insight {
   return {
@@ -58,50 +58,5 @@ describe('Memory stats derivations', () => {
       insight({ id: 'd', confidence: 'low' }),
     ]);
     expect(stat).toEqual({ high: 2, medium: 1, low: 1, total: 4 });
-  });
-
-  it('summarizes outbound sharing by type + broadcast', () => {
-    const outbound: OutboundSharing = {
-      items: [
-        {
-          id: '1',
-          kind: 'fact',
-          text: 'a',
-          broadcast: false,
-          types: ['partner'],
-          personIds: [],
-          recipients: [],
-        },
-        {
-          id: '2',
-          kind: 'intakeAnswer',
-          text: 'b',
-          broadcast: false,
-          types: ['partner', 'sibling'],
-          personIds: [],
-          recipients: [],
-        },
-        {
-          id: '3',
-          kind: 'fact',
-          text: 'c',
-          broadcast: true,
-          types: [],
-          personIds: [],
-          recipients: [],
-        },
-      ],
-    };
-    const stat = sharingStats(outbound);
-    expect(stat.sharedCount).toBe(3);
-    expect(stat.broadcastCount).toBe(1);
-    expect(stat.byType).toEqual([
-      { type: 'partner', count: 2 },
-      { type: 'sibling', count: 1 },
-    ]);
-  });
-
-  it('reads an empty outbound view as nothing shared', () => {
-    expect(sharingStats({ items: [] })).toEqual({ sharedCount: 0, byType: [], broadcastCount: 0 });
   });
 });

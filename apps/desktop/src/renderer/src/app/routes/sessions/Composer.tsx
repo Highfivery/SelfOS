@@ -47,11 +47,21 @@ export function Composer({
 
   const submit = async (): Promise<void> => {
     if (!canSend) return;
-    const result = await onSend(text.trim(), pending);
-    if (result === false) return; // send failed — keep the text + pending attachments to retry
+    // Clear the field the INSTANT you hit send (05 §3) — the message belongs in the thread, not lingering in a
+    // disabled textarea while the coach replies (which read as broken + duplicated). Snapshot first so a send
+    // that can't even start (a total attachment-store failure → `false`) restores the text/attachments intact.
+    const sentText = text;
+    const sentPending = pending;
     setText('');
     setPending([]);
     setAddError(null);
+    const result = await onSend(sentText.trim(), sentPending);
+    if (result === false) {
+      // Restore so nothing is lost — but only if the field is still empty; if the user already started typing
+      // a new message in the brief pre-disable window, don't clobber it.
+      setText((current) => (current === '' ? sentText : current));
+      setPending((current) => (current.length === 0 ? sentPending : current));
+    }
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {

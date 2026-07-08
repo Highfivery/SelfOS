@@ -310,6 +310,15 @@ resulting `SessionInsight` feeds the subject's own context (and, per §3.3, can 
 specified — this is the path that makes a completed session reusable across Dreams, the questionnaire gap-finder,
 and the Home dashboard (memory `app-refresh-plan-2026-06`, packages C/G depend on it).
 
+**A first-class "Wrap up & reflect" button below the composer (2026-07-08).** Completing + summarizing on demand
+previously lived only in the per-session ⋯ menu (plus the proactive AI wrap-up suggestion), so a person had no
+obvious way to say "I'm done — analyze this." A **"Wrap up & reflect"** button now sits centered just below the
+composer. It runs the exact same action as the menu's "complete & summarize" (`setStatus('complete')` → summarize)
+— it is a relocation, not a second action. It's shown only when it can actually analyze: hidden when AI or session
+memory is off, when the session has no messages yet, once the session is already complete, and while the proactive
+wrap-up suggestion is on screen (so there's never two wrap-up controls at once). Reopening a completed session by
+typing again works unchanged.
+
 ### 14.3 Per-session cost (item 4)
 
 Each session shows its **accumulated AI cost** — the sum of all `UsageEvent`s whose `sessionId` equals the

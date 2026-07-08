@@ -119,4 +119,34 @@ describe('Composer attachments (45)', () => {
     ]);
     expect(screen.queryByRole('img', { name: 'Attached image 1' })).toBeNull();
   });
+
+  it('clears the field the INSTANT you hit Send — before the turn resolves (05 §3)', async () => {
+    // A turn stays "in flight" for the whole reply, so onSend hasn't resolved yet. The field must already be
+    // empty (the message lives in the thread) — not lingering in a disabled textarea (the reported confusion).
+    let resolveSend: () => void = () => {};
+    const onSend = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSend = resolve;
+        }),
+    );
+    render(<Composer disabled={false} onSend={onSend} />);
+    const box = screen.getByRole('textbox', { name: 'Message' });
+    await userEvent.type(box, 'I feel distant');
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    expect(onSend).toHaveBeenCalledWith('I feel distant', []);
+    expect(box).toHaveValue(''); // cleared immediately, while the turn is still running
+    resolveSend();
+    await waitFor(() => expect(box).toHaveValue(''));
+  });
+
+  it('restores the typed text if the send can’t even start (false)', async () => {
+    const onSend = vi.fn().mockResolvedValue(false);
+    render(<Composer disabled={false} onSend={onSend} />);
+    const box = screen.getByRole('textbox', { name: 'Message' });
+    await userEvent.type(box, 'keep me');
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    // The store aborted before sending (e.g. a total attachment failure) → nothing is lost.
+    await waitFor(() => expect(box).toHaveValue('keep me'));
+  });
 });

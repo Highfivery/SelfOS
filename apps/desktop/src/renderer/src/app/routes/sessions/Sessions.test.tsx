@@ -557,4 +557,115 @@ describe('Sessions', () => {
     expect(screen.getByText('Goal: rest tonight')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /View in Memory/i })).toBeInTheDocument();
   });
+
+  it('offers "Wrap up & reflect" below the composer → ends + summarizes on demand (09 §14.2)', async () => {
+    const summarizeInsight = {
+      id: 'ins2',
+      schemaVersion: 1,
+      source: 'session' as const,
+      subjectPersonId: 'p1',
+      summary: 'You named wanting more connection.',
+      facts: [{ id: 'f1', text: 'Goal: one honest conversation', shareable: false }],
+      metrics: { moodValence: 0.2, moodEnergy: -0.1 },
+      confidence: 'medium' as const,
+      categories: [] as string[],
+      approved: true,
+      provenance: { conversationId: 'c1', at: 'now' },
+      createdAt: 'now',
+      updatedAt: 'now',
+    };
+    const sessionsSetStatus = vi.fn(() =>
+      Promise.resolve(meta('c1', 'Feeling distant', 'complete')),
+    );
+    const sessionsEndAndSummarize = vi.fn(() =>
+      Promise.resolve({
+        ok: true as const,
+        insight: summarizeInsight,
+        usage: summarizeInsight as never,
+      }),
+    );
+    installMockBridge({
+      secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
+      conversationsList: () =>
+        Promise.resolve([
+          { id: 'c1', title: 'Feeling distant', updatedAt: 'now', status: 'inProgress' },
+        ]),
+      conversationsGet: () =>
+        Promise.resolve({
+          id: 'c1',
+          schemaVersion: 1,
+          personId: 'p1',
+          title: 'Feeling distant',
+          createdAt: 'now',
+          updatedAt: 'now',
+          status: 'inProgress',
+          messages: [
+            { role: 'user', content: 'Thanks, that helps', ts: 'now' },
+            { role: 'assistant', content: 'Glad to hear it.', ts: 'now' },
+          ],
+        }),
+      sessionsSetStatus,
+      sessionsEndAndSummarize,
+    });
+    setAiEnabled(true);
+    renderSessions();
+    await userEvent.click(await screen.findByRole('button', { name: 'Feeling distant' }));
+
+    // The manual wrap-up button is offered for an in-progress session with messages.
+    const wrapUp = await screen.findByRole('button', { name: 'Wrap up & reflect' });
+    await userEvent.click(wrapUp);
+
+    // It completes the session AND generates the summary (same as the ⋯ menu's complete & summarize).
+    await waitFor(() =>
+      expect(sessionsSetStatus).toHaveBeenCalledWith({ conversationId: 'c1', status: 'complete' }),
+    );
+    expect(sessionsEndAndSummarize).toHaveBeenCalledWith({ conversationId: 'c1' });
+    expect(await screen.findByText('You named wanting more connection.')).toBeInTheDocument();
+    // Once complete, the manual wrap-up button is gone (no lingering duplicate control).
+    expect(screen.queryByRole('button', { name: 'Wrap up & reflect' })).not.toBeInTheDocument();
+  });
+
+  it('hides "Wrap up & reflect" when session memory is off', async () => {
+    installMockBridge({
+      secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
+      conversationsList: () =>
+        Promise.resolve([
+          { id: 'c1', title: 'Feeling distant', updatedAt: 'now', status: 'inProgress' },
+        ]),
+      conversationsGet: () =>
+        Promise.resolve({
+          id: 'c1',
+          schemaVersion: 1,
+          personId: 'p1',
+          title: 'Feeling distant',
+          createdAt: 'now',
+          updatedAt: 'now',
+          status: 'inProgress',
+          messages: [{ role: 'user', content: 'hi', ts: 'now' }],
+        }),
+    });
+    setAiEnabled(true);
+    useSettingsStore.setState((state) => ({
+      values: { ...state.values, 'sessions.memoryEnabled': false },
+    }));
+    renderSessions();
+    await userEvent.click(await screen.findByRole('button', { name: 'Feeling distant' }));
+    // The composer is present, but with memory off there's nothing to analyze → no wrap-up affordance.
+    expect(await screen.findByLabelText('Message')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Wrap up & reflect' })).not.toBeInTheDocument();
+  });
 });

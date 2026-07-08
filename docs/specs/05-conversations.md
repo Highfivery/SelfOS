@@ -70,6 +70,11 @@ prompt, calls the streaming proxy, forwards `chunk` events → renderer appends 
 `done`, the full turn is persisted to the encrypted transcript. Errors (no key, auth, network, rate
 limit) surface inline with the same typed envelope as the connection test (03/05).
 
+**The composer clears the instant you hit send.** The textarea empties (and disables while the turn runs)
+the moment the message is sent — the message belongs in the thread, never lingering greyed-out in the
+field where it reads as broken and duplicated. The typed text + any pending attachments are snapshotted
+first, so a send that can't even start (e.g. a total attachment-store failure) restores them intact.
+
 **§4.1 Fail-safe turn handling (2026-07-08).** A turn must never silently dead-end (the reported "thinking
 then nothing" bug):
 

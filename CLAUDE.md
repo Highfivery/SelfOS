@@ -389,6 +389,28 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-08 — **Build (Sessions: clear the composer on send + a "Wrap up & reflect" button below it; mockup
+  approved first; spec 05 §3 + 09 §14.2; on `feat/sessions-clear-field-and-wrap-up`).** Two user asks, mockup
+  shown + approved before building (the `visualize` tool — send before/after + the end-button demo). **(1) Bug —
+  composer cleared too late.** `Composer.submit()` only cleared the textarea AFTER `onSend` resolved, but `onSend`
+  awaits the WHOLE chat turn → the sent text sat in the disabled field the entire time the coach was "thinking,"
+  duplicated with the bubble above (user: "confusing"). Fix: **snapshot then clear immediately** on send (the
+  message lives in the thread); restore the text + pending attachments only if the send can't even start (a total
+  attachment-store failure → `false`). **(2) Feature — a first-class "end + analyze" control.** "Complete &
+  summarize" only lived in the per-session ⋯ menu + the proactive AI wrap-up chip, so there was no obvious "I'm
+  done, analyze this" affordance. Added a **"Wrap up & reflect"** button centered below the composer running the
+  SAME `completeAndSummarize` (setStatus('complete') → summarize) — a relocation, not a second action. **Decisions
+  asked (2 forks, user-chosen):** label = "Wrap up & reflect"; AI/memory-off = **hide it** (matches the existing
+  summarize gating). Gated `summarizeReady && activeId && messages.length>0 && status!=='complete' && !showSuggestion`
+  (never two wrap-up controls at once). Gate green: typecheck (all), lint, format, **961 core + 910 desktop + 11
+  relay** unit (+Composer: clears the instant you Send [pending-promise onSend] + restores text on `false`; +Sessions
+  RTL: button ends+summarizes on demand + disappears once complete + hidden when memory off), **E2E +1** (send →
+  field `toHaveValue('')` → "Wrap up & reflect" → Session summary + Insight written + button gone; the base send E2E
+  asserts the clear too). Synced spec 05 §3 + 09 §14.2. **Lesson: a composer that clears only after the send promise
+  resolves leaves the message stuck in a disabled field for the whole turn — clear optimistically on send + restore
+  on a can't-start failure; and when adding an "end/analyze" affordance, RELOCATE the existing action (the ⋯-menu
+  complete-&-summarize) to where users look, don't add a redundant second control (gate it so it never co-exists
+  with the proactive wrap-up suggestion).**
 - 2026-07-08 — **Fix (Sessions retry made ZERO difference for a session created BEFORE the fix — the LEGACY
   blank-reply ghost; user-reported (furious) with a screenshot; spec 05 §4.1 amended; on
   `fix/sessions-legacy-blank-reply-retry`).** The v0.14.3 retry only appeared when the transcript's last message

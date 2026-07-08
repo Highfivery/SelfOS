@@ -204,6 +204,20 @@ export function Sessions(): JSX.Element {
     !suggestionDismissed &&
     activeStatus !== 'complete' &&
     !summarizing;
+  // The manual "Wrap up & reflect" affordance below the composer (09 §14.2): a first-class way to end + analyze
+  // an in-progress session on demand (same action as the ⋯ menu's "complete & summarize"). Hidden when it
+  // can't analyze (AI/memory off → `summarizeReady` false), when there's nothing to reflect on yet, once the
+  // session is already complete, and while the proactive wrap-up suggestion is showing (so there's never two
+  // wrap-up controls at once).
+  const canWrapUp =
+    summarizeReady &&
+    activeId !== null &&
+    messages.length > 0 &&
+    activeStatus !== 'complete' &&
+    !showSuggestion &&
+    // Not while the last turn is still awaiting a reply (a live failure or a legacy dead-end): retry first, so
+    // you never summarize an unanswered turn — and the "Try again" banner isn't stacked with a wrap-up button.
+    !awaitingReply(messages);
 
   return (
     <div className={styles.layout} data-view={effectiveView}>
@@ -432,12 +446,26 @@ export function Sessions(): JSX.Element {
             ) : null}
 
             {configured ? (
-              <Composer
-                disabled={sending}
-                allowAttachments
-                // Return the send promise so the composer keeps pending attachments if a store fails.
-                onSend={(text, attachments) => send(text, attachments)}
-              />
+              <>
+                <Composer
+                  disabled={sending}
+                  allowAttachments
+                  // Return the send promise so the composer keeps pending attachments if a store fails.
+                  onSend={(text, attachments) => send(text, attachments)}
+                />
+                {canWrapUp ? (
+                  <div className={styles.wrapUpRow}>
+                    <Button
+                      variant="secondary"
+                      onClick={() => activeId && completeAndSummarize(activeId)}
+                      disabled={summarizing}
+                    >
+                      <Sparkles size={16} aria-hidden="true" />
+                      {summarizing ? 'Wrapping up…' : 'Wrap up & reflect'}
+                    </Button>
+                  </div>
+                ) : null}
+              </>
             ) : (
               <AiUnavailableNotice />
             )}

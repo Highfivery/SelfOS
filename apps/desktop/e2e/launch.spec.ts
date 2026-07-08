@@ -1667,6 +1667,10 @@ test('sessions: send a message, stream a reply, and show the usage header + cris
     await w.getByLabel('Message').fill('I had a hard day');
     await w.getByRole('button', { name: 'Send' }).click();
 
+    // The composer clears the INSTANT you hit send (05 §3) — the message lives in the thread, not lingering
+    // in a disabled field while the coach replies.
+    await expect(w.getByLabel('Message')).toHaveValue('');
+
     // `.first()` tolerates the brief stream→persist handoff where the streaming bubble and the saved
     // message both match.
     await expect(w.getByText(/hear you/i).first()).toBeVisible(); // offline fake reply
@@ -1971,6 +1975,38 @@ test('sessions: switching accounts immediately clears the previous person’s se
 
     // Jordan must NOT see the owner's session — it used to linger until a later reload.
     await expect(w.getByText('OWNER-ONLY SESSION')).toHaveCount(0);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('sessions (09 §14.2): "Wrap up & reflect" below the composer ends + summarizes on demand', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Sessions' }).click();
+    await w.getByLabel('Message').fill('Thanks, this really helped');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByLabel('Message')).toHaveValue(''); // field clears on send
+    await expect(w.getByText(/hear you/i).first()).toBeVisible();
+
+    // The manual wrap-up button sits below the composer for an in-progress session — end + analyze on demand.
+    await w.getByRole('button', { name: 'Wrap up & reflect' }).click();
+    await expect(w.getByRole('heading', { name: 'Session summary' })).toBeVisible();
+    await expect(w.getByRole('button', { name: /View in Memory/i })).toBeVisible();
+    // Once complete, the wrap-up button is gone (no duplicate control lingering).
+    await expect(w.getByRole('button', { name: 'Wrap up & reflect' })).toHaveCount(0);
+
+    // The session is completed + its Insight feeds the subject's own assembled context.
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('wrap-up e2e: master key missing');
+    const insights = await listInsightsForPerson(fs, key, 'owner-1');
+    expect(insights.some((i) => i.source === 'session')).toBe(true);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

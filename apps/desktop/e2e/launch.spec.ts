@@ -3574,7 +3574,7 @@ test('memory overhaul: stats header, type-scope a fact to partner (decrypt), mar
   }
 });
 
-test('goals: a tracked goal shows in Memory with status; marking it Done moves it to closed (39 §3.1)', async () => {
+test('goals: a tracked goal shows on the Goals page with status; marking it Done moves it to closed (57 §3.7)', async () => {
   const { userData, vault } = await seedReadyVault();
   const fs = createNodeFileSystem(vault);
   const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
@@ -3596,7 +3596,8 @@ test('goals: a tracked goal shows in Memory with status; marking it Done moves i
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'Memory' }).click();
+    // Goals now live on their own top-level page (57 §3.7), not inside Memory.
+    await w.getByRole('link', { name: 'Goals' }).click();
 
     // The goal appears under "Goals & commitments" with an Open status.
     await expect(w.getByRole('heading', { name: /Goals & commitments/ })).toBeVisible();
@@ -3613,7 +3614,13 @@ test('goals: a tracked goal shows in Memory with status; marking it Done moves i
       .poll(async () => (await getGoal(fs, key, 'owner-1', 'goal-1'))?.status)
       .toBe('done');
 
-    // No horizontal overflow at phone width with the Goals section present.
+    // The extraction: Memory no longer carries a Goals section (57 §1.3).
+    await w.getByRole('link', { name: 'Memory' }).click();
+    await expect(w.getByRole('heading', { name: 'Memory' })).toBeVisible();
+    await expect(w.getByRole('heading', { name: /Goals & commitments/ })).toHaveCount(0);
+
+    // No horizontal overflow at phone width on the Goals page.
+    await w.getByRole('link', { name: 'Goals' }).click();
     await w.setViewportSize({ width: 390, height: 800 });
     const overflow = await w.evaluate(() => {
       let max = 0;

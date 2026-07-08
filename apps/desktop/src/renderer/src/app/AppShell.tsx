@@ -6,6 +6,7 @@ import {
   Brain,
   ClipboardList,
   Compass,
+  Flag,
   House,
   Inbox,
   MessageCircle,
@@ -319,6 +320,18 @@ export function AppShell(): JSX.Element {
               >
                 <Brain size={18} aria-hidden="true" />
                 <span className={styles.label}>Memory</span>
+              </NavLink>
+            ) : null}
+            {canViewMemory ? (
+              <NavLink
+                to="/goals"
+                className={navClass}
+                aria-label="Goals"
+                title={tip('Goals')}
+                onClick={closeDrawer}
+              >
+                <Flag size={18} aria-hidden="true" />
+                <span className={styles.label}>Goals</span>
               </NavLink>
             ) : null}
             {canOwnDreams ? (

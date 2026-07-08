@@ -2,11 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import type { Goal, Insight } from '@shared/schemas';
+import type { Insight } from '@shared/schemas';
 import { DEFAULT_ROLES } from '@shared/capabilities';
 import { Memory } from './Memory';
 import { useInsightStore } from '../../../stores/insightStore';
-import { useGoalStore } from '../../../stores/goalStore';
 import { usePeopleStore } from '../../../stores/peopleStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useConversationStore } from '../../../stores/conversationStore';
@@ -48,18 +47,6 @@ function renderMemory(): void {
   );
 }
 
-function goal(over: Partial<Goal> & { id: string; text: string }): Goal {
-  return {
-    schemaVersion: 1,
-    subjectPersonId: 'p1',
-    status: 'open',
-    provenance: { conversationId: 'c1', at: '2026-06-11T12:00:00.000Z' },
-    createdAt: '2026-06-11T12:00:00.000Z',
-    updatedAt: '2026-06-11T12:00:00.000Z',
-    ...over,
-  };
-}
-
 afterEach(() => {
   clearMockBridge();
   useInsightStore.setState({
@@ -69,7 +56,6 @@ afterEach(() => {
     lastReconciledAt: undefined,
     proposals: [],
   });
-  useGoalStore.setState({ goals: [], loaded: false });
   usePeopleStore.setState({ people: [], loaded: false });
   useConversationStore.setState({ conversations: [] });
   useDreamStore.setState({ dreams: [], loaded: false });
@@ -399,54 +385,6 @@ describe('Memory dashboard', () => {
     await userEvent.type(screen.getByLabelText('Search memory'), 'hiking');
     expect(screen.getByText('Loves hiking outdoors')).toBeInTheDocument();
     expect(screen.queryByText('Prefers quiet evenings')).not.toBeInTheDocument();
-  });
-
-  it('renders the Goals section with status, and marks a goal done (moving it to closed)', async () => {
-    useSessionStore.setState({ activePerson: activeP1 });
-    const setStatus = vi.fn(() => Promise.resolve(null));
-    installMockBridge({
-      insightsList: () => Promise.resolve([insight({ id: 'i1' })]),
-      goalsList: () =>
-        Promise.resolve([goal({ id: 'g1', text: 'Finish the thesis', status: 'open' })]),
-      goalsSetStatus: setStatus,
-    });
-    renderMemory();
-    expect(await screen.findByRole('heading', { name: /Goals & commitments/ })).toBeInTheDocument();
-    expect(screen.getByText('Finish the thesis')).toBeInTheDocument();
-    const setStatusSelect = screen.getByRole('combobox', {
-      name: /Set status for: Finish the thesis/,
-    });
-    expect(setStatusSelect).toHaveValue('open'); // the goal reads Open
-
-    await userEvent.selectOptions(setStatusSelect, 'done');
-    expect(setStatus).toHaveBeenCalledWith({ goalId: 'g1', status: 'done' });
-  });
-
-  it('shows the gentle stale prompt for a goal past its due date', async () => {
-    useSessionStore.setState({ activePerson: activeP1 });
-    installMockBridge({
-      insightsList: () => Promise.resolve([insight({ id: 'i1' })]),
-      goalsList: () =>
-        Promise.resolve([
-          goal({ id: 'g1', text: 'Call the dentist', status: 'open', due: '2000-01-01' }),
-        ]),
-    });
-    renderMemory();
-    expect(await screen.findByText(/still working on it/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Still on it' })).toBeInTheDocument();
-    expect(screen.getByText('Open a while')).toBeInTheDocument(); // the derived stale chip
-  });
-
-  it('shows the warm Goals empty hint when there are insights but no goals', async () => {
-    useSessionStore.setState({ activePerson: activeP1 });
-    installMockBridge({
-      insightsList: () => Promise.resolve([insight({ id: 'i1' })]),
-      goalsList: () => Promise.resolve([]),
-    });
-    renderMemory();
-    expect(
-      await screen.findByText(/Goals you mention in sessions show up here/),
-    ).toBeInTheDocument();
   });
 
   it('shows a merge proposal in Needs your review and confirms it + the kept-tidy signal', async () => {

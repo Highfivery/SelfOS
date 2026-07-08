@@ -5,7 +5,6 @@ import type { Insight, InsightSource, Relationship } from '@shared/schemas';
 import { LIFE_AREAS } from '@shared/schemas';
 import { availableRelationshipTypesFor } from '../../availableRelationshipTypes';
 import { useInsightStore } from '../../../stores/insightStore';
-import { useGoalStore } from '../../../stores/goalStore';
 import { usePeopleStore } from '../../../stores/peopleStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { aiUnavailableMessage } from '../../AiUnavailableNotice';
@@ -26,7 +25,6 @@ import {
 } from '../../../design-system/components';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { InsightCard } from './InsightCard';
-import { GoalCard } from './GoalCard';
 import { RelationshipInsightsCard } from './RelationshipInsightsCard';
 import { StatsSummary } from './StatsSummary';
 import { confidenceStats, overviewStats, sharingStats } from './stats';
@@ -82,8 +80,6 @@ export function Memory(): JSX.Element {
   const canStartSession = useSessionStore((s) => s.can('sessions.own'));
   const conversations = useConversationStore((s) => s.conversations);
   const dreams = useDreamStore((s) => s.dreams);
-  const goals = useGoalStore((s) => s.goals);
-  const loadGoals = useGoalStore((s) => s.load);
   const lastReconciledAt = useInsightStore((s) => s.lastReconciledAt);
   const proposals = useInsightStore((s) => s.proposals);
   const loadReconcileState = useInsightStore((s) => s.loadReconcileState);
@@ -101,27 +97,14 @@ export function Memory(): JSX.Element {
   useEffect(() => {
     void load();
     void loadPeople();
-    void loadGoals();
     void loadReconcileState();
     void window.selfos?.relationshipsList?.().then((rels) => setRelationships(rels ?? []));
-  }, [load, loadPeople, loadGoals, loadReconcileState]);
+  }, [load, loadPeople, loadReconcileState]);
 
   // The relationship types in the person's graph — offered by an AI-inferred fact's sharing picker (44 §3.4).
   const availableTypes = useMemo(
     () => availableRelationshipTypesFor(activePersonId, relationships),
     [activePersonId, relationships],
-  );
-
-  // Active goals (open/in-progress — `stale` derives from these) above; closed (done/let go) fold into a
-  // collapsed history. The store returns newest-first.
-  const activeGoals = useMemo(
-    () =>
-      goals.filter((g) => g.status === 'open' || g.status === 'inProgress' || g.status === 'stale'),
-    [goals],
-  );
-  const closedGoals = useMemo(
-    () => goals.filter((g) => g.status === 'done' || g.status === 'abandoned'),
-    [goals],
   );
 
   const liveConversationIds = useMemo(
@@ -443,42 +426,6 @@ export function Memory(): JSX.Element {
                   />
                 ))}
               </Stack>
-            </section>
-          ) : null}
-
-          {goals.length > 0 || anyOwn ? (
-            <section className={styles.group} aria-label="Goals & commitments">
-              <Heading level={3} className={styles.groupTitle}>
-                Goals &amp; commitments
-              </Heading>
-              {goals.length === 0 ? (
-                <Card>
-                  <Text tone="secondary">
-                    Goals you mention in sessions show up here so SelfOS can help you follow
-                    through.
-                  </Text>
-                </Card>
-              ) : (
-                <Stack gap={3}>
-                  {activeGoals.map((goal) => (
-                    <GoalCard key={goal.id} goal={goal} />
-                  ))}
-                  {closedGoals.length > 0 ? (
-                    <details className={styles.trends}>
-                      <summary className={styles.trendsSummary}>
-                        Completed &amp; closed ({closedGoals.length})
-                      </summary>
-                      <div className={styles.trendsBody}>
-                        <Stack gap={3}>
-                          {closedGoals.map((goal) => (
-                            <GoalCard key={goal.id} goal={goal} />
-                          ))}
-                        </Stack>
-                      </div>
-                    </details>
-                  ) : null}
-                </Stack>
-              )}
             </section>
           ) : null}
 

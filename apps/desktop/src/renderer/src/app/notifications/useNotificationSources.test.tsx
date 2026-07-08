@@ -167,7 +167,7 @@ describe('useNotificationSources — responses-arrived (38 §3.1)', () => {
         .getState()
         .notifications.find((n) => n.coalesceKey === 'goal-followup');
       expect(goal?.body).toContain('finish the deck');
-      expect(goal?.action).toEqual({ type: 'navigate', to: '/memory' });
+      expect(goal?.action).toEqual({ type: 'navigate', to: '/goals' });
     });
   });
 

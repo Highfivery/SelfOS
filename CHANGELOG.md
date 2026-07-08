@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.2](https://github.com/Highfivery/SelfOS/compare/v0.15.1...v0.15.2) (2026-07-08)
+
+
+### Bug Fixes
+
+* **memory:** group sent-questionnaire insights as "Responses", not "About you" ([#129](https://github.com/Highfivery/SelfOS/issues/129)) ([b260950](https://github.com/Highfivery/SelfOS/commit/b2609506e0ad24a629313558a7e5e5781d73ef79))
+
 ## [0.15.1](https://github.com/Highfivery/SelfOS/compare/v0.15.0...v0.15.1) (2026-07-08)
 
 

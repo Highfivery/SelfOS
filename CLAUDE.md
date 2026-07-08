@@ -389,6 +389,33 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-08 — **Enhancements on the Questionnaires landing (11 user asks, mockup iterated + approved FIRST;
+  spec 08 §3.1/§3.3; on `feat/questionnaires-page-redesign`, stacked on the base redesign commit).** After the
+  two-section redesign, the user requested a batch of upgrades; I mocked them ALL up in an interactive Artifact
+  (Calm direction), iterated twice on feedback ("analyze button + toolbar look out of place" → quiet ghost
+  toolbar + a soft accent Analyze prompt; the green re-send box "looks out of place" → a calm accent nudge that
+  keeps the age visible + frames refreshing as good), got "looks good," THEN built. **Sections are collapsible;
+  "Sent" is organised into collapsible status subgroups** (Drafts [dashed] · Awaiting · Answered · ready to
+  analyze · Analyzed) via a pure `sentGrouping.ts` (`sentStatusOf`/`SENT_GROUPS`/`sortSent` — favourites pin
+  top). Each section has a **quiet toolbar** (search + status filter + sort) + **"Show more"** pagination. Cards
+  now show **date AND time** (`formatDateTime`). **Sent card**: favourite · **share-link** (icon+tooltip, moved
+  out of the kebab) · **view** ("See what was sent") icons + a kebab (**Duplicate**/Delete), an **inline delete
+  confirm** rendered IN the card (fixing the off-screen section-banner confirm — the "can't delete a sent one"
+  report was the confirm being scrolled away), a one-tap **Analyze** on answered-not-analysed (reuses
+  `insights:analyze`), the **Insight excerpt** + "View in Memory" once analysed, and a calm **"these answers are
+  N old — duplicate & send for fresh answers"** nudge when stale. **Received card**: **category eyebrow**,
+  received/answered **date·time**, and a **favourite** (device-local per-person via `InboxItem.favorite` +
+  `assignments:setFavorite` + `DeviceState.inboxFavorites`, the `discoveryDismissals` precedent). Additive
+  `sentOverview` fields (`answeredAt`/`analyzed`/`insightSummary`/`analyzableAssignmentId`) — still **no raw
+  answers** cross the seam (the excerpt is the sender's own derived Insight summary). Gate green: typecheck,
+  lint, format, **972 core + 11 relay + 934 desktop** unit (+sentOverview new-fields + inbox type/favorite/
+  setFavorite bridge tests, +sentGrouping unit, +3 RTL [analyze/excerpt, received category+favourite, grouping/
+  collapse/filter]), **E2E** (redesign test extended: grouped statuses + date·time + Analyze affordance +
+  received category + favourite-flip + section collapse; real-Electron visual QA at desktop + 360px). **Lesson:
+  a `getByText('Awaiting response')`/`('New')`/`('Submitted')` collides once a status FILTER `<option>` with the
+  same word exists AND a group LABEL shares the prefix — scope to `{exact:true}` or a role button, and remember
+  InboxAnswer's Submit calls `onDone` (returns to the landing), so post-submit assert the card's new "View" CTA,
+  not a status pill that now shares text with the filter option.**
 - 2026-07-08 — **Redesign (Questionnaires landing → a two-section card grid; user asked, mockup approved FIRST;
   spec 08 §3.1/§3.3; on `feat/questionnaires-page-redesign`).** The old page was a master list + a big empty
   "Select a questionnaire" detail placeholder (wasted real-estate the user flagged). Replaced with a full-width,

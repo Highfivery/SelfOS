@@ -44,11 +44,13 @@ afterEach(() => {
 const item = (over: Partial<InboxItem> = {}): InboxItem => ({
   assignmentId: 'a1',
   title: 'Weekly check-in',
+  type: 'general',
   questionCount: 1,
   status: 'sent',
   privacy: 'private',
   senderName: 'Ben',
   createdAt: '2026-06-11T00:00:00.000Z',
+  favorite: false,
   answerable: true,
   hasDraft: false,
   fromSelf: false,

@@ -340,6 +340,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.challengesClearSuggestion, bridge.challengesClearSuggestion);
   handle(IpcChannels.assignmentsCreate, bridge.assignmentsCreate);
   handle(IpcChannels.assignmentsInbox, bridge.assignmentsInbox);
+  handle(IpcChannels.assignmentsSetFavorite, bridge.assignmentsSetFavorite);
   handle(IpcChannels.assignmentsGet, bridge.assignmentsGet);
   handle(IpcChannels.assignmentsOpen, bridge.assignmentsOpen);
   handle(IpcChannels.assignmentsSaveProgress, bridge.assignmentsSaveProgress);

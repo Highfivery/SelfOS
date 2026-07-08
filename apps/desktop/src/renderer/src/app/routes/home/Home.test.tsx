@@ -208,11 +208,13 @@ describe('Home — hierarchy & status grid', () => {
           {
             assignmentId: 'a1',
             title: 'Check-in',
+            type: 'general',
             questionCount: 3,
             status: 'sent' as const,
             privacy: 'private' as const,
             senderName: 'Sam',
             createdAt: 'now',
+            favorite: false,
             answerable: true,
             hasDraft: false,
             fromSelf: false,

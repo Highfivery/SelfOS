@@ -60,6 +60,173 @@
   color: var(--color-text-tertiary);
 }
 
+/* The collapse toggle on a section/group header — a borderless button carrying a rotating chevron. */
+.collapseToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 2px 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.collapseToggle:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.chev {
+  color: var(--color-text-tertiary);
+  transition: transform var(--motion-fast) var(--ease-standard);
+  flex: none;
+}
+
+.chevCollapsed {
+  transform: rotate(-90deg);
+}
+
+/* Per-section toolbar (search + filter + sort) — quiet ghost controls, not heavy pills (calm aesthetic). */
+.toolbar {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+
+.tbSearch {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: var(--radius-pill);
+  padding: 5px var(--space-2);
+  color: var(--color-text-tertiary);
+}
+
+.tbSearch:hover {
+  background: var(--color-surface-alt);
+}
+
+.tbSearch:focus-within {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+}
+
+.tbSearch input {
+  border: none;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+  width: 96px;
+}
+
+.tbSelect {
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  padding: 5px var(--space-2);
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.tbSelect:hover {
+  background: var(--color-surface-alt);
+}
+
+.tbSelect:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+/* A status subgroup within Sent (Drafts / Awaiting / Answered / Analyzed). */
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.groupHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 2px 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.groupHead:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.groupDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.dotDraft {
+  background: var(--color-text-tertiary);
+}
+
+.dotAwaiting {
+  background: var(--color-warning);
+}
+
+.dotAnswered {
+  background: var(--color-success);
+}
+
+.dotAnalyzed {
+  background: var(--color-accent-solid);
+}
+
+.groupLabel {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.groupCount {
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+}
+
+/* "Show more" pagination — a quiet full-width reveal within a group/section. */
+.showMore {
+  border: 1px dashed var(--color-border-strong);
+  background: transparent;
+  color: var(--color-accent-text);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  width: 100%;
+}
+
+.showMore:hover {
+  background: var(--color-surface-alt);
+}
+
+.showMore:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
 /* Responsive card grid: multiple per row on desktop, one column on phones (auto-fit reflow). */
 .grid {
   display: grid;
@@ -266,6 +433,148 @@
   gap: var(--space-1);
   font-size: var(--text-xs);
   color: var(--color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The top-right action cluster (favourite · share-link · view · more). */
+.cardIcons {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+/* Centered empty state inside the "no questionnaires yet" card. */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  text-align: center;
+}
+
+/* Analysed → the Insight excerpt; a quiet left-accent block, clamped to a few lines. */
+.excerpt {
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-alt);
+  border-left: 2px solid var(--color-accent);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  padding: var(--space-2) var(--space-3);
+  /* Keep a long summary from making a tall card (§12 density) — clamp the block to ~4 lines. */
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.excerptLabel {
+  color: var(--color-accent-text);
+  font-weight: 600;
+}
+
+.excerptLink {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: var(--color-accent-text);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.excerptLink:hover,
+.excerptLink:focus-visible {
+  text-decoration: underline;
+}
+
+/* Answered-not-analysed → a one-tap Analyze prompt (parallel to the excerpt, soft accent). */
+.analyzePrompt {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+  background: var(--color-accent-subtle-bg);
+  border-left: 2px solid var(--color-accent);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  padding: var(--space-2) var(--space-3);
+}
+
+.analyzeGo,
+.refreshGo {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--color-accent-text);
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.analyzeGo:hover,
+.analyzeGo:focus-visible,
+.refreshGo:hover,
+.refreshGo:focus-visible {
+  text-decoration: underline;
+}
+
+/* Stale answers → a calm, clear "ask again" prompt (keeps the age visible; not an alert). */
+.refreshPrompt {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--color-text-secondary);
+  background: var(--color-accent-subtle-bg);
+  border-left: 2px solid var(--color-accent);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  padding: var(--space-2) var(--space-3);
+}
+
+.refreshPrompt strong {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.refreshIcon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--color-accent);
+}
+
+.refreshGo {
+  white-space: normal;
+}
+
+/* Inline delete confirm (rendered IN the card, right where you clicked — never off-screen). */
+.confirmRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-warning);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-alt);
+  font-size: var(--text-sm);
+}
+
+.confirmText {
+  color: var(--color-text-primary);
+}
+
+.confirmActions {
+  display: flex;
+  gap: var(--space-2);
 }
 
 .resendNudge {

@@ -14,6 +14,7 @@ type ImproveInput = Parameters<SelfosBridge['questionnairesImproveQuestion']>[0]
 type ImproveResult = Awaited<ReturnType<SelfosBridge['questionnairesImproveQuestion']>>;
 type SuggestInput = Parameters<SelfosBridge['gapfinderSuggest']>[0];
 type SuggestResult = Awaited<ReturnType<SelfosBridge['gapfinderSuggest']>>;
+type AnalyzeResult = Awaited<ReturnType<SelfosBridge['insightsAnalyze']>>;
 // Recipient-first saved suggestions (08 §18).
 type SavedSuggestionList = Awaited<ReturnType<SelfosBridge['questionnaireSuggestionsList']>>;
 type SavedSuggestionsGenerateResult = Awaited<
@@ -60,6 +61,9 @@ interface QuestionnaireState {
     recipientPersonId: string,
     suggestionId: string,
   ) => Promise<GenerateResult>;
+  /** Analyze a submitted send into an Insight (the card's one-tap "Analyze"); reloads the overview after.
+   *  Returns the result so the caller can surface a calm message on failure (AI off / over budget / denied). */
+  analyze: (assignmentId: string) => Promise<AnalyzeResult>;
   save: (input: QuestionnaireInput) => Promise<Questionnaire | null>;
   remove: (id: string) => Promise<void>;
   validate: (input: QuestionnaireInput) => Promise<string[]>;
@@ -111,6 +115,11 @@ export const useQuestionnaireStore = create<QuestionnaireState>((set, get) => ({
       recipientPersonId,
       suggestionId,
     })) ?? AI_UNAVAILABLE,
+  analyze: async (assignmentId) => {
+    const result = (await window.selfos?.insightsAnalyze({ assignmentId })) ?? AI_UNAVAILABLE;
+    await get().load();
+    return result;
+  },
   save: async (input) => {
     const saved = (await window.selfos?.questionnairesSave(input)) ?? null;
     await get().load();

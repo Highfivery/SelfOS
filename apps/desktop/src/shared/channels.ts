@@ -254,6 +254,7 @@ export const IpcChannels = {
   challengesClearSuggestion: 'challenges:clearSuggestion',
   assignmentsCreate: 'assignments:create',
   assignmentsInbox: 'assignments:inbox',
+  assignmentsSetFavorite: 'assignments:setFavorite',
   assignmentsGet: 'assignments:get',
   assignmentsOpen: 'assignments:open',
   assignmentsSaveProgress: 'assignments:saveProgress',
@@ -929,6 +930,11 @@ export interface SelfosBridge {
   }): Promise<InAppSendResult>;
   /** The active person's Inbox — questionnaires sent to them, newest first. Requires `questionnaires.answer`. */
   assignmentsInbox(): Promise<InboxItem[]>;
+  /**
+   * Pin/unpin a received questionnaire (08 §3.3) — a personal, device-local, per-person view preference on
+   * someone else's send. Recipient-scoped; requires `questionnaires.answer`.
+   */
+  assignmentsSetFavorite(input: { assignmentId: string; favorite: boolean }): Promise<void>;
   /**
    * The answering view for one Inbox assignment (frozen snapshot + any saved draft answers). Returns
    * null unless the active person is the recipient. Requires `questionnaires.answer`.

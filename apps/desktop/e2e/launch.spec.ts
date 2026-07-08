@@ -4488,21 +4488,39 @@ test('questionnaires redesign (§3.1/§3.3): Sent + Received card sections; answ
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Questionnaires' }).click();
 
-    // Sent section: both owner questionnaires, with rich per-recipient status.
+    // Sent section: grouped by status, with rich per-recipient status + date·time + an Analyze affordance.
     const sent = w.getByRole('region', { name: 'Sent questionnaires' });
     await expect(w.getByRole('heading', { name: 'Sent' })).toBeVisible();
+    await expect(sent.getByRole('button', { name: /Awaiting responses/ })).toBeVisible();
+    await expect(sent.getByRole('button', { name: /Answered · ready to analyze/ })).toBeVisible();
     await expect(sent.getByRole('button', { name: /^Weekly mood/ })).toBeVisible();
-    await expect(sent.getByText('Awaiting response')).toBeVisible();
-    await expect(sent.getByText(/Answered/)).toBeVisible();
+    await expect(sent.getByText('Awaiting response', { exact: true })).toBeVisible();
     await expect(sent.getByText('1 new')).toBeVisible();
+    // The meta carries date AND time; the answered card offers one-tap Analyze.
+    await expect(sent.getByText(/Sent .*2026 · /).first()).toBeVisible();
+    await expect(sent.getByRole('button', { name: /Analyze to see the insight/ })).toBeVisible();
 
-    // Received section: the friend's send — but NOT the owner's own self-sends (filtered so nothing
-    // double-renders across the two sections on one screen, §3.3).
+    // Received section: the friend's send — with its category eyebrow + a favourite pin — but NOT the owner's
+    // own self-sends (filtered so nothing double-renders across the two sections, §3.3).
     const received = w.getByRole('region', { name: 'Received questionnaires' });
     await expect(w.getByRole('heading', { name: 'Received' })).toBeVisible();
-    await expect(received.getByRole('button', { name: /friend’s check-in/ })).toBeVisible();
-    await expect(received.getByText('New')).toBeVisible();
+    await expect(
+      received.getByRole('button', { name: 'A friend’s check-in', exact: true }),
+    ).toBeVisible();
+    // A New item leads with the "Answer" CTA.
+    await expect(received.getByRole('button', { name: 'Answer' })).toBeVisible();
+    await expect(received.getByText(/How am I doing in this role/)).toBeVisible();
+    await expect(received.getByText(/Received .*2026 · /)).toBeVisible();
     await expect(received.getByRole('button', { name: /Weekly mood/ })).toHaveCount(0);
+    // Favourite the received one → the pin flips to "Unpin".
+    await received.getByRole('button', { name: /^Pin / }).click();
+    await expect(received.getByRole('button', { name: /^Unpin / })).toBeVisible();
+
+    // Collapsing the Sent section hides its cards; expanding restores them.
+    await w.getByRole('button', { name: 'Sent', exact: true }).click();
+    await expect(sent.getByRole('button', { name: /^Weekly mood/ })).toHaveCount(0);
+    await w.getByRole('button', { name: 'Sent', exact: true }).click();
+    await expect(sent.getByRole('button', { name: /^Weekly mood/ })).toBeVisible();
 
     // 360px on the populated landing: no horizontal overflow anywhere — page-level OR an inner scroller
     // (§7/§12) — then back to desktop width for the answering interaction.
@@ -4522,11 +4540,11 @@ test('questionnaires redesign (§3.1/§3.3): Sent + Received card sections; answ
     expect(overflow.inner).toBe(0);
     await w.setViewportSize({ width: 1280, height: 900 });
 
-    // Answer the received one straight from its card → submit.
+    // Answer the received one straight from its card → submit → back on the landing its CTA flips to "View".
     await received.getByRole('button', { name: 'Answer' }).click();
     await w.getByLabel('How are we?').fill('Doing well');
     await w.getByRole('button', { name: 'Submit' }).click();
-    await expect(w.getByText('Submitted')).toBeVisible();
+    await expect(received.getByRole('button', { name: 'View' })).toBeVisible();
 
     // Decrypt proof: the UI answer round-tripped — the friend's send is now submitted in the vault.
     const submitted = (await listAssignments(fs, key)).find(

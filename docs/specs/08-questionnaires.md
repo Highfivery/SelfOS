@@ -165,6 +165,21 @@ each recipient's latest send, the sender's own compatibility half excluded; **ne
 basic **`questionnaires:sendStates`** (create-gated `{lastSentAt,total}`) stays for the builder + as a
 graceful fallback when a person lacks `viewResults`.
 
+**Landing enhancements (2026-07-08b).** The two sections are **collapsible**, and "Sent" is organised into
+**collapsible status subgroups** — **Drafts** (dashed cards) · **Awaiting responses** · **Answered · ready to
+analyze** · **Analyzed** (a pure `sentStatusOf`/`SENT_GROUPS` classification). Each section has a quiet toolbar
+(**search** + **status filter** + **sort** — recently sent / recently answered / A–Z; favourites pin to the
+top) and **"Show more"** pagination (`PAGE_SIZE`). Sent/answered/received times show **date AND time**
+(`formatDateTime`). A **Sent card** carries favourite · **share-link** (icon + tooltip, moved out of the kebab)
+· **view** ("See what was sent") icons + a kebab (**Duplicate** · Delete), with an **inline delete confirm**
+(rendered in the card, never off-screen). An **answered-not-analysed** card offers a one-tap **Analyze**
+(reuses `insights:analyze`); an **analysed** card shows the **Insight excerpt** + "View in Memory"; a **stale
+answered** card shows a calm "these answers are N old — duplicate & send for fresh answers" nudge. These need
+extra `sentOverview` fields (`answeredAt`, `analyzed`, `insightSummary`, `analyzableAssignmentId`, per-recipient
+`answeredAt`). **Received** cards gain the **category eyebrow**, received/answered **date·time**, and a
+**favourite** (device-local, per-person via `InboxItem.favorite` + `assignments:setFavorite`; `InboxItem` also
+carries `type` + `answeredAt`).
+
 ### 3.2 Sending
 
 1. **Choose recipient** — a household **subject** (delivered in-app) or an **external person** (relay
@@ -626,7 +641,8 @@ renderer):
   answers). _(both wired, sender-scoped.)_
 - **Send/collect** — `assignments:create` (the in-app send — wired) / `:inbox` (the recipient's Inbox; each
   item carries `fromSelf` = the active person is both sender + recipient, so the landing's "Received" section
-  can filter out self check-ins that already show under "Sent" §3.3) /
+  can filter out self check-ins that already show under "Sent" §3.3; plus `type`, `answeredAt`, and a
+  device-local per-person `favorite`) / `:setFavorite` (pin/unpin a received questionnaire, recipient-scoped) /
   `:get` (the recipient answering view) / `:open` (sent → opened) — _all wired, recipient-scoped + gated by
   `questionnaires.answer`_; `assignments:results(questionnaireId)` returns the sender's sends + per-send
   outcome (Standard, submitted → raw answers; Private → none), _sender-scoped + gated by

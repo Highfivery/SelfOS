@@ -2185,9 +2185,10 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // landing "Sent" cards (08 §3.1). Recipient detail (names + answered status, never the raw answers) is
       // results territory, so this read is `viewResults`-gated — stricter than `questionnairesSendStates`.
       const sends = await listAssignments(ctx.fs, ctx.key, { senderPersonId: personId });
-      const analyzedAssignmentIds = new Set(
+      // assignmentId → its derived Insight (for the "analysed" excerpt + to know which sends are analysed).
+      const insightByAssignment = new Map(
         (await listInsightsForPerson(ctx.fs, ctx.key, personId)).flatMap((i) =>
-          i.provenance.assignmentId ? [i.provenance.assignmentId] : [],
+          i.provenance.assignmentId ? [[i.provenance.assignmentId, i] as const] : [],
         ),
       );
       const isAnswered = (status: AssignmentStatus): boolean =>
@@ -2197,11 +2198,15 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         name: string;
         at: string;
         status: AssignmentStatus;
+        answeredAt?: string;
       }
       interface Agg {
         lastSentAt: string;
         latestByRecipient: Map<string, Recip>;
         newResponses: number;
+        answeredAt?: string; // most recent submission across sends
+        analyzable?: { at: string; id: string }; // latest submitted-but-un-analysed send
+        latestInsight?: { at: string; summary: string }; // latest analysed send's insight
       }
       const byQuestionnaire = new Map<string, Agg>();
       for (const a of sends) {
@@ -2227,6 +2232,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           newResponses: 0,
         };
         agg.lastSentAt = agg.lastSentAt > a.createdAt ? agg.lastSentAt : a.createdAt;
+        const answered = isAnswered(a.status);
+        // A submitted send's `updatedAt` is its submission time (08 §13.5b) — the "Answered <date·time>".
+        const submittedAt = answered ? a.updatedAt : undefined;
         const prior = agg.latestByRecipient.get(recipientKey);
         // Keep the recipient's LATEST send (a re-ask shows each person once). A strictly-later send always
         // wins; on an EXACT timestamp tie (two rapid programmatic sends), prefer an answered one so the card
@@ -2234,17 +2242,32 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         const supersedes =
           !prior ||
           a.createdAt > prior.at ||
-          (a.createdAt === prior.at && isAnswered(a.status) && !isAnswered(prior.status));
+          (a.createdAt === prior.at && answered && !isAnswered(prior.status));
         if (supersedes) {
           agg.latestByRecipient.set(recipientKey, {
             name: recipientName,
             at: a.createdAt,
             status: a.status,
+            ...(submittedAt ? { answeredAt: submittedAt } : {}),
           });
         }
-        // A submitted-but-not-yet-analysed send is a "new response" — tallied over sends (not deduped), so
-        // multiple fresh responses on a re-asked questionnaire each count toward the badge.
-        if (a.status === 'submitted' && !analyzedAssignmentIds.has(a.id)) agg.newResponses += 1;
+        if (answered && submittedAt) {
+          agg.answeredAt =
+            !agg.answeredAt || submittedAt > agg.answeredAt ? submittedAt : agg.answeredAt;
+          const insight = insightByAssignment.get(a.id);
+          if (insight) {
+            // Track the most-recently-answered analysed send's summary for the card excerpt.
+            if (!agg.latestInsight || submittedAt > agg.latestInsight.at) {
+              agg.latestInsight = { at: submittedAt, summary: insight.summary };
+            }
+          } else if (a.status === 'submitted') {
+            // Un-analysed → a "new response" (tallied over sends) + a candidate for one-tap Analyze.
+            agg.newResponses += 1;
+            if (!agg.analyzable || submittedAt > agg.analyzable.at) {
+              agg.analyzable = { at: submittedAt, id: a.id };
+            }
+          }
+        }
         byQuestionnaire.set(a.questionnaireId, agg);
       }
       const overview: Record<string, QuestionnaireSentOverview> = {};
@@ -2253,13 +2276,25 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           name: r.name,
           status: r.status,
           answered: isAnswered(r.status),
+          ...(r.answeredAt ? { answeredAt: r.answeredAt } : {}),
         }));
+        // "Analysed" = EVERY recipient has answered and there's nothing left to analyse (all answered sends
+        // have an insight); the excerpt is that insight's summary. A still-outstanding recipient keeps the
+        // card at "N of M answered" (never "Analyzed"); a fresh un-analysed response shows the Analyze
+        // affordance (analyzableAssignmentId) instead of the excerpt.
+        const answeredCount = recipients.filter((r) => r.answered).length;
+        const allAnswered = recipients.length > 0 && answeredCount === recipients.length;
+        const analyzed = allAnswered && !agg.analyzable && agg.latestInsight !== undefined;
         overview[questionnaireId] = {
           questionnaireId,
           lastSentAt: agg.lastSentAt,
           recipients,
-          answeredCount: recipients.filter((r) => r.answered).length,
+          answeredCount,
           newResponses: agg.newResponses,
+          analyzed,
+          ...(agg.answeredAt ? { answeredAt: agg.answeredAt } : {}),
+          ...(analyzed && agg.latestInsight ? { insightSummary: agg.latestInsight.summary } : {}),
+          ...(agg.analyzable ? { analyzableAssignmentId: agg.analyzable.id } : {}),
         };
       }
       return overview;
@@ -3185,25 +3220,50 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const personId = await activePersonId();
       if (!personId) return [];
       const assignments = await listAssignments(ctx.fs, ctx.key, { recipientPersonId: personId });
+      const device = await host.readDeviceState();
+      const favorites = new Set(device.inboxFavorites?.[personId] ?? []);
       const items: InboxItem[] = [];
       for (const a of assignments) {
         const snapshot = await getAssignmentSnapshot(ctx.fs, ctx.key, a.id);
         if (!snapshot) continue; // a half-written send with no snapshot is unanswerable — skip it
-        const draft = await getResponse(ctx.fs, ctx.key, a.id);
+        const response = await getResponse(ctx.fs, ctx.key, a.id);
+        const submitted = response && response.submittedAt !== undefined;
         items.push({
           assignmentId: a.id,
           title: snapshot.title,
+          type: snapshot.type,
           questionCount: snapshot.questions.length,
           status: a.status,
           privacy: a.privacy,
           senderName: await senderNameFor(ctx.fs, ctx.key, a),
           createdAt: a.createdAt,
+          ...(submitted ? { answeredAt: a.updatedAt } : {}),
+          favorite: favorites.has(a.id),
           answerable: isAnswerable(a.status),
-          hasDraft: Boolean(draft && draft.submittedAt === undefined),
+          hasDraft: Boolean(response && !submitted),
           fromSelf: a.senderPersonId === personId,
         });
       }
       return items;
+    },
+    assignmentsSetFavorite: async ({ assignmentId, favorite }): Promise<void> => {
+      // A personal, device-local pin on a received questionnaire (08 §3.3). Recipient-scoped: only the active
+      // person can favourite their own Inbox items, and it never syncs or leaks across personas.
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.answer'))) return;
+      const personId = await activePersonId();
+      if (!personId) return;
+      const id = AssignmentIdSchema.parse(assignmentId);
+      // Only pin an assignment actually sent to the active person (never an arbitrary id).
+      const mine = await listAssignments(ctx.fs, ctx.key, { recipientPersonId: personId });
+      if (!mine.some((a) => a.id === id)) return;
+      const device = await host.readDeviceState();
+      const current = new Set(device.inboxFavorites?.[personId] ?? []);
+      if (favorite) current.add(id);
+      else current.delete(id);
+      await host.updateDeviceState({
+        inboxFavorites: { ...device.inboxFavorites, [personId]: [...current] },
+      });
     },
     assignmentsGet: async (assignmentId): Promise<InboxAssignmentDetail | null> => {
       const resolved = await recipientAssignment(AssignmentIdSchema.parse(assignmentId));

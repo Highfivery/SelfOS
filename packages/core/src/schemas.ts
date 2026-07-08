@@ -207,6 +207,12 @@ export const DeviceStateSchema = z.object({
    * precedent — no schemaVersion bump).
    */
   discoveryDismissals: z.record(z.string(), z.array(z.string())).optional(),
+  /**
+   * Received questionnaires the active person has pinned (08 §3.3), keyed by subject person id → the set of
+   * favourited assignment ids. A favourite is a personal, device-local view preference on someone else's
+   * send — it must not sync or leak across personas. Additive-optional (the `discoveryDismissals` precedent).
+   */
+  inboxFavorites: z.record(z.string(), z.array(z.string())).optional(),
 });
 export type DeviceState = z.infer<typeof DeviceStateSchema>;
 
@@ -2324,11 +2330,14 @@ export type IntakeSynthesisResult =
 export interface InboxItem {
   assignmentId: string;
   title: string;
+  type: string; // the questionnaire's category (from the frozen snapshot), shown as the card eyebrow
   questionCount: number;
   status: AssignmentStatus;
   privacy: PrivacyMode;
   senderName: string | null; // null = the sender stayed anonymous
   createdAt: string;
+  answeredAt?: string; // when the recipient submitted (ISO) — present once submitted
+  favorite: boolean; // the active person pinned it (device-local, per-person)
   answerable: boolean; // still open to answer / decline
   hasDraft: boolean; // saved-but-unsubmitted progress exists
   // True when the active person is BOTH sender and recipient (a self check-in). The standalone Inbox still
@@ -2449,6 +2458,8 @@ export interface SentRecipientSummary {
   status: AssignmentStatus;
   /** True once the recipient has submitted (status `submitted` or `analyzed`). */
   answered: boolean;
+  /** When this recipient's latest send was submitted (ISO) — present only once answered. */
+  answeredAt?: string;
 }
 
 /**
@@ -2467,6 +2478,15 @@ export interface QuestionnaireSentOverview {
   answeredCount: number;
   /** Submitted responses not yet analysed by the sender — drives the "N new" badge. */
   newResponses: number;
+  /** The most recent submission time across all sends (ISO) — the card's "Answered <date·time>". */
+  answeredAt?: string;
+  /** True once every submitted send has been analysed (≥1 submitted, none left un-analysed). */
+  analyzed: boolean;
+  /** A short excerpt of the derived Insight's summary (the latest analysed send) — shown on the card. */
+  insightSummary?: string;
+  /** The latest submitted-but-un-analysed send, so the card can offer a one-tap "Analyze". Absent when
+   *  there's nothing new to analyse (nothing submitted, or all analysed). */
+  analyzableAssignmentId?: string;
 }
 
 /**

@@ -323,6 +323,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         },
       }),
     assignmentsInbox: () => Promise.resolve([]),
+    assignmentsSetFavorite: () => Promise.resolve(),
     assignmentsGet: () => Promise.resolve(null),
     assignmentsOpen: () => Promise.resolve(),
     assignmentsSaveProgress: () => Promise.resolve(),

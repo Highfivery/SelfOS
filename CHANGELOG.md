@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.0](https://github.com/Highfivery/SelfOS/compare/v0.14.4...v0.15.0) (2026-07-08)
+
+
+### Features
+
+* **sessions:** clear the composer on send + add a "Wrap up & reflect" button ([#125](https://github.com/Highfivery/SelfOS/issues/125)) ([c896e7e](https://github.com/Highfivery/SelfOS/commit/c896e7eb8975d2d76bedb253d42e51c736d780af))
+
 ## [0.14.4](https://github.com/Highfivery/SelfOS/compare/v0.14.3...v0.14.4) (2026-07-08)
 
 

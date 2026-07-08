@@ -5,8 +5,37 @@ import { getInsight, listInsightsForPerson, summarizeForContext } from '../insig
 import { matrixRowKey } from '../schemas';
 import type { ScoreAnswers } from './scoring';
 import { getTest } from './testCatalog';
-import { deleteAllResults, deleteResult, latestResult, listResults, takeTest } from './testService';
+import {
+  deleteAllResults,
+  deleteResult,
+  latestResult,
+  listResults,
+  normalizeTestSummary,
+  takeTest,
+} from './testService';
 import type { TestDefinition } from './types';
+
+describe('normalizeTestSummary (their → your, read-time legacy fix)', () => {
+  it('rewrites the pre-fix third-person summaries to second person', () => {
+    expect(
+      normalizeTestSummary(
+        'How they see their own sexuality & orientation (a private self-assessment).',
+      ),
+    ).toBe('How you see your own sexuality & orientation (a private self-assessment).');
+    expect(
+      normalizeTestSummary(
+        'Their consensual-adult intimacy interests (a private self-assessment).',
+      ),
+    ).toBe('Your consensual-adult intimacy interests (a private self-assessment).');
+    expect(
+      normalizeTestSummary('How they describe their own personality (a self-assessment).'),
+    ).toBe('How you describe your own personality (a self-assessment).');
+  });
+
+  it('leaves any other summary untouched', () => {
+    expect(normalizeTestSummary('Something else entirely.')).toBe('Something else entirely.');
+  });
+});
 
 const key = generateMasterKey();
 let seq = 0;

@@ -141,21 +141,43 @@ function buildFacts(
   return facts;
 }
 
-/** A short, non-diagnostic summary line (feeds the coach as a header for the facts). */
+/** A short, non-diagnostic summary line — second person, matching the rest of the person's Memory + the
+ * facts below it (which are already "you"/"your"). Feeds the coach as a header for the facts. */
 function buildSummary(def: TestDefinition): string {
   switch (def.group) {
     case 'personality':
-      return 'How they describe their own personality (a self-assessment).';
+      return 'How you describe your own personality (a self-assessment).';
     case 'relationships':
-      return 'How they relate in close relationships (an attachment self-assessment).';
+      return 'How you relate in close relationships (an attachment self-assessment).';
     case 'intimacy':
       return def.id === 'kink-interests'
-        ? 'Their consensual-adult intimacy interests (a private self-assessment).'
-        : 'How they see their own sexuality & orientation (a private self-assessment).';
+        ? 'Your consensual-adult intimacy interests (a private self-assessment).'
+        : 'How you see your own sexuality & orientation (a private self-assessment).';
     case 'wellbeing':
       // A gentle, non-diagnostic header — a self-reflection check-in, never a screening or diagnosis (§8.1).
       return `A wellbeing self-reflection (${def.title.toLowerCase()}) — a check-in, not a diagnosis.`;
   }
+}
+
+/**
+ * Map a pre-fix (third-person) self-assessment summary to its second-person form (the strings were stored on
+ * the insight at take time, so existing insights keep the old wording until this normalizes it read-time).
+ * Pure + exact-match — a no-op for any other summary. Applied where insights are read (insightStore), so both
+ * Memory display AND coaching context see the consistent "you/your" wording.
+ */
+const LEGACY_TEST_SUMMARY_FIX: Record<string, string> = {
+  'How they describe their own personality (a self-assessment).':
+    'How you describe your own personality (a self-assessment).',
+  'How they relate in close relationships (an attachment self-assessment).':
+    'How you relate in close relationships (an attachment self-assessment).',
+  'Their consensual-adult intimacy interests (a private self-assessment).':
+    'Your consensual-adult intimacy interests (a private self-assessment).',
+  'How they see their own sexuality & orientation (a private self-assessment).':
+    'How you see your own sexuality & orientation (a private self-assessment).',
+};
+
+export function normalizeTestSummary(summary: string): string {
+  return LEGACY_TEST_SUMMARY_FIX[summary] ?? summary;
 }
 
 /**

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.4](https://github.com/Highfivery/SelfOS/compare/v0.14.3...v0.14.4) (2026-07-08)
+
+
+### Bug Fixes
+
+* **sessions:** recover a legacy session that dead-ended on a blank reply ([#123](https://github.com/Highfivery/SelfOS/issues/123)) ([3b6ecc2](https://github.com/Highfivery/SelfOS/commit/3b6ecc2acf9ab35542905998bd20f3ab384776ad))
+
 ## [0.14.3](https://github.com/Highfivery/SelfOS/compare/v0.14.2...v0.14.3) (2026-07-07)
 
 

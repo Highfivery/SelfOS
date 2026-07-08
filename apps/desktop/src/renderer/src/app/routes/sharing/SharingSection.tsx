@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Share2 } from 'lucide-react';
+import { Share2 } from 'lucide-react';
 import type { OutboundSharingItem, Relationship } from '@shared/schemas';
 import { describeScope, SHARING_INLINE_EXPLAINER } from '@selfos/core/sharing';
 import { useInsightStore } from '../../../stores/insightStore';
@@ -13,19 +12,21 @@ import {
   Stack,
   Text,
 } from '../../../design-system/components';
-import { CrisisFooter } from '../sessions/CrisisFooter';
-import { FactSharingControl } from './FactSharingControl';
+import { FactSharingControl } from '../memory/FactSharingControl';
 import { availableRelationshipTypesFor } from '../../availableRelationshipTypes';
-import styles from './SharingPanel.module.css';
+import styles from './SharingSection.module.css';
 
 /**
- * "What you share & with whom" (44-memory-dashboard §3.5) — the one place to audit + control ALL outbound
- * sharing. Lists every item the active person shares (insight facts + intake answers, via
+ * "What you share & with whom" (44-memory-dashboard §3.5) — the transparency + control surface for ALL
+ * outbound sharing. Lists every item the active person shares (insight facts + intake answers, via
  * `memory:outboundSharing`), each with its scope, the concrete people currently receiving it, and a
  * `RelationshipScopePicker` to change scope or set Private. Own-scoped (the bridge gates the reads + writes).
+ *
+ * Relocated out of Memory (57 §3.8): rendered as a SECTION of the "Sharing & relationships" page — it no
+ * longer owns the page chrome (no back button, no crisis footer; the page provides them). The `<h2>` reads as
+ * a section heading under the page title.
  */
-export function SharingPanel(): JSX.Element {
-  const navigate = useNavigate();
+export function SharingSection(): JSX.Element {
   const outbound = useInsightStore((s) => s.outbound);
   const insights = useInsightStore((s) => s.insights);
   const loaded = useInsightStore((s) => s.loaded);
@@ -106,13 +107,9 @@ export function SharingPanel(): JSX.Element {
   };
 
   return (
-    <div className={styles.layout}>
-      <button type="button" className={styles.back} onClick={() => navigate('/memory')}>
-        <ArrowLeft size={15} aria-hidden="true" /> Memory
-      </button>
-
+    <section className={styles.section} aria-label="What you share">
       <Stack gap={2}>
-        <Heading level={2}>What you share &amp; with whom</Heading>
+        <Heading level={3}>What you share &amp; with whom</Heading>
         <Text tone="secondary">{SHARING_INLINE_EXPLAINER}</Text>
       </Stack>
 
@@ -156,8 +153,6 @@ export function SharingPanel(): JSX.Element {
           );
         })}
       </Stack>
-
-      <CrisisFooter />
-    </div>
+    </section>
   );
 }

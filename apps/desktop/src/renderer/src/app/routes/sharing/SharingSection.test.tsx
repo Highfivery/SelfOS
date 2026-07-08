@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import type { Insight, OutboundSharing, Relationship } from '@shared/schemas';
-import { SharingPanel } from './SharingPanel';
+import { SharingSection } from './SharingSection';
 import { useInsightStore } from '../../../stores/insightStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
@@ -74,7 +74,7 @@ const relationships: Relationship[] = [
 function renderPanel(): void {
   render(
     <MemoryRouter>
-      <SharingPanel />
+      <SharingSection />
     </MemoryRouter>,
   );
 }
@@ -85,7 +85,7 @@ afterEach(() => {
   useSessionStore.setState({ activePerson: null });
 });
 
-describe('SharingPanel (transparency surface)', () => {
+describe('SharingSection (transparency surface)', () => {
   it('lists shared items with scope + recipients and re-scopes a fact via the picker', async () => {
     useSessionStore.setState({ activePerson: activeP1 });
     const update = vi.fn(() => Promise.resolve(null));

@@ -3213,7 +3213,7 @@ test('memory (#129): a questionnaire you sent a partner is grouped under "Respon
   }
 });
 
-test('memory redesign (54): a partner’s shared facts never show raw; the Partners view shows AI relationship insights', async () => {
+test('memory redesign (54/57): a partner’s shared facts never show raw; the Sharing & relationships page shows AI relationship insights', async () => {
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
   await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
   {
@@ -3286,8 +3286,9 @@ test('memory redesign (54): a partner’s shared facts never show raw; the Partn
     await expect(w.getByText('PARTNER-PRIVATE-FACT')).toHaveCount(0);
     await expect(w.getByText('About people you relate to')).toHaveCount(0);
 
-    // The Partners view: a relationship-insights card. Generate → AI observations (a synthesis, never raw).
-    await w.getByRole('button', { name: 'Partners' }).click();
+    // The relationship reflections moved to the "Sharing & relationships" page (57 §3.8): a
+    // relationship-insights card. Generate → AI observations (a synthesis, never raw).
+    await w.getByRole('link', { name: 'Sharing & relationships' }).click();
     await expect(w.getByText(/You & Pat/)).toBeVisible();
     await w.getByRole('button', { name: /Reflect on us/ }).click();
     await expect(w.getByText(/both lean on security/)).toBeVisible();
@@ -3305,7 +3306,7 @@ test('memory redesign (54): a partner’s shared facts never show raw; the Partn
     const synthRaw = await fs.read('people/owner-1/relationships/pat-1/synthesis.enc');
     expect(synthRaw).not.toBeNull(); // the synthesis was cached
 
-    // Phone width: no horizontal overflow with the Partners card on screen.
+    // Phone width: no horizontal overflow with the relationship card on screen.
     await w.setViewportSize({ width: 360, height: 800 });
     const overflow = await w.evaluate(() => {
       const main = document.querySelector('main');
@@ -3563,8 +3564,9 @@ test('memory overhaul: stats header, type-scope a fact to partner (decrypt), mar
     expect(await overflowAt()).toBeLessThanOrEqual(1);
     await w.setViewportSize({ width: 1024, height: 800 });
 
-    // Back to Memory; "Edit answer" on the onboarding portrait deep-links into onboarding (§3.4).
-    await w.getByRole('button', { name: /^Memory$/ }).click();
+    // Back to Memory (via the nav — the sharing surface is its own page now, 57 §3.8); "Edit answer" on the
+    // onboarding portrait deep-links into onboarding (§3.4).
+    await w.getByRole('link', { name: 'Memory' }).click();
     await w.getByRole('button', { name: /Edit answer/ }).click();
     await expect.poll(() => w.url()).toContain('onboarding');
   } finally {

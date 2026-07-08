@@ -15,6 +15,7 @@ import {
   PanelLeftOpen,
   Settings,
   Shapes,
+  Share2,
   ShieldCheck,
   Sparkles,
   Users,
@@ -356,6 +357,18 @@ export function AppShell(): JSX.Element {
               >
                 <Compass size={18} aria-hidden="true" />
                 <span className={styles.label}>You</span>
+              </NavLink>
+            ) : null}
+            {canViewMemory ? (
+              <NavLink
+                to="/sharing"
+                className={navClass}
+                aria-label="Sharing & relationships"
+                title={tip('Sharing & relationships')}
+                onClick={closeDrawer}
+              >
+                <Share2 size={18} aria-hidden="true" />
+                <span className={styles.label}>Sharing</span>
               </NavLink>
             ) : null}
             {canManagePeople ? (

@@ -16,7 +16,6 @@ import {
   Card,
   Heading,
   LineChart,
-  SegmentedControl,
   Select,
   Stack,
   Switch,
@@ -25,7 +24,6 @@ import {
 } from '../../../design-system/components';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { InsightCard } from './InsightCard';
-import { RelationshipInsightsCard } from './RelationshipInsightsCard';
 import { StatsSummary } from './StatsSummary';
 import { confidenceStats, overviewStats, sharingStats } from './stats';
 import { buildTrendSeries } from './trends';
@@ -60,11 +58,16 @@ function relativeDate(iso: string): string {
 }
 
 /**
- * "Memory" — the active person's living view of what SelfOS has learned (20-memory-dashboard, redesigned in
- * 54-memory-redesign). A summary strip + an "About you" / "Partners" toggle: "About you" is their OWN data
- * (search/filters, drafts, goals, trends, insights by life-area); "Partners" shows AI relationship insights
- * per partner. A partner's shared data feeds the AI's context + that synthesis but is NEVER shown raw here —
- * sharing is context, not display (§1).
+ * "Memory" — the active person's living view of what SelfOS has learned about them
+ * (20-memory-dashboard → 54-memory-redesign → 57-memory-overview-redesign). Purely "about you": a summary
+ * strip, search/filters, drafts to review, trends, and insights grouped by life-area (+ the issue-#129
+ * "responses to your questionnaires" own-coaching data). Goals moved to /goals (57 §3.7); the partner
+ * relationship synthesis + the outbound-sharing surface moved to /sharing (57 §3.8) — a partner's shared
+ * data still feeds the AI's context but is never shown raw here (sharing is context, not display).
+ *
+ * NOTE (57): the overview-first redesign (portrait hero + life-area tile map → drill-down) lands in a
+ * follow-up slice; this slice removes the Partners view + relocates sharing, keeping the current
+ * summary+sections layout for the "about you" data.
  */
 export function Memory(): JSX.Element {
   const navigate = useNavigate();
@@ -85,7 +88,6 @@ export function Memory(): JSX.Element {
   const loadReconcileState = useInsightStore((s) => s.loadReconcileState);
   const resolveProposal = useInsightStore((s) => s.resolveProposal);
 
-  const [view, setView] = useState<'you' | 'relationships'>('you');
   const [query, setQuery] = useState('');
   const [source, setSource] = useState<SourceFilter>('all');
   const [confidence, setConfidence] = useState<ConfidenceFilter>('all');
@@ -130,20 +132,6 @@ export function Memory(): JSX.Element {
   // Only the person's OWN insights are ever displayed (54): a related person's shared facts feed the AI's
   // context + the relationship synthesis, but are NEVER shown raw — sharing is context, not display.
   const own = insights.filter((i) => i.subjectPersonId === activePersonId);
-
-  // The viewer's PARTNER relationships (the `partner` edge is symmetric) → the "Partners" view's cards.
-  const partners = useMemo(() => {
-    if (!activePersonId) return [] as { id: string; name: string }[];
-    const ids = new Set<string>();
-    for (const r of relationships) {
-      if (r.type !== 'partner') continue;
-      if (r.fromPersonId === activePersonId) ids.add(r.toPersonId);
-      else if (r.toPersonId === activePersonId) ids.add(r.fromPersonId);
-    }
-    return [...ids]
-      .map((id) => ({ id, name: people.find((p) => p.id === id)?.displayName }))
-      .filter((p): p is { id: string; name: string } => p.name !== undefined);
-  }, [relationships, activePersonId, people]);
 
   const passesFilters = (insight: Insight): boolean =>
     matchesText(insight, q) &&
@@ -228,13 +216,12 @@ export function Memory(): JSX.Element {
 
   const nothingShown = loaded && drafts.length === 0 && approvedOwn.length === 0;
   const anyOwn = own.length > 0;
-  const showToggle = loaded && (anyOwn || partners.length > 0);
 
   return (
     <div className={styles.layout}>
       <Stack gap={2}>
         <Heading level={2}>Memory</Heading>
-        <Text tone="secondary">What SelfOS understands about you — and your relationships.</Text>
+        <Text tone="secondary">What SelfOS understands about you.</Text>
         {lastReconciledAt ? (
           <Text size="sm" tone="tertiary" aria-live="polite">
             Memory last tidied {relativeDate(lastReconciledAt)}.
@@ -247,250 +234,210 @@ export function Memory(): JSX.Element {
           overview={overviewSummary}
           confidence={confidenceSummary}
           sharing={sharingSummary}
-          onManageSharing={() => navigate('/memory/sharing')}
+          onManageSharing={() => navigate('/sharing')}
         />
       ) : null}
 
-      {showToggle ? (
-        <SegmentedControl
-          aria-label="Memory view"
-          options={[
-            { value: 'you', label: 'About you' },
-            { value: 'relationships', label: 'Partners' },
-          ]}
-          value={view}
-          onChange={setView}
-        />
-      ) : null}
-
-      {view === 'relationships' ? (
-        <Stack gap={3}>
-          <Text size="sm" tone="tertiary">
-            Insight about you and your partners — drawn from what they share, shown as insight,
-            never their raw answers.
-          </Text>
-          {partners.length === 0 ? (
-            <Card>
-              <Text tone="secondary">
-                Add a partner in People, and relationship insights about the two of you will appear
-                here.
-              </Text>
-            </Card>
-          ) : (
-            partners.map((p) => (
-              <RelationshipInsightsCard
-                key={p.id}
-                partnerId={p.id}
-                partnerName={p.name}
-                canManageAi={canManageAi}
-              />
-            ))
-          )}
-        </Stack>
-      ) : (
-        <>
-          {anyOwn ? (
-            <div className={styles.controls}>
-              <div className={styles.searchRow}>
-                <div className={styles.searchBox}>
-                  <Search size={15} aria-hidden="true" className={styles.searchIcon} />
-                  <TextInput
-                    value={query}
-                    aria-label="Search memory"
-                    placeholder="Search what SelfOS knows…"
-                    onChange={(event) => setQuery(event.target.value)}
-                  />
-                </div>
-                <Button variant="secondary" onClick={() => void onRefresh()} disabled={refreshing}>
-                  <RefreshCw size={14} aria-hidden="true" />{' '}
-                  {refreshing ? 'Refreshing…' : 'Refresh'}
-                </Button>
-              </div>
-              <div className={styles.filterRow}>
-                <Select
-                  aria-label="Filter by source"
-                  value={source}
-                  onChange={(event) => setSource(event.target.value as SourceFilter)}
-                >
-                  {SOURCE_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </Select>
-                <Select
-                  aria-label="Filter by confidence"
-                  value={confidence}
-                  onChange={(event) => setConfidence(event.target.value as ConfidenceFilter)}
-                >
-                  <option value="all">Any confidence</option>
-                  <option value="high">High</option>
-                  <option value="medium">Medium</option>
-                  <option value="low">Low</option>
-                </Select>
-                <span className={styles.flaggedToggle}>
-                  <Switch
-                    checked={flaggedOnly}
-                    aria-label="Show only flagged"
-                    onChange={setFlaggedOnly}
-                  />
-                  <Text size="sm" aria-hidden="true">
-                    Flagged only
-                  </Text>
-                </span>
-              </div>
-            </div>
-          ) : null}
-
-          {refreshNote ? <Banner tone="info">{refreshNote}</Banner> : null}
-
-          {trendSeries.length > 0 ? (
-            <details className={styles.trends} open>
-              <summary className={styles.trendsSummary}>Trends</summary>
-              <div className={styles.trendsBody}>
-                <Text size="sm" tone="tertiary">
-                  How your mood and energy have moved across analyzed sessions — a gentle
-                  reflection, not a measure.
-                </Text>
-                <LineChart
-                  series={trendSeries}
-                  ariaLabel="Your mood and energy across analyzed sessions over time"
-                  yMin={-1}
-                  yMax={1}
+      <>
+        {anyOwn ? (
+          <div className={styles.controls}>
+            <div className={styles.searchRow}>
+              <div className={styles.searchBox}>
+                <Search size={15} aria-hidden="true" className={styles.searchIcon} />
+                <TextInput
+                  value={query}
+                  aria-label="Search memory"
+                  placeholder="Search what SelfOS knows…"
+                  onChange={(event) => setQuery(event.target.value)}
                 />
               </div>
-            </details>
-          ) : null}
-
-          {loaded && !anyOwn ? (
-            <Card>
-              <Stack gap={3} align="center">
-                <Brain size={24} aria-hidden="true" />
-                <Text tone="secondary">
-                  Insights appear here after your sessions, dreams, and questionnaires are analyzed
-                  — your own view of what SelfOS is learning about you. Start a session to begin.
+              <Button variant="secondary" onClick={() => void onRefresh()} disabled={refreshing}>
+                <RefreshCw size={14} aria-hidden="true" /> {refreshing ? 'Refreshing…' : 'Refresh'}
+              </Button>
+            </div>
+            <div className={styles.filterRow}>
+              <Select
+                aria-label="Filter by source"
+                value={source}
+                onChange={(event) => setSource(event.target.value as SourceFilter)}
+              >
+                {SOURCE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </Select>
+              <Select
+                aria-label="Filter by confidence"
+                value={confidence}
+                onChange={(event) => setConfidence(event.target.value as ConfidenceFilter)}
+              >
+                <option value="all">Any confidence</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </Select>
+              <span className={styles.flaggedToggle}>
+                <Switch
+                  checked={flaggedOnly}
+                  aria-label="Show only flagged"
+                  onChange={setFlaggedOnly}
+                />
+                <Text size="sm" aria-hidden="true">
+                  Flagged only
                 </Text>
-                {canStartSession ? (
-                  <Button variant="secondary" onClick={() => navigate('/sessions')}>
-                    <MessageCircle size={16} aria-hidden="true" />
-                    Start a session
-                  </Button>
-                ) : null}
-              </Stack>
-            </Card>
-          ) : null}
+              </span>
+            </div>
+          </div>
+        ) : null}
 
-          {drafts.length > 0 || proposals.length > 0 ? (
-            <section className={styles.group} aria-label="Needs your review">
+        {refreshNote ? <Banner tone="info">{refreshNote}</Banner> : null}
+
+        {trendSeries.length > 0 ? (
+          <details className={styles.trends} open>
+            <summary className={styles.trendsSummary}>Trends</summary>
+            <div className={styles.trendsBody}>
+              <Text size="sm" tone="tertiary">
+                How your mood and energy have moved across analyzed sessions — a gentle reflection,
+                not a measure.
+              </Text>
+              <LineChart
+                series={trendSeries}
+                ariaLabel="Your mood and energy across analyzed sessions over time"
+                yMin={-1}
+                yMax={1}
+              />
+            </div>
+          </details>
+        ) : null}
+
+        {loaded && !anyOwn ? (
+          <Card>
+            <Stack gap={3} align="center">
+              <Brain size={24} aria-hidden="true" />
+              <Text tone="secondary">
+                Insights appear here after your sessions, dreams, and questionnaires are analyzed —
+                your own view of what SelfOS is learning about you. Start a session to begin.
+              </Text>
+              {canStartSession ? (
+                <Button variant="secondary" onClick={() => navigate('/sessions')}>
+                  <MessageCircle size={16} aria-hidden="true" />
+                  Start a session
+                </Button>
+              ) : null}
+            </Stack>
+          </Card>
+        ) : null}
+
+        {drafts.length > 0 || proposals.length > 0 ? (
+          <section className={styles.group} aria-label="Needs your review">
+            <Heading level={3} className={styles.groupTitle}>
+              Needs your review
+            </Heading>
+            <Stack gap={3}>
+              {proposals.map((proposal) => (
+                <Card key={proposal.id} className={styles.proposal}>
+                  <Stack gap={2}>
+                    <Text size="sm" tone="secondary">
+                      These two look like the same thing — combine them into one?
+                    </Text>
+                    <Text>· {proposal.intoSummary}</Text>
+                    <Text>· {proposal.fromSummary}</Text>
+                    <div className={styles.proposalActions}>
+                      <Button
+                        variant="secondary"
+                        onClick={() => void resolveProposal(proposal.id, 'merge')}
+                      >
+                        Merge
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        onClick={() => void resolveProposal(proposal.id, 'keepBoth')}
+                      >
+                        Keep both
+                      </Button>
+                    </div>
+                  </Stack>
+                </Card>
+              ))}
+              {drafts.length > 0 ? (
+                <Text size="sm" tone="tertiary">
+                  Drafts wait here until you approve them — they don’t inform your coaching yet.
+                </Text>
+              ) : null}
+              {drafts.map((insight) => (
+                <InsightCard
+                  key={insight.id}
+                  insight={insight}
+                  subjectName="you"
+                  isOwn
+                  {...(availableTypes ? { availableTypes } : {})}
+                />
+              ))}
+            </Stack>
+          </section>
+        ) : null}
+
+        {orderedAreas.map((area) => {
+          const areaInsights = byArea.get(area) ?? [];
+          return (
+            <section key={area} className={styles.group} aria-label={area}>
               <Heading level={3} className={styles.groupTitle}>
-                Needs your review
+                {area} <span className={styles.groupCount}>({areaInsights.length})</span>
               </Heading>
               <Stack gap={3}>
-                {proposals.map((proposal) => (
-                  <Card key={proposal.id} className={styles.proposal}>
-                    <Stack gap={2}>
-                      <Text size="sm" tone="secondary">
-                        These two look like the same thing — combine them into one?
-                      </Text>
-                      <Text>· {proposal.intoSummary}</Text>
-                      <Text>· {proposal.fromSummary}</Text>
-                      <div className={styles.proposalActions}>
-                        <Button
-                          variant="secondary"
-                          onClick={() => void resolveProposal(proposal.id, 'merge')}
-                        >
-                          Merge
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          onClick={() => void resolveProposal(proposal.id, 'keepBoth')}
-                        >
-                          Keep both
-                        </Button>
-                      </div>
-                    </Stack>
-                  </Card>
-                ))}
-                {drafts.length > 0 ? (
-                  <Text size="sm" tone="tertiary">
-                    Drafts wait here until you approve them — they don’t inform your coaching yet.
-                  </Text>
-                ) : null}
-                {drafts.map((insight) => (
+                {areaInsights.map((insight) => (
                   <InsightCard
                     key={insight.id}
                     insight={insight}
                     subjectName="you"
                     isOwn
+                    sourceRemoved={sourceRemoved(insight)}
                     {...(availableTypes ? { availableTypes } : {})}
                   />
                 ))}
               </Stack>
             </section>
-          ) : null}
+          );
+        })}
 
-          {orderedAreas.map((area) => {
-            const areaInsights = byArea.get(area) ?? [];
-            return (
-              <section key={area} className={styles.group} aria-label={area}>
-                <Heading level={3} className={styles.groupTitle}>
-                  {area} <span className={styles.groupCount}>({areaInsights.length})</span>
-                </Heading>
-                <Stack gap={3}>
-                  {areaInsights.map((insight) => (
-                    <InsightCard
-                      key={insight.id}
-                      insight={insight}
-                      subjectName="you"
-                      isOwn
-                      sourceRemoved={sourceRemoved(insight)}
-                      {...(availableTypes ? { availableTypes } : {})}
-                    />
-                  ))}
-                </Stack>
-              </section>
-            );
-          })}
+        {recipientGroups.length > 0 ? (
+          <section className={styles.group} aria-label="Responses to your questionnaires">
+            <Heading level={3} className={styles.groupTitle}>
+              Responses to your questionnaires
+            </Heading>
+            <Text size="sm" tone="tertiary">
+              What you learned from questionnaires you sent — these reflect their answers, not you.
+            </Text>
+            <Stack gap={4}>
+              {recipientGroups.map((group) => (
+                <div key={group.key} className={styles.responseGroup}>
+                  <h4 className={styles.responseName}>{group.name}</h4>
+                  <Stack gap={3}>
+                    {group.insights.map((insight) => (
+                      <InsightCard
+                        key={insight.id}
+                        insight={insight}
+                        subjectName="you"
+                        isOwn
+                        aboutName={group.name}
+                        sourceRemoved={sourceRemoved(insight)}
+                        {...(availableTypes ? { availableTypes } : {})}
+                      />
+                    ))}
+                  </Stack>
+                </div>
+              ))}
+            </Stack>
+          </section>
+        ) : null}
 
-          {recipientGroups.length > 0 ? (
-            <section className={styles.group} aria-label="Responses to your questionnaires">
-              <Heading level={3} className={styles.groupTitle}>
-                Responses to your questionnaires
-              </Heading>
-              <Text size="sm" tone="tertiary">
-                What you learned from questionnaires you sent — these reflect their answers, not
-                you.
-              </Text>
-              <Stack gap={4}>
-                {recipientGroups.map((group) => (
-                  <div key={group.key} className={styles.responseGroup}>
-                    <h4 className={styles.responseName}>{group.name}</h4>
-                    <Stack gap={3}>
-                      {group.insights.map((insight) => (
-                        <InsightCard
-                          key={insight.id}
-                          insight={insight}
-                          subjectName="you"
-                          isOwn
-                          aboutName={group.name}
-                          sourceRemoved={sourceRemoved(insight)}
-                          {...(availableTypes ? { availableTypes } : {})}
-                        />
-                      ))}
-                    </Stack>
-                  </div>
-                ))}
-              </Stack>
-            </section>
-          ) : null}
-
-          {!nothingShown ? null : (
-            <Card>
-              <Text tone="secondary">No insights match your filters.</Text>
-            </Card>
-          )}
-        </>
-      )}
+        {!nothingShown ? null : (
+          <Card>
+            <Text tone="secondary">No insights match your filters.</Text>
+          </Card>
+        )}
+      </>
 
       <CrisisFooter />
     </div>

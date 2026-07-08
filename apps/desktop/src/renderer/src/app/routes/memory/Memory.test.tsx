@@ -159,49 +159,6 @@ describe('Memory dashboard', () => {
     expect(screen.queryByText(/About Sam/)).not.toBeInTheDocument();
   });
 
-  it('the Partners view replaces raw shared data with a relationship-insights card (54)', async () => {
-    useSessionStore.setState({ activePerson: activeP1 });
-    const synth = vi.fn(() =>
-      Promise.resolve({
-        ok: true as const,
-        synthesis: {
-          schemaVersion: 1,
-          subjectPersonId: 'p1',
-          partnerPersonId: 'p2',
-          observations: ['You and Sam both value security.'],
-          computedAt: '2026-06-26T12:00:00.000Z',
-        },
-      }),
-    );
-    installMockBridge({
-      peopleList: () => Promise.resolve([activeP1, { ...activeP1, id: 'p2', displayName: 'Sam' }]),
-      relationshipsList: () =>
-        Promise.resolve([
-          {
-            id: 'r1',
-            schemaVersion: 1,
-            fromPersonId: 'p1',
-            toPersonId: 'p2',
-            type: 'partner',
-            createdAt: 'now',
-            updatedAt: 'now',
-          },
-        ]),
-      relationshipsGetSynthesis: () => Promise.resolve(null),
-      relationshipsSynthesize: synth,
-      insightsList: () => Promise.resolve([insight({ id: 'own', summary: 'MY OWN NOTE' })]),
-    });
-    renderMemory();
-    await screen.findByText('MY OWN NOTE');
-    await userEvent.click(screen.getByRole('button', { name: 'Partners' }));
-    expect(await screen.findByText(/You & Sam/)).toBeInTheDocument();
-    expect(screen.getByText(/never shown.*as their raw answers/i)).toBeInTheDocument();
-    // Generate → an AI observation (synthesis, NOT the partner's raw answers) appears.
-    await userEvent.click(screen.getByRole('button', { name: /Reflect on us/ }));
-    expect(await screen.findByText('You and Sam both value security.')).toBeInTheDocument();
-    expect(synth).toHaveBeenCalledWith({ partnerPersonId: 'p2' });
-  });
-
   it('marks an AI-inferred fact "not right about me"', async () => {
     useSessionStore.setState({ activePerson: activeP1 });
     const flag = vi.fn(() => Promise.resolve(null));

@@ -80,7 +80,8 @@ describe('Sharing & relationships page', () => {
     // The partner card renders; the shared data is NEVER shown raw — only the AI observation once generated.
     expect(await screen.findByText(/You & Sam/)).toBeInTheDocument();
     expect(screen.getByText(/never shown.*as their raw answers/i)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /Reflect on us/ }));
+    // "Reflect on us" only appears once the card's cached-synthesis read resolves (findBy waits for it).
+    await userEvent.click(await screen.findByRole('button', { name: /Reflect on us/ }));
     expect(await screen.findByText('You and Sam both value security.')).toBeInTheDocument();
     expect(synth).toHaveBeenCalledWith({ partnerPersonId: 'p2' });
   });

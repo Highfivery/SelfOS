@@ -201,6 +201,77 @@ describe('Sessions', () => {
     expect(screen.queryByText(/hasn’t been answered yet/i)).not.toBeInTheDocument();
   });
 
+  it('recovers a LEGACY session that dead-ended on a BLANK assistant reply (pre-05 §4.1)', async () => {
+    // The pre-fail-safe code persisted an empty assistant bubble on an empty reply, so the transcript ends on
+    // that ghost (last.role === 'assistant'), NOT the user's message — which the earlier fix's retry missed.
+    // The ghost must not render, and "Try again" must still be offered (and work).
+    installMockBridge({
+      secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
+      conversationsList: () =>
+        Promise.resolve([{ id: 'c1', title: 'Ghosted', updatedAt: 'now', status: 'inProgress' }]),
+      conversationsGet: () =>
+        Promise.resolve({
+          id: 'c1',
+          schemaVersion: 1,
+          personId: 'owner-1',
+          title: 'Ghosted',
+          createdAt: 'now',
+          updatedAt: 'now',
+          status: 'inProgress',
+          messages: [
+            { role: 'user', content: 'Everything feels off', ts: 'now' },
+            { role: 'assistant', content: '', ts: 'now' }, // the legacy blank-reply ghost
+          ],
+        }),
+      chatRetry: () =>
+        Promise.resolve({
+          ok: true,
+          conversation: {
+            id: 'c1',
+            schemaVersion: 1,
+            personId: 'owner-1',
+            title: 'Ghosted',
+            createdAt: 'now',
+            updatedAt: 'now',
+            status: 'inProgress' as const,
+            messages: [
+              { role: 'user' as const, content: 'Everything feels off', ts: 'now' },
+              { role: 'assistant' as const, content: 'I’m here with you.', ts: 'now' },
+            ],
+          },
+          usage: {
+            id: 'u',
+            schemaVersion: 1 as const,
+            type: 'chat' as const,
+            personId: 'owner-1',
+            model: 'claude-sonnet-4-6',
+            at: 'now',
+            inputTokens: 100,
+            outputTokens: 10,
+            cacheWriteTokens: 0,
+            cacheReadTokens: 0,
+            costUsd: 0.001,
+          },
+        }),
+    });
+    setAiEnabled(true);
+    renderSessions();
+    await userEvent.click(await screen.findByRole('button', { name: 'Ghosted' }));
+    // The user's message shows; the transcript is treated as awaiting a reply despite the trailing blank ghost.
+    await waitFor(() => expect(screen.getByText('Everything feels off')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/hasn’t been answered yet/i)).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(screen.getByText('I’m here with you.')).toBeInTheDocument());
+    expect(screen.queryByText(/hasn’t been answered yet/i)).not.toBeInTheDocument();
+  });
+
   it('renders a coach reply as Markdown (bold + a list), not literal markdown (34)', async () => {
     installMockBridge({
       secretHas: () => Promise.resolve(true),

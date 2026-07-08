@@ -1798,6 +1798,54 @@ test('sessions (05 §4.1): re-opening a session that ended on the user’s messa
   }
 });
 
+test('sessions (05 §4.1): a LEGACY session that dead-ended on a blank assistant reply still recovers', async () => {
+  // The user's actual case: a session created BEFORE the fail-safe shipped. The old code persisted an empty
+  // `{ role: 'assistant', content: '' }` bubble on an empty reply, so the transcript ends on that ghost, not
+  // the user's message — and the first fix (retry only when last === 'user') did nothing for it.
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('legacy-ghost e2e: master key missing');
+  const now = new Date().toISOString();
+  await saveConversation(fs, key, {
+    id: 'ghost-1',
+    schemaVersion: 1,
+    personId: 'owner-1',
+    title: 'Ghosted before the fix',
+    status: 'inProgress',
+    messages: [
+      { role: 'user', content: 'Everything has felt off lately', ts: now },
+      { role: 'assistant', content: '', ts: now }, // the pre-fix blank-reply ghost
+    ],
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  const app = await electron.launch({ args: [`--user-data-dir=${userData}`, MAIN], env: e2eEnv() });
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Sessions' }).click();
+    await w.getByRole('button', { name: 'Ghosted before the fix', exact: true }).click();
+
+    // The user's message shows, the ghost is treated as "no reply yet" → a gentle prompt + a working retry.
+    await expect(w.getByText('Everything has felt off lately').first()).toBeVisible();
+    await expect(w.getByText(/hasn’t been answered yet/i)).toBeVisible();
+    await w.getByRole('button', { name: 'Try again' }).click();
+    await expect(w.getByText(/hear you/i).first()).toBeVisible();
+    await expect(w.getByText(/hasn’t been answered yet/i)).toHaveCount(0);
+
+    // Decrypt: the blank ghost was stripped; the transcript is a clean [user, assistant] pair, not duplicated.
+    const convo = (await listConversations(fs, key, 'owner-1')).find((c) => c.id === 'ghost-1');
+    expect(convo?.messages.map((m) => m.role)).toEqual(['user', 'assistant']);
+    expect(convo?.messages[1]?.content.trim()).not.toBe('');
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('sessions: attach an image → encrypted on disk → thumbnail + lightbox + export → delete purges (45)', async () => {
   const saveDir = await mkdtemp(join(tmpdir(), 'selfos-save-'));
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });

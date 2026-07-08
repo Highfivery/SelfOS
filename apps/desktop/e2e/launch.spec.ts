@@ -9165,3 +9165,79 @@ test('wellbeing (51): PHQ-9 item 9 surfaces crisis resources MID-check-in; the f
     await rm(vault, { recursive: true, force: true });
   }
 });
+
+test('memory: life-area tile counts stay inside the tile at wide widths (long names ellipsize, count never clips)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('master key missing');
+  const at = '2026-07-01T10:00:00.000Z';
+  // Every life area, each with a large fact count → tiles pack to the ~230px grid minimum where the long
+  // name ("Emotions & patterns") + count would clip if the header didn't shrink the name (grid minmax(0,1fr)).
+  const AREAS = [
+    'Relationships',
+    'Family',
+    'Work & purpose',
+    'Health & body',
+    'Emotions & patterns',
+    'Values & beliefs',
+    'Intimacy',
+    'Goals & growth',
+    'Money',
+    'Faith',
+  ];
+  for (const a of AREAS) {
+    await saveInsight(fs, key, {
+      id: `tile-${a}`,
+      schemaVersion: 1,
+      source: 'session',
+      subjectPersonId: 'owner-1',
+      summary: `${a} summary.`,
+      facts: Array.from({ length: 57 }, (_, i) => ({
+        id: `${a}${i}`,
+        text: `f${i}`,
+        shareable: false,
+      })),
+      confidence: 'high',
+      categories: [a],
+      approved: true,
+      provenance: { at },
+      createdAt: at,
+      updatedAt: at,
+    });
+  }
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    for (const width of [1440, 1600, 1800]) {
+      await w.setViewportSize({ width, height: 900 });
+      await w.getByRole('link', { name: 'Memory' }).click();
+      await expect(w.getByRole('heading', { name: 'By life area' })).toBeVisible();
+      // No tile's count spills past the tile's content box (the clip the user reported).
+      const worst = await w.evaluate(() => {
+        let overflow = 0;
+        for (const tile of Array.from(document.querySelectorAll('main button'))) {
+          const t = tile as HTMLElement;
+          if (
+            !(t.getAttribute('aria-label') || '').match(
+              /^(Relationships|Family|Work|Health|Emotions|Values|Intimacy|Goals|Money|Faith)/,
+            )
+          )
+            continue;
+          const cs = getComputedStyle(t);
+          const edge = t.getBoundingClientRect().right - parseFloat(cs.paddingRight);
+          for (const span of Array.from(t.querySelectorAll('span'))) {
+            const r = (span as HTMLElement).getBoundingClientRect();
+            if (r.width > 0) overflow = Math.max(overflow, Math.round(r.right - edge));
+          }
+        }
+        return overflow;
+      });
+      expect(worst, `tile content overflow at ${width}px`).toBeLessThanOrEqual(1);
+    }
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});

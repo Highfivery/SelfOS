@@ -392,6 +392,7 @@ import {
   listTestSummaries,
   narrateResult,
   registerTestContextProvider,
+  normalizeTestSummary,
   takeTest,
   testForm,
   type ScoreAnswers,
@@ -2668,7 +2669,11 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // pre-#129 ones are resolved read-time from the originating assignment / compatibility group. A self
       // check-in (recipient === subject) resolves to null and stays a normal "about you" insight.
       const ownEnriched = await Promise.all(
-        own.map(async (insight) => {
+        own.map(async (raw) => {
+          // Normalize a pre-fix third-person self-assessment summary to "you/your" (matches its facts + the
+          // rest of Memory) — read-time, so existing insights read consistently without a rewrite.
+          const insight =
+            raw.source === 'test' ? { ...raw, summary: normalizeTestSummary(raw.summary) } : raw;
           if (insight.provenance.aboutPersonId || insight.provenance.aboutName) return insight;
           const about = await resolveInsightAbout(ctx.fs, ctx.key, insight);
           return about ? { ...insight, provenance: { ...insight.provenance, ...about } } : insight;

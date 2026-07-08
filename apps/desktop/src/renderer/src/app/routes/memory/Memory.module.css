@@ -2,7 +2,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  max-width: 820px;
   min-width: 0;
 }
 
@@ -108,9 +107,11 @@
   letter-spacing: 0.04em;
 }
 
-/* The insight summary reads as prose; the facts below are the labeled list (34 §3.5 hierarchy). */
+/* The insight summary reads as prose (a long portrait shouldn't be a wall of bold); the facts below are the
+   labeled list (34 §3.5 hierarchy). */
 .insightSummary {
-  font-weight: 600;
+  font-weight: 400;
+  line-height: 1.55;
   margin-top: 2px;
 }
 
@@ -362,11 +363,30 @@
 }
 
 .portrait {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
   font-family: var(--font-serif);
   font-size: var(--text-md);
   line-height: 1.55;
-  max-width: 60ch;
   min-width: 0;
+}
+
+/* "Read full portrait →" — opens the portrait insight where the whole thing lives. */
+.readFull {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-accent-text);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.readFull:hover {
+  text-decoration: underline;
 }
 
 .knows {
@@ -704,7 +724,12 @@
 }
 
 .irowLead {
-  font-weight: 700;
+  font-weight: 600;
+  /* A row is a nav element, never a wall — clamp a long summary (e.g. the portrait) to two lines. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .irowMeta {

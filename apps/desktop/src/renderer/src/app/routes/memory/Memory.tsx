@@ -175,7 +175,16 @@ export function Memory(): JSX.Element {
   const areas = useMemo(() => summarizeAreas(aboutYouApproved), [aboutYouApproved]);
   const overview = overviewStats(aboutYouApproved);
   const knows = knowsYouRead(confidenceStats(aboutYouApproved));
-  const portraitSummary = approvedOwn.find((i) => i.source === 'intake')?.summary?.trim() ?? '';
+  // The onboarding portrait can be a long essay — the hero shows only a short lead (first paragraph, capped);
+  // "Read full portrait" opens the insight where the whole thing (+ its grouped facts) lives.
+  const portraitInsight = approvedOwn.find((i) => i.source === 'intake');
+  const portraitFull = portraitInsight?.summary?.trim() ?? '';
+  const portraitLead = ((): string => {
+    const firstPara = portraitFull.split(/\n{2,}/)[0]?.trim() ?? '';
+    if (firstPara.length <= 320) return firstPara;
+    return `${firstPara.slice(0, 320).replace(/\s+\S*$/, '')}…`;
+  })();
+  const hasMorePortrait = portraitInsight != null && portraitFull.length > portraitLead.length;
   const trendSeries = activePersonId ? buildTrendSeries(insights, activePersonId) : [];
   const responseCount = responseInsights.length;
 
@@ -388,8 +397,19 @@ export function Memory(): JSX.Element {
         {approvedOwn.length > 0 ? (
           <Card className={styles.hero}>
             <div className={styles.portrait}>
-              {portraitSummary ? (
-                <Markdown>{portraitSummary}</Markdown>
+              {portraitLead ? (
+                <>
+                  <Markdown>{portraitLead}</Markdown>
+                  {hasMorePortrait && portraitInsight ? (
+                    <button
+                      type="button"
+                      className={styles.readFull}
+                      onClick={() => openInsight(portraitInsight.id, { name: 'overview' })}
+                    >
+                      Read your full portrait →
+                    </button>
+                  ) : null}
+                </>
               ) : (
                 <Text tone="secondary">
                   A picture of you is taking shape — the more you reflect, the fuller it gets.

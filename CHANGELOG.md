@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.16.0](https://github.com/Highfivery/SelfOS/compare/v0.15.2...v0.16.0) (2026-07-08)
+
+
+### Features
+
+* **memory:** overview-first redesign — Goals & Sharing move to their own pages (spec 57) ([#132](https://github.com/Highfivery/SelfOS/issues/132)) ([ddb12d8](https://github.com/Highfivery/SelfOS/commit/ddb12d8ae24edabfd57e761c867d0b6ec9c63eac))
+* **questionnaires:** redesign the landing into a two-section card dashboard ([#133](https://github.com/Highfivery/SelfOS/issues/133)) ([5d4a65b](https://github.com/Highfivery/SelfOS/commit/5d4a65b639e31303b3a3c7ac243aa30ac9a0a161))
+
+
+### Bug Fixes
+
+* **memory:** life-area tile count no longer clips at wide widths ([#136](https://github.com/Highfivery/SelfOS/issues/136)) ([1f700ca](https://github.com/Highfivery/SelfOS/commit/1f700ca3ae1bcfe4a3f2521229c884b1e22a2720))
+* **ui:** full-width layouts, tame Memory text walls, fix self-assessment pronouns ([#135](https://github.com/Highfivery/SelfOS/issues/135)) ([b7f9f3e](https://github.com/Highfivery/SelfOS/commit/b7f9f3ec18fc317d27457f05619c4f40615e46a5))
+
 ## [0.15.2](https://github.com/Highfivery/SelfOS/compare/v0.15.1...v0.15.2) (2026-07-08)
 
 

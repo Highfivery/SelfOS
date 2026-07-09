@@ -173,10 +173,16 @@ top) and **"Show more"** pagination (`PAGE_SIZE`). Sent/answered/received times 
 (`formatDateTime`). A **Sent card** carries favourite · **share-link** (icon + tooltip, moved out of the kebab)
 · **view** ("See what was sent") icons + a kebab (**Duplicate** · Delete), with an **inline delete confirm**
 (rendered in the card, never off-screen). An **answered-not-analysed** card offers a one-tap **Analyze**
-(reuses `insights:analyze`); an **analysed** card shows the **Insight excerpt** + "View in Memory"; a **stale
+(reuses `insights:analyze`); an **analysed** card shows the **Insight excerpt** (2026-07-09: an "Insight"
+eyebrow + the summary rendered through the shared safe `<Markdown>` (34) and **clamped to 3 whole lines on a
+padding-free body** — a clean ellipsis, never a half-sliced line — with the affordances on their **own row
+below the clamp** so they can never be clipped: a measured **"Show more"/"Show less"** that appears only when
+the summary actually overflows and expands in place, and **"View in Memory"**, which **deep-links to the exact
+insight** via router state `{ insightId }` — Memory opens its detail view with back → Responses for a
+response insight, else the overview); a **stale
 answered** card shows a calm "these answers are N old — duplicate & send for fresh answers" nudge. These need
-extra `sentOverview` fields (`answeredAt`, `analyzed`, `insightSummary`, `analyzableAssignmentId`, per-recipient
-`answeredAt`). **Received** cards gain the **category eyebrow**, received/answered **date·time**, and a
+extra `sentOverview` fields (`answeredAt`, `analyzed`, `insightSummary`, `insightId`, `analyzableAssignmentId`,
+per-recipient `answeredAt`). **Received** cards gain the **category eyebrow**, received/answered **date·time**, and a
 **favourite** (device-local, per-person via `InboxItem.favorite` + `assignments:setFavorite`; `InboxItem` also
 carries `type` + `answeredAt`).
 

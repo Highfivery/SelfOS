@@ -389,6 +389,32 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-09 — **Fix + redesign (Questionnaires Sent card: the Insight excerpt was "weirdly cut off"; user-reported;
+  mockup approved FIRST; spec 08 §3.1; on `fix/questionnaires-insight-excerpt`).** Four connected defects in the
+  analysed card's excerpt: (1) `-webkit-line-clamp: 4` sat on the PADDED `.excerpt` box, so overflow clipped at the
+  padding edge and a **half-sliced sliver of the 5th line** rendered into the bottom padding; (2) the "View in
+  Memory →" button was inline AFTER the summary INSIDE the clamped box — **clipped out of existence** on any long
+  summary; (3) the AI summary rendered as a raw string (literal `**` marks — every other AI-prose surface uses the
+  spec-34 `<Markdown>`); (4) "View in Memory" dumped the user on the Memory landing, not the insight. **Redesign
+  (Calm; the user picked "Show more + Memory deep-link" from the mockup):** a route-local **`InsightExcerpt`** —
+  an "Insight" eyebrow + the summary through the shared `<Markdown>` **clamped to 3 whole lines on a padding-free
+  body** (clean ellipsis by construction) + an action row **BELOW the clamp** that can never be clipped: a
+  **measured "Show more"/"Show less"** (ResizeObserver + `scrollHeight > clientHeight`, rendered only when the text
+  actually overflows — no dead affordance, `aria-expanded`/`aria-controls`) and an always-visible **"View in
+  Memory"** that now **deep-links to the exact insight** (additive `QuestionnaireSentOverview.insightId`; router
+  state `{ insightId }`; Memory opens the detail with back → Responses for a response insight, else the overview —
+  and a **not-found guard** so a person switch re-firing the effect with the OLD person's stale router state stays
+  on the overview, never a dead "no longer here" view — the code-reviewer's one should-fix). Gate green: typecheck,
+  lint, format, **974 core + 11 relay + 946 desktop** unit (+3 InsightExcerpt RTL [measured toggle/no-dead-affordance/
+  markdown], +1 Questionnaires RTL [markdown + deep-link state probe], +3 Memory RTL [response deep-link → back
+  Responses, self deep-link → back Memory, stale-id → overview], +bridge insightId stamp), **E2E +1** (seeded
+  analysed self-send with a long 2-paragraph markdown summary → geometric clamp assert → expand/collapse round-trip
+  → 360px overflow guard incl. the EXPANDED state → deep-link lands on the insight detail); real-Electron visual QA
+  at desktop + 360px, collapsed/expanded/deep-linked. Synced spec 08 §3.1. **Lesson: never put `-webkit-line-clamp`
+  on a padded box (overflow clips at the padding edge → a sliced line renders into the padding) and never put an
+  affordance INSIDE the clamped element (a long text clips it away exactly when it's needed) — clamp a padding-free
+  body and give actions their own row; and a clamp geometry E2E must seed text long enough to overflow at FULL grid
+  width (a lone auto-fit card stretches to the whole row, un-clamping a summary that clamps at normal card width).**
 - 2026-07-08 — **Enhancements on the Questionnaires landing (11 user asks, mockup iterated + approved FIRST;
   spec 08 §3.1/§3.3; on `feat/questionnaires-page-redesign`, stacked on the base redesign commit).** After the
   two-section redesign, the user requested a batch of upgrades; I mocked them ALL up in an interactive Artifact

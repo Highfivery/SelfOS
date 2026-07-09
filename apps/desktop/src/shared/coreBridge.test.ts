@@ -3468,6 +3468,12 @@ describe('createCoreBridge', () => {
     expect(overview[q.id]?.analyzed).toBe(true);
     expect(overview[q.id]?.insightSummary).toBe('Going well.');
     expect(overview[q.id]?.analyzableAssignmentId).toBeUndefined();
+    // The deep-link id names the derived Insight itself, so "View in Memory" can open it directly.
+    const derived = (await bridge.insightsList()).find(
+      (i) => i.provenance.assignmentId === latest.id,
+    );
+    expect(derived?.id).toBeTruthy();
+    expect(overview[q.id]?.insightId).toBe(derived?.id);
 
     // Sender-scoped: the recipient sees none of the owner's sends in her own overview.
     await bridge.sessionSetActive({ personId: mara.id });

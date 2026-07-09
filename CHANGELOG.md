@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.1](https://github.com/Highfivery/SelfOS/compare/v0.16.0...v0.16.1) (2026-07-09)
+
+
+### Bug Fixes
+
+* **questionnaires:** insight excerpt clamps cleanly, expands in place, deep-links to Memory ([#138](https://github.com/Highfivery/SelfOS/issues/138)) ([66dbfa4](https://github.com/Highfivery/SelfOS/commit/66dbfa41f48fb394311577a28b6e01e5abb82c41))
+
 ## [0.16.0](https://github.com/Highfivery/SelfOS/compare/v0.15.2...v0.16.0) (2026-07-08)
 
 

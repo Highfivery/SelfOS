@@ -8,6 +8,7 @@ import type {
 } from '@shared/channels';
 import { Button, IconButton } from '../../../design-system/components';
 import { Avatar } from './Avatar';
+import { InsightExcerpt } from './InsightExcerpt';
 import { QuestionnaireRowMenu } from './QuestionnaireRowMenu';
 import { QUESTIONNAIRE_TYPES } from './questionnaireTypes';
 import { formatDateTime, relativeAge, resendStatus } from './sentState';
@@ -168,12 +169,15 @@ export function SentCard({
 
       {/* Analysed → the Insight excerpt; answered-not-analysed → a one-tap Analyze prompt (parallel styles). */}
       {analyzed && overview?.insightSummary ? (
-        <div className={styles.excerpt}>
-          <span className={styles.excerptLabel}>Insight ·</span> {overview.insightSummary}{' '}
-          <button type="button" className={styles.excerptLink} onClick={() => navigate('/memory')}>
-            View in Memory →
-          </button>
-        </div>
+        <InsightExcerpt
+          summary={overview.insightSummary}
+          onViewInMemory={() =>
+            navigate(
+              '/memory',
+              overview.insightId ? { state: { insightId: overview.insightId } } : undefined,
+            )
+          }
+        />
       ) : analyzable ? (
         <div className={styles.analyzePrompt} aria-busy={analyzing ?? false}>
           <span>Responses are in.</span>

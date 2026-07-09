@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { Questionnaires } from './Questionnaires';
 import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
 import { usePeopleStore } from '../../../stores/peopleStore';
@@ -1373,6 +1373,47 @@ describe('Questionnaires', () => {
     expect(insightsAnalyze).toHaveBeenCalledWith({ assignmentId: 'a1' });
     // A failure is surfaced calmly, never silent.
     expect(await screen.findByText(/Couldn’t analyze/)).toBeInTheDocument();
+  });
+
+  it('the Insight excerpt renders rich text and "View in Memory" deep-links to the exact insight (§3.1)', async () => {
+    installMockBridge({
+      questionnairesList: () => Promise.resolve([sentDef('q2', 'Love languages')]),
+      questionnairesSendStates: () =>
+        Promise.resolve({ q2: { lastSentAt: '2026-06-09T00:00:00.000Z', total: 1 } }),
+      questionnairesSentOverview: () =>
+        Promise.resolve({
+          q2: {
+            questionnaireId: 'q2',
+            lastSentAt: '2026-06-09T00:00:00.000Z',
+            recipients: [{ name: 'Angel', status: 'analyzed', answered: true }],
+            answeredCount: 1,
+            newResponses: 0,
+            analyzed: true,
+            answeredAt: '2026-06-10T09:00:00.000Z',
+            insightSummary: 'They value **quality time** above gifts.',
+            insightId: 'ins-9',
+          },
+        }),
+    });
+    const MemoryProbe = (): JSX.Element => {
+      const location = useLocation();
+      return <div>memory-probe:{(location.state as { insightId?: string })?.insightId}</div>;
+    };
+    render(
+      <MemoryRouter>
+        <Routes>
+          <Route path="/" element={<Questionnaires />} />
+          <Route path="/memory" element={<MemoryProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    // The AI summary renders as rich text — never literal `**` marks (34 §3.4).
+    expect(await screen.findByText('quality time')).toBeInTheDocument();
+    expect(screen.queryByText(/\*\*/)).not.toBeInTheDocument();
+    // "View in Memory" navigates to /memory carrying the insight id, so Memory opens that insight.
+    await userEvent.click(screen.getByRole('button', { name: /View in Memory/ }));
+    expect(await screen.findByText('memory-probe:ins-9')).toBeInTheDocument();
   });
 
   it('a received card shows the category and can be favourited (§3.3)', async () => {

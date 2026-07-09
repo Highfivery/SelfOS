@@ -365,6 +365,64 @@ describe('Memory overview', () => {
     expect(resolve).toHaveBeenCalledWith({ proposalId: 'mp1', action: 'merge' });
   });
 
+  it('deep-links from a Sent card: navigating with an insightId opens that response insight (08 §3.1)', async () => {
+    useSessionStore.setState({ activePerson: activeP1 });
+    installMockBridge({
+      insightsList: () =>
+        Promise.resolve([
+          insight({ id: 'i1' }),
+          insight({
+            id: 'i-resp',
+            summary: 'They value quality time above gifts.',
+            provenance: { assignmentId: 'a2', at: '2026-06-11T12:00:00.000Z', aboutPersonId: 'p2' },
+          }),
+        ]),
+    });
+    render(
+      <MemoryRouter initialEntries={[{ pathname: '/memory', state: { insightId: 'i-resp' } }]}>
+        <Memory />
+      </MemoryRouter>,
+    );
+    // The insight detail opens directly (no hunting from the overview), with back → Responses since a
+    // sent-questionnaire insight lives in the Responses section (#129). findBy waits for it to appear,
+    // then a fresh query asserts it (late async loads re-render, detaching the node findBy captured).
+    await screen.findByText('They value quality time above gifts.');
+    expect(screen.getByText('They value quality time above gifts.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Responses/ })).toBeInTheDocument();
+  });
+
+  it('deep-links to a self check-in insight with back → the overview (it lives in the life-area map)', async () => {
+    useSessionStore.setState({ activePerson: activeP1 });
+    installMockBridge({
+      insightsList: () => Promise.resolve([insight({ id: 'i-self', summary: 'Steady week.' })]),
+    });
+    render(
+      <MemoryRouter initialEntries={[{ pathname: '/memory', state: { insightId: 'i-self' } }]}>
+        <Memory />
+      </MemoryRouter>,
+    );
+    await screen.findByText('Steady week.');
+    expect(screen.getByText('Steady week.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Memory/ })).toBeInTheDocument();
+  });
+
+  it('a deep-link naming an insight this person does not have stays on the overview (never a dead end)', async () => {
+    useSessionStore.setState({ activePerson: activeP1 });
+    installMockBridge({
+      insightsList: () => Promise.resolve([insight({ id: 'i1', summary: 'Own insight.' })]),
+    });
+    render(
+      <MemoryRouter
+        initialEntries={[{ pathname: '/memory', state: { insightId: 'someone-elses' } }]}
+      >
+        <Memory />
+      </MemoryRouter>,
+    );
+    // The overview renders (the life-area tile map is present); no "no longer here" dead-end card.
+    await screen.findByRole('button', { name: /Other/ });
+    expect(screen.queryByText(/no longer here/)).not.toBeInTheDocument();
+  });
+
   it('runs Refresh memory and shows the calm AI-off note', async () => {
     useSessionStore.setState({ activePerson: activeP1 });
     const refresh = vi.fn(() => Promise.resolve({ ok: false, reason: 'AI_OFF' as const }));

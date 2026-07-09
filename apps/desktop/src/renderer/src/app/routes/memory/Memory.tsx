@@ -155,6 +155,23 @@ export function Memory(): JSX.Element {
   const responseInsights = approvedOwn.filter((i) => responseAbout(i) !== null);
   const aboutYouApproved = approvedOwn.filter((i) => responseAbout(i) === null);
 
+  // Deep-link from a Sent questionnaire card's "View in Memory" (08 §3.1): open the exact insight once
+  // insights are loaded, with a back target matching where it lives (a response → Responses, else the
+  // overview). Declared AFTER the reset-to-overview effect so it wins on the same navigation; a plain
+  // nav-link visit carries no state and stays on the overview. Deliberately keyed on `loaded` (not the
+  // insight lists — fresh arrays every render) so it fires once per navigation, or again when the
+  // per-person load completes.
+  useEffect(() => {
+    const id = (location.state as { insightId?: string } | null)?.insightId;
+    if (!id || !loaded) return;
+    const insight = own.find((i) => i.id === id);
+    // Not this person's insight (a person switch re-fires this with the OLD state — 57 §3.6 says a
+    // drill-down never survives a switch) or since deleted → stay on the overview, never a dead end.
+    if (!insight) return;
+    const back: BackTarget = responseAbout(insight) ? { name: 'responses' } : { name: 'overview' };
+    setView({ name: 'insight', insightId: id, back });
+  }, [activePersonId, location.key, loaded]);
+
   // Group responses by recipient (name), for the responses view.
   const recipientGroups = useMemo(() => {
     const byRecipient = new Map<string, { key: string; name: string; insights: Insight[] }>();

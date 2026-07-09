@@ -2207,7 +2207,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         newResponses: number;
         answeredAt?: string; // most recent submission across sends
         analyzable?: { at: string; id: string }; // latest submitted-but-un-analysed send
-        latestInsight?: { at: string; summary: string }; // latest analysed send's insight
+        latestInsight?: { at: string; id: string; summary: string }; // latest analysed send's insight
       }
       const byQuestionnaire = new Map<string, Agg>();
       for (const a of sends) {
@@ -2257,9 +2257,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
             !agg.answeredAt || submittedAt > agg.answeredAt ? submittedAt : agg.answeredAt;
           const insight = insightByAssignment.get(a.id);
           if (insight) {
-            // Track the most-recently-answered analysed send's summary for the card excerpt.
+            // Track the most-recently-answered analysed send's insight for the card excerpt + deep-link.
             if (!agg.latestInsight || submittedAt > agg.latestInsight.at) {
-              agg.latestInsight = { at: submittedAt, summary: insight.summary };
+              agg.latestInsight = { at: submittedAt, id: insight.id, summary: insight.summary };
             }
           } else if (a.status === 'submitted') {
             // Un-analysed → a "new response" (tallied over sends) + a candidate for one-tap Analyze.
@@ -2294,7 +2294,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           newResponses: agg.newResponses,
           analyzed,
           ...(agg.answeredAt ? { answeredAt: agg.answeredAt } : {}),
-          ...(analyzed && agg.latestInsight ? { insightSummary: agg.latestInsight.summary } : {}),
+          ...(analyzed && agg.latestInsight
+            ? { insightSummary: agg.latestInsight.summary, insightId: agg.latestInsight.id }
+            : {}),
           ...(agg.analyzable ? { analyzableAssignmentId: agg.analyzable.id } : {}),
         };
       }

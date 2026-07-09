@@ -4597,6 +4597,119 @@ test('questionnaires redesign (§3.1/§3.3): Sent + Received card sections; answ
   }
 });
 
+test('questionnaires excerpt (§3.1): the Insight excerpt clamps whole lines, expands in place, and deep-links to the insight in Memory', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('excerpt e2e: master key missing');
+
+  // Seed an ANALYSED self check-in: an answered send + its derived Insight, whose summary is long
+  // markdown prose (the real shape an analysis produces) so the card must genuinely clamp it.
+  const q = await saveQuestionnaire(
+    fs,
+    key,
+    {
+      title: 'Connection check',
+      type: 'general',
+      sensitivity: 'standard',
+      questions: [
+        { id: 'q1', type: 'shortText', prompt: 'How connected do we feel?', required: true },
+      ],
+    },
+    'owner-1',
+  );
+  const a = await createAssignment(fs, key, {
+    questionnaireId: q.id,
+    senderPersonId: 'owner-1',
+    recipient: { kind: 'person', personId: 'owner-1' },
+    channel: 'inApp',
+    privacy: 'standard',
+    senderVisibleToRecipient: true,
+  });
+  await submitResponse(fs, key, {
+    assignmentId: a.id,
+    answers: [{ questionId: 'q1', value: 'Close, most weeks' }],
+  });
+  const now = new Date().toISOString();
+  // Two paragraphs of markdown prose, long enough to overflow the 3-line clamp even when a lone card
+  // stretches to the full grid row width at desktop.
+  const longSummary =
+    'They value **quality time** far above gifts or grand gestures, and feel closest during unhurried, ' +
+    'screen-free evenings together. Connection dips when the week turns purely logistical and appreciation ' +
+    'goes unspoken, so small everyday acknowledgements land harder than occasional big efforts. They notice ' +
+    'and remember specifics — a coffee made without asking, a question about how the meeting went — and those ' +
+    'small gestures carry more weight than anything planned or expensive.\n\n' +
+    'Protecting one slow evening a week and naming appreciation out loud are the clearest next steps either ' +
+    'could take, and both are easier to sustain when they are framed as shared rituals rather than obligations. ' +
+    'A short weekly check-in would give the quieter frustrations somewhere to go before they harden, and ' +
+    'naming appreciation out loud keeps the connection felt rather than assumed.';
+  await saveInsight(fs, key, {
+    id: 'ins-excerpt',
+    schemaVersion: 1,
+    source: 'questionnaire',
+    subjectPersonId: 'owner-1',
+    summary: longSummary,
+    facts: [],
+    confidence: 'medium',
+    categories: [],
+    approved: true,
+    provenance: { assignmentId: a.id, at: now },
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+
+    // The analysed card renders the summary as rich text — a real <strong>, never literal ** marks.
+    const card = w.getByRole('article').filter({ hasText: 'Connection check' });
+    await expect(card.locator('strong')).toContainText('quality time');
+    expect(await card.getByText('**').count()).toBe(0);
+
+    // Collapsed, the body is genuinely clamped (content taller than the box)…
+    const body = card.getByTestId('insight-excerpt-body');
+    expect(await body.evaluate((el) => el.scrollHeight > el.clientHeight + 1)).toBe(true);
+
+    // …"Show more" expands it fully in place (nothing hidden), and "Show less" re-clamps.
+    await card.getByRole('button', { name: 'Show more' }).click();
+    await expect(card.getByRole('button', { name: 'Show less' })).toBeVisible();
+    expect(await body.evaluate((el) => el.scrollHeight <= el.clientHeight + 1)).toBe(true);
+    await card.getByRole('button', { name: 'Show less' }).click();
+    await expect(card.getByRole('button', { name: 'Show more' })).toBeVisible();
+    expect(await body.evaluate((el) => el.scrollHeight > el.clientHeight + 1)).toBe(true);
+
+    // 360px: the excerpt (collapsed AND expanded) never overflows horizontally (§7/§12).
+    await w.setViewportSize({ width: 360, height: 900 });
+    await card.getByRole('button', { name: 'Show more' }).click();
+    const overflow = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      const inner = Array.from(document.querySelectorAll('*')).filter((el) => {
+        const s = getComputedStyle(el);
+        return (
+          (s.overflowX === 'auto' || s.overflowX === 'scroll') &&
+          el.scrollWidth > el.clientWidth + 1
+        );
+      }).length;
+      return { main: main ? main.scrollWidth - main.clientWidth : 0, inner };
+    });
+    expect(overflow.main).toBeLessThanOrEqual(1);
+    expect(overflow.inner).toBe(0);
+    await w.setViewportSize({ width: 1280, height: 900 });
+
+    // "View in Memory" deep-links straight to the insight's detail view — the full summary is on
+    // screen with the back affordance — not the Memory landing page.
+    await card.getByRole('button', { name: /View in Memory/ }).click();
+    await expect(w.getByText(/naming appreciation out loud/)).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Memory', exact: true })).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('roles: the owner edits the role × capability matrix', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);

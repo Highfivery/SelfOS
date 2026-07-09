@@ -2482,8 +2482,11 @@ export interface QuestionnaireSentOverview {
   answeredAt?: string;
   /** True once every submitted send has been analysed (≥1 submitted, none left un-analysed). */
   analyzed: boolean;
-  /** A short excerpt of the derived Insight's summary (the latest analysed send) — shown on the card. */
+  /** The derived Insight's full summary (the latest analysed send) — the card clamps it for display. */
   insightSummary?: string;
+  /** That Insight's id, so the card's "View in Memory" can deep-link straight to it. Present with
+   *  `insightSummary`. */
+  insightId?: string;
   /** The latest submitted-but-un-analysed send, so the card can offer a one-tap "Analyze". Absent when
    *  there's nothing new to analyse (nothing submitted, or all analysed). */
   analyzableAssignmentId?: string;

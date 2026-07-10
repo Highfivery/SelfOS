@@ -43,6 +43,14 @@ interface QuestionnaireFormProps {
   sharing?: QuestionSharing;
   /** Crisis affordance shown below the questions; defaults to the built-in `CrisisFooter` (§8.2). */
   footer?: ReactNode;
+  /**
+   * Read-only render (08 §20.4): every answer control is inert. Used by the author's Preview — the questions
+   * are wrapped in a `<fieldset disabled>`, which natively disables every descendant form control (inputs,
+   * textareas, selects, AND the custom `<button>` controls) with no per-control threading. The crisis footer
+   * stays OUTSIDE the fieldset, so "Get help now" is never disabled (§8.2). Default false ⇒ interactive
+   * (the Inbox + relay answer as before).
+   */
+  disabled?: boolean;
 }
 
 const range = (min: number, max: number): number[] => {
@@ -795,6 +803,7 @@ export function QuestionnaireForm({
   loadImage,
   sharing,
   footer,
+  disabled,
 }: QuestionnaireFormProps): JSX.Element {
   const visible = visibleQuestions(questions, answers);
   const field = (question: Question): JSX.Element => (
@@ -816,26 +825,37 @@ export function QuestionnaireForm({
   const groupOrder: string[] = [];
   for (const q of visible) if (q.group && !groupOrder.includes(q.group)) groupOrder.push(q.group);
 
+  const questionsBody =
+    visible.length === 0 ? (
+      <p className={styles.empty}>Add a question with a prompt to preview it.</p>
+    ) : (
+      <>
+        {ungrouped.map(field)}
+        {groupOrder.length > 0 ? (
+          <div className={styles.groups}>
+            {groupOrder.map((name) => (
+              <details key={name} className={styles.group} open>
+                <summary className={styles.groupSummary}>{name}</summary>
+                <div className={styles.groupBody}>
+                  {visible.filter((q) => q.group === name).map(field)}
+                </div>
+              </details>
+            ))}
+          </div>
+        ) : null}
+      </>
+    );
+
   return (
     <div className={styles.form}>
-      {visible.length === 0 ? (
-        <p className={styles.empty}>Add a question with a prompt to preview it.</p>
+      {/* Read-only Preview (08 §20.4): a disabled <fieldset> makes every descendant control inert with no
+          per-control wiring. The crisis footer stays OUTSIDE it, so "Get help now" always works (§8.2). */}
+      {disabled ? (
+        <fieldset className={styles.fieldset} disabled>
+          {questionsBody}
+        </fieldset>
       ) : (
-        <>
-          {ungrouped.map(field)}
-          {groupOrder.length > 0 ? (
-            <div className={styles.groups}>
-              {groupOrder.map((name) => (
-                <details key={name} className={styles.group} open>
-                  <summary className={styles.groupSummary}>{name}</summary>
-                  <div className={styles.groupBody}>
-                    {visible.filter((q) => q.group === name).map(field)}
-                  </div>
-                </details>
-              ))}
-            </div>
-          ) : null}
-        </>
+        questionsBody
       )}
       {footer ?? <CrisisFooter />}
     </div>

@@ -5,7 +5,8 @@
 > §16.5a shared owner-extensible `INTIMACY_TOPICS` (the constant + intake sync + owner Settings/inline UI)
 > built on `feat/questionnaire-explicit-gen` (NOT yet merged). See §16.10. **§17 (recipient-bound
 > questionnaires + in-policy explicit framing) is APPROVED + BUILT on the same branch (NOT merged) — see §17.9.**
-> · _last updated 2026-06-15_
+> **§20 (Preview & Results redesign — full-width, disabled preview, modern answering, rethought Results +
+> private results) is APPROVED, not built — see §20.** · _last updated 2026-07-10_
 >
 > **2026-06 amendment (§15, package D of the app refresh):** authoring-experience refinements on the
 > already-built feature — a **General** type; **sensitivity tiers shown only for Intimacy/Scenario** types (other
@@ -2576,3 +2577,245 @@ already-rated acts as "go deeper, don't re-ask" while seeding only un-rated terr
   the assembly in the bridge (intake imports `questionnaires/answering` one-way, so a core `recipientHistory→intake`
   import would risk a cycle), and reframe a seeded inventory ("ask these") into "go deeper on the rated ones, explore
   the rest" rather than fighting it with a separate avoid instruction.**
+
+## 20. 2026-07-10 amendment — Preview & Results redesign (full-width, disabled preview, modern answering, rethought Results) — APPROVED, not built
+
+> **Status: Approved** (all decisions locked with the user 2026-07-10) · **not built.** A complete rethink of
+> the questionnaire **Preview**, the **answering / "your answers"** surface, and the sender's **Results** — the
+> read-and-review half of the feature — matching the sleek, full-width landing redesign (§3.1). Amends §3.1
+> (Preview), §3.3/§3.7 (answering + Results), §5.3 (renderer), §6 (IPC), §8.4 (private-mode boundary). Builds on
+> the card privacy badges (§3.1, 2026-07-10) — the same derived privacy wording is reused here.
+
+### 20.1 Why
+
+After the landing became a full-width, two-section card grid (§3.1), the **detail surfaces it opens into**
+(Edit / Preview / Results / the answering pane) stayed cramped and utilitarian:
+
+1. **Nothing is full-width.** Every detail surface shares one container capped at `max-width: 760px`, centered
+   (`.page[data-view='detail'] .detail`) — so Preview, Results, and the answering pane float in a narrow column
+   while the landing they came from spans the whole area. Jarring and space-wasting.
+2. **Preview isn't a preview.** `QuestionnairePreview` renders the fully **interactive** shared form (a
+   "test-on-self" dry run); the sent/locked case only drops the "Finish" button (§17.14f) but leaves every field
+   live. There is no genuine read-only look, and test-on-self makes little sense — the author built the
+   questionnaire, they have no reason to answer their own questions.
+3. **The answer boxes are plain.** The shared `QuestionnaireForm` (used by Preview, the in-app Inbox, AND the
+   external relay page) is a stack of tokened cards with a `<p>` prompt and 36px inputs — functional but dated,
+   with no sense of progress through a long questionnaire.
+4. **Results is thin and shows nothing gracefully.** With no sends it renders an empty "you haven't sent this
+   yet" card (it should just not be there). With sends it's a flat list of per-recipient cards; a **Private send
+   shows a single bare line** ("Answered privately — Analyze to draft an insight"); there's no summary, no
+   grouping, and no cross-recipient view. The whole surface needs rethinking.
+
+### 20.2 Decisions (locked with the user, 2026-07-10)
+
+1. **Full width: everything**, including the Edit builder — all questionnaire detail surfaces span the full area
+   like the landing (drop the 760px cap). §20.3.
+2. **Preview = disabled only.** A genuine read-only render with every field inert. **Test-on-self is removed
+   entirely** (the author has no reason to self-answer). §20.4.
+3. **Modernize the answering form for BOTH hosts** — the in-app Inbox and the external relay page share one
+   renderer, so both get the new look (stays design-system-free, token CSS only). §20.5.
+4. **Add a progress indicator** to the answering form — "Question N of M" per card + a slim progress bar. §20.5.
+5. **Results: summary + aggregate + per-recipient**, all three. §20.6/§20.7.
+6. **Hide the Results tab entirely** until there's ≥1 send — nothing empty to click into. §20.6.
+7. **Aggregate scope**: closed types get distributions/averages; free-text is summarized as a count ("N
+   responded"), with the individual text staying in the per-recipient cards. §20.7.
+8. **Private results, greatly improved** — surface ALL of: the inline **insight excerpt + View in Memory**, the
+   **numeric ratings the sender is allowed to see** as mini-distributions, a **prominent one-tap Analyze**, and a
+   **calm privacy-explainer panel**. §20.8.
+
+### 20.3 Full-width detail layout
+
+The detail container (`.page[data-view='detail'] .detail`, §3.1) drops its `max-width: 760px; margin-inline:
+auto` and spans the full area — every surface it hosts (Edit builder, Preview, Results, the answering pane)
+lays out responsively within it:
+
+- **Results** uses the full width for a multi-column arrangement where it helps (a responsive grid of
+  per-recipient cards; the summary + aggregate as full-width bands). §20.6.
+- The **answering / preview form** renders as a single column of full-width question cards (the cards fill the
+  width; long prompts + controls read cleanly). A comfortable internal max reading measure MAY be applied to
+  text-heavy blocks during visual QA, but the frame itself is full-width.
+- The **Edit builder** spans full width too (per decision 1); visual QA confirms the authoring rows don't read
+  sparse (group secondary controls, keep the question list scannable).
+
+No new tokens. This is a CSS change plus per-surface responsive layout, verified at desktop **and** 360px (the
+standing no-horizontal-overflow guard, §7/§10, incl. inner scrollers).
+
+### 20.4 Preview = disabled read-only (test-on-self removed)
+
+`QuestionnairePreview` becomes a **static, fully-disabled** render of the shared form:
+
+- A new **`disabled?: boolean`** prop on `QuestionnaireForm` (§20.5) makes every control inert — native
+  `disabled` on `input`/`textarea`/`select`, and `disabled` + `aria-disabled="true"` + non-interactive styling on
+  the custom button-based controls (scale points, option cards, yes/no + this-or-that pills, ranking/roster/date
+  buttons). A muted "read-only" treatment (see §20.5 CSS) makes the disabled state obvious without looking broken.
+- Preview no longer manages `answers` state, a Finish button, or required-validation — **all of test-on-self is
+  gone** (the `onFinish`/dry-run result path is deleted). The `readOnly` prop that only dropped Finish (§17.14f)
+  is subsumed: Preview is always disabled.
+- Preview leads with the **privacy chip** (§3.1 card privacy badges) + a one-line "This is exactly what
+  {recipient} sees — read-only" note, so the author sees what the recipient is promised.
+- **Known limitation (documented):** a static, un-interactable preview shows the **initially-visible** questions
+  (branch-gated follow-ups reveal only when their trigger is answered, which can't happen with disabled fields).
+  The author sees every question — branch-gated included — in **Edit**, so nothing is hidden from them; the
+  Preview is faithful to the recipient's first view. Called out here so it isn't mistaken for a bug.
+
+### 20.5 Modernized answering form (shared renderer — in-app + relay)
+
+All changes land in **`@selfos/answering`** (`QuestionnaireForm` + `styles.module.css`), so the in-app Inbox and
+the external relay page stay one implementation and both get the refresh. Token CSS only — no app design-system,
+no new dependency (the relay Worker bundle constraint, §5.4).
+
+- **Sleeker cards + controls.** Softer card surfaces, more breathing room, larger/rounder inputs and a clearer
+  focus ring; option cards, scale points, and pills restyled to read modern. The prompt keeps its
+  `<p>`-not-`<legend>` treatment (the legend-bisect fix) and per-control aria labels (unchanged a11y contract).
+- **Progress (decision 4).** A slim progress bar + "Question N of M" per card, computed over the **visible**
+  question count (branch-aware), driven by how many are answered. Rendered by the form host via a new optional
+  prop (e.g. `progress?: boolean`, default off) so Preview (disabled) and any non-answering host can suppress it;
+  the Inbox + relay page turn it on. The count uses the existing `visibleQuestions`/`isAnswered` helpers — no new
+  core logic.
+- **`disabled` prop (decision 2).** Drives the Preview read-only render (§20.4); default false, so the Inbox +
+  relay are interactive as today.
+- **"Your answers" review, modernized.** The post-submit review in `InboxAnswer` (56 §3.1) and the compatibility
+  joint report (§3.6) currently use a bare `dt/dd` `AnswerList`. Redesign `AnswerList` into a clean card of
+  prompt→answer rows matching the new aesthetic (still shared by Results, reveal, and the Inbox), keeping the
+  **Edit answers** affordance and the compat report layout.
+
+### 20.6 Results — structure (summary · grouping · hide-when-empty)
+
+`QuestionnaireResults` / `StandardResults` is restructured; `CompatibilityResults` gets the same summary +
+grouping treatment where it applies.
+
+- **Hide the Results tab until there's a send (decision 6).** The builder's Edit/Preview/Results
+  `SegmentedControl` includes Results only when `saved && canViewResults && hasSends` (a send exists for this
+  questionnaire — derivable from `questionnairesSendStates()[id]`, already loaded). The empty "you haven't sent
+  this yet" card is removed. A `responses-arrived` deep-link (§3.1) only fires when sends exist, so the
+  open-on-Results path stays valid.
+- **Summary header.** A band at the top: recipients sent-to, answered / awaiting counts, and a small
+  response-rate ring (text % + a non-colour-only ring, §9). Derived from the sends already loaded.
+- **Per-recipient cards, grouped by status.** Cards grouped under **Answered · In progress · Awaiting ·
+  Declined** (collapsible section headers), each card sleeker: an initials avatar (the landing `Avatar`), name,
+  status pill, timestamp, the answers inline (Standard) or the private treatment (§20.8), and per-recipient
+  actions (Analyze / Re-analyze / Resend link / delete-with-confirm) — secondary actions may collapse into a
+  kebab to keep the row clean (§12).
+- **Trends** stay, restyled, below the aggregate.
+
+### 20.7 Results — the "At a glance" aggregate (new derived read)
+
+A cross-recipient, per-question summary — the one genuinely new backend piece.
+
+- **New IPC `assignments:aggregate(questionnaireId)`** → a derived `QuestionnaireAggregate` (per-question
+  aggregates across all of this questionnaire's submitted sends). **Sender-scoped + gated
+  `questionnaires.viewResults`**, computed in the bridge (the trust boundary), carrying **no raw written
+  answers**.
+- **What each question type yields:**
+  - **Choice / this-or-that / yes-no** → a **distribution** (count per option). **Standard sends only** — a
+    private recipient's categorical selection is raw content the sender may not see (§8.4).
+  - **Rating / slider / matrix / allocation (numeric)** → an **average** (+ optional distribution / per-bucket
+    average). Contributed by **both Standard AND Private** sends — numeric values are the exact data the existing
+    **trends** read already surfaces for Private sends (§13.5c / §8.4), so this reuses that established boundary,
+    not a new exposure.
+  - **Free-text (short/long)** → **"N responded"** only (decision 7) — a bare count, never the text. A response
+    count is already visible to the sender via send status, so it leaks nothing; the individual text stays in the
+    per-recipient Standard cards.
+- **Privacy invariant (spelled out, tested):** the aggregate NEVER emits a Private send's categorical or text
+  answer — only its numeric values, and only folded into a numeric average/distribution. A bridge unit test
+  drives a Private send and asserts its choice/text answers are absent from the aggregate while its numeric
+  values contribute (mirroring the trends privacy test, §13.5c).
+- **Private per-recipient mini-distributions (§20.8)** use the same numeric-only rule for a single recipient's
+  values.
+
+`QuestionnaireAggregate` is an additive, crypto-free **view type** in `@selfos/core/schemas` (the `SendResult` /
+`QuestionTrend` precedent) — no persisted-schema change, no migration.
+
+### 20.8 Private results — the four improvements (decision 8)
+
+A Private send's Results card stops being a one-line dead end. It shows, in one calm card:
+
+1. **Inline insight excerpt + View in Memory.** Once analyzed, the drafted Insight's summary renders inline
+   (through the shared safe `<Markdown>`, 34), with a deep-link to the exact insight in Memory (the landing
+   `InsightExcerpt` precedent, §3.1). Not a "go look in Memory" line — the insight is right there.
+2. **Numeric ratings the sender is allowed to see.** The recipient's numeric answers (rating/slider/matrix/
+   allocation) as small per-question bars/values — the numeric-only boundary (§20.7). A private send stops
+   looking empty; it shows the real, permitted signal.
+3. **Prominent one-tap Analyze.** For an un-analyzed private response, a clear primary "Analyze to see the
+   insight" CTA (reusing `insights:analyze`, the landing affordance).
+4. **Calm privacy-explainer panel.** A short, explicit line — "You see the insight drawn from their answers,
+   never the raw answers themselves" — using the same derived wording family as the card privacy chips (§3.1 /
+   `disclosure.ts`), so the private state reads as intentional, not broken. AI-off / over-budget degrade to the
+   existing `AiUnavailableNotice` calm states.
+
+The **raw written answers never cross the bridge for a Private send** — unchanged (§8.4); everything here is the
+derived Insight + numeric values, both already permitted.
+
+### 20.9 Data model / IPC additions
+
+- **New view type** `QuestionnaireAggregate` (`@selfos/core/schemas`, crypto-free) — per-question aggregates
+  (distributions / averages / response counts). Additive; no persisted-schema or `schemaVersion` change.
+- **New IPC** `assignments:aggregate(questionnaireId): Promise<QuestionnaireAggregate>` — sender-scoped, gated
+  `questionnaires.viewResults`, numeric-only for Private. Wired channels → coreBridge → ipc → preload →
+  test-utils, like the existing `assignments:results` / `:trends`.
+- **`QuestionnaireForm` props** (`@selfos/answering`): additive `disabled?` (Preview) + `progress?` (answering).
+  No behavior change when omitted (Inbox/relay stay interactive; a non-answering host stays plain).
+- Everything else is renderer + CSS. No new capability, no new vault file, **no new AI spend** (Analyze reuses
+  the existing metered `insights:analyze`; the aggregate is a pure local derivation).
+
+### 20.10 Safety, privacy & honesty
+
+- **The private-mode boundary (§8.4) is unchanged and reinforced.** The sender still never receives a Private
+  send's written/categorical answers; the aggregate and the private card emit only the derived Insight + numeric
+  values — the same data the trends read already exposes. The numeric-only rule is asserted by a bridge test.
+- **Honest wording.** The private-explainer + preview privacy note reuse the derived `disclosure.ts` family
+  (§3.1 card privacy badges / §8.4), so no surface promises more privacy than the system delivers.
+- **Crisis + not-medical** stay present on the answering surfaces (the shared `CrisisFooter`, §8.2) — the
+  modernization is visual only; the footer is never removed.
+
+### 20.11 Accessibility
+
+- Disabled Preview controls carry `disabled` / `aria-disabled` and remain announced (read-only, not hidden); the
+  progress indicator is a labelled `progress`/`role="progressbar"` with a text equivalent ("Question N of M").
+- The response-rate ring + aggregate distributions carry text values (never colour-only, §9). Status grouping
+  uses real headings; kebab menus are keyboard-reachable. Full pass at desktop + 360px.
+
+### 20.12 Testing
+
+- **Unit (core):** the aggregate derivation (distributions / averages / response-count; the **numeric-only
+  Private** rule — a Private send's choice/text absent, its numbers present).
+- **Bridge:** `assignments:aggregate` sender-scoping + `viewResults` gating + the Private privacy assertion
+  (decrypt-level, mirroring the trends test).
+- **RTL:** Preview renders disabled/inert (no interactive Finish); the modernized answering form + progress; the
+  Results summary + status grouping + hide-when-no-sends; the private card's four elements (insight excerpt,
+  numeric distributions, Analyze CTA, explainer); the modernized "Your answers" review.
+- **E2E:** extend the questionnaire flow — a full-width detail with no horizontal overflow at 360px; a disabled
+  Preview; a Standard multi-recipient Results showing the summary + an aggregate distribution; a Private send
+  showing the explainer + Analyze → inline insight; and the Results tab absent before any send. The §16.7 matrix
+  is extended with a Private-aggregate numeric-only case.
+- **Visual QA:** every touched surface screenshotted at desktop + 360px (Preview, answering, Results standard +
+  private, the relay page look) — the redesign is judged on polish, not just "it renders."
+
+### 20.13 Proposed build slices (after approval)
+
+Each slice is its own branch → tests → visual QA → code-review → PR.
+
+1. **Full-width layout + disabled Preview** — the CSS un-cap + `QuestionnaireForm` `disabled` prop + Preview
+   becomes read-only (test-on-self removed). Small, self-contained. (§20.3/§20.4)
+2. **Answering form modernization** — sleeker cards/controls + progress, in `@selfos/answering`; the modernized
+   "Your answers" review (`AnswerList`). Verified in-app **and** on the relay page. (§20.5)
+3. **Results restructure** — summary header, status grouping, hide-when-empty, sleeker per-recipient cards.
+   (§20.6)
+4. **Aggregate read + "At a glance"** — `assignments:aggregate` (bridge derivation, numeric-only Private) +
+   the renderer band. (§20.7)
+5. **Private results** — inline insight excerpt, numeric mini-distributions, Analyze CTA, privacy explainer.
+   (§20.8)
+
+### 20.14 Resolved decisions (2026-07-10)
+
+All eight §20.2 decisions are the user's explicit choices (two `AskUserQuestion` rounds after a reviewed
+interactive mockup): full-width everything · disabled-only Preview (test-on-self removed) · modernize both hosts
+· progress bar + count · summary + aggregate + per-recipient · hide Results when empty · closed-type aggregates
+with text-as-count · all four private-results improvements.
+
+### 20.15 Open questions (amendment)
+
+- **Aggregate distribution vs. average for numeric** — the exact per-numeric-question presentation (a single
+  average, a distribution histogram, or both) is a visual-QA call within slice 4; the data supports either.
+- **Edit-builder full-width density** — widening the authoring form may read sparse; slice 1 visual QA decides
+  whether authoring rows need regrouping (no scope change, just layout).

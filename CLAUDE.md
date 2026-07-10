@@ -389,6 +389,38 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-10 — **Spec + Build (Questionnaire Preview & Results redesign — SPEC 08 §20 APPROVED; slice 1/5 BUILT:
+  full-width detail + disabled Preview; user-requested; mockup + 2 AskUserQuestion rounds FIRST; on
+  `feat/questionnaire-full-width-preview`).** A complete rethink of the read-and-review half of questionnaires
+  (Preview · answering/"your answers" · Results). Reviewed the whole surface, built an interactive `visualize`
+  mockup (4-view switcher: Preview · Answering · Results-visible · Results-private), then locked **8 decisions**
+  with the user: full-width EVERYTHING incl. the Edit builder · **Preview = disabled only** (test-on-self removed
+  — the author built the questions, self-answering makes no sense) · modernize the answering form for BOTH the
+  in-app Inbox AND the shared relay page · a progress indicator · Results = summary + aggregate + per-recipient ·
+  **hide the Results tab until there's a send** · closed-type aggregates with free-text as a count · and **all
+  four private-results improvements** (inline insight excerpt + View in Memory · numeric mini-distributions ·
+  prominent one-tap Analyze · a calm privacy-explainer). Wrote spec 08 **§20** (§20.3–§20.13 + the 5 build
+  slices). **The one new backend piece (slice 4): `assignments:aggregate`** — a derived per-question read that is
+  **numeric-only for Private sends** (reusing the exact boundary the trends read already honors, §13.5c/§8.4), so
+  no new exposure. **Slice 1/5 BUILT:** dropped the `max-width:760px` cap on `.page[data-view='detail'] .detail`
+  (every surface spans full width, §20.3); an additive **`disabled?`** prop on the shared `@selfos/answering`
+  `QuestionnaireForm` wraps the questions in a **`<fieldset disabled>`** (natively disables every descendant
+  control incl. the custom `<button>`s, no per-control wiring) with the **crisis footer OUTSIDE** it so "Get help
+  now" is never disabled (§8.2) + `min-width:0` on the fieldset (a disabled fieldset defaults to `min-content` →
+  would force an inner scrollbar, §12); `QuestionnairePreview` rewritten to a static disabled render (removed the
+  answers state, Finish, required-validation, and the `readOnly` prop — all of test-on-self), naming the bound
+  recipient. Code-reviewer **ship** (no blockers/should-fixes; applied the nit — pass the plain recipient name,
+  guarded by a resolved recipient, so an unbound draft falls back to the generic note instead of "what no one yet
+  sees"). Gate green: typecheck, lint, format, **974 core + 11 relay + 957 desktop** unit (QuestionnaireForm
+  disabled/inert + crisis-still-works + no-onChange; Preview disabled + recipient-named + no-Finish; the builder
+  preview RTL asserts disabled), **E2E** (the old test-on-self test rewritten to a disabled-Preview + full-width
+  360px overflow guard), real-Electron visual QA at desktop + 360px. **Known limitation (documented, §20.4):** a
+  static disabled preview shows the initially-visible (unbranched) questions — branch-gated follow-ups are visible
+  to the author in Edit. **Remaining slices 2–5** (answering modernization + progress · Results restructure ·
+  aggregate · private results). **Lesson: `<fieldset disabled>` is the low-surface-area way to make a whole
+  shared form read-only — it propagates `:disabled` to every descendant control (custom `<button>`s included) with
+  zero per-control threading; keep the crisis footer OUTSIDE it (§8.2) and set `min-width:0` (a disabled fieldset's
+  `min-content` default otherwise overflows a flex parent, §12).**
 - 2026-07-10 — **Build (Questionnaires landing cards state whether answers are private or visible — card privacy
   badges; user-requested; mockup approved FIRST [visualize widget, 3 placement variants + AskUserQuestion forks:
   status-row chip · both Sent AND Received · mode-specific compat labels — all recommended picks]; spec 08

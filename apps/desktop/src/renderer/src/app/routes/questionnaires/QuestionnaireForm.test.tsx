@@ -295,6 +295,32 @@ describe('QuestionnaireForm', () => {
   });
 });
 
+describe('QuestionnaireForm — progress (08 §20.5)', () => {
+  const two = [
+    q({ id: 'a', type: 'shortText', prompt: 'First?' }),
+    q({ id: 'b', type: 'shortText', prompt: 'Second?' }),
+  ];
+
+  it('shows a progress bar + count and numbers each question when progress is on', () => {
+    render(
+      <QuestionnaireForm questions={two} answers={{ a: 'hi' }} onChange={() => {}} progress />,
+    );
+    // One of two answered → the bar reports it, and each card is numbered in order.
+    const bar = screen.getByRole('progressbar');
+    expect(bar).toHaveAttribute('aria-valuenow', '1');
+    expect(bar).toHaveAttribute('aria-valuemax', '2');
+    expect(screen.getByText('1 of 2 answered')).toBeInTheDocument();
+    expect(screen.getByText('Question 1 of 2')).toBeInTheDocument();
+    expect(screen.getByText('Question 2 of 2')).toBeInTheDocument();
+  });
+
+  it('renders no progress UI by default (Preview / onboarding / tests stay plain)', () => {
+    render(<QuestionnaireForm questions={two} answers={{}} onChange={() => {}} />);
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Question 1 of/)).not.toBeInTheDocument();
+  });
+});
+
 describe('QuestionnaireForm — disabled (read-only Preview, 08 §20.4)', () => {
   it('makes every answer control inert but keeps the crisis footer working', () => {
     render(

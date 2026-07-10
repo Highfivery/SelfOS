@@ -3958,8 +3958,14 @@ test('inbox: send a questionnaire, answer it, submit, and round-trip through the
     await expect(w.getByText(/won’t see your written answers/i)).toBeVisible();
     await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible();
 
-    // Answer and submit; the row then reads Submitted.
+    // The modernized answering form shows a progress indicator (08 §20.5): a bar + a per-question number.
+    await expect(w.getByRole('progressbar')).toBeVisible();
+    await expect(w.getByText(/Question 1 of/)).toBeVisible();
+    await expect(w.getByText(/0 of .* answered/)).toBeVisible();
+
+    // Answer and submit; the progress reflects the answer, then the row reads Submitted.
     await w.getByLabel('How are we doing?').fill('Doing great');
+    await expect(w.getByText(/1 of .* answered/)).toBeVisible();
     await w.getByRole('button', { name: 'Submit' }).click();
     await expect(w.getByText('Submitted')).toBeVisible();
 

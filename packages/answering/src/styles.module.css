@@ -9,6 +9,47 @@
   gap: var(--space-4);
 }
 
+/* Progress (08 §20.5): a slim bar + a text count above the questions, shown when the host opts in. */
+.progressWrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.progressTrack {
+  flex: 1;
+  min-width: 0;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-alt);
+  overflow: hidden;
+}
+
+.progressBar {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-solid);
+  transition: width var(--motion-fast) var(--ease-standard);
+}
+
+.progressLabel {
+  flex: none;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* "Question N of M" eyebrow above a question's prompt (08 §20.5). */
+.qNumber {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+}
+
 /* Read-only Preview wrapper (08 §20.4): a disabled <fieldset> with no chrome that keeps the same column
    rhythm as the interactive form. `min-width: 0` so a disabled fieldset (which defaults to `min-width:
    min-content`) can't force an inner scrollbar in a flex/grid parent. */
@@ -53,16 +94,18 @@
   flex-direction: column;
   gap: var(--space-3);
   margin: 0;
-  padding: var(--space-4);
+  padding: var(--space-5);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--color-surface);
   min-width: 0;
 }
 
 .prompt {
   padding: 0;
+  font-size: var(--text-md);
   font-weight: 600;
+  line-height: 1.35;
   color: var(--color-text-primary);
 }
 
@@ -117,9 +160,9 @@
 /* Text input + textarea (replaces design-system TextInput/Textarea — same token styling). */
 .input {
   width: 100%;
-  height: 36px;
+  height: 42px;
   padding: 0 var(--space-3);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
   background: var(--color-surface);
   color: var(--color-text-primary);
@@ -130,9 +173,9 @@
 
 .textarea {
   width: 100%;
-  min-height: 80px;
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--color-border);
+  min-height: 96px;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
   background: var(--color-surface);
   color: var(--color-text-primary);
@@ -170,9 +213,10 @@
 .pill {
   flex: 1 1 auto;
   min-width: 88px;
-  padding: var(--space-2) var(--space-4);
+  min-height: 44px;
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--color-surface);
   color: var(--color-text-primary);
   font: inherit;
@@ -211,9 +255,9 @@
   align-items: flex-start;
   gap: var(--space-3);
   width: 100%;
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-4);
   border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--color-surface);
   color: var(--color-text-primary);
   font: inherit;
@@ -316,10 +360,11 @@
 }
 
 .scalePoint {
-  min-width: 40px;
-  padding: var(--space-2);
+  min-width: 44px;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--color-surface);
   color: var(--color-text-primary);
   font: inherit;

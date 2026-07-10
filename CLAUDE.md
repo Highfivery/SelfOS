@@ -389,6 +389,31 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-10 — **Build (Questionnaire Preview & Results redesign — SPEC 08 §20 slice 2/5 BUILT: modernized
+  answering form + progress + "Your answers" review; on `feat/questionnaire-answering-modernize`).** The second
+  slice (§20.5). **Progress indicator:** an additive **`progress?`** prop on the shared `@selfos/answering`
+  `QuestionnaireForm` (default OFF) → a slim top bar (`role="progressbar"` + answered/total-visible aria + a text
+  "N of M answered") + a **"Question N of M" eyebrow** per card, **numbered in RENDER order** (ungrouped first,
+  then each group, so numbering matches what the person sees even for grouped forms) via the pure `isAnswered`/
+  `visibleQuestions` core helpers. Wired ON at the **two answering hosts only** — `InboxAnswer` + the relay
+  `RelayApp` — so Preview (disabled), onboarding (`IntakeFormPanel`), and the self-tests (`TestTake`) stay plain
+  (default off). **Modernized controls (token CSS only, so the in-app Inbox AND the external relay page both get
+  it — §5.4):** taller inputs (36→42px), rounder question cards (`--radius-md`→`--radius-lg`) with airier padding,
+  bigger tap targets on scale points + pills (min-height 44px), softer option cards. **"Your answers" review:**
+  the shared `AnswerList` (`.qaList` — used by Results, the Inbox review, the compat report, break-glass reveal)
+  redesigned into divider-separated prompt→answer rows (prompt a quiet label, answer below). Code-reviewer
+  **ship** (no blockers/should-fixes; applied the a11y nit — `aria-hidden` on the visible progress label so the
+  progressbar's aria-label isn't read twice; the "answered counts optional questions too" is the intended
+  answered/total-visible semantics). Gate green: typecheck, lint, format, **974 core + 11 relay + 959 desktop**
+  unit (+progress on→bar+numbers / off→none), **E2E** (the inbox answering asserts the progressbar + "Question 1
+  of" + the count updating on answer; 23 questionnaire/inbox/compat + 21 onboarding/self-test E2E green — the
+  shared-form CSS change caused no geometry regression), real-Electron visual QA at desktop (the modernized
+  answering form with progress + the redesigned "Your answers" review). **Remaining slices 3–5** (Results
+  restructure · aggregate read · private results). **Lesson: number a progress indicator in RENDER order, not the
+  `visible`-array order — a grouped form renders ungrouped-first-then-groups, so mirror that exact traversal when
+  building the number map or "Question N of M" won't match what the person sees; and keep the whole progress UI
+  behind a default-off prop so the ONE shared renderer stays plain for its non-answering hosts (Preview,
+  onboarding, self-tests).**
 - 2026-07-10 — **Spec + Build (Questionnaire Preview & Results redesign — SPEC 08 §20 APPROVED; slice 1/5 BUILT:
   full-width detail + disabled Preview; user-requested; mockup + 2 AskUserQuestion rounds FIRST; on
   `feat/questionnaire-full-width-preview`).** A complete rethink of the read-and-review half of questionnaires

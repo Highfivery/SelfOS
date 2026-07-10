@@ -303,6 +303,7 @@ export function InboxAnswer({
             loadImage={loadImage}
             onChange={onChange}
             footer={<CrisisFooter />}
+            progress
           />
 
           {saved ? <Banner tone="info">Saved — you can come back and finish later.</Banner> : null}

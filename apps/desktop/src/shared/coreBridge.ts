@@ -96,7 +96,6 @@ import {
   type Role,
   type RelayLinkResult,
   type SendAnswer,
-  type SendNumericAnswer,
   type SendResult,
   type AssignmentStatus,
   type QuestionnaireSendState,
@@ -322,7 +321,6 @@ import {
   readRelayLink,
   buildQuestionTrends,
   buildQuestionnaireAggregate,
-  extractNumericAnswers,
   type AggregateSend,
   compatibilityDisclosure,
   createAssignment,
@@ -3886,23 +3884,18 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         // Standard below, so a Private send's raw responses still never reach the sender.
         const needsResponse = a.status === 'submitted' || insight !== undefined;
         const response = needsResponse ? await getResponse(ctx.fs, ctx.key, a.id) : null;
-        // Privacy boundary: only a Standard, submitted send exposes the raw answers to the sender. A PRIVATE
-        // submitted send instead surfaces its NUMERIC answers only (§20.8/§8.4 — numbers, never written text).
+        // Privacy boundary (§8.4/§21.5): only a Standard, submitted send exposes answers to the sender. A
+        // PRIVATE send surfaces NOTHING from the answers — words or numbers; its only output is the derived
+        // insight (below). The raw answers never cross the bridge for a private send.
         let answers: SendAnswer[] | undefined;
-        let numericAnswers: SendNumericAnswer[] | undefined;
-        if (a.status === 'submitted' && response) {
+        if (a.privacy === 'standard' && a.status === 'submitted' && response) {
           const snapshot = await getAssignmentSnapshot(ctx.fs, ctx.key, a.id);
           if (snapshot) {
-            if (a.privacy === 'standard') {
-              const byId = new Map(response.answers.map((ans) => [ans.questionId, ans.value]));
-              answers = snapshot.questions.map((q) => ({
-                prompt: q.prompt,
-                answer: formatAnswerForDisplay(q, byId.get(q.id)),
-              }));
-            } else {
-              const nums = extractNumericAnswers(snapshot.questions, response.answers);
-              if (nums.length > 0) numericAnswers = nums;
-            }
+            const byId = new Map(response.answers.map((ans) => [ans.questionId, ans.value]));
+            answers = snapshot.questions.map((q) => ({
+              prompt: q.prompt,
+              answer: formatAnswerForDisplay(q, byId.get(q.id)),
+            }));
           }
         }
         results.push({
@@ -3926,8 +3919,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           ...(a.status === 'submitted' ? { submittedAt: a.updatedAt } : {}),
           ...(a.declineNote !== undefined ? { declineNote: a.declineNote } : {}),
           ...(answers ? { answers } : {}),
-          ...(numericAnswers ? { numericAnswers } : {}),
-          // The derived Insight's summary + id (once analyzed) for the inline excerpt + Memory deep-link (§20.8).
+          // The derived Insight's summary + id (once analyzed) for the Memory deep-link (+ the inline excerpt
+          // on a Standard card). The insight is the derived, allowed output — for a private send it's the ONLY
+          // thing surfaced (§21.5); the raw answers never cross.
           ...(insight ? { insightSummary: insight.summary, insightId: insight.id } : {}),
         });
       }
@@ -3988,9 +3982,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!personId) return { questions: [] };
       const qid = QuestionnaireIdSchema.parse(questionnaireId);
       // The "At a glance" aggregate spans every SUBMITTED send of this questionnaire by the active person.
-      // The core builder applies the §8.4 privacy rule from each send's `privacy`: categorical distributions
-      // count Standard sends only; numeric averages fold in Private too (numbers already reach trends). The
-      // raw answers are decrypted HERE (host-side) and never cross IPC — only the aggregate does.
+      // The core builder applies the §21.5 privacy rule from each send's `privacy`: PRIVATE sends are excluded
+      // ENTIRELY — words AND numbers (a private answer never appears in any distribution, average, or count).
+      // The raw answers are decrypted HERE (host-side) and never cross IPC — only the aggregate does.
       const sends = (await listAssignments(ctx.fs, ctx.key, { senderPersonId: personId })).filter(
         (a) => a.questionnaireId === qid && a.status === 'submitted',
       );
@@ -4686,8 +4680,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     },
     assignmentsExportResults: async (input): Promise<string | null> => {
       // Export a questionnaire's results to a file OUTSIDE the vault (38 §3.7). The privacy boundary is
-      // enforced HERE (the bridge), not the renderer: a Standard send exports all answers; a Private send
-      // exports only its NUMERIC values (rating/slider/matrix/allocation), never prose — exactly as Results.
+      // enforced HERE (the bridge), not the renderer: a Standard send exports all answers; a PRIVATE send
+      // exports NO answers — words or numbers (§21.5) — only that it was answered.
       const ctx = await host.vaultAndKey();
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.viewResults')))
         throw new Error('Not permitted');
@@ -4701,19 +4695,17 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const sends = (await listAssignments(ctx.fs, ctx.key, { senderPersonId: personId })).filter(
         (a) => a.questionnaireId === questionnaireId,
       );
-      const numericTypes = new Set(['rating', 'slider', 'matrix', 'allocation']);
       const exportSends: ExportSend[] = [];
       for (const a of sends) {
         const recipientName = await recipientDisplayName(ctx.fs, ctx.key, a);
         const answers: { prompt: string; answer: string }[] = [];
-        if (a.status === 'submitted') {
+        // Only a STANDARD submitted send exports its answers; a Private send exports none (§21.5).
+        if (a.privacy === 'standard' && a.status === 'submitted') {
           const snapshot = await getAssignmentSnapshot(ctx.fs, ctx.key, a.id);
           const response = await getResponse(ctx.fs, ctx.key, a.id);
           if (snapshot && response) {
             const byId = new Map(response.answers.map((ans) => [ans.questionId, ans.value]));
             for (const q of snapshot.questions) {
-              // Private sends contribute ONLY numeric values (consistent with trends, §3.2); prose excluded.
-              if (a.privacy === 'private' && !numericTypes.has(q.type)) continue;
               answers.push({ prompt: q.prompt, answer: formatAnswerForDisplay(q, byId.get(q.id)) });
             }
           }

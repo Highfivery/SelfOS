@@ -2723,7 +2723,7 @@ describe('createCoreBridge', () => {
     void assignment;
   });
 
-  it('aggregate (§20.7): numeric folds in Private sends, categorical counts Standard only, viewResults-gated', async () => {
+  it('aggregate (§21.5): Private sends are excluded entirely (words AND numbers), viewResults-gated', async () => {
     const { bridge, ownerId } = await freshOwner();
     const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
     await bridge.accessSetAccount({ personId: mara.id, roleId: 'member', pin: null });
@@ -2785,18 +2785,21 @@ describe('createCoreBridge', () => {
     const agg = await bridge.assignmentsAggregate(q.id);
     const rating = agg.questions.find((a) => a.questionId === 'rate');
     const choice = agg.questions.find((a) => a.questionId === 'pick');
-    // Numeric average folds in BOTH sends (4 + 2) / 2 = 3 — the Private numeric value contributes (§8.4).
+    // Private is EXCLUDED entirely (§21.5): the numeric average is the STANDARD 4 only — the private 2 does
+    // NOT pull it toward 3.
     expect(rating?.kind).toBe('average');
-    if (rating?.kind === 'average') expect(rating.average).toBe(3);
-    // The categorical distribution counts the STANDARD send only — the Private "Tense" is NOT shown, only
-    // reflected in the response count.
+    if (rating?.kind === 'average') {
+      expect(rating.average).toBe(4);
+      expect(rating.responseCount).toBe(1); // the standard send only
+    }
+    // The distribution counts the STANDARD send only; the private "Tense" is neither shown NOR counted.
     expect(choice?.kind).toBe('distribution');
     if (choice?.kind === 'distribution') {
       expect(choice.options).toEqual([
         { label: 'Calm', count: 1 },
         { label: 'Tense', count: 0 },
       ]);
-      expect(choice.responseCount).toBe(2); // both answered; the private choice is counted, never shown
+      expect(choice.responseCount).toBe(1); // only the standard respondent — the private one is excluded
     }
 
     // Gated on viewResults: a Guest gets an empty aggregate even though sends exist.
@@ -2806,7 +2809,7 @@ describe('createCoreBridge', () => {
     expect(await bridge.assignmentsAggregate(q.id)).toEqual({ questions: [] });
   });
 
-  it('private send Results (§20.8): carries numeric answers + the insight excerpt, NEVER the raw written answers', async () => {
+  it('private send Results (§21.5): NOTHING from the answers — no words, no numbers; only the derived insight', async () => {
     const { bridge, ownerId, host } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
     const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
@@ -2842,15 +2845,16 @@ describe('createCoreBridge', () => {
     await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
 
     let result = (await bridge.assignmentsResults(q.id))[0];
-    // The private send withholds the raw answers but surfaces the NUMERIC value the sender is allowed to see.
+    // A private send surfaces NOTHING from the answers — not the words, not the numbers (§21.5).
     expect(result?.answers).toBeUndefined();
-    expect(result?.numericAnswers).toEqual([
-      { prompt: 'How connected?', row: null, value: 4, min: 1, max: 5 },
-    ]);
-    // The written text never crosses the bridge.
+    expect('numericAnswers' in (result ?? {})).toBe(false);
+    // Neither the written text nor the numeric value is anywhere in the serialized result.
     expect(JSON.stringify(result)).not.toContain('a private written thought');
 
-    // Analyze → the derived Insight's summary + id are surfaced for the inline excerpt + Memory deep-link.
+    // A private send contributes NOTHING to the aggregate either — no question appears from it (§21.5).
+    expect(await bridge.assignmentsAggregate(q.id)).toEqual({ questions: [] });
+
+    // Analyze → the derived Insight's summary + id are surfaced (the insight is the ONLY allowed output).
     host.host.claude = {
       send: () => Promise.resolve('{}'),
       stream: (_options, onDelta) => {
@@ -4587,7 +4591,7 @@ describe('notifications (35)', () => {
     expect(await bridge.notificationsRemindersDue()).toEqual([]);
   });
 
-  it('exports results to a file outside the vault; a Private send contributes numeric only (38 §3.7)', async () => {
+  it('exports results to a file outside the vault; a Private send exports NO answers — words or numbers (§21.5)', async () => {
     const { bridge, ownerId, host } = await freshOwner();
     // Capture what gets written to disk (the export bytes) without a real save dialog.
     const saved: { name: string; bytes: Uint8Array }[] = [];
@@ -4613,7 +4617,7 @@ describe('notifications (35)', () => {
         },
       ],
     });
-    // PRIVATE send → the prose answer must be excluded from the export (numeric only).
+    // PRIVATE send → NEITHER the prose NOR the numeric answer may be exported (§21.5).
     const { assignment } = await bridge.assignmentsCreate({
       questionnaireId: q.id,
       privacy: 'private',
@@ -4631,9 +4635,15 @@ describe('notifications (35)', () => {
     const path = await bridge.assignmentsExportResults({ questionnaireId: q.id, format: 'csv' });
     expect(path).toBe('/tmp/weekly-check-in.csv');
     const csv = new TextDecoder().decode(saved[0]?.bytes);
-    expect(csv).toContain('Rate it'); // the numeric question is exported
-    expect(csv).toContain(',4'); // its value
-    expect(csv).not.toContain('secret prose'); // a Private send's prose never reaches the file
+    // A Private send's answers never reach the file — not the prose, not the numeric value (§21.5).
+    expect(csv).not.toContain('secret prose');
+    expect(csv).not.toContain(',4');
+
+    // The JSON export is the same boundary — a private send's words and numbers are absent there too.
+    await bridge.assignmentsExportResults({ questionnaireId: q.id, format: 'json' });
+    const json = new TextDecoder().decode(saved[1]?.bytes);
+    expect(json).not.toContain('secret prose');
+    expect(json).not.toContain('"value": 4');
   });
 
   it('opens only http(s) URLs externally, via the host shell', async () => {

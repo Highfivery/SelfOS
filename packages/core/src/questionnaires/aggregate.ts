@@ -7,7 +7,6 @@ import {
   type Question,
   type QuestionAggregate,
   type QuestionnaireAggregate,
-  type SendNumericAnswer,
 } from '../schemas';
 
 /**
@@ -56,51 +55,16 @@ const round2 = (n: number): number => Math.round(n * 100) / 100;
 const mean = (xs: number[]): number =>
   xs.length === 0 ? 0 : round2(xs.reduce((a, b) => a + b, 0) / xs.length);
 
-/**
- * Extract a single send's NUMERIC answers (08 §20.8) — rating/slider values + matrix rows + allocation
- * buckets — for a private send's Results card, where the raw written answers are withheld but numbers are
- * allowed (§8.4, the trends boundary). Never returns any text/categorical content.
- */
-export function extractNumericAnswers(
-  questions: Question[],
-  answers: Answer[],
-): SendNumericAnswer[] {
-  const byId = new Map(answers.map((a) => [a.questionId, a.value]));
-  const out: SendNumericAnswer[] = [];
-  for (const question of questions) {
-    const v = byId.get(question.id);
-    if (v === undefined) continue;
-    if (NUMERIC.has(question.type)) {
-      if (typeof v === 'number' && Number.isFinite(v)) {
-        const scale =
-          question.scale ?? (question.type === 'rating' ? { min: 1, max: 5 } : { min: 0, max: 10 });
-        out.push({ prompt: question.prompt, row: null, value: v, min: scale.min, max: scale.max });
-      }
-    } else if (
-      NUMERIC_ROWS.has(question.type) &&
-      v !== null &&
-      typeof v === 'object' &&
-      !Array.isArray(v)
-    ) {
-      const map = v as Record<string, number>;
-      const min = question.type === 'matrix' ? (question.matrix?.min ?? 1) : 0;
-      const max = question.type === 'matrix' ? (question.matrix?.max ?? 5) : 100;
-      for (const { key, label } of objectKeys(question)) {
-        const n = map[key];
-        if (typeof n === 'number' && Number.isFinite(n)) {
-          out.push({ prompt: question.prompt, row: label, value: n, min, max });
-        }
-      }
-    }
-  }
-  return out;
-}
-
 export function buildQuestionnaireAggregate(sends: AggregateSend[]): QuestionnaireAggregate {
+  // Private sends are EXCLUDED from the aggregate entirely (08 §21.5): a private recipient's answers — words
+  // AND numbers — are never shown, so they contribute nothing to any distribution/average/count. The "At a
+  // glance" view is Standard sends only.
+  const standardSends = sends.filter((s) => s.privacy === 'standard');
+
   // Representative question per id (first seen), preserving first-seen order across snapshots.
   const order: string[] = [];
   const repr = new Map<string, Question>();
-  for (const send of sends) {
+  for (const send of standardSends) {
     for (const q of send.questions) {
       if (!repr.has(q.id)) {
         repr.set(q.id, q);
@@ -114,21 +78,18 @@ export function buildQuestionnaireAggregate(sends: AggregateSend[]): Questionnai
     const question = repr.get(questionId);
     if (!question) continue;
 
-    // Every send that answered this question (any privacy) — the response count.
-    const answering = sends.filter((s) =>
-      s.answers.some((a) => a.questionId === questionId && a.value !== undefined),
-    );
-    const responseCount = answering.length;
+    const answerOf = (s: AggregateSend): Answer['value'] | undefined =>
+      s.answers.find((a) => a.questionId === questionId)?.value;
+    // Standard sends that answered this question — the response count (private sends are already excluded).
+    const responseCount = standardSends.filter((s) => answerOf(s) !== undefined).length;
     if (responseCount === 0) continue; // nothing answered → not in the at-a-glance
 
     const base = { questionId, prompt: question.prompt, responseCount };
-    const answerOf = (s: AggregateSend): Answer['value'] | undefined =>
-      s.answers.find((a) => a.questionId === questionId)?.value;
 
     if (NUMERIC.has(question.type)) {
-      // rating / slider — a single numeric value. Standard + Private both contribute.
+      // rating / slider — a single numeric value.
       const values: number[] = [];
-      for (const s of sends) {
+      for (const s of standardSends) {
         const v = answerOf(s);
         if (typeof v === 'number' && Number.isFinite(v)) values.push(v);
       }
@@ -142,10 +103,10 @@ export function buildQuestionnaireAggregate(sends: AggregateSend[]): Questionnai
         question.scale ?? (question.type === 'rating' ? { min: 1, max: 5 } : { min: 0, max: 10 });
       out.push({ ...base, kind: 'average', average: mean(values), min: scale.min, max: scale.max });
     } else if (NUMERIC_ROWS.has(question.type)) {
-      // matrix / allocation — a per-row/bucket numeric map. Standard + Private both contribute.
+      // matrix / allocation — a per-row/bucket numeric map.
       const rows = objectKeys(question).map(({ key, label }) => {
         const values: number[] = [];
-        for (const s of sends) {
+        for (const s of standardSends) {
           const v = answerOf(s);
           if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
             const n = (v as Record<string, number>)[key];
@@ -162,20 +123,14 @@ export function buildQuestionnaireAggregate(sends: AggregateSend[]): Questionnai
         out.push({ ...base, kind: 'allocation', rows });
       }
     } else if (CATEGORICAL.has(question.type)) {
-      // choice / yes-no / this-or-that — a distribution counted from STANDARD sends ONLY (a Private
-      // recipient's selection is raw content the sender may not see, §8.4).
+      // choice / yes-no / this-or-that — a distribution over the Standard sends.
       const counts = new Map<string, number>(categoricalOptions(question).map((o) => [o, 0]));
       const bump = (label: string): void => {
         counts.set(label, (counts.get(label) ?? 0) + 1);
       };
-      // Count DISTINCT standard sends that answered (a multiChoice send bumps several options but is ONE
-      // respondent), so `responseCount − standardCount` correctly reports how many answered privately.
-      let standardCount = 0;
-      for (const s of sends) {
-        if (s.privacy !== 'standard') continue;
+      for (const s of standardSends) {
         const v = answerOf(s);
         if (v === undefined) continue;
-        standardCount += 1;
         if (question.type === 'yesNo') {
           if (v === true) bump('Yes');
           else if (v === false) bump('No');
@@ -188,7 +143,6 @@ export function buildQuestionnaireAggregate(sends: AggregateSend[]): Questionnai
       out.push({
         ...base,
         kind: 'distribution',
-        standardCount,
         options: [...counts].map(([label, count]) => ({ label, count })),
       });
     } else {

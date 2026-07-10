@@ -2822,3 +2822,113 @@ with text-as-count · all four private-results improvements.
   average, a distribution histogram, or both) is a visual-QA call within slice 4; the data supports either.
 - **Edit-builder full-width density** — widening the authoring form may read sparse; slice 1 visual QA decides
   whether authoring rows need regrouping (no scope change, just layout).
+
+## 21. 2026-07-10b amendment — Preview & Results from-scratch REDESIGN (supersedes parts of §20) — APPROVED, building
+
+> **Status: Approved** (mockups reviewed + 4 decisions locked with the user 2026-07-10b) · **building.** §20 shipped
+> a redesign the user judged a **restyle, not a rethink** ("the Preview looks exactly the same except it's wider")
+> and, critically, it **showed private responses** (numeric ratings) when the user's hard requirement is that
+> **private answers are never shown**. §21 is the from-scratch redesign, reviewed as interactive mockups BEFORE any
+> code. It **supersedes**: §20.4 (Preview), §20.7's "numeric averages fold in Private" rule, and §20.8 (the private
+> card's numeric bars). §20.3 (full-width), §20.5 (the shared-renderer modernization + progress), and §20.6
+> (Results structure) stand and are extended here.
+
+### 21.1 Decisions (locked with the user 2026-07-10b)
+
+1. **Private = answered-privately + the insight ONLY.** A private send's Results show **nothing from the answers**
+   — not the words, not the numbers. Private sends are **excluded from the "At a glance" aggregate entirely** (so
+   the aggregate is **Standard sends only**, for every question type — reversing §20.7's numeric-folds-private).
+   The sender still sees **who answered + when** ("Answered privately") and the **derived coaching insight** (in
+   Memory, or an on-demand "Draw an insight"). §21.5.
+2. **Answering is one question at a time** — a focused wizard (big prompt, Back/Next, a progress bar), replacing
+   the stacked all-questions form. Applies to the in-app Inbox **and** the external relay page (one renderer).
+   §21.3.
+3. **Preview is an "as they see it" presentation view** — a clean, read-only presentation of the questionnaire
+   (hero title + a meta strip [question count · ~time · privacy] + a numbered reading flow with elegant read-only
+   representations), clearly distinct from Edit and clearly not answerable. NOT the disabled shared form. §21.2.
+4. **Results is an aggregate-first dashboard** — a KPI hero (sent-to · answered/waiting · a response-rate ring),
+   the cross-recipient "At a glance" as the centerpiece, then a compact "Who answered" per-person list (expandable
+   to the raw answers for a Standard send). §21.4.
+
+### 21.2 Preview — the presentation view (supersedes §20.4)
+
+`QuestionnairePreview` is rebuilt as a **bespoke, read-only presentation** — it does NOT reuse the shared answering
+form (disabled or otherwise):
+
+- A **hero**: an eyebrow ("Preview"), the questionnaire title, and a **meta strip** of chips — question count,
+  an estimated time (~a small heuristic, e.g. 30s/question), and the privacy chip where known (a compatibility
+  def's visibility, else omitted — a plain send's privacy is a send-time choice, §3.1).
+- An **"as {recipient} sees it"** marker (the bound recipient, §17.3).
+- A **numbered reading flow**: each question is a row with a circled number, the prompt, and an **elegant
+  read-only representation** of its control — a scale as labelled endpoints, a text answer as a soft "{recipient}
+  writes their answer here…" field, choices as quiet outline options, etc. Never an interactive/disabled input.
+- A calm footer: "This is a read-only preview — {recipient} hasn't answered yet."
+- Branch-gated follow-ups: still shown per the §20.4 note (the author sees all questions in Edit); the reading
+  flow may render them with a subtle "shown if …" caption (visual-QA call).
+
+### 21.3 Answering — the one-question-at-a-time wizard (extends §20.5)
+
+The shared `@selfos/answering` renderer gains a **wizard mode** (one question per step), used by the in-app Inbox
+
+- the relay page; the author's Preview does not use it (§21.2). Token CSS only (the relay Worker bundle
+  constraint, §5.4).
+
+* A **step header**: "Question N of M" + a progress bar (reusing the §20.5 progress) + the privacy chip.
+* One **large question** per step (the prompt bigger than today), its control spacious.
+* A **footer action bar**: **Back** · **Save for later** · **Next** (primary); the last step's Next becomes
+  **Submit** (or **Update** when editing, 56 §3.1). **Decline** stays reachable (a quiet action).
+* **Branch-aware**: `visibleQuestions` already drives which questions exist; the wizard steps over the visible set
+  and re-evaluates as answers change (a new branch reveal is appended to the remaining steps). Required-question
+  validation happens at Submit (unchanged), but Next may also flag a required-but-empty current step.
+* **A11y**: each step is a labelled group; the progress is a `role="progressbar"` with a text equivalent (§9);
+  focus moves to the new question's heading on step change. The crisis footer (§8.2) is present on every step.
+* The **"Your answers" review** (post-submit, 56 §3.1) stays the §20.5 clean summary (not a wizard).
+
+### 21.4 Results — the aggregate-first dashboard (extends §20.6)
+
+`StandardResults` is reorganised:
+
+- **KPI hero** (the §20.6 summary band, kept): sent-to · answered/waiting · a response-rate **ring**.
+- **"At a glance"** (the §20.7 aggregate) is promoted to the **centerpiece**, directly under the hero —
+  **Standard sends only** (§21.5), with a quiet "Private responses aren't included here" note.
+- **"Who answered"** — a compact per-person list (avatar · name · when · a status pill), each **expandable** to
+  the raw answers **for a Standard send**; a Private row shows only "Answered privately" + its insight affordance
+  (§21.5). Secondary actions (resend link, delete) sit inline / in a kebab.
+- Trends stay, below.
+
+### 21.5 Private — the corrected model (supersedes §20.7 numeric rule + §20.8)
+
+The load-bearing correction. **A private send's answers are never shown — no words, no numbers.**
+
+- **Aggregate excludes private sends entirely.** `buildQuestionnaireAggregate` counts **only Standard** sends for
+  **every** question type (numeric averages no longer fold in Private — reversing §20.7). A question answered only
+  by private sends simply doesn't appear (or appears with 0 standard responses). The "At a glance" note says
+  private responses aren't included.
+- **`SendResult.numericAnswers` is REMOVED** (added in §20.8) — the private card shows no numeric bars.
+  `extractNumericAnswers` is removed with it (its only consumer).
+- **The private Results row/card shows only:** "Answered privately · {date}", and the **coaching insight** — a
+  deep-link to the insight in **Memory** once analyzed, or an on-demand **"Draw an insight"** (the existing
+  `insights:analyze`, relabelled) when not. `SendResult.insightSummary`/`insightId` **stay** (the insight is the
+  derived, allowed output — the landing already surfaces the same summary), but the inline excerpt on a private
+  card is a product call (visual QA) — the row may simply link to Memory rather than show the excerpt, to keep the
+  private surface answer-free. The calm explainer stays: "Their answers are never shown here — they inform your
+  coaching."
+- **Unchanged + reinforced:** the raw written answers still never cross the bridge for a private send (`answers`
+  undefined); now the numbers don't either. A bridge test asserts a private send contributes **nothing** to the
+  aggregate and carries **no** `numericAnswers`.
+
+### 21.6 Build slices (after approval)
+
+Each its own branch → tests → visual QA → code-review → PR.
+
+1. **Private correctness** (highest priority — the user's explicit complaint + safety): aggregate excludes
+   private entirely; remove `numericAnswers`/`extractNumericAnswers`; the private card shows only
+   answered-privately + the insight/Draw-an-insight. (§21.5)
+2. **Preview presentation view** — the bespoke read-only render. (§21.2)
+3. **Answering wizard** — the one-question-at-a-time mode in `@selfos/answering` (Inbox + relay). (§21.3)
+4. **Results dashboard** — aggregate-first ordering + the expandable "Who answered" list. (§21.4)
+
+### 21.7 Resolved decisions (2026-07-10b)
+
+All four §21.1 decisions are the user's explicit choices (an interactive mockup of all five surfaces + an
+`AskUserQuestion` round), after the user rejected the §20 result as a restyle that wrongly showed private answers.

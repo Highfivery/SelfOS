@@ -92,6 +92,7 @@ import {
   type IntakeTurnResult,
   type PrivacyMode,
   type QuestionTrend,
+  type QuestionnaireAggregate,
   type Role,
   type RelayLinkResult,
   type SendAnswer,
@@ -286,6 +287,8 @@ import {
   attachRelayLink,
   readRelayLink,
   buildQuestionTrends,
+  buildQuestionnaireAggregate,
+  type AggregateSend,
   compatibilityDisclosure,
   createAssignment,
   createCompatibilitySend,
@@ -3516,6 +3519,33 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         });
       }
       return buildQuestionTrends(trendSends);
+    },
+    assignmentsAggregate: async (questionnaireId): Promise<QuestionnaireAggregate> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.viewResults')))
+        return { questions: [] };
+      const personId = await activePersonId();
+      if (!personId) return { questions: [] };
+      const qid = QuestionnaireIdSchema.parse(questionnaireId);
+      // The "At a glance" aggregate spans every SUBMITTED send of this questionnaire by the active person.
+      // The core builder applies the §8.4 privacy rule from each send's `privacy`: categorical distributions
+      // count Standard sends only; numeric averages fold in Private too (numbers already reach trends). The
+      // raw answers are decrypted HERE (host-side) and never cross IPC — only the aggregate does.
+      const sends = (await listAssignments(ctx.fs, ctx.key, { senderPersonId: personId })).filter(
+        (a) => a.questionnaireId === qid && a.status === 'submitted',
+      );
+      const aggregateSends: AggregateSend[] = [];
+      for (const a of sends) {
+        const snapshot = await getAssignmentSnapshot(ctx.fs, ctx.key, a.id);
+        const response = await getResponse(ctx.fs, ctx.key, a.id);
+        if (!snapshot || !response) continue;
+        aggregateSends.push({
+          privacy: a.privacy,
+          questions: snapshot.questions,
+          answers: response.answers,
+        });
+      }
+      return buildQuestionnaireAggregate(aggregateSends);
     },
 
     // --- Compatibility (08-questionnaires §3.6/§13.5d) ---

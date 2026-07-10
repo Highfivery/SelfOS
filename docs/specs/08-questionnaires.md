@@ -6,7 +6,9 @@
 > built on `feat/questionnaire-explicit-gen` (NOT yet merged). See §16.10. **§17 (recipient-bound
 > questionnaires + in-policy explicit framing) is APPROVED + BUILT on the same branch (NOT merged) — see §17.9.**
 > **§20 (Preview & Results redesign — full-width, disabled preview, modern answering, rethought Results +
-> private results) is APPROVED, not built — see §20.** · _last updated 2026-07-10_
+> private results) is APPROVED; slices 1–4 of 5 BUILT (full-width + disabled Preview · modern answering +
+> progress · Results restructure · the aggregate "At a glance"); slice 5 (private results) remains — see §20.**
+> · _last updated 2026-07-10_
 >
 > **2026-06 amendment (§15, package D of the app refresh):** authoring-experience refinements on the
 > already-built feature — a **General** type; **sensitivity tiers shown only for Intimacy/Scenario** types (other
@@ -2713,9 +2715,10 @@ A cross-recipient, per-question summary — the one genuinely new backend piece.
     average). Contributed by **both Standard AND Private** sends — numeric values are the exact data the existing
     **trends** read already surfaces for Private sends (§13.5c / §8.4), so this reuses that established boundary,
     not a new exposure.
-  - **Free-text (short/long)** → **"N responded"** only (decision 7) — a bare count, never the text. A response
-    count is already visible to the sender via send status, so it leaks nothing; the individual text stays in the
-    per-recipient Standard cards.
+  - **Free-text (short/long) / date / ranking** → **"N responded"** only (decision 7) — a bare count, never the
+    content. A response count is already visible to the sender via send status, so it leaks nothing; the
+    individual text stays in the per-recipient Standard cards. (Ranking is a count in v1 — an
+    average-rank-per-option aggregate is a possible future enhancement, §20.15.)
 - **Privacy invariant (spelled out, tested):** the aggregate NEVER emits a Private send's categorical or text
   answer — only its numeric values, and only folded into a numeric average/distribution. A bridge unit test
   drives a Private send and asserts its choice/text answers are absent from the aggregate while its numeric

@@ -77,6 +77,54 @@ describe('QuestionnaireResults', () => {
     expect(screen.getByText('Sam')).toBeInTheDocument();
   });
 
+  it('renders the "At a glance" aggregate — a distribution + a numeric average (§20.7)', async () => {
+    installMockBridge({
+      assignmentsResults: () => Promise.resolve([send({ status: 'submitted' })]),
+      assignmentsAggregate: () =>
+        Promise.resolve({
+          questions: [
+            {
+              questionId: 'pick',
+              prompt: 'Best word?',
+              responseCount: 3,
+              kind: 'distribution',
+              standardCount: 3,
+              options: [
+                { label: 'Calm', count: 2 },
+                { label: 'Tense', count: 1 },
+              ],
+            },
+            {
+              questionId: 'rate',
+              prompt: 'How connected?',
+              responseCount: 3,
+              kind: 'average',
+              average: 3.5,
+              min: 1,
+              max: 5,
+            },
+          ],
+        }),
+    });
+    renderResults();
+    expect(await screen.findByText('At a glance')).toBeInTheDocument();
+    expect(screen.getByText('Best word?')).toBeInTheDocument();
+    expect(screen.getByText('Calm')).toBeInTheDocument();
+    // The value is shown as text (never colour-only, §9).
+    expect(screen.getByText('3.5')).toBeInTheDocument();
+    expect(screen.getByText(/scale 1–5/)).toBeInTheDocument();
+  });
+
+  it('omits the "At a glance" band when there are no aggregated questions', async () => {
+    installMockBridge({
+      assignmentsResults: () => Promise.resolve([send({ status: 'submitted' })]),
+      assignmentsAggregate: () => Promise.resolve({ questions: [] }),
+    });
+    renderResults();
+    await screen.findByRole('heading', { name: 'Results' });
+    expect(screen.queryByText('At a glance')).not.toBeInTheDocument();
+  });
+
   it('marks the responses-arrived notification seen on open (38 §3.1)', async () => {
     installMockBridge({ assignmentsResults: () => Promise.resolve([]) });
     await useNotificationStore.getState().load();

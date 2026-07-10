@@ -332,6 +332,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     assignmentsDecline: () => Promise.resolve(),
     assignmentsResults: () => Promise.resolve([]),
     assignmentsTrends: () => Promise.resolve([]),
+    assignmentsAggregate: () => Promise.resolve({ questions: [] }),
     assignmentsDelete: () => Promise.resolve(),
     assignmentsCreateCompatibility: () =>
       Promise.resolve({ ok: true, compatibilityGroupId: 'group-1' }),

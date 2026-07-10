@@ -389,6 +389,32 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-10 — **Build (Questionnaire Preview & Results redesign — SPEC 08 §20 slice 4/5 BUILT: the aggregate
+  "At a glance" read; on `feat/questionnaire-results-aggregate`).** The fourth slice (§20.7) — the **one new
+  backend piece**. New crypto-free view type **`QuestionnaireAggregate`** (`@selfos/core/schemas`; a proper
+  DISCRIMINATED UNION — `Base & (union)` doesn't narrow via `Extract`/switch, so each member carries the base
+  fields) + a pure **`buildQuestionnaireAggregate`** (`@selfos/core/questionnaires/aggregate.ts`, mirroring
+  `buildQuestionTrends`): per question → a **distribution** (choice/yesNo/thisOrThat), a **numeric average**
+  (rating/slider, positioned against the DECLARED scale not the observed range), **per-row/bucket averages**
+  (matrix/allocation), or a **response count** (free-text/date/ranking). **The privacy rule (§8.4), tested at the
+  bridge:** categorical distributions count **Standard sends only** (a Private recipient's selection is raw
+  content); numeric averages fold in **BOTH** Standard + Private (numbers already reach the sender's trends,
+  §13.5c); free-text is a bare count. New IPC **`assignments:aggregate(questionnaireId)`** through the full seam
+  (channels → coreBridge → ipc → preload → test-utils), **sender-scoped + `questionnaires.viewResults`-gated**,
+  computed in the bridge from the DECRYPTED responses (host-side) — only the aggregate crosses IPC, never a
+  written answer. Renderer: the `resultsStore` loads it alongside results/trends; an **`AtAGlance`** band (token
+  CSS bars; every count/average shown as TEXT, §9; "N answered privately (not shown)" when a distribution's
+  standard count is short of the response count) renders between the per-recipient cards and Trends,
+  self-hiding when empty. Gate green: typecheck, lint, format, **980 core + 11 relay + 970 desktop** unit
+  (+aggregate dist/avg/rows/count + the numeric-only-private / categorical-standard-only privacy split;
+  +bridge decrypt-level privacy + viewResults gating; +2 AtAGlance RTL), **E2E** (the results test asserts the
+  "At a glance" average band; the inbox privacy E2E unchanged), real-Electron visual QA at desktop (the average
+  bar reads "3.5 · scale 1–5"). Synced spec 08 §20.7. **Remaining: slice 5** (private results — inline insight,
+  numeric distributions, Analyze CTA, explainer). **Lesson: a discriminated union defined as `Base & (A|B|…)`
+  does NOT narrow — TS sees the intersection as one non-union type, so `Extract<…,{kind}>` and `switch(kind)`
+  both fail; distribute the base into each member (`(Base & A) | (Base & B) | …`) for clean narrowing. And a
+  numeric-average bar must be positioned against the question's DECLARED scale (1–5), not the observed min/max
+  of the answers, or "3.5" sits at the wrong place and the label reads a misleading range.**
 - 2026-07-10 — **Build (Questionnaire Preview & Results redesign — SPEC 08 §20 slice 3/5 BUILT: Results
   restructure — hide-when-empty + summary band + status grouping; on `feat/questionnaire-results-restructure`).**
   The third slice (§20.6). **Hide the Results tab until there's a send:** the builder's Edit/Preview/Results

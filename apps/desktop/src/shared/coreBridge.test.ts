@@ -2716,6 +2716,89 @@ describe('createCoreBridge', () => {
     void assignment;
   });
 
+  it('aggregate (§20.7): numeric folds in Private sends, categorical counts Standard only, viewResults-gated', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: mara.id, roleId: 'member', pin: null });
+    const noah = await bridge.peopleSave({ displayName: 'Noah', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: noah.id, roleId: 'member', pin: null });
+    const q = await bridge.questionnairesSave({
+      title: 'Team pulse',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: mara.id },
+      questions: [
+        {
+          id: 'rate',
+          type: 'rating',
+          prompt: 'How connected?',
+          required: true,
+          scale: { min: 1, max: 5 },
+        },
+        {
+          id: 'pick',
+          type: 'singleChoice',
+          prompt: 'Best word?',
+          required: true,
+          options: ['Calm', 'Tense'],
+        },
+      ],
+    });
+
+    // One STANDARD send (Mara → rating 4, choice "Calm") and one PRIVATE send (Noah → rating 2, choice "Tense").
+    const submitAs = async (
+      personId: string,
+      privacy: 'standard' | 'private',
+      rate: number,
+      pick: string,
+    ): Promise<void> => {
+      // Re-target the questionnaire to this recipient, then send + answer as them.
+      await bridge.questionnairesSave({
+        id: q.id,
+        title: 'Team pulse',
+        type: 'role-feedback',
+        sensitivity: 'standard',
+        recipient: { kind: 'person', personId },
+        questions: q.questions,
+      });
+      const { assignment: a } = await bridge.assignmentsCreate({ questionnaireId: q.id, privacy });
+      await bridge.sessionSetActive({ personId });
+      await bridge.assignmentsSubmit({
+        assignmentId: a.id,
+        answers: [
+          { questionId: 'rate', value: rate },
+          { questionId: 'pick', value: pick },
+        ],
+      });
+      await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    };
+    await submitAs(mara.id, 'standard', 4, 'Calm');
+    await submitAs(noah.id, 'private', 2, 'Tense');
+
+    const agg = await bridge.assignmentsAggregate(q.id);
+    const rating = agg.questions.find((a) => a.questionId === 'rate');
+    const choice = agg.questions.find((a) => a.questionId === 'pick');
+    // Numeric average folds in BOTH sends (4 + 2) / 2 = 3 — the Private numeric value contributes (§8.4).
+    expect(rating?.kind).toBe('average');
+    if (rating?.kind === 'average') expect(rating.average).toBe(3);
+    // The categorical distribution counts the STANDARD send only — the Private "Tense" is NOT shown, only
+    // reflected in the response count.
+    expect(choice?.kind).toBe('distribution');
+    if (choice?.kind === 'distribution') {
+      expect(choice.options).toEqual([
+        { label: 'Calm', count: 1 },
+        { label: 'Tense', count: 0 },
+      ]);
+      expect(choice.responseCount).toBe(2); // both answered; the private choice is counted, never shown
+    }
+
+    // Gated on viewResults: a Guest gets an empty aggregate even though sends exist.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+    expect(await bridge.assignmentsAggregate(q.id)).toEqual({ questions: [] });
+  });
+
   it('trends include Private sends’ numeric values; per-send delete is sender/admin-only', async () => {
     const { bridge, ownerId } = await freshOwner();
     const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });

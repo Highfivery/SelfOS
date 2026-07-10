@@ -24,6 +24,7 @@ import {
   type LineChartSeries,
 } from '../../../design-system/components';
 import { Avatar } from './Avatar';
+import { AtAGlance } from './AtAGlance';
 import { ResultGroupHead, ResultsSummaryBand } from './ResultsSummaryBand';
 import { groupSendsByStatus, summarizeSends } from './resultsSummary';
 import { useResultsStore } from '../../../stores/resultsStore';
@@ -92,6 +93,7 @@ export function QuestionnaireResults({
 function StandardResults({ questionnaireId }: { questionnaireId: string }): JSX.Element {
   const results = useResultsStore((s) => s.results);
   const trends = useResultsStore((s) => s.trends);
+  const aggregate = useResultsStore((s) => s.aggregate);
   const loaded = useResultsStore((s) => s.loaded);
   const load = useResultsStore((s) => s.load);
   const analyze = useResultsStore((s) => s.analyze);
@@ -274,6 +276,8 @@ function StandardResults({ questionnaireId }: { questionnaireId: string }): JSX.
           ))}
         </Stack>
       ))}
+
+      <AtAGlance aggregate={aggregate} />
 
       {trends.length > 0 ? (
         <Stack gap={3}>

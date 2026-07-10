@@ -2408,6 +2408,51 @@ export interface QuestionTrend {
 }
 
 /**
+ * A cross-recipient "At a glance" aggregate for one questionnaire (08-questionnaires §20.7). A derived,
+ * sender-scoped view carrying **no raw written answers** — only distributions/averages/counts. The
+ * **privacy rule** (§8.4, mirroring trends §13.5c): a categorical distribution counts **Standard sends
+ * only** (a Private recipient's selection is raw content the sender may not see); numeric averages fold in
+ * **both** Standard and Private (numeric values already reach the sender's trends); free-text is a bare
+ * response count over all sends. Additive view type — no persisted-schema change.
+ */
+export interface AggregateOptionCount {
+  label: string;
+  count: number;
+}
+export interface AggregateRowAverage {
+  label: string;
+  average: number; // mean of the numeric answers for this row/bucket
+}
+interface QuestionAggregateBase {
+  questionId: string;
+  prompt: string;
+  /** How many submitted sends answered this question, across ALL privacy modes (a count leaks nothing). */
+  responseCount: number;
+}
+// A proper discriminated union (each member carries the base fields) so `Extract`/switch narrowing works.
+export type QuestionAggregate =
+  | (QuestionAggregateBase & {
+      kind: 'distribution';
+      options: AggregateOptionCount[];
+      // How many STANDARD sends answered this question (distinct sends, NOT summed option selections — a
+      // multiChoice send picks several). `responseCount − standardCount` = how many answered privately
+      // (their categorical selection is counted but never shown, §8.4).
+      standardCount: number;
+    }) // choice / yes-no / this-or-that — STANDARD only
+  | (QuestionAggregateBase & { kind: 'average'; average: number; min: number; max: number }) // rating / slider — Standard + Private
+  | (QuestionAggregateBase & {
+      kind: 'rows';
+      rows: AggregateRowAverage[];
+      min: number;
+      max: number;
+    }) // matrix per-row avg — S+P
+  | (QuestionAggregateBase & { kind: 'allocation'; rows: AggregateRowAverage[] }) // allocation per-bucket avg — S+P
+  | (QuestionAggregateBase & { kind: 'count' }); // free-text / date / ranking — just the response count
+export interface QuestionnaireAggregate {
+  questions: QuestionAggregate[];
+}
+
+/**
  * One send of a questionnaire as the **sender** sees it in Results (08-questionnaires §3.7). A derived
  * view: `answers` is populated **only** for a Standard, submitted send — a Private send never carries the
  * raw answers across IPC (the break-glass `readRaw` reveal is a separate, deferred slice). The `analyzed`

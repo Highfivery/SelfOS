@@ -1348,6 +1348,23 @@
   padding: 1px var(--space-2);
 }
 
+/* Private send explainer panel (08 §20.8) — a calm accent-tinted note that the sender sees the insight,
+   never the raw answers. */
+.privateNote {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-accent-subtle-bg);
+}
+
+.privateNoteIcon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--color-accent-text);
+}
+
 /* "At a glance" aggregate bars (08 §20.7) — the count/average is always text (never colour-only, §9). */
 .glanceRow {
   display: flex;

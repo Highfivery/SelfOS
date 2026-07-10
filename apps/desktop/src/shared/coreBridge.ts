@@ -96,6 +96,7 @@ import {
   type Role,
   type RelayLinkResult,
   type SendAnswer,
+  type SendNumericAnswer,
   type SendResult,
   type AssignmentStatus,
   type QuestionnaireSendState,
@@ -288,6 +289,7 @@ import {
   readRelayLink,
   buildQuestionTrends,
   buildQuestionnaireAggregate,
+  extractNumericAnswers,
   type AggregateSend,
   compatibilityDisclosure,
   createAssignment,
@@ -3436,16 +3438,23 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         // Standard below, so a Private send's raw responses still never reach the sender.
         const needsResponse = a.status === 'submitted' || insight !== undefined;
         const response = needsResponse ? await getResponse(ctx.fs, ctx.key, a.id) : null;
-        // Privacy boundary: only a Standard, submitted send exposes the raw answers to the sender.
+        // Privacy boundary: only a Standard, submitted send exposes the raw answers to the sender. A PRIVATE
+        // submitted send instead surfaces its NUMERIC answers only (§20.8/§8.4 — numbers, never written text).
         let answers: SendAnswer[] | undefined;
-        if (a.privacy === 'standard' && a.status === 'submitted' && response) {
+        let numericAnswers: SendNumericAnswer[] | undefined;
+        if (a.status === 'submitted' && response) {
           const snapshot = await getAssignmentSnapshot(ctx.fs, ctx.key, a.id);
           if (snapshot) {
-            const byId = new Map(response.answers.map((ans) => [ans.questionId, ans.value]));
-            answers = snapshot.questions.map((q) => ({
-              prompt: q.prompt,
-              answer: formatAnswerForDisplay(q, byId.get(q.id)),
-            }));
+            if (a.privacy === 'standard') {
+              const byId = new Map(response.answers.map((ans) => [ans.questionId, ans.value]));
+              answers = snapshot.questions.map((q) => ({
+                prompt: q.prompt,
+                answer: formatAnswerForDisplay(q, byId.get(q.id)),
+              }));
+            } else {
+              const nums = extractNumericAnswers(snapshot.questions, response.answers);
+              if (nums.length > 0) numericAnswers = nums;
+            }
           }
         }
         results.push({
@@ -3469,6 +3478,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           ...(a.status === 'submitted' ? { submittedAt: a.updatedAt } : {}),
           ...(a.declineNote !== undefined ? { declineNote: a.declineNote } : {}),
           ...(answers ? { answers } : {}),
+          ...(numericAnswers ? { numericAnswers } : {}),
+          // The derived Insight's summary + id (once analyzed) for the inline excerpt + Memory deep-link (§20.8).
+          ...(insight ? { insightSummary: insight.summary, insightId: insight.id } : {}),
         });
       }
       return results;

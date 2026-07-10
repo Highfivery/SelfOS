@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildQuestionnaireAggregate, type AggregateSend } from './aggregate';
+import {
+  buildQuestionnaireAggregate,
+  extractNumericAnswers,
+  type AggregateSend,
+} from './aggregate';
 import type { Answer, PrivacyMode, Question } from '../schemas';
 
 const q = (over: Partial<Question> & Pick<Question, 'id' | 'type' | 'prompt'>): Question => ({
@@ -138,5 +142,40 @@ describe('buildQuestionnaireAggregate (08 §20.7)', () => {
     const question = q({ id: 'r', type: 'rating', prompt: 'How?' });
     const agg = buildQuestionnaireAggregate([send('standard', [question], [])]);
     expect(agg.questions).toEqual([]);
+  });
+});
+
+describe('extractNumericAnswers (08 §20.8 — a private send card)', () => {
+  it('returns rating/slider values + matrix rows with scale bounds, and NO text/categorical content', () => {
+    const questions: Question[] = [
+      q({ id: 'r', type: 'rating', prompt: 'How connected?', scale: { min: 1, max: 5 } }),
+      q({
+        id: 'm',
+        type: 'matrix',
+        prompt: 'Rate us',
+        matrix: { rows: ['Speed', 'Care'], min: 1, max: 5 },
+      }),
+      q({ id: 't', type: 'longText', prompt: 'Anything else?' }),
+      q({ id: 'c', type: 'singleChoice', prompt: 'Word?', options: ['Calm', 'Tense'] }),
+    ];
+    const nums = extractNumericAnswers(questions, [
+      { questionId: 'r', value: 4 },
+      { questionId: 'm', value: { Speed: 5, Care: 3 } },
+      { questionId: 't', value: 'a private written thought' },
+      { questionId: 'c', value: 'Tense' },
+    ]);
+    expect(nums).toEqual([
+      { prompt: 'How connected?', row: null, value: 4, min: 1, max: 5 },
+      { prompt: 'Rate us', row: 'Speed', value: 5, min: 1, max: 5 },
+      { prompt: 'Rate us', row: 'Care', value: 3, min: 1, max: 5 },
+    ]);
+    // The written text + the categorical selection are NEVER returned (§8.4).
+    expect(JSON.stringify(nums)).not.toContain('private written thought');
+    expect(JSON.stringify(nums)).not.toContain('Tense');
+  });
+
+  it('returns [] when a private send has no numeric questions', () => {
+    const questions: Question[] = [q({ id: 't', type: 'longText', prompt: 'Thoughts?' })];
+    expect(extractNumericAnswers(questions, [{ questionId: 't', value: 'secret' }])).toEqual([]);
   });
 });

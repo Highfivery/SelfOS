@@ -7,6 +7,7 @@ import {
   type Question,
   type QuestionAggregate,
   type QuestionnaireAggregate,
+  type SendNumericAnswer,
 } from '../schemas';
 
 /**
@@ -54,6 +55,46 @@ function categoricalOptions(question: Question): string[] {
 const round2 = (n: number): number => Math.round(n * 100) / 100;
 const mean = (xs: number[]): number =>
   xs.length === 0 ? 0 : round2(xs.reduce((a, b) => a + b, 0) / xs.length);
+
+/**
+ * Extract a single send's NUMERIC answers (08 §20.8) — rating/slider values + matrix rows + allocation
+ * buckets — for a private send's Results card, where the raw written answers are withheld but numbers are
+ * allowed (§8.4, the trends boundary). Never returns any text/categorical content.
+ */
+export function extractNumericAnswers(
+  questions: Question[],
+  answers: Answer[],
+): SendNumericAnswer[] {
+  const byId = new Map(answers.map((a) => [a.questionId, a.value]));
+  const out: SendNumericAnswer[] = [];
+  for (const question of questions) {
+    const v = byId.get(question.id);
+    if (v === undefined) continue;
+    if (NUMERIC.has(question.type)) {
+      if (typeof v === 'number' && Number.isFinite(v)) {
+        const scale =
+          question.scale ?? (question.type === 'rating' ? { min: 1, max: 5 } : { min: 0, max: 10 });
+        out.push({ prompt: question.prompt, row: null, value: v, min: scale.min, max: scale.max });
+      }
+    } else if (
+      NUMERIC_ROWS.has(question.type) &&
+      v !== null &&
+      typeof v === 'object' &&
+      !Array.isArray(v)
+    ) {
+      const map = v as Record<string, number>;
+      const min = question.type === 'matrix' ? (question.matrix?.min ?? 1) : 0;
+      const max = question.type === 'matrix' ? (question.matrix?.max ?? 5) : 100;
+      for (const { key, label } of objectKeys(question)) {
+        const n = map[key];
+        if (typeof n === 'number' && Number.isFinite(n)) {
+          out.push({ prompt: question.prompt, row: label, value: n, min, max });
+        }
+      }
+    }
+  }
+  return out;
+}
 
 export function buildQuestionnaireAggregate(sends: AggregateSend[]): QuestionnaireAggregate {
   // Representative question per id (first seen), preserving first-seen order across snapshots.

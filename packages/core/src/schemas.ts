@@ -2483,6 +2483,25 @@ export interface SendResult {
   // re-edit from a retry of the same attempt. Present for a submitted send (a re-edit bumps it).
   revision?: number;
   answers?: SendAnswer[]; // present only for a Standard, submitted send
+  // The derived Insight's summary + id, present once analyzed — so Results can show the insight excerpt
+  // INLINE (through the safe `<Markdown>`) with a deep-link to Memory, instead of a bare "review in Memory"
+  // line (08 §20.8). Carries no raw answers.
+  insightSummary?: string;
+  insightId?: string;
+  // A PRIVATE send's numeric answers (rating/slider/matrix/allocation) — the numbers the sender is allowed
+  // to see (§8.4, the same boundary the trends read honors), so a private card shows real signal instead of
+  // "hidden". Absent for a Standard send (its full `answers` are already shown) and non-numeric questions.
+  numericAnswers?: SendNumericAnswer[];
+}
+
+/** One numeric datapoint on a private send's Results card (08 §20.8) — a rating/slider value, or one matrix
+ * row / allocation bucket. `min`/`max` are the scale bounds so the bar positions correctly. No written text. */
+export interface SendNumericAnswer {
+  prompt: string;
+  row: string | null; // the matrix row / allocation bucket label; null for a plain rating/slider
+  value: number;
+  min: number;
+  max: number;
 }
 
 /**

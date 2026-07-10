@@ -211,8 +211,18 @@ export function appendTogetherChunk(delta: string): void {
   useTogetherStore.setState((s) => ({ streaming: s.streaming + delta }));
 }
 
-/** The count of sessions "waiting on you" — invitations + your-turn — for the nav badge (§3.1). */
-export function togetherWaitingCount(sessions: TogetherSessionSummary[]): number {
-  return sessions.filter((s) => s.status === 'invited' || (s.status === 'active' && s.yourTurn))
-    .length;
+/**
+ * The count of sessions "waiting on you" — invitations you RECEIVED + your-turn sessions — for the nav badge
+ * (§3.1). An `invited` session the ACTIVE person initiated is their own pending outgoing invite (they're
+ * waiting on the partner, not the other way round), so it's excluded.
+ */
+export function togetherWaitingCount(
+  sessions: TogetherSessionSummary[],
+  myId: string | null,
+): number {
+  return sessions.filter(
+    (s) =>
+      (s.status === 'invited' && s.initiatorPersonId !== myId) ||
+      (s.status === 'active' && s.yourTurn),
+  ).length;
 }

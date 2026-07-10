@@ -3,6 +3,7 @@ import type { ContextTopic, TogetherSession } from '../schemas';
 import { buildContext, getPerson } from '../people';
 import { FORMATTING, PERSONA, SAFETY } from '../conversations/promptBuilder';
 import { buildGroundingPack } from './groundingPack';
+import { listStates } from './togetherService';
 
 // ── The couples coach prompt (58 §6.3) — order is load-bearing ────────────────────────────────────
 // PERSONA + SAFETY always lead (verbatim, 05); then the Together facilitator addendum; then a
@@ -79,8 +80,18 @@ export async function buildTogetherSystemPrompt(
 
   const parts: string[] = [PERSONA, SAFETY, TOGETHER_FRAME, TOGETHER_ADDENDUM];
 
+  // A participant's private background feeds the coach ONLY once they've accepted the rules of the room
+  // (§3.4 — the consent moment for full-context personalization). The initiator always has `rulesAckAt` from
+  // create; a partner only after accept — so before the partner joins the coach has just the initiator's
+  // context, which also implements "it won't go deep before the partner joins" (§3.3). Each block is
+  // OWN-context-only (§6.3): no cross-shared partner facts re-admitted; the contract wraps only that person.
+  const states = await listStates(fs, key, session.id);
   for (const pid of session.participantIds) {
-    const context = await buildContext(fs, key, pid, options.topic, { excludeRestricted: true });
+    if (!states.get(pid)?.rulesAckAt) continue;
+    const context = await buildContext(fs, key, pid, options.topic, {
+      excludeRestricted: true,
+      ownContextOnly: true,
+    });
     if (context) parts.push(`${confidentialityContract(nameOf(pid))}\n${context}`);
   }
 

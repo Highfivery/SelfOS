@@ -3,11 +3,17 @@ import { generateMasterKey } from '../crypto';
 import { memFileSystem } from '../host/memFileSystem';
 import type { ClaudeClient, ClaudeMessage, FileSystem } from '../host';
 import type { Insight, Person, TogetherSession } from '../schemas';
-import { savePerson } from '../people';
+import { savePerson, saveRelationship } from '../people';
 import { saveInsight } from '../insights';
 import { recordUsage, setPersonBudget } from '../usage';
 import { writeEncryptedJson } from '../vault';
-import { appendMessage, createSession, listMessages, projectMessages } from './togetherService';
+import {
+  appendMessage,
+  createSession,
+  listMessages,
+  projectMessages,
+  updateState,
+} from './togetherService';
 import { runTogetherTurn, retryTogetherReply } from './togetherChatService';
 import { TOGETHER_ADDENDUM } from './togetherPromptBuilder';
 
@@ -69,6 +75,17 @@ function captureClient(reply = 'I hear you both.'): {
 async function seed(fs: FileSystem): Promise<TogetherSession> {
   await savePerson(fs, key, person(BEN, 'Ben'));
   await savePerson(fs, key, person(ANGEL, 'Angel'));
+  // A live partner edge — required for a couples session, and the vector S2 guards against (a partner's
+  // sensitive SHARED fact re-admitted into the other's block via the cross-shared path).
+  await saveRelationship(fs, key, {
+    id: 'rel-partner',
+    schemaVersion: 2,
+    fromPersonId: BEN,
+    toPersonId: ANGEL,
+    type: 'partner',
+    createdAt: '2026-07-01T00:00:00.000Z',
+    updatedAt: '2026-07-01T00:00:00.000Z',
+  });
   // Ben's portrait carries a general fact, a restricted trauma fact, and a sensitive intimacy fact.
   await saveInsight(
     fs,
@@ -140,9 +157,10 @@ describe('togetherPromptBuilder (§6.3 captured prompt)', () => {
     expect(iSafety).toBeLessThan(iAddendum);
     expect(iAddendum).toBeLessThan(iContract);
     expect(iContract).toBeLessThan(iFormatting);
-    // Both partners' confidentiality contracts present.
+    // The initiator's contract is present (they acked at create); the partner's is ABSENT — Angel hasn't
+    // accepted the rules of the room yet, so her private context does not feed the coach (§3.4 consent-timing).
     expect(system).toContain('private background about Ben');
-    expect(system).toContain('private background about Angel');
+    expect(system).not.toContain('private background about Angel');
     // excludeRestricted: neither the restricted trauma fact NOR the sensitive desire fact reaches the prompt,
     // even on an Intimacy topic; the general fact + summary do (§6.3, the desire-continuity trade-off §8.6).
     expect(system).toContain('enjoys long walks');
@@ -156,6 +174,65 @@ describe('togetherPromptBuilder (§6.3 captured prompt)', () => {
     expect(system.toLowerCase()).not.toContain('fantasy or roleplay');
     // The addendum's never-reveal + aside rule are present.
     expect(TOGETHER_ADDENDUM).toContain('NEVER quote, attribute, reveal');
+  });
+
+  it('once the partner accepts, their block feeds — but a sensitive SHARED fact never re-admits into either block (§6.3 own-context-only)', async () => {
+    const fs = memFileSystem();
+    const session = await seed(fs);
+    // Angel accepts the rules of the room → her block may now feed.
+    await updateState(
+      fs,
+      key,
+      session.id,
+      ANGEL,
+      { rulesAckAt: '2026-07-09T00:00:00.000Z' },
+      new Date(),
+    );
+    // Angel has a partner-shareable SENSITIVE fact (a kink self-assessment — Intimacy life-area, NOT
+    // restricted, shared with her partner). Without own-context-only it would re-admit into Ben's block.
+    await saveInsight(fs, key, {
+      id: 'angel-kink',
+      schemaVersion: 1,
+      source: 'test',
+      subjectPersonId: ANGEL,
+      summary: 'Angel intimacy interests',
+      facts: [
+        {
+          id: 'k',
+          text: 'ANGELKINKSECRET',
+          shareable: true,
+          shareableTypes: ['partner'],
+          lifeArea: 'Intimacy',
+        },
+      ],
+      confidence: 'medium',
+      categories: [],
+      approved: true,
+      provenance: { at: '2026-07-08T00:00:00.000Z' },
+      createdAt: '2026-07-08T00:00:00.000Z',
+      updatedAt: '2026-07-08T00:00:00.000Z',
+    });
+    const { client, captured } = captureClient();
+    await runTogetherTurn({
+      fs,
+      key,
+      client,
+      apiKey: 'sk-test',
+      model: 'claude-sonnet-4-6',
+      session,
+      authorPersonId: BEN,
+      userText: 'Can we talk about our desire life?',
+      topic: { lifeAreas: ['Intimacy'] }, // the worst case — the fact IS on-topic
+      onDelta: () => {},
+      now: new Date('2026-07-10T12:06:00.000Z'),
+    });
+    const system = captured.system ?? '';
+    // Both blocks now present (both acked).
+    expect(system).toContain('private background about Ben');
+    expect(system).toContain('private background about Angel');
+    // The sensitive fact appears in NEITHER block — dropped from Angel's own (excludeRestricted's sensitive
+    // filter) AND never re-admitted into Ben's via the cross-shared path (own-context-only). The invariant holds.
+    expect(system).not.toContain('ANGELKINKSECRET');
   });
 });
 

@@ -9521,10 +9521,11 @@ test('together (58): lifecycle + aside projection (crown jewel) + prompt capture
     await w.getByPlaceholder('e.g. Feeling disconnected lately').fill('Feeling distant lately');
     await w.getByRole('button', { name: 'Send invitation' }).click();
 
-    // Ben writes an opening message (a pre-accept turn — hold-space); the coach echoes BOTH names.
+    // Ben writes an opening message (a pre-accept turn — hold-space). Angel hasn't accepted the rules of the
+    // room yet, so the coach only draws on Ben's context (§3.4 consent-timing) — it names Ben, not Angel yet.
     await w.getByLabel('Message').fill('I feel like we barely talk anymore.');
     await w.getByRole('button', { name: 'Send' }).click();
-    await expect(w.getByText(/I hear you, Ben and Angel/)).toBeVisible();
+    await expect(w.getByText(/I hear you, Ben/)).toBeVisible();
 
     // Ben sends a PRIVATE ASIDE — only he can see it.
     await w.getByRole('button', { name: 'Write privately to the coach' }).click();

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { TogetherSessionSummary } from '@shared/schemas';
 import { togetherNotificationCandidates } from './notifications';
+import { togetherWaitingCount } from '../../../stores/togetherStore';
 
 const ME = 'me';
 const PARTNER = 'partner';
@@ -79,5 +80,18 @@ describe('togetherNotificationCandidates (§3.11)', () => {
     ).toEqual([]);
     expect(togetherNotificationCandidates([summary({ status: 'ended' })], ME)).toEqual([]);
     expect(togetherNotificationCandidates([summary({ status: 'complete' })], ME)).toEqual([]);
+  });
+});
+
+describe('togetherWaitingCount (§3.1 nav badge)', () => {
+  it('counts invitations RECEIVED + your-turn sessions, NOT your own outgoing invites', () => {
+    const sessions = [
+      summary({ id: 's1', status: 'invited', initiatorPersonId: PARTNER }), // received → counts
+      summary({ id: 's2', status: 'invited', initiatorPersonId: ME }), // my own outgoing → does NOT count
+      summary({ id: 's3', status: 'active', yourTurn: true }), // your turn → counts
+      summary({ id: 's4', status: 'active', yourTurn: false }), // not your turn → no
+      summary({ id: 's5', status: 'complete' }), // done → no
+    ];
+    expect(togetherWaitingCount(sessions, ME)).toBe(2);
   });
 });

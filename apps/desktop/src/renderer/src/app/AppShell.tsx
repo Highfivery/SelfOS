@@ -77,7 +77,7 @@ export function AppShell(): JSX.Element {
   // sessions waiting on you (invitations + your-turn), derived over your projection.
   const canTogether = useSessionStore((s) => s.can('together.own'));
   const togetherHasPartner = useTogetherStore((s) => s.hasPartner);
-  const togetherWaiting = useTogetherStore((s) => togetherWaitingCount(s.sessions));
+  const togetherSessions = useTogetherStore((s) => s.sessions);
   const canDoIntake = useSessionStore((s) => s.can('intake.own'));
   const intakeLoaded = useIntakeStore((s) => s.loaded);
   const intakeState = useIntakeStore((s) => s.state);
@@ -100,6 +100,7 @@ export function AppShell(): JSX.Element {
   });
   const locked = useSessionStore((s) => s.locked);
   const activePersonId = useSessionStore((s) => s.activePerson?.id ?? null);
+  const togetherWaiting = togetherWaitingCount(togetherSessions, activePersonId);
   const collapsed = useNavStore((s) => s.collapsed);
   const toggleSidebar = useNavStore((s) => s.toggle);
   const [switching, setSwitching] = useState(false);

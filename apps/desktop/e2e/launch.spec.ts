@@ -8909,21 +8909,20 @@ test('questionnaires: responses-arrived names the responder → View results →
     await row.getByRole('button', { name: 'View' }).click();
     await expect.poll(() => w.evaluate(() => window.location.hash)).toContain('focus=');
     await expect(w.getByRole('heading', { name: 'Results' })).toBeVisible();
-    // A Private send never shows its raw written answers — instead the calm explainer + the numeric rating
-    // the sender IS allowed to see (§20.8), and the private prose is absent from the card.
-    await expect(w.getByText(/never the raw answers themselves/i)).toBeVisible();
-    await expect(w.getByText('Ratings you can see')).toBeVisible();
-    // "Rate it" appears in the private numeric card AND the "At a glance" band — both are the sender-allowed
-    // numeric view; scope to the first. The private written prose appears in NEITHER.
-    await expect(w.getByText('Rate it').first()).toBeVisible();
+    // A Private send shows NOTHING from the answers — no words, no numbers (§21.5): just the calm explainer.
+    // Neither the private prose NOR the numeric value ('Rate it' / 4) appears anywhere on the card or in an
+    // aggregate (a single private send produces no "At a glance").
+    await expect(w.getByText(/answers are never shown here/i)).toBeVisible();
     await expect(w.getByText('my secret prose')).toHaveCount(0);
+    await expect(w.getByText('Rate it')).toHaveCount(0);
+    await expect(w.getByText('Ratings you can see')).toHaveCount(0);
+    await expect(w.getByRole('heading', { name: 'At a glance' })).toHaveCount(0);
 
-    // Export CSV writes a real file OUTSIDE the vault; the Private prose is absent, the numeric value present.
+    // Export CSV writes a real file OUTSIDE the vault; a Private send's answers are absent entirely (§21.5) —
+    // no prose, no numeric value reaches the file.
     await w.getByRole('button', { name: /Export CSV/i }).click();
     await expect(w.getByText(/outside your encrypted vault/i)).toBeVisible();
     const csv = await readFile(join(saveDir, 'weekly-check-in.csv'), 'utf8');
-    expect(csv).toContain('Rate it');
-    expect(csv).toContain('4');
     expect(csv).not.toContain('my secret prose');
   } finally {
     await app.close();

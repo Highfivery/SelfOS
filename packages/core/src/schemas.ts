@@ -2410,12 +2410,11 @@ export interface QuestionTrend {
 }
 
 /**
- * A cross-recipient "At a glance" aggregate for one questionnaire (08-questionnaires §20.7). A derived,
+ * A cross-recipient "At a glance" aggregate for one questionnaire (08-questionnaires §20.7/§21.5). A derived,
  * sender-scoped view carrying **no raw written answers** — only distributions/averages/counts. The
- * **privacy rule** (§8.4, mirroring trends §13.5c): a categorical distribution counts **Standard sends
- * only** (a Private recipient's selection is raw content the sender may not see); numeric averages fold in
- * **both** Standard and Private (numeric values already reach the sender's trends); free-text is a bare
- * response count over all sends. Additive view type — no persisted-schema change.
+ * **privacy rule** (§8.4/§21.5): **Private sends are excluded ENTIRELY** — the aggregate is Standard sends
+ * only, for every question type (a private recipient's answers, words AND numbers, are never shown).
+ * Additive view type — no persisted-schema change.
  */
 export interface AggregateOptionCount {
   label: string;
@@ -2428,27 +2427,20 @@ export interface AggregateRowAverage {
 interface QuestionAggregateBase {
   questionId: string;
   prompt: string;
-  /** How many submitted sends answered this question, across ALL privacy modes (a count leaks nothing). */
+  /** How many STANDARD sends answered this question (private sends are excluded from the aggregate, §21.5). */
   responseCount: number;
 }
 // A proper discriminated union (each member carries the base fields) so `Extract`/switch narrowing works.
 export type QuestionAggregate =
-  | (QuestionAggregateBase & {
-      kind: 'distribution';
-      options: AggregateOptionCount[];
-      // How many STANDARD sends answered this question (distinct sends, NOT summed option selections — a
-      // multiChoice send picks several). `responseCount − standardCount` = how many answered privately
-      // (their categorical selection is counted but never shown, §8.4).
-      standardCount: number;
-    }) // choice / yes-no / this-or-that — STANDARD only
-  | (QuestionAggregateBase & { kind: 'average'; average: number; min: number; max: number }) // rating / slider — Standard + Private
+  | (QuestionAggregateBase & { kind: 'distribution'; options: AggregateOptionCount[] }) // choice / yes-no / this-or-that
+  | (QuestionAggregateBase & { kind: 'average'; average: number; min: number; max: number }) // rating / slider
   | (QuestionAggregateBase & {
       kind: 'rows';
       rows: AggregateRowAverage[];
       min: number;
       max: number;
-    }) // matrix per-row avg — S+P
-  | (QuestionAggregateBase & { kind: 'allocation'; rows: AggregateRowAverage[] }) // allocation per-bucket avg — S+P
+    }) // matrix per-row avg
+  | (QuestionAggregateBase & { kind: 'allocation'; rows: AggregateRowAverage[] }) // allocation per-bucket avg
   | (QuestionAggregateBase & { kind: 'count' }); // free-text / date / ranking — just the response count
 export interface QuestionnaireAggregate {
   questions: QuestionAggregate[];
@@ -2485,25 +2477,11 @@ export interface SendResult {
   // re-edit from a retry of the same attempt. Present for a submitted send (a re-edit bumps it).
   revision?: number;
   answers?: SendAnswer[]; // present only for a Standard, submitted send
-  // The derived Insight's summary + id, present once analyzed — so Results can show the insight excerpt
-  // INLINE (through the safe `<Markdown>`) with a deep-link to Memory, instead of a bare "review in Memory"
-  // line (08 §20.8). Carries no raw answers.
+  // The derived Insight's summary + id, present once analyzed — so Results can deep-link to the exact insight
+  // in Memory (and, for a Standard send, show the excerpt inline, 08 §20.8/§21.5). The insight is the derived,
+  // allowed output even for a Private send; the raw answers are never carried.
   insightSummary?: string;
   insightId?: string;
-  // A PRIVATE send's numeric answers (rating/slider/matrix/allocation) — the numbers the sender is allowed
-  // to see (§8.4, the same boundary the trends read honors), so a private card shows real signal instead of
-  // "hidden". Absent for a Standard send (its full `answers` are already shown) and non-numeric questions.
-  numericAnswers?: SendNumericAnswer[];
-}
-
-/** One numeric datapoint on a private send's Results card (08 §20.8) — a rating/slider value, or one matrix
- * row / allocation bucket. `min`/`max` are the scale bounds so the bar positions correctly. No written text. */
-export interface SendNumericAnswer {
-  prompt: string;
-  row: string | null; // the matrix row / allocation bucket label; null for a plain rating/slider
-  value: number;
-  min: number;
-  max: number;
 }
 
 /**

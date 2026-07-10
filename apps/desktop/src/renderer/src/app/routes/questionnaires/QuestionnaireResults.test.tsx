@@ -88,7 +88,6 @@ describe('QuestionnaireResults', () => {
               prompt: 'Best word?',
               responseCount: 3,
               kind: 'distribution',
-              standardCount: 3,
               options: [
                 { label: 'Calm', count: 2 },
                 { label: 'Tense', count: 1 },
@@ -126,29 +125,27 @@ describe('QuestionnaireResults', () => {
       }),
   };
 
-  it('private send (§20.8): explainer + numeric ratings + a prominent Analyze; NO raw answers shown', async () => {
+  it('private send (§21.5): shows NOTHING from the answers — a calm explainer + a "Draw an insight" CTA', async () => {
     enableAi();
     installMockBridge({
       ...aiReadyBridge,
       assignmentsResults: () =>
         Promise.resolve([
-          send({
-            recipientName: 'Angel',
-            status: 'submitted',
-            privacy: 'private',
-            numericAnswers: [{ prompt: 'How connected?', row: null, value: 4, min: 1, max: 5 }],
-          }),
+          send({ recipientName: 'Angel', status: 'submitted', privacy: 'private' }),
         ]),
     });
     renderResults();
-    // The calm explainer + the numeric rating (the number as text), and a prominent primary Analyze CTA.
-    expect(await screen.findByText(/never the raw answers themselves/i)).toBeInTheDocument();
-    expect(screen.getByText('How connected?')).toBeInTheDocument();
-    expect(screen.getByText('4')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Analyze to see the insight/i })).toBeInTheDocument();
+    // The calm explainer — the answers (words AND numbers) are never shown — and the only action: draw an insight.
+    expect(
+      await screen.findByText(/answers are never shown here — they quietly inform your coaching/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Draw an insight/i })).toBeInTheDocument();
+    // No numeric bars, no answer list, no inline excerpt on a private card.
+    expect(screen.queryByText('Ratings you can see')).not.toBeInTheDocument();
+    expect(screen.queryByText('Insight')).not.toBeInTheDocument();
   });
 
-  it('an analyzed send shows the Insight excerpt inline with a Memory deep-link (§20.8)', async () => {
+  it('an analyzed PRIVATE send links to Memory, and never shows the insight excerpt inline (§21.5)', async () => {
     enableAi();
     installMockBridge({
       ...aiReadyBridge,
@@ -165,10 +162,36 @@ describe('QuestionnaireResults', () => {
         ]),
     });
     renderResults();
+    // A private card links to Memory; it does NOT render the insight excerpt (the private surface stays answer-free).
+    expect(
+      await screen.findByRole('button', { name: /View insight in Memory/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/They feel connected but carry something unspoken/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it('an analyzed STANDARD send shows the Insight excerpt inline with a Memory deep-link (§20.8)', async () => {
+    enableAi();
+    installMockBridge({
+      ...aiReadyBridge,
+      assignmentsResults: () =>
+        Promise.resolve([
+          send({
+            recipientName: 'Angel',
+            status: 'submitted',
+            privacy: 'standard',
+            analyzed: true,
+            answers: [{ prompt: 'How?', answer: 'Great' }],
+            insightSummary: 'They feel connected but carry something unspoken.',
+            insightId: 'insight-1',
+          }),
+        ]),
+    });
+    renderResults();
     expect(
       await screen.findByText(/They feel connected but carry something unspoken/i),
     ).toBeInTheDocument();
-    // The excerpt's "Insight" eyebrow + the deep-link affordance both render.
     expect(screen.getByText('Insight')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /View in Memory/i })).toBeInTheDocument();
   });
@@ -265,12 +288,14 @@ describe('QuestionnaireResults', () => {
       assignmentsResults: () => Promise.resolve([send({ privacy: 'private' })]),
     });
     renderResults();
-    // A Private send never shows raw answers — the calm explainer + a prominent Analyze CTA (§20.8).
-    expect(await screen.findByText(/never the raw answers themselves/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /analyze/i })).toBeInTheDocument();
+    // A Private send never shows raw answers — the calm explainer + a "Draw an insight" CTA (§21.5).
+    expect(
+      await screen.findByText(/answers are never shown here — they quietly inform your coaching/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Draw an insight/i })).toBeInTheDocument();
   });
 
-  it('links an already-analyzed send to Memory instead of Analyze', async () => {
+  it('an analyzed private send links to Memory, no Analyze/Draw action (§21.5)', async () => {
     enableAi();
     installMockBridge({
       secretHas: () => Promise.resolve(true),
@@ -281,15 +306,15 @@ describe('QuestionnaireResults', () => {
           resolvedReady: true,
           source: 'device' as const,
         }),
-      assignmentsResults: () => Promise.resolve([send({ privacy: 'private', analyzed: true })]),
+      assignmentsResults: () =>
+        Promise.resolve([send({ privacy: 'private', analyzed: true, insightId: 'insight-9' })]),
     });
     renderResults();
-    expect(await screen.findByText(/insight drafted from this response/i)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /review it in memory/i })).toHaveAttribute(
-      'href',
-      '/memory',
-    );
-    expect(screen.queryByRole('button', { name: /analyze/i })).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole('button', { name: /View insight in Memory/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Draw an insight/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Analyze/i })).not.toBeInTheDocument();
   });
 
   it('flags a stale analysis (recipient edited) with a Re-analyze action (56)', async () => {
@@ -311,17 +336,13 @@ describe('QuestionnaireResults', () => {
       insightsAnalyze,
     });
     renderResults();
-    // The stale banner appears instead of the plain "insight drafted" link.
-    expect(
-      await screen.findByText(/answers updated since your last analysis/i),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/insight drafted from this response/i)).not.toBeInTheDocument();
-    // Re-analyze runs the analysis again.
-    await userEvent.click(screen.getByRole('button', { name: 'Re-analyze' }));
+    // A stale private insight prompts to draw a fresh one (§21.5) — no raw answers, no "analysis" wording.
+    expect(await screen.findByText(/answers updated since your last insight/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /Draw a fresh insight/i }));
     expect(insightsAnalyze).toHaveBeenCalledWith({ assignmentId: 'a1' });
   });
 
-  it('analyzes a response and confirms with a Memory pointer', async () => {
+  it('draws an insight from a private response, then links to Memory (§21.5)', async () => {
     enableAi();
     let analyzed = false;
     const insightsAnalyze = vi.fn(() => {
@@ -338,14 +359,17 @@ describe('QuestionnaireResults', () => {
           source: 'device' as const,
         }),
       insightsAnalyze,
-      assignmentsResults: () => Promise.resolve([send({ privacy: 'private', analyzed })]),
+      assignmentsResults: () =>
+        Promise.resolve([send({ privacy: 'private', analyzed, insightId: 'insight-1' })]),
     });
     renderResults();
 
-    await userEvent.click(await screen.findByRole('button', { name: /analyze/i }));
+    await userEvent.click(await screen.findByRole('button', { name: /Draw an insight/i }));
     expect(insightsAnalyze).toHaveBeenCalledWith({ assignmentId: 'a1' });
-    // After analyze, the reload reports analyzed → the card collapses to the Memory pointer.
-    expect(await screen.findByText(/insight drafted from this response/i)).toBeInTheDocument();
+    // After drawing, the reload reports analyzed → the card links to Memory (no answers shown).
+    expect(
+      await screen.findByRole('button', { name: /View insight in Memory/i }),
+    ).toBeInTheDocument();
   });
 
   it('prompts to turn on AI when it is off, with no Analyze action', async () => {

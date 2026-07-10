@@ -58,19 +58,11 @@ const respondents = (n: number): string => `${n} ${n === 1 ? 'response' : 'respo
 
 function DistributionBody({ q }: { q: Of<'distribution'> }): JSX.Element {
   const max = Math.max(1, ...q.options.map((o) => o.count));
-  // How many answered privately = total respondents − DISTINCT standard respondents (not summed option
-  // selections, which over-count a multiChoice send). Their categorical selection is counted, never shown (§8.4).
-  const privateCount = q.responseCount - q.standardCount;
   return (
     <Stack gap={1}>
       {q.options.map((o) => (
         <DistBar key={o.label} label={o.label} count={o.count} max={max} />
       ))}
-      {privateCount > 0 ? (
-        <Text size="sm" tone="tertiary">
-          {privateCount} answered privately (not shown)
-        </Text>
-      ) : null}
     </Stack>
   );
 }
@@ -155,7 +147,8 @@ export function AtAGlance({
     <Stack gap={3}>
       <Heading level={3}>At a glance</Heading>
       <Text size="sm" tone="secondary">
-        Across everyone who answered — never anyone’s written answers.
+        Across everyone who answered — never anyone’s written answers. Private responses aren’t
+        included here.
       </Text>
       {aggregate.questions.map((q) => (
         <QuestionCard key={q.questionId} q={q} />

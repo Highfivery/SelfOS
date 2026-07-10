@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Download, Link2, Link2Off, Lock, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
+import { Brain, Download, Link2, Link2Off, Lock, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 import { aiKeyResolved } from '../../aiAvailability';
 import { AiUnavailableNotice } from '../../AiUnavailableNotice';
 import type {
@@ -8,7 +8,6 @@ import type {
   CompatibilityConfig,
   QuestionTrend,
   RelayLinkResult,
-  SendNumericAnswer,
   SendResult,
 } from '@shared/schemas';
 import { CompatibilityResults } from './CompatibilityResults';
@@ -296,33 +295,6 @@ function StandardResults({ questionnaireId }: { questionnaireId: string }): JSX.
   );
 }
 
-/** A private send's numeric answers as read-only bars (08 §20.8) — the numbers the sender is allowed to
- * see. The value is always shown as text (never colour-only, §9); no written content. */
-function PrivateNumericAnswers({ answers }: { answers: SendNumericAnswer[] }): JSX.Element {
-  return (
-    <Stack gap={1}>
-      {answers.map((a, i) => {
-        const span = a.max - a.min;
-        const pct = span > 0 ? Math.round(((a.value - a.min) / span) * 100) : 0;
-        return (
-          <div key={`${a.prompt}-${a.row ?? ''}-${i}`} className={styles.glanceRow}>
-            <span className={styles.glanceLabel}>
-              {a.row ? `${a.prompt} — ${a.row}` : a.prompt}
-            </span>
-            <span className={styles.glanceTrack}>
-              <span
-                className={styles.glanceFill}
-                style={{ width: `${Math.max(0, Math.min(100, pct))}%` }}
-              />
-            </span>
-            <span className={styles.glanceValue}>{a.value}</span>
-          </div>
-        );
-      })}
-    </Stack>
-  );
-}
-
 /** One numeric question's rating-over-time chart across the questionnaire's re-asks. */
 function TrendCard({ trend }: { trend: QuestionTrend }): JSX.Element {
   const series: LineChartSeries[] = trend.series.map((s) => ({
@@ -455,24 +427,54 @@ function SendCard({
           </dl>
         ) : null}
 
-        {/* Private submitted send (08 §20.8): a calm privacy explainer + the numeric answers the sender is
-            allowed to see (never the written content). */}
-        {isSubmitted && !send.answers && send.privacy === 'private' ? (
+        {/* PRIVATE submitted send (08 §21.5): the answers are NEVER shown — no words, no numbers. A calm
+            explainer, and the only output is the derived coaching insight (a Memory deep-link once analyzed,
+            or a "Draw an insight" action). */}
+        {isSubmitted && send.privacy === 'private' ? (
           <Stack gap={2}>
             <div className={styles.privateNote}>
               <Lock size={14} aria-hidden="true" className={styles.privateNoteIcon} />
               <Text size="sm" tone="secondary">
-                {send.analyzed ? 'You see' : 'You’ll see'} the insight drawn from{' '}
-                {send.recipientName}’s answers — never the raw answers themselves.
+                {send.recipientName}’s answers are never shown here — they quietly inform your
+                coaching.
               </Text>
             </div>
-            {send.numericAnswers && send.numericAnswers.length > 0 ? (
-              <Stack gap={1}>
-                <Text size="sm" tone="tertiary">
-                  Ratings you can see
-                </Text>
-                <PrivateNumericAnswers answers={send.numericAnswers} />
-              </Stack>
+            {send.analyzed && send.analysisStale ? (
+              <Banner tone="warning">
+                <Stack gap={2}>
+                  <Text>Answers updated since your last insight — draw a fresh one.</Text>
+                  {aiReady ? (
+                    <div>
+                      <Button variant="secondary" onClick={onAnalyze} disabled={analyzing}>
+                        <Sparkles size={16} aria-hidden="true" />
+                        {analyzing ? 'Drawing…' : 'Draw a fresh insight'}
+                      </Button>
+                    </div>
+                  ) : null}
+                </Stack>
+              </Banner>
+            ) : send.analyzed ? (
+              <div>
+                <Button
+                  variant="secondary"
+                  onClick={() =>
+                    navigate(
+                      '/memory',
+                      send.insightId ? { state: { insightId: send.insightId } } : undefined,
+                    )
+                  }
+                >
+                  <Brain size={16} aria-hidden="true" />
+                  View insight in Memory
+                </Button>
+              </div>
+            ) : aiReady ? (
+              <div>
+                <Button variant="primary" onClick={onAnalyze} disabled={analyzing}>
+                  <Sparkles size={16} aria-hidden="true" />
+                  {analyzing ? 'Drawing…' : 'Draw an insight'}
+                </Button>
+              </div>
             ) : null}
           </Stack>
         ) : null}
@@ -482,9 +484,8 @@ function SendCard({
           <Text tone="secondary">Couldn’t load these answers.</Text>
         ) : null}
 
-        {/* Analyzed + the recipient edited since (56 §3.2): flag it stale + offer a Re-analyze (the manual path;
-            autoAnalyze refreshes it automatically when on). */}
-        {isSubmitted && send.analyzed && send.analysisStale ? (
+        {/* STANDARD analyzed send: a stale re-analyze prompt, else the drafted Insight excerpt inline (§20.8). */}
+        {isSubmitted && send.privacy === 'standard' && send.analyzed && send.analysisStale ? (
           <Banner tone="warning">
             <Stack gap={2}>
               <Text>
@@ -500,8 +501,7 @@ function SendCard({
               ) : null}
             </Stack>
           </Banner>
-        ) : isSubmitted && send.analyzed && send.insightSummary ? (
-          // The drafted Insight, INLINE — the excerpt + a deep-link to the exact insight in Memory (§20.8).
+        ) : isSubmitted && send.privacy === 'standard' && send.analyzed && send.insightSummary ? (
           <InsightExcerpt
             summary={send.insightSummary}
             onViewInMemory={() =>
@@ -511,27 +511,18 @@ function SendCard({
               )
             }
           />
-        ) : isSubmitted && send.analyzed ? (
+        ) : isSubmitted && send.privacy === 'standard' && send.analyzed ? (
           <Banner tone="info">
             Insight drafted from this response. <Link to="/memory">Review it in Memory →</Link>
           </Banner>
         ) : null}
 
-        {/* Prominent one-tap Analyze on an un-analyzed submitted send — primary for a Private send (it's the
-            only way to see anything from it, §20.8); secondary for a Standard send (whose answers already show). */}
-        {isSubmitted && !send.analyzed && aiReady ? (
+        {/* STANDARD un-analyzed send: a secondary Analyze (its answers already show above). */}
+        {isSubmitted && send.privacy === 'standard' && !send.analyzed && aiReady ? (
           <div>
-            <Button
-              variant={send.privacy === 'private' ? 'primary' : 'secondary'}
-              onClick={onAnalyze}
-              disabled={analyzing}
-            >
+            <Button variant="secondary" onClick={onAnalyze} disabled={analyzing}>
               <Sparkles size={16} aria-hidden="true" />
-              {analyzing
-                ? 'Analyzing…'
-                : send.privacy === 'private'
-                  ? 'Analyze to see the insight'
-                  : 'Analyze'}
+              {analyzing ? 'Analyzing…' : 'Analyze'}
             </Button>
           </div>
         ) : null}

@@ -11,7 +11,9 @@ import { useSessionStore } from '../../stores/sessionStore';
 import { useNotificationStore } from '../../stores/notificationStore';
 import { useUpdateStore } from '../../stores/updateStore';
 import { useIntakeStore } from '../../stores/intakeStore';
+import { useTogetherStore } from '../../stores/togetherStore';
 import { attentionFromIntakeState } from '../routes/onboarding/progress';
+import { togetherNotificationCandidates } from '../routes/together/notifications';
 import { stalestGoal } from './goalFollowup';
 import type { NotificationCandidate } from './notificationKinds';
 
@@ -30,6 +32,10 @@ export function useNotificationSources(conflicts: string[]): void {
   const canMemory = useSessionStore((s) => s.can('memory.own'));
   const canSessions = useSessionStore((s) => s.can('sessions.own'));
   const canChallenges = useSessionStore((s) => s.can('challenges.own'));
+  const canTogether = useSessionStore((s) => s.can('together.own'));
+  // Together sessions are loaded + reset per active person by AppShell (58 §5.3) — derive the invite/turn
+  // notifications from the projection-computed summaries (no extra fetch, no message content, §3.11).
+  const togetherSessions = useTogetherStore((s) => s.sessions);
   const setCandidates = useNotificationStore((s) => s.setCandidates);
   // The update result is app-global (NOT per-person) — it survives a person switch (36 §11).
   const update = useUpdateStore((s) => s.result);
@@ -256,6 +262,11 @@ export function useNotificationSources(conflicts: string[]): void {
       }
     }
 
+    // Together invitations + your-turn nudges (58 §3.11), derived from the projection-computed summaries.
+    if (canTogether) {
+      candidates.push(...togetherNotificationCandidates(togetherSessions, activePersonId));
+    }
+
     setCandidates(candidates);
   }, [
     conflicts,
@@ -270,6 +281,9 @@ export function useNotificationSources(conflicts: string[]): void {
     update,
     canIntake,
     intake,
+    canTogether,
+    togetherSessions,
+    activePersonId,
     setCandidates,
   ]);
 }

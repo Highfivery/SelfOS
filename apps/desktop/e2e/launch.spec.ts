@@ -4395,6 +4395,9 @@ test('results: re-asks chart a trend, a send deletes, and the questionnaire purg
     // Summary band: the recipient-count stat label + the "Answered" status group (header + 2 answered sends).
     await expect(w.getByText('recipients', { exact: true })).toBeVisible();
     expect(await w.getByText('Answered', { exact: true }).count()).toBeGreaterThanOrEqual(2);
+    // "At a glance" aggregate (§20.7): the rating question shows a numeric average across everyone.
+    await expect(w.getByRole('heading', { name: 'At a glance' })).toBeVisible();
+    await expect(w.getByText('Average')).toBeVisible();
     await expect(w.getByRole('heading', { name: 'Trends' })).toBeVisible();
     await expect(w.getByRole('img', { name: /trend over time/i })).toBeVisible();
 

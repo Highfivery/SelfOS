@@ -1348,6 +1348,47 @@
   padding: 1px var(--space-2);
 }
 
+/* "At a glance" aggregate bars (08 §20.7) — the count/average is always text (never colour-only, §9). */
+.glanceRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.glanceLabel {
+  flex: 0 0 var(--glance-label-w, 128px);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+}
+
+.glanceTrack {
+  flex: 1;
+  min-width: 0;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-alt);
+  overflow: hidden;
+}
+
+.glanceFill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-solid);
+}
+
+.glanceValue {
+  flex: none;
+  min-width: 32px;
+  text-align: right;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Recipient name + avatar cluster in a send card header. */
 .resultRecipient {
   display: inline-flex;

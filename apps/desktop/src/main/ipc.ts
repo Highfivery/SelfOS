@@ -349,6 +349,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.assignmentsDecline, bridge.assignmentsDecline);
   handle(IpcChannels.assignmentsResults, bridge.assignmentsResults);
   handle(IpcChannels.assignmentsTrends, bridge.assignmentsTrends);
+  handle(IpcChannels.assignmentsAggregate, bridge.assignmentsAggregate);
   handle(IpcChannels.assignmentsDelete, bridge.assignmentsDelete);
   handle(IpcChannels.assignmentsCreateCompatibility, bridge.assignmentsCreateCompatibility);
   handle(IpcChannels.assignmentsCompatibility, bridge.assignmentsCompatibility);

@@ -1,5 +1,12 @@
 import { create } from 'zustand';
-import type { QuestionTrend, SelfosBridge, SendResult } from '@shared/channels';
+import type {
+  QuestionnaireAggregate,
+  QuestionTrend,
+  SelfosBridge,
+  SendResult,
+} from '@shared/channels';
+
+const EMPTY_AGGREGATE: QuestionnaireAggregate = { questions: [] };
 
 // Derive the analyze result shape from the bridge contract so the store never drifts from the IPC.
 type AnalyzeResult = Awaited<ReturnType<SelfosBridge['insightsAnalyze']>>;
@@ -20,6 +27,8 @@ interface ResultsState {
   results: SendResult[];
   /** Per-question rating-over-time trends across this questionnaire's submitted sends. */
   trends: QuestionTrend[];
+  /** The cross-recipient "At a glance" aggregate (§20.7) — distributions/averages/counts; no raw answers. */
+  aggregate: QuestionnaireAggregate;
   /** True once the first load for the current questionnaire has resolved — gates the empty state so it
    *  never flashes before data arrives. */
   loaded: boolean;
@@ -39,15 +48,17 @@ export const useResultsStore = create<ResultsState>((set, get) => ({
   questionnaireId: null,
   results: [],
   trends: [],
+  aggregate: EMPTY_AGGREGATE,
   loaded: false,
   loading: false,
   load: async (questionnaireId) => {
     set({ questionnaireId, loading: true });
-    const [results, trends] = await Promise.all([
+    const [results, trends, aggregate] = await Promise.all([
       window.selfos?.assignmentsResults(questionnaireId) ?? Promise.resolve([]),
       window.selfos?.assignmentsTrends(questionnaireId) ?? Promise.resolve([]),
+      window.selfos?.assignmentsAggregate(questionnaireId) ?? Promise.resolve(EMPTY_AGGREGATE),
     ]);
-    set({ results, trends, loading: false, loaded: true });
+    set({ results, trends, aggregate, loading: false, loaded: true });
   },
   analyze: async (assignmentId) => {
     const result = (await window.selfos?.insightsAnalyze({ assignmentId })) ?? ANALYZE_UNAVAILABLE;
@@ -73,5 +84,12 @@ export const useResultsStore = create<ResultsState>((set, get) => ({
     if (questionnaireId) await get().load(questionnaireId);
   },
   reset: () =>
-    set({ questionnaireId: null, results: [], trends: [], loaded: false, loading: false }),
+    set({
+      questionnaireId: null,
+      results: [],
+      trends: [],
+      aggregate: EMPTY_AGGREGATE,
+      loaded: false,
+      loading: false,
+    }),
 }));

@@ -96,6 +96,7 @@ import type {
   SavedSuggestionsResult,
   RelayLinkResult,
   QuestionTrend,
+  QuestionnaireAggregate,
   Relationship,
   RelationshipInput,
   RelationshipType,
@@ -264,6 +265,7 @@ export const IpcChannels = {
   assignmentsDecline: 'assignments:decline',
   assignmentsResults: 'assignments:results',
   assignmentsTrends: 'assignments:trends',
+  assignmentsAggregate: 'assignments:aggregate',
   assignmentsDelete: 'assignments:delete',
   assignmentsCreateCompatibility: 'assignments:createCompatibility',
   assignmentsCompatibility: 'assignments:compatibility',
@@ -966,6 +968,9 @@ export interface SelfosBridge {
    * numeric values only). Sender-scoped; requires `questionnaires.viewResults`.
    */
   assignmentsTrends(questionnaireId: string): Promise<QuestionTrend[]>;
+  /** The cross-recipient "At a glance" aggregate (08 §20.7) — distributions/averages/counts; no raw
+   *  answers. Sender-scoped + gated `questionnaires.viewResults`; numeric-only for Private sends. */
+  assignmentsAggregate(questionnaireId: string): Promise<QuestionnaireAggregate>;
   /**
    * Delete one send (its snapshot + assignment + response + any derived Insight). Allowed for the send's
    * sender or the Owner. Requires `questionnaires.viewResults`.
@@ -1341,6 +1346,7 @@ export type {
   QuestionnaireSentOverview,
   SentRecipientSummary,
   QuestionTrend,
+  QuestionnaireAggregate,
   RelayLinkResult,
   AnswersUpdatedSummary,
   ReminderDueSummary,

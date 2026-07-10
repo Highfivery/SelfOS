@@ -8,6 +8,7 @@ export * from './alignmentService';
 export * from './disclosure';
 export * from './deletionService';
 export * from './trends';
+export * from './aggregate';
 export * from './customTypeService';
 export * from './answering';
 export * from './imageService';

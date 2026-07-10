@@ -389,6 +389,33 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-10 — **Build (Questionnaire Preview & Results redesign — SPEC 08 §20 slice 3/5 BUILT: Results
+  restructure — hide-when-empty + summary band + status grouping; on `feat/questionnaire-results-restructure`).**
+  The third slice (§20.6). **Hide the Results tab until there's a send:** the builder's Edit/Preview/Results
+  segment + render are gated on `showResults = saved && canViewResults && isSent` (isSent = a send state exists),
+  and the responses-arrived deep-link only starts on Results when `sendStates[id]` exists (loaded atomically with
+  the def, so no race) — the old empty "you haven't sent this yet" card is GONE. **Summary band:** a new pure
+  `resultsSummary.ts` (`summarizeSends` → recipient/answered/awaiting/inProgress/declined counts + responseRate;
+  `groupSendsByStatus` → ordered non-empty groups Answered · In progress · Awaiting · Declined · Closed, with a
+  `?? 'closed'` fallback so every `AssignmentStatus` lands somewhere) drives a `ResultsSummaryBand` (stat tiles +
+  a response-rate ring with the % as text, §9). **Status-grouped per-recipient cards:** `StandardResults` renders
+  the SendCards under `ResultGroupHead`s; each SendCard header gained the landing `Avatar`. Carries **no raw
+  answers** (operates only on the already-derived `SendResult[]` — the Standard/Private boundary from the bridge
+  is unchanged; the private treatment is slice 5). `CompatibilityResults` untouched. Code-reviewer **ship
+  after 2 should-fixes** (both applied): the summary band no longer flashes "0 recipients" during the async load
+  (gated on `!loaded`), and the band's **"awaiting" tile now mirrors the "Awaiting" group exactly** (sent/opened
+  only) with a separate "in progress" tile — fixing an awaiting-vs-Awaiting count collision on one screen (the §7
+  coherence-walk rule); + the nits (comment direction, a full-`AssignmentStatus`-coverage test). Gate green:
+  typecheck, lint, format, **974 core + 11 relay + 965 desktop** unit (+resultsSummary grouping/summary/coverage;
+  Results renders-nothing-empty / summary+grouping; the builder Results-tab hidden-without-sends / shown-with-sends),
+  **E2E** (the results test asserts the summary stat + the Answered group + a **360px overflow guard** on
+  full-width Results), real-Electron visual QA at desktop (summary band + response-rate ring + status groups +
+  avatar cards + the slice-2 redesigned answer rows). **Remaining slices 4–5** (the `assignments:aggregate` read +
+  "At a glance" · private results). **Lesson: a summary tile and its matching card-group heading must count the
+  SAME statuses — folding `inProgress` into a band "awaiting" while the "Awaiting" group excludes it makes "2
+  awaiting" collide with "Awaiting (1)" + "In progress (1)" on one screen (§7); mirror the groups exactly. And a
+  view that renders derived counts must gate on the store's `loaded` flag or it flashes zeros for a frame before
+  the async load resolves.**
 - 2026-07-10 — **Build (Questionnaire Preview & Results redesign — SPEC 08 §20 slice 2/5 BUILT: modernized
   answering form + progress + "Your answers" review; on `feat/questionnaire-answering-modernize`).** The second
   slice (§20.5). **Progress indicator:** an additive **`progress?`** prop on the shared `@selfos/answering`

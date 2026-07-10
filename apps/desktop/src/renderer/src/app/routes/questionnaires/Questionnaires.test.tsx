@@ -721,30 +721,61 @@ describe('Questionnaires', () => {
     expect(screen.getByText(/connect a relay in/i)).toBeInTheDocument();
   });
 
-  it('offers a Results tab on a saved questionnaire (gated by viewResults)', async () => {
+  const savedDef = {
+    id: 'q1',
+    schemaVersion: 1 as const,
+    version: 1,
+    title: 'Weekly check-in',
+    type: 'role-feedback',
+    sensitivity: 'standard' as const,
+    questions: [{ id: 'qq1', type: 'shortText' as const, prompt: 'How?', required: true }],
+    createdAt: 'now',
+    updatedAt: 'now',
+  };
+
+  it('hides the Results tab until the questionnaire has been sent (§20.6)', async () => {
     elevateToOwner();
     installMockBridge({
-      questionnairesList: () =>
+      questionnairesList: () => Promise.resolve([savedDef]),
+      // No send state → no sends → Results must not be offered.
+      questionnairesSendStates: () => Promise.resolve({}),
+    });
+    renderApp();
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Weekly check-in/ }));
+    expect(screen.queryByRole('button', { name: 'Results' })).not.toBeInTheDocument();
+  });
+
+  it('offers a Results tab once sent, showing the summary (§20.6, gated by viewResults)', async () => {
+    elevateToOwner();
+    installMockBridge({
+      questionnairesList: () => Promise.resolve([savedDef]),
+      questionnairesSendStates: () =>
+        Promise.resolve({ q1: { lastSentAt: '2026-07-01T00:00:00.000Z', total: 1 } }),
+      assignmentsResults: () =>
         Promise.resolve([
           {
-            id: 'q1',
-            schemaVersion: 1,
-            version: 1,
-            title: 'Weekly check-in',
-            type: 'role-feedback',
-            sensitivity: 'standard',
-            questions: [{ id: 'qq1', type: 'shortText', prompt: 'How?', required: true }],
+            assignmentId: 'a1',
+            recipientName: 'Mara',
+            channel: 'inApp' as const,
+            relayLinked: false,
+            status: 'submitted' as const,
+            privacy: 'standard' as const,
             createdAt: 'now',
-            updatedAt: 'now',
+            analyzed: false,
+            analysisStale: false,
+            answers: [{ prompt: 'How?', answer: 'Good' }],
           },
         ]),
-      assignmentsResults: () => Promise.resolve([]),
     });
     renderApp();
 
     await userEvent.click(await screen.findByRole('button', { name: /^Weekly check-in/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Results' }));
-    expect(await screen.findByText(/haven’t sent this questionnaire yet/i)).toBeInTheDocument();
+    // The summary band + the recipient card render (no more empty "haven't sent yet" placeholder).
+    expect(await screen.findByText('recipient')).toBeInTheDocument();
+    expect(screen.getByText('Mara')).toBeInTheDocument();
+    expect(screen.queryByText(/haven’t sent this questionnaire yet/i)).not.toBeInTheDocument();
   });
 
   it('duplicates a saved questionnaire: clones the questions and re-picks a recipient (§17.3)', async () => {

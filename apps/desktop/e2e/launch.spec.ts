@@ -4388,12 +4388,32 @@ test('results: re-asks chart a trend, a send deletes, and the questionnaire purg
       await w.getByRole('button', { name: 'Submit', exact: true }).click();
     }
 
-    // Results: both sends + a Trends chart for the rating question.
+    // Results: the summary band + status-grouped cards + a Trends chart for the rating question (§20.6).
     await w.getByRole('link', { name: 'Questionnaires' }).click();
     await w.getByRole('button', { name: /^Mood check/ }).click();
     await w.getByRole('button', { name: 'Results' }).click();
+    // Summary band: the recipient-count stat label + the "Answered" status group (header + 2 answered sends).
+    await expect(w.getByText('recipients', { exact: true })).toBeVisible();
+    expect(await w.getByText('Answered', { exact: true }).count()).toBeGreaterThanOrEqual(2);
     await expect(w.getByRole('heading', { name: 'Trends' })).toBeVisible();
     await expect(w.getByRole('img', { name: /trend over time/i })).toBeVisible();
+
+    // Full-width Results has no horizontal overflow at 360px — page-level or an inner scroller (§7/§12).
+    await w.setViewportSize({ width: 360, height: 900 });
+    const resultsOverflow = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      const inner = Array.from(document.querySelectorAll('*')).filter((el) => {
+        const s = getComputedStyle(el);
+        return (
+          (s.overflowX === 'auto' || s.overflowX === 'scroll') &&
+          el.scrollWidth > el.clientWidth + 1
+        );
+      }).length;
+      return { main: main ? main.scrollWidth - main.clientWidth : 0, inner };
+    });
+    expect(resultsOverflow.main).toBeLessThanOrEqual(1);
+    expect(resultsOverflow.inner).toBe(0);
+    await w.setViewportSize({ width: 1280, height: 900 });
 
     // Delete one send — confirm inline, then it's gone (one card remains).
     expect(await w.getByRole('button', { name: /Delete this send/ }).count()).toBe(2);

@@ -48,10 +48,33 @@ const send = (over: Partial<SendResult> = {}): SendResult => ({
 });
 
 describe('QuestionnaireResults', () => {
-  it('shows the empty state when nothing has been sent', async () => {
+  it('renders nothing when there are no sends (the tab is hidden upstream, §20.6)', async () => {
     installMockBridge({ assignmentsResults: () => Promise.resolve([]) });
+    const { container } = renderResults();
+    // No stale empty card; the builder gates the whole Results tab on there being ≥1 send.
+    await waitFor(() => expect(useResultsStore.getState().loaded).toBe(true));
+    expect(screen.queryByText(/haven’t sent this questionnaire yet/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Results' })).not.toBeInTheDocument();
+    expect(container.textContent).toBe('');
+  });
+
+  it('shows a summary band + status-grouped cards for multiple recipients (§20.6)', async () => {
+    installMockBridge({
+      assignmentsResults: () =>
+        Promise.resolve([
+          send({ assignmentId: 'a1', recipientName: 'Angel', status: 'submitted' }),
+          send({ assignmentId: 'a2', recipientName: 'Sam', status: 'sent' }),
+        ]),
+    });
     renderResults();
-    expect(await screen.findByText(/haven’t sent this questionnaire yet/i)).toBeInTheDocument();
+    // Summary band: 2 recipients (a stat tile) + status group headers for the non-empty groups.
+    expect(await screen.findByText('recipients')).toBeInTheDocument();
+    // "Awaiting" is a unique group header (a 'sent' send's own badge reads "Sent — waiting").
+    expect(screen.getByText('Awaiting')).toBeInTheDocument();
+    // "Answered" is both the group header AND the submitted send's status badge → at least two.
+    expect(screen.getAllByText('Answered').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('Angel')).toBeInTheDocument();
+    expect(screen.getByText('Sam')).toBeInTheDocument();
   });
 
   it('marks the responses-arrived notification seen on open (38 §3.1)', async () => {

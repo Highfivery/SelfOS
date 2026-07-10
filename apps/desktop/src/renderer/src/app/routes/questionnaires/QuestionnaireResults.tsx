@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Brain, Download, Link2, Link2Off, Lock, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
+import { Download, Link2, Link2Off, Lock, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 import { aiKeyResolved } from '../../aiAvailability';
 import { AiUnavailableNotice } from '../../AiUnavailableNotice';
 import type {
@@ -23,6 +23,9 @@ import {
   Text,
   type LineChartSeries,
 } from '../../../design-system/components';
+import { Avatar } from './Avatar';
+import { ResultGroupHead, ResultsSummaryBand } from './ResultsSummaryBand';
+import { groupSendsByStatus, summarizeSends } from './resultsSummary';
 import { useResultsStore } from '../../../stores/resultsStore';
 import { useNotificationStore } from '../../../stores/notificationStore';
 import { useSessionStore } from '../../../stores/sessionStore';
@@ -208,22 +211,16 @@ function StandardResults({ questionnaireId }: { questionnaireId: string }): JSX.
     void runAnalyze(next.assignmentId);
   }, [results, autoAnalyze, aiReady]);
 
-  if (loaded && results.length === 0) {
-    return (
-      <Card>
-        <Stack gap={2} align="center">
-          <Brain size={24} aria-hidden="true" />
-          <Text tone="secondary">
-            You haven’t sent this questionnaire yet. Use <strong>Send</strong> on the Edit tab to
-            ask someone — their response shows up here.
-          </Text>
-        </Stack>
-      </Card>
-    );
-  }
+  // Results is hidden until there's a send (§20.6). Render nothing until the sends have loaded (so the
+  // summary band never flashes "0 recipients"), and nothing for the transient empty / all-deleted edge —
+  // never a stale empty card.
+  if (!loaded || results.length === 0) return <></>;
+
+  const summary = summarizeSends(results);
+  const groups = groupSendsByStatus(results);
 
   return (
-    <Stack gap={3}>
+    <Stack gap={4}>
       <div className={styles.resultsHead}>
         <Heading level={3}>Results</Heading>
         <Inline gap={2} align="center">
@@ -251,22 +248,31 @@ function StandardResults({ questionnaireId }: { questionnaireId: string }): JSX.
           ) : null}
         </Inline>
       </div>
+
+      <ResultsSummaryBand summary={summary} />
+
       {drainMsg ? <Banner tone="info">{drainMsg}</Banner> : null}
       {exportMsg ? <Banner tone="info">{exportMsg}</Banner> : null}
       {!aiReady ? <AiUnavailableNotice /> : null}
 
-      {results.map((send) => (
-        <SendCard
-          key={send.assignmentId}
-          send={send}
-          aiReady={aiReady}
-          senderName={senderName}
-          analyzing={analyzing[send.assignmentId] === true}
-          message={messages[send.assignmentId]}
-          onAnalyze={() => void runAnalyze(send.assignmentId)}
-          onDelete={() => void runDelete(send.assignmentId)}
-          onRevoke={() => void revoke(send.assignmentId)}
-        />
+      {/* Per-recipient cards grouped by status (§20.6) — Answered · In progress · Awaiting · Declined · Closed. */}
+      {groups.map((group) => (
+        <Stack gap={2} key={group.key}>
+          <ResultGroupHead label={group.label} count={group.sends.length} />
+          {group.sends.map((send) => (
+            <SendCard
+              key={send.assignmentId}
+              send={send}
+              aiReady={aiReady}
+              senderName={senderName}
+              analyzing={analyzing[send.assignmentId] === true}
+              message={messages[send.assignmentId]}
+              onAnalyze={() => void runAnalyze(send.assignmentId)}
+              onDelete={() => void runDelete(send.assignmentId)}
+              onRevoke={() => void revoke(send.assignmentId)}
+            />
+          ))}
+        </Stack>
       ))}
 
       {trends.length > 0 ? (
@@ -353,7 +359,10 @@ function SendCard({
     <Card>
       <Stack gap={3}>
         <div className={styles.resultHead}>
-          <Text weight={500}>{send.recipientName}</Text>
+          <span className={styles.resultRecipient}>
+            <Avatar name={send.recipientName} />
+            <Text weight={500}>{send.recipientName}</Text>
+          </span>
           <div className={styles.resultHeadRight}>
             <span className={styles.rowBadge}>
               {send.privacy === 'private' ? (

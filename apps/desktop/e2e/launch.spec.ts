@@ -2650,7 +2650,7 @@ test('questionnaires: custom type, sensitivity, matrix + branching round-trip', 
   }
 });
 
-test('questionnaires: preview / test-on-self renders the form, gates Finish, saves nothing', async () => {
+test('questionnaires: Preview is read-only (disabled fields, no Finish) and the detail spans full width (08 §20.3/§20.4)', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);
   try {
@@ -2661,29 +2661,32 @@ test('questionnaires: preview / test-on-self renders the form, gates Finish, sav
     await w.getByLabel('Question 1', { exact: true }).fill('How are you feeling?');
     await w.getByLabel('Answer type').selectOption({ label: 'Rating' });
 
-    // Switch to Preview — the answering form + crisis footer render exactly as the recipient sees them.
+    // Switch to Preview — a READ-ONLY render: the note names the recipient, the crisis footer stays, and
+    // there is NO test-on-self Finish (removed, §20.4).
     await w.getByRole('button', { name: 'Preview', exact: true }).click();
-    await expect(w.getByText(/exactly what your recipient sees/i)).toBeVisible();
+    await expect(w.getByText(/exactly what .* sees — read-only/i)).toBeVisible();
     await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Finish' })).toHaveCount(0);
 
-    // Finish is gated on the required (and untouched) rating — a required scale slider isn't auto-seeded,
-    // so it stays unanswered until moved.
-    await w.getByRole('button', { name: 'Finish' }).click();
-    await expect(w.getByText(/answer the 1 required question to finish/i)).toBeVisible();
+    // The rating slider renders but is DISABLED (the whole answer surface is inert in Preview).
+    await expect(w.getByRole('slider', { name: 'How are you feeling?' })).toBeDisabled();
 
-    // Answer it on the 1→5 slider, then Finish confirms the dry run saved nothing.
-    await w.getByRole('slider', { name: 'How are you feeling?' }).fill('4');
-    await w.getByRole('button', { name: 'Finish' }).click();
-    await expect(w.getByText(/nothing you entered was saved/i)).toBeVisible();
-
-    // Nothing was persisted — the list still shows no saved questionnaire for this draft.
-    await expect(w.getByRole('button', { name: /Dry run/ })).toHaveCount(0);
-
+    // Full-width detail (§20.3) + the standing no-horizontal-overflow guard at 360px — page-level AND any
+    // inner scroller (§7/§12).
+    await w.setViewportSize({ width: 360, height: 900 });
     const overflow = await w.evaluate(() => {
       const main = document.querySelector('main');
-      return main ? main.scrollWidth - main.clientWidth : 0;
+      const inner = Array.from(document.querySelectorAll('*')).filter((el) => {
+        const s = getComputedStyle(el);
+        return (
+          (s.overflowX === 'auto' || s.overflowX === 'scroll') &&
+          el.scrollWidth > el.clientWidth + 1
+        );
+      }).length;
+      return { main: main ? main.scrollWidth - main.clientWidth : 0, inner };
     });
-    expect(overflow).toBeLessThanOrEqual(1);
+    expect(overflow.main).toBeLessThanOrEqual(1);
+    expect(overflow.inner).toBe(0);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

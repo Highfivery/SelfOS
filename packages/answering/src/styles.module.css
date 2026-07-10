@@ -9,6 +9,44 @@
   gap: var(--space-4);
 }
 
+/* Read-only Preview wrapper (08 §20.4): a disabled <fieldset> with no chrome that keeps the same column
+   rhythm as the interactive form. `min-width: 0` so a disabled fieldset (which defaults to `min-width:
+   min-content`) can't force an inner scrollbar in a flex/grid parent. */
+.fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+/* Muted, non-interactive controls inside a disabled Preview — the prompt + help text stay full-strength so
+   the questionnaire still reads clearly; only the answer inputs look inert. */
+.fieldset:disabled .input,
+.fieldset:disabled .textarea {
+  background: var(--color-surface-alt);
+  color: var(--color-text-tertiary);
+  border-style: dashed;
+}
+
+.fieldset:disabled .input:hover,
+.fieldset:disabled .textarea:hover {
+  border-color: var(--color-border);
+}
+
+.fieldset:disabled .scalePoint,
+.fieldset:disabled .optionCard,
+.fieldset:disabled .pill,
+.fieldset:disabled .rankButton,
+.fieldset:disabled .dateAdd,
+.fieldset:disabled .dateRemove,
+.fieldset:disabled .slider {
+  opacity: 0.6;
+  cursor: default;
+}
+
 /* Each question is a role="group" card (NOT a fieldset — a legend bisects long wrapped prompts). */
 .question {
   display: flex;

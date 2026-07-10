@@ -883,7 +883,10 @@ export function QuestionnaireBuilder({
             )}
             {shareMsg ? <Banner tone="warning">{shareMsg}</Banner> : null}
           </div>
-          <QuestionnairePreview questions={previewQuestions} readOnly />
+          <QuestionnairePreview
+            questions={previewQuestions}
+            {...(recipient ? { recipientLabel: recipientName } : {})}
+          />
           {problems !== null && problems.length > 0 ? (
             <Banner tone="warning">{problems.join(' ')}</Banner>
           ) : null}
@@ -934,7 +937,10 @@ export function QuestionnaireBuilder({
           {deleteConfirmBanner}
         </Stack>
       ) : mode === 'preview' ? (
-        <QuestionnairePreview questions={previewQuestions} />
+        <QuestionnairePreview
+          questions={previewQuestions}
+          {...(recipient ? { recipientLabel: recipientName } : {})}
+        />
       ) : (
         <>
           <Card>

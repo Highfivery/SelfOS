@@ -550,10 +550,11 @@ describe('Questionnaires', () => {
     await openNewBuilder();
 
     await userEvent.type(screen.getByLabelText('Question 1'), 'How was your week?');
-    // Switch to Preview — the authored question renders in the answering form, with the crisis footer.
+    // Switch to Preview — the authored question renders read-only (08 §20.4): the field is DISABLED,
+    // the note names the bound recipient, and the crisis footer stays present.
     await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
-    expect(screen.getByText(/exactly what your recipient sees/i)).toBeInTheDocument();
-    expect(screen.getByLabelText('How was your week?')).toBeInTheDocument();
+    expect(screen.getByText(/exactly what Mara sees — read-only/i)).toBeInTheDocument();
+    expect(screen.getByLabelText('How was your week?')).toBeDisabled();
     expect(screen.getByRole('button', { name: /get help now/i })).toBeInTheDocument();
   });
 

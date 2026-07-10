@@ -295,21 +295,57 @@ describe('QuestionnaireForm', () => {
   });
 });
 
-describe('QuestionnairePreview (test-on-self)', () => {
+describe('QuestionnaireForm — disabled (read-only Preview, 08 §20.4)', () => {
+  it('makes every answer control inert but keeps the crisis footer working', () => {
+    render(
+      <QuestionnaireForm
+        questions={[
+          q({ id: 'a', type: 'shortText', prompt: 'Your name?' }),
+          q({ id: 'b', type: 'singleChoice', prompt: 'Pick', options: ['One', 'Two'] }),
+        ]}
+        answers={{}}
+        onChange={() => {}}
+        disabled
+      />,
+    );
+    // Native + custom controls alike are disabled (a disabled <fieldset> propagates to all descendants).
+    expect(screen.getByLabelText('Your name?')).toBeDisabled();
+    expect(screen.getByRole('radio', { name: 'One' })).toBeDisabled();
+    // The crisis affordance is OUTSIDE the fieldset — always usable (§8.2).
+    expect(screen.getByRole('button', { name: /get help now/i })).toBeEnabled();
+  });
+
+  it('does not fire onChange when a disabled control is clicked', async () => {
+    const onChange = vi.fn();
+    render(
+      <QuestionnaireForm
+        questions={[q({ id: 'b', type: 'singleChoice', prompt: 'Pick', options: ['One', 'Two'] })]}
+        answers={{}}
+        onChange={onChange}
+        disabled
+      />,
+    );
+    await userEvent.click(screen.getByRole('radio', { name: 'One' }));
+    expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe('QuestionnairePreview (read-only, 08 §20.4)', () => {
   const questions = [
     q({ id: 'a', type: 'shortText', prompt: 'How are we doing?', required: true }),
   ];
 
-  it('blocks Finish until required questions are answered', async () => {
-    render(<QuestionnairePreview questions={questions} />);
-    await userEvent.click(screen.getByRole('button', { name: 'Finish' }));
-    expect(screen.getByText(/answer the 1 required question to finish/i)).toBeInTheDocument();
+  it('renders disabled fields, names the recipient, and offers NO test-on-self Finish', () => {
+    render(<QuestionnairePreview questions={questions} recipientLabel="Angel" />);
+    expect(screen.getByText(/exactly what Angel sees — read-only/i)).toBeInTheDocument();
+    expect(screen.getByLabelText('How are we doing?')).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Finish' })).not.toBeInTheDocument();
+    // The crisis footer is still present + usable.
+    expect(screen.getByRole('button', { name: /get help now/i })).toBeEnabled();
   });
 
-  it('confirms nothing was saved once required questions are answered', async () => {
+  it('falls back to a generic note when no recipient label is given', () => {
     render(<QuestionnairePreview questions={questions} />);
-    await userEvent.type(screen.getByLabelText('How are we doing?'), 'Great');
-    await userEvent.click(screen.getByRole('button', { name: 'Finish' }));
-    expect(screen.getByText(/nothing you entered was saved/i)).toBeInTheDocument();
+    expect(screen.getByText(/exactly what your recipient sees — read-only/i)).toBeInTheDocument();
   });
 });

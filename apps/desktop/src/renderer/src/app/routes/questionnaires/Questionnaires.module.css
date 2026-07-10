@@ -802,12 +802,12 @@
   min-width: 0;
 }
 
-/* Focus mode: with a card open, the detail (builder / answering pane) takes the full width as a centered
-   panel. The landing returns via the "← Questionnaires" back link. */
+/* Focus mode: with a card open, the detail (Edit / Preview / Results / answering pane) spans the FULL width
+   of the area, like the landing (08 §20.3) — no narrow centered column. Each surface lays out responsively
+   within it. The landing returns via the "← Questionnaires" back link. */
 .page[data-view='detail'] .detail {
   width: 100%;
-  max-width: 760px;
-  margin-inline: auto;
+  min-width: 0;
 }
 
 .back {

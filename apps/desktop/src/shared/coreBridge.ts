@@ -132,6 +132,14 @@ import {
   type SessionSummaryResult,
   type TestResult,
   type UpdateCheckResult,
+  TogetherCreateInputSchema,
+  TogetherSetPausedInputSchema,
+  TogetherMarkReadInputSchema,
+  type TogetherSession,
+  type TogetherSessionSummary,
+  type TogetherSessionView,
+  type TogetherParticipant,
+  type TogetherCreateResult,
 } from './schemas';
 import { OWNER_ROLE_ID, roleAllows, type CapabilityKey } from './capabilities';
 import { runConnectionTest } from './claudeProxy';
@@ -235,6 +243,16 @@ import {
   storeConversationAttachment,
   suggestGuidedSessions,
 } from '@selfos/core/conversations';
+import {
+  createSession as createTogetherSession,
+  digestFor,
+  getSession as getTogetherSession,
+  listMessages as listTogetherMessages,
+  listSessionsForPerson as listTogetherSessionsForPerson,
+  listStates as listTogetherStates,
+  projectMessages as projectTogetherMessages,
+  updateState as updateTogetherState,
+} from '@selfos/core/together';
 import { sniffImageMime } from '@selfos/core/media';
 import {
   deleteInsight,
@@ -899,6 +917,111 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       now: new Date(),
       activePersonId: device.activePersonId ?? null,
     });
+  };
+
+  // ── Together (58) access helpers — the trust boundary is here, not the renderer (§5.2) ─────────────
+  // Every read/write authorizes by `together.own` + participant membership + a LIVE `partner` edge to
+  // every other participant, re-checked on each call (deleting the edge instantly re-gates everything).
+
+  /** Whether the active person has a live `partner` edge to every one of `otherIds` (order-independent). */
+  const togetherEdgeLive = async (
+    fs: FileSystem,
+    key: Uint8Array,
+    viewerId: string,
+    otherIds: string[],
+  ): Promise<boolean> => {
+    const rels = await listRelationships(fs, key);
+    return otherIds.every((oid) =>
+      relationshipTypesFromSubjectToViewer(viewerId, oid, rels).includes('partner'),
+    );
+  };
+
+  /** ctx + active person, gated on `together.own`. Null if not ready or not allowed (surface is hidden). */
+  const togetherCtx = async (): Promise<{
+    fs: FileSystem;
+    key: Uint8Array;
+    personId: string;
+  } | null> => {
+    const ctx = await host.vaultAndKey();
+    const personId = ctx ? await activePersonId() : null;
+    if (!ctx || !personId) return null;
+    if (!(await activePersonCan(ctx.fs, ctx.key, 'together.own'))) return null;
+    return { fs: ctx.fs, key: ctx.key, personId };
+  };
+
+  /** A session the active person may access — membership + live edge — else null (§5.2). */
+  const accessibleTogetherSession = async (
+    fs: FileSystem,
+    key: Uint8Array,
+    personId: string,
+    id: string,
+  ): Promise<TogetherSession | null> => {
+    const session = await getTogetherSession(fs, key, id);
+    if (!session || !session.participantIds.includes(personId)) return null;
+    const others = session.participantIds.filter((p) => p !== personId);
+    return (await togetherEdgeLive(fs, key, personId, others)) ? session : null;
+  };
+
+  const togetherParticipants = async (
+    fs: FileSystem,
+    key: Uint8Array,
+    session: TogetherSession,
+  ): Promise<TogetherParticipant[]> => {
+    const out: TogetherParticipant[] = [];
+    for (const pid of session.participantIds) {
+      out.push({
+        personId: pid,
+        displayName: (await getPerson(fs, key, pid))?.displayName ?? 'Someone',
+      });
+    }
+    return out;
+  };
+
+  /** Build the viewer's list summary — every derived field over their projection (§5.2). */
+  const buildTogetherSummary = async (
+    fs: FileSystem,
+    key: Uint8Array,
+    session: TogetherSession,
+    viewerId: string,
+    now: Date,
+  ): Promise<TogetherSessionSummary> => {
+    const states = await listTogetherStates(fs, key, session.id);
+    const messages = await listTogetherMessages(fs, key, session.id);
+    const digest = digestFor(session, states, null, messages, viewerId, now); // reportCreatedAt: Phase D
+    return {
+      id: session.id,
+      pairKey: session.pairKey,
+      ...(session.topic ? { topic: session.topic } : {}),
+      ...(session.guideId ? { guideId: session.guideId } : {}),
+      initiatorPersonId: session.initiatorPersonId,
+      participants: await togetherParticipants(fs, key, session),
+      status: digest.status,
+      yourTurn: digest.yourTurn,
+      unreadCount: digest.unreadCount,
+      ...(digest.lastMessageSnippet !== undefined
+        ? { lastMessageSnippet: digest.lastMessageSnippet }
+        : {}),
+      ...(digest.lastMessageAt !== undefined ? { lastMessageAt: digest.lastMessageAt } : {}),
+      createdAt: session.createdAt,
+    };
+  };
+
+  /** The full viewer-projected session view (summary + projected messages + the viewer's own ack flag). */
+  const buildTogetherView = async (
+    fs: FileSystem,
+    key: Uint8Array,
+    session: TogetherSession,
+    viewerId: string,
+    now: Date,
+  ): Promise<TogetherSessionView> => {
+    const summary = await buildTogetherSummary(fs, key, session, viewerId, now);
+    const states = await listTogetherStates(fs, key, session.id);
+    const messages = await listTogetherMessages(fs, key, session.id);
+    return {
+      ...summary,
+      messages: projectTogetherMessages(messages, viewerId),
+      viewerAcked: Boolean(states.get(viewerId)?.rulesAckAt),
+    };
   };
 
   const AI_KEY_IDS = { anthropic: ANTHROPIC_API_KEY_ID, openai: OPENAI_API_KEY_ID } as const;
@@ -1832,6 +1955,185 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         onDelta: (text) => host.emitChatChunk(text),
         now: new Date(),
       });
+    },
+
+    // --- Together: couples sessions (58) — every handler gates on together.own + membership + live edge ---
+    togetherList: async (): Promise<TogetherSessionSummary[]> => {
+      const c = await togetherCtx();
+      if (!c) return [];
+      const now = new Date();
+      const rels = await listRelationships(c.fs, c.key);
+      const sessions = await listTogetherSessionsForPerson(c.fs, c.key, c.personId);
+      const out: TogetherSessionSummary[] = [];
+      for (const session of sessions) {
+        const others = session.participantIds.filter((p) => p !== c.personId);
+        // Live-edge gate: an un-edged pair is inaccessible to both (deleting the edge removes it).
+        if (
+          !others.every((oid) =>
+            relationshipTypesFromSubjectToViewer(c.personId, oid, rels).includes('partner'),
+          )
+        ) {
+          continue;
+        }
+        const summary = await buildTogetherSummary(c.fs, c.key, session, c.personId, now);
+        // The decliner's own list drops the session entirely (§3.5); everyone else never sees a quiet decline.
+        if (summary.status !== 'declined') out.push(summary);
+      }
+      // Newest activity first; an un-messaged session falls back to its create time.
+      return out.sort((a, b) =>
+        (b.lastMessageAt ?? b.createdAt).localeCompare(a.lastMessageAt ?? a.createdAt),
+      );
+    },
+    togetherGet: async (id): Promise<TogetherSessionView | null> => {
+      const c = await togetherCtx();
+      if (!c) return null;
+      const session = await accessibleTogetherSession(
+        c.fs,
+        c.key,
+        c.personId,
+        z.string().min(1).parse(id),
+      );
+      if (!session) return null;
+      const view = await buildTogetherView(c.fs, c.key, session, c.personId, new Date());
+      // The decliner sees nothing — even a direct get returns null (§3.5).
+      return view.status === 'declined' ? null : view;
+    },
+    togetherCreate: async (input): Promise<TogetherCreateResult> => {
+      const { partnerPersonId, topic, guideId } = TogetherCreateInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId) {
+        return { ok: false, reason: 'NOT_READY', message: 'SelfOS isn’t ready yet.' };
+      }
+      if (!(await activePersonCan(ctx.fs, ctx.key, 'together.own'))) {
+        return { ok: false, reason: 'NOT_ALLOWED', message: 'You can’t start Together sessions.' };
+      }
+      if (partnerPersonId === personId) {
+        return { ok: false, reason: 'NO_EDGE', message: 'Pick a partner other than yourself.' };
+      }
+      // The partner must be a subject WITH a login account (a non-subject contact can't participate — §3.1).
+      const partner = await getPerson(ctx.fs, ctx.key, partnerPersonId);
+      const access = await getAccessConfig(ctx.fs, ctx.key);
+      const hasAccount = access.accounts.some((a) => a.personId === partnerPersonId);
+      if (!partner || !partner.isSubject || !hasAccount) {
+        return {
+          ok: false,
+          reason: 'PARTNER_NOT_SUBJECT',
+          message: 'That person needs a SelfOS login in this household to join.',
+        };
+      }
+      if (!(await togetherEdgeLive(ctx.fs, ctx.key, personId, [partnerPersonId]))) {
+        return {
+          ok: false,
+          reason: 'NO_EDGE',
+          message: 'Together with this person isn’t available.',
+        };
+      }
+      const session = await createTogetherSession(
+        ctx.fs,
+        ctx.key,
+        {
+          initiatorPersonId: personId,
+          participantIds: [personId, partnerPersonId],
+          ...(topic !== undefined ? { topic } : {}),
+          ...(guideId !== undefined ? { guideId } : {}),
+        },
+        new Date(),
+      );
+      return {
+        ok: true,
+        session: await buildTogetherView(ctx.fs, ctx.key, session, personId, new Date()),
+      };
+    },
+    togetherAccept: async (id): Promise<TogetherSessionView | null> => {
+      const c = await togetherCtx();
+      if (!c) return null;
+      const session = await accessibleTogetherSession(
+        c.fs,
+        c.key,
+        c.personId,
+        z.string().min(1).parse(id),
+      );
+      if (!session) return null;
+      await updateTogetherState(
+        c.fs,
+        c.key,
+        session.id,
+        c.personId,
+        { rulesAckAt: new Date().toISOString() },
+        new Date(),
+      );
+      return buildTogetherView(c.fs, c.key, session, c.personId, new Date());
+    },
+    togetherDecline: async (id): Promise<void> => {
+      const c = await togetherCtx();
+      if (!c) return;
+      const session = await accessibleTogetherSession(
+        c.fs,
+        c.key,
+        c.personId,
+        z.string().min(1).parse(id),
+      );
+      if (!session) return;
+      await updateTogetherState(
+        c.fs,
+        c.key,
+        session.id,
+        c.personId,
+        { declinedAt: new Date().toISOString() },
+        new Date(),
+      );
+    },
+    togetherSetPaused: async (input): Promise<TogetherSessionView | null> => {
+      const { sessionId, paused } = TogetherSetPausedInputSchema.parse(input);
+      const c = await togetherCtx();
+      if (!c) return null;
+      const session = await accessibleTogetherSession(c.fs, c.key, c.personId, sessionId);
+      if (!session) return null;
+      await updateTogetherState(
+        c.fs,
+        c.key,
+        session.id,
+        c.personId,
+        { pausedAt: paused ? new Date().toISOString() : undefined },
+        new Date(),
+      );
+      return buildTogetherView(c.fs, c.key, session, c.personId, new Date());
+    },
+    togetherLeave: async (id): Promise<TogetherSessionView | null> => {
+      const c = await togetherCtx();
+      if (!c) return null;
+      const session = await accessibleTogetherSession(
+        c.fs,
+        c.key,
+        c.personId,
+        z.string().min(1).parse(id),
+      );
+      if (!session) return null;
+      await updateTogetherState(
+        c.fs,
+        c.key,
+        session.id,
+        c.personId,
+        { leftAt: new Date().toISOString() },
+        new Date(),
+      );
+      return buildTogetherView(c.fs, c.key, session, c.personId, new Date());
+    },
+    togetherMarkRead: async (input): Promise<void> => {
+      const { sessionId, at } = TogetherMarkReadInputSchema.parse(input);
+      const c = await togetherCtx();
+      if (!c) return;
+      const session = await accessibleTogetherSession(c.fs, c.key, c.personId, sessionId);
+      if (!session) return;
+      await updateTogetherState(
+        c.fs,
+        c.key,
+        session.id,
+        c.personId,
+        { lastReadMessageAt: at },
+        new Date(),
+      );
     },
 
     // --- Session image attachments (45 §6) — gated by `sessions.own`, scoped to the active person ---

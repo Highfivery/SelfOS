@@ -338,6 +338,15 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.challengesSuggest, bridge.challengesSuggest);
   handle(IpcChannels.challengesGetSuggestion, bridge.challengesGetSuggestion);
   handle(IpcChannels.challengesClearSuggestion, bridge.challengesClearSuggestion);
+  // Together / couples sessions (58).
+  handle(IpcChannels.togetherList, bridge.togetherList);
+  handle(IpcChannels.togetherGet, bridge.togetherGet);
+  handle(IpcChannels.togetherCreate, bridge.togetherCreate);
+  handle(IpcChannels.togetherAccept, bridge.togetherAccept);
+  handle(IpcChannels.togetherDecline, bridge.togetherDecline);
+  handle(IpcChannels.togetherSetPaused, bridge.togetherSetPaused);
+  handle(IpcChannels.togetherLeave, bridge.togetherLeave);
+  handle(IpcChannels.togetherMarkRead, bridge.togetherMarkRead);
   handle(IpcChannels.assignmentsCreate, bridge.assignmentsCreate);
   handle(IpcChannels.assignmentsInbox, bridge.assignmentsInbox);
   handle(IpcChannels.assignmentsSetFavorite, bridge.assignmentsSetFavorite);

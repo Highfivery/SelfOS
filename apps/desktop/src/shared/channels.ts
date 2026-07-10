@@ -107,6 +107,9 @@ import type {
   SessionStatus,
   SessionSummaryResult,
   TestResult,
+  TogetherCreateResult,
+  TogetherSessionSummary,
+  TogetherSessionView,
   UpdateCheckResult,
   UsageEvent,
   UsageSummary,
@@ -254,6 +257,16 @@ export const IpcChannels = {
   challengesSuggest: 'challenges:suggest',
   challengesGetSuggestion: 'challenges:getSuggestion',
   challengesClearSuggestion: 'challenges:clearSuggestion',
+  // Together / couples sessions (58-together §6.1). All gated by `together.own` + participant membership +
+  // a live `partner` edge; every read is viewer-projected in the bridge (the trust boundary, §5.2).
+  togetherList: 'together:list',
+  togetherGet: 'together:get',
+  togetherCreate: 'together:create',
+  togetherAccept: 'together:accept',
+  togetherDecline: 'together:decline',
+  togetherSetPaused: 'together:setPaused',
+  togetherLeave: 'together:leave',
+  togetherMarkRead: 'together:markRead',
   assignmentsCreate: 'assignments:create',
   assignmentsInbox: 'assignments:inbox',
   assignmentsSetFavorite: 'assignments:setFavorite',
@@ -919,6 +932,35 @@ export interface SelfosBridge {
   challengesGetSuggestion(): Promise<ChallengeSuggestion | null>;
   /** Clear the cached suggestion (after the person accepts or dismisses it). */
   challengesClearSuggestion(): Promise<void>;
+  /**
+   * Together / couples sessions (58-together §6.1). All gated by `together.own` + participant membership + a
+   * live `partner` edge, re-checked on every call; every read is **viewer-projected** in the bridge (§5.2) —
+   * a private aside (and its coach reply) appears only to its author, a quiet decline never surfaces to the
+   * initiator, and status/turn/unread/snippet are all derived over the caller's projection, never stored.
+   */
+  /** The active person's Together sessions (projection-derived summaries + turn state). */
+  togetherList(): Promise<TogetherSessionSummary[]>;
+  /** One session, viewer-projected (messages + status). Null if not a participant, un-edged, or declined. */
+  togetherGet(id: string): Promise<TogetherSessionView | null>;
+  /** Start a session → invited. Returns a typed prerequisite-absent result on failure (§3.13). */
+  togetherCreate(input: {
+    partnerPersonId: string;
+    topic?: string;
+    guideId?: string;
+  }): Promise<TogetherCreateResult>;
+  /** Accept the rules of the room — writes the caller's `rulesAckAt` consent record (§3.4). */
+  togetherAccept(id: string): Promise<TogetherSessionView | null>;
+  /** Decline quietly — writes the caller's `declinedAt`; the initiator never sees "declined" (§3.5). */
+  togetherDecline(id: string): Promise<void>;
+  /** Pause for me / un-pause — the caller's own `pausedAt`; the partner's view is unchanged (§8.3). */
+  togetherSetPaused(input: {
+    sessionId: string;
+    paused: boolean;
+  }): Promise<TogetherSessionView | null>;
+  /** Leave — ends the session for both, neutrally (§8.3). */
+  togetherLeave(id: string): Promise<TogetherSessionView | null>;
+  /** Mark the caller's read cursor (drives the unread/turn badges). */
+  togetherMarkRead(input: { sessionId: string; at: string }): Promise<void>;
   /**
    * Send a questionnaire to its BOUND household recipient (in-app), freezing an immutable snapshot at send.
    * The recipient is set on the questionnaire at creation (08 §17.3) — it is NOT passed here. Returns the

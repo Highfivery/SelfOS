@@ -28,6 +28,7 @@ import { matrixRowKey } from '@selfos/core/schemas';
 import { saveGoal } from '@selfos/core/goals';
 import { listChallenges } from '@selfos/core/challenges';
 import { buildContext } from '@selfos/core/people';
+import { pairKeyFor } from '@selfos/core/together';
 import { ANTHROPIC_API_KEY_ID, OPENAI_API_KEY_ID } from './channels';
 import { DeviceStateSchema } from './schemas';
 import type { BootState, DeviceState, Insight } from './schemas';
@@ -4821,5 +4822,195 @@ describe('update awareness (36)', () => {
       expect(await bridge.testsGet({ testId: 'ecr-r' })).toBeNull();
       expect(await bridge.testsTake({ testId: 'ecr-r', answers: {} })).toBeNull();
     });
+  });
+});
+
+describe('createCoreBridge — Together (58) foundation', () => {
+  /** Seed a household with two subjects (Ben the owner + Angel) linked by a live `partner` edge. */
+  async function seedPair(): Promise<{
+    host: ReturnType<typeof makeHost>;
+    bridge: ReturnType<typeof createCoreBridge>;
+    ben: string;
+    angel: string;
+    edgeId: string;
+  }> {
+    const { host, bridge, ownerId } = await freshOwner();
+    const angel = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
+    const edge = await bridge.relationshipsSave({
+      fromPersonId: ownerId,
+      toPersonId: angel.id,
+      type: 'partner',
+    });
+    return { host, bridge, ben: ownerId, angel: angel.id, edgeId: edge.id };
+  }
+
+  const asPerson = async (host: ReturnType<typeof makeHost>, personId: string): Promise<void> => {
+    await host.host.updateDeviceState({ activePersonId: personId });
+  };
+
+  it('full invite lifecycle: create → invited for both → accept → active; declined never leaks (§3.3–§3.5)', async () => {
+    const { host, bridge, ben, angel } = await seedPair();
+    const created = await bridge.togetherCreate({
+      partnerPersonId: angel,
+      topic: 'Feeling distant',
+    });
+    expect(created.ok).toBe(true);
+    const sessionId = created.ok ? created.session.id : '';
+    expect(created.ok && created.session.status).toBe('invited');
+    expect(created.ok && created.session.topic).toBe('Feeling distant');
+
+    // Angel sees the invitation (her projection): status invited, not yet acked.
+    await asPerson(host, angel);
+    const angelList = await bridge.togetherList();
+    expect(angelList).toHaveLength(1);
+    expect(angelList[0]?.status).toBe('invited');
+    const angelGet = await bridge.togetherGet(sessionId);
+    expect(angelGet?.viewerAcked).toBe(false);
+    // Partner names resolved for the avatar pair.
+    expect(angelGet?.participants.map((p) => p.displayName).sort()).toEqual(['Angel', 'Ben']);
+
+    // Angel accepts → both acked → active for both.
+    const accepted = await bridge.togetherAccept(sessionId);
+    expect(accepted?.status).toBe('active');
+    expect(accepted?.viewerAcked).toBe(true);
+    await asPerson(host, ben);
+    expect((await bridge.togetherGet(sessionId))?.status).toBe('active');
+  });
+
+  it('quiet decline is viewer-projected: the initiator reads invited (never declined); the decliner drops it (§3.5)', async () => {
+    const { host, bridge, ben, angel } = await seedPair();
+    const created = await bridge.togetherCreate({ partnerPersonId: angel });
+    const sessionId = created.ok ? created.session.id : '';
+
+    await asPerson(host, angel);
+    await bridge.togetherDecline(sessionId);
+    // Decliner: the session is gone from her world entirely.
+    expect(await bridge.togetherList()).toHaveLength(0);
+    expect(await bridge.togetherGet(sessionId)).toBeNull();
+
+    // Initiator: still just "invited" — never "declined", never notified.
+    await asPerson(host, ben);
+    const benList = await bridge.togetherList();
+    expect(benList).toHaveLength(1);
+    expect(benList[0]?.status).toBe('invited');
+    expect(await bridge.togetherGet(sessionId)).not.toBeNull();
+  });
+
+  it('an expired invitation derives `expired` for the initiator (30-day window)', async () => {
+    const { host, bridge, ben, angel } = await seedPair();
+    const ctx = (await host.host.vaultAndKey())!;
+    const id = 'seed-old';
+    const old = '2026-01-01T00:00:00.000Z';
+    await writeEncryptedJson(
+      ctx.fs,
+      `together/sessions/${id}/session.enc`,
+      {
+        id,
+        schemaVersion: 1,
+        pairKey: pairKeyFor(ben, angel),
+        participantIds: [ben, angel],
+        initiatorPersonId: ben,
+        createdAt: old,
+      },
+      ctx.key,
+    );
+    await writeEncryptedJson(
+      ctx.fs,
+      `together/sessions/${id}/state/${ben}.enc`,
+      { schemaVersion: 1, personId: ben, rulesAckAt: old, updatedAt: old },
+      ctx.key,
+    );
+    await asPerson(host, ben);
+    expect((await bridge.togetherGet(id))?.status).toBe('expired');
+  });
+
+  it('"send again" mints a FRESH session id; the old one is untouched', async () => {
+    const { bridge, angel } = await seedPair();
+    const a = await bridge.togetherCreate({ partnerPersonId: angel });
+    const b = await bridge.togetherCreate({ partnerPersonId: angel });
+    expect(a.ok && b.ok).toBe(true);
+    expect(a.ok && b.ok && a.session.id !== b.session.id).toBe(true);
+    expect(await bridge.togetherList()).toHaveLength(2);
+  });
+
+  it('membership + create gates: a non-participant sees nothing; a non-subject/no-edge partner is refused', async () => {
+    const { host, bridge, ben, angel } = await seedPair();
+    const created = await bridge.togetherCreate({ partnerPersonId: angel });
+    const sessionId = created.ok ? created.session.id : '';
+
+    // A third subject with NO edge to the pair can't read the session.
+    const cara = await bridge.peopleSave({ displayName: 'Cara', isSubject: true, tags: [] });
+    await asPerson(host, cara.id);
+    expect(await bridge.togetherList()).toHaveLength(0);
+    expect(await bridge.togetherGet(sessionId)).toBeNull();
+
+    // Creating with a non-subject contact → PARTNER_NOT_SUBJECT.
+    await asPerson(host, ben);
+    const contact = await bridge.peopleSave({ displayName: 'Dee', isSubject: false, tags: [] });
+    const badSubject = await bridge.togetherCreate({ partnerPersonId: contact.id });
+    expect(badSubject.ok).toBe(false);
+    expect(!badSubject.ok && badSubject.reason).toBe('PARTNER_NOT_SUBJECT');
+
+    // Creating with a subject you have NO partner edge to → NO_EDGE.
+    const noEdge = await bridge.togetherCreate({ partnerPersonId: cara.id });
+    expect(!noEdge.ok && noEdge.reason).toBe('NO_EDGE');
+  });
+
+  it('deleting the partner edge re-gates the session for both; restoring it restores access (§7)', async () => {
+    const { host, bridge, ben, angel, edgeId } = await seedPair();
+    const created = await bridge.togetherCreate({ partnerPersonId: angel });
+    const sessionId = created.ok ? created.session.id : '';
+    expect(await bridge.togetherList()).toHaveLength(1);
+
+    await bridge.relationshipsDelete(edgeId);
+    expect(await bridge.togetherList()).toHaveLength(0); // inaccessible to the initiator
+    expect(await bridge.togetherGet(sessionId)).toBeNull();
+    await asPerson(host, angel);
+    expect(await bridge.togetherGet(sessionId)).toBeNull(); // …and the partner
+
+    // Restore the edge → access returns (data was never deleted).
+    await asPerson(host, ben);
+    await bridge.relationshipsSave({ fromPersonId: ben, toPersonId: angel, type: 'partner' });
+    expect(await bridge.togetherList()).toHaveLength(1);
+    expect(await bridge.togetherGet(sessionId)).not.toBeNull();
+  });
+
+  it('a corrupt session file is skipped, not fatal (§7 tolerant reads)', async () => {
+    const { host, bridge, angel } = await seedPair();
+    await bridge.togetherCreate({ partnerPersonId: angel });
+    const ctx = (await host.host.vaultAndKey())!;
+    await ctx.fs.writeAtomic(
+      'together/sessions/corrupt/session.enc',
+      new TextEncoder().encode('not-encrypted'),
+    );
+    // The corrupt session is skipped; the real one still lists.
+    expect(await bridge.togetherList()).toHaveLength(1);
+  });
+
+  it('pause is non-attributed: the pauser sees onHold; the partner’s view is unchanged (§8.3)', async () => {
+    const { host, bridge, ben, angel } = await seedPair();
+    const created = await bridge.togetherCreate({ partnerPersonId: angel });
+    const sessionId = created.ok ? created.session.id : '';
+    await asPerson(host, angel);
+    await bridge.togetherAccept(sessionId); // both acked → active
+
+    await asPerson(host, ben);
+    const paused = await bridge.togetherSetPaused({ sessionId, paused: true });
+    expect(paused?.status).toBe('onHold');
+    // Angel's view is unaffected — pause is the pauser's own state only.
+    await asPerson(host, angel);
+    expect((await bridge.togetherGet(sessionId))?.status).toBe('active');
+  });
+
+  it('leave ends the session for both, neutrally (§8.3)', async () => {
+    const { host, bridge, ben, angel } = await seedPair();
+    const created = await bridge.togetherCreate({ partnerPersonId: angel });
+    const sessionId = created.ok ? created.session.id : '';
+    await asPerson(host, angel);
+    await bridge.togetherAccept(sessionId);
+    await bridge.togetherLeave(sessionId);
+    expect((await bridge.togetherGet(sessionId))?.status).toBe('ended');
+    await asPerson(host, ben);
+    expect((await bridge.togetherGet(sessionId))?.status).toBe('ended');
   });
 });

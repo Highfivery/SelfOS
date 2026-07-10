@@ -1,4 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { ClaudeClient, ClaudeMessage, ClaudeStreamResult } from '@selfos/core/host';
 import { flattenContent } from '@selfos/core/host';
 
@@ -91,6 +93,30 @@ export function anthropicClient(): ClaudeClient {
 // E2E fail-safe hook (05-conversations §4.1): whether the one forced-empty chat reply has been served yet.
 // Module-level so it persists across turns within a launch, regardless of client re-instantiation.
 let fakeChatEmptyServed = false;
+// 58-together §10 — whether the one forced-empty COUPLES reply has been served (its own hook; the solo one
+// is one-shot + haiku-gated, so Together needs a separate flag).
+let fakeTogetherEmptyServed = false;
+let togetherPromptSeq = 0;
+
+/**
+ * 58-together §10 — the `SELFOS_FAKE_PROMPT_DIR` capture hook (the `SELFOS_FAKE_SAVE_DIR` precedent): the fake
+ * writes each couples system prompt + transcript to a file the E2E reads, the mechanism behind every
+ * "captured prompt" assert (restricted-absence, register-absence, contract order, deflection phrase). Writes a
+ * per-turn numbered file + a stable `-latest.txt`. Best-effort; never throws into the turn.
+ */
+function captureTogetherPrompt(system: string, transcript: string): void {
+  const dir = process.env['SELFOS_FAKE_PROMPT_DIR'];
+  if (!dir) return;
+  try {
+    mkdirSync(dir, { recursive: true });
+    const body = `SYSTEM:\n${system}\n\nTRANSCRIPT:\n${transcript}\n`;
+    togetherPromptSeq += 1;
+    writeFileSync(join(dir, `together-prompt-${togetherPromptSeq}.txt`), body);
+    writeFileSync(join(dir, 'together-prompt-latest.txt'), body);
+  } catch {
+    // Capture is a test aid — never let it break the turn.
+  }
+}
 
 /** Offline stub (gated by SELFOS_FAKE_CLAUDE) so chat + the connection test are deterministic. */
 export function fakeClaudeClient(): ClaudeClient {
@@ -455,6 +481,35 @@ export function fakeClaudeClient(): ClaudeClient {
         return Promise.resolve({
           text: draft,
           usage: { inputTokens: 160, outputTokens: 60, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+
+      // The couples turn (58 §5.1) — detected by the TOGETHER_ADDENDUM's unique phrase so it can't collide
+      // with the solo chat/guided branches. Captures the prompt (for the §10 restricted/register/order/
+      // deflection asserts), echoes BOTH participants' names (so content-correctness asserts bite — the
+      // #129 lesson), and serves the SELFOS_FAKE_TOGETHER_EMPTY fail-safe once when set.
+      if (
+        (options.system ?? '').includes('facilitating a shared conversation between two partners')
+      ) {
+        captureTogetherPrompt(options.system ?? '', userText);
+        if (process.env['SELFOS_FAKE_TOGETHER_EMPTY'] && !fakeTogetherEmptyServed) {
+          fakeTogetherEmptyServed = true;
+          return Promise.resolve({
+            text: '',
+            usage: { inputTokens: 200, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0 },
+          });
+        }
+        const names = [...(options.system ?? '').matchAll(/private background about (\w+)/g)].map(
+          (m) => m[1],
+        );
+        const [a, b] = [names[0] ?? 'you', names[1] ?? 'you both'];
+        const reply =
+          `I hear you, ${a} and ${b}. Let's slow down and take this one gentle step at a time — ` +
+          "I'd like to hear how it lands for each of you.";
+        for (const word of reply.split(' ')) onDelta(`${word} `);
+        return Promise.resolve({
+          text: reply,
+          usage: { inputTokens: 220, outputTokens: 30, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
       }
 

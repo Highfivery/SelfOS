@@ -60,6 +60,8 @@ export const NOTIFICATION_KINDS = [
   'challenge-followup', // 52-challenge-sessions §3.5 — a gentle "how did your challenge go?" check-in
   'onboarding-updated', // 55-onboarding-attention §3.1 — completed onboarding has new/unanswered questions
   'answers-updated', // 56-answer-review-edit §3.2 — a recipient edited answers after the sender analyzed them
+  'together-invite', // 58-together §3.11 — a partner invited you to a Together session
+  'together-turn', // 58-together §3.11 — your turn in a Together session (coalesced per session, projection signature)
 ] as const;
 export const NotificationKindSchema = z.enum(NOTIFICATION_KINDS);
 export type NotificationKind = z.infer<typeof NotificationKindSchema>;
@@ -2875,3 +2877,206 @@ export interface DreamSharedImage {
   dreamId: string;
   mime: string;
 }
+
+// ── Together: couples sessions (58-together-couples-sessions) ────────────────────────────────────
+// Async, invitation-based, AI-facilitated sessions between connected partners. All records are new
+// (`schemaVersion: 1`), one-writer-per-file (§4) — session status/staleness/turn state are DERIVED on
+// read, never stored, so no file needs a second writer (the one exception, `Agreement`, lands in Phase D).
+
+/**
+ * A Together session (§4.2). Written **once** by the initiator at create, then IMMUTABLE — status,
+ * staleness, and the guided step are all derived on read (§4.3/§3.8/§3.10), so there is never a second
+ * writer. `participantIds` is exactly 2 in v1 but N-ready by design (§2 non-goal).
+ */
+export const TogetherSessionSchema = z.object({
+  id: z.string().min(1),
+  schemaVersion: z.literal(1),
+  pairKey: z.string().min(1),
+  participantIds: z.array(z.string().min(1)).min(2),
+  initiatorPersonId: z.string().min(1), // the payer (§6.2)
+  topic: z.string().optional(), // immutable in v1 (§2 non-goal)
+  guideId: z.string().optional(), // Together catalog entry (§3.10); current STEP is derived from messages
+  createdAt: z.string(),
+});
+export type TogetherSession = z.infer<typeof TogetherSessionSchema>;
+
+/**
+ * Each participant's own state file (§4.2), the ONLY writer being that person. `declinedAt`/`pausedAt`
+ * are honored only in the writer's own projection (§4.3); `leftAt` ends the session for both, neutrally.
+ */
+export const ParticipantStateSchema = z.object({
+  schemaVersion: z.literal(1),
+  personId: z.string().min(1),
+  rulesAckAt: z.string().optional(), // accepting the rules of the room — the consent record (§3.4)
+  declinedAt: z.string().optional(), // decline quietly — honored only in the DECLINER's projection (§3.5)
+  pausedAt: z.string().optional(), // pause-for-me — visible only in the pauser's own view (§8.3)
+  leftAt: z.string().optional(), // ends the session for both, neutrally (§8.3)
+  lastReadMessageAt: z.string().optional(), // drives the unread/turn badges (projection-derived)
+  ynmOptInAt: z.string().optional(), // §3.10b symmetric opt-in; cleared by together:ynmRevoke (Phase F)
+  updatedAt: z.string(),
+});
+export type ParticipantState = z.infer<typeof ParticipantStateSchema>;
+
+/**
+ * A single message in a Together session (§4.2) — write-once by its author's device. A private aside
+ * (and the coach's private reply to it) carries `privateAside: true` + the aside author's
+ * `authorPersonId`, so the projection (§5.2) hides the whole exchange from the partner.
+ */
+export const TogetherMessageSchema = z.object({
+  id: z.string().min(1),
+  schemaVersion: z.literal(1),
+  authorPersonId: z.string().min(1), // the human author; a coach msg carries the turn-runner's id
+  role: z.enum(['user', 'assistant']),
+  content: z.string(),
+  ts: z.string(),
+  privateAside: z.boolean().optional(), // §3.6 — the whole aside EXCHANGE (incl. the coach reply) carries this
+  replyToMessageId: z.string().optional(), // coach msgs: the triggering message; never crosses a masking projection
+  attachments: z.array(AttachmentRefSchema).optional(), // stored under the session's attachments/ (§4.1, Phase C)
+});
+export type TogetherMessage = z.infer<typeof TogetherMessageSchema>;
+
+/**
+ * The private pre-screen outcome (§8.2), stored at `people/<id>/together/prescreen.enc` — read/written
+ * only by its owner. DATA-MINIMIZED: raw answers are evaluated AI-free at submit and NEVER persisted;
+ * only the outcome is retained (the answers would be the most dangerous record in the vault).
+ */
+export const PreScreenResultSchema = z.object({
+  schemaVersion: z.literal(1),
+  personId: z.string().min(1),
+  flagged: z.boolean(), // computed AI-free at submit; the only thing retained
+  itemCatalogVersion: z.number().int().nonnegative(), // which item set was evaluated (re-offer logic)
+  completedAt: z.string(),
+});
+export type PreScreenResult = z.infer<typeof PreScreenResultSchema>;
+
+/** Derived, viewer-projected session status (§4.3). `declined` is internal — the decliner's own list drops it. */
+export const TogetherStatusSchema = z.enum([
+  'invited',
+  'expired',
+  'active',
+  'onHold',
+  'ended',
+  'complete',
+  'declined',
+]);
+export type TogetherStatus = z.infer<typeof TogetherStatusSchema>;
+
+/** A participant descriptor for rendering the avatar pair (names resolved bridge-side). */
+export interface TogetherParticipant {
+  personId: string;
+  displayName: string;
+}
+
+/** One projected message (§5.2) — author-attributed; asides present only for their author. */
+export interface TogetherMessageView {
+  id: string;
+  authorPersonId: string;
+  role: 'user' | 'assistant';
+  content: string;
+  ts: string;
+  privateAside: boolean;
+  replyToMessageId?: string;
+  attachments?: AttachmentRef[];
+}
+
+/** A Together sessions-list summary, every field derived over the viewer's projection (§3 intro). */
+export interface TogetherSessionSummary {
+  id: string;
+  pairKey: string;
+  topic?: string;
+  guideId?: string;
+  initiatorPersonId: string;
+  participants: TogetherParticipant[];
+  status: TogetherStatus;
+  yourTurn: boolean;
+  unreadCount: number;
+  lastMessageSnippet?: string;
+  lastMessageAt?: string;
+  createdAt: string;
+}
+
+/** The full session view — the summary plus the viewer-projected messages + the viewer's own ack flag. */
+export interface TogetherSessionView extends TogetherSessionSummary {
+  messages: TogetherMessageView[];
+  viewerAcked: boolean;
+}
+
+/** Create input (§6.1) — Zod-validated in the bridge before any storage. */
+export const TogetherCreateInputSchema = z.object({
+  partnerPersonId: z.string().min(1),
+  topic: z.string().max(200).optional(),
+  guideId: z.string().min(1).optional(),
+});
+export type TogetherCreateInput = z.infer<typeof TogetherCreateInputSchema>;
+
+export const TogetherSetPausedInputSchema = z.object({
+  sessionId: z.string().min(1),
+  paused: z.boolean(),
+});
+export type TogetherSetPausedInput = z.infer<typeof TogetherSetPausedInputSchema>;
+
+export const TogetherMarkReadInputSchema = z.object({
+  sessionId: z.string().min(1),
+  at: z.string().min(1),
+});
+export type TogetherMarkReadInput = z.infer<typeof TogetherMarkReadInputSchema>;
+
+/**
+ * The result of `together:create` (§6.1) — a discriminated union so the renderer can surface the exact
+ * prerequisite-absent state (§3.13). `PRESCREEN` is populated once the pre-screen gate lands (Phase B).
+ */
+export type TogetherCreateResult =
+  | { ok: true; session: TogetherSessionView }
+  | {
+      ok: false;
+      reason: 'NOT_READY' | 'NOT_ALLOWED' | 'NO_EDGE' | 'PARTNER_NOT_SUBJECT' | 'PRESCREEN';
+      message: string;
+    };
+
+/** One pre-screen item for the renderer (id + prompt + radio choices) — §8.2. */
+export interface TogetherPreScreenItem {
+  id: string;
+  prompt: string;
+  choices: { value: string; label: string }[];
+}
+
+/** The pre-screen state the renderer reads before the ceremony/turn (§8.2). Never carries raw answers. */
+export interface TogetherPreScreenView {
+  completed: boolean; // a pre-screen outcome exists
+  flagged: boolean; // the latest outcome held Together for this person
+  needsScreen: boolean; // must take (or re-take) the screen before create/accept/turns
+  reoffer: boolean; // cleared, but 180+ days old — a gentle re-offer (never gates)
+  items: TogetherPreScreenItem[];
+}
+
+/** The outcome of submitting a pre-screen (§8.2) — the private, per-person result. No raw answers cross. */
+export interface TogetherPreScreenResult {
+  flagged: boolean;
+  showCrisis: boolean;
+  suggestSolo: boolean;
+}
+
+/** Pre-screen submit input — the raw answers are evaluated then DISCARDED host-side (§8.2). */
+export const TogetherPreScreenSubmitSchema = z.object({
+  answers: z.record(z.string(), z.string()),
+});
+export type TogetherPreScreenSubmitInput = z.infer<typeof TogetherPreScreenSubmitSchema>;
+
+/** The result of a couples turn (§5.1) — the refreshed viewer-projected view, or an honest failure (37). */
+export type TogetherTurnResult =
+  | { ok: true; view: TogetherSessionView }
+  | {
+      ok: false;
+      reason: 'NO_KEY' | 'BUDGET' | 'EMPTY' | 'ERROR' | 'PRESCREEN' | 'NOT_ALLOWED';
+      message: string;
+    };
+
+export const TogetherSendMessageInputSchema = z.object({
+  sessionId: z.string().min(1),
+  text: z.string().min(1),
+  privateAside: z.boolean().optional(), // §3.6 — a private aside to the coach
+});
+export type TogetherSendMessageInput = z.infer<typeof TogetherSendMessageInputSchema>;
+
+export const TogetherRetryInputSchema = z.object({ sessionId: z.string().min(1) });
+export type TogetherRetryInput = z.infer<typeof TogetherRetryInputSchema>;

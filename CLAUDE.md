@@ -389,6 +389,41 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-10 — **Build (Together — couples sessions; SPEC 58 Phase A + Phase B BUILT; on `feat/together-foundation`,
+  a git worktree, PR pending).** The first two phases of the new top-level **Together** feature — async,
+  invitation-based, AI-facilitated couples sessions. **Owner decisions asked first:** the pre-screen flag rule =
+  **conservative** (flag on any not-safe-being-honest / afraid / pressure signal; "often afraid" adds crisis
+  resources; "prefer solo first" offers the route but isn't a hard flag), and **all four §11 spec defaults kept**
+  (prep bills its author, wrap-up excludes asides from all artifacts, non-attributed pause, desire-continuity
+  resets per session). **Phase A (backend):** `@selfos/core/together` — session/message/state CRUD + the
+  **viewer-projection derivations** (`deriveStatusFor`, `projectMessages`, `turnStateFor`, `unreadCountFor`,
+  `digestFor`) that make every viewer signal (status/turn/unread/snippet/notification) privacy-safe; capability
+  `together.own` (Member ON); the bridge seam gated on `together.own` + participant membership + a **LIVE partner
+  edge** re-checked on every read/write, every read viewer-projected (the trust boundary); 2 notification kinds.
+  **Phase B (AI + surface):** the **code-enforced `excludeRestricted`** option (threaded `buildContext` →
+  `summarizeForContext` → drops every restricted + sensitive-life-area fact from the couples prompt, incl. the
+  pinned portrait's; default-off = solo byte-identical); the **AI-free pre-screen** (outcome-only storage, raw
+  answers never persisted, the one §5.2 gate); the **couples turn** (`togetherPromptBuilder`: PERSONA+SAFETY →
+  facilitator addendum → per-participant confidentiality contract + `excludeRestricted` context → grounding pack
+  [syntheses + latest alignment] → FORMATTING; `runTogetherTurn`/`retryTogetherReply` = the 05 §4.1 invariants,
+  **initiator-billed**, **aside turns → private coach reply + no artifacts**; `together:chunk` streaming); asymmetric
+  budget honesty (the partner gets a neutral session notice, no ratio/$); the renderer (store, `/together` +
+  `/together/session/:id`, nav gated on `together.own` + a live edge, home/start-flow, the ceremony [rules of the
+  room DERIVED from mechanics, **mechanical-never-absolute** §8.7], the pre-screen form, the author-attributed
+  thread + private-aside composer, two notification providers). **Tests:** 40 core + 14 coreBridge integration
+  (two-persona: quiet-decline projection, aside hidden from partner, budget asymmetry, edge-delete re-gating) + 15
+  RTL/unit + **3 E2E** (the crown jewel: an aside is invisible in the partner's rendered thread while present in the
+  captured prompt [restricted-absence + register-absence + contract-order asserted], decrypt-level; the pre-screen
+  hold + no-raw-answers; gates + 360px). New E2E fakes: `SELFOS_FAKE_PROMPT_DIR` capture hook, a Together fake-Claude
+  branch, `SELFOS_FAKE_TOGETHER_EMPTY`. Gate green post-rebase onto latest main: typecheck/lint/format, \*\*1025 core
+  - 1002 desktop** unit, 3 Together E2E; real-Electron visual QA at desktop (light/dark) + 360px + the ceremony.
+    **Phases C–H remain** (prep spaces/attachments, wrap-up/memory, catalog, explicit register/YNM, pulse,
+    integrations). **Lesson: every viewer-facing signal must be computed over the viewer's PROJECTION, never raw
+    files — one `projectMessages`/`deriveStatusFor` that both list and single-read derive from is what makes a
+    quiet-decline invisible to the initiator and a private aside invisible to the partner across status/turn/unread/
+    snippet/notification at once; and the restricted-exclusion for a shared-output prompt has to be a code path
+    (`excludeRestricted` through the context builders), not a prompt instruction, because the existing store gates
+    keep a subject's own restricted facts IN their own intimacy-topic context and the portrait bypasses the gate.\*\*
 - 2026-07-10 — **Build (Questionnaire Preview & Results redesign — SPEC 08 §20 slice 5/5 BUILT: private results —
   SPEC 08 §20 IS NOW FULLY BUILT; on `feat/questionnaire-private-results`).** The final slice (§20.8), which brings
   the private-send experience together. A private send's Results card stops being a one-line dead end and gets all

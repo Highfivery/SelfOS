@@ -107,6 +107,12 @@ import type {
   SessionStatus,
   SessionSummaryResult,
   TestResult,
+  TogetherCreateResult,
+  TogetherPreScreenResult,
+  TogetherPreScreenView,
+  TogetherSessionSummary,
+  TogetherSessionView,
+  TogetherTurnResult,
   UpdateCheckResult,
   UsageEvent,
   UsageSummary,
@@ -254,6 +260,21 @@ export const IpcChannels = {
   challengesSuggest: 'challenges:suggest',
   challengesGetSuggestion: 'challenges:getSuggestion',
   challengesClearSuggestion: 'challenges:clearSuggestion',
+  // Together / couples sessions (58-together §6.1). All gated by `together.own` + participant membership +
+  // a live `partner` edge; every read is viewer-projected in the bridge (the trust boundary, §5.2).
+  togetherList: 'together:list',
+  togetherGet: 'together:get',
+  togetherCreate: 'together:create',
+  togetherAccept: 'together:accept',
+  togetherDecline: 'together:decline',
+  togetherSetPaused: 'together:setPaused',
+  togetherLeave: 'together:leave',
+  togetherMarkRead: 'together:markRead',
+  togetherPrescreenGet: 'together:prescreenGet',
+  togetherPrescreenSubmit: 'together:prescreenSubmit',
+  togetherSendMessage: 'together:sendMessage',
+  togetherRetry: 'together:retry',
+  togetherChunk: 'together:chunk', // main → renderer event
   assignmentsCreate: 'assignments:create',
   assignmentsInbox: 'assignments:inbox',
   assignmentsSetFavorite: 'assignments:setFavorite',
@@ -919,6 +940,52 @@ export interface SelfosBridge {
   challengesGetSuggestion(): Promise<ChallengeSuggestion | null>;
   /** Clear the cached suggestion (after the person accepts or dismisses it). */
   challengesClearSuggestion(): Promise<void>;
+  /**
+   * Together / couples sessions (58-together §6.1). All gated by `together.own` + participant membership + a
+   * live `partner` edge, re-checked on every call; every read is **viewer-projected** in the bridge (§5.2) —
+   * a private aside (and its coach reply) appears only to its author, a quiet decline never surfaces to the
+   * initiator, and status/turn/unread/snippet are all derived over the caller's projection, never stored.
+   */
+  /** The active person's Together sessions (projection-derived summaries + turn state). */
+  togetherList(): Promise<TogetherSessionSummary[]>;
+  /** One session, viewer-projected (messages + status). Null if not a participant, un-edged, or declined. */
+  togetherGet(id: string): Promise<TogetherSessionView | null>;
+  /** Start a session → invited. Returns a typed prerequisite-absent result on failure (§3.13). */
+  togetherCreate(input: {
+    partnerPersonId: string;
+    topic?: string;
+    guideId?: string;
+  }): Promise<TogetherCreateResult>;
+  /** Accept the rules of the room — writes the caller's `rulesAckAt` consent record (§3.4). */
+  togetherAccept(id: string): Promise<TogetherSessionView | null>;
+  /** Decline quietly — writes the caller's `declinedAt`; the initiator never sees "declined" (§3.5). */
+  togetherDecline(id: string): Promise<void>;
+  /** Pause for me / un-pause — the caller's own `pausedAt`; the partner's view is unchanged (§8.3). */
+  togetherSetPaused(input: {
+    sessionId: string;
+    paused: boolean;
+  }): Promise<TogetherSessionView | null>;
+  /** Leave — ends the session for both, neutrally (§8.3). */
+  togetherLeave(id: string): Promise<TogetherSessionView | null>;
+  /** Mark the caller's read cursor (drives the unread/turn badges). */
+  togetherMarkRead(input: { sessionId: string; at: string }): Promise<void>;
+  /** The caller's own pre-screen state (§8.2) — items + whether they must (re-)take it. Never raw answers. */
+  togetherPrescreenGet(): Promise<TogetherPreScreenView>;
+  /** Submit the caller's pre-screen — evaluated AI-free, only the OUTCOME persisted (raw answers discarded). */
+  togetherPrescreenSubmit(input: {
+    answers: Record<string, string>;
+  }): Promise<TogetherPreScreenResult>;
+  /** Send a message (or a private aside): streams the coach reply via `onTogetherChunk`, resolves with the
+   *  refreshed viewer-projected view. Participant + edge; pre-screen + initiator-budget gates (§5.1/§5.2). */
+  togetherSendMessage(input: {
+    sessionId: string;
+    text: string;
+    privateAside?: boolean;
+  }): Promise<TogetherTurnResult>;
+  /** Reply-only regeneration for a session whose newest message is an unanswered human message (§7). */
+  togetherRetry(input: { sessionId: string }): Promise<TogetherTurnResult>;
+  /** Subscribe to streamed couples-turn reply chunks (a separate sink from chat — §5.4). */
+  onTogetherChunk(listener: (delta: string) => void): () => void;
   /**
    * Send a questionnaire to its BOUND household recipient (in-app), freezing an immutable snapshot at send.
    * The recipient is set on the questionnaire at creation (08 §17.3) — it is NOT passed here. Returns the

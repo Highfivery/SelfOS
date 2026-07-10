@@ -132,6 +132,20 @@ import {
   type SessionSummaryResult,
   type TestResult,
   type UpdateCheckResult,
+  TogetherCreateInputSchema,
+  TogetherSetPausedInputSchema,
+  TogetherMarkReadInputSchema,
+  type TogetherSession,
+  type TogetherSessionSummary,
+  type TogetherSessionView,
+  type TogetherParticipant,
+  type TogetherCreateResult,
+  type TogetherPreScreenView,
+  type TogetherPreScreenResult,
+  TogetherPreScreenSubmitSchema,
+  type TogetherTurnResult,
+  TogetherSendMessageInputSchema,
+  TogetherRetryInputSchema,
 } from './schemas';
 import { OWNER_ROLE_ID, roleAllows, type CapabilityKey } from './capabilities';
 import { runConnectionTest } from './claudeProxy';
@@ -235,6 +249,25 @@ import {
   storeConversationAttachment,
   suggestGuidedSessions,
 } from '@selfos/core/conversations';
+import {
+  createSession as createTogetherSession,
+  digestFor,
+  evaluatePreScreen,
+  getPreScreen,
+  getSession as getTogetherSession,
+  isPreScreenComplete,
+  listMessages as listTogetherMessages,
+  listSessionsForPerson as listTogetherSessionsForPerson,
+  listStates as listTogetherStates,
+  preScreenClears,
+  preScreenNeedsReoffer,
+  PRESCREEN_ITEMS,
+  projectMessages as projectTogetherMessages,
+  retryTogetherReply,
+  runTogetherTurn,
+  savePreScreenOutcome,
+  updateState as updateTogetherState,
+} from '@selfos/core/together';
 import { sniffImageMime } from '@selfos/core/media';
 import {
   deleteInsight,
@@ -480,6 +513,8 @@ export interface BridgeHost {
   emitDreamChunk(chunk: string): void;
   /** Deliver an intake interview reply chunk to the renderer (separate channel from chat/dreams). */
   emitIntakeChunk(chunk: string): void;
+  /** Deliver a Together couples-turn reply chunk to the renderer (separate sink from chat, 58 §5.4). */
+  emitTogetherChunk(chunk: string): void;
 
   // --- Platform-specific surface, forwarded verbatim to the renderer-facing bridge ---
   getBootState(): Promise<BootState>;
@@ -511,6 +546,8 @@ export interface BridgeHost {
   onDreamChunk(listener: (delta: string) => void): () => void;
   /** Subscribe to streamed intake interview chunks; the counterpart to `emitIntakeChunk`. */
   onIntakeChunk(listener: (delta: string) => void): () => void;
+  /** Subscribe to streamed Together couples-turn chunks; the counterpart to `emitTogetherChunk`. */
+  onTogetherChunk(listener: (delta: string) => void): () => void;
 }
 
 /** Vault-relative path of the plain-JSON, vault-scoped settings file (02-app-shell). */
@@ -901,6 +938,148 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     });
   };
 
+  // ── Together (58) access helpers — the trust boundary is here, not the renderer (§5.2) ─────────────
+  // Every read/write authorizes by `together.own` + participant membership + a LIVE `partner` edge to
+  // every other participant, re-checked on each call (deleting the edge instantly re-gates everything).
+
+  /** Whether the active person has a live `partner` edge to every one of `otherIds` (order-independent). */
+  const togetherEdgeLive = async (
+    fs: FileSystem,
+    key: Uint8Array,
+    viewerId: string,
+    otherIds: string[],
+  ): Promise<boolean> => {
+    const rels = await listRelationships(fs, key);
+    return otherIds.every((oid) =>
+      relationshipTypesFromSubjectToViewer(viewerId, oid, rels).includes('partner'),
+    );
+  };
+
+  /** ctx + active person, gated on `together.own`. Null if not ready or not allowed (surface is hidden). */
+  const togetherCtx = async (): Promise<{
+    fs: FileSystem;
+    key: Uint8Array;
+    personId: string;
+  } | null> => {
+    const ctx = await host.vaultAndKey();
+    const personId = ctx ? await activePersonId() : null;
+    if (!ctx || !personId) return null;
+    if (!(await activePersonCan(ctx.fs, ctx.key, 'together.own'))) return null;
+    return { fs: ctx.fs, key: ctx.key, personId };
+  };
+
+  /**
+   * The pre-screen gate (§5.2 one rule): a person may create/accept/take a turn only when their LATEST
+   * pre-screen is present AND not flagged. The OTHER participant only ever sees invited/waiting (§8.2).
+   */
+  const togetherPreScreenClears = async (
+    fs: FileSystem,
+    key: Uint8Array,
+    personId: string,
+  ): Promise<boolean> => preScreenClears(await getPreScreen(fs, key, personId));
+
+  /** A session the active person may access — membership + live edge — else null (§5.2). */
+  const accessibleTogetherSession = async (
+    fs: FileSystem,
+    key: Uint8Array,
+    personId: string,
+    id: string,
+  ): Promise<TogetherSession | null> => {
+    const session = await getTogetherSession(fs, key, id);
+    if (!session || !session.participantIds.includes(personId)) return null;
+    const others = session.participantIds.filter((p) => p !== personId);
+    return (await togetherEdgeLive(fs, key, personId, others)) ? session : null;
+  };
+
+  const togetherParticipants = async (
+    fs: FileSystem,
+    key: Uint8Array,
+    session: TogetherSession,
+  ): Promise<TogetherParticipant[]> => {
+    const out: TogetherParticipant[] = [];
+    for (const pid of session.participantIds) {
+      out.push({
+        personId: pid,
+        displayName: (await getPerson(fs, key, pid))?.displayName ?? 'Someone',
+      });
+    }
+    return out;
+  };
+
+  /** Build the viewer's list summary — every derived field over their projection (§5.2). */
+  const buildTogetherSummary = async (
+    fs: FileSystem,
+    key: Uint8Array,
+    session: TogetherSession,
+    viewerId: string,
+    now: Date,
+  ): Promise<TogetherSessionSummary> => {
+    const states = await listTogetherStates(fs, key, session.id);
+    const messages = await listTogetherMessages(fs, key, session.id);
+    const digest = digestFor(session, states, null, messages, viewerId, now); // reportCreatedAt: Phase D
+    return {
+      id: session.id,
+      pairKey: session.pairKey,
+      ...(session.topic ? { topic: session.topic } : {}),
+      ...(session.guideId ? { guideId: session.guideId } : {}),
+      initiatorPersonId: session.initiatorPersonId,
+      participants: await togetherParticipants(fs, key, session),
+      status: digest.status,
+      yourTurn: digest.yourTurn,
+      unreadCount: digest.unreadCount,
+      ...(digest.lastMessageSnippet !== undefined
+        ? { lastMessageSnippet: digest.lastMessageSnippet }
+        : {}),
+      ...(digest.lastMessageAt !== undefined ? { lastMessageAt: digest.lastMessageAt } : {}),
+      createdAt: session.createdAt,
+    };
+  };
+
+  /** The full viewer-projected session view (summary + projected messages + the viewer's own ack flag). */
+  const buildTogetherView = async (
+    fs: FileSystem,
+    key: Uint8Array,
+    session: TogetherSession,
+    viewerId: string,
+    now: Date,
+  ): Promise<TogetherSessionView> => {
+    const summary = await buildTogetherSummary(fs, key, session, viewerId, now);
+    const states = await listTogetherStates(fs, key, session.id);
+    const messages = await listTogetherMessages(fs, key, session.id);
+    return {
+      ...summary,
+      messages: projectTogetherMessages(messages, viewerId),
+      viewerAcked: Boolean(states.get(viewerId)?.rulesAckAt),
+    };
+  };
+
+  /**
+   * Map a core turn outcome → the renderer-facing `TogetherTurnResult`. On BUDGET, honesty is asymmetric
+   * (§6.2): the INITIATOR sees their own standard budget message; the non-initiator gets a NEUTRAL,
+   * session-scoped notice — no ratio, no `$`, no naming of whose budget. On success, the refreshed view.
+   */
+  const togetherTurnResult = async (
+    fs: FileSystem,
+    key: Uint8Array,
+    session: TogetherSession,
+    viewerId: string,
+    outcome: { ok: true } | { ok: false; reason: string; message: string },
+  ): Promise<TogetherTurnResult> => {
+    if (outcome.ok) {
+      return { ok: true, view: await buildTogetherView(fs, key, session, viewerId, new Date()) };
+    }
+    if (outcome.reason === 'BUDGET') {
+      const message =
+        viewerId === session.initiatorPersonId
+          ? outcome.message
+          : 'AI replies are paused for this session until next period.';
+      return { ok: false, reason: 'BUDGET', message };
+    }
+    const reason: 'NO_KEY' | 'EMPTY' | 'ERROR' =
+      outcome.reason === 'NO_KEY' || outcome.reason === 'EMPTY' ? outcome.reason : 'ERROR';
+    return { ok: false, reason, message: outcome.message };
+  };
+
   const AI_KEY_IDS = { anthropic: ANTHROPIC_API_KEY_ID, openai: OPENAI_API_KEY_ID } as const;
 
   /**
@@ -1093,6 +1272,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     onChatChunk: (listener) => host.onChatChunk(listener),
     onDreamChunk: (listener) => host.onDreamChunk(listener),
     onIntakeChunk: (listener) => host.onIntakeChunk(listener),
+    onTogetherChunk: (listener) => host.onTogetherChunk(listener),
     platform: host.platform,
     // iOS/web have no OS window chrome, so there is no fullscreen-titlebar transition to report.
     onFullscreenChanged: () => () => {},
@@ -1832,6 +2012,274 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         onDelta: (text) => host.emitChatChunk(text),
         now: new Date(),
       });
+    },
+
+    // --- Together: couples sessions (58) — every handler gates on together.own + membership + live edge ---
+    togetherList: async (): Promise<TogetherSessionSummary[]> => {
+      const c = await togetherCtx();
+      if (!c) return [];
+      const now = new Date();
+      const rels = await listRelationships(c.fs, c.key);
+      const sessions = await listTogetherSessionsForPerson(c.fs, c.key, c.personId);
+      const out: TogetherSessionSummary[] = [];
+      for (const session of sessions) {
+        const others = session.participantIds.filter((p) => p !== c.personId);
+        // Live-edge gate: an un-edged pair is inaccessible to both (deleting the edge removes it).
+        if (
+          !others.every((oid) =>
+            relationshipTypesFromSubjectToViewer(c.personId, oid, rels).includes('partner'),
+          )
+        ) {
+          continue;
+        }
+        const summary = await buildTogetherSummary(c.fs, c.key, session, c.personId, now);
+        // The decliner's own list drops the session entirely (§3.5); everyone else never sees a quiet decline.
+        if (summary.status !== 'declined') out.push(summary);
+      }
+      // Newest activity first; an un-messaged session falls back to its create time.
+      return out.sort((a, b) =>
+        (b.lastMessageAt ?? b.createdAt).localeCompare(a.lastMessageAt ?? a.createdAt),
+      );
+    },
+    togetherGet: async (id): Promise<TogetherSessionView | null> => {
+      const c = await togetherCtx();
+      if (!c) return null;
+      const session = await accessibleTogetherSession(
+        c.fs,
+        c.key,
+        c.personId,
+        z.string().min(1).parse(id),
+      );
+      if (!session) return null;
+      const view = await buildTogetherView(c.fs, c.key, session, c.personId, new Date());
+      // The decliner sees nothing — even a direct get returns null (§3.5).
+      return view.status === 'declined' ? null : view;
+    },
+    togetherCreate: async (input): Promise<TogetherCreateResult> => {
+      const { partnerPersonId, topic, guideId } = TogetherCreateInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId) {
+        return { ok: false, reason: 'NOT_READY', message: 'SelfOS isn’t ready yet.' };
+      }
+      if (!(await activePersonCan(ctx.fs, ctx.key, 'together.own'))) {
+        return { ok: false, reason: 'NOT_ALLOWED', message: 'You can’t start Together sessions.' };
+      }
+      if (partnerPersonId === personId) {
+        return { ok: false, reason: 'NO_EDGE', message: 'Pick a partner other than yourself.' };
+      }
+      // The partner must be a subject WITH a login account (a non-subject contact can't participate — §3.1).
+      const partner = await getPerson(ctx.fs, ctx.key, partnerPersonId);
+      const access = await getAccessConfig(ctx.fs, ctx.key);
+      const hasAccount = access.accounts.some((a) => a.personId === partnerPersonId);
+      if (!partner || !partner.isSubject || !hasAccount) {
+        return {
+          ok: false,
+          reason: 'PARTNER_NOT_SUBJECT',
+          message: 'That person needs a SelfOS login in this household to join.',
+        };
+      }
+      if (!(await togetherEdgeLive(ctx.fs, ctx.key, personId, [partnerPersonId]))) {
+        return {
+          ok: false,
+          reason: 'NO_EDGE',
+          message: 'Together with this person isn’t available.',
+        };
+      }
+      // The pre-screen gate (§8.2): the initiator must have cleared their own private check before starting.
+      if (!(await togetherPreScreenClears(ctx.fs, ctx.key, personId))) {
+        return { ok: false, reason: 'PRESCREEN', message: 'Take the private check first.' };
+      }
+      const session = await createTogetherSession(
+        ctx.fs,
+        ctx.key,
+        {
+          initiatorPersonId: personId,
+          participantIds: [personId, partnerPersonId],
+          ...(topic !== undefined ? { topic } : {}),
+          ...(guideId !== undefined ? { guideId } : {}),
+        },
+        new Date(),
+      );
+      return {
+        ok: true,
+        session: await buildTogetherView(ctx.fs, ctx.key, session, personId, new Date()),
+      };
+    },
+    togetherAccept: async (id): Promise<TogetherSessionView | null> => {
+      const c = await togetherCtx();
+      if (!c) return null;
+      const session = await accessibleTogetherSession(
+        c.fs,
+        c.key,
+        c.personId,
+        z.string().min(1).parse(id),
+      );
+      if (!session) return null;
+      // Defense in depth (§8.2): accept requires the caller's own cleared pre-screen. The renderer routes to
+      // the pre-screen form first (via `togetherPrescreenGet`), so this null is a belt-and-suspenders guard.
+      if (!(await togetherPreScreenClears(c.fs, c.key, c.personId))) return null;
+      await updateTogetherState(
+        c.fs,
+        c.key,
+        session.id,
+        c.personId,
+        { rulesAckAt: new Date().toISOString() },
+        new Date(),
+      );
+      return buildTogetherView(c.fs, c.key, session, c.personId, new Date());
+    },
+    togetherDecline: async (id): Promise<void> => {
+      const c = await togetherCtx();
+      if (!c) return;
+      const session = await accessibleTogetherSession(
+        c.fs,
+        c.key,
+        c.personId,
+        z.string().min(1).parse(id),
+      );
+      if (!session) return;
+      await updateTogetherState(
+        c.fs,
+        c.key,
+        session.id,
+        c.personId,
+        { declinedAt: new Date().toISOString() },
+        new Date(),
+      );
+    },
+    togetherSetPaused: async (input): Promise<TogetherSessionView | null> => {
+      const { sessionId, paused } = TogetherSetPausedInputSchema.parse(input);
+      const c = await togetherCtx();
+      if (!c) return null;
+      const session = await accessibleTogetherSession(c.fs, c.key, c.personId, sessionId);
+      if (!session) return null;
+      await updateTogetherState(
+        c.fs,
+        c.key,
+        session.id,
+        c.personId,
+        { pausedAt: paused ? new Date().toISOString() : undefined },
+        new Date(),
+      );
+      return buildTogetherView(c.fs, c.key, session, c.personId, new Date());
+    },
+    togetherLeave: async (id): Promise<TogetherSessionView | null> => {
+      const c = await togetherCtx();
+      if (!c) return null;
+      const session = await accessibleTogetherSession(
+        c.fs,
+        c.key,
+        c.personId,
+        z.string().min(1).parse(id),
+      );
+      if (!session) return null;
+      await updateTogetherState(
+        c.fs,
+        c.key,
+        session.id,
+        c.personId,
+        { leftAt: new Date().toISOString() },
+        new Date(),
+      );
+      return buildTogetherView(c.fs, c.key, session, c.personId, new Date());
+    },
+    togetherMarkRead: async (input): Promise<void> => {
+      const { sessionId, at } = TogetherMarkReadInputSchema.parse(input);
+      const c = await togetherCtx();
+      if (!c) return;
+      const session = await accessibleTogetherSession(c.fs, c.key, c.personId, sessionId);
+      if (!session) return;
+      await updateTogetherState(
+        c.fs,
+        c.key,
+        session.id,
+        c.personId,
+        { lastReadMessageAt: at },
+        new Date(),
+      );
+    },
+    togetherPrescreenGet: async (): Promise<TogetherPreScreenView> => {
+      const items = PRESCREEN_ITEMS.map((i) => ({
+        id: i.id,
+        prompt: i.prompt,
+        choices: i.choices.map((ch) => ({ value: ch.value, label: ch.label })),
+      }));
+      const c = await togetherCtx();
+      if (!c) return { completed: false, flagged: false, needsScreen: true, reoffer: false, items };
+      const result = await getPreScreen(c.fs, c.key, c.personId);
+      return {
+        completed: result !== null,
+        flagged: result?.flagged === true,
+        needsScreen: !preScreenClears(result),
+        reoffer: preScreenNeedsReoffer(result, new Date()),
+        items,
+      };
+    },
+    togetherPrescreenSubmit: async (input): Promise<TogetherPreScreenResult> => {
+      const { answers } = TogetherPreScreenSubmitSchema.parse(input);
+      const c = await togetherCtx();
+      // Not ready, or an incomplete screen → a safe HELD default (never persist a false "clear").
+      if (!c || !isPreScreenComplete(answers)) {
+        return { flagged: true, showCrisis: false, suggestSolo: true };
+      }
+      const evaluation = evaluatePreScreen(answers);
+      // Persist ONLY the outcome — the raw answers are evaluated here and then discarded (§8.2).
+      await savePreScreenOutcome(c.fs, c.key, c.personId, evaluation.flagged, new Date());
+      return evaluation;
+    },
+    togetherSendMessage: async (input): Promise<TogetherTurnResult> => {
+      const { sessionId, text, privateAside } = TogetherSendMessageInputSchema.parse(input);
+      const c = await togetherCtx();
+      if (!c) return { ok: false, reason: 'NOT_ALLOWED', message: 'SelfOS isn’t ready yet.' };
+      const session = await accessibleTogetherSession(c.fs, c.key, c.personId, sessionId);
+      if (!session) {
+        return { ok: false, reason: 'NOT_ALLOWED', message: 'Together isn’t available right now.' };
+      }
+      // The pre-screen gate applies to EVERY turn (§5.2 one rule) — for the active writer only.
+      if (!(await togetherPreScreenClears(c.fs, c.key, c.personId))) {
+        return { ok: false, reason: 'PRESCREEN', message: 'Take the private check first.' };
+      }
+      const apiKey = (await resolveAiKey(host.secrets, c.fs, c.key)).key ?? null;
+      const outcome = await runTogetherTurn({
+        fs: c.fs,
+        key: c.key,
+        client: host.claude,
+        apiKey,
+        model: await host.activeModel(),
+        session,
+        authorPersonId: c.personId,
+        userText: text,
+        ...(privateAside ? { privateAside: true } : {}),
+        onDelta: (delta) => host.emitTogetherChunk(delta),
+        now: new Date(),
+      });
+      return togetherTurnResult(c.fs, c.key, session, c.personId, outcome);
+    },
+    togetherRetry: async (input): Promise<TogetherTurnResult> => {
+      const { sessionId } = TogetherRetryInputSchema.parse(input);
+      const c = await togetherCtx();
+      if (!c) return { ok: false, reason: 'NOT_ALLOWED', message: 'SelfOS isn’t ready yet.' };
+      const session = await accessibleTogetherSession(c.fs, c.key, c.personId, sessionId);
+      if (!session) {
+        return { ok: false, reason: 'NOT_ALLOWED', message: 'Together isn’t available right now.' };
+      }
+      if (!(await togetherPreScreenClears(c.fs, c.key, c.personId))) {
+        return { ok: false, reason: 'PRESCREEN', message: 'Take the private check first.' };
+      }
+      const apiKey = (await resolveAiKey(host.secrets, c.fs, c.key)).key ?? null;
+      const outcome = await retryTogetherReply({
+        fs: c.fs,
+        key: c.key,
+        client: host.claude,
+        apiKey,
+        model: await host.activeModel(),
+        session,
+        authorPersonId: c.personId,
+        onDelta: (delta) => host.emitTogetherChunk(delta),
+        now: new Date(),
+      });
+      return togetherTurnResult(c.fs, c.key, session, c.personId, outcome);
     },
 
     // --- Session image attachments (45 §6) — gated by `sessions.own`, scoped to the active person ---

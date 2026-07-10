@@ -87,6 +87,7 @@ function createBridgeHost(parts: HostParts): BridgeHost {
   const chatListeners = new Set<(delta: string) => void>();
   const dreamListeners = new Set<(delta: string) => void>();
   const intakeListeners = new Set<(delta: string) => void>();
+  const togetherListeners = new Set<(delta: string) => void>();
 
   const activeVaultId = async (): Promise<string | null> =>
     (await deviceStore.read()).vaultBookmark ?? null;
@@ -162,6 +163,9 @@ function createBridgeHost(parts: HostParts): BridgeHost {
     emitIntakeChunk: (chunk) => {
       for (const listener of intakeListeners) listener(chunk);
     },
+    emitTogetherChunk: (chunk) => {
+      for (const listener of togetherListeners) listener(chunk);
+    },
     getBootState: bootState,
     refreshBootState: bootState,
     selectVaultFolder: parts.selectVaultFolder,
@@ -215,6 +219,10 @@ function createBridgeHost(parts: HostParts): BridgeHost {
     onIntakeChunk: (listener) => {
       intakeListeners.add(listener);
       return () => intakeListeners.delete(listener);
+    },
+    onTogetherChunk: (listener) => {
+      togetherListeners.add(listener);
+      return () => togetherListeners.delete(listener);
     },
   };
 }

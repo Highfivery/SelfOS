@@ -306,6 +306,30 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
       Promise.resolve({ ok: false, reason: 'EMPTY', message: 'Nothing yet.' }),
     challengesGetSuggestion: () => Promise.resolve(null),
     challengesClearSuggestion: () => Promise.resolve(),
+    // Together / couples sessions (58).
+    togetherList: () => Promise.resolve([]),
+    togetherGet: () => Promise.resolve(null),
+    togetherCreate: () => Promise.resolve({ ok: false, reason: 'NO_EDGE', message: 'No partner.' }),
+    togetherAccept: () => Promise.resolve(null),
+    togetherDecline: () => Promise.resolve(),
+    togetherSetPaused: () => Promise.resolve(null),
+    togetherLeave: () => Promise.resolve(null),
+    togetherMarkRead: () => Promise.resolve(),
+    togetherPrescreenGet: () =>
+      Promise.resolve({
+        completed: false,
+        flagged: false,
+        needsScreen: true,
+        reoffer: false,
+        items: [],
+      }),
+    togetherPrescreenSubmit: () =>
+      Promise.resolve({ flagged: false, showCrisis: false, suggestSolo: false }),
+    togetherSendMessage: () =>
+      Promise.resolve({ ok: false, reason: 'NOT_ALLOWED', message: 'Not available.' }),
+    togetherRetry: () =>
+      Promise.resolve({ ok: false, reason: 'NOT_ALLOWED', message: 'Not available.' }),
+    onTogetherChunk: () => () => {},
     assignmentsCreate: (input) =>
       Promise.resolve({
         assignment: {

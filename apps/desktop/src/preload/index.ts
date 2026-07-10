@@ -189,6 +189,20 @@ const bridge: SelfosBridge = {
   challengesSuggest: (input) => ipcRenderer.invoke(IpcChannels.challengesSuggest, input),
   challengesGetSuggestion: () => ipcRenderer.invoke(IpcChannels.challengesGetSuggestion),
   challengesClearSuggestion: () => ipcRenderer.invoke(IpcChannels.challengesClearSuggestion),
+  // Together / couples sessions (58).
+  togetherList: () => ipcRenderer.invoke(IpcChannels.togetherList),
+  togetherGet: (id) => ipcRenderer.invoke(IpcChannels.togetherGet, id),
+  togetherCreate: (input) => ipcRenderer.invoke(IpcChannels.togetherCreate, input),
+  togetherAccept: (id) => ipcRenderer.invoke(IpcChannels.togetherAccept, id),
+  togetherDecline: (id) => ipcRenderer.invoke(IpcChannels.togetherDecline, id),
+  togetherSetPaused: (input) => ipcRenderer.invoke(IpcChannels.togetherSetPaused, input),
+  togetherLeave: (id) => ipcRenderer.invoke(IpcChannels.togetherLeave, id),
+  togetherMarkRead: (input) => ipcRenderer.invoke(IpcChannels.togetherMarkRead, input),
+  togetherPrescreenGet: () => ipcRenderer.invoke(IpcChannels.togetherPrescreenGet),
+  togetherPrescreenSubmit: (input) =>
+    ipcRenderer.invoke(IpcChannels.togetherPrescreenSubmit, input),
+  togetherSendMessage: (input) => ipcRenderer.invoke(IpcChannels.togetherSendMessage, input),
+  togetherRetry: (input) => ipcRenderer.invoke(IpcChannels.togetherRetry, input),
   assignmentsCreate: (input) => ipcRenderer.invoke(IpcChannels.assignmentsCreate, input),
   assignmentsInbox: () => ipcRenderer.invoke(IpcChannels.assignmentsInbox),
   assignmentsSetFavorite: (input) => ipcRenderer.invoke(IpcChannels.assignmentsSetFavorite, input),
@@ -275,6 +289,13 @@ const bridge: SelfosBridge = {
     ipcRenderer.on(IpcChannels.intakeChunk, handler);
     return () => {
       ipcRenderer.removeListener(IpcChannels.intakeChunk, handler);
+    };
+  },
+  onTogetherChunk: (listener) => {
+    const handler = (_event: unknown, delta: string): void => listener(delta);
+    ipcRenderer.on(IpcChannels.togetherChunk, handler);
+    return () => {
+      ipcRenderer.removeListener(IpcChannels.togetherChunk, handler);
     };
   },
   intakeSkipSection: (input) => ipcRenderer.invoke(IpcChannels.intakeSkipSection, input),

@@ -13,6 +13,7 @@ import {
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
+  Heart,
   Settings,
   Shapes,
   Share2,
@@ -40,6 +41,7 @@ import { useIntakeStore } from '../stores/intakeStore';
 import { useSynthesisStore } from '../stores/synthesisStore';
 import { useNotificationStore } from '../stores/notificationStore';
 import { useDiscoveryStore } from '../stores/discoveryStore';
+import { togetherWaitingCount, useTogetherStore } from '../stores/togetherStore';
 import { useNotificationSources } from './notifications/useNotificationSources';
 import { useUpdateChecks } from './notifications/useUpdateChecks';
 import { useMemoryReconcile } from './notifications/useMemoryReconcile';
@@ -71,6 +73,11 @@ export function AppShell(): JSX.Element {
   const inboxCount = unansweredCount(inboxItems);
   const canOwnDreams = useSessionStore((s) => s.can('dreams.own'));
   const canTakeTests = useSessionStore((s) => s.can('tests.own'));
+  // Together (58 §3.1): the nav shows only with `together.own` AND a live partner edge; the badge counts
+  // sessions waiting on you (invitations + your-turn), derived over your projection.
+  const canTogether = useSessionStore((s) => s.can('together.own'));
+  const togetherHasPartner = useTogetherStore((s) => s.hasPartner);
+  const togetherSessions = useTogetherStore((s) => s.sessions);
   const canDoIntake = useSessionStore((s) => s.can('intake.own'));
   const intakeLoaded = useIntakeStore((s) => s.loaded);
   const intakeState = useIntakeStore((s) => s.state);
@@ -93,6 +100,7 @@ export function AppShell(): JSX.Element {
   });
   const locked = useSessionStore((s) => s.locked);
   const activePersonId = useSessionStore((s) => s.activePerson?.id ?? null);
+  const togetherWaiting = togetherWaitingCount(togetherSessions, activePersonId);
   const collapsed = useNavStore((s) => s.collapsed);
   const toggleSidebar = useNavStore((s) => s.toggle);
   const [switching, setSwitching] = useState(false);
@@ -133,6 +141,7 @@ export function AppShell(): JSX.Element {
     useSynthesisStore.getState().reset(); // the cached cross-feature synthesis is per-person (40 §5.3)
     useNotificationStore.getState().reset(); // notifications are per-person, device-local (35 §4)
     useDiscoveryStore.getState().reset(); // orientation/tip dismissals are per-person, device-local (41 §4)
+    useTogetherStore.getState().reset(); // Together sessions are per-person (58 §5.3)
     void useNotificationStore.getState().load();
     void useDiscoveryStore.getState().load();
     void useConversationStore.getState().load();
@@ -144,7 +153,8 @@ export function AppShell(): JSX.Element {
     void useInsightStore.getState().load();
     void useGoalStore.getState().load();
     void useChallengeStore.getState().load();
-  }, [activePersonId]);
+    if (canTogether) void useTogetherStore.getState().load(); // drives the nav visibility + badge (58 §3.1)
+  }, [activePersonId, canTogether]);
 
   // Collapse any open drawer when the viewport grows back to desktop (where the sidebar is permanent).
   useEffect(() => {
@@ -357,6 +367,25 @@ export function AppShell(): JSX.Element {
               >
                 <Compass size={18} aria-hidden="true" />
                 <span className={styles.label}>You</span>
+              </NavLink>
+            ) : null}
+            {canTogether && togetherHasPartner ? (
+              <NavLink
+                to="/together"
+                className={navClass}
+                aria-label={
+                  togetherWaiting > 0 ? `Together, ${togetherWaiting} waiting on you` : 'Together'
+                }
+                title={tip('Together')}
+                onClick={closeDrawer}
+              >
+                <Heart size={18} aria-hidden="true" />
+                <span className={styles.label}>Together</span>
+                {togetherWaiting > 0 ? (
+                  <span className={styles.navBadge} aria-hidden="true">
+                    {togetherWaiting}
+                  </span>
+                ) : null}
               </NavLink>
             ) : null}
             {canViewMemory ? (

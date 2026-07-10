@@ -21,6 +21,7 @@
     "./people": "./src/people/index.ts",
     "./usage": "./src/usage/index.ts",
     "./conversations": "./src/conversations/index.ts",
+    "./together": "./src/together/index.ts",
     "./insights": "./src/insights/index.ts",
     "./goals": "./src/goals/index.ts",
     "./challenges": "./src/challenges/index.ts",

@@ -407,7 +407,13 @@ export async function summarizeForContext(
   related: RelatedForContext[],
   topic?: ContextTopic,
   viewerName?: string,
+  // 58-together §6.3 — the CODE-ENFORCED restricted exclusion for Together couples prompts. When on, every
+  // `restricted` (break-glass) AND sensitive-life-area fact is dropped from the subject's OWN emit — including
+  // the pinned portrait's (otherwise exempt from gating) and the intimacy-topic-gated facts (which otherwise
+  // DO feed the subject's own context). Default OFF, so every solo caller is byte-identical.
+  options?: { excludeRestricted?: boolean },
 ): Promise<string> {
+  const excludeRestricted = options?.excludeRestricted === true;
   const lines: string[] = [];
 
   const feedable = await feedableInsights(
@@ -425,9 +431,16 @@ export async function summarizeForContext(
     for (const insight of own) {
       // A fact the person flagged as inaccurate (20-memory-dashboard §3.6) is excluded from context
       // immediately — the coach stops using it at once, even before the next reconciliation.
-      const liveFacts = insight.facts.filter((fact) => !fact.flaggedInaccurate);
+      let liveFacts = insight.facts.filter((fact) => !fact.flaggedInaccurate);
+      // 58-together §6.3 — the couples prompt drops every restricted/sensitive fact BEFORE the gate + emit, so
+      // no break-glass trauma/intimacy fact ever reaches a prompt the partner reads. A mixed insight keeps its
+      // safe summary; a now-wholly-filtered insight is dropped below (its summary would restate the content).
+      if (excludeRestricted) {
+        liveFacts = liveFacts.filter((fact) => !fact.restricted && !isSensitiveContextFact(fact));
+      }
       // A WHOLLY-flagged insight (had facts, all now flagged — e.g. the user flagged the whole insight) is
       // dropped entirely: its summary restates the corrected claim, so it must not reach the coach either.
+      // (With `excludeRestricted`, a wholly-restricted/sensitive insight lands here too — summary dropped.)
       if (insight.facts.length > 0 && liveFacts.length === 0) continue;
       // A SENSITIVE non-portrait insight (a kink/sexuality self-assessment, 50-self-assessments §3.4): its
       // restricted facts are relevance-gated to an intimacy-topic context — gate the WHOLE insight (summary +

@@ -81,9 +81,16 @@ export async function buildContext(
   // The call's topic (28-portrait-synthesis-optimization §pillar-2): when present, the pinned onboarding
   // portrait emits the facts relevant to these life-areas (+ the always-on core). Absent ⇒ core + fill.
   topic?: ContextTopic,
+  // 58-together §6.3 — code-enforced restricted exclusion for Together couples prompts (default OFF, so every
+  // solo caller is byte-identical). Threaded into `summarizeForContext` → the own-insight fact filter.
+  // `ownContextOnly` (§6.3) drops the related-people block entirely — the couples prompt gives each partner
+  // their OWN dedicated block, so the cross-shared block is redundant AND the re-admission vector that would
+  // otherwise let a partner's sensitive (Intimacy-life-area, non-restricted) shared fact back into the prompt.
+  options?: { excludeRestricted?: boolean; ownContextOnly?: boolean },
 ): Promise<string> {
   const person = await getPerson(fs, key, personId);
   if (!person) return '';
+  const ownContextOnly = options?.ownContextOnly === true;
 
   const people = await listPeople(fs, key);
   const relationships = await listRelationships(fs, key);
@@ -103,7 +110,10 @@ export async function buildContext(
   );
   const related: RelatedForContext[] = [];
   const seenRelated = new Set<string>();
-  if (theirs.length > 0) {
+  // `ownContextOnly` (58 §6.3): skip the related-people block AND leave `related` empty, so
+  // `summarizeForContext` below emits no cross-shared block — each Together partner's block is their own data
+  // only (no partner facts re-admitted, and the confidentiality contract wraps only that person's own data).
+  if (!ownContextOnly && theirs.length > 0) {
     lines.push('People in their life:');
     for (const relationship of theirs) {
       const otherId =
@@ -154,6 +164,7 @@ export async function buildContext(
     related,
     topic,
     person.displayName,
+    options,
   );
   if (insightContext) lines.push(insightContext);
 

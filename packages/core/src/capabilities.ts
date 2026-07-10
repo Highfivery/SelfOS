@@ -51,6 +51,10 @@ export const CAPABILITIES = [
   // one's OWN challenges. Member default ON (taking on a challenge about yourself is ordinary — not
   // break-glass). A sexual/explicit challenge is ADDITIONALLY gated by the shared 18+ ack (§8.3), not a capability.
   'challenges.own',
+  // Together / couples sessions (58-together §3.1). `together.own` = start + participate in Together sessions
+  // with a connected partner. Member default ON; the surface is ADDITIONALLY gated on a live `partner`
+  // relationship edge (resolved read-time), and the explicit-register/desire content on BOTH partners' 18+ ack.
+  'together.own',
 ] as const;
 
 export type CapabilityKey = (typeof CAPABILITIES)[number];
@@ -79,6 +83,7 @@ export const CAPABILITY_LABELS: Record<CapabilityKey, string> = {
   'devices.manage': 'Manage devices & re-key the vault',
   'tests.own': 'Take their own self-assessments',
   'challenges.own': 'Take on their own challenges',
+  'together.own': 'Start & join Together sessions with a partner',
 };
 
 /**
@@ -132,6 +137,7 @@ export const DEFAULT_ROLES: Role[] = [
       'memory.own',
       'tests.own',
       'challenges.own',
+      'together.own',
     ]),
   },
   {

@@ -22,6 +22,8 @@ export const USAGE_TYPE_LABELS: Record<string, string> = {
   'test.narrate': 'Self-assessment — what it means',
   'challenge.suggest': 'Challenge suggestion',
   'intimacy.suggestTopics': 'Intimacy topics — AI suggestions',
+  'together.chat': 'Together — couples session',
+  'together.analyze': 'Together — session summary',
 };
 
 export function usageTypeLabel(type: string): string {

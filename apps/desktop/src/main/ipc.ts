@@ -54,6 +54,7 @@ export function registerIpcHandlers(): void {
   let chatSender: WebContents | undefined;
   let dreamSender: WebContents | undefined;
   let intakeSender: WebContents | undefined;
+  let togetherSender: WebContents | undefined;
   // E2E/dev: a deterministic in-memory relay (no real Cloudflare account/network), like SELFOS_FAKE_CLAUDE.
   const useFakeRelay = Boolean(process.env['SELFOS_FAKE_RELAY']);
   // E2E/dev: a deterministic update check (no real GitHub call). The env value is the latest version to
@@ -116,6 +117,11 @@ export function registerIpcHandlers(): void {
     emitIntakeChunk: (chunk) => {
       if (intakeSender && !intakeSender.isDestroyed()) {
         intakeSender.send(IpcChannels.intakeChunk, chunk);
+      }
+    },
+    emitTogetherChunk: (chunk) => {
+      if (togetherSender && !togetherSender.isDestroyed()) {
+        togetherSender.send(IpcChannels.togetherChunk, chunk);
       }
     },
     getBootState: currentBootState,
@@ -196,6 +202,7 @@ export function registerIpcHandlers(): void {
     onChatChunk: () => () => {},
     onDreamChunk: () => () => {},
     onIntakeChunk: () => () => {},
+    onTogetherChunk: () => () => {},
   };
 
   const bridge = createCoreBridge(host);
@@ -338,6 +345,37 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.challengesSuggest, bridge.challengesSuggest);
   handle(IpcChannels.challengesGetSuggestion, bridge.challengesGetSuggestion);
   handle(IpcChannels.challengesClearSuggestion, bridge.challengesClearSuggestion);
+  // Together / couples sessions (58).
+  handle(IpcChannels.togetherList, bridge.togetherList);
+  handle(IpcChannels.togetherGet, bridge.togetherGet);
+  handle(IpcChannels.togetherCreate, bridge.togetherCreate);
+  handle(IpcChannels.togetherAccept, bridge.togetherAccept);
+  handle(IpcChannels.togetherDecline, bridge.togetherDecline);
+  handle(IpcChannels.togetherSetPaused, bridge.togetherSetPaused);
+  handle(IpcChannels.togetherLeave, bridge.togetherLeave);
+  handle(IpcChannels.togetherMarkRead, bridge.togetherMarkRead);
+  handle(IpcChannels.togetherPrescreenGet, bridge.togetherPrescreenGet);
+  handle(IpcChannels.togetherPrescreenSubmit, bridge.togetherPrescreenSubmit);
+  // The couples turn streams on its own channel (kept separate from chat/dreams so streams never cross, §5.4).
+  // Same per-turn sender binding + reset as chatStream.
+  ipcMain.handle(IpcChannels.togetherSendMessage, async (event, raw: unknown) => {
+    togetherSender = event.sender;
+    try {
+      return await bridge.togetherSendMessage(
+        raw as { sessionId: string; text: string; privateAside?: boolean },
+      );
+    } finally {
+      togetherSender = undefined;
+    }
+  });
+  ipcMain.handle(IpcChannels.togetherRetry, async (event, raw: unknown) => {
+    togetherSender = event.sender;
+    try {
+      return await bridge.togetherRetry(raw as { sessionId: string });
+    } finally {
+      togetherSender = undefined;
+    }
+  });
   handle(IpcChannels.assignmentsCreate, bridge.assignmentsCreate);
   handle(IpcChannels.assignmentsInbox, bridge.assignmentsInbox);
   handle(IpcChannels.assignmentsSetFavorite, bridge.assignmentsSetFavorite);

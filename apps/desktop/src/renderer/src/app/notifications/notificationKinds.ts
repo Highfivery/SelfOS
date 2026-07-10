@@ -5,6 +5,8 @@ import {
   Clock,
   Download,
   Flag,
+  Heart,
+  MessageCircle,
   PencilLine,
   RefreshCw,
   Sparkles,
@@ -75,6 +77,12 @@ export const NOTIFICATION_KIND_DEFS: Record<NotificationKind, KindDef> = {
   // A recipient edited + resubmitted after the sender analyzed them (56 §3.2) — nudges a re-analyze. onIncrease
   // by revision: dismissing (or re-analyzing, which drops the candidate) never re-nags until they edit again.
   'answers-updated': { icon: PencilLine, severity: 'info', resurfaces: onIncrease },
+  // A partner invited you to a Together session (58 §3.11). Registered now (Phase A); the candidate provider
+  // lands in Phase B. onChange: a fresh invite (a new session id) re-surfaces.
+  'together-invite': { icon: Heart, severity: 'info', resurfaces: onChange },
+  // Your turn in a Together session (58 §3.11), coalesced per session. onChange by the latest message in the
+  // recipient's PROJECTION — an aside never changes the partner's signature, so it never re-pops here.
+  'together-turn': { icon: MessageCircle, severity: 'info', resurfaces: onChange },
 };
 
 /** The icon for a kind (used by the bell rows + toasts). */

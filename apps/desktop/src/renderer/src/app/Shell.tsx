@@ -18,6 +18,8 @@ import { Onboarding } from './routes/onboarding/Onboarding';
 import { People } from './routes/people/People';
 import { Roles } from './routes/roles/Roles';
 import { Usage } from './routes/usage/Usage';
+import { Together } from './routes/together/Together';
+import { TogetherSession } from './routes/together/TogetherSession';
 import { SettingsScreen } from '../settings/SettingsScreen';
 import { RequireCapability } from './RequireCapability';
 import { useSettingsStore } from '../settings/settingsStore';
@@ -48,6 +50,10 @@ const GUARDED_ROUTES: { path: string; capability: CapabilityKey; element: JSX.El
   { path: 'you/:testId', capability: 'tests.own', element: <TestResultScreen /> },
   { path: 'people', capability: 'people.manage', element: <People /> },
   { path: 'roles', capability: 'roles.manage', element: <Roles /> },
+  // Together (58 §5.3): gated by `together.own`; the finer live-partner-edge gating is enforced in the
+  // screen + the bridge (the surface self-hides without a partner, and a direct route shows a calm state).
+  { path: 'together', capability: 'together.own', element: <Together /> },
+  { path: 'together/session/:id', capability: 'together.own', element: <TogetherSession /> },
   // Usage is reachable with `sessions.own`; it filters cost/the Everyone scope internally via
   // `budgets.manage` (02-app-shell §13.4) — that finer gating stays in the screen, not here.
   { path: 'usage', capability: 'sessions.own', element: <Usage /> },

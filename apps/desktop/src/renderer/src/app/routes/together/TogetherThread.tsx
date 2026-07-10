@@ -86,6 +86,9 @@ function TogetherComposer({
     const snapshot = text.trim();
     const wasAside = aside;
     setText('');
+    // Reset the aside toggle after each send — a private aside is a deliberate act each time, so the next
+    // message never goes out privately by accident (§3.6).
+    setAside(false);
     await onSend(snapshot, wasAside);
   };
 

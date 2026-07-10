@@ -3425,6 +3425,8 @@ describe('createCoreBridge', () => {
     expect(overview[q.id]?.answeredCount).toBe(0);
     expect(overview[q.id]?.newResponses).toBe(0);
     expect(typeof overview[q.id]?.lastSentAt).toBe('string');
+    // The card privacy chip reads the derived mode (§3.1 card privacy badges).
+    expect(overview[q.id]?.privacy).toBe('standard');
 
     // Mara answers the latest send → she reads as answered, and it's a "new" (un-analysed) response.
     await bridge.sessionSetActive({ personId: mara.id });
@@ -3484,6 +3486,73 @@ describe('createCoreBridge', () => {
     await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
     await bridge.sessionSetActive({ personId: guest.id });
     expect(await bridge.questionnairesSentOverview()).toEqual({});
+  });
+
+  it('card privacy badges (§3.1): sentOverview derives private/mixed; a compatibility Inbox item carries its visibility', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: mara.id, roleId: 'member', pin: null });
+    const noah = await bridge.peopleSave({ displayName: 'Noah', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: noah.id, roleId: 'member', pin: null });
+
+    // A Private send → the overview says so (the Sent card chip reads "Private · insights only").
+    const questions = [{ id: 'a', type: 'shortText' as const, prompt: 'How?', required: true }];
+    const q = await bridge.questionnairesSave({
+      title: 'Quiet check-in',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: mara.id },
+      questions,
+    });
+    await bridge.assignmentsCreate({ questionnaireId: q.id, privacy: 'private' });
+    let overview = await bridge.questionnairesSentOverview();
+    expect(overview[q.id]?.privacy).toBe('private');
+
+    // The recipient's Inbox item: a plain send carries its privacy, and NO compatibility visibility.
+    await bridge.sessionSetActive({ personId: mara.id });
+    const maraItem = (await bridge.assignmentsInbox()).find((i) => i.title === 'Quiet check-in');
+    expect(maraItem?.privacy).toBe('private');
+    expect(maraItem?.compatibilityVisibility).toBeUndefined();
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+
+    // Re-target the questionnaire to Noah and send Standard: two recipients whose latest sends differ
+    // → the card-level mode is `mixed` (the legacy multi-recipient shape).
+    await bridge.questionnairesSave({
+      id: q.id,
+      title: 'Quiet check-in',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: noah.id },
+      questions,
+    });
+    await bridge.assignmentsCreate({ questionnaireId: q.id, privacy: 'standard' });
+    overview = await bridge.questionnairesSentOverview();
+    expect(overview[q.id]?.privacy).toBe('mixed');
+
+    // A compatibility send's Inbox item carries the visibility mode, so the recipient's chip states the
+    // REAL promise — for senderSeesAll the answers ARE shared, which a generic "private" would misstate.
+    const cq = await bridge.questionnairesSave({
+      title: 'Us check',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: mara.id },
+      questions: [
+        {
+          id: 'c1',
+          type: 'rating',
+          prompt: 'Connected?',
+          required: true,
+          scale: { min: 1, max: 5 },
+        },
+      ],
+      compatibility: { enabled: true, visibility: 'senderSeesAll' },
+    });
+    const sent = await bridge.assignmentsCreateCompatibility({ questionnaireId: cq.id });
+    expect(sent.ok).toBe(true);
+    await bridge.sessionSetActive({ personId: mara.id });
+    const compatItem = (await bridge.assignmentsInbox()).find((i) => i.compatibilityVisibility);
+    expect(compatItem?.compatibilityVisibility).toBe('senderSeesAll');
   });
 
   it('assignmentsInbox: carries the category + answered time; setFavorite pins it (device-local, per-person) (§3.3)', async () => {

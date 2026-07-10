@@ -9,6 +9,8 @@ import type {
 import { Button, IconButton } from '../../../design-system/components';
 import { Avatar } from './Avatar';
 import { InsightExcerpt } from './InsightExcerpt';
+import { PrivacyChip } from './PrivacyChip';
+import { sentCompatibilityBadge, sentPrivacyBadge } from './privacyBadge';
 import { QuestionnaireRowMenu } from './QuestionnaireRowMenu';
 import { QUESTIONNAIRE_TYPES } from './questionnaireTypes';
 import { formatDateTime, relativeAge, resendStatus } from './sentState';
@@ -102,6 +104,16 @@ export function SentCard({
     !analyzable &&
     Boolean(sendState && resendStatus(sendState.lastSentAt).ready) &&
     Boolean(overview?.answeredAt);
+  // The privacy chip (08 §3.1): only once sent — privacy is chosen at send, so a draft/never-sent card
+  // shows nothing. A compatibility card states its visibility mode (the definition carries it, so it shows
+  // even when `sentOverview` is unavailable); otherwise the recipients' latest-send privacy from the overview.
+  const privacyBadge = !sent
+    ? null
+    : questionnaire.compatibility
+      ? sentCompatibilityBadge(questionnaire.compatibility.visibility)
+      : overview?.privacy
+        ? sentPrivacyBadge(overview.privacy)
+        : null;
 
   return (
     <article className={`${styles.card} ${styles.sentCard} ${isDraft ? styles.draftCard : ''}`}>
@@ -230,6 +242,7 @@ export function SentCard({
         ) : (
           <span className={`${styles.pill} ${styles.pillDraft}`}>Not sent yet</span>
         )}
+        {privacyBadge ? <PrivacyChip badge={privacyBadge} /> : null}
       </div>
 
       <div className={styles.cardMeta}>

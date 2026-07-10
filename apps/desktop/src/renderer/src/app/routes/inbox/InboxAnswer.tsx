@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Lock } from 'lucide-react';
 import {
   compatibilityDisclosure,
+  externalSendDisclosure,
   formatAnswerForDisplay,
   unansweredRequired,
   visibleAnswers,
@@ -117,8 +118,8 @@ export function InboxAnswer({
 
   const asker = detail.senderName ?? 'Someone';
   // The disclosure is DERIVED from the send (compatibility visibility, else privacy mode), so the promise
-  // shown to the recipient always matches what the system delivers (§3.2/§8.4). The admin-access line is
-  // appended only when the (admin-only) disclosure setting is on and an admin could ever reach the answers.
+  // shown to the recipient always matches what the system delivers (§3.2/§8.4) — one shared source
+  // (`disclosure.ts`) for the answering pane, the relay page, and the landing card privacy chips.
   const disclosure = ((): string => {
     if (detail.compatibility)
       return compatibilityDisclosure(detail.compatibility.visibility, {
@@ -126,9 +127,7 @@ export function InboxAnswer({
         senderName: asker,
         viewerIsSender: detail.compatibility.viewerIsSender,
       });
-    return detail.privacy === 'private'
-      ? 'Your answers personalize their coaching. They won’t see your individual responses — though your numeric ratings may appear in their trends over time.'
-      : 'They’ll see your answers.';
+    return externalSendDisclosure(asker, detail.privacy);
   })();
 
   const onChange = (id: string, value: AnswerValue): void => {

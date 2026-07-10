@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { InboxItem, Questionnaire, QuestionnaireSentOverview } from '@shared/channels';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
@@ -1278,6 +1279,103 @@ describe('Questionnaires', () => {
     expect(screen.getByText('Angel')).toBeInTheDocument();
     expect(screen.getByText('Sam')).toBeInTheDocument();
     expect(screen.getByText('1 new')).toBeInTheDocument();
+  });
+
+  it('Sent cards state whether answers are private or visible; drafts show no chip (§3.1 privacy badges)', async () => {
+    const def = (id: string, title: string, compat?: boolean): Questionnaire => ({
+      id,
+      schemaVersion: 1,
+      version: 1,
+      title,
+      type: compat ? 'role-feedback' : 'general',
+      sensitivity: 'standard',
+      questions: [{ id: 'qq1', type: 'shortText', prompt: 'How?', required: true }],
+      ...(compat ? { compatibility: { enabled: true as const, visibility: 'sharedReport' } } : {}),
+      createdAt: 'now',
+      updatedAt: 'now',
+    });
+    const overviewFor = (
+      id: string,
+      privacy: 'standard' | 'private',
+    ): QuestionnaireSentOverview => ({
+      questionnaireId: id,
+      lastSentAt: '2026-07-01T00:00:00.000Z',
+      recipients: [{ name: 'Angel', status: 'sent', answered: false }],
+      answeredCount: 0,
+      newResponses: 0,
+      analyzed: false,
+      privacy,
+    });
+    installMockBridge({
+      questionnairesList: () =>
+        Promise.resolve([
+          def('q1', 'Quiet check-in'),
+          def('q2', 'Open check-in'),
+          def('q3', 'Us check', true),
+          def('q4', 'Unsent draft'),
+        ]),
+      questionnairesSendStates: () =>
+        Promise.resolve({
+          q1: { lastSentAt: '2026-07-01T00:00:00.000Z', total: 1 },
+          q2: { lastSentAt: '2026-07-01T00:00:00.000Z', total: 1 },
+          q3: { lastSentAt: '2026-07-01T00:00:00.000Z', total: 1 },
+        }),
+      questionnairesSentOverview: () =>
+        Promise.resolve({ q1: overviewFor('q1', 'private'), q2: overviewFor('q2', 'standard') }),
+    });
+    renderApp();
+
+    await screen.findByText('Quiet check-in');
+    // Private send → the protected chip; Standard → the "visible" one; compat → its visibility mode.
+    expect(screen.getByText('Private · insights only')).toBeInTheDocument();
+    expect(screen.getByText('Answers visible')).toBeInTheDocument();
+    expect(screen.getByText('Combined report')).toBeInTheDocument();
+    // The full honest sentence rides as the chip tooltip (the §8.4 honesty guard).
+    expect(screen.getByTitle(/never the answers themselves/)).toBeInTheDocument();
+    // Exactly three chips — the never-sent draft shows none (privacy is chosen at send).
+    expect(
+      screen.getAllByText(/Private · insights only|Answers visible|Combined report|Mixed privacy/),
+    ).toHaveLength(3);
+    expect(screen.getByText('Unsent draft')).toBeInTheDocument();
+  });
+
+  it('Received cards state what the sender sees — on New cards too (§3.1/§3.3 privacy badges)', async () => {
+    const item = (assignmentId: string, title: string, extra: Partial<InboxItem>): InboxItem => ({
+      assignmentId,
+      title,
+      type: 'general',
+      questionCount: 3,
+      status: 'sent',
+      privacy: 'standard',
+      senderName: 'Sam',
+      createdAt: 'now',
+      favorite: false,
+      answerable: true,
+      hasDraft: false,
+      fromSelf: false,
+      ...extra,
+    });
+    installMockBridge({
+      questionnairesList: () => Promise.resolve([]),
+      assignmentsInbox: () =>
+        Promise.resolve([
+          item('a1', 'Anything weighing on you?', { privacy: 'private' }),
+          item('a2', 'Weekend planning', { status: 'submitted', answerable: false }),
+          item('a3', 'Us check', { privacy: 'private', compatibilityVisibility: 'senderSeesAll' }),
+        ]),
+    });
+    renderApp();
+
+    await screen.findByRole('heading', { name: 'Received' });
+    // A brand-new private item announces the promise BEFORE the recipient opens it.
+    expect(screen.getByText('Your answers stay private')).toBeInTheDocument();
+    // A standard item names who sees the answers; the tooltip is the derived disclosure verbatim.
+    expect(screen.getByText('Sam sees your answers')).toBeInTheDocument();
+    expect(
+      screen.getByTitle(/shared with Sam to help them understand you better/),
+    ).toBeInTheDocument();
+    // A compatibility item states its REAL mode — senderSeesAll is shared, never a false "private".
+    expect(screen.getByText('Shared with Sam')).toBeInTheDocument();
   });
 
   it('lists Received questionnaires and opening one shows the answering pane (§3.3)', async () => {

@@ -3,6 +3,8 @@ import type { InboxItem } from '@shared/channels';
 import { IconButton } from '../../../design-system/components';
 import { receivedCta, receivedStatus } from '../inbox/inboxStatus';
 import { Avatar } from './Avatar';
+import { PrivacyChip } from './PrivacyChip';
+import { receivedPrivacyBadge } from './privacyBadge';
 import { QUESTIONNAIRE_TYPES } from './questionnaireTypes';
 import { formatDateTime } from './sentState';
 import styles from './Questionnaires.module.css';
@@ -66,8 +68,10 @@ export function ReceivedCard({
         {item.title}
       </button>
 
-      {!status.isNew ? (
-        <div className={styles.cardFoot}>
+      {/* The privacy chip renders on a New card too (08 §3.1) — the recipient knows what the sender will
+          see BEFORE opening; the status pill still hides while the card is New. */}
+      <div className={styles.cardFoot}>
+        {!status.isNew ? (
           <span
             className={`${styles.pill} ${
               status.label === 'Submitted'
@@ -79,8 +83,9 @@ export function ReceivedCard({
           >
             {status.label}
           </span>
-        </div>
-      ) : null}
+        ) : null}
+        <PrivacyChip badge={receivedPrivacyBadge(item)} />
+      </div>
 
       <div className={styles.cardMeta}>
         <span>

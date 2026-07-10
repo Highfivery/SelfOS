@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Download, Link2, Link2Off, Lock, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 import { aiKeyResolved } from '../../aiAvailability';
 import { AiUnavailableNotice } from '../../AiUnavailableNotice';
@@ -8,6 +8,7 @@ import type {
   CompatibilityConfig,
   QuestionTrend,
   RelayLinkResult,
+  SendNumericAnswer,
   SendResult,
 } from '@shared/schemas';
 import { CompatibilityResults } from './CompatibilityResults';
@@ -25,6 +26,7 @@ import {
 } from '../../../design-system/components';
 import { Avatar } from './Avatar';
 import { AtAGlance } from './AtAGlance';
+import { InsightExcerpt } from './InsightExcerpt';
 import { ResultGroupHead, ResultsSummaryBand } from './ResultsSummaryBand';
 import { groupSendsByStatus, summarizeSends } from './resultsSummary';
 import { useResultsStore } from '../../../stores/resultsStore';
@@ -294,6 +296,33 @@ function StandardResults({ questionnaireId }: { questionnaireId: string }): JSX.
   );
 }
 
+/** A private send's numeric answers as read-only bars (08 §20.8) — the numbers the sender is allowed to
+ * see. The value is always shown as text (never colour-only, §9); no written content. */
+function PrivateNumericAnswers({ answers }: { answers: SendNumericAnswer[] }): JSX.Element {
+  return (
+    <Stack gap={1}>
+      {answers.map((a, i) => {
+        const span = a.max - a.min;
+        const pct = span > 0 ? Math.round(((a.value - a.min) / span) * 100) : 0;
+        return (
+          <div key={`${a.prompt}-${a.row ?? ''}-${i}`} className={styles.glanceRow}>
+            <span className={styles.glanceLabel}>
+              {a.row ? `${a.prompt} — ${a.row}` : a.prompt}
+            </span>
+            <span className={styles.glanceTrack}>
+              <span
+                className={styles.glanceFill}
+                style={{ width: `${Math.max(0, Math.min(100, pct))}%` }}
+              />
+            </span>
+            <span className={styles.glanceValue}>{a.value}</span>
+          </div>
+        );
+      })}
+    </Stack>
+  );
+}
+
 /** One numeric question's rating-over-time chart across the questionnaire's re-asks. */
 function TrendCard({ trend }: { trend: QuestionTrend }): JSX.Element {
   const series: LineChartSeries[] = trend.series.map((s) => ({
@@ -329,6 +358,7 @@ function SendCard({
   onDelete: () => void;
   onRevoke: () => void;
 }): JSX.Element {
+  const navigate = useNavigate();
   const isSubmitted = send.status === 'submitted';
   const isOpen = OPEN_STATUSES.includes(send.status);
   // A relay link that's still open (not answered / declined / revoked / expired) can be revoked — for an
@@ -425,11 +455,26 @@ function SendCard({
           </dl>
         ) : null}
 
+        {/* Private submitted send (08 §20.8): a calm privacy explainer + the numeric answers the sender is
+            allowed to see (never the written content). */}
         {isSubmitted && !send.answers && send.privacy === 'private' ? (
-          <Text tone="secondary">
-            Answered privately — their raw responses stay hidden. Analyze to draft an insight from
-            them.
-          </Text>
+          <Stack gap={2}>
+            <div className={styles.privateNote}>
+              <Lock size={14} aria-hidden="true" className={styles.privateNoteIcon} />
+              <Text size="sm" tone="secondary">
+                {send.analyzed ? 'You see' : 'You’ll see'} the insight drawn from{' '}
+                {send.recipientName}’s answers — never the raw answers themselves.
+              </Text>
+            </div>
+            {send.numericAnswers && send.numericAnswers.length > 0 ? (
+              <Stack gap={1}>
+                <Text size="sm" tone="tertiary">
+                  Ratings you can see
+                </Text>
+                <PrivateNumericAnswers answers={send.numericAnswers} />
+              </Stack>
+            ) : null}
+          </Stack>
         ) : null}
 
         {/* Standard but the answers couldn't be read (a rare missing/corrupt file) — don't mislabel it as private. */}
@@ -455,17 +500,38 @@ function SendCard({
               ) : null}
             </Stack>
           </Banner>
+        ) : isSubmitted && send.analyzed && send.insightSummary ? (
+          // The drafted Insight, INLINE — the excerpt + a deep-link to the exact insight in Memory (§20.8).
+          <InsightExcerpt
+            summary={send.insightSummary}
+            onViewInMemory={() =>
+              navigate(
+                '/memory',
+                send.insightId ? { state: { insightId: send.insightId } } : undefined,
+              )
+            }
+          />
         ) : isSubmitted && send.analyzed ? (
           <Banner tone="info">
             Insight drafted from this response. <Link to="/memory">Review it in Memory →</Link>
           </Banner>
         ) : null}
 
+        {/* Prominent one-tap Analyze on an un-analyzed submitted send — primary for a Private send (it's the
+            only way to see anything from it, §20.8); secondary for a Standard send (whose answers already show). */}
         {isSubmitted && !send.analyzed && aiReady ? (
           <div>
-            <Button variant="secondary" onClick={onAnalyze} disabled={analyzing}>
+            <Button
+              variant={send.privacy === 'private' ? 'primary' : 'secondary'}
+              onClick={onAnalyze}
+              disabled={analyzing}
+            >
               <Sparkles size={16} aria-hidden="true" />
-              {analyzing ? 'Analyzing…' : 'Analyze'}
+              {analyzing
+                ? 'Analyzing…'
+                : send.privacy === 'private'
+                  ? 'Analyze to see the insight'
+                  : 'Analyze'}
             </Button>
           </div>
         ) : null}

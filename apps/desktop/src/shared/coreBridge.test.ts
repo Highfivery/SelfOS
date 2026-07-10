@@ -2799,6 +2799,78 @@ describe('createCoreBridge', () => {
     expect(await bridge.assignmentsAggregate(q.id)).toEqual({ questions: [] });
   });
 
+  it('private send Results (§20.8): carries numeric answers + the insight excerpt, NEVER the raw written answers', async () => {
+    const { bridge, ownerId, host } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: mara.id, roleId: 'member', pin: null });
+    const q = await bridge.questionnairesSave({
+      title: 'Quiet check-in',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: mara.id },
+      questions: [
+        {
+          id: 'r',
+          type: 'rating',
+          prompt: 'How connected?',
+          required: true,
+          scale: { min: 1, max: 5 },
+        },
+        { id: 't', type: 'longText', prompt: 'Anything on your mind?', required: true },
+      ],
+    });
+    const { assignment: a } = await bridge.assignmentsCreate({
+      questionnaireId: q.id,
+      privacy: 'private',
+    });
+    await bridge.sessionSetActive({ personId: mara.id });
+    await bridge.assignmentsSubmit({
+      assignmentId: a.id,
+      answers: [
+        { questionId: 'r', value: 4 },
+        { questionId: 't', value: 'a private written thought' },
+      ],
+    });
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+
+    let result = (await bridge.assignmentsResults(q.id))[0];
+    // The private send withholds the raw answers but surfaces the NUMERIC value the sender is allowed to see.
+    expect(result?.answers).toBeUndefined();
+    expect(result?.numericAnswers).toEqual([
+      { prompt: 'How connected?', row: null, value: 4, min: 1, max: 5 },
+    ]);
+    // The written text never crosses the bridge.
+    expect(JSON.stringify(result)).not.toContain('a private written thought');
+
+    // Analyze → the derived Insight's summary + id are surfaced for the inline excerpt + Memory deep-link.
+    host.host.claude = {
+      send: () => Promise.resolve('{}'),
+      stream: (_options, onDelta) => {
+        const json = JSON.stringify({
+          summary: 'They feel fairly connected but are carrying something unspoken.',
+          facts: [{ text: 'Quietly stressed', shareable: false }],
+          confidence: 'medium',
+        });
+        onDelta(json);
+        return Promise.resolve({
+          text: json,
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    expect((await bridge.insightsAnalyze({ assignmentId: a.id })).ok).toBe(true);
+    result = (await bridge.assignmentsResults(q.id))[0];
+    expect(result?.analyzed).toBe(true);
+    expect(result?.insightSummary).toBe(
+      'They feel fairly connected but are carrying something unspoken.',
+    );
+    expect(typeof result?.insightId).toBe('string');
+    // Still no raw written answers after analysis.
+    expect(result?.answers).toBeUndefined();
+    expect(JSON.stringify(result)).not.toContain('a private written thought');
+  });
+
   it('trends include Private sends’ numeric values; per-send delete is sender/admin-only', async () => {
     const { bridge, ownerId } = await freshOwner();
     const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });

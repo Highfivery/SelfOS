@@ -389,6 +389,33 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-10 — **Build (Questionnaire Preview & Results redesign — SPEC 08 §20 slice 5/5 BUILT: private results —
+  SPEC 08 §20 IS NOW FULLY BUILT; on `feat/questionnaire-private-results`).** The final slice (§20.8), which brings
+  the private-send experience together. A private send's Results card stops being a one-line dead end and gets all
+  **four** improvements: (1) a **calm privacy-explainer panel** (accent-tinted lock: "You see the insight drawn
+  from {name}'s answers — never the raw answers themselves"); (2) the **numeric ratings the sender is allowed to
+  see** as read-only bars (a new core `extractNumericAnswers` → additive `SendResult.numericAnswers` of
+  `{prompt,row,value,min,max}`, numbers only — the §8.4/§13.5c boundary the trends read already honors, so a private
+  card shows real signal instead of "hidden"); (3) a **prominent primary "Analyze to see the insight"** CTA on an
+  un-analyzed private send (secondary for a Standard send whose answers already show); (4) the **drafted Insight
+  INLINE** — additive `SendResult.insightSummary`/`insightId` (populated in the bridge for any analyzed send) render
+  through the shared landing **`InsightExcerpt`** with a **deep-link to the exact insight in Memory** (router
+  `{ insightId }`), replacing the bare "review in Memory" banner. **The raw written answers still NEVER cross the
+  bridge for a private send** (unchanged §8.4) — a bridge decrypt-level test asserts `answers` stays undefined while
+  `numericAnswers`/`insightSummary` are present and the prose is absent from the serialized result. Gate green:
+  typecheck, lint, format, **983 core + 11 relay + 973 desktop** unit (+`extractNumericAnswers` numeric-only /
+  no-text; +bridge private-send numeric+insight / never-raw; +2 Results RTL [explainer+numeric+Analyze, inline
+  excerpt+Memory link]), **E2E** (the private responses-arrived test now asserts the explainer + "Ratings you can
+  see" + the numeric, prose absent; the answer-review test asserts the inline excerpt + View-in-Memory after
+  analyze/re-analyze; fixed a latent slice-4 assertion ambiguity — the aggregate band duplicates a prompt on the
+  Standard view, scoped with `.first()`), real-Electron visual QA at desktop (the private card: lock explainer +
+  "Rate it" bar at 4/5, no raw prose). Synced spec 08 §20 (→ **FULLY BUILT, all 5 slices**). **Lesson: a private
+  send's Results card can show REAL signal without breaking the boundary — surface the derived Insight (summary +
+  id) + the NUMERIC answers only (the same data trends already exposes), never the written/categorical content; the
+  bridge stays the trust boundary (it decrypts host-side and emits only numbers + the insight), so `answers` stays
+  undefined and the raw prose never reaches the renderer. And when a new cross-recipient band (the aggregate)
+  duplicates a question prompt already shown in a per-recipient list, existing `getByText(prompt)` E2E asserts go
+  strict-mode-ambiguous — scope them to `.first()`.**
 - 2026-07-10 — **Build (Questionnaire Preview & Results redesign — SPEC 08 §20 slice 4/5 BUILT: the aggregate
   "At a glance" read; on `feat/questionnaire-results-aggregate`).** The fourth slice (§20.7) — the **one new
   backend piece**. New crypto-free view type **`QuestionnaireAggregate`** (`@selfos/core/schemas`; a proper

@@ -115,6 +115,64 @@ describe('QuestionnaireResults', () => {
     expect(screen.getByText(/scale 1–5/)).toBeInTheDocument();
   });
 
+  const aiReadyBridge = {
+    secretHas: () => Promise.resolve(true),
+    aiKeyStatus: () =>
+      Promise.resolve({
+        hasSharedKey: false,
+        hasDeviceOverride: true,
+        resolvedReady: true,
+        source: 'device' as const,
+      }),
+  };
+
+  it('private send (§20.8): explainer + numeric ratings + a prominent Analyze; NO raw answers shown', async () => {
+    enableAi();
+    installMockBridge({
+      ...aiReadyBridge,
+      assignmentsResults: () =>
+        Promise.resolve([
+          send({
+            recipientName: 'Angel',
+            status: 'submitted',
+            privacy: 'private',
+            numericAnswers: [{ prompt: 'How connected?', row: null, value: 4, min: 1, max: 5 }],
+          }),
+        ]),
+    });
+    renderResults();
+    // The calm explainer + the numeric rating (the number as text), and a prominent primary Analyze CTA.
+    expect(await screen.findByText(/never the raw answers themselves/i)).toBeInTheDocument();
+    expect(screen.getByText('How connected?')).toBeInTheDocument();
+    expect(screen.getByText('4')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Analyze to see the insight/i })).toBeInTheDocument();
+  });
+
+  it('an analyzed send shows the Insight excerpt inline with a Memory deep-link (§20.8)', async () => {
+    enableAi();
+    installMockBridge({
+      ...aiReadyBridge,
+      assignmentsResults: () =>
+        Promise.resolve([
+          send({
+            recipientName: 'Angel',
+            status: 'submitted',
+            privacy: 'private',
+            analyzed: true,
+            insightSummary: 'They feel connected but carry something unspoken.',
+            insightId: 'insight-1',
+          }),
+        ]),
+    });
+    renderResults();
+    expect(
+      await screen.findByText(/They feel connected but carry something unspoken/i),
+    ).toBeInTheDocument();
+    // The excerpt's "Insight" eyebrow + the deep-link affordance both render.
+    expect(screen.getByText('Insight')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /View in Memory/i })).toBeInTheDocument();
+  });
+
   it('omits the "At a glance" band when there are no aggregated questions', async () => {
     installMockBridge({
       assignmentsResults: () => Promise.resolve([send({ status: 'submitted' })]),
@@ -207,7 +265,8 @@ describe('QuestionnaireResults', () => {
       assignmentsResults: () => Promise.resolve([send({ privacy: 'private' })]),
     });
     renderResults();
-    expect(await screen.findByText(/raw responses stay hidden/i)).toBeInTheDocument();
+    // A Private send never shows raw answers — the calm explainer + a prominent Analyze CTA (§20.8).
+    expect(await screen.findByText(/never the raw answers themselves/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /analyze/i })).toBeInTheDocument();
   });
 

@@ -6,9 +6,9 @@
 > built on `feat/questionnaire-explicit-gen` (NOT yet merged). See §16.10. **§17 (recipient-bound
 > questionnaires + in-policy explicit framing) is APPROVED + BUILT on the same branch (NOT merged) — see §17.9.**
 > **§20 (Preview & Results redesign — full-width, disabled preview, modern answering, rethought Results +
-> private results) is APPROVED; slices 1–4 of 5 BUILT (full-width + disabled Preview · modern answering +
-> progress · Results restructure · the aggregate "At a glance"); slice 5 (private results) remains — see §20.**
-> · _last updated 2026-07-10_
+> private results) is APPROVED + FULLY BUILT (all 5 slices: full-width + disabled Preview · modern answering +
+> progress · Results restructure · the aggregate "At a glance" · private results) — see §20.** · _last updated
+> 2026-07-10_
 >
 > **2026-06 amendment (§15, package D of the app refresh):** authoring-experience refinements on the
 > already-built feature — a **General** type; **sensitivity tiers shown only for Intimacy/Scenario** types (other

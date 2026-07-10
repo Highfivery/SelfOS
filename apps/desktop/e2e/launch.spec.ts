@@ -4139,7 +4139,9 @@ test('results: a Standard response surfaces the raw answers in the sender’s Re
     await w.getByRole('link', { name: 'Questionnaires' }).click();
     await w.getByRole('button', { name: /^Weekly check-in/ }).click();
     await w.getByRole('button', { name: 'Results' }).click();
-    await expect(w.getByText('How are we doing?')).toBeVisible();
+    // The prompt appears in the raw-answer list AND the "At a glance" aggregate band (§20.7) — scope to the
+    // first; the written answer itself is unique to the Standard raw-answer list.
+    await expect(w.getByText('How are we doing?').first()).toBeVisible();
     await expect(w.getByText('Doing great')).toBeVisible();
     // AI is off, so analysis is offered via the calm role-aware notice (no dead Analyze button).
     await expect(w.getByText(/isn.t set up yet/i).first()).toBeVisible();
@@ -4200,7 +4202,8 @@ test('answer review/edit (56): recipient reviews + edits + resends → Results g
     await w.getByRole('button', { name: /^Weekly check-in/ }).click();
     await w.getByRole('button', { name: 'Results' }).click();
     await w.getByRole('button', { name: 'Analyze', exact: true }).click();
-    await expect(w.getByText(/insight drafted from this response/i)).toBeVisible();
+    // Once analyzed, the drafted Insight shows INLINE — the excerpt + a "View in Memory" deep-link (§20.8).
+    await expect(w.getByRole('button', { name: /View in Memory/i })).toBeVisible();
 
     // Back to the Inbox: review the submitted answers, then EDIT + resend (56 §3.1).
     await w.getByRole('link', { name: /Inbox/ }).click();
@@ -4230,9 +4233,9 @@ test('answer review/edit (56): recipient reviews + edits + resends → Results g
     expect(response?.revision).toBe(2);
     expect(response?.answers[0]?.value).toBe('Actually, really well now');
 
-    // Re-analyze → the insight's analyzedRevision catches up → the stale chip clears.
+    // Re-analyze → the insight's analyzedRevision catches up → the stale chip clears, the inline excerpt shows.
     await w.getByRole('button', { name: 'Re-analyze' }).click();
-    await expect(w.getByText(/insight drafted from this response/i)).toBeVisible();
+    await expect(w.getByRole('button', { name: /View in Memory/i })).toBeVisible();
     await expect(w.getByText(/answers updated since your last analysis/i)).toHaveCount(0);
     const insights = await listInsightsForPerson(fs, key, 'owner-1');
     const insight = insights.find((i) => i.provenance.assignmentId === send.id);
@@ -8814,8 +8817,14 @@ test('questionnaires: responses-arrived names the responder → View results →
     await row.getByRole('button', { name: 'View' }).click();
     await expect.poll(() => w.evaluate(() => window.location.hash)).toContain('focus=');
     await expect(w.getByRole('heading', { name: 'Results' })).toBeVisible();
-    // A Private send never shows its raw answers to the sender.
-    await expect(w.getByText(/Answered privately/i)).toBeVisible();
+    // A Private send never shows its raw written answers — instead the calm explainer + the numeric rating
+    // the sender IS allowed to see (§20.8), and the private prose is absent from the card.
+    await expect(w.getByText(/never the raw answers themselves/i)).toBeVisible();
+    await expect(w.getByText('Ratings you can see')).toBeVisible();
+    // "Rate it" appears in the private numeric card AND the "At a glance" band — both are the sender-allowed
+    // numeric view; scope to the first. The private written prose appears in NEITHER.
+    await expect(w.getByText('Rate it').first()).toBeVisible();
+    await expect(w.getByText('my secret prose')).toHaveCount(0);
 
     // Export CSV writes a real file OUTSIDE the vault; the Private prose is absent, the numeric value present.
     await w.getByRole('button', { name: /Export CSV/i }).click();

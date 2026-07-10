@@ -381,6 +381,7 @@ function FormScreen({
           setError(null);
           setAnswers((prev) => ({ ...prev, [id]: value }));
         }}
+        progress
       />
       {error ? (
         <p className="error" role="alert">

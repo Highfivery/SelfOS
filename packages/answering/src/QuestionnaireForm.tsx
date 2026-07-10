@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import {
   visibleQuestions,
   allocationTotal,
+  isAnswered,
   isDateEntryList,
   isRosterList,
 } from '@selfos/core/questionnaires';
@@ -43,6 +44,12 @@ interface QuestionnaireFormProps {
   sharing?: QuestionSharing;
   /** Crisis affordance shown below the questions; defaults to the built-in `CrisisFooter` (§8.2). */
   footer?: ReactNode;
+  /**
+   * Show a progress indicator (08 §20.5): a slim bar (answered / total visible) at the top, plus a
+   * "Question N of M" eyebrow on each card (numbered in render order). Default false ⇒ no progress UI (the
+   * author's Preview, onboarding, and the self-tests stay plain). The Inbox + relay answering turn it on.
+   */
+  progress?: boolean;
   /**
    * Read-only render (08 §20.4): every answer control is inert. Used by the author's Preview — the questions
    * are wrapped in a `<fieldset disabled>`, which natively disables every descendant form control (inputs,
@@ -754,6 +761,8 @@ function QuestionField({
   onChange,
   loadImage,
   sharingControl,
+  number,
+  total,
 }: {
   question: Question;
   value: AnswerValue | undefined;
@@ -761,6 +770,9 @@ function QuestionField({
   loadImage?: LoadImage;
   /** A pre-rendered per-question sharing control (43) for the header row; omit ⇒ none. */
   sharingControl?: ReactNode;
+  /** 1-based position + total for the "Question N of M" eyebrow (08 §20.5); omit ⇒ no eyebrow. */
+  number?: number;
+  total?: number;
 }): JSX.Element {
   // A plain card with a visible prompt heading — NOT <fieldset>/<legend>, whose legend renders on the card's
   // top border and gets bisected when a long prompt wraps (the visible-overlap bug). Each control carries its
@@ -782,6 +794,11 @@ function QuestionField({
   );
   return (
     <div className={styles.question}>
+      {number !== undefined && total !== undefined ? (
+        <span className={styles.qNumber}>
+          Question {number} of {total}
+        </span>
+      ) : null}
       {prompt}
       {/* 43 §3.1 — the sharing control sits on its own line directly UNDER the prompt, left-aligned (not
           floating right of a short prompt with a big empty gap). The inline sensitive-share confirm renders
@@ -803,19 +820,10 @@ export function QuestionnaireForm({
   loadImage,
   sharing,
   footer,
+  progress,
   disabled,
 }: QuestionnaireFormProps): JSX.Element {
   const visible = visibleQuestions(questions, answers);
-  const field = (question: Question): JSX.Element => (
-    <QuestionField
-      key={question.id}
-      question={question}
-      value={answers[question.id]}
-      onChange={onChange}
-      {...(loadImage ? { loadImage } : {})}
-      {...(sharing ? { sharingControl: sharing.renderControl(question.id) } : {})}
-    />
-  );
 
   // Long forms can group questions under collapsible headings (18 §14.3). Ungrouped questions render first;
   // grouped ones follow as <details> in first-seen group order. Every group is **open by default** — the
@@ -824,6 +832,30 @@ export function QuestionnaireForm({
   const ungrouped = visible.filter((q) => !q.group);
   const groupOrder: string[] = [];
   for (const q of visible) if (q.group && !groupOrder.includes(q.group)) groupOrder.push(q.group);
+
+  // Progress (08 §20.5): number each question 1..M in RENDER order (ungrouped first, then each group), so
+  // "Question N of M" matches what the person sees even when a form is grouped. Answered count drives the bar.
+  const renderOrder = progress
+    ? [...ungrouped, ...groupOrder.flatMap((g) => visible.filter((q) => q.group === g))]
+    : [];
+  const numberOf = new Map(renderOrder.map((q, i) => [q.id, i + 1]));
+  const total = visible.length;
+  const answeredCount = progress ? visible.filter((q) => isAnswered(q, answers[q.id])).length : 0;
+
+  const field = (question: Question): JSX.Element => {
+    const number = progress ? numberOf.get(question.id) : undefined;
+    return (
+      <QuestionField
+        key={question.id}
+        question={question}
+        value={answers[question.id]}
+        onChange={onChange}
+        {...(loadImage ? { loadImage } : {})}
+        {...(sharing ? { sharingControl: sharing.renderControl(question.id) } : {})}
+        {...(number !== undefined ? { number, total } : {})}
+      />
+    );
+  };
 
   const questionsBody =
     visible.length === 0 ? (
@@ -848,6 +880,30 @@ export function QuestionnaireForm({
 
   return (
     <div className={styles.form}>
+      {/* Progress (08 §20.5): a slim bar + a text count, shown only when the host opts in and there are
+          questions. `role="progressbar"` carries the numeric state; the visible label is the text equivalent. */}
+      {progress && total > 0 ? (
+        <div className={styles.progressWrap}>
+          <div
+            className={styles.progressTrack}
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={total}
+            aria-valuenow={answeredCount}
+            aria-label={`${answeredCount} of ${total} questions answered`}
+          >
+            <span
+              className={styles.progressBar}
+              style={{ width: `${Math.round((answeredCount / total) * 100)}%` }}
+            />
+          </div>
+          {/* The progressbar's aria-label already announces the count; hide the visible text from the SR
+              so it isn't read twice (the label is the visual equivalent, §9). */}
+          <span className={styles.progressLabel} aria-hidden="true">
+            {answeredCount} of {total} answered
+          </span>
+        </div>
+      ) : null}
       {/* Read-only Preview (08 §20.4): a disabled <fieldset> makes every descendant control inert with no
           per-control wiring. The crisis footer stays OUTSIDE it, so "Get help now" always works (§8.2). */}
       {disabled ? (

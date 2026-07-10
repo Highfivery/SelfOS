@@ -506,11 +506,20 @@ export function QuestionnaireBuilder({
   // questionnaire opens read-only, so it starts on Preview (Edit isn't offered).
   const canViewResults = useSessionStore((s) => s.can('questionnaires.viewResults'));
   const [mode, setMode] = useState<BuilderMode>(() => {
-    // A notification deep-link opens straight on Results (38 §3.1) when allowed and the questionnaire is saved.
-    if (initialView === 'results' && questionnaire !== null && canViewResults) return 'results';
+    // A notification deep-link opens straight on Results (38 §3.1) when allowed, the questionnaire is saved,
+    // AND it has actually been sent (Results is hidden until then — 08 §20.6).
+    if (
+      initialView === 'results' &&
+      questionnaire !== null &&
+      canViewResults &&
+      sendStates[questionnaire.id]
+    )
+      return 'results';
     return questionnaire && sendStates[questionnaire.id] ? 'preview' : 'edit';
   });
-  const showResults = saved !== null && canViewResults;
+  // Results is offered only once there's ≥1 send (§20.6) — nothing empty to click into. `isSent` (above) is
+  // `sendStates[saved.id] !== undefined`.
+  const showResults = saved !== null && canViewResults && isSent;
   const previewQuestions = drafts
     .filter((d) => d.prompt.trim() !== '')
     .map((d) => toQuestion(d, drafts));
@@ -834,7 +843,7 @@ export function QuestionnaireBuilder({
             }}
           />
         ) : null
-      ) : mode === 'results' && saved ? (
+      ) : mode === 'results' && saved && showResults ? (
         <QuestionnaireResults
           questionnaireId={saved.id}
           compatibility={saved.compatibility ?? null}

@@ -90,6 +90,7 @@ import {
   type ProfileUpdateSuggestion,
   type IntakeSynthesisResult,
   type IntakeTurnResult,
+  type PrivacyMode,
   type QuestionTrend,
   type Role,
   type RelayLinkResult,
@@ -2199,6 +2200,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         name: string;
         at: string;
         status: AssignmentStatus;
+        privacy: PrivacyMode;
         answeredAt?: string;
       }
       interface Agg {
@@ -2249,6 +2251,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
             name: recipientName,
             at: a.createdAt,
             status: a.status,
+            privacy: a.privacy,
             ...(submittedAt ? { answeredAt: submittedAt } : {}),
           });
         }
@@ -2286,6 +2289,11 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         const answeredCount = recipients.filter((r) => r.answered).length;
         const allAnswered = recipients.length > 0 && answeredCount === recipients.length;
         const analyzed = allAnswered && !agg.analyzable && agg.latestInsight !== undefined;
+        // The card privacy chip (08 §3.1): one mode when every recipient's latest send agrees, else
+        // `mixed` (a legacy multi-recipient questionnaire sent under different modes).
+        const privacies = new Set([...agg.latestByRecipient.values()].map((r) => r.privacy));
+        const privacy: PrivacyMode | 'mixed' | undefined =
+          privacies.size === 1 ? [...privacies][0] : privacies.size > 1 ? 'mixed' : undefined;
         overview[questionnaireId] = {
           questionnaireId,
           lastSentAt: agg.lastSentAt,
@@ -2293,6 +2301,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           answeredCount,
           newResponses: agg.newResponses,
           analyzed,
+          ...(privacy ? { privacy } : {}),
           ...(agg.answeredAt ? { answeredAt: agg.answeredAt } : {}),
           ...(analyzed && agg.latestInsight
             ? { insightSummary: agg.latestInsight.summary, insightId: agg.latestInsight.id }
@@ -3249,6 +3258,11 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           answerable: isAnswerable(a.status),
           hasDraft: Boolean(response && !submitted),
           fromSelf: a.senderPersonId === personId,
+          // The card privacy chip states the REAL compatibility promise per mode (08 §3.1) — the frozen
+          // snapshot's visibility, present only on a compatibility send.
+          ...(snapshot.compatibility
+            ? { compatibilityVisibility: snapshot.compatibility.visibility }
+            : {}),
         });
       }
       return items;

@@ -2344,6 +2344,10 @@ export interface InboxItem {
   // lists it, but the Questionnaires landing's "Received" section (things OTHERS sent you) filters it out —
   // it already appears there under "Sent" (08 §3.3), so it never double-renders on one screen.
   fromSelf: boolean;
+  // Present for a compatibility send (read from the frozen snapshot): the visibility mode, so the card's
+  // privacy chip (08 §3.1) can state the REAL promise per mode — a generic "private" would misstate
+  // `senderSeesAll`, where the sender may see the answers.
+  compatibilityVisibility?: CompatibilityVisibility;
 }
 
 /**
@@ -2490,6 +2494,11 @@ export interface QuestionnaireSentOverview {
   /** The latest submitted-but-un-analysed send, so the card can offer a one-tap "Analyze". Absent when
    *  there's nothing new to analyse (nothing submitted, or all analysed). */
   analyzableAssignmentId?: string;
+  /** The privacy mode of the recipients' latest sends, for the card's privacy chip (§3.1 card privacy
+   *  badges): `private` = the sender sees only the derived insight, `standard` = the sender sees the
+   *  answers, `mixed` = a legacy multi-recipient questionnaire whose latest sends differ. Derived with the
+   *  same per-recipient latest-send dedup as `recipients`; absent only when there are no sends. */
+  privacy?: PrivacyMode | 'mixed';
 }
 
 /**

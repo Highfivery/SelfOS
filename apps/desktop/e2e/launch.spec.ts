@@ -3950,8 +3950,9 @@ test('inbox: send a questionnaire, answer it, submit, and round-trip through the
     await expect(w.getByText('New')).toBeVisible();
     await w.getByRole('button', { name: /Weekly check-in/ }).click();
 
-    // The answer pane shows the Private promise + the always-present crisis affordance.
-    await expect(w.getByText(/won’t see your individual responses/i)).toBeVisible();
+    // The answer pane shows the Private promise — the shared derived `externalSendDisclosure` wording
+    // (one source with the relay page + the landing privacy chips, §8.4) — + the crisis affordance.
+    await expect(w.getByText(/won’t see your written answers/i)).toBeVisible();
     await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible();
 
     // Answer and submit; the row then reads Submitted.
@@ -4470,7 +4471,11 @@ test('questionnaires redesign (§3.1/§3.3): Sent + Received card sections; answ
   const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
   if (!key) throw new Error('redesign e2e: master key missing');
 
-  const selfSend = async (title: string, prompt: string): Promise<string> => {
+  const selfSend = async (
+    title: string,
+    prompt: string,
+    privacy: 'standard' | 'private' = 'standard',
+  ): Promise<string> => {
     const q = await saveQuestionnaire(
       fs,
       key,
@@ -4487,7 +4492,7 @@ test('questionnaires redesign (§3.1/§3.3): Sent + Received card sections; answ
       senderPersonId: 'owner-1',
       recipient: { kind: 'person', personId: 'owner-1' },
       channel: 'inApp',
-      privacy: 'standard',
+      privacy,
       senderVisibleToRecipient: true,
     });
     return a.id;
@@ -4496,7 +4501,8 @@ test('questionnaires redesign (§3.1/§3.3): Sent + Received card sections; answ
   // (a) An owner self check-in still AWAITING a response.
   await selfSend('Weekly mood', 'How’s your mood?');
   // (b) Another owner self check-in that HAS been answered → the Sent card reads "Answered" + a "new" badge.
-  const answeredId = await selfSend('Values check', 'What matters most?');
+  //     Sent PRIVATE, so its card carries the protected privacy chip (§3.1 card privacy badges).
+  const answeredId = await selfSend('Values check', 'What matters most?', 'private');
   await submitResponse(fs, key, {
     assignmentId: answeredId,
     answers: [{ questionId: 'q1', value: 'Honesty' }],
@@ -4518,7 +4524,8 @@ test('questionnaires redesign (§3.1/§3.3): Sent + Received card sections; answ
     senderPersonId: 'ghost-author',
     recipient: { kind: 'person', personId: 'owner-1' },
     channel: 'inApp',
-    privacy: 'standard',
+    // Private, so the Received card must announce the promise BEFORE the recipient opens it (§3.1).
+    privacy: 'private',
     senderVisibleToRecipient: true,
   });
 
@@ -4538,6 +4545,9 @@ test('questionnaires redesign (§3.1/§3.3): Sent + Received card sections; answ
     // The meta carries date AND time; the answered card offers one-tap Analyze.
     await expect(sent.getByText(/Sent .*2026 · /).first()).toBeVisible();
     await expect(sent.getByRole('button', { name: /Analyze to see the insight/ })).toBeVisible();
+    // Privacy chips (§3.1 card privacy badges): the standard send reads visible, the private one protected.
+    await expect(sent.getByText('Answers visible')).toBeVisible();
+    await expect(sent.getByText('Private · insights only')).toBeVisible();
 
     // Received section: the friend's send — with its category eyebrow + a favourite pin — but NOT the owner's
     // own self-sends (filtered so nothing double-renders across the two sections, §3.3).
@@ -4546,8 +4556,10 @@ test('questionnaires redesign (§3.1/§3.3): Sent + Received card sections; answ
     await expect(
       received.getByRole('button', { name: 'A friend’s check-in', exact: true }),
     ).toBeVisible();
-    // A New item leads with the "Answer" CTA.
+    // A New item leads with the "Answer" CTA — and its privacy chip shows BEFORE the recipient opens it,
+    // so they know what the sender will (and won't) see (§3.1 card privacy badges).
     await expect(received.getByRole('button', { name: 'Answer' })).toBeVisible();
+    await expect(received.getByText('Your answers stay private')).toBeVisible();
     await expect(received.getByText(/How am I doing in this role/)).toBeVisible();
     await expect(received.getByText(/Received .*2026 · /)).toBeVisible();
     await expect(received.getByRole('button', { name: /Weekly mood/ })).toHaveCount(0);

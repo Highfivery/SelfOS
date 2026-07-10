@@ -389,6 +389,35 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-10 — **Build (Questionnaires landing cards state whether answers are private or visible — card privacy
+  badges; user-requested; mockup approved FIRST [visualize widget, 3 placement variants + AskUserQuestion forks:
+  status-row chip · both Sent AND Received · mode-specific compat labels — all recommended picks]; spec 08
+  §3.1/§3.3; on `feat/questionnaire-card-privacy`).** Every landing card now carries a quiet **privacy chip**
+  beside the status pill (icon + short label; the full honest sentence as the tooltip): Sent = `Private · insights
+only` (lock, accent tint) / `Answers visible` (eye, neutral outline) / `Mixed privacy` (legacy multi-recipient
+  whose latest sends differ); Received = `Your answers stay private` / `<Sender> sees your answers` — shown on a
+  **New** card too, so the recipient knows what the sender sees BEFORE opening. A **compatibility** card states
+  its **visibility mode** (`Combined report` / `Report + own answers` / `You see all answers` / `Shared with
+<sender>` / `Context only`) since a generic "Private" would misstate `senderSeesAll`. Drafts/never-sent show no
+  chip (privacy is chosen at send). Data: additive `QuestionnaireSentOverview.privacy?: PrivacyMode | 'mixed'`
+  (derived in the bridge with the SAME per-recipient latest-send dedup as the recipient chips) +
+  `InboxItem.compatibilityVisibility?` (read from the frozen snapshot); the Sent compat chip reads the definition
+  (`questionnaire.compatibility.visibility`), so it shows even without `viewResults`. **Honesty guard (§8.4):** the
+  Received tooltips reuse `externalSendDisclosure` VERBATIM — and per the code-reviewer's should-fix, the Inbox
+  answering pane's plain-send disclosure was unified ONTO `externalSendDisclosure` (its inline strings deleted), so
+  the pane, the relay page, and the chips share one derived source; the two name-free compat tooltips
+  (`senderSeesAll`/`contextOnly`) are pinned byte-for-byte against `compatibilityDisclosure` by a drift-fence unit
+  test. Route-local pure `privacyBadge.ts` + a shared `PrivacyChip` (title tooltip, ellipsis-safe at 360px). Gate
+  green: typecheck, lint, format, **974 core + 11 relay + 955 desktop** unit (+bridge private/standard/mixed +
+  compat-visibility-on-InboxItem, +privacyBadge matrix incl. the verbatim pin, +2 RTL [Sent chips + exactly-3/
+  draft-none; Received chips incl. New-card + compat]), **E2E** (the redesign test now seeds a private self-send +
+  a private foreign send → asserts both Sent chips, the Received chip on a New card, 360px overflow guard; the
+  inbox round-trip asserts the unified disclosure wording); real-Electron visual QA at desktop + 360px. Synced
+  spec 08 §3.1/§3.3/§6. **Lesson: a per-send attribute surfaced at card level must be derived with the SAME dedup
+  the card's other fields use (latest send per recipient), with an honest `mixed` fallback; and when a chip
+  paraphrases a privacy promise, wire its wording to the one derived disclosure source (reuse verbatim + pin with
+  an equality test) — a hand-copied sentence WILL drift, and the §8.4 guard only holds if every surface prints the
+  same derivation.**
 - 2026-07-09 — **Fix + redesign (Questionnaires Sent card: the Insight excerpt was "weirdly cut off"; user-reported;
   mockup approved FIRST; spec 08 §3.1; on `fix/questionnaires-insight-excerpt`).** Four connected defects in the
   analysed card's excerpt: (1) `-webkit-line-clamp: 4` sat on the PADDED `.excerpt` box, so overflow clipped at the

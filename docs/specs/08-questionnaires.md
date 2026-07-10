@@ -186,6 +186,31 @@ per-recipient `answeredAt`). **Received** cards gain the **category eyebrow**, r
 **favourite** (device-local, per-person via `InboxItem.favorite` + `assignments:setFavorite`; `InboxItem` also
 carries `type` + `answeredAt`).
 
+**Card privacy badges (2026-07-10).** Every landing card states **whether the answers are private or
+visible** — a quiet **privacy chip beside the status pill** (icon + short label; the full honest sentence as
+a `title` tooltip), so the promise is visible at a glance, not only inside the answering pane. Wording is
+**derived, never configured** (the §8.4 honesty guard): the Received side reuses `externalSendDisclosure`
+verbatim for the tooltip. Labels:
+
+- **Sent card** (sender's point of view): `Private · insights only` (lock, accent tint) / `Answers visible`
+  (eye, neutral outline). A **compatibility** card shows its **visibility mode** instead — `Combined report`
+  (sharedReport) / `Report + own answers` (eachSeesOwn) / `You see all answers` (senderSeesAll) / `Context
+only` — since a generic "Private" would misstate `senderSeesAll`.
+- **Received card** (recipient's point of view): `Your answers stay private` / `<Sender> sees your answers`;
+  a compatibility item shows the mode from **its** viewpoint (`Combined report` / `Report + your answers` /
+  `Shared with <sender>` / `Context only`). Shown on a **New** card too — the recipient knows **before
+  opening** what the sender will see.
+- A **draft / never-sent** card shows **no chip** (privacy is chosen at send). A legacy multi-recipient
+  questionnaire whose recipients' latest sends **differ** shows `Mixed privacy` (tooltip: check each send in
+  Results).
+
+Data: additive `QuestionnaireSentOverview.privacy?: PrivacyMode | 'mixed'` (derived from each recipient's
+latest send, same dedup as the recipient chips) and `InboxItem.compatibilityVisibility?:
+CompatibilityVisibility` (read from the frozen snapshot). The Sent chip therefore shares `sentOverview`'s
+`viewResults` gating — a sender without it simply gets no chip (same as the recipient chips); a
+compatibility Sent card reads the mode from the definition (`questionnaire.compatibility.visibility`), so it
+shows even without `viewResults`.
+
 ### 3.2 Sending
 
 1. **Choose recipient** — a household **subject** (delivered in-app) or an **external person** (relay
@@ -218,7 +243,10 @@ and Edit + resend** (a resubmit bumps `ResponseSet.revision`), which flags the s
 Answer / Continue / View), so everything questionnaire-related has one home. The standalone **`/inbox`** nav
 stays (it will grow beyond questionnaires). A **self check-in** (you're both sender and recipient) is filtered
 out of this "Received" section — it already appears under "Sent" — via a new derived `InboxItem.fromSelf`
-flag, so the same card never renders twice on one screen. The `/inbox` page still lists it.
+flag, so the same card never renders twice on one screen. The `/inbox` page still lists it. Each Received
+card carries the **privacy chip** (§3.1 card privacy badges) so the recipient sees what the sender will see
+**before** opening the questionnaire — the same derived promise the answering pane shows (the pane's
+plain-send disclosure reuses `externalSendDisclosure` too, so there is one derived source).
 
 ### 3.4 Recipient — external (relay page)
 
@@ -644,11 +672,13 @@ renderer):
   `questionnaires:sendStates` (create-gated `{lastSentAt,total}` per questionnaire) +
   `questionnaires:sentOverview` (**viewResults**-gated per-questionnaire recipients + answered/new counts for
   the landing "Sent" cards §3.1 — deduped to each recipient's latest send, compat self-half excluded, no raw
-  answers). _(both wired, sender-scoped.)_
+  answers; carries a derived `privacy` (`standard` / `private` / `mixed`) for the card privacy chip).
+  _(both wired, sender-scoped.)_
 - **Send/collect** — `assignments:create` (the in-app send — wired) / `:inbox` (the recipient's Inbox; each
   item carries `fromSelf` = the active person is both sender + recipient, so the landing's "Received" section
-  can filter out self check-ins that already show under "Sent" §3.3; plus `type`, `answeredAt`, and a
-  device-local per-person `favorite`) / `:setFavorite` (pin/unpin a received questionnaire, recipient-scoped) /
+  can filter out self check-ins that already show under "Sent" §3.3; plus `type`, `answeredAt`, a
+  device-local per-person `favorite`, and `compatibilityVisibility` from the frozen snapshot for the card
+  privacy chip §3.1) / `:setFavorite` (pin/unpin a received questionnaire, recipient-scoped) /
   `:get` (the recipient answering view) / `:open` (sent → opened) — _all wired, recipient-scoped + gated by
   `questionnaires.answer`_; `assignments:results(questionnaireId)` returns the sender's sends + per-send
   outcome (Standard, submitted → raw answers; Private → none), _sender-scoped + gated by

@@ -115,8 +115,10 @@ describe('Inbox', () => {
     renderInbox();
 
     await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
-    // Private mode tells the recipient their raw answers stay hidden, and crisis help is always present.
-    expect(await screen.findByText(/won’t see your individual responses/i)).toBeInTheDocument();
+    // Private mode tells the recipient their raw answers stay hidden — the shared derived
+    // `externalSendDisclosure` wording (one source with the relay page + the landing privacy chips, §8.4) —
+    // and crisis help is always present.
+    expect(await screen.findByText(/won’t see your written answers/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /get help now/i })).toBeInTheDocument();
 
     await userEvent.type(screen.getByLabelText('How are we doing?'), 'Pretty well');

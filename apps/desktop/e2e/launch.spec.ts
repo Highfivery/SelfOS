@@ -209,6 +209,98 @@ async function seedProfileSuggestion(
   );
 }
 
+/**
+ * Seed a Together-ready household (58): Ben (owner) + Angel (member), a live `partner` edge, both onboarded,
+ * an AI key, cleared pre-screens (unless opted out), and Ben's portrait carrying a RESTRICTED trauma fact +
+ * a general fact (for the excludeRestricted / restricted-absence prompt assert).
+ */
+async function seedTogetherReady(
+  opts: { clearBenPrescreen?: boolean } = {},
+): Promise<{ userData: string; vault: string; ben: string; angel: string }> {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('seedTogetherReady: master key missing');
+  const now = new Date().toISOString();
+  const ben = 'owner-1';
+  const angel = 'angel-1';
+  // Rename the seeded owner (default "Tester") to "Ben" so the couples prompt/coach/switcher name him.
+  await savePerson(fs, key, {
+    id: ben,
+    schemaVersion: 1,
+    displayName: 'Ben',
+    isSubject: true,
+    tags: [],
+    createdAt: now,
+    updatedAt: now,
+  });
+  await seedCompletedIntake(fs, key, ben);
+  await saveInsight(fs, key, {
+    id: 'intake-owner-1',
+    schemaVersion: 1,
+    source: 'intake',
+    subjectPersonId: ben,
+    summary: 'Ben is thoughtful and steady',
+    facts: [
+      { id: 'g', text: 'enjoys long hikes', shareable: false },
+      {
+        id: 'r',
+        text: 'RESTRICTEDTRAUMA detail',
+        shareable: false,
+        restricted: true,
+        lifeArea: 'Intimacy',
+      },
+    ],
+    confidence: 'medium',
+    categories: [],
+    approved: true,
+    provenance: { intakeSection: 'weighs', at: now },
+    createdAt: now,
+    updatedAt: now,
+  });
+  await savePerson(fs, key, {
+    id: angel,
+    schemaVersion: 1,
+    displayName: 'Angel',
+    isSubject: true,
+    tags: [],
+    createdAt: now,
+    updatedAt: now,
+  });
+  await setAccount(fs, key, { personId: angel, roleId: 'member' });
+  await seedCompletedIntake(fs, key, angel);
+  await saveRelationship(fs, key, {
+    id: 'rel-partner',
+    schemaVersion: 2,
+    fromPersonId: ben,
+    toPersonId: angel,
+    type: 'partner',
+    createdAt: now,
+    updatedAt: now,
+  });
+  const clearPrescreen = (id: string): Promise<void> =>
+    writeEncryptedJson(
+      fs,
+      `people/${id}/together/prescreen.enc`,
+      { schemaVersion: 1, personId: id, flagged: false, itemCatalogVersion: 1, completedAt: now },
+      key,
+    );
+  if (opts.clearBenPrescreen !== false) await clearPrescreen(ben);
+  await clearPrescreen(angel);
+  return { userData, vault, ben, angel };
+}
+
+/** Switch the active person via the TopBar account menu → "Switch person" → the Switcher dialog (PIN-free). */
+async function switchTogetherPerson(w: Page, name: string): Promise<void> {
+  await w.getByRole('button', { name: /signed in as/i }).click();
+  await w.getByRole('menuitem', { name: 'Switch person' }).click();
+  const dialog = w.getByRole('dialog', { name: /who.s here/i });
+  await expect(dialog).toBeVisible();
+  await dialog.getByText(name).click();
+  await expect(w.getByRole('button', { name: `Signed in as ${name}` })).toBeVisible();
+}
+
 // Deterministic AI: passthrough secret encryption (no keychain prompt) + offline Claude client.
 function e2eEnv(): Record<string, string> {
   const env: Record<string, string> = {};
@@ -9401,6 +9493,171 @@ test('memory: life-area tile counts stay inside the tile at wide widths (long na
       });
       expect(worst, `tile content overflow at ${width}px`).toBeLessThanOrEqual(1);
     }
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+/** All captured couples prompts (58 §10 `SELFOS_FAKE_PROMPT_DIR`) concatenated. */
+async function readTogetherPrompts(dir: string): Promise<string> {
+  const names = (await readdir(dir)).filter((n) => n.startsWith('together-prompt-'));
+  const bodies = await Promise.all(names.map((n) => readFile(join(dir, n), 'utf8')));
+  return bodies.join('\n===\n');
+}
+
+test('together (58): lifecycle + aside projection (crown jewel) + prompt capture + decrypt', async () => {
+  const promptDir = await mkdtemp(join(tmpdir(), 'selfos-e2e-prompt-'));
+  const { userData, vault } = await seedTogetherReady();
+  const app = await electron.launch({
+    args: [`--user-data-dir=${userData}`, MAIN],
+    env: { ...e2eEnv(), SELFOS_FAKE_PROMPT_DIR: promptDir },
+  });
+  try {
+    const w = await app.firstWindow();
+    // Ben has a partner → the Together nav shows. Open it + start a session with Angel.
+    await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByPlaceholder('e.g. Feeling disconnected lately').fill('Feeling distant lately');
+    await w.getByRole('button', { name: 'Send invitation' }).click();
+
+    // Ben writes an opening message (a pre-accept turn — hold-space); the coach echoes BOTH names.
+    await w.getByLabel('Message').fill('I feel like we barely talk anymore.');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/I hear you, Ben and Angel/)).toBeVisible();
+
+    // Ben sends a PRIVATE ASIDE — only he can see it.
+    await w.getByRole('button', { name: 'Write privately to the coach' }).click();
+    await w.getByLabel('Private note to the coach').fill('SECRETWORD I am scared to say this.');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText('SECRETWORD I am scared to say this.')).toBeVisible();
+    await expect(w.getByText('Private to the coach').first()).toBeVisible();
+
+    // Switch to Angel → open the invitation → the derived rules of the room → accept → the thread.
+    await switchTogetherPerson(w, 'Angel');
+    await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByText('Feeling distant lately').click();
+    await expect(w.getByText('You both see the conversation.')).toBeVisible();
+    await expect(w.getByText('Private notes exist.')).toBeVisible();
+    await w.getByRole('button', { name: 'Continue' }).click();
+
+    // Angel's thread shows Ben's opening + the coach reply, but NEVER the aside (the crown jewel).
+    await expect(w.getByText(/barely talk anymore/)).toBeVisible();
+    await expect(w.getByText('SECRETWORD I am scared to say this.')).toHaveCount(0);
+
+    // Prompt capture: the aside DID reach the coach's prompt (marked private); no restricted fact, no register.
+    const prompts = await readTogetherPrompts(promptDir);
+    expect(prompts).toContain('SECRETWORD'); // the coach sees the aside…
+    expect(prompts).toContain('[PRIVATE from Ben'); // …clearly marked private
+    expect(prompts).not.toContain('RESTRICTEDTRAUMA'); // excludeRestricted (§6.3) — even on any topic
+    expect(prompts.toLowerCase()).not.toContain('consenting adults'); // no explicit register in Phase B
+    // Order is load-bearing: PERSONA → the confidentiality contract → FORMATTING.
+    expect(prompts.indexOf('warm, reflective wellness companion')).toBeLessThan(
+      prompts.indexOf('private background about Ben'),
+    );
+
+    // Decrypt: the messages are write-once files; the aside is stored privateAside by Ben.
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('no key');
+    const fs = createNodeFileSystem(vault);
+    const sessions = await readdir(join(vault, 'together', 'sessions'));
+    expect(sessions.length).toBe(1);
+    const msgDir = join(vault, 'together', 'sessions', sessions[0]!, 'messages');
+    const files = await readdir(msgDir);
+    const msgs = await Promise.all(
+      files.map((f) =>
+        readEncryptedJson(fs, `together/sessions/${sessions[0]}/messages/${f}`, key),
+      ),
+    );
+    const asides = (msgs as { privateAside?: boolean; authorPersonId: string }[]).filter(
+      (m) => m.privateAside,
+    );
+    expect(asides.length).toBeGreaterThanOrEqual(1);
+    expect(asides.every((m) => m.authorPersonId === 'owner-1')).toBe(true);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+    await rm(promptDir, { recursive: true, force: true });
+  }
+});
+
+test('together (58): the private pre-screen holds a flagged person; the partner only sees invited (§8.2)', async () => {
+  // Ben's pre-screen is NOT seeded → he must take it first.
+  const { userData, vault } = await seedTogetherReady({ clearBenPrescreen: false });
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: /Together/ }).click();
+    // The private check-in leads (never the start card).
+    await expect(w.getByText('A private check-in, just for you')).toBeVisible();
+    await expect(w.getByRole('heading', { name: 'Start a session' })).toHaveCount(0);
+
+    // A flagged set (afraid → flagged; the fear item surfaces crisis resources).
+    await w.getByLabel('Yes, usually').click(); // safe-honest: fine
+    await w.getByLabel('Often').click(); // afraid: flags + crisis
+    await w.getByLabel('Yes, my choice').click(); // own-choice: fine
+    await w.getByLabel('No, I’m ready for this').click(); // prefer-solo: fine
+    await w.getByRole('button', { name: 'Continue' }).click();
+
+    await expect(w.getByText('Let’s take this gently')).toBeVisible();
+    await expect(w.getByText(/If you ever feel unsafe or afraid/)).toBeVisible();
+
+    // Decrypt: only the OUTCOME is stored — no raw answers.
+    const raw = await readFile(
+      (await findFileNamed(join(vault, 'people', 'owner-1', 'together'), 'prescreen.enc'))!,
+      'utf8',
+    );
+    expect(raw).not.toContain('afraid');
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('together (58): no partner → no nav; and the surface is clean at 360px', async () => {
+  // A plain ready vault (owner, NO partner) → the Together nav is absent.
+  const noPartner = await seedReadyVault({ 'ai.enabled': true });
+  let app = await launch(noPartner.userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Home' }).waitFor();
+    await expect(w.getByRole('link', { name: /Together/ })).toHaveCount(0);
+  } finally {
+    await app.close();
+    await rm(noPartner.userData, { recursive: true, force: true });
+    await rm(noPartner.vault, { recursive: true, force: true });
+  }
+
+  // With a partner, the surface renders with no horizontal overflow at 360px (home + thread).
+  const { userData, vault } = await seedTogetherReady();
+  app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.setViewportSize({ width: 360, height: 780 });
+    await w.getByRole('button', { name: /open navigation/i }).click();
+    await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByPlaceholder('e.g. Feeling disconnected lately').fill('A tricky week');
+    await w.getByRole('button', { name: 'Send invitation' }).click();
+    await w.getByLabel('Message').fill('Hi.');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/I hear you/)).toBeVisible();
+
+    // No element has an inner horizontal scrollbar (§12 / §7 overflow guard).
+    const overflow = await w.evaluate(() => {
+      for (const el of Array.from(document.querySelectorAll('*'))) {
+        const style = getComputedStyle(el);
+        if (
+          (style.overflowX === 'auto' || style.overflowX === 'scroll') &&
+          el.scrollWidth > el.clientWidth + 1
+        ) {
+          return el.className || el.tagName;
+        }
+      }
+      return null;
+    });
+    expect(overflow).toBeNull();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

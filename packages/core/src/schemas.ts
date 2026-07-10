@@ -3032,3 +3032,51 @@ export type TogetherCreateResult =
       reason: 'NOT_READY' | 'NOT_ALLOWED' | 'NO_EDGE' | 'PARTNER_NOT_SUBJECT' | 'PRESCREEN';
       message: string;
     };
+
+/** One pre-screen item for the renderer (id + prompt + radio choices) — §8.2. */
+export interface TogetherPreScreenItem {
+  id: string;
+  prompt: string;
+  choices: { value: string; label: string }[];
+}
+
+/** The pre-screen state the renderer reads before the ceremony/turn (§8.2). Never carries raw answers. */
+export interface TogetherPreScreenView {
+  completed: boolean; // a pre-screen outcome exists
+  flagged: boolean; // the latest outcome held Together for this person
+  needsScreen: boolean; // must take (or re-take) the screen before create/accept/turns
+  reoffer: boolean; // cleared, but 180+ days old — a gentle re-offer (never gates)
+  items: TogetherPreScreenItem[];
+}
+
+/** The outcome of submitting a pre-screen (§8.2) — the private, per-person result. No raw answers cross. */
+export interface TogetherPreScreenResult {
+  flagged: boolean;
+  showCrisis: boolean;
+  suggestSolo: boolean;
+}
+
+/** Pre-screen submit input — the raw answers are evaluated then DISCARDED host-side (§8.2). */
+export const TogetherPreScreenSubmitSchema = z.object({
+  answers: z.record(z.string(), z.string()),
+});
+export type TogetherPreScreenSubmitInput = z.infer<typeof TogetherPreScreenSubmitSchema>;
+
+/** The result of a couples turn (§5.1) — the refreshed viewer-projected view, or an honest failure (37). */
+export type TogetherTurnResult =
+  | { ok: true; view: TogetherSessionView }
+  | {
+      ok: false;
+      reason: 'NO_KEY' | 'BUDGET' | 'EMPTY' | 'ERROR' | 'PRESCREEN' | 'NOT_ALLOWED';
+      message: string;
+    };
+
+export const TogetherSendMessageInputSchema = z.object({
+  sessionId: z.string().min(1),
+  text: z.string().min(1),
+  privateAside: z.boolean().optional(), // §3.6 — a private aside to the coach
+});
+export type TogetherSendMessageInput = z.infer<typeof TogetherSendMessageInputSchema>;
+
+export const TogetherRetryInputSchema = z.object({ sessionId: z.string().min(1) });
+export type TogetherRetryInput = z.infer<typeof TogetherRetryInputSchema>;

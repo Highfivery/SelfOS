@@ -108,8 +108,11 @@ import type {
   SessionSummaryResult,
   TestResult,
   TogetherCreateResult,
+  TogetherPreScreenResult,
+  TogetherPreScreenView,
   TogetherSessionSummary,
   TogetherSessionView,
+  TogetherTurnResult,
   UpdateCheckResult,
   UsageEvent,
   UsageSummary,
@@ -267,6 +270,11 @@ export const IpcChannels = {
   togetherSetPaused: 'together:setPaused',
   togetherLeave: 'together:leave',
   togetherMarkRead: 'together:markRead',
+  togetherPrescreenGet: 'together:prescreenGet',
+  togetherPrescreenSubmit: 'together:prescreenSubmit',
+  togetherSendMessage: 'together:sendMessage',
+  togetherRetry: 'together:retry',
+  togetherChunk: 'together:chunk', // main → renderer event
   assignmentsCreate: 'assignments:create',
   assignmentsInbox: 'assignments:inbox',
   assignmentsSetFavorite: 'assignments:setFavorite',
@@ -961,6 +969,23 @@ export interface SelfosBridge {
   togetherLeave(id: string): Promise<TogetherSessionView | null>;
   /** Mark the caller's read cursor (drives the unread/turn badges). */
   togetherMarkRead(input: { sessionId: string; at: string }): Promise<void>;
+  /** The caller's own pre-screen state (§8.2) — items + whether they must (re-)take it. Never raw answers. */
+  togetherPrescreenGet(): Promise<TogetherPreScreenView>;
+  /** Submit the caller's pre-screen — evaluated AI-free, only the OUTCOME persisted (raw answers discarded). */
+  togetherPrescreenSubmit(input: {
+    answers: Record<string, string>;
+  }): Promise<TogetherPreScreenResult>;
+  /** Send a message (or a private aside): streams the coach reply via `onTogetherChunk`, resolves with the
+   *  refreshed viewer-projected view. Participant + edge; pre-screen + initiator-budget gates (§5.1/§5.2). */
+  togetherSendMessage(input: {
+    sessionId: string;
+    text: string;
+    privateAside?: boolean;
+  }): Promise<TogetherTurnResult>;
+  /** Reply-only regeneration for a session whose newest message is an unanswered human message (§7). */
+  togetherRetry(input: { sessionId: string }): Promise<TogetherTurnResult>;
+  /** Subscribe to streamed couples-turn reply chunks (a separate sink from chat — §5.4). */
+  onTogetherChunk(listener: (delta: string) => void): () => void;
   /**
    * Send a questionnaire to its BOUND household recipient (in-app), freezing an immutable snapshot at send.
    * The recipient is set on the questionnaire at creation (08 §17.3) — it is NOT passed here. Returns the

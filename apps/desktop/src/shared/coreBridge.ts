@@ -140,6 +140,12 @@ import {
   type TogetherSessionView,
   type TogetherParticipant,
   type TogetherCreateResult,
+  type TogetherPreScreenView,
+  type TogetherPreScreenResult,
+  TogetherPreScreenSubmitSchema,
+  type TogetherTurnResult,
+  TogetherSendMessageInputSchema,
+  TogetherRetryInputSchema,
 } from './schemas';
 import { OWNER_ROLE_ID, roleAllows, type CapabilityKey } from './capabilities';
 import { runConnectionTest } from './claudeProxy';
@@ -246,11 +252,20 @@ import {
 import {
   createSession as createTogetherSession,
   digestFor,
+  evaluatePreScreen,
+  getPreScreen,
   getSession as getTogetherSession,
+  isPreScreenComplete,
   listMessages as listTogetherMessages,
   listSessionsForPerson as listTogetherSessionsForPerson,
   listStates as listTogetherStates,
+  preScreenClears,
+  preScreenNeedsReoffer,
+  PRESCREEN_ITEMS,
   projectMessages as projectTogetherMessages,
+  retryTogetherReply,
+  runTogetherTurn,
+  savePreScreenOutcome,
   updateState as updateTogetherState,
 } from '@selfos/core/together';
 import { sniffImageMime } from '@selfos/core/media';
@@ -498,6 +513,8 @@ export interface BridgeHost {
   emitDreamChunk(chunk: string): void;
   /** Deliver an intake interview reply chunk to the renderer (separate channel from chat/dreams). */
   emitIntakeChunk(chunk: string): void;
+  /** Deliver a Together couples-turn reply chunk to the renderer (separate sink from chat, 58 §5.4). */
+  emitTogetherChunk(chunk: string): void;
 
   // --- Platform-specific surface, forwarded verbatim to the renderer-facing bridge ---
   getBootState(): Promise<BootState>;
@@ -529,6 +546,8 @@ export interface BridgeHost {
   onDreamChunk(listener: (delta: string) => void): () => void;
   /** Subscribe to streamed intake interview chunks; the counterpart to `emitIntakeChunk`. */
   onIntakeChunk(listener: (delta: string) => void): () => void;
+  /** Subscribe to streamed Together couples-turn chunks; the counterpart to `emitTogetherChunk`. */
+  onTogetherChunk(listener: (delta: string) => void): () => void;
 }
 
 /** Vault-relative path of the plain-JSON, vault-scoped settings file (02-app-shell). */
@@ -949,6 +968,16 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     return { fs: ctx.fs, key: ctx.key, personId };
   };
 
+  /**
+   * The pre-screen gate (§5.2 one rule): a person may create/accept/take a turn only when their LATEST
+   * pre-screen is present AND not flagged. The OTHER participant only ever sees invited/waiting (§8.2).
+   */
+  const togetherPreScreenClears = async (
+    fs: FileSystem,
+    key: Uint8Array,
+    personId: string,
+  ): Promise<boolean> => preScreenClears(await getPreScreen(fs, key, personId));
+
   /** A session the active person may access — membership + live edge — else null (§5.2). */
   const accessibleTogetherSession = async (
     fs: FileSystem,
@@ -1022,6 +1051,33 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       messages: projectTogetherMessages(messages, viewerId),
       viewerAcked: Boolean(states.get(viewerId)?.rulesAckAt),
     };
+  };
+
+  /**
+   * Map a core turn outcome → the renderer-facing `TogetherTurnResult`. On BUDGET, honesty is asymmetric
+   * (§6.2): the INITIATOR sees their own standard budget message; the non-initiator gets a NEUTRAL,
+   * session-scoped notice — no ratio, no `$`, no naming of whose budget. On success, the refreshed view.
+   */
+  const togetherTurnResult = async (
+    fs: FileSystem,
+    key: Uint8Array,
+    session: TogetherSession,
+    viewerId: string,
+    outcome: { ok: true } | { ok: false; reason: string; message: string },
+  ): Promise<TogetherTurnResult> => {
+    if (outcome.ok) {
+      return { ok: true, view: await buildTogetherView(fs, key, session, viewerId, new Date()) };
+    }
+    if (outcome.reason === 'BUDGET') {
+      const message =
+        viewerId === session.initiatorPersonId
+          ? outcome.message
+          : 'AI replies are paused for this session until next period.';
+      return { ok: false, reason: 'BUDGET', message };
+    }
+    const reason: 'NO_KEY' | 'EMPTY' | 'ERROR' =
+      outcome.reason === 'NO_KEY' || outcome.reason === 'EMPTY' ? outcome.reason : 'ERROR';
+    return { ok: false, reason, message: outcome.message };
   };
 
   const AI_KEY_IDS = { anthropic: ANTHROPIC_API_KEY_ID, openai: OPENAI_API_KEY_ID } as const;
@@ -1216,6 +1272,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     onChatChunk: (listener) => host.onChatChunk(listener),
     onDreamChunk: (listener) => host.onDreamChunk(listener),
     onIntakeChunk: (listener) => host.onIntakeChunk(listener),
+    onTogetherChunk: (listener) => host.onTogetherChunk(listener),
     platform: host.platform,
     // iOS/web have no OS window chrome, so there is no fullscreen-titlebar transition to report.
     onFullscreenChanged: () => () => {},
@@ -2029,6 +2086,10 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           message: 'Together with this person isn’t available.',
         };
       }
+      // The pre-screen gate (§8.2): the initiator must have cleared their own private check before starting.
+      if (!(await togetherPreScreenClears(ctx.fs, ctx.key, personId))) {
+        return { ok: false, reason: 'PRESCREEN', message: 'Take the private check first.' };
+      }
       const session = await createTogetherSession(
         ctx.fs,
         ctx.key,
@@ -2055,6 +2116,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         z.string().min(1).parse(id),
       );
       if (!session) return null;
+      // Defense in depth (§8.2): accept requires the caller's own cleared pre-screen. The renderer routes to
+      // the pre-screen form first (via `togetherPrescreenGet`), so this null is a belt-and-suspenders guard.
+      if (!(await togetherPreScreenClears(c.fs, c.key, c.personId))) return null;
       await updateTogetherState(
         c.fs,
         c.key,
@@ -2134,6 +2198,88 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         { lastReadMessageAt: at },
         new Date(),
       );
+    },
+    togetherPrescreenGet: async (): Promise<TogetherPreScreenView> => {
+      const items = PRESCREEN_ITEMS.map((i) => ({
+        id: i.id,
+        prompt: i.prompt,
+        choices: i.choices.map((ch) => ({ value: ch.value, label: ch.label })),
+      }));
+      const c = await togetherCtx();
+      if (!c) return { completed: false, flagged: false, needsScreen: true, reoffer: false, items };
+      const result = await getPreScreen(c.fs, c.key, c.personId);
+      return {
+        completed: result !== null,
+        flagged: result?.flagged === true,
+        needsScreen: !preScreenClears(result),
+        reoffer: preScreenNeedsReoffer(result, new Date()),
+        items,
+      };
+    },
+    togetherPrescreenSubmit: async (input): Promise<TogetherPreScreenResult> => {
+      const { answers } = TogetherPreScreenSubmitSchema.parse(input);
+      const c = await togetherCtx();
+      // Not ready, or an incomplete screen → a safe HELD default (never persist a false "clear").
+      if (!c || !isPreScreenComplete(answers)) {
+        return { flagged: true, showCrisis: false, suggestSolo: true };
+      }
+      const evaluation = evaluatePreScreen(answers);
+      // Persist ONLY the outcome — the raw answers are evaluated here and then discarded (§8.2).
+      await savePreScreenOutcome(c.fs, c.key, c.personId, evaluation.flagged, new Date());
+      return evaluation;
+    },
+    togetherSendMessage: async (input): Promise<TogetherTurnResult> => {
+      const { sessionId, text, privateAside } = TogetherSendMessageInputSchema.parse(input);
+      const c = await togetherCtx();
+      if (!c) return { ok: false, reason: 'NOT_ALLOWED', message: 'SelfOS isn’t ready yet.' };
+      const session = await accessibleTogetherSession(c.fs, c.key, c.personId, sessionId);
+      if (!session) {
+        return { ok: false, reason: 'NOT_ALLOWED', message: 'Together isn’t available right now.' };
+      }
+      // The pre-screen gate applies to EVERY turn (§5.2 one rule) — for the active writer only.
+      if (!(await togetherPreScreenClears(c.fs, c.key, c.personId))) {
+        return { ok: false, reason: 'PRESCREEN', message: 'Take the private check first.' };
+      }
+      const apiKey = (await resolveAiKey(host.secrets, c.fs, c.key)).key ?? null;
+      const outcome = await runTogetherTurn({
+        fs: c.fs,
+        key: c.key,
+        client: host.claude,
+        apiKey,
+        model: await host.activeModel(),
+        session,
+        authorPersonId: c.personId,
+        userText: text,
+        ...(privateAside ? { privateAside: true } : {}),
+        onDelta: (delta) => host.emitTogetherChunk(delta),
+        now: new Date(),
+      });
+      return togetherTurnResult(c.fs, c.key, session, c.personId, outcome);
+    },
+    togetherRetry: async (input): Promise<TogetherTurnResult> => {
+      const { sessionId } = TogetherRetryInputSchema.parse(input);
+      const c = await togetherCtx();
+      if (!c) return { ok: false, reason: 'NOT_ALLOWED', message: 'SelfOS isn’t ready yet.' };
+      const session = await accessibleTogetherSession(c.fs, c.key, c.personId, sessionId);
+      if (!session) {
+        return { ok: false, reason: 'NOT_ALLOWED', message: 'Together isn’t available right now.' };
+      }
+      if (!(await togetherPreScreenClears(c.fs, c.key, c.personId))) {
+        return { ok: false, reason: 'PRESCREEN', message: 'Take the private check first.' };
+      }
+      const apiKey = (await resolveAiKey(host.secrets, c.fs, c.key)).key ?? null;
+      const outcome = await retryTogetherReply({
+        fs: c.fs,
+        key: c.key,
+        client: host.claude,
+        apiKey,
+        model: await host.activeModel(),
+        session,
+        authorPersonId: c.personId,
+        onDelta: (delta) => host.emitTogetherChunk(delta),
+        now: new Date(),
+      });
+      return togetherTurnResult(c.fs, c.key, session, c.personId, outcome);
     },
 
     // --- Session image attachments (45 §6) — gated by `sessions.own`, scoped to the active person ---

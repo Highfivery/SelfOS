@@ -276,6 +276,67 @@ describe('insightStore', () => {
       ).not.toContain('untagged sensitive summary');
     });
 
+    it('excludeRestricted (58 §6.3): drops the pinned portrait’s restricted + sensitive facts even on an intimacy topic, keeps its safe summary + general facts', async () => {
+      const fs = memFileSystem();
+      await saveInsight(
+        fs,
+        key,
+        insight({
+          id: 'portrait',
+          subjectPersonId: 'p1',
+          source: 'intake', // the PINNED portrait — otherwise exempt from relevance gating (§15)
+          summary: 'a warm, thoughtful person',
+          facts: [
+            { id: 'g', text: 'loves hiking', shareable: false },
+            {
+              id: 'r',
+              text: 'a trauma disclosure',
+              shareable: false,
+              restricted: true,
+              lifeArea: 'Intimacy',
+            },
+            { id: 's', text: 'a desire preference', shareable: false, lifeArea: 'Intimacy' },
+          ],
+        }),
+      );
+      const topic = { lifeAreas: ['Intimacy'] };
+      // Normal (solo) context on an intimacy topic: the portrait is present and its restricted/sensitive facts feed.
+      const solo = await summarizeForContext(fs, key, 'p1', [], topic);
+      expect(solo).toContain('a trauma disclosure');
+      expect(solo).toContain('a desire preference');
+
+      // The couples path: same topic, but restricted + sensitive facts are dropped; summary + general fact stay.
+      const couples = await summarizeForContext(fs, key, 'p1', [], topic, 'Ben', {
+        excludeRestricted: true,
+      });
+      expect(couples).toContain('a warm, thoughtful person');
+      expect(couples).toContain('loves hiking');
+      expect(couples).not.toContain('a trauma disclosure');
+      expect(couples).not.toContain('a desire preference');
+    });
+
+    it('excludeRestricted drops a WHOLLY-restricted insight’s summary too (nothing left to feed)', async () => {
+      const fs = memFileSystem();
+      await saveInsight(
+        fs,
+        key,
+        insight({
+          id: 'portrait',
+          subjectPersonId: 'p1',
+          source: 'intake',
+          summary: 'general portrait line',
+          facts: [{ id: 'g', text: 'enjoys cooking', shareable: false }],
+        }),
+      );
+      // A separate wholly-restricted intake fact set would already be dropped by feedableInsights; here we
+      // confirm the general portrait still feeds under excludeRestricted (default-off callers unaffected).
+      const couples = await summarizeForContext(fs, key, 'p1', [], undefined, 'Ben', {
+        excludeRestricted: true,
+      });
+      expect(couples).toContain('general portrait line');
+      expect(couples).toContain('enjoys cooking');
+    });
+
     it("includes related people's SHAREABLE facts but never their private ones", async () => {
       const fs = memFileSystem();
       await saveInsight(

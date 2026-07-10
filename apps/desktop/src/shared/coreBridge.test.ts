@@ -29,6 +29,7 @@ import { saveGoal } from '@selfos/core/goals';
 import { listChallenges } from '@selfos/core/challenges';
 import { buildContext } from '@selfos/core/people';
 import { pairKeyFor } from '@selfos/core/together';
+import { recordUsage, setPersonBudget } from '@selfos/core/usage';
 import { ANTHROPIC_API_KEY_ID, OPENAI_API_KEY_ID } from './channels';
 import { DeviceStateSchema } from './schemas';
 import type { BootState, DeviceState, Insight } from './schemas';
@@ -96,6 +97,7 @@ function makeHost(): {
   chunks: string[];
   dreamChunks: string[];
   intakeChunks: string[];
+  togetherChunks: string[];
   device: () => DeviceState;
   deviceSettings: () => Record<string, unknown>;
 } {
@@ -118,6 +120,7 @@ function makeHost(): {
   const chunks: string[] = [];
   const dreamChunks: string[] = [];
   const intakeChunks: string[] = [];
+  const togetherChunks: string[] = [];
   const claude: ClaudeClient = {
     send: () => Promise.resolve('ok'),
     stream: (options, onDelta) => {
@@ -272,6 +275,7 @@ function makeHost(): {
     emitChatChunk: (chunk) => chunks.push(chunk),
     emitDreamChunk: (chunk) => dreamChunks.push(chunk),
     emitIntakeChunk: (chunk) => intakeChunks.push(chunk),
+    emitTogetherChunk: (chunk) => togetherChunks.push(chunk),
     getBootState: () => Promise.resolve(bootFromDevice()),
     refreshBootState: () => Promise.resolve(bootFromDevice()),
     selectVaultFolder: () => Promise.resolve(null),
@@ -285,6 +289,7 @@ function makeHost(): {
     onChatChunk: () => () => {},
     onDreamChunk: () => () => {},
     onIntakeChunk: () => () => {},
+    onTogetherChunk: () => () => {},
   };
   return {
     host,
@@ -292,6 +297,7 @@ function makeHost(): {
     chunks,
     dreamChunks,
     intakeChunks,
+    togetherChunks,
     device: () => device,
     deviceSettings: () => deviceSettings,
   };
@@ -4826,7 +4832,32 @@ describe('update awareness (36)', () => {
 });
 
 describe('createCoreBridge — Together (58) foundation', () => {
-  /** Seed a household with two subjects (Ben the owner + Angel) linked by a live `partner` edge. */
+  const CLEAR_PRESCREEN: Record<string, string> = {
+    'safe-honest': 'yes',
+    afraid: 'never',
+    'own-choice': 'yes',
+    'prefer-solo': 'ready',
+  };
+
+  const asPerson = async (host: ReturnType<typeof makeHost>, personId: string): Promise<void> => {
+    await host.host.updateDeviceState({ activePersonId: personId });
+  };
+
+  /** Submit a given answer set as `personId`, restoring the previously-active person afterward. */
+  async function submitPrescreen(
+    host: ReturnType<typeof makeHost>,
+    bridge: ReturnType<typeof createCoreBridge>,
+    personId: string,
+    answers: Record<string, string>,
+  ): Promise<void> {
+    const prev = host.device().activePersonId ?? null;
+    await asPerson(host, personId);
+    await bridge.togetherPrescreenSubmit({ answers });
+    if (prev) await asPerson(host, prev);
+  }
+
+  /** Seed a household with two subjects (Ben the owner + Angel) linked by a live `partner` edge, both with a
+   *  CLEAR pre-screen (the lifecycle tests exercise the happy path; the pre-screen gate has its own test). */
   async function seedPair(): Promise<{
     host: ReturnType<typeof makeHost>;
     bridge: ReturnType<typeof createCoreBridge>;
@@ -4835,18 +4866,18 @@ describe('createCoreBridge — Together (58) foundation', () => {
     edgeId: string;
   }> {
     const { host, bridge, ownerId } = await freshOwner();
+    // The owner sets a Claude key (auto-shared to the vault, 25 §5.6) so couples turns can resolve it.
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-together-test' });
     const angel = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
     const edge = await bridge.relationshipsSave({
       fromPersonId: ownerId,
       toPersonId: angel.id,
       type: 'partner',
     });
+    await submitPrescreen(host, bridge, angel.id, CLEAR_PRESCREEN);
+    await submitPrescreen(host, bridge, ownerId, CLEAR_PRESCREEN);
     return { host, bridge, ben: ownerId, angel: angel.id, edgeId: edge.id };
   }
-
-  const asPerson = async (host: ReturnType<typeof makeHost>, personId: string): Promise<void> => {
-    await host.host.updateDeviceState({ activePersonId: personId });
-  };
 
   it('full invite lifecycle: create → invited for both → accept → active; declined never leaks (§3.3–§3.5)', async () => {
     const { host, bridge, ben, angel } = await seedPair();
@@ -5012,5 +5043,145 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect((await bridge.togetherGet(sessionId))?.status).toBe('ended');
     await asPerson(host, ben);
     expect((await bridge.togetherGet(sessionId))?.status).toBe('ended');
+  });
+
+  it('pre-screen gate (§8.2): create is blocked until the initiator clears; only the outcome is stored', async () => {
+    // A fresh pair with NO pre-screens yet (bypass seedPair's auto-clear).
+    const { host, bridge, ownerId } = await freshOwner();
+    const angel = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
+    await bridge.relationshipsSave({
+      fromPersonId: ownerId,
+      toPersonId: angel.id,
+      type: 'partner',
+    });
+
+    // Ben hasn't taken the private check → create is refused with PRESCREEN.
+    expect(await bridge.togetherPrescreenGet()).toMatchObject({
+      completed: false,
+      needsScreen: true,
+    });
+    const blocked = await bridge.togetherCreate({ partnerPersonId: angel.id });
+    expect(!blocked.ok && blocked.reason).toBe('PRESCREEN');
+
+    // A FLAGGED submission still holds (afraid → flagged) — and stores only the outcome, no raw answers.
+    const flagged = await bridge.togetherPrescreenSubmit({
+      answers: { ...CLEAR_PRESCREEN, afraid: 'often' },
+    });
+    expect(flagged).toMatchObject({ flagged: true, showCrisis: true, suggestSolo: true });
+    expect((await bridge.togetherPrescreenGet()).needsScreen).toBe(true);
+    expect(!(await bridge.togetherCreate({ partnerPersonId: angel.id })).ok).toBe(true);
+    const ctx = (await host.host.vaultAndKey())!;
+    const rawStored = await ctx.fs.read(`people/${ownerId}/together/prescreen.enc`);
+    expect(new TextDecoder().decode(rawStored!)).not.toContain('afraid'); // outcome only — no answer keys
+
+    // A CLEAR re-take unlocks.
+    await bridge.togetherPrescreenSubmit({ answers: CLEAR_PRESCREEN });
+    expect((await bridge.togetherPrescreenGet()).needsScreen).toBe(false);
+    expect((await bridge.togetherCreate({ partnerPersonId: angel.id })).ok).toBe(true);
+  });
+
+  it('a flagged partner can’t accept, and the initiator only ever sees invited/waiting — never why (§8.2)', async () => {
+    const { host, bridge, ben, angel } = await seedPair(); // both cleared…
+    const created = await bridge.togetherCreate({ partnerPersonId: angel });
+    const sessionId = created.ok ? created.session.id : '';
+
+    // …but now Angel's screen goes flagged (a later re-take). Her accept is held; her raw answers never stored.
+    await asPerson(host, angel);
+    await bridge.togetherPrescreenSubmit({
+      answers: { ...CLEAR_PRESCREEN, 'own-choice': 'pressure' },
+    });
+    expect(await bridge.togetherAccept(sessionId)).toBeNull();
+    expect((await bridge.togetherGet(sessionId))?.status).toBe('invited');
+
+    // Ben's view: still "invited" — the pre-screen result never crosses to the initiator.
+    await asPerson(host, ben);
+    expect((await bridge.togetherGet(sessionId))?.status).toBe('invited');
+  });
+
+  it('a couples turn streams + persists; both partners see the shared exchange (§3.6)', async () => {
+    const { host, bridge, ben, angel } = await seedPair();
+    const created = await bridge.togetherCreate({ partnerPersonId: angel });
+    const sessionId = created.ok ? created.session.id : '';
+    await asPerson(host, angel);
+    await bridge.togetherAccept(sessionId);
+    const turn = await bridge.togetherSendMessage({ sessionId, text: 'I miss us.' });
+    expect(turn.ok).toBe(true);
+    if (turn.ok) {
+      expect(turn.view.messages.map((m) => m.role)).toEqual(['user', 'assistant']);
+      expect(turn.view.messages[0]?.authorPersonId).toBe(angel);
+    }
+    expect(host.togetherChunks.length).toBeGreaterThan(0); // the coach reply streamed
+    await asPerson(host, ben);
+    const benView = await bridge.togetherGet(sessionId);
+    expect(benView?.messages.map((m) => m.role)).toEqual(['user', 'assistant']); // shared, both see it
+    expect(benView?.yourTurn).toBe(true); // Angel + the coach wrote last → Ben's turn
+  });
+
+  it('a private aside (+ its coach reply) is hidden from the partner; her turn/unread badges are unchanged (§3.6)', async () => {
+    const { host, bridge, ben, angel } = await seedPair();
+    const created = await bridge.togetherCreate({ partnerPersonId: angel });
+    const sessionId = created.ok ? created.session.id : '';
+    await asPerson(host, angel);
+    await bridge.togetherAccept(sessionId);
+    const angelBefore = await bridge.togetherGet(sessionId);
+
+    // Ben sends a PRIVATE aside — visible only to him.
+    await asPerson(host, ben);
+    const asideTurn = await bridge.togetherSendMessage({
+      sessionId,
+      text: 'I’m scared to say this out loud.',
+      privateAside: true,
+    });
+    expect(asideTurn.ok).toBe(true);
+    if (asideTurn.ok) {
+      expect(asideTurn.view.messages).toHaveLength(2); // the aside + the coach's private reply
+      expect(asideTurn.view.messages.every((m) => m.privateAside)).toBe(true);
+    }
+
+    // Angel's projection: nothing new — no aside, no coach reply, no placeholder; her badges unchanged.
+    await asPerson(host, angel);
+    const angelAfter = await bridge.togetherGet(sessionId);
+    expect(angelAfter?.messages).toHaveLength(0);
+    expect(angelAfter?.yourTurn).toBe(angelBefore?.yourTurn);
+    expect(angelAfter?.unreadCount).toBe(angelBefore?.unreadCount);
+  });
+
+  it('over-budget: the initiator sees the standard notice; the partner a NEUTRAL session one — no ratio/$ (§6.2)', async () => {
+    const { host, bridge, ben, angel } = await seedPair();
+    const created = await bridge.togetherCreate({ partnerPersonId: angel });
+    const sessionId = created.ok ? created.session.id : '';
+    await asPerson(host, angel);
+    await bridge.togetherAccept(sessionId);
+
+    // Put BEN (the initiator + payer) over budget, at the vault level.
+    const ctx = (await host.host.vaultAndKey())!;
+    await setPersonBudget(ctx.fs, ctx.key, ben, { limitUsd: 0.01, period: 'week', warnRatio: 0.8 });
+    await recordUsage(ctx.fs, ctx.key, {
+      id: 'u-over',
+      schemaVersion: 1,
+      type: 'together.chat',
+      personId: ben,
+      model: 'claude-sonnet-4-6',
+      at: new Date().toISOString(),
+      inputTokens: 1,
+      outputTokens: 1,
+      cacheWriteTokens: 0,
+      cacheReadTokens: 0,
+      costUsd: 5,
+    });
+
+    // The partner (non-initiator) sees a neutral, session-scoped notice — never a ratio, $, or whose budget.
+    const partnerTurn = await bridge.togetherSendMessage({ sessionId, text: 'you there?' });
+    expect(!partnerTurn.ok && partnerTurn.reason).toBe('BUDGET');
+    if (!partnerTurn.ok) {
+      expect(partnerTurn.message).not.toContain('$');
+      expect(partnerTurn.message).toContain('paused for this session');
+    }
+
+    // The initiator sees their own standard budget message.
+    await asPerson(host, ben);
+    const initiatorTurn = await bridge.togetherSendMessage({ sessionId, text: 'hmm' });
+    expect(!initiatorTurn.ok && initiatorTurn.reason).toBe('BUDGET');
+    expect(!initiatorTurn.ok && initiatorTurn.message).toBe('AI budget reached for this period.');
   });
 });

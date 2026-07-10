@@ -81,6 +81,9 @@ export async function buildContext(
   // The call's topic (28-portrait-synthesis-optimization §pillar-2): when present, the pinned onboarding
   // portrait emits the facts relevant to these life-areas (+ the always-on core). Absent ⇒ core + fill.
   topic?: ContextTopic,
+  // 58-together §6.3 — code-enforced restricted exclusion for Together couples prompts (default OFF, so every
+  // solo caller is byte-identical). Threaded into `summarizeForContext` → the own-insight fact filter.
+  options?: { excludeRestricted?: boolean },
 ): Promise<string> {
   const person = await getPerson(fs, key, personId);
   if (!person) return '';
@@ -154,6 +157,7 @@ export async function buildContext(
     related,
     topic,
     person.displayName,
+    options,
   );
   if (insightContext) lines.push(insightContext);
 

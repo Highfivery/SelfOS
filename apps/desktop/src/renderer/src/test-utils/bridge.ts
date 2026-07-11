@@ -361,6 +361,10 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         ready: false,
       }),
     togetherYnmOverlap: () => Promise.resolve({ ready: false, items: [] }),
+    togetherPulse: () =>
+      Promise.resolve({ series: [], hasCheckIns: false, alignment: { ready: false } }),
+    togetherPulseLog: () =>
+      Promise.resolve({ series: [], hasCheckIns: false, alignment: { ready: false } }),
     togetherWrapUp: () =>
       Promise.resolve({ ok: false, reason: 'NOT_ALLOWED', message: 'Not available.' }),
     togetherGetReport: () => Promise.resolve({ report: null, stale: false, agreements: [] }),

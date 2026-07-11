@@ -342,6 +342,27 @@ Connection/Friction series from twin-insight metrics + check-ins, text-equivalen
 model, stored per logger), and **comparative views (desire alignment) only when both partners have
 logged AND both consented to share that metric** — never inferred, hidden until then (11 §3.1).
 
+**BUILT (Phase G, `feat/together-pulse`).** As-built decisions (autonomous, spec defaults):
+
+- **Metric set** (§11 Q4, confirmed): `connection` · `desire` · `satisfaction` from the 1–3-tap
+  check-in (Low/Steady/High → 0 / 0.5 / 1, clamped 0..1), plus `connectionValence`/`frictionLevel`
+  from D's wrap-up twins (normalized ±1 → 0..1) surfaced as "Connection (sessions)"/"Friction
+  (sessions)" series. Each series carries a `direction` (`rising`/`steady`/`dipping`/`flat`) for the
+  text equivalent.
+- **Storage:** `people/<logger>/together/pulse/<pairKey>/<checkInId>.enc` — one writer per file (the
+  logger's own perception; a partner's raw metrics are **never** shown). `PulseCheckIn` is a fresh
+  type (11's `CheckIn` was never built — no migration).
+- **The desire-alignment dual-consent gate:** surfaced only when **both** partners have a `desire`
+  reading they **consented to share** (`shareMetrics` includes `'desire'`). The **most-recent**
+  desire check-in's consent governs — logging a fresh check-in _without_ sharing desire **retracts**
+  visibility (the intuitive privacy model, not a stale opt-in lingering). Reads `aligned` (|Δ| ≤
+  0.25) or `some distance`; the two raw values cross the seam only for a consenting pair. Bridge:
+  `together:pulse` / `together:pulseLog`, gated `together.own` + a re-checked **live partner edge**
+  (§5.2) — a non-partner reads an empty view.
+- **Placement:** the Pulse card renders on the Together home per eligible partner (not a separate
+  `/together/pulse` route — no dead nav). The memory-strip Pulse tile (§3.6) is a Phase-H
+  whole-flow-polish item (the strip aggregates D+G+H artifacts).
+
 ### 3.10b Yes/No/Maybe — together (mutual overlap)
 
 A deterministic, host-side intersection of both partners' intimacy inventories (the 49/50

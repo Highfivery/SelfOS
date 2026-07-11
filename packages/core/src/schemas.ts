@@ -3230,6 +3230,68 @@ export interface TogetherYnmOverlap {
 export const TogetherYnmInputSchema = z.object({ partnerPersonId: z.string().min(1) });
 export type TogetherYnmInput = z.infer<typeof TogetherYnmInputSchema>;
 
+// ── Phase G: Pulse (§3.10a — absorbs spec 11) ─────────────────────────────────────────────────────
+
+/** The pulse metric starter set (§11 #4): a 1-3 tap check-in logs a subset of these (each normalized 0..1). */
+export const PULSE_METRICS = ['connection', 'desire', 'satisfaction'] as const;
+export type PulseMetric = (typeof PULSE_METRICS)[number];
+/** The single source of truth for each metric's display label — used by the trend assembly AND the check-in UI. */
+export const PULSE_METRIC_LABELS: Record<PulseMetric, string> = {
+  connection: 'Connection',
+  desire: 'Desire',
+  satisfaction: 'Satisfaction',
+};
+
+/** A person's own pulse check-in (§3.10a) — one writer, stored at people/<logger>/together/pulse/<pairKey>/. */
+export const PulseCheckInSchema = z.object({
+  id: z.string().min(1),
+  schemaVersion: z.literal(1),
+  pairKey: z.string().min(1),
+  loggerPersonId: z.string().min(1), // their OWN perception; one writer
+  at: z.string(),
+  metrics: z.record(z.string(), z.number()), // e.g. { connection, desire, satisfaction } normalized 0..1
+  shareMetrics: z.array(z.string()).optional(), // metric keys this logger consents to comparative views for
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type PulseCheckIn = z.infer<typeof PulseCheckInSchema>;
+
+/** A trend line for the Pulse chart — a named metric over time (x = ms timestamp, y = 0..1). */
+export interface PulseSeries {
+  label: string;
+  points: { x: number; y: number }[];
+  /** A plain-language direction for the §9 text-equivalent ('rising' | 'steady' | 'dipping' | 'flat'). */
+  direction: 'rising' | 'steady' | 'dipping' | 'flat';
+}
+
+/**
+ * The desire-alignment comparative (§3.10a / 11 §3.1) — shown ONLY when BOTH partners have logged a check-in
+ * with a `desire` metric they each CONSENTED to share. Never inferred; hidden (`ready:false`) until then.
+ */
+export interface PulseAlignment {
+  ready: boolean;
+  /** The two most-recent shared desire values (0..1) + a plain-language read ('aligned' | 'some distance'). */
+  yours?: number;
+  theirs?: number;
+  read?: 'aligned' | 'some distance';
+}
+
+/** The Pulse view (§3.10a): the viewer's own metric trends + dyad trends + the dual-consent desire alignment. */
+export interface TogetherPulseView {
+  /** The viewer's own check-in metric trends + the dyad Connection/Friction from the wrap-up twins (0..1). */
+  series: PulseSeries[];
+  /** Whether the viewer has logged at least one check-in (drives the empty state). */
+  hasCheckIns: boolean;
+  alignment: PulseAlignment;
+}
+
+export const TogetherPulseLogInputSchema = z.object({
+  partnerPersonId: z.string().min(1),
+  metrics: z.record(z.string(), z.number()),
+  shareMetrics: z.array(z.string()).optional(),
+});
+export type TogetherPulseLogInput = z.infer<typeof TogetherPulseLogInputSchema>;
+
 /** Save (create/edit/retire) an agreement — inline on the ledger (§11 #2). `id` absent ⇒ create. */
 export const TogetherSaveAgreementInputSchema = z.object({
   sessionId: z.string().min(1),

@@ -530,3 +530,8 @@
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 1px;
 }
+.pulseChart {
+  width: 100%;
+  max-width: 480px;
+  min-width: 0;
+}

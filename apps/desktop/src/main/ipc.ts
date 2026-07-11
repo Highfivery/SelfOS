@@ -385,6 +385,8 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.togetherYnmOptIn, bridge.togetherYnmOptIn);
   handle(IpcChannels.togetherYnmRevoke, bridge.togetherYnmRevoke);
   handle(IpcChannels.togetherYnmOverlap, bridge.togetherYnmOverlap);
+  handle(IpcChannels.togetherPulse, bridge.togetherPulse);
+  handle(IpcChannels.togetherPulseLog, bridge.togetherPulseLog);
   handle(IpcChannels.togetherWrapUp, bridge.togetherWrapUp);
   handle(IpcChannels.togetherGetReport, bridge.togetherGetReport);
   handle(IpcChannels.togetherSaveAgreement, bridge.togetherSaveAgreement);

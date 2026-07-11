@@ -20,6 +20,7 @@ import { useTogetherStore } from '../../../stores/togetherStore';
 import { PreScreenForm } from './PreScreenForm';
 import { TogetherCatalog } from './TogetherCatalog';
 import { TogetherIntimacy } from './TogetherIntimacy';
+import { TogetherPulse } from './TogetherPulse';
 import { TOGETHER_FRAME_LINE } from './roomRules';
 import styles from './Together.module.css';
 
@@ -256,6 +257,13 @@ export function Together(): JSX.Element {
                 }}
               />
             ) : null}
+            {eligiblePartners.map((p) => (
+              <TogetherPulse
+                key={`pulse-${p.personId}`}
+                partnerId={p.personId}
+                partnerName={p.displayName}
+              />
+            ))}
             {eligiblePartners.map((p) => (
               <TogetherIntimacy
                 key={p.personId}

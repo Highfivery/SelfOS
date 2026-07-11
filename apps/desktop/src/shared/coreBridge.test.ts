@@ -5662,4 +5662,53 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect((await bridge.togetherYnmOverlap({ partnerPersonId: angel })).ready).toBe(false);
     expect((await bridge.togetherYnmStatus({ partnerPersonId: angel })).ready).toBe(false);
   });
+
+  // ── Phase G: Pulse (§3.10a — absorbs spec 11) ────────────────────────────────────────────────────
+  it('Pulse surfaces each viewer’s OWN trends; desire alignment appears only when BOTH share (dual consent)', async () => {
+    const { host, bridge, ben, angel } = await seedPair();
+
+    // Ben logs a check-in sharing his desire; his own trend shows, alignment not ready (Angel hasn't shared).
+    let view = await bridge.togetherPulseLog({
+      partnerPersonId: angel,
+      metrics: { connection: 0.4, desire: 0.8, satisfaction: 0.6 },
+      shareMetrics: ['desire'],
+    });
+    expect(view.hasCheckIns).toBe(true);
+    expect(view.series.find((s) => s.label === 'Connection')?.points).toHaveLength(1);
+    expect(view.alignment.ready).toBe(false);
+
+    // Angel logs but does NOT share desire → still hidden for both.
+    await asPerson(host, angel);
+    await bridge.togetherPulseLog({ partnerPersonId: ben, metrics: { desire: 0.7 } });
+    expect((await bridge.togetherPulse({ partnerPersonId: ben })).alignment.ready).toBe(false);
+    await asPerson(host, ben);
+    expect((await bridge.togetherPulse({ partnerPersonId: angel })).alignment.ready).toBe(false);
+
+    // Angel shares → dual consent met → the desire alignment surfaces for both, each seeing the read.
+    await asPerson(host, angel);
+    await bridge.togetherPulseLog({
+      partnerPersonId: ben,
+      metrics: { desire: 0.75 },
+      shareMetrics: ['desire'],
+    });
+    const angelView = await bridge.togetherPulse({ partnerPersonId: ben });
+    expect(angelView.alignment.ready).toBe(true);
+    expect(angelView.alignment.read).toBe('aligned');
+    await asPerson(host, ben);
+    view = await bridge.togetherPulse({ partnerPersonId: angel });
+    expect(view.alignment.ready).toBe(true);
+    expect(view.alignment.yours).toBe(0.8);
+    expect(view.alignment.theirs).toBe(0.75);
+
+    // A non-partner cannot read this pair's Pulse (live edge required, §5.2).
+    const stranger = await bridge.peopleSave({
+      displayName: 'Stranger',
+      isSubject: true,
+      tags: [],
+    });
+    await asPerson(host, stranger.id);
+    const strangerView = await bridge.togetherPulse({ partnerPersonId: angel });
+    expect(strangerView.hasCheckIns).toBe(false);
+    expect(strangerView.alignment.ready).toBe(false);
+  });
 });

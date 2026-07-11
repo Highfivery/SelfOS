@@ -4296,6 +4296,8 @@ test('results: a Standard response surfaces the raw answers in the sender’s Re
     await w.getByRole('link', { name: 'Questionnaires' }).click();
     await w.getByRole('button', { name: /^Weekly check-in/ }).click();
     await w.getByRole('button', { name: 'Results' }).click();
+    // "Who answered" rows are collapsed by default (§21.4) — expand this recipient to reveal their answers.
+    await w.getByRole('button', { name: /Expand Tester/ }).click();
     // The prompt appears in the raw-answer list AND the "At a glance" aggregate band (§20.7) — scope to the
     // first; the written answer itself is unique to the Standard raw-answer list.
     await expect(w.getByText('How are we doing?').first()).toBeVisible();
@@ -4358,6 +4360,8 @@ test('answer review/edit (56): recipient reviews + edits + resends → Results g
     await w.getByRole('link', { name: 'Questionnaires' }).click();
     await w.getByRole('button', { name: /^Weekly check-in/ }).click();
     await w.getByRole('button', { name: 'Results' }).click();
+    // Expand the "Who answered" row (§21.4) to reach the per-send Analyze + insight.
+    await w.getByRole('button', { name: /Expand Tester/ }).click();
     await w.getByRole('button', { name: 'Analyze', exact: true }).click();
     // Once analyzed, the drafted Insight shows INLINE — the excerpt + a "View in Memory" deep-link (§20.8).
     await expect(w.getByRole('button', { name: /View in Memory/i })).toBeVisible();
@@ -4378,6 +4382,7 @@ test('answer review/edit (56): recipient reviews + edits + resends → Results g
     await w.getByRole('link', { name: 'Questionnaires' }).click();
     await w.getByRole('button', { name: /^Weekly check-in/ }).click();
     await w.getByRole('button', { name: 'Results' }).click();
+    await w.getByRole('button', { name: /Expand Tester/ }).click();
     await expect(w.getByText(/answers updated since your last analysis/i)).toBeVisible();
 
     // Decrypt: the response revision climbed to 2 (a resubmit), the answers updated.
@@ -8974,9 +8979,10 @@ test('questionnaires: responses-arrived names the responder → View results →
     await row.getByRole('button', { name: 'View' }).click();
     await expect.poll(() => w.evaluate(() => window.location.hash)).toContain('focus=');
     await expect(w.getByRole('heading', { name: 'Results' })).toBeVisible();
-    // A Private send shows NOTHING from the answers — no words, no numbers (§21.5): just the calm explainer.
-    // Neither the private prose NOR the numeric value ('Rate it' / 4) appears anywhere on the card or in an
-    // aggregate (a single private send produces no "At a glance").
+    // Expand the "Who answered" row (§21.4) — a Private send shows NOTHING from the answers even expanded:
+    // no words, no numbers (§21.5), just the calm explainer. Neither the private prose NOR the numeric value
+    // ('Rate it' / 4) appears anywhere on the card or in an aggregate (a single private send → no "At a glance").
+    await w.getByRole('button', { name: /Expand Mara/ }).click();
     await expect(w.getByText(/answers are never shown here/i)).toBeVisible();
     await expect(w.getByText('my secret prose')).toHaveCount(0);
     await expect(w.getByText('Rate it')).toHaveCount(0);

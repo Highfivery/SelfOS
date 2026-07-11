@@ -1407,14 +1407,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Recipient name + avatar cluster in a send card header. */
-.resultRecipient {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
 .resultHead {
   display: flex;
   align-items: center;
@@ -1427,6 +1419,48 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
+}
+
+/* "Who answered" compact row (§21.4): a clickable expand toggle (chevron · avatar · name · when) on the
+   left, the status pill + secondary actions on the right. Wraps rather than overflowing at narrow widths. */
+.whoRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.whoToggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+}
+
+.whoToggle:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.whoChevron {
+  flex: none;
+  color: var(--color-text-tertiary);
+}
+
+.whoName {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
 }
 
 /* The "Your answers" review + Results Q→A list (08 §20.5): each prompt→answer pair is a clean row with a

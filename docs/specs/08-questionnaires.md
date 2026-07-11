@@ -2823,7 +2823,7 @@ with text-as-count · all four private-results improvements.
 - **Edit-builder full-width density** — widening the authoring form may read sparse; slice 1 visual QA decides
   whether authoring rows need regrouping (no scope change, just layout).
 
-## 21. 2026-07-10b amendment — Preview & Results from-scratch REDESIGN (supersedes parts of §20) — APPROVED, building
+## 21. 2026-07-10b amendment — Preview & Results from-scratch REDESIGN (supersedes parts of §20) — BUILT (all 4 slices)
 
 > **Status: Approved** (mockups reviewed + 4 decisions locked with the user 2026-07-10b) · **building.** §20 shipped
 > a redesign the user judged a **restyle, not a rethink** ("the Preview looks exactly the same except it's wider")
@@ -2938,7 +2938,12 @@ Each its own branch → tests → visual QA → code-review → PR.
    visible set, a reveal is appended); Next flags a required-but-empty step; focus moves to the step title
    on change; the crisis footer is on every step. The two hosts drop their own Submit/Save/Decline rows and
    pass the config (editing → Update answers + Cancel; a relay recipient → Submit + Decline, no Save).
-4. **Results dashboard** — aggregate-first ordering + the expandable "Who answered" list. (§21.4)
+4. **Results dashboard** — aggregate-first ordering + the expandable "Who answered" list. (§21.4) —
+   **BUILT**: `StandardResults` reordered so the **KPI hero** (response-rate ring) leads, the **"At a glance"**
+   aggregate is the **centerpiece directly under it** (Standard-only, with the "Private responses aren't
+   included here" note), then **"Who answered"** — each recipient a **collapsed compact row** (chevron ·
+   avatar · name · when-answered · status pill + inline delete/revoke) that **expands** to their answers
+   (Standard) or the private-insight affordance (§21.5); Trends stay last. §21 is now fully built.
 
 ### 21.7 Resolved decisions (2026-07-10b)
 

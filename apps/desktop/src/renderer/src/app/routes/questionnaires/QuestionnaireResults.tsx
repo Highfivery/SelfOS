@@ -1,6 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Brain, Download, Link2, Link2Off, Lock, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
+import {
+  Brain,
+  ChevronDown,
+  ChevronRight,
+  Download,
+  Link2,
+  Link2Off,
+  Lock,
+  RefreshCw,
+  Sparkles,
+  Trash2,
+} from 'lucide-react';
 import { aiKeyResolved } from '../../aiAvailability';
 import { AiUnavailableNotice } from '../../AiUnavailableNotice';
 import type {
@@ -25,6 +36,7 @@ import {
 } from '../../../design-system/components';
 import { Avatar } from './Avatar';
 import { AtAGlance } from './AtAGlance';
+import { formatDateTime } from './sentState';
 import { InsightExcerpt } from './InsightExcerpt';
 import { ResultGroupHead, ResultsSummaryBand } from './ResultsSummaryBand';
 import { groupSendsByStatus, summarizeSends } from './resultsSummary';
@@ -252,33 +264,40 @@ function StandardResults({ questionnaireId }: { questionnaireId: string }): JSX.
         </Inline>
       </div>
 
+      {/* KPI hero (§21.4): sent-to · answered/waiting · a response-rate ring. */}
       <ResultsSummaryBand summary={summary} />
 
       {drainMsg ? <Banner tone="info">{drainMsg}</Banner> : null}
       {exportMsg ? <Banner tone="info">{exportMsg}</Banner> : null}
       {!aiReady ? <AiUnavailableNotice /> : null}
 
-      {/* Per-recipient cards grouped by status (§20.6) — Answered · In progress · Awaiting · Declined · Closed. */}
-      {groups.map((group) => (
-        <Stack gap={2} key={group.key}>
-          <ResultGroupHead label={group.label} count={group.sends.length} />
-          {group.sends.map((send) => (
-            <SendCard
-              key={send.assignmentId}
-              send={send}
-              aiReady={aiReady}
-              senderName={senderName}
-              analyzing={analyzing[send.assignmentId] === true}
-              message={messages[send.assignmentId]}
-              onAnalyze={() => void runAnalyze(send.assignmentId)}
-              onDelete={() => void runDelete(send.assignmentId)}
-              onRevoke={() => void revoke(send.assignmentId)}
-            />
-          ))}
-        </Stack>
-      ))}
-
+      {/* "At a glance" is the centerpiece (§21.4): the aggregate, directly under the hero. */}
       <AtAGlance aggregate={aggregate} />
+
+      {/* "Who answered" (§21.4): a compact per-person list — each recipient a collapsed row (avatar · name ·
+          when · status pill) that EXPANDS to their answers (Standard) or the private-insight affordance
+          (§21.5). Kept grouped by status (§20.6) so the answered ones lead. */}
+      <Stack gap={3}>
+        <Heading level={3}>Who answered</Heading>
+        {groups.map((group) => (
+          <Stack gap={2} key={group.key}>
+            <ResultGroupHead label={group.label} count={group.sends.length} />
+            {group.sends.map((send) => (
+              <SendCard
+                key={send.assignmentId}
+                send={send}
+                aiReady={aiReady}
+                senderName={senderName}
+                analyzing={analyzing[send.assignmentId] === true}
+                message={messages[send.assignmentId]}
+                onAnalyze={() => void runAnalyze(send.assignmentId)}
+                onDelete={() => void runDelete(send.assignmentId)}
+                onRevoke={() => void revoke(send.assignmentId)}
+              />
+            ))}
+          </Stack>
+        ))}
+      </Stack>
 
       {trends.length > 0 ? (
         <Stack gap={3}>
@@ -337,6 +356,8 @@ function SendCard({
   // external send AND a household send that also minted a link (§17.13).
   const canRevoke = send.relayLinked && isOpen;
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  // Compact "Who answered" row (§21.4): collapsed by default, expands to the answers / insight / actions.
+  const [expanded, setExpanded] = useState(false);
   // Re-publish / resend (§17.14): an open send can (re-)mint a fresh link + PIN for delivery. Since the PIN
   // is never stored, resharing always mints a NEW one; the old link stops working.
   const [delivery, setDelivery] = useState<RelayLinkResult | null>(null);
@@ -361,14 +382,37 @@ function SendCard({
     }
   };
 
+  // The collapsible detail expands on demand, or when there's an active confirm / fresh link to show.
+  const bodyOpen = expanded || confirmingDelete || delivery !== null;
+
   return (
     <Card>
       <Stack gap={3}>
-        <div className={styles.resultHead}>
-          <span className={styles.resultRecipient}>
+        <div className={styles.whoRow}>
+          <button
+            type="button"
+            className={styles.whoToggle}
+            aria-expanded={bodyOpen}
+            aria-label={`${bodyOpen ? 'Collapse' : 'Expand'} ${send.recipientName}`}
+            onClick={() => setExpanded((v) => !v)}
+          >
+            {bodyOpen ? (
+              <ChevronDown size={16} aria-hidden="true" className={styles.whoChevron} />
+            ) : (
+              <ChevronRight size={16} aria-hidden="true" className={styles.whoChevron} />
+            )}
             <Avatar name={send.recipientName} />
-            <Text weight={500}>{send.recipientName}</Text>
-          </span>
+            <span className={styles.whoName}>
+              <Text as="span" weight={500}>
+                {send.recipientName}
+              </Text>
+              {send.submittedAt ? (
+                <Text as="span" size="xs" tone="tertiary">
+                  Answered {formatDateTime(send.submittedAt)}
+                </Text>
+              ) : null}
+            </span>
+          </button>
           <div className={styles.resultHeadRight}>
             <span className={styles.rowBadge}>
               {send.privacy === 'private' ? (
@@ -388,164 +432,182 @@ function SendCard({
             <IconButton
               aria-label={`Delete this send to ${send.recipientName}`}
               variant="secondary"
-              onClick={() => setConfirmingDelete(true)}
+              onClick={() => {
+                setExpanded(true);
+                setConfirmingDelete(true);
+              }}
             >
               <Trash2 size={14} aria-hidden="true" />
             </IconButton>
           </div>
         </div>
 
-        {send.relayLinked ? (
-          <Text size="sm" tone="secondary">
-            {send.channel === 'relay'
-              ? 'Sent via a private link.'
-              : 'In their Inbox — also answerable via the link you shared.'}
-          </Text>
-        ) : null}
+        {bodyOpen ? (
+          <Stack gap={3}>
+            {send.relayLinked ? (
+              <Text size="sm" tone="secondary">
+                {send.channel === 'relay'
+                  ? 'Sent via a private link.'
+                  : 'In their Inbox — also answerable via the link you shared.'}
+              </Text>
+            ) : null}
 
-        {send.expiresAt ? (
-          <Text size="sm" tone="secondary">
-            {formatLinkExpiry(send.expiresAt)}
-          </Text>
-        ) : null}
+            {send.expiresAt ? (
+              <Text size="sm" tone="secondary">
+                {formatLinkExpiry(send.expiresAt)}
+              </Text>
+            ) : null}
 
-        {send.status === 'declined' ? (
-          <Text tone="secondary">
-            {send.declineNote ? `Declined — “${send.declineNote}”` : 'Declined.'}
-          </Text>
-        ) : null}
+            {send.status === 'declined' ? (
+              <Text tone="secondary">
+                {send.declineNote ? `Declined — “${send.declineNote}”` : 'Declined.'}
+              </Text>
+            ) : null}
 
-        {/* Standard, submitted → the raw answers; Private never carries them (privacy boundary). */}
-        {isSubmitted && send.answers ? (
-          <dl className={styles.qaList}>
-            {send.answers.map((qa, i) => (
-              <div key={i} className={styles.qaItem}>
-                <dt className={styles.qaPrompt}>{qa.prompt}</dt>
-                <dd className={styles.qaAnswer}>{qa.answer === '' ? '—' : qa.answer}</dd>
-              </div>
-            ))}
-          </dl>
-        ) : null}
+            {/* Standard, submitted → the raw answers; Private never carries them (privacy boundary). */}
+            {isSubmitted && send.answers ? (
+              <dl className={styles.qaList}>
+                {send.answers.map((qa, i) => (
+                  <div key={i} className={styles.qaItem}>
+                    <dt className={styles.qaPrompt}>{qa.prompt}</dt>
+                    <dd className={styles.qaAnswer}>{qa.answer === '' ? '—' : qa.answer}</dd>
+                  </div>
+                ))}
+              </dl>
+            ) : null}
 
-        {/* PRIVATE submitted send (08 §21.5): the answers are NEVER shown — no words, no numbers. A calm
+            {/* PRIVATE submitted send (08 §21.5): the answers are NEVER shown — no words, no numbers. A calm
             explainer, and the only output is the derived coaching insight (a Memory deep-link once analyzed,
             or a "Draw an insight" action). */}
-        {isSubmitted && send.privacy === 'private' ? (
-          <Stack gap={2}>
-            <div className={styles.privateNote}>
-              <Lock size={14} aria-hidden="true" className={styles.privateNoteIcon} />
-              <Text size="sm" tone="secondary">
-                {send.recipientName}’s answers are never shown here — they quietly inform your
-                coaching.
-              </Text>
-            </div>
-            {send.analyzed && send.analysisStale ? (
+            {isSubmitted && send.privacy === 'private' ? (
+              <Stack gap={2}>
+                <div className={styles.privateNote}>
+                  <Lock size={14} aria-hidden="true" className={styles.privateNoteIcon} />
+                  <Text size="sm" tone="secondary">
+                    {send.recipientName}’s answers are never shown here — they quietly inform your
+                    coaching.
+                  </Text>
+                </div>
+                {send.analyzed && send.analysisStale ? (
+                  <Banner tone="warning">
+                    <Stack gap={2}>
+                      <Text>Answers updated since your last insight — draw a fresh one.</Text>
+                      {aiReady ? (
+                        <div>
+                          <Button variant="secondary" onClick={onAnalyze} disabled={analyzing}>
+                            <Sparkles size={16} aria-hidden="true" />
+                            {analyzing ? 'Drawing…' : 'Draw a fresh insight'}
+                          </Button>
+                        </div>
+                      ) : null}
+                    </Stack>
+                  </Banner>
+                ) : send.analyzed ? (
+                  <div>
+                    <Button
+                      variant="secondary"
+                      onClick={() =>
+                        navigate(
+                          '/memory',
+                          send.insightId ? { state: { insightId: send.insightId } } : undefined,
+                        )
+                      }
+                    >
+                      <Brain size={16} aria-hidden="true" />
+                      View insight in Memory
+                    </Button>
+                  </div>
+                ) : aiReady ? (
+                  <div>
+                    <Button variant="primary" onClick={onAnalyze} disabled={analyzing}>
+                      <Sparkles size={16} aria-hidden="true" />
+                      {analyzing ? 'Drawing…' : 'Draw an insight'}
+                    </Button>
+                  </div>
+                ) : null}
+              </Stack>
+            ) : null}
+
+            {/* Standard but the answers couldn't be read (a rare missing/corrupt file) — don't mislabel it as private. */}
+            {isSubmitted && !send.answers && send.privacy === 'standard' ? (
+              <Text tone="secondary">Couldn’t load these answers.</Text>
+            ) : null}
+
+            {/* STANDARD analyzed send: a stale re-analyze prompt, else the drafted Insight excerpt inline (§20.8). */}
+            {isSubmitted && send.privacy === 'standard' && send.analyzed && send.analysisStale ? (
               <Banner tone="warning">
                 <Stack gap={2}>
-                  <Text>Answers updated since your last insight — draw a fresh one.</Text>
+                  <Text>
+                    Answers updated since your last analysis — re-analyze to refresh the insight.
+                  </Text>
                   {aiReady ? (
                     <div>
                       <Button variant="secondary" onClick={onAnalyze} disabled={analyzing}>
                         <Sparkles size={16} aria-hidden="true" />
-                        {analyzing ? 'Drawing…' : 'Draw a fresh insight'}
+                        {analyzing ? 'Analyzing…' : 'Re-analyze'}
                       </Button>
                     </div>
                   ) : null}
                 </Stack>
               </Banner>
-            ) : send.analyzed ? (
+            ) : isSubmitted &&
+              send.privacy === 'standard' &&
+              send.analyzed &&
+              send.insightSummary ? (
+              <InsightExcerpt
+                summary={send.insightSummary}
+                onViewInMemory={() =>
+                  navigate(
+                    '/memory',
+                    send.insightId ? { state: { insightId: send.insightId } } : undefined,
+                  )
+                }
+              />
+            ) : isSubmitted && send.privacy === 'standard' && send.analyzed ? (
+              <Banner tone="info">
+                Insight drafted from this response. <Link to="/memory">Review it in Memory →</Link>
+              </Banner>
+            ) : null}
+
+            {/* STANDARD un-analyzed send: a secondary Analyze (its answers already show above). */}
+            {isSubmitted && send.privacy === 'standard' && !send.analyzed && aiReady ? (
               <div>
-                <Button
-                  variant="secondary"
-                  onClick={() =>
-                    navigate(
-                      '/memory',
-                      send.insightId ? { state: { insightId: send.insightId } } : undefined,
-                    )
-                  }
-                >
-                  <Brain size={16} aria-hidden="true" />
-                  View insight in Memory
-                </Button>
-              </div>
-            ) : aiReady ? (
-              <div>
-                <Button variant="primary" onClick={onAnalyze} disabled={analyzing}>
+                <Button variant="secondary" onClick={onAnalyze} disabled={analyzing}>
                   <Sparkles size={16} aria-hidden="true" />
-                  {analyzing ? 'Drawing…' : 'Draw an insight'}
+                  {analyzing ? 'Analyzing…' : 'Analyze'}
                 </Button>
               </div>
             ) : null}
-          </Stack>
-        ) : null}
 
-        {/* Standard but the answers couldn't be read (a rare missing/corrupt file) — don't mislabel it as private. */}
-        {isSubmitted && !send.answers && send.privacy === 'standard' ? (
-          <Text tone="secondary">Couldn’t load these answers.</Text>
-        ) : null}
-
-        {/* STANDARD analyzed send: a stale re-analyze prompt, else the drafted Insight excerpt inline (§20.8). */}
-        {isSubmitted && send.privacy === 'standard' && send.analyzed && send.analysisStale ? (
-          <Banner tone="warning">
-            <Stack gap={2}>
-              <Text>
-                Answers updated since your last analysis — re-analyze to refresh the insight.
-              </Text>
-              {aiReady ? (
+            {/* Share / resend a link for an OPEN send (not yet answered). Resharing mints a fresh link + PIN. */}
+            {isOpen ? (
+              delivery ? (
+                <RelayLinkDelivery
+                  link={delivery.link}
+                  pin={delivery.pin}
+                  senderName={senderName}
+                  sensitive={false}
+                  note="A fresh link + PIN — the previous link no longer works. Share it now; we don’t keep a copy of the PIN."
+                  onDone={() => setDelivery(null)}
+                />
+              ) : (
                 <div>
-                  <Button variant="secondary" onClick={onAnalyze} disabled={analyzing}>
-                    <Sparkles size={16} aria-hidden="true" />
-                    {analyzing ? 'Analyzing…' : 'Re-analyze'}
+                  <Button
+                    variant="secondary"
+                    onClick={() => void runReshare()}
+                    disabled={resharing}
+                  >
+                    <Link2 size={16} aria-hidden="true" />
+                    {resharing
+                      ? 'Creating link…'
+                      : send.relayLinked
+                        ? 'Resend link'
+                        : 'Create a link'}
                   </Button>
                 </div>
-              ) : null}
-            </Stack>
-          </Banner>
-        ) : isSubmitted && send.privacy === 'standard' && send.analyzed && send.insightSummary ? (
-          <InsightExcerpt
-            summary={send.insightSummary}
-            onViewInMemory={() =>
-              navigate(
-                '/memory',
-                send.insightId ? { state: { insightId: send.insightId } } : undefined,
               )
-            }
-          />
-        ) : isSubmitted && send.privacy === 'standard' && send.analyzed ? (
-          <Banner tone="info">
-            Insight drafted from this response. <Link to="/memory">Review it in Memory →</Link>
-          </Banner>
-        ) : null}
-
-        {/* STANDARD un-analyzed send: a secondary Analyze (its answers already show above). */}
-        {isSubmitted && send.privacy === 'standard' && !send.analyzed && aiReady ? (
-          <div>
-            <Button variant="secondary" onClick={onAnalyze} disabled={analyzing}>
-              <Sparkles size={16} aria-hidden="true" />
-              {analyzing ? 'Analyzing…' : 'Analyze'}
-            </Button>
-          </div>
-        ) : null}
-
-        {/* Share / resend a link for an OPEN send (not yet answered). Resharing mints a fresh link + PIN. */}
-        {isOpen ? (
-          delivery ? (
-            <RelayLinkDelivery
-              link={delivery.link}
-              pin={delivery.pin}
-              senderName={senderName}
-              sensitive={false}
-              note="A fresh link + PIN — the previous link no longer works. Share it now; we don’t keep a copy of the PIN."
-              onDone={() => setDelivery(null)}
-            />
-          ) : (
-            <div>
-              <Button variant="secondary" onClick={() => void runReshare()} disabled={resharing}>
-                <Link2 size={16} aria-hidden="true" />
-                {resharing ? 'Creating link…' : send.relayLinked ? 'Resend link' : 'Create a link'}
-              </Button>
-            </div>
-          )
+            ) : null}
+          </Stack>
         ) : null}
 
         {reshareMsg ? <Banner tone="warning">{reshareMsg}</Banner> : null}

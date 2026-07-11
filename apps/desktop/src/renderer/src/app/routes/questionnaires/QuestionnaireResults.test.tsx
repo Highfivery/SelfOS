@@ -34,6 +34,15 @@ function enableAi(): void {
   useSettingsStore.setState({ values: { 'ai.enabled': true } });
 }
 
+/**
+ * The "Who answered" rows are collapsed by default (§21.4); expand them all so their bodies (answers /
+ * insight / actions / declined note / expiry / reshare) render. Waits for the rows to load first.
+ */
+async function expandRows(): Promise<void> {
+  const toggles = await screen.findAllByRole('button', { name: /^Expand / });
+  for (const t of toggles) await userEvent.click(t);
+}
+
 const send = (over: Partial<SendResult> = {}): SendResult => ({
   assignmentId: 'a1',
   recipientName: 'Mara',
@@ -135,6 +144,7 @@ describe('QuestionnaireResults', () => {
         ]),
     });
     renderResults();
+    await expandRows();
     // The calm explainer — the answers (words AND numbers) are never shown — and the only action: draw an insight.
     expect(
       await screen.findByText(/answers are never shown here — they quietly inform your coaching/i),
@@ -162,6 +172,7 @@ describe('QuestionnaireResults', () => {
         ]),
     });
     renderResults();
+    await expandRows();
     // A private card links to Memory; it does NOT render the insight excerpt (the private surface stays answer-free).
     expect(
       await screen.findByRole('button', { name: /View insight in Memory/i }),
@@ -189,6 +200,7 @@ describe('QuestionnaireResults', () => {
         ]),
     });
     renderResults();
+    await expandRows();
     expect(
       await screen.findByText(/They feel connected but carry something unspoken/i),
     ).toBeInTheDocument();
@@ -234,6 +246,7 @@ describe('QuestionnaireResults', () => {
         Promise.resolve([send({ status: 'submitted', answers: [{ prompt: 'Q', answer: 'A' }] })]),
     });
     renderResults();
+    await expandRows();
     await screen.findByText('Mara');
     await userEvent.click(screen.getByRole('button', { name: /export csv/i }));
     expect(assignmentsExportResults).toHaveBeenCalledWith({ questionnaireId: 'q1', format: 'csv' });
@@ -249,6 +262,7 @@ describe('QuestionnaireResults', () => {
         ]),
     });
     renderResults();
+    await expandRows();
     expect(await screen.findByText(/link expires in 3 days/i)).toBeInTheDocument();
   });
 
@@ -269,6 +283,7 @@ describe('QuestionnaireResults', () => {
         ]),
     });
     renderResults();
+    await expandRows();
     expect(await screen.findByText('How are we doing?')).toBeInTheDocument();
     expect(screen.getByText('Doing great')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /analyze/i })).toBeInTheDocument();
@@ -288,6 +303,7 @@ describe('QuestionnaireResults', () => {
       assignmentsResults: () => Promise.resolve([send({ privacy: 'private' })]),
     });
     renderResults();
+    await expandRows();
     // A Private send never shows raw answers — the calm explainer + a "Draw an insight" CTA (§21.5).
     expect(
       await screen.findByText(/answers are never shown here — they quietly inform your coaching/i),
@@ -310,6 +326,7 @@ describe('QuestionnaireResults', () => {
         Promise.resolve([send({ privacy: 'private', analyzed: true, insightId: 'insight-9' })]),
     });
     renderResults();
+    await expandRows();
     expect(
       await screen.findByRole('button', { name: /View insight in Memory/i }),
     ).toBeInTheDocument();
@@ -336,6 +353,7 @@ describe('QuestionnaireResults', () => {
       insightsAnalyze,
     });
     renderResults();
+    await expandRows();
     // A stale private insight prompts to draw a fresh one (§21.5) — no raw answers, no "analysis" wording.
     expect(await screen.findByText(/answers updated since your last insight/i)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /Draw a fresh insight/i }));
@@ -363,6 +381,7 @@ describe('QuestionnaireResults', () => {
         Promise.resolve([send({ privacy: 'private', analyzed, insightId: 'insight-1' })]),
     });
     renderResults();
+    await expandRows();
 
     await userEvent.click(await screen.findByRole('button', { name: /Draw an insight/i }));
     expect(insightsAnalyze).toHaveBeenCalledWith({ assignmentId: 'a1' });
@@ -377,6 +396,7 @@ describe('QuestionnaireResults', () => {
       assignmentsResults: () => Promise.resolve([send()]),
     });
     renderResults();
+    await expandRows();
     await waitFor(() => expect(screen.getByText(/isn.t set up yet/i)).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: /analyze/i })).not.toBeInTheDocument();
   });
@@ -387,6 +407,7 @@ describe('QuestionnaireResults', () => {
       assignmentsResults: () => Promise.resolve([send({ privacy: 'standard' })]),
     });
     renderResults();
+    await expandRows();
     expect(await screen.findByText(/couldn’t load these answers/i)).toBeInTheDocument();
     expect(screen.queryByText(/raw responses stay hidden/i)).not.toBeInTheDocument();
   });
@@ -426,6 +447,7 @@ describe('QuestionnaireResults', () => {
         ]),
     });
     renderResults();
+    await expandRows();
     expect(await screen.findByRole('heading', { name: 'Trends' })).toBeInTheDocument();
     expect(screen.getByText('How connected do you feel?')).toBeInTheDocument();
     expect(screen.getByRole('img', { name: /trend over time for/i })).toBeInTheDocument();
@@ -437,6 +459,7 @@ describe('QuestionnaireResults', () => {
         Promise.resolve([send({ status: 'declined', declineNote: 'Not now' })]),
     });
     renderResults();
+    await expandRows();
     expect(await screen.findByText(/Not now/)).toBeInTheDocument();
   });
 
@@ -479,6 +502,7 @@ describe('QuestionnaireResults', () => {
       },
     });
     renderResults();
+    await expandRows();
     await screen.findByText('Mara');
     expect(screen.getByRole('button', { name: /check for responses/i })).toBeInTheDocument();
     expect(
@@ -499,6 +523,7 @@ describe('QuestionnaireResults', () => {
     });
     renderResults();
     await screen.findByText('Mara');
+    await expandRows();
     expect(
       screen.queryByRole('button', { name: /revoke the link sent to Mara/i }),
     ).not.toBeInTheDocument();
@@ -518,6 +543,7 @@ describe('QuestionnaireResults', () => {
       assignmentsReshare,
     });
     renderResults();
+    await expandRows();
     await screen.findByText('Mara');
     await userEvent.click(screen.getByRole('button', { name: /resend link/i }));
     expect(assignmentsReshare).toHaveBeenCalledWith('a1');

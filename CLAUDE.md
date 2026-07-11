@@ -174,7 +174,10 @@ A slice is **not** done until **all** of these pass:
 - [ ] **Self code-review** passed (`code-reviewer` agent); findings fixed or explicitly accepted
 - [ ] Accessibility check for any UI
 - [ ] **Responsive** — every UI works and looks intentional from ~360px (phone) to desktop; include a
-      mobile-width layout guard (see §12)
+      mobile-width layout guard (see §12). **AND: the screen FILLS the available width — the top-level
+      content container has NO `max-width` cap (only dialogs/overlays, ellipsizing text, and fixed-aspect
+      charts may cap; chat bubbles may use a % — never a fixed px page cap). Verify at desktop width, not
+      just 360px.** (§12 durable rule.)
 - [ ] **Visual QA pass (not just functional)** — screenshot every touched/new surface and look
       critically: alignment (buttons bottom-aligned with the inputs beside them, not floating
       mid-height), even spacing/rhythm, nothing clipped, and each element looks intentional and
@@ -334,6 +337,18 @@ placing anything. Specifically:
   must look and work great from ~360px (phone) to desktop, adapting purely by screen size. Treat this
   like accessibility — always. (Electron is desktop-only; the iPhone path is **Capacitor** — see the
   platform memory and the Capacitor track.)
+- **Content FILLS the available width — NEVER cap a page/content container with `max-width` (durable
+  rule, the user has flagged this repeatedly and forcefully).** The content area (right of the sidebar)
+  is the canvas; every route's top-level container must FILL it (`width: 100%`, no cap). **Do NOT** put
+  `max-width` + `margin: 0 auto` on a route's page/content wrapper — that centers a narrow column and
+  wastes the horizontal space, and it is a recurring UX failure. The screens are laid out with grids/
+  flex that use the full width; a fixed reading-width cap is wrong for this app. **The ONLY things that
+  may cap width:** (a) a **modal/overlay dialog** (centered + capped, e.g. `max-width: 460px`), (b) text
+  that **ellipsizes** (a truncation cap on a label/chip), (c) a **fixed-aspect visualization** (a chart).
+  A chat/message **bubble** may use a **percentage** (~80%) for readability — never a fixed `px` cap.
+  When you build OR review ANY screen, confirm the top-level content container has **no `max-width`**;
+  when in doubt, fill. (2026-07-11: removed content caps on Together/Settings/Home/Questionnaires/You/
+  Onboarding/Gallery after the user flagged it yet again.)
 - **Admin-only visibility marker.** Anything visible **only** to an Owner / super-admin (cost, budgets,
   the Everyone scope + person picker + by-person breakdown, the Roles screen, etc.) carries a clear,
   consistent indicator (e.g. a small "Admin only" / lock badge) so admins know normal users don't see
@@ -403,7 +418,7 @@ A running log of durable decisions and feedback captured into the project config
   invitation flow is now **ceremony → accept** (no screen). **What deliberately STAYS (verified untouched):** the
   always-present **crisis footer** on every Together surface, the in-session **escalation/coercion handling** in
   the couples prompt (§8.5 — the coach still slows a flooded exchange + routes to support), the aside/
-  confidentiality logic, and `excludeRestricted` — the removal drops only the *pre-session* screen, not the
+  confidentiality logic, and `excludeRestricted` — the removal drops only the _pre-session_ screen, not the
   in-conversation safety behaviour. Gate green: typecheck, lint, format, **1082 core + 1043 desktop** unit (the
   pre-screen unit/RTL/coreBridge tests deleted, not skipped), **11/11 Together E2E** (the crown-jewel ceremony→
   accept flow confirms no screen in between), real-Electron visual QA of the Together home (goes straight to

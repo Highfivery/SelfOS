@@ -5,6 +5,7 @@ import {
   ClipboardList,
   Flag,
   Heart,
+  HeartHandshake,
   HeartPulse,
   MessageCircle,
   Moon,
@@ -27,6 +28,7 @@ const DOMAIN_ICON: Record<RecommendationDomain, LucideIcon> = {
   dream: Moon,
   memory: Brain,
   questionnaire: ClipboardList,
+  together: HeartHandshake,
 };
 
 /**

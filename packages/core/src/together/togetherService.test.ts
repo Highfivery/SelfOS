@@ -15,10 +15,12 @@ import {
   listStates,
   pairKeyFor,
   projectMessages,
+  reapTogetherForPerson,
   turnStateFor,
   unreadCountFor,
   updateState,
 } from './togetherService';
+import { saveAgreement } from './agreementService';
 
 const key = generateMasterKey();
 const NOW = new Date('2026-07-10T12:00:00.000Z');
@@ -216,6 +218,35 @@ describe('storage round-trips + corrupt-file tolerance (§7)', () => {
     expect(deriveStatusFor(s, st, null, [], A, NOW)).toBe('invited');
     expect(await listSessionsForPerson(fs, key, A)).toHaveLength(1);
     expect(await listSessionsForPerson(fs, key, 'stranger')).toHaveLength(0);
+  });
+
+  it('reapTogetherForPerson removes the deleted person’s session folders + pair agreements, leaving others', async () => {
+    const fs = await makeFs();
+    // A~B share a session + an agreement; C~D share a separate session (must survive B's deletion).
+    const ab = await createSession(fs, key, { initiatorPersonId: A, participantIds: [A, B] }, NOW);
+    const cd = await createSession(
+      fs,
+      key,
+      { initiatorPersonId: 'personC', participantIds: ['personC', 'personD'] },
+      NOW,
+    );
+    await saveAgreement(
+      fs,
+      key,
+      A,
+      B,
+      { text: 'weekly date night', status: 'standing', sessionId: ab.id },
+      NOW,
+    );
+    expect(await getSession(fs, key, ab.id)).toBeTruthy();
+
+    await reapTogetherForPerson(fs, key, B);
+
+    // B's session + the A~B agreements dir are gone; C~D's session is untouched.
+    expect(await getSession(fs, key, ab.id)).toBeNull();
+    expect(await fs.list(`together/pairs/${pairKeyFor(A, B)}`)).toHaveLength(0);
+    expect(await getSession(fs, key, cd.id)).toBeTruthy();
+    expect(await listSessionsForPerson(fs, key, A)).toHaveLength(0);
   });
 
   it('updateState is one-writer read-modify-write', async () => {

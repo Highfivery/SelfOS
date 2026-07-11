@@ -19,6 +19,7 @@ export const RecommendationDomainSchema = z.enum([
   'dream',
   'memory',
   'questionnaire',
+  'together',
 ]);
 export type RecommendationDomain = z.infer<typeof RecommendationDomainSchema>;
 
@@ -124,6 +125,18 @@ export interface PersonRecommendationState {
   challengeSuggestable?: boolean;
   /** A cached challenge suggestion's `computedAt` — drives the suggest dismissal signature (a NEW idea re-surfaces). */
   challengeSuggestionComputedAt?: string;
+
+  // --- Together (58 §3.12; additive-optional — absent ⇒ the provider contributes nothing) ---
+  /** The one Together Home nudge (a pending invite ∨ your-turn session ∨ a >14-day-quiet pair), derived over
+   *  the viewer's session summaries (`computeTogetherHomeNudge`). Requires the `together.own` gate + a live
+   *  partner edge (the bridge only returns summaries with one). The explicit-register copy never appears here. */
+  togetherNudge?: {
+    kind: 'invite' | 'turn' | 'quiet';
+    sessionId?: string;
+    pairKey: string;
+    partnerName: string;
+    stamp: string;
+  } | null;
 }
 
 /**

@@ -4,3 +4,4 @@ export * from './providers';
 export * from './rank';
 export * from './momentum';
 export * from './celebration';
+export * from './togetherNudge';

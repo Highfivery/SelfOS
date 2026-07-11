@@ -302,6 +302,37 @@ describe('Home — the "For you" engine', () => {
     expect(screen.queryByRole('heading', { name: /welcome to selfos/i })).toBeNull();
   });
 
+  it('surfaces a Together invitation in "For you" (58 §3.12), routed to the session', async () => {
+    installMockBridge({
+      coachingGetPrefs: () => Promise.resolve({ schemaVersion: 1, proactivity: 'active' as const }),
+      // Some activity so the person isn't "new" (which suppresses all "For you" pushes).
+      conversationsList: () => Promise.resolve([meta('c1', 'A past talk', 'complete')]),
+      togetherList: () =>
+        Promise.resolve([
+          {
+            id: 'ts1',
+            pairKey: 'owner-1~partner',
+            initiatorPersonId: 'partner', // Angel invited Ben → a pending invite for him
+            participants: [
+              { personId: 'owner-1', displayName: 'Ben' },
+              { personId: 'partner', displayName: 'Angel' },
+            ],
+            status: 'invited' as const,
+            yourTurn: false,
+            unreadCount: 0,
+            createdAt: 'now',
+          },
+        ]),
+    });
+    renderHome();
+    const region = await waitFor(() => {
+      const r = forYouRegion();
+      expect(r).not.toBeNull();
+      return r as HTMLElement;
+    });
+    expect(region).toHaveTextContent(/Angel invited you to a Together session/i);
+  });
+
   it('invites a first self-assessment when no profile test is taken (50)', async () => {
     installMockBridge({
       conversationsList: () => Promise.resolve([meta('c1', 'A first talk', 'inProgress')]),

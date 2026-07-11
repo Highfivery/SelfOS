@@ -135,6 +135,50 @@ export async function listSessionsForPerson(
   return sessions;
 }
 
+/**
+ * Reap the shared-root Together data belonging to a now-deleted person (58 §5.6 / §H person-delete reap).
+ * The deleted person's OWN per-person Together data (pulse check-ins, YNM opt-ins, pre-screen, prep threads)
+ * lives under `people/<id>/` and is already gone with `deletePerson`; what remains in the shared `together/`
+ * roots are the session folders they participated in and the pair-scoped agreements/reports. Removes:
+ *   - every `together/sessions/<id>/` where the person was a participant, and
+ *   - every `together/pairs/<pairKey>/` whose pairKey names the person.
+ * Best-effort + tolerant (a corrupt/partial entry is skipped) — cleanup only; the live-edge re-gate already
+ * makes any partner-side orphan (e.g. their pulse toward the deleted id) unreadable, so a miss never leaks.
+ */
+export async function reapTogetherForPerson(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+): Promise<void> {
+  if (!isSafeSegment(personId)) return;
+  // Session folders the person participated in.
+  for (const name of await fs.list(SESSIONS_ROOT)) {
+    if (!isSafeSegment(name)) continue;
+    try {
+      const raw = await readEncryptedJson(fs, sessionPath(name), key);
+      if (!raw) continue;
+      const session = TogetherSessionSchema.parse(raw);
+      if (session.participantIds.includes(personId)) await fs.remove(sessionDir(name));
+    } catch {
+      // Skip a corrupt session; never fatal.
+    }
+  }
+  // Pair-scoped agreements/reports whose pairKey names the person (pairKey = sorted a~b).
+  const PAIRS_ROOT = 'together/pairs';
+  for (const pairKey of await fs.list(PAIRS_ROOT)) {
+    const parts = pairKey.split('~');
+    // Defense-in-depth: only touch a well-formed pairKey (two safe segments) that names the person —
+    // matching the pairKey validation in agreement/pulse/ynm services.
+    if (parts.length === 2 && parts.every(isSafeSegment) && parts.includes(personId)) {
+      try {
+        await fs.remove(`${PAIRS_ROOT}/${pairKey}`);
+      } catch {
+        // Best-effort cleanup.
+      }
+    }
+  }
+}
+
 // ── Participant state (one writer per file) ───────────────────────────────────────────────────────
 
 /**

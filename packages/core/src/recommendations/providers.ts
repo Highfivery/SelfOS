@@ -314,6 +314,50 @@ const intimacyExercise: RecommendationProvider = {
 };
 
 /**
+ * Together (58 §3.12): a pending invitation to answer, an active session where it's the viewer's turn, or a
+ * pair gone quiet >14 days since their last completed session. Capability-gated (`together.own`) + only
+ * relevant with a live partner edge (the summaries the nudge derives from only exist with one). Relational
+ * copy only — the explicit-register variant never appears on Home.
+ */
+const togetherSession: RecommendationProvider = {
+  id: 'together-session',
+  domain: 'together',
+  capabilityGate: 'together.own',
+  relevance: (s): RecommendationCandidate | null => {
+    const n = s.togetherNudge;
+    if (!n) return null;
+    const copy = {
+      invite: {
+        label: 'A Together invitation',
+        reason: `${n.partnerName} invited you to a Together session — open it when you’re ready.`,
+        score: 88,
+      },
+      turn: {
+        label: 'Your turn in Together',
+        reason: `It’s your turn to reply in your Together session with ${n.partnerName}.`,
+        score: 84,
+      },
+      quiet: {
+        label: 'Reconnect in Together',
+        reason: `It’s been a while since you and ${n.partnerName} did a Together session — no pressure, whenever it feels right.`,
+        score: 52,
+      },
+    }[n.kind];
+    return {
+      id: 'together-session',
+      label: copy.label,
+      reason: copy.reason,
+      route: n.sessionId ? `/together/session/${n.sessionId}` : '/together',
+      score: copy.score,
+      // Re-surfaces when the situation advances: a new invite/turn (a newer stamp) or a still-quiet pair
+      // whose last-completed stamp changes (a fresh session completed, then went quiet again). Keyed on the
+      // stable `pairKey` (a display name can collide or change), not the partner's name.
+      dismissKey: `together:${n.kind}:${n.pairKey}:${n.stamp}`,
+    };
+  },
+};
+
+/**
  * The built-in recommendation providers, registered by `registerBuiltInRecommendationProviders`. Slice A is
  * the existing-feature set; Slice B grows it as the 2026-06 features land (50/51/48/52) — each registered
  * here (the engine built-ins), so they appear in "For you" when relevant + permitted with NO `Home.tsx` edit.
@@ -333,4 +377,6 @@ export const BUILT_IN_RECOMMENDATION_PROVIDERS: readonly RecommendationProvider[
   takeATest,
   wellbeingCheckin,
   intimacyExercise,
+  // Together (58 §3.12): couples-session presence on Home.
+  togetherSession,
 ];

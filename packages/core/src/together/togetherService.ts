@@ -1,9 +1,11 @@
 import type { FileSystem } from '../host';
 import { uuid } from '../id';
+import { getMedia, isAllowedImageMime, MAX_IMAGE_BYTES, storeMedia } from '../media';
 import {
   ParticipantStateSchema,
   TogetherMessageSchema,
   TogetherSessionSchema,
+  type AttachmentRef,
   type ParticipantState,
   type TogetherMessage,
   type TogetherMessageView,
@@ -226,6 +228,79 @@ export async function appendMessage(
   const file = `${messagesDir(id)}/${millis}-${seg}-${uuid()}.enc`;
   await writeEncryptedJson(fs, file, message, key);
   return message;
+}
+
+// ── Attachments (58 §6.1) — Together's OWN seam (the 45 solo channels are person-scoped by construction) ──
+
+/** The session's encrypted image-attachment folder (§4.1). */
+export function togetherAttachmentsDir(sessionId: string): string {
+  return `${sessionDir(sessionId)}/attachments`;
+}
+
+/** Guard: a path is one of OUR Together attachment files — defense in depth for `getMedia` (the `isMediaPath` habit). */
+export function isTogetherAttachmentPath(path: string): boolean {
+  return /^together\/sessions\/[^/]+\/attachments\/[^/]+\.enc$/.test(path) && !path.includes('..');
+}
+
+export type StoreTogetherAttachmentResult =
+  | AttachmentRef
+  | { ok: false; reason: 'UNSUPPORTED' | 'TOO_LARGE'; message: string };
+
+/**
+ * Validate (mime + size) then encrypt + store an image attachment under the session's attachments folder.
+ * The renderer is NOT the trust boundary — mime/size are re-checked here (the 45 §5.2 pattern).
+ */
+export async function storeTogetherAttachment(
+  fs: FileSystem,
+  key: Uint8Array,
+  sessionId: string,
+  bytes: Uint8Array,
+  mime: string,
+  dims?: { width?: number; height?: number },
+): Promise<StoreTogetherAttachmentResult> {
+  if (!isAllowedImageMime(mime)) {
+    return { ok: false, reason: 'UNSUPPORTED', message: 'That file isn’t a supported image.' };
+  }
+  if (bytes.length === 0 || bytes.length > MAX_IMAGE_BYTES) {
+    return { ok: false, reason: 'TOO_LARGE', message: 'That image is too large.' };
+  }
+  const dir = togetherAttachmentsDir(sessionId);
+  if (!isSafeSegment(sessionId) || !isTogetherAttachmentPath(`${dir}/probe.enc`)) {
+    return { ok: false, reason: 'UNSUPPORTED', message: 'Invalid session reference.' };
+  }
+  const { id, path } = await storeMedia(fs, key, dir, bytes);
+  return {
+    id,
+    kind: 'image',
+    mime,
+    path,
+    bytes: bytes.length,
+    ...(dims?.width !== undefined ? { width: dims.width } : {}),
+    ...(dims?.height !== undefined ? { height: dims.height } : {}),
+  };
+}
+
+/** Read + decrypt a stored Together attachment's bytes; null if out-of-bounds/absent/unreadable. Message-gating
+ *  (an aside's attachment is author-only) is enforced by the BRIDGE before calling this (§5.2). */
+export async function getTogetherAttachment(
+  fs: FileSystem,
+  key: Uint8Array,
+  path: string,
+): Promise<Uint8Array | null> {
+  return getMedia(fs, key, path, isTogetherAttachmentPath);
+}
+
+/** The message that references an attachment `path` (for the bridge's aside-gated read), or null. */
+export async function messageOwningAttachment(
+  fs: FileSystem,
+  key: Uint8Array,
+  sessionId: string,
+  path: string,
+): Promise<TogetherMessage | null> {
+  for (const m of await listMessages(fs, key, sessionId)) {
+    if (m.attachments?.some((a) => a.path === path)) return m;
+  }
+  return null;
 }
 
 // ── Derivations (§4.3 / §5.2) — all viewer-relative, none stored ───────────────────────────────────

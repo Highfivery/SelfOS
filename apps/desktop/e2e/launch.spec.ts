@@ -57,6 +57,7 @@ import {
 } from '@selfos/core/conversations';
 import { listChallenges } from '@selfos/core/challenges';
 import { listProfileSuggestions } from '@selfos/core/profile';
+import { getTogetherAttachment } from '@selfos/core/together';
 
 const MAIN = join(__dirname, '..', 'out', 'main', 'index.js');
 
@@ -9630,6 +9631,8 @@ test('together (58): lifecycle + aside projection (crown jewel) + prompt capture
     expect(prompts).toContain('[PRIVATE from Ben'); // …clearly marked private
     expect(prompts).not.toContain('RESTRICTEDTRAUMA'); // excludeRestricted (§6.3) — even on any topic
     expect(prompts.toLowerCase()).not.toContain('consenting adults'); // no explicit register in Phase B
+    // The Phase C secrets-policy reaches the live prompt: the identical no-oracle deflection (§8.7).
+    expect(prompts).toContain("I'd tell you the same thing either way");
     // Order is load-bearing: PERSONA → the confidentiality contract → FORMATTING.
     expect(prompts.indexOf('warm, reflective wellness companion')).toBeLessThan(
       prompts.indexOf('private background about Ben'),
@@ -9658,6 +9661,61 @@ test('together (58): lifecycle + aside projection (crown jewel) + prompt capture
     await rm(userData, { recursive: true, force: true });
     await rm(vault, { recursive: true, force: true });
     await rm(promptDir, { recursive: true, force: true });
+  }
+});
+
+test('together (58) phase C: an attachment stores encrypted under the session; the private prep space stays OFF the Sessions list (§3.7/§6.1)', async () => {
+  const { userData, vault } = await seedTogetherReady();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByPlaceholder('e.g. Feeling disconnected lately').fill('Planning our week');
+    await w.getByRole('button', { name: 'Send invitation' }).click();
+
+    // Attach a real PNG to a shared message → a pending thumbnail → send → it renders in the thread.
+    await w.locator('input[type="file"]').setInputFiles({
+      name: 'us.png',
+      mimeType: 'image/png',
+      buffer: makePng(),
+    });
+    await expect(w.getByRole('img', { name: 'Attachment 1' })).toBeVisible(); // pending thumb
+    await w.getByLabel('Message').fill('remember this day?');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/I hear you/)).toBeVisible();
+    await expect(w.getByRole('button', { name: /Shared image/ }).first()).toBeVisible();
+
+    // On disk: the attachment is an AES-GCM envelope under the SESSION's namespace, decrypting to PNG.
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('no key');
+    const sessions = await readdir(join(vault, 'together', 'sessions'));
+    expect(sessions.length).toBe(1);
+    const attFiles = await readdir(
+      join(vault, 'together', 'sessions', sessions[0]!, 'attachments'),
+    );
+    expect(attFiles.length).toBe(1);
+    const attPath = `together/sessions/${sessions[0]}/attachments/${attFiles[0]}`;
+    expect(new TextDecoder().decode((await fs.read(attPath))!)).toContain('aes-256-gcm');
+    const decrypted = await getTogetherAttachment(fs, key, attPath);
+    expect(decrypted?.slice(0, 4)).toEqual(new Uint8Array([0x89, 0x50, 0x4e, 0x47])); // PNG magic
+
+    // Prep privately → the person's OWN private thread; a solo turn replies.
+    await w.getByRole('button', { name: /Prep privately/ }).click();
+    await expect(w.getByText(/Private prep — only you/)).toBeVisible();
+    await w.getByPlaceholder('Write privately…').fill('I want to lead with appreciation.');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/hear you/i).first()).toBeVisible();
+
+    // The prep thread NEVER shows in the solo Sessions list (the togetherSessionId filter, §3.7).
+    await w.getByRole('button', { name: /Back to session/ }).click();
+    await w.getByRole('link', { name: 'Sessions' }).click();
+    await w.getByLabel('Message').waitFor(); // the solo Sessions composer → we've arrived
+    await expect(w.getByText('Prep', { exact: true })).toHaveCount(0);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
   }
 });
 

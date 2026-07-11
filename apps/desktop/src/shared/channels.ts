@@ -275,6 +275,9 @@ export const IpcChannels = {
   togetherSendMessage: 'together:sendMessage',
   togetherRetry: 'together:retry',
   togetherChunk: 'together:chunk', // main → renderer event
+  togetherPrepOpen: 'together:prepOpen',
+  togetherStoreAttachment: 'together:storeAttachment',
+  togetherGetAttachment: 'together:getAttachment',
   assignmentsCreate: 'assignments:create',
   assignmentsInbox: 'assignments:inbox',
   assignmentsSetFavorite: 'assignments:setFavorite',
@@ -981,11 +984,30 @@ export interface SelfosBridge {
     sessionId: string;
     text: string;
     privateAside?: boolean;
+    attachments?: AttachmentRef[];
   }): Promise<TogetherTurnResult>;
   /** Reply-only regeneration for a session whose newest message is an unanswered human message (§7). */
   togetherRetry(input: { sessionId: string }): Promise<TogetherTurnResult>;
   /** Subscribe to streamed couples-turn reply chunks (a separate sink from chat — §5.4). */
   onTogetherChunk(listener: (delta: string) => void): () => void;
+  /** Open (or return) the caller's OWN private prep thread for a session (§3.7) — an ordinary conversation. */
+  togetherPrepOpen(input: { sessionId: string }): Promise<Conversation | null>;
+  /** Store an image attachment under the session's own folder (§6.1); a calm reject on mime/size. */
+  togetherStoreAttachment(input: {
+    sessionId: string;
+    base64: string;
+    mime: string;
+    width?: number;
+    height?: number;
+  }): Promise<
+    | AttachmentRef
+    | { ok: false; reason: 'UNSUPPORTED' | 'TOO_LARGE' | 'NOT_FOUND'; message: string }
+  >;
+  /** Read a session attachment's bytes; an aside's attachment is readable only by its author (§5.2). */
+  togetherGetAttachment(input: {
+    sessionId: string;
+    path: string;
+  }): Promise<{ mime: string; dataBase64: string } | null>;
   /**
    * Send a questionnaire to its BOUND household recipient (in-app), freezing an immutable snapshot at send.
    * The recipient is set on the questionnaire at creation (08 §17.3) — it is NOT passed here. Returns the

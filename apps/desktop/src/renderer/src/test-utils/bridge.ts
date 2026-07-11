@@ -330,6 +330,10 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     togetherRetry: () =>
       Promise.resolve({ ok: false, reason: 'NOT_ALLOWED', message: 'Not available.' }),
     onTogetherChunk: () => () => {},
+    togetherPrepOpen: () => Promise.resolve(null),
+    togetherStoreAttachment: () =>
+      Promise.resolve({ ok: false, reason: 'NOT_FOUND', message: 'Not available.' }),
+    togetherGetAttachment: () => Promise.resolve(null),
     assignmentsCreate: (input) =>
       Promise.resolve({
         assignment: {

@@ -191,6 +191,7 @@ describe('TogetherThread (§3.6)', () => {
               },
             ],
           })}
+          onPrep={() => {}}
         />
       </MemoryRouter>,
     );
@@ -208,5 +209,19 @@ describe('TogetherThread (§3.6)', () => {
     );
     // Turn pill carries text.
     expect(within(screen.getByText('Your turn')).getByText('Your turn')).toBeInTheDocument();
+  });
+
+  it('exposes a "Prep privately" affordance that opens the private prep space (§3.7)', async () => {
+    installMockBridge();
+    setActivePerson();
+    let opened = 0;
+    render(
+      <MemoryRouter>
+        <TogetherThread session={view()} onPrep={() => (opened += 1)} />
+      </MemoryRouter>,
+    );
+    const prep = screen.getByRole('button', { name: /Prep privately/ });
+    await userEvent.click(prep);
+    expect(opened).toBe(1);
   });
 });

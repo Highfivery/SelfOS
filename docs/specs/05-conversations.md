@@ -143,6 +143,12 @@ service (AES-256-GCM, master key). Zod-validated on read; `schemaVersion` + migr
 > guided exercise that seeded the session; absent ⇒ a free session) and **`guideStep?`** (current step index, for
 > structured exercises only). Also additive-optional → **no `schemaVersion` bump** (16 §4.2). When `guideId` is
 > set, the system prompt appends the exercise's steering addendum **after** PERSONA + SAFETY + context (16 §5).
+>
+> **Amended by [`58-together-couples-sessions.md`](58-together-couples-sessions.md) (Approved + built)** — adds
+> **`togetherSessionId?`**: when set, this conversation is a person's private **prep thread** for a couples
+> session (an ordinary conversation reused wholesale — composer/streaming/retry/attachments). Additive-optional
+> → **no `schemaVersion` bump** (58 §3.7). The **Sessions-list read (`conversations:list`) excludes** these —
+> they're reached from the Together session's "Prep privately", not the solo Sessions list.
 
 ## 5. Architecture & modules
 

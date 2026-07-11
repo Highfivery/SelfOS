@@ -133,6 +133,12 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+/* The title takes the row and ellipsizes; the turn pill + "Prep privately" wrap below on a narrow pane. */
+.threadHead > :first-child {
+  flex: 1 1 auto;
   min-width: 0;
 }
 .threadBanner {
@@ -237,6 +243,26 @@
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
 }
+.pendingRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pendingItem {
+  position: relative;
+  width: 56px;
+  height: 56px;
+}
+.attachmentGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: 2px;
+}
+
 .composerInput {
   width: 100%;
   min-height: 64px;

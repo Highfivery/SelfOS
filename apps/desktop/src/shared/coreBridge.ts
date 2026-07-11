@@ -145,6 +145,9 @@ import {
   type TogetherTurnResult,
   TogetherSendMessageInputSchema,
   TogetherRetryInputSchema,
+  TogetherPrepOpenSchema,
+  TogetherStoreAttachmentSchema,
+  TogetherGetAttachmentSchema,
 } from './schemas';
 import { OWNER_ROLE_ID, roleAllows, type CapabilityKey } from './capabilities';
 import { runConnectionTest } from './claudeProxy';
@@ -254,10 +257,14 @@ import {
   evaluatePreScreen,
   getPreScreen,
   getSession as getTogetherSession,
+  getTogetherAttachment,
   isPreScreenComplete,
+  isTogetherAttachmentPath,
   listMessages as listTogetherMessages,
   listSessionsForPerson as listTogetherSessionsForPerson,
   listStates as listTogetherStates,
+  messageOwningAttachment,
+  openPrepConversation,
   preScreenClears,
   preScreenNeedsReoffer,
   PRESCREEN_ITEMS,
@@ -265,6 +272,8 @@ import {
   retryTogetherReply,
   runTogetherTurn,
   savePreScreenOutcome,
+  storeTogetherAttachment,
+  togetherAttachmentsDir,
   updateState as updateTogetherState,
 } from '@selfos/core/together';
 import { sniffImageMime } from '@selfos/core/media';
@@ -1901,13 +1910,19 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const ctx = await host.vaultAndKey();
       const personId = ctx ? await activePersonId() : null;
       if (!ctx || !personId) return [];
-      return (await listConversations(ctx.fs, ctx.key, personId)).map((c) => ({
-        id: c.id,
-        title: c.title,
-        updatedAt: c.updatedAt,
-        status: conversationStatus(c),
-        ...(c.guideId ? { guideId: c.guideId } : {}),
-      }));
+      return (
+        (await listConversations(ctx.fs, ctx.key, personId))
+          // Together prep threads (58 §3.7) are ordinary conversations, but they belong to a couples session's
+          // "Prep privately" panel — NOT the solo Sessions list. Filter them out here (the new §3.7 filter).
+          .filter((c) => !c.togetherSessionId)
+          .map((c) => ({
+            id: c.id,
+            title: c.title,
+            updatedAt: c.updatedAt,
+            status: conversationStatus(c),
+            ...(c.guideId ? { guideId: c.guideId } : {}),
+          }))
+      );
     },
     conversationsGet: async (id): Promise<Conversation | null> => {
       const ctx = await host.vaultAndKey();
@@ -2227,7 +2242,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       return evaluation;
     },
     togetherSendMessage: async (input): Promise<TogetherTurnResult> => {
-      const { sessionId, text, privateAside } = TogetherSendMessageInputSchema.parse(input);
+      const { sessionId, text, privateAside, attachments } =
+        TogetherSendMessageInputSchema.parse(input);
       const c = await togetherCtx();
       if (!c) return { ok: false, reason: 'NOT_ALLOWED', message: 'SelfOS isn’t ready yet.' };
       const session = await accessibleTogetherSession(c.fs, c.key, c.personId, sessionId);
@@ -2249,10 +2265,60 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         authorPersonId: c.personId,
         userText: text,
         ...(privateAside ? { privateAside: true } : {}),
+        ...(attachments && attachments.length > 0 ? { attachments } : {}),
         onDelta: (delta) => host.emitTogetherChunk(delta),
         now: new Date(),
       });
       return togetherTurnResult(c.fs, c.key, session, c.personId, outcome);
+    },
+    togetherPrepOpen: async (input): Promise<Conversation | null> => {
+      const { sessionId } = TogetherPrepOpenSchema.parse(input);
+      const c = await togetherCtx();
+      if (!c) return null;
+      // A participant (membership + live edge) opens THEIR OWN prep thread (§3.7) — a solo conversation
+      // billed to them (their `chatStream` bills the active person, outside the initiator-pays rule).
+      const session = await accessibleTogetherSession(c.fs, c.key, c.personId, sessionId);
+      if (!session) return null;
+      return openPrepConversation(c.fs, c.key, c.personId, sessionId, new Date());
+    },
+    togetherStoreAttachment: async (
+      input,
+    ): Promise<
+      | AttachmentRef
+      | { ok: false; reason: 'UNSUPPORTED' | 'TOO_LARGE' | 'NOT_FOUND'; message: string }
+    > => {
+      const { sessionId, base64, mime, width, height } = TogetherStoreAttachmentSchema.parse(input);
+      const c = await togetherCtx();
+      if (!c) return { ok: false, reason: 'NOT_FOUND', message: 'SelfOS isn’t ready yet.' };
+      const session = await accessibleTogetherSession(c.fs, c.key, c.personId, sessionId);
+      if (!session) return { ok: false, reason: 'NOT_FOUND', message: 'Together isn’t available.' };
+      const dims =
+        width !== undefined || height !== undefined
+          ? {
+              ...(width !== undefined ? { width } : {}),
+              ...(height !== undefined ? { height } : {}),
+            }
+          : undefined;
+      return storeTogetherAttachment(c.fs, c.key, sessionId, fromBase64(base64), mime, dims);
+    },
+    togetherGetAttachment: async (input): Promise<{ mime: string; dataBase64: string } | null> => {
+      const { sessionId, path } = TogetherGetAttachmentSchema.parse(input);
+      const c = await togetherCtx();
+      if (!c) return null;
+      const session = await accessibleTogetherSession(c.fs, c.key, c.personId, sessionId);
+      if (!session) return null;
+      // Confine the path to THIS session's attachments folder (a crafted path can't reach another session's).
+      const prefix = `${togetherAttachmentsDir(sessionId)}/`;
+      if (!isTogetherAttachmentPath(path) || !path.startsWith(prefix)) return null;
+      // Message-gated (§5.2): an attachment referenced ONLY by a private aside is readable by the aside's
+      // author alone — the projection hides the aside from the partner, so its image must be gated too.
+      // Fail CLOSED on an unknown owner: a legitimate read always renders from a message the viewer can see,
+      // so an owning message always exists on the happy path; an owner-less path (a stored-but-never-sent
+      // orphan) must never resolve to bytes for anyone but its storer's own author-gated read.
+      const owner = await messageOwningAttachment(c.fs, c.key, sessionId, path);
+      if (!owner || (owner.privateAside && owner.authorPersonId !== c.personId)) return null;
+      const bytes = await getTogetherAttachment(c.fs, c.key, path);
+      return bytes ? { mime: sniffImageMime(bytes), dataBase64: toBase64(bytes) } : null;
     },
     togetherRetry: async (input): Promise<TogetherTurnResult> => {
       const { sessionId } = TogetherRetryInputSchema.parse(input);

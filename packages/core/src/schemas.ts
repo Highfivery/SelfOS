@@ -542,6 +542,11 @@ export const ConversationSchema = z.object({
   // session (the `challenge-reflect` guide), this back-links the Challenge it reflects on so End &
   // summarize stamps `provenance.challengeId`. Additive-optional — absent ⇒ a normal/guided session.
   challengeId: z.string().optional(),
+  // Together prep spaces (58-together §3.7). When set, this conversation is a person's PRIVATE prep thread
+  // for a couples session — an ordinary 05 Conversation carrying the link, so it reuses composer/streaming/
+  // retry/attachments wholesale. A NEW filter in the Sessions-list read excludes these (they're reached via
+  // the Together session's "Prep privately", not the solo Sessions list). Additive-optional — no migration.
+  togetherSessionId: z.string().optional(),
   // Free-form session topic cache (28 §13.2). The life-areas a Haiku classifier inferred from the
   // conversation, reused across turns and re-run only on a subject shift, so context selects the relevant
   // pinned portrait facts. Additive-optional — absent ⇒ unclassified (⇒ core + fill). Guided sessions don't
@@ -3057,8 +3062,34 @@ export const TogetherSendMessageInputSchema = z.object({
   sessionId: z.string().min(1),
   text: z.string().min(1),
   privateAside: z.boolean().optional(), // §3.6 — a private aside to the coach
+  attachments: z.array(AttachmentRefSchema).optional(), // §6.1 — already-stored image refs (Phase C)
 });
 export type TogetherSendMessageInput = z.infer<typeof TogetherSendMessageInputSchema>;
 
 export const TogetherRetryInputSchema = z.object({ sessionId: z.string().min(1) });
 export type TogetherRetryInput = z.infer<typeof TogetherRetryInputSchema>;
+
+/** Prep-space open input (§3.7) — the caller's own prep Conversation for a session. */
+export const TogetherPrepOpenSchema = z.object({ sessionId: z.string().min(1) });
+export type TogetherPrepOpenInput = z.infer<typeof TogetherPrepOpenSchema>;
+
+/** Together attachment store/read inputs (§6.1) — the session's own image seam (aside-gated reads). */
+export const TogetherStoreAttachmentSchema = z.object({
+  sessionId: z.string().min(1),
+  // ~5 MB of image → ~6.83 MB of base64; cap at 8 MB chars so a hostile renderer can't force an unbounded
+  // decode before the core size check (which authoritatively re-validates the real byte length) runs.
+  base64: z
+    .string()
+    .min(1)
+    .max(8 * 1024 * 1024),
+  mime: z.string().min(1),
+  width: z.number().int().positive().optional(),
+  height: z.number().int().positive().optional(),
+});
+export type TogetherStoreAttachmentInput = z.infer<typeof TogetherStoreAttachmentSchema>;
+
+export const TogetherGetAttachmentSchema = z.object({
+  sessionId: z.string().min(1),
+  path: z.string().min(1),
+});
+export type TogetherGetAttachmentInput = z.infer<typeof TogetherGetAttachmentSchema>;

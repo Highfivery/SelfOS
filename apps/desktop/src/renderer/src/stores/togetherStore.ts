@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type {
+  AttachmentRef,
   Person,
   TogetherCreateResult,
   TogetherPreScreenResult,
@@ -8,6 +9,7 @@ import type {
   TogetherSessionView,
   TogetherTurnResult,
 } from '@shared/schemas';
+import type { PendingAttachment } from '../app/routes/sessions/downscaleImage';
 import { useSessionStore } from './sessionStore';
 
 /** A partner the active person can start a session with (or a disabled non-subject contact — §3.1). */
@@ -49,7 +51,11 @@ interface TogetherState {
   create: (partnerPersonId: string, topic?: string) => Promise<TogetherCreateResult>;
   accept: (id: string) => Promise<void>;
   decline: (id: string) => Promise<void>;
-  sendMessage: (text: string, privateAside?: boolean) => Promise<TogetherTurnResult>;
+  sendMessage: (
+    text: string,
+    privateAside?: boolean,
+    pending?: PendingAttachment[],
+  ) => Promise<TogetherTurnResult>;
   retry: () => Promise<TogetherTurnResult>;
   markRead: (id: string) => Promise<void>;
   leave: (id: string) => Promise<void>;
@@ -147,15 +153,29 @@ export const useTogetherStore = create<TogetherState>((set, get) => ({
     if (get().open?.id === id) set({ open: null });
     await get().refresh();
   },
-  sendMessage: async (text, privateAside) => {
+  sendMessage: async (text, privateAside, pending) => {
     const open = get().open;
     if (!open) return NOT_ALLOWED;
     set({ sending: true, streaming: '', error: null });
+    // Store any pending images under the session's own attachment folder (§6.1), then send their refs. A
+    // failed store drops that image but the message still sends (best-effort, matching the 45 solo path).
+    const attachments: AttachmentRef[] = [];
+    for (const p of pending ?? []) {
+      const stored = await window.selfos?.togetherStoreAttachment({
+        sessionId: open.id,
+        base64: p.base64,
+        mime: p.mime,
+        width: p.width,
+        height: p.height,
+      });
+      if (stored && 'id' in stored) attachments.push(stored);
+    }
     const result =
       (await window.selfos?.togetherSendMessage({
         sessionId: open.id,
         text,
         ...(privateAside ? { privateAside: true } : {}),
+        ...(attachments.length > 0 ? { attachments } : {}),
       })) ?? NOT_ALLOWED;
     if (result.ok) set({ open: result.view, sending: false, streaming: '' });
     else set({ sending: false, streaming: '', error: result.message });

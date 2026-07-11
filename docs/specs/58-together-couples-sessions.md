@@ -1079,11 +1079,16 @@ Remaining (build-time; ask before the relevant phase):
 
 ## 14. Build order — phases (each independently shippable, gated, and E2E-tested)
 
-> **Build status (2026-07-10):** **Phase A + Phase B BUILT** on `feat/together-foundation` (one PR — A has no
-> surface). Delivered: the projection core + bridge seam + `together.own` (A); `excludeRestricted`, the
+> **Build status (2026-07-10):** **Phase A + Phase B BUILT + released (0.17.0)** on `feat/together-foundation`
+> (one PR — A has no surface): the projection core + bridge seam + `together.own` (A); `excludeRestricted`, the
 > pre-screen, the couples turn + streaming, and the renderer (nav/home/ceremony/pre-screen/thread + the two
-> notifications) (B). Owner-confirmed: conservative pre-screen flag rule + all four §11 defaults kept. **Phases
-> C–H remain.**
+> notifications) (B). **Phase C BUILT** on `feat/together-prep-attachments`: solo prep spaces (additive
+> `Conversation.togetherSessionId` + the Sessions-list filter + `PrepPanel`, author-billed, find-or-create with a
+> static opener), the Together attachment seam (`together:storeAttachment`/`getAttachment`, `isTogetherAttachmentPath`,
+> the **fail-closed** aside-gated read + vision ContentBlocks), and the secrets-policy prompt additions (§8.7 —
+> identical no-oracle deflection, no covert use, no indefinite-secret-holding). Owner-confirmed: conservative
+> pre-screen flag rule + all four §11 defaults kept. **The live-model adversarial pass (§13 first run) is a manual
+> DoD item that needs a real API key — flagged for the user; the offline suite is green.** **Phases D–H remain.**
 
 Each phase lands via the standard slice workflow (branch → implement + tests → quality-gate →
 code-reviewer → sync-docs → PR → squash-merge), meets the full §7-CLAUDE.md DoD (E2E written AND

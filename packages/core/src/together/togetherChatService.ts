@@ -1,10 +1,17 @@
-import type { ClaudeClient, ClaudeMessage, FileSystem } from '../host';
+import type { ClaudeClient, ClaudeMessage, ContentBlock, FileSystem } from '../host';
+import { toBase64 } from '../encoding';
 import { uuid } from '../id';
-import type { ContextTopic, TogetherMessage, TogetherSession, UsageEvent } from '../schemas';
+import type {
+  AttachmentRef,
+  ContextTopic,
+  TogetherMessage,
+  TogetherSession,
+  UsageEvent,
+} from '../schemas';
 import { checkBudget, costOf, recordUsage } from '../usage';
 import { getPerson } from '../people';
 import { stripCoachMarkers } from '../conversations/guidedSteps';
-import { appendMessage, getSession, listMessages } from './togetherService';
+import { appendMessage, getSession, getTogetherAttachment, listMessages } from './togetherService';
 import { buildTogetherSystemPrompt } from './togetherPromptBuilder';
 
 // ── The couples turn (58 §5.1) — a sibling of `runChatTurn` (05 §4.1), not a change to it ─────────
@@ -32,6 +39,9 @@ export interface TogetherTurnDeps {
   /** Who is writing this turn (the active person). The coach reply carries this id too (§4.2). */
   authorPersonId: string;
   userText: string;
+  /** Image attachments on the NEW message (58 §6.1) — already stored via `together:storeAttachment`; the bytes
+   *  are re-read host-side each turn to build vision blocks. Absent ⇒ a text-only turn. */
+  attachments?: AttachmentRef[];
   /** A private aside — the whole exchange (this message + the coach reply) is author-only (§3.6). */
   privateAside?: boolean;
   /** The call topic (Phase E guided sessions derive it from the catalog); absent ⇒ core + fill. */
@@ -82,35 +92,53 @@ function buildTogetherUsage(
  * requires alternating roles), and the list is trimmed to start on a user message. Text-only in Phase B
  * (attachments arrive in Phase C).
  */
-function buildTogetherClaudeMessages(
+async function buildTogetherClaudeMessages(
+  fs: FileSystem,
+  key: Uint8Array,
   messages: TogetherMessage[],
   nameOf: (personId: string) => string,
-): ClaudeMessage[] {
+): Promise<ClaudeMessage[]> {
   const windowed = messages.slice(-TOGETHER_TRANSCRIPT_WINDOW);
-  const built: ClaudeMessage[] = windowed.map((m) => {
-    if (m.role === 'assistant') return { role: 'assistant', content: m.content };
+  // Each message → a role + its parts (a name-prefixed text part + any image blocks). Consecutive same-role
+  // messages MERGE (two partners can write before a reply — the API requires alternating roles). A missing/
+  // corrupt attachment is skipped so the turn still completes (the 45 §6.1 degrade rule).
+  const groups: { role: 'user' | 'assistant'; parts: (string | ContentBlock)[] }[] = [];
+  for (const m of windowed) {
     const name = nameOf(m.authorPersonId);
-    const prefix = m.privateAside
-      ? `[PRIVATE from ${name} — only ${name} can see this] `
-      : `${name}: `;
-    return { role: 'user', content: `${prefix}${m.content}` };
-  });
-  const merged: ClaudeMessage[] = [];
-  for (const cm of built) {
-    const last = merged[merged.length - 1];
-    if (
-      last &&
-      last.role === cm.role &&
-      typeof last.content === 'string' &&
-      typeof cm.content === 'string'
-    ) {
-      last.content = `${last.content}\n\n${cm.content}`;
-    } else {
-      merged.push({ role: cm.role, content: cm.content });
+    const text =
+      m.role === 'assistant'
+        ? m.content
+        : `${m.privateAside ? `[PRIVATE from ${name} — only ${name} can see this] ` : `${name}: `}${m.content}`;
+    const parts: (string | ContentBlock)[] = [];
+    if (text) parts.push(text);
+    for (const ref of m.attachments ?? []) {
+      const bytes = await getTogetherAttachment(fs, key, ref.path);
+      if (bytes) {
+        parts.push({
+          type: 'image',
+          source: { type: 'base64', media_type: ref.mime, data: toBase64(bytes) },
+        });
+      }
     }
+    const last = groups[groups.length - 1];
+    if (last && last.role === m.role) last.parts.push(...parts);
+    else groups.push({ role: m.role, parts });
   }
-  while (merged.length > 0 && merged[0]?.role !== 'user') merged.shift();
-  return merged;
+  const out: ClaudeMessage[] = groups.map((g) => {
+    const hasImage = g.parts.some((p) => typeof p !== 'string');
+    if (!hasImage) {
+      return {
+        role: g.role,
+        content: g.parts.filter((p): p is string => typeof p === 'string').join('\n\n'),
+      };
+    }
+    const blocks: ContentBlock[] = g.parts.map((p) =>
+      typeof p === 'string' ? { type: 'text', text: p } : p,
+    );
+    return { role: g.role, content: blocks };
+  });
+  while (out.length > 0 && out[0]?.role !== 'user') out.shift();
+  return out;
 }
 
 async function resolveNames(
@@ -143,7 +171,12 @@ async function generateCoachReply(
     ...(deps.topic ? { topic: deps.topic } : {}),
     ...(deps.allAdultAcked ? { allAdultAcked: true } : {}),
   });
-  const messages = buildTogetherClaudeMessages(await listMessages(fs, key, session.id), nameOf);
+  const messages = await buildTogetherClaudeMessages(
+    fs,
+    key,
+    await listMessages(fs, key, session.id),
+    nameOf,
+  );
 
   let result;
   try {
@@ -232,6 +265,7 @@ export async function runTogetherTurn(deps: TogetherTurnDeps): Promise<TogetherT
     content: userText,
     ts: at,
     ...(deps.privateAside ? { privateAside: true } : {}),
+    ...(deps.attachments && deps.attachments.length > 0 ? { attachments: deps.attachments } : {}),
   });
 
   return generateCoachReply(deps, authorPersonId, deps.privateAside === true);

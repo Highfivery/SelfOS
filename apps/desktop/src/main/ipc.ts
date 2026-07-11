@@ -376,6 +376,9 @@ export function registerIpcHandlers(): void {
       togetherSender = undefined;
     }
   });
+  handle(IpcChannels.togetherPrepOpen, bridge.togetherPrepOpen);
+  handle(IpcChannels.togetherStoreAttachment, bridge.togetherStoreAttachment);
+  handle(IpcChannels.togetherGetAttachment, bridge.togetherGetAttachment);
   handle(IpcChannels.assignmentsCreate, bridge.assignmentsCreate);
   handle(IpcChannels.assignmentsInbox, bridge.assignmentsInbox);
   handle(IpcChannels.assignmentsSetFavorite, bridge.assignmentsSetFavorite);

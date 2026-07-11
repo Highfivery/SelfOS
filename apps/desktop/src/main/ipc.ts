@@ -380,6 +380,11 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.togetherStoreAttachment, bridge.togetherStoreAttachment);
   handle(IpcChannels.togetherGetAttachment, bridge.togetherGetAttachment);
   handle(IpcChannels.togetherCatalog, bridge.togetherCatalog);
+  handle(IpcChannels.togetherAcknowledgeAdult, bridge.togetherAcknowledgeAdult);
+  handle(IpcChannels.togetherYnmStatus, bridge.togetherYnmStatus);
+  handle(IpcChannels.togetherYnmOptIn, bridge.togetherYnmOptIn);
+  handle(IpcChannels.togetherYnmRevoke, bridge.togetherYnmRevoke);
+  handle(IpcChannels.togetherYnmOverlap, bridge.togetherYnmOverlap);
   handle(IpcChannels.togetherWrapUp, bridge.togetherWrapUp);
   handle(IpcChannels.togetherGetReport, bridge.togetherGetReport);
   handle(IpcChannels.togetherSaveAgreement, bridge.togetherSaveAgreement);

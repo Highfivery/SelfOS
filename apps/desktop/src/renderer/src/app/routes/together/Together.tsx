@@ -19,6 +19,7 @@ import { useSessionStore } from '../../../stores/sessionStore';
 import { useTogetherStore } from '../../../stores/togetherStore';
 import { PreScreenForm } from './PreScreenForm';
 import { TogetherCatalog } from './TogetherCatalog';
+import { TogetherIntimacy } from './TogetherIntimacy';
 import { TOGETHER_FRAME_LINE } from './roomRules';
 import styles from './Together.module.css';
 
@@ -180,6 +181,8 @@ export function Together(): JSX.Element {
   const sessions = useTogetherStore((s) => s.sessions);
   const prescreen = useTogetherStore((s) => s.prescreen);
   const catalog = useTogetherStore((s) => s.catalog);
+  const partners = useTogetherStore((s) => s.partners);
+  const eligiblePartners = partners.filter((p) => p.eligible);
   const refresh = useTogetherStore((s) => s.refresh);
   const [selectedGuide, setSelectedGuide] = useState<TogetherCatalogEntry | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -253,6 +256,13 @@ export function Together(): JSX.Element {
                 }}
               />
             ) : null}
+            {eligiblePartners.map((p) => (
+              <TogetherIntimacy
+                key={p.personId}
+                partnerId={p.personId}
+                partnerName={p.displayName}
+              />
+            ))}
           </>
         )}
 

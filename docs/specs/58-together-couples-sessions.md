@@ -437,9 +437,15 @@ interface ParticipantState {
   pausedAt?: string; // pause-for-me — visible only in the pauser's own view (§8.3)
   leftAt?: string; // ends the session for both, neutrally (§4.3, §8.3)
   lastReadMessageAt?: string; // drives the unread/turn badges (projection-derived)
-  ynmOptInAt?: string; // §3.10b symmetric opt-in; cleared by together:ynmRevoke
   updatedAt: string;
 }
+
+// AS BUILT (Phase F): the §3.10b symmetric YNM opt-in is stored PAIR-scoped, one file per person per pair, at
+// `people/<personId>/together/ynm/<pairKey>.enc` (a `YnmOptIn` = { schemaVersion, personId, pairKey, optedInAt }),
+// NOT on ParticipantState. Pair-scoped fits the consent model (it persists across sessions + the pair, stays
+// one-writer-per-file, and re-gates by pairKey) and `together:ynmRevoke` DELETES the file. The mutual overlap
+// is a deterministic (no-AI) intersection of both partners' intake `activities` ratings (≥ curious), computed
+// only under the full conjunction (both 18+ acks + both opt-ins + a live edge), re-checked on every read.
 
 // together/sessions/<id>/messages/<millis>-<personId>-<uuid>.enc — write-once.
 interface TogetherMessage {
@@ -1111,8 +1117,23 @@ Remaining (build-time; ask before the relevant phase):
 > newest coach message (`guideStepFor`), keeping session.enc single-writer. The 18+ group is **withheld
 > host-side** (`togetherCatalog()` bridge + `togetherCreate` refuses an adult/unknown `guideId`). Renderer: the
 > grouped, searchable `TogetherCatalog` on the Together home (binds a guide to the start form) + a structured
-> **stepper** in the thread. **The live-model adversarial pass (§13 first run) is a manual DoD item that needs a
-> real API key — flagged for the user; the offline suite is green.** **Phases F–H remain.**
+> **stepper** in the thread. **Phase F BUILT** on `feat/together-explicit-ynm`: the 18+ **`together-desire`
+> catalog group** (4 adult entries — Sensate Focus, Yes/No/Maybe-together, Desire Mapping, Fantasy Exchange);
+> **`allAdultAcknowledged(participants)`** (the N-party conjunction — true only when EVERY participant's
+> guidance-prefs ack is set); **`EXPLICIT_INTIMACY_REGISTER`** appended to the couples prompt **only when both
+> acked** (after the addendum, before FORMATTING; SAFETY never loosened; boundary verbatim from the 52 sibling);
+> and **YNM (§3.10b)** — a symmetric, **revocable** opt-in + a deterministic (no-AI) **mutual overlap** of both
+> partners' intake `activities` ratings (≥ curious), where **one-sided answers are never revealed**, gated on
+> both acks + both opt-ins + a live edge (all re-checked on every read), feeding the grounding pack only for a
+> desire session when ready (the §8.6 consented restricted-exception). The desire group + adult guides + the
+> register are **withheld host-side** (`togetherCatalog` allowAdult, `togetherCreate` re-check). Bridge:
+> `together:catalog`/`acknowledgeAdult`/`ynmStatus`/`ynmOptIn`/`ynmRevoke`/`ynmOverlap`. Renderer: the
+> `TogetherIntimacy` card (18+ ack → waiting-for-partner → YNM opt-in/revoke → the mutual list + start).
+> Code-reviewer verdict **SHIP** (safety boundaries airtight, no blockers; applied the spec-lockstep + two
+> hardening nits). **Product sign-off pending (§3.13):** the status surfaces the PARTNER's ack/opt-in state to
+> the viewer (never the inventory) to drive actionable copy ("Waiting for Angel to turn it on") — flagged for
+> the user. **The live-model adversarial pass (§13 first run + the Phase F explicit re-run) is a manual DoD item
+> that needs a real API key — flagged for the user; the offline suite is green.** **Phases G–H remain.**
 
 Each phase lands via the standard slice workflow (branch → implement + tests → quality-gate →
 code-reviewer → sync-docs → PR → squash-merge), meets the full §7-CLAUDE.md DoD (E2E written AND

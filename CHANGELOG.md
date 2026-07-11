@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.18.1](https://github.com/Highfivery/SelfOS/compare/v0.18.0...v0.18.1) (2026-07-11)
+
+
+### Bug Fixes
+
+* **ui:** content fills the available width — remove page max-width caps ([#164](https://github.com/Highfivery/SelfOS/issues/164)) ([5639f97](https://github.com/Highfivery/SelfOS/commit/5639f977507b78affa95d72794e531016aa7cb50))
+
 ## [0.18.0](https://github.com/Highfivery/SelfOS/compare/v0.17.0...v0.18.0) (2026-07-11)
 
 

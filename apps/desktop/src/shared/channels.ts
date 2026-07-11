@@ -119,6 +119,7 @@ import type {
   TogetherYnmStatus,
   TogetherYnmOverlap,
   TogetherPulseView,
+  JointChallengeStatus,
   Agreement,
   UpdateCheckResult,
   UsageEvent,
@@ -293,6 +294,7 @@ export const IpcChannels = {
   togetherYnmOverlap: 'together:ynmOverlap',
   togetherPulse: 'together:pulse',
   togetherPulseLog: 'together:pulseLog',
+  togetherJointChallenges: 'together:jointChallenges',
   togetherWrapUp: 'together:wrapUp',
   togetherGetReport: 'together:getReport',
   togetherSaveAgreement: 'together:saveAgreement',
@@ -1046,6 +1048,8 @@ export interface SelfosBridge {
     metrics: Record<string, number>;
     shareMetrics?: string[];
   }): Promise<TogetherPulseView>;
+  /** The pair's JOINT challenges (§5.6) + cross-partner "both checked in" status. `together.own` + edge. */
+  togetherJointChallenges(input: { partnerPersonId: string }): Promise<JointChallengeStatus[]>;
   /** Run wrap-up for a session (§3.8): a shared report + per-partner twins; the INITIATOR is billed. */
   togetherWrapUp(input: { sessionId: string }): Promise<TogetherWrapUpResult>;
   /** The session's shared report + derived staleness + the pair's agreements ledger (§3.8/§3.9). */

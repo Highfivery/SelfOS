@@ -10,12 +10,17 @@ import type {
 } from '../schemas';
 import { checkBudget, costOf, recordUsage } from '../usage';
 import { getPerson } from '../people';
-import { parseLatestStep, stripCoachMarkers } from '../conversations/guidedSteps';
+import {
+  parseChallengeMarker,
+  parseLatestStep,
+  stripCoachMarkers,
+} from '../conversations/guidedSteps';
 import { parseAgreementMarker } from '../conversations/agreementMarker';
 import { getTogetherGuide } from './togetherCatalog';
 import { appendMessage, getSession, getTogetherAttachment, listMessages } from './togetherService';
 import { buildTogetherSystemPrompt } from './togetherPromptBuilder';
 import { captureAgreementFromMarker } from './agreementService';
+import { captureJointChallengeFromMarker } from './togetherChallengeService';
 
 // ── The couples turn (58 §5.1) — a sibling of `runChatTurn` (05 §4.1), not a change to it ─────────
 // Invariants held verbatim: budget gate (the INITIATOR pays, §6.2) → persist the author's message FIRST
@@ -215,6 +220,20 @@ async function generateCoachReply(
     const [a, b] = session.participantIds;
     if (marker && a && b) {
       await captureAgreementFromMarker(fs, key, a, b, marker, session.id, now);
+    }
+    // A JOINT challenge (§5.6): a `[[SELFOS:CHALLENGE:{…}]]` marker mints twin `Challenge` records for BOTH
+    // partners (shared `groupId`), each keeping their own 52 check-in cadence/card/reflection. Tolerant-parse;
+    // asides mint nothing (§3.6). The marker is stripped from the saved + streamed text below.
+    const challenge = parseChallengeMarker(result.text);
+    if (challenge) {
+      await captureJointChallengeFromMarker(
+        fs,
+        key,
+        session.participantIds,
+        challenge,
+        session.id,
+        now,
+      );
     }
   }
 

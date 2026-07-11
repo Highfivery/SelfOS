@@ -10072,6 +10072,52 @@ test('together (58) phase H1: deleting a participant reaps their Together sessio
   }
 });
 
+test('together (58) phase H2: a couples turn mints a JOINT challenge for both partners; the home tile shows it (§5.6, decrypt)', async () => {
+  const { userData, vault, ben, angel } = await seedTogetherReady();
+  const app = await electron.launch({ args: [`--user-data-dir=${userData}`, MAIN], env: e2eEnv() });
+  try {
+    const w = await app.firstWindow();
+    // Ben starts a session + sends a message with "challenge" → the fake couples coach appends a CHALLENGE
+    // marker → twin Challenge records are minted for BOTH partners (the marker is stripped from the reply).
+    await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByPlaceholder('e.g. Feeling disconnected lately').fill('Growing together');
+    await w.getByRole('button', { name: 'Send invitation' }).click();
+    await w.getByLabel('Message').fill('Can we take on a small challenge together?');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/I hear you/)).toBeVisible();
+    await expect(w.getByText(/SELFOS:CHALLENGE/)).toHaveCount(0); // the marker never shows
+
+    // Decrypt-level proof: both partners have a twin challenge sharing one groupId.
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('no key');
+    const groupIds = new Set<string>();
+    await expect
+      .poll(async () => {
+        groupIds.clear();
+        for (const person of [ben, angel]) {
+          for (const name of await fs.list(`people/${person}/challenges`)) {
+            if (!name.endsWith('.enc')) continue;
+            const raw = await readEncryptedJson(fs, `people/${person}/challenges/${name}`, key);
+            const gid = (raw as { groupId?: string } | null)?.groupId;
+            if (gid) groupIds.add(gid);
+          }
+        }
+        return groupIds.size;
+      })
+      .toBe(1); // exactly one shared groupId across both partners' twins
+
+    // The Together home tile surfaces the joint challenge.
+    await w.getByRole('link', { name: /Together/ }).click();
+    await expect(w.getByRole('heading', { name: 'Joint challenges' })).toBeVisible();
+    await expect(w.getByText('Share one appreciation a day')).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('together (58): the private pre-screen holds a flagged person; the partner only sees invited (§8.2)', async () => {
   // Ben's pre-screen is NOT seeded → he must take it first.
   const { userData, vault } = await seedTogetherReady({ clearBenPrescreen: false });

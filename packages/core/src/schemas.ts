@@ -837,9 +837,26 @@ export const ChallengeSchema = z.object({
   insightId: z.string().optional(), // the reflection's derived Insight (source:'session', §4.4)
   seededGoalId: z.string().optional(), // if completing seeded a 39 Goal (§11 Q6) — the back-link
   seededFromChallengeId: z.string().optional(), // the prior challenge this was seeded from (§3.7 chain)
+  groupId: z.string().optional(), // links the twin JOINT challenges a couples coach mints for both partners (58 §5.6)
   createdAt: z.string(),
   updatedAt: z.string(),
 });
+
+/** A joint (couples) challenge's cross-partner status (58 §5.6), DERIVED from the twins — never a stored record. */
+export interface JointChallengeStatus {
+  groupId: string;
+  action: string;
+  /** How many of the pair have a twin (2 in v1). */
+  memberCount: number;
+  /** How many twins have been checked in (outcome recorded / status done). */
+  checkedInCount: number;
+  /** Every partner has checked in. */
+  allCheckedIn: boolean;
+  /** At least one twin is still active (the challenge is live for the pair). */
+  active: boolean;
+  /** The most recent twin update, for ordering. */
+  updatedAt: string;
+}
 export type Challenge = z.infer<typeof ChallengeSchema>;
 
 /**

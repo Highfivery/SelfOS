@@ -282,6 +282,8 @@ import {
   buildPulseView,
   logPulseCheckIn,
   reapTogetherForPerson,
+  listJointChallenges,
+  type JointChallengeStatus,
   pairKeyFor,
   isPreScreenComplete,
   isReportStale,
@@ -2575,6 +2577,15 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         new Date(),
       );
       return buildPulseView(c.fs, c.key, c.personId, partnerPersonId);
+    },
+    togetherJointChallenges: async (input): Promise<JointChallengeStatus[]> => {
+      const { partnerPersonId } = TogetherYnmInputSchema.parse(input);
+      const c = await togetherCtx();
+      if (!c) return [];
+      // Pair-scoped: a live partner edge is required (re-checked, §5.2). Reads BOTH partners' twin Challenge
+      // records to derive the cross-partner "both checked in" status — never any other challenge content.
+      if (!(await togetherEdgeLive(c.fs, c.key, c.personId, [partnerPersonId]))) return [];
+      return listJointChallenges(c.fs, c.key, [c.personId, partnerPersonId]);
     },
     togetherWrapUp: async (input): Promise<TogetherWrapUpResult> => {
       const { sessionId } = TogetherWrapUpInputSchema.parse(input);

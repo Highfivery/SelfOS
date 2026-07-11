@@ -21,6 +21,7 @@ import { PreScreenForm } from './PreScreenForm';
 import { TogetherCatalog } from './TogetherCatalog';
 import { TogetherIntimacy } from './TogetherIntimacy';
 import { TogetherPulse } from './TogetherPulse';
+import { TogetherJointChallenges } from './TogetherJointChallenges';
 import { TOGETHER_FRAME_LINE } from './roomRules';
 import styles from './Together.module.css';
 
@@ -257,6 +258,9 @@ export function Together(): JSX.Element {
                 }}
               />
             ) : null}
+            {eligiblePartners.map((p) => (
+              <TogetherJointChallenges key={`joint-${p.personId}`} partnerId={p.personId} />
+            ))}
             {eligiblePartners.map((p) => (
               <TogetherPulse
                 key={`pulse-${p.personId}`}

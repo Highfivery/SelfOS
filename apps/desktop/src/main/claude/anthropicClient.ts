@@ -554,6 +554,12 @@ export function fakeClaudeClient(): ClaudeClient {
         if (/step two/i.test(userText)) {
           reply += ' [[SELFOS:STEP:1]]';
         }
+        // 58 §5.6: when the pair take on a shared stretch action (a "challenge" ask), append the CHALLENGE
+        // marker so an E2E can drive JOINT-challenge minting through the real UI. Stripped from the reply.
+        if (userText.toLowerCase().includes('challenge')) {
+          reply +=
+            ' [[SELFOS:CHALLENGE:{"action":"Share one appreciation a day","comfort":2,"lifeArea":"Relationships","checkInDays":7}]]';
+        }
         for (const word of reply.split(' ')) onDelta(`${word} `);
         return Promise.resolve({
           text: reply,

@@ -84,6 +84,18 @@ often, if stated"}]]. Only capture something BOTH have actually agreed to in the
 from a private aside and never a one-sided idea. This token is a silent signal to the app; it is never shown \
 to either partner, so never mention or explain it.`;
 
+/**
+ * Teach the coach the JOINT-challenge convention (§5.6 — the CHALLENGE marker, a couples twin of the 52
+ * challenge). Only on the OPEN conversation, only when both partners genuinely take it on together.
+ */
+export const JOINT_CHALLENGE_INSTRUCTION = `When BOTH partners want to take on the SAME small, concrete \
+stretch action together before the next time you talk (an experiment for the relationship — e.g. "each share \
+one appreciation a day", "plan one screen-free evening"), silently append — at the very end of that reply — \
+the exact token [[SELFOS:CHALLENGE:{"action":"the shared action in their words","comfort":N,"lifeArea":"the \
+area","checkInDays":N}]], where comfort is 1 (gentle) to 5 (a big stretch) and checkInDays is when to gently \
+check in. Only when BOTH clearly commit together in the open conversation — never from a private aside, never \
+one-sided. This token is a silent app signal, never shown to either partner; never mention or explain it.`;
+
 /** The per-participant confidentiality contract (§6.3 step 3) — prefixes each person's own context block. */
 export function confidentialityContract(name: string): string {
   return `The following is private background about ${name}. Use it to shape your support. Never quote, \
@@ -120,6 +132,7 @@ export async function buildTogetherSystemPrompt(
     TOGETHER_FRAME,
     TOGETHER_ADDENDUM,
     AGREEMENT_INSTRUCTION,
+    JOINT_CHALLENGE_INSTRUCTION,
   ];
 
   // A guided couples session (§3.10) foregrounds its group's life-areas for per-call fact selection; a

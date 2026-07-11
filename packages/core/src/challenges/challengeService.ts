@@ -156,6 +156,8 @@ export interface CaptureFromMarkerInput {
   conversationId: string;
   marker: ChallengeMarker;
   now: Date;
+  /** For a JOINT (couples) challenge — the shared id linking the twin records for both partners (58 §5.6). */
+  groupId?: string;
 }
 
 /**
@@ -165,7 +167,7 @@ export interface CaptureFromMarkerInput {
  * to LIFE_AREAS, `domain` to the family enum, `comfort` clamped 1..5, `checkInDays` clamped to a sane window.
  */
 export async function captureFromMarker(input: CaptureFromMarkerInput): Promise<Challenge | null> {
-  const { fs, key, personId, conversationId, marker, now } = input;
+  const { fs, key, personId, conversationId, marker, now, groupId } = input;
   const action = marker.action.trim();
   if (!action) return null;
   const at = now.toISOString();
@@ -206,6 +208,7 @@ export async function captureFromMarker(input: CaptureFromMarkerInput): Promise<
     ...(lifeArea ? { lifeArea } : {}),
     ...(domain ? { domain } : {}),
     ...(adult ? { adult: true } : {}),
+    ...(groupId ? { groupId } : {}),
     conversationId,
     provenance: { conversationId, at },
     agreedAt: at,

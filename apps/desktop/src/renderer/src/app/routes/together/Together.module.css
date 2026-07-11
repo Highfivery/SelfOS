@@ -535,3 +535,13 @@
   max-width: 480px;
   min-width: 0;
 }
+.jointChallengeRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--color-border);
+}
+.jointChallengeRow:first-child {
+  border-top: none;
+}

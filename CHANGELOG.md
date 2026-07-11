@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.17.0](https://github.com/Highfivery/SelfOS/compare/v0.16.1...v0.17.0) (2026-07-11)
+
+
+### Features
+
+* **questionnaires:** 'At a glance' aggregate read (spec 08 §20, slice 4/5) ([#146](https://github.com/Highfivery/SelfOS/issues/146)) ([ec2dbef](https://github.com/Highfivery/SelfOS/commit/ec2dbef5e4ffad928df4ea2bbb207751b8217359))
+* **questionnaires:** aggregate-first Results dashboard (spec 08 §21.4) ([#152](https://github.com/Highfivery/SelfOS/issues/152)) ([af7b7e3](https://github.com/Highfivery/SelfOS/commit/af7b7e38fdb69d882e522bcaec5771f33a33fd80))
+* **questionnaires:** bespoke read-only Preview presentation view (spec 08 §21.2) ([#150](https://github.com/Highfivery/SelfOS/issues/150)) ([65fb1a9](https://github.com/Highfivery/SelfOS/commit/65fb1a9941d31d4b8f4a4ab8f8929d6419c72982))
+* **questionnaires:** full-width detail + read-only disabled Preview (spec 08 §20, slice 1/5) ([#143](https://github.com/Highfivery/SelfOS/issues/143)) ([0703442](https://github.com/Highfivery/SelfOS/commit/070344214fd687a9be5be3eed94383e1a992d919))
+* **questionnaires:** landing cards state whether answers are private or visible ([#140](https://github.com/Highfivery/SelfOS/issues/140)) ([b7f4e13](https://github.com/Highfivery/SelfOS/commit/b7f4e13134a65016e8a14cca6dd0cd8653a90a4c))
+* **questionnaires:** modernize answering form + progress (spec 08 §20, slice 2/5) ([#144](https://github.com/Highfivery/SelfOS/issues/144)) ([bb49673](https://github.com/Highfivery/SelfOS/commit/bb49673e9944eb2b3f9af7bcf26e6774a290482d))
+* **questionnaires:** one-question-at-a-time answering wizard (spec 08 §21.3) ([#151](https://github.com/Highfivery/SelfOS/issues/151)) ([03529f6](https://github.com/Highfivery/SelfOS/commit/03529f6e157688b8ea9c0a8d11e81cdf0d8bb1ef))
+* **questionnaires:** private results — inline insight, numeric, explainer (spec 08 §20, slice 5/5) ([#147](https://github.com/Highfivery/SelfOS/issues/147)) ([3225b0f](https://github.com/Highfivery/SelfOS/commit/3225b0f5b45d71274dfdf94f6166fc36f491e0d0))
+* **questionnaires:** restructure Results — summary + status grouping (spec 08 §20, slice 3/5) ([#145](https://github.com/Highfivery/SelfOS/issues/145)) ([7b67c40](https://github.com/Highfivery/SelfOS/commit/7b67c409b8af191e8f6c56b63386810280f0e678))
+* **together:** couples sessions — Phase A + B foundation (spec 58) ([#148](https://github.com/Highfivery/SelfOS/issues/148)) ([4333180](https://github.com/Highfivery/SelfOS/commit/4333180f3514a6dc919d1fdc71e1054d5c4ceca3))
+
+
+### Bug Fixes
+
+* **questionnaires:** private answers are never shown — words or numbers (spec 08 §21.5) ([#149](https://github.com/Highfivery/SelfOS/issues/149)) ([e558688](https://github.com/Highfivery/SelfOS/commit/e558688f0fdb0b4c2ce0517f1ac77404f56d1568))
+
 ## [0.16.1](https://github.com/Highfivery/SelfOS/compare/v0.16.0...v0.16.1) (2026-07-09)
 
 

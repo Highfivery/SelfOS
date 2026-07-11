@@ -570,7 +570,16 @@ export function conversationStatus(c: Pick<Conversation, 'status'>): SessionStat
  * enum widening — `summarizeForContext`/`feedableInsights` don't branch on `source`, so a test insight feeds
  * context exactly like a session/intake one; no `schemaVersion` bump (the `'dream'`/`'intake'` precedent).
  */
-export const InsightSourceSchema = z.enum(['questionnaire', 'session', 'dream', 'intake', 'test']);
+export const InsightSourceSchema = z.enum([
+  'questionnaire',
+  'session',
+  'dream',
+  'intake',
+  'test',
+  // A Together couples-session wrap-up twin (58 §3.8) — one per partner, subject = that partner, feeding
+  // ONLY their own coaching context. The enum is closed; this is a deliberate, listed amendment.
+  'together',
+]);
 export type InsightSource = z.infer<typeof InsightSourceSchema>;
 
 export const InsightFactSchema = z.object({
@@ -697,6 +706,11 @@ export const InsightProvenanceSchema = z.object({
   // the producers + resolved read-time for pre-#129 insights. Never set for a self-recipient.
   aboutPersonId: z.string().optional().catch(undefined),
   aboutName: z.string().optional().catch(undefined),
+  // Together wrap-up (58 §3.8): the session a twin came from, and the STABLE pair dimension (`pairKey`
+  // survives edge delete/recreate, so it's the queryable relationship key — `Insight.relationshipId` is the
+  // best-effort live edge). Additive-optional (the `aboutPersonId` precedent), no migration.
+  togetherSessionId: z.string().optional().catch(undefined),
+  pairKey: z.string().optional().catch(undefined),
   at: z.string(),
 });
 export type InsightProvenance = z.infer<typeof InsightProvenanceSchema>;
@@ -3093,3 +3107,80 @@ export const TogetherGetAttachmentSchema = z.object({
   path: z.string().min(1),
 });
 export type TogetherGetAttachmentInput = z.infer<typeof TogetherGetAttachmentSchema>;
+
+// ── Phase D: wrap-up report + the pair agreements ledger (58 §3.8/§3.9) ───────────────────────────
+
+/** The shared wrap-up report — both partners see it; staleness is DERIVED, never stored (§3.8). */
+export const SharedReportSchema = z.object({
+  id: z.string().min(1),
+  schemaVersion: z.literal(1),
+  sessionId: z.string().min(1),
+  summary: z.string(),
+  themes: z.array(z.string()).default([]),
+  workedThrough: z.array(z.string()).default([]),
+  agreementIds: z.array(z.string()).default([]),
+  challengeGroupId: z.string().optional(),
+  // Dyad metrics mirror (the chart source of truth stays the twins); crisis detail is NEVER here (§8.5).
+  metrics: z.record(z.string(), z.number()).optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type SharedReport = z.infer<typeof SharedReportSchema>;
+
+export const AgreementStatusSchema = z.enum(['standing', 'done', 'retired']);
+export type AgreementStatus = z.infer<typeof AgreementStatusSchema>;
+
+/** A pair-level agreement — the ONE two-editor record (either partner edits/retires; last-write-wins, §7). */
+export const AgreementSchema = z.object({
+  id: z.string().min(1),
+  schemaVersion: z.literal(1),
+  pairKey: z.string().min(1),
+  text: z.string().min(1),
+  timeframe: z.string().optional(),
+  status: AgreementStatusSchema,
+  provenance: z.object({ sessionId: z.string(), at: z.string() }),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type Agreement = z.infer<typeof AgreementSchema>;
+
+export const TogetherWrapUpInputSchema = z.object({ sessionId: z.string().min(1) });
+export type TogetherWrapUpInput = z.infer<typeof TogetherWrapUpInputSchema>;
+
+/** The wrap-up result the bridge returns (the shared report on success; an honest failure reason otherwise). */
+export type TogetherWrapUpResult =
+  | { ok: true; report: SharedReport; stale: false }
+  | {
+      ok: false;
+      reason:
+        | 'NOT_ALLOWED'
+        | 'MEMORY_DISABLED'
+        | 'EMPTY'
+        | 'NO_KEY'
+        | 'BUDGET'
+        | 'TRUNCATED'
+        | 'MALFORMED'
+        | 'REFUSED'
+        | 'ERROR';
+      message: string;
+    };
+
+export const TogetherGetReportInputSchema = z.object({ sessionId: z.string().min(1) });
+export type TogetherGetReportInput = z.infer<typeof TogetherGetReportInputSchema>;
+
+/** Save (create/edit/retire) an agreement — inline on the ledger (§11 #2). `id` absent ⇒ create. */
+export const TogetherSaveAgreementInputSchema = z.object({
+  sessionId: z.string().min(1),
+  id: z.string().optional(),
+  text: z.string().min(1).max(2000),
+  timeframe: z.string().max(200).optional(),
+  status: AgreementStatusSchema,
+});
+export type TogetherSaveAgreementInput = z.infer<typeof TogetherSaveAgreementInputSchema>;
+
+/** The report + its resolved agreements + derived staleness — the Together wrap-up/memory view (§3.8/§3.9). */
+export interface TogetherReportView {
+  report: SharedReport | null;
+  stale: boolean;
+  agreements: Agreement[];
+}

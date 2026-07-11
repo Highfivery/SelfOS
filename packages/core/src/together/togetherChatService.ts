@@ -11,8 +11,10 @@ import type {
 import { checkBudget, costOf, recordUsage } from '../usage';
 import { getPerson } from '../people';
 import { stripCoachMarkers } from '../conversations/guidedSteps';
+import { parseAgreementMarker } from '../conversations/agreementMarker';
 import { appendMessage, getSession, getTogetherAttachment, listMessages } from './togetherService';
 import { buildTogetherSystemPrompt } from './togetherPromptBuilder';
+import { captureAgreementFromMarker } from './agreementService';
 
 // ── The couples turn (58 §5.1) — a sibling of `runChatTurn` (05 §4.1), not a change to it ─────────
 // Invariants held verbatim: budget gate (the INITIATOR pays, §6.2) → persist the author's message FIRST
@@ -204,9 +206,20 @@ async function generateCoachReply(
     };
   }
 
+  // Shared-artifact capture (§3.9/§6.4): a NON-aside coach reply may carry a `[[SELFOS:AGREEMENT:{…}]]` marker
+  // → capture it into the pair ledger. An ASIDE turn mints NO shared artifacts by design (§3.6), so it's
+  // skipped. A malformed marker yields no agreement (tolerant-parse). The marker itself is stripped below.
+  if (!privateAside) {
+    const marker = parseAgreementMarker(result.text);
+    const [a, b] = session.participantIds;
+    if (marker && a && b) {
+      await captureAgreementFromMarker(fs, key, a, b, marker, session.id, now);
+    }
+  }
+
   // The coach reply carries the turn-runner's id (§4.2). On an ASIDE turn it is itself `privateAside`, so the
-  // projection hides it from the partner (§3.6). Markers are stripped defensively (the Phase B addendum emits
-  // none; the shared-artifact markers land in Phase D and are already suppressed on aside turns by design).
+  // projection hides it from the partner (§3.6). Markers (incl. AGREEMENT) are always stripped from the saved
+  // + streamed text via `stripCoachMarkers`, so the token never shows.
   const coachAt = new Date(now.getTime() + 1).toISOString();
   const reply = await lastHumanMessage(fs, key, session.id, authorPersonId);
   const coach: TogetherMessage = {

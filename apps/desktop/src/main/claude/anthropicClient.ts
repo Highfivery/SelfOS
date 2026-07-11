@@ -277,6 +277,45 @@ export function fakeClaudeClient(): ClaudeClient {
         });
       }
 
+      // Together wrap-up (58 §3.8): "write the wrap-up for this session between A and B" → a per-partner
+      // report JSON. Must come BEFORE the generic "JSON object" dream/session branches below (its
+      // instruction also says "single JSON object"). A partner whose attributed line contains "CRISIS" is
+      // flagged so the crisis-routing test bites.
+      const wrapMatch = /write the wrap-up for this session between (.+?) and (.+?)\./.exec(
+        userText,
+      );
+      if (wrapMatch) {
+        const [, nameA, nameB] = wrapMatch;
+        const crisisFor = (name: string): boolean =>
+          new RegExp(`^${name}: .*CRISIS`, 'm').test(userText);
+        return Promise.resolve({
+          text: JSON.stringify({
+            summary: 'You both showed up honestly and named what you each need.',
+            themes: ['connection'],
+            workedThrough: ['naming the pattern together'],
+            connectionValence: 0.4,
+            frictionLevel: 0.2,
+            partners: [
+              {
+                name: nameA,
+                reflection: `A reflection for ${nameA}.`,
+                facts: ['wants more time'],
+                sensitiveFacts: [],
+                crisisFlag: crisisFor(nameA ?? ''),
+              },
+              {
+                name: nameB,
+                reflection: `A reflection for ${nameB}.`,
+                facts: ['values reassurance'],
+                sensitiveFacts: [],
+                crisisFlag: crisisFor(nameB ?? ''),
+              },
+            ],
+          }),
+          usage: { inputTokens: 150, outputTokens: 60, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+
       // The session-analysis turn (09 §5) asks to "summarize this session" as a JSON object. Return a
       // valid SessionAnalysisDraft so the offline End & summarize path parses + produces facts/mood.
       if (userText.includes('summarize this session')) {
@@ -503,9 +542,14 @@ export function fakeClaudeClient(): ClaudeClient {
           (m) => m[1],
         );
         const [a, b] = [names[0] ?? 'you', names[1] ?? 'you both'];
-        const reply =
+        let reply =
           `I hear you, ${a} and ${b}. Let's slow down and take this one gentle step at a time — ` +
           "I'd like to hear how it lands for each of you.";
+        // 58 §6.4: when the pair agree to something (a "screen-free" ask), append the AGREEMENT marker so an
+        // E2E can drive agreement capture through the real UI. Stripped from the visible reply by the service.
+        if (userText.toLowerCase().includes('screen-free')) {
+          reply += ' [[SELFOS:AGREEMENT:{"text":"screen-free dinners","timeframe":"weekdays"}]]';
+        }
         for (const word of reply.split(' ')) onDelta(`${word} `);
         return Promise.resolve({
           text: reply,

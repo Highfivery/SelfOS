@@ -7,6 +7,7 @@ export * from './wrapUp';
 export * from './sessionAnalysisService';
 export * from './guidedCatalog';
 export * from './guidedSteps';
+export * from './agreementMarker';
 export * from './guidedSessionService';
 export * from './guidanceService';
 export * from './topicClassifier';

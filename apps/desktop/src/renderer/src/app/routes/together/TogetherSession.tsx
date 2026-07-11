@@ -8,6 +8,9 @@ import { InvitationCeremony } from './InvitationCeremony';
 import { PreScreenForm } from './PreScreenForm';
 import { PrepPanel } from './PrepPanel';
 import { TogetherThread } from './TogetherThread';
+import { TogetherReflection } from './TogetherReflection';
+import { useSetting } from '../../../settings/useSetting';
+import { aiKeyResolved } from '../../aiAvailability';
 import styles from './Together.module.css';
 
 /**
@@ -27,15 +30,22 @@ export function TogetherSession(): JSX.Element {
   const [showPrescreen, setShowPrescreen] = useState(false);
   const [prepOpen, setPrepOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [aiEnabled] = useSetting('ai.enabled');
+  const [memoryEnabled] = useSetting('sessions.memoryEnabled');
+  const [hasKey, setHasKey] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
     void useTogetherStore.getState().loadPrescreen();
+    void aiKeyResolved('anthropic').then((ok) => {
+      if (alive) setHasKey(ok);
+    });
     void openSession(id ?? '').finally(() => {
       if (alive) setLoading(false);
     });
+    if (id) void useTogetherStore.getState().loadReport(id);
     return () => {
       alive = false;
       useTogetherStore.getState().closeSession();
@@ -156,6 +166,11 @@ export function TogetherSession(): JSX.Element {
         </Text>
       </div>
       <TogetherThread session={open} onPrep={() => setPrepOpen(true)} />
+      <TogetherReflection
+        sessionId={open.id}
+        memoryEnabled={memoryEnabled !== false}
+        aiReady={aiEnabled === true && hasKey}
+      />
     </div>
   );
 }

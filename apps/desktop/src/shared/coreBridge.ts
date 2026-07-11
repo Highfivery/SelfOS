@@ -148,6 +148,12 @@ import {
   TogetherPrepOpenSchema,
   TogetherStoreAttachmentSchema,
   TogetherGetAttachmentSchema,
+  type Agreement,
+  type TogetherReportView,
+  type TogetherWrapUpResult,
+  TogetherWrapUpInputSchema,
+  TogetherGetReportInputSchema,
+  TogetherSaveAgreementInputSchema,
 } from './schemas';
 import { OWNER_ROLE_ID, roleAllows, type CapabilityKey } from './capabilities';
 import { runConnectionTest } from './claudeProxy';
@@ -256,10 +262,13 @@ import {
   digestFor,
   evaluatePreScreen,
   getPreScreen,
+  getReport as getTogetherReport,
   getSession as getTogetherSession,
   getTogetherAttachment,
   isPreScreenComplete,
+  isReportStale,
   isTogetherAttachmentPath,
+  listAgreements,
   listMessages as listTogetherMessages,
   listSessionsForPerson as listTogetherSessionsForPerson,
   listStates as listTogetherStates,
@@ -267,6 +276,8 @@ import {
   openPrepConversation,
   preScreenClears,
   preScreenNeedsReoffer,
+  runTogetherWrapUp,
+  saveAgreement,
   PRESCREEN_ITEMS,
   projectMessages as projectTogetherMessages,
   retryTogetherReply,
@@ -2344,6 +2355,84 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         now: new Date(),
       });
       return togetherTurnResult(c.fs, c.key, session, c.personId, outcome);
+    },
+
+    // --- Phase D: wrap-up + the pair agreements ledger (58 §3.8/§3.9) ---
+    togetherWrapUp: async (input): Promise<TogetherWrapUpResult> => {
+      const { sessionId } = TogetherWrapUpInputSchema.parse(input);
+      const c = await togetherCtx();
+      if (!c) return { ok: false, reason: 'NOT_ALLOWED', message: 'SelfOS isn’t ready yet.' };
+      const session = await accessibleTogetherSession(c.fs, c.key, c.personId, sessionId);
+      if (!session) {
+        return { ok: false, reason: 'NOT_ALLOWED', message: 'Together isn’t available right now.' };
+      }
+      const apiKey = (await resolveAiKey(host.secrets, c.fs, c.key)).key ?? null;
+      // Together memory rides the existing Sessions memory toggle (Together is a coaching session type) — no
+      // dead new setting (§12). The live partner edge id is the best-effort `relationshipId` (§3.8).
+      const memoryEnabled =
+        (await readVaultSettingsValues(c.fs))['sessions.memoryEnabled'] !== false;
+      const rels = await listRelationships(c.fs, c.key);
+      const others = session.participantIds.filter((p) => p !== c.personId);
+      const edge = rels.find(
+        (r) =>
+          r.type === 'partner' &&
+          ((r.fromPersonId === c.personId && others.includes(r.toPersonId)) ||
+            (r.toPersonId === c.personId && others.includes(r.fromPersonId))),
+      );
+      const outcome = await runTogetherWrapUp({
+        fs: c.fs,
+        key: c.key,
+        client: host.claude,
+        apiKey,
+        model: await host.activeModel(),
+        session,
+        memoryEnabled,
+        ...(edge ? { relationshipId: edge.id } : {}),
+        now: new Date(),
+      });
+      if (outcome.ok) return { ok: true, report: outcome.report, stale: false };
+      return { ok: false, reason: outcome.reason, message: outcome.message };
+    },
+    togetherGetReport: async (input): Promise<TogetherReportView> => {
+      const { sessionId } = TogetherGetReportInputSchema.parse(input);
+      const c = await togetherCtx();
+      if (!c) return { report: null, stale: false, agreements: [] };
+      const session = await accessibleTogetherSession(c.fs, c.key, c.personId, sessionId);
+      if (!session) return { report: null, stale: false, agreements: [] };
+      const report = await getTogetherReport(c.fs, c.key, sessionId);
+      // Derived staleness (§3.8): the newest mutually-visible human message vs the report's createdAt.
+      const shared = (await listTogetherMessages(c.fs, c.key, sessionId)).filter(
+        (m) => !m.privateAside && m.role === 'user',
+      );
+      const newestHumanTs = shared.reduce<string | null>(
+        (max, m) => (max === null || m.ts > max ? m.ts : max),
+        null,
+      );
+      const agreements = await listAgreements(c.fs, c.key, session.pairKey);
+      return { report, stale: isReportStale(report, newestHumanTs), agreements };
+    },
+    togetherSaveAgreement: async (input): Promise<Agreement | null> => {
+      const parsed = TogetherSaveAgreementInputSchema.parse(input);
+      const c = await togetherCtx();
+      if (!c) return null;
+      const session = await accessibleTogetherSession(c.fs, c.key, c.personId, parsed.sessionId);
+      if (!session) return null;
+      const [a, b] = session.participantIds;
+      if (!a || !b) return null;
+      return saveAgreement(
+        c.fs,
+        c.key,
+        a,
+        b,
+        {
+          ...(parsed.id ? { id: parsed.id } : {}),
+          text: parsed.text,
+          ...(parsed.timeframe ? { timeframe: parsed.timeframe } : {}),
+          status: parsed.status,
+          sessionId: parsed.sessionId,
+        },
+        new Date(),
+      );
     },
 
     // --- Session image attachments (45 §6) — gated by `sessions.own`, scoped to the active person ---

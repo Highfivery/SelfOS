@@ -3,6 +3,7 @@ import type { TogetherSession } from '../schemas';
 import { getRelationshipSynthesis } from '../coaching/relationshipSynthesisService';
 import { getAlignmentReport } from '../questionnaires/alignmentService';
 import { listAssignments } from '../questionnaires/assignmentService';
+import { getReport, listAgreements, standingAgreements } from './agreementService';
 
 // ── The grounding pack (58 §3.9) — zero extra AI spend, all cached/deterministic reads ────────────
 // Opens every couples prompt with what SelfOS already knows about the RELATIONSHIP, so the coach "already
@@ -67,6 +68,20 @@ export async function buildGroundingPack(
 
   const alignment = await latestAlignmentSummary(fs, key, session.participantIds);
   if (alignment) lines.push(`From a recent compatibility check between them: ${alignment}`);
+
+  // Phase D: the pair's STANDING agreements (both see + edit them) so the coach honours what they've committed
+  // to, and the most recent wrap-up summary for narrative continuity (relational, not sexual — §8.6).
+  const standing = standingAgreements(await listAgreements(fs, key, session.pairKey));
+  if (standing.length > 0) {
+    lines.push('Standing agreements they’ve made together:');
+    for (const a of standing) {
+      lines.push(`  - ${a.text}${a.timeframe ? ` (${a.timeframe})` : ''}`);
+    }
+  }
+  const lastReport = await getReport(fs, key, session.id);
+  if (lastReport?.summary) {
+    lines.push(`From their last wrap-up together: ${lastReport.summary}`);
+  }
 
   if (lines.length === 0) return '';
   return [

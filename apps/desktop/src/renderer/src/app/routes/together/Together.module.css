@@ -278,3 +278,120 @@
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 1px;
 }
+
+/* ── Reflection + agreements ledger (58 §3.8/§3.9) ───────────────────────────── */
+.reflection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  min-width: 0;
+}
+.reflectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.reportCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-accent-subtle-bg);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.reportBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.reportList {
+  margin: 0;
+  padding-left: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.themeChip {
+  flex: none;
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: var(--radius-full, 999px);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+}
+
+.ledger,
+.followUp {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.followUp {
+  padding: var(--space-3);
+  border: 1px dashed var(--color-accent-solid);
+  border-radius: var(--radius-md);
+}
+.agreementList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.agreementRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  min-width: 0;
+}
+.agreementBody {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 160px;
+}
+.agreementDone {
+  text-decoration: line-through;
+  color: var(--color-text-secondary);
+}
+.agreementDoneTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.72rem;
+  color: var(--color-accent-text);
+}
+.agreementEdit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+}
+.agreementInput {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+}
+.agreementInput:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 1px;
+}

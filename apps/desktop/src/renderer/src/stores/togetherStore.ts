@@ -1,16 +1,27 @@
 import { create } from 'zustand';
 import type {
+  Agreement,
+  AgreementStatus,
   AttachmentRef,
   Person,
   TogetherCreateResult,
   TogetherPreScreenResult,
   TogetherPreScreenView,
+  TogetherReportView,
   TogetherSessionSummary,
   TogetherSessionView,
   TogetherTurnResult,
+  TogetherWrapUpResult,
 } from '@shared/schemas';
 import type { PendingAttachment } from '../app/routes/sessions/downscaleImage';
 import { useSessionStore } from './sessionStore';
+
+const EMPTY_REPORT: TogetherReportView = { report: null, stale: false, agreements: [] };
+const WRAP_NOT_READY: TogetherWrapUpResult = {
+  ok: false,
+  reason: 'NOT_ALLOWED',
+  message: 'Together isn’t available right now.',
+};
 
 /** A partner the active person can start a session with (or a disabled non-subject contact — §3.1). */
 export interface TogetherPartner {
@@ -43,6 +54,10 @@ interface TogetherState {
   sending: boolean;
   error: string | null;
   prescreen: TogetherPreScreenView | null;
+  /** The open session's wrap-up report + derived staleness + the pair agreements ledger (§3.8/§3.9). */
+  reportView: TogetherReportView;
+  /** True while a wrap-up analyze pass is running (the initiator-billed spend). */
+  wrappingUp: boolean;
 
   load: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -62,6 +77,15 @@ interface TogetherState {
   setPaused: (id: string, paused: boolean) => Promise<void>;
   loadPrescreen: () => Promise<void>;
   submitPrescreen: (answers: Record<string, string>) => Promise<TogetherPreScreenResult>;
+  loadReport: (sessionId: string) => Promise<void>;
+  wrapUp: (sessionId: string) => Promise<TogetherWrapUpResult>;
+  saveAgreement: (input: {
+    sessionId: string;
+    id?: string;
+    text: string;
+    timeframe?: string;
+    status: AgreementStatus;
+  }) => Promise<Agreement | null>;
   reset: () => void;
 }
 
@@ -106,6 +130,8 @@ export const useTogetherStore = create<TogetherState>((set, get) => ({
   sending: false,
   error: null,
   prescreen: null,
+  reportView: EMPTY_REPORT,
+  wrappingUp: false,
 
   load: async () => {
     const [{ hasPartner, partners }, sessions] = await Promise.all([
@@ -177,8 +203,12 @@ export const useTogetherStore = create<TogetherState>((set, get) => ({
         ...(privateAside ? { privateAside: true } : {}),
         ...(attachments.length > 0 ? { attachments } : {}),
       })) ?? NOT_ALLOWED;
-    if (result.ok) set({ open: result.view, sending: false, streaming: '' });
-    else set({ sending: false, streaming: '', error: result.message });
+    if (result.ok) {
+      set({ open: result.view, sending: false, streaming: '' });
+      // A shared (non-aside) turn may have captured an agreement (§6.4) or moved the report's staleness —
+      // refresh the ledger/report so it stays live. An aside mints no shared artifacts (§3.6), so skip it.
+      if (!privateAside) await get().loadReport(open.id);
+    } else set({ sending: false, streaming: '', error: result.message });
     return result;
   },
   retry: async () => {
@@ -212,6 +242,24 @@ export const useTogetherStore = create<TogetherState>((set, get) => ({
     await get().loadPrescreen();
     return result;
   },
+  loadReport: async (sessionId) => {
+    const reportView = (await window.selfos?.togetherGetReport({ sessionId })) ?? EMPTY_REPORT;
+    set({ reportView });
+  },
+  wrapUp: async (sessionId) => {
+    set({ wrappingUp: true });
+    const result = (await window.selfos?.togetherWrapUp({ sessionId })) ?? WRAP_NOT_READY;
+    set({ wrappingUp: false });
+    // Refresh the report + the open session (its status may derive to complete).
+    await get().loadReport(sessionId);
+    if (get().open?.id === sessionId) await get().refresh();
+    return result;
+  },
+  saveAgreement: async (input) => {
+    const agreement = (await window.selfos?.togetherSaveAgreement(input)) ?? null;
+    await get().loadReport(input.sessionId);
+    return agreement;
+  },
   reset: () =>
     set({
       loaded: false,
@@ -223,6 +271,8 @@ export const useTogetherStore = create<TogetherState>((set, get) => ({
       sending: false,
       error: null,
       prescreen: null,
+      reportView: EMPTY_REPORT,
+      wrappingUp: false,
     }),
 }));
 

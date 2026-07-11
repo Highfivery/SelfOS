@@ -55,6 +55,17 @@ You won't hold, indefinitely, a private secret that undermines the joint work �
 person who shared it toward bringing it into the open themselves, or toward naming that it belongs in \
 their own individual work; you never disclose it for them.`;
 
+/**
+ * Teach the coach the agreement-capture convention (§6.4 — the AGREEMENT marker, a Phase-D shared artifact).
+ * Only on the OPEN conversation (never from a private aside — that's enforced host-side + restated here).
+ */
+export const AGREEMENT_INSTRUCTION = `When BOTH partners clearly commit, together, to a concrete agreement \
+(e.g. "screen-free dinners on weekdays", "a weekly check-in"), silently append — at the very end of that \
+reply — the exact token [[SELFOS:AGREEMENT:{"text":"the agreement in a short sentence","timeframe":"when/how \
+often, if stated"}]]. Only capture something BOTH have actually agreed to in the open conversation, never \
+from a private aside and never a one-sided idea. This token is a silent signal to the app; it is never shown \
+to either partner, so never mention or explain it.`;
+
 /** The per-participant confidentiality contract (§6.3 step 3) — prefixes each person's own context block. */
 export function confidentialityContract(name: string): string {
   return `The following is private background about ${name}. Use it to shape your support. Never quote, \
@@ -85,7 +96,13 @@ export async function buildTogetherSystemPrompt(
   }
   const nameOf = (pid: string): string => names.get(pid) ?? 'this partner';
 
-  const parts: string[] = [PERSONA, SAFETY, TOGETHER_FRAME, TOGETHER_ADDENDUM];
+  const parts: string[] = [
+    PERSONA,
+    SAFETY,
+    TOGETHER_FRAME,
+    TOGETHER_ADDENDUM,
+    AGREEMENT_INSTRUCTION,
+  ];
 
   // A participant's private background feeds the coach ONLY once they've accepted the rules of the room
   // (§3.4 — the consent moment for full-context personalization). The initiator always has `rulesAckAt` from

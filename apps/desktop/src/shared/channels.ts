@@ -113,6 +113,9 @@ import type {
   TogetherSessionSummary,
   TogetherSessionView,
   TogetherTurnResult,
+  TogetherWrapUpResult,
+  TogetherReportView,
+  Agreement,
   UpdateCheckResult,
   UsageEvent,
   UsageSummary,
@@ -278,6 +281,9 @@ export const IpcChannels = {
   togetherPrepOpen: 'together:prepOpen',
   togetherStoreAttachment: 'together:storeAttachment',
   togetherGetAttachment: 'together:getAttachment',
+  togetherWrapUp: 'together:wrapUp',
+  togetherGetReport: 'together:getReport',
+  togetherSaveAgreement: 'together:saveAgreement',
   assignmentsCreate: 'assignments:create',
   assignmentsInbox: 'assignments:inbox',
   assignmentsSetFavorite: 'assignments:setFavorite',
@@ -1008,6 +1014,18 @@ export interface SelfosBridge {
     sessionId: string;
     path: string;
   }): Promise<{ mime: string; dataBase64: string } | null>;
+  /** Run wrap-up for a session (§3.8): a shared report + per-partner twins; the INITIATOR is billed. */
+  togetherWrapUp(input: { sessionId: string }): Promise<TogetherWrapUpResult>;
+  /** The session's shared report + derived staleness + the pair's agreements ledger (§3.8/§3.9). */
+  togetherGetReport(input: { sessionId: string }): Promise<TogetherReportView>;
+  /** Create/edit/retire a pair agreement inline (§11 #2); `id` absent ⇒ create. */
+  togetherSaveAgreement(input: {
+    sessionId: string;
+    id?: string;
+    text: string;
+    timeframe?: string;
+    status: 'standing' | 'done' | 'retired';
+  }): Promise<Agreement | null>;
   /**
    * Send a questionnaire to its BOUND household recipient (in-app), freezing an immutable snapshot at send.
    * The recipient is set on the questionnaire at creation (08 §17.3) — it is NOT passed here. Returns the

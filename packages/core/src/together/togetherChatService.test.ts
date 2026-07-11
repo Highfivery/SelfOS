@@ -174,6 +174,11 @@ describe('togetherPromptBuilder (§6.3 captured prompt)', () => {
     expect(system.toLowerCase()).not.toContain('fantasy or roleplay');
     // The addendum's never-reveal + aside rule are present.
     expect(TOGETHER_ADDENDUM).toContain('NEVER quote, attribute, reveal');
+    // The Phase C secrets-policy: an identical deflection whether or not a private note exists (no oracle),
+    // no covert use of a note, and no indefinite-secret-holding (§8.7).
+    expect(TOGETHER_ADDENDUM).toContain("I'd tell you the same thing either way");
+    expect(TOGETHER_ADDENDUM).toContain('covertly steer or sabotage');
+    expect(TOGETHER_ADDENDUM).toContain("won't hold, indefinitely, a private secret");
   });
 
   it('once the partner accepts, their block feeds — but a sensitive SHARED fact never re-admits into either block (§6.3 own-context-only)', async () => {

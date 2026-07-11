@@ -6,6 +6,7 @@ import { useSessionStore } from '../../../stores/sessionStore';
 import { appendTogetherChunk, useTogetherStore } from '../../../stores/togetherStore';
 import { InvitationCeremony } from './InvitationCeremony';
 import { PreScreenForm } from './PreScreenForm';
+import { PrepPanel } from './PrepPanel';
 import { TogetherThread } from './TogetherThread';
 import styles from './Together.module.css';
 
@@ -24,6 +25,7 @@ export function TogetherSession(): JSX.Element {
   const accept = useTogetherStore((s) => s.accept);
   const refresh = useTogetherStore((s) => s.refresh);
   const [showPrescreen, setShowPrescreen] = useState(false);
+  const [prepOpen, setPrepOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -136,6 +138,15 @@ export function TogetherSession(): JSX.Element {
 
   const other = open.participants.find((p) => p.personId !== myId);
 
+  // The private prep space (§3.7) — reached from the thread's "Prep privately"; it's the person's OWN thread.
+  if (prepOpen) {
+    return (
+      <div className={styles.page}>
+        <PrepPanel sessionId={open.id} onBack={() => setPrepOpen(false)} />
+      </div>
+    );
+  }
+
   return (
     <div className={styles.page}>
       <div className={styles.sessionTop}>
@@ -144,7 +155,7 @@ export function TogetherSession(): JSX.Element {
           You &amp; {other?.displayName ?? 'your partner'}
         </Text>
       </div>
-      <TogetherThread session={open} />
+      <TogetherThread session={open} onPrep={() => setPrepOpen(true)} />
     </div>
   );
 }

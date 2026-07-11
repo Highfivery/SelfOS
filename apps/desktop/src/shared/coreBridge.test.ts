@@ -5227,4 +5227,122 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(!initiatorTurn.ok && initiatorTurn.reason).toBe('BUDGET');
     expect(!initiatorTurn.ok && initiatorTurn.message).toBe('AI budget reached for this period.');
   });
+
+  // ── Phase C: prep spaces + attachments (§3.7 / §6.1) ────────────────────────────────────────────
+  const PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ';
+
+  it('prep opens the active person’s OWN solo thread + stays OUT of the Sessions list (both directions) (§3.7)', async () => {
+    const { host, bridge, ben, angel } = await seedPair();
+    const created = await bridge.togetherCreate({ partnerPersonId: angel });
+    const sessionId = created.ok ? created.session.id : '';
+    await asPerson(host, angel);
+    await bridge.togetherAccept(sessionId);
+
+    // Angel opens her prep — a solo conversation carrying the link, seeded with a static opener.
+    const angelPrep = await bridge.togetherPrepOpen({ sessionId });
+    expect(angelPrep?.togetherSessionId).toBe(sessionId);
+    expect(angelPrep?.personId).toBe(angel);
+    // Find-or-create: opening again returns the same conversation.
+    expect((await bridge.togetherPrepOpen({ sessionId }))?.id).toBe(angelPrep?.id);
+    // The prep thread NEVER shows in the solo Sessions list (the togetherSessionId filter).
+    expect((await bridge.conversationsList()).map((c) => c.id)).not.toContain(angelPrep?.id);
+
+    // Ben's prep is a DIFFERENT thread — invisible to Angel, absent from his Sessions list too.
+    await asPerson(host, ben);
+    const benPrep = await bridge.togetherPrepOpen({ sessionId });
+    expect(benPrep?.id).not.toBe(angelPrep?.id);
+    expect((await bridge.conversationsList()).map((c) => c.id)).not.toContain(benPrep?.id);
+    await asPerson(host, angel);
+    expect((await bridge.conversationsList()).map((c) => c.id)).not.toContain(benPrep?.id);
+  });
+
+  it('a private-aside attachment is readable by its author but REFUSED for the partner; a shared one is readable by both (§6.1)', async () => {
+    const { host, bridge, ben, angel } = await seedPair();
+    const created = await bridge.togetherCreate({ partnerPersonId: angel });
+    const sessionId = created.ok ? created.session.id : '';
+    await asPerson(host, angel);
+    await bridge.togetherAccept(sessionId);
+
+    // Ben attaches an image to a PRIVATE aside.
+    await asPerson(host, ben);
+    const asideRef = await bridge.togetherStoreAttachment({
+      sessionId,
+      base64: PNG_B64,
+      mime: 'image/png',
+    });
+    if ('ok' in asideRef) throw new Error('aside store failed');
+    await bridge.togetherSendMessage({
+      sessionId,
+      text: 'a photo, just for the coach',
+      privateAside: true,
+      attachments: [asideRef],
+    });
+    // Ben (the author) can read his aside's image.
+    expect((await bridge.togetherGetAttachment({ sessionId, path: asideRef.path }))?.mime).toBe(
+      'image/png',
+    );
+
+    // Ben also shares a NON-aside image both should see.
+    const sharedRef = await bridge.togetherStoreAttachment({
+      sessionId,
+      base64: PNG_B64,
+      mime: 'image/png',
+    });
+    if ('ok' in sharedRef) throw new Error('shared store failed');
+    await bridge.togetherSendMessage({
+      sessionId,
+      text: 'us last summer',
+      attachments: [sharedRef],
+    });
+
+    // Ben stores an ORPHAN image (bytes on disk) but never sends a message referencing it.
+    const orphan = await bridge.togetherStoreAttachment({
+      sessionId,
+      base64: PNG_B64,
+      mime: 'image/png',
+    });
+    if ('ok' in orphan) throw new Error('orphan store failed');
+
+    // Angel: the aside's image is REFUSED (null — message-gated), the shared image reads fine, and the
+    // owner-less ORPHAN fails CLOSED (no owning message ⇒ null, even though bytes exist on disk).
+    await asPerson(host, angel);
+    expect(await bridge.togetherGetAttachment({ sessionId, path: asideRef.path })).toBeNull();
+    expect((await bridge.togetherGetAttachment({ sessionId, path: sharedRef.path }))?.mime).toBe(
+      'image/png',
+    );
+    expect(await bridge.togetherGetAttachment({ sessionId, path: orphan.path })).toBeNull();
+  });
+
+  it('store rejects an unsupported mime, and a non-participant cannot read/store/prep (§5.2 trust boundary)', async () => {
+    const { host, bridge, ben, angel } = await seedPair();
+    const created = await bridge.togetherCreate({ partnerPersonId: angel });
+    const sessionId = created.ok ? created.session.id : '';
+    await asPerson(host, angel);
+    await bridge.togetherAccept(sessionId);
+
+    await asPerson(host, ben);
+    const bad = await bridge.togetherStoreAttachment({
+      sessionId,
+      base64: PNG_B64,
+      mime: 'application/pdf',
+    });
+    expect('ok' in bad && bad.reason).toBe('UNSUPPORTED');
+
+    // A third household subject with no membership/edge is refused everywhere.
+    const cara = await bridge.peopleSave({ displayName: 'Cara', isSubject: true, tags: [] });
+    await asPerson(host, cara.id);
+    expect(await bridge.togetherPrepOpen({ sessionId })).toBeNull();
+    const outsider = await bridge.togetherStoreAttachment({
+      sessionId,
+      base64: PNG_B64,
+      mime: 'image/png',
+    });
+    expect('ok' in outsider && outsider.reason).toBe('NOT_FOUND');
+    expect(
+      await bridge.togetherGetAttachment({
+        sessionId,
+        path: `together/sessions/${sessionId}/attachments/x.enc`,
+      }),
+    ).toBeNull();
+  });
 });

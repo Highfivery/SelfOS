@@ -203,6 +203,10 @@ const bridge: SelfosBridge = {
     ipcRenderer.invoke(IpcChannels.togetherPrescreenSubmit, input),
   togetherSendMessage: (input) => ipcRenderer.invoke(IpcChannels.togetherSendMessage, input),
   togetherRetry: (input) => ipcRenderer.invoke(IpcChannels.togetherRetry, input),
+  togetherPrepOpen: (input) => ipcRenderer.invoke(IpcChannels.togetherPrepOpen, input),
+  togetherStoreAttachment: (input) =>
+    ipcRenderer.invoke(IpcChannels.togetherStoreAttachment, input),
+  togetherGetAttachment: (input) => ipcRenderer.invoke(IpcChannels.togetherGetAttachment, input),
   assignmentsCreate: (input) => ipcRenderer.invoke(IpcChannels.assignmentsCreate, input),
   assignmentsInbox: () => ipcRenderer.invoke(IpcChannels.assignmentsInbox),
   assignmentsSetFavorite: (input) => ipcRenderer.invoke(IpcChannels.assignmentsSetFavorite, input),

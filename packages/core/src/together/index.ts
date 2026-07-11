@@ -6,3 +6,4 @@ export * from './preScreen';
 export * from './togetherPromptBuilder';
 export * from './groundingPack';
 export * from './togetherChatService';
+export * from './prepService';

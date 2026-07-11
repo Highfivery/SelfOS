@@ -389,6 +389,41 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-10 — **Build (Together — couples sessions; SPEC 58 Phase C BUILT; on `feat/together-prep-attachments`, a
+  git worktree, PR pending).** The third Together phase: **private prep spaces + Together image attachments + the
+  secrets policy (§3.7/§6.1/§8.7).** **Prep spaces:** each participant gets their OWN private prep thread — an
+  ordinary **05 Conversation** carrying a new additive-optional **`Conversation.togetherSessionId`** link (no
+  `schemaVersion` bump), so it reuses the composer/streaming/retry/attachments wholesale; `prepService.openPrepConversation`
+  is find-or-create with a **static opener** (no AI spend); `PrepPanel` reuses the solo `conversationStore` + shared
+  `Composer` + `MessageAttachments`; **billed to its author** (its `chatStream` bills the active person, outside the
+  initiator-pays rule). The solo **Sessions list (`conversationsList`) now filters `!togetherSessionId`** so a prep
+  thread never surfaces there (regression-tested both directions). **Attachments:** a Together-OWN seam
+  (`together:storeAttachment`/`getAttachment` + `isTogetherAttachmentPath` + `messageOwningAttachment`), distinct
+  from the 45 solo channels; the couples prompt gains **vision `ContentBlock`s** (`buildTogetherClaudeMessages` now
+  async: reads each stored attachment, skips missing/corrupt, merges consecutive same-role). **The privacy gate
+  (§5.2):** an attachment referenced ONLY by a private aside is readable by the **aside's author alone** — the
+  bridge `togetherGetAttachment` **fails CLOSED** (`!owner || (owner.privateAside && owner.authorPersonId !== me)` →
+  null), path-confined to the session's attachments dir, mime/size re-validated in core. **Secrets policy (§8.7):**
+  `TOGETHER_ADDENDUM` gains the **identical no-oracle deflection** ("I keep each of your private reflections
+  private — I'd tell you the same thing either way"), no covert use of a private note, and no indefinite
+  secret-holding. Code-reviewer **fix-first** (the fail-open→**fail-closed** aside gate — the security-critical
+  gate the feature hangs on; + nits: dropped the dead `bytes` store field, bounded the base64 input). Gate green:
+  typecheck, lint, format, **1030 core + 1016 desktop** unit (+prepService/attachment core [prep find-or-create +
+  own-thread isolation, store round-trip, mime/size reject, path guard, `messageOwningAttachment`], +3 coreBridge
+  [prep off the Sessions list both directions, aside-attachment refused for the partner + **owner-less orphan fails
+  closed**, non-participant refused, unsupported mime], +2 RTL [Prep-privately affordance, secrets-policy addendum
+  phrases]), **4/4 Together E2E** (#2 extended: attachment stores encrypted under the session namespace + decrypts
+  to PNG + the prep space stays OFF the Sessions list; the crown-jewel prompt-capture now asserts the deflection
+  phrase reaches the live prompt), real-Electron visual QA at desktop + 360px (thread with "Prep privately" +
+  attachment thumbnail; the prep panel; the `.threadHead` now wraps at 360px so the new button never overflows).
+  Synced spec 58 §14 + spec 05 §4.1 (additive `togetherSessionId` amendment). **Phases D–H remain; the §13
+  live-model adversarial pass [first run] is a manual DoD item needing a real API key — flagged for the user.**
+  **Lesson: a privacy read-gate keyed on "the owning message flags this as an aside" MUST fail closed on an
+  unknown owner (`!owner → null`) — an owner-less orphan (stored-but-never-sent attachment) has bytes on disk and
+  is indistinguishable from a shared image except by its owning message, so a fail-OPEN default would resolve it
+  for anyone the moment its uuid path leaked; and a prep space is just a solo Conversation carrying a
+  `togetherSessionId`, so the ONE thing that keeps it private is the Sessions-list `!togetherSessionId` filter —
+  test it both directions.**
 - 2026-07-10 — **Build (Together — couples sessions; SPEC 58 Phase A + Phase B BUILT; on `feat/together-foundation`,
   a git worktree, PR pending).** The first two phases of the new top-level **Together** feature — async,
   invitation-based, AI-facilitated couples sessions. **Owner decisions asked first:** the pre-screen flag rule =

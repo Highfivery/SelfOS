@@ -152,6 +152,9 @@ import {
   type TogetherCatalogEntry,
   type TogetherReportView,
   type TogetherWrapUpResult,
+  type TogetherYnmStatus,
+  type TogetherYnmOverlap,
+  TogetherYnmInputSchema,
   TogetherWrapUpInputSchema,
   TogetherGetReportInputSchema,
   TogetherSaveAgreementInputSchema,
@@ -270,6 +273,11 @@ import {
   guideStepFor,
   togetherCatalogFor,
   togetherGuideView,
+  allAdultAcknowledged,
+  getYnmOptIn,
+  setYnmOptIn,
+  ynmOverlapFor,
+  pairKeyFor,
   isPreScreenComplete,
   isReportStale,
   isTogetherAttachmentPath,
@@ -976,6 +984,31 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     return otherIds.every((oid) =>
       relationshipTypesFromSubjectToViewer(viewerId, oid, rels).includes('partner'),
     );
+  };
+
+  /** The YNM readiness status a viewer sees for a partner (§3.10b) — never reveals the partner's inventory. */
+  const ynmStatusFor = async (
+    fs: FileSystem,
+    key: Uint8Array,
+    personId: string,
+    partnerPersonId: string,
+  ): Promise<TogetherYnmStatus> => {
+    const edgeLive = await togetherEdgeLive(fs, key, personId, [partnerPersonId]);
+    const youAcked = (await getGuidancePrefs(fs, key, personId)).adultAcknowledged === true;
+    const acked = await allAdultAcknowledged(fs, key, [personId, partnerPersonId]);
+    const eligible = edgeLive && acked;
+    const pairKey = pairKeyFor(personId, partnerPersonId);
+    const [youOptedIn, partnerOptedIn] = await Promise.all([
+      getYnmOptIn(fs, key, personId, pairKey),
+      getYnmOptIn(fs, key, partnerPersonId, pairKey),
+    ]);
+    return {
+      youAcked,
+      eligible,
+      youOptedIn,
+      partnerOptedIn,
+      ready: eligible && youOptedIn && partnerOptedIn,
+    };
   };
 
   /** ctx + active person, gated on `together.own`. Null if not ready or not allowed (surface is hidden). */
@@ -2124,16 +2157,26 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!(await togetherPreScreenClears(ctx.fs, ctx.key, personId))) {
         return { ok: false, reason: 'PRESCREEN', message: 'Take the private check first.' };
       }
-      // A guided couples session (§3.10): the guideId must resolve to a real catalog entry. The 18+
-      // `together-desire` group is refused here in Phase E (it lands, ack-gated, in Phase F) — the withholding
-      // is host-side, never merely a hidden UI card.
+      // A guided couples session (§3.10): the guideId must resolve to a real catalog entry. An adult
+      // (`together-desire`) guide additionally requires BOTH participants' 18+ acks (§5.2 N-party conjunction),
+      // re-checked host-side here regardless of what the catalog card showed — never merely a hidden UI card.
       if (guideId) {
         const guide = getTogetherGuide(guideId);
-        if (!guide || guide.adult) {
+        if (!guide) {
           return {
             ok: false,
             reason: 'NOT_ALLOWED',
             message: 'That guided session isn’t available.',
+          };
+        }
+        if (
+          guide.adult &&
+          !(await allAdultAcknowledged(ctx.fs, ctx.key, [personId, partnerPersonId]))
+        ) {
+          return {
+            ok: false,
+            reason: 'NOT_ALLOWED',
+            message: 'Both of you need to turn on adult content first.',
           };
         }
       }
@@ -2289,6 +2332,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         return { ok: false, reason: 'PRESCREEN', message: 'Take the private check first.' };
       }
       const apiKey = (await resolveAiKey(host.secrets, c.fs, c.key)).key ?? null;
+      // The explicit register is unlocked ONLY when EVERY participant has acked (§5.2 N-party conjunction).
+      const allAdultAcked = await allAdultAcknowledged(c.fs, c.key, session.participantIds);
       const outcome = await runTogetherTurn({
         fs: c.fs,
         key: c.key,
@@ -2300,6 +2345,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         userText: text,
         ...(privateAside ? { privateAside: true } : {}),
         ...(attachments && attachments.length > 0 ? { attachments } : {}),
+        ...(allAdultAcked ? { allAdultAcked: true } : {}),
         onDelta: (delta) => host.emitTogetherChunk(delta),
         now: new Date(),
       });
@@ -2366,6 +2412,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         return { ok: false, reason: 'PRESCREEN', message: 'Take the private check first.' };
       }
       const apiKey = (await resolveAiKey(host.secrets, c.fs, c.key)).key ?? null;
+      const allAdultAcked = await allAdultAcknowledged(c.fs, c.key, session.participantIds);
       const outcome = await retryTogetherReply({
         fs: c.fs,
         key: c.key,
@@ -2374,6 +2421,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         model: await host.activeModel(),
         session,
         authorPersonId: c.personId,
+        ...(allAdultAcked ? { allAdultAcked: true } : {}),
         onDelta: (delta) => host.emitTogetherChunk(delta),
         now: new Date(),
       });
@@ -2384,8 +2432,106 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     togetherCatalog: async (): Promise<TogetherCatalogEntry[]> => {
       const c = await togetherCtx();
       if (!c) return [];
-      // Phase E: the 18+ `together-desire` group is withheld (allowAdult:false); Phase F passes both acks.
-      return togetherCatalogFor({ allowAdult: false });
+      // The 18+ `together-desire` group is withheld unless the active person acked AND ≥1 live-edge partner
+      // has acked too (so "both acks exist" for at least one pairing) — host-side (§3.10). Starting a desire
+      // session then RE-CHECKS `allAdultAcknowledged([initiator, that partner])` at `togetherCreate`, so a
+      // wrong-partner pairing can never bypass the conjunction.
+      const meAcked = (await getGuidancePrefs(c.fs, c.key, c.personId)).adultAcknowledged === true;
+      let allowAdult = false;
+      if (meAcked) {
+        const rels = await listRelationships(c.fs, c.key);
+        const partnerIds = new Set<string>();
+        for (const r of rels) {
+          if (r.type !== 'partner') continue;
+          if (r.fromPersonId === c.personId) partnerIds.add(r.toPersonId);
+          else if (r.toPersonId === c.personId) partnerIds.add(r.fromPersonId);
+        }
+        for (const pid of partnerIds) {
+          if ((await getGuidancePrefs(c.fs, c.key, pid)).adultAcknowledged === true) {
+            allowAdult = true;
+            break;
+          }
+        }
+      }
+      return togetherCatalogFor({ allowAdult });
+    },
+    togetherAcknowledgeAdult: async (): Promise<boolean> => {
+      const c = await togetherCtx();
+      if (!c) return false;
+      // The active person's one-time 18+ ack — the shared guidance-prefs flag (16/48/50). Their own consent
+      // only; the partner acks for themselves. The desire group + register stay gated until BOTH have acked.
+      await acknowledgeAdult(c.fs, c.key, c.personId);
+      return true;
+    },
+    togetherYnmStatus: async (input): Promise<TogetherYnmStatus> => {
+      const { partnerPersonId } = TogetherYnmInputSchema.parse(input);
+      const c = await togetherCtx();
+      if (!c)
+        return {
+          youAcked: false,
+          eligible: false,
+          youOptedIn: false,
+          partnerOptedIn: false,
+          ready: false,
+        };
+      return ynmStatusFor(c.fs, c.key, c.personId, partnerPersonId);
+    },
+    togetherYnmOptIn: async (input): Promise<TogetherYnmStatus> => {
+      const { partnerPersonId } = TogetherYnmInputSchema.parse(input);
+      const c = await togetherCtx();
+      if (!c)
+        return {
+          youAcked: false,
+          eligible: false,
+          youOptedIn: false,
+          partnerOptedIn: false,
+          ready: false,
+        };
+      // Opting in requires the pair be eligible (both acks + live edge) — you can't consent to share the
+      // overlap before the register is even unlocked. Revoke is always allowed (below).
+      if (
+        (await togetherEdgeLive(c.fs, c.key, c.personId, [partnerPersonId])) &&
+        (await allAdultAcknowledged(c.fs, c.key, [c.personId, partnerPersonId]))
+      ) {
+        await setYnmOptIn(c.fs, c.key, c.personId, partnerPersonId, true, new Date());
+      }
+      return ynmStatusFor(c.fs, c.key, c.personId, partnerPersonId);
+    },
+    togetherYnmRevoke: async (input): Promise<TogetherYnmStatus> => {
+      const { partnerPersonId } = TogetherYnmInputSchema.parse(input);
+      const c = await togetherCtx();
+      if (!c)
+        return {
+          youAcked: false,
+          eligible: false,
+          youOptedIn: false,
+          partnerOptedIn: false,
+          ready: false,
+        };
+      // Revocation is ALWAYS honored (§3.10b) — the overlap drops from every subsequent read immediately.
+      await setYnmOptIn(c.fs, c.key, c.personId, partnerPersonId, false, new Date());
+      return ynmStatusFor(c.fs, c.key, c.personId, partnerPersonId);
+    },
+    togetherYnmOverlap: async (input): Promise<TogetherYnmOverlap> => {
+      const { partnerPersonId } = TogetherYnmInputSchema.parse(input);
+      const c = await togetherCtx();
+      if (!c) return { ready: false, items: [] };
+      // The mutual overlap is computed ONLY when READY: both 18+ acks + a live edge + BOTH opted in. Otherwise
+      // an empty not-ready result — never a one-sided or partial list (§3.10b). Live re-gate on every read.
+      const edgeLive = await togetherEdgeLive(c.fs, c.key, c.personId, [partnerPersonId]);
+      const acked = await allAdultAcknowledged(c.fs, c.key, [c.personId, partnerPersonId]);
+      const pairKey = pairKeyFor(c.personId, partnerPersonId);
+      const [youIn, partnerIn] = await Promise.all([
+        getYnmOptIn(c.fs, c.key, c.personId, pairKey),
+        getYnmOptIn(c.fs, c.key, partnerPersonId, pairKey),
+      ]);
+      return ynmOverlapFor(
+        c.fs,
+        c.key,
+        c.personId,
+        partnerPersonId,
+        edgeLive && acked && youIn && partnerIn,
+      );
     },
     togetherWrapUp: async (input): Promise<TogetherWrapUpResult> => {
       const { sessionId } = TogetherWrapUpInputSchema.parse(input);

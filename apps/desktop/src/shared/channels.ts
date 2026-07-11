@@ -116,6 +116,8 @@ import type {
   TogetherWrapUpResult,
   TogetherReportView,
   TogetherCatalogEntry,
+  TogetherYnmStatus,
+  TogetherYnmOverlap,
   Agreement,
   UpdateCheckResult,
   UsageEvent,
@@ -283,6 +285,11 @@ export const IpcChannels = {
   togetherStoreAttachment: 'together:storeAttachment',
   togetherGetAttachment: 'together:getAttachment',
   togetherCatalog: 'together:catalog',
+  togetherAcknowledgeAdult: 'together:acknowledgeAdult',
+  togetherYnmStatus: 'together:ynmStatus',
+  togetherYnmOptIn: 'together:ynmOptIn',
+  togetherYnmRevoke: 'together:ynmRevoke',
+  togetherYnmOverlap: 'together:ynmOverlap',
   togetherWrapUp: 'together:wrapUp',
   togetherGetReport: 'together:getReport',
   togetherSaveAgreement: 'together:saveAgreement',
@@ -1018,6 +1025,16 @@ export interface SelfosBridge {
   }): Promise<{ mime: string; dataBase64: string } | null>;
   /** The couples guided catalog cards the active person may start (§3.10) — 18+ group withheld host-side. */
   togetherCatalog(): Promise<TogetherCatalogEntry[]>;
+  /** The active person's one-time 18+ acknowledgement (§3.10/§8.3) — their own consent only. */
+  togetherAcknowledgeAdult(): Promise<boolean>;
+  /** YNM readiness for a partner (§3.10b) — both acks + live edge + who's opted in; never the inventory. */
+  togetherYnmStatus(input: { partnerPersonId: string }): Promise<TogetherYnmStatus>;
+  /** Opt this pair's YNM in (symmetric consent, §3.10b) — only when eligible; returns the new status. */
+  togetherYnmOptIn(input: { partnerPersonId: string }): Promise<TogetherYnmStatus>;
+  /** Revoke this pair's YNM opt-in (always honored, §3.10b) — the overlap drops immediately. */
+  togetherYnmRevoke(input: { partnerPersonId: string }): Promise<TogetherYnmStatus>;
+  /** The mutual YNM overlap (§3.10b) — only when READY (both acks + edge + both opted in); else empty. */
+  togetherYnmOverlap(input: { partnerPersonId: string }): Promise<TogetherYnmOverlap>;
   /** Run wrap-up for a session (§3.8): a shared report + per-partner twins; the INITIATOR is billed. */
   togetherWrapUp(input: { sessionId: string }): Promise<TogetherWrapUpResult>;
   /** The session's shared report + derived staleness + the pair's agreements ledger (§3.8/§3.9). */

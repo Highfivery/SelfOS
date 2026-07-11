@@ -3198,6 +3198,38 @@ export type TogetherWrapUpResult =
 export const TogetherGetReportInputSchema = z.object({ sessionId: z.string().min(1) });
 export type TogetherGetReportInput = z.infer<typeof TogetherGetReportInputSchema>;
 
+// ── Phase F: Yes/No/Maybe — together (§3.10b) ─────────────────────────────────────────────────────
+
+/** A person's symmetric YNM opt-in for a pair (§3.10b) — stored at people/<id>/together/ynm/<pairKey>.enc. */
+export const YnmOptInSchema = z.object({
+  schemaVersion: z.literal(1),
+  personId: z.string().min(1),
+  pairKey: z.string().min(1),
+  optedInAt: z.string(),
+});
+export type YnmOptIn = z.infer<typeof YnmOptInSchema>;
+
+/** The YNM status a viewer sees for a partner (§3.10b) — never reveals the partner's inventory, only readiness. */
+export interface TogetherYnmStatus {
+  /** Whether the ACTIVE person has acknowledged adult content (their own state — drives the ack affordance). */
+  youAcked: boolean;
+  /** Whether the explicit register is unlocked for this pair (both 18+ acks + live edge). */
+  eligible: boolean;
+  youOptedIn: boolean;
+  partnerOptedIn: boolean;
+  /** True iff eligible AND both opted in — the mutual overlap can be shown/fed (§3.10b). */
+  ready: boolean;
+}
+
+/** The mutual YNM overlap (§3.10b) — items BOTH partners are ≥ "curious" about; one-sided answers never shown. */
+export interface TogetherYnmOverlap {
+  ready: boolean;
+  items: { key: string; label: string }[];
+}
+
+export const TogetherYnmInputSchema = z.object({ partnerPersonId: z.string().min(1) });
+export type TogetherYnmInput = z.infer<typeof TogetherYnmInputSchema>;
+
 /** Save (create/edit/retire) an agreement — inline on the ledger (§11 #2). `id` absent ⇒ create. */
 export const TogetherSaveAgreementInputSchema = z.object({
   sessionId: z.string().min(1),

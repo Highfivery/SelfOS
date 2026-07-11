@@ -389,6 +389,53 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-11 — **Build (Together — couples sessions; SPEC 58 Phase F BUILT; on `feat/together-explicit-ynm`, a
+  git worktree, PR pending — autonomous overnight, spec defaults taken).** The sixth + most safety-critical
+  Together phase: the **explicit register + Desire & intimacy + Yes/No/Maybe (§3.10/§3.10b/§6.3).** The 18+
+  **`together-desire` catalog group** (4 adult entries — Sensate Focus, Yes/No/Maybe-together, Desire Mapping,
+  Fantasy Exchange, all `adult:true`, each leading with the not-therapy `frame()`). **`allAdultAcknowledged(fs,
+key, participantIds)`** — the app's first **N-party 18+ conjunction**, true only when EVERY participant's
+  shared guidance-prefs `adultAcknowledged` is set. **`EXPLICIT_INTIMACY_REGISTER`** (the frank-but-bounded 52
+  `CHALLENGE_INTIMACY_REGISTER` sibling, adapted for two partners) is appended to the couples prompt **ONLY when
+  both acked**, AFTER the addendum + context + grounding, before FORMATTING — SAFETY never loosened, the consent
+  boundary verbatim (consenting adults only · taboo only as fantasy/roleplay · never minors/real-non-consent/
+  illegal · a hard no from EITHER partner is absolute · trauma-aware STOP-and-route). **YNM (§3.10b):** a
+  **symmetric, revocable** opt-in (`people/<id>/together/ynm/<pairKey>.enc`, one file per person per pair) + a
+  **deterministic, no-AI mutual overlap** (`computeYnmOverlap` — the intersection of both partners' intake
+  `activities` ratings at ≥ "curious" [value ≥ 3 on the 5-point scale], resolved to labels); **one-sided answers
+  are NEVER revealed**, and the overlap is computed ONLY under the **full conjunction** (both 18+ acks + both
+  opt-ins + a LIVE edge), **re-checked on every read** (a revoke or a removed edge re-gates immediately). The
+  overlap feeds the grounding pack **only for a desire-group session when ready** (the §8.6 consented
+  restricted-exception). **All withholding is host-side:** `togetherCatalog()` returns adult cards only when the
+  active person acked + ≥1 live-edge partner acked; `togetherCreate` **re-checks `allAdultAcknowledged([initiator,
+partner])`** for any adult guide regardless of what the catalog showed (no wrong-partner bypass); the couples
+  turn computes `allAdultAcked` fresh per turn. Bridge (all gated `together.own` + participant-scoped via the live
+  edge): `together:catalog`/`acknowledgeAdult`/`ynmStatus`/`ynmOptIn`/`ynmRevoke`/`ynmOverlap`. Additive schema
+  (`YnmOptIn`, `TogetherYnmStatus`/`TogetherYnmOverlap`, `TogetherCatalogEntry`) — no bumps. Renderer: the
+  `TogetherIntimacy` card (18+ ack → "waiting for your partner" → YNM opt-in/revoke → the mutual list + "Start
+  Yes/No/Maybe together"; the `youAcked`/`eligible`/`ready` states from the bridge, never the inventory).
+  Code-reviewer verdict **SHIP** — every safety boundary traced airtight (register never reaches a prompt without
+  both acks; the desire group/adult guide never startable without both acks; a one-sided YNM answer never
+  revealed via the overlap OR grounding; the gate is live; the trust boundary holds; `youAcked` leaks no
+  inventory) — no blockers; applied the spec-lockstep should-fix (YNM storage) + two hardening nits (typed
+  `IntakeSession | null`; a defensive edge re-check in the reusable grounding pack). Gate green: typecheck, lint,
+  format, **1060 core + 1033 desktop** unit (+ynm/adultGate/register/overlap/opt-in-revoke core, +2 coreBridge
+  two-persona [desire+adult-guide withheld until both ack; YNM symmetric + one-sided-never-shown decrypt +
+  revoke re-gates], +3 RTL [ack affordance, ready-overlap+start, waiting-for-partner]), **7/7 Together E2E** (+the
+  Phase F ack matrix: desire withheld → both ack → group appears → a desire session's captured prompt carries
+  the explicit register → YNM opt-in/revoke through the UI + 360px). Real-Electron visual QA at desktop (the
+  desire group + the YNM consent card). Synced spec 58 §4 (YNM storage as-built) + §14. **Product sign-off
+  pending (§3.13):** the YNM status surfaces the PARTNER's ack/opt-in state to the viewer (never the inventory)
+  to drive the actionable copy — flagged for the user. **Phases G–H remain; the §13 live-model adversarial pass
+  [first run + the explicit re-run] is a manual DoD item needing a real API key — flagged for the user.**
+  **Lesson: the N-party 18+ conjunction must be re-checked at EVERY explicit surface independently — the catalog
+  gate is deliberately coarse (shows adult cards if the active person + ≥1 partner acked), so `togetherCreate`
+  RE-CHECKS `allAdultAcknowledged([initiator, partner])` for the actual pairing (a wrong-partner bypass is
+  refused at create), and the couples turn computes `allAdultAcked` fresh per turn — never trust an earlier
+  gate. And a "restricted reaches no one" exception (the YNM mutual overlap) is only safe as a DETERMINISTIC
+  host-side intersection gated on the FULL conjunction (both acks + both opt-ins + live edge, re-checked every
+  read) that emits only the BOTH-≥-curious subset — one-sided answers never computed into the result, revoke
+  deletes the opt-in file so the next read is instantly not-ready.**
 - 2026-07-11 — **Build (Together — couples sessions; SPEC 58 Phase E BUILT; on `feat/together-catalog`, a git
   worktree, PR pending — autonomous overnight, spec defaults taken).** The fifth Together phase: the **guided
   couples catalog (§3.10).** New **`togetherCatalog.ts`** — `together-connect` + `together-repair` groups (8

@@ -9858,6 +9858,111 @@ test('together (58) phase E: start a structured guided couples session from the 
   }
 });
 
+test('together (58) phase F: the Desire group + explicit register are withheld until BOTH partners ack; YNM overlap shows only shared items (§3.10/§3.10b)', async () => {
+  const promptDir = await mkdtemp(join(tmpdir(), 'selfos-e2e-prompt-'));
+  const { userData, vault, ben, angel } = await seedTogetherReady();
+  // Seed both partners' intimacy activity ratings so the YNM overlap has a shared item.
+  {
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('no key');
+    const intake = (id: string, activities: Record<string, number>) => ({
+      id: `intake-${id}`,
+      schemaVersion: 1,
+      personId: id,
+      status: 'complete' as const,
+      sections: [
+        {
+          id: 'intimacy',
+          status: 'complete' as const,
+          restricted: true,
+          messages: [],
+          answers: { activities },
+        },
+      ],
+      startedAt: 'now',
+      updatedAt: 'now',
+      completedAt: 'now', // keep the onboarding hard-gate released (mirrors seedCompletedIntake)
+    });
+    await writeEncryptedJson(
+      fs,
+      `people/${ben}/intake/session.enc`,
+      intake(ben, { 'oral-receiving': 4 }),
+      key,
+    );
+    await writeEncryptedJson(
+      fs,
+      `people/${angel}/intake/session.enc`,
+      intake(angel, { 'oral-receiving': 5 }),
+      key,
+    );
+  }
+  const app = await electron.launch({
+    args: [`--user-data-dir=${userData}`, MAIN],
+    env: { ...e2eEnv(), SELFOS_FAKE_PROMPT_DIR: promptDir },
+  });
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: /Together/ }).click();
+
+    // The Desire & intimacy group is WITHHELD (no adult cards) before any ack.
+    await expect(w.getByRole('heading', { name: 'Guided sessions' })).toBeVisible();
+    await expect(w.getByText('Sensate Focus')).toHaveCount(0);
+
+    // Ben turns on adult content — still withheld (Angel hasn't).
+    await w.getByRole('button', { name: /turn on adult content/i }).click();
+    await expect(w.getByText(/Waiting for Angel to turn it on/i)).toBeVisible();
+    await expect(w.getByText('Sensate Focus')).toHaveCount(0);
+
+    // Angel turns it on too — now BOTH have acked (all further assertions run as Angel, a Member who can do
+    // everything in Together — the full both-opted-in overlap + revoke is proven decrypt-level in the bridge test).
+    await switchTogetherPerson(w, 'Angel');
+    await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByRole('button', { name: /turn on adult content/i }).click();
+
+    // The Desire & intimacy group now appears (both acked, host-side).
+    await expect(w.getByText('Sensate Focus')).toBeVisible();
+
+    // Start a Desire session → the captured couples prompt carries the EXPLICIT register (both acked).
+    await w.getByRole('button', { name: /Sensate Focus/ }).click();
+    await w.getByRole('button', { name: 'Send invitation' }).click();
+    await w.getByLabel('Message').fill('We want to feel closer physically.');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/I hear you/)).toBeVisible();
+    const prompts = await readTogetherPrompts(promptDir);
+    expect(prompts).toContain('consensual adults only'); // the explicit register is present
+    expect(prompts).toContain('Sensate Focus'); // the guide addendum too
+
+    // YNM opt-in + revoke through the UI (the mutual overlap needs BOTH opted in — covered in the bridge test).
+    await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByRole('button', { name: 'Opt in to compare' }).click();
+    await expect(w.getByText(/Waiting for Ben to opt in/i)).toBeVisible();
+    await w.getByRole('button', { name: 'Revoke' }).click();
+    await expect(w.getByRole('button', { name: 'Opt in to compare' })).toBeVisible();
+
+    // 360px: the intimacy card + catalog have no inner horizontal scrollbar.
+    await w.setViewportSize({ width: 360, height: 900 });
+    const overflow = await w.evaluate(() => {
+      for (const el of Array.from(document.querySelectorAll('*'))) {
+        const style = getComputedStyle(el);
+        if (
+          (style.overflowX === 'auto' || style.overflowX === 'scroll') &&
+          el.scrollWidth > el.clientWidth + 1
+        ) {
+          return el.className || el.tagName;
+        }
+      }
+      return null;
+    });
+    expect(overflow).toBeNull();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+    await rm(promptDir, { recursive: true, force: true });
+  }
+});
+
 test('together (58): the private pre-screen holds a flagged person; the partner only sees invited (§8.2)', async () => {
   // Ben's pre-screen is NOT seeded → he must take it first.
   const { userData, vault } = await seedTogetherReady({ clearBenPrescreen: false });

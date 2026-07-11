@@ -32,10 +32,12 @@ export interface TogetherGuide {
   adult?: boolean;
 }
 
-/** Ordered groups with non-clinical display titles (§3.10). `together-desire` is added in Phase F. */
+/** Ordered groups with non-clinical display titles (§3.10). The 18+ `together-desire` group is withheld
+ *  host-side unless BOTH partners have acknowledged adult content (Phase F). */
 export const TOGETHER_GROUPS: ReadonlyArray<{ id: TogetherGroupId; title: string }> = [
   { id: 'together-connect', title: 'Connect' },
   { id: 'together-repair', title: 'Repair' },
+  { id: 'together-desire', title: 'Desire & intimacy' },
 ];
 
 export function togetherGroupTitle(group: TogetherGroupId): string {
@@ -200,6 +202,92 @@ and physiological self-soothing / breaks. Keep it collaborative and non-blaming.
 the Speaker shares one point using "I" language; the Listener paraphrases back what they heard (no rebuttal) \
 until the Speaker feels understood; then swap roles; finally each names what shifted. Hold the structure \
 firmly but warmly — interrupt gently if someone rebuts out of turn, and keep both turns balanced.`,
+  },
+  // ── Desire & intimacy (18+) — withheld host-side unless BOTH partners acked (§3.10/Phase F) ────────
+  {
+    id: 'sensate-focus',
+    group: 'together-desire',
+    title: 'Sensate Focus',
+    framework: 'Masters & Johnson',
+    blurb:
+      'A gentle, pressure-free program of touch and attunement — rebuild physical closeness step by step.',
+    kind: 'structured',
+    adult: true,
+    steps: [
+      'Set the frame',
+      'Non-genital touch',
+      'Add feedback',
+      'Widen the map',
+      'What you noticed',
+    ],
+    openingMessage:
+      'Welcome to Sensate Focus — a Together program (inspired by Masters & Johnson, not therapy) for rebuilding ' +
+      'physical closeness slowly and without pressure. There’s no goal beyond attention and comfort. To set the ' +
+      'frame: what would each of you want the other to know before you begin — anything that helps you feel safe ' +
+      'and unhurried?',
+    systemPromptAddendum: `${frame('the Masters & Johnson "Sensate Focus" program')} Guide a graded, \
+pressure-free touch program in stages: (1) agree the frame + boundaries, (2) non-genital touch focused on \
+sensation not performance, (3) add gentle spoken feedback, (4) widen the map only with mutual eagerness, (5) \
+reflect on what each noticed. Center consent and comfort at every step; there is no performance goal. Speak \
+frankly about bodies and sensation when they do, but never push pace — either partner can pause anything, \
+anytime, and a hard no ends that thread absolutely.`,
+  },
+  {
+    id: 'yes-no-maybe-together',
+    group: 'together-desire',
+    title: 'Yes / No / Maybe — together',
+    framework: 'Consent mapping',
+    blurb:
+      'Explore the things you’re both curious about — from your shared, consented overlap only.',
+    kind: 'structured',
+    adult: true,
+    steps: ['Your shared curiosities', 'Talk one through', 'Boundaries & aftercare', 'A next step'],
+    openingMessage:
+      'This is Yes/No/Maybe, together — a Together exercise (not therapy) for exploring what you’re BOTH curious ' +
+      'about, drawn only from the overlap you’ve each privately consented to share. Nothing one-sided is ever ' +
+      'shown. To begin: of the things you both leaned toward, which one feels most alive to talk through first?',
+    systemPromptAddendum: `${frame('a consent-mapping "Yes/No/Maybe" exchange')} Work ONLY from the mutual, \
+consented overlap provided in context (items both partners are at least curious about) — never introduce an \
+activity that isn't there, and never reveal or imply what one partner alone marked. Help them talk one shared \
+curiosity through at a time: what draws each of them to it, boundaries and aftercare, and a small concrete \
+next step ONLY if both are eager. Any hesitation is a full stop; a hard no is absolute.`,
+  },
+  {
+    id: 'desire-mapping',
+    group: 'together-desire',
+    title: 'Desire Mapping',
+    framework: 'Emotionally-focused sex',
+    blurb:
+      'Understand what turns each of you toward closeness — the conditions, not just the acts.',
+    kind: 'chat',
+    adult: true,
+    openingMessage:
+      'This is Desire Mapping — a Together conversation (not therapy) about what actually turns each of you ' +
+      'toward wanting closeness: the moods, moments, and conditions, not just the acts. What tends to help you ' +
+      'feel most in the mood, and what tends to get in the way?',
+    systemPromptAddendum: `${frame('an emotionally-focused approach to sexual desire')} Help each partner map \
+their own desire — the emotional and contextual conditions that invite or dampen it (responsive vs spontaneous \
+desire, stress, resentment, novelty, safety), and how their patterns meet. Speak frankly and specifically when \
+they do. Never frame a lower-desire partner as broken; never pressure toward more sex — the goal is mutual \
+understanding and small, consensual experiments, not a quota.`,
+  },
+  {
+    id: 'fantasy-exchange',
+    group: 'together-desire',
+    title: 'Fantasy Exchange',
+    framework: 'Consent-forward',
+    blurb: 'Share a fantasy safely — curiosity over pressure, with a clear exit at every step.',
+    kind: 'chat',
+    adult: true,
+    openingMessage:
+      'This is a Fantasy Exchange — a Together practice (not therapy) for sharing something you’re curious about ' +
+      'in a way that stays safe and pressure-free. Sharing a fantasy is not a request to act on it. Who’d like ' +
+      'to go first, and would you rather share, or listen first?',
+    systemPromptAddendum: `${frame('a consent-forward fantasy-sharing practice')} Help partners share fantasies \
+with curiosity, not obligation — make explicit that sharing is not a request to act, keep judgment out, and \
+give each a clear, honored exit at any point. Explore the appeal and the feeling beneath a fantasy. Taboo \
+themes are welcome ONLY as fantasy/roleplay between consenting adults; never minors, real non-consent, or \
+illegal acts. If a fantasy touches trauma, slow down and validate rather than eroticize it.`,
   },
 ];
 

@@ -351,6 +351,18 @@
   overflow: hidden;
 }
 
+/* ── Desire & intimacy badge (58 §3.10) ──────────────────────────────────────── */
+.adultBadge {
+  flex: none;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 2px 7px;
+  border-radius: var(--radius-full, 999px);
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+}
+
 /* ── Structured stepper (58 §3.10) ───────────────────────────────────────────── */
 .stepper {
   display: flex;

@@ -58,6 +58,22 @@ person who shared it toward bringing it into the open themselves, or toward nami
 their own individual work; you never disclose it for them.`;
 
 /**
+ * The full explicit register for a couples session (§6.3 step 5 / Phase F) — appended ONLY when
+ * `allAdultAcknowledged(participants)`. The frank-but-bounded sibling of the 52 `CHALLENGE_INTIMACY_REGISTER`,
+ * adapted for two partners. SAFETY is never loosened; this only WIDENS the register when both have acked.
+ */
+export const EXPLICIT_INTIMACY_REGISTER = `Both partners have confirmed they're 18+, so when the conversation \
+turns to sex or intimacy you may engage frankly, as consensual-adult sexual wellness, within Anthropic's usage \
+policy — explicit, specific, plain language is welcome. Boundary: consensual adults only; taboo content only \
+as fantasy/roleplay (e.g. consensual non-consent as pre-agreed roleplay); NEVER minors, real (non-roleplay) \
+non-consent, or illegal acts. Everything here is between the two of THEM: steer toward mutual, enthusiastic \
+consent — negotiation, a real yes from both, and honored exits; never pressure either partner, never take a \
+side, and never coach one to persuade or wear down the other. Respect a hard no ABSOLUTELY — from either \
+partner, it ends that thread. Be trauma-aware: if shame, coercion, or an assault history surfaces, slow down, \
+validate, STOP, and route to professional support — never frame trauma as kink, never treat a disclosed \
+assault as erotic.`;
+
+/**
  * Teach the coach the agreement-capture convention (§6.4 — the AGREEMENT marker, a Phase-D shared artifact).
  * Only on the OPEN conversation (never from a private aside — that's enforced host-side + restated here).
  */
@@ -141,6 +157,11 @@ export async function buildTogetherSystemPrompt(
       parts.push(buildStepInstruction(guide.steps));
     }
   }
+
+  // The explicit register (Phase F) — appended ONLY when BOTH partners have acknowledged adult content
+  // (`allAdultAcked`, computed host-side over EVERY participant), AFTER context + grounding + guide so the
+  // boundary always leads. SAFETY is never loosened; absent ⇒ the conservative register (Phase B/E).
+  if (options.allAdultAcked) parts.push(EXPLICIT_INTIMACY_REGISTER);
 
   parts.push(FORMATTING);
   return parts.filter(Boolean).join('\n\n');

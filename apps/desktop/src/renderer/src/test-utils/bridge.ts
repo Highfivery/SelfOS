@@ -335,6 +335,32 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
       Promise.resolve({ ok: false, reason: 'NOT_FOUND', message: 'Not available.' }),
     togetherGetAttachment: () => Promise.resolve(null),
     togetherCatalog: () => Promise.resolve([]),
+    togetherAcknowledgeAdult: () => Promise.resolve(false),
+    togetherYnmStatus: () =>
+      Promise.resolve({
+        youAcked: false,
+        eligible: false,
+        youOptedIn: false,
+        partnerOptedIn: false,
+        ready: false,
+      }),
+    togetherYnmOptIn: () =>
+      Promise.resolve({
+        youAcked: false,
+        eligible: false,
+        youOptedIn: false,
+        partnerOptedIn: false,
+        ready: false,
+      }),
+    togetherYnmRevoke: () =>
+      Promise.resolve({
+        youAcked: false,
+        eligible: false,
+        youOptedIn: false,
+        partnerOptedIn: false,
+        ready: false,
+      }),
+    togetherYnmOverlap: () => Promise.resolve({ ready: false, items: [] }),
     togetherWrapUp: () =>
       Promise.resolve({ ok: false, reason: 'NOT_ALLOWED', message: 'Not available.' }),
     togetherGetReport: () => Promise.resolve({ report: null, stale: false, agreements: [] }),

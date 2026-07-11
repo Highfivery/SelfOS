@@ -14,7 +14,13 @@ import { InvitationCeremony } from './InvitationCeremony';
 import { TogetherThread } from './TogetherThread';
 import { TogetherReflection } from './TogetherReflection';
 import { TogetherCatalog } from './TogetherCatalog';
-import type { Agreement, SharedReport, TogetherCatalogEntry } from '@shared/schemas';
+import { TogetherIntimacy } from './TogetherIntimacy';
+import type {
+  Agreement,
+  SharedReport,
+  TogetherCatalogEntry,
+  TogetherYnmStatus,
+} from '@shared/schemas';
 import { useTogetherStore } from '../../../stores/togetherStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
@@ -293,6 +299,76 @@ describe('TogetherCatalog (§3.10)', () => {
 
     await userEvent.click(screen.getByText('Four Horsemen'));
     expect(picked).toBe('four-horsemen');
+  });
+});
+
+describe('TogetherIntimacy (§3.10/§3.10b)', () => {
+  const ynm = (over: Partial<TogetherYnmStatus>): TogetherYnmStatus => ({
+    youAcked: false,
+    eligible: false,
+    youOptedIn: false,
+    partnerOptedIn: false,
+    ready: false,
+    ...over,
+  });
+
+  it('offers the 18+ acknowledgement when the active person has not acked', async () => {
+    let acked = 0;
+    installMockBridge({
+      togetherYnmStatus: () => Promise.resolve(ynm({ youAcked: false })),
+      togetherAcknowledgeAdult: () => {
+        acked += 1;
+        return Promise.resolve(true);
+      },
+    });
+    render(
+      <MemoryRouter>
+        <TogetherIntimacy partnerId="partner" partnerName="Angel" />
+      </MemoryRouter>,
+    );
+    const btn = await screen.findByRole('button', { name: /turn on adult content/i });
+    await userEvent.click(btn);
+    expect(acked).toBe(1);
+  });
+
+  it('shows the mutual overlap + a "Start Yes/No/Maybe together" action when ready; never a one-sided list', async () => {
+    installMockBridge({
+      togetherYnmStatus: () =>
+        Promise.resolve(
+          ynm({
+            youAcked: true,
+            eligible: true,
+            youOptedIn: true,
+            partnerOptedIn: true,
+            ready: true,
+          }),
+        ),
+      togetherYnmOverlap: () =>
+        Promise.resolve({ ready: true, items: [{ key: 'k1', label: 'Something you both like' }] }),
+    });
+    render(
+      <MemoryRouter>
+        <TogetherIntimacy partnerId="partner" partnerName="Angel" />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText('Something you both like')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start Yes/No/Maybe together' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Revoke' })).toBeInTheDocument();
+  });
+
+  it('waits for the partner to ack (no dead controls) when only the active person has acked', async () => {
+    installMockBridge({
+      togetherYnmStatus: () => Promise.resolve(ynm({ youAcked: true, eligible: false })),
+    });
+    render(
+      <MemoryRouter>
+        <TogetherIntimacy partnerId="partner" partnerName="Angel" />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText(/Waiting for Angel to turn it on/i)).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /turn on adult content/i }),
+    ).not.toBeInTheDocument();
   });
 });
 

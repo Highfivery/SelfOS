@@ -10,3 +10,5 @@ export * from './prepService';
 export * from './agreementService';
 export * from './togetherAnalysisService';
 export * from './togetherCatalog';
+export * from './adultGate';
+export * from './ynmService';

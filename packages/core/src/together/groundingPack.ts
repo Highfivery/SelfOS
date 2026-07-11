@@ -4,6 +4,11 @@ import { getRelationshipSynthesis } from '../coaching/relationshipSynthesisServi
 import { getAlignmentReport } from '../questionnaires/alignmentService';
 import { listAssignments } from '../questionnaires/assignmentService';
 import { getReport, listAgreements, standingAgreements } from './agreementService';
+import { allAdultAcknowledged } from './adultGate';
+import { getTogetherGuide } from './togetherCatalog';
+import { getYnmOptIn, ynmOverlapFor } from './ynmService';
+import { pairKeyFor } from './togetherService';
+import { listRelationships } from '../people';
 
 // ── The grounding pack (58 §3.9) — zero extra AI spend, all cached/deterministic reads ────────────
 // Opens every couples prompt with what SelfOS already knows about the RELATIONSHIP, so the coach "already
@@ -81,6 +86,39 @@ export async function buildGroundingPack(
   const lastReport = await getReport(fs, key, session.id);
   if (lastReport?.summary) {
     lines.push(`From their last wrap-up together: ${lastReport.summary}`);
+  }
+
+  // Phase F: the Yes/No/Maybe mutual overlap (§3.10b) feeds ONLY a Desire & intimacy guided session, and ONLY
+  // when READY — both partners have opted in (symmetric consent) AND both have acknowledged adult content. The
+  // edge is already verified (the session is accessible). Revoke → this drops immediately (live re-gate). The
+  // list is items BOTH are ≥ "curious" about; one-sided answers are never revealed.
+  const guide = session.guideId ? getTogetherGuide(session.guideId) : undefined;
+  if (guide?.group === 'together-desire' && session.participantIds.length === 2) {
+    const [a, b] = session.participantIds;
+    if (a && b) {
+      const pairKey = pairKeyFor(a, b);
+      const [acked, aIn, bIn, rels] = await Promise.all([
+        allAdultAcknowledged(fs, key, session.participantIds),
+        getYnmOptIn(fs, key, a, pairKey),
+        getYnmOptIn(fs, key, b, pairKey),
+        listRelationships(fs, key),
+      ]);
+      // Defensive: re-check the live partner edge here too (this is a reusable core fn — don't rely solely on
+      // the caller having verified it). A removed edge immediately re-gates the overlap feed.
+      const edgeLive = rels.some(
+        (r) =>
+          r.type === 'partner' &&
+          ((r.fromPersonId === a && r.toPersonId === b) ||
+            (r.fromPersonId === b && r.toPersonId === a)),
+      );
+      const overlap = await ynmOverlapFor(fs, key, a, b, edgeLive && acked && aIn && bIn);
+      if (overlap.ready && overlap.items.length > 0) {
+        lines.push(
+          'Their mutual Yes/No/Maybe list (both are at least curious about these — work ONLY from here, never reveal one-sided answers):',
+        );
+        for (const item of overlap.items) lines.push(`  - ${item.label}`);
+      }
+    }
   }
 
   if (lines.length === 0) return '';

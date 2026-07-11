@@ -5556,4 +5556,110 @@ describe('createCoreBridge — Together (58) foundation', () => {
       false,
     );
   });
+
+  // ── Phase F: 18+ acks + explicit register + YNM (§3.10/§3.10b) ──────────────────────────────────
+  /** Seed a person's intimacy activity ratings (the intake `activities` matrix, 1-5). */
+  async function seedActivities(
+    ctx: { fs: FileSystem; key: Uint8Array },
+    personId: string,
+    activities: Record<string, number>,
+  ): Promise<void> {
+    await writeEncryptedJson(
+      ctx.fs,
+      `people/${personId}/intake/session.enc`,
+      {
+        id: `intake-${personId}`,
+        schemaVersion: 1,
+        personId,
+        status: 'complete',
+        sections: [
+          {
+            id: 'intimacy',
+            status: 'complete',
+            restricted: true,
+            messages: [],
+            answers: { activities },
+          },
+        ],
+        startedAt: '2026-07-01T00:00:00.000Z',
+        updatedAt: '2026-07-01T00:00:00.000Z',
+      },
+      ctx.key,
+    );
+  }
+
+  it('the desire group + adult guides are WITHHELD until BOTH partners ack; the ack unlocks them (§3.10)', async () => {
+    const { host, bridge, ben, angel } = await seedPair();
+    // Neither has acked → the catalog has no desire cards, and an adult guide is refused.
+    expect((await bridge.togetherCatalog()).some((c) => c.group === 'together-desire')).toBe(false);
+    expect(
+      (await bridge.togetherCreate({ partnerPersonId: angel, guideId: 'sensate-focus' })).ok,
+    ).toBe(false);
+
+    // Ben acks — still not both, so still withheld.
+    await bridge.togetherAcknowledgeAdult();
+    expect((await bridge.togetherCatalog()).some((c) => c.group === 'together-desire')).toBe(false);
+    expect(
+      (await bridge.togetherCreate({ partnerPersonId: angel, guideId: 'sensate-focus' })).ok,
+    ).toBe(false);
+
+    // Angel acks too → both acked → the desire group appears + an adult guide can start.
+    await asPerson(host, angel);
+    await bridge.togetherAcknowledgeAdult();
+    await asPerson(host, ben);
+    expect(
+      (await bridge.togetherCatalog()).filter((c) => c.group === 'together-desire').length,
+    ).toBe(4);
+    const created = await bridge.togetherCreate({
+      partnerPersonId: angel,
+      guideId: 'sensate-focus',
+    });
+    expect(created.ok).toBe(true);
+  });
+
+  it('YNM is symmetric + revocable; the mutual overlap shows ONLY items both are ≥ curious about, never one-sided (§3.10b)', async () => {
+    const { host, bridge, ben, angel } = await seedPair();
+    const ctx = (await host.host.vaultAndKey())!;
+    // Seed activity ratings: 'a-shared' both curious+, 'a-ben' Ben only, 'a-angel' Angel only.
+    await seedActivities(ctx, ben, { 'a-shared': 4, 'a-ben': 5, 'a-angel': 1 });
+    await seedActivities(ctx, angel, { 'a-shared': 3, 'a-ben': 2, 'a-angel': 5 });
+
+    // Before acks: not eligible; overlap empty.
+    expect((await bridge.togetherYnmStatus({ partnerPersonId: angel })).eligible).toBe(false);
+    expect(await bridge.togetherYnmOverlap({ partnerPersonId: angel })).toEqual({
+      ready: false,
+      items: [],
+    });
+
+    // Both ack → eligible, but the overlap needs BOTH opt-ins.
+    await bridge.togetherAcknowledgeAdult();
+    await asPerson(host, angel);
+    await bridge.togetherAcknowledgeAdult();
+    await asPerson(host, ben);
+    let status = await bridge.togetherYnmStatus({ partnerPersonId: angel });
+    expect(status.eligible).toBe(true);
+    expect(status.ready).toBe(false);
+
+    // Ben opts in — still not both.
+    status = await bridge.togetherYnmOptIn({ partnerPersonId: angel });
+    expect(status.youOptedIn).toBe(true);
+    expect(status.ready).toBe(false);
+    expect((await bridge.togetherYnmOverlap({ partnerPersonId: angel })).ready).toBe(false);
+
+    // Angel opts in too → ready → the mutual overlap shows ONLY 'a-shared'.
+    await asPerson(host, angel);
+    await bridge.togetherYnmOptIn({ partnerPersonId: ben });
+    await asPerson(host, ben);
+    const overlap = await bridge.togetherYnmOverlap({ partnerPersonId: angel });
+    expect(overlap.ready).toBe(true);
+    const keys = overlap.items.map((i) => i.key);
+    expect(keys).toContain('a-shared');
+    expect(keys).not.toContain('a-ben'); // one-sided (Ben only) — never shown
+    expect(keys).not.toContain('a-angel'); // one-sided (Angel only) — never shown
+
+    // Ben revokes → the overlap immediately drops to not-ready (live re-gate, §3.10b).
+    await bridge.togetherYnmRevoke({ partnerPersonId: angel });
+    expect((await bridge.togetherYnmOverlap({ partnerPersonId: angel })).ready).toBe(false);
+    expect((await bridge.togetherYnmStatus({ partnerPersonId: angel })).ready).toBe(false);
+  });
 });

@@ -389,6 +389,39 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-11 — **Build (Together — couples sessions; SPEC 58 Phase G BUILT — Pulse, absorbs spec 11; on
+  `feat/together-pulse`, a git worktree, PR pending — autonomous overnight, spec defaults taken).** The Pulse
+  phase (§3.10a): a couples **dyad-metric trend** + a frictionless **1–3-tap check-in** + a **dual-consent
+  desire alignment**. Core **`pulseService`** — `logPulseCheckIn` (writes `people/<logger>/together/pulse/
+<pairKey>/<id>.enc`, one writer per file, metrics clamped 0..1, drops an all-non-finite log), `buildPulseView`
+  (the viewer's OWN check-in trends [connection/desire/satisfaction, Low/Steady/High → 0/0.5/1] + the viewer's
+  OWN wrap-up-twin Connection/Friction for the pair [Phase D, ±1 → 0..1] — **never the partner's raw metrics**),
+  and **`desireAlignment`** — the one comparative that reads the partner, gated on **dual consent**: surfaced
+  only when BOTH partners have a `desire` reading they each consented to share (`shareMetrics ∋ 'desire'`), with
+  the **most-recent desire check-in's consent governing** (logging a fresh check-in without sharing desire
+  **retracts** visibility — the intuitive privacy model), reading `aligned` (|Δ| ≤ 0.25) or `some distance`; the
+  two raw desire values cross the seam only for a consenting pair, and the viewer's own-desire short-circuit runs
+  BEFORE any partner read. Bridge `together:pulse`/`together:pulseLog`, gated `together.own` + a re-checked
+  **live partner edge** (a non-partner reads an empty view). Renderer **`TogetherPulse`** card on the Together
+  home (per eligible partner; `LineChart` trends capped at 480px + a **§9 text equivalent** naming each series'
+  direction, the 1–3-tap `SegmentedControl` per metric + a default-off "share my desire level" switch + the
+  alignment banner). Additive schema (`PulseCheckIn`/`PulseSeries`/`PulseAlignment`/`TogetherPulseView` +
+  `PULSE_METRICS`/`PULSE_METRIC_LABELS` — the single source of truth the trend assembly AND the check-in UI both
+  derive from). **Spec 11 marked Superseded-by 58 §3.10a** (never built standalone; its metrics vocabulary
+  adopted verbatim; `CheckIn` → `PulseCheckIn`, a fresh type — no migration). Code-reviewer **ship** (the privacy
+  boundary verified adversarially airtight — a partner's raw metrics never cross, dual consent correct + ordered,
+  cross-pair isolation, path safety; applied both should-fixes: the §9 direction text equivalent is now rendered,
+  and the metric list is derived from `PULSE_METRICS` in both places [no triplication]; + the stale-comment + `as
+number` nits). Gate green: typecheck, lint, format, **1067 core + 1037 desktop** unit (+pulse core [dual-consent/
+  retraction/clamp/dyad-fold/own-only], +coreBridge two-persona [each sees own trends, alignment only after both
+  share, non-partner empty], +3 TogetherPulse RTL), **8/8 Together E2E** (E2E #8: both log + share → the desire
+  alignment surfaces; own-trend renders while alignment hidden pre-dual-consent; 360px guard). Real-Electron
+  visual QA at desktop (light/dark) + 360px (the card, the check-in form, the alignment banner). **Phase H
+  remains** (integrations: joint challenges, questionnaire→compat→alignment grounding, Home together-session
+  provider, quiet-session offer, person-delete reap, whole-flow coherence walk + visual QA sweep). **Lesson: a
+  dual-consent comparative must be retractable via the MOST-RECENT reading (not a lingering older opt-in), and the
+  viewer's own-side consent must short-circuit BEFORE the partner's file is ever read — so "I stopped sharing"
+  takes effect the instant the next check-in lands, and a non-consenting viewer can never force a partner read.**
 - 2026-07-11 — **Build (Together — couples sessions; SPEC 58 Phase F BUILT; on `feat/together-explicit-ynm`, a
   git worktree, PR pending — autonomous overnight, spec defaults taken).** The sixth + most safety-critical
   Together phase: the **explicit register + Desire & intimacy + Yes/No/Maybe (§3.10/§3.10b/§6.3).** The 18+

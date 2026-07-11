@@ -1,6 +1,17 @@
 # 11 — Relationship & intimacy tracking
 
-> **Status:** **Approved** · _last updated 2026-06-11_
+> **Status:** **Superseded by [`58-together-couples-sessions.md`](58-together-couples-sessions.md) §3.10a
+> (Pulse)** · _superseded 2026-07-11_
+>
+> **This spec was never built as a standalone dashboard. Its core — the dyad-metric trend view
+> (connection/satisfaction/desire over time) + the frictionless intimacy check-in + the both-answer /
+> dual-consent desire-discrepancy gate — is delivered by spec 58's Pulse phase (§3.10a), which adopts
+> this spec's metrics vocabulary verbatim and lives inside the Together surface (a couple's home for
+> shared, coached work) rather than a separate per-relationship dashboard. Its `CheckIn` type became
+> `PulseCheckIn` (a fresh type, not a migration — nothing was built). Read this spec for the metric
+> rationale and the sensitivity treatment; read 58 §3.10a for the as-built model.**
+>
+> _Original status: Approved · last updated 2026-06-11_
 >
 > A per-relationship **dashboard** that turns the shared **metrics** layer into longitudinal insight for
 > couples and close relationships — connection, satisfaction, desire (incl. **desire-discrepancy**),

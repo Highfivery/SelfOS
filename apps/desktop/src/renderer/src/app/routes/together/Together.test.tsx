@@ -15,6 +15,7 @@ import { TogetherThread } from './TogetherThread';
 import { TogetherReflection } from './TogetherReflection';
 import { TogetherCatalog } from './TogetherCatalog';
 import { TogetherIntimacy } from './TogetherIntimacy';
+import { TogetherPulse } from './TogetherPulse';
 import type {
   Agreement,
   SharedReport,
@@ -369,6 +370,78 @@ describe('TogetherIntimacy (§3.10/§3.10b)', () => {
     expect(
       screen.queryByRole('button', { name: /turn on adult content/i }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe('TogetherPulse (§3.10a)', () => {
+  it('logs a check-in with the chosen levels and desire-share choice', async () => {
+    let logged: { metrics: Record<string, number>; shareMetrics?: string[] } | null = null;
+    installMockBridge({
+      togetherPulse: () =>
+        Promise.resolve({ series: [], hasCheckIns: false, alignment: { ready: false } }),
+      togetherPulseLog: (input) => {
+        logged = {
+          metrics: input.metrics,
+          ...(input.shareMetrics ? { shareMetrics: input.shareMetrics } : {}),
+        };
+        return Promise.resolve({ series: [], hasCheckIns: false, alignment: { ready: false } });
+      },
+    });
+    render(
+      <MemoryRouter>
+        <TogetherPulse partnerId="partner" partnerName="Angel" />
+      </MemoryRouter>,
+    );
+    await userEvent.click(await screen.findByRole('button', { name: 'Log a check-in' }));
+    // Set Connection to High, opt to share desire, save.
+    const connGroup = screen.getByRole('group', { name: 'Connection level' });
+    await userEvent.click(within(connGroup).getByRole('button', { name: 'High' }));
+    await userEvent.click(screen.getByRole('switch'));
+    await userEvent.click(screen.getByRole('button', { name: 'Save check-in' }));
+    expect(logged).not.toBeNull();
+    expect(logged!.metrics['connection']).toBe(1);
+    expect(logged!.metrics['satisfaction']).toBe(0.5); // untouched default (Steady)
+    expect(logged!.shareMetrics).toEqual(['desire']);
+  });
+
+  it('renders the desire alignment read only when the view says it is ready', async () => {
+    installMockBridge({
+      togetherPulse: () =>
+        Promise.resolve({
+          series: [
+            {
+              label: 'Connection',
+              points: [
+                { x: 1, y: 0.2 },
+                { x: 2, y: 0.8 },
+              ],
+              direction: 'rising',
+            },
+          ],
+          hasCheckIns: true,
+          alignment: { ready: true, yours: 0.8, theirs: 0.75, read: 'aligned' },
+        }),
+    });
+    render(
+      <MemoryRouter>
+        <TogetherPulse partnerId="partner" partnerName="Angel" />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText(/desire levels are closely aligned/i)).toBeInTheDocument();
+  });
+
+  it('hides the desire alignment when not ready (dual consent unmet)', async () => {
+    installMockBridge({
+      togetherPulse: () =>
+        Promise.resolve({ series: [], hasCheckIns: false, alignment: { ready: false } }),
+    });
+    render(
+      <MemoryRouter>
+        <TogetherPulse partnerId="partner" partnerName="Angel" />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText(/No check-ins yet/i)).toBeInTheDocument();
+    expect(screen.queryByText(/desire levels/i)).not.toBeInTheDocument();
   });
 });
 

@@ -154,7 +154,9 @@ import {
   type TogetherWrapUpResult,
   type TogetherYnmStatus,
   type TogetherYnmOverlap,
+  type TogetherPulseView,
   TogetherYnmInputSchema,
+  TogetherPulseLogInputSchema,
   TogetherWrapUpInputSchema,
   TogetherGetReportInputSchema,
   TogetherSaveAgreementInputSchema,
@@ -277,6 +279,8 @@ import {
   getYnmOptIn,
   setYnmOptIn,
   ynmOverlapFor,
+  buildPulseView,
+  logPulseCheckIn,
   pairKeyFor,
   isPreScreenComplete,
   isReportStale,
@@ -2532,6 +2536,41 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         partnerPersonId,
         edgeLive && acked && youIn && partnerIn,
       );
+    },
+    togetherPulse: async (input): Promise<TogetherPulseView> => {
+      const { partnerPersonId } = TogetherYnmInputSchema.parse(input);
+      const c = await togetherCtx();
+      const empty: TogetherPulseView = {
+        series: [],
+        hasCheckIns: false,
+        alignment: { ready: false },
+      };
+      if (!c) return empty;
+      // Pulse is pair-scoped: a live partner edge is required (re-checked, §5.2). The desire-alignment gate
+      // (both logged + both consented) is enforced inside `buildPulseView`.
+      if (!(await togetherEdgeLive(c.fs, c.key, c.personId, [partnerPersonId]))) return empty;
+      return buildPulseView(c.fs, c.key, c.personId, partnerPersonId);
+    },
+    togetherPulseLog: async (input): Promise<TogetherPulseView> => {
+      const { partnerPersonId, metrics, shareMetrics } = TogetherPulseLogInputSchema.parse(input);
+      const c = await togetherCtx();
+      const empty: TogetherPulseView = {
+        series: [],
+        hasCheckIns: false,
+        alignment: { ready: false },
+      };
+      if (!c) return empty;
+      if (!(await togetherEdgeLive(c.fs, c.key, c.personId, [partnerPersonId]))) return empty;
+      await logPulseCheckIn(
+        c.fs,
+        c.key,
+        c.personId,
+        partnerPersonId,
+        metrics,
+        shareMetrics,
+        new Date(),
+      );
+      return buildPulseView(c.fs, c.key, c.personId, partnerPersonId);
     },
     togetherWrapUp: async (input): Promise<TogetherWrapUpResult> => {
       const { sessionId } = TogetherWrapUpInputSchema.parse(input);

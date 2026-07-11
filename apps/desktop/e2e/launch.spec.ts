@@ -9963,6 +9963,63 @@ test('together (58) phase F: the Desire group + explicit register are withheld u
   }
 });
 
+test('together (58) phase G: Pulse logs each partner’s own check-in; the desire alignment appears only after BOTH share (dual consent) (§3.10a)', async () => {
+  const { userData, vault } = await seedTogetherReady();
+  const app = await electron.launch({ args: [`--user-data-dir=${userData}`, MAIN], env: e2eEnv() });
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: /Together/ }).click();
+
+    // The Pulse card is present (no adult ack needed — it's the dyad check-in). No alignment yet.
+    await expect(w.getByRole('heading', { name: 'Pulse', exact: true })).toBeVisible();
+    await expect(w.getByText(/No check-ins yet/i)).toBeVisible();
+
+    // Ben logs a check-in with Desire = High and opts to SHARE it.
+    await w.getByRole('button', { name: 'Log a check-in' }).click();
+    const desireGroup = w.getByRole('group', { name: 'Desire level' });
+    await desireGroup.getByRole('button', { name: 'High' }).click();
+    await w.getByRole('switch', { name: /Share my desire level/i }).click();
+    await w.getByRole('button', { name: 'Save check-in' }).click();
+    // His own trend now renders, but the alignment is still hidden (Angel hasn't shared).
+    await expect(w.getByRole('img', { name: /Your Together pulse over time/i })).toBeVisible();
+    await expect(w.getByText(/desire levels/i)).toHaveCount(0);
+
+    // Angel logs a check-in with Desire = High and shares too → dual consent met.
+    await switchTogetherPerson(w, 'Angel');
+    await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByRole('button', { name: 'Log a check-in' }).click();
+    await w
+      .getByRole('group', { name: 'Desire level' })
+      .getByRole('button', { name: 'High' })
+      .click();
+    await w.getByRole('switch', { name: /Share my desire level/i }).click();
+    await w.getByRole('button', { name: 'Save check-in' }).click();
+
+    // The desire alignment now surfaces (both High → aligned).
+    await expect(w.getByText(/desire levels are closely aligned/i)).toBeVisible();
+
+    // 360px: the Pulse chart + card have no inner horizontal scrollbar.
+    await w.setViewportSize({ width: 360, height: 900 });
+    const overflow = await w.evaluate(() => {
+      for (const el of Array.from(document.querySelectorAll('*'))) {
+        const style = getComputedStyle(el);
+        if (
+          (style.overflowX === 'auto' || style.overflowX === 'scroll') &&
+          el.scrollWidth > el.clientWidth + 1
+        ) {
+          return el.className || el.tagName;
+        }
+      }
+      return null;
+    });
+    expect(overflow).toBeNull();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('together (58): the private pre-screen holds a flagged person; the partner only sees invited (§8.2)', async () => {
   // Ben's pre-screen is NOT seeded → he must take it first.
   const { userData, vault } = await seedTogetherReady({ clearBenPrescreen: false });

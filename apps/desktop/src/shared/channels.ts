@@ -118,6 +118,7 @@ import type {
   TogetherCatalogEntry,
   TogetherYnmStatus,
   TogetherYnmOverlap,
+  TogetherPulseView,
   Agreement,
   UpdateCheckResult,
   UsageEvent,
@@ -290,6 +291,8 @@ export const IpcChannels = {
   togetherYnmOptIn: 'together:ynmOptIn',
   togetherYnmRevoke: 'together:ynmRevoke',
   togetherYnmOverlap: 'together:ynmOverlap',
+  togetherPulse: 'together:pulse',
+  togetherPulseLog: 'together:pulseLog',
   togetherWrapUp: 'together:wrapUp',
   togetherGetReport: 'together:getReport',
   togetherSaveAgreement: 'together:saveAgreement',
@@ -1035,6 +1038,14 @@ export interface SelfosBridge {
   togetherYnmRevoke(input: { partnerPersonId: string }): Promise<TogetherYnmStatus>;
   /** The mutual YNM overlap (§3.10b) — only when READY (both acks + edge + both opted in); else empty. */
   togetherYnmOverlap(input: { partnerPersonId: string }): Promise<TogetherYnmOverlap>;
+  /** The pair Pulse (§3.10a): the viewer's own metric trends + dyad session metrics + dual-consent desire. */
+  togetherPulse(input: { partnerPersonId: string }): Promise<TogetherPulseView>;
+  /** Log a pulse check-in (§3.10a) — the viewer's own 1–3 ratings; returns the refreshed Pulse view. */
+  togetherPulseLog(input: {
+    partnerPersonId: string;
+    metrics: Record<string, number>;
+    shareMetrics?: string[];
+  }): Promise<TogetherPulseView>;
   /** Run wrap-up for a session (§3.8): a shared report + per-partner twins; the INITIATOR is billed. */
   togetherWrapUp(input: { sessionId: string }): Promise<TogetherWrapUpResult>;
   /** The session's shared report + derived staleness + the pair's agreements ledger (§3.8/§3.9). */

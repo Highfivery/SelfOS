@@ -12,3 +12,4 @@ export * from './togetherAnalysisService';
 export * from './togetherCatalog';
 export * from './adultGate';
 export * from './ynmService';
+export * from './pulseService';

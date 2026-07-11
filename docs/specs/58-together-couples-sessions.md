@@ -394,6 +394,26 @@ figure), signal-aware `dismissKey` (`together:<sessionId>:<updatedAt>`), crisis-
 every provider. The explicit-register variant of the copy never appears here — Home copy stays
 relational.
 
+**BUILT (Phase H1, `feat/together-integrations`).** The pure `computeTogetherHomeNudge(summaries,
+viewerId, now)` (relocated into `@selfos/core/recommendations` so the renderer imports it without the
+host-only `together` barrel) derives the one nudge, prioritized **invite → turn → quiet**: a pending
+invitation the viewer was SENT (`status==='invited' && initiator !== viewer`), an active session where
+it's their turn, else a `complete`/`ended` pair gone >14 days quiet (routes to `/together`, not a
+session). Fed into `PersonRecommendationState.togetherNudge`; the `together-session` provider renders
+relational copy per kind (score invite 88 / turn 84 / quiet 52) with dismissKey
+`together:<kind>:<sessionId|partnerName>:<stamp>`. Home adds `together.own` to its capability snapshot
+
+- loads the Together sessions in its per-person effect, and — because a pending invite is a real,
+  actionable relationship cue — **a person with any Together session is no longer treated as "brand
+  new"** (so the invite surfaces in "For you" even for an otherwise-empty invitee). `HeartHandshake` is
+  the `together` domain icon. **Person-delete reap (§5.6):** `reapTogetherForPerson` (in
+  `togetherService`, called from the bridge's `peopleDelete` after `deletePerson`) removes every
+  `together/sessions/<id>/` the deleted person participated in + every `together/pairs/<pairKey>/`
+  naming them; their own per-person Together data (pulse/YNM/pre-screen/prep) already went with
+  `deletePerson`, and the live-edge re-gate keeps any partner-side orphan unreadable. Tests: 10
+  provider/nudge units + a reap core test + a coreBridge reap-on-delete test + a Home RTL (invite
+  surfaces) + 2 E2E (an invite surfaces on the invitee's Home; delete reaps the session, decrypt).
+
 ### 3.13 Empty/gating states (never silent)
 
 Every prerequisite-absent state gets a calm, actionable explanation (41): no partner edge → no nav

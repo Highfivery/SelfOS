@@ -10020,6 +10020,58 @@ test('together (58) phase G: Pulse logs each partner’s own check-in; the desir
   }
 });
 
+test('together (58) phase H1: a pending Together invitation surfaces on the invitee’s Home (§3.12)', async () => {
+  const { userData, vault } = await seedTogetherReady();
+  const app = await electron.launch({ args: [`--user-data-dir=${userData}`, MAIN], env: e2eEnv() });
+  try {
+    const w = await app.firstWindow();
+    // Ben invites Angel to a Together session.
+    await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByPlaceholder('e.g. Feeling disconnected lately').fill('Reconnecting');
+    await w.getByRole('button', { name: 'Send invitation' }).click();
+
+    // Switch to Angel → her Home "For you" zone surfaces the invitation, named by the inviter.
+    await switchTogetherPerson(w, 'Angel');
+    await w.getByRole('link', { name: 'Home' }).click();
+    const forYou = w.getByRole('region', { name: 'For you' });
+    await expect(forYou.getByText(/Ben invited you to a Together session/i)).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('together (58) phase H1: deleting a participant reaps their Together sessions (§5.6, decrypt)', async () => {
+  const { userData, vault } = await seedTogetherReady();
+  const app = await electron.launch({ args: [`--user-data-dir=${userData}`, MAIN], env: e2eEnv() });
+  try {
+    const w = await app.firstWindow();
+    // Ben (owner) starts a Together session with Angel.
+    await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByPlaceholder('e.g. Feeling disconnected lately').fill('A shared topic');
+    await w.getByRole('button', { name: 'Send invitation' }).click();
+    await expect(w.getByLabel('Message')).toBeVisible();
+
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('no key');
+    expect((await fs.list('together/sessions')).length).toBeGreaterThan(0);
+
+    // Ben deletes Angel from People → the reap runs in the delete handler.
+    await w.getByRole('link', { name: 'People' }).click();
+    await w.getByText('Angel').click();
+    await w.getByRole('button', { name: 'Delete person' }).click();
+
+    // Decrypt-level proof: the shared session folder is gone.
+    await expect.poll(async () => (await fs.list('together/sessions')).length).toBe(0);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('together (58): the private pre-screen holds a flagged person; the partner only sees invited (§8.2)', async () => {
   // Ben's pre-screen is NOT seeded → he must take it first.
   const { userData, vault } = await seedTogetherReady({ clearBenPrescreen: false });

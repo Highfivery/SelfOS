@@ -13,6 +13,7 @@ import { useGoalStore } from '../../../stores/goalStore';
 import { useChallengeStore } from '../../../stores/challengeStore';
 import { useTestStore } from '../../../stores/testStore';
 import { useDiscoveryStore } from '../../../stores/discoveryStore';
+import { useTogetherStore } from '../../../stores/togetherStore';
 import { useSetting } from '../../../settings/useSetting';
 import { aggregateCrisisSignal } from '@selfos/core/coaching';
 import {
@@ -22,6 +23,7 @@ import {
 } from '@selfos/core/challenges';
 import {
   computeMomentum,
+  computeTogetherHomeNudge,
   listRecommendationProviders,
   pendingCelebration,
   rankRecommendations,
@@ -78,6 +80,7 @@ export function Home(): JSX.Element {
   const canDoIntake = useSessionStore((s) => s.can('intake.own'));
   const canTakeTests = useSessionStore((s) => s.can('tests.own'));
   const canTakeChallenges = useSessionStore((s) => s.can('challenges.own'));
+  const canTogether = useSessionStore((s) => s.can('together.own'));
   // The reactive capability snapshot the engine filters gated providers against (§5.2) — built from the
   // active person's `can(...)` checks for the gates the providers use (a new gate adds one line here).
   const capabilities = new Set<string>();
@@ -87,6 +90,7 @@ export function Home(): JSX.Element {
   if (canDoIntake) capabilities.add('intake.own');
   if (canTakeTests) capabilities.add('tests.own'); // 50/51 — take-a-test + wellbeing-checkin gates
   if (canTakeChallenges) capabilities.add('challenges.own'); // 52 — challenge providers' gate
+  if (canTogether) capabilities.add('together.own'); // 58 — the together-session provider's gate
 
   const conversations = useConversationStore((s) => s.conversations);
   const sessionCosts = useConversationStore((s) => s.sessionCosts);
@@ -103,6 +107,7 @@ export function Home(): JSX.Element {
   const adultAcknowledged = useGuidanceStore((s) => s.adultAcknowledged);
   const testCatalog = useTestStore((s) => s.catalog);
   const resultsByTest = useTestStore((s) => s.resultsByTest);
+  const togetherSessions = useTogetherStore((s) => s.sessions);
   const intake = useIntakeStore((s) => s.state);
   const dismissed = useDiscoveryStore((s) => s.dismissed);
 
@@ -137,6 +142,7 @@ export function Home(): JSX.Element {
       // series, the `take-a-test` / `wellbeing-checkin` / `intimacy-exercise` providers, and the momentum.
       // Bridge gates on tests.own → empty when not permitted; the 18+ tests are withheld until acked.
       useTestStore.getState().load(),
+      useTogetherStore.getState().load(), // bridge gates on together.own + a live edge → [] otherwise (58)
       useDiscoveryStore.getState().load(), // recommendation dismissals + celebration signatures
       window.selfos?.coachingGetPrefs().then((p) => {
         if (!cancelled) setProactivity(p?.proactivity ?? 'gentle');
@@ -197,7 +203,10 @@ export function Home(): JSX.Element {
     dreams.length === 0 &&
     approvedInsights.length === 0 &&
     inboxCount === 0 &&
-    goals.length === 0;
+    goals.length === 0 &&
+    // A pending Together invitation (or any couples-session signal) is a real, actionable relationship
+    // cue — such a person is NOT "brand new", so the invite can surface in "For you" (58 §3.12).
+    togetherSessions.length === 0;
 
   const lightActivity = conversations.length + dreams.length + goals.length <= 2;
   const freshness = profileSuggestions.filter((s) => s.kind !== 'depth');
@@ -271,6 +280,10 @@ export function Home(): JSX.Element {
     testResults: takenTests,
     wellbeingCheckinDue: wbCheckin.due,
     ...(wbCheckin.lastAt ? { lastWellbeingCheckinAt: wbCheckin.lastAt } : {}),
+    // Together (58 §3.12) — the couples-session Home nudge (invite / your turn / quiet pair).
+    togetherNudge: activePersonId
+      ? computeTogetherHomeNudge(togetherSessions, activePersonId, now)
+      : null,
   };
 
   const dismissedSet = new Set(dismissed);

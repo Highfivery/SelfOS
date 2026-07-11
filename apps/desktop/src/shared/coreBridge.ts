@@ -281,6 +281,7 @@ import {
   ynmOverlapFor,
   buildPulseView,
   logPulseCheckIn,
+  reapTogetherForPerson,
   pairKeyFor,
   isPreScreenComplete,
   isReportStale,
@@ -1751,6 +1752,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // facts (39-living-memory §4.5). Cleanup only — the read-time re-gate already prevents any leak, so
       // a best-effort failure here is non-fatal. Done from the seam to avoid a people↔insights import cycle.
       await reapOrphanShares(ctx.fs, ctx.key, personId);
+      // Reap the shared-root Together data the person was in (session folders + pair agreements/reports;
+      // their own per-person Together data went with `deletePerson`) — 58 §5.6.
+      await reapTogetherForPerson(ctx.fs, ctx.key, personId);
     },
     relationshipsList: async (): Promise<Relationship[]> => {
       const ctx = await host.vaultAndKey();

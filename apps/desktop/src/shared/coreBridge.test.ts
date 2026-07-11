@@ -5102,6 +5102,17 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(await bridge.togetherList()).toHaveLength(1);
   });
 
+  it('deleting a participant reaps their Together sessions (§5.6 person-delete reap)', async () => {
+    const { host, bridge, ben, angel } = await seedPair();
+    await bridge.togetherCreate({ partnerPersonId: angel });
+    expect(await bridge.togetherList()).toHaveLength(1);
+    // Delete Angel (as the owner Ben) → the shared session folder is reaped.
+    await asPerson(host, ben);
+    await bridge.peopleDelete(angel);
+    const ctx = (await host.host.vaultAndKey())!;
+    expect(await ctx.fs.list('together/sessions')).toHaveLength(0);
+  });
+
   it('pause is non-attributed: the pauser sees onHold; the partner’s view is unchanged (§8.3)', async () => {
     const { host, bridge, ben, angel } = await seedPair();
     const created = await bridge.togetherCreate({ partnerPersonId: angel });

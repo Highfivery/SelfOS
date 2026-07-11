@@ -357,7 +357,7 @@ export function Questionnaires(): JSX.Element {
                                     analyzing={analyzingId === q.id}
                                     onOpen={() => setSelection({ mode: 'edit', id: q.id })}
                                     onToggleFavorite={() => void setFavorite(q.id, !q.favorite)}
-                                    {...(e.sendState
+                                    {...(e.sendState && !e.sendState.answered
                                       ? {
                                           onShare: () =>
                                             setSelection({ mode: 'edit', id: q.id, share: true }),

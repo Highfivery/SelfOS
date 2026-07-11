@@ -1026,6 +1026,38 @@ describe('Questionnaires', () => {
     ).toBeInTheDocument();
   });
 
+  it('Share a link: hidden once the questionnaire has been ANSWERED (§17.14e)', async () => {
+    installMockBridge({
+      questionnairesList: () =>
+        Promise.resolve([
+          {
+            id: 'q1',
+            schemaVersion: 1,
+            version: 1,
+            title: 'Weekly check-in',
+            type: 'general',
+            sensitivity: 'standard',
+            recipient: { kind: 'person', personId: 'p-mara' },
+            questions: [
+              { id: 'qq1', type: 'shortText', prompt: 'How are we doing?', required: true },
+            ],
+            createdAt: 'now',
+            updatedAt: 'now',
+          },
+        ]),
+      // The latest send has been answered → the share affordance should not appear.
+      questionnairesSendStates: () =>
+        Promise.resolve({ q1: { lastSentAt: new Date().toISOString(), total: 1, answered: true } }),
+    });
+    renderApp();
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Weekly check-in/ }));
+    // The locked sent view is shown, but there's nothing left to answer, so no "Share a link" card.
+    expect(await screen.findByText(/questions are locked/i)).toBeInTheDocument();
+    expect(screen.queryByText('Share a link')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /get the link/i })).not.toBeInTheDocument();
+  });
+
   it('enables "Send again" on a sent questionnaire once the cooldown has elapsed (§17.14a)', async () => {
     installMockBridge({
       questionnairesList: () =>

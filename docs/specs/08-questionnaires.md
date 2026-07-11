@@ -2358,6 +2358,12 @@ relayBundle.ts`, kept in sync) and the bundle rebuilt. `relayStatusOf` computes
   preview**, and a **"Share link"** item in the **list-row kebab** (above Delete, shown only when sent) that
   opens the questionnaire and auto-fetches it. Both open the shared `RelayLinkDelivery` (link + PIN + editable
   message + Email/Text/Copy). The reshare/share-link mint is factored into one `reshareLink` helper.
+- **Hidden once ANSWERED (2026-07-11):** the share affordance is for the recipient to answer, so both surfaces
+  (the locked-preview card + the landing card's share icon) hide once the **latest** send is submitted/analyzed
+  — there's nothing left to answer. A re-ask makes a fresh unanswered send and the share returns.
+  `QuestionnaireSendState` gained an additive `answered?: boolean` (the latest send's status, computed in
+  `questionnairesSendStates`); the builder gates the Share card on `!sentState.answered`, and the landing
+  `SentCard`'s `onShare` on `!sendState.answered`.
 - **Tests:** coreBridge (`questionnairesShareLink` re-mints the latest send's link; null before any send),
   RTL (the kebab "Share link" opens + fetches the delivery; the locked preview's "Share a link" button), the
   relay-version bump. **Verified LIVE** (screenshots): the sent compat questionnaire's preview → "Share a link"

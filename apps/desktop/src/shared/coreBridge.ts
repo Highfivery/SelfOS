@@ -2615,15 +2615,31 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) return {};
       const personId = await activePersonId();
       if (!personId) return {};
-      // The active person's own sends, aggregated by questionnaire — latest send time + count. Pure
-      // metadata for the list's "Sent · <date>" badge (08 §17.14); no answers or recipient detail.
+      // The active person's own sends, aggregated by questionnaire — latest send time + count + whether the
+      // LATEST send is answered. Pure metadata for the list's "Sent · <date>" badge + hiding the share-a-link
+      // affordance once answered (08 §17.14); no raw answers or recipient detail.
       const sends = await listAssignments(ctx.fs, ctx.key, { senderPersonId: personId });
-      const states: Record<string, QuestionnaireSendState> = {};
+      interface Acc {
+        lastSentAt: string;
+        total: number;
+        latestStatus: AssignmentStatus;
+      }
+      const acc: Record<string, Acc> = {};
       for (const a of sends) {
-        const prev = states[a.questionnaireId];
-        states[a.questionnaireId] = {
-          lastSentAt: prev && prev.lastSentAt > a.createdAt ? prev.lastSentAt : a.createdAt,
+        const prev = acc[a.questionnaireId];
+        const isLatest = !prev || a.createdAt > prev.lastSentAt;
+        acc[a.questionnaireId] = {
+          lastSentAt: isLatest ? a.createdAt : prev.lastSentAt,
           total: (prev?.total ?? 0) + 1,
+          latestStatus: isLatest ? a.status : (prev?.latestStatus ?? a.status),
+        };
+      }
+      const states: Record<string, QuestionnaireSendState> = {};
+      for (const [qid, a] of Object.entries(acc)) {
+        states[qid] = {
+          lastSentAt: a.lastSentAt,
+          total: a.total,
+          answered: a.latestStatus === 'submitted' || a.latestStatus === 'analyzed',
         };
       }
       return states;

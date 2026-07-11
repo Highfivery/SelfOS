@@ -297,48 +297,39 @@ export function InboxAnswer({
         </div>
       ) : (
         <>
+          {saved ? <Banner tone="info">Saved — you can come back and finish later.</Banner> : null}
+          {error ? <Banner tone="warning">{error}</Banner> : null}
+
+          {/* One question at a time (08 §21.3): the shared wizard owns Back/Next + the action bar; the
+              host supplies the terminal callbacks. Editing → Update answers + Cancel (no Save for later);
+              a fresh answer → Submit + Save for later + Decline. */}
           <QuestionnaireForm
             questions={detail.questionnaire.questions}
             answers={answers}
             loadImage={loadImage}
             onChange={onChange}
             footer={<CrisisFooter />}
-            progress
+            wizard={
+              editing
+                ? {
+                    onSubmit: () => void onUpdate(),
+                    submitLabel: 'Update answers',
+                    onDecline: () => {
+                      setEditing(false);
+                      setError(null);
+                      setAnswers(toAnswerMap(detail.answers)); // discard edits — restore submitted answers
+                    },
+                    declineLabel: 'Cancel',
+                    busy,
+                  }
+                : {
+                    onSubmit: () => void onSubmit(),
+                    onSaveForLater: () => void onSave(),
+                    onDecline: () => setDeclining(true),
+                    busy,
+                  }
+            }
           />
-
-          {saved ? <Banner tone="info">Saved — you can come back and finish later.</Banner> : null}
-          {error ? <Banner tone="warning">{error}</Banner> : null}
-
-          {editing ? (
-            <div className={styles.footer}>
-              <Button variant="primary" onClick={() => void onUpdate()} disabled={busy}>
-                Update answers
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setEditing(false);
-                  setError(null);
-                  setAnswers(toAnswerMap(detail.answers)); // discard edits — restore the submitted answers
-                }}
-                disabled={busy}
-              >
-                Cancel
-              </Button>
-            </div>
-          ) : (
-            <div className={styles.footer}>
-              <Button variant="primary" onClick={() => void onSubmit()} disabled={busy}>
-                Submit
-              </Button>
-              <Button variant="secondary" onClick={() => void onSave()} disabled={busy}>
-                Save for later
-              </Button>
-              <Button variant="secondary" onClick={() => setDeclining(true)} disabled={busy}>
-                Decline
-              </Button>
-            </div>
-          )}
         </>
       )}
     </Stack>

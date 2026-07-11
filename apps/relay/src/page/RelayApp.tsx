@@ -373,16 +373,6 @@ function FormScreen({
   return (
     <div className="card">
       <h1 className="title">{content.questionnaire.title}</h1>
-      <QuestionnaireForm
-        questions={content.questionnaire.questions}
-        answers={answers}
-        loadImage={loadImage}
-        onChange={(id, value: AnswerValue) => {
-          setError(null);
-          setAnswers((prev) => ({ ...prev, [id]: value }));
-        }}
-        progress
-      />
       {error ? (
         <p className="error" role="alert">
           {error}
@@ -417,21 +407,26 @@ function FormScreen({
               Back
             </button>
           </div>
+          <CrisisFooter />
         </div>
       ) : (
-        <div className="row">
-          <button className="button buttonPrimary" type="button" disabled={busy} onClick={onSubmit}>
-            {busy ? 'Sending…' : 'Submit'}
-          </button>
-          <button
-            className="button buttonSecondary"
-            type="button"
-            disabled={busy}
-            onClick={() => setDeclining(true)}
-          >
-            Decline
-          </button>
-        </div>
+        /* One question at a time (08 §21.3): the shared wizard owns Back/Next + the action bar. An
+           external relay recipient can't resume, so there's no "Save for later" — Submit + Decline only. */
+        <QuestionnaireForm
+          questions={content.questionnaire.questions}
+          answers={answers}
+          loadImage={loadImage}
+          onChange={(id, value: AnswerValue) => {
+            setError(null);
+            setAnswers((prev) => ({ ...prev, [id]: value }));
+          }}
+          wizard={{
+            onSubmit,
+            submitLabel: busy ? 'Sending…' : 'Submit',
+            onDecline: () => setDeclining(true),
+            busy,
+          }}
+        />
       )}
     </div>
   );

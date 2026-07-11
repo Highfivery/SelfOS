@@ -130,7 +130,7 @@ describe('Inbox', () => {
     });
   });
 
-  it('blocks submit until required questions are answered', async () => {
+  it('blocks submit until a required question is answered (wizard: the last-step guard, §21.3)', async () => {
     const submit = vi.fn(() => Promise.resolve());
     installMockBridge({
       assignmentsInbox: () => Promise.resolve([item()]),
@@ -140,10 +140,52 @@ describe('Inbox', () => {
     renderInbox();
 
     await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
+    // A single required question → the wizard opens on the last step, so the primary is "Submit".
+    expect(await screen.findByText('Question 1 of 1')).toBeInTheDocument();
     await userEvent.click(await screen.findByRole('button', { name: 'Submit' }));
 
-    expect(screen.getByText(/required question/i)).toBeInTheDocument();
+    // The wizard's final-step guard flags the empty required question and never calls the host submit.
+    expect(screen.getByText(/answer this question before continuing/i)).toBeInTheDocument();
     expect(submit).not.toHaveBeenCalled();
+
+    // Answering it lets the submit through.
+    await userEvent.type(screen.getByLabelText('How are we doing?'), 'Pretty well');
+    await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
+    expect(submit).toHaveBeenCalled();
+  });
+
+  it('steps through multiple questions with Back/Next, blocking a required step (wizard, §21.3)', async () => {
+    const submit = vi.fn(() => Promise.resolve());
+    const twoQ = detail({
+      questionnaire: {
+        ...detail().questionnaire,
+        questions: [
+          { id: 'qq1', type: 'shortText', prompt: 'How are we doing?', required: true },
+          { id: 'qq2', type: 'shortText', prompt: 'Anything else?', required: false },
+        ],
+      },
+    });
+    installMockBridge({
+      assignmentsInbox: () => Promise.resolve([item({ questionCount: 2 })]),
+      assignmentsGet: () => Promise.resolve(twoQ),
+      assignmentsSubmit: submit,
+    });
+    renderInbox();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
+    expect(await screen.findByText('Question 1 of 2')).toBeInTheDocument();
+    // Next blocks the required first step while it's empty.
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getByText(/answer this question before continuing/i)).toBeInTheDocument();
+    // Answer it → advance to step 2 (its optional; the primary is now Submit).
+    await userEvent.type(screen.getByLabelText('How are we doing?'), 'Well');
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(await screen.findByText('Question 2 of 2')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Submit' })).toBeInTheDocument();
+    // Back returns to step 1 with the answer intact.
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(await screen.findByText('Question 1 of 2')).toBeInTheDocument();
+    expect(screen.getByLabelText('How are we doing?')).toHaveValue('Well');
   });
 
   it('declines with an optional note', async () => {

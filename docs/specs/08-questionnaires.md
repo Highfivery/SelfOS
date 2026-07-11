@@ -2930,7 +2930,14 @@ Each its own branch → tests → visual QA → code-review → PR.
    labelled endpoints, text as a soft "{recipient} writes their answer here…" field, choices as quiet outline
    options; matrix/allocation/ranking/roster as static rows) + a calm read-only footer + the crisis footer. No
    answerable/disabled input; author-attached images still render via the shared `QuestionImage`.
-3. **Answering wizard** — the one-question-at-a-time mode in `@selfos/answering` (Inbox + relay). (§21.3)
+3. **Answering wizard** — the one-question-at-a-time mode in `@selfos/answering` (Inbox + relay). (§21.3) —
+   **BUILT**: `QuestionnaireForm` gains a `wizard` prop (a `WizardActions` config). Presence ⇒ one question
+   per step — a progress bar + "Question N of M" title + one large question + a footer action bar
+   (Back · Save for later · Next/Submit · Decline) rendered as plain token-CSS buttons calling host
+   callbacks, so the SAME bar serves the in-app Inbox AND the relay page. Branch-aware (steps over the
+   visible set, a reveal is appended); Next flags a required-but-empty step; focus moves to the step title
+   on change; the crisis footer is on every step. The two hosts drop their own Submit/Save/Decline rows and
+   pass the config (editing → Update answers + Cancel; a relay recipient → Submit + Decline, no Save).
 4. **Results dashboard** — aggregate-first ordering + the expandable "Who answered" list. (§21.4)
 
 ### 21.7 Resolved decisions (2026-07-10b)

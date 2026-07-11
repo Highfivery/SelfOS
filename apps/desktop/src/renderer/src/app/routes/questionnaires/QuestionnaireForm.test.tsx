@@ -405,3 +405,144 @@ describe('QuestionnairePreview — presentation view (08 §21.2)', () => {
     expect(screen.getByText(/shown only when an earlier answer matches/i)).toBeInTheDocument();
   });
 });
+
+/** A stateful host for the wizard mode (one question per step), mirroring the Inbox/relay hosts. */
+function WizardHarness({
+  questions,
+  onSubmit,
+  onSaveForLater,
+  onDecline,
+  submitLabel,
+  declineLabel,
+}: {
+  questions: Question[];
+  onSubmit: () => void;
+  onSaveForLater?: () => void;
+  onDecline?: () => void;
+  submitLabel?: string;
+  declineLabel?: string;
+}): JSX.Element {
+  const [answers, setAnswers] = useState<AnswerMap>({});
+  return (
+    <QuestionnaireForm
+      questions={questions}
+      answers={answers}
+      onChange={(id: string, value: AnswerValue) =>
+        setAnswers((prev) => ({ ...prev, [id]: value }))
+      }
+      wizard={{
+        onSubmit,
+        ...(onSaveForLater ? { onSaveForLater } : {}),
+        ...(onDecline ? { onDecline } : {}),
+        ...(submitLabel ? { submitLabel } : {}),
+        ...(declineLabel ? { declineLabel } : {}),
+      }}
+    />
+  );
+}
+
+describe('QuestionnaireForm — wizard mode (08 §21.3)', () => {
+  const twoQ = [
+    q({ id: 'a', type: 'shortText', prompt: 'First?', required: true }),
+    q({ id: 'b', type: 'shortText', prompt: 'Second?' }),
+  ];
+
+  it('shows one question per step with Back/Next; Next becomes Submit on the last step', async () => {
+    const onSubmit = vi.fn();
+    render(<WizardHarness questions={twoQ} onSubmit={onSubmit} onSaveForLater={vi.fn()} />);
+
+    // Step 1: only the first question, Next (not Submit), Back disabled, Save for later present.
+    expect(screen.getByText('Question 1 of 2')).toBeInTheDocument();
+    expect(screen.getByText('First?')).toBeInTheDocument();
+    expect(screen.queryByText('Second?')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Save for later' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Submit' })).not.toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText('First?'), 'x');
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+    // Step 2 (last): Submit appears, Back enabled.
+    expect(screen.getByText('Question 2 of 2')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back' })).toBeEnabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it('blocks Next on a required-but-empty step and never advances', async () => {
+    render(<WizardHarness questions={twoQ} onSubmit={vi.fn()} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getByRole('alert')).toHaveTextContent(/answer this question before continuing/i);
+    expect(screen.getByText('Question 1 of 2')).toBeInTheDocument(); // still on step 1
+  });
+
+  it('is branch-aware — a revealed follow-up is appended to the steps', async () => {
+    const branched = [
+      q({ id: 'a', type: 'yesNo', prompt: 'Together?' }),
+      q({
+        id: 'b',
+        type: 'shortText',
+        prompt: 'Say more',
+        branch: { whenQuestionId: 'a', equals: true, action: 'show' },
+      }),
+    ];
+    render(<WizardHarness questions={branched} onSubmit={vi.fn()} />);
+    // Before answering, only the trigger is visible → 1 of 1.
+    expect(screen.getByText('Question 1 of 1')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('radio', { name: 'Yes' }));
+    // Answering Yes reveals the follow-up → the total grows to 2, and Next now leads there.
+    expect(screen.getByText('Question 1 of 2')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getByText('Say more')).toBeInTheDocument();
+  });
+
+  it('clamps the step without crashing when a branch answer HIDES a later step you already passed', async () => {
+    // Q1 (yesNo) reveals Q2 only when Yes; Q3 is always visible. Step to Q3, then go Back to Q1 and flip to
+    // No — Q2 vanishes, so the visible set shrinks (3 → 2). The wizard must clamp, not crash or get stuck.
+    const branched = [
+      q({ id: 'a', type: 'yesNo', prompt: 'Together?' }),
+      q({
+        id: 'b',
+        type: 'shortText',
+        prompt: 'Say more',
+        branch: { whenQuestionId: 'a', equals: true, action: 'show' },
+      }),
+      q({ id: 'c', type: 'shortText', prompt: 'Last one' }),
+    ];
+    render(<WizardHarness questions={branched} onSubmit={vi.fn()} />);
+    await userEvent.click(screen.getByRole('radio', { name: 'Yes' })); // reveals Q2 → 3 steps
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getByText('Question 3 of 3')).toBeInTheDocument();
+    // Back to step 1 and flip to No → Q2 disappears; total shrinks to 2 without a crash.
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    await userEvent.click(screen.getByRole('radio', { name: 'No' }));
+    expect(screen.getByText('Question 1 of 2')).toBeInTheDocument();
+    expect(screen.getByText('Together?')).toBeInTheDocument();
+  });
+
+  it('clears the required-empty alert as soon as the current question is answered', async () => {
+    render(<WizardHarness questions={twoQ} onSubmit={vi.fn()} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    // Answering the required question clears the alert without needing to click Next again.
+    await userEvent.type(screen.getByLabelText('First?'), 'x');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('uses the host labels for editing (Update answers + Cancel), no Save for later', () => {
+    render(
+      <WizardHarness
+        questions={[q({ id: 'a', type: 'shortText', prompt: 'Only?' })]}
+        onSubmit={vi.fn()}
+        onDecline={vi.fn()}
+        submitLabel="Update answers"
+        declineLabel="Cancel"
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Update answers' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save for later' })).not.toBeInTheDocument();
+  });
+});

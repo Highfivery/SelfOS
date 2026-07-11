@@ -28,7 +28,11 @@ import { matrixRowKey } from '@selfos/core/schemas';
 import { saveGoal } from '@selfos/core/goals';
 import { listChallenges, recordCheckIn } from '@selfos/core/challenges';
 import { buildContext } from '@selfos/core/people';
-import { captureJointChallengeFromMarker, pairKeyFor } from '@selfos/core/together';
+import {
+  captureJointChallengeFromMarker,
+  captureSuggestionFromMarker,
+  pairKeyFor,
+} from '@selfos/core/together';
 import { queryUsage, recordUsage, setPersonBudget } from '@selfos/core/usage';
 import { ANTHROPIC_API_KEY_ID, OPENAI_API_KEY_ID } from './channels';
 import { DeviceStateSchema } from './schemas';
@@ -5780,5 +5784,41 @@ describe('createCoreBridge — Together (58) foundation', () => {
     // A non-partner (no live edge) sees none.
     await asPerson(host, stranger.id);
     expect(await bridge.togetherJointChallenges({ partnerPersonId: angel })).toHaveLength(0);
+  });
+
+  // ── Phase H3: coach suggestions (§5.6) ───────────────────────────────────────────────────────────
+  it('a coach suggestion is visible to BOTH participants but NOT to a non-participant (§5.6)', async () => {
+    const { host, bridge, angel } = await seedPair();
+    const ctx = (await host.host.vaultAndKey())!;
+    const created = await bridge.togetherCreate({ partnerPersonId: angel });
+    const sessionId = created.ok ? created.session.id : '';
+    // Seed a coach suggestion (the couples turn writes it from a SUGGEST marker in the real flow).
+    await captureSuggestionFromMarker(
+      ctx.fs,
+      ctx.key,
+      sessionId,
+      { kind: 'guide', prompt: 'Try Love Maps together', guideId: 'love-maps' },
+      new Date(),
+    );
+    // Create the non-participant while still the owner (peopleSave needs people.manage).
+    const stranger = await bridge.peopleSave({
+      displayName: 'Stranger',
+      isSubject: true,
+      tags: [],
+    });
+
+    // Ben (a participant) sees it.
+    const benList = await bridge.togetherSuggestions(sessionId);
+    expect(benList).toHaveLength(1);
+    expect(benList[0]?.guideId).toBe('love-maps');
+
+    // Angel (the other participant) sees it too (her accepted session).
+    await asPerson(host, angel);
+    await bridge.togetherAccept(sessionId);
+    expect(await bridge.togetherSuggestions(sessionId)).toHaveLength(1);
+
+    // A non-participant sees none (session not accessible).
+    await asPerson(host, stranger.id);
+    expect(await bridge.togetherSuggestions(sessionId)).toHaveLength(0);
   });
 });

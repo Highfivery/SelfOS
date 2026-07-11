@@ -96,6 +96,18 @@ area","checkInDays":N}]], where comfort is 1 (gentle) to 5 (a big stretch) and c
 check in. Only when BOTH clearly commit together in the open conversation — never from a private aside, never \
 one-sided. This token is a silent app signal, never shown to either partner; never mention or explain it.`;
 
+/**
+ * Teach the coach the SUGGESTION convention (§5.6 — the SUGGEST marker). When a guided exercise or a
+ * compatibility check-in would genuinely help this pair, the coach can drop a suggestion CARD they can act on.
+ */
+export const SUGGEST_INSTRUCTION = `When a specific next step would clearly help this pair — a guided exercise \
+from their Together catalog, or a short compatibility check-in on a topic they keep circling — you may silently \
+append (at the very end of the reply) the exact token [[SELFOS:SUGGEST:{"kind":"guide"|"questionnaire","prompt":\
+"a short, warm phrasing of the suggestion","guideId":"the catalog id if kind is guide","topic":"a short topic \
+if kind is questionnaire"}]]. This drops a card they can choose to act on — it NEVER sends or starts anything on \
+its own. Suggest sparingly, only when it truly fits, never from a private aside. The token is a silent app \
+signal, never shown; never mention or explain it.`;
+
 /** The per-participant confidentiality contract (§6.3 step 3) — prefixes each person's own context block. */
 export function confidentialityContract(name: string): string {
   return `The following is private background about ${name}. Use it to shape your support. Never quote, \
@@ -133,6 +145,7 @@ export async function buildTogetherSystemPrompt(
     TOGETHER_ADDENDUM,
     AGREEMENT_INSTRUCTION,
     JOINT_CHALLENGE_INSTRUCTION,
+    SUGGEST_INSTRUCTION,
   ];
 
   // A guided couples session (§3.10) foregrounds its group's life-areas for per-call fact selection; a

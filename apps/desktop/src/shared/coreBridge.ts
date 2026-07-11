@@ -155,6 +155,7 @@ import {
   type TogetherYnmStatus,
   type TogetherYnmOverlap,
   type TogetherPulseView,
+  type TogetherSuggestion,
   TogetherYnmInputSchema,
   TogetherPulseLogInputSchema,
   TogetherWrapUpInputSchema,
@@ -284,6 +285,7 @@ import {
   reapTogetherForPerson,
   listJointChallenges,
   type JointChallengeStatus,
+  listSuggestions,
   pairKeyFor,
   isPreScreenComplete,
   isReportStale,
@@ -2586,6 +2588,18 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // records to derive the cross-partner "both checked in" status — never any other challenge content.
       if (!(await togetherEdgeLive(c.fs, c.key, c.personId, [partnerPersonId]))) return [];
       return listJointChallenges(c.fs, c.key, [c.personId, partnerPersonId]);
+    },
+    togetherSuggestions: async (sessionId): Promise<TogetherSuggestion[]> => {
+      const c = await togetherCtx();
+      if (!c) return [];
+      // Session-scoped: only a participant with a live edge sees the coach's suggestion cards (§5.2).
+      const session = await accessibleTogetherSession(
+        c.fs,
+        c.key,
+        c.personId,
+        z.string().min(1).parse(sessionId),
+      );
+      return session ? listSuggestions(c.fs, c.key, session.id) : [];
     },
     togetherWrapUp: async (input): Promise<TogetherWrapUpResult> => {
       const { sessionId } = TogetherWrapUpInputSchema.parse(input);

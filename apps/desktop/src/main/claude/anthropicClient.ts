@@ -560,6 +560,12 @@ export function fakeClaudeClient(): ClaudeClient {
           reply +=
             ' [[SELFOS:CHALLENGE:{"action":"Share one appreciation a day","comfort":2,"lifeArea":"Relationships","checkInDays":7}]]';
         }
+        // 58 §5.6: when a next step would help (a "suggest"/"idea" ask), append a SUGGEST marker so an E2E can
+        // drive the suggestion-card flow. It NEVER auto-acts. Stripped from the reply.
+        if (/suggest|idea/i.test(userText)) {
+          reply +=
+            ' [[SELFOS:SUGGEST:{"kind":"guide","prompt":"Try the Love Maps exercise together","guideId":"love-maps"}]]';
+        }
         for (const word of reply.split(' ')) onDelta(`${word} `);
         return Promise.resolve({
           text: reply,

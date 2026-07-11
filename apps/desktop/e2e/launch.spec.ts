@@ -10118,6 +10118,35 @@ test('together (58) phase H2: a couples turn mints a JOINT challenge for both pa
   }
 });
 
+test('together (58) phase H3: a coach SUGGESTION card appears and "Start this exercise" opens a guided session (§5.6)', async () => {
+  const { userData, vault } = await seedTogetherReady();
+  const app = await electron.launch({ args: [`--user-data-dir=${userData}`, MAIN], env: e2eEnv() });
+  try {
+    const w = await app.firstWindow();
+    // Ben starts a session + asks for an idea → the fake couples coach appends a SUGGEST marker → a suggestion
+    // card renders (nothing auto-acts). The marker never shows in the reply.
+    await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByPlaceholder('e.g. Feeling disconnected lately').fill('Reconnecting');
+    await w.getByRole('button', { name: 'Send invitation' }).click();
+    await w.getByLabel('Message').fill('Any ideas for something we could try together?');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/I hear you/)).toBeVisible();
+    await expect(w.getByText(/SELFOS:SUGGEST/)).toHaveCount(0); // the marker never shows
+
+    // The suggestion card appears with an explicit action (never auto-acts).
+    await expect(w.getByRole('heading', { name: 'Ideas from your coach' })).toBeVisible();
+    await expect(w.getByText('Try the Love Maps exercise together')).toBeVisible();
+
+    // "Start this exercise" creates + opens a NEW guided Together session (the Love Maps opener shows).
+    await w.getByRole('button', { name: 'Start this exercise' }).click();
+    await expect(w.getByLabel('Message')).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('together (58): the private pre-screen holds a flagged person; the partner only sees invited (§8.2)', async () => {
   // Ben's pre-screen is NOT seeded → he must take it first.
   const { userData, vault } = await seedTogetherReady({ clearBenPrescreen: false });

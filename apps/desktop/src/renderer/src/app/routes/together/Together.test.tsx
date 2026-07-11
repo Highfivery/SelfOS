@@ -17,6 +17,7 @@ import { TogetherCatalog } from './TogetherCatalog';
 import { TogetherIntimacy } from './TogetherIntimacy';
 import { TogetherPulse } from './TogetherPulse';
 import { TogetherJointChallenges } from './TogetherJointChallenges';
+import { TogetherSuggestions } from './TogetherSuggestions';
 import type {
   Agreement,
   SharedReport,
@@ -220,6 +221,23 @@ describe('TogetherThread (§3.6)', () => {
     );
     // Turn pill carries text.
     expect(within(screen.getByText('Your turn')).getByText('Your turn')).toBeInTheDocument();
+  });
+
+  it('strips coach markers from the LIVE streaming bubble — a trailing SUGGEST never flashes (§5.6)', () => {
+    installMockBridge();
+    setActivePerson();
+    useTogetherStore.setState({
+      sending: true,
+      streaming:
+        'Here’s an idea. [[SELFOS:SUGGEST:{"kind":"guide","prompt":"Try Love Maps","guideId":"love-maps"}]]',
+    });
+    render(
+      <MemoryRouter>
+        <TogetherThread session={view({ messages: [] })} onPrep={() => {}} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText('Here’s an idea.')).toBeInTheDocument();
+    expect(screen.queryByText(/SELFOS:SUGGEST/)).toBeNull(); // the raw marker never shows mid-stream
   });
 
   it('renders a stepper for a structured guided session, marking the current step (§3.10)', () => {
@@ -488,6 +506,79 @@ async function waitForNoJointCard(container: HTMLElement): Promise<void> {
   await new Promise((r) => setTimeout(r, 0));
   expect(within(container).queryByText('Joint challenges')).toBeNull();
 }
+
+describe('TogetherSuggestions (§5.6)', () => {
+  it('renders a guide suggestion with a Start action; a questionnaire suggestion with a check-in doorway', async () => {
+    installMockBridge({
+      togetherSuggestions: () =>
+        Promise.resolve([
+          {
+            id: 's1',
+            schemaVersion: 1,
+            sessionId: 'sess',
+            kind: 'guide' as const,
+            prompt: 'Try Love Maps together',
+            guideId: 'love-maps',
+            createdAt: 'now',
+          },
+          {
+            id: 's2',
+            schemaVersion: 1,
+            sessionId: 'sess',
+            kind: 'questionnaire' as const,
+            prompt: 'A check-in on chores',
+            topic: 'chores',
+            createdAt: 'now',
+          },
+        ]),
+    });
+    render(
+      <MemoryRouter>
+        <TogetherSuggestions sessionId="sess" partnerId="partner" />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText('Try Love Maps together')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start this exercise' })).toBeInTheDocument();
+    expect(screen.getByText('A check-in on chores')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open a check-in' })).toBeInTheDocument();
+  });
+
+  it('a guide suggestion with no startable guideId is a plain prompt card — NO action button', async () => {
+    installMockBridge({
+      togetherSuggestions: () =>
+        Promise.resolve([
+          {
+            id: 's1',
+            schemaVersion: 1,
+            sessionId: 'sess',
+            kind: 'guide' as const, // adult/unknown guide → guideId dropped host-side
+            prompt: 'A desire exercise',
+            createdAt: 'now',
+          },
+        ]),
+    });
+    render(
+      <MemoryRouter>
+        <TogetherSuggestions sessionId="sess" partnerId="partner" />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText('A desire exercise')).toBeInTheDocument();
+    // No "Start this exercise" AND no wrong "Open a check-in" doorway on a degraded guide card.
+    expect(screen.queryByRole('button', { name: 'Start this exercise' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Open a check-in' })).toBeNull();
+  });
+
+  it('self-hides when there are no suggestions', async () => {
+    installMockBridge({ togetherSuggestions: () => Promise.resolve([]) });
+    const { container } = render(
+      <MemoryRouter>
+        <TogetherSuggestions sessionId="sess" partnerId="partner" />
+      </MemoryRouter>,
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    expect(within(container).queryByText('Ideas from your coach')).toBeNull();
+  });
+});
 
 describe('TogetherReflection (§3.8/§3.9)', () => {
   const report: SharedReport = {

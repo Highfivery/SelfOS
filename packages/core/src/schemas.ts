@@ -3309,6 +3309,19 @@ export const TogetherPulseLogInputSchema = z.object({
 });
 export type TogetherPulseLogInput = z.infer<typeof TogetherPulseLogInputSchema>;
 
+/** A coach SUGGESTION artifact (58 §5.6) — a write-once card in the session; NEVER auto-acts. One writer. */
+export const TogetherSuggestionSchema = z.object({
+  id: z.string().min(1),
+  schemaVersion: z.literal(1),
+  sessionId: z.string().min(1),
+  kind: z.enum(['guide', 'questionnaire']),
+  prompt: z.string().min(1), // the coach's human phrasing shown on the card
+  guideId: z.string().optional(), // a `guide` suggestion → the Together catalog entry to start
+  topic: z.string().optional(), // a `questionnaire` suggestion → a topic to seed a compatibility check-in
+  createdAt: z.string(),
+});
+export type TogetherSuggestion = z.infer<typeof TogetherSuggestionSchema>;
+
 /** Save (create/edit/retire) an agreement — inline on the ledger (§11 #2). `id` absent ⇒ create. */
 export const TogetherSaveAgreementInputSchema = z.object({
   sessionId: z.string().min(1),

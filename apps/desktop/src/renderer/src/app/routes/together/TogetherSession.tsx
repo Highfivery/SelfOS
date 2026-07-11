@@ -9,6 +9,7 @@ import { PreScreenForm } from './PreScreenForm';
 import { PrepPanel } from './PrepPanel';
 import { TogetherThread } from './TogetherThread';
 import { TogetherReflection } from './TogetherReflection';
+import { TogetherSuggestions } from './TogetherSuggestions';
 import { useSetting } from '../../../settings/useSetting';
 import { aiKeyResolved } from '../../aiAvailability';
 import styles from './Together.module.css';
@@ -166,6 +167,7 @@ export function TogetherSession(): JSX.Element {
         </Text>
       </div>
       <TogetherThread session={open} onPrep={() => setPrepOpen(true)} />
+      {other ? <TogetherSuggestions sessionId={open.id} partnerId={other.personId} /> : null}
       <TogetherReflection
         sessionId={open.id}
         memoryEnabled={memoryEnabled !== false}

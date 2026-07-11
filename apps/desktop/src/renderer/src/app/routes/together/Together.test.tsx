@@ -13,7 +13,8 @@ import { PreScreenForm } from './PreScreenForm';
 import { InvitationCeremony } from './InvitationCeremony';
 import { TogetherThread } from './TogetherThread';
 import { TogetherReflection } from './TogetherReflection';
-import type { Agreement, SharedReport } from '@shared/schemas';
+import { TogetherCatalog } from './TogetherCatalog';
+import type { Agreement, SharedReport, TogetherCatalogEntry } from '@shared/schemas';
 import { useTogetherStore } from '../../../stores/togetherStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
@@ -213,6 +214,32 @@ describe('TogetherThread (§3.6)', () => {
     expect(within(screen.getByText('Your turn')).getByText('Your turn')).toBeInTheDocument();
   });
 
+  it('renders a stepper for a structured guided session, marking the current step (§3.10)', () => {
+    installMockBridge();
+    setActivePerson();
+    render(
+      <MemoryRouter>
+        <TogetherThread
+          session={view({
+            guide: {
+              id: 'love-maps',
+              title: 'Love Maps',
+              framework: 'Gottman',
+              kind: 'structured',
+              steps: ['Warm up', 'Ask & answer', 'Go deeper'],
+            },
+            guideStep: 1,
+          })}
+          onPrep={() => {}}
+        />
+      </MemoryRouter>,
+    );
+    // The guide title leads the thread; the stepper lists every step; step index 1 is current.
+    expect(screen.getByText('Love Maps')).toBeInTheDocument();
+    expect(screen.getByText('Ask & answer').closest('li')).toHaveAttribute('aria-current', 'step');
+    expect(screen.getByText('Warm up').closest('li')).toHaveAttribute('data-state', 'done');
+  });
+
   it('exposes a "Prep privately" affordance that opens the private prep space (§3.7)', async () => {
     installMockBridge();
     setActivePerson();
@@ -225,6 +252,47 @@ describe('TogetherThread (§3.6)', () => {
     const prep = screen.getByRole('button', { name: /Prep privately/ });
     await userEvent.click(prep);
     expect(opened).toBe(1);
+  });
+});
+
+describe('TogetherCatalog (§3.10)', () => {
+  const entry = (over: Partial<TogetherCatalogEntry>): TogetherCatalogEntry => ({
+    id: 'love-maps',
+    group: 'together-connect',
+    groupTitle: 'Connect',
+    title: 'Love Maps',
+    framework: 'Gottman',
+    blurb: 'Take turns learning each other’s world.',
+    kind: 'structured',
+    adult: false,
+    ...over,
+  });
+  const catalog = [
+    entry({}),
+    entry({
+      id: 'four-horsemen',
+      group: 'together-repair',
+      groupTitle: 'Repair',
+      title: 'Four Horsemen',
+      kind: 'chat',
+      blurb: 'Spot four habits.',
+    }),
+  ];
+
+  it('groups cards by their group title, filters by search, and fires onPick', async () => {
+    let picked = '';
+    render(<TogetherCatalog catalog={catalog} selectedId={null} onPick={(e) => (picked = e.id)} />);
+    expect(screen.getByText('Connect')).toBeInTheDocument();
+    expect(screen.getByText('Repair')).toBeInTheDocument();
+    expect(screen.getByText('Love Maps')).toBeInTheDocument();
+
+    // Search filters to a single group.
+    await userEvent.type(screen.getByLabelText('Search guided sessions'), 'horsemen');
+    expect(screen.queryByText('Love Maps')).not.toBeInTheDocument();
+    expect(screen.getByText('Four Horsemen')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText('Four Horsemen'));
+    expect(picked).toBe('four-horsemen');
   });
 });
 

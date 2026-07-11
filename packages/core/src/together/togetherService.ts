@@ -7,12 +7,14 @@ import {
   TogetherSessionSchema,
   type AttachmentRef,
   type ParticipantState,
+  type TogetherGuideView,
   type TogetherMessage,
   type TogetherMessageView,
   type TogetherSession,
   type TogetherStatus,
 } from '../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
+import { getTogetherGuide } from './togetherCatalog';
 
 // ── Together session/message/state CRUD + the viewer-projection derivations (58 §5.1) ─────────────
 // Storage layout (§4.1):
@@ -96,6 +98,19 @@ export async function createSession(
     rulesAckAt: at,
     updatedAt: at,
   });
+  // A guided couples session (§3.10) opens with the guide's STATIC coach message (no model call) — a shared,
+  // non-aside message both partners see once the invitation is accepted.
+  const guide = input.guideId ? getTogetherGuide(input.guideId) : undefined;
+  if (guide) {
+    await appendMessage(fs, key, id, {
+      id: uuid(),
+      schemaVersion: 1,
+      authorPersonId: input.initiatorPersonId,
+      role: 'assistant',
+      content: guide.openingMessage,
+      ts: at,
+    });
+  }
   return session;
 }
 
@@ -309,6 +324,33 @@ export function isInvitationExpired(createdAt: string, now: Date): boolean {
   const created = Date.parse(createdAt);
   if (Number.isNaN(created)) return false;
   return now.getTime() - created > INVITE_EXPIRY_DAYS * DAY_MS;
+}
+
+/**
+ * The DERIVED current step of a structured guided couples session (§3.10) — the `guideStep` of the newest coach
+ * message that declared one, else 0. Never stored on the single-writer session.enc; recomputed per read.
+ */
+export function guideStepFor(messages: TogetherMessage[]): number {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m && m.role === 'assistant' && m.guideStep !== undefined) return m.guideStep;
+  }
+  return 0;
+}
+
+/** The renderer-facing guide meta for a session's `guideId` (§3.10), or undefined for a free session. */
+export function togetherGuideView(guideId: string | undefined): TogetherGuideView | undefined {
+  if (!guideId) return undefined;
+  const guide = getTogetherGuide(guideId);
+  if (!guide) return undefined;
+  return {
+    id: guide.id,
+    title: guide.title,
+    framework: guide.framework,
+    kind: guide.kind,
+    ...(guide.steps ? { steps: guide.steps } : {}),
+    ...(guide.adult ? { adult: true } : {}),
+  };
 }
 
 /** The newest mutually-visible (non-aside) human message ts — the shared report's staleness clock (§3.8). */

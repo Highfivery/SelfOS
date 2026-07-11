@@ -4,6 +4,7 @@ import type {
   AgreementStatus,
   AttachmentRef,
   Person,
+  TogetherCatalogEntry,
   TogetherCreateResult,
   TogetherPreScreenResult,
   TogetherPreScreenView,
@@ -54,6 +55,8 @@ interface TogetherState {
   sending: boolean;
   error: string | null;
   prescreen: TogetherPreScreenView | null;
+  /** The couples guided catalog cards the active person may start (§3.10); 18+ withheld host-side. */
+  catalog: TogetherCatalogEntry[];
   /** The open session's wrap-up report + derived staleness + the pair agreements ledger (§3.8/§3.9). */
   reportView: TogetherReportView;
   /** True while a wrap-up analyze pass is running (the initiator-billed spend). */
@@ -63,7 +66,12 @@ interface TogetherState {
   refresh: () => Promise<void>;
   openSession: (id: string) => Promise<void>;
   closeSession: () => void;
-  create: (partnerPersonId: string, topic?: string) => Promise<TogetherCreateResult>;
+  create: (
+    partnerPersonId: string,
+    topic?: string,
+    guideId?: string,
+  ) => Promise<TogetherCreateResult>;
+  loadCatalog: () => Promise<void>;
   accept: (id: string) => Promise<void>;
   decline: (id: string) => Promise<void>;
   sendMessage: (
@@ -130,6 +138,7 @@ export const useTogetherStore = create<TogetherState>((set, get) => ({
   sending: false,
   error: null,
   prescreen: null,
+  catalog: [],
   reportView: EMPTY_REPORT,
   wrappingUp: false,
 
@@ -158,16 +167,21 @@ export const useTogetherStore = create<TogetherState>((set, get) => ({
     if (open) void window.selfos?.togetherMarkRead({ sessionId: id, at: new Date().toISOString() });
   },
   closeSession: () => set({ open: null, streaming: '', error: null }),
-  create: async (partnerPersonId, topic) => {
+  create: async (partnerPersonId, topic, guideId) => {
     const result = (await window.selfos?.togetherCreate({
       partnerPersonId,
       ...(topic && topic.trim() ? { topic: topic.trim() } : {}),
+      ...(guideId ? { guideId } : {}),
     })) ?? { ok: false as const, reason: 'NOT_READY' as const, message: 'SelfOS isn’t ready.' };
     if (result.ok) {
       set({ open: result.session });
       await get().refresh();
     }
     return result;
+  },
+  loadCatalog: async () => {
+    const catalog = (await window.selfos?.togetherCatalog()) ?? [];
+    set({ catalog });
   },
   accept: async (id) => {
     const view = (await window.selfos?.togetherAccept(id)) ?? null;
@@ -271,6 +285,7 @@ export const useTogetherStore = create<TogetherState>((set, get) => ({
       sending: false,
       error: null,
       prescreen: null,
+      catalog: [],
       reportView: EMPTY_REPORT,
       wrappingUp: false,
     }),

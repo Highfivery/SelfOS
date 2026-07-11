@@ -149,6 +149,7 @@ import {
   TogetherStoreAttachmentSchema,
   TogetherGetAttachmentSchema,
   type Agreement,
+  type TogetherCatalogEntry,
   type TogetherReportView,
   type TogetherWrapUpResult,
   TogetherWrapUpInputSchema,
@@ -265,6 +266,10 @@ import {
   getReport as getTogetherReport,
   getSession as getTogetherSession,
   getTogetherAttachment,
+  getTogetherGuide,
+  guideStepFor,
+  togetherCatalogFor,
+  togetherGuideView,
   isPreScreenComplete,
   isReportStale,
   isTogetherAttachmentPath,
@@ -1064,10 +1069,15 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     const summary = await buildTogetherSummary(fs, key, session, viewerId, now);
     const states = await listTogetherStates(fs, key, session.id);
     const messages = await listTogetherMessages(fs, key, session.id);
+    // A guided couples session (§3.10): resolve the guide meta + DERIVE the current step from the newest coach
+    // message that declared one (never stored on session.enc). The stepper renders from these.
+    const guide = togetherGuideView(session.guideId);
     return {
       ...summary,
       messages: projectTogetherMessages(messages, viewerId),
       viewerAcked: Boolean(states.get(viewerId)?.rulesAckAt),
+      ...(guide ? { guide } : {}),
+      ...(guide?.kind === 'structured' ? { guideStep: guideStepFor(messages) } : {}),
     };
   };
 
@@ -2114,6 +2124,19 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!(await togetherPreScreenClears(ctx.fs, ctx.key, personId))) {
         return { ok: false, reason: 'PRESCREEN', message: 'Take the private check first.' };
       }
+      // A guided couples session (§3.10): the guideId must resolve to a real catalog entry. The 18+
+      // `together-desire` group is refused here in Phase E (it lands, ack-gated, in Phase F) — the withholding
+      // is host-side, never merely a hidden UI card.
+      if (guideId) {
+        const guide = getTogetherGuide(guideId);
+        if (!guide || guide.adult) {
+          return {
+            ok: false,
+            reason: 'NOT_ALLOWED',
+            message: 'That guided session isn’t available.',
+          };
+        }
+      }
       const session = await createTogetherSession(
         ctx.fs,
         ctx.key,
@@ -2358,6 +2381,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     },
 
     // --- Phase D: wrap-up + the pair agreements ledger (58 §3.8/§3.9) ---
+    togetherCatalog: async (): Promise<TogetherCatalogEntry[]> => {
+      const c = await togetherCtx();
+      if (!c) return [];
+      // Phase E: the 18+ `together-desire` group is withheld (allowAdult:false); Phase F passes both acks.
+      return togetherCatalogFor({ allowAdult: false });
+    },
     togetherWrapUp: async (input): Promise<TogetherWrapUpResult> => {
       const { sessionId } = TogetherWrapUpInputSchema.parse(input);
       const c = await togetherCtx();

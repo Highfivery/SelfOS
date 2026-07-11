@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Heart } from 'lucide-react';
-import type { TogetherSessionSummary } from '@shared/schemas';
+import { Heart, X } from 'lucide-react';
+import type { TogetherCatalogEntry, TogetherSessionSummary } from '@shared/schemas';
 import {
   Banner,
   Button,
   Card,
   Heading,
+  IconButton,
   Inline,
   Select,
   Stack,
@@ -17,6 +18,7 @@ import { CrisisFooter } from '../sessions/CrisisFooter';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useTogetherStore } from '../../../stores/togetherStore';
 import { PreScreenForm } from './PreScreenForm';
+import { TogetherCatalog } from './TogetherCatalog';
 import { TOGETHER_FRAME_LINE } from './roomRules';
 import styles from './Together.module.css';
 
@@ -73,7 +75,13 @@ function SessionCard({
   );
 }
 
-function StartCard(): JSX.Element {
+function StartCard({
+  guide,
+  onClearGuide,
+}: {
+  guide: TogetherCatalogEntry | null;
+  onClearGuide: () => void;
+}): JSX.Element {
   const navigate = useNavigate();
   const partners = useTogetherStore((s) => s.partners);
   const create = useTogetherStore((s) => s.create);
@@ -91,7 +99,7 @@ function StartCard(): JSX.Element {
     setBusy(true);
     setError(null);
     try {
-      const result = await create(chosen, topic);
+      const result = await create(chosen, topic, guide?.id);
       if (result.ok) navigate(`/together/session/${result.session.id}`);
       else setError(result.message);
     } finally {
@@ -104,7 +112,19 @@ function StartCard(): JSX.Element {
   return (
     <Card>
       <Stack gap={2}>
-        <Heading level={2}>Start a session</Heading>
+        <Inline gap={2} align="center" justify="between">
+          <Heading level={2}>{guide ? `Start “${guide.title}”` : 'Start a session'}</Heading>
+          {guide ? (
+            <IconButton aria-label="Clear guided session" onClick={onClearGuide}>
+              <X size={16} aria-hidden="true" />
+            </IconButton>
+          ) : null}
+        </Inline>
+        {guide ? (
+          <Text size="sm" tone="secondary">
+            A guided practice inspired by {guide.framework}, for the two of you.
+          </Text>
+        ) : null}
         {eligible.length > 1 ? (
           <label className={styles.field}>
             <Text size="sm" weight={600}>
@@ -121,19 +141,21 @@ function StartCard(): JSX.Element {
         ) : eligible.length === 1 ? (
           <Text tone="secondary">With {eligible[0]?.displayName}</Text>
         ) : null}
-        <label className={styles.field}>
-          <Text size="sm" weight={600}>
-            What’s on your mind?{' '}
-            <Text as="span" tone="secondary">
-              (optional)
+        {guide ? null : (
+          <label className={styles.field}>
+            <Text size="sm" weight={600}>
+              What’s on your mind?{' '}
+              <Text as="span" tone="secondary">
+                (optional)
+              </Text>
             </Text>
-          </Text>
-          <TextInput
-            value={topic}
-            placeholder="e.g. Feeling disconnected lately"
-            onChange={(e) => setTopic(e.target.value)}
-          />
-        </label>
+            <TextInput
+              value={topic}
+              placeholder="e.g. Feeling disconnected lately"
+              onChange={(e) => setTopic(e.target.value)}
+            />
+          </label>
+        )}
         {error ? <Banner tone="danger">{error}</Banner> : null}
         {ineligible.length > 0 ? (
           <Text size="xs" tone="secondary">
@@ -157,12 +179,16 @@ export function Together(): JSX.Element {
   const hasPartner = useTogetherStore((s) => s.hasPartner);
   const sessions = useTogetherStore((s) => s.sessions);
   const prescreen = useTogetherStore((s) => s.prescreen);
+  const catalog = useTogetherStore((s) => s.catalog);
   const refresh = useTogetherStore((s) => s.refresh);
+  const [selectedGuide, setSelectedGuide] = useState<TogetherCatalogEntry | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     void useTogetherStore.getState().load();
     void useTogetherStore.getState().loadPrescreen();
+    void useTogetherStore.getState().loadCatalog();
+    setSelectedGuide(null);
   }, [myId]);
 
   // Near-live refresh (58 §3.6): a synced partner change re-fetches the list (debounced), the first data
@@ -215,7 +241,19 @@ export function Together(): JSX.Element {
         {needsScreen ? (
           <PreScreenForm onCleared={() => void useTogetherStore.getState().loadPrescreen()} />
         ) : (
-          <StartCard />
+          <>
+            <StartCard guide={selectedGuide} onClearGuide={() => setSelectedGuide(null)} />
+            {catalog.length > 0 ? (
+              <TogetherCatalog
+                catalog={catalog}
+                selectedId={selectedGuide?.id ?? null}
+                onPick={(entry) => {
+                  setSelectedGuide(entry);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+              />
+            ) : null}
+          </>
         )}
 
         {sessions.length > 0 ? (

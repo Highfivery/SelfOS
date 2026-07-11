@@ -1100,9 +1100,19 @@ Remaining (build-time; ask before the relevant phase):
 > the MAIN twin (reflection + non-sexual facts, no `restricted`) feeds the partner's context in every topic; a
 > companion **INTIMACY twin** (sexual facts, `restricted` + `lifeArea:'Intimacy'`) is own-context-only +
 > intimacy-topic-gated (the §50 relevance-gate is fail-closed on a missing `lifeArea`, so a single unlabelled
-> restricted fact would otherwise withhold the whole reflection). **The live-model adversarial pass (§13 first
-> run) is a manual DoD item that needs a real API key — flagged for the user; the offline suite is green.**
-> **Phases E–H remain.**
+> restricted fact would otherwise withhold the whole reflection). **Phase E BUILT** on `feat/together-catalog`:
+> the **Together guided catalog** (`togetherCatalog.ts` — `together-connect` + `together-repair` groups, 8
+> entries; the 18+ `together-desire` group + its entries land in Phase F) — SEPARATE from the solo
+> `guidedCatalog`; the `adult === (group === 'together-desire')` invariant is tested. A guided couples session is
+> an ordinary Together session carrying `guideId`: `createSession` seeds the guide's **static opener** (no model
+> call); `buildTogetherSystemPrompt` appends the guide addendum + (structured) the `[[SELFOS:STEP:n]]` step
+> convention AFTER context/grounding; the couples turn **stamps the declared step** onto the coach message
+> (`TogetherMessage.guideStep?`, additive) — never on an aside — and the **current step is DERIVED** from the
+> newest coach message (`guideStepFor`), keeping session.enc single-writer. The 18+ group is **withheld
+> host-side** (`togetherCatalog()` bridge + `togetherCreate` refuses an adult/unknown `guideId`). Renderer: the
+> grouped, searchable `TogetherCatalog` on the Together home (binds a guide to the start form) + a structured
+> **stepper** in the thread. **The live-model adversarial pass (§13 first run) is a manual DoD item that needs a
+> real API key — flagged for the user; the offline suite is green.** **Phases F–H remain.**
 
 Each phase lands via the standard slice workflow (branch → implement + tests → quality-gate →
 code-reviewer → sync-docs → PR → squash-merge), meets the full §7-CLAUDE.md DoD (E2E written AND

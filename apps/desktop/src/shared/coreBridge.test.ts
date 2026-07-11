@@ -259,7 +259,11 @@ function makeHost(): {
             crisisFlag: false,
             distressSignal: false,
           })
-        : 'hi';
+        : // A guided couples turn: append a step marker when the user asks to move to "step two" (§3.10),
+          // so the derived-step test bites. Stripped from the saved text by the service.
+          /step two/i.test(userText)
+          ? 'On to the next step. [[SELFOS:STEP:1]]'
+          : 'hi';
       onDelta('hi');
       return Promise.resolve({
         text,
@@ -5507,5 +5511,49 @@ describe('createCoreBridge — Together (58) foundation', () => {
       await bridge.togetherSaveAgreement({ sessionId, text: 'sneaky', status: 'standing' }),
     ).toBeNull();
     expect((await bridge.togetherGetReport({ sessionId })).report).toBeNull();
+  });
+
+  // ── Phase E: guided couples catalog (§3.10) ────────────────────────────────────────────────────
+  it('starts a structured guided session: seeds the opener, resolves the guide view + derives the step; a chat guide has no stepper; unknown/adult refused (§3.10)', async () => {
+    const { host, bridge, ben, angel } = await seedPair();
+    // The catalog withholds the 18+ group host-side (none in Phase E) and returns Connect + Repair cards.
+    const catalog = await bridge.togetherCatalog();
+    expect(catalog.length).toBeGreaterThan(0);
+    expect(catalog.every((c) => !c.adult)).toBe(true);
+    expect(catalog.some((c) => c.id === 'love-maps' && c.kind === 'structured')).toBe(true);
+
+    // Start a structured guided session.
+    const created = await bridge.togetherCreate({ partnerPersonId: angel, guideId: 'love-maps' });
+    expect(created.ok).toBe(true);
+    const sessionId = created.ok ? created.session.id : '';
+    // The static opener is seeded as a shared coach message (no model call); the guide view resolves.
+    await asPerson(host, angel);
+    await bridge.togetherAccept(sessionId);
+    const view = await bridge.togetherGet(sessionId);
+    expect(view?.guide?.id).toBe('love-maps');
+    expect(view?.guide?.kind).toBe('structured');
+    expect(
+      view?.messages.some((m) => m.role === 'assistant' && m.content.includes('Love Maps')),
+    ).toBe(true);
+    expect(view?.guideStep).toBe(0); // no coach step declared yet
+
+    // A couples turn whose reply declares a step advances the DERIVED step (marker stripped from content).
+    await asPerson(host, ben);
+    // The offline fake couples reply appends a step marker when the user text mentions "step two".
+    await bridge.togetherSendMessage({ sessionId, text: 'let’s move to step two' });
+    const advanced = await bridge.togetherGet(sessionId);
+    expect(advanced?.guideStep).toBeGreaterThanOrEqual(1);
+    expect(JSON.stringify(advanced?.messages)).not.toContain('SELFOS:STEP');
+
+    // A chat guide resolves a guide view but no stepper (guideStep undefined).
+    const chat = await bridge.togetherCreate({ partnerPersonId: angel, guideId: 'four-horsemen' });
+    const chatView = chat.ok ? await bridge.togetherGet(chat.session.id) : null;
+    expect(chatView?.guide?.kind).toBe('chat');
+    expect(chatView?.guideStep).toBeUndefined();
+
+    // Unknown + adult guide ids are refused host-side (the desire group lands, ack-gated, in Phase F).
+    expect((await bridge.togetherCreate({ partnerPersonId: angel, guideId: 'nope' })).ok).toBe(
+      false,
+    );
   });
 });

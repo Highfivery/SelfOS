@@ -9794,6 +9794,70 @@ test('together (58) phase D: wrap-up writes a report + twins (aside ABSENT from 
   }
 });
 
+test('together (58) phase E: start a structured guided couples session from the catalog; the stepper advances via a marker (§3.10)', async () => {
+  const { userData, vault } = await seedTogetherReady();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: /Together/ }).click();
+
+    // The guided catalog lists Connect + Repair; pick a structured practice → it binds to the start form.
+    await expect(w.getByRole('heading', { name: 'Guided sessions' })).toBeVisible();
+    await expect(w.getByText('Connect')).toBeVisible();
+    await w.getByRole('button', { name: /Love Maps/ }).click();
+    await expect(w.getByRole('heading', { name: /Start .Love Maps./ })).toBeVisible();
+    await w.getByRole('button', { name: 'Send invitation' }).click();
+
+    // The static guide opener shows; the stepper renders every step (none current yet at step 0).
+    await expect(w.getByText(/Welcome to Love Maps/)).toBeVisible();
+    await expect(w.getByRole('list', { name: 'Exercise steps' })).toBeVisible();
+    await expect(w.getByText('Ask & answer')).toBeVisible();
+
+    // A turn that asks to move to "step two" → the fake declares step 1; the stepper advances (derived).
+    await w.getByLabel('Message').fill('I’m ready — let’s move to step two.');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/I hear you/)).toBeVisible();
+    await expect(w.getByText(/SELFOS:STEP/)).toHaveCount(0); // marker never shown
+    // The second step is now marked current (aria-current="step").
+    await expect
+      .poll(async () => w.locator('li[aria-current="step"]').first().textContent())
+      .toContain('Ask & answer');
+
+    // Decrypt: the session carries the guideId + the coach message is stamped with the derived step.
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('no key');
+    const sessions = await readdir(join(vault, 'together', 'sessions'));
+    const sessionRaw = (await readEncryptedJson(
+      fs,
+      `together/sessions/${sessions[0]}/session.enc`,
+      key,
+    )) as { guideId?: string };
+    expect(sessionRaw.guideId).toBe('love-maps');
+
+    // No inner horizontal scrollbar at 360px (the catalog grid + stepper).
+    await w.getByRole('button', { name: /Together/ }).click();
+    await w.setViewportSize({ width: 360, height: 900 });
+    const overflow = await w.evaluate(() => {
+      for (const el of Array.from(document.querySelectorAll('*'))) {
+        const style = getComputedStyle(el);
+        if (
+          (style.overflowX === 'auto' || style.overflowX === 'scroll') &&
+          el.scrollWidth > el.clientWidth + 1
+        ) {
+          return el.className || el.tagName;
+        }
+      }
+      return null;
+    });
+    expect(overflow).toBeNull();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('together (58): the private pre-screen holds a flagged person; the partner only sees invited (§8.2)', async () => {
   // Ben's pre-screen is NOT seeded → he must take it first.
   const { userData, vault } = await seedTogetherReady({ clearBenPrescreen: false });

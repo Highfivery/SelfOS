@@ -862,40 +862,43 @@ export function QuestionnaireBuilder({
           </Banner>
           {/* Share link (§17.14e): a tidy card to get the recipient's link + Email/Text, reachable any
               time after sending (also opened by the list "Share link" kebab). Shows the EXISTING link;
-              Refresh regenerates. */}
-          <div className={styles.shareCard}>
-            <div className={styles.shareHead}>
-              <span className={styles.shareIcon} aria-hidden="true">
-                <Link2 size={18} />
-              </span>
-              <span className={styles.shareHeadText}>
-                <Text weight={600}>Share a link</Text>
-                <Text size="sm" tone="secondary">
-                  Send {recipientLabel} a private link to answer from any device — copy it, or send
-                  by email or text.
-                </Text>
-              </span>
-            </div>
-            {shareLink ? (
-              <RelayLinkDelivery
-                link={shareLink.link}
-                pin={shareLink.pin}
-                senderName={senderName}
-                sensitive={effectiveSensitivity !== 'standard'}
-                note="This is the same link each time — use Refresh to make a new one (which stops the current one working)."
-                onRefresh={() => runShareLink(true)}
-                refreshing={refreshingLink}
-              />
-            ) : (
-              <div>
-                <Button variant="primary" onClick={() => void runShareLink()} disabled={sharing}>
-                  <Link2 size={16} aria-hidden="true" />
-                  {sharing ? 'Getting link…' : 'Get the link'}
-                </Button>
+              Refresh regenerates. HIDDEN once the recipient has ANSWERED (the latest send is submitted) —
+              there's nothing left to answer; a re-ask makes a fresh unanswered send and it returns. */}
+          {sentState?.answered ? null : (
+            <div className={styles.shareCard}>
+              <div className={styles.shareHead}>
+                <span className={styles.shareIcon} aria-hidden="true">
+                  <Link2 size={18} />
+                </span>
+                <span className={styles.shareHeadText}>
+                  <Text weight={600}>Share a link</Text>
+                  <Text size="sm" tone="secondary">
+                    Send {recipientLabel} a private link to answer from any device — copy it, or
+                    send by email or text.
+                  </Text>
+                </span>
               </div>
-            )}
-            {shareMsg ? <Banner tone="warning">{shareMsg}</Banner> : null}
-          </div>
+              {shareLink ? (
+                <RelayLinkDelivery
+                  link={shareLink.link}
+                  pin={shareLink.pin}
+                  senderName={senderName}
+                  sensitive={effectiveSensitivity !== 'standard'}
+                  note="This is the same link each time — use Refresh to make a new one (which stops the current one working)."
+                  onRefresh={() => runShareLink(true)}
+                  refreshing={refreshingLink}
+                />
+              ) : (
+                <div>
+                  <Button variant="primary" onClick={() => void runShareLink()} disabled={sharing}>
+                    <Link2 size={16} aria-hidden="true" />
+                    {sharing ? 'Getting link…' : 'Get the link'}
+                  </Button>
+                </div>
+              )}
+              {shareMsg ? <Banner tone="warning">{shareMsg}</Banner> : null}
+            </div>
+          )}
           <QuestionnairePreview
             questions={previewQuestions}
             title={title}

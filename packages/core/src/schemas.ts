@@ -2492,6 +2492,10 @@ export interface SendResult {
 export interface QuestionnaireSendState {
   lastSentAt: string;
   total: number;
+  // Whether the LATEST send has been answered (submitted/analyzed). Once answered there's nothing left to
+  // answer, so the "Share a link" affordance is hidden (a re-ask creates a fresh unanswered send → shown
+  // again). Additive; absent ⇒ treat as not-answered (the pre-existing "show the link" behaviour).
+  answered?: boolean;
 }
 
 /**

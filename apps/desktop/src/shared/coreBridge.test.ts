@@ -3557,11 +3557,44 @@ describe('createCoreBridge', () => {
     const states = await bridge.questionnairesSendStates();
     expect(states[q.id]?.total).toBe(2);
     expect(typeof states[q.id]?.lastSentAt).toBe('string');
+    // The latest send is unanswered → `answered` is false (the "Share a link" affordance still shows).
+    expect(states[q.id]?.answered).toBe(false);
 
     // Sender-scoped: the recipient (Mara) sent nothing herself, so her own send-states are empty —
     // the owner's send of `q` does not leak into another person's list.
     await bridge.sessionSetActive({ personId: mara.id });
     expect(await bridge.questionnairesSendStates()).toEqual({});
+  });
+
+  it('questionnairesSendStates: `answered` flips true once the latest send is submitted (§17.14e)', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: mara.id, roleId: 'member', pin: null });
+    const q = await bridge.questionnairesSave({
+      title: 'Weekly check-in',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: mara.id },
+      questions: [{ id: 'a', type: 'shortText', prompt: 'How?', required: true }],
+    });
+    await bridge.assignmentsCreate({ questionnaireId: q.id, privacy: 'standard' });
+    // Before the recipient answers, `answered` is false.
+    expect((await bridge.questionnairesSendStates())[q.id]?.answered).toBe(false);
+
+    // Mara answers it in her Inbox → submitted.
+    await bridge.sessionSetActive({ personId: mara.id });
+    const inbox = await bridge.assignmentsInbox();
+    const item = inbox[0];
+    if (!item) throw new Error('expected an inbox item');
+    await bridge.assignmentsSubmit({
+      assignmentId: item.assignmentId,
+      answers: [{ questionId: 'a', value: 'Doing well' }],
+    });
+
+    // Back to the sender (returning to the Owner needs the Owner's PIN): the latest send is now answered →
+    // `answered` is true (the share affordance hides).
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    expect((await bridge.questionnairesSendStates())[q.id]?.answered).toBe(true);
   });
 
   it('questionnairesSentOverview: per-recipient answered status, new-response + analysed counts, gated (§3.1)', async () => {

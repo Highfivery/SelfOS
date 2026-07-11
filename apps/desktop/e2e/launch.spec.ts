@@ -4131,6 +4131,14 @@ test('inbox: send a questionnaire, answer it, submit, and round-trip through the
     });
     expect(overflow).toBeLessThanOrEqual(1);
 
+    // Now that it's ANSWERED, opening the questionnaire's locked view offers NO "Share a link" — there's
+    // nothing left to answer (§17.14e).
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await w.getByRole('button', { name: /^Weekly check-in/ }).click();
+    await expect(w.getByText(/questions are locked/i)).toBeVisible();
+    await expect(w.getByText('Share a link')).toHaveCount(0);
+    await expect(w.getByRole('button', { name: /get the link/i })).toHaveCount(0);
+
     // The answer round-tripped through the encrypted vault (a ResponseSet was written + the
     // assignment is locked at submitted) — proving the full IPC → core → at-rest path.
     const fs = createNodeFileSystem(vault);

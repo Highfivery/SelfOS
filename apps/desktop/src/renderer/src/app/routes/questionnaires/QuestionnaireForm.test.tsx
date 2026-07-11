@@ -356,22 +356,52 @@ describe('QuestionnaireForm — disabled (read-only Preview, 08 §20.4)', () => 
   });
 });
 
-describe('QuestionnairePreview (read-only, 08 §20.4)', () => {
+describe('QuestionnairePreview — presentation view (08 §21.2)', () => {
   const questions = [
     q({ id: 'a', type: 'shortText', prompt: 'How are we doing?', required: true }),
+    q({ id: 'b', type: 'rating', prompt: 'Rate it', scale: { min: 1, max: 5 } }),
   ];
 
-  it('renders disabled fields, names the recipient, and offers NO test-on-self Finish', () => {
-    render(<QuestionnairePreview questions={questions} recipientLabel="Angel" />);
-    expect(screen.getByText(/exactly what Angel sees — read-only/i)).toBeInTheDocument();
-    expect(screen.getByLabelText('How are we doing?')).toBeDisabled();
+  it('renders a hero (title + meta strip) and a numbered reading flow — NOT an answerable form', () => {
+    render(
+      <QuestionnairePreview questions={questions} title="Weekly check-in" recipientLabel="Angel" />,
+    );
+    // Hero: the eyebrow, the title, and a "as they see it" marker naming the recipient.
+    expect(screen.getByText('Preview')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Weekly check-in' })).toBeInTheDocument();
+    expect(screen.getByText(/as Angel sees it/i)).toBeInTheDocument();
+    // Meta strip: a question count + a time estimate.
+    expect(screen.getByText(/2 questions/i)).toBeInTheDocument();
+    expect(screen.getByText(/~1 min/i)).toBeInTheDocument();
+    // The reading flow shows the prompts, but NO interactive/disabled inputs — it's a presentation.
+    expect(screen.getByText('How are we doing?')).toBeInTheDocument();
+    expect(screen.queryByLabelText('How are we doing?')).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Finish' })).not.toBeInTheDocument();
+    // A soft "writes their answer" representation, and the calm read-only footer.
+    expect(screen.getByText(/writes a short answer/i)).toBeInTheDocument();
+    expect(screen.getByText(/read-only preview/i)).toBeInTheDocument();
     // The crisis footer is still present + usable.
     expect(screen.getByRole('button', { name: /get help now/i })).toBeEnabled();
   });
 
-  it('falls back to a generic note when no recipient label is given', () => {
-    render(<QuestionnairePreview questions={questions} />);
-    expect(screen.getByText(/exactly what your recipient sees — read-only/i)).toBeInTheDocument();
+  it('shows a generic read-only footer and no "as they see it" marker when no recipient is bound', () => {
+    render(<QuestionnairePreview questions={questions} title="Weekly check-in" />);
+    expect(screen.queryByText(/as .* sees it/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/read-only preview/i)).toBeInTheDocument();
+  });
+
+  it('captions a branch-gated follow-up so its conditional nature is clear (§20.4)', () => {
+    const branched = [
+      q({ id: 'a', type: 'yesNo', prompt: 'Together?' }),
+      q({
+        id: 'b',
+        type: 'shortText',
+        prompt: 'Say more',
+        branch: { whenQuestionId: 'a', equals: true, action: 'show' },
+      }),
+    ];
+    render(<QuestionnairePreview questions={branched} title="T" recipientLabel="Sam" />);
+    expect(screen.getByText(/shown only when an earlier answer matches/i)).toBeInTheDocument();
   });
 });

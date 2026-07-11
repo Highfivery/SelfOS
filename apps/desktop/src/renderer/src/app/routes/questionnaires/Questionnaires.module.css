@@ -1083,7 +1083,8 @@
   outline-offset: 2px;
 }
 
-.hiddenFile {
+.hiddenFile,
+.srOnly {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -1556,4 +1557,283 @@
     width: 100%;
     opacity: 0.5;
   }
+}
+
+/* ── Preview: the read-only presentation view (§21.2) ──────────────────────────────────────────── */
+.previewView {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  max-width: 720px;
+}
+
+.previewHero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.eyebrowStatic {
+  font-size: var(--text-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-accent-text);
+  font-weight: 600;
+}
+
+.previewMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.metaChip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-alt);
+  border-radius: var(--radius-pill);
+  padding: 3px var(--space-2);
+}
+
+.metaChip svg {
+  flex: none;
+}
+
+/* The numbered reading flow. */
+.readingFlow {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.flowRow {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+.flowNum {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  margin-top: 1px;
+}
+
+.flowBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.flowPrompt {
+  font-size: var(--text-md);
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.flowReq {
+  color: var(--color-danger-text, var(--color-accent-text));
+  margin-left: 2px;
+}
+
+/* Read-only control representations. */
+.roField {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-alt);
+  color: var(--color-text-tertiary);
+  font-size: var(--text-sm);
+  font-style: italic;
+}
+
+.roFieldTall {
+  min-height: 60px;
+  align-items: flex-start;
+}
+
+.roOptions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.roOption {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
+}
+
+.roDot,
+.roBox {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  border: 1.5px solid var(--color-border-strong);
+}
+
+.roDot {
+  border-radius: var(--radius-pill);
+}
+
+.roBox {
+  border-radius: 3px;
+}
+
+.roMuted {
+  font-size: var(--text-sm);
+  color: var(--color-text-tertiary);
+  font-style: italic;
+}
+
+.roRank {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.roRankRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 5px var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.roRankNum {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-alt);
+  color: var(--color-text-tertiary);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.roAlloc {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.roAllocRow {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 5px var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.roScale {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.roScaleEnd {
+  flex: none;
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+
+.roScaleTrack {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 2px;
+  background: var(--color-border-strong);
+  position: relative;
+}
+
+.roScaleDot {
+  width: 9px;
+  height: 9px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-border-strong);
+}
+
+.roMatrix {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.roMatrixScale {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+  padding: 0 var(--space-1) var(--space-1);
+  flex-wrap: wrap;
+}
+
+.roMatrixRow {
+  padding: 5px var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.roRoster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.roRosterCol {
+  padding: 4px var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  background: var(--color-surface-alt);
 }

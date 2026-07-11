@@ -2923,8 +2923,13 @@ Each its own branch → tests → visual QA → code-review → PR.
 
 1. **Private correctness** (highest priority — the user's explicit complaint + safety): aggregate excludes
    private entirely; remove `numericAnswers`/`extractNumericAnswers`; the private card shows only
-   answered-privately + the insight/Draw-an-insight. (§21.5)
-2. **Preview presentation view** — the bespoke read-only render. (§21.2)
+   answered-privately + the insight/Draw-an-insight. (§21.5) — **BUILT** (PR #149).
+2. **Preview presentation view** — the bespoke read-only render. (§21.2) — **BUILT**: `QuestionnairePreview`
+   rewritten as a bespoke hero (Preview eyebrow + title + meta strip [count · ~time · privacy when known] +
+   "as {recipient} sees it") + a numbered reading flow with elegant static control representations (scale as
+   labelled endpoints, text as a soft "{recipient} writes their answer here…" field, choices as quiet outline
+   options; matrix/allocation/ranking/roster as static rows) + a calm read-only footer + the crisis footer. No
+   answerable/disabled input; author-attached images still render via the shared `QuestionImage`.
 3. **Answering wizard** — the one-question-at-a-time mode in `@selfos/answering` (Inbox + relay). (§21.3)
 4. **Results dashboard** — aggregate-first ordering + the expandable "Who answered" list. (§21.4)
 

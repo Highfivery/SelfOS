@@ -16,6 +16,7 @@ import {
   MAX_ATTACHMENTS_PER_MESSAGE,
   type PendingAttachment,
 } from '../sessions/downscaleImage';
+import { stripCoachMarkers } from '@selfos/core/conversations';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useTogetherStore } from '../../../stores/togetherStore';
 import { TogetherAttachments } from './TogetherAttachments';
@@ -288,7 +289,9 @@ export function TogetherThread({
               <Text size="xs" tone="secondary" weight={600}>
                 Coach
               </Text>
-              <Markdown>{streaming}</Markdown>
+              {/* Strip coach markers (SUGGEST/AGREEMENT/CHALLENGE/STEP) from the LIVE stream too — a
+                  trailing marker must never flash to the author mid-stream (mirrors Sessions). */}
+              <Markdown>{stripCoachMarkers(streaming)}</Markdown>
             </div>
           </div>
         ) : sending ? (

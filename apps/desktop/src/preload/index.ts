@@ -217,6 +217,8 @@ const bridge: SelfosBridge = {
   togetherPulseLog: (input) => ipcRenderer.invoke(IpcChannels.togetherPulseLog, input),
   togetherJointChallenges: (input) =>
     ipcRenderer.invoke(IpcChannels.togetherJointChallenges, input),
+  togetherSuggestions: (sessionId) =>
+    ipcRenderer.invoke(IpcChannels.togetherSuggestions, sessionId),
   togetherWrapUp: (input) => ipcRenderer.invoke(IpcChannels.togetherWrapUp, input),
   togetherGetReport: (input) => ipcRenderer.invoke(IpcChannels.togetherGetReport, input),
   togetherSaveAgreement: (input) => ipcRenderer.invoke(IpcChannels.togetherSaveAgreement, input),

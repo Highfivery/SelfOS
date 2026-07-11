@@ -14,3 +14,4 @@ export * from './adultGate';
 export * from './ynmService';
 export * from './pulseService';
 export * from './togetherChallengeService';
+export * from './suggestionService';

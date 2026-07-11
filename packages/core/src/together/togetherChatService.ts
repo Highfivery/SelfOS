@@ -16,11 +16,13 @@ import {
   stripCoachMarkers,
 } from '../conversations/guidedSteps';
 import { parseAgreementMarker } from '../conversations/agreementMarker';
+import { parseSuggestMarker } from '../conversations/suggestMarker';
 import { getTogetherGuide } from './togetherCatalog';
 import { appendMessage, getSession, getTogetherAttachment, listMessages } from './togetherService';
 import { buildTogetherSystemPrompt } from './togetherPromptBuilder';
 import { captureAgreementFromMarker } from './agreementService';
 import { captureJointChallengeFromMarker } from './togetherChallengeService';
+import { captureSuggestionFromMarker } from './suggestionService';
 
 // ── The couples turn (58 §5.1) — a sibling of `runChatTurn` (05 §4.1), not a change to it ─────────
 // Invariants held verbatim: budget gate (the INITIATOR pays, §6.2) → persist the author's message FIRST
@@ -234,6 +236,12 @@ async function generateCoachReply(
         session.id,
         now,
       );
+    }
+    // A coach SUGGESTION (§5.6): a `[[SELFOS:SUGGEST:{…}]]` marker drops a write-once card into the session
+    // (a guided exercise to start / a check-in to seed). It NEVER auto-acts. Tolerant-parse; stripped below.
+    const suggestion = parseSuggestMarker(result.text);
+    if (suggestion) {
+      await captureSuggestionFromMarker(fs, key, session.id, suggestion, now);
     }
   }
 

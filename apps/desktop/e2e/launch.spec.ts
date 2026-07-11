@@ -4049,11 +4049,13 @@ test('inbox: send a questionnaire, answer it, submit, and round-trip through the
   try {
     const w = await app.firstWindow();
 
-    // Author a one-question questionnaire.
+    // Author a two-question questionnaire (so the answering wizard's Back/Next is exercised, §21.3).
     await w.getByRole('link', { name: 'Questionnaires' }).click();
     await startNewQuestionnaire(w);
     await w.getByLabel('Title').fill('Weekly check-in');
     await w.getByLabel('Question 1', { exact: true }).fill('How are we doing?');
+    await w.getByRole('button', { name: 'Add question' }).click();
+    await w.getByLabel('Question 2', { exact: true }).fill('Anything else?');
 
     // §16.3 two-step: Save the draft first (Send only appears on a saved questionnaire), then Send.
     await w.getByRole('button', { name: 'Create draft' }).click();
@@ -4082,14 +4084,43 @@ test('inbox: send a questionnaire, answer it, submit, and round-trip through the
     await expect(w.getByText(/won’t see your written answers/i)).toBeVisible();
     await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible();
 
-    // The modernized answering form shows a progress indicator (08 §20.5): a bar + a per-question number.
+    // The wizard (08 §21.3) shows one question per step: a progress bar + "Question 1 of 2", no Submit yet.
     await expect(w.getByRole('progressbar')).toBeVisible();
-    await expect(w.getByText(/Question 1 of/)).toBeVisible();
-    await expect(w.getByText(/0 of .* answered/)).toBeVisible();
+    await expect(w.getByText('Question 1 of 2')).toBeVisible();
+    await expect(w.getByText(/0 of 2 answered/)).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Submit' })).toHaveCount(0);
+    await expect(w.getByText('Anything else?')).toHaveCount(0); // step 2 isn't on screen yet
 
-    // Answer and submit; the progress reflects the answer, then the row reads Submitted.
+    // Answer step 1, advance to step 2 (Next → the last step shows Submit), then Back keeps the answer.
     await w.getByLabel('How are we doing?').fill('Doing great');
-    await expect(w.getByText(/1 of .* answered/)).toBeVisible();
+    await expect(w.getByText(/1 of 2 answered/)).toBeVisible();
+    await w.getByRole('button', { name: 'Next' }).click();
+    await expect(w.getByText('Question 2 of 2')).toBeVisible();
+
+    // The wizard's four-button action bar must not overflow at 360px — scan EVERY element for an inner
+    // x-scroller AND the page width (§7/§12), WHILE a wizard step (with the action bar) is on screen.
+    await w.setViewportSize({ width: 360, height: 900 });
+    const wizardOverflow = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      const inner = Array.from(document.querySelectorAll('*')).filter((el) => {
+        const s = getComputedStyle(el);
+        return (
+          (s.overflowX === 'auto' || s.overflowX === 'scroll') &&
+          el.scrollWidth > el.clientWidth + 1
+        );
+      }).length;
+      return { main: main ? main.scrollWidth - main.clientWidth : 0, inner };
+    });
+    expect(wizardOverflow.main).toBeLessThanOrEqual(1);
+    expect(wizardOverflow.inner).toBe(0);
+    await w.setViewportSize({ width: 1000, height: 800 });
+
+    await w.getByLabel('Anything else?').fill('All good');
+    await w.getByRole('button', { name: 'Back' }).click();
+    await expect(w.getByLabel('How are we doing?')).toHaveValue('Doing great');
+    await w.getByRole('button', { name: 'Next' }).click();
+
+    // Submit from the last step; the row reads Submitted.
     await w.getByRole('button', { name: 'Submit' }).click();
     await expect(w.getByText('Submitted')).toBeVisible();
 
@@ -4112,7 +4143,9 @@ test('inbox: send a questionnaire, answer it, submit, and round-trip through the
     expect(assignment.status).toBe('submitted');
     expect(assignment.privacy).toBe('private');
     const response = await getResponse(fs, key, assignment.id);
-    expect(response?.answers[0]?.value).toBe('Doing great');
+    // Both wizard steps persisted (Back preserved step 1's answer).
+    expect(response?.answers.find((a) => a.value === 'Doing great')).toBeTruthy();
+    expect(response?.answers.find((a) => a.value === 'All good')).toBeTruthy();
     expect(response?.submittedAt).toBeTruthy();
   } finally {
     await app.close();

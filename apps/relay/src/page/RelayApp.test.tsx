@@ -85,6 +85,37 @@ describe('RelayApp', () => {
     expect(await screen.findByText(/thanks for filling this out/i)).toBeInTheDocument();
   });
 
+  it('steps through a multi-question questionnaire one at a time (wizard, §21.3)', async () => {
+    nextContent = content({
+      questions: [
+        { id: 'a', type: 'shortText', prompt: 'One thing I do well?', required: true },
+        { id: 'b', type: 'shortText', prompt: 'One thing to improve?', required: false },
+      ],
+    });
+    mockFetch({
+      '/api/unlock': { status: 200, body: { ok: true, sealedContent: envelope, submitted: false } },
+      '/api/respond': { status: 200, body: { ok: true } },
+    });
+    render(<RelayApp />);
+    await userEvent.type(screen.getByLabelText(/your pin/i), '123456');
+    await userEvent.click(screen.getByRole('button', { name: /open questionnaire/i }));
+    await userEvent.click(await screen.findByRole('button', { name: /continue/i }));
+
+    // One question at a time: step 1 of 2, the primary is "Next" (not Submit yet).
+    expect(await screen.findByText('Question 1 of 2')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^submit$/i })).not.toBeInTheDocument();
+    // Next blocks the required first step while empty, then advances once answered.
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getByText(/answer this question before continuing/i)).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('One thing I do well?'), 'Listening');
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+    // Step 2 of 2 → the primary is Submit; submitting reaches the thanks state.
+    expect(await screen.findByText('Question 2 of 2')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /^submit$/i }));
+    expect(await screen.findByText(/thanks for filling this out/i)).toBeInTheDocument();
+  });
+
   it('shows the attempts-left error on a wrong PIN', async () => {
     mockFetch({
       '/api/unlock': { status: 401, body: { error: 'wrong pin', attemptsRemaining: 4 } },

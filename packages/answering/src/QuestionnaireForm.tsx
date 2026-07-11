@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   visibleQuestions,
   allocationTotal,
@@ -34,6 +34,28 @@ export interface QuestionSharing {
   renderControl: (questionId: string) => ReactNode;
 }
 
+/**
+ * Wizard mode (08-questionnaires §21.3): one question per step. The form owns Back/Next navigation + the
+ * footer action bar; the host supplies the terminal callbacks (Submit / Save for later / Decline) so the
+ * SAME bar works in the in-app Inbox AND the relay page (design-system-free — plain token-CSS buttons). The
+ * host stops rendering its own Submit/Save/Decline row when it passes this. Presence of `wizard` ⇒ wizard
+ * mode; absent ⇒ the all-at-once form (Preview, onboarding, self-tests stay unchanged).
+ */
+export interface WizardActions {
+  /** The primary action on the final step (submit the whole response). Host validates all required (§21.3). */
+  onSubmit: () => void;
+  /** The final-step primary label — 'Submit', or 'Update answers' when editing (56 §3.1). Default 'Submit'. */
+  submitLabel?: string;
+  /** "Save for later" — omit ⇒ the button is hidden (e.g. an external relay recipient can't resume). */
+  onSaveForLater?: () => void;
+  /** The quiet escape action — start declining (fresh answer) or cancel (editing). Omit ⇒ hidden. */
+  onDecline?: () => void;
+  /** The escape action's label — default 'Decline'; 'Cancel' when editing. */
+  declineLabel?: string;
+  /** Disable the whole action bar while a host op is in flight. */
+  busy?: boolean;
+}
+
 interface QuestionnaireFormProps {
   questions: Question[];
   answers: AnswerMap;
@@ -58,6 +80,11 @@ interface QuestionnaireFormProps {
    * (the Inbox + relay answer as before).
    */
   disabled?: boolean;
+  /**
+   * One-question-at-a-time wizard (08 §21.3). When set, the form renders a single question per step with a
+   * step header + progress + the host's action bar; absent ⇒ the all-at-once form. See {@link WizardActions}.
+   */
+  wizard?: WizardActions;
 }
 
 const range = (min: number, max: number): number[] => {
@@ -813,6 +840,176 @@ function QuestionField({
   );
 }
 
+/**
+ * The one-question-at-a-time wizard (08 §21.3). Steps over the currently-visible questions (branch-aware —
+ * a new reveal is appended to the remaining steps as answers change), with a step header (progress + a
+ * "Question N of M" title), one large question, and a footer action bar (Back · Save for later · Decline ·
+ * Next/Submit). Focus moves to the step title on each step change (§9).
+ */
+function WizardForm({
+  visible,
+  answers,
+  onChange,
+  loadImage,
+  footer,
+  actions,
+}: {
+  visible: Question[];
+  answers: AnswerMap;
+  onChange: (questionId: string, value: AnswerValue) => void;
+  loadImage?: LoadImage;
+  footer?: ReactNode;
+  actions: WizardActions;
+}): JSX.Element {
+  const total = visible.length;
+  const [step, setStep] = useState(0);
+  const [stepError, setStepError] = useState(false);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+
+  // Clamp the step if the visible set shrank (a branch answer hid a later question). Steps are 0..total-1.
+  const current = Math.min(step, Math.max(0, total - 1));
+  useEffect(() => {
+    if (step !== current) setStep(current);
+  }, [step, current]);
+  // Move focus to the step title on every step change so a screen-reader / keyboard user lands on the new
+  // question, not back at the top of the page.
+  useEffect(() => {
+    titleRef.current?.focus();
+  }, [current]);
+
+  const answeredCount = visible.filter((q) => isAnswered(q, answers[q.id])).length;
+  const question = visible[current];
+  const isLast = current >= total - 1;
+  const requiredButEmpty = (q: Question | undefined): boolean =>
+    q !== undefined && q.required === true && !isAnswered(q, answers[q.id]);
+
+  // Clear a lingering "please answer this" alert as soon as the current required question is answered, so
+  // the message doesn't sit under a now-filled field until the next Back/Next.
+  const currentSatisfied = !requiredButEmpty(question);
+  useEffect(() => {
+    if (currentSatisfied) setStepError(false);
+  }, [currentSatisfied]);
+
+  const goNext = (): void => {
+    if (requiredButEmpty(question)) {
+      setStepError(true);
+      titleRef.current?.focus();
+      return;
+    }
+    setStepError(false);
+    setStep(current + 1);
+  };
+  const goBack = (): void => {
+    setStepError(false);
+    setStep(Math.max(0, current - 1));
+  };
+  const onPrimary = (): void => {
+    if (isLast) {
+      // The final step still guards its own required question; the host re-validates ALL required (§21.3).
+      if (requiredButEmpty(question)) {
+        setStepError(true);
+        titleRef.current?.focus();
+        return;
+      }
+      actions.onSubmit();
+    } else {
+      goNext();
+    }
+  };
+
+  return (
+    <div className={`${styles.form} ${styles.wizard}`}>
+      {total > 0 ? (
+        <div className={styles.progressWrap}>
+          <div
+            className={styles.progressTrack}
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={total}
+            aria-valuenow={answeredCount}
+            aria-label={`${answeredCount} of ${total} questions answered`}
+          >
+            <span
+              className={styles.progressBar}
+              style={{ width: `${Math.round((answeredCount / total) * 100)}%` }}
+            />
+          </div>
+          <span className={styles.progressLabel} aria-hidden="true">
+            {answeredCount} of {total} answered
+          </span>
+        </div>
+      ) : null}
+
+      <div className={styles.wizardStepRow}>
+        <h3 className={styles.wizardStepTitle} tabIndex={-1} ref={titleRef}>
+          {total > 0 ? `Question ${current + 1} of ${total}` : 'No questions yet'}
+        </h3>
+      </div>
+
+      <div className={styles.wizardBody}>
+        {question ? (
+          <QuestionField
+            question={question}
+            value={answers[question.id]}
+            onChange={onChange}
+            {...(loadImage ? { loadImage } : {})}
+          />
+        ) : (
+          <p className={styles.empty}>Add a question with a prompt to preview it.</p>
+        )}
+        {stepError ? (
+          <p className={styles.wizardError} role="alert">
+            Please answer this question before continuing.
+          </p>
+        ) : null}
+      </div>
+
+      {/* Action bar. DOM order == visual order == tab order (WCAG 2.4.3): Back · Save · Decline · Primary.
+          The primary (Next/Submit) is pushed to the far right via `margin-left:auto` in CSS. */}
+      <div className={styles.wizardActions}>
+        <button
+          type="button"
+          className={styles.wizardBack}
+          disabled={current === 0 || actions.busy === true}
+          onClick={goBack}
+        >
+          Back
+        </button>
+        {actions.onSaveForLater ? (
+          <button
+            type="button"
+            className={styles.wizardSecondary}
+            disabled={actions.busy === true}
+            onClick={actions.onSaveForLater}
+          >
+            Save for later
+          </button>
+        ) : null}
+        {actions.onDecline ? (
+          <button
+            type="button"
+            className={styles.wizardDecline}
+            disabled={actions.busy === true}
+            onClick={actions.onDecline}
+          >
+            {actions.declineLabel ?? 'Decline'}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className={styles.wizardPrimary}
+          disabled={actions.busy === true}
+          onClick={onPrimary}
+        >
+          {isLast ? (actions.submitLabel ?? 'Submit') : 'Next'}
+        </button>
+      </div>
+
+      {footer ?? <CrisisFooter />}
+    </div>
+  );
+}
+
 export function QuestionnaireForm({
   questions,
   answers,
@@ -822,8 +1019,25 @@ export function QuestionnaireForm({
   footer,
   progress,
   disabled,
+  wizard,
 }: QuestionnaireFormProps): JSX.Element {
   const visible = visibleQuestions(questions, answers);
+
+  // Wizard mode (08 §21.3): one question per step. Rendered as its own branch — it ignores grouping (a
+  // wizard steps over the flat visible set) and owns the action bar. Everything else (the all-at-once form)
+  // stays exactly as before.
+  if (wizard) {
+    return (
+      <WizardForm
+        visible={visible}
+        answers={answers}
+        onChange={onChange}
+        {...(loadImage ? { loadImage } : {})}
+        {...(footer !== undefined ? { footer } : {})}
+        actions={wizard}
+      />
+    );
+  }
 
   // Long forms can group questions under collapsible headings (18 §14.3). Ungrouped questions render first;
   // grouped ones follow as <details> in first-seen group order. Every group is **open by default** — the

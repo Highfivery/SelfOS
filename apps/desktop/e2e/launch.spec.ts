@@ -2742,7 +2742,7 @@ test('questionnaires: custom type, sensitivity, matrix + branching round-trip', 
   }
 });
 
-test('questionnaires: Preview is read-only (disabled fields, no Finish) and the detail spans full width (08 §20.3/§20.4)', async () => {
+test('questionnaires: Preview is a bespoke read-only presentation (hero + reading flow, no answerable inputs) and the detail spans full width (08 §21.2/§20.3)', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);
   try {
@@ -2752,16 +2752,46 @@ test('questionnaires: Preview is read-only (disabled fields, no Finish) and the 
     await w.getByLabel('Title').fill('Dry run');
     await w.getByLabel('Question 1', { exact: true }).fill('How are you feeling?');
     await w.getByLabel('Answer type').selectOption({ label: 'Rating' });
+    // A couple more types so the reading flow exercises multiple read-only representations.
+    await w.getByRole('button', { name: 'Add question' }).click();
+    await w.getByLabel('Question 2', { exact: true }).fill('Anything on your mind?');
+    await w.getByLabel('Answer type').nth(1).selectOption({ label: 'Long text' });
+    await w.getByRole('button', { name: 'Add question' }).click();
+    await w.getByLabel('Question 3', { exact: true }).fill('Pick one');
+    await w.getByLabel('Answer type').nth(2).selectOption({ label: 'Single choice' });
+    await w.getByLabel('Option 1', { exact: true }).fill('This');
+    await w.getByLabel('Option 2', { exact: true }).fill('That');
+    // A matrix + an allocation — the content-heavy static representations (scale header, allocation rows)
+    // whose no-overflow behaviour the 360px guard below must actually exercise (§7/§12).
+    await w.getByRole('button', { name: 'Add question' }).click();
+    await w.getByLabel('Question 4', { exact: true }).fill('Rate these together');
+    await w.getByLabel('Answer type').nth(3).selectOption({ label: 'Matrix (rows on one scale)' });
+    await w.getByLabel('Row 1', { exact: true }).fill('Trust and mutual understanding');
+    await w.getByLabel('Row 2', { exact: true }).fill('Fun and spontaneity together');
+    await w.getByRole('button', { name: 'Add question' }).click();
+    await w.getByLabel('Question 5', { exact: true }).fill('Split 100 points');
+    await w.getByLabel('Answer type').nth(4).selectOption({ label: 'Allocation (sums to 100)' });
+    await w.getByLabel('Option 1', { exact: true }).nth(1).fill('Time together');
+    await w.getByLabel('Option 2', { exact: true }).nth(1).fill('Time apart');
 
-    // Switch to Preview — a READ-ONLY render: the note names the recipient, the crisis footer stays, and
-    // there is NO test-on-self Finish (removed, §20.4).
+    // Switch to Preview — the presentation view (§21.2): the title as a hero, a meta strip (question count +
+    // ~time), an "as they see it" marker, and the calm read-only footer. There is NO answerable input (not
+    // even a disabled one) and NO test-on-self Finish.
     await w.getByRole('button', { name: 'Preview', exact: true }).click();
-    await expect(w.getByText(/exactly what .* sees — read-only/i)).toBeVisible();
+    // (A "Preview" eyebrow also renders in the hero — it shares the toggle's label, so we identify the
+    // presentation view by its distinctive hero heading + meta strip + marker rather than the eyebrow text.)
+    await expect(w.getByRole('heading', { name: 'Dry run' })).toBeVisible();
+    await expect(w.getByText(/5 questions/i)).toBeVisible();
+    // The content-heavy matrix + allocation representations render in the reading flow.
+    await expect(w.getByText('Trust and mutual understanding')).toBeVisible();
+    await expect(w.getByText('Time together')).toBeVisible();
+    await expect(w.getByText(/as .* sees it/i)).toBeVisible();
+    await expect(w.getByText('How are you feeling?')).toBeVisible();
+    await expect(w.getByText(/read-only preview/i)).toBeVisible();
     await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible();
     await expect(w.getByRole('button', { name: 'Finish' })).toHaveCount(0);
-
-    // The rating slider renders but is DISABLED (the whole answer surface is inert in Preview).
-    await expect(w.getByRole('slider', { name: 'How are you feeling?' })).toBeDisabled();
+    // The rating renders as a static scale (labelled endpoints), never an interactive/disabled slider.
+    await expect(w.getByRole('slider')).toHaveCount(0);
 
     // Full-width detail (§20.3) + the standing no-horizontal-overflow guard at 360px — page-level AND any
     // inner scroller (§7/§12).
@@ -2807,9 +2837,11 @@ test('questionnaires: General default + intimacy-only sensitivity + live inline 
     await expect(w.getByRole('button', { name: 'Hide preview' })).toBeVisible();
     await expect(w.getByRole('slider', { name: 'How are you, really?' })).toBeVisible();
 
-    // …and it matches the full Preview render (the same shared @selfos/answering renderer).
+    // …and the full Preview presents the same question in its read-only reading flow (§21.2 — a static
+    // scale, not an interactive slider).
     await w.getByRole('button', { name: 'Preview', exact: true }).click();
-    await expect(w.getByRole('slider', { name: 'How are you, really?' })).toBeVisible();
+    await expect(w.getByText('How are you, really?')).toBeVisible();
+    await expect(w.getByRole('slider')).toHaveCount(0);
     await w.getByRole('button', { name: 'Edit', exact: true }).click();
 
     // §15.2: switching to Intimacy reveals the picker with intimacy tiers only (no Standard), and the

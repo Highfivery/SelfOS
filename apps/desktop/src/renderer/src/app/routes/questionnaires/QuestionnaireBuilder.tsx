@@ -48,6 +48,7 @@ import {
 import { QuestionnaireAiPanel } from './QuestionnaireAiPanel';
 import { QuestionPreview } from './QuestionPreview';
 import { QuestionnairePreview } from './QuestionnairePreview';
+import { sentCompatibilityBadge } from './privacyBadge';
 import { QuestionnaireResults } from './QuestionnaireResults';
 import { QuestionnaireSendPanel } from './QuestionnaireSendPanel';
 import { RelayLinkDelivery } from './RelayLinkDelivery';
@@ -391,6 +392,9 @@ export function QuestionnaireBuilder({
         ? `${recipient.displayName ?? 'someone'} (link)`
         : 'no one yet';
   const recipientLabel = compatEnabled ? `Compatibility — you + ${recipientName}` : recipientName;
+  // Preview's privacy chip is only shown when the promise is KNOWN — a compatibility def's visibility. A
+  // plain send's privacy is a send-time choice (§3.1), so it's omitted from the presentation view (§21.2).
+  const previewPrivacyBadge = compatEnabled ? sentCompatibilityBadge(visibility) : undefined;
   const [drafts, setDrafts] = useState<QDraft[]>(
     questionnaire
       ? questionnaire.questions.map(fromQuestion)
@@ -894,7 +898,9 @@ export function QuestionnaireBuilder({
           </div>
           <QuestionnairePreview
             questions={previewQuestions}
+            title={title}
             {...(recipient ? { recipientLabel: recipientName } : {})}
+            {...(previewPrivacyBadge ? { privacyBadge: previewPrivacyBadge } : {})}
           />
           {problems !== null && problems.length > 0 ? (
             <Banner tone="warning">{problems.join(' ')}</Banner>
@@ -948,7 +954,9 @@ export function QuestionnaireBuilder({
       ) : mode === 'preview' ? (
         <QuestionnairePreview
           questions={previewQuestions}
+          title={title}
           {...(recipient ? { recipientLabel: recipientName } : {})}
+          {...(previewPrivacyBadge ? { privacyBadge: previewPrivacyBadge } : {})}
         />
       ) : (
         <>

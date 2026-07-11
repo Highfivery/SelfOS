@@ -2957,20 +2957,6 @@ export const TogetherMessageSchema = z.object({
 });
 export type TogetherMessage = z.infer<typeof TogetherMessageSchema>;
 
-/**
- * The private pre-screen outcome (§8.2), stored at `people/<id>/together/prescreen.enc` — read/written
- * only by its owner. DATA-MINIMIZED: raw answers are evaluated AI-free at submit and NEVER persisted;
- * only the outcome is retained (the answers would be the most dangerous record in the vault).
- */
-export const PreScreenResultSchema = z.object({
-  schemaVersion: z.literal(1),
-  personId: z.string().min(1),
-  flagged: z.boolean(), // computed AI-free at submit; the only thing retained
-  itemCatalogVersion: z.number().int().nonnegative(), // which item set was evaluated (re-offer logic)
-  completedAt: z.string(),
-});
-export type PreScreenResult = z.infer<typeof PreScreenResultSchema>;
-
 /** Derived, viewer-projected session status (§4.3). `declined` is internal — the decliner's own list drops it. */
 export const TogetherStatusSchema = z.enum([
   'invited',
@@ -3071,51 +3057,22 @@ export type TogetherMarkReadInput = z.infer<typeof TogetherMarkReadInputSchema>;
 
 /**
  * The result of `together:create` (§6.1) — a discriminated union so the renderer can surface the exact
- * prerequisite-absent state (§3.13). `PRESCREEN` is populated once the pre-screen gate lands (Phase B).
+ * prerequisite-absent state (§3.13).
  */
 export type TogetherCreateResult =
   | { ok: true; session: TogetherSessionView }
   | {
       ok: false;
-      reason: 'NOT_READY' | 'NOT_ALLOWED' | 'NO_EDGE' | 'PARTNER_NOT_SUBJECT' | 'PRESCREEN';
+      reason: 'NOT_READY' | 'NOT_ALLOWED' | 'NO_EDGE' | 'PARTNER_NOT_SUBJECT';
       message: string;
     };
-
-/** One pre-screen item for the renderer (id + prompt + radio choices) — §8.2. */
-export interface TogetherPreScreenItem {
-  id: string;
-  prompt: string;
-  choices: { value: string; label: string }[];
-}
-
-/** The pre-screen state the renderer reads before the ceremony/turn (§8.2). Never carries raw answers. */
-export interface TogetherPreScreenView {
-  completed: boolean; // a pre-screen outcome exists
-  flagged: boolean; // the latest outcome held Together for this person
-  needsScreen: boolean; // must take (or re-take) the screen before create/accept/turns
-  reoffer: boolean; // cleared, but 180+ days old — a gentle re-offer (never gates)
-  items: TogetherPreScreenItem[];
-}
-
-/** The outcome of submitting a pre-screen (§8.2) — the private, per-person result. No raw answers cross. */
-export interface TogetherPreScreenResult {
-  flagged: boolean;
-  showCrisis: boolean;
-  suggestSolo: boolean;
-}
-
-/** Pre-screen submit input — the raw answers are evaluated then DISCARDED host-side (§8.2). */
-export const TogetherPreScreenSubmitSchema = z.object({
-  answers: z.record(z.string(), z.string()),
-});
-export type TogetherPreScreenSubmitInput = z.infer<typeof TogetherPreScreenSubmitSchema>;
 
 /** The result of a couples turn (§5.1) — the refreshed viewer-projected view, or an honest failure (37). */
 export type TogetherTurnResult =
   | { ok: true; view: TogetherSessionView }
   | {
       ok: false;
-      reason: 'NO_KEY' | 'BUDGET' | 'EMPTY' | 'ERROR' | 'PRESCREEN' | 'NOT_ALLOWED';
+      reason: 'NO_KEY' | 'BUDGET' | 'EMPTY' | 'ERROR' | 'NOT_ALLOWED';
       message: string;
     };
 

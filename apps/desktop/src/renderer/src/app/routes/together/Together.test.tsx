@@ -2,14 +2,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import type {
-  Person,
-  TogetherPreScreenView,
-  TogetherSessionSummary,
-  TogetherSessionView,
-} from '@shared/schemas';
+import type { Person, TogetherSessionSummary, TogetherSessionView } from '@shared/schemas';
 import { Together } from './Together';
-import { PreScreenForm } from './PreScreenForm';
 import { InvitationCeremony } from './InvitationCeremony';
 import { TogetherThread } from './TogetherThread';
 import { TogetherReflection } from './TogetherReflection';
@@ -46,23 +40,6 @@ function person(id: string, displayName: string): Person {
 function setActivePerson(): void {
   useSessionStore.setState({ activePerson: person(ME, 'Ben') });
 }
-
-const PRESCREEN_ITEMS: TogetherPreScreenView = {
-  completed: false,
-  flagged: false,
-  needsScreen: true,
-  reoffer: false,
-  items: [
-    {
-      id: 'safe-honest',
-      prompt: 'Do you feel safe being honest?',
-      choices: [
-        { value: 'yes', label: 'Yes, usually' },
-        { value: 'no', label: 'Not really' },
-      ],
-    },
-  ],
-};
 
 function summary(over: Partial<TogetherSessionSummary> = {}): TogetherSessionSummary {
   return {
@@ -112,7 +89,6 @@ describe('Together home (§3.2)', () => {
       loaded: true,
       hasPartner: true,
       partners: [{ personId: PARTNER, displayName: 'Angel', eligible: true }],
-      prescreen: { ...PRESCREEN_ITEMS, needsScreen: false },
       sessions: [summary({ topic: 'Feeling distant', status: 'invited' })],
     });
     render(
@@ -124,35 +100,6 @@ describe('Together home (§3.2)', () => {
     expect(screen.getByText('With Angel')).toBeInTheDocument();
     expect(screen.getByText('Feeling distant')).toBeInTheDocument();
     expect(screen.getByText('Invited · waiting')).toBeInTheDocument(); // initiator sees invited/waiting
-  });
-
-  it('shows the pre-screen (never the start card) when the person must take it first (§8.2)', () => {
-    installMockBridge();
-    setActivePerson();
-    useTogetherStore.setState({ loaded: true, hasPartner: true, prescreen: PRESCREEN_ITEMS });
-    render(
-      <MemoryRouter>
-        <Together />
-      </MemoryRouter>,
-    );
-    expect(screen.getByText('A private check-in, just for you')).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Start a session' })).not.toBeInTheDocument();
-  });
-});
-
-describe('PreScreenForm (§8.2)', () => {
-  it('a flagged submission shows a calm private hold + crisis resources (fear item)', async () => {
-    installMockBridge({
-      togetherPrescreenSubmit: () =>
-        Promise.resolve({ flagged: true, showCrisis: true, suggestSolo: true }),
-      togetherPrescreenGet: () => Promise.resolve(PRESCREEN_ITEMS),
-    });
-    useTogetherStore.setState({ prescreen: PRESCREEN_ITEMS });
-    render(<PreScreenForm />);
-    await userEvent.click(screen.getByLabelText('Not really'));
-    await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
-    expect(await screen.findByText('Let’s take this gently')).toBeInTheDocument();
-    expect(screen.getByText(/If you ever feel unsafe or afraid/)).toBeInTheDocument();
   });
 });
 

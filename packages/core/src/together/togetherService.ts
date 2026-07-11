@@ -137,7 +137,7 @@ export async function listSessionsForPerson(
 
 /**
  * Reap the shared-root Together data belonging to a now-deleted person (58 §5.6 / §H person-delete reap).
- * The deleted person's OWN per-person Together data (pulse check-ins, YNM opt-ins, pre-screen, prep threads)
+ * The deleted person's OWN per-person Together data (pulse check-ins, YNM opt-ins, prep threads)
  * lives under `people/<id>/` and is already gone with `deletePerson`; what remains in the shared `together/`
  * roots are the session folders they participated in and the pair-scoped agreements/reports. Removes:
  *   - every `together/sessions/<id>/` where the person was a participant, and

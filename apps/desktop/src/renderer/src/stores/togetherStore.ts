@@ -6,8 +6,6 @@ import type {
   Person,
   TogetherCatalogEntry,
   TogetherCreateResult,
-  TogetherPreScreenResult,
-  TogetherPreScreenView,
   TogetherReportView,
   TogetherSessionSummary,
   TogetherSessionView,
@@ -37,11 +35,6 @@ const NOT_ALLOWED: TogetherTurnResult = {
   reason: 'NOT_ALLOWED',
   message: 'Together isn’t available right now.',
 };
-const HELD_PRESCREEN: TogetherPreScreenResult = {
-  flagged: true,
-  showCrisis: false,
-  suggestSolo: true,
-};
 
 interface TogetherState {
   loaded: boolean;
@@ -54,7 +47,6 @@ interface TogetherState {
   streaming: string;
   sending: boolean;
   error: string | null;
-  prescreen: TogetherPreScreenView | null;
   /** The couples guided catalog cards the active person may start (§3.10); 18+ withheld host-side. */
   catalog: TogetherCatalogEntry[];
   /** The open session's wrap-up report + derived staleness + the pair agreements ledger (§3.8/§3.9). */
@@ -83,8 +75,6 @@ interface TogetherState {
   markRead: (id: string) => Promise<void>;
   leave: (id: string) => Promise<void>;
   setPaused: (id: string, paused: boolean) => Promise<void>;
-  loadPrescreen: () => Promise<void>;
-  submitPrescreen: (answers: Record<string, string>) => Promise<TogetherPreScreenResult>;
   loadReport: (sessionId: string) => Promise<void>;
   wrapUp: (sessionId: string) => Promise<TogetherWrapUpResult>;
   saveAgreement: (input: {
@@ -137,7 +127,6 @@ export const useTogetherStore = create<TogetherState>((set, get) => ({
   streaming: '',
   sending: false,
   error: null,
-  prescreen: null,
   catalog: [],
   reportView: EMPTY_REPORT,
   wrappingUp: false,
@@ -247,15 +236,6 @@ export const useTogetherStore = create<TogetherState>((set, get) => ({
     if (view && get().open?.id === id) set({ open: view });
     await get().refresh();
   },
-  loadPrescreen: async () => {
-    const prescreen = (await window.selfos?.togetherPrescreenGet()) ?? null;
-    set({ prescreen });
-  },
-  submitPrescreen: async (answers) => {
-    const result = (await window.selfos?.togetherPrescreenSubmit({ answers })) ?? HELD_PRESCREEN;
-    await get().loadPrescreen();
-    return result;
-  },
   loadReport: async (sessionId) => {
     const reportView = (await window.selfos?.togetherGetReport({ sessionId })) ?? EMPTY_REPORT;
     set({ reportView });
@@ -284,7 +264,6 @@ export const useTogetherStore = create<TogetherState>((set, get) => ({
       streaming: '',
       sending: false,
       error: null,
-      prescreen: null,
       catalog: [],
       reportView: EMPTY_REPORT,
       wrappingUp: false,

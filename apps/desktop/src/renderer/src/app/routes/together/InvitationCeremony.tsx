@@ -9,7 +9,7 @@ import styles from './Together.module.css';
 /**
  * The invitation & consent ceremony (58 §3.4): the "rules of the room", derived from mechanics (never
  * absolute — §8.7). Accepting writes the caller's `rulesAckAt` (the consent record for full-context
- * personalization). Continue → the pre-screen (if first time) or the session; the caller wires `onContinue`.
+ * personalization). Continue → the session; the caller wires `onContinue`.
  */
 export function InvitationCeremony({
   session,

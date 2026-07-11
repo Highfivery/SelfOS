@@ -5,7 +5,6 @@ import { Button, Inline, Stack, Text } from '../../../design-system/components';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { appendTogetherChunk, useTogetherStore } from '../../../stores/togetherStore';
 import { InvitationCeremony } from './InvitationCeremony';
-import { PreScreenForm } from './PreScreenForm';
 import { PrepPanel } from './PrepPanel';
 import { TogetherThread } from './TogetherThread';
 import { TogetherReflection } from './TogetherReflection';
@@ -16,19 +15,16 @@ import styles from './Together.module.css';
 
 /**
  * A Together session route (58 §3.4/§3.6). Resolves the view: an un-accepted invitation shows the consent
- * ceremony → (first time) the private pre-screen → the thread. Subscribes to the couples-turn stream + the
- * vault watcher for near-live refresh.
+ * ceremony → the thread. Subscribes to the couples-turn stream + the vault watcher for near-live refresh.
  */
 export function TogetherSession(): JSX.Element {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const myId = useSessionStore((s) => s.activePerson?.id ?? null);
   const open = useTogetherStore((s) => s.open);
-  const prescreen = useTogetherStore((s) => s.prescreen);
   const openSession = useTogetherStore((s) => s.openSession);
   const accept = useTogetherStore((s) => s.accept);
   const refresh = useTogetherStore((s) => s.refresh);
-  const [showPrescreen, setShowPrescreen] = useState(false);
   const [prepOpen, setPrepOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [aiEnabled] = useSetting('ai.enabled');
@@ -39,7 +35,6 @@ export function TogetherSession(): JSX.Element {
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    void useTogetherStore.getState().loadPrescreen();
     void aiKeyResolved('anthropic').then((ok) => {
       if (alive) setHasKey(ok);
     });
@@ -97,33 +92,18 @@ export function TogetherSession(): JSX.Element {
     );
   }
 
-  // An un-accepted invitation (the viewer hasn't acked) → the consent ceremony, then the pre-screen (first
-  // time), then acceptance. The initiator is already acked (starting is consenting), so they skip straight in.
+  // An un-accepted invitation (the viewer hasn't acked) → the consent ceremony, then acceptance. The
+  // initiator is already acked (starting is consenting), so they skip straight in.
   const needsCeremony = !open.viewerAcked && open.status === 'invited';
 
-  const continueFromCeremony = (): void => {
-    if (prescreen?.needsScreen) setShowPrescreen(true);
-    else void accept(open.id);
-  };
-
   if (needsCeremony) {
-    if (showPrescreen && prescreen?.needsScreen) {
-      return (
-        <div className={styles.page}>
-          <Stack gap={2}>
-            {back}
-            <PreScreenForm onCleared={() => void accept(open.id)} />
-          </Stack>
-        </div>
-      );
-    }
     return (
       <div className={styles.page}>
         <Stack gap={2}>
           {back}
           <InvitationCeremony
             session={open}
-            onContinue={continueFromCeremony}
+            onContinue={() => void accept(open.id)}
             onNotNow={() => navigate('/together')}
           />
         </Stack>

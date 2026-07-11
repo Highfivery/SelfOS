@@ -44,7 +44,7 @@ export interface TogetherTurnDeps {
   client: ClaudeClient;
   apiKey: string | null;
   model: string;
-  /** The session (already loaded by the bridge, membership + edge + pre-screen already gated). */
+  /** The session (already loaded by the bridge, membership + edge already gated). */
   session: TogetherSession;
   /** Who is writing this turn (the active person). The coach reply carries this id too (§4.2). */
   authorPersonId: string;

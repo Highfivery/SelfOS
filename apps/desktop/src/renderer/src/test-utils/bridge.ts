@@ -315,16 +315,6 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     togetherSetPaused: () => Promise.resolve(null),
     togetherLeave: () => Promise.resolve(null),
     togetherMarkRead: () => Promise.resolve(),
-    togetherPrescreenGet: () =>
-      Promise.resolve({
-        completed: false,
-        flagged: false,
-        needsScreen: true,
-        reoffer: false,
-        items: [],
-      }),
-    togetherPrescreenSubmit: () =>
-      Promise.resolve({ flagged: false, showCrisis: false, suggestSolo: false }),
     togetherSendMessage: () =>
       Promise.resolve({ ok: false, reason: 'NOT_ALLOWED', message: 'Not available.' }),
     togetherRetry: () =>

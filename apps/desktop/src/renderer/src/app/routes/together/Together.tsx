@@ -17,7 +17,6 @@ import {
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useTogetherStore } from '../../../stores/togetherStore';
-import { PreScreenForm } from './PreScreenForm';
 import { TogetherCatalog } from './TogetherCatalog';
 import { TogetherIntimacy } from './TogetherIntimacy';
 import { TogetherPulse } from './TogetherPulse';
@@ -181,7 +180,6 @@ export function Together(): JSX.Element {
   const loaded = useTogetherStore((s) => s.loaded);
   const hasPartner = useTogetherStore((s) => s.hasPartner);
   const sessions = useTogetherStore((s) => s.sessions);
-  const prescreen = useTogetherStore((s) => s.prescreen);
   const catalog = useTogetherStore((s) => s.catalog);
   const partners = useTogetherStore((s) => s.partners);
   const eligiblePartners = partners.filter((p) => p.eligible);
@@ -191,7 +189,6 @@ export function Together(): JSX.Element {
 
   useEffect(() => {
     void useTogetherStore.getState().load();
-    void useTogetherStore.getState().loadPrescreen();
     void useTogetherStore.getState().loadCatalog();
     setSelectedGuide(null);
   }, [myId]);
@@ -233,8 +230,6 @@ export function Together(): JSX.Element {
     );
   }
 
-  const needsScreen = prescreen?.needsScreen === true;
-
   return (
     <div className={styles.page}>
       <Stack gap={3}>
@@ -243,40 +238,30 @@ export function Together(): JSX.Element {
           <Text tone="secondary">{TOGETHER_FRAME_LINE}</Text>
         </Stack>
 
-        {needsScreen ? (
-          <PreScreenForm onCleared={() => void useTogetherStore.getState().loadPrescreen()} />
-        ) : (
-          <>
-            <StartCard guide={selectedGuide} onClearGuide={() => setSelectedGuide(null)} />
-            {catalog.length > 0 ? (
-              <TogetherCatalog
-                catalog={catalog}
-                selectedId={selectedGuide?.id ?? null}
-                onPick={(entry) => {
-                  setSelectedGuide(entry);
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-              />
-            ) : null}
-            {eligiblePartners.map((p) => (
-              <TogetherJointChallenges key={`joint-${p.personId}`} partnerId={p.personId} />
-            ))}
-            {eligiblePartners.map((p) => (
-              <TogetherPulse
-                key={`pulse-${p.personId}`}
-                partnerId={p.personId}
-                partnerName={p.displayName}
-              />
-            ))}
-            {eligiblePartners.map((p) => (
-              <TogetherIntimacy
-                key={p.personId}
-                partnerId={p.personId}
-                partnerName={p.displayName}
-              />
-            ))}
-          </>
-        )}
+        <StartCard guide={selectedGuide} onClearGuide={() => setSelectedGuide(null)} />
+        {catalog.length > 0 ? (
+          <TogetherCatalog
+            catalog={catalog}
+            selectedId={selectedGuide?.id ?? null}
+            onPick={(entry) => {
+              setSelectedGuide(entry);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+          />
+        ) : null}
+        {eligiblePartners.map((p) => (
+          <TogetherJointChallenges key={`joint-${p.personId}`} partnerId={p.personId} />
+        ))}
+        {eligiblePartners.map((p) => (
+          <TogetherPulse
+            key={`pulse-${p.personId}`}
+            partnerId={p.personId}
+            partnerName={p.displayName}
+          />
+        ))}
+        {eligiblePartners.map((p) => (
+          <TogetherIntimacy key={p.personId} partnerId={p.personId} partnerName={p.displayName} />
+        ))}
 
         {sessions.length > 0 ? (
           <Stack gap={2}>

@@ -212,12 +212,15 @@ async function seedProfileSuggestion(
 
 /**
  * Seed a Together-ready household (58): Ben (owner) + Angel (member), a live `partner` edge, both onboarded,
- * an AI key, cleared pre-screens (unless opted out), and Ben's portrait carrying a RESTRICTED trauma fact +
- * a general fact (for the excludeRestricted / restricted-absence prompt assert).
+ * an AI key, and Ben's portrait carrying a RESTRICTED trauma fact + a general fact (for the excludeRestricted
+ * / restricted-absence prompt assert).
  */
-async function seedTogetherReady(
-  opts: { clearBenPrescreen?: boolean } = {},
-): Promise<{ userData: string; vault: string; ben: string; angel: string }> {
+async function seedTogetherReady(): Promise<{
+  userData: string;
+  vault: string;
+  ben: string;
+  angel: string;
+}> {
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
   await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
   const fs = createNodeFileSystem(vault);
@@ -280,15 +283,6 @@ async function seedTogetherReady(
     createdAt: now,
     updatedAt: now,
   });
-  const clearPrescreen = (id: string): Promise<void> =>
-    writeEncryptedJson(
-      fs,
-      `people/${id}/together/prescreen.enc`,
-      { schemaVersion: 1, personId: id, flagged: false, itemCatalogVersion: 1, completedAt: now },
-      key,
-    );
-  if (opts.clearBenPrescreen !== false) await clearPrescreen(ben);
-  await clearPrescreen(angel);
   return { userData, vault, ben, angel };
 }
 
@@ -10140,40 +10134,6 @@ test('together (58) phase H3: a coach SUGGESTION card appears and "Start this ex
     // "Start this exercise" creates + opens a NEW guided Together session (the Love Maps opener shows).
     await w.getByRole('button', { name: 'Start this exercise' }).click();
     await expect(w.getByLabel('Message')).toBeVisible();
-  } finally {
-    await app.close();
-    await rm(userData, { recursive: true, force: true });
-    await rm(vault, { recursive: true, force: true });
-  }
-});
-
-test('together (58): the private pre-screen holds a flagged person; the partner only sees invited (§8.2)', async () => {
-  // Ben's pre-screen is NOT seeded → he must take it first.
-  const { userData, vault } = await seedTogetherReady({ clearBenPrescreen: false });
-  const app = await launch(userData);
-  try {
-    const w = await app.firstWindow();
-    await w.getByRole('link', { name: /Together/ }).click();
-    // The private check-in leads (never the start card).
-    await expect(w.getByText('A private check-in, just for you')).toBeVisible();
-    await expect(w.getByRole('heading', { name: 'Start a session' })).toHaveCount(0);
-
-    // A flagged set (afraid → flagged; the fear item surfaces crisis resources).
-    await w.getByLabel('Yes, usually').click(); // safe-honest: fine
-    await w.getByLabel('Often').click(); // afraid: flags + crisis
-    await w.getByLabel('Yes, my choice').click(); // own-choice: fine
-    await w.getByLabel('No, I’m ready for this').click(); // prefer-solo: fine
-    await w.getByRole('button', { name: 'Continue' }).click();
-
-    await expect(w.getByText('Let’s take this gently')).toBeVisible();
-    await expect(w.getByText(/If you ever feel unsafe or afraid/)).toBeVisible();
-
-    // Decrypt: only the OUTCOME is stored — no raw answers.
-    const raw = await readFile(
-      (await findFileNamed(join(vault, 'people', 'owner-1', 'together'), 'prescreen.enc'))!,
-      'utf8',
-    );
-    expect(raw).not.toContain('afraid');
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

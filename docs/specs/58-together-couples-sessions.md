@@ -196,9 +196,9 @@ so it can never drift from behavior. The statements are **mechanical, never abso
 - **You can step away.** Pause or leave any session at any time, no reason needed.
 
 Plus: the **18+ line** ("You've both turned on adult content — intimacy topics can be explored
-frankly") **only when both acks exist** (bridge-checked), and a first-time line announcing the
-private pre-screen. Actions: **Continue** (→ pre-screen if first time, else the session) ·
-**Not right now** (leaves it invited) · **Decline quietly** (§3.5).
+frankly") **only when both acks exist** (bridge-checked). Actions: **Continue** (→ the session) ·
+**Not right now** (leaves it invited) · **Decline quietly** (§3.5). _(The pre-screen step was removed
+— §8.2.)_
 
 Accepting writes the partner's **consent record** (their per-participant state file: `rulesAckAt`) —
 the load-bearing consent moment for full-context personalization. **Per the durable product rule
@@ -667,11 +667,9 @@ Additionally:
   **every** participant's `adultAcknowledged` via core `allAdultAcknowledged(fs, key,
 participantIds)` (the first multi-person ack check in the app; never the UI-only
   `sessions:startGuided` pattern).
-- **Pre-screen gate (one rule)**: `together:create`, `together:accept`, and **every turn**
-  (`together:sendMessage`/`together:retry`) are refused with the calm `PRESCREEN` state while the
-  active person's **latest** pre-screen is missing or flagged — including a flagged re-take, which
-  holds that person's turns the same way. The _other_ participant only ever sees
-  `invited`/"waiting" — never why (§8.2).
+- **Pre-screen gate — REMOVED** (owner decision 2026-07-11, §8.2): `together:create`/`accept`/turns
+  no longer carry a pre-screen gate. The `PRESCREEN` failure state is gone. The invitation flow is
+  ceremony → accept.
 - **Budget privacy**: the initiator's `budgetRatio`/state never crosses the seam to the partner —
   the non-initiator receives only a boolean session-paused signal (§6.2), asserted in a bridge
   test.
@@ -879,26 +877,29 @@ frame line appears on Together home, the invitation, the catalog, and leads ever
 and not a substitute for professional care"). The **CrisisFooter + not-medical line** are pinned on
 every conversational surface (thread, prep, pre-screen, catalog), exactly as on Sessions.
 
-### 8.2 The private pre-screen (deterministic, AI-free)
+### 8.2 The private pre-screen — REMOVED (2026-07-11, owner decision)
 
-Couples-work best practice treats active abuse/coercion as a reason **not** to start joint work,
-and screens each partner individually first. Together mirrors that:
-
-- Before a person's **first** session — gating `together:create`, `together:accept`, and every
-  turn (§5.2, one rule) — they complete a short private check (mockup: 4 items — safety being
-  honest, fear of reactions, own choice, prefer-solo-first), worded gently, no wrong answers.
-- Evaluation is **pure and AI-free** (`evaluatePreScreen` — the `wellbeingCrisis.ts` pattern),
-  works AI-off, is never behind a setting. **Raw answers are never persisted** — only the outcome
-  (`flagged` + `itemCatalogVersion` + `completedAt`, §4.2): the answers would be the most dangerous
-  record in the vault, and the feature only ever needs the outcome (data minimization).
-- **Flagged** → that person sees a calm private state: individual support is suggested (their solo
-  coach, guided sessions, professional resources; crisis resources when the fear item triggers),
-  and Together holds for them. **The partner only ever sees "invited" / "waiting" — never the
-  existence, content, or result of the screen.** Re-taking is allowed any time; a later clear
-  result unlocks; a flagged re-take re-holds (§5.2).
-- Results live at `people/<id>/together/prescreen.enc` — read/written only by their owner through
-  the seam (§5.2); never in notifications, lists, errors, or the other partner's projections.
-- The screen re-offers (not re-gates) after 180 quiet days (unit-tested).
+> **The private couples pre-screen has been removed at the owner's explicit request.** It was the
+> AI-free, per-partner safety screen (safe-being-honest / fear-of-reactions / own-choice / prefer-solo)
+> that ran once before a person's first session and held an at-risk/coerced person from starting while
+> surfacing crisis resources. The owner was informed of what it did and its safety trade-off (it was the
+> couples intimate-partner-violence / coercion safety net) and chose to remove it entirely. All of it is
+> gone: the `PreScreenForm`, the `together:prescreenGet`/`Submit` seam, the gate on
+> `together:create`/`accept`/turns, the `preScreen.ts` service, the `PreScreenResult` schema +
+> `people/<id>/together/prescreen.enc` storage, and the `PRESCREEN` failure reason. The invitation flow
+> now goes ceremony → accept with no screen.
+>
+> **What still stands (unchanged):** the always-present **crisis footer** ("Get help now" + the
+> not-medical line) on every Together surface; the in-session **escalation/coercion handling** in the
+> couples prompt (§8.5, the coach still slows a flooded exchange + routes to support); and the general
+> app-wide crisis routing. The removal drops the _pre-session_ screen only, not the in-conversation
+> safety behaviour.
+>
+> _The original design is preserved below (struck through in intent) for history._
+>
+> ~~Before a person's first session, they completed a short private check (4 gentle items); evaluation
+> was pure + AI-free; only the outcome was persisted (never raw answers); a flag held Together for that
+> person + surfaced resources, while the partner only ever saw "invited"/"waiting".~~
 
 ### 8.3 Exit, pause, and the soft decline
 

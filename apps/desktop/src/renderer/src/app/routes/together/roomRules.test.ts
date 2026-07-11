@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PRESCREEN_INTRO_LINE, TOGETHER_FRAME_LINE, roomRules } from './roomRules';
+import { TOGETHER_FRAME_LINE, roomRules } from './roomRules';
 
 describe('roomRules (58 §3.4/§8.7)', () => {
   const rules = roomRules('Angel');
@@ -17,11 +17,7 @@ describe('roomRules (58 §3.4/§8.7)', () => {
   });
 
   it('the copy is MECHANICAL, never absolute (§8.7) — no "never revealed"/"only the coach will ever see"', () => {
-    const all = [
-      ...rules.map((r) => `${r.title} ${r.body}`),
-      TOGETHER_FRAME_LINE,
-      PRESCREEN_INTRO_LINE,
-    ]
+    const all = [...rules.map((r) => `${r.title} ${r.body}`), TOGETHER_FRAME_LINE]
       .join(' ')
       .toLowerCase();
     expect(all).not.toContain('never revealed');

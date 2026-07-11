@@ -108,8 +108,6 @@ import type {
   SessionSummaryResult,
   TestResult,
   TogetherCreateResult,
-  TogetherPreScreenResult,
-  TogetherPreScreenView,
   TogetherSessionSummary,
   TogetherSessionView,
   TogetherTurnResult,
@@ -279,8 +277,6 @@ export const IpcChannels = {
   togetherSetPaused: 'together:setPaused',
   togetherLeave: 'together:leave',
   togetherMarkRead: 'together:markRead',
-  togetherPrescreenGet: 'together:prescreenGet',
-  togetherPrescreenSubmit: 'together:prescreenSubmit',
   togetherSendMessage: 'together:sendMessage',
   togetherRetry: 'together:retry',
   togetherChunk: 'together:chunk', // main → renderer event
@@ -994,14 +990,8 @@ export interface SelfosBridge {
   togetherLeave(id: string): Promise<TogetherSessionView | null>;
   /** Mark the caller's read cursor (drives the unread/turn badges). */
   togetherMarkRead(input: { sessionId: string; at: string }): Promise<void>;
-  /** The caller's own pre-screen state (§8.2) — items + whether they must (re-)take it. Never raw answers. */
-  togetherPrescreenGet(): Promise<TogetherPreScreenView>;
-  /** Submit the caller's pre-screen — evaluated AI-free, only the OUTCOME persisted (raw answers discarded). */
-  togetherPrescreenSubmit(input: {
-    answers: Record<string, string>;
-  }): Promise<TogetherPreScreenResult>;
   /** Send a message (or a private aside): streams the coach reply via `onTogetherChunk`, resolves with the
-   *  refreshed viewer-projected view. Participant + edge; pre-screen + initiator-budget gates (§5.1/§5.2). */
+   *  refreshed viewer-projected view. Participant + edge; initiator-budget gate (§5.1/§5.2). */
   togetherSendMessage(input: {
     sessionId: string;
     text: string;

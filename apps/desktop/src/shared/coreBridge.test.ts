@@ -4920,32 +4920,11 @@ describe('update awareness (36)', () => {
 });
 
 describe('createCoreBridge — Together (58) foundation', () => {
-  const CLEAR_PRESCREEN: Record<string, string> = {
-    'safe-honest': 'yes',
-    afraid: 'never',
-    'own-choice': 'yes',
-    'prefer-solo': 'ready',
-  };
-
   const asPerson = async (host: ReturnType<typeof makeHost>, personId: string): Promise<void> => {
     await host.host.updateDeviceState({ activePersonId: personId });
   };
 
-  /** Submit a given answer set as `personId`, restoring the previously-active person afterward. */
-  async function submitPrescreen(
-    host: ReturnType<typeof makeHost>,
-    bridge: ReturnType<typeof createCoreBridge>,
-    personId: string,
-    answers: Record<string, string>,
-  ): Promise<void> {
-    const prev = host.device().activePersonId ?? null;
-    await asPerson(host, personId);
-    await bridge.togetherPrescreenSubmit({ answers });
-    if (prev) await asPerson(host, prev);
-  }
-
-  /** Seed a household with two subjects (Ben the owner + Angel) linked by a live `partner` edge, both with a
-   *  CLEAR pre-screen (the lifecycle tests exercise the happy path; the pre-screen gate has its own test). */
+  /** Seed a household with two subjects (Ben the owner + Angel) linked by a live `partner` edge. */
   async function seedPair(): Promise<{
     host: ReturnType<typeof makeHost>;
     bridge: ReturnType<typeof createCoreBridge>;
@@ -4962,8 +4941,6 @@ describe('createCoreBridge — Together (58) foundation', () => {
       toPersonId: angel.id,
       type: 'partner',
     });
-    await submitPrescreen(host, bridge, angel.id, CLEAR_PRESCREEN);
-    await submitPrescreen(host, bridge, ownerId, CLEAR_PRESCREEN);
     return { host, bridge, ben: ownerId, angel: angel.id, edgeId: edge.id };
   }
 
@@ -5142,59 +5119,6 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect((await bridge.togetherGet(sessionId))?.status).toBe('ended');
     await asPerson(host, ben);
     expect((await bridge.togetherGet(sessionId))?.status).toBe('ended');
-  });
-
-  it('pre-screen gate (§8.2): create is blocked until the initiator clears; only the outcome is stored', async () => {
-    // A fresh pair with NO pre-screens yet (bypass seedPair's auto-clear).
-    const { host, bridge, ownerId } = await freshOwner();
-    const angel = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
-    await bridge.relationshipsSave({
-      fromPersonId: ownerId,
-      toPersonId: angel.id,
-      type: 'partner',
-    });
-
-    // Ben hasn't taken the private check → create is refused with PRESCREEN.
-    expect(await bridge.togetherPrescreenGet()).toMatchObject({
-      completed: false,
-      needsScreen: true,
-    });
-    const blocked = await bridge.togetherCreate({ partnerPersonId: angel.id });
-    expect(!blocked.ok && blocked.reason).toBe('PRESCREEN');
-
-    // A FLAGGED submission still holds (afraid → flagged) — and stores only the outcome, no raw answers.
-    const flagged = await bridge.togetherPrescreenSubmit({
-      answers: { ...CLEAR_PRESCREEN, afraid: 'often' },
-    });
-    expect(flagged).toMatchObject({ flagged: true, showCrisis: true, suggestSolo: true });
-    expect((await bridge.togetherPrescreenGet()).needsScreen).toBe(true);
-    expect(!(await bridge.togetherCreate({ partnerPersonId: angel.id })).ok).toBe(true);
-    const ctx = (await host.host.vaultAndKey())!;
-    const rawStored = await ctx.fs.read(`people/${ownerId}/together/prescreen.enc`);
-    expect(new TextDecoder().decode(rawStored!)).not.toContain('afraid'); // outcome only — no answer keys
-
-    // A CLEAR re-take unlocks.
-    await bridge.togetherPrescreenSubmit({ answers: CLEAR_PRESCREEN });
-    expect((await bridge.togetherPrescreenGet()).needsScreen).toBe(false);
-    expect((await bridge.togetherCreate({ partnerPersonId: angel.id })).ok).toBe(true);
-  });
-
-  it('a flagged partner can’t accept, and the initiator only ever sees invited/waiting — never why (§8.2)', async () => {
-    const { host, bridge, ben, angel } = await seedPair(); // both cleared…
-    const created = await bridge.togetherCreate({ partnerPersonId: angel });
-    const sessionId = created.ok ? created.session.id : '';
-
-    // …but now Angel's screen goes flagged (a later re-take). Her accept is held; her raw answers never stored.
-    await asPerson(host, angel);
-    await bridge.togetherPrescreenSubmit({
-      answers: { ...CLEAR_PRESCREEN, 'own-choice': 'pressure' },
-    });
-    expect(await bridge.togetherAccept(sessionId)).toBeNull();
-    expect((await bridge.togetherGet(sessionId))?.status).toBe('invited');
-
-    // Ben's view: still "invited" — the pre-screen result never crosses to the initiator.
-    await asPerson(host, ben);
-    expect((await bridge.togetherGet(sessionId))?.status).toBe('invited');
   });
 
   it('a couples turn streams + persists; both partners see the shared exchange (§3.6)', async () => {

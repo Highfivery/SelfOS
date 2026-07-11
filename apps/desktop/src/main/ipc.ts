@@ -354,8 +354,6 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.togetherSetPaused, bridge.togetherSetPaused);
   handle(IpcChannels.togetherLeave, bridge.togetherLeave);
   handle(IpcChannels.togetherMarkRead, bridge.togetherMarkRead);
-  handle(IpcChannels.togetherPrescreenGet, bridge.togetherPrescreenGet);
-  handle(IpcChannels.togetherPrescreenSubmit, bridge.togetherPrescreenSubmit);
   // The couples turn streams on its own channel (kept separate from chat/dreams so streams never cross, §5.4).
   // Same per-turn sender binding + reset as chatStream.
   ipcMain.handle(IpcChannels.togetherSendMessage, async (event, raw: unknown) => {

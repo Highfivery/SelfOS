@@ -38,7 +38,3 @@ export function roomRules(partnerName: string): RoomRule[] {
 /** The honest not-therapy frame line, shown on Together home + the ceremony + the catalog (§8.1). */
 export const TOGETHER_FRAME_LINE =
   'Informed by research-backed approaches like Gottman and EFT. Not therapy, and not a substitute for professional care.';
-
-/** A first-time line announcing the private pre-screen (§3.4). */
-export const PRESCREEN_INTRO_LINE =
-  'Before your first session, there’s a short, private check-in — just for you. It’s never shared.';

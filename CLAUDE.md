@@ -389,6 +389,31 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-11 — **Change + durable decision (Together pre-screen REMOVED at the owner's request; spec 58 §8.2;
+  on `fix/together-remove-prescreen`).** The user asked to remove the couples "A private check-in, just for you"
+  pre-screen. Because it was the app's **couples safety gate** (the AI-free, per-partner screen for
+  safe-being-honest / afraid-of-partner / coerced signals that held an at-risk person from a first session and
+  surfaced crisis resources — a documented non-negotiable per CLAUDE.md §1 / spec 58 §8.2), I **flagged the
+  safety trade-off + asked** (AskUserQuestion, 3 options: one-tap-skippable / remove-entirely / lighten) rather
+  than silently delete an IPV/coercion safety net. The owner chose **remove entirely**, informed. Surgical full
+  removal: `PreScreenForm`, `preScreen.ts`/`.test`, the `PreScreenResult`/`TogetherPreScreenView`/`Result`/
+  `SubmitSchema` schemas + `people/<id>/together/prescreen.enc` storage, the `together:prescreenGet`/`Submit` seam
+  (channels/ipc/preload/test-utils/coreBridge), the gate on `together:create`/`accept`/`sendMessage`/`retry`, the
+  `PRESCREEN` failure-reason union member, the store's prescreen state/actions, and `PRESCREEN_INTRO_LINE`. The
+  invitation flow is now **ceremony → accept** (no screen). **What deliberately STAYS (verified untouched):** the
+  always-present **crisis footer** on every Together surface, the in-session **escalation/coercion handling** in
+  the couples prompt (§8.5 — the coach still slows a flooded exchange + routes to support), the aside/
+  confidentiality logic, and `excludeRestricted` — the removal drops only the *pre-session* screen, not the
+  in-conversation safety behaviour. Gate green: typecheck, lint, format, **1082 core + 1043 desktop** unit (the
+  pre-screen unit/RTL/coreBridge tests deleted, not skipped), **11/11 Together E2E** (the crown-jewel ceremony→
+  accept flow confirms no screen in between), real-Electron visual QA of the Together home (goes straight to
+  "Start a session"). code-reviewer **ship** (removal clean + complete, no dangling refs, safety mechanisms
+  provably intact; swept the flagged dead `.prescreen*` CSS + 5 stale comments). Synced spec 58 §8.2 (→ REMOVED
+  note, original design kept for history) + §3.4/§5.2 + the header. **Lesson: when a user asks to remove a
+  feature that is a documented SAFETY mechanism (here IPV/coercion screening), surface the trade-off + the exact
+  scope and let them decide with AskUserQuestion — don't silently comply OR refuse; and when they confirm, remove
+  it SURGICALLY (only the pre-session screen), leaving the in-conversation crisis/coercion handling + the crisis
+  footer intact.**
 - 2026-07-11 — **Build (Together — couples sessions; SPEC 58 Phase H BUILT — integrations; SPEC 58 IS NOW
   BUILT ACROSS ALL PHASES A–H; split into 3 merged PRs; autonomous overnight, spec defaults taken).** The final
   phase, sub-sliced for reviewability. **H1 (`feat/together-integrations`, PR #160):** the Home
@@ -405,30 +430,30 @@ A running log of durable decisions and feedback captured into the project config
   `Challenge.groupId`; a `[[SELFOS:CHALLENGE:{…}]]` marker on a **non-aside** couples turn → `captureJoint
 ChallengeFromMarker` mints a twin per partner via the reused 52 `captureFromMarker` (per-person files, one shared
   `groupId`, a same-session re-mint updates the twins); each twin flows into that partner's existing 52 Home card
-  + check-in + reflection→Insight; `JOINT_CHALLENGE_INSTRUCTION`; `jointChallengeGroundingLines` (counts **people
-  not records**); a self-hiding `TogetherJointChallenges` home tile via `together:jointChallenges` (gated +
-  live-edge). **H3 (`feat/together-suggestions`, PR pending):** the **SUGGEST artifact** — a `[[SELFOS:SUGGEST:
+  - check-in + reflection→Insight; `JOINT_CHALLENGE_INSTRUCTION`; `jointChallengeGroundingLines` (counts **people
+    not records**); a self-hiding `TogetherJointChallenges` home tile via `together:jointChallenges` (gated +
+    live-edge). **H3 (`feat/together-suggestions`, PR pending):** the **SUGGEST artifact** — a `[[SELFOS:SUGGEST:
 {kind,prompt,guideId?,topic?}]]` marker on a non-aside reply → a **write-once** `TogetherSuggestion` under the
-  session (one writer — the coach turn — so §4's one-writer rule holds; no dismiss/mutation), parse/strip wired
-  into the shared `stripCoachMarkers`; the `TogetherSuggestions` card **NEVER auto-acts** — a `guide` →
-  **"Start this exercise"** (starts a new Together session, but ONLY a real **non-adult** catalog entry; an
-  adult/unknown guide degrades to a plain prompt card, and `togetherCreate` re-refuses an adult guideId host-side
-  — the 18+/explicit gates hold), a `questionnaire` → **"Open a check-in"** (a doorway to the existing,
-  user-confirmed Questionnaires compat flow, never a new auto-send); `SUGGEST_INSTRUCTION`; `together:
+    session (one writer — the coach turn — so §4's one-writer rule holds; no dismiss/mutation), parse/strip wired
+    into the shared `stripCoachMarkers`; the `TogetherSuggestions` card **NEVER auto-acts** — a `guide` →
+    **"Start this exercise"** (starts a new Together session, but ONLY a real **non-adult** catalog entry; an
+    adult/unknown guide degrades to a plain prompt card, and `togetherCreate` re-refuses an adult guideId host-side
+    — the 18+/explicit gates hold), a `questionnaire` → **"Open a check-in"** (a doorway to the existing,
+    user-confirmed Questionnaires compat flow, never a new auto-send); `SUGGEST_INSTRUCTION`; `together:
 suggestions` (participant + live-edge gated). **H3 also fixed a pre-existing leak (code-review B1):** the
-  Together **streaming** bubble rendered raw coach markers → now `stripCoachMarkers(streaming)`, mirroring
-  Sessions. **Gate (H1–H3):** typecheck/lint/format; **1094 core + 1047 desktop** unit; **12/12 Together E2E**
-  (the whole-flow coherence walk: invite→ceremony→thread→aside→wrap-up→catalog→desire/YNM→pulse→home-nudge→reap→
-  joint-challenge→suggestion); real-Electron visual QA at desktop light/dark + 360px across every surface;
-  code-reviewer per slice (H1 fix-first: incoherent-quiet-nudge; H2 fix-first: count-people-not-records; H3
-  fix-first: the streaming-marker leak + a degraded-guide card action + a prefix-partial strip). **Two items
-  flagged for a maintainer with a real Claude key: the §13 live-model adversarial pass (offline fakes can't run
-  it), and the optional direct in-app compat "Send to both" from a suggestion card (H3 ships the safe
-  builder-doorway).** **Lesson: any surface that renders STREAMING model text must strip coach markers on the
-  live stream, not just the persisted text — a trailing marker flashes to the author mid-stream otherwise (the
-  Together thread had this latent since Phase B; the SUGGEST work surfaced it). And a Home nudge that can say
-  "it's been a while" must be suppressed while the same pair has a live session, or it contradicts the current
-  state (the §7 coherence rule).**
+    Together **streaming** bubble rendered raw coach markers → now `stripCoachMarkers(streaming)`, mirroring
+    Sessions. **Gate (H1–H3):** typecheck/lint/format; **1094 core + 1047 desktop** unit; **12/12 Together E2E**
+    (the whole-flow coherence walk: invite→ceremony→thread→aside→wrap-up→catalog→desire/YNM→pulse→home-nudge→reap→
+    joint-challenge→suggestion); real-Electron visual QA at desktop light/dark + 360px across every surface;
+    code-reviewer per slice (H1 fix-first: incoherent-quiet-nudge; H2 fix-first: count-people-not-records; H3
+    fix-first: the streaming-marker leak + a degraded-guide card action + a prefix-partial strip). **Two items
+    flagged for a maintainer with a real Claude key: the §13 live-model adversarial pass (offline fakes can't run
+    it), and the optional direct in-app compat "Send to both" from a suggestion card (H3 ships the safe
+    builder-doorway).** **Lesson: any surface that renders STREAMING model text must strip coach markers on the
+    live stream, not just the persisted text — a trailing marker flashes to the author mid-stream otherwise (the
+    Together thread had this latent since Phase B; the SUGGEST work surfaced it). And a Home nudge that can say
+    "it's been a while" must be suppressed while the same pair has a live session, or it contradicts the current
+    state (the §7 coherence rule).**
 - 2026-07-11 — **Build (Together — couples sessions; SPEC 58 Phase G BUILT — Pulse, absorbs spec 11; on
   `feat/together-pulse`, a git worktree, PR pending — autonomous overnight, spec defaults taken).** The Pulse
   phase (§3.10a): a couples **dyad-metric trend** + a frictionless **1–3-tap check-in** + a **dual-consent

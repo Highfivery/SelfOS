@@ -98,7 +98,7 @@ export interface TogetherWrapUpDeps {
   client: ClaudeClient;
   apiKey: string | null;
   model: string;
-  /** The session (loaded + gated by the bridge: membership + live edge + pre-screen). */
+  /** The session (loaded + gated by the bridge: membership + live edge). */
   session: TogetherSession;
   /** Whether Together memory is on (the sessions.memoryEnabled sibling; wrap-up produces no memory when off). */
   memoryEnabled: boolean;

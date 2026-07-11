@@ -215,6 +215,8 @@ const bridge: SelfosBridge = {
   togetherYnmOverlap: (input) => ipcRenderer.invoke(IpcChannels.togetherYnmOverlap, input),
   togetherPulse: (input) => ipcRenderer.invoke(IpcChannels.togetherPulse, input),
   togetherPulseLog: (input) => ipcRenderer.invoke(IpcChannels.togetherPulseLog, input),
+  togetherJointChallenges: (input) =>
+    ipcRenderer.invoke(IpcChannels.togetherJointChallenges, input),
   togetherWrapUp: (input) => ipcRenderer.invoke(IpcChannels.togetherWrapUp, input),
   togetherGetReport: (input) => ipcRenderer.invoke(IpcChannels.togetherGetReport, input),
   togetherSaveAgreement: (input) => ipcRenderer.invoke(IpcChannels.togetherSaveAgreement, input),

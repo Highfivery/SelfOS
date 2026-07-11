@@ -16,6 +16,7 @@ import { TogetherReflection } from './TogetherReflection';
 import { TogetherCatalog } from './TogetherCatalog';
 import { TogetherIntimacy } from './TogetherIntimacy';
 import { TogetherPulse } from './TogetherPulse';
+import { TogetherJointChallenges } from './TogetherJointChallenges';
 import type {
   Agreement,
   SharedReport,
@@ -444,6 +445,49 @@ describe('TogetherPulse (§3.10a)', () => {
     expect(screen.queryByText(/desire levels/i)).not.toBeInTheDocument();
   });
 });
+
+describe('TogetherJointChallenges (§5.6)', () => {
+  it('renders the pair’s open joint challenge with its cross-partner status', async () => {
+    installMockBridge({
+      togetherJointChallenges: () =>
+        Promise.resolve([
+          {
+            groupId: 'g1',
+            action: 'Share one appreciation a day',
+            memberCount: 2,
+            checkedInCount: 1,
+            allCheckedIn: false,
+            active: true,
+            updatedAt: 'now',
+          },
+        ]),
+    });
+    render(
+      <MemoryRouter>
+        <TogetherJointChallenges partnerId="partner" />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText('Share one appreciation a day')).toBeInTheDocument();
+    expect(screen.getByText('1 of 2 checked in')).toBeInTheDocument();
+  });
+
+  it('self-hides when the pair has no joint challenge', async () => {
+    installMockBridge({ togetherJointChallenges: () => Promise.resolve([]) });
+    const { container } = render(
+      <MemoryRouter>
+        <TogetherJointChallenges partnerId="partner" />
+      </MemoryRouter>,
+    );
+    // Nothing renders (the card returns null when there are no open joint challenges).
+    await waitForNoJointCard(container);
+  });
+});
+
+async function waitForNoJointCard(container: HTMLElement): Promise<void> {
+  // Give the async fetch a tick, then assert the heading never appeared.
+  await new Promise((r) => setTimeout(r, 0));
+  expect(within(container).queryByText('Joint challenges')).toBeNull();
+}
 
 describe('TogetherReflection (§3.8/§3.9)', () => {
   const report: SharedReport = {

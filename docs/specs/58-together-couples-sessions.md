@@ -707,6 +707,20 @@ framework (35), recommendation engine (53).
   only, §3.6) for **both** partners — twin `Challenge` records linked by `groupId`, each partner
   keeping their own check-in cadence/Home card/reflection; "both checked in" is surfaced in the
   next session's grounding pack.
+  **BUILT (Phase H2, `feat/together-challenges`).** Additive `Challenge.groupId?`. The couples turn
+  parses a `[[SELFOS:CHALLENGE:{…}]]` marker on a **non-aside** reply (asides mint nothing, §3.6) →
+  `captureJointChallengeFromMarker` mints a twin for each participant via the reused 52
+  `captureFromMarker` (per-person `people/<id>/challenges/…` files, so per-person isolation holds),
+  all sharing one `groupId`; a re-mint in the same session **updates** the twins (stable groupId), no
+  competing group. Each twin flows into that partner's existing 52 Home challenge card + check-in +
+  reflection→Insight, unchanged. `JOINT_CHALLENGE_INSTRUCTION` teaches the convention (appended after
+  AGREEMENT, before context). Grounding: `jointChallengeGroundingLines` (over `listJointChallenges`,
+  which groups the twins + derives `checkedInCount`/`allCheckedIn` from each twin's outcome) adds a
+  line per open joint challenge to the pack. A Together-home **`TogetherJointChallenges`** tile
+  (self-hiding) reads the pair's status via the new `together:jointChallenges` bridge read (gated
+  `together.own` + a re-checked live edge). An **adult** joint challenge inherits the 52 restricted-
+  reflection + 18+ gating on each partner's own surfaces; the couples coach only proposes one in the
+  explicit register, which itself requires both 18+ acks (Phase F).
 - **Questionnaire suggestions**: a coach suggestion artifact carries a compat-questionnaire seed;
   "Send to both" drives the existing `toSeed()`/builder or direct compat-send path (user-confirmed
   before anything sends); the resulting `AlignmentReport` joins the grounding pack.

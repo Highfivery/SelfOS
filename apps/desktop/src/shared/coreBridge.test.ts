@@ -26,9 +26,9 @@ import { submitSectionForm } from '@selfos/core/intake';
 import { getTest } from '@selfos/core/tests';
 import { matrixRowKey } from '@selfos/core/schemas';
 import { saveGoal } from '@selfos/core/goals';
-import { listChallenges } from '@selfos/core/challenges';
+import { listChallenges, recordCheckIn } from '@selfos/core/challenges';
 import { buildContext } from '@selfos/core/people';
-import { pairKeyFor } from '@selfos/core/together';
+import { captureJointChallengeFromMarker, pairKeyFor } from '@selfos/core/together';
 import { queryUsage, recordUsage, setPersonBudget } from '@selfos/core/usage';
 import { ANTHROPIC_API_KEY_ID, OPENAI_API_KEY_ID } from './channels';
 import { DeviceStateSchema } from './schemas';
@@ -5721,5 +5721,64 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const strangerView = await bridge.togetherPulse({ partnerPersonId: angel });
     expect(strangerView.hasCheckIns).toBe(false);
     expect(strangerView.alignment.ready).toBe(false);
+  });
+
+  // ── Phase H2: joint challenges (§5.6) ────────────────────────────────────────────────────────────
+  it('a joint challenge shows for BOTH partners with the cross-partner status; a non-partner sees none', async () => {
+    const { host, bridge, ben, angel } = await seedPair();
+    const ctx = (await host.host.vaultAndKey())!;
+    const created = await bridge.togetherCreate({ partnerPersonId: angel });
+    const sessionId = created.ok ? created.session.id : '';
+    // Seed a joint challenge directly (the couples coach mints it from a CHALLENGE marker in the real turn).
+    await captureJointChallengeFromMarker(
+      ctx.fs,
+      ctx.key,
+      [ben, angel],
+      {
+        action: 'Share one appreciation a day',
+        comfort: 2,
+        lifeArea: 'Relationships',
+        checkInDays: 7,
+      },
+      sessionId,
+      new Date(),
+    );
+
+    // Ben sees the joint challenge; neither has checked in yet.
+    let benList = await bridge.togetherJointChallenges({ partnerPersonId: angel });
+    expect(benList).toHaveLength(1);
+    expect(benList[0]?.action).toBe('Share one appreciation a day');
+    expect(benList[0]?.checkedInCount).toBe(0);
+
+    // Ben checks in his own twin → 1 of 2 (his own per-person card, the 52 machinery).
+    const benTwin = (await listChallenges(ctx.fs, ctx.key, ben))[0]!;
+    await recordCheckIn({
+      fs: ctx.fs,
+      key: ctx.key,
+      personId: ben,
+      challengeId: benTwin.id,
+      outcome: 'did',
+      now: new Date(),
+    });
+    benList = await bridge.togetherJointChallenges({ partnerPersonId: angel });
+    expect(benList[0]?.checkedInCount).toBe(1);
+    expect(benList[0]?.allCheckedIn).toBe(false);
+
+    // Create a non-partner while still the owner (peopleSave needs people.manage).
+    const stranger = await bridge.peopleSave({
+      displayName: 'Stranger',
+      isSubject: true,
+      tags: [],
+    });
+
+    // Angel sees the same joint challenge (her projection).
+    await asPerson(host, angel);
+    const angelList = await bridge.togetherJointChallenges({ partnerPersonId: ben });
+    expect(angelList).toHaveLength(1);
+    expect(angelList[0]?.groupId).toBe(benList[0]?.groupId);
+
+    // A non-partner (no live edge) sees none.
+    await asPerson(host, stranger.id);
+    expect(await bridge.togetherJointChallenges({ partnerPersonId: angel })).toHaveLength(0);
   });
 });

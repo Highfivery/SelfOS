@@ -8,6 +8,7 @@ import { allAdultAcknowledged } from './adultGate';
 import { getTogetherGuide } from './togetherCatalog';
 import { getYnmOptIn, ynmOverlapFor } from './ynmService';
 import { pairKeyFor } from './togetherService';
+import { jointChallengeGroundingLines, listJointChallenges } from './togetherChallengeService';
 import { listRelationships } from '../people';
 
 // ── The grounding pack (58 §3.9) — zero extra AI spend, all cached/deterministic reads ────────────
@@ -87,6 +88,13 @@ export async function buildGroundingPack(
   if (lastReport?.summary) {
     lines.push(`From their last wrap-up together: ${lastReport.summary}`);
   }
+
+  // Phase H: the pair's OPEN joint challenges (§5.6) + how far each has got, so the coach can follow up on a
+  // shared stretch action ("both of you have checked in" / "N of M"). Derived from the twin records.
+  const jointLines = jointChallengeGroundingLines(
+    await listJointChallenges(fs, key, session.participantIds),
+  );
+  for (const line of jointLines) lines.push(line);
 
   // Phase F: the Yes/No/Maybe mutual overlap (§3.10b) feeds ONLY a Desire & intimacy guided session, and ONLY
   // when READY — both partners have opted in (symmetric consent) AND both have acknowledged adult content. The

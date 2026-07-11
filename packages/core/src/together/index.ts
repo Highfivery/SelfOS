@@ -9,3 +9,4 @@ export * from './togetherChatService';
 export * from './prepService';
 export * from './agreementService';
 export * from './togetherAnalysisService';
+export * from './togetherCatalog';

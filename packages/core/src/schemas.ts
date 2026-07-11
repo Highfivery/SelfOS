@@ -2933,6 +2933,10 @@ export const TogetherMessageSchema = z.object({
   privateAside: z.boolean().optional(), // §3.6 — the whole aside EXCHANGE (incl. the coach reply) carries this
   replyToMessageId: z.string().optional(), // coach msgs: the triggering message; never crosses a masking projection
   attachments: z.array(AttachmentRefSchema).optional(), // stored under the session's attachments/ (§4.1, Phase C)
+  // A structured guided couples session (§3.10): the step the coach declared this turn (parsed from its
+  // `[[SELFOS:STEP:n]]` marker, stripped from `content`). The CURRENT step is derived from the newest coach
+  // message carrying this — never stored on the single-writer session.enc. Additive-optional (Phase E).
+  guideStep: z.number().int().nonnegative().optional(),
 });
 export type TogetherMessage = z.infer<typeof TogetherMessageSchema>;
 
@@ -2996,10 +3000,36 @@ export interface TogetherSessionSummary {
   createdAt: string;
 }
 
+/** A couples guided-catalog card the renderer shows (§3.10) — steering (addendum/opener/steps) omitted. */
+export interface TogetherCatalogEntry {
+  id: string;
+  group: string;
+  groupTitle: string;
+  title: string;
+  framework: string;
+  blurb: string;
+  kind: 'chat' | 'structured';
+  adult: boolean;
+}
+
+/** The resolved guide meta a guided couples session carries (§3.10) — title/steps for the card + stepper. */
+export interface TogetherGuideView {
+  id: string;
+  title: string;
+  framework: string;
+  kind: 'chat' | 'structured';
+  steps?: string[];
+  adult?: boolean;
+}
+
 /** The full session view — the summary plus the viewer-projected messages + the viewer's own ack flag. */
 export interface TogetherSessionView extends TogetherSessionSummary {
   messages: TogetherMessageView[];
   viewerAcked: boolean;
+  /** The resolved guide (a guided couples session, §3.10), absent for a free session. */
+  guide?: TogetherGuideView;
+  /** The DERIVED current step for a structured guide (newest coach message's `guideStep`), else absent. */
+  guideStep?: number;
 }
 
 /** Create input (§6.1) — Zod-validated in the bridge before any storage. */

@@ -10,8 +10,9 @@ import type {
 } from '../schemas';
 import { checkBudget, costOf, recordUsage } from '../usage';
 import { getPerson } from '../people';
-import { stripCoachMarkers } from '../conversations/guidedSteps';
+import { parseLatestStep, stripCoachMarkers } from '../conversations/guidedSteps';
 import { parseAgreementMarker } from '../conversations/agreementMarker';
+import { getTogetherGuide } from './togetherCatalog';
 import { appendMessage, getSession, getTogetherAttachment, listMessages } from './togetherService';
 import { buildTogetherSystemPrompt } from './togetherPromptBuilder';
 import { captureAgreementFromMarker } from './agreementService';
@@ -222,6 +223,12 @@ async function generateCoachReply(
   // + streamed text via `stripCoachMarkers`, so the token never shows.
   const coachAt = new Date(now.getTime() + 1).toISOString();
   const reply = await lastHumanMessage(fs, key, session.id, authorPersonId);
+  // A structured guided couples session (§3.10): stamp the step the coach declared this turn onto the message
+  // (parsed from its `[[SELFOS:STEP:n]]` marker, which is stripped from `content`), so the current step can be
+  // DERIVED from the newest coach message — never stored on the single-writer session.enc. Never on an aside.
+  const guide = session.guideId ? getTogetherGuide(session.guideId) : undefined;
+  const declaredStep =
+    !privateAside && guide?.kind === 'structured' ? parseLatestStep(result.text) : null;
   const coach: TogetherMessage = {
     id: uuid(),
     schemaVersion: 1,
@@ -231,6 +238,7 @@ async function generateCoachReply(
     ts: coachAt,
     ...(privateAside ? { privateAside: true } : {}),
     ...(reply ? { replyToMessageId: reply } : {}),
+    ...(declaredStep !== null ? { guideStep: declaredStep } : {}),
   };
   await appendMessage(fs, key, session.id, coach);
   return { ok: true, usage };

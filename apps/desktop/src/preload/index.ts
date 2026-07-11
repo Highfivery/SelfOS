@@ -207,6 +207,7 @@ const bridge: SelfosBridge = {
   togetherStoreAttachment: (input) =>
     ipcRenderer.invoke(IpcChannels.togetherStoreAttachment, input),
   togetherGetAttachment: (input) => ipcRenderer.invoke(IpcChannels.togetherGetAttachment, input),
+  togetherCatalog: () => ipcRenderer.invoke(IpcChannels.togetherCatalog),
   togetherWrapUp: (input) => ipcRenderer.invoke(IpcChannels.togetherWrapUp, input),
   togetherGetReport: (input) => ipcRenderer.invoke(IpcChannels.togetherGetReport, input),
   togetherSaveAgreement: (input) => ipcRenderer.invoke(IpcChannels.togetherSaveAgreement, input),

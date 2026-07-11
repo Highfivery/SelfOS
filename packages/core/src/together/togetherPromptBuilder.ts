@@ -4,6 +4,8 @@ import { buildContext, getPerson } from '../people';
 import { FORMATTING, PERSONA, SAFETY } from '../conversations/promptBuilder';
 import { buildGroundingPack } from './groundingPack';
 import { listStates } from './togetherService';
+import { getTogetherGuide, togetherGuideLifeAreas } from './togetherCatalog';
+import { buildStepInstruction } from '../conversations/guidedSteps';
 
 // ── The couples coach prompt (58 §6.3) — order is load-bearing ────────────────────────────────────
 // PERSONA + SAFETY always lead (verbatim, 05); then the Together facilitator addendum; then a
@@ -104,6 +106,13 @@ export async function buildTogetherSystemPrompt(
     AGREEMENT_INSTRUCTION,
   ];
 
+  // A guided couples session (§3.10) foregrounds its group's life-areas for per-call fact selection; a
+  // free-start passes the caller's topic (or none). The guide addendum itself is appended AFTER context.
+  const guide = session.guideId ? getTogetherGuide(session.guideId) : undefined;
+  const topic: ContextTopic | undefined = guide
+    ? { lifeAreas: togetherGuideLifeAreas(guide.group) }
+    : options.topic;
+
   // A participant's private background feeds the coach ONLY once they've accepted the rules of the room
   // (§3.4 — the consent moment for full-context personalization). The initiator always has `rulesAckAt` from
   // create; a partner only after accept — so before the partner joins the coach has just the initiator's
@@ -112,7 +121,7 @@ export async function buildTogetherSystemPrompt(
   const states = await listStates(fs, key, session.id);
   for (const pid of session.participantIds) {
     if (!states.get(pid)?.rulesAckAt) continue;
-    const context = await buildContext(fs, key, pid, options.topic, {
+    const context = await buildContext(fs, key, pid, topic, {
       excludeRestricted: true,
       ownContextOnly: true,
     });
@@ -122,8 +131,16 @@ export async function buildTogetherSystemPrompt(
   const grounding = await buildGroundingPack(fs, key, session, nameOf);
   if (grounding) parts.push(grounding);
 
-  // The guided-exercise addendum + step instruction (Phase E) and the EXPLICIT_INTIMACY_REGISTER (Phase F,
-  // both acked) are appended here, AFTER context + grounding, so the boundary always leads. Absent in Phase B.
+  // The guide addendum + (structured) step convention (Phase E), appended AFTER context + grounding so the
+  // boundary always leads. The addendum's `frame()` restates the not-therapy line; a structured guide adds the
+  // `[[SELFOS:STEP:n]]` convention the couples turn parses to derive the current step. (Phase F appends the
+  // EXPLICIT_INTIMACY_REGISTER here when BOTH partners have acked.)
+  if (guide) {
+    parts.push(guide.systemPromptAddendum);
+    if (guide.kind === 'structured' && guide.steps && guide.steps.length > 0) {
+      parts.push(buildStepInstruction(guide.steps));
+    }
+  }
 
   parts.push(FORMATTING);
   return parts.filter(Boolean).join('\n\n');

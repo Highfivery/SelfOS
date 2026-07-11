@@ -228,11 +228,14 @@ export function TogetherThread({
     ? 'Your turn'
     : `Waiting for ${other?.displayName ?? 'your partner'}`;
 
+  const steps = session.guide?.kind === 'structured' ? (session.guide.steps ?? []) : [];
+  const currentStep = session.guideStep ?? 0;
+
   return (
     <div className={styles.thread}>
       <div className={styles.threadHead}>
         <Text weight={600} className={styles.cardTitle}>
-          {session.topic ?? 'Together'}
+          {session.guide?.title ?? session.topic ?? 'Together'}
         </Text>
         <Inline gap={2} align="center">
           <span className={styles.turnPill} data-turn={session.yourTurn ? 'you' : 'them'}>
@@ -243,6 +246,24 @@ export function TogetherThread({
           </Button>
         </Inline>
       </div>
+
+      {steps.length > 0 ? (
+        <ol className={styles.stepper} aria-label="Exercise steps">
+          {steps.map((step, i) => (
+            <li
+              key={i}
+              className={styles.stepItem}
+              data-state={i < currentStep ? 'done' : i === currentStep ? 'current' : 'todo'}
+              aria-current={i === currentStep ? 'step' : undefined}
+            >
+              <span className={styles.stepDot} aria-hidden="true">
+                {i + 1}
+              </span>
+              <span className={styles.stepLabel}>{step}</span>
+            </li>
+          ))}
+        </ol>
+      ) : null}
 
       <div className={styles.messages} aria-busy={sending} data-testid="together-thread">
         {session.messages.length === 0 ? (

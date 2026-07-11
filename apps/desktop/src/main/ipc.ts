@@ -379,6 +379,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.togetherPrepOpen, bridge.togetherPrepOpen);
   handle(IpcChannels.togetherStoreAttachment, bridge.togetherStoreAttachment);
   handle(IpcChannels.togetherGetAttachment, bridge.togetherGetAttachment);
+  handle(IpcChannels.togetherCatalog, bridge.togetherCatalog);
   handle(IpcChannels.togetherWrapUp, bridge.togetherWrapUp);
   handle(IpcChannels.togetherGetReport, bridge.togetherGetReport);
   handle(IpcChannels.togetherSaveAgreement, bridge.togetherSaveAgreement);

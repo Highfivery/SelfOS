@@ -550,6 +550,10 @@ export function fakeClaudeClient(): ClaudeClient {
         if (userText.toLowerCase().includes('screen-free')) {
           reply += ' [[SELFOS:AGREEMENT:{"text":"screen-free dinners","timeframe":"weekdays"}]]';
         }
+        // 58 §3.10: a structured guided couples turn declares its step; "step two" → advance the derived step.
+        if (/step two/i.test(userText)) {
+          reply += ' [[SELFOS:STEP:1]]';
+        }
         for (const word of reply.split(' ')) onDelta(`${word} `);
         return Promise.resolve({
           text: reply,

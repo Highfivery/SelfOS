@@ -115,6 +115,7 @@ import type {
   TogetherTurnResult,
   TogetherWrapUpResult,
   TogetherReportView,
+  TogetherCatalogEntry,
   Agreement,
   UpdateCheckResult,
   UsageEvent,
@@ -281,6 +282,7 @@ export const IpcChannels = {
   togetherPrepOpen: 'together:prepOpen',
   togetherStoreAttachment: 'together:storeAttachment',
   togetherGetAttachment: 'together:getAttachment',
+  togetherCatalog: 'together:catalog',
   togetherWrapUp: 'together:wrapUp',
   togetherGetReport: 'together:getReport',
   togetherSaveAgreement: 'together:saveAgreement',
@@ -1014,6 +1016,8 @@ export interface SelfosBridge {
     sessionId: string;
     path: string;
   }): Promise<{ mime: string; dataBase64: string } | null>;
+  /** The couples guided catalog cards the active person may start (§3.10) — 18+ group withheld host-side. */
+  togetherCatalog(): Promise<TogetherCatalogEntry[]>;
   /** Run wrap-up for a session (§3.8): a shared report + per-partner twins; the INITIATOR is billed. */
   togetherWrapUp(input: { sessionId: string }): Promise<TogetherWrapUpResult>;
   /** The session's shared report + derived staleness + the pair's agreements ledger (§3.8/§3.9). */

@@ -389,6 +389,39 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-11 — **Build (Together — couples sessions; SPEC 58 Phase E BUILT; on `feat/together-catalog`, a git
+  worktree, PR pending — autonomous overnight, spec defaults taken).** The fifth Together phase: the **guided
+  couples catalog (§3.10).** New **`togetherCatalog.ts`** — `together-connect` + `together-repair` groups (8
+  entries: Love Maps, State of the Union, Appreciation Exchange, Dreams Within Conflict; Naming Your Cycle,
+  Repair After a Rupture, Four Horsemen, Speaker & Listener), **SEPARATE** from the solo `guidedCatalog` (16) so
+  solo surfaces never list couples guides and `GuidedGroupId`/`GUIDE_LIFE_AREAS` stay untouched; the 18+
+  `together-desire` group + its entries land in Phase F. The **`adult === (group === 'together-desire')`**
+  invariant is tested. A guided couples session is an ordinary Together session carrying **`guideId`**:
+  `createSession` seeds the guide's **static opening message** (no model call, a shared coach message);
+  `buildTogetherSystemPrompt` resolves the guide from `session.guideId`, foregrounds its group's life-areas, and
+  appends the **guide addendum** (leading with the not-therapy `frame()`) + (structured) the **`[[SELFOS:STEP:n]]`
+  step convention** AFTER context + grounding, before FORMATTING. The couples turn **stamps the coach-declared
+  step** onto the message (additive **`TogetherMessage.guideStep?`**) — **never on a private aside** (§3.6) — and
+  strips the marker from the visible text; the **current step is DERIVED** from the newest coach message
+  (`guideStepFor`), so session.enc stays single-writer. **The 18+ group is withheld HOST-SIDE:** `togetherCatalog()`
+  returns only `allowAdult:false` cards in Phase E, and `togetherCreate` refuses an adult/unknown `guideId` (never
+  merely a hidden UI card). Additive view fields (`TogetherGuideView`/`TogetherCatalogEntry`, `TogetherSessionView.guide?`/`guideStep?`).
+  Renderer: the grouped, **searchable** `TogetherCatalog` on the Together home (picking a card binds it to the
+  start form; the topic field hides for a guided start) + a structured **stepper** in the thread (current step
+  `aria-current`). Bridge `together:catalog`. Gate green: typecheck, lint, format, **1054 core + 1028 desktop**
+  unit (+8 core catalog [adult invariant, unique-id/opener/frame, host-side withhold, guide resolution, opener
+  seed, addendum+step-convention order, derived step, no-step-from-aside], +1 coreBridge [guided create seeds
+  opener + resolves guide view + derives step via marker + chat-no-stepper + unknown/adult refused], +2 RTL
+  [catalog group/search/pick, structured stepper]), **6/6 Together E2E** (+E2E: start a structured guided session
+  from the catalog → the stepper renders → a "move to step two" turn advances the derived step [marker never
+  shown, decrypt asserts `guideId`] + 360px catalog/stepper overflow guard). Real-Electron visual QA at desktop
+  (the grouped catalog + the thread stepper). Synced spec 58 §14. **Phases F–H remain; the §13 live-model
+  adversarial pass [first run] is a manual DoD item needing a real API key — flagged for the user.** **Lesson:
+  keep the couples catalog a SEPARATE module (`togetherCatalog`), not a group bolted onto the solo `guidedCatalog`
+  — the solo `GuidedGroupId` union + life-area map + every solo surface stay untouched, and the couples prompt
+  builder resolves `guideId` against the Together catalog ALONE; and derive the structured-exercise step from the
+  newest coach message's stamped `guideStep` (parse the marker, stamp the message, strip the text) rather than
+  storing it on session.enc, so the single-writer invariant holds — never stamp from an aside.**
 - 2026-07-11 — **Build (Together — couples sessions; SPEC 58 Phase D BUILT; on `feat/together-wrapup-memory`, a git
   worktree, PR pending).** The fourth Together phase: **wrap-up & relationship memory (§3.8/§3.9).** **Owner
   decisions asked first (§11 #2):** agreement editing = **inline on the ledger** (each field editable in place,

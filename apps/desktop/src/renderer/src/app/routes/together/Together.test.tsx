@@ -12,6 +12,8 @@ import { Together } from './Together';
 import { PreScreenForm } from './PreScreenForm';
 import { InvitationCeremony } from './InvitationCeremony';
 import { TogetherThread } from './TogetherThread';
+import { TogetherReflection } from './TogetherReflection';
+import type { Agreement, SharedReport } from '@shared/schemas';
 import { useTogetherStore } from '../../../stores/togetherStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
@@ -223,5 +225,66 @@ describe('TogetherThread (§3.6)', () => {
     const prep = screen.getByRole('button', { name: /Prep privately/ });
     await userEvent.click(prep);
     expect(opened).toBe(1);
+  });
+});
+
+describe('TogetherReflection (§3.8/§3.9)', () => {
+  const report: SharedReport = {
+    id: 'r1',
+    schemaVersion: 1,
+    sessionId: 's1',
+    summary: 'You both showed up honestly.',
+    themes: ['connection'],
+    workedThrough: ['naming the pattern'],
+    agreementIds: [],
+    createdAt: 'now',
+    updatedAt: 'now',
+  };
+  const agreement = (over: Partial<Agreement> = {}): Agreement => ({
+    id: 'a1',
+    schemaVersion: 1,
+    pairKey: 'ben~partner',
+    text: 'screen-free dinners',
+    status: 'standing',
+    provenance: { sessionId: 's1', at: 'now' },
+    createdAt: 'now',
+    updatedAt: 'now',
+    ...over,
+  });
+
+  it('offers "Wrap up & reflect" when AI + memory are ready and there is no report yet', () => {
+    installMockBridge();
+    useTogetherStore.setState({ reportView: { report: null, stale: false, agreements: [] } });
+    render(<TogetherReflection sessionId="s1" memoryEnabled aiReady />);
+    expect(screen.getByRole('button', { name: /Wrap up & reflect/ })).toBeInTheDocument();
+  });
+
+  it('renders the shared report (summary + worked-through + themes) once one exists', () => {
+    installMockBridge();
+    useTogetherStore.setState({ reportView: { report, stale: false, agreements: [] } });
+    render(<TogetherReflection sessionId="s1" memoryEnabled aiReady />);
+    expect(screen.getByText('You both showed up honestly.')).toBeInTheDocument();
+    expect(screen.getByText('naming the pattern')).toBeInTheDocument();
+    expect(screen.getByText('connection')).toBeInTheDocument();
+  });
+
+  it('lists agreements + inline edit; marking one done offers a gentle follow-up (§11 #2)', async () => {
+    installMockBridge();
+    useTogetherStore.setState({ reportView: { report, stale: false, agreements: [agreement()] } });
+    render(<TogetherReflection sessionId="s1" memoryEnabled aiReady />);
+    expect(screen.getByText('screen-free dinners')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /Mark done/ }));
+    expect(await screen.findByText(/build on it/i)).toBeInTheDocument();
+    // The follow-up offers an editable next agreement (not a placeholder-text row).
+    expect(screen.getByLabelText('Next agreement')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add agreement' })).toBeInTheDocument();
+  });
+
+  it('shows a calm connect-Claude note (never a dead wrap-up button) when AI is off', () => {
+    installMockBridge();
+    useTogetherStore.setState({ reportView: { report: null, stale: false, agreements: [] } });
+    render(<TogetherReflection sessionId="s1" memoryEnabled aiReady={false} />);
+    // Nothing to produce + AI off ⇒ the whole section hides (no dead control).
+    expect(screen.queryByRole('button', { name: /Wrap up & reflect/ })).not.toBeInTheDocument();
   });
 });

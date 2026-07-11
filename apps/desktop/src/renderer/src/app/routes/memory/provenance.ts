@@ -22,6 +22,7 @@ const SOURCE_NOUN: Record<InsightSource, string> = {
   questionnaire: 'a questionnaire',
   intake: 'onboarding',
   test: 'a self-assessment',
+  together: 'a Together session',
 };
 
 export function provenanceTarget(insight: Insight): ProvenanceTarget {

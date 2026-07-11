@@ -11,6 +11,7 @@ const SOURCE_EYEBROW: Record<Insight['source'], string> = {
   dream: 'Dream',
   questionnaire: 'Questionnaire',
   test: 'Self-assessment',
+  together: 'Together session',
 };
 
 const CONFIDENCE_LEVEL: Record<Insight['confidence'], ConfidenceLevel> = {

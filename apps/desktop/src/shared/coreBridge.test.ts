@@ -29,7 +29,7 @@ import { saveGoal } from '@selfos/core/goals';
 import { listChallenges } from '@selfos/core/challenges';
 import { buildContext } from '@selfos/core/people';
 import { pairKeyFor } from '@selfos/core/together';
-import { recordUsage, setPersonBudget } from '@selfos/core/usage';
+import { queryUsage, recordUsage, setPersonBudget } from '@selfos/core/usage';
 import { ANTHROPIC_API_KEY_ID, OPENAI_API_KEY_ID } from './channels';
 import { DeviceStateSchema } from './schemas';
 import type { BootState, DeviceState, Insight } from './schemas';
@@ -194,6 +194,43 @@ function makeHost(): {
             moodValence: -0.3,
             moodEnergy: 0.1,
             crisisFlag: false,
+          }),
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+      // Together wrap-up (58 §3.8): "write the wrap-up for this session between A and B" → a per-partner
+      // report. crisisFlag is set for a partner whose attributed lines contain "CRISIS" so a test can assert
+      // crisis routes to that twin only; the SHARED summary never carries the word.
+      const wrapMatch = /write the wrap-up for this session between (.+?) and (.+?)\./.exec(
+        userText,
+      );
+      if (wrapMatch) {
+        const [, nameA, nameB] = wrapMatch;
+        const crisisFor = (name: string): boolean =>
+          new RegExp(`^${name}: .*CRISIS`, 'm').test(userText);
+        return Promise.resolve({
+          text: JSON.stringify({
+            summary: 'You both showed up honestly.',
+            themes: ['connection'],
+            workedThrough: ['naming the pattern'],
+            connectionValence: 0.4,
+            frictionLevel: 0.2,
+            partners: [
+              {
+                name: nameA,
+                reflection: `A reflection for ${nameA}.`,
+                facts: ['wants more time'],
+                sensitiveFacts: [],
+                crisisFlag: crisisFor(nameA ?? ''),
+              },
+              {
+                name: nameB,
+                reflection: `A reflection for ${nameB}.`,
+                facts: ['values reassurance'],
+                sensitiveFacts: ['a desire preference'],
+                crisisFlag: crisisFor(nameB ?? ''),
+              },
+            ],
           }),
           usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
@@ -5344,5 +5381,131 @@ describe('createCoreBridge — Together (58) foundation', () => {
         path: `together/sessions/${sessionId}/attachments/x.enc`,
       }),
     ).toBeNull();
+  });
+
+  // ── Phase D: wrap-up + agreements (§3.8/§3.9) ──────────────────────────────────────────────────
+  it('wrap-up writes a shared report + per-partner twins; the private aside is ABSENT from BOTH; sexual facts are restricted; the initiator is billed (§3.8)', async () => {
+    const { host, bridge, ben, angel } = await seedPair();
+    const created = await bridge.togetherCreate({ partnerPersonId: angel });
+    const sessionId = created.ok ? created.session.id : '';
+    await asPerson(host, angel);
+    await bridge.togetherAccept(sessionId);
+
+    // A shared exchange, then a PRIVATE aside by Ben (its content must never reach the report or twins).
+    await asPerson(host, ben);
+    await bridge.togetherSendMessage({ sessionId, text: 'I want more time together.' });
+    await bridge.togetherSendMessage({
+      sessionId,
+      text: 'SECRETASIDE I am scared.',
+      privateAside: true,
+    });
+
+    const wrap = await bridge.togetherWrapUp({ sessionId });
+    expect(wrap.ok).toBe(true);
+    if (wrap.ok) expect(wrap.report.summary).toContain('showed up honestly');
+
+    const ctx = (await host.host.vaultAndKey())!;
+    // The report carries NO aside content.
+    expect(JSON.stringify(wrap.ok ? wrap.report : {})).not.toContain('SECRETASIDE');
+    // Two twins, one per partner, each feeding only that partner — neither contains the aside.
+    const benTwins = (await listInsightsForPerson(ctx.fs, ctx.key, ben)).filter(
+      (i) => i.source === 'together',
+    );
+    const angelTwins = (await listInsightsForPerson(ctx.fs, ctx.key, angel)).filter(
+      (i) => i.source === 'together',
+    );
+    // Ben has no sexual facts → one MAIN twin. Angel has one → a MAIN twin + an INTIMACY companion (split so
+    // her reflection still feeds while the sexual fact stays own-context-only + intimacy-gated, §3.8).
+    expect(benTwins).toHaveLength(1);
+    expect(angelTwins).toHaveLength(2);
+    expect(JSON.stringify(benTwins)).not.toContain('SECRETASIDE');
+    expect(JSON.stringify(angelTwins)).not.toContain('SECRETASIDE');
+    expect(benTwins[0]?.provenance.pairKey).toBe(pairKeyFor(ben, angel));
+    // The sexual fact lives on the RESTRICTED intimacy companion, tagged lifeArea Intimacy.
+    const intimacy = angelTwins.find((i) => i.facts.some((f) => f.restricted));
+    const main = angelTwins.find((i) => !i.facts.some((f) => f.restricted));
+    const sensitive = intimacy?.facts.find((f) => f.text === 'a desire preference');
+    expect(sensitive?.restricted).toBe(true);
+    expect(sensitive?.lifeArea).toBe('Intimacy');
+    // The main twin (reflection + non-sexual fact) carries no restricted fact → it feeds Angel's context.
+    expect(main?.facts.some((f) => f.restricted)).toBe(false);
+    // The INITIATOR (Ben) is billed for the analyze pass (§6.2).
+    const usage = await queryUsage(ctx.fs, ctx.key, {
+      from: '2026-01-01T00:00:00.000Z',
+      to: '2030-01-01T00:00:00.000Z',
+      type: 'together.analyze',
+    });
+    expect(usage.every((u) => u.personId === ben)).toBe(true);
+    expect(usage.length).toBeGreaterThan(0);
+  });
+
+  it('a crisis flag routes to the affected partner’s twin ONLY, never into the shared report (§8.5)', async () => {
+    const { host, bridge, ben, angel } = await seedPair();
+    const created = await bridge.togetherCreate({ partnerPersonId: angel });
+    const sessionId = created.ok ? created.session.id : '';
+    await asPerson(host, angel);
+    await bridge.togetherAccept(sessionId);
+    // Angel discloses crisis in a SHARED message (the fake flags a partner whose line contains "CRISIS").
+    await bridge.togetherSendMessage({ sessionId, text: 'CRISIS I feel hopeless.' });
+
+    await asPerson(host, ben);
+    const wrap = await bridge.togetherWrapUp({ sessionId });
+    expect(wrap.ok).toBe(true);
+    if (wrap.ok) expect(wrap.report.summary).not.toContain('CRISIS');
+    const ctx = (await host.host.vaultAndKey())!;
+    // The crisisFlag lands on the MAIN twin (the non-restricted one); scope past any intimacy companion.
+    const angelMain = (await listInsightsForPerson(ctx.fs, ctx.key, angel)).find(
+      (i) => i.source === 'together' && !i.facts.some((f) => f.restricted),
+    );
+    const benMain = (await listInsightsForPerson(ctx.fs, ctx.key, ben)).find(
+      (i) => i.source === 'together' && !i.facts.some((f) => f.restricted),
+    );
+    expect(angelMain?.crisisFlag).toBe(true);
+    expect(benMain?.crisisFlag).toBeUndefined();
+  });
+
+  it('agreements round-trip inline (create → edit → retire); report staleness derives; a non-participant is refused (§3.9/§11 #2)', async () => {
+    const { host, bridge, ben, angel } = await seedPair();
+    const created = await bridge.togetherCreate({ partnerPersonId: angel });
+    const sessionId = created.ok ? created.session.id : '';
+    await asPerson(host, angel);
+    await bridge.togetherAccept(sessionId);
+    await asPerson(host, ben);
+    await bridge.togetherSendMessage({ sessionId, text: 'Let’s set a rhythm.' });
+
+    // Create an agreement inline; it shows in the pair ledger.
+    const a = await bridge.togetherSaveAgreement({
+      sessionId,
+      text: 'weekly date night',
+      status: 'standing',
+    });
+    expect(a?.status).toBe('standing');
+    let view = await bridge.togetherGetReport({ sessionId });
+    expect(view.agreements.map((x) => x.id)).toContain(a?.id);
+
+    // Wrap up, then send a NEW shared message → the report derives stale (§3.8).
+    await bridge.togetherWrapUp({ sessionId });
+    expect((await bridge.togetherGetReport({ sessionId })).stale).toBe(false);
+    await bridge.togetherSendMessage({ sessionId, text: 'One more thing.' });
+    expect((await bridge.togetherGetReport({ sessionId })).stale).toBe(true);
+
+    // Edit inline (mark done), then retire.
+    const done = await bridge.togetherSaveAgreement({
+      sessionId,
+      id: a!.id,
+      text: 'weekly date night',
+      status: 'done',
+    });
+    expect(done?.status).toBe('done');
+    view = await bridge.togetherGetReport({ sessionId });
+    expect(view.agreements.find((x) => x.id === a?.id)?.status).toBe('done');
+
+    // A non-participant cannot save an agreement or read the report.
+    const cara = await bridge.peopleSave({ displayName: 'Cara', isSubject: true, tags: [] });
+    await asPerson(host, cara.id);
+    expect(
+      await bridge.togetherSaveAgreement({ sessionId, text: 'sneaky', status: 'standing' }),
+    ).toBeNull();
+    expect((await bridge.togetherGetReport({ sessionId })).report).toBeNull();
   });
 });

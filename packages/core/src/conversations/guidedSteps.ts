@@ -7,6 +7,7 @@
  */
 
 import { stripWrapUpMarker } from './wrapUp';
+import { stripAgreementMarker } from './agreementMarker';
 
 const STEP_MARKER_RE = /\[\[SELFOS:STEP:\d+\]\]/g;
 const STEP_PREFIX = '[[SELFOS:STEP:';
@@ -117,7 +118,7 @@ export function stripChallengeMarker(text: string): string {
   return out.replace(/\s+$/, '');
 }
 
-/** Strip all coach markers (wrap-up + step + challenge) — the single fn the renderer + service use on replies. */
+/** Strip all coach markers (wrap-up + step + challenge + agreement) — the single fn the renderer + services use. */
 export function stripCoachMarkers(text: string): string {
-  return stripChallengeMarker(stripStepMarkers(stripWrapUpMarker(text)));
+  return stripAgreementMarker(stripChallengeMarker(stripStepMarkers(stripWrapUpMarker(text))));
 }

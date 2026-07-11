@@ -389,6 +389,49 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-11 — **Build (Together — couples sessions; SPEC 58 Phase D BUILT; on `feat/together-wrapup-memory`, a git
+  worktree, PR pending).** The fourth Together phase: **wrap-up & relationship memory (§3.8/§3.9).** **Owner
+  decisions asked first (§11 #2):** agreement editing = **inline on the ledger** (each field editable in place,
+  LWW); a **gentle, dismissible follow-up** offered when an agreement is marked **done** (a soft editable "build
+  on it?" prompt — never a nag). **Wrap-up (`togetherAnalysisService.runTogetherWrapUp`):** one metered
+  **`together.analyze`** pass, **initiator-billed**, over the **mutually-visible transcript only** — every
+  `privateAside` message is **excluded host-side before prompt assembly** (a code boundary, decrypt-tested absent
+  from the report AND both twins); **crisis routed away from the shared report** (`crisisFlag` lands on the
+  affected partner's twin only; the report stays supportive/detail-free); **meter-before-parse**; **idempotent
+  re-run** (reuse-the-id). It writes a **`SharedReport`** (both partners see) + **per-partner twin insights**
+  (`source:'together'`, subject = that partner, feeding ONLY their own context; `provenance.togetherSessionId` +
+  the stable `pairKey`; `relationshipId` = the live edge). **Twin subject resolution is fail-safe:** strict
+  name→id match, and **NO twins are written when the two partners share a display name** (can't disambiguate → never
+  mis-subject a reflection — a code-review should-fix). **The twin is SPLIT (the other code-review should-fix):**
+  the MAIN twin (reflection + non-sexual facts, no `restricted`) feeds the partner's context in **every** topic;
+  a companion **INTIMACY twin** (sexual facts, `restricted` + **`lifeArea:'Intimacy'`**) is own-context-only +
+  intimacy-topic-gated — because the §50 relevance-gate is **fail-closed on a missing `lifeArea`**, so a single
+  unlabelled restricted fact on the main twin would have silently withheld the WHOLE reflection from the partner's
+  coaching. **Agreements ledger (§3.9):** the pair-level ledger is the **one two-editor record** (either partner
+  edits/retires; last-write-wins; an edit preserves `createdAt` + origin provenance); captured live via the
+  **`[[SELFOS:AGREEMENT:{json}]]`** marker (parsed on **non-aside** turns only — asides mint no shared artifacts,
+  §3.6 — and **globally stripped** by `stripCoachMarkers`, so a solo coach that ever emits one never shows it).
+  **Grounding pack v2:** standing agreements + the last wrap-up summary (relational continuity, not sexual detail,
+  §8.6). **Renderer:** `TogetherReflection` (a "Wrap up & reflect" CTA gated on AI+memory, the shared report card,
+  the inline-editable ledger, the gentle done-follow-up), wired into `TogetherSession`. **Additive schema (no
+  bump):** `InsightSource` gains **`'together'`** (the 3 Memory `Record<InsightSource>` maps extended);
+  `InsightProvenance` gains `togetherSessionId?`/`pairKey?`; new `SharedReport`/`Agreement`. Bridge:
+  `together:wrapUp`/`:getReport`/`:saveAgreement` (gated `together.own` + participant-scoped via
+  `accessibleTogetherSession`; Together memory rides the existing `sessions.memoryEnabled` toggle — no dead new
+  setting). Code-reviewer **fix-first** (both should-fixes above + nits). Gate green: typecheck, lint, format,
+  **1046 core + 1025 desktop** unit (+16 core wrapUp [aside-exclusion, twin-split feeds-context, crisis-routing,
+  restricted intimacy companion, identical-names guard, idempotency, marker capture/skip-on-aside, grounding v2],
+  +3 coreBridge two-persona [aside absent from report+twins decrypt, crisis routing, agreements round-trip +
+  staleness + non-participant refused], +4 RTL), **5/5 Together E2E** (+E2E #5: wrap-up report + twins + aside
+  absent [decrypt] + agreement capture via the marker through the UI + done-follow-up + 360px). Real-Electron
+  visual QA at desktop. Synced spec 58 §14 + spec 05 §4.1 (Phase C). **Phases E–H remain; the §13 live-model
+  adversarial pass [first run] is a manual DoD item needing a real API key — flagged for the user.** **Lesson: the
+  §50 memory relevance-gate is fail-CLOSED when a `restricted` fact has no `lifeArea` — so putting a couples twin's
+  sexual fact on the SAME insight as its reflection silently withholds the whole reflection from the partner's
+  coaching (the feature's core value) in every topic; split sexual facts onto a separate `lifeArea:'Intimacy'`
+  companion so the reflection always feeds while the sexual detail stays own-context-only + intimacy-gated. And a
+  strict name→id twin match still mis-subjects when two participants share a display name — the map collapses and
+  the guard's "unresolvable" branch never fires; detect the collision up front and write no twins.**
 - 2026-07-10 — **Build (Together — couples sessions; SPEC 58 Phase C BUILT; on `feat/together-prep-attachments`, a
   git worktree, PR pending).** The third Together phase: **private prep spaces + Together image attachments + the
   secrets policy (§3.7/§6.1/§8.7).** **Prep spaces:** each participant gets their OWN private prep thread — an

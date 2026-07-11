@@ -9719,6 +9719,81 @@ test('together (58) phase C: an attachment stores encrypted under the session; t
   }
 });
 
+test('together (58) phase D: wrap-up writes a report + twins (aside ABSENT from both, decrypt); agreements round-trip inline with a done follow-up (§3.8/§3.9)', async () => {
+  const { userData, vault, ben, angel } = await seedTogetherReady();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByPlaceholder('e.g. Feeling disconnected lately').fill('Planning our week');
+    await w.getByRole('button', { name: 'Send invitation' }).click();
+
+    // A shared message that captures an agreement (the fake appends the AGREEMENT marker on "screen-free").
+    await w.getByLabel('Message').fill('Let’s do screen-free dinners.');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/I hear you/)).toBeVisible();
+    // The captured agreement appears in the ledger (exact — the message bubble also contains the phrase);
+    // the marker itself never shows.
+    await expect(w.getByText('screen-free dinners', { exact: true })).toBeVisible();
+    await expect(w.getByText(/SELFOS:AGREEMENT/)).toHaveCount(0);
+
+    // A PRIVATE aside — its content must never reach the report or the twins.
+    await w.getByRole('button', { name: 'Write privately to the coach' }).click();
+    await w.getByLabel('Private note to the coach').fill('SECRETASIDE I am scared.');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText('SECRETASIDE I am scared.')).toBeVisible();
+
+    // Wrap up & reflect → the shared report renders.
+    await w.getByRole('button', { name: /Wrap up & reflect/ }).click();
+    await expect(w.getByText(/showed up honestly/)).toBeVisible();
+    await expect(w.getByText('naming the pattern together')).toBeVisible();
+
+    // Decrypt: two twins (one per partner), neither carrying the aside; the report on disk has no aside.
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('no key');
+    const benTwins = (await listInsightsForPerson(fs, key, ben)).filter(
+      (i) => i.source === 'together',
+    );
+    const angelTwins = (await listInsightsForPerson(fs, key, angel)).filter(
+      (i) => i.source === 'together',
+    );
+    expect(benTwins).toHaveLength(1);
+    expect(angelTwins).toHaveLength(1);
+    expect(JSON.stringify(benTwins)).not.toContain('SECRETASIDE');
+    expect(JSON.stringify(angelTwins)).not.toContain('SECRETASIDE');
+    const sessions = await readdir(join(vault, 'together', 'sessions'));
+    const report = await readEncryptedJson(fs, `together/sessions/${sessions[0]}/report.enc`, key);
+    expect(JSON.stringify(report)).not.toContain('SECRETASIDE');
+
+    // Mark the agreement done → a gentle, dismissible follow-up (§11 #2).
+    await w.getByRole('button', { name: /Mark done/ }).click();
+    await expect(w.getByText(/build on it/i)).toBeVisible();
+    await w.getByRole('button', { name: 'Not now' }).click();
+    await expect(w.getByText(/build on it/i)).toHaveCount(0);
+
+    // No inner horizontal scrollbar at 360px (the reflection section + ledger).
+    await w.setViewportSize({ width: 360, height: 900 });
+    const overflow = await w.evaluate(() => {
+      for (const el of Array.from(document.querySelectorAll('*'))) {
+        const style = getComputedStyle(el);
+        if (
+          (style.overflowX === 'auto' || style.overflowX === 'scroll') &&
+          el.scrollWidth > el.clientWidth + 1
+        ) {
+          return el.className || el.tagName;
+        }
+      }
+      return null;
+    });
+    expect(overflow).toBeNull();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('together (58): the private pre-screen holds a flagged person; the partner only sees invited (§8.2)', async () => {
   // Ben's pre-screen is NOT seeded → he must take it first.
   const { userData, vault } = await seedTogetherReady({ clearBenPrescreen: false });

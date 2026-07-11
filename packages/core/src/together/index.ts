@@ -7,3 +7,5 @@ export * from './togetherPromptBuilder';
 export * from './groundingPack';
 export * from './togetherChatService';
 export * from './prepService';
+export * from './agreementService';
+export * from './togetherAnalysisService';

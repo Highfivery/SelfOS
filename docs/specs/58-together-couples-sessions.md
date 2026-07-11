@@ -1035,8 +1035,10 @@ Remaining (build-time; ask before the relevant phase):
 
 1. **Pre-screen item wording + flag rule** — the four items + choices are drafted (mockup); final
    wording + the exact flag combinations need a review pass before Phase B ships.
-2. **Agreement editing UX** — inline edit on the ledger vs. edit-via-session; whether "done"
-   agreements auto-suggest a follow-up.
+2. **Agreement editing UX** — **RESOLVED (owner, 2026-07-11, Phase D):** **inline edit on the
+   ledger** (each field — text/timeframe/status — editable in place, last-write-wins), AND a **gentle,
+   dismissible follow-up** offered when an agreement is marked **done** (a soft "build on this?" prompt
+   that can seed a next agreement or a Together session — never a nag; §8 restraint).
 3. **Prompt transcript window size** — the most-recent-N bound + summary handoff (tune at build
    with real token counts).
 4. **Pulse metric starter set** — proposed: `connection`, `desire`, `satisfaction` for check-ins +
@@ -1087,8 +1089,20 @@ Remaining (build-time; ask before the relevant phase):
 > static opener), the Together attachment seam (`together:storeAttachment`/`getAttachment`, `isTogetherAttachmentPath`,
 > the **fail-closed** aside-gated read + vision ContentBlocks), and the secrets-policy prompt additions (§8.7 —
 > identical no-oracle deflection, no covert use, no indefinite-secret-holding). Owner-confirmed: conservative
-> pre-screen flag rule + all four §11 defaults kept. **The live-model adversarial pass (§13 first run) is a manual
-> DoD item that needs a real API key — flagged for the user; the offline suite is green.** **Phases D–H remain.**
+> pre-screen flag rule + all four §11 defaults kept. **Phase D BUILT** on `feat/together-wrapup-memory`: wrap-up
+> (`runTogetherWrapUp` — initiator-billed `together.analyze`, aside-excluded input host-side, crisis routed away
+> from the shared report, meter-before-parse, idempotent re-run) → a `SharedReport` both partners see +
+> **per-partner twins** (`source:'together'`, strict name→id match, **NO twin when the two partners share a
+> display name** — the wrong-subject guard); the pair **agreements ledger** (the one two-editor LWW record + the
+> `[[SELFOS:AGREEMENT]]` marker, captured on non-aside turns only + globally stripped) with **inline edit + a
+> gentle done-follow-up** (owner: inline · gentle follow-up, §11 #2); grounding pack v2 (standing agreements +
+> last wrap-up summary); the `TogetherReflection` renderer. **As-built refinement (§3.8):** a twin is **SPLIT** —
+> the MAIN twin (reflection + non-sexual facts, no `restricted`) feeds the partner's context in every topic; a
+> companion **INTIMACY twin** (sexual facts, `restricted` + `lifeArea:'Intimacy'`) is own-context-only +
+> intimacy-topic-gated (the §50 relevance-gate is fail-closed on a missing `lifeArea`, so a single unlabelled
+> restricted fact would otherwise withhold the whole reflection). **The live-model adversarial pass (§13 first
+> run) is a manual DoD item that needs a real API key — flagged for the user; the offline suite is green.**
+> **Phases E–H remain.**
 
 Each phase lands via the standard slice workflow (branch → implement + tests → quality-gate →
 code-reviewer → sync-docs → PR → squash-merge), meets the full §7-CLAUDE.md DoD (E2E written AND

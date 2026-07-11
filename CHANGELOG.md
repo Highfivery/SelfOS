@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.18.0](https://github.com/Highfivery/SelfOS/compare/v0.17.0...v0.18.0) (2026-07-11)
+
+
+### Features
+
+* **together:** coach suggestion cards — guided exercise / check-in (58 §5.6) ([#162](https://github.com/Highfivery/SelfOS/issues/162)) ([9a81806](https://github.com/Highfivery/SelfOS/commit/9a81806b8a9e3355e21ed98139ed0db9470597a3))
+* **together:** explicit register + Desire/intimacy + Yes/No/Maybe (58 phase F) ([#158](https://github.com/Highfivery/SelfOS/issues/158)) ([96f06c3](https://github.com/Highfivery/SelfOS/commit/96f06c3ce5078da7f2c6f587d8c366e5c500c6dd))
+* **together:** Home presence provider + person-delete reap (58 §3.12/§5.6) ([#160](https://github.com/Highfivery/SelfOS/issues/160)) ([6c78ec1](https://github.com/Highfivery/SelfOS/commit/6c78ec138c9393ab25f7cabc3e5e2c915ea85c04))
+* **together:** joint challenges — twin Challenge records for both partners (58 §5.6) ([#161](https://github.com/Highfivery/SelfOS/issues/161)) ([8d43a87](https://github.com/Highfivery/SelfOS/commit/8d43a873ae0b5e192dc11beb13257211f6eeedfb))
+* **together:** prep spaces, image attachments, and the secrets policy (58 phase C) ([#155](https://github.com/Highfivery/SelfOS/issues/155)) ([f16be1c](https://github.com/Highfivery/SelfOS/commit/f16be1c2eabfbfdf766d2c0040d5df9bc9d8e30c))
+* **together:** Pulse — dyad-metric trends + dual-consent desire alignment (58 §3.10a) ([#159](https://github.com/Highfivery/SelfOS/issues/159)) ([0834c29](https://github.com/Highfivery/SelfOS/commit/0834c29c0cf82fa164e3c458779c061cd68a12d2))
+* **together:** remove the couples pre-screen (58 §8.2, owner decision) ([#163](https://github.com/Highfivery/SelfOS/issues/163)) ([cf3cf0f](https://github.com/Highfivery/SelfOS/commit/cf3cf0f8c45dab460067d3fe4dd4883d97702ae3))
+* **together:** the guided couples catalog (58 phase E) ([#157](https://github.com/Highfivery/SelfOS/issues/157)) ([33d495b](https://github.com/Highfivery/SelfOS/commit/33d495b333a52c48b7cef2ab8a8295c7b53554d9))
+* **together:** wrap-up & relationship memory (58 phase D) ([#156](https://github.com/Highfivery/SelfOS/issues/156)) ([b08699a](https://github.com/Highfivery/SelfOS/commit/b08699a63b1d474d8b3a7012a77e32b06768c8b0))
+
+
+### Bug Fixes
+
+* **questionnaires:** hide "Share a link" once the questionnaire has been answered (spec 08 §17.14e) ([#153](https://github.com/Highfivery/SelfOS/issues/153)) ([8f5fd89](https://github.com/Highfivery/SelfOS/commit/8f5fd89ba4945578dc3b24a1141e13c4166a92c6))
+
 ## [0.17.0](https://github.com/Highfivery/SelfOS/compare/v0.16.1...v0.17.0) (2026-07-11)
 
 

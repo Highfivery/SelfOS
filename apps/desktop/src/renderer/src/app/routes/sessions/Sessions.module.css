@@ -165,6 +165,8 @@
   text-align: center;
 }
 
+/* max-width/alignment here apply to a standalone bubble; inside a MessageRow the row owns them and caps
+   the bubble to 100% of the row (see MessageTime.module.css). */
 .userMsg,
 .coachMsg {
   max-width: 80%;

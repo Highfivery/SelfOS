@@ -1,7 +1,18 @@
+import { Fragment } from 'react';
 import { stripIntakeFieldMarkers } from '@selfos/core/intake';
 import type { IntakeSection, IntakeSectionMeta } from '@shared/channels';
 import { ArrowRight, ShieldCheck } from 'lucide-react';
-import { Banner, Button, Card, Heading, Stack, Text } from '../../../design-system/components';
+import {
+  Banner,
+  Button,
+  Card,
+  dayDividerLabel,
+  Heading,
+  MessageDayDivider,
+  MessageRow,
+  Stack,
+  Text,
+} from '../../../design-system/components';
 import { Composer } from '../sessions/Composer';
 import { useIntakeStore } from '../../../stores/intakeStore';
 import styles from './Onboarding.module.css';
@@ -31,6 +42,8 @@ export function IntakeSectionPanel({
   const acknowledgeAdult = useIntakeStore((s) => s.acknowledgeAdult);
 
   const messages = section?.messages ?? [];
+  // The leading day divider (from the first real message's ts) renders above the static opener.
+  const openerDivider = messages[0] ? dayDividerLabel(undefined, messages[0].ts) : null;
   const status = section?.status ?? 'notStarted';
   const locked = meta.adult && !adultAcknowledged;
 
@@ -77,22 +90,39 @@ export function IntakeSectionPanel({
         {meta.contentNote ? <Banner tone="info">{meta.contentNote}</Banner> : null}
 
         <div className={styles.thread} aria-live="polite" aria-busy={running}>
-          <div className={`${styles.turn} ${styles.coachMsg}`}>{meta.opener}</div>
-          {messages.map((m, i) => (
-            <div
-              key={i}
-              className={`${styles.turn} ${m.role === 'user' ? styles.userMsg : styles.coachMsg}`}
-            >
-              {m.content}
-            </div>
-          ))}
+          {/* Leading day divider above the static opener (which has no ts) so the day leads the thread; the
+              opener is a MessageRow (no iso → no timestamp) so it matches every following coach bubble. */}
+          {openerDivider ? <MessageDayDivider label={openerDivider} /> : null}
+          <MessageRow side="coach">
+            <div className={`${styles.turn} ${styles.coachMsg}`}>{meta.opener}</div>
+          </MessageRow>
+          {messages.map((m, i) => {
+            // i === 0's leading divider already renders above the opener; only show day-change dividers here.
+            const divider = i === 0 ? null : dayDividerLabel(messages[i - 1]?.ts, m.ts);
+            return (
+              <Fragment key={i}>
+                {divider ? <MessageDayDivider label={divider} /> : null}
+                <MessageRow side={m.role === 'user' ? 'user' : 'coach'} iso={m.ts}>
+                  <div
+                    className={`${styles.turn} ${m.role === 'user' ? styles.userMsg : styles.coachMsg}`}
+                  >
+                    {m.content}
+                  </div>
+                </MessageRow>
+              </Fragment>
+            );
+          })}
           {running ? (
             streaming ? (
-              <div className={`${styles.turn} ${styles.coachMsg}`}>
-                {stripIntakeFieldMarkers(streaming)}
-              </div>
+              <MessageRow side="coach">
+                <div className={`${styles.turn} ${styles.coachMsg}`}>
+                  {stripIntakeFieldMarkers(streaming)}
+                </div>
+              </MessageRow>
             ) : (
-              <div className={styles.thinking}>Listening…</div>
+              <MessageRow side="coach">
+                <div className={styles.thinking}>Listening…</div>
+              </MessageRow>
             )
           ) : null}
         </div>

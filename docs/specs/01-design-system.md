@@ -169,6 +169,15 @@ this is the v1 inventory:
   [`45`](45-session-attachments.md) §3.3).
 - **Media:** `AttachmentThumb` — a square image thumbnail (a `src` data URL or a calm "image unavailable"
   placeholder; opens a `Lightbox` when interactive; [`45`](45-session-attachments.md) §3.3).
+- **Chat:** `MessageTime` (a muted `<time>` meta below a chat bubble — a short date + time
+  ["Jul 13 · 3:42 PM"; the year only for a prior year], side-aligned; renders nothing for an unparseable
+  ISO; the per-message date means the day is visible without scrolling to the divider in a long single-day
+  thread), `MessageDayDivider` (a centered "Today" / "Yesterday" / date
+  `role="separator"` between messages from different days), and `MessageRow` (wraps a bubble + its
+  `MessageTime`, owning the 80% width cap + sender-side alignment). Shared by every AI chat surface
+  (Sessions [`05`](05-conversations.md), Together [`58`](58-together-couples-sessions.md), Dream analysis
+  [`12`](12-dreams.md), Onboarding intake [`18`](18-personal-onboarding.md)). Pure formatters
+  (`formatMessageTime`, `formatDayLabel`, `dayDividerLabel`) live alongside for reuse + unit tests.
 - **Navigation:** `Tabs`, `Menu`, `SidebarItem`, `Breadcrumb`.
 - **Feedback / status:** `Badge`, `AdminOnlyBadge` (the "Admin only" lock pill — marks any
   control/section only admins can see; CLAUDE.md §12), `ScopeBadge` (a quiet borderless "Synced" /

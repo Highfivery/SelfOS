@@ -404,6 +404,46 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-13 — **Build (message timestamps across every AI chat surface; mockup approved first; specs 01 §5.6 +
+  05 §3; on `feat/msg-timestamps`, a git worktree, PR pending).** The user asked to show, below each message,
+  when it was sent/received — everywhere the user chats with AI. Showed an interactive `visualize` mockup (a
+  format toggle: time-only / relative / date+time, + a hover-only option) and **asked the three forks** — the
+  user confirmed all recommendations: time + a day divider, **always visible**, **all four surfaces**
+  (Sessions, Together, Dream analysis, Onboarding intake) — then, on review, asked to **also show the DATE on
+  each message** (keeping the divider) so a long single-day thread doesn't require scrolling up to the divider
+  to see the date, so the per-message meta is a **short date + time** ("Jul 13 · 3:42 PM"; the year only for a
+  prior year). **Render-only — NO schema change:** every message already stores `ts` (`ChatMessage.ts` /
+  `TogetherMessageView.ts`), so this reuses it. New shared design-system primitives + pure helpers:
+  **`MessageTime`** (a muted `<time>` below a bubble — short date + time, side-aligned, renders nothing for an
+  unparseable ISO), **`MessageDayDivider`** ("Today" / "Yesterday" / same-year weekday+date / prior-year
+  full date, a `role="separator"`), **`MessageRow`** (wraps a bubble + its timestamp, owning the 80% width cap +
+  sender-side alignment so the plain-bubble surfaces share one layout; a `.row > :first-child { max-width:100% }`
+  override neutralizes each surface's own bubble max-width **without editing it**), and `formatMessageTime` /
+  `formatDayLabel` / `dayDividerLabel` (unit-tested). A divider shows at the top of a thread and whenever the day
+  changes from the previous SHOWN message (Sessions filters the pre-05 §4.1 blank ghost first, so the "previous"
+  is never a hidden ghost); an in-flight (streaming / "thinking") bubble carries no timestamp. Together renders
+  the timestamp INSIDE its header-carrying bubble (bottom-aligned start); the other three wrap each bubble in
+  `MessageRow`. Added a `/gallery` "Message timestamps" section (DoD §12). code-reviewer **fix-first** — the two
+  substantive findings (time-only vs the requested date+time; a loose format test) were **already resolved**
+  before the review (the date+time refinement landed first); applied the 3 nits: wrapped the onboarding static
+  opener + the "Listening…" indicator in `MessageRow` (width parity with every other coach bubble + consistency
+  with Sessions/Dreams), rendered the leading day divider **above** the opener (from the first message's ts) so
+  the day leads the thread, and `aria-hidden` the divider's visible label so a `role="separator"` with an
+  `aria-label` isn't announced twice. Divider logic, the CSS override strategy, blank-ghost filtering, and the
+  Together aside projection were verified correct. Gate green: typecheck, lint, format, **1063 desktop unit**
+  (+`messageTimeFormat` [13: same-year date+time / prior-year year / Today/Yesterday/weekday/unparseable/
+  divider], +`MessageTime` RTL [7]), **E2E** (the sessions send-a-reply test asserts a `<time>` + the "Today"
+  divider render in the real built app). Real-Electron visual QA of the Sessions thread (muted "Jul 13 · 12:27 PM"
+  below each bubble, right under the user's / left under the coach's — matches the approved mockup). **Process:** a concurrent
+  session was editing the SHARED working tree (uncommitted Together WIP — `TogetherCatalog` mid-edit referencing
+  a not-yet-created `./PracticeCard`, plus `TogetherPulse`/`Together.module.css`/core `together/*`/`schemas.ts`),
+  which broke the Together unit tests in the shared checkout. Branching alone does NOT isolate the working tree —
+  so I moved my 13 disjoint files into a dedicated **`git worktree`** off `origin/main` and ran the whole gate
+  there, clean. **Lesson: every AI chat message already carries `ts`, so a "when was this sent" affordance is
+  pure rendering — one shared `MessageRow`/`MessageDayDivider` pair (the row owns width+alignment, a
+  `> :first-child` override caps the bubble) lets all four surfaces adopt it without touching their bubble CSS;
+  and when another session shares the checkout, a `git worktree` off origin/main is the only way to gate your
+  work free of their uncommitted churn.**
 - 2026-07-11 — **Change + durable decision (Together pre-screen REMOVED at the owner's request; spec 58 §8.2;
   on `fix/together-remove-prescreen`).** The user asked to remove the couples "A private check-in, just for you"
   pre-screen. Because it was the app's **couples safety gate** (the AI-free, per-partner screen for

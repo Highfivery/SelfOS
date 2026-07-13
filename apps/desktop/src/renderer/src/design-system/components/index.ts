@@ -31,6 +31,8 @@ export { ChallengeStatusChip, type ChallengeStatusValue } from './ChallengeStatu
 export { ComfortDial } from './ComfortDial';
 export { AttachmentThumb } from './AttachmentThumb';
 export { Lightbox, type LightboxImage } from './Lightbox';
+export { MessageTime, MessageDayDivider, MessageRow } from './MessageTime';
+export { formatMessageTime, formatDayLabel, dayDividerLabel } from './messageTimeFormat';
 // The shared rich-text renderer lives in @selfos/answering (so the relay page + iOS reuse it); re-export
 // it here so in-app callers import it like any other design-system primitive (34-rich-text-rendering §5).
 export { Markdown } from '@selfos/answering';

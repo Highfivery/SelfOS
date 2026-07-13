@@ -1768,6 +1768,11 @@ test('sessions: send a message, stream a reply, and show the usage header + cris
     await expect(w.getByText(/This session:/)).toHaveCount(0); // no cost in sessions
     await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible(); // crisis footer
 
+    // Message timestamps: a muted time below each bubble + a "Today" day divider so it's clear when each
+    // message was sent/received. `.first()` — both the user + coach bubbles carry a <time>.
+    await expect(w.locator('main time').first()).toBeVisible();
+    await expect(w.getByRole('separator', { name: 'Today' })).toBeVisible();
+
     // Rename the conversation (via the per-session kebab — no standalone icon buttons).
     await w
       .getByRole('complementary', { name: 'Conversations' })

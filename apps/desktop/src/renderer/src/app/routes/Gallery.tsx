@@ -28,6 +28,9 @@ import {
   ComfortDial,
   LineChart,
   Markdown,
+  MessageDayDivider,
+  MessageRow,
+  MessageTime,
   ProportionBar,
   SubscaleBar,
   SegmentedControl,
@@ -520,6 +523,47 @@ export function Gallery(): JSX.Element {
               </Markdown>
             </Card>
           </Stack>
+        </Section>
+
+        <Section title="Message timestamps">
+          <Text size="sm" tone="secondary">
+            A muted time below each chat bubble (aligned to the sender) + a day divider when the day
+            changes. Shared across every AI chat surface (Sessions, Together, Dreams, Onboarding).
+          </Text>
+          <Card>
+            <Stack gap={3}>
+              <MessageDayDivider label="Today" />
+              <MessageRow side="user" iso="2026-07-13T15:37:00">
+                <div
+                  style={{
+                    background: 'var(--color-accent-solid)',
+                    color: 'var(--color-accent-solid-text)',
+                    padding: 'var(--space-3) var(--space-4)',
+                    borderRadius: 'var(--radius-lg)',
+                  }}
+                >
+                  I keep putting off a hard conversation.
+                </div>
+              </MessageRow>
+              <MessageRow side="coach" iso="2026-07-13T15:39:00">
+                <div
+                  style={{
+                    background: 'var(--color-surface-alt)',
+                    padding: 'var(--space-3) var(--space-4)',
+                    borderRadius: 'var(--radius-lg)',
+                  }}
+                >
+                  That avoidance makes sense — what's the worst outcome you're picturing?
+                </div>
+              </MessageRow>
+            </Stack>
+          </Card>
+          <Inline gap={3} align="center">
+            <Text size="sm" tone="secondary">
+              Standalone time:
+            </Text>
+            <MessageTime iso="2026-07-13T15:39:00" />
+          </Inline>
         </Section>
 
         <Section title="Notifications (35)">

@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.20.0](https://github.com/Highfivery/SelfOS/compare/v0.19.0...v0.20.0) (2026-07-13)
+
+
+### Features
+
+* **together:** a clear audience toggle so private vs shared is unmistakable (58 §3.6) ([#175](https://github.com/Highfivery/SelfOS/issues/175)) ([1ecebcf](https://github.com/Highfivery/SelfOS/commit/1ecebcfaa97e5d4d610f3fd1fe1f773b3167aeee))
+* **together:** instant-send chat + sessions grouped by whose turn it is (58 §3.2/§3.6) ([#173](https://github.com/Highfivery/SelfOS/issues/173)) ([5790363](https://github.com/Highfivery/SelfOS/commit/5790363a7fcd989abc462b14eab16f1f6f94d85a))
+* **together:** let the initiator withdraw a pending invitation (58 §3.4) ([#171](https://github.com/Highfivery/SelfOS/issues/171)) ([f9f8f07](https://github.com/Highfivery/SelfOS/commit/f9f8f07017b52239acd5fd61d49453fea805299f))
+
+
+### Bug Fixes
+
+* **together:** render the Withdraw control inside the session card, not below it ([#174](https://github.com/Highfivery/SelfOS/issues/174)) ([7e04e4f](https://github.com/Highfivery/SelfOS/commit/7e04e4fe5555aafada4505b3c675bd6332057209))
+
 ## [0.19.0](https://github.com/Highfivery/SelfOS/compare/v0.18.1...v0.19.0) (2026-07-13)
 
 

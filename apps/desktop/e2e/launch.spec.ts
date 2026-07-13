@@ -10125,6 +10125,48 @@ test('together (58): the initiator can withdraw a pending invitation — gone fo
   }
 });
 
+test('together (58): the sessions board groups by whose move it is + spells out the turn; the author’s message shows immediately (§3.2/§3.6)', async () => {
+  const { userData, vault } = await seedTogetherReady();
+  const app = await electron.launch({ args: [`--user-data-dir=${userData}`, MAIN], env: e2eEnv() });
+  try {
+    const w = await app.firstWindow();
+    // Ben invites Angel + writes an opening message → the author's message shows RIGHT AWAY (optimistic),
+    // not only once the coach finishes thinking (05 §4.1).
+    await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByRole('button', { name: 'New session' }).first().click();
+    await w.getByPlaceholder('e.g. Feeling disconnected lately').fill('Reconnecting');
+    await w.getByRole('button', { name: 'Send invitation' }).click();
+    await w.getByLabel('Message').fill('I really missed you.');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText('I really missed you.')).toBeVisible();
+    await expect(w.getByText(/I hear you/)).toBeVisible();
+
+    // Back on the board, Ben's pending invite is filed under "Invitations you sent".
+    await w.getByRole('link', { name: /Together/ }).click();
+    await expect(
+      w.getByRole('region', { name: 'Invitations you sent' }).getByText('Reconnecting'),
+    ).toBeVisible();
+
+    // Angel sees it as an "Open invitation"; accepting makes it HER turn (Ben messaged last), spelled out.
+    await switchTogetherPerson(w, 'Angel');
+    await w.getByRole('link', { name: /Together/ }).click();
+    const invite = w.getByRole('region', { name: 'Open invitation' });
+    await expect(invite.getByText('Reconnecting')).toBeVisible();
+    await invite.getByText('Reconnecting').click();
+    await w.getByRole('button', { name: 'Continue' }).click();
+    await expect(w.getByText('I really missed you.')).toBeVisible(); // Ben's message in her thread
+
+    await w.getByRole('link', { name: /Together/ }).click();
+    const mine = w.getByRole('region', { name: 'Your turn' });
+    await expect(mine.getByText('Reconnecting')).toBeVisible();
+    await expect(mine.getByText('Ben is waiting on your reply.')).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('together (58) phase H2: a couples turn mints a JOINT challenge for both partners; the home tile shows it (§5.6, decrypt)', async () => {
   const { userData, vault, ben, angel } = await seedTogetherReady();
   const app = await electron.launch({ args: [`--user-data-dir=${userData}`, MAIN], env: e2eEnv() });

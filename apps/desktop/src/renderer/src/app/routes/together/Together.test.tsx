@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import type { Person, TogetherSessionSummary, TogetherSessionView } from '@shared/schemas';
@@ -12,11 +12,13 @@ import { TogetherIntimacy } from './TogetherIntimacy';
 import { TogetherPulse } from './TogetherPulse';
 import { TogetherJointChallenges } from './TogetherJointChallenges';
 import { TogetherSuggestions } from './TogetherSuggestions';
-import { sessionStatus, relativeTime, TogetherSessionCard } from './TogetherSessionCard';
+import { sessionStatus, relativeTime, turnHint, TogetherSessionCard } from './TogetherSessionCard';
+import { TogetherSessionsBoard } from './TogetherSessionsBoard';
 import type {
   Agreement,
   SharedReport,
   TogetherCatalogEntry,
+  TogetherTurnResult,
   TogetherYnmStatus,
 } from '@shared/schemas';
 import { useTogetherStore } from '../../../stores/togetherStore';
@@ -132,9 +134,10 @@ describe('Together home (§3.2)', () => {
         <Together />
       </MemoryRouter>,
     );
-    // Scope to the session card (the "Your turn" pill is unique to it — the catalog card below repeats
-    // the guide's title/eyebrow/blurb). The card resolves the guide meta for a clear title + subject.
-    const card = screen.getByText('Your turn').closest('button')!;
+    // Scope to the "Your turn" group (the catalog below repeats the guide's title/eyebrow/blurb, and the
+    // group header also reads "Your turn"). The card resolves the guide meta for a clear title + subject.
+    const region = screen.getByRole('region', { name: 'Your turn' });
+    const card = within(region).getByText('Love Maps').closest('button')!;
     expect(within(card).getByText('Love Maps')).toBeInTheDocument();
     expect(within(card).getByText('Gottman · 4 steps')).toBeInTheDocument();
     expect(within(card).getByText('Take turns learning each other’s world.')).toBeInTheDocument();
@@ -173,7 +176,7 @@ describe('session card status + relative time', () => {
       tone: 'accent',
     });
     expect(sessionStatus({ ...base, status: 'active', yourTurn: false }, ME).label).toBe(
-      'Waiting for you both',
+      'Their turn',
     );
     // An incoming invitation (I'm NOT the initiator) is ball-in-your-court → accent.
     expect(sessionStatus({ ...base, status: 'invited', initiatorPersonId: PARTNER }, ME)).toEqual({
@@ -192,6 +195,85 @@ describe('session card status + relative time', () => {
     expect(relativeTime(new Date(now - 2 * 3_600_000).toISOString())).toBe('2h ago');
     expect(relativeTime(new Date(now - 26 * 3_600_000).toISOString())).toBe('yesterday');
     expect(relativeTime(undefined)).toBe('');
+  });
+});
+
+describe('TogetherSessionsBoard (§3.2)', () => {
+  it('groups sessions by whose move it is + spells out the turn; wrapped-up is collapsed', () => {
+    render(
+      <MemoryRouter>
+        <TogetherSessionsBoard
+          sessions={[
+            summary({ id: 'a', status: 'active', yourTurn: true }),
+            summary({ id: 'b', status: 'active', yourTurn: false }),
+            summary({ id: 'c', status: 'invited', initiatorPersonId: PARTNER }),
+            summary({ id: 'd', status: 'invited', initiatorPersonId: ME }),
+            summary({ id: 'e', status: 'complete' }),
+          ]}
+          myId={ME}
+          partnerName="Angel"
+          guideById={new Map()}
+          onOpen={() => {}}
+          onWithdraw={() => Promise.resolve(true)}
+        />
+      </MemoryRouter>,
+    );
+    // Group sections, labelled by whose move it is.
+    expect(screen.getByRole('region', { name: 'Your turn' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Open invitation' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Waiting on Angel' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Invitations you sent' })).toBeInTheDocument();
+    // The turn is spelled out in plain words on each active card.
+    expect(screen.getByText('Angel is waiting on your reply.')).toBeInTheDocument();
+    expect(screen.getByText(/it.s Angel.s move/)).toBeInTheDocument();
+    // Past sessions live in a collapsed "Wrapped up" details.
+    const wrapped = screen.getByText('Wrapped up').closest('details')!;
+    expect(wrapped).not.toHaveAttribute('open');
+  });
+
+  it('turnHint spells out whose move it is for an active session only', () => {
+    expect(turnHint(summary({ status: 'active', yourTurn: true }), 'Angel')).toBe(
+      'Angel is waiting on your reply.',
+    );
+    expect(turnHint(summary({ status: 'active', yourTurn: false }), 'Angel')).toBe(
+      "You replied — it's Angel's move.",
+    );
+    expect(turnHint(summary({ status: 'invited' }), 'Angel')).toBeNull();
+  });
+});
+
+describe('Together chat send (05 §4.1)', () => {
+  it("shows the author's message immediately, before the coach reply resolves", async () => {
+    let resolveSend: (v: TogetherTurnResult) => void = () => {};
+    installMockBridge({
+      togetherSendMessage: () =>
+        new Promise<TogetherTurnResult>((r) => {
+          resolveSend = r;
+        }),
+    });
+    setActivePerson();
+    useTogetherStore.setState({ open: view({ messages: [] }) });
+    const done = useTogetherStore.getState().sendMessage('are we okay?', false, []);
+    // Before the bridge resolves, the optimistic user message is already in the thread + we're "sending".
+    await waitFor(() => {
+      const msgs = useTogetherStore.getState().open?.messages ?? [];
+      expect(msgs.some((m) => m.role === 'user' && m.content === 'are we okay?')).toBe(true);
+    });
+    expect(useTogetherStore.getState().sending).toBe(true);
+    resolveSend({ ok: true, view: view({ messages: [] }) });
+    await done;
+  });
+
+  it('a thrown send resolves to an honest error (never stuck thinking); the message isn’t lost', async () => {
+    installMockBridge({ togetherSendMessage: () => Promise.reject(new Error('boom')) });
+    setActivePerson();
+    useTogetherStore.setState({ open: view({ messages: [] }) });
+    const result = await useTogetherStore.getState().sendMessage('hey', false, []);
+    expect(result.ok).toBe(false);
+    expect(useTogetherStore.getState().sending).toBe(false);
+    expect(useTogetherStore.getState().error).toBeTruthy();
+    // The optimistic bubble stays so the just-typed message isn't lost (retry via the Try again banner).
+    expect(useTogetherStore.getState().open?.messages.some((m) => m.content === 'hey')).toBe(true);
   });
 });
 

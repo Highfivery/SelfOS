@@ -20,7 +20,7 @@ import { TogetherCatalog } from './TogetherCatalog';
 import { TogetherIntimacy } from './TogetherIntimacy';
 import { TogetherPulse } from './TogetherPulse';
 import { TogetherJointChallenges } from './TogetherJointChallenges';
-import { TogetherSessionCard } from './TogetherSessionCard';
+import { TogetherSessionsBoard } from './TogetherSessionsBoard';
 import { TOGETHER_FRAME_LINE } from './roomRules';
 import styles from './Together.module.css';
 
@@ -230,29 +230,18 @@ export function Together(): JSX.Element {
             </div>
           ) : null}
 
-          <Stack gap={2}>
-            <div className={styles.sectionHead}>
+          {mySessions.length > 0 ? (
+            <TogetherSessionsBoard
+              sessions={mySessions}
+              myId={myId}
+              partnerName={partnerName}
+              guideById={guideById}
+              onOpen={(id) => navigate(`/together/session/${id}`)}
+              onWithdraw={(id) => withdraw(id)}
+            />
+          ) : (
+            <Stack gap={2}>
               <Heading level={2}>Your sessions</Heading>
-              {mySessions.length > 0 ? (
-                <Text size="sm" tone="secondary">
-                  {mySessions.length} {mySessions.length === 1 ? 'session' : 'sessions'}
-                </Text>
-              ) : null}
-            </div>
-            {mySessions.length > 0 ? (
-              <div className={styles.sessionGrid}>
-                {mySessions.map((session) => (
-                  <TogetherSessionCard
-                    key={session.id}
-                    session={session}
-                    myId={myId}
-                    guide={session.guideId ? guideById.get(session.guideId) : undefined}
-                    onOpen={() => navigate(`/together/session/${session.id}`)}
-                    onWithdraw={() => withdraw(session.id)}
-                  />
-                ))}
-              </div>
-            ) : (
               <div className={styles.emptyCard}>
                 <Text weight={600}>No sessions yet</Text>
                 <Text tone="secondary">
@@ -262,8 +251,8 @@ export function Together(): JSX.Element {
                   <Plus size={14} aria-hidden="true" /> New session
                 </Button>
               </div>
-            )}
-          </Stack>
+            </Stack>
+          )}
 
           {nonAdultCatalog.length > 0 ? (
             <TogetherCatalog

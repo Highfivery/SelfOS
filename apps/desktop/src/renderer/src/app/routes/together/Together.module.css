@@ -69,11 +69,6 @@
   gap: var(--space-3);
   flex-wrap: wrap;
 }
-.checkInNudge {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-}
 .metricGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -116,6 +111,13 @@
   justify-content: space-between;
   gap: var(--space-2);
   flex-wrap: wrap;
+}
+
+/* A stacked label + control (the open-session topic field in the start bar). */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
 }
 
 /* ── Start bar (deliberate send) ─────────────────────────────────────────────── */
@@ -374,11 +376,6 @@
   align-items: center;
   gap: var(--space-2);
   flex-wrap: wrap;
-}
-.intimacyGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: var(--space-3);
 }
 .intimacyCard {
   display: flex;

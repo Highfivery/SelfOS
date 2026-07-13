@@ -159,7 +159,7 @@ export async function buildPulseView(
 
   const alignment = await desireAlignment(fs, key, partner, pairKey, own);
   // `own` is oldest-first (listPulseCheckIns sorts ascending), so the last entry is the most recent.
-  const lastCheckInAt = own.length > 0 ? own[own.length - 1]!.at : undefined;
+  const lastCheckInAt = own.at(-1)?.at;
   return {
     series,
     hasCheckIns: own.length > 0,

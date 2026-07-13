@@ -169,12 +169,13 @@ export function Together(): JSX.Element {
         canStart={canStart}
       />
 
-      {ineligible.length > 0 && !canStart ? (
+      {ineligible.length > 0 ? (
         <div className={styles.emptyCard}>
-          <Text weight={600}>Almost there</Text>
+          <Text weight={600}>{canStart ? 'One more to add' : 'Almost there'}</Text>
           <Text tone="secondary">
-            {ineligible.map((p) => p.displayName).join(', ')} needs a SelfOS login in this household
-            to join — make them a subject in People, then you can start a session together.
+            {ineligible.map((p) => p.displayName).join(', ')}{' '}
+            {ineligible.length === 1 ? 'needs' : 'need'} a SelfOS login in this household to join —
+            make them a subject in People.
           </Text>
         </div>
       ) : null}

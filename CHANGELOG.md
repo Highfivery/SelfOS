@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.19.0](https://github.com/Highfivery/SelfOS/compare/v0.18.1...v0.19.0) (2026-07-13)
+
+
+### Features
+
+* **chat:** show date + time under each message, with day dividers ([#169](https://github.com/Highfivery/SelfOS/issues/169)) ([356c8e8](https://github.com/Highfivery/SelfOS/commit/356c8e87d3933215ea52f2a5fbe66439793fb0c7))
+* **together:** redesign the Together dashboard around a clear priority order ([#166](https://github.com/Highfivery/SelfOS/issues/166)) ([#170](https://github.com/Highfivery/SelfOS/issues/170)) ([26c949b](https://github.com/Highfivery/SelfOS/commit/26c949bc1e00dff595b9a50a21a7ccdaf3fe184a))
+
+
+### Bug Fixes
+
+* **together:** show selected guide's full blurb + brighten dark headings ([#166](https://github.com/Highfivery/SelfOS/issues/166)) ([#167](https://github.com/Highfivery/SelfOS/issues/167)) ([6f518b0](https://github.com/Highfivery/SelfOS/commit/6f518b0f07e70025a7a8205b52371ffad5c2b105))
+
 ## [0.18.1](https://github.com/Highfivery/SelfOS/compare/v0.18.0...v0.18.1) (2026-07-11)
 
 

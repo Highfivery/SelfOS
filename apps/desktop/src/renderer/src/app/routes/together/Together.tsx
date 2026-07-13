@@ -38,6 +38,7 @@ export function Together(): JSX.Element {
   const catalog = useTogetherStore((s) => s.catalog);
   const partners = useTogetherStore((s) => s.partners);
   const create = useTogetherStore((s) => s.create);
+  const withdraw = useTogetherStore((s) => s.withdraw);
   const refresh = useTogetherStore((s) => s.refresh);
 
   const eligiblePartners = useMemo(() => partners.filter((p) => p.eligible), [partners]);
@@ -247,6 +248,7 @@ export function Together(): JSX.Element {
                     myId={myId}
                     guide={session.guideId ? guideById.get(session.guideId) : undefined}
                     onOpen={() => navigate(`/together/session/${session.id}`)}
+                    onWithdraw={() => withdraw(session.id)}
                   />
                 ))}
               </div>

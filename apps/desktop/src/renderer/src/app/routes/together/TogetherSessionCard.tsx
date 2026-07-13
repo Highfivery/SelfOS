@@ -1,6 +1,7 @@
 import type { TogetherCatalogEntry, TogetherSessionSummary } from '@shared/schemas';
 import { Text } from '../../../design-system/components';
 import { practiceEyebrow } from './PracticeCard';
+import { WithdrawInviteButton } from './WithdrawInviteButton';
 import styles from './Together.module.css';
 
 type Tone = 'accent' | 'warning' | 'neutral';
@@ -55,16 +56,27 @@ export function relativeTime(iso: string | undefined): string {
  * last-message excerpt, the partner + when, and an unread dot — with a clear status pill. The ball-in-your-
  * court session is accent-bordered so it stands out.
  */
+/** Whether the viewer may withdraw this session: it's their own invite the recipient hasn't accepted yet. */
+export function canWithdraw(session: TogetherSessionSummary, myId: string | null): boolean {
+  return (
+    session.initiatorPersonId === myId &&
+    (session.status === 'invited' || session.status === 'expired')
+  );
+}
+
 export function TogetherSessionCard({
   session,
   myId,
   guide,
   onOpen,
+  onWithdraw,
 }: {
   session: TogetherSessionSummary;
   myId: string | null;
   guide: TogetherCatalogEntry | undefined;
   onOpen: () => void;
+  /** Provided by the dashboard so a withdrawable invite (initiator + not-yet-accepted) can be undone. */
+  onWithdraw?: () => Promise<boolean>;
 }): JSX.Element {
   const partner = session.participants.find((p) => p.personId !== myId);
   const partnerName = partner?.displayName ?? 'your partner';
@@ -82,41 +94,49 @@ export function TogetherSessionCard({
       ? `A free session you started with ${partnerName}.`
       : `A free conversation to talk something through with ${partnerName}.`;
   const when = relativeTime(session.lastMessageAt ?? session.createdAt);
+  const withdrawable = onWithdraw != null && canWithdraw(session, myId);
 
   return (
-    <button
-      type="button"
-      className={styles.sessionCard}
-      data-turn={status.tone === 'accent' ? 'you' : undefined}
-      onClick={onOpen}
-    >
-      <div className={styles.sessionCardHead}>
-        <div>
-          <div className={styles.sessionEyebrow}>{eyebrow}</div>
-          <div className={styles.sessionCardTitle}>{title}</div>
-        </div>
-        <span className={styles.statusPill} data-tone={status.tone}>
-          {status.label}
-        </span>
-      </div>
-      <div className={styles.sessionSubject}>{subject}</div>
-      {session.lastMessageSnippet ? (
-        <div className={styles.sessionExcerpt}>“{session.lastMessageSnippet}”</div>
-      ) : null}
-      <div className={styles.sessionFoot}>
-        <span className={styles.sessionWho}>
-          <span className={styles.miniAvatar} aria-hidden="true">
-            {(partnerName[0] ?? '?').toUpperCase()}
+    <div className={styles.sessionCardWrap}>
+      <button
+        type="button"
+        className={styles.sessionCard}
+        data-turn={status.tone === 'accent' ? 'you' : undefined}
+        onClick={onOpen}
+      >
+        <div className={styles.sessionCardHead}>
+          <div>
+            <div className={styles.sessionEyebrow}>{eyebrow}</div>
+            <div className={styles.sessionCardTitle}>{title}</div>
+          </div>
+          <span className={styles.statusPill} data-tone={status.tone}>
+            {status.label}
           </span>
-          <Text size="xs" tone="secondary">
-            {partnerName}
-            {when ? ` · ${when}` : ''}
-          </Text>
-        </span>
-        {session.unreadCount > 0 ? (
-          <span className={styles.unreadDot} aria-label={`${session.unreadCount} unread`} />
+        </div>
+        <div className={styles.sessionSubject}>{subject}</div>
+        {session.lastMessageSnippet ? (
+          <div className={styles.sessionExcerpt}>“{session.lastMessageSnippet}”</div>
         ) : null}
-      </div>
-    </button>
+        <div className={styles.sessionFoot}>
+          <span className={styles.sessionWho}>
+            <span className={styles.miniAvatar} aria-hidden="true">
+              {(partnerName[0] ?? '?').toUpperCase()}
+            </span>
+            <Text size="xs" tone="secondary">
+              {partnerName}
+              {when ? ` · ${when}` : ''}
+            </Text>
+          </span>
+          {session.unreadCount > 0 ? (
+            <span className={styles.unreadDot} aria-label={`${session.unreadCount} unread`} />
+          ) : null}
+        </div>
+      </button>
+      {withdrawable && onWithdraw ? (
+        <div className={styles.cardActions}>
+          <WithdrawInviteButton onWithdraw={onWithdraw} size="sm" />
+        </div>
+      ) : null}
+    </div>
   );
 }

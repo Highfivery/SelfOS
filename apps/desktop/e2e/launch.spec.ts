@@ -10082,6 +10082,49 @@ test('together (58) phase H1: deleting a participant reaps their Together sessio
   }
 });
 
+test('together (58): the initiator can withdraw a pending invitation — gone for both, from the card + the session page (§3.4, decrypt)', async () => {
+  const { userData, vault } = await seedTogetherReady();
+  const app = await electron.launch({ args: [`--user-data-dir=${userData}`, MAIN], env: e2eEnv() });
+  try {
+    const w = await app.firstWindow();
+    // Ben sends an invitation to Angel → he lands on the invited session page.
+    await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByRole('button', { name: 'New session' }).first().click();
+    await w.getByPlaceholder('e.g. Feeling disconnected lately').fill('Undo me');
+    await w.getByRole('button', { name: 'Send invitation' }).click();
+    await expect(w.getByLabel('Message')).toBeVisible();
+
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('no key');
+    expect((await fs.list('together/sessions')).length).toBe(1);
+
+    // The session page offers the initiator "Withdraw invitation" (the invited thread view).
+    await expect(w.getByRole('button', { name: /Withdraw invitation/ })).toBeVisible();
+
+    // Withdraw from the DASHBOARD card: back to Together, the card carries the same control.
+    await w.getByRole('link', { name: /Together/ }).click();
+    await expect(w.getByText('Undo me')).toBeVisible();
+    await w.getByRole('button', { name: /Withdraw invitation/ }).click();
+    // A deliberate inline confirm (never a one-click delete), then Withdraw.
+    await expect(w.getByText(/removed for both of you/i)).toBeVisible();
+    await w.getByRole('button', { name: 'Withdraw', exact: true }).click();
+
+    // The card is gone, and the shared session folder is deleted (decrypt-level, gone for BOTH).
+    await expect(w.getByText('Undo me')).toHaveCount(0);
+    await expect.poll(async () => (await fs.list('together/sessions')).length).toBe(0);
+
+    // Angel never sees the withdrawn invite.
+    await switchTogetherPerson(w, 'Angel');
+    await w.getByRole('link', { name: /Together/ }).click();
+    await expect(w.getByText('Undo me')).toHaveCount(0);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('together (58) phase H2: a couples turn mints a JOINT challenge for both partners; the home tile shows it (§5.6, decrypt)', async () => {
   const { userData, vault, ben, angel } = await seedTogetherReady();
   const app = await electron.launch({ args: [`--user-data-dir=${userData}`, MAIN], env: e2eEnv() });

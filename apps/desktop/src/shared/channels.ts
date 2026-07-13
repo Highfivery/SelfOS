@@ -276,6 +276,7 @@ export const IpcChannels = {
   togetherDecline: 'together:decline',
   togetherSetPaused: 'together:setPaused',
   togetherLeave: 'together:leave',
+  togetherWithdraw: 'together:withdraw',
   togetherMarkRead: 'together:markRead',
   togetherSendMessage: 'together:sendMessage',
   togetherRetry: 'together:retry',
@@ -988,6 +989,9 @@ export interface SelfosBridge {
   }): Promise<TogetherSessionView | null>;
   /** Leave — ends the session for both, neutrally (§8.3). */
   togetherLeave(id: string): Promise<TogetherSessionView | null>;
+  /** Withdraw (undo) a pending invitation the recipient hasn't responded to — initiator-only; deletes the
+   *  shared session for both, as if never sent (§3.4). Resolves true on success, false if not allowed. */
+  togetherWithdraw(id: string): Promise<boolean>;
   /** Mark the caller's read cursor (drives the unread/turn badges). */
   togetherMarkRead(input: { sessionId: string; at: string }): Promise<void>;
   /** Send a message (or a private aside): streams the coach reply via `onTogetherChunk`, resolves with the

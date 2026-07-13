@@ -4992,6 +4992,39 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(await bridge.togetherGet(sessionId)).not.toBeNull();
   });
 
+  it('withdraw: the initiator undoes a pending invite → gone for BOTH; a recipient can’t withdraw (§3.4)', async () => {
+    const { host, bridge, ben, angel } = await seedPair();
+    const created = await bridge.togetherCreate({ partnerPersonId: angel, topic: 'Reconnecting' });
+    const sessionId = created.ok ? created.session.id : '';
+
+    // Angel (the recipient) cannot withdraw Ben's invite — it stays in her world.
+    await asPerson(host, angel);
+    expect(await bridge.togetherWithdraw(sessionId)).toBe(false);
+    expect(await bridge.togetherGet(sessionId)).not.toBeNull();
+
+    // Ben (the initiator) withdraws → gone for him.
+    await asPerson(host, ben);
+    expect(await bridge.togetherWithdraw(sessionId)).toBe(true);
+    expect(await bridge.togetherList()).toHaveLength(0);
+    expect(await bridge.togetherGet(sessionId)).toBeNull();
+
+    // …and gone for Angel too — the shared session folder was deleted.
+    await asPerson(host, angel);
+    expect(await bridge.togetherList()).toHaveLength(0);
+    expect(await bridge.togetherGet(sessionId)).toBeNull();
+  });
+
+  it('withdraw is refused once the recipient has ACCEPTED (no longer a pending invite) (§3.4)', async () => {
+    const { host, bridge, ben, angel } = await seedPair();
+    const created = await bridge.togetherCreate({ partnerPersonId: angel });
+    const sessionId = created.ok ? created.session.id : '';
+    await asPerson(host, angel);
+    await bridge.togetherAccept(sessionId); // now active for both
+    await asPerson(host, ben);
+    expect(await bridge.togetherWithdraw(sessionId)).toBe(false);
+    expect(await bridge.togetherGet(sessionId)).not.toBeNull(); // untouched
+  });
+
   it('an expired invitation derives `expired` for the initiator (30-day window)', async () => {
     const { host, bridge, ben, angel } = await seedPair();
     const ctx = (await host.host.vaultAndKey())!;

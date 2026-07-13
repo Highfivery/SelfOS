@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Sparkles } from 'lucide-react';
 import { stripDreamMarkers } from '@selfos/core/dreams';
 import type { Dream } from '@shared/channels';
@@ -7,7 +7,17 @@ import { AiUnavailableNotice } from '../../AiUnavailableNotice';
 import { useDreamAnalysisStore } from '../../../stores/dreamAnalysisStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useSetting } from '../../../settings/useSetting';
-import { Banner, Button, Heading, Markdown, Stack, Text } from '../../../design-system/components';
+import {
+  Banner,
+  Button,
+  dayDividerLabel,
+  Heading,
+  Markdown,
+  MessageDayDivider,
+  MessageRow,
+  Stack,
+  Text,
+} from '../../../design-system/components';
 import { Composer } from '../sessions/Composer';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { DreamSynthesisCard } from './DreamSynthesisCard';
@@ -117,25 +127,34 @@ export function DreamAnalysisPane({ dream, onBack }: DreamAnalysisPaneProps): JS
           <div className={`${styles.coachMsg} ${styles.thinking}`}>Reading your dream…</div>
         ) : (
           <Stack gap={3}>
-            {messages.map((message, index) => (
-              <div
-                key={index}
-                className={message.role === 'user' ? styles.userMsg : styles.coachMsg}
-              >
-                {message.role === 'user' ? (
-                  message.content
-                ) : (
-                  <Markdown>{stripDreamMarkers(message.content)}</Markdown>
-                )}
-              </div>
-            ))}
+            {messages.map((message, index) => {
+              const divider = dayDividerLabel(messages[index - 1]?.ts, message.ts);
+              return (
+                <Fragment key={index}>
+                  {divider ? <MessageDayDivider label={divider} /> : null}
+                  <MessageRow side={message.role === 'user' ? 'user' : 'coach'} iso={message.ts}>
+                    <div className={message.role === 'user' ? styles.userMsg : styles.coachMsg}>
+                      {message.role === 'user' ? (
+                        message.content
+                      ) : (
+                        <Markdown>{stripDreamMarkers(message.content)}</Markdown>
+                      )}
+                    </div>
+                  </MessageRow>
+                </Fragment>
+              );
+            })}
             {streaming ? (
-              <div className={styles.coachMsg}>
-                <Markdown>{stripDreamMarkers(streaming)}</Markdown>
-              </div>
+              <MessageRow side="coach">
+                <div className={styles.coachMsg}>
+                  <Markdown>{stripDreamMarkers(streaming)}</Markdown>
+                </div>
+              </MessageRow>
             ) : null}
             {(sending || opening) && !streaming ? (
-              <div className={`${styles.coachMsg} ${styles.thinking}`}>Reflecting…</div>
+              <MessageRow side="coach">
+                <div className={`${styles.coachMsg} ${styles.thinking}`}>Reflecting…</div>
+              </MessageRow>
             ) : null}
           </Stack>
         )}

@@ -1,0 +1,57 @@
+.time {
+  display: block;
+  font-size: var(--text-xs);
+  line-height: 1.2;
+  color: var(--color-text-tertiary);
+  padding: 0 var(--space-1);
+}
+.time[data-align='end'] {
+  text-align: right;
+}
+
+/* A message group owns the bubble's width + side alignment; the bubble inside fills it (see each surface's
+   .userMsg/.coachMsg override). Gap keeps the timestamp tight under the bubble. */
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-width: 80%;
+  min-width: 0;
+}
+.row[data-side='user'] {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+.row[data-side='coach'] {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+/* The bubble (first child) fills the row — the row owns the 80% cap + side alignment, so each surface's
+   own .userMsg/.coachMsg max-width is neutralized here without editing it. */
+.row > :first-child {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  align-self: stretch;
+  margin: var(--space-1) 0;
+}
+.dividerLine {
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+}
+.dividerLabel {
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+}
+
+@media (max-width: 767px) {
+  .row {
+    max-width: 92%;
+  }
+}

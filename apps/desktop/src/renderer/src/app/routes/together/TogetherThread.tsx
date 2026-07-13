@@ -1,13 +1,16 @@
-import { useRef, useState } from 'react';
+import { Fragment, useRef, useState } from 'react';
 import { ImagePlus, Lock, X } from 'lucide-react';
 import type { TogetherMessageView, TogetherSessionView } from '@shared/schemas';
 import {
   AttachmentThumb,
   Banner,
   Button,
+  dayDividerLabel,
   IconButton,
   Inline,
   Markdown,
+  MessageDayDivider,
+  MessageTime,
   Text,
 } from '../../../design-system/components';
 import { CrisisFooter } from '../sessions/CrisisFooter';
@@ -84,6 +87,7 @@ function MessageBubble({
             ) : null}
           </>
         )}
+        <MessageTime iso={message.ts} />
       </div>
     </div>
   );
@@ -273,14 +277,19 @@ export function TogetherThread({
             you both find your way through it.
           </Text>
         ) : (
-          session.messages.map((m) => (
-            <MessageBubble
-              key={m.id}
-              message={m}
-              session={session}
-              isMine={m.role === 'user' && m.authorPersonId === me}
-            />
-          ))
+          session.messages.map((m, i) => {
+            const divider = dayDividerLabel(session.messages[i - 1]?.ts, m.ts);
+            return (
+              <Fragment key={m.id}>
+                {divider ? <MessageDayDivider label={divider} /> : null}
+                <MessageBubble
+                  message={m}
+                  session={session}
+                  isMine={m.role === 'user' && m.authorPersonId === me}
+                />
+              </Fragment>
+            );
+          })
         )}
         {sending && streaming ? (
           <div className={styles.bubbleRow}>

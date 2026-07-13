@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { ArrowLeft, MessageCircle, Plus, Sparkles } from 'lucide-react';
 import {
@@ -17,7 +17,10 @@ import { useGuidanceStore } from '../../../stores/guidanceStore';
 import {
   Banner,
   Button,
+  dayDividerLabel,
   Markdown,
+  MessageDayDivider,
+  MessageRow,
   Select,
   Stack,
   Text,
@@ -159,6 +162,9 @@ export function Sessions(): JSX.Element {
   // In a session thread once there's an active/seeded session or a turn in flight; otherwise the launcher
   // (16 §3.1) is the start state. The launcher renders even with AI off (catalog + static guided openers).
   const inThread = activeId !== null || messages.length > 0 || sending || streaming;
+  // Drop the blank-assistant ghost (pre-05 §4.1) before rendering so the day-divider "previous" is the
+  // previous SHOWN message, and never a hidden ghost.
+  const shownMessages = messages.filter((message) => !isBlankReply(message));
   // A structured guided exercise shows its stepper beside the thread (16 §3.3).
   const activeExercise = activeGuideId ? getExercise(activeGuideId) : undefined;
   const stepperSteps =
@@ -357,37 +363,48 @@ export function Sessions(): JSX.Element {
                 </div>
               ) : (
                 <Stack gap={3}>
-                  {messages.map((message, index) =>
-                    // Skip a blank assistant bubble — the ghost the pre-05 §4.1 code left when a reply came back
-                    // empty. It rendered as an empty coach bubble + hid the retry; now it's neither shown nor final.
-                    isBlankReply(message) ? null : (
-                      <div
-                        key={index}
-                        className={message.role === 'user' ? styles.userMsg : styles.coachMsg}
-                      >
-                        {message.role === 'user' ? (
-                          <>
-                            {message.content}
-                            {message.attachments && message.attachments.length > 0 ? (
-                              <MessageAttachments attachments={message.attachments} />
-                            ) : null}
-                          </>
-                        ) : (
-                          // Coach prose renders Markdown; strip any coach markers first (order matters, §7).
-                          <Markdown>{stripCoachMarkers(message.content)}</Markdown>
-                        )}
-                      </div>
-                    ),
-                  )}
+                  {shownMessages.map((message, index) => {
+                    // A "Today"/date divider when the day changes from the previous shown message (§4.1).
+                    const divider = dayDividerLabel(shownMessages[index - 1]?.ts, message.ts);
+                    return (
+                      <Fragment key={index}>
+                        {divider ? <MessageDayDivider label={divider} /> : null}
+                        <MessageRow
+                          side={message.role === 'user' ? 'user' : 'coach'}
+                          iso={message.ts}
+                        >
+                          <div
+                            className={message.role === 'user' ? styles.userMsg : styles.coachMsg}
+                          >
+                            {message.role === 'user' ? (
+                              <>
+                                {message.content}
+                                {message.attachments && message.attachments.length > 0 ? (
+                                  <MessageAttachments attachments={message.attachments} />
+                                ) : null}
+                              </>
+                            ) : (
+                              // Coach prose renders Markdown; strip coach markers first (order matters, §7).
+                              <Markdown>{stripCoachMarkers(message.content)}</Markdown>
+                            )}
+                          </div>
+                        </MessageRow>
+                      </Fragment>
+                    );
+                  })}
                   {streaming ? (
-                    <div className={styles.coachMsg}>
-                      <Markdown>{stripCoachMarkers(streaming)}</Markdown>
-                    </div>
+                    <MessageRow side="coach">
+                      <div className={styles.coachMsg}>
+                        <Markdown>{stripCoachMarkers(streaming)}</Markdown>
+                      </div>
+                    </MessageRow>
                   ) : null}
                   {sending && !streaming ? (
-                    <div className={`${styles.coachMsg} ${styles.thinking}`}>
-                      Coach is thinking…
-                    </div>
+                    <MessageRow side="coach">
+                      <div className={`${styles.coachMsg} ${styles.thinking}`}>
+                        Coach is thinking…
+                      </div>
+                    </MessageRow>
                   ) : null}
                 </Stack>
               )}

@@ -54,6 +54,11 @@ saved as an **encrypted transcript** in the active person's vault folder.
   conversation". Each has a title (auto from the first message, editable) and timestamp.
 - **Thread** (right): messages (user right-aligned, coach left-aligned), a composer at the bottom
   (multiline, Enter to send / Shift+Enter newline), and a streaming indicator while the coach replies.
+  Each message shows a muted timestamp below its bubble — a short date + time ("Jul 13 · 3:42 PM",
+  aligned to the sender; the per-message date keeps the day visible in a long single-day thread) — plus a
+  "Today" / "Yesterday" / date divider when the day changes, from the message's stored `ts`, via the
+  shared `MessageRow` / `MessageDayDivider` primitives ([`01`](01-design-system.md) §5.6). An in-flight
+  (streaming / "thinking") bubble carries no timestamp.
 - **Always-visible footer**: the not-medical disclaimer + a quiet "Get help now" affordance that
   opens crisis resources (§7). Never dismissable.
 

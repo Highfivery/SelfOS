@@ -1,11 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Heart, X } from 'lucide-react';
-import type { TogetherCatalogEntry, TogetherSessionSummary } from '@shared/schemas';
+import { Heart, Plus, X } from 'lucide-react';
+import type { TogetherCatalogEntry } from '@shared/schemas';
 import {
   Banner,
   Button,
-  Card,
   Heading,
   IconButton,
   Inline,
@@ -21,162 +20,15 @@ import { TogetherCatalog } from './TogetherCatalog';
 import { TogetherIntimacy } from './TogetherIntimacy';
 import { TogetherPulse } from './TogetherPulse';
 import { TogetherJointChallenges } from './TogetherJointChallenges';
+import { TogetherSessionCard } from './TogetherSessionCard';
 import { TOGETHER_FRAME_LINE } from './roomRules';
 import styles from './Together.module.css';
 
-const STATUS_LABELS: Record<string, string> = {
-  invited: 'Invited',
-  expired: 'Invitation expired',
-  active: 'Active',
-  onHold: 'Paused',
-  ended: 'Ended',
-  complete: 'Completed',
-  declined: '',
-};
+/** What the deliberate start bar is about to create — a free session or a specific guided practice. */
+type Pending = { kind: 'free' } | { kind: 'guide'; entry: TogetherCatalogEntry } | null;
 
-function statusLabel(session: TogetherSessionSummary, myId: string | null): string {
-  if (session.status === 'active') {
-    return session.yourTurn ? 'Your turn' : 'Waiting for you both';
-  }
-  if (session.status === 'invited' && session.initiatorPersonId === myId)
-    return 'Invited · waiting';
-  return STATUS_LABELS[session.status] ?? '';
-}
-
-function SessionCard({
-  session,
-  myId,
-  onOpen,
-}: {
-  session: TogetherSessionSummary;
-  myId: string | null;
-  onOpen: () => void;
-}): JSX.Element {
-  const other = session.participants.find((p) => p.personId !== myId);
-  return (
-    <button type="button" className={styles.sessionCard} onClick={onOpen}>
-      <Stack gap={1}>
-        <Inline gap={2} align="center" justify="between">
-          <Text weight={600} className={styles.cardTitle}>
-            {session.topic ?? `With ${other?.displayName ?? 'your partner'}`}
-          </Text>
-          <span className={styles.statusPill} data-status={session.status}>
-            {statusLabel(session, myId)}
-          </span>
-        </Inline>
-        <Text size="sm" tone="secondary">
-          You &amp; {other?.displayName ?? 'your partner'}
-        </Text>
-        {session.lastMessageSnippet ? (
-          <Text size="sm" tone="secondary" className={styles.cardSnippet}>
-            {session.lastMessageSnippet}
-          </Text>
-        ) : null}
-      </Stack>
-    </button>
-  );
-}
-
-function StartCard({
-  guide,
-  onClearGuide,
-}: {
-  guide: TogetherCatalogEntry | null;
-  onClearGuide: () => void;
-}): JSX.Element {
-  const navigate = useNavigate();
-  const partners = useTogetherStore((s) => s.partners);
-  const create = useTogetherStore((s) => s.create);
-  const eligible = partners.filter((p) => p.eligible);
-  const firstEligible = eligible[0]?.personId ?? '';
-  const [partnerId, setPartnerId] = useState(firstEligible);
-  const [topic, setTopic] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const chosen = partnerId || firstEligible;
-  const canSend = Boolean(chosen) && !busy;
-
-  const onSend = async (): Promise<void> => {
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await create(chosen, topic, guide?.id);
-      if (result.ok) navigate(`/together/session/${result.session.id}`);
-      else setError(result.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const ineligible = partners.filter((p) => !p.eligible);
-
-  return (
-    <Card>
-      <Stack gap={2}>
-        <Inline gap={2} align="center" justify="between">
-          <Heading level={2}>{guide ? `Start “${guide.title}”` : 'Start a session'}</Heading>
-          {guide ? (
-            <IconButton aria-label="Clear guided session" onClick={onClearGuide}>
-              <X size={16} aria-hidden="true" />
-            </IconButton>
-          ) : null}
-        </Inline>
-        {guide ? (
-          <Stack gap={1}>
-            <Text>{guide.blurb}</Text>
-            <Text size="sm" tone="secondary">
-              A guided practice inspired by {guide.framework}, for the two of you.
-            </Text>
-          </Stack>
-        ) : null}
-        {eligible.length > 1 ? (
-          <label className={styles.field}>
-            <Text size="sm" weight={600}>
-              With
-            </Text>
-            <Select value={chosen} onChange={(e) => setPartnerId(e.target.value)}>
-              {eligible.map((p) => (
-                <option key={p.personId} value={p.personId}>
-                  {p.displayName}
-                </option>
-              ))}
-            </Select>
-          </label>
-        ) : eligible.length === 1 ? (
-          <Text tone="secondary">With {eligible[0]?.displayName}</Text>
-        ) : null}
-        {guide ? null : (
-          <label className={styles.field}>
-            <Text size="sm" weight={600}>
-              What’s on your mind?{' '}
-              <Text as="span" tone="secondary">
-                (optional)
-              </Text>
-            </Text>
-            <TextInput
-              value={topic}
-              placeholder="e.g. Feeling disconnected lately"
-              onChange={(e) => setTopic(e.target.value)}
-            />
-          </label>
-        )}
-        {error ? <Banner tone="danger">{error}</Banner> : null}
-        {ineligible.length > 0 ? (
-          <Text size="xs" tone="secondary">
-            {ineligible.map((p) => p.displayName).join(', ')} needs a SelfOS login in this household
-            to join — make them a subject in People.
-          </Text>
-        ) : null}
-        <Button onClick={() => void onSend()} disabled={!canSend} aria-busy={busy}>
-          {busy ? 'Sending…' : 'Send invitation'}
-        </Button>
-      </Stack>
-    </Card>
-  );
-}
-
-/** Together home (58 §3.2): the frame line, the start flow, and the sessions list. */
+/** Together home (58 §3.2 redesign): a partner-scoped dashboard — check-in, sessions, guided practices,
+ *  joint challenges, and the Desire & intimacy panel, in priority order. */
 export function Together(): JSX.Element {
   const navigate = useNavigate();
   const myId = useSessionStore((s) => s.activePerson?.id ?? null);
@@ -185,19 +37,38 @@ export function Together(): JSX.Element {
   const sessions = useTogetherStore((s) => s.sessions);
   const catalog = useTogetherStore((s) => s.catalog);
   const partners = useTogetherStore((s) => s.partners);
-  const eligiblePartners = partners.filter((p) => p.eligible);
+  const create = useTogetherStore((s) => s.create);
   const refresh = useTogetherStore((s) => s.refresh);
-  const [selectedGuide, setSelectedGuide] = useState<TogetherCatalogEntry | null>(null);
+
+  const eligiblePartners = useMemo(() => partners.filter((p) => p.eligible), [partners]);
+  const ineligible = useMemo(() => partners.filter((p) => !p.eligible), [partners]);
+
+  const [partnerId, setPartnerId] = useState<string>('');
+  const [pending, setPending] = useState<Pending>(null);
+  const [topic, setTopic] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     void useTogetherStore.getState().load();
     void useTogetherStore.getState().loadCatalog();
-    setSelectedGuide(null);
+    setPending(null);
+    setPartnerId('');
   }, [myId]);
 
-  // Near-live refresh (58 §3.6): a synced partner change re-fetches the list (debounced), the first data
-  // consumer of the vault watcher. Nav/focus loads still work with the watcher absent (§7).
+  // Keep a valid selected partner as the eligible set resolves / changes.
+  useEffect(() => {
+    if (eligiblePartners.length === 0) {
+      if (partnerId) setPartnerId('');
+      return;
+    }
+    if (!eligiblePartners.some((p) => p.personId === partnerId)) {
+      setPartnerId(eligiblePartners[0]!.personId);
+    }
+  }, [eligiblePartners, partnerId]);
+
+  // Near-live refresh (58 §3.6): a synced partner change re-fetches the list (debounced).
   useEffect(() => {
     const unsubscribe = window.selfos?.onVaultChanged(() => {
       if (timer.current) clearTimeout(timer.current);
@@ -209,80 +80,273 @@ export function Together(): JSX.Element {
     };
   }, [refresh]);
 
+  const selectedPartner = eligiblePartners.find((p) => p.personId === partnerId);
+  const partnerName = selectedPartner?.displayName ?? 'your partner';
+
+  const guideById = useMemo(() => new Map(catalog.map((e) => [e.id, e])), [catalog]);
+  const nonAdultCatalog = useMemo(() => catalog.filter((e) => !e.adult), [catalog]);
+  const adultPractices = useMemo(
+    () => catalog.filter((e) => e.adult && e.id !== 'yes-no-maybe-together'),
+    [catalog],
+  );
+  const mySessions = useMemo(
+    () =>
+      partnerId ? sessions.filter((s) => s.participants.some((p) => p.personId === partnerId)) : [],
+    [sessions, partnerId],
+  );
+
+  const selectedGuideId = pending?.kind === 'guide' ? pending.entry.id : null;
+
+  const pickGuide = (entry: TogetherCatalogEntry): void => {
+    setError(null);
+    setPending({ kind: 'guide', entry });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+  const openNew = (): void => {
+    setError(null);
+    setTopic('');
+    setPending({ kind: 'free' });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+  const clearPending = (): void => {
+    setPending(null);
+    setError(null);
+    setTopic('');
+  };
+
+  const send = async (): Promise<void> => {
+    if (!selectedPartner || !pending) return;
+    setBusy(true);
+    setError(null);
+    const guideId = pending.kind === 'guide' ? pending.entry.id : undefined;
+    const t = pending.kind === 'free' ? topic.trim() || undefined : undefined;
+    try {
+      const result = await create(selectedPartner.personId, t, guideId);
+      if (result.ok) navigate(`/together/session/${result.session.id}`);
+      else setError(result.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // No partner at all — the connect-first empty state.
   if (loaded && !hasPartner) {
     return (
       <div className={styles.page}>
-        <Stack gap={2}>
-          <Heading level={1}>Together</Heading>
-          <Text tone="secondary">{TOGETHER_FRAME_LINE}</Text>
-          <Card>
-            <Stack gap={1}>
-              <Inline gap={2} align="center">
-                <Heart size={18} aria-hidden="true" />
-                <Text weight={600}>Together is for you and a partner</Text>
-              </Inline>
-              <Text tone="secondary">
-                Once you’re connected with a partner in this household, you can start a shared,
-                coached conversation here.
-              </Text>
-            </Stack>
-          </Card>
-        </Stack>
+        <Header
+          partnerName={null}
+          eligiblePartners={[]}
+          partnerId=""
+          onPartner={setPartnerId}
+          onNew={openNew}
+          canStart={false}
+        />
+        <div className={styles.emptyCard}>
+          <Inline gap={2} align="center">
+            <Heart size={18} aria-hidden="true" />
+            <Text weight={600}>Together is for you and a partner</Text>
+          </Inline>
+          <Text tone="secondary">
+            Once you’re connected with a partner in this household, you can start a shared, coached
+            conversation here.
+          </Text>
+        </div>
         <CrisisFooter />
       </div>
     );
   }
 
+  const canStart = eligiblePartners.length > 0;
+
   return (
     <div className={styles.page}>
-      <Stack gap={3}>
-        <Stack gap={1}>
-          <Heading level={1}>Together</Heading>
-          <Text tone="secondary">{TOGETHER_FRAME_LINE}</Text>
-        </Stack>
+      <Header
+        partnerName={canStart ? partnerName : null}
+        eligiblePartners={eligiblePartners}
+        partnerId={partnerId}
+        onPartner={setPartnerId}
+        onNew={openNew}
+        canStart={canStart}
+      />
 
-        <StartCard guide={selectedGuide} onClearGuide={() => setSelectedGuide(null)} />
-        {catalog.length > 0 ? (
-          <TogetherCatalog
-            catalog={catalog}
-            selectedId={selectedGuide?.id ?? null}
-            onPick={(entry) => {
-              setSelectedGuide(entry);
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-          />
-        ) : null}
-        {eligiblePartners.map((p) => (
-          <TogetherJointChallenges key={`joint-${p.personId}`} partnerId={p.personId} />
-        ))}
-        {eligiblePartners.map((p) => (
-          <TogetherPulse
-            key={`pulse-${p.personId}`}
-            partnerId={p.personId}
-            partnerName={p.displayName}
-          />
-        ))}
-        {eligiblePartners.map((p) => (
-          <TogetherIntimacy key={p.personId} partnerId={p.personId} partnerName={p.displayName} />
-        ))}
+      {ineligible.length > 0 && !canStart ? (
+        <div className={styles.emptyCard}>
+          <Text weight={600}>Almost there</Text>
+          <Text tone="secondary">
+            {ineligible.map((p) => p.displayName).join(', ')} needs a SelfOS login in this household
+            to join — make them a subject in People, then you can start a session together.
+          </Text>
+        </div>
+      ) : null}
 
-        {sessions.length > 0 ? (
-          <Stack gap={2}>
-            <Heading level={2}>Your sessions</Heading>
-            <div className={styles.sessionGrid}>
-              {sessions.map((session) => (
-                <SessionCard
-                  key={session.id}
-                  session={session}
-                  myId={myId}
-                  onOpen={() => navigate(`/together/session/${session.id}`)}
-                />
-              ))}
+      {canStart ? (
+        <>
+          {partnerId ? <TogetherPulse partnerId={partnerId} partnerName={partnerName} /> : null}
+
+          {pending ? (
+            <div className={styles.startBar}>
+              <div className={styles.startBarTop}>
+                <Heading level={3}>
+                  {pending.kind === 'guide'
+                    ? `Start “${pending.entry.title}” with ${partnerName}`
+                    : `Start an open session with ${partnerName}`}
+                </Heading>
+                <span style={{ marginLeft: 'auto' }}>
+                  <IconButton aria-label="Cancel" onClick={clearPending}>
+                    <X size={16} aria-hidden="true" />
+                  </IconButton>
+                </span>
+              </div>
+              {pending.kind === 'guide' ? (
+                <Text size="sm" tone="secondary">
+                  {pending.entry.blurb}
+                </Text>
+              ) : (
+                <label className={styles.field}>
+                  <Text size="sm" weight={600}>
+                    What’s on your mind?{' '}
+                    <Text as="span" tone="secondary">
+                      (optional)
+                    </Text>
+                  </Text>
+                  <TextInput
+                    value={topic}
+                    placeholder="e.g. Feeling disconnected lately"
+                    onChange={(e) => setTopic(e.target.value)}
+                  />
+                </label>
+              )}
+              {error ? <Banner tone="danger">{error}</Banner> : null}
+              <Inline gap={2} align="center">
+                <Button onClick={() => void send()} disabled={busy} aria-busy={busy}>
+                  {busy ? 'Sending…' : 'Send invitation'}
+                </Button>
+                <Button variant="secondary" onClick={clearPending} disabled={busy}>
+                  Cancel
+                </Button>
+              </Inline>
             </div>
+          ) : null}
+
+          <Stack gap={2}>
+            <div className={styles.sectionHead}>
+              <Heading level={2}>Your sessions</Heading>
+              {mySessions.length > 0 ? (
+                <Text size="sm" tone="secondary">
+                  {mySessions.length} {mySessions.length === 1 ? 'session' : 'sessions'}
+                </Text>
+              ) : null}
+            </div>
+            {mySessions.length > 0 ? (
+              <div className={styles.sessionGrid}>
+                {mySessions.map((session) => (
+                  <TogetherSessionCard
+                    key={session.id}
+                    session={session}
+                    myId={myId}
+                    guide={session.guideId ? guideById.get(session.guideId) : undefined}
+                    onOpen={() => navigate(`/together/session/${session.id}`)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className={styles.emptyCard}>
+                <Text weight={600}>No sessions yet</Text>
+                <Text tone="secondary">
+                  Start an open conversation, or pick a guided practice below to begin one together.
+                </Text>
+                <Button onClick={openNew}>
+                  <Plus size={14} aria-hidden="true" /> New session
+                </Button>
+              </div>
+            )}
           </Stack>
-        ) : null}
-      </Stack>
+
+          {nonAdultCatalog.length > 0 ? (
+            <TogetherCatalog
+              catalog={nonAdultCatalog}
+              selectedId={selectedGuideId}
+              onPick={pickGuide}
+            />
+          ) : null}
+
+          {partnerId ? <TogetherJointChallenges partnerId={partnerId} /> : null}
+
+          {partnerId ? (
+            <TogetherIntimacy
+              partnerId={partnerId}
+              partnerName={partnerName}
+              adultPractices={adultPractices}
+              selectedId={selectedGuideId}
+              onPick={pickGuide}
+            />
+          ) : null}
+        </>
+      ) : null}
+
       <CrisisFooter />
+    </div>
+  );
+}
+
+/** The dashboard header — brand mark, title, the not-therapy frame line, a partner switcher, and New session. */
+function Header({
+  partnerName,
+  eligiblePartners,
+  partnerId,
+  onPartner,
+  onNew,
+  canStart,
+}: {
+  partnerName: string | null;
+  eligiblePartners: { personId: string; displayName: string }[];
+  partnerId: string;
+  onPartner: (id: string) => void;
+  onNew: () => void;
+  canStart: boolean;
+}): JSX.Element {
+  return (
+    <div className={styles.hero}>
+      <div className={styles.heroLeft}>
+        <span className={styles.heroMark} aria-hidden="true">
+          <Heart size={20} />
+        </span>
+        <div className={styles.heroText}>
+          <Heading level={1}>Together</Heading>
+          <div className={styles.heroSub}>
+            {partnerName && eligiblePartners.length > 1 ? (
+              <label className={styles.partnerSelect}>
+                <Text size="sm" tone="secondary">
+                  with
+                </Text>
+                <Select
+                  aria-label="Choose a partner"
+                  value={partnerId}
+                  onChange={(e) => onPartner(e.target.value)}
+                >
+                  {eligiblePartners.map((p) => (
+                    <option key={p.personId} value={p.personId}>
+                      {p.displayName}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+            ) : partnerName ? (
+              <Text size="sm" tone="secondary">
+                with {partnerName}
+              </Text>
+            ) : null}
+            <Text size="sm" tone="secondary">
+              {TOGETHER_FRAME_LINE}
+            </Text>
+          </div>
+        </div>
+      </div>
+      {canStart ? (
+        <Button variant="secondary" onClick={onNew}>
+          <Plus size={14} aria-hidden="true" /> New session
+        </Button>
+      ) : null}
     </div>
   );
 }

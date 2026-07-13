@@ -309,6 +309,7 @@ export function togetherCatalogFor(opts: { allowAdult: boolean }): TogetherCatal
     framework: g.framework,
     blurb: g.blurb,
     kind: g.kind,
+    stepCount: g.steps?.length ?? 0,
     adult: Boolean(g.adult),
   }));
 }

@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Activity } from 'lucide-react';
+import { Activity, Lock } from 'lucide-react';
 import { PULSE_METRICS, PULSE_METRIC_LABELS, type TogetherPulseView } from '@shared/schemas';
 import {
   Banner,
   Button,
-  Card,
   Heading,
   Inline,
   LineChart,
@@ -16,10 +15,10 @@ import {
 import styles from './Together.module.css';
 
 /**
- * The pair Pulse (58 §3.10a — absorbs spec 11): a frictionless 1–3 check-in on how the viewer feels the
- * relationship is going (connection / desire / satisfaction), the viewer's OWN metric trends + the dyad
- * session metrics, and — only when BOTH have logged AND both consented to share `desire` — a gentle desire
- * alignment. Everything is gated host-side; a partner's raw metrics are never shown (only the desire read).
+ * The Pulse check-in strip (58 §3.10a — absorbs spec 11), pulled to the top of the dashboard so logging is
+ * an inviting, low-friction habit. The three metric taps are always visible (a one-motion check-in), with the
+ * viewer's OWN trend + a gentle "last check-in" nudge, and — only when BOTH have logged AND both consented to
+ * share `desire` — the desire alignment. Everything is gated host-side; a partner's raw metrics are never shown.
  */
 type Level = 'low' | 'steady' | 'high';
 const LEVEL_TO_UNIT: Record<Level, number> = { low: 0, steady: 0.5, high: 1 };
@@ -38,6 +37,17 @@ const DIRECTION_WORD: Record<TogetherPulseView['series'][number]['direction'], s
   flat: '—',
 };
 
+/** A gentle "last check-in" nudge from the most-recent check-in timestamp (never fabricated). */
+function nudgeLine(lastCheckInAt: string | undefined): string {
+  if (!lastCheckInAt) return 'Takes 20 seconds — and it stays private to you.';
+  const then = Date.parse(lastCheckInAt);
+  if (!Number.isFinite(then)) return 'Takes 20 seconds — and it stays private to you.';
+  const days = Math.floor((Date.now() - then) / 86_400_000);
+  if (days <= 0) return 'You checked in today. Nice.';
+  if (days === 1) return 'Last check-in yesterday — takes 20 seconds.';
+  return `Last check-in ${days} days ago — takes 20 seconds.`;
+}
+
 export function TogetherPulse({
   partnerId,
   partnerName,
@@ -53,7 +63,7 @@ export function TogetherPulse({
   });
   const [shareDesire, setShareDesire] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [logging, setLogging] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   const refresh = useCallback(async (): Promise<void> => {
     const v = (await window.selfos?.togetherPulse({ partnerPersonId: partnerId })) ?? null;
@@ -73,9 +83,11 @@ export function TogetherPulse({
       metrics,
       ...(shareDesire ? { shareMetrics: ['desire'] } : {}),
     });
-    if (v) setView(v);
+    if (v) {
+      setView(v);
+      setSaved(true);
+    }
     setBusy(false);
-    setLogging(false);
   };
 
   if (!view) return null;
@@ -83,86 +95,78 @@ export function TogetherPulse({
   const alignment = view.alignment;
 
   return (
-    <Card>
-      <Stack gap={2}>
-        <Inline gap={2} align="center">
-          <Activity size={16} aria-hidden="true" />
-          <Heading level={3}>Pulse</Heading>
-        </Inline>
-        <Text size="sm" tone="secondary">
-          A quick, private read on how things feel with {partnerName}. Just for you — unless you
-          choose to share your desire level to see how you line up.
-        </Text>
-
+    <div className={styles.checkIn}>
+      <div className={styles.checkInHead}>
+        <Stack gap={1}>
+          <Inline gap={2} align="center">
+            <Activity size={16} aria-hidden="true" />
+            <Heading level={3}>How are things with {partnerName}?</Heading>
+          </Inline>
+          <Text size="sm" tone="secondary">
+            {saved ? 'Saved. Come back anytime.' : nudgeLine(view.lastCheckInAt)}
+          </Text>
+        </Stack>
         {view.hasCheckIns && view.series.length > 0 ? (
-          <Stack gap={1}>
-            <div className={styles.pulseChart}>
-              <LineChart
-                series={view.series}
-                ariaLabel={`Your Together pulse over time with ${partnerName}`}
-                yMin={0}
-                yMax={1}
-              />
-            </div>
+          <Stack gap={1} className={styles.pulseSpark}>
+            <LineChart
+              series={view.series}
+              ariaLabel={`Your Together pulse over time with ${partnerName}`}
+              yMin={0}
+              yMax={1}
+            />
             {/* §9 text equivalent — the trend direction as words, never colour/shape alone. */}
             <Text size="xs" tone="secondary">
               {view.series.map((s) => `${s.label} ${DIRECTION_WORD[s.direction]}`).join(' · ')}
             </Text>
           </Stack>
-        ) : (
-          <Text size="sm" tone="secondary">
-            No check-ins yet. Log one below to start seeing how things trend.
-          </Text>
-        )}
-
-        {alignment.ready && alignment.yours != null && alignment.theirs != null ? (
-          <Banner tone={alignment.read === 'aligned' ? 'info' : 'warning'}>
-            {alignment.read === 'aligned'
-              ? `Your desire levels are closely aligned right now.`
-              : `There's some distance in where your desire levels sit right now — worth a gentle conversation.`}
-          </Banner>
         ) : null}
+      </div>
 
-        {logging ? (
-          <Stack gap={2}>
-            {METRICS.map((m) => (
-              <Stack key={m.key} gap={1}>
-                <Text size="sm" weight={600}>
-                  {m.label}
-                </Text>
-                <SegmentedControl
-                  options={LEVEL_OPTIONS}
-                  value={levels[m.key] ?? 'steady'}
-                  onChange={(v) => setLevels((prev) => ({ ...prev, [m.key]: v }))}
-                  aria-label={`${m.label} level`}
-                />
-              </Stack>
-            ))}
-            <Inline gap={2} align="center">
-              <Switch
-                checked={shareDesire}
-                onChange={setShareDesire}
-                aria-label={`Share my desire level with ${partnerName} to see how you line up`}
-              />
-              <Text size="sm" tone="secondary">
-                Share my desire level with {partnerName} (to see how you line up)
-              </Text>
-            </Inline>
-            <Inline gap={2} align="center">
-              <Button onClick={() => void submit()} disabled={busy} aria-busy={busy}>
-                Save check-in
-              </Button>
-              <Button variant="secondary" onClick={() => setLogging(false)} disabled={busy}>
-                Cancel
-              </Button>
-            </Inline>
-          </Stack>
-        ) : (
-          <Inline gap={2} align="center">
-            <Button onClick={() => setLogging(true)}>Log a check-in</Button>
-          </Inline>
-        )}
-      </Stack>
-    </Card>
+      {alignment.ready && alignment.yours != null && alignment.theirs != null ? (
+        <Banner tone={alignment.read === 'aligned' ? 'info' : 'warning'}>
+          {alignment.read === 'aligned'
+            ? `Your desire levels are closely aligned right now.`
+            : `There's some distance in where your desire levels sit right now — worth a gentle conversation.`}
+        </Banner>
+      ) : null}
+
+      <div className={styles.metricGrid}>
+        {METRICS.map((m) => (
+          <div key={m.key} className={styles.metric}>
+            <Text size="sm" weight={600}>
+              {m.label}
+            </Text>
+            <SegmentedControl
+              options={LEVEL_OPTIONS}
+              value={levels[m.key] ?? 'steady'}
+              onChange={(v) => {
+                setLevels((prev) => ({ ...prev, [m.key]: v }));
+                setSaved(false);
+              }}
+              aria-label={`${m.label} level`}
+            />
+          </div>
+        ))}
+      </div>
+
+      <div className={styles.checkInFoot}>
+        <div className={styles.shareToggle}>
+          <Switch
+            checked={shareDesire}
+            onChange={(v) => {
+              setShareDesire(v);
+              setSaved(false);
+            }}
+            aria-label={`Share my desire level with ${partnerName} to see how you line up`}
+          />
+          <Text size="sm" tone="secondary" className={styles.lockNote}>
+            <Lock size={13} aria-hidden="true" /> Share my desire level to see how you line up
+          </Text>
+        </div>
+        <Button onClick={() => void submit()} disabled={busy} aria-busy={busy}>
+          {saved ? 'Saved' : 'Save check-in'}
+        </Button>
+      </div>
+    </div>
   );
 }

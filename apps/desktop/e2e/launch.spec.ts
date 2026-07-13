@@ -9591,6 +9591,7 @@ test('together (58): lifecycle + aside projection (crown jewel) + prompt capture
     const w = await app.firstWindow();
     // Ben has a partner → the Together nav shows. Open it + start a session with Angel.
     await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByRole('button', { name: 'New session' }).first().click();
     await w.getByPlaceholder('e.g. Feeling disconnected lately').fill('Feeling distant lately');
     await w.getByRole('button', { name: 'Send invitation' }).click();
 
@@ -9664,6 +9665,7 @@ test('together (58) phase C: an attachment stores encrypted under the session; t
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByRole('button', { name: 'New session' }).first().click();
     await w.getByPlaceholder('e.g. Feeling disconnected lately').fill('Planning our week');
     await w.getByRole('button', { name: 'Send invitation' }).click();
 
@@ -9719,6 +9721,7 @@ test('together (58) phase D: wrap-up writes a report + twins (aside ABSENT from 
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByRole('button', { name: 'New session' }).first().click();
     await w.getByPlaceholder('e.g. Feeling disconnected lately').fill('Planning our week');
     await w.getByRole('button', { name: 'Send invitation' }).click();
 
@@ -9796,8 +9799,9 @@ test('together (58) phase E: start a structured guided couples session from the 
     await w.getByRole('link', { name: /Together/ }).click();
 
     // The guided catalog lists Connect + Repair; pick a structured practice → it binds to the start form.
-    await expect(w.getByRole('heading', { name: 'Guided sessions' })).toBeVisible();
-    await expect(w.getByText('Connect')).toBeVisible();
+    await expect(w.getByRole('heading', { name: 'Start a guided practice' })).toBeVisible();
+    // `exact` — the Pulse strip's "Connection" metric label (now at the top) substring-matches "Connect".
+    await expect(w.getByText('Connect', { exact: true })).toBeVisible();
     await w.getByRole('button', { name: /Love Maps/ }).click();
     await expect(w.getByRole('heading', { name: /Start .Love Maps./ })).toBeVisible();
     // §166: the selected guide's FULL blurb is surfaced by the start card as a paragraph (not just a
@@ -9907,7 +9911,7 @@ test('together (58) phase F: the Desire group + explicit register are withheld u
     await w.getByRole('link', { name: /Together/ }).click();
 
     // The Desire & intimacy group is WITHHELD (no adult cards) before any ack.
-    await expect(w.getByRole('heading', { name: 'Guided sessions' })).toBeVisible();
+    await expect(w.getByRole('heading', { name: 'Start a guided practice' })).toBeVisible();
     await expect(w.getByText('Sensate Focus')).toHaveCount(0);
 
     // Ben turns on adult content — still withheld (Angel hasn't).
@@ -9971,12 +9975,11 @@ test('together (58) phase G: Pulse logs each partner’s own check-in; the desir
     const w = await app.firstWindow();
     await w.getByRole('link', { name: /Together/ }).click();
 
-    // The Pulse card is present (no adult ack needed — it's the dyad check-in). No alignment yet.
-    await expect(w.getByRole('heading', { name: 'Pulse', exact: true })).toBeVisible();
-    await expect(w.getByText(/No check-ins yet/i)).toBeVisible();
+    // The check-in strip is present at the top (no adult ack needed — it's the dyad check-in). No alignment yet.
+    await expect(w.getByRole('heading', { name: /How are things with/ })).toBeVisible();
+    await expect(w.getByText(/Takes 20 seconds/i)).toBeVisible();
 
-    // Ben logs a check-in with Desire = High and opts to SHARE it.
-    await w.getByRole('button', { name: 'Log a check-in' }).click();
+    // Ben logs a check-in with Desire = High and opts to SHARE it — the taps are always visible (one-motion).
     const desireGroup = w.getByRole('group', { name: 'Desire level' });
     await desireGroup.getByRole('button', { name: 'High' }).click();
     await w.getByRole('switch', { name: /Share my desire level/i }).click();
@@ -9988,7 +9991,6 @@ test('together (58) phase G: Pulse logs each partner’s own check-in; the desir
     // Angel logs a check-in with Desire = High and shares too → dual consent met.
     await switchTogetherPerson(w, 'Angel');
     await w.getByRole('link', { name: /Together/ }).click();
-    await w.getByRole('button', { name: 'Log a check-in' }).click();
     await w
       .getByRole('group', { name: 'Desire level' })
       .getByRole('button', { name: 'High' })
@@ -10028,6 +10030,7 @@ test('together (58) phase H1: a pending Together invitation surfaces on the invi
     const w = await app.firstWindow();
     // Ben invites Angel to a Together session.
     await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByRole('button', { name: 'New session' }).first().click();
     await w.getByPlaceholder('e.g. Feeling disconnected lately').fill('Reconnecting');
     await w.getByRole('button', { name: 'Send invitation' }).click();
 
@@ -10050,6 +10053,7 @@ test('together (58) phase H1: deleting a participant reaps their Together sessio
     const w = await app.firstWindow();
     // Ben (owner) starts a Together session with Angel.
     await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByRole('button', { name: 'New session' }).first().click();
     await w.getByPlaceholder('e.g. Feeling disconnected lately').fill('A shared topic');
     await w.getByRole('button', { name: 'Send invitation' }).click();
     await expect(w.getByLabel('Message')).toBeVisible();
@@ -10081,6 +10085,7 @@ test('together (58) phase H2: a couples turn mints a JOINT challenge for both pa
     // Ben starts a session + sends a message with "challenge" → the fake couples coach appends a CHALLENGE
     // marker → twin Challenge records are minted for BOTH partners (the marker is stripped from the reply).
     await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByRole('button', { name: 'New session' }).first().click();
     await w.getByPlaceholder('e.g. Feeling disconnected lately').fill('Growing together');
     await w.getByRole('button', { name: 'Send invitation' }).click();
     await w.getByLabel('Message').fill('Can we take on a small challenge together?');
@@ -10108,9 +10113,9 @@ test('together (58) phase H2: a couples turn mints a JOINT challenge for both pa
       })
       .toBe(1); // exactly one shared groupId across both partners' twins
 
-    // The Together home tile surfaces the joint challenge.
+    // The Together home strip surfaces the joint challenge (singular heading for one challenge).
     await w.getByRole('link', { name: /Together/ }).click();
-    await expect(w.getByRole('heading', { name: 'Joint challenges' })).toBeVisible();
+    await expect(w.getByRole('heading', { name: /Joint challenge/ })).toBeVisible();
     await expect(w.getByText('Share one appreciation a day')).toBeVisible();
   } finally {
     await app.close();
@@ -10127,6 +10132,7 @@ test('together (58) phase H3: a coach SUGGESTION card appears and "Start this ex
     // Ben starts a session + asks for an idea → the fake couples coach appends a SUGGEST marker → a suggestion
     // card renders (nothing auto-acts). The marker never shows in the reply.
     await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByRole('button', { name: 'New session' }).first().click();
     await w.getByPlaceholder('e.g. Feeling disconnected lately').fill('Reconnecting');
     await w.getByRole('button', { name: 'Send invitation' }).click();
     await w.getByLabel('Message').fill('Any ideas for something we could try together?');
@@ -10170,6 +10176,7 @@ test('together (58): no partner → no nav; and the surface is clean at 360px', 
     await w.setViewportSize({ width: 360, height: 780 });
     await w.getByRole('button', { name: /open navigation/i }).click();
     await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByRole('button', { name: 'New session' }).first().click();
     await w.getByPlaceholder('e.g. Feeling disconnected lately').fill('A tricky week');
     await w.getByRole('button', { name: 'Send invitation' }).click();
     await w.getByLabel('Message').fill('Hi.');

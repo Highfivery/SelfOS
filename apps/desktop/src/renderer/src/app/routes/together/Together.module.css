@@ -1,29 +1,155 @@
 .page {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-6);
   width: 100%;
 }
 
-/* ── Start flow + sessions list ─────────────────────────────────────────────── */
-.field {
+/* ══ DASHBOARD (58 §3.2 redesign) ═══════════════════════════════════════════════ */
+
+/* ── Hero header ─────────────────────────────────────────────────────────────── */
+.hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.heroLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.heroMark {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full, 999px);
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.heroText {
+  min-width: 0;
+}
+.heroSub {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.partnerSelect {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.partnerSelect :global(select) {
+  min-height: 28px;
+  padding: 2px var(--space-2);
+}
+
+/* ── Check-in strip (Pulse, §3.10a) ──────────────────────────────────────────── */
+.checkIn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  min-width: 0;
+}
+.checkInHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.checkInNudge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.metricGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-3);
+}
+.metric {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+  min-width: 0;
+}
+.checkInFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.shareToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.pulseSpark {
+  width: 100%;
+  max-width: 480px;
+  min-width: 0;
+}
+.lockNote {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
 }
 
+/* ── Section headers ─────────────────────────────────────────────────────────── */
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* ── Start bar (deliberate send) ─────────────────────────────────────────────── */
+.startBar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-accent-subtle-bg);
+  border: 1px solid var(--color-accent-solid);
+  min-width: 0;
+}
+.startBarTop {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* ── Sessions board ──────────────────────────────────────────────────────────── */
 .sessionGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: var(--space-3);
 }
-
 .sessionCard {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
   width: 100%;
   min-width: 0;
   text-align: left;
-  padding: var(--space-3);
+  padding: var(--space-4);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
@@ -36,21 +162,290 @@
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
 }
+/* The ball-in-your-court session pops (a full 2px border — never a single-sided accent). */
+.sessionCard[data-turn='you'] {
+  border: 2px solid var(--color-accent-solid);
+  padding: calc(var(--space-4) - 1px);
+}
+.sessionCardHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.sessionEyebrow {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-text-secondary);
+}
+.sessionCardTitle {
+  font-weight: 600;
+  color: var(--color-text-heading);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.sessionSubject,
+.sessionExcerpt {
+  font-size: 0.82rem;
+  color: var(--color-text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-width: 0;
+}
+.sessionExcerpt {
+  color: var(--color-text-tertiary);
+}
+.sessionFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: 2px;
+  min-width: 0;
+}
+.sessionWho {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  color: var(--color-text-secondary);
+}
+.miniAvatar {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-full, 999px);
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+.unreadDot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full, 999px);
+  background: var(--color-accent-solid);
+}
 
+/* Status pill — one text+tone chip per session state (never colour alone: the label carries meaning). */
+.statusPill {
+  flex: none;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: var(--radius-full, 999px);
+  background: var(--color-surface-alt);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+.statusPill[data-tone='accent'] {
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+}
+.statusPill[data-tone='warning'] {
+  background: var(--color-danger-subtle-bg);
+  color: var(--color-warning);
+}
+
+/* ── Guided practices (full-width, full blurbs) ──────────────────────────────── */
+.searchField {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  max-width: 340px;
+}
+.searchField :global(input) {
+  border: none;
+  background: transparent;
+  padding-left: 0;
+}
+.searchField :global(input):focus-visible {
+  outline: none;
+}
+.practiceGroupTitle {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.practiceGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: var(--space-3);
+}
+.practiceCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  text-align: left;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+.practiceCard:hover {
+  border-color: var(--color-border-strong);
+}
+.practiceCard:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+.practiceCard[data-selected='true'] {
+  border-color: var(--color-accent-solid);
+  background: var(--color-accent-subtle-bg);
+}
+.practiceEyebrow {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-text-secondary);
+}
+.practiceTitle {
+  font-weight: 600;
+  color: var(--color-text-heading);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+/* The full blurb — never clamped, so it's clear what each practice is (§166). */
+.practiceBlurb {
+  font-size: 0.82rem;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ── Joint challenge strip ───────────────────────────────────────────────────── */
+.challengeStrip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  min-width: 0;
+}
+.challengeMain {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.challengeIcon {
+  flex: none;
+  color: var(--color-text-secondary);
+  display: inline-flex;
+}
+.challengeText {
+  min-width: 0;
+}
+
+/* ── Desire & intimacy — cohesive panel (§3.10/§3.10b) ──────────────────────────── */
+.intimacyPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-accent-solid);
+  min-width: 0;
+}
+.intimacyHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.intimacyGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-3);
+}
+.intimacyCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  min-width: 0;
+}
+.intimacyCardTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.chip {
+  flex: none;
+  font-size: 0.75rem;
+  padding: 3px 10px;
+  border-radius: var(--radius-full, 999px);
+  background: var(--color-surface-alt);
+  color: var(--color-text-secondary);
+}
+.adultBadge {
+  flex: none;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 2px 7px;
+  border-radius: var(--radius-full, 999px);
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+}
+
+/* ── Empty / getting-started states ──────────────────────────────────────────── */
+.emptyCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  align-items: flex-start;
+  min-width: 0;
+}
+
+/* ══ SESSION PAGE (ceremony · thread · composer · stepper · reflection) ═══════════ */
+
+/* The generic ellipsizing title — shared by the session thread head. */
 .cardTitle {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.cardSnippet {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
 
-.statusPill,
+/* The thread turn pill (TogetherThread). */
 .turnPill {
   flex: none;
   font-size: 0.72rem;
@@ -61,7 +456,6 @@
   color: var(--color-text-secondary);
   white-space: nowrap;
 }
-.statusPill[data-status='active'],
 .turnPill[data-turn='you'] {
   background: var(--color-accent-subtle-bg);
   color: var(--color-accent-text);
@@ -246,91 +640,6 @@
   outline-offset: 1px;
 }
 
-/* ── Guided catalog (58 §3.10) ───────────────────────────────────────────────── */
-.searchField {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 0 var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: var(--color-text-secondary);
-}
-.searchField :global(input) {
-  border: none;
-  background: transparent;
-  padding-left: 0;
-}
-.searchField :global(input):focus-visible {
-  outline: none;
-}
-.catalogGroupTitle {
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.catalogGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  gap: var(--space-2);
-}
-.catalogCard {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-  text-align: left;
-  padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  cursor: pointer;
-}
-.catalogCard:hover {
-  border-color: var(--color-border-strong);
-}
-.catalogCard:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 2px;
-}
-.catalogCard[data-selected='true'] {
-  border-color: var(--color-accent-solid);
-  background: var(--color-accent-subtle-bg);
-}
-.catalogEyebrow {
-  font-size: 0.68rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--color-text-secondary);
-}
-.catalogCardTitle {
-  font-weight: 600;
-  min-width: 0;
-  overflow-wrap: anywhere;
-  color: var(--color-text-heading);
-}
-.catalogBlurb {
-  font-size: 0.82rem;
-  color: var(--color-text-secondary);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-/* ── Desire & intimacy badge (58 §3.10) ──────────────────────────────────────── */
-.adultBadge {
-  flex: none;
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  padding: 2px 7px;
-  border-radius: var(--radius-full, 999px);
-  background: var(--color-accent-subtle-bg);
-  color: var(--color-accent-text);
-}
-
 /* ── Structured stepper (58 §3.10) ───────────────────────────────────────────── */
 .stepper {
   display: flex;
@@ -498,21 +807,8 @@
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 1px;
 }
-.pulseChart {
-  width: 100%;
-  max-width: 480px;
-  min-width: 0;
-}
-.jointChallengeRow {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-2) 0;
-  border-top: 1px solid var(--color-border);
-}
-.jointChallengeRow:first-child {
-  border-top: none;
-}
+
+/* ── Coach suggestion cards (58 §5.6) ────────────────────────────────────────── */
 .suggestionRow {
   display: flex;
   flex-direction: column;

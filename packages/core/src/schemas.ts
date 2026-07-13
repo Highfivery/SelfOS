@@ -3003,7 +3003,7 @@ export interface TogetherSessionSummary {
   createdAt: string;
 }
 
-/** A couples guided-catalog card the renderer shows (§3.10) — steering (addendum/opener/steps) omitted. */
+/** A couples guided-catalog card the renderer shows (§3.10) — steering (addendum/opener) omitted. */
 export interface TogetherCatalogEntry {
   id: string;
   group: string;
@@ -3012,6 +3012,8 @@ export interface TogetherCatalogEntry {
   framework: string;
   blurb: string;
   kind: 'chat' | 'structured';
+  /** Number of named steps for a structured practice (0 for a chat practice) — drives the "N steps" marker. */
+  stepCount: number;
   adult: boolean;
 }
 
@@ -3256,6 +3258,8 @@ export interface TogetherPulseView {
   series: PulseSeries[];
   /** Whether the viewer has logged at least one check-in (drives the empty state). */
   hasCheckIns: boolean;
+  /** The viewer's most-recent check-in timestamp (ISO), if any — drives the "log regularly" nudge. */
+  lastCheckInAt?: string;
   alignment: PulseAlignment;
 }
 

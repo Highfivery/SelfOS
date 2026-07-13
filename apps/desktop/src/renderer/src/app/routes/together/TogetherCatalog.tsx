@@ -2,12 +2,14 @@ import { useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
 import type { TogetherCatalogEntry } from '@shared/schemas';
 import { Heading, Stack, Text, TextInput } from '../../../design-system/components';
+import { PracticeCard } from './PracticeCard';
 import styles from './Together.module.css';
 
 /**
- * The Together guided catalog (58 §3.10): couples guided sessions grouped by their non-clinical group title,
- * with a search filter. Picking a card binds it to the start form above. The 18+ group is withheld host-side
- * (never returned by `together:catalog` in Phase E), so nothing adult can appear here.
+ * The full-width guided practices (58 §3.10): couples guided sessions grouped by their non-clinical group
+ * title, with a search filter. Each card fills the row and shows its FULL blurb (never clamped, §166) so it's
+ * clear what the practice is. Picking a card raises it to the start bar above (a deliberate send). The 18+
+ * `together-desire` group is withheld host-side + surfaced separately in the Desire & intimacy panel.
  */
 export function TogetherCatalog({
   catalog,
@@ -41,15 +43,17 @@ export function TogetherCatalog({
 
   return (
     <Stack gap={2}>
-      <Heading level={2}>Guided sessions</Heading>
-      <Text size="sm" tone="secondary">
-        Structured practices for the two of you — pick one to start it together.
-      </Text>
+      <Stack gap={1}>
+        <Heading level={2}>Start a guided practice</Heading>
+        <Text size="sm" tone="secondary">
+          Structured practices for the two of you — pick one to start it together.
+        </Text>
+      </Stack>
       <label className={styles.searchField}>
         <Search size={15} aria-hidden="true" />
         <TextInput
           aria-label="Search guided sessions"
-          placeholder="Search practices…"
+          placeholder="Search practices"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -60,26 +64,17 @@ export function TogetherCatalog({
       ) : (
         groups.map((group) => (
           <Stack key={group.title} gap={1}>
-            <Text size="xs" tone="secondary" weight={600} className={styles.catalogGroupTitle}>
+            <Text size="xs" tone="secondary" weight={600} className={styles.practiceGroupTitle}>
               {group.title}
             </Text>
-            <div className={styles.catalogGrid}>
+            <div className={styles.practiceGrid}>
               {group.entries.map((entry) => (
-                <button
+                <PracticeCard
                   key={entry.id}
-                  type="button"
-                  className={styles.catalogCard}
-                  aria-pressed={selectedId === entry.id}
-                  data-selected={selectedId === entry.id}
-                  onClick={() => onPick(entry)}
-                >
-                  <span className={styles.catalogEyebrow}>
-                    {entry.framework}
-                    {entry.kind === 'structured' ? ' · Steps' : ''}
-                  </span>
-                  <span className={styles.catalogCardTitle}>{entry.title}</span>
-                  <span className={styles.catalogBlurb}>{entry.blurb}</span>
-                </button>
+                  entry={entry}
+                  selected={selectedId === entry.id}
+                  onPick={onPick}
+                />
               ))}
             </div>
           </Stack>

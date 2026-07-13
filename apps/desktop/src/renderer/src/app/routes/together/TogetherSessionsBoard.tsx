@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Archive, Clock, MailOpen, Reply, Send } from 'lucide-react';
+import { Archive, ChevronRight, Clock, MailOpen, Reply, Send } from 'lucide-react';
 import type { TogetherCatalogEntry, TogetherSessionSummary } from '@shared/schemas';
 import { Heading, Stack, Text } from '../../../design-system/components';
 import { TogetherSessionCard } from './TogetherSessionCard';
@@ -74,8 +74,9 @@ export function TogetherSessionsBoard({
               <details key={group.key} className={styles.wrappedGroup}>
                 <summary className={styles.wrappedSummary}>
                   <span className={styles.wrappedChevron} aria-hidden="true">
-                    <Icon size={16} />
+                    <ChevronRight size={16} />
                   </span>
+                  <Icon size={16} aria-hidden="true" />
                   <Text size="sm" weight={600} tone="secondary">
                     {title}
                   </Text>

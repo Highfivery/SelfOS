@@ -263,6 +263,18 @@ describe('Together chat send (05 §4.1)', () => {
     resolveSend({ ok: true, view: view({ messages: [] }) });
     await done;
   });
+
+  it('a thrown send resolves to an honest error (never stuck thinking); the message isn’t lost', async () => {
+    installMockBridge({ togetherSendMessage: () => Promise.reject(new Error('boom')) });
+    setActivePerson();
+    useTogetherStore.setState({ open: view({ messages: [] }) });
+    const result = await useTogetherStore.getState().sendMessage('hey', false, []);
+    expect(result.ok).toBe(false);
+    expect(useTogetherStore.getState().sending).toBe(false);
+    expect(useTogetherStore.getState().error).toBeTruthy();
+    // The optimistic bubble stays so the just-typed message isn't lost (retry via the Try again banner).
+    expect(useTogetherStore.getState().open?.messages.some((m) => m.content === 'hey')).toBe(true);
+  });
 });
 
 describe('TogetherSessionCard withdraw (§3.4)', () => {

@@ -36,6 +36,13 @@ const NOT_ALLOWED: TogetherTurnResult = {
   reason: 'NOT_ALLOWED',
   message: 'Together isn’t available right now.',
 };
+// A THROWN turn (main-process error / dropped IPC) must never leave "thinking" stuck forever — resolve to an
+// honest error the user can retry (05 §4.1). The optimistic bubble stays so the just-typed message isn't lost.
+const TURN_ERROR: TogetherTurnResult = {
+  ok: false,
+  reason: 'ERROR',
+  message: 'Something went wrong sending that. Try again.',
+};
 
 interface TogetherState {
   loaded: boolean;
@@ -206,42 +213,52 @@ export const useTogetherStore = create<TogetherState>((set, get) => ({
       streaming: '',
       error: null,
     });
-    // Store any pending images under the session's own attachment folder (§6.1), then send their refs. A
-    // failed store drops that image but the message still sends (best-effort, matching the 45 solo path).
-    const attachments: AttachmentRef[] = [];
-    for (const p of pending ?? []) {
-      const stored = await window.selfos?.togetherStoreAttachment({
-        sessionId: open.id,
-        base64: p.base64,
-        mime: p.mime,
-        width: p.width,
-        height: p.height,
-      });
-      if (stored && 'id' in stored) attachments.push(stored);
+    try {
+      // Store any pending images under the session's own attachment folder (§6.1), then send their refs. A
+      // failed store drops that image but the message still sends (best-effort, matching the 45 solo path).
+      const attachments: AttachmentRef[] = [];
+      for (const p of pending ?? []) {
+        const stored = await window.selfos?.togetherStoreAttachment({
+          sessionId: open.id,
+          base64: p.base64,
+          mime: p.mime,
+          width: p.width,
+          height: p.height,
+        });
+        if (stored && 'id' in stored) attachments.push(stored);
+      }
+      const result =
+        (await window.selfos?.togetherSendMessage({
+          sessionId: open.id,
+          text,
+          ...(privateAside ? { privateAside: true } : {}),
+          ...(attachments.length > 0 ? { attachments } : {}),
+        })) ?? NOT_ALLOWED;
+      if (result.ok) {
+        set({ open: result.view, sending: false, streaming: '' });
+        // A shared (non-aside) turn may have captured an agreement (§6.4) or moved the report's staleness —
+        // refresh the ledger/report so it stays live. An aside mints no shared artifacts (§3.6), so skip it.
+        if (!privateAside) await get().loadReport(open.id);
+      } else set({ sending: false, streaming: '', error: result.message });
+      return result;
+    } catch {
+      set({ sending: false, streaming: '', error: TURN_ERROR.message });
+      return TURN_ERROR;
     }
-    const result =
-      (await window.selfos?.togetherSendMessage({
-        sessionId: open.id,
-        text,
-        ...(privateAside ? { privateAside: true } : {}),
-        ...(attachments.length > 0 ? { attachments } : {}),
-      })) ?? NOT_ALLOWED;
-    if (result.ok) {
-      set({ open: result.view, sending: false, streaming: '' });
-      // A shared (non-aside) turn may have captured an agreement (§6.4) or moved the report's staleness —
-      // refresh the ledger/report so it stays live. An aside mints no shared artifacts (§3.6), so skip it.
-      if (!privateAside) await get().loadReport(open.id);
-    } else set({ sending: false, streaming: '', error: result.message });
-    return result;
   },
   retry: async () => {
     const open = get().open;
     if (!open) return NOT_ALLOWED;
     set({ sending: true, streaming: '', error: null });
-    const result = (await window.selfos?.togetherRetry({ sessionId: open.id })) ?? NOT_ALLOWED;
-    if (result.ok) set({ open: result.view, sending: false, streaming: '' });
-    else set({ sending: false, streaming: '', error: result.message });
-    return result;
+    try {
+      const result = (await window.selfos?.togetherRetry({ sessionId: open.id })) ?? NOT_ALLOWED;
+      if (result.ok) set({ open: result.view, sending: false, streaming: '' });
+      else set({ sending: false, streaming: '', error: result.message });
+      return result;
+    } catch {
+      set({ sending: false, streaming: '', error: TURN_ERROR.message });
+      return TURN_ERROR;
+    }
   },
   markRead: async (id) => {
     await window.selfos?.togetherMarkRead({ sessionId: id, at: new Date().toISOString() });

@@ -390,7 +390,7 @@ describe('generateQuestions', () => {
       existingPrompts: [],
     });
     expect(result.ok).toBe(true);
-    expect(sentUserText).toMatch(/genuinely explicit/i); // the §16.5 explicit direction
+    expect(sentUserText).toMatch(/no-holds-barred/i); // the §22.2 unfiltered explicit direction
     expect(sentUserText).toMatch(/appropriate and expected/i); // the legitimate-context framing
     expect(sentUserText).toContain('Deepthroat'); // a built-in topic
     expect(sentUserText).toContain('Sploshing'); // the owner's custom addition (merged inventory)

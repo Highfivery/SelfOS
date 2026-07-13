@@ -10,6 +10,7 @@ import {
   digestFor,
   getSession,
   isInvitationExpired,
+  isPendingInvite,
   listMessages,
   listSessionsForPerson,
   listStates,
@@ -19,6 +20,7 @@ import {
   turnStateFor,
   unreadCountFor,
   updateState,
+  withdrawSession,
 } from './togetherService';
 import { saveAgreement } from './agreementService';
 
@@ -247,6 +249,54 @@ describe('storage round-trips + corrupt-file tolerance (§7)', () => {
     expect(await fs.list(`together/pairs/${pairKeyFor(A, B)}`)).toHaveLength(0);
     expect(await getSession(fs, key, cd.id)).toBeTruthy();
     expect(await listSessionsForPerson(fs, key, A)).toHaveLength(0);
+  });
+
+  it('withdrawSession: the initiator undoes a pending invite (deletes for both); non-initiator is refused', async () => {
+    const fs = await makeFs();
+    const s = await createSession(fs, key, { initiatorPersonId: A, participantIds: [A, B] }, NOW);
+    // Only the initiator (A) has acked → still a pending invite.
+    expect(isPendingInvite(s, await listStates(fs, key, s.id))).toBe(true);
+    // The recipient (B) can't withdraw A's invite.
+    expect(await withdrawSession(fs, key, s.id, B)).toEqual({ ok: false, reason: 'NOT_INITIATOR' });
+    expect(await getSession(fs, key, s.id)).toBeTruthy();
+    // A withdraws → the shared session is gone for BOTH.
+    expect(await withdrawSession(fs, key, s.id, A)).toEqual({ ok: true });
+    expect(await getSession(fs, key, s.id)).toBeNull();
+    expect(await listSessionsForPerson(fs, key, A)).toHaveLength(0);
+    expect(await listSessionsForPerson(fs, key, B)).toHaveLength(0);
+  });
+
+  it('withdrawSession: refused once the recipient ACCEPTED; a quiet DECLINE is still withdrawable', async () => {
+    const fs = await makeFs();
+    // Accepted → no longer a pending invite → refused, session untouched.
+    const accepted = await createSession(
+      fs,
+      key,
+      { initiatorPersonId: A, participantIds: [A, B] },
+      NOW,
+    );
+    await updateState(fs, key, accepted.id, B, { rulesAckAt: NOW.toISOString() }, NOW);
+    expect(isPendingInvite(accepted, await listStates(fs, key, accepted.id))).toBe(false);
+    expect(await withdrawSession(fs, key, accepted.id, A)).toEqual({
+      ok: false,
+      reason: 'ALREADY_ACCEPTED',
+    });
+    expect(await getSession(fs, key, accepted.id)).toBeTruthy();
+
+    // Quietly declined (B set declinedAt, never acked) → still pending → the initiator can clean it up.
+    const declined = await createSession(
+      fs,
+      key,
+      { initiatorPersonId: A, participantIds: [A, B] },
+      NOW,
+    );
+    await updateState(fs, key, declined.id, B, { declinedAt: NOW.toISOString() }, NOW);
+    expect(isPendingInvite(declined, await listStates(fs, key, declined.id))).toBe(true);
+    expect(await withdrawSession(fs, key, declined.id, A)).toEqual({ ok: true });
+    expect(await getSession(fs, key, declined.id)).toBeNull();
+
+    // A missing session → NOT_FOUND (never throws).
+    expect(await withdrawSession(fs, key, 'nope', A)).toEqual({ ok: false, reason: 'NOT_FOUND' });
   });
 
   it('updateState is one-writer read-modify-write', async () => {

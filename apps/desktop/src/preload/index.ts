@@ -197,6 +197,7 @@ const bridge: SelfosBridge = {
   togetherDecline: (id) => ipcRenderer.invoke(IpcChannels.togetherDecline, id),
   togetherSetPaused: (input) => ipcRenderer.invoke(IpcChannels.togetherSetPaused, input),
   togetherLeave: (id) => ipcRenderer.invoke(IpcChannels.togetherLeave, id),
+  togetherWithdraw: (id) => ipcRenderer.invoke(IpcChannels.togetherWithdraw, id),
   togetherMarkRead: (input) => ipcRenderer.invoke(IpcChannels.togetherMarkRead, input),
   togetherSendMessage: (input) => ipcRenderer.invoke(IpcChannels.togetherSendMessage, input),
   togetherRetry: (input) => ipcRenderer.invoke(IpcChannels.togetherRetry, input),

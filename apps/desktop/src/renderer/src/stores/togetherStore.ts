@@ -74,6 +74,8 @@ interface TogetherState {
   retry: () => Promise<TogetherTurnResult>;
   markRead: (id: string) => Promise<void>;
   leave: (id: string) => Promise<void>;
+  /** Withdraw a pending invitation (initiator-only, recipient hasn't responded) — deletes it for both. */
+  withdraw: (id: string) => Promise<boolean>;
   setPaused: (id: string, paused: boolean) => Promise<void>;
   loadReport: (sessionId: string) => Promise<void>;
   wrapUp: (sessionId: string) => Promise<TogetherWrapUpResult>;
@@ -230,6 +232,12 @@ export const useTogetherStore = create<TogetherState>((set, get) => ({
     const view = (await window.selfos?.togetherLeave(id)) ?? null;
     if (view && get().open?.id === id) set({ open: view });
     await get().refresh();
+  },
+  withdraw: async (id) => {
+    const ok = (await window.selfos?.togetherWithdraw(id)) ?? false;
+    if (ok && get().open?.id === id) set({ open: null });
+    await get().refresh();
+    return ok;
   },
   setPaused: async (id, paused) => {
     const view = (await window.selfos?.togetherSetPaused({ sessionId: id, paused })) ?? null;

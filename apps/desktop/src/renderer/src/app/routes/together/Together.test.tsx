@@ -12,7 +12,7 @@ import { TogetherIntimacy } from './TogetherIntimacy';
 import { TogetherPulse } from './TogetherPulse';
 import { TogetherJointChallenges } from './TogetherJointChallenges';
 import { TogetherSuggestions } from './TogetherSuggestions';
-import { sessionStatus, relativeTime } from './TogetherSessionCard';
+import { sessionStatus, relativeTime, TogetherSessionCard } from './TogetherSessionCard';
 import type {
   Agreement,
   SharedReport,
@@ -192,6 +192,58 @@ describe('session card status + relative time', () => {
     expect(relativeTime(new Date(now - 2 * 3_600_000).toISOString())).toBe('2h ago');
     expect(relativeTime(new Date(now - 26 * 3_600_000).toISOString())).toBe('yesterday');
     expect(relativeTime(undefined)).toBe('');
+  });
+});
+
+describe('TogetherSessionCard withdraw (§3.4)', () => {
+  it('offers "Withdraw invitation" for the initiator’s pending invite; the inline confirm fires onWithdraw', async () => {
+    let withdrawn = 0;
+    render(
+      <MemoryRouter>
+        <TogetherSessionCard
+          session={summary({ status: 'invited', initiatorPersonId: ME })}
+          myId={ME}
+          guide={undefined}
+          onOpen={() => {}}
+          onWithdraw={() => {
+            withdrawn += 1;
+            return Promise.resolve(true);
+          }}
+        />
+      </MemoryRouter>,
+    );
+    await userEvent.click(screen.getByRole('button', { name: /Withdraw invitation/ }));
+    // A deliberate inline confirm (never a one-click delete).
+    expect(screen.getByText(/removed for both of you/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Withdraw' }));
+    expect(withdrawn).toBe(1);
+  });
+
+  it('never offers withdraw when the viewer isn’t the initiator, or the invite was already accepted', () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <TogetherSessionCard
+          session={summary({ status: 'invited', initiatorPersonId: PARTNER })}
+          myId={ME}
+          guide={undefined}
+          onOpen={() => {}}
+          onWithdraw={() => Promise.resolve(true)}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole('button', { name: /Withdraw invitation/ })).toBeNull();
+    rerender(
+      <MemoryRouter>
+        <TogetherSessionCard
+          session={summary({ status: 'active', initiatorPersonId: ME })}
+          myId={ME}
+          guide={undefined}
+          onOpen={() => {}}
+          onWithdraw={() => Promise.resolve(true)}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole('button', { name: /Withdraw invitation/ })).toBeNull();
   });
 });
 

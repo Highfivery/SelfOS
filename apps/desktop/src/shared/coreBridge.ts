@@ -278,6 +278,7 @@ import {
   buildPulseView,
   logPulseCheckIn,
   reapTogetherForPerson,
+  withdrawSession as withdrawTogetherSession,
   listJointChallenges,
   type JointChallengeStatus,
   listSuggestions,
@@ -2258,6 +2259,20 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         new Date(),
       );
       return buildTogetherView(c.fs, c.key, session, c.personId, new Date());
+    },
+    togetherWithdraw: async (id): Promise<boolean> => {
+      const c = await togetherCtx();
+      if (!c) return false;
+      const session = await accessibleTogetherSession(
+        c.fs,
+        c.key,
+        c.personId,
+        z.string().min(1).parse(id),
+      );
+      if (!session) return false;
+      // The core enforces initiator-only + still-pending; the bridge already gated participant + live edge.
+      const result = await withdrawTogetherSession(c.fs, c.key, session.id, c.personId);
+      return result.ok;
     },
     togetherMarkRead: async (input): Promise<void> => {
       const { sessionId, at } = TogetherMarkReadInputSchema.parse(input);

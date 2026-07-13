@@ -9,6 +9,8 @@ import { PrepPanel } from './PrepPanel';
 import { TogetherThread } from './TogetherThread';
 import { TogetherReflection } from './TogetherReflection';
 import { TogetherSuggestions } from './TogetherSuggestions';
+import { canWithdraw } from './TogetherSessionCard';
+import { WithdrawInviteButton } from './WithdrawInviteButton';
 import { useSetting } from '../../../settings/useSetting';
 import { aiKeyResolved } from '../../aiAvailability';
 import styles from './Together.module.css';
@@ -24,6 +26,7 @@ export function TogetherSession(): JSX.Element {
   const open = useTogetherStore((s) => s.open);
   const openSession = useTogetherStore((s) => s.openSession);
   const accept = useTogetherStore((s) => s.accept);
+  const withdraw = useTogetherStore((s) => s.withdraw);
   const refresh = useTogetherStore((s) => s.refresh);
   const [prepOpen, setPrepOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -122,6 +125,15 @@ export function TogetherSession(): JSX.Element {
               ? 'This session has ended.'
               : 'This invitation expired. Start a fresh session any time.'}
           </Text>
+          {canWithdraw(open, myId) ? (
+            <WithdrawInviteButton
+              onWithdraw={async () => {
+                const ok = await withdraw(open.id);
+                if (ok) navigate('/together');
+                return ok;
+              }}
+            />
+          ) : null}
         </Stack>
       </div>
     );
@@ -145,6 +157,18 @@ export function TogetherSession(): JSX.Element {
         <Text size="sm" tone="secondary">
           You &amp; {other?.displayName ?? 'your partner'}
         </Text>
+        {canWithdraw(open, myId) ? (
+          <span className={styles.sessionTopAction}>
+            <WithdrawInviteButton
+              size="sm"
+              onWithdraw={async () => {
+                const ok = await withdraw(open.id);
+                if (ok) navigate('/together');
+                return ok;
+              }}
+            />
+          </span>
+        ) : null}
       </div>
       <TogetherThread session={open} onPrep={() => setPrepOpen(true)} />
       {other ? <TogetherSuggestions sessionId={open.id} partnerId={other.personId} /> : null}

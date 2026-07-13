@@ -179,6 +179,47 @@ export async function reapTogetherForPerson(
   }
 }
 
+/**
+ * Whether a session is still a PENDING invitation — a non-initiator participant has not acked the ceremony,
+ * so it hasn't become a live session yet (mirrors `deriveStatusFor`'s `invited`/`expired`, where the
+ * initiator acks at create). A quiet decline leaves the recipient un-acked, so a declined invite is still
+ * "pending" here — the initiator can withdraw it too.
+ */
+export function isPendingInvite(
+  session: TogetherSession,
+  states: Map<string, ParticipantState>,
+): boolean {
+  if ([...states.values()].some((s) => s.leftAt)) return false; // a formally-left session isn't a pending invite
+  return !session.participantIds.every((pid) => states.get(pid)?.rulesAckAt);
+}
+
+/** The outcome of a withdraw attempt — a typed reason so the caller can surface an honest message (§7). */
+export type WithdrawResult =
+  | { ok: true }
+  | { ok: false; reason: 'NOT_FOUND' | 'NOT_INITIATOR' | 'ALREADY_ACCEPTED' };
+
+/**
+ * Withdraw (undo) a Together invitation the recipient hasn't responded to yet (58 §3.4). ONLY the initiator
+ * may withdraw, and ONLY while it's still a pending invite (`isPendingInvite`). Deletes the shared session
+ * folder outright, so it vanishes for BOTH people — as if never sent. The bridge is the trust boundary
+ * (participant + live-edge gating); this enforces the initiator-only + pending-only invariants host-side.
+ */
+export async function withdrawSession(
+  fs: FileSystem,
+  key: Uint8Array,
+  sessionId: string,
+  byPersonId: string,
+): Promise<WithdrawResult> {
+  if (!isSafeSegment(sessionId)) return { ok: false, reason: 'NOT_FOUND' };
+  const session = await getSession(fs, key, sessionId);
+  if (!session) return { ok: false, reason: 'NOT_FOUND' };
+  if (session.initiatorPersonId !== byPersonId) return { ok: false, reason: 'NOT_INITIATOR' };
+  const states = await listStates(fs, key, sessionId);
+  if (!isPendingInvite(session, states)) return { ok: false, reason: 'ALREADY_ACCEPTED' };
+  await fs.remove(sessionDir(sessionId));
+  return { ok: true };
+}
+
 // ── Participant state (one writer per file) ───────────────────────────────────────────────────────
 
 /**

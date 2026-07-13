@@ -9800,6 +9800,13 @@ test('together (58) phase E: start a structured guided couples session from the 
     await expect(w.getByText('Connect')).toBeVisible();
     await w.getByRole('button', { name: /Love Maps/ }).click();
     await expect(w.getByRole('heading', { name: /Start .Love Maps./ })).toBeVisible();
+    // §166: the selected guide's FULL blurb is surfaced by the start card as a paragraph (not just a
+    // framework line), so it's readable next to the Send button (the catalog card clamps it to two lines).
+    await expect(
+      w
+        .getByRole('paragraph')
+        .filter({ hasText: 'Take turns learning the little details of each other’s inner world.' }),
+    ).toBeVisible();
     await w.getByRole('button', { name: 'Send invitation' }).click();
 
     // The static guide opener shows; the stepper renders every step (none current yet at step 0).

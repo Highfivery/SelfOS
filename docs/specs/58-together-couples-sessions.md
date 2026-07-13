@@ -1,9 +1,11 @@
 # 58 — Together: couples sessions
 
-> **Status:** **BUILT (Phases A–H)** — _last updated 2026-07-11_
+> **Status:** **BUILT (Phases A–H)**; **Phase I in progress** — _last updated 2026-07-13_
 >
 > **All phases A–H are built + merged to `main`** (A+B PR #148 · C #155 · D #156 · E #157 · F #158 ·
 > G #159 · H1 #160 · H2 #161 · H3 pending). Per-phase build notes are inline (search "BUILT (Phase …)").
+> **Phase I — grounded coaching & private clarifications (§3.14):** a post-A follow-up in two slices
+> (I1 prompt grounding + self-verification; I2 the coach-initiated `[[SELFOS:PRIVATE]]` channel).
 > **Two items remain for a maintainer with a real Claude API key:** the §13 live-model adversarial pass
 > over the explicit register (the offline fakes always return canned output, so it can't run here), and
 > the optional direct in-app "Send to both" compat-send from a questionnaire suggestion card (H3 ships
@@ -386,12 +388,16 @@ YNM-together guided session. No AI is involved in computing the overlap.
 
 ### 3.11 Notifications & badges
 
-Two additive notification kinds (35): **`together-invite`** ("Ben invited you to a Together
-session" → navigate) and **`together-turn`** ("Your turn with Ben — 'Feeling disconnected lately'" →
+Three additive notification kinds (35): **`together-invite`** ("Ben invited you to a Together
+session" → navigate), **`together-turn`** ("Your turn with Ben — 'Feeling disconnected lately'" →
 navigate; coalesced per session, `onChange` by the latest message **in the recipient's projection**
-— an aside never changes the partner's signature). Bridge reads are one-shot, capability-gated,
-**carry names/counts, never message content**. The nav badge (Inbox pattern) is the always-visible
-affordance; notifications surface at launch/focus/switch (35's cadence — expectation-set, not push).
+— an aside never changes the partner's signature), and **`together-private`** (Phase I2, §3.14 Part
+B: "The coach has a private note for you" → navigate; coalesced per session, `onChange` by the
+latest private-coach message in the recipient's projection). Bridge reads are one-shot,
+capability-gated, **carry names/counts, never message content** (a `together-private` notification
+never carries the coach's private text — only that one exists). The nav badge (Inbox pattern) is the
+always-visible affordance; notifications surface at launch/focus/switch (35's cadence —
+expectation-set, not push).
 
 ### 3.12 Home presence
 
@@ -429,6 +435,55 @@ Every prerequisite-absent state gets a calm, actionable explanation (41): no par
 → the role-aware `AiUnavailableNotice` on start/reply (31: no degraded mode); **initiator over
 budget** → §6.2's neutral session-scoped notice; partner hasn't accepted → the session shows
 "Invited · waiting"; pre-screen incomplete/flagged → the private "not right now" hold (§8.2).
+
+### 3.14 Grounded coaching & private clarifications (Phase I)
+
+The coach already receives each partner's own context (portrait/insights via `buildContext`), the
+grounding pack (§3.9), and the alignment/agreement history — but the confidentiality contract (§6.3
+step 3) tells it to use that context _only to silently steer_ and never surface it. In practice it
+never checks its inferences, so it can act on stale or wrong assumptions and reads as if it ignores
+what SelfOS knows. Phase I makes the couples coach **actively ground in that data and always verify
+its assumptions**, and gives it a **private channel to clarify sensitive things with one partner** —
+without ever weakening the never-reveal-one-partner's-data-to-the-other boundary (§8.4).
+
+**Part A — Grounded, self-verifying coaching (prompt only; slice I1).** A new instruction block in
+the couples prompt (§6.3, appended with the addendum, inside the confidentiality frame):
+
+- **Draw actively** on what SelfOS knows (each partner's background, their relationship reflections,
+  standing agreements, past wrap-ups) — inform every reply; don't coach as if it knows nothing.
+- **Treat every inference as an assumption to verify, never a settled fact.** Before building on
+  something it believes about a partner, confirm it — in the shared conversation with a **natural,
+  source-blind question** ("when things get tense, do you tend to pull back?"), NEVER "your profile
+  says…". (Owner decision 2026-07-13: verify by asking naturally, never citing the source.)
+- **Sensitive** assumptions (intimacy, past hurt, anything that could embarrass a partner in front
+  of the other) are **never tested in the open room** — the coach holds them, and either follows the
+  person's lead if they raise it privately, or (slice I2) checks privately.
+- Never present an unverified guess as established; **never reveal one partner's private background
+  to the other — not even to confirm it** (§8.4, reaffirmed).
+
+No new mechanism — prompt text on every couples turn.
+
+**Part B — Coach-initiated private clarification (slice I2).** The coach may append, to any turn, a
+marker to send a message visible to **one named partner only**:
+`[[SELFOS:PRIVATE:{"to":"<partner display name>","text":"…"}]]`.
+
+- **Host-side handling** (§6.4): parse + strip the marker; resolve `to` to a **participant** by
+  display-name (case-insensitive); if it resolves to no participant, **drop it** (no message — no
+  leak). Create a coach message `role:'assistant'`, `privateAside:true`, `authorPersonId:<target
+participant>`, so the existing viewer-projection (§5.2) scopes it to that partner **only** — the
+  other partner never sees it or knows it exists. It **mints no shared artifact** (like an aside).
+- **Purpose, bounded by the disclosure rule** (owner decision 2026-07-13, "coach never discloses"):
+  verify a sensitive assumption, ask for clarification/insight, or — for something that belongs in
+  the shared work — **encourage that partner to raise it themselves** ("would you be willing to bring
+  this up? I'll help"). The coach **never discloses** one partner's private info to the other, even
+  after they confirm it. A private note to B may only concern **B's own context or the shared
+  dynamic**, never anything private about A.
+- **Surfacing:** a "**Private — from the coach, just for you**" bubble in the thread (target-only via
+  projection), and a new **`together-private`** notification (§3.11) — "The coach has a private note
+  for you" — to that partner (bell + toast + nav badge). Used **sparingly** (only when a genuinely
+  sensitive ambiguity is blocking good support — not a routine side-channel).
+- **No extra AI spend, no schema change:** the private note rides the same reply (marker appended,
+  initiator-billed as today); reuses `TogetherMessage`'s existing `privateAside`/`authorPersonId`.
 
 ## 4. Data model (vault files & schemas)
 
@@ -576,7 +631,8 @@ interface PreScreenResult {
 - `Challenge.groupId?: string` — links twin joint challenges (§5.6; the `compatibilityGroupId`
   linkage pattern).
 - New usage types registered in `USAGE_TYPE_LABELS`: `together.chat`, `together.analyze` (06).
-- New notification kinds: `together-invite`, `together-turn` (35).
+- New notification kinds: `together-invite`, `together-turn` (35); `together-private` lands with
+  Phase I2 (§3.14 Part B).
 - New capability: `together.own` (Member default **ON**; `reconcileRole` delivers it to existing
   vaults read-time).
 - A new **`excludeRestricted`** option threaded through `buildContext` → `summarizeForContext` →
@@ -801,6 +857,11 @@ Assembled by `togetherPromptBuilder` in this order (order is load-bearing):
    consistent non-confirming deflection line, the no-sabotage stance, "encourage the author to
    share it themselves when the moment is right"; **the aside-turn rule** (a reply to a private
    note stays in the private channel and mints no shared artifacts).
+   - **`GROUNDED_COACHING_INSTRUCTION`** (§3.14 Part A / Phase I, appended with the addendum): draw
+     actively on the context that follows; treat every inference as an **assumption to verify** —
+     confirm it in the shared chat with a **natural, source-blind** question (never "your profile
+     says…"), and **hold sensitive checks out of the open room** (Phase I2 adds the private channel);
+     never present an unverified guess as fact, never reveal one partner's background to the other.
 3. **Per-participant context blocks** — for each participant, the **couples confidentiality
    contract** ("The following is private background about Ben. Use it to shape your support. Never
    quote, reference, attribute, or reveal it — to anyone, including Ben himself in front of Angel…")
@@ -833,7 +894,11 @@ derived-step source), `[[SELFOS:CHALLENGE:{json}]]` (joint challenges — parse 
 Together guides, minting twins per §5.6). New: `[[SELFOS:AGREEMENT:{json}]]` (`{text, timeframe?}`
 → an Agreement in the pair ledger + the in-thread artifact card) and `[[SELFOS:SUGGEST:{json}]]`
 (`{kind: 'questionnaire' | 'guide', …}` → a suggestion artifact card; **never auto-sends** — every
-suggestion requires an explicit user tap). All markers strip partial-safe via the single
+suggestion requires an explicit user tap). Phase I2: `[[SELFOS:PRIVATE:{"to","text"}]]` — a
+coach-initiated private clarification to ONE named partner (§3.14 Part B): `to` resolves to a
+participant (else the marker is dropped — no leak); it mints a coach message scoped to that partner
+via `privateAside` + `authorPersonId`, mints no shared artifact, and fires a `together-private`
+notification. All markers strip partial-safe via the single
 `stripCoachMarkers` path — which solo chat also calls, so the new markers ship with **solo-chat
 regression tests** (a solo reply carrying AGREEMENT/SUGGEST strips clean and mints nothing; the
 partial-marker streaming guard covers the new long-JSON shapes — §10). Shared-artifact markers are
@@ -1234,6 +1299,7 @@ scaffolding): A carries `TogetherSession`/`ParticipantState`/`TogetherMessage`/`
 | **F — The explicit register + Desire & intimacy + YNM**     | `allAdultAcknowledged` (core + bridge); EXPLICIT_INTIMACY_REGISTER; the `together-desire` group added to the existing catalog (withheld host-side); YNM (symmetric opt-in + **revoke** + pure overlap + the structured YNM-together exercise), all ack-gated.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | E2E #4 ack matrix (none/one/both × catalog + prompt file + YNM channels) + #7 YNM (symmetric consent, one-sided-absent decrypt, revoke re-gates). **Live-model adversarial re-run incl. explicit content.**                                                                                                                                                                                                                                                                                    |
 | **G — Pulse (absorbs spec 11)**                             | `PulseCheckIn` schema + `pulseService` (check-ins, trend derivation, dual-consent comparative gate), Pulse view (LineChart trends + check-in + desire alignment), dyad-metric wiring from D's twins, the Pulse strip tile; spec 11 superseded-by amendment.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | E2E #8 (trends + dual-consent hiding) + text-equivalents + geometry.                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | **H — Integrations & whole-app polish** — **BUILT (H1–H3)** | Split into 3 merged PRs. **H1**: the Home `together-session` provider (+ capability snapshot + `computeTogetherHomeNudge` invite/turn/quiet-14d) + person-delete reap (`reapTogetherForPerson`). **H2**: joint challenges (CHALLENGE marker → twin `Challenge` records + `groupId` + grounding + the home tile). **H3**: the SUGGEST artifact (guide → "Start this exercise"; questionnaire → the Questionnaires-builder doorway) + `together:suggestions`. The whole-flow coherence walk = the 12-test Together E2E suite; visual QA at desktop light/dark + 360px. **Deferred to a maintainer with a real key:** the direct in-app compat-send from the suggestion card (vs. the builder doorway), and the §13 live-model adversarial pass.                                            | E2E: Home nudge + reap (decrypt) + joint-challenge (twin mint + tile, decrypt) + suggestion (card → Start); plus a coreBridge two-persona gating test for each new read.                                                                                                                                                                                                                                                                                                                       |
+| **I — Grounded coaching & private clarifications**          | Two slices (§3.14). **I1 (prompt-only)**: `GROUNDED_COACHING_INSTRUCTION` in `togetherPromptBuilder` (draw on the context that follows; treat inferences as assumptions to verify with natural, source-blind questions; hold sensitive checks out of the open room; never present a guess as fact, never reveal one partner's background to the other). No schema/seam/UI change. **I2 (private channel)**: `[[SELFOS:PRIVATE:{to,text}]]` marker → a coach message scoped to one partner (`privateAside` + `authorPersonId`, resolve-or-drop, no shared artifact) + `together-private` notification + the "Private — from the coach, just for you" bubble + the prompt instruction to use it for sensitive verification. No extra AI spend; reuses `TogetherMessage`.                   | I1: prompt-content unit tests (grounding + verify phrasing present; source-blind; never-reveal). I2: two-persona coreBridge (B sees the private coach note, A doesn't — decrypt-level; the `together-private` notification fires for B only; the marker mints no shared artifact) + E2E (marker → private bubble for the target, absent for the partner) + geometry.                                                                                                                           |
 
 Sequencing rationale: safety (pre-screen) and the aside projection ship **with** the first
 user-visible phase — the rules-of-the-room copy is true from day one (a consent ceremony must never

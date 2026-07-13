@@ -73,6 +73,7 @@
   --color-border: #e7dfd3;
   --color-border-strong: #d7cdbc;
   --color-text-primary: #2e2a25;
+  --color-text-heading: #241f1a; /* headings: strongest ink for hierarchy (dark mode brightens this) */
   --color-text-secondary: #6e665c;
   --color-text-tertiary: #948b7e;
 
@@ -105,6 +106,7 @@
   --color-border: #38332c;
   --color-border-strong: #4a4339;
   --color-text-primary: #ece5db;
+  --color-text-heading: #fbf8f3; /* headings pop in dark mode — a crisp near-white, brighter than body */
   --color-text-secondary: #a79e92;
   --color-text-tertiary: #7c7468;
 

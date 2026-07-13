@@ -123,9 +123,12 @@ function StartCard({
           ) : null}
         </Inline>
         {guide ? (
-          <Text size="sm" tone="secondary">
-            A guided practice inspired by {guide.framework}, for the two of you.
-          </Text>
+          <Stack gap={1}>
+            <Text>{guide.blurb}</Text>
+            <Text size="sm" tone="secondary">
+              A guided practice inspired by {guide.framework}, for the two of you.
+            </Text>
+          </Stack>
         ) : null}
         {eligible.length > 1 ? (
           <label className={styles.field}>

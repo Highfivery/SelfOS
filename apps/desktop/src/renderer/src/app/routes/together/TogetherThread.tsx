@@ -1,5 +1,5 @@
 import { Fragment, useRef, useState } from 'react';
-import { ImagePlus, Lock, X } from 'lucide-react';
+import { ImagePlus, Lock, Users, X } from 'lucide-react';
 import type { TogetherMessageView, TogetherSessionView } from '@shared/schemas';
 import {
   AttachmentThumb,
@@ -93,12 +93,19 @@ function MessageBubble({
   );
 }
 
-/** The composer with the private-aside toggle (58 §3.6) + image attachments (§6.1) — restyles when armed. */
+/**
+ * The composer with an explicit AUDIENCE toggle (58 §3.6): every message is clearly either shared with the
+ * partner or a private note only the coach sees. The choice is a segmented control (not a status label), the
+ * whole composer visibly transforms in private mode, and the Send button reflects the audience — so public vs
+ * private is unmistakable at every point. Plus image attachments (§6.1).
+ */
 function TogetherComposer({
   disabled,
+  partnerName,
   onSend,
 }: {
   disabled: boolean;
+  partnerName: string;
   onSend: (text: string, aside: boolean, pending: PendingAttachment[]) => Promise<void>;
 }): JSX.Element {
   const [text, setText] = useState('');
@@ -141,20 +148,36 @@ function TogetherComposer({
 
   return (
     <div className={[styles.composer, aside ? styles.composerAside : ''].filter(Boolean).join(' ')}>
-      <button
-        type="button"
-        className={styles.asideToggle}
-        aria-pressed={aside}
-        onClick={() => setAside((v) => !v)}
-      >
-        <Lock size={13} aria-hidden="true" />
-        {aside ? 'Private to the coach' : 'Write privately to the coach'}
-      </button>
+      <div className={styles.audienceToggle} role="group" aria-label="Who sees this">
+        <button
+          type="button"
+          className={styles.audienceOption}
+          data-active={!aside}
+          aria-pressed={!aside}
+          onClick={() => setAside(false)}
+        >
+          <Users size={15} aria-hidden="true" />
+          <span className={styles.audienceLabel}>Shared with {partnerName}</span>
+        </button>
+        <button
+          type="button"
+          className={styles.audienceOption}
+          data-active={aside}
+          aria-pressed={aside}
+          onClick={() => setAside(true)}
+        >
+          <Lock size={15} aria-hidden="true" />
+          <span className={styles.audienceLabel}>Just the coach</span>
+        </button>
+      </div>
       {aside ? (
-        <Text size="xs" tone="secondary">
-          Only the coach sees this note in the conversation. Your partner won’t see it here — or
-          that you wrote one.
-        </Text>
+        <div className={styles.privateBanner}>
+          <Lock size={16} aria-hidden="true" />
+          <Text size="sm" tone="accent">
+            Private note. Only the coach sees this — {partnerName} won’t see it, or that you wrote
+            one.
+          </Text>
+        </div>
       ) : null}
       {pending.length > 0 ? (
         <ul className={styles.pendingRow} aria-label="Attachments">
@@ -176,7 +199,9 @@ function TogetherComposer({
       ) : null}
       {addError ? <Banner tone="danger">{addError}</Banner> : null}
       <textarea
-        className={styles.composerInput}
+        className={[styles.composerInput, aside ? styles.composerInputPrivate : '']
+          .filter(Boolean)
+          .join(' ')}
         value={text}
         disabled={disabled}
         placeholder={aside ? 'A private note to the coach…' : 'Write a message…'}
@@ -189,7 +214,7 @@ function TogetherComposer({
           }
         }}
       />
-      <Inline gap={2} align="center" justify="between">
+      <Inline gap={2} align="center" justify="between" wrap>
         <IconButton
           aria-label="Attach image"
           onClick={() => fileRef.current?.click()}
@@ -205,9 +230,22 @@ function TogetherComposer({
           hidden
           onChange={(e) => void addFiles(e.target.files)}
         />
-        <Button onClick={() => void submit()} disabled={!canSend}>
-          Send
-        </Button>
+        <Inline gap={2} align="center">
+          {/* Who-sees-this, spelled out again right next to Send — the last, unmissable cue. */}
+          <span className={styles.audienceHint} data-aside={aside}>
+            {aside ? <Lock size={14} aria-hidden="true" /> : <Users size={14} aria-hidden="true" />}
+            {aside ? 'Only the coach' : `You and ${partnerName} both see this`}
+          </span>
+          <Button onClick={() => void submit()} disabled={!canSend}>
+            {aside ? (
+              <>
+                <Lock size={14} aria-hidden="true" /> Send privately
+              </>
+            ) : (
+              'Send'
+            )}
+          </Button>
+        </Inline>
       </Inline>
     </div>
   );
@@ -325,6 +363,7 @@ export function TogetherThread({
 
       <TogetherComposer
         disabled={sending}
+        partnerName={other?.displayName ?? 'your partner'}
         onSend={async (text, aside, pending) => {
           await send(text, aside, pending);
         }}

@@ -9607,7 +9607,7 @@ test('together (58): lifecycle + aside projection (crown jewel) + prompt capture
     await expect(w.getByText(/I hear you, Ben/)).toBeVisible();
 
     // Ben sends a PRIVATE ASIDE — only he can see it.
-    await w.getByRole('button', { name: 'Write privately to the coach' }).click();
+    await w.getByRole('button', { name: 'Just the coach' }).click();
     await w.getByLabel('Private note to the coach').fill('SECRETWORD I am scared to say this.');
     await w.getByRole('button', { name: 'Send' }).click();
     await expect(w.getByText('SECRETWORD I am scared to say this.')).toBeVisible();
@@ -9740,7 +9740,7 @@ test('together (58) phase D: wrap-up writes a report + twins (aside ABSENT from 
     await expect(w.getByText(/SELFOS:AGREEMENT/)).toHaveCount(0);
 
     // A PRIVATE aside — its content must never reach the report or the twins.
-    await w.getByRole('button', { name: 'Write privately to the coach' }).click();
+    await w.getByRole('button', { name: 'Just the coach' }).click();
     await w.getByLabel('Private note to the coach').fill('SECRETASIDE I am scared.');
     await w.getByRole('button', { name: 'Send' }).click();
     await expect(w.getByText('SECRETASIDE I am scared.')).toBeVisible();

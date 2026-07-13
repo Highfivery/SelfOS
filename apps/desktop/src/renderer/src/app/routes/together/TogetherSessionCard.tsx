@@ -109,13 +109,10 @@ export function TogetherSessionCard({
   const withdrawable = onWithdraw != null && canWithdraw(session, myId);
 
   return (
-    <div className={styles.sessionCardWrap}>
-      <button
-        type="button"
-        className={styles.sessionCard}
-        data-turn={status.tone === 'accent' ? 'you' : undefined}
-        onClick={onOpen}
-      >
+    // The card is a container (not a button) so its actions — e.g. Withdraw — can live INSIDE it. The whole
+    // content is one clickable "open" button; the actions sit below a hairline, still within the card border.
+    <div className={styles.sessionCard} data-turn={status.tone === 'accent' ? 'you' : undefined}>
+      <button type="button" className={styles.sessionCardOpen} onClick={onOpen}>
         <div className={styles.sessionCardHead}>
           <div>
             <div className={styles.sessionEyebrow}>{eyebrow}</div>

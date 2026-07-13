@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.21.0](https://github.com/Highfivery/SelfOS/compare/v0.20.0...v0.21.0) (2026-07-13)
+
+
+### Features
+
+* **together:** coach-initiated private clarification channel (58 §3.14 Part B, Phase I2) ([#178](https://github.com/Highfivery/SelfOS/issues/178)) ([54ccd76](https://github.com/Highfivery/SelfOS/commit/54ccd763a81dee538ca28b25116921a2efd137a1))
+* **together:** grounded self-verifying coaching (58 §3.14 Part A, Phase I1) ([#176](https://github.com/Highfivery/SelfOS/issues/176)) ([8a05a31](https://github.com/Highfivery/SelfOS/commit/8a05a31e1d2f0dd3bacbc3e91f1da40c02427513))
+
 ## [0.20.0](https://github.com/Highfivery/SelfOS/compare/v0.19.0...v0.20.0) (2026-07-13)
 
 

@@ -1,31 +1,31 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, ShieldCheck } from 'lucide-react';
-import type { TogetherYnmStatus } from '@shared/schemas';
-import {
-  Banner,
-  Button,
-  Card,
-  Heading,
-  Inline,
-  Stack,
-  Text,
-} from '../../../design-system/components';
+import { Shuffle, Lock, ShieldCheck } from 'lucide-react';
+import type { TogetherCatalogEntry, TogetherYnmStatus } from '@shared/schemas';
+import { Banner, Button, Heading, Inline, Stack, Text } from '../../../design-system/components';
 import { useTogetherStore } from '../../../stores/togetherStore';
+import { PracticeCard } from './PracticeCard';
 import styles from './Together.module.css';
 
 /**
- * The Desire & intimacy affordance (58 §3.10/§3.10b): the active person's one-time 18+ acknowledgement, and
- * — once BOTH partners have acked + a live edge — the symmetric, revocable Yes/No/Maybe opt-in + the mutual
- * overlap. Everything is gated host-side; this surface only reflects the bridge's `youAcked`/`eligible`/`ready`.
- * A one-sided answer is NEVER shown — the overlap read returns `ready:false` until both opt in.
+ * The Desire & intimacy panel (58 §3.10/§3.10b), redesigned as ONE cohesive 18+ space instead of a bolted-on
+ * card: the active person's one-time 18+ acknowledgement, and — once BOTH partners have acked + a live edge —
+ * the symmetric, revocable Yes/No/Maybe opt-in + mutual overlap, alongside the adult guided practices. Every
+ * gate is enforced host-side; this surface only reflects the bridge's `youAcked`/`eligible`/`ready`, and a
+ * one-sided answer is NEVER shown (`ready:false` until both opt in).
  */
 export function TogetherIntimacy({
   partnerId,
   partnerName,
+  adultPractices,
+  selectedId,
+  onPick,
 }: {
   partnerId: string;
   partnerName: string;
+  adultPractices: TogetherCatalogEntry[];
+  selectedId: string | null;
+  onPick: (entry: TogetherCatalogEntry) => void;
 }): JSX.Element | null {
   const navigate = useNavigate();
   const create = useTogetherStore((s) => s.create);
@@ -82,64 +82,72 @@ export function TogetherIntimacy({
   if (!status) return null;
 
   return (
-    <Card>
-      <Stack gap={2}>
-        <Inline gap={2} align="center">
-          <Lock size={16} aria-hidden="true" />
-          <Heading level={3}>Desire &amp; intimacy</Heading>
-          <span className={styles.adultBadge}>18+</span>
-        </Inline>
+    <div className={styles.intimacyPanel}>
+      <div className={styles.intimacyHead}>
+        <Lock size={18} aria-hidden="true" />
+        <Heading level={2}>Desire &amp; intimacy</Heading>
+        <span className={styles.adultBadge}>18+</span>
+      </div>
 
-        {!status.youAcked ? (
-          <>
-            <Text size="sm" tone="secondary">
-              Turn on adult content to unlock the Desire &amp; intimacy sessions and Yes/No/Maybe
-              with {partnerName}. Intimacy topics can then be explored frankly, for consenting
-              adults. Each of you turns this on for yourself.
-            </Text>
-            <Button onClick={() => void ack()} disabled={busy} aria-busy={busy}>
-              <ShieldCheck size={14} aria-hidden="true" /> I’m 18+ — turn on adult content
-            </Button>
-          </>
-        ) : !status.eligible ? (
+      {!status.youAcked ? (
+        <Stack gap={2} align="start">
           <Text size="sm" tone="secondary">
-            You’ve turned on adult content. Waiting for {partnerName} to turn it on too — then the
-            Desire &amp; intimacy sessions unlock for both of you.
+            A private, consenting space for the two of you. Turn on adult content to unlock the
+            Desire &amp; intimacy sessions and Yes/No/Maybe with {partnerName} — intimacy topics can
+            then be explored frankly, for consenting adults. Each of you turns this on for yourself.
           </Text>
-        ) : (
-          <>
-            <Text size="sm" tone="secondary">
-              <strong>Yes / No / Maybe.</strong> Privately compare what you’re each curious about —
-              only the things you <em>both</em> lean toward are ever shown. Both of you must opt in,
-              and you can revoke anytime.
+          <Button onClick={() => void ack()} disabled={busy} aria-busy={busy}>
+            <ShieldCheck size={14} aria-hidden="true" /> I’m 18+ — turn on adult content
+          </Button>
+        </Stack>
+      ) : !status.eligible ? (
+        <Text size="sm" tone="secondary">
+          You’ve turned on adult content. Waiting for {partnerName} to turn it on too — then the
+          Desire &amp; intimacy sessions unlock for both of you.
+        </Text>
+      ) : (
+        <Stack gap={4}>
+          <Text size="sm" tone="secondary">
+            You’ve both turned on adult content, so it’s unlocked — a private space for consenting
+            adults.
+          </Text>
+
+          {error ? <Banner tone="danger">{error}</Banner> : null}
+
+          <div className={styles.intimacyCard}>
+            <Text weight={600} className={styles.intimacyCardTitle}>
+              <Shuffle size={16} aria-hidden="true" /> Yes / No / Maybe
             </Text>
-            {error ? <Banner tone="danger">{error}</Banner> : null}
+            <Text size="sm" tone="secondary">
+              Privately compare what you’re each curious about — only the things you <em>both</em>{' '}
+              lean toward are ever shown. Both of you opt in, and you can revoke anytime.
+            </Text>
             {!status.youOptedIn ? (
-              <Button onClick={() => void optIn()} disabled={busy} aria-busy={busy}>
-                Opt in to compare
-              </Button>
+              <Inline gap={2} align="center">
+                <Button onClick={() => void optIn()} disabled={busy} aria-busy={busy}>
+                  Opt in to compare
+                </Button>
+              </Inline>
             ) : !status.ready ? (
-              <Stack gap={1}>
+              <Stack gap={2} align="start">
                 <Text size="sm" tone="secondary">
                   You’ve opted in. Waiting for {partnerName} to opt in too.
                 </Text>
-                <Inline gap={2} align="center">
-                  <Button variant="secondary" onClick={() => void revoke()} disabled={busy}>
-                    Revoke
-                  </Button>
-                </Inline>
+                <Button variant="secondary" onClick={() => void revoke()} disabled={busy}>
+                  Revoke
+                </Button>
               </Stack>
             ) : (
-              <Stack gap={2}>
+              <Stack gap={2} align="start">
                 {overlap && overlap.length > 0 ? (
                   <Stack gap={1}>
                     <Text size="xs" tone="secondary" weight={600}>
                       You’re both curious about
                     </Text>
-                    <ul>
+                    <ul className={styles.chipRow}>
                       {overlap.map((item) => (
-                        <li key={item.key}>
-                          <Text size="sm">{item.label}</Text>
+                        <li key={item.key} className={styles.chip}>
+                          {item.label}
                         </li>
                       ))}
                     </ul>
@@ -160,9 +168,27 @@ export function TogetherIntimacy({
                 </Inline>
               </Stack>
             )}
-          </>
-        )}
-      </Stack>
-    </Card>
+          </div>
+
+          {adultPractices.length > 0 ? (
+            <Stack gap={1}>
+              <Text size="xs" tone="secondary" weight={600} className={styles.practiceGroupTitle}>
+                Guided practices
+              </Text>
+              <div className={styles.practiceGrid}>
+                {adultPractices.map((entry) => (
+                  <PracticeCard
+                    key={entry.id}
+                    entry={entry}
+                    selected={selectedId === entry.id}
+                    onPick={onPick}
+                  />
+                ))}
+              </div>
+            </Stack>
+          ) : null}
+        </Stack>
+      )}
+    </div>
   );
 }

@@ -12,6 +12,7 @@ import { TogetherIntimacy } from './TogetherIntimacy';
 import { TogetherPulse } from './TogetherPulse';
 import { TogetherJointChallenges } from './TogetherJointChallenges';
 import { TogetherSuggestions } from './TogetherSuggestions';
+import { sessionStatus, relativeTime } from './TogetherSessionCard';
 import type {
   Agreement,
   SharedReport,
@@ -82,7 +83,7 @@ describe('Together home (§3.2)', () => {
     expect(screen.getByText(/Not therapy/i)).toBeInTheDocument();
   });
 
-  it('shows the start card (with the partner) + a sessions list', () => {
+  it('leads with the partner-scoped dashboard: a "Your sessions" board with rich, status-labelled cards', () => {
     installMockBridge();
     setActivePerson();
     useTogetherStore.setState({
@@ -96,10 +97,101 @@ describe('Together home (§3.2)', () => {
         <Together />
       </MemoryRouter>,
     );
-    expect(screen.getByRole('heading', { name: 'Start a session' })).toBeInTheDocument();
-    expect(screen.getByText('With Angel')).toBeInTheDocument();
+    // The hero names the partner; the sessions board leads (not buried at the bottom).
+    expect(screen.getByText('with Angel')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Your sessions' })).toBeInTheDocument();
+    // The card carries the topic as its title + a clear status pill.
     expect(screen.getByText('Feeling distant')).toBeInTheDocument();
     expect(screen.getByText('Invited · waiting')).toBeInTheDocument(); // initiator sees invited/waiting
+  });
+
+  it('a guided session card shows the framework eyebrow + the guide blurb as its subject (§166)', () => {
+    installMockBridge();
+    setActivePerson();
+    useTogetherStore.setState({
+      loaded: true,
+      hasPartner: true,
+      partners: [{ personId: PARTNER, displayName: 'Angel', eligible: true }],
+      sessions: [summary({ guideId: 'love-maps', status: 'active', yourTurn: true })],
+      catalog: [
+        {
+          id: 'love-maps',
+          group: 'together-connect',
+          groupTitle: 'Connect',
+          title: 'Love Maps',
+          framework: 'Gottman',
+          blurb: 'Take turns learning each other’s world.',
+          kind: 'structured',
+          stepCount: 4,
+          adult: false,
+        },
+      ],
+    });
+    render(
+      <MemoryRouter>
+        <Together />
+      </MemoryRouter>,
+    );
+    // Scope to the session card (the "Your turn" pill is unique to it — the catalog card below repeats
+    // the guide's title/eyebrow/blurb). The card resolves the guide meta for a clear title + subject.
+    const card = screen.getByText('Your turn').closest('button')!;
+    expect(within(card).getByText('Love Maps')).toBeInTheDocument();
+    expect(within(card).getByText('Gottman · 4 steps')).toBeInTheDocument();
+    expect(within(card).getByText('Take turns learning each other’s world.')).toBeInTheDocument();
+  });
+
+  it('the "New session" button opens the deliberate start bar (no auto-send)', async () => {
+    installMockBridge();
+    setActivePerson();
+    useTogetherStore.setState({
+      loaded: true,
+      hasPartner: true,
+      partners: [{ personId: PARTNER, displayName: 'Angel', eligible: true }],
+      sessions: [],
+      // Neutralize the mount refetch so the awaited click doesn't race a graph re-resolve (tested elsewhere).
+      load: async () => {},
+      loadCatalog: async () => {},
+    });
+    render(
+      <MemoryRouter>
+        <Together />
+      </MemoryRouter>,
+    );
+    await userEvent.click(screen.getAllByRole('button', { name: /New session/ })[0]!);
+    expect(
+      screen.getByRole('heading', { name: 'Start an open session with Angel' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send invitation' })).toBeInTheDocument();
+  });
+});
+
+describe('session card status + relative time', () => {
+  it('maps each viewer state to a labelled, toned status', () => {
+    const base = summary();
+    expect(sessionStatus({ ...base, status: 'active', yourTurn: true }, ME)).toEqual({
+      label: 'Your turn',
+      tone: 'accent',
+    });
+    expect(sessionStatus({ ...base, status: 'active', yourTurn: false }, ME).label).toBe(
+      'Waiting for you both',
+    );
+    // An incoming invitation (I'm NOT the initiator) is ball-in-your-court → accent.
+    expect(sessionStatus({ ...base, status: 'invited', initiatorPersonId: PARTNER }, ME)).toEqual({
+      label: 'Open invitation',
+      tone: 'accent',
+    });
+    expect(sessionStatus({ ...base, status: 'invited', initiatorPersonId: ME }, ME).label).toBe(
+      'Invited · waiting',
+    );
+    expect(sessionStatus({ ...base, status: 'complete' }, ME).tone).toBe('neutral');
+  });
+
+  it('formats a human relative time', () => {
+    const now = Date.now();
+    expect(relativeTime(new Date(now - 30_000).toISOString())).toBe('just now');
+    expect(relativeTime(new Date(now - 2 * 3_600_000).toISOString())).toBe('2h ago');
+    expect(relativeTime(new Date(now - 26 * 3_600_000).toISOString())).toBe('yesterday');
+    expect(relativeTime(undefined)).toBe('');
   });
 });
 
@@ -237,6 +329,7 @@ describe('TogetherCatalog (§3.10)', () => {
     framework: 'Gottman',
     blurb: 'Take turns learning each other’s world.',
     kind: 'structured',
+    stepCount: 4,
     adult: false,
     ...over,
   });
@@ -248,6 +341,7 @@ describe('TogetherCatalog (§3.10)', () => {
       groupTitle: 'Repair',
       title: 'Four Horsemen',
       kind: 'chat',
+      stepCount: 0,
       blurb: 'Spot four habits.',
     }),
   ];
@@ -290,7 +384,13 @@ describe('TogetherIntimacy (§3.10/§3.10b)', () => {
     });
     render(
       <MemoryRouter>
-        <TogetherIntimacy partnerId="partner" partnerName="Angel" />
+        <TogetherIntimacy
+          partnerId="partner"
+          partnerName="Angel"
+          adultPractices={[]}
+          selectedId={null}
+          onPick={() => {}}
+        />
       </MemoryRouter>,
     );
     const btn = await screen.findByRole('button', { name: /turn on adult content/i });
@@ -315,12 +415,52 @@ describe('TogetherIntimacy (§3.10/§3.10b)', () => {
     });
     render(
       <MemoryRouter>
-        <TogetherIntimacy partnerId="partner" partnerName="Angel" />
+        <TogetherIntimacy
+          partnerId="partner"
+          partnerName="Angel"
+          adultPractices={[]}
+          selectedId={null}
+          onPick={() => {}}
+        />
       </MemoryRouter>,
     );
     expect(await screen.findByText('Something you both like')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Start Yes/No/Maybe together' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Revoke' })).toBeInTheDocument();
+  });
+
+  it('surfaces the adult guided practices alongside the YNM card once unlocked (§3.10)', async () => {
+    let picked = '';
+    installMockBridge({
+      togetherYnmStatus: () =>
+        Promise.resolve(ynm({ youAcked: true, eligible: true, youOptedIn: false })),
+    });
+    render(
+      <MemoryRouter>
+        <TogetherIntimacy
+          partnerId="partner"
+          partnerName="Angel"
+          selectedId={null}
+          onPick={(e) => (picked = e.id)}
+          adultPractices={[
+            {
+              id: 'sensate-focus',
+              group: 'together-desire',
+              groupTitle: 'Desire & intimacy',
+              title: 'Sensate Focus',
+              framework: 'Masters & Johnson',
+              blurb: 'A gentle, pressure-free program of touch.',
+              kind: 'structured',
+              stepCount: 5,
+              adult: true,
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText('Sensate Focus')).toBeInTheDocument();
+    await userEvent.click(screen.getByText('Sensate Focus'));
+    expect(picked).toBe('sensate-focus');
   });
 
   it('waits for the partner to ack (no dead controls) when only the active person has acked', async () => {
@@ -329,7 +469,13 @@ describe('TogetherIntimacy (§3.10/§3.10b)', () => {
     });
     render(
       <MemoryRouter>
-        <TogetherIntimacy partnerId="partner" partnerName="Angel" />
+        <TogetherIntimacy
+          partnerId="partner"
+          partnerName="Angel"
+          adultPractices={[]}
+          selectedId={null}
+          onPick={() => {}}
+        />
       </MemoryRouter>,
     );
     expect(await screen.findByText(/Waiting for Angel to turn it on/i)).toBeInTheDocument();
@@ -358,9 +504,8 @@ describe('TogetherPulse (§3.10a)', () => {
         <TogetherPulse partnerId="partner" partnerName="Angel" />
       </MemoryRouter>,
     );
-    await userEvent.click(await screen.findByRole('button', { name: 'Log a check-in' }));
-    // Set Connection to High, opt to share desire, save.
-    const connGroup = screen.getByRole('group', { name: 'Connection level' });
+    // The taps are always visible (no "Log a check-in" reveal) — a one-motion check-in.
+    const connGroup = await screen.findByRole('group', { name: 'Connection level' });
     await userEvent.click(within(connGroup).getByRole('button', { name: 'High' }));
     await userEvent.click(screen.getByRole('switch'));
     await userEvent.click(screen.getByRole('button', { name: 'Save check-in' }));
@@ -406,8 +551,28 @@ describe('TogetherPulse (§3.10a)', () => {
         <TogetherPulse partnerId="partner" partnerName="Angel" />
       </MemoryRouter>,
     );
-    expect(await screen.findByText(/No check-ins yet/i)).toBeInTheDocument();
+    // The inviting nudge shows (no fabricated streak); no alignment read without dual consent.
+    expect(await screen.findByText(/Takes 20 seconds/i)).toBeInTheDocument();
     expect(screen.queryByText(/desire levels/i)).not.toBeInTheDocument();
+  });
+
+  it('shows an honest "last check-in N days ago" nudge from the view timestamp', async () => {
+    const fiveDaysAgo = new Date(Date.now() - 5 * 86_400_000).toISOString();
+    installMockBridge({
+      togetherPulse: () =>
+        Promise.resolve({
+          series: [],
+          hasCheckIns: true,
+          lastCheckInAt: fiveDaysAgo,
+          alignment: { ready: false },
+        }),
+    });
+    render(
+      <MemoryRouter>
+        <TogetherPulse partnerId="partner" partnerName="Angel" />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText(/Last check-in 5 days ago/i)).toBeInTheDocument();
   });
 });
 

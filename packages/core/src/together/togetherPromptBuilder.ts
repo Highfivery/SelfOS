@@ -108,6 +108,25 @@ if kind is questionnaire"}]]. This drops a card they can choose to act on — it
 its own. Suggest sparingly, only when it truly fits, never from a private aside. The token is a silent app \
 signal, never shown; never mention or explain it.`;
 
+/**
+ * Ground the coaching in what SelfOS already knows, and make the coach VERIFY rather than assume (§3.14
+ * Part A / Phase I1). Appended with the addendum, BEFORE the per-participant context blocks it refers to.
+ * It must NOT reference a coach-initiated private channel (Phase I2) — for I1 the coach only holds sensitive
+ * checks out of the open room and follows the person's lead.
+ */
+export const GROUNDED_COACHING_INSTRUCTION = `Draw actively on the private background about each partner that \
+follows — their history, patterns, values, and what you know of their relationship — so your support feels \
+like it knows them, not generic. But treat everything you infer from it as an ASSUMPTION to verify, never a \
+settled fact. Before you build on a guess about how someone feels, what they meant, or what's going on between \
+them, check it — ask a natural, open question in the conversation ("It sounds like that landed as…, is that \
+right?" / "What's that like for you?"). NEVER cite where the belief came from: don't say "your profile says", \
+"I know that you…", or otherwise reveal you hold background on them — just ask as a curious coach would. When \
+a partner states something about themselves, take their word over your prior; if it conflicts with what you \
+thought you knew, get curious, don't correct them. Hold especially sensitive assumptions (about intimacy, \
+past hurt, or one partner's private world) gently — don't surface a delicate guess in the shared room before \
+the person has chosen to; follow their lead. And never turn verification into disclosure: confirming something \
+with one partner must never reveal, to the other, anything you knew privately about them.`;
+
 /** The per-participant confidentiality contract (§6.3 step 3) — prefixes each person's own context block. */
 export function confidentialityContract(name: string): string {
   return `The following is private background about ${name}. Use it to shape your support. Never quote, \
@@ -143,6 +162,7 @@ export async function buildTogetherSystemPrompt(
     SAFETY,
     TOGETHER_FRAME,
     TOGETHER_ADDENDUM,
+    GROUNDED_COACHING_INSTRUCTION,
     AGREEMENT_INSTRUCTION,
     JOINT_CHALLENGE_INSTRUCTION,
     SUGGEST_INSTRUCTION,

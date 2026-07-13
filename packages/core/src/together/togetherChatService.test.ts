@@ -15,7 +15,7 @@ import {
   updateState,
 } from './togetherService';
 import { runTogetherTurn, retryTogetherReply } from './togetherChatService';
-import { TOGETHER_ADDENDUM } from './togetherPromptBuilder';
+import { TOGETHER_ADDENDUM, GROUNDED_COACHING_INSTRUCTION } from './togetherPromptBuilder';
 
 const key = generateMasterKey();
 const BEN = 'ben';
@@ -150,12 +150,16 @@ describe('togetherPromptBuilder (§6.3 captured prompt)', () => {
     const iPersona = system.indexOf('warm, reflective wellness companion');
     const iSafety = system.indexOf('wellness and self-help tool');
     const iAddendum = system.indexOf('facilitating a shared conversation');
+    const iGrounded = system.indexOf('Draw actively on the private background');
     const iContract = system.indexOf('private background about Ben');
     const iFormatting = system.indexOf('Formatting:');
     expect(iPersona).toBeGreaterThanOrEqual(0);
     expect(iPersona).toBeLessThan(iSafety);
     expect(iSafety).toBeLessThan(iAddendum);
-    expect(iAddendum).toBeLessThan(iContract);
+    // The grounding instruction (§3.14 Part A / Phase I1) sits after the addendum, before the context it
+    // refers to, before FORMATTING.
+    expect(iAddendum).toBeLessThan(iGrounded);
+    expect(iGrounded).toBeLessThan(iContract);
     expect(iContract).toBeLessThan(iFormatting);
     // The initiator's contract is present (they acked at create); the partner's is ABSENT — Angel hasn't
     // accepted the rules of the room yet, so her private context does not feed the coach (§3.4 consent-timing).
@@ -238,6 +242,21 @@ describe('togetherPromptBuilder (§6.3 captured prompt)', () => {
     // The sensitive fact appears in NEITHER block — dropped from Angel's own (excludeRestricted's sensitive
     // filter) AND never re-admitted into Ben's via the cross-shared path (own-context-only). The invariant holds.
     expect(system).not.toContain('ANGELKINKSECRET');
+  });
+
+  it('the grounded-coaching instruction (§3.14 Part A) tells the coach to USE the data, VERIFY assumptions, ask source-blind, and never disclose', () => {
+    // It must draw actively on the background AND treat inferences as assumptions to verify.
+    expect(GROUNDED_COACHING_INSTRUCTION).toContain('Draw actively on the private background');
+    expect(GROUNDED_COACHING_INSTRUCTION).toContain('ASSUMPTION to verify');
+    // It must instruct SOURCE-BLIND verification — ask naturally, never citing where the belief came from.
+    expect(GROUNDED_COACHING_INSTRUCTION).toContain('NEVER cite where the belief came from');
+    expect(GROUNDED_COACHING_INSTRUCTION).toContain('don\'t say "your profile says"');
+    // It must NOT reference the Phase I2 coach-initiated private channel (which doesn't exist in I1) — no
+    // instruction to proactively send a private message; the coach only holds sensitive checks + follows the lead.
+    expect(GROUNDED_COACHING_INSTRUCTION).toContain('follow their lead');
+    expect(GROUNDED_COACHING_INSTRUCTION).not.toMatch(/\[\[SELFOS:PRIVATE/);
+    // Verification must never become disclosure across partners (the "Coach never discloses it" boundary).
+    expect(GROUNDED_COACHING_INSTRUCTION).toContain('never turn verification into disclosure');
   });
 });
 

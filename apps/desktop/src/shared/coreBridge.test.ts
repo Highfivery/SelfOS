@@ -239,6 +239,16 @@ function makeHost(): {
           usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
       }
+      // A Together coach-initiated PRIVATE note (58 §3.14 Part B): when the turn text carries the trigger, the
+      // coach emits a public reply PLUS a `[[SELFOS:PRIVATE]]` marker for Angel — the service mints a private
+      // note scoped to her. Stripped from the shared reply by the service.
+      if (userText.includes('PRIVATENOTE')) {
+        onDelta('I hear you both.');
+        return Promise.resolve({
+          text: 'I hear you both. [[SELFOS:PRIVATE:{"to":"Angel","text":"PRIVATECOACHTEXT just for Angel."}]]',
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
       // Dream synthesis asks for a single JSON object — return a valid DreamAnalysis draft so the
       // synthesize path can parse it; every other turn just streams a short reply.
       const wantsJson = options.messages.some((m) =>
@@ -5193,6 +5203,10 @@ describe('createCoreBridge — Together (58) foundation', () => {
       expect(asideTurn.view.messages).toHaveLength(2); // the aside + the coach's private reply
       expect(asideTurn.view.messages.every((m) => m.privateAside)).toBe(true);
     }
+    // An ordinary aside coach REPLY must NOT trip the coach-INITIATED private-note signal (§3.14 Part B) —
+    // Ben just watched it arrive; `together-private` fires only for an unprompted note.
+    const benList = await bridge.togetherList();
+    expect(benList.find((s) => s.id === sessionId)?.lastPrivateCoachAt).toBeUndefined();
 
     // Angel's projection: nothing new — no aside, no coach reply, no placeholder; her badges unchanged.
     await asPerson(host, angel);
@@ -5200,6 +5214,44 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(angelAfter?.messages).toHaveLength(0);
     expect(angelAfter?.yourTurn).toBe(angelBefore?.yourTurn);
     expect(angelAfter?.unreadCount).toBe(angelBefore?.unreadCount);
+  });
+
+  it('a coach-initiated private note reaches ONLY the named partner; the shared reply is marker-free (§3.14 Part B)', async () => {
+    const { host, bridge, ben, angel } = await seedPair();
+    const created = await bridge.togetherCreate({ partnerPersonId: angel, topic: 'Us' });
+    const sessionId = created.ok ? created.session.id : '';
+    await asPerson(host, angel);
+    await bridge.togetherAccept(sessionId);
+
+    // Ben writes an OPEN message; the coach's reply carries a PRIVATE marker addressed to Angel.
+    await asPerson(host, ben);
+    const turn = await bridge.togetherSendMessage({
+      sessionId,
+      text: 'I want us close. PRIVATENOTE',
+    });
+    expect(turn.ok).toBe(true);
+
+    // Ben's projection: his message + the SHARED coach reply — no private note, and the reply is marker-free.
+    const benView = await bridge.togetherGet(sessionId);
+    expect(benView?.messages.map((m) => m.role)).toEqual(['user', 'assistant']);
+    expect(benView?.messages.every((m) => !m.content.includes('PRIVATECOACHTEXT'))).toBe(true);
+    expect(benView?.messages.every((m) => !m.content.includes('SELFOS:PRIVATE'))).toBe(true);
+    expect(benView?.lastPrivateCoachAt).toBeUndefined();
+
+    // Angel's projection: the shared reply PLUS the private coach note (authored for her, a private aside).
+    await asPerson(host, angel);
+    const angelView = await bridge.togetherGet(sessionId);
+    expect(angelView?.messages.map((m) => `${m.role}:${m.privateAside ? 'p' : '-'}`)).toEqual([
+      'user:-',
+      'assistant:-',
+      'assistant:p',
+    ]);
+    const note = angelView?.messages[2];
+    expect(note?.content).toContain('PRIVATECOACHTEXT');
+    expect(note?.privateAside).toBe(true);
+    // The summary carries the private-note signal for Angel (drives `together-private`), not for Ben.
+    const angelList = await bridge.togetherList();
+    expect(angelList.find((s) => s.id === sessionId)?.lastPrivateCoachAt).toBe(note?.ts);
   });
 
   it('over-budget: the initiator sees the standard notice; the partner a NEUTRAL session one — no ratio/$ (§6.2)', async () => {

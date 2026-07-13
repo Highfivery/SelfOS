@@ -81,6 +81,31 @@ describe('togetherNotificationCandidates (§3.11)', () => {
     expect(togetherNotificationCandidates([summary({ status: 'ended' })], ME)).toEqual([]);
     expect(togetherNotificationCandidates([summary({ status: 'complete' })], ME)).toEqual([]);
   });
+
+  it('fires together-private when the coach left a private note, signed by the note ts, no content (§3.14 Part B)', () => {
+    const out = togetherNotificationCandidates(
+      [
+        summary({
+          status: 'active',
+          yourTurn: false, // a note is independent of turn state
+          topic: 'Us',
+          lastPrivateCoachAt: '2026-07-12T00:00:00.000Z',
+          lastMessageSnippet: 'the private note text',
+        }),
+      ],
+      ME,
+    );
+    const priv = out.find((c) => c.kind === 'together-private');
+    expect(priv).toMatchObject({
+      kind: 'together-private',
+      coalesceKey: 'together-private:s1',
+      signature: '2026-07-12T00:00:00.000Z',
+      title: 'The coach has a private note for you — “Us”',
+      action: { type: 'navigate', to: '/together/session/s1' },
+    });
+    // Never carries the note's text.
+    expect(JSON.stringify(out)).not.toContain('the private note text');
+  });
 });
 
 describe('togetherWaitingCount (§3.1 nav badge)', () => {

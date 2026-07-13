@@ -566,6 +566,15 @@ export function fakeClaudeClient(): ClaudeClient {
           reply +=
             ' [[SELFOS:SUGGEST:{"kind":"guide","prompt":"Try the Love Maps exercise together","guideId":"love-maps"}]]';
         }
+        // 58 §3.14 Part B: when the author asks the coach to check "privately", append a PRIVATE marker
+        // addressed to the OTHER partner, so an E2E can drive the private-note flow through the real UI. The
+        // marker is stripped from the shared reply; the note is scoped to that partner alone. `a`/`b` are the
+        // named participants from the prompt; the author is the leading "Name:" in the transcript text.
+        if (/privately/i.test(userText)) {
+          const authorName = /^(\w+):/.exec(userText)?.[1];
+          const target = [a, b].find((n) => n && n !== authorName) ?? b;
+          reply += ` [[SELFOS:PRIVATE:{"to":"${target}","text":"PRIVATECOACHNOTE — a gentle check just for you."}]]`;
+        }
         for (const word of reply.split(' ')) onDelta(`${word} `);
         return Promise.resolve({
           text: reply,

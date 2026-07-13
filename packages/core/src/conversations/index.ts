@@ -8,6 +8,7 @@ export * from './sessionAnalysisService';
 export * from './guidedCatalog';
 export * from './guidedSteps';
 export * from './agreementMarker';
+export * from './privateMarker';
 export * from './guidedSessionService';
 export * from './guidanceService';
 export * from './topicClassifier';

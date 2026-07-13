@@ -533,6 +533,8 @@ export interface SessionDigest {
   viewerAcked: boolean;
   lastMessageSnippet?: string;
   lastMessageAt?: string;
+  /** The ts of the newest PRIVATE coach note for this viewer (§3.14 Part B) — drives `together-private`. */
+  lastPrivateCoachAt?: string;
 }
 
 const SNIPPET_MAX = 140;
@@ -549,6 +551,18 @@ export function digestFor(
   const projected = projectMessages(messages, viewerId);
   const last = projected[projected.length - 1];
   const vState = states.get(viewerId);
+  // The newest coach-INITIATED private note for this viewer (§3.14 Part B) — keyed on `coachInitiated` so it
+  // fires ONLY for an unprompted note, NOT for an ordinary §3.6 aside coach REPLY (both are assistant +
+  // privateAside + authored-for-viewer). Scoped to the viewer via `authorPersonId` (the projection rule).
+  const lastPrivateCoach = [...messages]
+    .reverse()
+    .find(
+      (m) =>
+        m.role === 'assistant' &&
+        m.privateAside &&
+        m.coachInitiated &&
+        m.authorPersonId === viewerId,
+    );
   return {
     status,
     yourTurn: turnStateFor(messages, viewerId),
@@ -560,5 +574,6 @@ export function digestFor(
           lastMessageAt: last.ts,
         }
       : {}),
+    ...(lastPrivateCoach ? { lastPrivateCoachAt: lastPrivateCoach.ts } : {}),
   };
 }

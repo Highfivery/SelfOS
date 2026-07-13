@@ -367,4 +367,27 @@ describe('digestFor', () => {
       lastMessageAt: '2',
     });
   });
+
+  it('sets lastPrivateCoachAt ONLY for a coach-INITIATED note to the viewer — never for an ordinary aside coach reply (§3.14 Part B)', async () => {
+    const st = states(
+      state(A, { rulesAckAt: NOW.toISOString() }),
+      state(B, { rulesAckAt: NOW.toISOString() }),
+    );
+    // A's OWN private aside + the coach's aside REPLY (both authored-for A, privateAside, NOT coachInitiated).
+    const asideOnly = [
+      msg(A, 'user', '1', { privateAside: true }),
+      msg(A, 'assistant', '2', { privateAside: true, replyToMessageId: 'personA-1' }),
+    ];
+    expect(digestFor(session(), st, null, asideOnly, A, NOW).lastPrivateCoachAt).toBeUndefined();
+
+    // Now a coach-INITIATED note for A (authored-for A, privateAside, coachInitiated) → the signal fires.
+    const withNote = [
+      msg(B, 'user', '1', { content: 'open message' }),
+      msg(B, 'assistant', '2', { content: 'shared reply' }),
+      msg(A, 'assistant', '3', { privateAside: true, coachInitiated: true }),
+    ];
+    expect(digestFor(session(), st, null, withNote, A, NOW).lastPrivateCoachAt).toBe('3');
+    // …but NOT for B — the note is authored for A, so it's outside B's projection + scoped away.
+    expect(digestFor(session(), st, null, withNote, B, NOW).lastPrivateCoachAt).toBeUndefined();
+  });
 });

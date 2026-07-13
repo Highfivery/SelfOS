@@ -16,7 +16,7 @@ export function sessionStatus(
     case 'active':
       return session.yourTurn
         ? { label: 'Your turn', tone: 'accent' }
-        : { label: 'Waiting for you both', tone: 'neutral' };
+        : { label: 'Their turn', tone: 'neutral' };
     case 'invited':
       return iInitiated
         ? { label: 'Invited · waiting', tone: 'neutral' }
@@ -32,6 +32,17 @@ export function sessionStatus(
     case 'declined':
       return { label: 'Declined', tone: 'neutral' };
   }
+}
+
+/**
+ * A one-line "whose move it is" hint for an active session (58 §3.6) — spells out the turn in plain words so
+ * there's no ambiguity about whether something is waiting on the viewer or on their partner. Null otherwise.
+ */
+export function turnHint(session: TogetherSessionSummary, partnerName: string): string | null {
+  if (session.status !== 'active') return null;
+  return session.yourTurn
+    ? `${partnerName} is waiting on your reply.`
+    : `You replied — it's ${partnerName}'s move.`;
 }
 
 /** A short, human relative time from an ISO timestamp — "just now", "2h ago", "yesterday", "5 days ago". */
@@ -94,6 +105,7 @@ export function TogetherSessionCard({
       ? `A free session you started with ${partnerName}.`
       : `A free conversation to talk something through with ${partnerName}.`;
   const when = relativeTime(session.lastMessageAt ?? session.createdAt);
+  const hint = turnHint(session, partnerName);
   const withdrawable = onWithdraw != null && canWithdraw(session, myId);
 
   return (
@@ -114,6 +126,11 @@ export function TogetherSessionCard({
           </span>
         </div>
         <div className={styles.sessionSubject}>{subject}</div>
+        {hint ? (
+          <div className={styles.turnHint} data-turn={session.yourTurn ? 'you' : 'them'}>
+            {hint}
+          </div>
+        ) : null}
         {session.lastMessageSnippet ? (
           <div className={styles.sessionExcerpt}>“{session.lastMessageSnippet}”</div>
         ) : null}

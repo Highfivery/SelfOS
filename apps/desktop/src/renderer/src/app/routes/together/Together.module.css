@@ -203,6 +203,69 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
+/* The plain-words "whose move it is" line — accent when it's on you, muted when it's on your partner. */
+.turnHint {
+  font-size: 0.8rem;
+  font-weight: 600;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-text-secondary);
+}
+.turnHint[data-turn='you'] {
+  color: var(--color-accent-text);
+}
+
+/* ── Session groups (by whose move it is) ────────────────────────────────────── */
+.sessionGroups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.groupHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+}
+.groupHead[data-accent='true'] {
+  color: var(--color-accent-text);
+}
+.groupCount {
+  color: var(--color-text-tertiary);
+}
+/* The collapsed "Wrapped up" section — a native details/summary. */
+.wrappedGroup {
+  min-width: 0;
+}
+.wrappedSummary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  list-style: none;
+  color: var(--color-text-secondary);
+  padding: var(--space-1) 0;
+}
+.wrappedSummary::-webkit-details-marker {
+  display: none;
+}
+.wrappedGroup[open] .wrappedSummary {
+  margin-bottom: var(--space-2);
+}
+.wrappedChevron {
+  display: inline-flex;
+  transition: transform var(--motion-fast) var(--ease-standard);
+}
+.wrappedGroup[open] .wrappedChevron {
+  transform: rotate(90deg);
+}
+
 .sessionSubject,
 .sessionExcerpt {
   font-size: 0.82rem;

@@ -6,6 +6,7 @@ import type {
   Person,
   TogetherCatalogEntry,
   TogetherCreateResult,
+  TogetherMessageView,
   TogetherReportView,
   TogetherSessionSummary,
   TogetherSessionView,
@@ -187,7 +188,24 @@ export const useTogetherStore = create<TogetherState>((set, get) => ({
   sendMessage: async (text, privateAside, pending) => {
     const open = get().open;
     if (!open) return NOT_ALLOWED;
-    set({ sending: true, streaming: '', error: null });
+    // Show the author's message IMMEDIATELY (so it's clear it was sent) rather than waiting for the coach to
+    // finish — the couples turn persists the author's message first (05 §4.1), so this optimistic bubble matches
+    // what's on disk; on success `result.view` replaces it, on failure it stays (with the error + Try again).
+    const meId = activePersonId();
+    const optimistic: TogetherMessageView = {
+      id: `pending-${new Date().toISOString()}`,
+      authorPersonId: meId ?? open.participants[0]?.personId ?? '',
+      role: 'user',
+      content: text,
+      ts: new Date().toISOString(),
+      privateAside: privateAside === true,
+    };
+    set({
+      open: { ...open, messages: [...open.messages, optimistic] },
+      sending: true,
+      streaming: '',
+      error: null,
+    });
     // Store any pending images under the session's own attachment folder (§6.1), then send their refs. A
     // failed store drops that image but the message still sends (best-effort, matching the 45 solo path).
     const attachments: AttachmentRef[] = [];

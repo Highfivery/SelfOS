@@ -1077,6 +1077,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         ? { lastMessageSnippet: digest.lastMessageSnippet }
         : {}),
       ...(digest.lastMessageAt !== undefined ? { lastMessageAt: digest.lastMessageAt } : {}),
+      ...(digest.lastPrivateCoachAt !== undefined
+        ? { lastPrivateCoachAt: digest.lastPrivateCoachAt }
+        : {}),
       createdAt: session.createdAt,
     };
   };

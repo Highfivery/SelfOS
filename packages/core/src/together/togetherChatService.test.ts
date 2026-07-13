@@ -12,10 +12,15 @@ import {
   createSession,
   listMessages,
   projectMessages,
+  turnStateFor,
   updateState,
 } from './togetherService';
 import { runTogetherTurn, retryTogetherReply } from './togetherChatService';
-import { TOGETHER_ADDENDUM, GROUNDED_COACHING_INSTRUCTION } from './togetherPromptBuilder';
+import {
+  TOGETHER_ADDENDUM,
+  GROUNDED_COACHING_INSTRUCTION,
+  PRIVATE_CLARIFICATION_INSTRUCTION,
+} from './togetherPromptBuilder';
 
 const key = generateMasterKey();
 const BEN = 'ben';
@@ -150,7 +155,7 @@ describe('togetherPromptBuilder (§6.3 captured prompt)', () => {
     const iPersona = system.indexOf('warm, reflective wellness companion');
     const iSafety = system.indexOf('wellness and self-help tool');
     const iAddendum = system.indexOf('facilitating a shared conversation');
-    const iGrounded = system.indexOf('Draw actively on the private background');
+    const iGrounded = system.indexOf('Draw actively on what you privately know');
     const iContract = system.indexOf('private background about Ben');
     const iFormatting = system.indexOf('Formatting:');
     expect(iPersona).toBeGreaterThanOrEqual(0);
@@ -246,7 +251,7 @@ describe('togetherPromptBuilder (§6.3 captured prompt)', () => {
 
   it('the grounded-coaching instruction (§3.14 Part A) tells the coach to USE the data, VERIFY assumptions, ask source-blind, and never disclose', () => {
     // It must draw actively on the background AND treat inferences as assumptions to verify.
-    expect(GROUNDED_COACHING_INSTRUCTION).toContain('Draw actively on the private background');
+    expect(GROUNDED_COACHING_INSTRUCTION).toContain('Draw actively on what you privately know');
     expect(GROUNDED_COACHING_INSTRUCTION).toContain('ASSUMPTION to verify');
     // It must instruct SOURCE-BLIND verification — ask naturally, never citing where the belief came from.
     expect(GROUNDED_COACHING_INSTRUCTION).toContain('NEVER cite where the belief came from');
@@ -440,5 +445,118 @@ describe('private asides (§3.6) + retry (§7)', () => {
       'user:angel',
       'assistant:angel',
     ]);
+  });
+});
+
+describe('coach-initiated private clarification (§3.14 Part B — the PRIVATE marker)', () => {
+  it('the prompt teaches the private channel: the marker format, one-partner scope, and the never-disclose boundary', () => {
+    // The instruction is in the assembled prompt (via the parts array) — teaches the exact token…
+    expect(PRIVATE_CLARIFICATION_INSTRUCTION).toContain('[[SELFOS:PRIVATE:');
+    expect(PRIVATE_CLARIFICATION_INSTRUCTION).toContain('one partner');
+    // …and reaffirms it must NEVER be used to keep a secret from, take a side against, or disclose one
+    // partner's private world to the other.
+    expect(PRIVATE_CLARIFICATION_INSTRUCTION).toContain('never');
+    expect(PRIVATE_CLARIFICATION_INSTRUCTION.toLowerCase()).toContain('reveal to one partner');
+    // The grounded instruction (I1) still stands and doesn't itself reference the marker.
+    expect(GROUNDED_COACHING_INSTRUCTION).not.toContain('[[SELFOS:PRIVATE');
+  });
+
+  it('a marker on an OPEN turn mints a private coach note scoped to the named partner; the public reply is marker-free', async () => {
+    const fs = memFileSystem();
+    const session = await seed(fs);
+    const { client } = captureClient(
+      'I hear you — let me sit with that. [[SELFOS:PRIVATE:{"to":"Angel","text":"Just checking in with you privately — is this pace okay?"}]]',
+    );
+    await runTogetherTurn({
+      fs,
+      key,
+      client,
+      apiKey: 'sk-test',
+      model: 'claude-sonnet-4-6',
+      session,
+      authorPersonId: BEN,
+      userText: 'I want us to be closer.',
+      onDelta: () => {},
+      now: new Date('2026-07-10T12:20:00.000Z'),
+    });
+    const messages = await listMessages(fs, key, session.id);
+    // user(Ben) → public coach reply(authored Ben) → private coach note(authored Angel, privateAside).
+    expect(
+      messages.map((m) => `${m.role}:${m.authorPersonId}:${m.privateAside ? 'p' : '-'}`),
+    ).toEqual(['user:ben:-', 'assistant:ben:-', 'assistant:angel:p']);
+    const publicReply = messages[1];
+    const privateNote = messages[2];
+    // The public reply is stripped of the marker (§6.4) — the raw token never shows.
+    expect(publicReply?.content).toBe('I hear you — let me sit with that.');
+    expect(publicReply?.content).not.toContain('SELFOS:PRIVATE');
+    // The private note carries the coach's text, is a private aside, and is authored FOR Angel.
+    expect(privateNote?.content).toBe('Just checking in with you privately — is this pace okay?');
+    expect(privateNote?.privateAside).toBe(true);
+    // Projection: only Angel sees the private note; Ben never does (§5.2).
+    expect(projectMessages(messages, ANGEL).some((m) => m.id === privateNote?.id)).toBe(true);
+    expect(projectMessages(messages, BEN).some((m) => m.id === privateNote?.id)).toBe(false);
+    // A private coach note is a NOTE, not a turn — it's an `assistant` message, so `turnStateFor` (which
+    // counts only human messages) never treats it as someone's turn.
+    expect(projectMessages(messages, ANGEL).find((m) => m.id === privateNote?.id)?.role).toBe(
+      'assistant',
+    );
+    // Angel's "your turn" is driven solely by Ben's human message, unchanged by the note.
+    expect(turnStateFor(messages, ANGEL)).toBe(true);
+  });
+
+  it('an UNRESOLVABLE `to` is dropped (no leak) — the marker is still stripped, no private note minted', async () => {
+    const fs = memFileSystem();
+    const session = await seed(fs);
+    const { client } = captureClient(
+      'Thanks for that. [[SELFOS:PRIVATE:{"to":"Nobody","text":"this should never appear"}]]',
+    );
+    await runTogetherTurn({
+      fs,
+      key,
+      client,
+      apiKey: 'sk-test',
+      model: 'claude-sonnet-4-6',
+      session,
+      authorPersonId: BEN,
+      userText: 'Anything you noticed?',
+      onDelta: () => {},
+      now: new Date('2026-07-10T12:21:00.000Z'),
+    });
+    const messages = await listMessages(fs, key, session.id);
+    // No private note — just the user message + the public coach reply.
+    expect(messages.map((m) => `${m.role}:${m.privateAside ? 'p' : '-'}`)).toEqual([
+      'user:-',
+      'assistant:-',
+    ]);
+    // The dropped marker's text NEVER lands anywhere.
+    expect(messages.some((m) => m.content.includes('this should never appear'))).toBe(false);
+    expect(messages.some((m) => m.content.includes('SELFOS:PRIVATE'))).toBe(false);
+  });
+
+  it('a marker on an ASIDE turn mints NO extra private note (an aside reply is already private)', async () => {
+    const fs = memFileSystem();
+    const session = await seed(fs);
+    const { client } = captureClient(
+      'Got it. [[SELFOS:PRIVATE:{"to":"Angel","text":"should be ignored on an aside turn"}]]',
+    );
+    await runTogetherTurn({
+      fs,
+      key,
+      client,
+      apiKey: 'sk-test',
+      model: 'claude-sonnet-4-6',
+      session,
+      authorPersonId: BEN,
+      userText: 'Something just for you, coach.',
+      privateAside: true,
+      onDelta: () => {},
+      now: new Date('2026-07-10T12:22:00.000Z'),
+    });
+    const messages = await listMessages(fs, key, session.id);
+    // The aside user message + one aside coach reply — no SECOND private note minted from the marker.
+    expect(
+      messages.map((m) => `${m.role}:${m.authorPersonId}:${m.privateAside ? 'p' : '-'}`),
+    ).toEqual(['user:ben:p', 'assistant:ben:p']);
+    expect(messages.some((m) => m.content.includes('should be ignored'))).toBe(false);
   });
 });

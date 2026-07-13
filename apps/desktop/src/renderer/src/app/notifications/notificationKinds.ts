@@ -6,6 +6,7 @@ import {
   Download,
   Flag,
   Heart,
+  Lock,
   MessageCircle,
   PencilLine,
   RefreshCw,
@@ -83,6 +84,9 @@ export const NOTIFICATION_KIND_DEFS: Record<NotificationKind, KindDef> = {
   // Your turn in a Together session (58 §3.11), coalesced per session. onChange by the latest message in the
   // recipient's PROJECTION — an aside never changes the partner's signature, so it never re-pops here.
   'together-turn': { icon: MessageCircle, severity: 'info', resurfaces: onChange },
+  // The coach left a private note just for you (58 §3.14 Part B), coalesced per session. onChange by the
+  // note's ts — a NEW private note re-surfaces; it never carries the note's text.
+  'together-private': { icon: Lock, severity: 'info', resurfaces: onChange },
 };
 
 /** The icon for a kind (used by the bell rows + toasts). */

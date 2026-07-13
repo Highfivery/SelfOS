@@ -9664,6 +9664,72 @@ test('together (58): lifecycle + aside projection (crown jewel) + prompt capture
   }
 });
 
+test('together (58) phase I2: the coach sends a private note to ONE partner; the other never sees it (§3.14 Part B, decrypt)', async () => {
+  const { userData, vault } = await seedTogetherReady();
+  const app = await electron.launch({ args: [`--user-data-dir=${userData}`, MAIN], env: e2eEnv() });
+  try {
+    const w = await app.firstWindow();
+    // Ben starts a session with Angel.
+    await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByRole('button', { name: 'New session' }).first().click();
+    await w.getByPlaceholder('e.g. Feeling disconnected lately').fill('Growing closer');
+    await w.getByRole('button', { name: 'Send invitation' }).click();
+
+    // Angel accepts the rules of the room (so both contexts feed + the session is active for both).
+    await switchTogetherPerson(w, 'Angel');
+    await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByRole('button', { name: /Open conversation Growing closer/ }).click();
+    await w.getByRole('button', { name: 'Continue' }).click();
+
+    // Ben asks the coach to check something PRIVATELY → the coach's shared reply is visible, but the private
+    // note it minted for Angel is NOT shown to Ben (and the raw marker never appears).
+    await switchTogetherPerson(w, 'Ben');
+    await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByRole('button', { name: /Open conversation Growing closer/ }).click();
+    await w
+      .getByLabel('Message')
+      .fill('Can you privately check how Angel is feeling about all this?');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/I hear you, Ben/)).toBeVisible();
+    await expect(w.getByText(/PRIVATECOACHNOTE/)).toHaveCount(0); // Ben never sees the private note…
+    await expect(w.getByText('SELFOS:PRIVATE')).toHaveCount(0); // …nor the raw marker
+    await expect(w.getByText('Private — from the coach, just for you')).toHaveCount(0);
+
+    // Angel opens the session → she DOES see the coach's private note, labelled as hers alone.
+    await switchTogetherPerson(w, 'Angel');
+    await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByRole('button', { name: /Open conversation Growing closer/ }).click();
+    await expect(w.getByText(/PRIVATECOACHNOTE/)).toBeVisible();
+    await expect(w.getByText('Private — from the coach, just for you')).toBeVisible();
+
+    // Decrypt: the private note is a write-once message, privateAside, authored FOR Angel (angel-1).
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('no key');
+    const fs = createNodeFileSystem(vault);
+    const sessions = await readdir(join(vault, 'together', 'sessions'));
+    expect(sessions.length).toBe(1);
+    const files = await readdir(join(vault, 'together', 'sessions', sessions[0]!, 'messages'));
+    const msgs = (await Promise.all(
+      files.map((f) =>
+        readEncryptedJson(fs, `together/sessions/${sessions[0]}/messages/${f}`, key),
+      ),
+    )) as { privateAside?: boolean; authorPersonId: string; role: string; content: string }[];
+    const privateNotes = msgs.filter(
+      (m) => m.privateAside && m.role === 'assistant' && m.content.includes('PRIVATECOACHNOTE'),
+    );
+    expect(privateNotes.length).toBe(1);
+    expect(privateNotes[0]?.authorPersonId).toBe('angel-1');
+    // The SHARED coach reply (non-aside) never carries the note text or the raw marker.
+    const shared = msgs.filter((m) => m.role === 'assistant' && !m.privateAside);
+    expect(shared.every((m) => !m.content.includes('PRIVATECOACHNOTE'))).toBe(true);
+    expect(shared.every((m) => !m.content.includes('SELFOS:PRIVATE'))).toBe(true);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('together (58) phase C: an attachment stores encrypted under the session; the private prep space stays OFF the Sessions list (§3.7/§6.1)', async () => {
   const { userData, vault } = await seedTogetherReady();
   const app = await launch(userData);

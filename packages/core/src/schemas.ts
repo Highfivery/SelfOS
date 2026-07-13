@@ -62,6 +62,7 @@ export const NOTIFICATION_KINDS = [
   'answers-updated', // 56-answer-review-edit §3.2 — a recipient edited answers after the sender analyzed them
   'together-invite', // 58-together §3.11 — a partner invited you to a Together session
   'together-turn', // 58-together §3.11 — your turn in a Together session (coalesced per session, projection signature)
+  'together-private', // 58-together §3.14 Part B — the coach left a private note just for you in a Together session
 ] as const;
 export const NotificationKindSchema = z.enum(NOTIFICATION_KINDS);
 export type NotificationKind = z.infer<typeof NotificationKindSchema>;
@@ -2954,6 +2955,10 @@ export const TogetherMessageSchema = z.object({
   // `[[SELFOS:STEP:n]]` marker, stripped from `content`). The CURRENT step is derived from the newest coach
   // message carrying this — never stored on the single-writer session.enc. Additive-optional (Phase E).
   guideStep: z.number().int().nonnegative().optional(),
+  // A coach-INITIATED private note (§3.14 Part B) — distinguishes it from an ordinary §3.6 aside coach reply
+  // (both are `assistant` + `privateAside` + authored-for-viewer). Drives the `together-private` signal so it
+  // fires only for an unprompted note, never for a reply the viewer just watched arrive. Additive-optional.
+  coachInitiated: z.boolean().optional(),
 });
 export type TogetherMessage = z.infer<typeof TogetherMessageSchema>;
 
@@ -3000,6 +3005,8 @@ export interface TogetherSessionSummary {
   unreadCount: number;
   lastMessageSnippet?: string;
   lastMessageAt?: string;
+  /** The ts of the newest private coach note for the viewer (§3.14 Part B) — drives `together-private`. */
+  lastPrivateCoachAt?: string;
   createdAt: string;
 }
 

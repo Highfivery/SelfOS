@@ -73,7 +73,8 @@ function MessageBubble({
           </Text>
           {message.privateAside ? (
             <span className={styles.asideTag}>
-              <Lock size={11} aria-hidden="true" /> Private to the coach
+              <Lock size={11} aria-hidden="true" />{' '}
+              {isCoach ? 'Private — from the coach, just for you' : 'Private to the coach'}
             </span>
           ) : null}
         </Inline>

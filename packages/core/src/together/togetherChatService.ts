@@ -17,6 +17,7 @@ import {
 } from '../conversations/guidedSteps';
 import { parseAgreementMarker } from '../conversations/agreementMarker';
 import { parseSuggestMarker } from '../conversations/suggestMarker';
+import { parsePrivateMarker } from '../conversations/privateMarker';
 import { getTogetherGuide } from './togetherCatalog';
 import { appendMessage, getSession, getTogetherAttachment, listMessages } from './togetherService';
 import { buildTogetherSystemPrompt } from './togetherPromptBuilder';
@@ -151,6 +152,27 @@ async function buildTogetherClaudeMessages(
   return out;
 }
 
+/**
+ * Resolve a `[[SELFOS:PRIVATE]]` marker's `to` (a display name the coach knows) to a participant id, or null
+ * if it doesn't name a participant (§3.14 Part B — an unresolvable target is DROPPED, never broadcast). Matches
+ * the display name case-insensitively; also accepts a raw participant id defensively.
+ */
+function resolvePrivateTarget(
+  to: string,
+  participantIds: string[],
+  nameOf: (personId: string) => string,
+): string | null {
+  const target = to.trim().toLowerCase();
+  if (!target) return null;
+  // Match by display name (case-insensitive); accept a raw participant id defensively. If the display name is
+  // AMBIGUOUS (two participants share it), drop rather than guess — the wrap-up-twin identical-name precedent.
+  const byName = participantIds.filter((pid) => nameOf(pid).trim().toLowerCase() === target);
+  if (byName.length === 1) return byName[0] ?? null;
+  if (byName.length > 1) return null;
+  const byId = participantIds.find((pid) => pid.toLowerCase() === target);
+  return byId ?? null;
+}
+
 async function resolveNames(
   fs: FileSystem,
   key: Uint8Array,
@@ -245,6 +267,21 @@ async function generateCoachReply(
     }
   }
 
+  // A coach-initiated PRIVATE clarification (§3.14 Part B): on an open turn the coach may append a
+  // `[[SELFOS:PRIVATE:{"to","text"}]]` marker to reach ONE partner privately (verify something sensitive,
+  // encourage them to raise it). It mints a SEPARATE `privateAside` coach message scoped to the resolved
+  // target via `authorPersonId` (the projection hides it from the other partner), mints no shared artifact,
+  // and never appears in the open transcript. An unresolvable `to` is dropped — no leak. Never on an aside
+  // turn (an aside reply is already private to its author). Appended just below, after the public reply.
+  let privateNote: { to: string; text: string } | null = null;
+  if (!privateAside) {
+    const priv = parsePrivateMarker(result.text);
+    if (priv) {
+      const targetId = resolvePrivateTarget(priv.to, session.participantIds, nameOf);
+      if (targetId) privateNote = { to: targetId, text: priv.text };
+    }
+  }
+
   // The coach reply carries the turn-runner's id (§4.2). On an ASIDE turn it is itself `privateAside`, so the
   // projection hides it from the partner (§3.6). Markers (incl. AGREEMENT) are always stripped from the saved
   // + streamed text via `stripCoachMarkers`, so the token never shows.
@@ -268,6 +305,23 @@ async function generateCoachReply(
     ...(declaredStep !== null ? { guideStep: declaredStep } : {}),
   };
   await appendMessage(fs, key, session.id, coach);
+
+  // Mint the coach's private clarification (§3.14 Part B), if one was declared and resolved. It is scoped to
+  // the target partner via `privateAside` + `authorPersonId`, so `projectMessages` shows it ONLY to them; it
+  // is a note, not a turn (it never flips the other partner's "your turn"). No shared artifact, no extra spend.
+  if (privateNote) {
+    await appendMessage(fs, key, session.id, {
+      id: uuid(),
+      schemaVersion: 1,
+      authorPersonId: privateNote.to,
+      role: 'assistant',
+      content: privateNote.text,
+      ts: new Date(now.getTime() + 2).toISOString(),
+      privateAside: true,
+      coachInitiated: true,
+    });
+  }
+
   return { ok: true, usage };
 }
 

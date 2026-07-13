@@ -667,30 +667,83 @@
   border-radius: var(--radius-lg);
   background: var(--color-surface);
 }
-.composerAside {
-  border-style: dashed;
-  border-color: var(--color-accent-solid);
+/* The audience toggle — a space-filling 2-option control (each half flexes to fit, never scrolls at 360px,
+   §12). Shared vs private is a deliberate CHOICE, not a status label. */
+.audienceToggle {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  width: 100%;
+  min-width: 0;
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
 }
-.asideToggle {
-  align-self: flex-start;
+.audienceOption {
+  flex: 1 1 0;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: 30px;
+  padding: 0 var(--space-2);
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+}
+.audienceOption > svg {
+  flex: none;
+}
+.audienceOption[data-active='true'] {
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+}
+.audienceOption:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 1px;
+}
+.audienceLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Private mode: the whole composer visibly transforms (accent border + tint) so it's unmistakable (§3.6). */
+.composerAside {
+  border-color: var(--color-accent-solid);
+  background: var(--color-accent-subtle-bg);
+}
+/* The lock banner — a white card on the tinted composer, spelling out who does (not) see this. */
+.privateBanner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-accent-text);
+  min-width: 0;
+}
+/* The who-sees-this line next to Send — muted when shared, accent when private. */
+.audienceHint {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 0.78rem;
-  font-weight: 600;
+  font-size: 0.8rem;
   color: var(--color-text-secondary);
-  background: transparent;
-  border: none;
-  padding: 2px 4px;
-  cursor: pointer;
-  border-radius: var(--radius-sm);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
-.asideToggle[aria-pressed='true'] {
+.audienceHint[data-aside='true'] {
   color: var(--color-accent-text);
-}
-.asideToggle:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 2px;
+  font-weight: 600;
 }
 .pendingRow {
   display: flex;
@@ -726,6 +779,9 @@
 .composerInput:focus-visible {
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 1px;
+}
+.composerInputPrivate {
+  border-color: var(--color-accent-solid);
 }
 
 /* ── Structured stepper (58 §3.10) ───────────────────────────────────────────── */

@@ -384,14 +384,16 @@ describe('TogetherThread (§3.6)', () => {
     expect(screen.getByText('Angel')).toBeInTheDocument();
     expect(screen.getByText('my secret')).toBeInTheDocument();
     expect(screen.getByText('Private to the coach')).toBeInTheDocument();
-    // The composer aside toggle restyles (aria-pressed).
-    const toggle = screen.getByRole('button', { name: /Write privately to the coach/ });
-    expect(toggle).toHaveAttribute('aria-pressed', 'false');
-    await userEvent.click(toggle);
-    expect(screen.getByRole('button', { name: 'Private to the coach' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    // The audience toggle: "Shared with Angel" is active by default; choosing "Just the coach" arms private.
+    const shared = screen.getByRole('button', { name: /Shared with Angel/ });
+    const priv = screen.getByRole('button', { name: 'Just the coach' });
+    expect(shared).toHaveAttribute('aria-pressed', 'true');
+    expect(priv).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(priv);
+    expect(priv).toHaveAttribute('aria-pressed', 'true');
+    // Private mode is unmistakable: the lock banner + the "Send privately" action.
+    expect(screen.getByText(/Only the coach sees this/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Send privately/ })).toBeInTheDocument();
     // Turn pill carries text.
     expect(within(screen.getByText('Your turn')).getByText('Your turn')).toBeInTheDocument();
   });

@@ -6,6 +6,7 @@ import { useDreamStore } from '../../../stores/dreamStore';
 import { useDreamPatternStore } from '../../../stores/dreamPatternStore';
 import { useInsightStore } from '../../../stores/insightStore';
 import { unansweredCount, useInboxStore } from '../../../stores/inboxStore';
+import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
 import { useGuidanceStore } from '../../../stores/guidanceStore';
 import { useIntakeStore } from '../../../stores/intakeStore';
 import { useSynthesisStore } from '../../../stores/synthesisStore';
@@ -39,7 +40,7 @@ import { ContinueCard } from './ContinueCard';
 import { WellbeingCard } from './WellbeingCard';
 import { DreamsCard } from './DreamsCard';
 import { MemoryCard } from './MemoryCard';
-import { InboxCard } from './InboxCard';
+import { QuestionnairesSection } from './QuestionnairesSection';
 import { GettingStarted } from './GettingStarted';
 import { WelcomeOrientationCard } from './WelcomeOrientationCard';
 import { ForYou } from './ForYou';
@@ -74,6 +75,8 @@ export function Home(): JSX.Element {
   const isAdmin = useSessionStore((s) => s.can('budgets.manage'));
   const hasSessions = useSessionStore((s) => s.can('sessions.own'));
   const canCreateQuestionnaires = useSessionStore((s) => s.can('questionnaires.create'));
+  const canAnswerQuestionnaires = useSessionStore((s) => s.can('questionnaires.answer'));
+  const canViewResults = useSessionStore((s) => s.can('questionnaires.viewResults'));
   const canViewMemory = useSessionStore((s) => s.can('memory.own'));
   const canOwnDreams = useSessionStore((s) => s.can('dreams.own'));
   const canManagePeople = useSessionStore((s) => s.can('people.manage'));
@@ -99,6 +102,7 @@ export function Home(): JSX.Element {
   const insights = useInsightStore((s) => s.insights);
   const proposals = useInsightStore((s) => s.proposals);
   const inboxItems = useInboxStore((s) => s.items);
+  const sentOverview = useQuestionnaireStore((s) => s.sentOverview);
   const goals = useGoalStore((s) => s.goals);
   const challenges = useChallengeStore((s) => s.challenges);
   const challengeSuggestion = useChallengeStore((s) => s.suggestion);
@@ -133,6 +137,9 @@ export function Home(): JSX.Element {
       useInsightStore.getState().load(),
       useInsightStore.getState().loadReconcileState(), // queued merge proposals → the "memory stale" signal (39)
       useInboxStore.getState().load(),
+      // The sender's questionnaire overview feeds the Questionnaires section's stats/needs-you/latest-insight
+      // (59). Bridge gates `sentOverview` on `questionnaires.viewResults` → empty when not permitted.
+      useQuestionnaireStore.getState().load(),
       useGuidanceStore.getState().load(),
       useIntakeStore.getState().load(),
       useSynthesisStore.getState().load(),
@@ -204,6 +211,9 @@ export function Home(): JSX.Element {
     approvedInsights.length === 0 &&
     inboxCount === 0 &&
     goals.length === 0 &&
+    // Someone who has SENT a questionnaire isn't brand new — the dedicated Questionnaires section (59) has
+    // real state to show them, so they see the dashboard, not getting-started.
+    Object.keys(sentOverview).length === 0 &&
     // A pending Together invitation (or any couples-session signal) is a real, actionable relationship
     // cue — such a person is NOT "brand new", so the invite can surface in "For you" (58 §3.12).
     togetherSessions.length === 0;
@@ -270,7 +280,9 @@ export function Home(): JSX.Element {
     ...(challengeSuggestion?.computedAt
       ? { challengeSuggestionComputedAt: challengeSuggestion.computedAt }
       : {}),
-    questionnaireGapHint: configured && inboxCount === 0,
+    // Absorbed into the dedicated Home Questionnaires section (59 §5.4) — the generic "For you" nudge no longer
+    // fires, so its richer replacement (go-deeper / variety / spicy) doesn't duplicate it.
+    questionnaireGapHint: false,
     memoryStale: proposals.length > 0,
     memorySignature: proposals
       .map((p) => p.id)
@@ -359,6 +371,20 @@ export function Home(): JSX.Element {
           refresh prompt once the portrait drifts from edited answers. Self-hides when complete + fresh. */}
       {ready ? <OnboardingCard /> : null}
 
+      {/* The dedicated Questionnaires section (59): stats + needs-you + latest insight are STATUS; the "Ideas
+          for you" are a PUSH (gated by showEncouragement). Absorbs the old InboxCard + generic gap nudge. */}
+      {ready && !isNew ? (
+        <QuestionnairesSection
+          canCreate={canCreateQuestionnaires}
+          canViewResults={canViewResults}
+          canAnswer={canAnswerQuestionnaires}
+          configured={configured}
+          adultAcknowledged={adultAcknowledged}
+          showIdeas={showEncouragement}
+          subjectPersonId={activePersonId}
+        />
+      ) : null}
+
       {!ready ? null : isNew ? (
         <GettingStarted
           hasSessions={hasSessions}
@@ -376,7 +402,6 @@ export function Home(): JSX.Element {
           <WellbeingCard points={moodPoints} checkIns={checkInPoints} />
           <DreamsCard dreams={dreams} stats={patternStats} />
           <MemoryCard insights={approvedInsights} canView={canViewMemory} />
-          <InboxCard count={inboxCount} />
         </div>
       )}
 

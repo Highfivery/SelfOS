@@ -305,6 +305,9 @@ export interface BuilderSeed {
   title: string;
   type: string;
   questions: Question[];
+  // An initial sensitivity tier, so a Home "Ideas" card can open a spicy (18+) draft pre-set (59 §3.5). Clamped
+  // by `computeEffectiveSensitivity` to what the seeded type actually allows.
+  sensitivity?: SensitivityTier;
 }
 
 /** Create or edit a questionnaire: title + type + sensitivity + a list of questions, with a check. */
@@ -359,7 +362,7 @@ export function QuestionnaireBuilder({
   const [title, setTitle] = useState(questionnaire?.title ?? seed?.title ?? '');
   const [type, setType] = useState(questionnaire?.type ?? seed?.type ?? DEFAULT_TYPE);
   const [sensitivity, setSensitivity] = useState<SensitivityTier>(
-    questionnaire?.sensitivity ?? 'standard',
+    questionnaire?.sensitivity ?? seed?.sensitivity ?? 'standard',
   );
 
   // Sensitivity is only meaningful for the types in SENSITIVITY_TYPES (intimacy/scenario, §15.2). For any

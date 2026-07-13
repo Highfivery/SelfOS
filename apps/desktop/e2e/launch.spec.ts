@@ -10293,3 +10293,69 @@ test('together (58): no partner → no nav; and the surface is clean at 360px', 
     await rm(vault, { recursive: true, force: true });
   }
 });
+
+test('home Questionnaires section (59): stats + a needs-you row + no overflow at ~360px', async () => {
+  const { userData, vault } = await seedReadyVault(); // AI off → analysis is gated behind a calm prompt
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    // Send a Standard self check-in and answer it, so the sender has an answered, un-analysed send.
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await startNewQuestionnaire(w);
+    await w.getByLabel('Title').fill('Weekly check-in');
+    await w.getByLabel('Question 1', { exact: true }).fill('How are we doing?');
+    await w.getByRole('button', { name: 'Create draft' }).click();
+    await w.getByRole('button', { name: 'Send' }).click();
+    await w.getByRole('button', { name: 'Standard' }).click();
+    await w.getByRole('button', { name: 'Send' }).last().click();
+    await expect(w.getByText(/Sent to Tester/)).toBeVisible();
+    await w.getByRole('button', { name: 'Done' }).click();
+
+    await w.getByRole('link', { name: /Inbox/ }).click();
+    await w.getByRole('button', { name: /^Weekly check-in/ }).click();
+    await w.getByLabel('How are we doing?').fill('Doing great');
+    await w.getByRole('button', { name: 'Submit' }).click();
+    await expect(w.getByText('Submitted')).toBeVisible();
+
+    // Home shows the dedicated Questionnaires section (59) with real cross-questionnaire stats.
+    await w.getByRole('link', { name: 'Home' }).click();
+    const section = w.getByRole('region', { name: 'Questionnaires' });
+    await expect(section).toBeVisible();
+    await expect(section.getByText('Sent', { exact: true })).toBeVisible();
+    await expect(section.getByText('Response rate', { exact: true })).toBeVisible();
+    await expect(section.getByText('New replies', { exact: true })).toBeVisible();
+    // The submitted-but-un-analysed self-send surfaces as a "needs you" analyze row.
+    await expect(section.getByRole('button', { name: 'Analyse' })).toBeVisible();
+
+    // No horizontal overflow at desktop or ~360px (page-level AND inner scrollers, §12).
+    const overflow = (): Promise<number> =>
+      w.evaluate(() => {
+        let max = 0;
+        for (const el of Array.from(document.querySelectorAll('*'))) {
+          const s = getComputedStyle(el);
+          if (
+            (s.overflowX === 'auto' || s.overflowX === 'scroll') &&
+            el.scrollWidth - el.clientWidth > max
+          )
+            max = el.scrollWidth - el.clientWidth;
+        }
+        const main = document.querySelector('main');
+        return Math.max(max, main ? main.scrollWidth - main.clientWidth : 0);
+      });
+    expect(await overflow()).toBeLessThanOrEqual(1);
+    await app.evaluate(async ({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows()[0];
+      if (win) {
+        win.setMinimumSize(360, 480);
+        win.setSize(390, 800);
+      }
+    });
+    await w.waitForTimeout(150);
+    expect(await overflow()).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});

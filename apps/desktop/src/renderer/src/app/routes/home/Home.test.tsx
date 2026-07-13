@@ -242,7 +242,11 @@ describe('Home — hierarchy & status grid', () => {
     expect(screen.getByRole('heading', { name: 'Wellbeing' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Recent dreams' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /what the coach knows/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Inbox' })).toBeInTheDocument();
+    // The Questionnaires section (59) absorbs the old Inbox card — the unanswered send shows as an answer row.
+    expect(screen.getByRole('region', { name: 'Questionnaires' })).toBeInTheDocument();
+    expect(
+      await screen.findByText(/1 questionnaire waiting for you to answer/i),
+    ).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /welcome to selfos/i })).toBeNull();
   });
 

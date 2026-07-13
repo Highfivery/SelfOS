@@ -68,6 +68,8 @@ interface QuestionnaireState {
   remove: (id: string) => Promise<void>;
   validate: (input: QuestionnaireInput) => Promise<string[]>;
   setFavorite: (id: string, favorite: boolean) => Promise<void>;
+  /** Clear the person-scoped state on an active-person switch (per-person isolation) — the AppShell reset. */
+  reset: () => void;
 }
 
 /** The sender's questionnaire definitions (08-questionnaires §3.1). CRUD flows through the bridge. */
@@ -137,4 +139,5 @@ export const useQuestionnaireStore = create<QuestionnaireState>((set, get) => ({
     });
     await window.selfos?.questionnairesSetFavorite({ id, favorite });
   },
+  reset: () => set({ questionnaires: [], sendStates: {}, sentOverview: {}, loaded: false }),
 }));

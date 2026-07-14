@@ -121,6 +121,7 @@ import type {
   JointChallengeStatus,
   TogetherSuggestion,
   Agreement,
+  AgreementSummary,
   UpdateCheckResult,
   UsageEvent,
   UsageSummary,
@@ -300,6 +301,8 @@ export const IpcChannels = {
   togetherWrapUp: 'together:wrapUp',
   togetherGetReport: 'together:getReport',
   togetherSaveAgreement: 'together:saveAgreement',
+  togetherMyAgreements: 'together:myAgreements',
+  togetherSetAgreementStatus: 'together:setAgreementStatus',
   assignmentsCreate: 'assignments:create',
   assignmentsInbox: 'assignments:inbox',
   assignmentsSetFavorite: 'assignments:setFavorite',
@@ -1078,6 +1081,14 @@ export interface SelfosBridge {
     id?: string;
     text: string;
     timeframe?: string;
+    status: 'standing' | 'done' | 'retired';
+  }): Promise<Agreement | null>;
+  /** Every STANDING agreement across the active person's pairs (spec 61) — for Goals + Home. Person-scoped. */
+  togetherMyAgreements(): Promise<AgreementSummary[]>;
+  /** Mark a standing agreement done/retired from Goals/Home (spec 61); resolves the pair from the partner. */
+  togetherSetAgreementStatus(input: {
+    partnerPersonId: string;
+    agreementId: string;
     status: 'standing' | 'done' | 'retired';
   }): Promise<Agreement | null>;
   /**

@@ -13,9 +13,11 @@ import { useGuidanceStore } from '../../../stores/guidanceStore';
 import { useConversationStore } from '../../../stores/conversationStore';
 import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
 import { useDiscoveryStore, DISCOVERY_KEYS } from '../../../stores/discoveryStore';
+import { useTogetherStore } from '../../../stores/togetherStore';
 import { stalestGoal } from '../../notifications/goalFollowup';
 import { AiUnavailableNotice } from '../../AiUnavailableNotice';
 import { GuidedExerciseCard } from '../sessions/GuidedExerciseCard';
+import { PulseCheckInForm } from '../together/PulseCheckInForm';
 import { toSeed } from '../questionnaires/SuggestedPanel';
 import { RecommendationCard } from './RecommendationCard';
 import styles from './Home.module.css';
@@ -74,6 +76,7 @@ export function RecommendationItem({
   const [qNotice, setQNotice] = useState<string | null>(null);
   const [challengeBusy, setChallengeBusy] = useState(false);
   const [challengeNotice, setChallengeNotice] = useState<string | null>(null);
+  const togetherPartners = useTogetherStore((s) => s.partners);
 
   const card = (body: JSX.Element): JSX.Element => (
     <RecommendationCard
@@ -354,6 +357,23 @@ export function RecommendationItem({
           <AiUnavailableNotice variant="inline" />
         )}
       </>,
+    );
+  }
+
+  // --- The inline Pulse check-in (spec 61 §3.4) — log all three metrics right on the dashboard. ---
+  if (rec.id === 'pulse-checkin') {
+    const partner = togetherPartners.find((p) => p.eligible);
+    if (!partner) {
+      return card(
+        <div>
+          <Button variant="secondary" onClick={() => navigate(rec.route)}>
+            Open Together <ArrowRight size={16} aria-hidden="true" />
+          </Button>
+        </div>,
+      );
+    }
+    return card(
+      <PulseCheckInForm partnerId={partner.personId} partnerName={partner.displayName} hideHead />,
     );
   }
 

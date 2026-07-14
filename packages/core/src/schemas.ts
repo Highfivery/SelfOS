@@ -3182,6 +3182,24 @@ export const AgreementSchema = z.object({
 });
 export type Agreement = z.infer<typeof AgreementSchema>;
 
+/**
+ * A standing agreement surfaced OUTSIDE its session (spec 61 — Goals / Home needs-attention), with the
+ * partner resolved for display + write-back. `agreement.provenance.sessionId` carries the origin session
+ * for the "open session" link; the mark-done write resolves the pair from `partnerPersonId`.
+ */
+export interface AgreementSummary {
+  agreement: Agreement;
+  partnerPersonId: string;
+  partnerName: string;
+}
+
+export const TogetherSetAgreementStatusInputSchema = z.object({
+  partnerPersonId: z.string().min(1),
+  agreementId: z.string().min(1),
+  status: AgreementStatusSchema,
+});
+export type TogetherSetAgreementStatusInput = z.infer<typeof TogetherSetAgreementStatusInputSchema>;
+
 export const TogetherWrapUpInputSchema = z.object({ sessionId: z.string().min(1) });
 export type TogetherWrapUpInput = z.infer<typeof TogetherWrapUpInputSchema>;
 

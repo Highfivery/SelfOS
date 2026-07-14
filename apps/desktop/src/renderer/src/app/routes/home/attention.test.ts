@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type {
+  AgreementSummary,
   Goal,
   QuestionnaireSentOverview,
   TestResult,
@@ -23,6 +24,7 @@ function base(over: Partial<AttentionInput> = {}): AttentionInput {
     now: NOW,
     activePersonId: 'me',
     goals: [],
+    agreements: [],
     sentOverview: {},
     togetherSessions: [],
     resultsByTest: {},
@@ -186,6 +188,30 @@ describe('needsAttention (60 §3.1.2a)', () => {
     expect(kinds).not.toContain('send-questionnaire');
   });
 
+  it('surfaces standing Together agreements as a gentle follow-through, naming a single partner (spec 61)', () => {
+    const items = needsAttention(base({ agreements: [agreement('Angel'), agreement('Angel')] }));
+    const item = items.find((i) => i.kind === 'agreement');
+    expect(item?.label).toBe('Following through with Angel');
+    expect(item?.detail).toBe('2 standing agreements to keep up');
+    expect(item?.route).toBe('/goals');
+    expect(item?.nudge).toBe(true);
+  });
+
+  it('generalizes the label across multiple partners, and drops the agreement item under suppressNudges', () => {
+    const many = base({ agreements: [agreement('Angel'), agreement('Cass', 'cass')] });
+    expect(needsAttention(many).find((i) => i.kind === 'agreement')?.label).toBe(
+      'Following through on your agreements',
+    );
+    // A nudge → suppressed when proactivity is off / crisis.
+    expect(needsAttention({ ...many, suppressNudges: true }).map((i) => i.kind)).not.toContain(
+      'agreement',
+    );
+    // Gated on `together`.
+    expect(
+      needsAttention({ ...many, can: { ...ALL_CAPS, together: false } }).map((i) => i.kind),
+    ).not.toContain('agreement');
+  });
+
   it('respects capability gates', () => {
     const input = base({
       can: {
@@ -197,6 +223,7 @@ describe('needsAttention (60 §3.1.2a)', () => {
       },
       togetherSessions: [session({ yourTurn: true })],
       goals: [goal({ id: 'g', due: '2026-06-01' })],
+      agreements: [agreement('Angel')],
       insightDraftCount: 2,
       resultsByTest: { phq9: [result(iso(NOW - 9 * DAY))] },
       sentOverview: { q1: overview({ newResponses: 1 }) },
@@ -204,6 +231,25 @@ describe('needsAttention (60 §3.1.2a)', () => {
     expect(needsAttention(input)).toEqual([]);
   });
 });
+
+let agreementSeq = 0;
+function agreement(partnerName: string, partnerPersonId = 'angel'): AgreementSummary {
+  agreementSeq += 1;
+  return {
+    partnerPersonId,
+    partnerName,
+    agreement: {
+      id: `a${agreementSeq}`,
+      schemaVersion: 1,
+      pairKey: `me~${partnerPersonId}`,
+      text: 'Date night Fridays',
+      status: 'standing',
+      provenance: { sessionId: 's1', at: '2026-07-01T00:00:00.000Z' },
+      createdAt: '2026-07-01T00:00:00.000Z',
+      updatedAt: '2026-07-01T00:00:00.000Z',
+    },
+  };
+}
 
 function iso(ms: number): string {
   // Deterministic ISO from an epoch offset (no Date.now() in the derivation itself).

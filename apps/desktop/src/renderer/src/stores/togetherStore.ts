@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type {
   Agreement,
   AgreementStatus,
+  AgreementSummary,
   AttachmentRef,
   Person,
   TogetherCatalogEntry,
@@ -61,6 +62,8 @@ interface TogetherState {
   reportView: TogetherReportView;
   /** True while a wrap-up analyze pass is running (the initiator-billed spend). */
   wrappingUp: boolean;
+  /** Standing agreements across ALL the active person's pairs (spec 61) — Goals + Home surfaces. */
+  myAgreements: AgreementSummary[];
 
   load: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -94,6 +97,14 @@ interface TogetherState {
     timeframe?: string;
     status: AgreementStatus;
   }) => Promise<Agreement | null>;
+  /** Load standing agreements across the active person's pairs (spec 61). */
+  loadMyAgreements: () => Promise<void>;
+  /** Mark a standing agreement done/retired from Goals/Home (spec 61); refreshes `myAgreements`. */
+  setAgreementStatus: (
+    partnerPersonId: string,
+    agreementId: string,
+    status: AgreementStatus,
+  ) => Promise<void>;
   reset: () => void;
 }
 
@@ -140,6 +151,7 @@ export const useTogetherStore = create<TogetherState>((set, get) => ({
   catalog: [],
   reportView: EMPTY_REPORT,
   wrappingUp: false,
+  myAgreements: [],
 
   load: async () => {
     const [{ hasPartner, partners }, sessions] = await Promise.all([
@@ -295,7 +307,16 @@ export const useTogetherStore = create<TogetherState>((set, get) => ({
   saveAgreement: async (input) => {
     const agreement = (await window.selfos?.togetherSaveAgreement(input)) ?? null;
     await get().loadReport(input.sessionId);
+    await get().loadMyAgreements();
     return agreement;
+  },
+  loadMyAgreements: async () => {
+    const myAgreements = (await window.selfos?.togetherMyAgreements()) ?? [];
+    set({ myAgreements });
+  },
+  setAgreementStatus: async (partnerPersonId, agreementId, status) => {
+    await window.selfos?.togetherSetAgreementStatus({ partnerPersonId, agreementId, status });
+    await get().loadMyAgreements();
   },
   reset: () =>
     set({
@@ -310,6 +331,7 @@ export const useTogetherStore = create<TogetherState>((set, get) => ({
       catalog: [],
       reportView: EMPTY_REPORT,
       wrappingUp: false,
+      myAgreements: [],
     }),
 }));
 

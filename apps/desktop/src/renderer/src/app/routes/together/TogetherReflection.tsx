@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type Ref } from 'react';
 import { Check, Pencil, RotateCcw, Sparkles } from 'lucide-react';
 import type { Agreement } from '@shared/schemas';
 import { Banner, Button, Inline, Markdown, Text } from '../../../design-system/components';
@@ -120,10 +120,13 @@ export function TogetherReflection({
   sessionId,
   memoryEnabled,
   aiReady,
+  sectionRef,
 }: {
   sessionId: string;
   memoryEnabled: boolean;
   aiReady: boolean;
+  /** Set by the session so the top summary strip can jump focus here (spec 61 §3.3). */
+  sectionRef?: Ref<HTMLElement>;
 }): JSX.Element | null {
   const view = useTogetherStore((s) => s.reportView);
   const wrappingUp = useTogetherStore((s) => s.wrappingUp);
@@ -146,7 +149,12 @@ export function TogetherReflection({
   if (!report && activeAgreements.length === 0 && (!memoryEnabled || !aiReady)) return null;
 
   return (
-    <section className={styles.reflection} aria-label="Reflection and agreements">
+    <section
+      ref={sectionRef}
+      tabIndex={-1}
+      className={styles.reflection}
+      aria-label="Reflection and agreements"
+    >
       <div className={styles.reflectionHead}>
         <Text weight={600}>Reflection</Text>
         {memoryEnabled && aiReady && (!report || stale) ? (

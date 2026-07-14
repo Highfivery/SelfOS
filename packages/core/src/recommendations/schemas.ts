@@ -137,6 +137,14 @@ export interface PersonRecommendationState {
     partnerName: string;
     stamp: string;
   } | null;
+  /** A Pulse check-in is due for a live partner (spec 61 §3.4) — never checked in, or last > 7 days ago.
+   *  Drives the inline Home check-in callout (`pulse-checkin`). Requires the `together.own` gate + a live
+   *  partner edge. `lastCheckInAt` drives the dismissal signature so a NEW overdue re-surfaces. */
+  pulseCheckinDue?: {
+    partnerPersonId: string;
+    partnerName: string;
+    lastCheckInAt?: string;
+  } | null;
 }
 
 /**

@@ -218,3 +218,40 @@ describe('the together-session provider (§3.12)', () => {
     expect(rec?.dismissKey).toBe('together:quiet:me~partner:2026-06-01');
   });
 });
+
+describe('pulse-checkin provider (spec 61)', () => {
+  it('surfaces when a check-in is due, routes to Together, dismissKey keyed on lastCheckInAt', () => {
+    const recs = rank(
+      state({
+        pulseCheckinDue: {
+          partnerPersonId: 'angel',
+          partnerName: 'Angel',
+          lastCheckInAt: '2026-07-01T00:00:00.000Z',
+        },
+      }),
+    );
+    const rec = recs.find((r) => r.id === 'pulse-checkin');
+    expect(rec?.route).toBe('/together');
+    expect(rec?.label).toContain('Angel');
+    expect(rec?.dismissKey).toBe('pulse-checkin:angel:2026-07-01T00:00:00.000Z');
+  });
+
+  it('uses `never` in the dismissKey when there is no prior check-in', () => {
+    const rec = rank(
+      state({ pulseCheckinDue: { partnerPersonId: 'angel', partnerName: 'Angel' } }),
+    ).find((r) => r.id === 'pulse-checkin');
+    expect(rec?.dismissKey).toBe('pulse-checkin:angel:never');
+  });
+
+  it('contributes nothing when not due, and is gated by together.own', () => {
+    expect(ids(state({ pulseCheckinDue: null }))).not.toContain('pulse-checkin');
+    expect(
+      ids(
+        state({
+          capabilities: new Set(),
+          pulseCheckinDue: { partnerPersonId: 'angel', partnerName: 'Angel' },
+        }),
+      ),
+    ).not.toContain('pulse-checkin');
+  });
+});

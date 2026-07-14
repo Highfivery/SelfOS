@@ -1,10 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import type { TogetherSessionSummary } from '@shared/schemas';
 import { TogetherHomeCard } from './TogetherHomeCard';
+import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
 
 const ME = 'me';
+
+beforeEach(() => installMockBridge());
+afterEach(() => clearMockBridge());
 
 const session = (over: Partial<TogetherSessionSummary>): TogetherSessionSummary => ({
   id: 's1',
@@ -46,6 +50,23 @@ describe('TogetherHomeCard', () => {
     expect(screen.getByText('Invitation')).toBeInTheDocument();
     expect(screen.getByText(/Angel invited you to a session/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /view invitation/i })).toBeInTheDocument();
+  });
+
+  it('shows the partner’s-turn pill and the pulse (Connection ring + desire alignment)', async () => {
+    installMockBridge({
+      togetherPulse: () =>
+        Promise.resolve({
+          series: [{ label: 'Connection', points: [{ x: 0, y: 0.7 }], direction: 'steady' }],
+          hasCheckIns: true,
+          alignment: { ready: true, yours: 0.6, theirs: 0.65, read: 'aligned' },
+        }),
+    });
+    renderCard([session({ status: 'active', yourTurn: false })]);
+    // Whose turn it is, when it's not yours.
+    expect(screen.getByText('Angel’s turn')).toBeInTheDocument();
+    // The pulse loads asynchronously → a Connection ring (level word + direction) and the desire alignment.
+    expect(await screen.findByText(/Connection · steady/)).toBeInTheDocument();
+    expect(screen.getByText(/Desire · aligned/)).toBeInTheDocument();
   });
 
   it('self-hides when there are no live sessions', () => {

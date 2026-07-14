@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { aiKeyResolved } from '../../aiAvailability';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useConversationStore } from '../../../stores/conversationStore';
@@ -48,7 +49,7 @@ import { WellbeingCard } from './WellbeingCard';
 import { DreamsCard } from './DreamsCard';
 import { MemoryCard } from './MemoryCard';
 import { ChallengeCard } from './ChallengeCard';
-import { QuestionnairesSection } from './QuestionnairesSection';
+import { QuestionnairesCard } from './QuestionnairesCard';
 import { GettingStarted } from './GettingStarted';
 import { WelcomeOrientationCard } from './WelcomeOrientationCard';
 import { ForYou } from './ForYou';
@@ -93,12 +94,12 @@ function defined(values: (string | undefined)[]): string[] {
  * nothing on load (the reflection is cache-only; Slice 2 adds the daily auto-cadence).
  */
 export function Home(): JSX.Element {
+  const navigate = useNavigate();
   const activePerson = useSessionStore((s) => s.activePerson);
   const activePersonId = activePerson?.id ?? null;
   const isAdmin = useSessionStore((s) => s.can('budgets.manage'));
   const hasSessions = useSessionStore((s) => s.can('sessions.own'));
   const canCreateQuestionnaires = useSessionStore((s) => s.can('questionnaires.create'));
-  const canAnswerQuestionnaires = useSessionStore((s) => s.can('questionnaires.answer'));
   const canViewResults = useSessionStore((s) => s.can('questionnaires.viewResults'));
   const canViewMemory = useSessionStore((s) => s.can('memory.own'));
   const canOwnDreams = useSessionStore((s) => s.can('dreams.own'));
@@ -128,6 +129,7 @@ export function Home(): JSX.Element {
   const inboxItems = useInboxStore((s) => s.items);
   const sentOverview = useQuestionnaireStore((s) => s.sentOverview);
   const relationships = usePeopleStore((s) => s.relationships);
+  const people = usePeopleStore((s) => s.people);
   const goals = useGoalStore((s) => s.goals);
   const challenges = useChallengeStore((s) => s.challenges);
   const challengeSuggestion = useChallengeStore((s) => s.suggestion);
@@ -560,17 +562,23 @@ export function Home(): JSX.Element {
             <div className={styles.main}>
               <div className={styles.mainLeft}>
                 <div className={styles.statStrip}>
-                  <StatTile label="Sessions · 7d" value={String(sessions7d)} />
+                  <StatTile
+                    label="Sessions · 7d"
+                    value={String(sessions7d)}
+                    onClick={() => navigate('/sessions')}
+                  />
                   <StatTile
                     label="Insights"
                     value={String(approvedInsights.length)}
                     {...(newInsights7d > 0 ? { delta: newInsights7d } : {})}
                     {...(needReview > 0 ? { sub: `${needReview} need review` } : {})}
+                    onClick={() => navigate('/memory')}
                   />
                   <StatTile
                     label="Dreams · 30d"
                     value={String(dreams30d)}
                     {...(newDreams7d > 0 ? { delta: newDreams7d } : {})}
+                    onClick={() => navigate('/dreams')}
                   />
                 </div>
                 <WellbeingCard points={moodPoints} checkIns={checkInPoints} />
@@ -583,6 +591,14 @@ export function Home(): JSX.Element {
                 <DreamsCard dreams={dreams} stats={patternStats} />
                 <MemoryCard insights={approvedInsights} canView={canViewMemory} />
                 <ChallengeCard />
+                <QuestionnairesCard
+                  sentOverview={sentOverview}
+                  inboxCount={inboxCount}
+                  people={people}
+                  subjectPersonId={activePersonId}
+                  canCreate={canCreateQuestionnaires}
+                  canViewResults={canViewResults}
+                />
                 <SharingCard outbound={outbound} />
               </div>
               <div className={styles.rail}>
@@ -591,20 +607,6 @@ export function Home(): JSX.Element {
               </div>
             </div>
           )}
-
-          {!isNew ? (
-            <QuestionnairesSection
-              canCreate={canCreateQuestionnaires}
-              canViewResults={canViewResults}
-              canAnswer={canAnswerQuestionnaires}
-              adultAcknowledged={adultAcknowledged}
-              showIdeas={showEncouragement}
-              subjectPersonId={activePersonId}
-              {...(recState.togetherNudge?.partnerName
-                ? { togetherPartnerName: recState.togetherNudge.partnerName }
-                : {})}
-            />
-          ) : null}
 
           {!crisis ? <WelcomeOrientationCard /> : null}
           {showEncouragement ? <CelebrationMoment completion={celebration} /> : null}

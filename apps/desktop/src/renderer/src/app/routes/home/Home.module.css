@@ -130,6 +130,18 @@
   background: var(--color-accent-subtle-bg);
   color: var(--color-accent-text);
 }
+/* A quieter status pill — e.g. "waiting on the partner" (not the viewer's action). */
+.statusPillMuted {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  background: var(--color-surface-alt);
+  color: var(--color-text-secondary);
+}
 
 .rowAction {
   flex: none;
@@ -923,21 +935,19 @@
   background: var(--color-surface);
   display: grid;
   place-items: center;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 700;
   color: var(--color-text-primary);
-  text-align: center;
-  padding: 2px;
+  font-variant-numeric: tabular-nums;
 }
 .ringLabel {
   font-size: var(--text-xs);
+  font-weight: 600;
   color: var(--color-text-secondary);
 }
-.ringPct {
+.ringLevel {
   font-size: 11px;
-  font-weight: 700;
   color: var(--color-text-tertiary);
-  font-variant-numeric: tabular-nums;
 }
 
 /* Activity feed */

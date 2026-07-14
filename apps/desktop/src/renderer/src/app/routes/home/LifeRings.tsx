@@ -22,15 +22,17 @@ export function LifeRings({ rings }: { rings: LifeRing[] }): JSX.Element | null 
         <ul className={styles.ringsRow}>
           {rings.map((ring) => (
             <li key={ring.key} className={styles.ringItem}>
+              {/* The short % sits inside the arc (always fits); the level word reads below the label so no
+                  text ever spills outside the circle. Softened (crisis) hides the number entirely (§8). */}
               <span
                 className={`${styles.ring}${ring.softened ? ` ${styles.ringSoftened}` : ''}`}
                 data-ring={ring.key}
                 style={{ '--ring-fill': ring.value } as CSSProperties}
               >
-                <span className={styles.ringInner}>{ring.levelLabel}</span>
+                <span className={styles.ringInner}>{ring.softened ? '' : `${ring.pct}%`}</span>
               </span>
               <span className={styles.ringLabel}>{ring.label}</span>
-              {ring.softened ? null : <span className={styles.ringPct}>{ring.pct}%</span>}
+              <span className={styles.ringLevel}>{ring.levelLabel}</span>
             </li>
           ))}
         </ul>

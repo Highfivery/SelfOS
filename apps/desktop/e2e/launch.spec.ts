@@ -10459,15 +10459,11 @@ test('home Questionnaires section (59): stats + a needs-you row + no overflow at
     await w.getByRole('button', { name: 'Submit' }).click();
     await expect(w.getByText('Submitted')).toBeVisible();
 
-    // Home shows the dedicated Questionnaires section (59) with real cross-questionnaire stats.
+    // Home shows the compact Questionnaires bento card (60 §3.6) with the sender's response rate.
     await w.getByRole('link', { name: 'Home' }).click();
-    const section = w.getByRole('region', { name: 'Questionnaires' });
-    await expect(section).toBeVisible();
-    await expect(section.getByText('Sent', { exact: true })).toBeVisible();
-    await expect(section.getByText('Response rate', { exact: true })).toBeVisible();
-    await expect(section.getByText('New replies', { exact: true })).toBeVisible();
-    // The submitted-but-un-analysed self-send surfaces as a "needs you" analyze row.
-    await expect(section.getByRole('button', { name: 'Analyse', exact: true })).toBeVisible();
+    await expect(w.getByRole('heading', { name: 'Questionnaires' })).toBeVisible();
+    // The answered send drives the response-rate bar (a design-system ProportionBar).
+    await expect(w.getByText('Answered', { exact: true })).toBeVisible();
 
     // No horizontal overflow at desktop or ~360px (page-level AND inner scrollers, §12).
     const overflow = (): Promise<number> =>
@@ -10495,10 +10491,14 @@ test('home Questionnaires section (59): stats + a needs-you row + no overflow at
     await w.waitForTimeout(150);
     expect(await overflow()).toBeLessThanOrEqual(1);
 
-    // The fun band navigates into the seeded authoring flow (59 §3.5). It needs no 18+ ack; the seed payload
-    // (type/sensitivity/brief) is covered by the section + AI-panel unit tests.
-    await section.getByRole('button', { name: /just for fun/i }).click();
-    await expect(w.getByRole('region', { name: 'Questionnaires' })).toHaveCount(0); // left Home
+    // The card's Open link navigates into the questionnaires surface.
+    await app.evaluate(async ({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows()[0];
+      if (win) win.setSize(1100, 800);
+    });
+    await w.waitForTimeout(150);
+    await w.getByRole('button', { name: 'Open', exact: true }).click();
+    await expect(w).toHaveURL(/#\/questionnaires$/);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

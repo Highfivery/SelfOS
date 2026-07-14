@@ -5,6 +5,7 @@ export { Text } from './Text';
 export { Button } from './Button';
 export { IconButton } from './IconButton';
 export { Card } from './Card';
+export { Collapsible } from './Collapsible';
 export { Banner } from './Banner';
 export { AdminOnlyBadge } from './AdminOnlyBadge';
 export { ScopeBadge } from './ScopeBadge';

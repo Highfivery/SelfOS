@@ -13,6 +13,7 @@ import {
   AdminOnlyBadge,
   AttachmentThumb,
   ScopeBadge,
+  Collapsible,
   OneTimeTip,
   Button,
   Card,
@@ -314,6 +315,22 @@ export function Gallery(): JSX.Element {
               </Text>
             </Stack>
           </Card>
+        </Section>
+
+        <Section title="Collapsible">
+          <Stack gap={2}>
+            <Collapsible header={<Text weight={600}>Emotions and patterns · 4</Text>}>
+              <Text tone="secondary" size="sm">
+                Collapsed by default; the body reveals on click with spacing baked in. Used by
+                Memory's life-area sections, the responses band, and the review callout.
+              </Text>
+            </Collapsible>
+            <Collapsible header={<Text weight={600}>Open by default</Text>} defaultOpen>
+              <Text tone="secondary" size="sm">
+                A section that starts expanded.
+              </Text>
+            </Collapsible>
+          </Stack>
         </Section>
 
         <Section title="Markers">

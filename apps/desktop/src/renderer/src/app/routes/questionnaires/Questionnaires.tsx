@@ -90,9 +90,15 @@ export function Questionnaires(): JSX.Element {
   const setInboxFavorite = useInboxStore((s) => s.setFavorite);
 
   const location = useLocation();
-  const handoffSeed = (location.state as { seed?: BuilderSeed } | null)?.seed;
+  // A seed opens a prefilled builder; `startNew` (the Home quick-action) opens a blank start step directly
+  // (60 §3.1.2 — link to the action, not the list).
+  const navState = location.state as { seed?: BuilderSeed; startNew?: boolean } | null;
   const [selection, setSelection] = useState<Selection>(
-    handoffSeed ? { mode: 'start', seed: handoffSeed } : { mode: 'none' },
+    navState?.seed
+      ? { mode: 'start', seed: navState.seed }
+      : navState?.startNew
+        ? { mode: 'start' }
+        : { mode: 'none' },
   );
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);

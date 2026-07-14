@@ -1183,9 +1183,11 @@ test('home (60): the Hybrid dashboard shows the quick dock, life-rings, and the 
     await expect(w.getByText(/across everything/i)).toBeVisible();
     await expect(w.getByText(/you logged a dream/i)).toBeVisible();
 
-    // A dock action routes into its surface.
+    // A dock action deep-links DIRECTLY to its action (60 §3.1.2) — "Log a dream" opens the dream composer
+    // itself, not just the Dreams journal.
     await w.getByRole('button', { name: /log a dream/i }).click();
     await expect(w).toHaveURL(/#\/dreams$/);
+    await expect(w.getByText('What happened?')).toBeVisible(); // the composer is open, not the list
 
     // 360px: the full surface renders with NO horizontal overflow — the feed's internal scroll is
     // overflow-Y only, so it is never a horizontal offender (60 §3.3/§9).

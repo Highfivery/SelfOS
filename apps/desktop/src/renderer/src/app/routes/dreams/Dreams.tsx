@@ -59,10 +59,12 @@ export function Dreams(): JSX.Element {
   // whatever window the Patterns screen last set on the shared store.
   const [stripStats, setStripStats] = useState<DreamPatternStats | null>(null);
 
-  // Deep-link from Memory's provenance link (20-memory-dashboard §3.3): open the referenced dream.
+  // Deep-links: Memory's provenance link opens the referenced dream (20 §3.3); the Home quick-action opens
+  // the composer directly (60 §3.1.2 — link to the action, not the journal).
   useEffect(() => {
-    const focus = (location.state as { focusDreamId?: string } | null)?.focusDreamId;
-    if (focus) setSelection({ mode: 'edit', id: focus });
+    const state = location.state as { focusDreamId?: string; compose?: boolean } | null;
+    if (state?.focusDreamId) setSelection({ mode: 'edit', id: state.focusDreamId });
+    else if (state?.compose) setSelection({ mode: 'new' });
   }, [location.state]);
 
   const select = (next: Selection): void => {

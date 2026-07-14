@@ -281,7 +281,7 @@ const wellbeingCheckin: RecommendationProvider = {
           label: 'A gentle check-in',
           reason:
             'It’s been a little while since you checked in on how you’ve been feeling — only if it’d help, no pressure.',
-          route: '/you',
+          route: '/you/phq9/take', // straight into the check-in itself, not the You hub (60 §3.1.2)
           score: 48,
           // The last check-in date: dismissing won't re-nag the SAME overdue, but a fresh check-in (then ≥14
           // days later) re-surfaces — never an escalating schedule (§8).

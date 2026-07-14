@@ -633,3 +633,488 @@
 .qTrendLine:hover {
   color: var(--color-accent-text);
 }
+
+/* =========================================================================
+   60-home-dashboard-redesign — the Hybrid layout + new elements
+   ========================================================================= */
+
+/* Header: greeting + momentum on the left, the rhythm streak pill on the right. */
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.headerMain {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.streakPill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: none;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+}
+
+/* Quick-action dock */
+.dock {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.dockAction {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1 1 200px;
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  transition: border-color var(--motion-fast) var(--ease-standard);
+}
+.dockAction:hover {
+  border-color: var(--color-accent);
+}
+.dockGlyph {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: var(--radius-md);
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+}
+.dockText {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.dockLabel {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.dockHint {
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* "For you today" band — reflection + focal next action. */
+.band {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: var(--space-4);
+  align-items: stretch;
+}
+.bandFocal {
+  min-width: 0;
+  display: flex;
+}
+.bandFocal > * {
+  flex: 1 1 auto;
+}
+.reflectionCard {
+  background: linear-gradient(150deg, var(--color-accent-subtle-bg), var(--color-surface));
+}
+.reflectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.reflectionEyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+}
+.aiTag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-tertiary);
+}
+.reflectionBody {
+  font-family: var(--font-serif);
+  font-size: var(--text-md);
+  line-height: 1.45;
+  color: var(--color-text-primary);
+}
+.reflectionActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.focalSatisfied {
+  background: var(--color-surface-alt);
+}
+
+/* Main: left bento + right rail. */
+.main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 336px;
+  gap: var(--space-4);
+  align-items: start;
+}
+.mainLeft {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  align-items: start;
+  grid-auto-flow: dense;
+}
+/* Cards that should span the full width of the left bento. */
+.statStrip,
+.mainLeft > :global(.wellbeing-wide) {
+  grid-column: 1 / -1;
+}
+.statStrip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  position: sticky;
+  top: var(--space-4);
+  min-width: 0;
+}
+
+/* Stat tiles */
+.statTile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  min-width: 0;
+}
+.statTileButton {
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+.statTileButton:hover {
+  border-color: var(--color-accent);
+}
+.statLabel {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+}
+.statRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.statValue {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--color-text-heading);
+  font-variant-numeric: tabular-nums;
+}
+.statDelta {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--color-success);
+}
+.statSub {
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+}
+
+/* Life-rings */
+.railTitle {
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--color-text-heading);
+}
+.railHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.ringsRow {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: space-between;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ringItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 0;
+}
+.ring {
+  width: 60px;
+  height: 60px;
+  border-radius: var(--radius-pill);
+  display: grid;
+  place-items: center;
+  background: conic-gradient(
+    var(--ring-color) calc(var(--ring-fill, 0) * 360deg),
+    var(--color-border) 0
+  );
+}
+.ring[data-ring='wellbeing'] {
+  --ring-color: var(--color-chart-1);
+}
+.ring[data-ring='connection'] {
+  --ring-color: var(--color-chart-4);
+}
+.ring[data-ring='reflection'] {
+  --ring-color: var(--color-chart-2);
+}
+.ring[data-ring='growth'] {
+  --ring-color: var(--color-chart-3);
+}
+.ringSoftened {
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+}
+.ringInner {
+  width: 46px;
+  height: 46px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  display: grid;
+  place-items: center;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  text-align: center;
+  padding: 2px;
+}
+.ringLabel {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+.ringPct {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Activity feed */
+.feed {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 360px;
+  overflow-y: auto;
+}
+.feedRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  min-width: 0;
+}
+button.feedRow {
+  cursor: pointer;
+}
+button.feedRow:hover {
+  background: var(--color-surface-alt);
+}
+.feedRowActionable {
+  background: color-mix(in srgb, var(--color-accent-subtle-bg) 55%, transparent);
+}
+button.feedRowActionable:hover {
+  background: var(--color-accent-subtle-bg);
+}
+.feedDot {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: var(--radius-md);
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+}
+.feedDot[data-domain='questionnaire'],
+.feedDot[data-domain='inbox'] {
+  background: color-mix(in srgb, var(--color-warning) 20%, transparent);
+  color: var(--color-warning);
+}
+.feedDot[data-domain='challenge'],
+.feedDot[data-domain='goal'] {
+  background: color-mix(in srgb, var(--color-success) 20%, transparent);
+  color: var(--color-success);
+}
+.feedBody {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.feedTitle {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.feedDetail {
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.feedWhen {
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+  flex: none;
+  white-space: nowrap;
+}
+
+/* Sharing chips */
+.shareChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.shareChip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  padding: 4px var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-alt);
+  color: var(--color-text-primary);
+}
+.shareChipCount {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--color-accent-text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Loading skeletons */
+.skCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+.skDockItem {
+  flex: 1 1 200px;
+  height: 62px;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+.skBar,
+.skDockItem {
+  background-image: linear-gradient(
+    100deg,
+    var(--color-surface-alt) 30%,
+    color-mix(in srgb, var(--color-border) 55%, transparent) 50%,
+    var(--color-surface-alt) 70%
+  );
+  background-size: 200% 100%;
+  animation: sk-shimmer 1.4s linear infinite;
+}
+.skBar {
+  height: 12px;
+  border-radius: var(--radius-sm);
+}
+@keyframes sk-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skBar,
+  .skDockItem {
+    animation: none;
+  }
+}
+
+/* Responsive */
+@media (max-width: 1160px) {
+  .main {
+    grid-template-columns: 1fr;
+  }
+  .rail {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .rail > * {
+    flex: 1 1 300px;
+  }
+}
+@media (max-width: 767px) {
+  .band {
+    grid-template-columns: 1fr;
+  }
+  .mainLeft {
+    grid-template-columns: 1fr;
+  }
+  .statStrip {
+    grid-template-columns: 1fr;
+  }
+  .dockAction {
+    flex-basis: 100%;
+  }
+}

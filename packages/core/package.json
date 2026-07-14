@@ -27,6 +27,7 @@
     "./challenges": "./src/challenges/index.ts",
     "./coaching": "./src/coaching/index.ts",
     "./recommendations": "./src/recommendations/index.ts",
+    "./home": "./src/home/index.ts",
     "./questionnaires": "./src/questionnaires/index.ts",
     "./dreams": "./src/dreams/index.ts",
     "./intake": "./src/intake/index.ts",

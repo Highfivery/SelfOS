@@ -1179,21 +1179,45 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     history: string;
     coveredActs: { label: string; rating: string }[];
     askedPrompts: string[];
+    dedupReference: string;
   }> => {
     const history = await gatherRecipientHistory(fs, key, recipientPersonId);
     // The structured already-asked prompts (08 §23.5) drive the deterministic hard near-dup filter in core.
-    const askedPrompts = await gatherRecipientAskedPrompts(fs, key, recipientPersonId);
+    const priorPrompts = await gatherRecipientAskedPrompts(fs, key, recipientPersonId);
     const session = await getIntakeSession(fs, key, recipientPersonId);
     const intake = session
       ? formatIntakeForGeneration(session)
-      : { text: '', coveredActs: [] as { label: string; rating: string }[] };
+      : {
+          text: '',
+          coveredActs: [] as { label: string; rating: string }[],
+          prompts: [] as string[],
+        };
+    // The generation SOFT grounding (the whole blob) — onboarding appended, as before.
     const combined = [
       history,
       intake.text.trim() ? `What they have already answered in onboarding:\n${intake.text}` : '',
     ]
       .filter((s) => s.trim() !== '')
       .join('\n\n');
-    return { history: combined, coveredActs: intake.coveredActs, askedPrompts };
+    // The SEMANTIC-PASS reference (08 §23.5b): a DEDICATED, prioritized digest that LEADS with the onboarding
+    // answers — the authoritative "already have data for this" material (specific acts, positions, porn genres,
+    // MMF/FFM, etc.). It was previously buried at the END of `combined` and truncated away, so the pass never
+    // saw it and re-asked onboarding questions. Asked-questionnaire prompts follow. Insight summaries are
+    // derivative (lower priority) and omitted here to keep the highest-signal material inside the budget.
+    const dedupReference = [
+      intake.text.trim()
+        ? `ALREADY ANSWERED in their onboarding — do NOT re-ask ANY of this, including specific sub-preferences, acts, positions, kinks, and options they selected (e.g. MMF/FFM, particular porn genres, yes/no on an act):\n${intake.text}`
+        : '',
+      priorPrompts.length
+        ? `ALREADY ASKED in prior questionnaires:\n${priorPrompts.map((p) => `- ${p}`).join('\n')}`
+        : '',
+    ]
+      .filter((s) => s.trim() !== '')
+      .join('\n\n');
+    // The hard near-dup FILTER list: prior questionnaire prompts AND the answered onboarding question prompts,
+    // so a generated question that verbatim re-asks an onboarding question is dropped deterministically too.
+    const askedPrompts = [...priorPrompts, ...intake.prompts];
+    return { history: combined, coveredActs: intake.coveredActs, askedPrompts, dedupReference };
   };
 
   /**
@@ -3333,7 +3357,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // acts already rated — so generation goes deeper instead of repeating what's known. Author-blind.
       const known = recipientIsHousehold
         ? await recipientKnownData(deps.fs, deps.key, p.recipientPersonId as string)
-        : { history: '', coveredActs: [], askedPrompts: [] };
+        : { history: '', coveredActs: [], askedPrompts: [], dedupReference: '' };
       return generateQuestions(deps, {
         type: p.type,
         sensitivity: p.sensitivity,
@@ -3348,6 +3372,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         },
         existingPrompts: p.existingPrompts,
         ...(known.history ? { recipientHistory: known.history } : {}),
+        ...(known.dedupReference ? { dedupReference: known.dedupReference } : {}),
         ...(known.askedPrompts.length ? { recipientAskedPrompts: known.askedPrompts } : {}),
         ...(known.coveredActs.length ? { coveredIntimacyActs: known.coveredActs } : {}),
         ...(p.intimacyMode !== undefined ? { intimacyMode: p.intimacyMode } : {}),
@@ -3488,6 +3513,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         existingPrompts: [],
         count: 6,
         ...(known.history ? { recipientHistory: known.history } : {}),
+        ...(known.dedupReference ? { dedupReference: known.dedupReference } : {}),
         ...(known.askedPrompts.length ? { recipientAskedPrompts: known.askedPrompts } : {}),
         // `coveredActs` only affects the prompt for an explicit-tier intimacy draft; a materialize is
         // standard-tier, so this is inert here today. Passed for symmetry (de-dup still runs via `history`)

@@ -14,11 +14,15 @@ import { runClaude, type AiDeps } from './aiCall';
  * recipient's reference material never leaves this host-side call.
  */
 
-const SEMANTIC_DEDUP_SYSTEM = `You are a precise de-duplication filter for questionnaire questions. You are given (1) a summary of what a person has ALREADY shared with an app or been asked before, and (2) a numbered list of NEW candidate questions. Identify which candidates are genuinely NEW — they ask something not already covered by the known material, even loosely. A candidate is a DUPLICATE if it re-asks something already known or asked, even in completely different words.
-Return ONLY a JSON array of the 1-based indices of the candidates to KEEP (the genuinely-new ones). Keep a candidate unless it clearly overlaps the known material. No prose, no keys, no markdown — just the array, e.g. [1,3,4].`;
+const SEMANTIC_DEDUP_SYSTEM = `You are a strict de-duplication filter for questionnaire questions. You are given (1) a record of what a person has ALREADY answered in onboarding or been asked before, and (2) a numbered list of NEW candidate questions. Drop any candidate the person has ALREADY given data for; keep only the genuinely-new ones.
 
-/** Cap the reference material fed to the pass so the call stays cheap (§23.5 — a bounded digest, not the blob). */
-const MAX_REFERENCE_CHARS = 3000;
+A candidate is a DUPLICATE (DROP it) if the known material already answers it OR asks the same thing — even when the wording is completely different, and even when the candidate asks about a SUB-PREFERENCE or DETAIL already covered. Examples of duplicates to DROP: the person listed "MMF, FFM" among their porn genres and the candidate asks "Do you prefer MMF or FFM threesomes?"; they rated an act in onboarding and the candidate asks whether they like that act; they stated a boundary/kink/frequency and the candidate re-asks it. Going DEEPER on a known topic in a genuinely new way (a follow-up that asks something NOT already stated) is NOT a duplicate — keep it.
+
+When in doubt about whether the person already has data for a candidate, DROP it. Return ONLY a JSON array of the 1-based indices of the candidates to KEEP. No prose, no keys, no markdown — just the array, e.g. [1,3,4].`;
+
+/** Cap the reference material fed to the pass (§23.5b). Generous so the onboarding answers — the authoritative
+ *  "already have data for this" material — are never truncated away (the bug that let re-asks through). */
+const MAX_REFERENCE_CHARS = 12000;
 
 export interface SemanticDedupResult {
   kept: Question[];

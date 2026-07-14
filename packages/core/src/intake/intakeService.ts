@@ -833,10 +833,14 @@ function parseCoveredActs(q: Question, value: IntakeAnswerValue | undefined): Co
 export function formatIntakeForGeneration(session: IntakeSession): {
   text: string;
   coveredActs: CoveredAct[];
+  /** The prompts of every answered, visible onboarding question — fed to the deterministic hard near-dup
+   *  filter (08 §23.5) so a generated question that verbatim re-asks an onboarding question is dropped. */
+  prompts: string[];
 } {
   const actCtx = activityRowContext(session);
   const lines: string[] = [];
   const coveredActs: CoveredAct[] = [];
+  const prompts: string[] = [];
   for (const def of INTAKE_CATALOG) {
     if (!def.questions) continue;
     const section = session.sections.find((s) => s.id === def.id);
@@ -848,14 +852,17 @@ export function formatIntakeForGeneration(session: IntakeSession): {
       const q = withResolvedActivityRows(m.q, actCtx);
       const value = section.answers[m.q.id];
       const str = formatAnswerForSynthesis(q, value);
-      if (str) sectionLines.push(`${m.q.prompt}: ${str}`);
+      if (str) {
+        sectionLines.push(`${m.q.prompt}: ${str}`);
+        prompts.push(m.q.prompt);
+      }
       if (m.q.id === 'activities') coveredActs.push(...parseCoveredActs(q, value));
     }
     if (sectionLines.length > 0) {
       lines.push(`From "${def.title}":`, ...sectionLines.map((l) => `  ${l}`));
     }
   }
-  return { text: lines.join('\n'), coveredActs };
+  return { text: lines.join('\n'), coveredActs, prompts };
 }
 
 /** The set of section refs (id or title, lowercased) whose facts are `restricted` (§8.4): every restricted

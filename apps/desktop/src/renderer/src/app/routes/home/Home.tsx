@@ -49,6 +49,10 @@ import { WellbeingCard } from './WellbeingCard';
 import { DreamsCard } from './DreamsCard';
 import { MemoryCard } from './MemoryCard';
 import { ChallengeCard } from './ChallengeCard';
+import { GoalsCard } from './GoalsCard';
+import { YouCard } from './YouCard';
+import { NeedsAttentionCard } from './NeedsAttentionCard';
+import { needsAttention } from './attention';
 import { QuestionnairesCard } from './QuestionnairesCard';
 import { GettingStarted } from './GettingStarted';
 import { WelcomeOrientationCard } from './WelcomeOrientationCard';
@@ -72,6 +76,15 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const SHOWED_UP_WINDOW_DAYS = 7;
 const GOAL_RECENT_DAYS = 14;
 const RING_WINDOW_DAYS = 30;
+
+/** Recommendation ids that move OUT of the "For you" band INTO the "Needs attention" card (§3.1.2a, split by
+ *  intent) — the waiting-on-you / time-sensitive kinds, so the same item never surfaces in both. */
+const ATTENTION_REC_IDS = new Set([
+  'stale-goal',
+  'wellbeing-checkin',
+  'together-session',
+  'questionnaire-gap',
+]);
 
 /** Whether an ISO timestamp falls within the last `days` (false on a missing/unparseable value). */
 function withinDays(iso: string | undefined, days: number, now: number): boolean {
@@ -312,8 +325,11 @@ export function Home(): JSX.Element {
   const allRecs = rankRecommendations(listRecommendationProviders(), recState, {
     dismissed: dismissedSet,
   });
-  // The synthesis observation is now the band's daily reflection (§3.6), so drop the duplicate rec.
-  const recs = allRecs.filter((r) => r.id !== 'synthesis-observation');
+  // The synthesis observation is now the band's daily reflection (§3.6), so drop the duplicate rec; and the
+  // waiting-on-you kinds move to the "Needs attention" card (§3.1.2a, split by intent) so nothing nags twice.
+  const recs = allRecs.filter(
+    (r) => r.id !== 'synthesis-observation' && !ATTENTION_REC_IDS.has(r.id),
+  );
 
   const momentum = computeMomentum({
     showedUpThisWeek:
@@ -442,6 +458,28 @@ export function Home(): JSX.Element {
     (i) => !i.approved && i.subjectPersonId === activePersonId,
   ).length;
 
+  // The "Needs attention" queue (§3.1.2a) — waiting-on-you items, split from the growth-oriented "For you"
+  // band. The gentle nudges (check-in / stale goals / ask-someone) are suppressed under crisis or when the
+  // person has turned proactive coaching off (§8); genuinely-pending items always show.
+  const attentionItems = needsAttention({
+    now: nowMs,
+    activePersonId,
+    goals,
+    sentOverview,
+    togetherSessions,
+    resultsByTest,
+    insightDraftCount: needReview,
+    otherPeopleCount: people.filter((p) => p.id !== activePersonId).length,
+    suppressNudges: crisis || proactivity === 'off',
+    can: {
+      memory: canViewMemory,
+      tests: canTakeTests,
+      questionnaires: canCreateQuestionnaires,
+      viewResults: canViewResults,
+      together: canTogether,
+    },
+  });
+
   // Completions worth a warm celebration (§3.5).
   const completions: Completion[] = [];
   if (intake?.session.status === 'complete' && intake.session.completedAt) {
@@ -532,6 +570,10 @@ export function Home(): JSX.Element {
 
           {crisis ? <CrisisSupportBanner /> : null}
 
+          {/* Needs attention (§3.1.2a) — the waiting-on-you queue, leading above the "For you" band. Self-hides
+              when clear; only for an established person (a brand-new one gets getting-started). */}
+          {!isNew ? <NeedsAttentionCard items={attentionItems} /> : null}
+
           {showEncouragement ? (
             <ForYouBand
               recs={recs}
@@ -582,6 +624,7 @@ export function Home(): JSX.Element {
                   />
                 </div>
                 <WellbeingCard points={moodPoints} checkIns={checkInPoints} />
+                {canTakeTests ? <YouCard /> : null}
                 <TogetherHomeCard sessions={togetherSessions} myId={activePersonId} />
                 <ContinueCard
                   conversations={conversations}
@@ -591,6 +634,7 @@ export function Home(): JSX.Element {
                 <DreamsCard dreams={dreams} stats={patternStats} />
                 <MemoryCard insights={approvedInsights} canView={canViewMemory} />
                 <ChallengeCard />
+                {canViewMemory ? <GoalsCard configured={configured} crisis={crisis} /> : null}
                 <QuestionnairesCard
                   sentOverview={sentOverview}
                   inboxCount={inboxCount}

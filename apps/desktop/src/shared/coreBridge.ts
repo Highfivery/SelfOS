@@ -74,6 +74,7 @@ import {
   type InboxCompatibilityView,
   type InboxItem,
   type Goal,
+  type GoalSuggestResult,
   type Challenge,
   type ChallengeCheckInResult,
   type ChallengeSuggestion,
@@ -316,7 +317,14 @@ import {
   shouldAutoReconcile,
   updateInsight,
 } from '@selfos/core/insights';
-import { deleteGoal, listGoals, setGoalStatus, updateGoal } from '@selfos/core/goals';
+import {
+  createGoal,
+  deleteGoal,
+  listGoals,
+  setGoalStatus,
+  suggestGoals,
+  updateGoal,
+} from '@selfos/core/goals';
 import {
   clearSuggestion,
   deleteChallenge,
@@ -827,6 +835,12 @@ const GoalUpdateSchema = z.object({
   horizon: z.string().optional(),
 });
 const GoalDeleteSchema = z.object({ goalId: z.string().min(1) });
+const GoalCreateSchema = z.object({
+  text: z.string().min(1),
+  due: z.string().optional(),
+  horizon: z.string().optional(),
+  lifeArea: z.string().optional(),
+});
 // Challenges / experiments (52-challenge-sessions §6). All scoped to the active person in the handler.
 const ChallengeStartSchema = z.object({ domain: ChallengeDomainSchema.optional() });
 const ChallengeStartReflectionSchema = z.object({ challengeId: z.string().min(1) });
@@ -3802,6 +3816,32 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // The delete path is `people/<activePerson>/goals/<id>` — inherently scoped to the active person's
       // OWN goals, so a person can never remove another's (the trust boundary).
       await deleteGoal(ctx.fs, personId, p.goalId);
+    },
+    goalsCreate: async (input): Promise<Goal | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'memory.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const p = GoalCreateSchema.parse(input);
+      // Written to `people/<activePerson>/goals/` — inherently the active person's OWN goal (trust boundary).
+      return createGoal(
+        ctx.fs,
+        ctx.key,
+        personId,
+        {
+          text: p.text,
+          ...(p.due !== undefined ? { due: p.due } : {}),
+          ...(p.horizon !== undefined ? { horizon: p.horizon } : {}),
+          ...(p.lifeArea !== undefined ? { lifeArea: p.lifeArea } : {}),
+        },
+        new Date(),
+      );
+    },
+    goalsSuggest: async (): Promise<GoalSuggestResult> => {
+      // Metered + budget-gated inside `suggestGoals`; gated `memory.own` + active-person-scoped via `aiDeps`.
+      const deps = await aiDeps('memory.own');
+      if (!deps) return { ok: false, reason: 'DENIED', message: 'Not available.' };
+      return suggestGoals(deps);
     },
     // --- Proactive coaching (40-proactive-coaching) — gated `sessions.own`, active-person-scoped ---
     coachingGetPrefs: async (): Promise<CoachingPrefs | null> => {

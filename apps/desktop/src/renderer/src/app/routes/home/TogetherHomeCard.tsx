@@ -1,8 +1,9 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Heart } from 'lucide-react';
 import type { TogetherPulseView, TogetherSessionSummary } from '@shared/schemas';
 import { Button, Card, Heading, Stack, Text } from '../../../design-system/components';
+import { Ring } from './Ring';
 import styles from './Home.module.css';
 
 /** The other participant's display name for a session (the viewer excluded). */
@@ -18,15 +19,6 @@ function plain(text: string): string {
     .replace(/^>\s?/gm, '')
     .replace(/\s+/g, ' ')
     .trim();
-}
-
-/** A 0..1 dyad metric → a gentle level word (never a score to chase). */
-function levelFor(value: number): string {
-  if (value < 0.2) return 'Quiet';
-  if (value < 0.4) return 'Tender';
-  if (value < 0.6) return 'Steady';
-  if (value < 0.8) return 'Warm';
-  return 'Close';
 }
 
 /** Pick the one session to feature: your-turn first, then a pending invite, then most recently active. */
@@ -120,12 +112,9 @@ export function TogetherHomeCard({
           <div className={styles.pulseRow}>
             {connectionValue !== undefined ? (
               <div className={styles.pulseItem}>
-                <span
-                  className={styles.pulseRing}
-                  style={{ '--ring-fill': connectionValue } as CSSProperties}
-                >
-                  <span className={styles.pulseRingInner}>{levelFor(connectionValue)}</span>
-                </span>
+                <Ring fill={connectionValue} color="var(--color-chart-4)" size={52} stroke={5}>
+                  <span className={styles.ringPct}>{Math.round(connectionValue * 100)}%</span>
+                </Ring>
                 <span className={styles.pulseLabel}>
                   Connection{connection?.direction ? ` · ${connection.direction}` : ''}
                 </span>

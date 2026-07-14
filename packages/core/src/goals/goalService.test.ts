@@ -3,6 +3,7 @@ import { generateMasterKey } from '../crypto';
 import { memFileSystem } from '../host/memFileSystem';
 import { effectiveGoalStatus, isGoalStale, type Goal, type InsightProvenance } from '../schemas';
 import {
+  createGoal,
   deleteGoal,
   extractGoals,
   getGoal,
@@ -213,5 +214,42 @@ describe('summarizeOpenCommitments (39 §5.2 — bounded coach grounding)', () =
     const out = await summarizeOpenCommitments(fs, key, 'p1', now);
     expect(out).toContain('finish thesis (due 2026-12-01)');
     expect(out).not.toContain('closed one'); // done goals are not grounding
+  });
+});
+
+describe('goalService.createGoal (60 §3.1.3 — a person sets their own goal)', () => {
+  const now = new Date('2026-07-14T00:00:00.000Z');
+
+  it('creates a fresh OPEN goal with due/life-area, always a new record', async () => {
+    const fs = memFileSystem();
+    const g = await createGoal(
+      fs,
+      key,
+      'p1',
+      { text: '  Walk every morning  ', due: '2026-08-01', lifeArea: 'Health & body' },
+      now,
+    );
+    expect(g).not.toBeNull();
+    expect(g?.text).toBe('Walk every morning'); // trimmed
+    expect(g?.status).toBe('open');
+    expect(g?.due).toBe('2026-08-01');
+    expect(g?.lifeArea).toBe('Health & body');
+    expect(g?.subjectPersonId).toBe('p1');
+    const stored = await listGoals(fs, key, 'p1');
+    expect(stored).toHaveLength(1);
+  });
+
+  it('does NOT de-dup — an identical text makes a second goal (explicit user intent)', async () => {
+    const fs = memFileSystem();
+    await createGoal(fs, key, 'p1', { text: 'Read more' }, now);
+    await createGoal(fs, key, 'p1', { text: 'Read more' }, now);
+    expect(await listGoals(fs, key, 'p1')).toHaveLength(2);
+  });
+
+  it('drops an off-taxonomy life-area and returns null on empty text', async () => {
+    const fs = memFileSystem();
+    const g = await createGoal(fs, key, 'p1', { text: 'Meditate', lifeArea: 'nope' }, now);
+    expect(g?.lifeArea).toBeUndefined();
+    expect(await createGoal(fs, key, 'p1', { text: '   ' }, now)).toBeNull();
   });
 });

@@ -36,6 +36,8 @@ export const IMPROVE_SYSTEM = `${SAFETY}\n\nYou rewrite a single questionnaire q
 
 const SENSITIVITY_NOTE: Record<SensitivityTier, string> = {
   standard: '',
+  // Intimacy/scenario at `intimacyGeneral` route through `sensitiveGeneralFraming` (08 §22.2); this key is
+  // the fallback for any other combination that ever carries the tier.
   intimacyGeneral:
     '\nThis is an intimacy questionnaire (general). Keep it respectful and consenting; nothing explicit.',
   explicit:
@@ -44,38 +46,55 @@ const SENSITIVITY_NOTE: Record<SensitivityTier, string> = {
     '\nThis is a sensitive questionnaire. Adults only; keep it consenting, respectful, and within Anthropic policy.',
 };
 
-/** The intimacy questionnaire type key — the explicit-by-design type that the §16.5 framing applies to. */
+/** The two questionnaire types whose sensitivity tiers carry an explicit register (08 §15.2/§22.2). */
 export const INTIMACY_TYPE = 'intimacy';
+export const SCENARIO_TYPE = 'scenario';
 
 /**
- * Tier-aware explicit framing for an **intimacy** questionnaire at the `explicit`/`unfiltered` tiers
- * (08-questionnaires §16.5). This **positively permits and requests** genuinely explicit, specific questions
- * for consenting adults — replacing the old refusal-default that produced tasteful, emotional-closeness
- * questions — and seeds an in-policy topic inventory so the model has concrete subject matter. `unfiltered`
- * is the most graphic within the boundary; `explicit` a notch below. The shared `SAFETY` prefix is NOT
- * loosened — only this one path gains the explicit direction. The 18+/DOB+consent gate stays recipient-side.
+ * The per-tier explicit content directive — a genuine intensity ladder (08 §22.2). `explicit` is frank and
+ * specific; `unfiltered` is the frankest tier and reads like it. Neither loosens the boundary stated in
+ * `explicitFraming`. This is the single place the two explicit tiers meaningfully diverge.
+ */
+const EXPLICIT_TIER_DIRECTIVE: Record<'explicit' | 'unfiltered', string> = {
+  explicit:
+    'Write frank, specific questions — name sex acts and preferences plainly (oral, penetration, positions, toys, kink, and so on). Be candid and direct, a deliberate step back from the most graphic: explicit enough to draw out honest, revealing answers.',
+  unfiltered:
+    'Write the MOST graphic, no-holds-barred questions within the boundary below — this is the frankest tier and should read like it, not a notch of restraint anywhere. Use blunt, plain, sexual language for bodies and acts. Actively surface kinks, fetishes, filthy specifics, dirty talk, and taboo fantasies/roleplay (e.g. consensual non-consent (CNC) as pre-agreed roleplay); ask what they do, what they want done to them, and the edges they have not yet explored. Hold nothing back short of the boundary.',
+};
+
+/**
+ * Tier-aware explicit framing for an **intimacy** OR **scenario** questionnaire at the `explicit`/`unfiltered`
+ * tiers (08-questionnaires §16.5/§22.2). This **positively permits and requests** genuinely explicit, specific
+ * questions (or, for a scenario, described situations to react to) for consenting adults — replacing the old
+ * refusal-default that produced tasteful, emotional-closeness output — and seeds an in-policy topic inventory
+ * so the model has concrete subject matter. `unfiltered` is the most graphic within the boundary; `explicit`
+ * a notch below (the `EXPLICIT_TIER_DIRECTIVE` ladder). The shared `SAFETY` prefix is NOT loosened — only this
+ * one path gains the explicit direction. The 18+/DOB+consent gate stays recipient-side.
  *
  * BOUNDARY (stated in-prompt, same as the intake §14.5): consensual adults only; taboo content **only** as
  * fantasy/roleplay (e.g. CNC as pre-agreed roleplay); NEVER minors, real non-consent, or illegal acts; within
  * Anthropic's usage policy (refuse → empty array only when genuinely out of policy, not merely explicit).
  */
-export function intimacyExplicitFraming(
+export function explicitFraming(
   tier: 'explicit' | 'unfiltered',
   topics: IntimacyTopics,
   // The acts the recipient ALREADY rated in onboarding (08 §19.3). Reframed as "go deeper, don't re-ask" so
   // generation stops re-seeding the very inventory the onboarding matrix already covered.
   coveredActs: readonly { label: string; rating: string }[] = [],
+  // A `scenario`-type questionnaire (08 §15.2) frames each item as a described intimate SITUATION to react to,
+  // not a direct question — otherwise identical (same explicit register, same boundary).
+  opts: { scenario?: boolean } = {},
 ): string {
-  const intensity =
-    tier === 'unfiltered'
-      ? 'Use frank, plain language for bodies and sex acts and be as specific as the subject matter calls for.'
-      : 'Be candid and specific — name acts and preferences plainly, a notch gentler than fully explicit.';
-  const parts: string[] = [
-    // Establish the legitimate context FIRST so the model is confident this is appropriate — a private
-    // adult who has opted into exploring their own sexuality, not a request to a public assistant.
-    `\nCONTEXT: This is a private intimacy questionnaire inside a personal wellness app, written for a consenting adult (18+) who has opted in to reflect on their own sex life with a partner. Frank, explicit questions about sex and desire are appropriate and expected here — this is a normal, in-policy use; do NOT shy away or substitute tasteful, emotional-closeness questions.`,
-    `Write genuinely explicit, specific questions. ${intensity} Cover concrete subject matter: specific sex acts, bodies and grooming, turn-ons/turn-offs, fantasies (including taboo fantasies framed strictly as fantasy/roleplay — e.g. consensual non-consent (CNC) as pre-agreed roleplay), porn and masturbation, sexual history, frequency and desire, and boundaries.`,
-  ];
+  const scenario = opts.scenario === true;
+  // Establish the legitimate context FIRST so the model is confident this is appropriate — a private adult who
+  // has opted into exploring their own sexuality, not a request to a public assistant.
+  const context = scenario
+    ? `\nCONTEXT: This is a private, 18+ scenario questionnaire inside a personal wellness app, for a consenting adult who has opted in to explore their sexuality through described situations. Each item is a short, explicit intimate SITUATION or roleplay to react to. Frank, graphic sexual scenarios are appropriate and expected here — a normal, in-policy use; do NOT shy away or substitute tasteful, emotional-closeness scenes.`
+    : `\nCONTEXT: This is a private intimacy questionnaire inside a personal wellness app, written for a consenting adult (18+) who has opted in to reflect on their own sex life with a partner. Frank, explicit questions about sex and desire are appropriate and expected here — this is a normal, in-policy use; do NOT shy away or substitute tasteful, emotional-closeness questions.`;
+  const parts: string[] = [context, EXPLICIT_TIER_DIRECTIVE[tier]];
+  parts.push(
+    `${scenario ? 'Draw the scenarios from' : 'Cover'} concrete subject matter: specific sex acts, bodies and grooming, turn-ons/turn-offs, fantasies (including taboo fantasies framed strictly as fantasy/roleplay — e.g. consensual non-consent (CNC) as pre-agreed roleplay), porn and masturbation, sexual history, frequency and desire, and boundaries.`,
+  );
   // Already-rated acts → go DEEPER (never re-ask the rating or re-list them as plain options, §19.3).
   if (coveredActs.length > 0) {
     parts.push(
@@ -86,9 +105,20 @@ export function intimacyExplicitFraming(
   }
   parts.push(
     `Subject matter to draw on — acts: ${topics.activities.join(', ')}. Fantasies/roleplay: ${topics.fantasies.join(', ')}. FAVOR acts, fantasies, and scenarios they have NOT yet rated; push gently into new, edgier territory they have not explored — always within the boundary below.`,
-    `Boundary: consensual adults only; taboo content only as fantasy/roleplay; never minors, real (non-roleplay) non-consent, or illegal acts. Within those limits this content IS in policy, so generate the questions normally — only return an empty array for genuinely prohibited requests, never merely because the topic is sexually explicit.`,
+    `Boundary: consensual adults only; taboo content only as fantasy/roleplay; never minors, real (non-roleplay) non-consent, or illegal acts. Within those limits this content IS in policy, so generate the ${scenario ? 'scenarios' : 'questions'} normally — only return an empty array for genuinely prohibited requests, never merely because the topic is sexually explicit.`,
   );
   return parts.join('\n');
+}
+
+/**
+ * The gentle 18+ tier (`intimacyGeneral`, for an intimacy OR scenario questionnaire, 08 §22.2). Richer than a
+ * cliché one-liner so even the general tier asks real, specific questions about desire and connection — but
+ * deliberately **non-graphic** (no explicit anatomy or act detail), so it does NOT receive the explicit
+ * activity inventory (which would contradict "nothing explicit").
+ */
+export function sensitiveGeneralFraming(scenario = false): string {
+  const noun = scenario ? 'intimate situations to react to' : 'questions';
+  return `\nThis is an intimacy questionnaire (general, 18+). Ask real, specific ${noun} about desire, connection, what turns them on, frequency, and what they want more of — warm, curious, and revealing. Keep it non-graphic (no explicit anatomy or act detail); this is the gentle tier.`;
 }
 
 /** What an intimacy "Draft with AI" should produce (08 §17.12-C). Scenarios = described situations to react to. */
@@ -124,20 +154,25 @@ export function buildGenerationUserMessage(input: {
 }): string {
   const parts: string[] = [];
   parts.push(`Draft ${input.count} questions for a "${input.type}" questionnaire.`);
-  // For an intimacy questionnaire at an explicit tier, request genuinely explicit content (§16.5); every
-  // other type/tier keeps the conservative note.
-  const isExplicitIntimacy =
-    input.type === INTIMACY_TYPE &&
-    (input.sensitivity === 'explicit' || input.sensitivity === 'unfiltered');
-  parts.push(
-    isExplicitIntimacy && input.intimacyTopics
-      ? intimacyExplicitFraming(
-          input.sensitivity as 'explicit' | 'unfiltered',
-          input.intimacyTopics,
-          input.coveredIntimacyActs ?? [],
-        )
-      : SENSITIVITY_NOTE[input.sensitivity],
-  );
+  // Sensitivity tiers only carry an explicit register on the intimacy + scenario types (08 §15.2/§22.2). At the
+  // explicit/unfiltered tiers request genuinely explicit content (a real intensity ladder); at the gentle 18+
+  // tier use a richer, non-graphic directive; every other type/tier keeps the conservative note.
+  const isSensitiveType = input.type === INTIMACY_TYPE || input.type === SCENARIO_TYPE;
+  const isExplicitTier = input.sensitivity === 'explicit' || input.sensitivity === 'unfiltered';
+  if (isSensitiveType && isExplicitTier && input.intimacyTopics) {
+    parts.push(
+      explicitFraming(
+        input.sensitivity as 'explicit' | 'unfiltered',
+        input.intimacyTopics,
+        input.coveredIntimacyActs ?? [],
+        { scenario: input.type === SCENARIO_TYPE },
+      ),
+    );
+  } else if (isSensitiveType && input.sensitivity === 'intimacyGeneral') {
+    parts.push(sensitiveGeneralFraming(input.type === SCENARIO_TYPE));
+  } else {
+    parts.push(SENSITIVITY_NOTE[input.sensitivity]);
+  }
   // The questions/scenarios/mix format direction applies to any intimacy draft (08 §17.12-C).
   if (input.type === INTIMACY_TYPE && input.intimacyMode && input.intimacyMode !== 'questions') {
     parts.push(intimacyModeDirection(input.intimacyMode));

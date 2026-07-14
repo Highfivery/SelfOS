@@ -162,7 +162,7 @@ describe('INTIMACY_TOPICS (08 §16.5a) — generation still reads a flat label l
   });
 });
 
-describe('tier-distinct explicit generation framing (08 §16.5)', () => {
+describe('tier-distinct explicit generation framing (08 §16.5/§22.2)', () => {
   const base = {
     brief: 'our sex life',
     context: '',
@@ -171,14 +171,14 @@ describe('tier-distinct explicit generation framing (08 §16.5)', () => {
     intimacyTopics: mergedIntimacyTopics(),
   };
 
-  it('intimacy + unfiltered requests genuinely explicit content, seeds the inventory, and is most graphic', () => {
+  it('intimacy + unfiltered is the MOST graphic tier, seeds the inventory, states the boundary', () => {
     const msg = buildGenerationUserMessage({
       ...base,
       type: 'intimacy',
       sensitivity: 'unfiltered',
     });
-    expect(msg).toMatch(/genuinely explicit/i);
-    expect(msg).toMatch(/frank, plain language/i); // the unfiltered intensity
+    expect(msg).toMatch(/no-holds-barred/i); // the unfiltered directive
+    expect(msg).toMatch(/blunt, plain/i);
     expect(msg).toContain('Deepthroat'); // a seeded activity (current inventory label)
     expect(msg).toContain('Consensual non-consent (CNC) roleplay'); // a seeded fantasy
     // The legitimate-context + consensual-adult boundary is stated in-prompt.
@@ -187,34 +187,73 @@ describe('tier-distinct explicit generation framing (08 §16.5)', () => {
     expect(msg).toMatch(/never minors/i);
   });
 
-  it('intimacy + explicit is explicit but a notch gentler than unfiltered', () => {
+  it('intimacy + explicit is frank and specific but a deliberate step back from unfiltered', () => {
     const explicit = buildGenerationUserMessage({
       ...base,
       type: 'intimacy',
       sensitivity: 'explicit',
     });
-    expect(explicit).toMatch(/genuinely explicit/i);
-    expect(explicit).toMatch(/a notch gentler/i);
-    expect(explicit).not.toMatch(/frank, plain language/i); // that's the unfiltered intensity
+    expect(explicit).toMatch(/frank, specific questions/i);
+    expect(explicit).toMatch(/step back from the most graphic/i);
+    expect(explicit).not.toMatch(/no-holds-barred/i); // that's the unfiltered tier
+    expect(explicit).toContain('Deepthroat'); // still seeds the inventory
   });
 
-  it('intimacy + general stays respectful with nothing explicit', () => {
+  it('explicit and unfiltered produce GENUINELY different directives (the intensity ladder)', () => {
+    const explicit = buildGenerationUserMessage({
+      ...base,
+      type: 'intimacy',
+      sensitivity: 'explicit',
+    });
+    const unfiltered = buildGenerationUserMessage({
+      ...base,
+      type: 'intimacy',
+      sensitivity: 'unfiltered',
+    });
+    expect(explicit).not.toEqual(unfiltered);
+    // The unfiltered-only escalation phrase must not appear in explicit, and vice-versa.
+    expect(unfiltered).toMatch(/hold nothing back short of the boundary/i);
+    expect(explicit).not.toMatch(/hold nothing back short of the boundary/i);
+  });
+
+  it('intimacy + general is richer than a cliché but stays non-graphic (no inventory)', () => {
     const msg = buildGenerationUserMessage({
       ...base,
       type: 'intimacy',
       sensitivity: 'intimacyGeneral',
     });
-    expect(msg).not.toMatch(/genuinely explicit/i);
-    expect(msg).toMatch(/nothing explicit/i);
+    expect(msg).toMatch(/gentle tier/i);
+    expect(msg).toMatch(/non-graphic/i);
+    expect(msg).toMatch(/what turns them on/i); // the richer directive
+    expect(msg).not.toMatch(/no-holds-barred/i);
+    expect(msg).not.toContain('Deepthroat'); // the graphic inventory is NOT dumped into the gentle tier
   });
 
-  it('a NON-intimacy type at an explicit tier does NOT get the explicit framing', () => {
+  it('SCENARIO + unfiltered gets the explicit framing, shaped as situations to react to (§22.2)', () => {
+    const msg = buildGenerationUserMessage({
+      ...base,
+      type: 'scenario',
+      sensitivity: 'unfiltered',
+    });
+    expect(msg).toMatch(/no-holds-barred/i); // scenario now escalates too
+    expect(msg).toMatch(/SITUATION or roleplay/); // shaped as scenarios, not direct questions
+    expect(msg).toContain('Deepthroat'); // seeds the inventory
+    expect(msg).toMatch(/never minors/i); // same boundary
+  });
+
+  it('SCENARIO + explicit is a deliberate step back from unfiltered', () => {
+    const msg = buildGenerationUserMessage({ ...base, type: 'scenario', sensitivity: 'explicit' });
+    expect(msg).toMatch(/step back from the most graphic/i);
+    expect(msg).not.toMatch(/no-holds-barred/i);
+  });
+
+  it('a type that carries NO sensitivity tier does NOT get the explicit framing', () => {
     const msg = buildGenerationUserMessage({
       ...base,
       type: 'role-feedback',
       sensitivity: 'unfiltered',
     });
-    expect(msg).not.toMatch(/genuinely explicit/i);
+    expect(msg).not.toMatch(/no-holds-barred/i);
     expect(msg).not.toContain('Deepthroat');
   });
 

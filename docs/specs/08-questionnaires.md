@@ -7,8 +7,10 @@
 > questionnaires + in-policy explicit framing) is APPROVED + BUILT on the same branch (NOT merged) — see §17.9.**
 > **§20 (Preview & Results redesign — full-width, disabled preview, modern answering, rethought Results +
 > private results) is APPROVED + FULLY BUILT (all 5 slices: full-width + disabled Preview · modern answering +
-> progress · Results restructure · the aggregate "At a glance" · private results) — see §20.** · _last updated
-> 2026-07-10_
+> progress · Results restructure · the aggregate "At a glance" · private results) — see §20.** **§22 (sensitivity
+> tiers that actually differ + explicit Scenario generation) is BUILT — the structural fix landed AND the live-model
+> diagnosis confirmed the new unfiltered framing produces genuinely explicit output (no further change needed); see
+> §22.** · _last updated 2026-07-13_
 >
 > **2026-06 amendment (§15, package D of the app refresh):** authoring-experience refinements on the
 > already-built feature — a **General** type; **sensitivity tiers shown only for Intimacy/Scenario** types (other
@@ -2955,3 +2957,117 @@ Each its own branch → tests → visual QA → code-review → PR.
 
 All four §21.1 decisions are the user's explicit choices (an interactive mockup of all five surfaces + an
 `AskUserQuestion` round), after the user rejected the §20 result as a restyle that wrongly showed private answers.
+
+---
+
+## 22. 2026-07-13 amendment — sensitivity tiers that actually differ + explicit Scenario — BUILT
+
+> **Status:** Draft (awaiting approval). Motivated by the owner's report that "when Intimacy is selected with a
+> Sensitivity like Unfiltered, the questions & scenarios it produces aren't very unfiltered. In general the
+> Sensitivity levels don't produce specific questions to those levels." The owner confirmed the tame output was
+> seen across **Intimacy + Unfiltered**, **Intimacy + Explicit**, AND **Scenario + Explicit/Unfiltered**.
+
+### 22.1 The problem, diagnosed against the real code (not assumed)
+
+Most of what the request asks for **already exists and is wired**: the explicit framing
+(`intimacyExplicitFraming`, §16.5) reaches the model and positively requests genuinely explicit content, and the
+"build off existing data / avoid duplicates / go deeper" grounding (a household recipient's onboarding answers,
+prior questionnaire prompts, insights, and already-rated intimacy acts — §17.4/§19) is assembled host-side and
+fed to the model. The tame output is **not** missing machinery. Three concrete causes were found by reading
+`packages/core/src/questionnaires/aiPrompts.ts` + the bridge `questionnairesGenerate` handler:
+
+1. **Scenario type gets NO explicit framing.** The gate is `isExplicitIntimacy = type === 'intimacy' && (explicit
+|| unfiltered)` — so a **Scenario** questionnaire at `explicit`/`unfiltered` (a valid combination, §15.2) falls
+   to the tame one-liner `SENSITIVITY_NOTE[sensitivity]`, which is **byte-identical** for `explicit` and
+   `unfiltered` and never instructs explicitness. This fully explains tame Scenario output. **(Verified in code.)**
+2. **`explicit` vs `unfiltered` barely differ** for intimacy — the only textual difference is a single `intensity`
+   sentence; the CONTEXT paragraph, the "genuinely explicit" direction, the topic inventory, and the boundary are
+   identical. Picking the most extreme tier feels almost identical to the middle one.
+3. **`intimacyGeneral` never receives the topic inventory**, and the whole tier signal lives in the **user**
+   message (`GENERATION_SYSTEM` is tier-blind). There is no persistent system-level reinforcement for explicit work.
+
+### 22.2 Resolution — the verified structural fixes (Slice 1, no live diagnosis needed)
+
+- **Extend the explicit framing to the Scenario type.** Generalize the gate so **any sensitivity-bearing type
+  at `explicit`/`unfiltered`** (intimacy OR scenario) gets an explicit framing — never only `intimacy`. For a
+  **scenario** questionnaire the framing is adapted to described situations/roleplay to react to (the §17.12-C
+  `intimacyModeDirection` already exists), within the same consensual-adult boundary. Rename
+  `intimacyExplicitFraming` → a general `explicitFraming(type, tier, topics, coveredActs)` (or a thin scenario
+  wrapper) so the two paths share one boundary-carrying builder.
+- **Make `explicit` vs `unfiltered` genuinely escalate — a clear intensity ladder, not one sentence.** Give each
+  tier a distinct, multi-point content directive:
+  - **`explicit`** — frank and specific; name acts and preferences plainly; a deliberate step back from the most
+    graphic.
+  - **`unfiltered`** — the most graphic / no-holds-barred **within the boundary**: use blunt, plain language for
+    bodies and sex acts; actively surface kinks, fetishes, and taboo content **as fantasy/roleplay**; push into
+    edgier, more revealing territory the person hasn't explored; hold nothing back short of the boundary.
+    The escalation is in the **content directive**, never in the boundary (which is identical at every tier).
+- **`intimacyGeneral` draws on the inventory too** — as tasteful, non-explicit subject matter — so even the general
+  tier asks real, specific intimacy questions instead of emotional-closeness clichés. (The general tier stays
+  respectful and non-explicit; it just gets concrete topics.)
+- The shared `SAFETY` prefix is **not** loosened globally (unchanged from §16.5). The boundary is stated in-prompt
+  at every explicit tier: consensual adults only; taboo **only** as fantasy/roleplay (e.g. CNC as pre-agreed
+  roleplay); never minors, real non-consent, or illegal acts; within Anthropic's usage policy. The 18+/DOB+consent
+  gate stays recipient-side at send (§8.3). This is the same boundary the **intake** intimacy block already ships.
+
+### 22.3 The live-model diagnosis prerequisite (Slice 2 — the hard rule)
+
+The owner reported **Intimacy + Unfiltered was STILL tame** even though that path already carries the strong
+§16.5 framing. Per CLAUDE.md §6 and memory `[[always-ask-never-assume]]` / `[[adaptive-thinking-shares-maxtokens]]`,
+**we do NOT assume the prompt is "too weak" and rewrite it blindly** — that class of guess cost the user real
+tokens before. Before any further intimacy prompt-strength change:
+
+- **Diagnose against the LIVE model.** Reconstruct the exact real prompt the builders produce for
+  intimacy/unfiltered — `GENERATION_SYSTEM` (system) + `buildGenerationUserMessage({ type:'intimacy',
+sensitivity:'unfiltered', intimacyTopics: mergedIntimacyTopics(...), coveredIntimacyActs, recipientHistory, ... })`
+  (user) — call the API with the real model + `extendedThinking:false` (§17.10), and read `stop_reason` + the raw
+  text.
+- Only from that evidence decide the real cause: the model genuinely softening despite a strong prompt (→ a
+  targeted, verified prompt-strength change, e.g. persistent **system-level** reinforcement for the explicit path
+  rather than user-message-only), vs a mechanical cause (truncation, a merged-inventory that's empty, a wrong
+  model, a parse/validation drop). **The offline fake Claude cannot exercise this — it always returns canned
+  output.** This step needs a real API key; if a key can't be provided, Slice 2 ships only the Slice-1 structural
+  fixes and the intimacy-strength question stays open (surfaced honestly, not silently "fixed").
+
+### 22.4 "Build off existing data / go deeper / avoid duplicates" — confirm, don't rebuild
+
+This is already built (§17.4/§19) and reaches the model. If it feels like it isn't going deeper, the likely
+reasons (to confirm at build) are: (a) the recipient is **external** (only a **household** recipient has history —
+external recipients get none, by design); (b) the history caps (prior prompts ≤ 40, insights ≤ 15) truncate a
+long history. No new mechanism is proposed here; Slice 1 verifies the wiring is live for the owner's real case and
+adjusts caps only if the diagnosis shows truncation.
+
+### 22.5 Build slices (after approval)
+
+1. **Structural fixes (verified — BUILT 2026-07-13, `feat/questionnaire-explicit-tiers`).** `intimacyExplicitFraming`
+   generalized to **`explicitFraming(tier, topics, coveredActs, { scenario })`**, fired for **intimacy OR scenario**
+   at `explicit`/`unfiltered` (was `intimacy`-only). A real **`EXPLICIT_TIER_DIRECTIVE` intensity ladder**:
+   `explicit` = frank + specific, a deliberate step back; `unfiltered` = the most graphic, no-holds-barred within
+   the boundary (blunt language, kinks/fetishes/dirty-talk/taboo-as-roleplay, "hold nothing back short of the
+   boundary"). `intimacyGeneral` now routes through **`sensitiveGeneralFraming`** — a richer, **non-graphic**
+   directive (real questions about desire/connection/what-turns-them-on), deliberately WITHOUT the explicit
+   inventory (which would contradict "nothing explicit"). The boundary + `SAFETY` prefix are unchanged. Unit tests
+   (`topics.test.ts` / `aiServices.test.ts`) assert: unfiltered is the most graphic + seeds the inventory + states
+   the boundary; explicit is a step back (still seeds the inventory) and differs genuinely from unfiltered;
+   `intimacyGeneral` is richer but non-graphic (no inventory dump); **scenario/unfiltered now receives the explicit
+   framing shaped as situations to react to**; a non-sensitivity type gets none. The recipient-history /
+   covered-acts wiring is unchanged (already live for a household recipient, §19).
+2. **Live-model diagnosis (needs a key) — DONE 2026-07-13; no further change needed.** Ran the §22.3 diagnosis
+   against the live app model (`claude-sonnet-4-6`, the default) with the real Slice-1 prompt (`GENERATION_SYSTEM`
+   - `buildGenerationUserMessage({ type:'intimacy', sensitivity:'unfiltered', intimacyTopics: mergedIntimacyTopics()
+… })`, `extendedThinking:false`, `max_tokens:2500`). Result: **`stop_reason: end_turn`** (no refusal, no
+     truncation) and **genuinely explicit, no-holds-barred output within the boundary** — specific acts (rough sex,
+     anal, rimming, deepthroat, pegging, DP, fisting), kink (shibari, breath play, degradation, primal/pet play), CNC
+     framed as pre-agreed roleplay, and explicit free-text fantasy prompts. So the earlier tameness was purely the
+     weak old framing (§22.1), NOT a model refusal or a mechanical starvation — the Slice-1 structural fix resolves
+     it. **No prompt-strength change landed** (the evidence didn't call for one — the hard rule honored: verified
+     before touching anything). The temporary diagnosis harness was removed; the API key used was flagged for
+     rotation.
+
+### 22.6 Non-goals
+
+- No change to the consensual-adult boundary, the 18+/consent recipient gates, or the shared `SAFETY` prefix.
+- No new sensitivity **tiers** or **types** (the `SensitivityTier` enum + §15 gating are unchanged — this is only
+  _what_ each tier instructs).
+- No loosening of Anthropic usage policy; explicit output is generated **within** policy, refusing only when
+  genuinely out of policy.

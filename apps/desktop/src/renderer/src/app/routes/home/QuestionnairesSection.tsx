@@ -10,6 +10,7 @@ import {
   PartyPopper,
   RefreshCw,
   Sparkles,
+  TrendingUp,
 } from 'lucide-react';
 import type {
   AnswersUpdatedSummary,
@@ -24,9 +25,11 @@ import type { BuilderSeed } from '../questionnaires/QuestionnaireBuilder';
 import {
   needsYou,
   questionnaireInsights,
+  questionnaireTrend,
   rollupStats,
   unsentTypes,
   type NeedsYouItem,
+  type QuestionnaireTrend,
 } from './questionnaireDashboard';
 import styles from './Home.module.css';
 
@@ -103,6 +106,7 @@ export function QuestionnairesSection({
 
   const rollup = rollupStats(sentOverview);
   const insightRollup = questionnaireInsights(insights, subjectPersonId);
+  const trend = questionnaireTrend(insights, subjectPersonId);
   const inboxCount = unansweredCount(inboxItems);
   const actions = needsYou({
     sentOverview,
@@ -223,26 +227,48 @@ export function QuestionnairesSection({
         </Stack>
       ) : null}
 
-      {/* Latest insight */}
-      {insightRollup.latest ? (
-        <div className={styles.qInsight}>
-          <div className={styles.qEyebrow}>
-            <Lightbulb size={13} aria-hidden="true" />
-            {insightRollup.latest.aboutName
-              ? `Latest insight · from ${insightRollup.latest.aboutName}`
-              : 'Latest insight'}
-          </div>
-          <Markdown inline className={styles.factText}>
-            {insightRollup.latest.summary}
-          </Markdown>
-          <button
-            type="button"
-            className={styles.cardLink}
-            onClick={() => navigate('/memory', { state: { insightId: insightRollup.latest?.id } })}
-          >
-            View in Memory
-            <ArrowRight size={14} aria-hidden="true" />
-          </button>
+      {/* Latest insight + a trend forming — a two-up row, each half self-hiding. */}
+      {insightRollup.latest || trend ? (
+        <div className={styles.qInsightRow}>
+          {insightRollup.latest ? (
+            <div className={styles.qInsight}>
+              <div className={styles.qEyebrow}>
+                <Lightbulb size={13} aria-hidden="true" />
+                {insightRollup.latest.aboutName
+                  ? `Latest insight · from ${insightRollup.latest.aboutName}`
+                  : 'Latest insight'}
+              </div>
+              <Markdown inline className={styles.factText}>
+                {insightRollup.latest.summary}
+              </Markdown>
+              <button
+                type="button"
+                className={styles.cardLink}
+                onClick={() =>
+                  navigate('/memory', { state: { insightId: insightRollup.latest?.id } })
+                }
+              >
+                View in Memory
+                <ArrowRight size={14} aria-hidden="true" />
+              </button>
+            </div>
+          ) : null}
+          {trend ? (
+            <div className={styles.qInsight}>
+              <div className={styles.qEyebrow}>
+                <TrendingUp size={13} aria-hidden="true" />A trend forming
+              </div>
+              <span className={styles.factText}>{describeTrend(trend)}</span>
+              <button
+                type="button"
+                className={styles.cardLink}
+                onClick={() => navigate('/questionnaires')}
+              >
+                See trends
+                <ArrowRight size={14} aria-hidden="true" />
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -289,6 +315,17 @@ function StatTile({
       <span className={styles.qStatValue}>{value}</span>
     </button>
   );
+}
+
+/** A calm, neutral one-liner for the trend card (direction only — never a value judgement). */
+function describeTrend(trend: QuestionnaireTrend): string {
+  const move =
+    trend.direction === 'up'
+      ? 'trending up'
+      : trend.direction === 'down'
+        ? 'trending down'
+        : 'holding steady';
+  return `Across ${trend.points} check-ins, ${trend.label} is ${move}.`;
 }
 
 function needsYouKey(item: NeedsYouItem): string {
@@ -455,7 +492,14 @@ function IdeaCard({
         blurb="Explore desire and fantasies together — draft it with AI, then edit."
         cta="Explore"
         onClick={() =>
-          onSeed({ title: '', type: 'intimacy', sensitivity: 'explicit', questions: [] })
+          onSeed({
+            title: '',
+            type: 'intimacy',
+            sensitivity: 'explicit',
+            questions: [],
+            brief:
+              'A flirty, explicit questionnaire about our desires and fantasies — playful and honest.',
+          })
         }
       />
     );
@@ -479,7 +523,15 @@ function IdeaCard({
       title="A playful this-or-that"
       blurb="A light, fun questionnaire to send a friend or partner."
       cta="Try it"
-      onClick={() => onSeed({ title: '', type: 'scenario', questions: [] })}
+      onClick={() =>
+        onSeed({
+          title: '',
+          type: 'scenario',
+          questions: [],
+          brief:
+            'A light, playful questionnaire — fun this-or-that and would-you-rather questions to enjoy together.',
+        })
+      }
     />
   );
 }

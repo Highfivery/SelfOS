@@ -10,6 +10,7 @@ import type {
 import {
   needsYou,
   questionnaireInsights,
+  questionnaireTrend,
   rollupStats,
   unsentTypes,
 } from './questionnaireDashboard';
@@ -108,6 +109,57 @@ describe('questionnaireInsights (59 §3.4)', () => {
       count: 0,
       latest: null,
     });
+  });
+});
+
+describe('questionnaireTrend (59 §3.4)', () => {
+  it('reports a metric with ≥2 readings, direction earliest→latest', () => {
+    const t = questionnaireTrend(
+      [
+        insight('a', { updatedAt: '2026-06-01', metrics: { connection: 3 } }),
+        insight('b', { updatedAt: '2026-07-01', metrics: { connection: 5 } }),
+      ],
+      'me',
+    );
+    expect(t).toEqual({ label: 'connection', direction: 'up', points: 2 });
+  });
+
+  it('humanizes a camelCase metric key and detects a downward move', () => {
+    const t = questionnaireTrend(
+      [
+        insight('a', { updatedAt: '2026-06-01', metrics: { moodValence: 0.6 } }),
+        insight('b', { updatedAt: '2026-07-01', metrics: { moodValence: 0.2 } }),
+      ],
+      'me',
+    );
+    expect(t?.label).toBe('mood valence');
+    expect(t?.direction).toBe('down');
+  });
+
+  it('returns null when no metric has ≥2 readings, or the subject is null', () => {
+    expect(questionnaireTrend([insight('a', { metrics: { connection: 3 } })], 'me')).toBeNull();
+    expect(
+      questionnaireTrend(
+        [
+          insight('a', { updatedAt: '2026-06-01', metrics: { connection: 3 } }),
+          insight('b', { updatedAt: '2026-07-01', metrics: { connection: 5 } }),
+        ],
+        null,
+      ),
+    ).toBeNull();
+  });
+
+  it('picks the metric with the most readings', () => {
+    const t = questionnaireTrend(
+      [
+        insight('a', { updatedAt: '2026-06-01', metrics: { connection: 3, desire: 2 } }),
+        insight('b', { updatedAt: '2026-06-15', metrics: { connection: 4 } }),
+        insight('c', { updatedAt: '2026-07-01', metrics: { connection: 5, desire: 4 } }),
+      ],
+      'me',
+    );
+    expect(t?.label).toBe('connection'); // 3 readings vs desire's 2
+    expect(t?.points).toBe(3);
   });
 });
 

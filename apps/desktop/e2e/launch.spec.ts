@@ -10419,6 +10419,11 @@ test('home Questionnaires section (59): stats + a needs-you row + no overflow at
     });
     await w.waitForTimeout(150);
     expect(await overflow()).toBeLessThanOrEqual(1);
+
+    // An "Ideas for you" card navigates into the seeded authoring flow (59 §3.5). The fun idea needs no 18+
+    // ack; the seed payload (type/sensitivity/brief) is covered by the section + AI-panel unit tests.
+    await section.getByRole('button', { name: /^Try it/ }).click();
+    await expect(w.getByRole('region', { name: 'Questionnaires' })).toHaveCount(0); // left Home
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

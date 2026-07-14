@@ -112,6 +112,20 @@ describe('QuestionnairesSection (59)', () => {
     expect(screen.getByRole('button', { name: /view in memory/i })).toBeInTheDocument();
   });
 
+  it('shows a "trend forming" card when a metric spans ≥2 questionnaire insights', () => {
+    seed({
+      overview: OVERVIEW,
+      insights: [
+        { ...QUESTIONNAIRE_INSIGHT, id: 'i1', updatedAt: '2026-06-01', metrics: { connection: 3 } },
+        { ...QUESTIONNAIRE_INSIGHT, id: 'i2', updatedAt: '2026-07-01', metrics: { connection: 5 } },
+      ],
+    });
+    renderSection();
+    expect(screen.getByText('A trend forming')).toBeInTheDocument();
+    expect(screen.getByText(/across 2 check-ins, connection is trending up/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /see trends/i })).toBeInTheDocument();
+  });
+
   it('shows a warm invitation (not an empty grid) when the person can create but has nothing yet', () => {
     seed({});
     renderSection();

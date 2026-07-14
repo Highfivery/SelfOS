@@ -308,6 +308,9 @@ export interface BuilderSeed {
   // An initial sensitivity tier, so a Home "Ideas" card can open a spicy (18+) draft pre-set (59 §3.5). Clamped
   // by `computeEffectiveSensitivity` to what the seeded type actually allows.
   sensitivity?: SensitivityTier;
+  // A starting "Draft with AI" brief — a Home fun/spicy "Ideas" card opens the AI panel pre-filled + expanded so
+  // the person is one tap from a drafted, flavoured questionnaire (59 §3.5). Empty ⇒ the panel stays collapsed.
+  brief?: string;
 }
 
 /** Create or edit a questionnaire: title + type + sensitivity + a list of questions, with a check. */
@@ -1131,6 +1134,7 @@ export function QuestionnaireBuilder({
             type={type}
             sensitivity={effectiveSensitivity}
             {...(recipient?.kind === 'person' ? { recipientPersonId: recipient.personId } : {})}
+            {...(seed?.brief ? { initialBrief: seed.brief } : {})}
             existingPrompts={drafts.map((d) => d.prompt.trim()).filter(Boolean)}
             onGenerated={appendGenerated}
             // Apply the AI-suggested title only when the author hasn't typed one (08 §16.4).

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowUpRight, ChevronDown, PencilLine, ShieldAlert, Trash2 } from 'lucide-react';
+import { ArrowUpRight, Flag, Pencil, PencilLine, ShieldAlert, Trash2 } from 'lucide-react';
 import type { Insight, InsightFact, RelationshipType } from '@shared/schemas';
 import { LIFE_AREAS } from '@shared/schemas';
 import { areaIcon } from './lifeAreaIcons';
@@ -9,6 +9,7 @@ import {
   Banner,
   Button,
   Card,
+  Collapsible,
   ConfidenceChip,
   IconButton,
   Markdown,
@@ -65,16 +66,15 @@ function groupFactsByArea(
 }
 
 /**
- * One insight on the Memory dashboard (20-memory-dashboard §3.2 + 44 §3.4). For the active person's OWN
- * insights it's interactive; for a RELATED person's shared facts it's read-only (`isOwn = false`).
+ * One insight on the Memory page (62-memory-insights-redesign, on 20/44/57). For the active person's OWN
+ * insights it's **obviously editable in place**: a card-level pencil edits the whole card (summary + facts),
+ * and each AI-inferred fact carries a **per-line pencil** that edits just that line inline — read and edit are
+ * no longer separate screens (62 §3.3). For a RELATED person's shared facts it's read-only (`isOwn = false`).
  *
  * Corrections split by source (44 §3.4): an ONBOARDING (`intake`) insight is what you told SelfOS — you fix
- * it by **editing the answer** (deep-link) or **deleting**, never "flagging." An AI-INFERRED insight
- * (session/dream/questionnaire) keeps the correction toggle, relabelled **"This isn't right about me"** —
- * it drops the fact from the coach at once. Sharing (44 audit): ONBOARDING facts carry NO per-fact chip (the
- * "wall of Private" the user reported) — their sharing is share-by-default and managed via the answer + the
- * "Manage sharing" panel; an AI-INFERRED fact keeps a discreet per-fact `FactSharingControl` (you still need
- * a way to share a session/dream insight). `sourceRemoved` renders "original source removed."
+ * it by **editing the answer** (deep-link) or **deleting**, not by inline editing/flagging. An AI-INFERRED
+ * insight keeps inline edit + the per-fact **sharing scope chip** + a **flag** ("this isn't right about me",
+ * which drops the fact from the coach at once). `sourceRemoved` renders "original source removed."
  */
 export function InsightCard({
   insight,
@@ -83,11 +83,14 @@ export function InsightCard({
   sourceRemoved,
   aboutName,
   availableTypes,
+  hideSummary,
 }: {
   insight: Insight;
   subjectName: string;
   isOwn: boolean;
   sourceRemoved?: boolean;
+  /** Hide the read-mode summary (the portrait's narrative is shown once in the hero — spec 62 §3.4). */
+  hideSummary?: boolean;
   /** Who this sent-questionnaire insight is ABOUT — the recipient (#129). When set, the eyebrow reads "From
    * <name>'s answers" instead of "About you," since the facts describe their answers, not the viewer. */
   aboutName?: string;
@@ -101,17 +104,23 @@ export function InsightCard({
   const flag = useInsightStore((s) => s.flag);
 
   const isIntake = insight.source === 'intake';
-  const [editing, setEditing] = useState(isOwn && !insight.approved); // own drafts open in review mode
+  const isDraft = isOwn && !insight.approved;
+  // Whole-card edit (drafts open here); a single-fact inline edit is tracked separately (62 §3.3).
+  const [cardEditing, setCardEditing] = useState(isDraft);
+  const [factEditing, setFactEditing] = useState<string | null>(null);
   const [summary, setSummary] = useState(insight.summary);
   const [facts, setFacts] = useState<InsightFact[]>(insight.facts);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Collapse to the read view once a draft becomes approved (the card is reused by `key`, so the initial
-  // useState doesn't re-run — sync it here).
+  // Resync local edit state when the insight actually changes (a save bumps updatedAt; the card is reused by
+  // `key` so useState doesn't re-run). A draft becoming approved also closes card-edit.
   useEffect(() => {
-    if (insight.approved) setEditing(false);
-  }, [insight.approved]);
+    setSummary(insight.summary);
+    setFacts(insight.facts);
+    if (insight.approved) setCardEditing(false);
+    setFactEditing(null);
+  }, [insight.updatedAt, insight.approved, insight.summary, insight.facts]);
 
   const prov = provenanceTarget(insight);
   // Approve/edit carries only `{id, text, shareable}` — `updateInsight` merges by id, so the server-owned
@@ -139,10 +148,14 @@ export function InsightCard({
     guard(async () => {
       if (!(await approve(edit))) setError('Couldn’t save that insight. Please try again.');
     }, 'Couldn’t save that insight. Please try again.');
+  // Save persists the whole edit (summary + all facts, merge-by-id) — used by both the card editor and a
+  // single-fact inline edit (the changed fact is already in `facts` state).
   const onSave = (): Promise<void> =>
     guard(async () => {
-      if (await update(edit)) setEditing(false);
-      else setError('Couldn’t save your changes. Please try again.');
+      if (await update(edit)) {
+        setCardEditing(false);
+        setFactEditing(null);
+      } else setError('Couldn’t save your changes. Please try again.');
     }, 'Couldn’t save your changes. Please try again.');
   const onRemove = (): Promise<void> =>
     guard(
@@ -158,81 +171,131 @@ export function InsightCard({
   const setFactText = (id: string, text: string): void =>
     setFacts((fs) => fs.map((f) => (f.id === id ? { ...f, text } : f)));
 
+  const cancelEdit = (): void => {
+    setSummary(insight.summary);
+    setFacts(insight.facts);
+    setCardEditing(false);
+    setFactEditing(null);
+  };
+
   const goToSource = (): void => navigate(prov.to, prov.state ? { state: prov.state } : undefined);
 
   // A long portrait groups its facts into collapsible life-area sections (44 audit). Sensitive sections (any
-  // restricted fact) start COLLAPSED so trauma/intimacy isn't on screen at a glance; everything else is open.
+  // restricted fact) start COLLAPSED so trauma/intimacy isn't on screen at a glance.
   const factGroups = groupFactsByArea(insight.facts, isOwn);
   const grouped = factGroups.length > 1 || factGroups[0]?.area !== null;
-  const [collapsedAreas, setCollapsedAreas] = useState<Set<string>>(
-    () =>
-      new Set(
-        factGroups
-          .filter((g) => g.area !== null && g.facts.some((f) => f.restricted))
-          .map((g) => g.area as string),
-      ),
-  );
-  const toggleArea = (area: string): void =>
-    setCollapsedAreas((prev) => {
-      const next = new Set(prev);
-      if (next.has(area)) next.delete(area);
-      else next.add(area);
-      return next;
-    });
 
-  /** One fact as a clean list row: text + inline tags, plus (AI-inferred only) the sharing + correction. */
-  const renderFact = (fact: InsightFact): JSX.Element => (
-    <li key={fact.id} className={styles.factItem}>
-      <span className={styles.factText}>
-        <Markdown
-          inline
-          size="sm"
-          className={fact.flaggedInaccurate ? styles.flaggedText : undefined}
-        >
-          {fact.text}
-        </Markdown>
-        {fact.flaggedInaccurate ? <span className={styles.inlineTag}>marked not right</span> : null}
-        {fact.retractedShareAt ? (
-          <span
-            className={styles.inlineTag}
-            title="This fact was shared, then withdrawn when you marked it"
-          >
-            sharing withdrawn
-          </span>
-        ) : null}
-        {isIntake && fact.restricted ? (
-          <span className={styles.sensitiveTag} title="Sensitive — only your own coach uses this.">
-            <ShieldAlert size={11} aria-hidden="true" /> private
-          </span>
-        ) : null}
-      </span>
-      {isOwn && !isIntake ? (
-        <span className={styles.factActions}>
-          {!fact.flaggedInaccurate ? (
-            <FactSharingControl
-              insightId={insight.id}
-              subjectPersonId={insight.subjectPersonId}
-              fact={fact}
-              disabled={busy}
-              {...(availableTypes ? { availableTypes } : {})}
-            />
-          ) : null}
-          <Button
-            variant="ghost"
+  const eyebrowContext = aboutName
+    ? `From ${aboutName}’s answers`
+    : isOwn
+      ? formatDate(insight.provenance.at)
+      : `About ${subjectName}`;
+
+  /** One fact as a read row: text + inline tags + (AI-inferred) the scope chip + a per-line edit pencil; or,
+   * when it's the fact being edited, an inline textarea with Save / Cancel (62 §3.3). */
+  const renderFact = (fact: InsightFact): JSX.Element => {
+    if (factEditing === fact.id) {
+      const current = facts.find((f) => f.id === fact.id)?.text ?? fact.text;
+      return (
+        <li key={fact.id} className={styles.factEditRow}>
+          <Textarea
+            rows={1}
+            value={current}
+            autoFocus
+            aria-label={`Edit fact: ${fact.text}`}
+            onChange={(event) => setFactText(fact.id, event.target.value)}
+          />
+          <div className={styles.factEditActions}>
+            <Button size="sm" variant="primary" disabled={busy} onClick={() => void onSave()}>
+              Save
+            </Button>
+            <Button size="sm" variant="ghost" disabled={busy} onClick={cancelEdit}>
+              Cancel
+            </Button>
+          </div>
+        </li>
+      );
+    }
+    return (
+      <li key={fact.id} className={styles.factItem}>
+        <span className={styles.factText}>
+          <Markdown
+            inline
             size="sm"
-            disabled={busy}
-            aria-label={
-              fact.flaggedInaccurate
-                ? `Undo — this is right about me: ${fact.text}`
-                : `This isn’t right about me: ${fact.text}`
-            }
-            onClick={() => void onFlag(fact.id, !fact.flaggedInaccurate)}
+            className={fact.flaggedInaccurate ? styles.flaggedText : undefined}
           >
-            {fact.flaggedInaccurate ? 'Undo' : 'Not right'}
-          </Button>
+            {fact.text}
+          </Markdown>
+          {fact.flaggedInaccurate ? (
+            <span className={styles.inlineTag}>marked not right</span>
+          ) : null}
+          {fact.retractedShareAt ? (
+            <span
+              className={styles.inlineTag}
+              title="This fact was shared, then withdrawn when you marked it"
+            >
+              sharing withdrawn
+            </span>
+          ) : null}
+          {isIntake && fact.restricted ? (
+            <span
+              className={styles.sensitiveTag}
+              title="Sensitive — only your own coach uses this."
+            >
+              <ShieldAlert size={11} aria-hidden="true" /> private
+            </span>
+          ) : null}
         </span>
-      ) : null}
-    </li>
+        {isOwn && !isIntake ? (
+          <span className={styles.factActions}>
+            {!fact.flaggedInaccurate ? (
+              <FactSharingControl
+                insightId={insight.id}
+                subjectPersonId={insight.subjectPersonId}
+                fact={fact}
+                disabled={busy}
+                {...(availableTypes ? { availableTypes } : {})}
+              />
+            ) : null}
+            {!fact.flaggedInaccurate ? (
+              <IconButton
+                variant="ghost"
+                aria-label={`Edit: ${fact.text}`}
+                disabled={busy}
+                onClick={() => {
+                  setFacts(insight.facts);
+                  setFactEditing(fact.id);
+                }}
+              >
+                <Pencil size={14} aria-hidden="true" />
+              </IconButton>
+            ) : null}
+            <IconButton
+              variant="ghost"
+              disabled={busy}
+              aria-label={
+                fact.flaggedInaccurate
+                  ? `Undo — this is right about me: ${fact.text}`
+                  : `This isn’t right about me: ${fact.text}`
+              }
+              onClick={() => void onFlag(fact.id, !fact.flaggedInaccurate)}
+            >
+              {fact.flaggedInaccurate ? (
+                <Text size="xs" tone="secondary">
+                  Undo
+                </Text>
+              ) : (
+                <Flag size={14} aria-hidden="true" />
+              )}
+            </IconButton>
+          </span>
+        ) : null}
+      </li>
+    );
+  };
+
+  const factList = (fs: InsightFact[]): JSX.Element => (
+    <ul className={styles.factList}>{fs.map(renderFact)}</ul>
   );
 
   return (
@@ -247,32 +310,39 @@ export function InsightCard({
 
         <div className={styles.head}>
           <div className={styles.headMain}>
-            <Text size="xs" tone="tertiary" className={styles.eyebrow}>
-              {`${SOURCE_EYEBROW[insight.source]} · ${
-                aboutName
-                  ? `From ${aboutName}’s answers`
-                  : isOwn
-                    ? 'About you'
-                    : `About ${subjectName}`
-              }`}
-            </Text>
-            {insight.summary && !editing ? (
+            <div className={styles.eyebrowRow}>
+              <span className={styles.sourcePill}>{SOURCE_EYEBROW[insight.source]}</span>
+              <Text size="xs" tone="tertiary">
+                {eyebrowContext}
+              </Text>
+              <ConfidenceChip
+                level={insight.confidence}
+                {...(insight.confidenceRationale ? { rationale: insight.confidenceRationale } : {})}
+              />
+            </div>
+            {insight.summary && !cardEditing && !hideSummary ? (
               <Markdown className={styles.insightSummary}>{insight.summary}</Markdown>
             ) : null}
           </div>
-          {isOwn && insight.approved && !editing ? (
+          {/* The obvious edit affordance (62 §3.3): a header pencil for an AI-inferred own insight. */}
+          {isOwn && insight.approved && !isIntake && !cardEditing ? (
             <IconButton
-              aria-label="Delete insight"
+              aria-label="Edit this insight"
               variant="secondary"
               disabled={busy}
-              onClick={() => void onRemove()}
+              onClick={() => {
+                setFacts(insight.facts);
+                setSummary(insight.summary);
+                setFactEditing(null);
+                setCardEditing(true);
+              }}
             >
-              <Trash2 size={16} aria-hidden="true" />
+              <Pencil size={16} aria-hidden="true" />
             </IconButton>
           ) : null}
         </div>
 
-        {editing ? (
+        {cardEditing ? (
           <>
             <Textarea
               rows={3}
@@ -294,69 +364,70 @@ export function InsightCard({
             </Stack>
             <div className={styles.actions}>
               {insight.approved ? (
-                <Button variant="primary" onClick={() => void onSave()} disabled={busy}>
-                  Save
-                </Button>
+                <>
+                  <Button variant="primary" onClick={() => void onSave()} disabled={busy}>
+                    Save
+                  </Button>
+                  <Button variant="secondary" onClick={cancelEdit} disabled={busy}>
+                    Cancel
+                  </Button>
+                  <span className={styles.actionsSpacer} />
+                  <IconButton
+                    aria-label="Delete insight"
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => void onRemove()}
+                  >
+                    <Trash2 size={16} aria-hidden="true" />
+                  </IconButton>
+                </>
               ) : (
-                <Button variant="primary" onClick={() => void onApprove()} disabled={busy}>
-                  Approve
-                </Button>
-              )}
-              {insight.approved ? (
-                <Button variant="secondary" onClick={() => setEditing(false)} disabled={busy}>
-                  Cancel
-                </Button>
-              ) : (
-                <Button variant="secondary" onClick={() => void onRemove()} disabled={busy}>
-                  Discard
-                </Button>
+                <>
+                  <Button variant="primary" onClick={() => void onApprove()} disabled={busy}>
+                    Approve
+                  </Button>
+                  <Button variant="secondary" onClick={() => void onRemove()} disabled={busy}>
+                    Discard
+                  </Button>
+                </>
               )}
             </div>
           </>
         ) : (
           <>
             {/* A short insight (session/dream) is a plain list; a long portrait becomes COLLAPSIBLE life-area
-                sections — expand on demand so 20+ facts aren't dumped at once, sensitive sections collapsed by
-                default (44 audit, confirmed with the user 2026-06-24). */}
+                sections — sensitive sections collapsed by default (44 audit). */}
             {!grouped ? (
-              <ul className={styles.factList}>{(factGroups[0]?.facts ?? []).map(renderFact)}</ul>
+              factList(factGroups[0]?.facts ?? [])
             ) : (
-              factGroups.map((group) => {
-                const area = group.area ?? 'More';
-                const Icon = areaIcon(area);
-                const sensitive = group.facts.some((f) => f.restricted);
-                const open = !collapsedAreas.has(area);
-                return (
-                  <div key={area} className={styles.factGroup}>
-                    <button
-                      type="button"
-                      className={styles.factGroupHead}
-                      aria-expanded={open}
-                      onClick={() => toggleArea(area)}
+              <Stack gap={2}>
+                {factGroups.map((group) => {
+                  const area = group.area ?? 'More';
+                  const Icon = areaIcon(area);
+                  const sensitive = group.facts.some((f) => f.restricted);
+                  return (
+                    <Collapsible
+                      key={area}
+                      defaultOpen={!sensitive}
+                      header={
+                        <>
+                          <Icon size={16} aria-hidden="true" className={styles.factGroupIcon} />
+                          <span className={styles.factGroupName}>{area}</span>
+                          {sensitive ? (
+                            <span className={styles.factGroupPrivate}>private</span>
+                          ) : null}
+                          <span className={styles.factGroupCount}>{group.facts.length}</span>
+                        </>
+                      }
                     >
-                      <Icon size={17} aria-hidden="true" className={styles.factGroupIcon} />
-                      <span className={styles.factGroupName}>{area}</span>
-                      {sensitive ? <span className={styles.factGroupPrivate}>private</span> : null}
-                      <span className={styles.factGroupCount}>{group.facts.length}</span>
-                      <ChevronDown
-                        size={17}
-                        aria-hidden="true"
-                        className={open ? styles.chevOpen : styles.chev}
-                      />
-                    </button>
-                    {open ? (
-                      <ul className={styles.factList}>{group.facts.map(renderFact)}</ul>
-                    ) : null}
-                  </div>
-                );
-              })
+                      {factList(group.facts)}
+                    </Collapsible>
+                  );
+                })}
+              </Stack>
             )}
 
             <div className={styles.metaRow}>
-              <ConfidenceChip
-                level={insight.confidence}
-                {...(insight.confidenceRationale ? { rationale: insight.confidenceRationale } : {})}
-              />
               {insight.categories.map((c) => (
                 <span key={c} className={styles.categoryTag}>
                   {c}
@@ -364,8 +435,6 @@ export function InsightCard({
               ))}
               <span className={styles.provenance}>
                 {!isOwn ? (
-                  // A related person's insight is scrubbed (no source id) and you can't open their source —
-                  // show a plain, non-navigable label, never a wrong-destination link.
                   <Text size="xs" tone="tertiary">
                     {prov.label}
                   </Text>
@@ -382,22 +451,16 @@ export function InsightCard({
               </span>
             </div>
 
-            {isOwn ? (
+            {isOwn && isIntake ? (
               <div className={styles.actions}>
-                {isIntake ? (
-                  // Onboarding correction = edit the source answer (§3.4); the portrait re-synthesizes from it.
-                  <Button
-                    variant="secondary"
-                    title="Editing your onboarding answers is how you correct what you told SelfOS"
-                    onClick={goToSource}
-                  >
-                    <PencilLine size={14} aria-hidden="true" /> Edit answer
-                  </Button>
-                ) : (
-                  <Button variant="secondary" onClick={() => setEditing(true)}>
-                    Edit
-                  </Button>
-                )}
+                {/* Onboarding correction = edit the source answer (§3.4); the portrait re-synthesizes from it. */}
+                <Button
+                  variant="secondary"
+                  title="Editing your onboarding answers is how you correct what you told SelfOS"
+                  onClick={goToSource}
+                >
+                  <PencilLine size={14} aria-hidden="true" /> Edit answer
+                </Button>
               </div>
             ) : null}
           </>

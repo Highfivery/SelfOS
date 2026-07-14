@@ -31,60 +31,10 @@
   padding-left: calc(var(--space-2) * 2 + 15px);
 }
 
-/* --- Life-area / section groups --- */
-.group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.groupTitle {
-  margin: 0;
-}
-
-/* A small per-group count beside a life-area heading (44 §11 build-time tuning). */
-.groupCount {
-  color: var(--color-text-tertiary);
-  font-weight: 400;
-  font-size: var(--text-sm);
-}
-
-/* --- Responses to your questionnaires (#129): per-recipient sub-groups --- */
-.responseGroup {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
 .responseName {
   margin: 0;
   font-size: var(--text-sm);
   color: var(--color-text-secondary);
-}
-
-/* --- Trends --- */
-.trends {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-2) var(--space-3);
-}
-
-.trendsSummary {
-  cursor: pointer;
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-
-.trends[open] .trendsSummary {
-  margin-bottom: var(--space-3);
-}
-
-.trendsBody {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
 }
 
 /* --- Card head --- */
@@ -102,59 +52,12 @@
   min-width: 0;
 }
 
-.eyebrow {
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
 /* The insight summary reads as prose (a long portrait shouldn't be a wall of bold); the facts below are the
    labeled list (34 §3.5 hierarchy). */
 .insightSummary {
   font-weight: 400;
   line-height: 1.55;
   margin-top: 2px;
-}
-
-/* --- Fact rows --- */
-/* Wrap so a long sharing chip (e.g. a legacy broadcast fact showing every relationship type) drops to its
- * own line and ellipsizes instead of overflowing the card at narrow widths (the §12 no-inner-scroll rule). */
-/* --- Fact list (44 audit — readability) ---
-   A long portrait groups its facts by life-area; each fact is a list row with hairline dividers, readable
-   text, and any tag flowing INLINE right after the text (never a far-right floating chip). */
-.factGroup {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.factGroup + .factGroup {
-  margin-top: var(--space-2);
-}
-
-/* Collapsible life-area section header (44 audit) — a full-width button: icon · name · private? · count ·
-   chevron. Click to expand/collapse; sensitive sections start collapsed. */
-.factGroupHead {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  width: 100%;
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-alt);
-  color: var(--color-text-primary);
-  cursor: pointer;
-  text-align: left;
-  font: inherit;
-}
-
-.factGroupHead:hover {
-  border-color: var(--color-border-strong, var(--color-border));
-}
-
-.factGroupHead:focus-visible {
-  outline: 2px solid var(--color-accent, var(--color-text-secondary));
-  outline-offset: 2px;
 }
 
 .factGroupIcon {
@@ -186,29 +89,11 @@
   color: var(--color-text-tertiary);
 }
 
-.chev {
-  flex: none;
-  color: var(--color-text-tertiary);
-  transition: transform 0.15s ease;
-}
-
-.chevOpen {
-  flex: none;
-  color: var(--color-text-tertiary);
-  transform: rotate(180deg);
-  transition: transform 0.15s ease;
-}
-
 .factList {
   list-style: none;
   margin: 0;
   padding: 0;
   min-width: 0;
-}
-
-/* Facts inside a collapsible section are indented under the header; a flat (un-grouped) list is not. */
-.factGroup .factList {
-  padding: 0 var(--space-3);
 }
 
 .factItem {
@@ -253,16 +138,6 @@
 .factEditRow :global(textarea) {
   flex: 1 1 auto;
   min-width: 0;
-}
-
-.factIcon {
-  flex-shrink: 0;
-  color: var(--color-text-tertiary);
-}
-
-.flagOn {
-  flex-shrink: 0;
-  color: var(--color-danger, #c0392b);
 }
 
 .flaggedText {
@@ -350,78 +225,6 @@
   flex-wrap: wrap;
 }
 
-/* Relationship-insights card styles moved to routes/sharing/RelationshipInsightsCard.module.css (57 §3.8). */
-
-/* ===== Overview redesign (57 §3.1) ============================================================== */
-
-/* Portrait hero + "how well it knows you" */
-.hero {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: var(--space-6);
-  align-items: start;
-}
-
-.portrait {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-2);
-  font-family: var(--font-serif);
-  font-size: var(--text-md);
-  line-height: 1.55;
-  min-width: 0;
-}
-
-/* "Read full portrait →" — opens the portrait insight where the whole thing lives. */
-.readFull {
-  font-family: var(--font-sans);
-  font-size: var(--text-sm);
-  font-weight: 700;
-  color: var(--color-accent-text);
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-}
-
-.readFull:hover {
-  text-decoration: underline;
-}
-
-.knows {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: var(--space-2);
-  text-align: right;
-  min-width: 140px;
-}
-
-.knowsLabel {
-  font-size: var(--text-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--color-text-tertiary);
-  font-weight: 700;
-}
-
-.knowsValue {
-  font-weight: 800;
-  font-size: var(--text-md);
-}
-
-.meter {
-  display: flex;
-  gap: var(--space-1);
-}
-
-.meter span {
-  width: 26px;
-  height: 6px;
-  border-radius: var(--radius-pill);
-}
-
 .meterOn {
   background: var(--color-accent-solid);
 }
@@ -430,167 +233,15 @@
   background: var(--color-border-strong);
 }
 
-@media (max-width: 640px) {
-  .hero {
-    grid-template-columns: 1fr;
-  }
-  .knows {
-    align-items: flex-start;
-    text-align: left;
-  }
-}
-
-/* "Needs your review" callout */
-.callout {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-  background: var(--color-accent-subtle-bg);
-  border: 1px solid var(--color-accent);
-  border-radius: var(--radius-lg);
-  padding: var(--space-3) var(--space-4);
-}
-
 .calloutIcon {
   color: var(--color-accent-solid);
   flex: none;
 }
 
-.calloutText {
-  flex: 1 1 200px;
-  min-width: 0;
-  color: var(--color-accent-text);
-}
-
-.calloutText strong {
-  color: var(--color-text-primary);
-}
-
-/* Section head (title + count, no search chip) */
-.sectionHead {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-2);
-}
-
-/* Life-area tile map */
-.tileGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  gap: var(--space-3);
-}
-
-.tile {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  text-align: left;
-  font-family: inherit;
-  cursor: pointer;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-4);
-  min-width: 0;
-  transition:
-    transform var(--motion-fast) var(--ease-standard),
-    border-color var(--motion-fast) var(--ease-standard);
-}
-
-.tile:hover {
-  transform: translateY(-2px);
-  border-color: var(--color-accent);
-}
-
-.tile:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 2px;
-}
-
-.tileTop {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.tileChip {
-  width: 34px;
-  height: 34px;
-  flex: none;
-  border-radius: var(--radius-md);
-  background: var(--color-accent-subtle-bg);
-  color: var(--color-accent-solid);
-  display: grid;
-  place-items: center;
-}
-
-.tileName {
-  min-width: 0;
-  font-weight: 800;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tileNum {
-  font-weight: 800;
-  color: var(--color-text-secondary);
-  font-variant-numeric: tabular-nums;
-}
-
-.tilePreview {
-  color: var(--color-text-secondary);
-  font-size: var(--text-sm);
-  line-height: 1.5;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  min-height: 2.6em;
-}
-
-.tileFoot {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-/* Confidence dots (tiles + rows) */
-.dots {
-  display: inline-flex;
-  gap: 3px;
-}
-
-.dots i {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  display: block;
-}
-
-.dot {
-  background: var(--color-border-strong);
-}
-
-.dotOn {
-  background: var(--color-accent-solid);
-}
-
-.confLabel {
-  font-size: var(--text-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-weight: 700;
-  color: var(--color-text-tertiary);
-}
-
 /* Secondary row: trend + responses */
 .duo {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: var(--space-3);
 }
 
@@ -607,24 +258,12 @@
   padding: var(--space-4);
 }
 
-.panelButton {
-  cursor: pointer;
-  transition: border-color var(--motion-fast) var(--ease-standard);
-}
-
-.panelButton:hover {
-  border-color: var(--color-accent);
-}
-
-.panelButton:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 2px;
-}
-
 .panelHead {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-2);
+  flex-wrap: wrap;
   font-weight: 700;
 }
 
@@ -634,10 +273,14 @@
 }
 
 .panelName {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 @media (max-width: 640px) {
@@ -646,105 +289,209 @@
   }
 }
 
-/* Drill-down: back link + area head */
-.back {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  align-self: flex-start;
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  color: var(--color-accent);
-  font-size: var(--text-sm);
-  font-weight: 700;
-}
+/* ── 62 memory-insights-redesign ─────────────────────────────────────────────── */
 
-.back:hover {
-  text-decoration: underline;
-}
-
-.areaHead {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-width: 0;
-}
-
-.areaChip {
-  width: 44px;
-  height: 44px;
-  flex: none;
-  border-radius: var(--radius-lg);
-  background: var(--color-accent-subtle-bg);
-  color: var(--color-accent-solid);
+/* Stats strip */
+.statStrip {
   display: grid;
-  place-items: center;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--space-2);
 }
-
-/* Insight rows (area / responses / search) */
-.insightList {
+.stat {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.irow {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: var(--space-3);
-  align-items: center;
-  text-align: left;
-  font-family: inherit;
-  cursor: pointer;
+  gap: 2px;
+  padding: var(--space-2) var(--space-3);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-3) var(--space-4);
-  min-width: 0;
-  transition: border-color var(--motion-fast) var(--ease-standard);
-}
-
-.irow:hover {
-  border-color: var(--color-accent);
-}
-
-.irow:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 2px;
-}
-
-.irowMain {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+  border-radius: var(--radius-md);
   min-width: 0;
 }
-
-.irowLead {
+.statValue {
+  font-size: var(--text-lg);
   font-weight: 600;
-  /* A row is a nav element, never a wall — clamp a long summary (e.g. the portrait) to two lines. */
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  color: var(--color-text-primary);
 }
-
-.irowMeta {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
+.statLabel {
   font-size: var(--text-xs);
   color: var(--color-text-tertiary);
 }
 
-.irowMeta .sep {
-  opacity: 0.5;
+/* Portrait hero (override the old grid .hero) */
+.hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.heroHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.heroAvatar {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: var(--text-sm);
+}
+.heroHeadText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.heroKnows {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+.heroKnowsMeter {
+  display: inline-flex;
+  gap: 3px;
+}
+.heroBody {
+  line-height: 1.6;
+}
+.heroActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.heroLink {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--color-accent-text);
+  cursor: pointer;
+}
+.heroLink:hover {
+  text-decoration: underline;
+}
+.heroLinkMuted {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.heroLinkMuted:hover {
+  color: var(--color-accent-text);
 }
 
-.irowChev {
+/* Review callout as a Collapsible (override the old flex .callout) */
+.callout {
+  background: var(--color-accent-subtle-bg);
+  border: 1px solid var(--color-accent-border, var(--color-border));
+  border-radius: var(--radius-md);
+  padding: 0 var(--space-3);
+}
+.calloutHead {
+  color: var(--color-accent-text);
+}
+.calloutText {
+  color: var(--color-accent-text);
+}
+
+/* Life-area sections */
+.sectionsTitle {
   color: var(--color-text-tertiary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.section {
+  border-top: 1px solid var(--color-border);
+}
+.sectionIcon {
   flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sectionName {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.sectionLock {
+  flex: none;
+  color: var(--color-text-tertiary);
+}
+.sectionCount {
+  flex: none;
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+}
+
+/* Insight card eyebrow + source pill */
+.eyebrowRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.sourcePill {
+  flex: none;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--color-accent-text);
+  background: var(--color-accent-subtle-bg);
+  padding: 1px 8px;
+  border-radius: var(--radius-sm);
+}
+
+/* Inline single-fact edit */
+.factEditActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+.actionsSpacer {
+  flex: 1;
+}
+
+/* Responses band recipient rows */
+.responseRow {
+  border-top: 1px solid var(--color-border);
+}
+.responseAvatar {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-xs);
+  font-weight: 600;
 }

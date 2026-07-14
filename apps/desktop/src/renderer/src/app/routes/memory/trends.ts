@@ -7,9 +7,15 @@ import type { LineChartSeries } from '../../../design-system/components';
  * ≥2 of their approved insights (e.g. future questionnaire metrics). Charts only — never prose. `x` is the
  * point index (oldest→newest); a series needs ≥2 points to be meaningful (the LineChart no-ops below that).
  */
-export function buildTrendSeries(insights: Insight[], personId: string): LineChartSeries[] {
+export function buildTrendSeries(
+  insights: Insight[],
+  personId: string,
+  windowDays?: number,
+): LineChartSeries[] {
+  const since = windowDays && windowDays > 0 ? Date.now() - windowDays * 24 * 60 * 60 * 1000 : null;
   const own = insights
     .filter((i) => i.subjectPersonId === personId && i.approved && i.metrics)
+    .filter((i) => since === null || (Date.parse(i.provenance.at) || 0) >= since)
     .sort((a, b) => a.provenance.at.localeCompare(b.provenance.at));
 
   // Collect every metric key present, then keep those with ≥2 readings (a line needs two points).

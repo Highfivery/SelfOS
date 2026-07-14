@@ -404,6 +404,42 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-14 — **Build (Memory insights redesign — flatten + edit-in-place; SPEC 62 APPROVED + BUILT; on
+  `feat/memory-insights-redesign`, PR pending).** The user: the Memory/Insights page reads as "a bunch of text
+  boxes that make the page very long, not clear you can edit them." **Mockups approved FIRST** (two `visualize`
+  mockups — the redesigned cards, then the top surfaces), then **decisions asked** (3 rounds, all AskUserQuestion):
+  **flatten** the tile→area→single-card drill-down into **collapsible life-area sections edited in place**;
+  **redesign all three top surfaces** (portrait/trends/responses); **all sections collapsed by default, sensitive
+  (Intimacy/restricted) always collapsed**; extract **one `Collapsible` primitive**; **click a fact edits just
+  that line** (card pencil = whole card); **reuse 57's knows-you formula**. **Renderer-only, NO new persisted
+  schema** (reuses the existing insight edit/flag/approve/scope channels). **Built:** (1) a reusable
+  **`Collapsible`** design-system primitive (header button `aria-expanded` + body, controlled/uncontrolled, the §12
+  accordion-spacing rule baked in once) + `/gallery` + a unit test. (2) **`Memory.tsx` rewritten** from a 5-view
+  switch (overview/area/insight/review/responses) into a single scrolling page: a **stats strip** (things known ·
+  confidence · areas · tidied), a **collapsible review callout** (drafts + merge proposals), search, the
+  **portrait hero** (`PortraitHero` — avatar + narrative + read-more + "Edit your answers"), **`TrendsCard`**
+  ("How you've been", a 30d/90d/All `SegmentedControl` + `LineChart` + a §9 text read), a **`ResponsesBand`** (#129,
+  per-recipient collapsibles), and collapsible **`LifeAreaSection`s** (`sections.ts` = `summarizeAreas` + a
+  sensitivity flag). Deep-links open the target section + `scrollIntoView`. (3) **`InsightCard` reworked** for
+  **obvious inline editing** — a card-level pencil (whole card) + a **per-line pencil per AI-inferred fact** (edits
+  just that line inline; Save via `insights:update` merge-by-id so `restricted`/`shareableTypes` are preserved) +
+  the per-fact scope chip + flag; the intake portrait renders as a section card with **`hideSummary`** (the hero
+  owns the narrative — no duplication; portrait facts stay viewable/searchable, corrected via onboarding). Deleted
+  the orphaned `InsightRow`/`LifeAreaTile`/`ConfidenceDots`. **Privacy preserved:** a related person's facts still
+  never render raw; `restricted` facts only to the owner with a "private" tag; sensitive sections collapsed; crisis
+  banner + footer intact. **CSS:** `.duo` now `auto-fit minmax(260px,1fr)` (stacks at narrow widths) + the panel
+  head `flex-wrap`s so the trends `SegmentedControl` never scrolls-x (the §12 fix). Gate green: typecheck (node +
+  web/DOM), lint, format, **core + 1153 desktop** unit (rewrote `Memory.test.tsx` for the flatten [incl. the
+  inline-fact-edit + sensitive-collapsed cases]; +`Collapsible` [3] + `sections` [2]), **16/16 Memory E2E** (updated
+  ~9 for the flatten — expand-section instead of open-insight, portrait-as-hero — + a new redesign E2E: sections
+  collapsed [Intimacy too] → edit a fact inline → **decrypt** the persisted change → 360px overflow guard).
+  Real-Electron visual QA at desktop + 360px (the stats strip + hero + trends + collapsible sections read clean +
+  scannable; a fact mid-inline-edit; no overflow). code-reviewer: pending. **Lesson: the "long wall of text boxes"
+  fix is FLATTEN + affordance — replace a multi-level drill-down with collapsible edit-in-place sections, and make
+  editability a visible pencil (card + per-line), not a buried mode toggle; keep the intake portrait's narrative in
+  the hero + its facts in a section card with the summary hidden (`hideSummary`) so nothing duplicates while the
+  facts stay searchable; and any panel that gains a `SegmentedControl` needs the head to `flex-wrap` + the grid to
+  `auto-fit`, or the control scrolls-x at phone width (§12).**
 - 2026-07-14 — **Build (Together follow-through — agreements → Goals + dashboard, session summary strip, inline
   Pulse on Home; SPEC 61 APPROVED + BUILT; on `feat/together-follow-through`, PR pending).** The "things to do" from
   a Together wrap-up (the **agreements ledger**) + the couples **Pulse check-in** were buried — agreements only at

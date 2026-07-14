@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.22.0](https://github.com/Highfivery/SelfOS/compare/v0.21.0...v0.22.0) (2026-07-14)
+
+
+### Features
+
+* **home:** a dedicated Questionnaires dashboard section (59) ([#180](https://github.com/Highfivery/SelfOS/issues/180)) ([6242016](https://github.com/Highfivery/SelfOS/commit/6242016a093ea5922335c68854a27ec17647ef4f))
+* **home:** questionnaire dashboard follow-ups — trend line + prefilled fun/spicy briefs (59) ([#182](https://github.com/Highfivery/SelfOS/issues/182)) ([96673c1](https://github.com/Highfivery/SelfOS/commit/96673c1c0dd6808240ce0ad06f024dc05045e459))
+* **home:** richer Questionnaires dashboard section (59 §15) ([#183](https://github.com/Highfivery/SelfOS/issues/183)) ([7d8b7a3](https://github.com/Highfivery/SelfOS/commit/7d8b7a38c97f9a2672dc021ef81987da7b2fc4c2))
+* **questionnaires:** draft-with-AI overhaul — brief-as-focus, count, real de-dup (08 §23) ([#184](https://github.com/Highfivery/SelfOS/issues/184)) ([b5aa9e1](https://github.com/Highfivery/SelfOS/commit/b5aa9e1aa0ad2a48da4daf0d0ab2740518afdbb8))
+* **questionnaires:** sensitivity tiers that actually differ + explicit Scenario (08 §22) ([#179](https://github.com/Highfivery/SelfOS/issues/179)) ([4b18651](https://github.com/Highfivery/SelfOS/commit/4b186519dbc3994ce87031764bf535d5498727cb))
+* **questionnaires:** use all data — complete de-dup + deep personalization (08 §24) ([#186](https://github.com/Highfivery/SelfOS/issues/186)) ([ac76501](https://github.com/Highfivery/SelfOS/commit/ac76501ae07a86ba68d95adc10db3b19ace9ae39))
+
+
+### Bug Fixes
+
+* **questionnaires:** stop re-asking onboarding questions in AI drafts (08 §23.5b) ([#185](https://github.com/Highfivery/SelfOS/issues/185)) ([0457acb](https://github.com/Highfivery/SelfOS/commit/0457acb75c0e5a0253744a58175e4fd75c19f347))
+
 ## [0.21.0](https://github.com/Highfivery/SelfOS/compare/v0.20.0...v0.21.0) (2026-07-13)
 
 

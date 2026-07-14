@@ -1,6 +1,7 @@
+import { useEffect, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Heart } from 'lucide-react';
-import type { TogetherSessionSummary } from '@shared/schemas';
+import type { TogetherPulseView, TogetherSessionSummary } from '@shared/schemas';
 import { Button, Card, Heading, Stack, Text } from '../../../design-system/components';
 import styles from './Home.module.css';
 
@@ -17,6 +18,15 @@ function plain(text: string): string {
     .replace(/^>\s?/gm, '')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+/** A 0..1 dyad metric → a gentle level word (never a score to chase). */
+function levelFor(value: number): string {
+  if (value < 0.2) return 'Quiet';
+  if (value < 0.4) return 'Tender';
+  if (value < 0.6) return 'Steady';
+  if (value < 0.8) return 'Warm';
+  return 'Close';
 }
 
 /** Pick the one session to feature: your-turn first, then a pending invite, then most recently active. */
@@ -36,10 +46,11 @@ function primarySession(
 }
 
 /**
- * The Together hero card (60 §3.1.5) — the one couples session that most wants the person's attention
- * (your turn / a pending invite / the most recent active pair), with unread + a snippet + a CTA into
- * Together. Self-hides when there are no live sessions (the "start a session" nudge lives in "For you").
- * Per-person + gated by a live partner edge (the bridge only returns summaries when one exists).
+ * The Together hero card (60 §3.1.5) — the one couples session that most wants attention (your turn / a
+ * pending invite / the most recent active pair), with WHOSE turn it is, a clean snippet, a **pulse ring**
+ * (the dyad Connection trend) and the **desire alignment** (only when both partners have consented to share
+ * it — 58 §3.10a), and a CTA into Together. The pulse is a free, deterministic read (no spend). Self-hides
+ * when there are no live sessions. Per-person + gated by a live partner edge.
  */
 export function TogetherHomeCard({
   sessions,
@@ -49,13 +60,39 @@ export function TogetherHomeCard({
   myId: string | null;
 }): JSX.Element | null {
   const navigate = useNavigate();
+  const [pulse, setPulse] = useState<TogetherPulseView | null>(null);
   const session = primarySession(sessions, myId);
+  const partnerId = session?.participants.find((p) => p.personId !== myId)?.personId;
+
+  useEffect(() => {
+    setPulse(null);
+    if (!partnerId) return undefined;
+    let cancelled = false;
+    void window.selfos
+      ?.togetherPulse?.({ partnerPersonId: partnerId })
+      ?.then((view) => {
+        if (!cancelled) setPulse(view);
+      })
+      .catch(() => {
+        /* a calm no-pulse card */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [partnerId]);
+
   if (!session) return null;
 
   const name = partnerName(session, myId);
   // Show WHOSE turn it is explicitly: yours, the partner's, or a pending invite.
   const pill =
     session.status === 'invited' ? 'Invitation' : session.yourTurn ? 'Your turn' : `${name}’s turn`;
+
+  const connection = pulse?.series.find((s) => /connection/i.test(s.label));
+  const connectionValue = connection?.points.at(-1)?.y;
+  const alignment = pulse?.alignment;
+  const showPulse =
+    connectionValue !== undefined || (alignment?.ready === true && alignment.read !== undefined);
 
   return (
     <Card>
@@ -78,6 +115,32 @@ export function TogetherHomeCard({
                 : 'Pick up where you left off.'}
           {session.unreadCount > 0 ? ` · ${session.unreadCount} unread` : ''}
         </Text>
+
+        {showPulse ? (
+          <div className={styles.pulseRow}>
+            {connectionValue !== undefined ? (
+              <div className={styles.pulseItem}>
+                <span
+                  className={styles.pulseRing}
+                  style={{ '--ring-fill': connectionValue } as CSSProperties}
+                >
+                  <span className={styles.pulseRingInner}>{levelFor(connectionValue)}</span>
+                </span>
+                <span className={styles.pulseLabel}>
+                  Connection{connection?.direction ? ` · ${connection.direction}` : ''}
+                </span>
+              </div>
+            ) : null}
+            {alignment?.ready && alignment.read ? (
+              <span
+                className={alignment.read === 'aligned' ? styles.pulseAlignGood : styles.pulseAlign}
+              >
+                Desire · {alignment.read}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+
         <Button variant="secondary" size="sm" onClick={() => navigate('/together')}>
           {session.status === 'invited' ? 'View invitation' : 'Open session'}
         </Button>

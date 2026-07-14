@@ -143,6 +143,61 @@
   color: var(--color-text-secondary);
 }
 
+/* Together pulse — a small dyad Connection ring + the desire-alignment badge (58 §3.10a) */
+.pulseRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.pulseItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.pulseRing {
+  width: 42px;
+  height: 42px;
+  flex: none;
+  border-radius: var(--radius-pill);
+  display: grid;
+  place-items: center;
+  background: conic-gradient(
+    var(--color-chart-4) calc(var(--ring-fill, 0) * 360deg),
+    var(--color-border) 0
+  );
+}
+.pulseRingInner {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+.pulseLabel {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+.pulseAlign,
+.pulseAlignGood {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  background: var(--color-surface-alt);
+  color: var(--color-text-secondary);
+}
+.pulseAlignGood {
+  background: color-mix(in srgb, var(--color-success) 16%, transparent);
+  color: var(--color-success);
+}
+
 .rowAction {
   flex: none;
 }
@@ -301,349 +356,6 @@
   display: flex;
   gap: var(--space-2);
   flex: none;
-}
-
-/* Questionnaires dashboard section (59-questionnaires-dashboard) */
-.qSection {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  min-width: 0;
-}
-
-.qSectionHead {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--color-text-secondary);
-}
-
-.qSectionHead .cardLink {
-  margin-left: auto;
-}
-
-/* Stat strip */
-.qStats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.qStat {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: var(--space-3);
-  border: none;
-  border-radius: var(--radius-md);
-  background: var(--color-surface-alt);
-  cursor: pointer;
-  text-align: left;
-  min-width: 0;
-  font: inherit;
-}
-
-.qStat:hover {
-  background: var(--color-accent-subtle-bg);
-}
-
-.qStatAccent {
-  background: var(--color-accent-subtle-bg);
-}
-
-.qStatLabel {
-  font-size: var(--text-xs);
-  color: var(--color-text-secondary);
-}
-
-.qStatAccent .qStatLabel {
-  color: var(--color-accent-text);
-}
-
-.qStatValue {
-  font-size: var(--text-xl);
-  font-weight: 500;
-  color: var(--color-text-primary);
-}
-
-.qStatAccent .qStatValue {
-  color: var(--color-accent-text);
-}
-
-/* Needs-you rows */
-.qActionRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  min-width: 0;
-}
-
-.qActionIcon {
-  display: inline-flex;
-  flex: none;
-  color: var(--color-accent-text);
-}
-
-.qActionText {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
-.qActionLine {
-  font-size: var(--text-sm);
-  color: var(--color-text-primary);
-}
-
-.qActionSub {
-  font-size: var(--text-xs);
-  color: var(--color-text-tertiary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.qError {
-  font-size: var(--text-sm);
-  color: var(--color-danger-text, var(--color-text-secondary));
-}
-
-/* Latest insight + trend — a two-up row that stacks on phones */
-.qInsightRow {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.qInsight {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  min-width: 0;
-}
-
-.qEyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  font-size: var(--text-xs);
-  color: var(--color-text-tertiary);
-}
-
-/* Ideas */
-.qIdeas {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.qIdea {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  min-width: 0;
-}
-
-.qIdeaEyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  font-size: var(--text-xs);
-  font-weight: 500;
-  color: var(--color-accent-text);
-}
-
-.qIdeaDanger {
-  color: var(--color-danger-text, var(--color-accent-text));
-}
-
-.qIdeaTitle {
-  font-size: var(--text-md);
-  font-weight: 500;
-  color: var(--color-text-primary);
-}
-
-/* Engagement banner */
-.qBanner {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3);
-  border-radius: var(--radius-md);
-  background: var(--color-accent-subtle-bg);
-  color: var(--color-accent-text);
-  font-size: var(--text-sm);
-  line-height: 1.5;
-}
-
-.qStatSub {
-  font-size: var(--text-xs);
-  color: var(--color-text-tertiary);
-}
-
-.qStatAccent .qStatSub {
-  color: var(--color-accent-text);
-}
-
-/* An icon in an avatar-sized circle for non-person action rows */
-.qAvatarIcon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  flex: none;
-  border-radius: var(--radius-pill);
-  background: var(--color-surface-alt);
-  color: var(--color-text-secondary);
-}
-
-/* Rich insight card */
-.qInsightHead {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.qInsightContext {
-  font-size: var(--text-xs);
-  color: var(--color-text-secondary);
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.qInsightMeta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
-.qAreaChip {
-  font-size: var(--text-xs);
-  padding: 2px var(--space-2);
-  border-radius: var(--radius-pill);
-  background: var(--color-surface-alt);
-  color: var(--color-text-secondary);
-}
-
-/* Go-deeper accent (the session thread) */
-.qActionRowAccent {
-  border-color: var(--color-accent-border, var(--color-accent-text));
-}
-
-/* Fun + spicy bands */
-.qBand {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: var(--space-3) var(--space-4);
-  border: none;
-  border-radius: var(--radius-lg);
-  cursor: pointer;
-  text-align: left;
-  min-width: 0;
-  font: inherit;
-}
-
-.qBandFun {
-  background: var(--color-accent-subtle-bg);
-}
-
-.qBandSpicy {
-  background: var(--color-danger-subtle-bg, var(--color-accent-subtle-bg));
-}
-
-.qBandEyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  font-size: var(--text-xs);
-  font-weight: 500;
-  color: var(--color-accent-text);
-}
-
-.qBandEyebrowDanger {
-  color: var(--color-danger-text, var(--color-accent-text));
-}
-
-.qBandTitle {
-  font-size: var(--text-md);
-  font-weight: 500;
-  color: var(--color-text-primary);
-}
-
-.qBandBlurb {
-  font-size: var(--text-sm);
-  color: var(--color-text-secondary);
-  line-height: 1.4;
-}
-
-/* Type coverage */
-.qCoverageHead {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
-
-.qTypeChips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-.qTypeChip {
-  font-size: var(--text-sm);
-  padding: 6px var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.qTypeChip:hover {
-  background: var(--color-surface-alt);
-}
-
-.qTrendLine {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  align-self: flex-start;
-  background: none;
-  border: none;
-  padding: 0;
-  font: inherit;
-  font-size: var(--text-sm);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-}
-
-.qTrendLine:hover {
-  color: var(--color-accent-text);
 }
 
 /* =========================================================================

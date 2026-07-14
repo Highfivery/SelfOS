@@ -138,12 +138,13 @@ empty**, and **skeleton-loads** while its stores resolve. The layout is the revi
    → a soft **"ask someone"** send-a-questionnaire nudge (a prior send ≥30 days old). Each row deep-links to where
    the action happens. Leads **above** "For you"; self-hides when clear; per-person. **Your goals** (every ACTIVE
    goal — framed "needs a check-in" when stale, else "in progress") and **Together agreements** are GENUINE
-   (non-nudge) items — your own concrete commitments, kept **top of mind regardless of the proactivity dial**
-   (updated 2026-07-14 on repeated user feedback: goals + reflections must show here even with proactivity off);
-   they clear as goals/agreements are marked done. Only the **check-in** and **"ask someone"** are gentle
-   **nudges**, dropped under recurring crisis OR proactivity-off (§8). The truly-pending items (turn / invite /
-   responses / review) always show; a recurring crisis additionally suppresses agreements + goals (Home leads
-   with support). Pure derivation (`needsAttention`).
+   (non-nudge) items — your own concrete commitments, so they **ALWAYS show**: neither a proactivity-off dial NOR
+   a recurring crisis signal hides them (updated 2026-07-14 on repeated user feedback — a crisis signal was
+   silently suppressing them, the exact bug the user hit; they're grounding, not AI pushes, and the crisis banner
+   - resources already lead Home with support, so there is no need to hide the person's own gentle commitments).
+     They clear as goals/agreements are marked done. Only the **check-in** and **"ask someone"** are gentle
+     **nudges**, dropped under recurring crisis OR proactivity-off (§8), along with the "For you" growth band. The
+     truly-pending items (turn / invite / responses / review) always show. Pure derivation (`needsAttention`).
 4. **"For you today" band** — two cards side by side:
    - **Daily reflection (AI companion).** The cached `coaching.synthesize` observation in a warm companion
      voice ("Rest and self-worth keep circling each other for you this week — and you came back to Angel,
@@ -554,6 +555,25 @@ complete flows through the rendered UI, not bridge calls (CLAUDE.md §7). E2E is
 
 ## 12. Changelog
 
+- 2026-07-14 — **Follow-up 4 (a recurring crisis signal was silently hiding your goals + agreements — the real
+  root cause; on `fix/needs-attention-crisis-shows-commitments`).** After Follow-up 3 shipped in v0.24.0, the user
+  (on the fresh build — confirmed by the new "It's your turn with Angel" queue item) STILL saw only "It's your turn"
+  - "6 insights to review", with their Goals card clearly showing a Together commitment + two in-progress goals.
+    **Diagnosed by elimination (not assumed):** `together-turn` and `review-insights` (not crisis-gated) rendered,
+    while the `agreement` and `goals` items — the ONLY two gated on `!input.crisis` — did not, despite the data
+    existing. So `aggregateCrisisSignal(...).recurring` was true for them, and the `!crisis` gate I'd added (in #198,
+    extended to goals in Follow-up 3) was suppressing exactly what they asked to see. **Fix:** the person's OWN
+    commitments (goals + Together agreements) now **always show** — the `!input.crisis` gate is removed from both, and
+    the now-unused `crisis` `AttentionInput` field is dropped (crisis still suppresses the true nudges via
+    `suppressNudges` + the "For you" band). They're grounding, not AI pushes, and the crisis banner already leads Home
+    with support. Tests: attention + Home units inverted (goal/agreement now VISIBLE under crisis) and a new E2E seeds
+    a recurring crisis + a standing agreement + an active goal and asserts the support banner leads AND both
+    commitments render in "Needs attention" (For-you suppressed). Real-Electron screenshot verified. Gate green:
+    typecheck, lint, format, 96 home unit, affected E2E (crisis-shows-commitments, spec-61, proactivity-off,
+    crisis-banner, stale-goal). **Lesson: "lead with support during a crisis" means suppress AI PUSHES (the growth
+    band + gentle nudges), NOT the person's own gentle commitments — hiding someone's goals/agreements behind a crisis
+    flag reads as the app erasing their stuff exactly when they look for grounding; the crisis banner + resources are
+    the support, the commitments are allowed to stay.**
 - 2026-07-14 — **Follow-up 3 (goals + Together reflections must show in "Needs attention" — user-reported,
   escalating; on `fix/needs-attention-goals-agreements`).** The user (furious) kept seeing ONLY "N insights to
   review" in the queue — no goals, no Together agreements — because their **proactivity dial is off**, which

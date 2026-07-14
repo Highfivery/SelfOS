@@ -79,9 +79,10 @@ the active person has ≥1 **standing** agreement across their live partner pair
 - Ordering: below the urgent Together items (`together-turn`, `together-invite`) and the
   `analyze-responses`/`review-insights` items.
 - It is a **genuine (non-nudge) item** (updated 2026-07-14 on user feedback — a standing agreement is a
-  concrete commitment the couple made, not an AI suggestion, and must stay **top of mind regardless of the
-  proactivity dial**). It is therefore **not** dropped by `suppressNudges` (proactivity off); it is
-  suppressed **only under an active recurring crisis** (Home leads with support, §8).
+  concrete commitment the couple made, not an AI suggestion, and must stay **top of mind**). It is therefore
+  **not** dropped by `suppressNudges` (proactivity off) **and not** hidden by a recurring crisis signal either
+  (re-confirmed 2026-07-14 — a crisis flag was silently suppressing it; the crisis banner + resources already
+  lead Home with support, so the couple's own commitment stays visible, §8). See spec 60 §3.1.2a Follow-up 4.
 - It clears naturally as agreements are marked **done**/**retired** (no standing agreements → no item).
 
 ### 3.2 "Together commitments" in the Goals surface (slice A)

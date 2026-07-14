@@ -31,7 +31,6 @@ function base(over: Partial<AttentionInput> = {}): AttentionInput {
     insightDraftCount: 0,
     otherPeopleCount: 1,
     suppressNudges: false,
-    crisis: false,
     can: ALL_CAPS,
     ...over,
   };
@@ -215,11 +214,11 @@ describe('needsAttention (60 §3.1.2a)', () => {
     expect(kinds).not.toContain('send-questionnaire');
   });
 
-  it('a recurring crisis DOES suppress your goals (Home leads with support, §8)', () => {
+  it('your goals stay visible even under a recurring crisis — your own commitment, not an AI push', () => {
     const kinds = needsAttention(
-      base({ crisis: true, goals: [goal({ id: 'g', due: '2026-06-01' })] }),
+      base({ suppressNudges: true, goals: [goal({ id: 'g', due: '2026-06-01' })] }),
     ).map((i) => i.kind);
-    expect(kinds).not.toContain('goals');
+    expect(kinds).toContain('goals');
   });
 
   it('surfaces a single standing agreement as a genuine (non-nudge) item showing its text (spec 61)', () => {
@@ -232,17 +231,16 @@ describe('needsAttention (60 §3.1.2a)', () => {
     expect(item?.nudge).toBeUndefined(); // NOT a nudge — stays top of mind regardless of proactivity
   });
 
-  it('stays visible under proactivity-off (non-nudge); a crisis suppresses it; generalizes for many partners', () => {
+  it('stays visible under proactivity-off AND under crisis (your own commitment); generalizes for many partners', () => {
     const many = base({ agreements: [agreement('Angel'), agreement('Cass', 'cass')] });
     const item = needsAttention(many).find((i) => i.kind === 'agreement');
     expect(item?.label).toBe('Following through on your agreements');
     expect(item?.detail).toBe('2 standing agreements to keep up');
-    // Non-nudge → NOT dropped when proactivity is off (suppressNudges), the user's "top of mind" ask.
+    // Non-nudge → NOT dropped when proactivity is off / a crisis is active (the user's "top of mind" ask).
+    // It's the couple's own commitment, not an AI push, so a crisis signal never hides it.
     expect(needsAttention({ ...many, suppressNudges: true }).map((i) => i.kind)).toContain(
       'agreement',
     );
-    // But a recurring crisis DOES suppress it (Home leads with support, §8).
-    expect(needsAttention({ ...many, crisis: true }).map((i) => i.kind)).not.toContain('agreement');
     // Gated on `together`.
     expect(
       needsAttention({ ...many, can: { ...ALL_CAPS, together: false } }).map((i) => i.kind),

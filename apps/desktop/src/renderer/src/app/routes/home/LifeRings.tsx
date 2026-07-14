@@ -1,14 +1,23 @@
-import type { CSSProperties } from 'react';
-import type { LifeRing } from '@selfos/core/home';
+import { Heart } from 'lucide-react';
+import type { LifeRing, LifeRingKey } from '@selfos/core/home';
 import { Card, Heading, Stack, Text } from '../../../design-system/components';
+import { Ring } from './Ring';
 import styles from './Home.module.css';
 
+/** The chart token that colours each ring's arc. */
+const RING_COLOR: Record<LifeRingKey, string> = {
+  wellbeing: 'var(--color-chart-1)',
+  connection: 'var(--color-chart-4)',
+  reflection: 'var(--color-chart-2)',
+  growth: 'var(--color-chart-3)',
+};
+
 /**
- * The "life-rings" whole-life glance (60 §3.1.6) — a few derived rings (Wellbeing / Connection / Reflection
- * / Growth), each with a level word AND a % (the owner's choice). Framed as "a reflection, not a score to
- * chase". During a crisis every ring is `softened`: the number/bar is hidden and only the supportive level
- * word shows (§8). Self-hides when no ring has a contributing signal. Meaning is never color-only — the
- * level word + % are real text (§9).
+ * The "life-rings" whole-life glance (60 §3.1.6) — a few derived rings (Wellbeing / Connection / Reflection /
+ * Growth), each an SVG progress ring with the % inside and a level word below. Framed as "a reflection, not a
+ * score to chase". During a crisis every ring is `softened`: the arc is dropped and a soft heart sits in the
+ * ring with only the supportive level word — a calm, intentional snapshot, never an empty circle (§8). Meaning
+ * is real text (% + level word), never colour-only (§9). Self-hides when no ring has a contributing signal.
  */
 export function LifeRings({ rings }: { rings: LifeRing[] }): JSX.Element | null {
   if (rings.length === 0) return null;
@@ -22,15 +31,19 @@ export function LifeRings({ rings }: { rings: LifeRing[] }): JSX.Element | null 
         <ul className={styles.ringsRow}>
           {rings.map((ring) => (
             <li key={ring.key} className={styles.ringItem}>
-              {/* The short % sits inside the arc (always fits); the level word reads below the label so no
-                  text ever spills outside the circle. Softened (crisis) hides the number entirely (§8). */}
-              <span
-                className={`${styles.ring}${ring.softened ? ` ${styles.ringSoftened}` : ''}`}
-                data-ring={ring.key}
-                style={{ '--ring-fill': ring.value } as CSSProperties}
+              <Ring
+                fill={ring.value}
+                color={RING_COLOR[ring.key]}
+                muted={ring.softened}
+                size={58}
+                stroke={6}
               >
-                <span className={styles.ringInner}>{ring.softened ? '' : `${ring.pct}%`}</span>
-              </span>
+                {ring.softened ? (
+                  <Heart size={16} className={styles.ringHeart} aria-hidden="true" />
+                ) : (
+                  <span className={styles.ringPct}>{ring.pct}%</span>
+                )}
+              </Ring>
               <span className={styles.ringLabel}>{ring.label}</span>
               <span className={styles.ringLevel}>{ring.levelLabel}</span>
             </li>

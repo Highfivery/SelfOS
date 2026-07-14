@@ -796,6 +796,28 @@ export const GoalSchema = z.object({
 export type Goal = z.infer<typeof GoalSchema>;
 
 /**
+ * An AI-proposed goal (60-home-dashboard §3.1.3 — the Goals card's "Suggest goals" tap). The suggest service
+ * derives 2-3 tailored proposals from the person's OWN structured context (own insights/themes + existing
+ * goals to avoid), NEVER auto-runs (explicit tap only), and returns these WITHOUT persisting — the person
+ * accepts one (→ `createGoal`), edits, or dismisses. `lifeArea` is clamped to `LIFE_AREAS` server-side.
+ */
+export const GoalSuggestionSchema = z.object({
+  text: z.string().min(1), // the proposed commitment, in second-person ("Reach out to …")
+  lifeArea: z.string().optional(),
+  rationale: z.string().optional(), // a short "why this, now" the card can show
+});
+export type GoalSuggestion = z.infer<typeof GoalSuggestionSchema>;
+
+/** Result of the metered "Suggest goals" pass (`goal.suggest`) — the gap-finder result shape (37/08). */
+export interface GoalSuggestResult {
+  ok: boolean;
+  suggestions?: GoalSuggestion[];
+  usage?: UsageEvent;
+  reason?: AiFailureReason;
+  message?: string;
+}
+
+/**
  * A tracked challenge / experiment (52-challenge-sessions §4.2) — a small, deliberately-stretching action the
  * person co-creates with the coach and commits to between sessions, with a check-in and a reflection that
  * feeds memory. It is its OWN entity, NOT a `Goal` subtype (§2/§4.2): a goal is a standing commitment; a

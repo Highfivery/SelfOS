@@ -49,6 +49,8 @@ import { WellbeingCard } from './WellbeingCard';
 import { DreamsCard } from './DreamsCard';
 import { MemoryCard } from './MemoryCard';
 import { ChallengeCard } from './ChallengeCard';
+import { GoalsCard } from './GoalsCard';
+import { YouCard } from './YouCard';
 import { QuestionnairesCard } from './QuestionnairesCard';
 import { GettingStarted } from './GettingStarted';
 import { WelcomeOrientationCard } from './WelcomeOrientationCard';
@@ -582,6 +584,7 @@ export function Home(): JSX.Element {
                   />
                 </div>
                 <WellbeingCard points={moodPoints} checkIns={checkInPoints} />
+                {canTakeTests ? <YouCard /> : null}
                 <TogetherHomeCard sessions={togetherSessions} myId={activePersonId} />
                 <ContinueCard
                   conversations={conversations}
@@ -591,6 +594,7 @@ export function Home(): JSX.Element {
                 <DreamsCard dreams={dreams} stats={patternStats} />
                 <MemoryCard insights={approvedInsights} canView={canViewMemory} />
                 <ChallengeCard />
+                {canViewMemory ? <GoalsCard configured={configured} crisis={crisis} /> : null}
                 <QuestionnairesCard
                   sentOverview={sentOverview}
                   inboxCount={inboxCount}

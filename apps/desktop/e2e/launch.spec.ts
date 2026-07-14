@@ -988,7 +988,13 @@ test('proactive coaching: a stale goal surfaces a nudge + Home card; Mark done c
     // The Home "For you" goal recommendation surfaces the stale goal with the calm actions (scoped to main,
     // not the notification body / toast that also names the goal).
     await expect(w.getByRole('heading', { name: /a goal worth a check-in/i })).toBeVisible();
-    await expect(w.getByRole('main').getByText(/finish the side project/i)).toBeVisible();
+    // The goal is now named in both the recommendation reason AND the Goals bento card — assert at least one.
+    await expect(
+      w
+        .getByRole('main')
+        .getByText(/finish the side project/i)
+        .first(),
+    ).toBeVisible();
     // The 3-action row wraps rather than overflowing at phone width (§9).
     await w.setViewportSize({ width: 360, height: 780 });
     const offenders = await w.evaluate(() => {
@@ -1166,6 +1172,17 @@ test('home (60): the Hybrid dashboard shows the quick dock, life-rings, and the 
     updatedAt: now,
   });
   await seedTwoAreas(fs, key);
+  await saveGoal(fs, key, {
+    id: 'g1',
+    schemaVersion: 1,
+    subjectPersonId: 'owner-1',
+    text: 'Reach out to an old friend',
+    status: 'open',
+    provenance: { at: now },
+    createdAt: now,
+    updatedAt: now,
+    lastTouchedAt: now,
+  });
 
   const app = await launch(userData);
   try {
@@ -1177,6 +1194,22 @@ test('home (60): the Hybrid dashboard shows the quick dock, life-rings, and the 
 
     // Life-rings whole-life glance (a level word + a %).
     await expect(w.getByRole('heading', { name: /your life, lately/i })).toBeVisible();
+    // The rings draw a real SVG progress arc — the fix for the reported "blank circles".
+    expect(await w.evaluate(() => !!document.querySelector('circle[stroke-dasharray]'))).toBe(true);
+
+    // Goals card (60 §3.1.3) — the seeded goal + a way to set + complete more.
+    await expect(w.getByRole('heading', { name: /^goals$/i })).toBeVisible();
+    await expect(w.getByText('Reach out to an old friend')).toBeVisible();
+
+    // You card (60 §3.1.4) — the self-assessments hub window (invite state: nothing taken yet).
+    await expect(w.getByRole('heading', { name: /^you$/i })).toBeVisible();
+    await expect(w.getByText('Discover your profile', { exact: true })).toBeVisible();
+
+    // Create a new goal inline → it persists + appears in the card (real bridge round-trip).
+    await w.getByRole('button', { name: /new goal/i }).click();
+    await w.getByRole('textbox', { name: 'New goal' }).fill('Read for ten minutes');
+    await w.getByRole('button', { name: /^add goal$/i }).click();
+    await expect(w.getByText('Read for ten minutes')).toBeVisible();
 
     // The cross-feature activity feed ("recent across everything") surfaces a recent event.
     await expect(w.getByRole('heading', { name: 'Recent', exact: true })).toBeVisible();

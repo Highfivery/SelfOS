@@ -460,8 +460,11 @@ describe('Home — the "For you" engine', () => {
     expect(
       await screen.findByRole('heading', { name: /a goal worth a check-in/i }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/finish the memoir/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /mark done/i }));
+    // The goal now also appears on the Goals bento card, so it's referenced in more than one place.
+    expect(screen.getAllByText(/finish the memoir/i).length).toBeGreaterThan(0);
+    // The recommendation's action is a plain "Mark done" button (the Goals card's per-goal buttons name the
+    // goal, so `/mark done/i` uniquely targets the recommendation here).
+    fireEvent.click(screen.getByRole('button', { name: /^mark done$/i }));
     await waitFor(() => expect(setStatus).toHaveBeenCalledWith({ goalId: 'g1', status: 'done' }));
   });
 

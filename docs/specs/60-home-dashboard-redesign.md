@@ -151,13 +151,27 @@ empty**, and **skeleton-loads** while its stores resolve. The layout is the revi
    - **Dreams** — recurring-symbol **frequency bars** (`FrequencyBars`) + nightmare-rate + lucid chips.
    - **Memory** — a **highlight insight** (a recent high-confidence fact) + confidence chip.
    - **Challenge** — the active challenge, **comfort dial** + **progress bar** (day N of M) + a check-in CTA.
+   - **Goals** (§3.1.3) — encourages a person to SET, SEE, MOVE, and COMPLETE goals from Home: a completion
+     `ProportionBar`, the active goals that most want attention (stale-first) each with a one-tap **Done** /
+     **Still on it**, an inline **+ New goal** (`goalsCreate`), and — AI-configured — a metered **Suggest goals**
+     tap (`goalsSuggest`, `goal.suggest`) that proposes 2-3 tailored goals to accept/dismiss (explicit tap only,
+     no per-load spend, persists nothing). Empty state invites the first goal; "See all" opens Memory. Crisis
+     hides the completion bar + AI suggest (§8), keeping the calm list + create.
+   - **You** (§3.1.4) — a window into the self-assessments hub (50/51): **profile highlights** (a signature
+     subscale from the latest results — nothing else on Home shows these), a gentle **check-in nudge** when a
+     mood/anxiety reflection has gone stale (≥14d, never for someone who's never checked in, §8), and
+     **take-a-test** invites (the lead when no results). Deep-links straight to the take flow / hub; self-hides
+     when there's nothing to say.
    - **Sharing** — "sharing N things — Angel (4) · Mom (2)" + "1 new insight ready to share" (from
      `memoryOutboundSharing`, 44).
 6. **Right rail:**
-   - **Life-rings** — a whole-life glance of a few derived rings (**Wellbeing / Connection / Reflection**, and
-     optionally **Growth**) shown as **levels/scores** (full engagement), each with a text label (Good / Warm /
-     Active) so meaning is never color-only (§9). Framed as "a reflection of your check-ins, sessions &
-     Together — not a score to chase." Softened during crisis (§8).
+   - **Life-rings** (§3.1.6) — a whole-life glance of a few derived rings (**Wellbeing / Connection / Reflection**,
+     and optionally **Growth**), each a shared **SVG progress ring** (`Ring` — a visible track + a rounded arc,
+     the % inside) with a text level word below (Quiet / Warming / Steady / Active / Thriving) so meaning is never
+     color-only (§9). Framed as "a reflection of your check-ins, sessions & Together — not a score to chase."
+     Softened during crisis (§8): the arc is dropped and a soft **heart** sits in the ring with only the
+     supportive level word — a calm, intentional snapshot, **never an empty circle** (the SVG replaced a
+     low-contrast conic-gradient that read as blank on the cream ground). The Together pulse ring shares `Ring`.
    - **Activity feed** — "recent across everything": a time-sorted, deduped stream of cross-feature events
      (Angel replied · Mom answered your check-in · new insight needs review · challenge check-in due · logged a
      dream · mood check-in). Actionable items are visually marked and route on click; the feed scrolls **inside
@@ -562,6 +576,21 @@ complete flows through the rendered UI, not bridge calls (CLAUDE.md §7). E2E is
   (the activity feed now filters to the active person's own insights — defense-in-depth) + nits (DST-safe streak
   day-math, streak counts only your OWN Together messages, dropped a route cast, + a renderer test proving Home
   suppresses the rhythm streak under crisis). Slices 2 (daily auto-reflection + badges) + 3 pending.
+- 2026-07-14 — **Follow-up (Goals card + You card + life-rings redesign; on `feat/home-goals-you-rings`).** After
+  the redesign merged, the owner flagged: the life-rings "just look blank", and asked for a proper **Goals** surface
+  (set / update / complete / see progress / suggest / create) + a **You**-page surface on Home. **Rings fix:** the
+  conic-gradient rings read as blank (low-contrast on cream, and empty when crisis-softened) — replaced with a shared
+  **SVG `Ring`** (visible track + rounded arc + % inside; softened → a soft heart, never an empty circle); the
+  Together pulse ring adopts it too. **Goals card (§3.1.3, owner chose AI-suggest-on-tap):** completion bar + top
+  active goals with one-tap Done/Still-on-it + inline create (new core `createGoal` + `goals:create`) + a metered
+  **Suggest goals** tap (new `goalSuggestService` + `goal.suggest` usage + `goals:suggest`, mirroring the gap-finder:
+  budget-gated, meter-before-parse, tolerant salvage, persists nothing). **You card (§3.1.4, owner chose profile +
+  check-in + tests):** profile highlights from latest results + a stale mood/anxiety check-in nudge + take-a-test
+  invites; deep-links into the take flow / hub; self-hides when empty. Both cards per-person + capability-gated
+  (`memory.own` / `tests.own`); goal actions name their goal for a11y (no ambiguous "Mark done"). Gate green:
+  typecheck (all), lint, format, **1162 core + 1134 desktop** unit (+goalSuggest/createGoal/goalsSummary core,
+  +goalsCreate/goalsSuggest bridge, +GoalsCard/YouCard RTL, +LifeRings arc/heart guards), Home **E2E** green (the
+  `home (60)` test seeds a goal, asserts both cards + a real SVG ring arc, and creates a goal end-to-end; 360px clean).
 - 2026-07-13 — created (Draft). Founding decisions in §11.0 resolved by the owner from a three-direction mockup
   review; Hybrid direction, capped daily AI reflection, four new cross-feature elements, all-four hero, full
   engagement (with the §8 crisis guardrail), loading skeletons. Amends [`53`](53-home-encouragement.md) §2/§3.8/§8

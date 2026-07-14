@@ -1,8 +1,9 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Heart } from 'lucide-react';
 import type { TogetherPulseView, TogetherSessionSummary } from '@shared/schemas';
 import { Button, Card, Heading, Stack, Text } from '../../../design-system/components';
+import { Ring } from './Ring';
 import styles from './Home.module.css';
 
 /** The other participant's display name for a session (the viewer excluded). */
@@ -120,12 +121,9 @@ export function TogetherHomeCard({
           <div className={styles.pulseRow}>
             {connectionValue !== undefined ? (
               <div className={styles.pulseItem}>
-                <span
-                  className={styles.pulseRing}
-                  style={{ '--ring-fill': connectionValue } as CSSProperties}
-                >
-                  <span className={styles.pulseRingInner}>{levelFor(connectionValue)}</span>
-                </span>
+                <Ring fill={connectionValue} color="var(--color-chart-4)" size={46} stroke={5}>
+                  <span className={styles.pulseRingLevel}>{levelFor(connectionValue)}</span>
+                </Ring>
                 <span className={styles.pulseLabel}>
                   Connection{connection?.direction ? ` · ${connection.direction}` : ''}
                 </span>

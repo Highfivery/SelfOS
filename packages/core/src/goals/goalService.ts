@@ -216,6 +216,48 @@ export async function updateGoal(
   return updated;
 }
 
+export interface CreateGoalInput {
+  text: string;
+  due?: string; // ISO date, optional hard deadline
+  horizon?: string; // soft horizon when there's no date
+  lifeArea?: string; // clamped to LIFE_AREAS, or dropped
+}
+
+/**
+ * Create a NEW goal the person set for themselves (60-home-dashboard §3.1.3 — the Goals card "+ New goal" and
+ * the accept-a-suggestion path). Unlike `extractGoals` (session-sourced, de-duped), a manual create always
+ * makes a fresh `open` goal — the person asked for it explicitly. Provenance is the create time only (no
+ * session/source). Returns null on empty text.
+ */
+export async function createGoal(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  input: CreateGoalInput,
+  now: Date,
+): Promise<Goal | null> {
+  const text = input.text.trim();
+  if (!text) return null;
+  const at = now.toISOString();
+  const lifeArea = normalizeLifeArea(input.lifeArea);
+  const goal: Goal = {
+    id: uuid(),
+    schemaVersion: 1,
+    subjectPersonId: personId,
+    text,
+    status: 'open',
+    provenance: { at },
+    createdAt: at,
+    updatedAt: at,
+    lastTouchedAt: at,
+    ...(input.due?.trim() ? { due: input.due.trim() } : {}),
+    ...(input.horizon?.trim() ? { horizon: input.horizon.trim() } : {}),
+    ...(lifeArea ? { lifeArea } : {}),
+  };
+  await saveGoal(fs, key, goal);
+  return goal;
+}
+
 /** How many open commitments to surface to the coach as grounding (bounded like the rest of context). */
 const MAX_GOALS_IN_CONTEXT = 8;
 

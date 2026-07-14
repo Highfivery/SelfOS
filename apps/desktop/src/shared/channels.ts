@@ -5,6 +5,7 @@ import type {
   AlignmentResult,
   Goal,
   GoalStatus,
+  GoalSuggestResult,
   Challenge,
   ChallengeStatus,
   ChallengeDomain,
@@ -248,6 +249,8 @@ export const IpcChannels = {
   goalsSetStatus: 'goals:setStatus',
   goalsUpdate: 'goals:update',
   goalsDelete: 'goals:delete',
+  goalsCreate: 'goals:create',
+  goalsSuggest: 'goals:suggest',
   coachingGetPrefs: 'coaching:getPrefs',
   coachingSetPrefs: 'coaching:setPrefs',
   coachingGetSynthesis: 'coaching:getSynthesis',
@@ -893,6 +896,18 @@ export interface SelfosBridge {
   }): Promise<Goal | null>;
   /** Delete one of the active person's OWN goals. */
   goalsDelete(input: { goalId: string }): Promise<void>;
+  /** Create a NEW goal the person set for themselves (60-home-dashboard §3.1.3). */
+  goalsCreate(input: {
+    text: string;
+    due?: string;
+    horizon?: string;
+    lifeArea?: string;
+  }): Promise<Goal | null>;
+  /**
+   * Metered "Suggest goals" (60 §3.1.3) — 2-3 AI-proposed goals from the person's own structured context.
+   * Explicit-tap only (no per-load spend); persists nothing (the person accepts one via `goalsCreate`).
+   */
+  goalsSuggest(): Promise<GoalSuggestResult>;
   /**
    * The active person's OWN proactive-coaching preferences (40 §4.1a) — the per-person proactivity level.
    * Gated `sessions.own`, active-person-scoped in the bridge. `null` when not signed in / not permitted.

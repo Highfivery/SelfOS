@@ -164,6 +164,21 @@ function makeHost(): {
           usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
       }
+      // Goal suggestions (60 §3.1.3): "Propose the goals JSON." → a JSON array of goal objects, one carrying
+      // an off-taxonomy life-area so the bridge test can assert the clamp drops it.
+      if (userText.includes('Propose the goals JSON')) {
+        return Promise.resolve({
+          text: JSON.stringify([
+            {
+              text: 'Call your sister this week',
+              lifeArea: 'Relationships',
+              rationale: 'You miss her',
+            },
+            { text: 'Take a short walk most days', lifeArea: 'not-a-real-area' },
+          ]),
+          usage: { inputTokens: 3, outputTokens: 3, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
       // Compatibility alignment → a report object (items merge by canonicalId in the service).
       if (userText.includes('compatibility report JSON')) {
         return Promise.resolve({
@@ -2464,17 +2479,66 @@ describe('createCoreBridge', () => {
       'run a half marathon',
     );
 
-    // A Guest (no memory.own) sees none and can't mutate.
+    // The owner can CREATE a new goal for themselves (60 §3.1.3) — a fresh open goal, clamped life-area.
+    const created = await bridge.goalsCreate({
+      text: 'meditate daily',
+      due: '2026-09-01',
+      lifeArea: 'nope',
+    });
+    expect(created?.status).toBe('open');
+    expect(created?.due).toBe('2026-09-01');
+    expect(created?.lifeArea).toBeUndefined(); // off-taxonomy dropped
+    expect((await bridge.goalsList()).map((g) => g.text)).toContain('meditate daily');
+
+    // A Guest (no memory.own) sees none and can't mutate or create.
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
     await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
     expect((await bridge.sessionSetActive({ personId: guest.id })).ok).toBe(true);
     expect(await bridge.goalsList()).toEqual([]);
     expect(await bridge.goalsSetStatus({ goalId: 'g1', status: 'open' })).toBeNull();
+    expect(await bridge.goalsCreate({ text: 'sneaky' })).toBeNull();
 
-    // Back as the owner (PIN required returning to the owner), delete it.
+    // Back as the owner (PIN required returning to the owner), delete both.
     expect((await bridge.sessionSetActive({ personId: ownerId, pin: '1234' })).ok).toBe(true);
     await bridge.goalsDelete({ goalId: 'g1' });
+    if (created) await bridge.goalsDelete({ goalId: created.id });
     expect(await bridge.goalsList()).toEqual([]);
+  });
+
+  it('goalsSuggest (60 §3.1.3): metered goal.suggest, clamps life-area, gated memory.own', async () => {
+    const { bridge, host, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const ctx = (await host.host.vaultAndKey())!;
+    // Seed some context so the pre-call thin-context check passes (else it's a calm empty state, no spend).
+    await saveInsight(ctx.fs, ctx.key, {
+      id: 'i1',
+      schemaVersion: 1,
+      source: 'session',
+      subjectPersonId: ownerId,
+      summary: 'Keeps mentioning his sister and wanting to move more.',
+      facts: [{ id: 'f1', text: 'Misses his sister.', shareable: false }],
+      confidence: 'high',
+      categories: ['Relationships'],
+      approved: true,
+      provenance: { conversationId: 'i1', at: new Date().toISOString() },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    const r = await bridge.goalsSuggest();
+    expect(r.ok).toBe(true);
+    expect(r.suggestions?.map((s) => s.text)).toContain('Call your sister this week');
+    // The off-taxonomy life-area on the second suggestion is dropped.
+    expect(r.suggestions?.find((s) => s.text.includes('walk'))?.lifeArea).toBeUndefined();
+    expect(
+      (await bridge.usageSummary({ scope: 'person', period: 'month' })).byType['goal.suggest']
+        ?.count ?? 0,
+    ).toBeGreaterThan(0);
+
+    // A Guest (no memory.own) is denied without spending.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    expect((await bridge.sessionSetActive({ personId: guest.id })).ok).toBe(true);
+    expect(await bridge.goalsSuggest()).toMatchObject({ ok: false, reason: 'DENIED' });
   });
 
   it('persists custom types for the picker, gated by questionnaires.create', async () => {

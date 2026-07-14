@@ -1,10 +1,28 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import type { Goal } from '@shared/schemas';
+import type { AgreementSummary, Goal } from '@shared/schemas';
 import { GoalsCard } from './GoalsCard';
 import { useGoalStore } from '../../../stores/goalStore';
+import { useTogetherStore } from '../../../stores/togetherStore';
 import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
+
+function commitment(text: string): AgreementSummary {
+  return {
+    partnerPersonId: 'angel',
+    partnerName: 'Angel',
+    agreement: {
+      id: 'a1',
+      schemaVersion: 1,
+      pairKey: 'angel~me',
+      text,
+      status: 'standing',
+      provenance: { sessionId: 's1', at: 'now' },
+      createdAt: 'now',
+      updatedAt: 'now',
+    },
+  };
+}
 
 const goal = (over: Partial<Goal> & { id: string; text: string }): Goal => ({
   schemaVersion: 1,
@@ -26,6 +44,7 @@ function renderCard(props: { configured?: boolean; crisis?: boolean } = {}): voi
 
 afterEach(() => {
   useGoalStore.getState().reset();
+  useTogetherStore.getState().reset();
   clearMockBridge();
 });
 
@@ -37,6 +56,30 @@ describe('GoalsCard (60 §3.1.3)', () => {
     expect(screen.getByRole('heading', { name: /goals/i })).toBeInTheDocument();
     expect(screen.getByText(/set a goal you want to move toward/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /new goal/i })).toBeInTheDocument();
+  });
+
+  it('shows Together commitments (text + partner) with a one-tap mark done (spec 61)', async () => {
+    const setStatus = vi.fn(() => Promise.resolve(null));
+    installMockBridge({
+      togetherSetAgreementStatus: setStatus,
+      togetherMyAgreements: () => Promise.resolve([commitment('Weekly date night')]),
+    });
+    useGoalStore.setState({ goals: [], loaded: true });
+    useTogetherStore.setState({ myAgreements: [commitment('Weekly date night')] });
+    renderCard();
+
+    expect(screen.getByText('Together commitments')).toBeInTheDocument();
+    expect(screen.getByText('Weekly date night')).toBeInTheDocument();
+    expect(screen.getByText('Angel')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mark done: Weekly date night' }));
+    await waitFor(() =>
+      expect(setStatus).toHaveBeenCalledWith({
+        partnerPersonId: 'angel',
+        agreementId: 'a1',
+        status: 'done',
+      }),
+    );
   });
 
   it('shows a completion bar + the top goal with one-tap Done / Still on it', async () => {

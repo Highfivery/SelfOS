@@ -505,6 +505,7 @@ export function Home(): JSX.Element {
     insightDraftCount: needReview,
     otherPeopleCount: people.filter((p) => p.id !== activePersonId).length,
     suppressNudges: crisis || proactivity === 'off',
+    crisis,
     can: {
       memory: canViewMemory,
       tests: canTakeTests,

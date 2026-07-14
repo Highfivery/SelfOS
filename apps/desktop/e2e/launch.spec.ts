@@ -10543,6 +10543,9 @@ test('together follow-through (61): agreements in Goals + needs-attention, inlin
     // Home surfaces BOTH the needs-attention follow-through item AND the inline pulse check-in callout.
     await expect(w.getByText('Following through with Angel')).toBeVisible();
     await expect(w.getByRole('heading', { name: 'Check in with Angel' })).toBeVisible();
+    // The commitment TEXT is on Home (the needs-attention detail + the Goals card list — not just a count).
+    await expect(w.getByText('weekly date night').first()).toBeVisible();
+    await expect(w.getByText('Together commitments').first()).toBeVisible();
 
     // Log a pulse check-in right on the dashboard (metrics default to Steady) → decrypt asserts it persisted.
     await w.getByRole('button', { name: 'Save check-in' }).click();

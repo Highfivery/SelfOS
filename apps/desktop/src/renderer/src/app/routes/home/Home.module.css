@@ -77,24 +77,38 @@
   text-decoration: underline;
 }
 
-/* A passive "N Together commitments" glance on the Goals card (spec 61 §3.2). */
-.togetherGlance {
-  display: inline-flex;
-  align-items: center;
+/* The Together commitments mini-section on the Goals card (spec 61 §3.2) — the shared agreements, shown
+   with a one-tap "Mark done", not just a count. */
+.commitments {
+  display: flex;
+  flex-direction: column;
   gap: var(--space-1);
-  align-self: flex-start;
-  padding: 4px 10px;
-  border-radius: var(--radius-full, 999px);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
   background: var(--color-accent-subtle-bg);
-  color: var(--color-accent-text);
-  border: none;
-  font: inherit;
-  font-size: var(--text-xs);
-  cursor: pointer;
 }
 
-.togetherGlance:hover {
-  text-decoration: underline;
+.commitmentsHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-accent-text);
+}
+
+.commitmentsTitle {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.commitmentWith {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--color-accent-text);
 }
 
 /* Continue + memory + dream rows */

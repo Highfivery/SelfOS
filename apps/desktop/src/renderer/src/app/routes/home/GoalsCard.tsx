@@ -49,7 +49,8 @@ export function GoalsCard({
   const create = useGoalStore((s) => s.create);
   const setStatus = useGoalStore((s) => s.setStatus);
   const suggest = useGoalStore((s) => s.suggest);
-  const commitmentCount = useTogetherStore((s) => s.myAgreements.length);
+  const commitments = useTogetherStore((s) => s.myAgreements);
+  const setAgreementStatus = useTogetherStore((s) => s.setAgreementStatus);
 
   const now = new Date();
   const summary = goalsSummary(goals, now, 2);
@@ -105,23 +106,50 @@ export function GoalsCard({
             <Flag size={16} aria-hidden="true" /> Goals
           </Heading>
           {!empty ? (
-            <button type="button" className={styles.cardLink} onClick={() => navigate('/memory')}>
+            <button type="button" className={styles.cardLink} onClick={() => navigate('/goals')}>
               See all
             </button>
           ) : null}
         </div>
 
-        {commitmentCount > 0 ? (
-          <button
-            type="button"
-            className={styles.togetherGlance}
-            onClick={() => navigate('/goals')}
-          >
-            <Handshake size={13} aria-hidden="true" />
-            {commitmentCount === 1
-              ? '1 Together commitment'
-              : `${commitmentCount} Together commitments`}
-          </button>
+        {commitments.length > 0 ? (
+          <div className={styles.commitments}>
+            <div className={styles.commitmentsHead}>
+              <Handshake size={14} aria-hidden="true" />
+              <span className={styles.commitmentsTitle}>Together commitments</span>
+              {commitments.length > 2 ? (
+                <button
+                  type="button"
+                  className={styles.cardLink}
+                  onClick={() => navigate('/goals')}
+                >
+                  See all
+                </button>
+              ) : null}
+            </div>
+            <ul className={styles.goalList}>
+              {commitments.slice(0, 2).map(({ agreement, partnerPersonId, partnerName }) => (
+                <li key={agreement.id} className={styles.goalItem}>
+                  <div className={styles.goalMain}>
+                    <span className={styles.goalText}>{agreement.text}</span>
+                    <div className={styles.goalMeta}>
+                      <span className={styles.commitmentWith}>
+                        <Handshake size={11} aria-hidden="true" /> {partnerName}
+                      </span>
+                    </div>
+                  </div>
+                  <div className={styles.goalActions}>
+                    <IconButton
+                      aria-label={`Mark done: ${agreement.text}`}
+                      onClick={() => void setAgreementStatus(partnerPersonId, agreement.id, 'done')}
+                    >
+                      <Check size={16} aria-hidden="true" />
+                    </IconButton>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
         ) : null}
 
         {empty ? (

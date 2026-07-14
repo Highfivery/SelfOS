@@ -74,11 +74,14 @@ the active person has ≥1 **standing** agreement across their live partner pair
 - Icon: `handshake` (lucide).
 - Route: `/goals` (the "Together commitments" section, §3.2). Navigation-only row, consistent with the
   rest of the queue.
+- Copy: **"Following through with `<partner>`"** · detail = the **actual commitment text** (a single
+  agreement) or "`N` standing agreements to keep up" (several), so the person sees what it is at a glance.
 - Ordering: below the urgent Together items (`together-turn`, `together-invite`) and the
-  `analyze-responses`/`review-insights` items. It is a **gentle nudge** (`nudge: true`) — so it respects the
-  person's opt-out and is dropped under `suppressNudges` (proactivity off **or** recurring crisis), matching
-  how the queue's other gentle reminders (`check-in`, `stale-goals`) behave. It stays visible for the default
-  gentle/active proactivity.
+  `analyze-responses`/`review-insights` items.
+- It is a **genuine (non-nudge) item** (updated 2026-07-14 on user feedback — a standing agreement is a
+  concrete commitment the couple made, not an AI suggestion, and must stay **top of mind regardless of the
+  proactivity dial**). It is therefore **not** dropped by `suppressNudges` (proactivity off); it is
+  suppressed **only under an active recurring crisis** (Home leads with support, §8).
 - It clears naturally as agreements are marked **done**/**retired** (no standing agreements → no item).
 
 ### 3.2 "Together commitments" in the Goals surface (slice A)
@@ -96,9 +99,11 @@ rendered above/below the personal goals list, only when there are standing agree
 - Marked "Together commitments" (not "Goals") so it's clear these are shared with a partner, not private
   personal goals. A short one-line note: "Shared with `<partner>` — either of you can update these."
 
-The Home `GoalsCard` shows a compact **passive roll-up** ("`N` Together commitments") linking to the same
-section, **in addition to** the needs-attention item (decided 2026-07-14) — the needs-attention row is the
-actionable callout, the `GoalsCard` count is a passive glance. It does not duplicate the full list on Home.
+The Home `GoalsCard` shows a compact **"Together commitments" mini-section** (updated 2026-07-14 on user
+feedback — a passive count wasn't enough; the card must actually **show** the commitments): each standing
+agreement's text + partner + a one-tap **"Mark done"** (writes back via `together:setAgreementStatus`),
+capped at 2 with a "See all" → `/goals`. This is in addition to the needs-attention item — the queue row is
+the top-of-mind callout, the `GoalsCard` mini-section lets you see + act on the commitments beside your goals.
 
 ### 3.3 Session top summary strip (slice B)
 

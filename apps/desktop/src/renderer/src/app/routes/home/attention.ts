@@ -47,6 +47,8 @@ export interface AttentionInput {
   otherPeopleCount: number;
   /** When true (recurring crisis OR proactivity off), the gentle nudges are dropped, leaving only genuinely-pending items (§8). */
   suppressNudges: boolean;
+  /** Recurring crisis alone — suppresses even the non-nudge Together-commitment item so Home leads with support (§8). */
+  crisis: boolean;
   can: {
     memory: boolean;
     tests: boolean;
@@ -131,9 +133,11 @@ export function needsAttention(input: AttentionInput): AttentionItem[] {
     });
   }
 
-  // Standing Together agreements — a gentle follow-through reminder (spec 61). Clears as they're marked
-  // done/retired (the actions live on the Goals card + /goals). A nudge, so it respects proactivity-off / crisis.
-  if (can.together && input.agreements.length > 0) {
+  // Standing Together agreements — a concrete commitment the couple made, so it's a genuine (non-nudge)
+  // needs-attention item that stays TOP OF MIND regardless of the proactivity dial (the user's ask). It's
+  // suppressed only under an active crisis (Home leads with support), and clears as agreements are marked
+  // done/retired. The detail shows the actual commitment text so you see what it is at a glance.
+  if (can.together && input.agreements.length > 0 && !input.crisis) {
     const partners = new Set(input.agreements.map((a) => a.partnerPersonId));
     const only = input.agreements[0];
     const n = input.agreements.length;
@@ -143,10 +147,9 @@ export function needsAttention(input: AttentionInput): AttentionItem[] {
         partners.size === 1 && only
           ? `Following through with ${only.partnerName}`
           : 'Following through on your agreements',
-      detail: n === 1 ? '1 standing agreement to keep up' : `${n} standing agreements to keep up`,
+      detail: n === 1 && only ? only.agreement.text : `${n} standing agreements to keep up`,
       route: '/goals',
       count: n,
-      nudge: true,
     });
   }
 

@@ -31,6 +31,7 @@ function base(over: Partial<AttentionInput> = {}): AttentionInput {
     insightDraftCount: 0,
     otherPeopleCount: 1,
     suppressNudges: false,
+    crisis: false,
     can: ALL_CAPS,
     ...over,
   };
@@ -188,24 +189,27 @@ describe('needsAttention (60 §3.1.2a)', () => {
     expect(kinds).not.toContain('send-questionnaire');
   });
 
-  it('surfaces standing Together agreements as a gentle follow-through, naming a single partner (spec 61)', () => {
-    const items = needsAttention(base({ agreements: [agreement('Angel'), agreement('Angel')] }));
-    const item = items.find((i) => i.kind === 'agreement');
+  it('surfaces a single standing agreement as a genuine (non-nudge) item showing its text (spec 61)', () => {
+    const item = needsAttention(base({ agreements: [agreement('Angel')] })).find(
+      (i) => i.kind === 'agreement',
+    );
     expect(item?.label).toBe('Following through with Angel');
-    expect(item?.detail).toBe('2 standing agreements to keep up');
+    expect(item?.detail).toBe('Date night Fridays'); // the actual commitment text, not a bare count
     expect(item?.route).toBe('/goals');
-    expect(item?.nudge).toBe(true);
+    expect(item?.nudge).toBeUndefined(); // NOT a nudge — stays top of mind regardless of proactivity
   });
 
-  it('generalizes the label across multiple partners, and drops the agreement item under suppressNudges', () => {
+  it('stays visible under proactivity-off (non-nudge); a crisis suppresses it; generalizes for many partners', () => {
     const many = base({ agreements: [agreement('Angel'), agreement('Cass', 'cass')] });
-    expect(needsAttention(many).find((i) => i.kind === 'agreement')?.label).toBe(
-      'Following through on your agreements',
-    );
-    // A nudge → suppressed when proactivity is off / crisis.
-    expect(needsAttention({ ...many, suppressNudges: true }).map((i) => i.kind)).not.toContain(
+    const item = needsAttention(many).find((i) => i.kind === 'agreement');
+    expect(item?.label).toBe('Following through on your agreements');
+    expect(item?.detail).toBe('2 standing agreements to keep up');
+    // Non-nudge → NOT dropped when proactivity is off (suppressNudges), the user's "top of mind" ask.
+    expect(needsAttention({ ...many, suppressNudges: true }).map((i) => i.kind)).toContain(
       'agreement',
     );
+    // But a recurring crisis DOES suppress it (Home leads with support, §8).
+    expect(needsAttention({ ...many, crisis: true }).map((i) => i.kind)).not.toContain('agreement');
     // Gated on `together`.
     expect(
       needsAttention({ ...many, can: { ...ALL_CAPS, together: false } }).map((i) => i.kind),

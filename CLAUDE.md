@@ -404,6 +404,27 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-14 — **Fix (Together agreements weren't top-of-mind on the dashboard — user-reported after spec 61
+  shipped; SPEC 61 §3.1/§3.2 amended; on `fix/together-agreements-prominence`, PR pending).** After 61 merged the
+  user (screenshot): "I'm still not seeing the together reflections appear in the dashboard, besides a little
+  tag" + asked to (a) put agreements in the **needs-attention** card so they're top of mind and (b) **improve
+  the Goals card** so it actually SHOWS the commitment, not just a count. **Diagnosed (not assumed):** the
+  agreement needs-attention item was a **`nudge`**, so `needsAttention`'s `suppressNudges` filter (proactivity
+  off **OR** crisis) dropped it — a standing commitment the couple MADE isn't an AI suggestion, so it shouldn't
+  be suppressed by the proactivity dial. **Fix:** (1) the `agreement` item is now a **genuine (non-nudge) item**
+  gated on a new explicit `crisis` input (added to `AttentionInput`) — it stays visible under proactivity-off,
+  suppressed only under an active crisis (Home leads with support); its **detail now shows the actual commitment
+  TEXT** (single agreement) so you see what it is at a glance. (2) The Home **`GoalsCard`** passive "N Together
+  commitments" chip is replaced with a **"Together commitments" mini-section** — each standing agreement's text +
+  partner + a one-tap **"Mark done"** (writes back via `together:setAgreementStatus`), capped at 2 with a "See
+  all" → `/goals` (also fixed the card's stale "See all" → `/memory` to `/goals`). Gate green: typecheck, lint,
+  format, **1154 desktop** unit (attention: single-agreement text detail + non-nudge-shows-under-suppressNudges +
+  crisis-suppresses; GoalsCard: commitments text + partner + mark-done), **spec-61 E2E** extended (the commitment
+  TEXT + "Together commitments" now assert on Home). Real-Electron visual QA (the Needs-attention card shows
+  "Following through with Angel" + the commitment text prominently). **Lesson: a "clear-as-you-act" callout the
+  user wants TOP OF MIND must be a genuine needs-attention item, NOT a `nudge` — nudges are for AI suggestions and
+  get dropped by the proactivity-off dial; gate a concrete-commitment item on `crisis` alone, and show its TEXT
+  (not a bare count) so the surface is self-explaining.**
 - 2026-07-14 — **Build (Memory insights redesign — flatten + edit-in-place; SPEC 62 APPROVED + BUILT; on
   `feat/memory-insights-redesign`, PR pending).** The user: the Memory/Insights page reads as "a bunch of text
   boxes that make the page very long, not clear you can edit them." **Mockups approved FIRST** (two `visualize`

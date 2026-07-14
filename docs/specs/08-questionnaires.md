@@ -8,7 +8,9 @@
 > **§20 (Preview & Results redesign — full-width, disabled preview, modern answering, rethought Results +
 > private results) is APPROVED + FULLY BUILT (all 5 slices: full-width + disabled Preview · modern answering +
 > progress · Results restructure · the aggregate "At a glance" · private results) — see §20.** **§22 (sensitivity
-> tiers that actually differ + explicit Scenario generation) is DRAFT — see §22.** · _last updated 2026-07-13_
+> tiers that actually differ + explicit Scenario generation) is BUILT — the structural fix landed AND the live-model
+> diagnosis confirmed the new unfiltered framing produces genuinely explicit output (no further change needed); see
+> §22.** · _last updated 2026-07-13_
 >
 > **2026-06 amendment (§15, package D of the app refresh):** authoring-experience refinements on the
 > already-built feature — a **General** type; **sensitivity tiers shown only for Intimacy/Scenario** types (other
@@ -2958,7 +2960,7 @@ All four §21.1 decisions are the user's explicit choices (an interactive mockup
 
 ---
 
-## 22. 2026-07-13 amendment — sensitivity tiers that actually differ + explicit Scenario — DRAFT
+## 22. 2026-07-13 amendment — sensitivity tiers that actually differ + explicit Scenario — BUILT
 
 > **Status:** Draft (awaiting approval). Motivated by the owner's report that "when Intimacy is selected with a
 > Sensitivity like Unfiltered, the questions & scenarios it produces aren't very unfiltered. In general the
@@ -3050,8 +3052,17 @@ adjusts caps only if the diagnosis shows truncation.
    `intimacyGeneral` is richer but non-graphic (no inventory dump); **scenario/unfiltered now receives the explicit
    framing shaped as situations to react to**; a non-sensitivity type gets none. The recipient-history /
    covered-acts wiring is unchanged (already live for a household recipient, §19).
-2. **Live-model diagnosis (needs a key) — PENDING.** Run the §22.3 diagnosis for Intimacy + Unfiltered; land a
-   verified change only if the evidence supports one. Never a blind rewrite.
+2. **Live-model diagnosis (needs a key) — DONE 2026-07-13; no further change needed.** Ran the §22.3 diagnosis
+   against the live app model (`claude-sonnet-4-6`, the default) with the real Slice-1 prompt (`GENERATION_SYSTEM`
+   - `buildGenerationUserMessage({ type:'intimacy', sensitivity:'unfiltered', intimacyTopics: mergedIntimacyTopics()
+… })`, `extendedThinking:false`, `max_tokens:2500`). Result: **`stop_reason: end_turn`** (no refusal, no
+     truncation) and **genuinely explicit, no-holds-barred output within the boundary** — specific acts (rough sex,
+     anal, rimming, deepthroat, pegging, DP, fisting), kink (shibari, breath play, degradation, primal/pet play), CNC
+     framed as pre-agreed roleplay, and explicit free-text fantasy prompts. So the earlier tameness was purely the
+     weak old framing (§22.1), NOT a model refusal or a mechanical starvation — the Slice-1 structural fix resolves
+     it. **No prompt-strength change landed** (the evidence didn't call for one — the hard rule honored: verified
+     before touching anything). The temporary diagnosis harness was removed; the API key used was flagged for
+     rotation.
 
 ### 22.6 Non-goals
 

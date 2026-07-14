@@ -145,8 +145,9 @@ describe('Memory (flattened, edit-in-place — spec 62)', () => {
     await userEvent.type(field, 'Likes slow mornings');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(update).toHaveBeenCalledTimes(1);
-    const arg = update.mock.calls[0]![0] as { facts: { id: string; text: string }[] };
-    expect(arg.facts.find((f) => f.id === 'f1')?.text).toBe('Likes slow mornings');
+    const [arg] = update.mock.calls[0] ?? [];
+    const facts = (arg as { facts: { id: string; text: string }[] } | undefined)?.facts ?? [];
+    expect(facts.find((f) => f.id === 'f1')?.text).toBe('Likes slow mornings');
   });
 
   it('flags an AI-inferred fact "not right about me" inline', async () => {

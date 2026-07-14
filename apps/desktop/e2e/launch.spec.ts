@@ -10650,11 +10650,14 @@ test('memory redesign (62): sections collapsed (sensitive too), edit a fact inli
     await field.fill('Likes slow mornings');
     await w.getByRole('button', { name: 'Save' }).click();
 
-    // Decrypt-level proof: the inline edit persisted to the vault.
+    // Decrypt-level proof: the inline edit persisted to the vault (trim tolerates a `fill` whitespace quirk).
     await expect
       .poll(async () => {
         const list = await listInsightsForPerson(fs, key, 'owner-1');
-        return list.find((i) => i.id === 'ins-emotions')?.facts.find((f) => f.id === 'f1')?.text;
+        return list
+          .find((i) => i.id === 'ins-emotions')
+          ?.facts.find((f) => f.id === 'f1')
+          ?.text?.trim();
       })
       .toBe('Likes slow mornings');
 

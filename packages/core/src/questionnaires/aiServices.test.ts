@@ -221,6 +221,36 @@ describe('generateQuestions', () => {
     expect(opts.maxTokens).toBeGreaterThanOrEqual(2000);
   });
 
+  it('scales maxTokens with the requested count so a large set is not truncated (§23.4)', async () => {
+    const fs = memFileSystem();
+    const { author } = await seedHousehold(fs);
+    let opts: { maxTokens?: number } = {};
+    const capturing: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (options) => {
+        opts = options;
+        return Promise.resolve({
+          text: valid,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    await generateQuestions(deps(fs, capturing, author), {
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      count: 20,
+      context: {
+        authorPersonId: author,
+        includeAuthor: true,
+        includeTarget: false,
+        includeRelationship: false,
+      },
+      existingPrompts: [],
+    });
+    // 20 questions × ~350 tokens ⇒ a much larger budget than the 2500 floor.
+    expect(opts.maxTokens).toBeGreaterThanOrEqual(7000);
+  });
+
   it('reports a cut-off draft distinctly from a brief problem (§17.9 diagnostic)', async () => {
     const fs = memFileSystem();
     const { author } = await seedHousehold(fs);
@@ -257,6 +287,80 @@ describe('generateQuestions', () => {
       existingPrompts: ['how connected do you feel?'], // case/space-insensitive match
     });
     expect(result.questions?.map((q) => q.prompt)).toEqual(['Pick a date night']);
+  });
+
+  it('hard-drops a generated question that near-duplicates one the recipient was already asked (§23.5)', async () => {
+    const fs = memFileSystem();
+    const { author } = await seedHousehold(fs);
+    const returned = JSON.stringify({
+      title: 'X',
+      questions: [
+        { type: 'shortText', prompt: 'What are your weekend plans?' }, // a re-ask (subset of the asked prompt)
+        { type: 'shortText', prompt: 'What are you most proud of?' }, // genuinely new
+      ],
+    });
+    const result = await generateQuestions(deps(fs, fakeClient(returned), author), {
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      context: {
+        authorPersonId: author,
+        includeAuthor: true,
+        includeTarget: false,
+        includeRelationship: false,
+      },
+      existingPrompts: [],
+      // A prior questionnaire already covered their weekend plans — the model returned a re-ask, but the
+      // deterministic filter drops it (2 shared content words) while keeping the genuinely-new question.
+      recipientAskedPrompts: ['Tell me about your typical weekend plans lately'],
+    });
+    expect(result.questions?.map((q) => q.prompt)).toEqual(['What are you most proud of?']);
+  });
+
+  it('runs the semantic de-dup pass when a recipient has history, then trims to the requested count (§23.5)', async () => {
+    const fs = memFileSystem();
+    const { author } = await seedHousehold(fs);
+    // First stream call = generation (4 fresh questions); second = the semantic pass (keep indices 1 & 3).
+    const responses = [
+      JSON.stringify({
+        title: 'T',
+        questions: [
+          { type: 'shortText', prompt: 'One?' },
+          { type: 'shortText', prompt: 'Two?' },
+          { type: 'shortText', prompt: 'Three?' },
+          { type: 'shortText', prompt: 'Four?' },
+        ],
+      }),
+      '[1,3]',
+    ];
+    let calls = 0;
+    const seq: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (_o, onDelta) => {
+        const text = responses[Math.min(calls, responses.length - 1)] ?? '';
+        calls += 1;
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    const result = await generateQuestions(deps(fs, seq, author), {
+      type: 'general',
+      sensitivity: 'standard',
+      count: 2,
+      context: {
+        authorPersonId: author,
+        includeAuthor: true,
+        includeTarget: false,
+        includeRelationship: false,
+      },
+      existingPrompts: [],
+      recipientHistory: 'Themes they have already explored:\n- Work stress.',
+    });
+    expect(calls).toBe(2); // generation + the semantic pass
+    // The pass kept Q1 + Q3; trimmed to the requested count (2).
+    expect(result.questions?.map((q) => q.prompt)).toEqual(['One?', 'Three?']);
   });
 
   it('returns NO_KEY without a key, and REFUSED on unusable output', async () => {

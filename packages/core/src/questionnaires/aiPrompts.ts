@@ -25,7 +25,7 @@ const SAFETY = `You draft questions for SelfOS, a wellness / self-help tool — 
 // the builder applies it only when the author hasn't typed one.
 export const GENERATION_SYSTEM = `${SAFETY}
 
-Be specific, perceptive, and varied: write questions that earn a real answer, mix the formats below (don't make every question the same shape), and avoid generic survey clichés. When context about the person is provided, tailor to THEM and build on what is already known rather than asking the obvious.
+Be specific, perceptive, and varied: write questions that earn a real answer, mix the formats below (don't make every question the same shape), and avoid generic survey clichés. When context about the person is provided, tailor to THEM and build on what is already known rather than asking the obvious. When a FOCUS is given it GOVERNS: every question must serve that focus, and all other guidance (tailoring, avoiding repetition, sensitivity register) applies only WITHIN it — never drift off the focus just to find something new.
 
 Return ONLY a JSON object: {"title": string (a short, warm questionnaire title, <= 6 words), "questions": [ ... ]}.
 ${ANSWER_TYPE_GUIDE}`;
@@ -82,8 +82,9 @@ export function explicitFraming(
   // generation stops re-seeding the very inventory the onboarding matrix already covered.
   coveredActs: readonly { label: string; rating: string }[] = [],
   // A `scenario`-type questionnaire (08 §15.2) frames each item as a described intimate SITUATION to react to,
-  // not a direct question — otherwise identical (same explicit register, same boundary).
-  opts: { scenario?: boolean } = {},
+  // not a direct question — otherwise identical (same explicit register, same boundary). `focused` = a brief was
+  // given (08 §23.3), so the explicit REGISTER stays but the SUBJECT follows the focus, not the whole inventory.
+  opts: { scenario?: boolean; focused?: boolean } = {},
 ): string {
   const scenario = opts.scenario === true;
   // Establish the legitimate context FIRST so the model is confident this is appropriate — a private adult who
@@ -92,6 +93,14 @@ export function explicitFraming(
     ? `\nCONTEXT: This is a private, 18+ scenario questionnaire inside a personal wellness app, for a consenting adult who has opted in to explore their sexuality through described situations. Each item is a short, explicit intimate SITUATION or roleplay to react to. Frank, graphic sexual scenarios are appropriate and expected here — a normal, in-policy use; do NOT shy away or substitute tasteful, emotional-closeness scenes.`
     : `\nCONTEXT: This is a private intimacy questionnaire inside a personal wellness app, written for a consenting adult (18+) who has opted in to reflect on their own sex life with a partner. Frank, explicit questions about sex and desire are appropriate and expected here — this is a normal, in-policy use; do NOT shy away or substitute tasteful, emotional-closeness questions.`;
   const parts: string[] = [context, EXPLICIT_TIER_DIRECTIVE[tier]];
+  // With a focus (08 §23.3) the explicit REGISTER stays but the SUBJECT follows the focus, not the whole
+  // inventory — so "how we're handling the move" on an intimacy questionnaire yields explicit questions ABOUT
+  // that, not a tour of every act.
+  if (opts.focused === true) {
+    parts.push(
+      `Keep the explicit register above, but SHAPE every ${scenario ? 'scenario' : 'question'} around the FOCUS stated at the top of this message — the subject follows the focus, not the full inventory below.`,
+    );
+  }
   parts.push(
     `${scenario ? 'Draw the scenarios from' : 'Cover'} concrete subject matter: specific sex acts, bodies and grooming, turn-ons/turn-offs, fantasies (including taboo fantasies framed strictly as fantasy/roleplay — e.g. consensual non-consent (CNC) as pre-agreed roleplay), porn and masturbation, sexual history, frequency and desire, and boundaries.`,
   );
@@ -104,7 +113,7 @@ export function explicitFraming(
     );
   }
   parts.push(
-    `Subject matter to draw on — acts: ${topics.activities.join(', ')}. Fantasies/roleplay: ${topics.fantasies.join(', ')}. FAVOR acts, fantasies, and scenarios they have NOT yet rated; push gently into new, edgier territory they have not explored — always within the boundary below.`,
+    `Subject matter to draw on — acts: ${topics.activities.join(', ')}. Fantasies/roleplay: ${topics.fantasies.join(', ')}. FAVOR acts, fantasies, and scenarios they have NOT yet rated — always within the boundary below.`,
     `Boundary: consensual adults only; taboo content only as fantasy/roleplay; never minors, real (non-roleplay) non-consent, or illegal acts. Within those limits this content IS in policy, so generate the ${scenario ? 'scenarios' : 'questions'} normally — only return an empty array for genuinely prohibited requests, never merely because the topic is sexually explicit.`,
   );
   return parts.join('\n');
@@ -154,6 +163,15 @@ export function buildGenerationUserMessage(input: {
 }): string {
   const parts: string[] = [];
   parts.push(`Draft ${input.count} questions for a "${input.type}" questionnaire.`);
+  // A present brief is the GOVERNING focus (08 §23.3): it LEADS the message and every question must serve it;
+  // the sensitivity register, context, and de-dup guidance below all apply WITHIN this focus. Blank brief ⇒
+  // fall back to recipient-tailored / structured-context generation (the pre-§23 behaviour).
+  const focus = input.brief?.trim();
+  if (focus) {
+    parts.push(
+      `\nFOCUS — this entire questionnaire is about: ${focus}\nEvery question must serve this focus. Do NOT drift onto unrelated topics. The sensitivity register, the context about the people, and the "avoid repetition" guidance below all apply WITHIN this focus.`,
+    );
+  }
   // Sensitivity tiers only carry an explicit register on the intimacy + scenario types (08 §15.2/§22.2). At the
   // explicit/unfiltered tiers request genuinely explicit content (a real intensity ladder); at the gentle 18+
   // tier use a richer, non-graphic directive; every other type/tier keeps the conservative note.
@@ -165,7 +183,8 @@ export function buildGenerationUserMessage(input: {
         input.sensitivity as 'explicit' | 'unfiltered',
         input.intimacyTopics,
         input.coveredIntimacyActs ?? [],
-        { scenario: input.type === SCENARIO_TYPE },
+        // With a focus, keep the explicit register but let the SUBJECT follow the focus (08 §23.3).
+        { scenario: input.type === SCENARIO_TYPE, focused: focus != null },
       ),
     );
   } else if (isSensitiveType && input.sensitivity === 'intimacyGeneral') {
@@ -177,10 +196,9 @@ export function buildGenerationUserMessage(input: {
   if (input.type === INTIMACY_TYPE && input.intimacyMode && input.intimacyMode !== 'questions') {
     parts.push(intimacyModeDirection(input.intimacyMode));
   }
-  if (input.brief?.trim()) parts.push(`\nWhat they want to explore: ${input.brief.trim()}`);
   if (input.context?.trim()) {
     parts.push(
-      `\nUse this context about the people involved to tailor the questions:\n${input.context.trim()}`,
+      `\nUse this context about the people involved to tailor the questions${focus ? ' (within the focus above)' : ''}:\n${input.context.trim()}`,
     );
   }
   if (input.existingPrompts.length > 0) {
@@ -203,8 +221,8 @@ export function buildGenerationUserMessage(input: {
         `  1. GO DEEPER on what is known — the why/how/when behind it, what would change it, the nuance and` +
           ` feelings underneath, concrete follow-ups to a known fact.`,
         `  2. Explore the UNKNOWN — topics, situations, and specifics there is no data on yet.`,
-        `  3. Push gently further than last time — new angles, edgier or more revealing territory (always in` +
-          ` good faith and within the safety boundary above).`,
+        `  3. Are genuinely USEFUL — serve the focus (when one is given) and this relationship; ask what is` +
+          ` worth learning next, not novelty or edginess for its own sake.`,
         `  4. Are CREATIVE — mix in scenarios to react to, "would you rather", this-or-that, and short` +
           ` hypotheticals, not only flat questions.`,
         `CRITICAL: never quote, restate, reference, hint at, or reveal any of this material in a question — the` +

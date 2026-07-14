@@ -48,6 +48,25 @@ export async function gatherRecipientHistory(
   }
 
   // The exact questions they've ALREADY been asked (so we never repeat a prompt across questionnaires).
+  const prompts = await gatherRecipientAskedPrompts(fs, key, recipientPersonId);
+  if (prompts.length) {
+    parts.push('Questions they have already been asked (do NOT repeat these):');
+    for (const p of prompts.slice(0, 40)) parts.push(`- ${p}`);
+  }
+
+  return parts.join('\n');
+}
+
+/**
+ * The exact prompts a recipient has already been asked across every prior questionnaire (08-questionnaires
+ * §23.5) — the structured list that drives the deterministic hard near-duplicate FILTER in generation (distinct
+ * from the formatted `gatherRecipientHistory` text that drives the model). Deduped, host-side, author-blind.
+ */
+export async function gatherRecipientAskedPrompts(
+  fs: FileSystem,
+  key: Uint8Array,
+  recipientPersonId: string,
+): Promise<string[]> {
   const asked = await listAssignments(fs, key, { recipientPersonId });
   const prompts = new Set<string>();
   for (const assignment of asked) {
@@ -58,10 +77,5 @@ export async function gatherRecipientHistory(
       if (p) prompts.add(p);
     }
   }
-  if (prompts.size) {
-    parts.push('Questions they have already been asked (do NOT repeat these):');
-    for (const p of [...prompts].slice(0, 40)) parts.push(`- ${p}`);
-  }
-
-  return parts.join('\n');
+  return [...prompts];
 }

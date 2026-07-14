@@ -1,5 +1,46 @@
 import type { IntimacyTopics } from '../intimacy/topics';
-import { LIFE_AREAS, SUGGESTABLE_ANSWER_TYPES, type SensitivityTier } from '../schemas';
+import {
+  LIFE_AREAS,
+  SUGGESTABLE_ANSWER_TYPES,
+  type RelationshipType,
+  type SensitivityTier,
+} from '../schemas';
+
+/**
+ * Relationship-aware framing (08 §24.4-B2): a questionnaire for a PARTNER should read nothing like one for a
+ * COWORKER or a CHILD. Each `RelationshipType` gets a tone/depth/register directive, modulated by `closeness`
+ * (1–5). This is what makes "partner vs coworker" finally diverge instead of the bare type word doing nothing.
+ */
+const RELATIONSHIP_REGISTER: Record<RelationshipType, string> = {
+  partner:
+    'This is for their romantic PARTNER — warm, intimate, and "us"-oriented; it is safe to go deep on connection, desire, and the relationship.',
+  parent:
+    'This is for their PARENT — reflective and respectful; welcome history, legacy, gratitude, and the evolving adult relationship.',
+  child:
+    "This is for their CHILD — warm, curious about the child's inner world and interests, and age-appropriate; never intrusive or heavy.",
+  sibling:
+    'This is for their SIBLING — candid and familiar; shared history, growing up together, and how the bond is now.',
+  friend:
+    'This is for their FRIEND — candid, playful, and genuine; what the friendship means, shared fun, and honest check-ins.',
+  coworker:
+    'This is for a COWORKER — professional and boundaried; stay on work, collaboration, and rapport; do NOT ask intrusive personal, family, or intimate questions.',
+  ex: 'This is for an EX — careful, respectful, and low-pressure; avoid reopening wounds or presuming closeness.',
+  other:
+    'Keep the tone warm and adaptable; match the depth to how close they seem from the context.',
+};
+
+/** Frame the questionnaire for the author↔recipient relationship (type + optional 1–5 closeness). */
+export function relationshipFraming(type: RelationshipType, closeness?: number): string {
+  const depth =
+    closeness == null
+      ? ''
+      : closeness >= 4
+        ? ' They are very close — it is safe to go deep and personal.'
+        : closeness <= 2
+          ? ' They are not especially close — keep it lighter and less intrusive.'
+          : '';
+  return `\nRELATIONSHIP: ${RELATIONSHIP_REGISTER[type]}${depth}`;
+}
 
 /**
  * Prompt builders for AI question generation + the gap-finder (08-questionnaires §3.1/§3.7/§5.1). The
@@ -9,7 +50,8 @@ import { LIFE_AREAS, SUGGESTABLE_ANSWER_TYPES, type SensitivityTier } from '../s
  * call; output is schema-validated by the caller and the model refuses gracefully when it must.
  */
 
-/** The answer-type catalog the model must choose from, with the fields each type needs. */
+/** The answer-type catalog the model must choose from, with the fields each type needs + an intent→type rubric
+ *  (08 §24.4-B3) so the FORMAT of each question is chosen to fit what it's trying to learn, not stylistically. */
 const ANSWER_TYPE_GUIDE = `Each question is an object with:
 - "type": one of ${SUGGESTABLE_ANSWER_TYPES.join(', ')}.
 - "prompt": the question text (warm, clear, first- or second-person as fits).
@@ -17,7 +59,8 @@ const ANSWER_TYPE_GUIDE = `Each question is an object with:
 - "help": optional one-line clarifier.
 - "options": string[] — REQUIRED for singleChoice, multiChoice, ranking, thisOrThat (>= 2 items).
 - "scale": {"min":number,"max":number} — REQUIRED for rating and slider (e.g. 1..5).
-Do NOT use matrix or allocation. No prose, no markdown fences.`;
+Do NOT use matrix or allocation. No prose, no markdown fences.
+MATCH the answer type to what the question is trying to learn: a story/feeling/nuance → shortText or longText; "how much" or something to track over time → rating or slider; a quick, playful, or rapport-building choice → thisOrThat or singleChoice/yesNo; ranking priorities → ranking. Vary DELIBERATELY — never stack many rating scales in a row; pick the type that earns the best answer for each question.`;
 
 const SAFETY = `You draft questions for SelfOS, a wellness / self-help tool — NOT medical, NOT diagnosis, NOT treatment. Write ORIGINAL, evidence-informed questions in a supportive voice. Never reproduce or imitate copyrighted or clinical/diagnostic instruments, never score diagnostically, never ask for medical/clinical self-assessment. Stay strictly within Anthropic's usage policy. If a request would require unsafe or out-of-policy content, return an empty questions array.`;
 
@@ -25,7 +68,15 @@ const SAFETY = `You draft questions for SelfOS, a wellness / self-help tool — 
 // the builder applies it only when the author hasn't typed one.
 export const GENERATION_SYSTEM = `${SAFETY}
 
-Be specific, perceptive, and varied: write questions that earn a real answer, mix the formats below (don't make every question the same shape), and avoid generic survey clichés. When context about the person is provided, tailor to THEM and build on what is already known rather than asking the obvious. When a FOCUS is given it GOVERNS: every question must serve that focus, and all other guidance (tailoring, avoiding repetition, sensitivity register) applies only WITHIN it — never drift off the focus just to find something new.
+Be specific, perceptive, and varied: write questions that earn a real answer and avoid generic survey clichés.
+
+TAILOR TO WHO THEY ARE (08 §24.4): when you're given context about the person — their name, work, interests, values, goals, relationship, personality, and everything already known about them — use it to make the questions feel written for THIS person and their actual life, not a generic template. Address them directly ("you"), use their name where natural, and use their pronouns. Build ON what is already known (go deeper — the why/how/nuance behind it) rather than asking the obvious or repeating it.
+
+Let their PERSONALITY shape HOW you ask when you know it: gentle and reassurance-aware for an anxious attachment style; hypotheticals and open exploration welcome for high openness; concrete and practical for someone conscientious; and so on.
+
+Compose a COHERENT SET, not a bag of questions: open with lighter, easy questions that build rapport, deepen through the middle, and close on a warm or forward-looking note. Return the array IN that intended order.
+
+When a FOCUS is given it GOVERNS: every question must serve that focus, and all other guidance (tailoring, avoiding repetition, sensitivity register) applies only WITHIN it — never drift off the focus just to find something new.
 
 Return ONLY a JSON object: {"title": string (a short, warm questionnaire title, <= 6 words), "questions": [ ... ]}.
 ${ANSWER_TYPE_GUIDE}`;
@@ -155,14 +206,33 @@ export function buildGenerationUserMessage(input: {
   intimacyTopics?: IntimacyTopics;
   // What an intimacy draft should produce (08 §17.12-C): direct questions, described scenarios, or a mix.
   intimacyMode?: IntimacyGenerateMode;
-  // The recipient's full answered content (08 §17.4/§19.1), assembled host-side. Used ONLY to AVOID overlap +
-  // go DEEPER — the model must never quote, reference, or reveal any of it in a question (author-blind too).
+  // The recipient's full answered content (08 §17.4/§19.1), assembled host-side. Used to AVOID overlap AND to
+  // go DEEPER / personalize (08 §24 — the owner directed tailoring may use all of it). The model weaves it in
+  // naturally; it must not recite it back verbatim.
   recipientHistory?: string;
   // The intimacy acts the recipient already rated in onboarding (08 §19.3) — reframes the intimacy seeding.
   coveredIntimacyActs?: readonly { label: string; rating: string }[];
+  // Who the questionnaire is FOR (08 §24.4): name + pronouns + the author↔recipient relationship — so questions
+  // read as written for this specific person, in the right register for the relationship.
+  recipient?: {
+    name?: string;
+    pronouns?: string;
+    relationship?: { type: RelationshipType; closeness?: number };
+  };
 }): string {
   const parts: string[] = [];
   parts.push(`Draft ${input.count} questions for a "${input.type}" questionnaire.`);
+  // Who it's for (08 §24.4-B2/B3): name + pronouns + relationship register lead so tailoring frames everything.
+  const rcpt = input.recipient;
+  if (rcpt?.name?.trim()) {
+    const pron = rcpt.pronouns?.trim() ? ` (${rcpt.pronouns.trim()})` : '';
+    parts.push(
+      `\nThis questionnaire is FOR ${rcpt.name.trim()}${pron}. Write it for them — address them directly, use their name where natural, and use their pronouns.`,
+    );
+  }
+  if (rcpt?.relationship) {
+    parts.push(relationshipFraming(rcpt.relationship.type, rcpt.relationship.closeness));
+  }
   // A present brief is the GOVERNING focus (08 §23.3): it LEADS the message and every question must serve it;
   // the sensitivity register, context, and de-dup guidance below all apply WITHIN this focus. Blank brief ⇒
   // fall back to recipient-tailored / structured-context generation (the pre-§23 behaviour).
@@ -208,14 +278,15 @@ export function buildGenerationUserMessage(input: {
         .join('\n')}`,
     );
   }
-  // Knowledge-aware de-dup (08 §17.4/§19.2): the model is handed everything already known about the recipient
-  // and told to BUILD ON it — never repeat it. This is what makes each questionnaire learn more over time.
+  // Knowledge-aware generation (08 §17.4/§19.2/§24): the model is handed everything already known about the
+  // recipient and told to USE it to personalize + go deeper, and to NEVER repeat it. This is what makes each
+  // questionnaire feel written for them and learn more over time.
   if (input.recipientHistory?.trim()) {
     parts.push(
       [
-        `\nKNOWN ALREADY — the person who will answer has already shared the material below with the app` +
-          ` (their onboarding answers, past sessions, earlier questionnaires, and profile). Treat it as the` +
-          ` baseline of what is ALREADY KNOWN.`,
+        `\nWHAT IS ALREADY KNOWN about the person who will answer (their onboarding answers, past sessions,` +
+          ` earlier questionnaires + their answers, reflections/tests, and profile). USE this to make the` +
+          ` questions personal and specific to them, and to go DEEPER — never to repeat it.`,
         `Do NOT ask anything already answered here, and do NOT offer a multiple-choice OPTION that repeats a` +
           ` value they have already chosen or rated. Instead, write questions that:`,
         `  1. GO DEEPER on what is known — the why/how/when behind it, what would change it, the nuance and` +
@@ -225,8 +296,8 @@ export function buildGenerationUserMessage(input: {
           ` worth learning next, not novelty or edginess for its own sake.`,
         `  4. Are CREATIVE — mix in scenarios to react to, "would you rather", this-or-that, and short` +
           ` hypotheticals, not only flat questions.`,
-        `CRITICAL: never quote, restate, reference, hint at, or reveal any of this material in a question — the` +
-          ` questions must stand on their own. "Avoid overlap" means steer clear, NOT mention.`,
+        `Weave this knowledge in NATURALLY to make questions feel personal — do not recite it back word-for-word` +
+          ` or turn a known fact into "you said X, tell me about X". "Avoid overlap" means don't RE-ASK it.`,
         input.recipientHistory.trim(),
       ].join('\n'),
     );

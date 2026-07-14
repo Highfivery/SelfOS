@@ -86,6 +86,7 @@ import {
   type OutboundSharing,
   IntakeAnswerValueSchema,
   RelationshipTypeSchema,
+  type RelationshipType,
   type IntakeState,
   type ProfileUpdateSuggestion,
   type IntakeSynthesisResult,
@@ -376,6 +377,8 @@ import {
   garbageCollectImages,
   gatherRecipientHistory,
   gatherRecipientAskedPrompts,
+  gatherRecipientPriorAnswers,
+  gatherRecipientInsightFacts,
   generateQuestions,
   resolveInsightAbout,
   getAssignment,
@@ -1166,10 +1169,10 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
   };
 
   /**
-   * Assemble the full author-blind known-data for a household recipient (08 §19.1): the §17.4 recipient
-   * history (profile + insights + already-asked prompts + prior answers) PLUS the RAW onboarding answers
-   * (incl. the intimacy-matrix act ratings), and the set of intimacy acts already rated (so the intimacy
-   * framing goes deeper instead of re-asking). All host-side; never returned to the author.
+   * Assemble the full author-blind known-data for a household recipient (08 §19.1/§24.3): the recipient history
+   * (profile + insight facts + already-asked prompts), the RAW onboarding answers (incl. the intimacy-matrix act
+   * ratings), the RAW answers to prior questionnaires (§24.3-A1), and the set of intimacy acts already rated.
+   * All host-side; never returned to the author.
    */
   const recipientKnownData = async (
     fs: FileSystem,
@@ -1184,6 +1187,10 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     const history = await gatherRecipientHistory(fs, key, recipientPersonId);
     // The structured already-asked prompts (08 §23.5) drive the deterministic hard near-dup filter in core.
     const priorPrompts = await gatherRecipientAskedPrompts(fs, key, recipientPersonId);
+    // §24.3-A1/A2: the recipient's RAW prior-questionnaire answers + all distilled insight facts (sessions,
+    // dreams, tests, Together) — so the semantic pass can catch a re-ask of ANY of them, not just onboarding.
+    const priorAnswers = await gatherRecipientPriorAnswers(fs, key, recipientPersonId);
+    const insightFacts = await gatherRecipientInsightFacts(fs, key, recipientPersonId);
     const session = await getIntakeSession(fs, key, recipientPersonId);
     const intake = session
       ? formatIntakeForGeneration(session)
@@ -1199,17 +1206,23 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     ]
       .filter((s) => s.trim() !== '')
       .join('\n\n');
-    // The SEMANTIC-PASS reference (08 §23.5b): a DEDICATED, prioritized digest that LEADS with the onboarding
-    // answers — the authoritative "already have data for this" material (specific acts, positions, porn genres,
-    // MMF/FFM, etc.). It was previously buried at the END of `combined` and truncated away, so the pass never
-    // saw it and re-asked onboarding questions. Asked-questionnaire prompts follow. Insight summaries are
-    // derivative (lower priority) and omitted here to keep the highest-signal material inside the budget.
+    // The SEMANTIC-PASS reference (08 §23.5b/§24.3-A2/A3): a DEDICATED digest of the "already have data for this"
+    // material. Each section gets its OWN budget so a huge onboarding can't truncate away the prior-questionnaire
+    // answers or insight facts (Track A's whole point) — the §23.5b bug was onboarding buried last + truncated;
+    // per-section caps guarantee every authoritative source is represented. `…` marks a trimmed section.
+    const cap = (s: string, n: number): string => (s.length > n ? `${s.slice(0, n)}\n…` : s);
     const dedupReference = [
       intake.text.trim()
-        ? `ALREADY ANSWERED in their onboarding — do NOT re-ask ANY of this, including specific sub-preferences, acts, positions, kinks, and options they selected (e.g. MMF/FFM, particular porn genres, yes/no on an act):\n${intake.text}`
+        ? `ALREADY ANSWERED in their onboarding — do NOT re-ask ANY of this, including specific sub-preferences, acts, positions, kinks, and options they selected (e.g. MMF/FFM, particular porn genres, yes/no on an act):\n${cap(intake.text.trim(), 8000)}`
+        : '',
+      priorAnswers.trim()
+        ? `ALREADY ANSWERED in prior questionnaires (do NOT re-ask any of this):\n${cap(priorAnswers.trim(), 4000)}`
+        : '',
+      insightFacts.trim()
+        ? `ALREADY KNOWN about them from sessions, reflections, tests, and dreams (do NOT re-ask these):\n${cap(insightFacts.trim(), 3000)}`
         : '',
       priorPrompts.length
-        ? `ALREADY ASKED in prior questionnaires:\n${priorPrompts.map((p) => `- ${p}`).join('\n')}`
+        ? `ALREADY ASKED in prior questionnaires:\n${cap(priorPrompts.map((p) => `- ${p}`).join('\n'), 2000)}`
         : '',
     ]
       .filter((s) => s.trim() !== '')
@@ -3350,21 +3363,58 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // they're for, and (b) de-dup — their FULL answered content as avoid-only grounding (§17.4), gathered
       // host-side, never returned to the author. Only a HOUSEHOLD recipient has this context; an external one
       // has neither, so both are skipped. There is no separate "about a person" picker (§17.12-A).
-      const recipientIsHousehold =
-        p.recipientPersonId !== undefined &&
-        (await getPerson(deps.fs, deps.key, p.recipientPersonId)) !== null;
+      const recipientPerson = p.recipientPersonId
+        ? await getPerson(deps.fs, deps.key, p.recipientPersonId)
+        : null;
+      const recipientIsHousehold = recipientPerson !== null;
       // Knowledge-aware de-dup (08 §19): the recipient's history + RAW onboarding answers, and the intimacy
       // acts already rated — so generation goes deeper instead of repeating what's known. Author-blind.
       const known = recipientIsHousehold
         ? await recipientKnownData(deps.fs, deps.key, p.recipientPersonId as string)
         : { history: '', coveredActs: [], askedPrompts: [], dedupReference: '' };
+      // Who it's FOR (08 §24.4): the recipient's name/pronouns + the author↔recipient relationship (type +
+      // closeness), so generation adopts the right register (partner vs coworker vs child) and personalizes.
+      let recipientFraming:
+        | {
+            name?: string;
+            pronouns?: string;
+            relationship?: { type: RelationshipType; closeness?: number };
+          }
+        | undefined;
+      if (recipientPerson) {
+        const rels = await listRelationships(deps.fs, deps.key);
+        // "the recipient is the author's ___" — resolved from the live graph so an edge stored in EITHER
+        // direction gives the right role (parent↔child is asymmetric; using `edge.type` raw would invert it).
+        const relType = relationshipTypesFromSubjectToViewer(
+          deps.personId,
+          recipientPerson.id,
+          rels,
+        )[0];
+        const edge = rels.find(
+          (r) =>
+            (r.fromPersonId === deps.personId && r.toPersonId === recipientPerson.id) ||
+            (r.fromPersonId === recipientPerson.id && r.toPersonId === deps.personId),
+        );
+        recipientFraming = {
+          name: recipientPerson.displayName,
+          ...(recipientPerson.pronouns ? { pronouns: recipientPerson.pronouns } : {}),
+          ...(relType
+            ? {
+                relationship: {
+                  type: relType,
+                  ...(edge?.closeness != null ? { closeness: edge.closeness } : {}),
+                },
+              }
+            : {}),
+        };
+      }
       return generateQuestions(deps, {
         type: p.type,
         sensitivity: p.sensitivity,
         ...(p.brief !== undefined ? { brief: p.brief } : {}),
         context: {
           authorPersonId: deps.personId,
-          // The author's own shareable data always feeds (§15.4); the recipient's shareable context tailors.
+          // The author's own data always feeds (§15.4); the recipient's full context tailors (§24.5 override).
           includeAuthor: true,
           ...(recipientIsHousehold ? { targetPersonId: p.recipientPersonId as string } : {}),
           includeTarget: recipientIsHousehold,
@@ -3377,6 +3427,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         ...(known.coveredActs.length ? { coveredIntimacyActs: known.coveredActs } : {}),
         ...(p.intimacyMode !== undefined ? { intimacyMode: p.intimacyMode } : {}),
         ...(p.count !== undefined ? { count: p.count } : {}),
+        ...(recipientFraming ? { recipient: recipientFraming } : {}),
       });
     },
     questionnairesImproveQuestion: async (input): Promise<QuestionnaireImproveResult> => {

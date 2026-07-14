@@ -13,6 +13,7 @@ import {
   type Question,
   type QuestionnaireGenerateResult,
   type QuestionnaireImproveResult,
+  type RelationshipType,
   type SensitivityTier,
 } from '../schemas';
 import { mergedIntimacyTopics } from '../intimacy/topics';
@@ -120,6 +121,13 @@ export interface GenerateRequest {
   // The intimacy acts the recipient already rated in onboarding (08 §19.3) — reframes the intimacy seeding so
   // it goes deeper on rated acts instead of re-asking them.
   coveredIntimacyActs?: readonly { label: string; rating: string }[];
+  // Who the questionnaire is FOR (08 §24.4): name + pronouns + the author↔recipient relationship, so questions
+  // read as written for this specific person in the right register. Assembled host-side by the bridge.
+  recipient?: {
+    name?: string;
+    pronouns?: string;
+    relationship?: { type: RelationshipType; closeness?: number };
+  };
 }
 
 /** Generate questions from a brief and/or the configured structured context. */
@@ -159,6 +167,7 @@ export async function generateQuestions(
     ...(request.coveredIntimacyActs !== undefined
       ? { coveredIntimacyActs: request.coveredIntimacyActs }
       : {}),
+    ...(request.recipient !== undefined ? { recipient: request.recipient } : {}),
   });
 
   // A generous output budget (thinking is off) that SCALES with the (over-asked) count (08 §23.4) — a 20-question

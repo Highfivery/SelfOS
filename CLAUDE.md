@@ -404,6 +404,42 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-13 — **Build + DURABLE PRIVACY OVERRIDE (questionnaire AI: use ALL the data — complete de-dup + deep
+  personalization + question intelligence; SPEC 08 §24 BUILT; on `feat/questionnaire-ai-deep-personalization`).**
+  After the §23.5b fix, the user (frustrated my audits kept missing data) demanded a genuinely exhaustive re-audit
+  ensuring EVERYTHING is covered + ALL data is used, plus improvements/enhancements. Ran **3 parallel deep-audit
+  agents** (full data inventory · generation-coverage verification · personalization/intelligence) + verified the
+  critical claims myself. Root finding: generation has **two asymmetric data paths** — de-dup (onboarding + asked
+  prompts) and tailoring (only `notes`+`tags`+bare relationship type) — each drawing from a DIFFERENT subset, so
+  the same field (occupation) was used only as a "don't re-ask" avoid-list, never to personalize. **Verified gaps:**
+  prior-questionnaire ANSWERS never read (spec §19.1 unimplemented + a stale comment); session/dream/test/Together
+  insight facts EXCLUDED from the semantic de-dup reference (re-askable); ~20 rich `Person` fields + relationship
+  closeness + relationship-type-as-register unused for tailoring; topic map only themed intimacy. **Decisions
+  asked + locked:** all-in-one · read RAW prior answers · all four enhancement groups. **Track A** (never re-ask):
+  `gatherRecipientPriorAnswers` (raw Q→A) + `gatherRecipientInsightFacts` fold into a relevance-prioritized
+  `dedupReference` (onboarding + prior Q→A lead, then insight facts, then prompts), cap 12000→16000. **Track B**
+  (deep personalization): rich-profile tailoring, `relationshipFraming(type, closeness)` (partner≠coworker≠child),
+  recipient name/pronouns, broadened topic map, psych-profile-aware directive. **Track C**: set-arc +
+  answer-type-intent rubric in `GENERATION_SYSTEM`/`ANSWER_TYPE_GUIDE`. **THE PRIVACY OVERRIDE (durable, owner's
+  informed decision):** the user directed that questionnaire TAILORING use **ALL** of the recipient's data —
+  shareable AND private/restricted. I did NOT silently comply: I spelled out the exact consequence (a member's
+  private health/trauma/intimacy data can shape + be implied by the visible questions another member authors,
+  overriding spec 15/42/43 + CLAUDE.md §1's "highly sensitive, never surface to others") via AskUserQuestion; the
+  owner chose "All data, always" fully informed. So questionnaire generation now feeds the recipient's private/
+  locked profile fields + relationship notes — **scoped STRICTLY to questionnaire generation** (`contextProviders`
+  - `recipientKnownData`); `buildContext` (coaching), Memory's cross-user gate, Together `excludeRestricted`, and
+    every other surface are UNCHANGED (their privacy tests stay green). The §17.4 author-blind boundary still holds
+    for de-dup (only questions come back). Same pattern as the 2026-07-11 Together pre-screen removal: surface the
+    trade-off, let the owner decide, comply + document. See memory [[questionnaire-tailoring-uses-all-data]]. Gate
+    green: typecheck, lint, format, **1124 core + 1116 desktop** unit (+relationshipFraming/recipient-framing,
+    +rich-profile-feeds-locked-notes, +`gatherRecipientPriorAnswers`, +bridge decrypt: session fact reaches the
+    pass author-blind), **24 questionnaire E2E**. code-reviewer + release: pending. **Lesson: personalization and
+    de-dup are two sides of the SAME data — feed the recipient's complete profile + history ONCE and instruct the
+    model to BOTH build on it (personal, go deeper) AND never re-ask it; and a "use ALL data" directive that
+    overrides a privacy boundary must be an INFORMED owner decision (spell out the exact leak, then comply + scope
+    it to the one path), never a silent default. Also: parallel deep-audit agents (data inventory + coverage
+    verification + enhancement lenses) + verifying the critical claims yourself is how you avoid the shallow-audit
+    miss the user rightly called out.**
 - 2026-07-13 — **Fix (Draft-with-AI STILL re-asked onboarding questions — the semantic de-dup pass never saw the
   onboarding answers; user-reported [threesome MMF/FFM, an intake `pornGenres` answer]; SPEC 08 §23.5b; on
   `fix/questionnaire-onboarding-dedup`).** After §23 merged, generation kept asking questions the app already has

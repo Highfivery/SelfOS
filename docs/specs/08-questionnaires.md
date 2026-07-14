@@ -3287,3 +3287,134 @@ topic field is gone; the intimacy-topics test asserts the inline add is gone). *
 CONSERVATIVE (default Jaccard 0.6 + subset-containment) so it rarely false-drops, and let the bounded,
 fail-safe semantic pass catch meaning-only paraphrases — over-ask a small buffer then trim so the semantic
 drops don't undershoot the author's requested count.**
+
+## 24. 2026-07-13 amendment — use ALL the data: complete de-dup + deep personalization + question intelligence — BUILT
+
+> **Status: BUILT** (`feat/questionnaire-ai-deep-personalization`; decisions locked with the user 2026-07-13; a full deep-audit follow-up to §23 after a
+> generated questionnaire re-asked an onboarding answer). Amends §5.1 (context providers), §17.4/§19/§23.5
+> (de-dup), §13.3 (tailoring), §6 (IPC). Privacy boundaries (§8.4, §17.4) unchanged — tailoring uses only
+> **shareable** recipient data; de-dup uses everything host-side because the output reveals nothing.
+
+### 24.1 The root problem (from an exhaustive audit)
+
+Generation has **two data paths that draw from DIFFERENT subsets of what the app knows**, and neither is
+complete — so the same field (e.g. occupation) is used only as a "don't re-ask" avoid-list, never to
+personalize:
+
+- **De-dup** (don't re-ask): onboarding answers + asked prompts. **Excludes** prior-questionnaire _answers_ and
+  every fact learned in **sessions, dreams, tests, and Together** (all of which are `Insight`s) — so any of them
+  can be re-asked (the same class of bug as the §23.5b onboarding truncation, but for session/test data).
+- **Tailoring** (make it feel written for them): only `notes` + `tags` + the bare relationship _type_ +
+  topic-gated insights. **Ignores ~20 rich `Person` fields** (occupation, interests, values, goals,
+  communicationStyle, relationshipStatus, gender, age…), relationship **closeness**, and treats a partner,
+  child, and coworker **identically**.
+
+### 24.2 Decisions (locked with the user, 2026-07-13)
+
+1. **All in one change** (de-dup completeness + personalization + question intelligence).
+2. **Read the RAW prior-questionnaire answers** (decrypt `ResponseSet`s) so de-dup knows exactly what was
+   answered, not just which questions were asked.
+3. **Build all four enhancement groups**: rich-profile tailoring · relationship-aware framing · name+pronoun+
+   set-arc+answer-type-intent · psych-profile-aware approach.
+4. **Tailoring uses ALL of the recipient's data — shareable AND private/restricted** (the owner's explicit,
+   informed 2026-07-13 override, after the trade-off was spelled out: private health/trauma/intimacy data can
+   shape — and be implied by — the visible questions another member authors, overriding the spec-15/42/43
+   shareability model for this ONE path). Scoped strictly to **questionnaire generation**; coaching context
+   (`buildContext`), Memory display, and every cross-user boundary elsewhere are UNCHANGED. See §24.5.
+
+### 24.3 Track A — complete de-dup (never re-ask known data)
+
+- **A1. Raw prior-questionnaire answers.** A new `gatherRecipientPriorAnswers` reads each assignment's snapshot
+  - its `ResponseSet` and formats `Q → A` pairs (via `formatAnswerForDisplay`). Fed into the semantic de-dup
+    reference (the §19.1 claim, finally implemented; the stale comment fixed).
+- **A2. ALL insight facts in the reference.** The dedicated `dedupReference` (§23.5b) gains an "ALREADY KNOWN
+  about them (from sessions, reflections, tests, dreams)" block — the recipient's `Insight` summaries + facts
+  (session/dream/test/Together/questionnaire), so a fact revealed in a session or a kink test can't be re-asked.
+- **A3. Relevance-prioritized, generous budget.** The reference LEADS with the authoritative "already answered"
+  material (onboarding answers + prior Q→A), then insight facts, then asked prompts; the cap is raised so the
+  authoritative material is never truncated.
+- **A4. Compatibility.** The canonical compatibility generation de-dups against the bound recipient as today;
+  variant REWRITES stay aligned (de-duping aligned variants would break `canonicalId` alignment — out of scope,
+  documented).
+- **A5.** Fix the stale spec §19.1 claim + the stale `recipientKnownData` comment.
+
+### 24.4 Track B — deep personalization (tailor to WHO they are)
+
+- **B1. Rich-profile tailoring.** `profilesProvider` emits the recipient's **shareable** profile as POSITIVE
+  signal (occupation, interests, values, goals, communicationStyle, relationshipStatus, parentalStatus,
+  location, age from `birthday`, gender, languages, faith) — each gated by `isPersonFieldShared`; the author's
+  own profile always feeds. A `GENERATION_SYSTEM` line: use who they are to make questions specific to their
+  actual life.
+- **B2. Relationship-aware framing.** A `relationshipFraming(type, closeness?)` maps each `RelationshipType`
+  (partner/parent/child/sibling/friend/coworker/ex/other) → a tone/depth/register directive, modulated by
+  `closeness` (1–5). Threaded from the bridge (which resolves the author↔recipient relationship) through
+  `GenerateRequest`. `relationshipsProvider` also reads `closeness`.
+- **B3. Name + pronoun + arc + answer-type intent.** The recipient's name + pronouns are passed in and the model
+  is told to address them directly and use their pronouns. `GENERATION_SYSTEM` gains a **set-arc** directive
+  (open light → deepen → close warm; return in that order) and `ANSWER_TYPE_GUIDE` gains an **intent→type**
+  rubric (depth→text; trackable→scale; fun/rapport→thisOrThat/singleChoice; priorities→ranking; never stack
+  many rating scales).
+- **B4. Broader topical relevance.** `questionnaireTopic` maps every starter type (not just intimacy) to its
+  relevant life-areas, so a non-intimacy questionnaire gets a relevant portrait, not just CORE + fill.
+- **B5. Psych-profile-aware approach.** A `GENERATION_SYSTEM` directive: when the recipient's personality /
+  attachment style is known (their shareable test-source insight facts), let it shape HOW to ask (gentle +
+  reassurance-aware for anxious attachment; hypotheticals for high openness; etc.).
+
+### 24.5 Privacy — the owner's informed override (decision 4)
+
+**The owner explicitly directed that questionnaire tailoring use ALL of the recipient's data — shareable AND
+private/restricted — after the exact consequence was spelled out** (a household member's private health,
+trauma, or intimacy data can shape, and be implied by, the visible questions another member authors and sends).
+This is an informed override of the spec-15/42/43 shareability model, **scoped strictly to questionnaire
+generation** (the `contextProviders` + `recipientKnownData` path). It is the same pattern as the 2026-07-11
+Together pre-screen removal: a documented privacy/safety mechanism changed at the owner's informed request, with
+the trade-off recorded.
+
+**What stays unchanged (hard):** `buildContext` (coaching/session context), the Memory dashboard's cross-user
+gate (`insightsList` never shows another member's insights), the Together `excludeRestricted` path, dreams
+linked-people context, and every other surface's shareable-vs-private boundary. The change is ONLY that the
+questionnaire generators, host-side, may read the recipient's private/restricted fields + facts to make the
+questions deeply personal. The §17.4 author-blind boundary on the OUTPUT still holds for de-dup (the model must
+not gratuitously quote the rawest sensitive facts verbatim — it tailors naturally). The author's own data
+always feeds (it's theirs).
+
+### 24.6 Testing
+
+Core: rich-profile fields feed tailoring (shareable only; a locked field is withheld); `relationshipFraming`
+differs by type + modulates by closeness; the arc + answer-type rubric appear in the prompt; prior Q→A answers
+
+- insight facts reach the semantic reference. Bridge (decrypt-level): the recipient's raw prior answers +
+  session-insight facts reach the semantic pass but never return to the author; a locked profile field never
+  tailors. E2E: the panel still drafts (offline fake). All privacy/author-blind assertions preserved.
+
+### 24.7 Non-goals
+
+- No change to the consent gates or `SAFETY`. The §17.4 author-blind boundary holds for de-dup; the §8.4
+  shareable-vs-private boundary is overridden ONLY for questionnaire tailoring (§24.5, owner decision), NOT for
+  coaching context / Memory / any other surface.
+- No de-dup of aligned compatibility variants (would break `canonicalId` alignment).
+- No new manual tone/depth panel controls (the user declined these in §23; relationship-derived tone is
+  automatic).
+
+### 24.8 Build status (2026-07-13, `feat/questionnaire-ai-deep-personalization`) — BUILT
+
+All tracks built. **Track A (de-dup completeness):** `gatherRecipientPriorAnswers` (raw `ResponseSet` Q→A) +
+`gatherRecipientInsightFacts` (session/dream/test/Together facts) fold into a relevance-prioritized
+`dedupReference` (onboarding answers + prior Q→A LEAD, then insight facts, then asked prompts) with the cap
+raised 12000→16000; the stale §19.1 claim + comment fixed. **Track B (personalization):** `profilesProvider`
+emits the recipient's full rich profile as positive tailoring signal (§24.5 — private fields included);
+`relationshipsProvider` adds closeness/since; a new `relationshipFraming(type, closeness)` register directive +
+recipient name/pronouns thread from the bridge (which resolves the author↔recipient relationship) through
+`GenerateRequest`; `questionnaireTopic` broadened to the relationship/feedback types. **Track C (intelligence):**
+`GENERATION_SYSTEM` gains the tailor-to-them, psych-profile-aware, and set-arc directives; `ANSWER_TYPE_GUIDE`
+gains an intent→type rubric. **§24.5 privacy override implemented + scoped:** the recipient's private/locked
+profile fields + relationship notes now feed questionnaire generation (only); `buildContext`, Memory's
+cross-user gate, Together `excludeRestricted`, and every other surface are untouched (their tests stay green).
+Gate green: typecheck (node + web/DOM), lint, format (only pre-existing `site/index.html` untouched), **1124
+core + 1116 desktop** unit (+relationshipFraming/recipient-framing/GENERATION_SYSTEM directives, +rich-profile
+tailoring incl. the now-feeds-locked-notes update, +`gatherRecipientPriorAnswers`, +bridge decrypt tests: a
+session fact reaches the semantic pass author-blind, prior answers Q→A), **24 questionnaire E2E** green.
+**Lesson: personalization and de-dup are two sides of the SAME data — feed the recipient's complete profile +
+history once and instruct the model to BOTH build on it (personal, go deeper) AND never re-ask it; and a "use
+all data" directive that overrides a privacy boundary must be an INFORMED owner decision (surface the exact
+leak, then comply + scope it to the one path), not a silent default.**

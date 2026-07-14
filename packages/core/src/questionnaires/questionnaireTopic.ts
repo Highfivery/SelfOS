@@ -9,6 +9,12 @@ import type { ContextTopic } from '../schemas';
  */
 export const QUESTIONNAIRE_TYPE_LIFE_AREAS: Record<string, string[]> = {
   intimacy: ['Intimacy', 'Relationships'],
+  scenario: ['Intimacy', 'Relationships'],
+  'role-feedback': ['Relationships', 'Work & purpose'],
+  'blind-spots': ['Relationships', 'Emotions & patterns'],
+  appreciation: ['Relationships', 'Values & beliefs'],
+  perspective: ['Relationships', 'Emotions & patterns'],
+  // `general`, `fill-gaps`, `science`, and custom types stay broad (undefined ⇒ core + priority fill).
 };
 
 /** The relevance `topic` for generating a questionnaire of this type, or `undefined` (core + fill). */

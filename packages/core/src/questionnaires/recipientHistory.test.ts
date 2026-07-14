@@ -5,7 +5,8 @@ import { upsertPerson } from '../people/peopleService';
 import { saveInsight } from '../insights';
 import { saveQuestionnaire } from './questionnaireService';
 import { createAssignment } from './assignmentService';
-import { gatherRecipientHistory } from './recipientHistory';
+import { saveResponse } from './responseService';
+import { gatherRecipientHistory, gatherRecipientPriorAnswers } from './recipientHistory';
 
 const key = generateMasterKey();
 const now = '2026-06-15T12:00:00.000Z';
@@ -67,5 +68,46 @@ describe('gatherRecipientHistory (08 §17.4)', () => {
     const fs = memFileSystem();
     const p = await upsertPerson(fs, key, { displayName: 'New', isSubject: true, tags: [] });
     expect(await gatherRecipientHistory(fs, key, p.id)).toBe('');
+  });
+});
+
+describe('gatherRecipientPriorAnswers (08 §24.3-A1)', () => {
+  it('formats the recipient’s ACTUAL answers to prior questionnaires (Q → A), not just the prompts', async () => {
+    const fs = memFileSystem();
+    const mara = await upsertPerson(fs, key, { displayName: 'Mara', isSubject: true, tags: [] });
+    const def = await saveQuestionnaire(fs, key, {
+      title: 'Last week',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: mara.id },
+      questions: [
+        { id: 'q1', type: 'shortText', prompt: 'What lifted you up this week?', required: true },
+      ],
+    });
+    const assignment = await createAssignment(fs, key, {
+      questionnaireId: def.id,
+      senderPersonId: 'owner',
+      recipient: { kind: 'person', personId: mara.id },
+      channel: 'inApp',
+      privacy: 'private',
+      senderVisibleToRecipient: true,
+    });
+    await saveResponse(fs, key, {
+      id: 'r1',
+      schemaVersion: 1,
+      assignmentId: assignment.id,
+      answers: [{ questionId: 'q1', value: 'A quiet morning hike with my dog.' }],
+      submittedAt: now,
+    });
+
+    const answers = await gatherRecipientPriorAnswers(fs, key, mara.id);
+    expect(answers).toMatch(/Q: What lifted you up this week\?/);
+    expect(answers).toMatch(/A: A quiet morning hike with my dog\./);
+  });
+
+  it('is empty when the recipient has been sent nothing / answered nothing', async () => {
+    const fs = memFileSystem();
+    const p = await upsertPerson(fs, key, { displayName: 'New', isSubject: true, tags: [] });
+    expect(await gatherRecipientPriorAnswers(fs, key, p.id)).toBe('');
   });
 });

@@ -1,6 +1,5 @@
 import type { FileSystem } from '../host';
 import { summarizeForContext, type RelatedForContext } from '../insights';
-import { isPersonFieldShared } from '../schemas';
 import { getPerson, listPeople } from '../people/peopleService';
 import { listRelationships } from '../people/relationshipService';
 import { relationshipTypesFromSubjectToViewer } from '../people/relationshipScope';
@@ -13,9 +12,11 @@ import { questionnaireTopic } from './questionnaireTopic';
  * with **no changes to the generators**.
  *
  * The author configures which subjects feed a generation: their **own** data, an optional **target**
- * person the questionnaire is about, and/or the **relationship** between them. A target person's data is
- * limited to **shareable** facts (never their private notes) — the §04/§8.4 shareable-vs-private split,
- * the same rule `buildContext` follows.
+ * person the questionnaire is about, and/or the **relationship** between them. Per the owner's informed §24.5
+ * decision, questionnaire TAILORING feeds ALL of the recipient's profile fields (private included) — scoped to
+ * questionnaire generation only; coaching context (`buildContext`) keeps the §04/§8.4 shareable-vs-private split.
+ * (The `insightsProvider` still routes the recipient's INSIGHT facts through the shareable gate; the recipient's
+ * full insight facts reach generation host-side via `recipientKnownData`/`gatherRecipientInsightFacts` instead.)
  */
 export interface GenerationContextRequest {
   authorPersonId: string;
@@ -38,6 +39,43 @@ export interface ContextProvider {
 const nameOf = (displayName: string, pronouns?: string): string =>
   pronouns ? `${displayName} (${pronouns})` : displayName;
 
+/**
+ * The rich profile as POSITIVE tailoring signal (08 §24.4-B1): who this person is — their work, life, and inner
+ * world — so questions feel written for their actual life, not generic. Per the owner's informed §24.5 decision
+ * this feeds ALL of the recipient's fields (shareable + private), scoped to questionnaire generation only.
+ */
+function profileLines(person: Awaited<ReturnType<typeof getPerson>>): string[] {
+  if (!person) return [];
+  const out: string[] = [];
+  const push = (label: string, value?: string | null): void => {
+    const v = value?.trim();
+    if (v) out.push(`  - ${label}: ${v}`);
+  };
+  const list = (label: string, arr?: readonly string[]): void => {
+    if (arr && arr.length > 0) out.push(`  - ${label}: ${arr.join(', ')}`);
+  };
+  push('occupation', person.occupation);
+  push('location', person.location);
+  push('gender', person.gender);
+  push('birthday', person.birthday);
+  push('relationship status', person.relationshipStatus);
+  push('parental status', person.parentalStatus);
+  push('living situation', person.livingSituation);
+  list('languages', person.languages);
+  push('ethnicity', person.ethnicity);
+  list('interests', person.interests);
+  list('values', person.values);
+  push('goals', person.goals);
+  push('communication style', person.communicationStyle);
+  push('faith', person.faith);
+  push('sexual orientation', person.sexualOrientation);
+  push('relationship style', person.relationshipStyle);
+  push('health notes', person.healthNotes);
+  list('tags', person.tags);
+  push('notes', person.notes);
+  return out;
+}
+
 const profilesProvider: ContextProvider = {
   id: 'profiles',
   label: 'Profiles',
@@ -49,18 +87,19 @@ const profilesProvider: ContextProvider = {
         lines.push(
           `The questionnaire is created by ${nameOf(author.displayName, author.pronouns)}.`,
         );
-        // The author's OWN notes always feed their own generation (their data, their context).
-        if (author.notes) lines.push(`About them: ${author.notes}`);
-        if (author.tags.length > 0) lines.push(`Their tags: ${author.tags.join(', ')}`);
+        const authorLines = profileLines(author);
+        if (authorLines.length > 0) lines.push(`About the author:`, ...authorLines);
       }
     }
     if (req.targetPersonId && req.includeTarget) {
       const target = await getPerson(fs, key, req.targetPersonId);
       if (target) {
-        lines.push(`It is about ${nameOf(target.displayName, target.pronouns)}.`);
-        // Shared notes only — a target person's notes feed generation only when left shared (15 §5).
-        if (target.notes && isPersonFieldShared(target, 'notes'))
-          lines.push(`About ${target.displayName}: ${target.notes}`);
+        lines.push(
+          `It is FOR ${nameOf(target.displayName, target.pronouns)} — tailor to who they are:`,
+        );
+        // Per §24.5 (the owner's informed override), a recipient's full profile — private fields included —
+        // feeds questionnaire tailoring. This is questionnaire-generation-scoped; coaching context is unchanged.
+        lines.push(...profileLines(target));
       }
     }
     return lines.join('\n');
@@ -84,8 +123,10 @@ const relationshipsProvider: ContextProvider = {
     const target = byId.get(req.targetPersonId);
     return between
       .map((r) => {
-        const note = r.notes && r.notesShared !== false ? ` — ${r.notes}` : '';
-        return `Their relationship with ${target?.displayName ?? 'them'}: ${r.type}${note}`;
+        const note = r.notes ? ` — ${r.notes}` : ''; // §24.5: recipient relationship notes feed tailoring too
+        const close = r.closeness != null ? `, closeness ${r.closeness}/5` : '';
+        const since = r.since ? `, since ${r.since}` : '';
+        return `Their relationship with ${target?.displayName ?? 'them'}: ${r.type}${close}${since}${note}`;
       })
       .join('\n');
   },
@@ -166,7 +207,7 @@ export async function gatherGenerationContext(
  * substantive data (so a literally-empty `gatherGenerationContext` never happens). Kept here next to the
  * provider that produces them so the coupling lives in one place.
  */
-const IDENTITY_PREFIXES = ['The questionnaire is created by', 'It is about'];
+const IDENTITY_PREFIXES = ['The questionnaire is created by', 'It is FOR', 'About the author:'];
 
 /**
  * Whether gathered context has NO substantive signal — only the identity boilerplate (37 §11). The

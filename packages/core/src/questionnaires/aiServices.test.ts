@@ -102,7 +102,10 @@ describe('contextProviders', () => {
     expect(ctx).toContain('Values quality time.'); // author insight
   });
 
-  it('excludes a target’s LOCKED notes and an unshared relationship note (15 §5)', async () => {
+  it('feeds a target’s LOCKED notes + unshared relationship note for tailoring (§24.5 owner override)', async () => {
+    // Per the owner's informed §24.5 decision, questionnaire TAILORING uses ALL of the recipient's data —
+    // private/locked fields included — so questions are as personal as possible. (This is scoped to
+    // questionnaire generation; coaching context / Memory / cross-user boundaries elsewhere are unchanged.)
     const fs = memFileSystem();
     const { author, target } = await seedHousehold(fs, { lockTarget: true });
     const ctx = await gatherGenerationContext(fs, key, {
@@ -113,8 +116,42 @@ describe('contextProviders', () => {
       includeRelationship: true,
     });
     expect(ctx).toContain('Loves hiking.'); // author still feeds
-    expect(ctx).not.toContain('Enjoys cooking together.'); // target notes locked → excluded
-    expect(ctx).not.toContain('Together 5 years.'); // relationship notes unshared → excluded
+    expect(ctx).toContain('Enjoys cooking together.'); // locked target notes now feed tailoring
+    expect(ctx).toContain('Together 5 years.'); // unshared relationship notes now feed tailoring
+  });
+
+  it('feeds the recipient’s RICH profile as positive tailoring signal (§24.4-B1) + relationship closeness', async () => {
+    const fs = memFileSystem();
+    const author = await upsertPerson(fs, key, { displayName: 'Ben', isSubject: true, tags: [] });
+    const target = await upsertPerson(fs, key, {
+      displayName: 'Mara',
+      isSubject: true,
+      tags: [],
+      occupation: 'nurse',
+      interests: ['climbing', 'jazz'],
+      values: ['honesty'],
+      goals: 'run a marathon',
+    });
+    await upsertRelationship(fs, key, {
+      fromPersonId: author.id,
+      toPersonId: target.id,
+      type: 'partner',
+      closeness: 5,
+    });
+    const ctx = await gatherGenerationContext(fs, key, {
+      authorPersonId: author.id,
+      includeAuthor: true,
+      targetPersonId: target.id,
+      includeTarget: true,
+      includeRelationship: true,
+    });
+    // The rich profile is positive tailoring signal, not just an avoid-list.
+    expect(ctx).toMatch(/tailor to who they are/i);
+    expect(ctx).toContain('occupation: nurse');
+    expect(ctx).toContain('interests: climbing, jazz');
+    expect(ctx).toContain('goals: run a marathon');
+    // The relationship line carries the type + closeness.
+    expect(ctx).toMatch(/relationship with Mara: partner, closeness 5\/5/);
   });
 
   it('omits the target + relationship when not toggled', async () => {
@@ -534,9 +571,9 @@ describe('generateQuestions', () => {
     });
     expect(result.ok).toBe(true);
     expect(sentUserText).toContain('Burnout at work.'); // the history reaches the model
-    expect(sentUserText).toMatch(/ALREADY shared/i); // the avoid framing
-    expect(sentUserText).toMatch(/never quote, restate, reference/i); // the never-reference safety clause
-    expect(sentUserText).toMatch(/steer clear, NOT mention/i);
+    expect(sentUserText).toMatch(/ALREADY KNOWN/i); // the known-data framing (§24: personalize + don't re-ask)
+    expect(sentUserText).toMatch(/Weave this knowledge in NATURALLY/i); // use it, don't recite verbatim
+    expect(sentUserText).toMatch(/don't RE-ASK it/i);
     // 08 §19.2: the knowledge-aware contract tells the model to go deeper / explore the unknown / be creative.
     expect(sentUserText).toMatch(/GO DEEPER/);
     expect(sentUserText).toMatch(/UNKNOWN/);
@@ -869,5 +906,27 @@ describe('improveQuestion + gap-finder', () => {
       to: '2026-07-01T00:00:00.000Z',
     });
     expect(billed).toHaveLength(0); // no spend
+  });
+
+  it('PRE-CALL: still recognizes an empty context when a data-less TARGET is selected (§24.4 boilerplate)', async () => {
+    // §24: profilesProvider now emits "It is FOR <name> — tailor to who they are:" for the target. A data-less
+    // target must still be treated as thin context (only identity boilerplate) so the gap-finder doesn't spend.
+    const fs = memFileSystem();
+    const author = await upsertPerson(fs, key, { displayName: 'Solo', isSubject: true, tags: [] });
+    const bareTarget = await upsertPerson(fs, key, {
+      displayName: 'Blank',
+      isSubject: true,
+      tags: [],
+    });
+    const noCall: ClaudeClient = {
+      send: () => Promise.reject(new Error('should not be called')),
+      stream: () => Promise.reject(new Error('should not be called')),
+    };
+    const result = await suggestQuestionnaires(deps(fs, noCall, author.id), {
+      targetPersonId: bareTarget.id,
+    });
+    expect(result.ok).toBe(false);
+    expect((result as { message: string }).message).toMatch(/add more about the people/i);
+    expect((result as { reason?: string }).reason).toBeUndefined();
   });
 });

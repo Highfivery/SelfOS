@@ -11,7 +11,11 @@ import {
   mergedIntimacyTopics,
   orderedActivities,
 } from './topics';
-import { buildGenerationUserMessage } from '../questionnaires/aiPrompts';
+import {
+  buildGenerationUserMessage,
+  GENERATION_SYSTEM,
+  relationshipFraming,
+} from '../questionnaires/aiPrompts';
 
 describe('INTIMACY_ACTIVITIES_FULL — inventory integrity (49 §10)', () => {
   it('every entry key is unique (a duplicate would collide matrix ratings)', () => {
@@ -355,5 +359,55 @@ describe('brief-as-focus + non-escalating contract (08 §23.3/§23.5)', () => {
       sensitivity: 'unfiltered',
     });
     expect(unfocused).not.toMatch(/SHAPE every question around the FOCUS/i);
+  });
+});
+
+describe('deep personalization + question intelligence (08 §24.4)', () => {
+  const base = {
+    context: '',
+    existingPrompts: [],
+    count: 5,
+    intimacyTopics: mergedIntimacyTopics(),
+  };
+
+  it('relationshipFraming differs by type and modulates by closeness', () => {
+    expect(relationshipFraming('partner')).toMatch(/PARTNER/);
+    expect(relationshipFraming('coworker')).toMatch(/COWORKER/);
+    expect(relationshipFraming('child')).toMatch(/CHILD/);
+    // A coworker questionnaire is explicitly boundaried; a partner one is not.
+    expect(relationshipFraming('coworker')).toMatch(/professional|boundaried/i);
+    expect(relationshipFraming('partner')).not.toMatch(/do NOT ask intrusive/i);
+    // Closeness modulates depth.
+    expect(relationshipFraming('friend', 5)).toMatch(/very close/i);
+    expect(relationshipFraming('friend', 1)).toMatch(/not especially close/i);
+    expect(relationshipFraming('friend')).not.toMatch(/close/i);
+  });
+
+  it('buildGenerationUserMessage frames the recipient by name/pronouns + relationship register', () => {
+    const msg = buildGenerationUserMessage({
+      ...base,
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: {
+        name: 'Angel',
+        pronouns: 'she/her',
+        relationship: { type: 'partner', closeness: 5 },
+      },
+    });
+    expect(msg).toMatch(/FOR Angel \(she\/her\)/);
+    expect(msg).toMatch(/use their pronouns/i);
+    expect(msg).toMatch(/PARTNER/);
+    expect(msg).toMatch(/very close/i);
+  });
+
+  it('GENERATION_SYSTEM carries the tailor-to-them, set-arc, and answer-type-intent directives', () => {
+    expect(GENERATION_SYSTEM).toMatch(/TAILOR TO WHO THEY ARE/);
+    expect(GENERATION_SYSTEM).toMatch(/PERSONALITY shape HOW you ask/); // psych-profile-aware
+    expect(GENERATION_SYSTEM).toMatch(/COHERENT SET/); // the arc
+    expect(GENERATION_SYSTEM).toMatch(/open with lighter.*deepen.*close/is);
+    expect(GENERATION_SYSTEM).toMatch(
+      /MATCH the answer type to what the question is trying to learn/,
+    );
+    expect(GENERATION_SYSTEM).toMatch(/never stack many rating scales/i);
   });
 });

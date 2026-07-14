@@ -400,6 +400,56 @@ describe('generateQuestions', () => {
     expect(result.questions?.map((q) => q.prompt)).toEqual(['One?', 'Three?']);
   });
 
+  it('runs the semantic pass for an intimacy set even with NO recipient history (intra-batch dedup, #192)', async () => {
+    const fs = memFileSystem();
+    const { author } = await seedHousehold(fs);
+    // Generation returns 3 questions, two of which are near-identical; the semantic pass (2nd call) drops the
+    // later duplicate (keep indices 1 & 3). No recipientHistory/dedupReference — the pass runs because the
+    // questionnaire is a sensitive intimacy type.
+    const responses = [
+      JSON.stringify({
+        title: 'T',
+        questions: [
+          { type: 'shortText', prompt: 'What turns you on the most?' },
+          { type: 'shortText', prompt: 'What really gets you going in bed?' },
+          { type: 'shortText', prompt: 'What is a hard limit for you?' },
+        ],
+      }),
+      '[1,3]',
+    ];
+    let calls = 0;
+    const seq: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (_o, onDelta) => {
+        const text = responses[Math.min(calls, responses.length - 1)] ?? '';
+        calls += 1;
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    const result = await generateQuestions(deps(fs, seq, author), {
+      type: 'intimacy',
+      sensitivity: 'explicit',
+      count: 3,
+      context: {
+        authorPersonId: author,
+        includeAuthor: true,
+        includeTarget: false,
+        includeRelationship: false,
+      },
+      existingPrompts: [],
+      // No recipientHistory / dedupReference on purpose.
+    });
+    expect(calls).toBe(2); // generation + the intra-batch semantic pass
+    expect(result.questions?.map((q) => q.prompt)).toEqual([
+      'What turns you on the most?',
+      'What is a hard limit for you?',
+    ]);
+  });
+
   it('returns NO_KEY without a key, and REFUSED on unusable output', async () => {
     const fs = memFileSystem();
     const { author } = await seedHousehold(fs);

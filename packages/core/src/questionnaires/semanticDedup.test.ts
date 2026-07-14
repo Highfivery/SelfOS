@@ -62,7 +62,7 @@ describe('semantic de-dup pass (08 §23.5 layer 3)', () => {
     expect(result.kept).toHaveLength(3);
   });
 
-  it('skips the call entirely with ≤1 candidate or an empty reference', async () => {
+  it('skips the call entirely with ≤1 candidate (nothing to compare)', async () => {
     const fs = memFileSystem();
     let called = false;
     const spyClient: ClaudeClient = {
@@ -76,9 +76,35 @@ describe('semantic de-dup pass (08 §23.5 layer 3)', () => {
       },
     };
     const one = await semanticDedupFilter(deps(fs, spyClient), [q('only one')], 'ref');
-    const noRef = await semanticDedupFilter(deps(fs, spyClient), CANDIDATES, '   ');
     expect(one.kept).toHaveLength(1);
-    expect(noRef.kept).toHaveLength(3);
     expect(called).toBe(false);
+  });
+
+  it('runs intra-batch dedup with an empty reference — drops a later near-identical candidate (#192)', async () => {
+    const fs = memFileSystem();
+    let called = false;
+    // The model keeps candidate 1 and drops candidate 2 (its intra-batch near-duplicate), keeps candidate 3.
+    const client: ClaudeClient = {
+      send: () => Promise.resolve('[1,3]'),
+      stream: (_o, onDelta) => {
+        called = true;
+        onDelta('[1,3]');
+        return Promise.resolve({
+          text: '[1,3]',
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    const candidates = [
+      q('What turns you on the most?'),
+      q('What really gets you going in bed?'),
+      q('What is a boundary you never want crossed?'),
+    ];
+    const result = await semanticDedupFilter(deps(fs, client), candidates, '   ');
+    expect(called).toBe(true);
+    expect(result.kept.map((x) => x.prompt)).toEqual([
+      'What turns you on the most?',
+      'What is a boundary you never want crossed?',
+    ]);
   });
 });

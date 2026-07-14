@@ -3200,6 +3200,29 @@ answers** and couldn't drop the re-ask. Fix:
 - **Onboarding question prompts join the hard fuzzy-filter list** (`formatIntakeForGeneration` now also returns
   `prompts`), so a **verbatim** onboarding re-ask is dropped deterministically too.
 
+### 23.5c Follow-up fix — intra-batch near-duplicates (issue #192, 2026-07-14)
+
+A user reported that a generated questionnaire (especially the **sexual** ones) still contained questions that
+were "almost duplicates or VERY similar" — two questions **in the same generated set** asking essentially the
+same thing. **Diagnosed against the code:** the cross-questionnaire de-dup (§23.5/§23.5b) is thorough, but the
+three layers only compared each candidate against the recipient's **prior** material — never against its
+**sibling candidates** in the same batch, except at the word level (the fuzzy `keptPrompts` filter). So two
+questions worded differently but meaning the same thing both survived. Intimacy sets hit this most because the
+explicit framing makes the model over-produce many closely-related sexual questions. Fix:
+
+- **The semantic pass now also de-duplicates candidates against EACH OTHER** (keep the first of a near-identical
+  pair, drop the later one) — the system prompt gained an explicit intra-batch rule, alongside the existing
+  reference rule.
+- **The semantic pass runs whenever there are ≥2 candidates and the questionnaire is a sensitive intimacy/scenario
+  type — even with no recipient reference** (a first questionnaire to someone with no history still gets
+  meaning-level intra-batch de-dup). For household recipients (who have a `dedupReference`) it already ran, so the
+  intra-batch rule is a free upgrade there; the only new metered call is the intimacy-with-no-history case.
+- **`GENERATION_SYSTEM` gained a distinctness instruction** (belt-and-suspenders at the source): every question in
+  a set must be distinct — no two may ask essentially the same thing or draw the same answer.
+
+Still **fail-safe** (keep all on AI-off/over-budget/parse-miss), **author-blind** (indices only), and the
+over-ask-then-trim keeps the returned count near the request.
+
 ### 23.6 Declutter the panel
 
 - Remove the `showTopicAdd` block + its state/handler from `QuestionnaireAiPanel`. Settings → Intimacy topics is

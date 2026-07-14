@@ -23,6 +23,8 @@ import {
   buildVariantUserMessage,
   GENERATION_SYSTEM,
   IMPROVE_SYSTEM,
+  INTIMACY_TYPE,
+  SCENARIO_TYPE,
   VARIANT_SYSTEM,
   type IntimacyGenerateMode,
 } from './aiPrompts';
@@ -136,12 +138,15 @@ export async function generateQuestions(
   request: GenerateRequest,
 ): Promise<GenerateResult> {
   const requestedCount = request.count ?? 5;
-  // The semantic de-dup pass (08 §23.5, layer 3) runs when the recipient has known material to compare against.
-  // When it will run, OVER-ASK a small buffer so the questions it drops as duplicates don't leave us short of
-  // the requested count; we trim back after filtering. No recipient history ⇒ nothing to compare ⇒ no over-ask.
-  // Prefer the DEDICATED, onboarding-first reference (§23.5b) — falls back to the full history blob.
+  // The semantic de-dup pass (08 §23.5, layer 3) runs when the recipient has known material to compare against
+  // (reference de-dup) OR the questionnaire is a sensitive intimacy/scenario type (issue #192 — the model
+  // over-produces near-identical sexual questions in one set, and the intra-batch dedup catches those even with
+  // no recipient history). Either way the pass also drops candidates that duplicate EACH OTHER. When it will
+  // run, OVER-ASK a small buffer so the questions it drops don't leave us short of the requested count; we trim
+  // back after filtering. Prefer the DEDICATED, onboarding-first reference (§23.5b) — falls back to the history.
   const dedupReference = (request.dedupReference ?? request.recipientHistory)?.trim() ?? '';
-  const willSemanticDedup = dedupReference !== '';
+  const isSensitiveType = request.type === INTIMACY_TYPE || request.type === SCENARIO_TYPE;
+  const willSemanticDedup = dedupReference !== '' || isSensitiveType;
   const askCount = willSemanticDedup ? Math.min(requestedCount + 3, 23) : requestedCount;
 
   // Pass the questionnaire type so the insights provider derives a relevance topic (28 §13.1) — an intimacy

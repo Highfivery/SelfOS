@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.24.1](https://github.com/Highfivery/SelfOS/compare/v0.24.0...v0.24.1) (2026-07-14)
+
+
+### Bug Fixes
+
+* **home:** never hide your goals + Together agreements behind a crisis signal ([#200](https://github.com/Highfivery/SelfOS/issues/200)) ([da59e17](https://github.com/Highfivery/SelfOS/commit/da59e175f2ef23a9d9ef77bcf5ab88d54152aa62))
+
 ## [0.24.0](https://github.com/Highfivery/SelfOS/compare/v0.23.0...v0.24.0) (2026-07-14)
 
 

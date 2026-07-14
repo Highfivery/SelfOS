@@ -375,6 +375,7 @@ import {
   externalSendDisclosure,
   garbageCollectImages,
   gatherRecipientHistory,
+  gatherRecipientAskedPrompts,
   generateQuestions,
   resolveInsightAbout,
   getAssignment,
@@ -758,6 +759,8 @@ const GenerateSchema = z.object({
   recipientPersonId: z.string().min(1).optional(),
   // Intimacy draft format (08 §17.12-C): direct questions, described scenarios, or a mix.
   intimacyMode: z.enum(['questions', 'scenarios', 'mix']).optional(),
+  // How many questions to draft (08 §23.4): 1–20; core defaults to 5 when omitted. maxTokens scales with it.
+  count: z.number().int().min(1).max(20).optional(),
 });
 const ImproveSchema = z.object({
   prompt: z.string().min(1),
@@ -1172,8 +1175,14 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     fs: FileSystem,
     key: Uint8Array,
     recipientPersonId: string,
-  ): Promise<{ history: string; coveredActs: { label: string; rating: string }[] }> => {
+  ): Promise<{
+    history: string;
+    coveredActs: { label: string; rating: string }[];
+    askedPrompts: string[];
+  }> => {
     const history = await gatherRecipientHistory(fs, key, recipientPersonId);
+    // The structured already-asked prompts (08 §23.5) drive the deterministic hard near-dup filter in core.
+    const askedPrompts = await gatherRecipientAskedPrompts(fs, key, recipientPersonId);
     const session = await getIntakeSession(fs, key, recipientPersonId);
     const intake = session
       ? formatIntakeForGeneration(session)
@@ -1184,7 +1193,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     ]
       .filter((s) => s.trim() !== '')
       .join('\n\n');
-    return { history: combined, coveredActs: intake.coveredActs };
+    return { history: combined, coveredActs: intake.coveredActs, askedPrompts };
   };
 
   /**
@@ -3324,7 +3333,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // acts already rated — so generation goes deeper instead of repeating what's known. Author-blind.
       const known = recipientIsHousehold
         ? await recipientKnownData(deps.fs, deps.key, p.recipientPersonId as string)
-        : { history: '', coveredActs: [] };
+        : { history: '', coveredActs: [], askedPrompts: [] };
       return generateQuestions(deps, {
         type: p.type,
         sensitivity: p.sensitivity,
@@ -3339,8 +3348,10 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         },
         existingPrompts: p.existingPrompts,
         ...(known.history ? { recipientHistory: known.history } : {}),
+        ...(known.askedPrompts.length ? { recipientAskedPrompts: known.askedPrompts } : {}),
         ...(known.coveredActs.length ? { coveredIntimacyActs: known.coveredActs } : {}),
         ...(p.intimacyMode !== undefined ? { intimacyMode: p.intimacyMode } : {}),
+        ...(p.count !== undefined ? { count: p.count } : {}),
       });
     },
     questionnairesImproveQuestion: async (input): Promise<QuestionnaireImproveResult> => {
@@ -3477,6 +3488,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         existingPrompts: [],
         count: 6,
         ...(known.history ? { recipientHistory: known.history } : {}),
+        ...(known.askedPrompts.length ? { recipientAskedPrompts: known.askedPrompts } : {}),
         // `coveredActs` only affects the prompt for an explicit-tier intimacy draft; a materialize is
         // standard-tier, so this is inert here today. Passed for symmetry (de-dup still runs via `history`)
         // and so it works automatically if a future materialize carries the suggestion's sensitivity.

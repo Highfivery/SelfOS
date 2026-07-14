@@ -1485,6 +1485,63 @@ describe('createCoreBridge', () => {
     expect(JSON.stringify(result)).not.toContain('secret codeword');
   });
 
+  it('passes the chosen count to the model and hard-drops a re-ask of a prior question (§23.4/§23.5)', async () => {
+    const { host, bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    const prior = await bridge.questionnairesSave({
+      title: 'Earlier',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: mara.id },
+      questions: [
+        { id: 'p1', type: 'shortText', prompt: 'What is your secret codeword?', required: true },
+      ],
+    });
+    await bridge.assignmentsCreate({ questionnaireId: prior.id });
+
+    let sentUserText = '';
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        sentUserText = options.messages.map((m) => m.content).join('\n');
+        // The model returns a near-repeat of the prior prompt AND a genuinely new one — the deterministic
+        // filter must drop the repeat and keep the fresh one (so only 1 remains, the semantic pass is skipped).
+        const json = JSON.stringify({
+          title: 'X',
+          questions: [
+            { type: 'shortText', prompt: "What's your secret codeword lately?", required: false },
+            {
+              type: 'shortText',
+              prompt: 'What are you most proud of this month?',
+              required: false,
+            },
+          ],
+        });
+        onDelta(json);
+        return Promise.resolve({
+          text: json,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+
+    const result = await bridge.questionnairesGenerate({
+      type: 'general',
+      sensitivity: 'standard',
+      existingPrompts: [],
+      recipientPersonId: mara.id,
+      count: 8,
+    });
+    // The requested count (over-asked by the §23.5 buffer for a recipient with history) reached the prompt…
+    expect(sentUserText).toMatch(/Draft 11 questions/);
+    // …and the re-ask of the prior prompt was hard-dropped, keeping only the genuinely-new question.
+    expect(result.ok).toBe(true);
+    expect(result.questions?.map((q) => q.prompt)).toEqual([
+      'What are you most proud of this month?',
+    ]);
+  });
+
   it('intimacy generation feeds the recipient’s RAW onboarding ratings as "go deeper", never returns them (§19)', async () => {
     const { host, bridge, ownerId } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });

@@ -404,6 +404,44 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-13 — **Build (Questionnaire Draft-with-AI quality overhaul — audit + GREATLY improve; SPEC 08 §23 BUILT;
+  on `feat/questionnaire-ai-audit`, PR pending).** The user reported four problems with questionnaire AI generation
+  (brief not respected, a confusing topic-add field, no question-count control, duplicative/already-known questions)
+  and asked for a full audit + big improvement, ask-don't-assume. **Audited the whole AI system** (two parallel
+  explore agents mapped core generation + the renderer/IPC seam), **diagnosed each against the real code** (the
+  brief IS wired end-to-end — the failure is prompt PRIORITY: it's one weak line buried before the forceful
+  recipient "KNOWN ALREADY" block + the intimacy explicit framing that swamp it), then **asked the 4 genuine forks**
+  (all AskUserQuestion): brief = **the focus** · **remove** the topic-add field · de-dup = **fuzzy filter +
+  rewritten prompt + a semantic AI pass** · **everywhere applicable**. Offered 4 extra enhancements (iterative
+  refine, tone/depth controls, de-dup transparency, per-question swap) — user **declined all**. Wrote spec §23,
+  approved, built in 5 slices. **Slice 1:** `GENERATION_SYSTEM` gains a precedence rule; `buildGenerationUserMessage`
+  now LEADS with a governing `FOCUS —` block (old un-emphasized brief line removed), reframes context as
+  "within the focus", passes `focused` into `explicitFraming` (register stays, subject follows the focus), and the
+  recipient-history directive drops "push edgier every time" for "useful, not novelty". **Slice 2:** a 1–20 count
+  Select (default 5) threaded channels → `GenerateSchema` (`int().min(1).max(20)`) → `generateQuestions`; `maxTokens`
+  scales `max(2500, askCount*350)`. **Slice 3:** pure `dedup.ts` (`isNearDuplicate` — normalized-equal /
+  subset-containment [gated ≥2 content words] / Jaccard ≥0.6) drops built questions near-duplicating the draft, the
+  kept set, OR the recipient's already-asked prompts (`gatherRecipientAskedPrompts` threaded host-side). **Slice 4:**
+  `semanticDedup.ts` — a bounded, metered (`questionnaire.dedup`), **fail-safe** second Claude call (keeps ALL on
+  AI-off/over-budget/parse-miss/empty-list; author-blind — only keep/drop indices return) that catches meaning-level
+  dupes the fuzzy layer misses; `generateQuestions` over-asks a +3 buffer when a recipient has history, runs the
+  pass, trims to the requested count. `runClaude`/`AiDeps` extracted to `aiCall.ts` (re-exported) to break the
+  `generationService`↔`semanticDedup` cycle. **Slice 5:** the inline "Add a consensual-adult topic" field removed
+  from the panel (managed only in Settings → Intimacy topics); the materialize path also gets the de-dup + semantic
+  pass. **Privacy boundary unchanged** (§17.4 author-blind: the recipient's known content still crosses only
+  host-side, never returns; the semantic pass sends a bounded ≤3000-char digest, returns only indices). Code-reviewer
+  **fix-first** (both should-fixes applied: actually import `runClaude` from `./aiCall` so the cycle is truly broken;
+  gate subset-containment at ≥2 content words so a single shared topic word isn't hard-dropped [+test]; the privacy/
+  fail-safe/over-ask-trim/count-bounds/metering all verified sound). Gate green: typecheck (node + web/DOM), lint,
+  format (only the pre-existing `site/index.html` untouched), **1117 core + 1114 desktop** unit (+`dedup` [8], +`semanticDedup` [4], +generation count-scaling/hard-drop/semantic-integration, +panel count/declutter RTL, +a
+  bridge count+hard-drop decrypt test), **19 questionnaire E2E** green (the authoring draft asserts the count Select
+  defaults to 5 + is choosable + the topic field is gone; the intimacy-topics test asserts the inline add is gone);
+  real-Electron visual QA of the panel (count Select sits cleanly between the brief + Generate). **Lesson: a brief
+  that's "wired but ignored" is a prompt-PRIORITY bug, not a plumbing bug — make it the LEADING, governing FOCUS so
+  the forceful de-dup/explicit blocks apply within it instead of swamping it; and layer de-dup CONSERVATIVELY (a
+  fuzzy filter that rarely false-drops — single-word overlap is NOT a dup) + a bounded, FAIL-SAFE semantic pass
+  (over-ask a buffer, trim after) so meaning-only paraphrases get caught without ever losing the author's questions
+  or dead-ending.**
 - 2026-07-13 — **Build (message timestamps across every AI chat surface; mockup approved first; specs 01 §5.6 +
   05 §3; on `feat/msg-timestamps`, a git worktree, PR pending).** The user asked to show, below each message,
   when it was sent/received — everywhere the user chats with AI. Showed an interactive `visualize` mockup (a

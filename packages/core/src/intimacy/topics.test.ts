@@ -292,3 +292,68 @@ describe('tier-distinct explicit generation framing (08 §16.5/§22.2)', () => {
     expect(nonIntimacy).not.toMatch(/FORMAT —/);
   });
 });
+
+describe('brief-as-focus + non-escalating contract (08 §23.3/§23.5)', () => {
+  const base = {
+    context: '',
+    existingPrompts: [],
+    count: 5,
+    intimacyTopics: mergedIntimacyTopics(),
+  };
+
+  it('a present brief becomes a leading, governing FOCUS block', () => {
+    const msg = buildGenerationUserMessage({
+      ...base,
+      type: 'general',
+      sensitivity: 'standard',
+      brief: 'how we are handling the move',
+    });
+    expect(msg).toMatch(/FOCUS — this entire questionnaire is about: how we are handling the move/);
+    expect(msg).toMatch(/Every question must serve this focus/);
+    // It LEADS: the focus appears before any context/tailoring guidance.
+    expect(msg.indexOf('FOCUS —')).toBeLessThan(msg.indexOf('Return the JSON object'));
+    // The old un-emphasized brief line is gone.
+    expect(msg).not.toMatch(/What they want to explore/);
+  });
+
+  it('a blank brief emits no FOCUS block (falls back to pre-§23 behaviour)', () => {
+    const msg = buildGenerationUserMessage({ ...base, type: 'general', sensitivity: 'standard' });
+    expect(msg).not.toMatch(/FOCUS —/);
+    expect(msg).not.toMatch(/What they want to explore/);
+  });
+
+  it('the recipient-history contract no longer escalates "edgier every time" (§23.5)', () => {
+    const msg = buildGenerationUserMessage({
+      ...base,
+      type: 'general',
+      sensitivity: 'standard',
+      recipientHistory: 'Themes they have already explored:\n- Burnout at work.',
+    });
+    // The escalation framing is removed…
+    expect(msg).not.toMatch(/edgier or more revealing territory/i);
+    expect(msg).not.toMatch(/Push gently further than last time/i);
+    // …replaced with a useful-not-novelty directive; the other de-dup directives stay.
+    expect(msg).toMatch(/not novelty or edginess for its own sake/i);
+    expect(msg).toMatch(/GO DEEPER/);
+    expect(msg).toMatch(/UNKNOWN/);
+    expect(msg).toMatch(/CREATIVE/);
+  });
+
+  it('an intimacy explicit draft WITH a focus keeps the register but follows the focus subject (§23.3)', () => {
+    const focused = buildGenerationUserMessage({
+      ...base,
+      type: 'intimacy',
+      sensitivity: 'unfiltered',
+      brief: 'reconnecting after the baby',
+    });
+    expect(focused).toMatch(/SHAPE every question around the FOCUS/i);
+    expect(focused).toMatch(/no-holds-barred/i); // the explicit register is unchanged
+    // Without a focus, the shaping line is absent (the whole inventory drives it, as before).
+    const unfocused = buildGenerationUserMessage({
+      ...base,
+      type: 'intimacy',
+      sensitivity: 'unfiltered',
+    });
+    expect(unfocused).not.toMatch(/SHAPE every question around the FOCUS/i);
+  });
+});

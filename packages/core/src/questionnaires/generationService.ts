@@ -6,7 +6,6 @@ import {
   salvageJsonArray,
   tolerantArray,
 } from '../ai/jsonSalvage';
-import type { ClaudeClient, FileSystem } from '../host';
 import { uuid } from '../id';
 import {
   AnswerTypeSchema,
@@ -15,10 +14,8 @@ import {
   type QuestionnaireGenerateResult,
   type QuestionnaireImproveResult,
   type SensitivityTier,
-  type UsageEvent,
 } from '../schemas';
 import { mergedIntimacyTopics } from '../intimacy/topics';
-import { checkBudget, costOf, recordUsage } from '../usage';
 import {
   buildGenerationUserMessage,
   buildImproveUserMessage,
@@ -28,8 +25,11 @@ import {
   VARIANT_SYSTEM,
   type IntimacyGenerateMode,
 } from './aiPrompts';
+import { runClaude, type AiDeps } from './aiCall';
 import { gatherGenerationContext, type GenerationContextRequest } from './contextProviders';
 import { readCustomIntimacyTopics } from './customTypeService';
+import { isNearDuplicate } from './dedup';
+import { semanticDedupFilter } from './semanticDedup';
 
 /**
  * AI question generation + per-question improve (08-questionnaires §3.1/§13.3). Mirrors `chatService`'s
@@ -42,16 +42,10 @@ export type { AiFailureReason };
 export type GenerateResult = QuestionnaireGenerateResult;
 export type ImproveResult = QuestionnaireImproveResult;
 
-export interface AiDeps {
-  fs: FileSystem;
-  key: Uint8Array;
-  client: ClaudeClient;
-  apiKey: string | null;
-  model: string;
-  personId: string;
-  now: Date;
-  override?: boolean;
-}
+// `runClaude` / `AiDeps` / `ClaudeCallResult` live in `./aiCall` (shared, cycle-free); re-exported here so every
+// existing `from './generationService'` importer keeps working.
+export { runClaude } from './aiCall';
+export type { AiDeps, ClaudeCallResult } from './aiCall';
 
 /** The model returns ungiven-id question objects; ids are minted here. matrix/allocation aren't generated. */
 const GeneratedQuestionSchema = z.object({
@@ -102,71 +96,6 @@ function toQuestion(raw: z.infer<typeof GeneratedQuestionSchema>): Question | nu
   };
 }
 
-const norm = (s: string): string => s.trim().toLowerCase().replace(/\s+/g, ' ');
-
-export type ClaudeCallResult =
-  | { ok: true; text: string; usage: UsageEvent }
-  | { ok: false; reason: AiFailureReason; message: string };
-
-/** Shared budget-gated, metered one-shot Claude call (used by generate / improve / gap-finder). */
-export async function runClaude(
-  deps: AiDeps,
-  system: string,
-  userText: string,
-  type: string,
-  maxTokens: number,
-): Promise<ClaudeCallResult> {
-  const { fs, key, apiKey, model, personId, now } = deps;
-  if (!apiKey) return { ok: false, reason: 'NO_KEY', message: 'Add your Claude API key first.' };
-  const person = await checkBudget(fs, key, {
-    scope: 'person',
-    personId,
-    now,
-    override: deps.override,
-  });
-  const app = await checkBudget(fs, key, { scope: 'app', now, override: deps.override });
-  if (person.state === 'over' || app.state === 'over') {
-    return { ok: false, reason: 'BUDGET', message: 'AI budget reached for this period.' };
-  }
-
-  let streamed;
-  try {
-    streamed = await deps.client.stream(
-      {
-        apiKey,
-        model,
-        system,
-        messages: [{ role: 'user', content: userText }],
-        maxTokens,
-        // These are bounded structured-JSON calls — disable adaptive thinking so it can't consume the whole
-        // token budget and truncate the JSON to empty (the intimacy-generation bug, 08 §17.9). Verified live:
-        // sonnet + adaptive thinking + 1500 tokens → stop_reason `max_tokens`, empty output → "No usable
-        // questions"; with thinking off the full budget goes to the JSON.
-        extendedThinking: false,
-      },
-      () => {},
-    );
-  } catch {
-    return { ok: false, reason: 'ERROR', message: 'Generation failed. Please try again.' };
-  }
-
-  const usage: UsageEvent = {
-    id: uuid(),
-    schemaVersion: 1,
-    type,
-    personId,
-    model,
-    at: now.toISOString(),
-    inputTokens: streamed.usage.inputTokens,
-    outputTokens: streamed.usage.outputTokens,
-    cacheWriteTokens: streamed.usage.cacheWriteTokens,
-    cacheReadTokens: streamed.usage.cacheReadTokens,
-    costUsd: costOf(model, streamed.usage),
-  };
-  await recordUsage(fs, key, usage);
-  return { ok: true, text: streamed.text, usage };
-}
-
 export interface GenerateRequest {
   type: string;
   sensitivity: SensitivityTier;
@@ -179,6 +108,10 @@ export interface GenerateRequest {
   // The recipient's full answered content (08 §17.4/§19.1), assembled host-side by the caller (bridge). Fed to
   // the model ONLY to avoid repeating + to go deeper — never surfaced to the author.
   recipientHistory?: string;
+  // The exact prompts the recipient was already asked in prior questionnaires (08 §23.5) — a structured list for
+  // the deterministic hard near-duplicate FILTER (the string `recipientHistory` drives the model; this drives
+  // the code filter, so a re-ask the model slips past is still dropped).
+  recipientAskedPrompts?: readonly string[];
   // The intimacy acts the recipient already rated in onboarding (08 §19.3) — reframes the intimacy seeding so
   // it goes deeper on rated acts instead of re-asking them.
   coveredIntimacyActs?: readonly { label: string; rating: string }[];
@@ -189,6 +122,14 @@ export async function generateQuestions(
   deps: AiDeps,
   request: GenerateRequest,
 ): Promise<GenerateResult> {
+  const requestedCount = request.count ?? 5;
+  // The semantic de-dup pass (08 §23.5, layer 3) runs when the recipient has known material to compare against.
+  // When it will run, OVER-ASK a small buffer so the questions it drops as duplicates don't leave us short of
+  // the requested count; we trim back after filtering. No recipient history ⇒ nothing to compare ⇒ no over-ask.
+  const dedupReference = request.recipientHistory?.trim() ?? '';
+  const willSemanticDedup = dedupReference !== '';
+  const askCount = willSemanticDedup ? Math.min(requestedCount + 3, 23) : requestedCount;
+
   // Pass the questionnaire type so the insights provider derives a relevance topic (28 §13.1) — an intimacy
   // questionnaire surfaces the author's Intimacy/Relationships portrait facts, etc.
   const context = await gatherGenerationContext(deps.fs, deps.key, {
@@ -203,7 +144,7 @@ export async function generateQuestions(
     ...(request.brief !== undefined ? { brief: request.brief } : {}),
     context,
     existingPrompts: request.existingPrompts,
-    count: request.count ?? 5,
+    count: askCount,
     intimacyTopics: mergedIntimacyTopics(await readCustomIntimacyTopics(deps.fs)),
     ...(request.intimacyMode !== undefined ? { intimacyMode: request.intimacyMode } : {}),
     ...(request.recipientHistory !== undefined
@@ -214,9 +155,11 @@ export async function generateQuestions(
       : {}),
   });
 
-  // A generous output budget (thinking is off) — an intimacy set with long multi-choice option lists can run
-  // past 1500 tokens; 2500 leaves headroom so the JSON is never truncated.
-  const call = await runClaude(deps, GENERATION_SYSTEM, user, 'questionnaire.generate', 2500);
+  // A generous output budget (thinking is off) that SCALES with the (over-asked) count (08 §23.4) — a 20-question
+  // set with long multi-choice option lists would blow past a fixed 2500 and truncate the JSON. ~350 tokens per
+  // question with a 2500 floor (so a small set keeps the same headroom as before).
+  const maxTokens = Math.max(2500, askCount * 350);
+  const call = await runClaude(deps, GENERATION_SYSTEM, user, 'questionnaire.generate', maxTokens);
   if (!call.ok) return { ok: false, reason: call.reason, message: call.message };
 
   // Generation returns {title, questions}. Tolerate a legacy bare-array reply (older model responses) and a
@@ -241,14 +184,20 @@ export async function generateQuestions(
     const { reason, message } = classifyParseOutcome(call.text, 'draft');
     return { ok: false, reason, usage: call.usage, message };
   }
-  const seen = new Set(request.existingPrompts.map(norm));
+  // Hard de-dup (08 §23.5): drop a built question that near-duplicates (a) one already kept this round, (b) a
+  // question already in the draft, or (c) one the recipient was already asked in a prior questionnaire — not
+  // just an exact-normalized repeat. This is the deterministic backstop to the model's soft "avoid overlap".
+  const askedPrompts = request.recipientAskedPrompts ?? [];
   const questions: Question[] = [];
+  const keptPrompts: string[] = [];
   for (const raw of set.questions) {
     const q = toQuestion(raw);
-    if (q && !seen.has(norm(q.prompt))) {
-      seen.add(norm(q.prompt));
-      questions.push(q);
-    }
+    if (!q) continue;
+    if (isNearDuplicate(q.prompt, request.existingPrompts)) continue;
+    if (isNearDuplicate(q.prompt, askedPrompts)) continue;
+    if (isNearDuplicate(q.prompt, keptPrompts)) continue;
+    questions.push(q);
+    keptPrompts.push(q.prompt);
   }
   if (questions.length === 0) {
     // A set parsed but yielded nothing new/usable (all duplicates or unbuildable) — a calm retry, not a
@@ -260,8 +209,22 @@ export async function generateQuestions(
       message: 'No new questions came back. Please try again.',
     };
   }
+
+  // Semantic de-dup (08 §23.5, layer 3): a second bounded, metered call drops questions that mean the same as
+  // something the recipient already shared/was asked, in different words (the fuzzy filter misses those). It is
+  // FAIL-SAFE — on AI-off / over-budget / a parse miss it keeps every question. Then TRIM to the requested
+  // count (we over-asked to absorb the drops). Fewer than requested is acceptable (all we had were new).
+  let finalQuestions = questions;
+  if (willSemanticDedup && questions.length > 1) {
+    const sem = await semanticDedupFilter(deps, questions, dedupReference);
+    finalQuestions = sem.kept;
+  }
+  finalQuestions = finalQuestions.slice(0, requestedCount);
+
   const title = set.title?.trim();
-  return { ok: true, questions, ...(title ? { title } : {}), usage: call.usage };
+  // We return the generation call's usage for the renderer's optimistic budget refresh; the semantic pass's
+  // `questionnaire.dedup` usage is billed separately (recorded inside `runClaude`) — the ring reloads to reflect it.
+  return { ok: true, questions: finalQuestions, ...(title ? { title } : {}), usage: call.usage };
 }
 
 /**

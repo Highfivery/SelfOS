@@ -3071,3 +3071,195 @@ adjusts caps only if the diagnosis shows truncation.
   _what_ each tier instructs).
 - No loosening of Anthropic usage policy; explicit output is generated **within** policy, refusing only when
   genuinely out of policy.
+
+## 23. 2026-07-13 amendment — Draft-with-AI quality overhaul (brief-as-focus · question count · real de-dup · declutter) — BUILT
+
+> **Status: BUILT** (`feat/questionnaire-ai-audit`; decisions locked + approved with the user 2026-07-13; the
+> four §23.2 forks answered via clarifying questions, the optional §23-extra enhancements declined). A
+> complete audit-and-improve pass over the whole questionnaire AI system, from four user-reported problems.
+> Amends §5.1 (generation), §17.4/§19 (de-dup), §16.4/§17.12 (the Draft-with-AI panel), §6 (IPC). The safety /
+> privacy / author-blind boundaries of §17.4 and §8 are **unchanged** — this changes _how well_ generation
+> respects the brief, avoids repetition, and is controlled, not _what_ it may say or who sees what.
+
+### 23.1 The four problems, diagnosed against the real code (not assumed)
+
+1. **The brief ("What do you want to explore?") is under-respected.** It is wired end-to-end correctly (it
+   reaches the prompt as `"What they want to explore: <brief>"`), so this is **not** a plumbing bug — it is
+   **prompt priority**. The brief is a single un-emphasized line placed _before_ two far more forceful, longer,
+   later-positioned blocks: the §17.4/§19 recipient "KNOWN ALREADY" block (numbered "CRITICAL" directives — _go
+   deeper, explore the unknown, push edgier every time_) and, for intimacy, `explicitFraming` (_"Cover specific
+   sex acts… FAVOR acts they have NOT yet rated; push into edgier territory"_). Those swamp the brief. The
+   reported case was an **intimacy/explicit** questionnaire — exactly where the brief is drowned hardest.
+2. **A confusing, redundant field.** The owner-only "Add a consensual-adult topic for the AI to draw on (18+)"
+   control sits inside the Draft-with-AI panel (intimacy + explicit/unfiltered + `people.manage` only). It edits
+   the **household-wide** intimacy topic inventory — a management task, not part of drafting _this_
+   questionnaire — and the **full management UI for it already exists** in Settings → Intimacy topics (§16.5a).
+   Its placement directly under the brief conflates "what to explore now" with "topics the AI may draw on in
+   general."
+3. **No question-count control.** The number of questions is hardcoded: **5** for Draft-with-AI
+   (`generateQuestions` default `count ?? 5`), **6** for `questionnaireSuggestionMaterialize`. There is no `count`
+   field in `QuestionnaireAiPanel`, the `questionnaires:generate` IPC contract, or `GenerateSchema`.
+4. **Duplicative / "already-has-data" questions.** The only **hard** post-parse filter drops questions matching
+   the **current draft** (`existingPrompts`). The recipient's already-asked prompts + known profile facts are
+   only **softly** avoided via prompt text — nothing hard-stops a re-ask. Compounding it, the §19.2 de-dup
+   contract is **totalizing/escalating** (_"push gently further than last time — edgier or more revealing
+   territory"_), applied to **every** type incl. general check-ins, so it pushes novelty-for-its-own-sake and
+   fights the brief.
+
+Two further issues found in the audit: (5) **`maxTokens` (2500) does not scale with count** — a 20-question set
+with option lists would truncate (the §17.9/§22 class of bug); (6) the escalation framing is applied
+type-agnostically (wrong for a general questionnaire).
+
+### 23.2 Decisions (locked with the user, 2026-07-13)
+
+1. **Brief = the focus.** When a brief is present it **leads** the prompt and the questionnaire **centers on
+   that topic**; de-dup, depth, and recipient-tailoring apply _within_ that focus. (When the brief is blank,
+   generation falls back to the recipient-tailored / structured-context behavior as today.)
+2. **Remove** the inline "Add a consensual-adult topic" field from the Draft-with-AI panel entirely — no
+   capability is lost (Settings → Intimacy topics keeps add / remove / AI-suggest).
+3. **Real de-dup:** a **hard fuzzy filter** (drop generated questions that closely match what the recipient was
+   already asked/answered, not just the current draft) **+ a rewritten, non-escalating prompt contract + a
+   semantic AI de-dup pass** (a bounded extra Claude call that catches meaning-level duplicates the fuzzy filter
+   misses). The user accepted the small extra per-generation cost.
+4. **Everywhere applicable:** the brief-focus + de-dup improvements apply to **Draft-with-AI AND** the "Suggested
+   for you" gap-finder + saved suggestions (they share `runClaude`/the prompt builders). The **count control** is
+   a full-generation concept → it applies to Draft-with-AI and "Create from this" (materialize); the gap-finder's
+   sample-question count (2–4 preview questions per suggestion) is unchanged.
+
+Non-asked, clearly-needed fixes (done as part of the work): the count control (1–20, default **5**), `maxTokens`
+scaled with count, and the type-agnostic escalation framing removed.
+
+### 23.3 Brief becomes the focus (prompt restructure)
+
+- `buildGenerationUserMessage` is restructured so a present brief is the **leading, framed constraint**, e.g.
+  _"FOCUS: this entire questionnaire is about — `<brief>`. Every question must serve this focus."_ — placed
+  **first** (after the count/type line), with the sensitivity framing, recipient context, and de-dup grounding
+  reframed as _"within that focus"_ modifiers rather than competing top-level goals.
+- The `GENERATION_SYSTEM` variety/tailoring line gains an explicit precedence rule: **when a focus is given, it
+  governs**; de-dup means _don't repeat within the focus_, not _drift off the focus to find something new_.
+- **Blank brief** keeps today's recipient-tailored behavior (the structured context + de-dup drive it).
+- The intimacy `explicitFraming` still applies for the explicit tiers, but when a brief is present it is scoped to
+  the brief's subject (the explicit register stays; the _topic_ follows the brief) — so "how we're handling the
+  move" on an intimacy questionnaire yields explicit questions **about that**, not the whole act inventory.
+
+### 23.4 Question count (1–20)
+
+- New optional `count` on the `questionnaires:generate` IPC contract + `GenerateSchema` (`z.number().int().min(1).max(20)`),
+  threaded → `generateQuestions` (already accepts `count?`). The panel exposes a compact selector (default **5**,
+  range **1–20**).
+- **`maxTokens` scales with count** (e.g. a per-question budget with a floor, so 20 questions with option lists
+  never truncate) — replacing the fixed 2500. `extendedThinking:false` stays (§17.9).
+- Materialize ("Create from this") keeps its own sensible default (or accepts a count); the gap-finder sample
+  count is unchanged.
+
+### 23.5 Real de-dup — three layers
+
+1. **Rewritten prompt contract (non-escalating).** The §19.2 "escalate / edgier every time" directive is replaced
+   with a **useful-not-repetitive** instruction: don't re-ask or re-offer what's known; go deeper _where it
+   serves the focus/relationship_; explore genuinely useful unknowns. "Push edgier" is **removed as a
+   default** — for the explicit intimacy tiers, the existing `EXPLICIT_TIER_DIRECTIVE` (§22.2) already carries the
+   register, so novelty need not be a separate escalation instruction.
+2. **Hard fuzzy filter (no extra cost).** After parsing, in addition to the existing `existingPrompts` exact-dedup,
+   drop any generated prompt that is a **near-match** (normalized token-overlap / fuzzy ratio over a threshold) of
+   any of the recipient's **already-asked prompts** (from `gatherRecipientHistory`, already assembled host-side).
+   Pure, deterministic, in `@selfos/core` — the recipient's known prompts already cross into the generation path
+   host-side, so no new data crosses the trust boundary.
+3. **Semantic AI de-dup pass (bounded, metered).** When a recipient has known material, after generation + the
+   fuzzy filter run **one bounded Claude call**: given a **compact digest** of what the recipient has already
+   answered/been asked and the candidate question prompts (numbered), return the indices that are **not
+   meaning-level duplicates**. Keep those. Details: budget-gated + metered (a `questionnaire.dedup` usage type, or
+   reuse `questionnaire.generate`); **fails safe** — on AI-off / over-budget / parse failure it falls back to the
+   fuzzy-filtered set (never a dead-end, never a data-blame); the digest is **bounded** (already-asked prompts +
+   short known-fact list, not the whole raw onboarding) to keep cost small; **author-blind + output-safe** (the
+   §17.4 boundary holds — only keep/drop indices come back, never the recipient's content). To keep the returned
+   count near the request, generation may **over-ask by a small buffer** then trim to `count` after de-dup; if
+   fewer survive, keep them (a calm "dropped N that overlapped with what they've already shared" note) rather than
+   dead-end.
+
+### 23.6 Declutter the panel
+
+- Remove the `showTopicAdd` block + its state/handler from `QuestionnaireAiPanel`. Settings → Intimacy topics is
+  the single home for managing the inventory (unchanged). No IPC removed (`questionnairesAddIntimacyTopic` stays —
+  Settings uses it).
+
+### 23.7 Scope — the gap-finder + saved suggestions
+
+- `buildGapFinderUserMessage` / `GAP_FINDER_SYSTEM` adopt the same **non-escalating, focus-aware** de-dup wording
+  and (where a recipient is bound) the same fuzzy + semantic de-dup improvements apply to the recipient-first
+  saved suggestions. The gap-finder's own 2–4 sample-question preview count is unchanged.
+
+### 23.8 Data model / IPC additions
+
+- `questionnaires:generate` input gains optional `count?: number` (1–20). `GenerateSchema` validates it. No
+  schema-version bump (additive, renderer→main input only).
+- Optional new usage type `questionnaire.dedup` (metering) if the semantic pass isn't folded into
+  `questionnaire.generate`.
+- No change to persisted `Questionnaire`/`Assignment`/`ResponseSet` shapes.
+
+### 23.9 Safety, privacy & honesty (unchanged boundaries)
+
+- The §17.4 **author-blind, output-safe** boundary holds: the recipient's raw/known content still only crosses
+  **host-side**, the author never receives it, the semantic pass returns only keep/drop indices, and the model is
+  still forbidden to quote or allude to it. The consensual-adult boundary + `SAFETY` prefix + 18+/consent
+  recipient gates are untouched.
+- A shorter-than-requested result surfaces an honest note (§23.5), never a data-blame or a silent dead-end (37).
+
+### 23.10 Testing
+
+- **Core:** brief-as-focus (the focus line leads + governs; blank-brief keeps today's behavior); the fuzzy filter
+  drops a near-dup of an already-asked prompt but keeps a genuinely new one; the semantic pass filters
+  meaning-level dups and **falls back to the fuzzy set** on AI-off/over-budget/parse-failure; `maxTokens` scales
+  with count; the escalation framing is gone. **Bridge:** `count` flows through; the semantic pass is metered +
+  budget-gated + author-blind (decrypt-level: the recipient's content never returns). **Renderer:** the count
+  selector; the topic-add field is gone; a short-result note renders.
+- **E2E:** Draft-with-AI with a brief + a count → the requested number of on-topic questions; a household
+  recipient with prior questionnaires → no repeat of an already-asked question.
+
+### 23.11 Build slices (after approval)
+
+1. **Brief-as-focus + non-escalating contract** (prompt restructure in `aiPrompts.ts`; core tests). Highest-value,
+   self-contained.
+2. **Count control** (IPC + `GenerateSchema` + panel selector + `maxTokens` scaling).
+3. **Hard fuzzy filter** (pure core, against the recipient's already-asked prompts).
+4. **Semantic AI de-dup pass** (bounded metered call + fail-safe fallback + optional over-ask/trim).
+5. **Declutter** (remove the inline topic-add field) + **gap-finder parity** (§23.7).
+
+### 23.12 Non-goals
+
+- No change to the consensual-adult boundary, 18+/consent gates, `SAFETY` prefix, or the §17.4 author-blind
+  privacy boundary.
+- No new sensitivity tiers/types, no new persisted shapes, no removal of the Settings intimacy-topic management.
+- No AI generation of matrix/allocation questions (still `SUGGESTABLE_ANSWER_TYPES` only).
+
+### 23.13 Build status (2026-07-13, `feat/questionnaire-ai-audit`) — BUILT
+
+All five slices built. **Slice 1 — brief-as-focus + non-escalating contract:** `GENERATION_SYSTEM` gains a
+precedence rule (_"when a FOCUS is given it GOVERNS"_); `buildGenerationUserMessage` now leads with a
+`FOCUS — this entire questionnaire is about: …` block (removing the old un-emphasized `What they want to explore`
+line), reframes the context line as _"within the focus above"_, passes `focused` into `explicitFraming` (the
+explicit register stays but the SUBJECT follows the focus), and the recipient-history directive #3 drops
+_"push edgier every time"_ for a _useful-not-novelty_ instruction. **Slice 2 — count control:** optional
+`count` (1–20) threaded channels → `GenerateSchema` → `generateQuestions`; a `Number of questions` Select
+(default 5) on the panel; `maxTokens` scales `Math.max(2500, askCount*350)`. **Slice 3 — hard fuzzy filter:**
+new pure `dedup.ts` (`isNearDuplicate` — normalized-equal / subset-containment / Jaccard ≥ threshold);
+`gatherRecipientAskedPrompts` (structured already-asked prompts) threaded via `recipientKnownData` →
+`recipientAskedPrompts`; `generateQuestions` drops built questions that near-duplicate the draft, the kept set,
+OR the recipient's prior prompts. **Slice 4 — semantic AI de-dup pass:** new `semanticDedup.ts`
+(`semanticDedupFilter`) — a bounded, metered (`questionnaire.dedup`) call that returns keep-indices, FAIL-SAFE
+(keeps all on AI-off / over-budget / parse-miss / empty-list), skipped for ≤1 candidate or no reference;
+`generateQuestions` over-asks a +3 buffer when a recipient has history, runs the pass, then trims to the
+requested count. `runClaude`/`AiDeps` extracted to `aiCall.ts` (re-exported) to avoid the
+`generationService` ↔ `semanticDedup` cycle. **Slice 5 — declutter + parity:** the inline "Add a
+consensual-adult topic" field removed from `QuestionnaireAiPanel` (managed only in Settings → Intimacy topics);
+the materialize path also gets `recipientAskedPrompts` + the semantic pass; the gap-finder wording was already
+non-escalating. **Code-reviewer fix-first** (both should-fixes applied): the import cycle was actually broken —
+`semanticDedup` imports `runClaude` from `./aiCall`, not `./generationService`; and the fuzzy subset-containment
+now requires the smaller token set to carry **≥ 2 content words** so a single shared topic word ("family") is
+NOT hard-dropped (that's the semantic pass's job) — with a test. Gate green: typecheck (node + web/DOM), lint,
+format (only the pre-existing `site/index.html` unclean, untouched), **1117 core + 1114 desktop** unit (+`dedup` [7], +`semanticDedup` [4], +generation
+count-scaling/hard-drop/semantic-integration, +panel count/declutter RTL, +a bridge count+hard-drop decrypt
+test), **questionnaire E2E** (the authoring draft asserts the count Select defaults to 5 + is choosable + the
+topic field is gone; the intimacy-topics test asserts the inline add is gone). **Lesson: keep the fuzzy layer
+CONSERVATIVE (default Jaccard 0.6 + subset-containment) so it rarely false-drops, and let the bounded,
+fail-safe semantic pass catch meaning-only paraphrases — over-ask a small buffer then trim so the semantic
+drops don't undershoot the author's requested count.**

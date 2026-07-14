@@ -5495,6 +5495,12 @@ test('authoring (§16.4): AI draft fills the empty title; Save→Send is a two-s
     // §16.4: Title sits below "Draft with AI"; an AI draft fills the empty title. (noWaitAfter: the
     // Generate click flips the button to a transient "Drafting…" state Playwright would otherwise wait on.)
     await w.getByRole('button', { name: /Draft with AI/ }).click();
+    // §23.4: the author picks how many questions — a Select defaulting to 5, choosable up to 20.
+    const countSelect = w.getByLabel('Number of questions');
+    await expect(countSelect).toHaveValue('5');
+    await countSelect.selectOption('8');
+    // §23.6: the household intimacy-topic manager is NOT in this panel (it lives in Settings).
+    await expect(w.getByText(/add a consensual-adult topic/i)).toHaveCount(0);
     await w.getByRole('button', { name: /Generate questions/ }).click({ noWaitAfter: true });
     await expect(w.getByLabel('Title')).toHaveValue('A gentle weekly check-in');
 
@@ -5510,7 +5516,7 @@ test('authoring (§16.4): AI draft fills the empty title; Save→Send is a two-s
   }
 });
 
-test('intimacy topics (§16.5a): the owner manages custom topics in Settings + AI suggest + an inline builder add, persisted', async () => {
+test('intimacy topics (§16.5a): the owner manages custom topics in Settings + AI suggest; the inline builder add is gone (§23.6)', async () => {
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
   await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
   const fs = createNodeFileSystem(vault);
@@ -5554,22 +5560,17 @@ test('intimacy topics (§16.5a): the owner manages custom topics in Settings + A
       'Temperature contrast play',
     );
 
-    // The inline builder add (owner) writes to the SAME shared list: author an intimacy/unfiltered
-    // questionnaire and add a fantasy from the AI panel.
+    // §23.6: the inline "add a topic" is GONE from the Draft-with-AI panel — the household inventory is
+    // managed only here in Settings. Confirm the builder panel no longer surfaces it (even at intimacy/unfiltered).
     await w.getByRole('link', { name: 'Questionnaires' }).click();
     await startNewQuestionnaire(w);
     await w.getByLabel('Type', { exact: true }).selectOption('intimacy');
     await w.getByLabel('Sensitivity').selectOption('unfiltered');
     await w.getByRole('button', { name: /Draft with AI/ }).click();
-    await w.getByLabel('Topic kind').selectOption('fantasies');
-    await w.getByLabel('New topic').fill('Pirate roleplay');
-    await w.getByRole('button', { name: 'Add topic' }).click();
-    await expect(w.getByText(/Added .Pirate roleplay./)).toBeVisible();
-    await expect
-      .poll(async () => (await readCustomIntimacyTopics(fs)).fantasies)
-      .toContain('Pirate roleplay');
-
-    // No inner horizontal scrollbar on the new Settings control or the inline add at phone width.
+    await expect(w.getByText(/add a consensual-adult topic/i)).toHaveCount(0);
+    await expect(w.getByRole('button', { name: 'Add topic' })).toHaveCount(0);
+    // …and the count control it now carries fits with no inner horizontal scrollbar at phone width.
+    await expect(w.getByLabel('Number of questions')).toBeVisible();
     await w.setViewportSize({ width: 390, height: 800 });
     await w.waitForTimeout(150);
     const offenders = await w.evaluate(

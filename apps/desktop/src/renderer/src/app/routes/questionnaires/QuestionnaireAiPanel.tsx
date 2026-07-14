@@ -3,7 +3,6 @@ import { Sparkles } from 'lucide-react';
 import type { Question, SensitivityTier } from '@shared/schemas';
 import { AiUnavailableNotice } from '../../AiUnavailableNotice';
 import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
-import { useSessionStore } from '../../../stores/sessionStore';
 import {
   Banner,
   Button,
@@ -16,11 +15,14 @@ import {
 import styles from './Questionnaires.module.css';
 
 /**
- * "Draft with AI" (08-questionnaires §3.1/§13.3/§17.12): generate questions from a free-text brief. Generation
- * automatically uses the author's own shareable data AND the **bound recipient's** shareable context to tailor
- * the questions (the recipient is chosen at the start step — no second person-picker here, §17.12-A), plus the
- * recipient's full history for de-dup (§17.4). Budget-gated + metered in main; calm states when AI is off or
- * over budget. Generated questions are appended to the draft (the caller marks them AI-drafted).
+ * "Draft with AI" (08-questionnaires §3.1/§13.3/§17.12/§23): generate questions from a free-text brief that,
+ * when present, is the GOVERNING focus of the whole questionnaire (§23.3). Generation automatically uses the
+ * author's own shareable data AND the **bound recipient's** shareable context to tailor the questions (the
+ * recipient is chosen at the start step — no second person-picker here, §17.12-A), plus the recipient's full
+ * history for de-dup (§17.4/§23.5). The author picks how many questions (§23.4). Budget-gated + metered in
+ * main; calm states when AI is off or over budget. Generated questions are appended to the draft (the caller
+ * marks them AI-drafted). The household-wide intimacy-topic inventory is managed in Settings → Intimacy topics
+ * (§16.5a) — it is deliberately NOT surfaced here (§23.6).
  */
 export function QuestionnaireAiPanel({
   aiReady,
@@ -47,41 +49,18 @@ export function QuestionnaireAiPanel({
   initialBrief?: string;
 }): JSX.Element {
   const generate = useQuestionnaireStore((s) => s.generate);
-  // Owner-only inline "add a topic" for an intimacy questionnaire at an explicit tier (08 §16.5a).
-  const canManageTopics = useSessionStore((s) => s.can('people.manage'));
-  const showTopicAdd =
-    canManageTopics &&
-    type === 'intimacy' &&
-    (sensitivity === 'explicit' || sensitivity === 'unfiltered');
 
   const [open, setOpen] = useState(initialBrief != null);
   const [brief, setBrief] = useState(initialBrief ?? '');
+  // How many questions to draft (08 §23.4): a Select (1–20) keeps the value always valid — no NaN/blank edge
+  // from a free-typed number input (§22 lesson). Default 5.
+  const [count, setCount] = useState(5);
   // Intimacy drafts can be direct questions, described scenarios, or a mix (08 §17.12-C).
   const [intimacyMode, setIntimacyMode] = useState<'questions' | 'scenarios' | 'mix'>('questions');
   const isIntimacy = type === 'intimacy';
   const [busy, setBusy] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [notice, setNotice] = useState<{ tone: 'info' | 'warning'; text: string } | null>(null);
-  const [topicKind, setTopicKind] = useState<'activities' | 'fantasies'>('activities');
-  const [topicDraft, setTopicDraft] = useState('');
-  const [topicBusy, setTopicBusy] = useState(false);
-  const [topicNotice, setTopicNotice] = useState<{ ok: boolean; text: string } | null>(null);
-
-  const onAddTopic = async (): Promise<void> => {
-    const name = topicDraft.trim();
-    if (name === '' || topicBusy) return;
-    setTopicBusy(true);
-    setTopicNotice(null);
-    try {
-      await window.selfos?.questionnairesAddIntimacyTopic({ kind: topicKind, name });
-      setTopicDraft('');
-      setTopicNotice({ ok: true, text: `Added “${name}” — the AI will draw on it.` });
-    } catch {
-      setTopicNotice({ ok: false, text: 'Couldn’t add that topic.' });
-    } finally {
-      setTopicBusy(false);
-    }
-  };
 
   // A live elapsed-time counter while drafting, so it's clearly working and not stuck (generation is a
   // single non-streaming call, so an honest "it's running" beats a frozen spinner).
@@ -105,6 +84,7 @@ export function QuestionnaireAiPanel({
         sensitivity,
         ...(brief.trim() ? { brief: brief.trim() } : {}),
         existingPrompts,
+        count,
         // The bound household recipient (08 §17.12-A): the bridge auto-tailors to their shareable context and
         // de-dups against their full history. No person-picker here — the recipient was chosen at the start.
         ...(recipientPersonId ? { recipientPersonId } : {}),
@@ -154,6 +134,22 @@ export function QuestionnaireAiPanel({
             )}
           </Field>
 
+          <Field label="Number of questions">
+            {(props) => (
+              <Select
+                {...props}
+                value={String(count)}
+                onChange={(e) => setCount(Number(e.target.value))}
+              >
+                {Array.from({ length: 20 }, (_, i) => i + 1).map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+
           {/* Intimacy can draft direct questions, described scenarios to react to, or a mix (§17.12-C). */}
           {isIntimacy ? (
             <Field label="Generate">
@@ -191,44 +187,6 @@ export function QuestionnaireAiPanel({
               Generate questions
             </Button>
           )}
-
-          {showTopicAdd ? (
-            <Stack gap={2}>
-              <Text size="sm" tone="secondary">
-                Add a consensual-adult topic for the AI to draw on (18+). It’s saved household-wide
-                and also feeds the personal intake — manage the full list in Settings.
-              </Text>
-              <Select
-                aria-label="Topic kind"
-                value={topicKind}
-                onChange={(e) => setTopicKind(e.target.value as 'activities' | 'fantasies')}
-              >
-                <option value="activities">Activity</option>
-                <option value="fantasies">Fantasy</option>
-              </Select>
-              <Textarea
-                aria-label="New topic"
-                rows={2}
-                value={topicDraft}
-                placeholder="e.g. Wax play"
-                onChange={(e) => setTopicDraft(e.target.value)}
-              />
-              <div>
-                <Button
-                  variant="secondary"
-                  onClick={() => void onAddTopic()}
-                  disabled={topicBusy || topicDraft.trim() === ''}
-                >
-                  {topicBusy ? 'Adding…' : 'Add topic'}
-                </Button>
-              </div>
-              {topicNotice ? (
-                <Text size="sm" tone={topicNotice.ok ? 'secondary' : 'tertiary'}>
-                  {topicNotice.text}
-                </Text>
-              ) : null}
-            </Stack>
-          ) : null}
         </Stack>
       ) : null}
     </div>

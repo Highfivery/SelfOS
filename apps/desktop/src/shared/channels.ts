@@ -794,6 +794,8 @@ export interface SelfosBridge {
     recipientPersonId?: string;
     // Intimacy draft format (08 §17.12-C): direct questions, described scenarios, or a mix.
     intimacyMode?: 'questions' | 'scenarios' | 'mix';
+    // How many questions to draft (08 §23.4): 1–20, default 5 when omitted. maxTokens scales with it in core.
+    count?: number;
   }): Promise<QuestionnaireGenerateResult>;
   /** Reword a single question per an instruction ("warmer", "tighter"). Budget-gated + metered. */
   questionnairesImproveQuestion(input: {

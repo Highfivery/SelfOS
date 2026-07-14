@@ -83,6 +83,71 @@ export function questionnaireInsights(
   };
 }
 
+/** A chartable trend forming across the person's questionnaire insights (§3.4). */
+export interface QuestionnaireTrend {
+  /** A human label for the metric (e.g. "connection"). */
+  label: string;
+  /** Direction from the earliest to the latest reading. */
+  direction: 'up' | 'down' | 'steady';
+  /** How many time-points feed it (≥2). */
+  points: number;
+}
+
+/** camelCase / snake_case metric key → a lowercase human phrase ("moodValence" → "mood valence"). */
+function humanizeMetric(key: string): string {
+  return key
+    .replace(/[_-]+/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * A "trend forming" from the metrics on the person's own approved questionnaire insights (§3.4) — a metric key
+ * that appears across ≥2 insights over time. Picks the metric with the most readings (tie → the most recently
+ * updated), and reports its direction earliest→latest. Pure over already-loaded insights — no per-questionnaire
+ * trends read, no spend. `null` when no metric has ≥2 readings (the trend half self-hides).
+ */
+export function questionnaireTrend(
+  insights: Insight[],
+  subjectPersonId: string | null,
+): QuestionnaireTrend | null {
+  if (subjectPersonId === null) return null;
+  const own = insights.filter(
+    (i) => i.source === 'questionnaire' && i.approved && i.subjectPersonId === subjectPersonId,
+  );
+  // metric key → time-ordered readings.
+  const byMetric = new Map<string, { at: string; value: number }[]>();
+  for (const i of own) {
+    for (const [key, value] of Object.entries(i.metrics ?? {})) {
+      const list = byMetric.get(key) ?? [];
+      list.push({ at: i.updatedAt, value });
+      byMetric.set(key, list);
+    }
+  }
+  let best: { key: string; readings: { at: string; value: number }[] } | null = null;
+  for (const [key, readings] of byMetric) {
+    if (readings.length < 2) continue;
+    if (
+      !best ||
+      readings.length > best.readings.length ||
+      (readings.length === best.readings.length && latestAt(readings) > latestAt(best.readings))
+    ) {
+      best = { key, readings };
+    }
+  }
+  if (!best) return null;
+  const ordered = [...best.readings].sort((a, b) => a.at.localeCompare(b.at));
+  const first = ordered[0]?.value ?? 0;
+  const last = ordered[ordered.length - 1]?.value ?? 0;
+  const direction = last > first ? 'up' : last < first ? 'down' : 'steady';
+  return { label: humanizeMetric(best.key), direction, points: ordered.length };
+}
+
+function latestAt(readings: { at: string }[]): string {
+  return readings.reduce((m, r) => (r.at > m ? r.at : m), '');
+}
+
 /** One actionable item in the "Needs you" list (§3.3). */
 export type NeedsYouItem =
   | {

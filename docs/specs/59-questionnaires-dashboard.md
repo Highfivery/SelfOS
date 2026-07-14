@@ -2,14 +2,16 @@
 
 > **Status:** **Built** (on `feat/questionnaires-dashboard`, not merged) — _last updated 2026-07-13_
 >
-> **As-built deviations (see §13):** (1) the "latest insight" card shipped; the sibling **trend-forming** line
-> is **deferred** (it needs a per-questionnaire `assignments:trends` read — a follow-up). (2) The `questionnaire-gap`
-> "For you" provider was **left in place but gated OFF** (`questionnaireGapHint: false` in Home) rather than
-> deleted — removing it cascaded through `RecommendationItem`'s state/imports + shared engine tests, so gating it
-> off is the low-risk absorption (no duplicate nudge fires). (3) The **fun/spicy** "Ideas" cards seed the builder's
-> **type + sensitivity** (not a prefilled AI brief) — the user taps "Draft with AI" there (which now uses the
-> §22 explicit framing); a prefilled brief is a small follow-up. (4) "Go deeper" navigates to `/questionnaires`
-> (the Suggested panel), where generation spends on tap.
+> **As-built deviations (see §13):** (1) The `questionnaire-gap` "For you" provider was **left in place but gated
+> OFF** (`questionnaireGapHint: false` in Home) rather than deleted — removing it cascaded through
+> `RecommendationItem`'s state/imports + shared engine tests, so gating it off is the low-risk absorption (no
+> duplicate nudge fires). (2) "Go deeper" navigates to `/questionnaires` (the Suggested panel), where generation
+> spends on tap.
+>
+> **Follow-ups now BUILT (2026-07-13, `feat/questionnaire-dashboard-followups`):** the **trend-forming** line
+> (a sibling of the latest-insight card, derived cheaply from the metrics on the person's own questionnaire
+> insights — no per-questionnaire trends read), and **prefilled fun/spicy briefs** (`BuilderSeed.brief` → the AI
+> panel opens expanded + pre-filled, so a fun/spicy idea is one tap from a drafted, flavoured questionnaire).
 >
 > A dedicated, engaging **Questionnaires** section on the Home dashboard that turns questionnaires from a
 > buried tool into a living loop: at-a-glance stats, the few things that need the person now, their latest

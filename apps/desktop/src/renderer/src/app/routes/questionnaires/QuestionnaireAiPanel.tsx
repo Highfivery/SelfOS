@@ -30,6 +30,7 @@ export function QuestionnaireAiPanel({
   existingPrompts,
   onGenerated,
   onTitle,
+  initialBrief,
 }: {
   aiReady: boolean;
   type: string;
@@ -41,6 +42,9 @@ export function QuestionnaireAiPanel({
   onGenerated: (questions: Question[]) => void;
   // A short AI-suggested title (08 §16.4); the builder applies it only when the title is still empty.
   onTitle?: (title: string) => void;
+  // A pre-filled starting brief from a Home "Ideas" card (59 §3.5) — opens the panel expanded + seeds the brief
+  // so a fun/spicy idea is one tap from a drafted questionnaire. Undefined ⇒ the panel starts collapsed + empty.
+  initialBrief?: string;
 }): JSX.Element {
   const generate = useQuestionnaireStore((s) => s.generate);
   // Owner-only inline "add a topic" for an intimacy questionnaire at an explicit tier (08 §16.5a).
@@ -50,8 +54,8 @@ export function QuestionnaireAiPanel({
     type === 'intimacy' &&
     (sensitivity === 'explicit' || sensitivity === 'unfiltered');
 
-  const [open, setOpen] = useState(false);
-  const [brief, setBrief] = useState('');
+  const [open, setOpen] = useState(initialBrief != null);
+  const [brief, setBrief] = useState(initialBrief ?? '');
   // Intimacy drafts can be direct questions, described scenarios, or a mix (08 §17.12-C).
   const [intimacyMode, setIntimacyMode] = useState<'questions' | 'scenarios' | 'mix'>('questions');
   const isIntimacy = type === 'intimacy';

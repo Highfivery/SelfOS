@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.24.0](https://github.com/Highfivery/SelfOS/compare/v0.23.0...v0.24.0) (2026-07-14)
+
+
+### Features
+
+* **memory:** flatten the insights page into edit-in-place life-area sections (62) ([#197](https://github.com/Highfivery/SelfOS/issues/197)) ([a842685](https://github.com/Highfivery/SelfOS/commit/a8426850b7ef6817e5c55395b8f6fa992fefab2d))
+* **together:** surface agreements in Goals + dashboard + inline pulse on Home (61) ([#195](https://github.com/Highfivery/SelfOS/issues/195)) ([b455b62](https://github.com/Highfivery/SelfOS/commit/b455b62cf4d24ae10e084b35487c6dae23815638))
+
+
+### Bug Fixes
+
+* **home:** show your goals AND Together reflections in "Needs attention" ([#199](https://github.com/Highfivery/SelfOS/issues/199)) ([bb76da9](https://github.com/Highfivery/SelfOS/commit/bb76da9792491f60c69e2b70c2ea026c59f7fa88))
+* **together:** make standing agreements top-of-mind on the dashboard (61) ([#198](https://github.com/Highfivery/SelfOS/issues/198)) ([419dd11](https://github.com/Highfivery/SelfOS/commit/419dd112cbf7f0aab135ecf9de0ec90b814f94c5))
+
 ## [0.23.0](https://github.com/Highfivery/SelfOS/compare/v0.22.0...v0.23.0) (2026-07-14)
 
 

@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.23.0](https://github.com/Highfivery/SelfOS/compare/v0.22.0...v0.23.0) (2026-07-14)
+
+
+### Features
+
+* **home:** challenge card + Home review polish (60 slice 3) ([#189](https://github.com/Highfivery/SelfOS/issues/189)) ([efe3527](https://github.com/Highfivery/SelfOS/commit/efe35277edfb12e74ae64d3ce1a0c511d31e0d77))
+* **home:** complete hybrid dashboard redesign — bento, AI companion, life-rings, feed (60) ([#187](https://github.com/Highfivery/SelfOS/issues/187)) ([7f45fdd](https://github.com/Highfivery/SelfOS/commit/7f45fddfd84f475ddc5bc0b76704bc382805efed))
+* **home:** goals card, you card, needs-attention queue, and life-rings redesign (60) ([#194](https://github.com/Highfivery/SelfOS/issues/194)) ([50488df](https://github.com/Highfivery/SelfOS/commit/50488dfb49b7ef4a30a7096877bbc9e89330f284))
+* **home:** together pulse ring on the hero card + dead-code cleanup ([#191](https://github.com/Highfivery/SelfOS/issues/191)) ([ec09b85](https://github.com/Highfivery/SelfOS/commit/ec09b851bdf512c5d3e0d88dfc462492cf6a84e6))
+* **questionnaires:** make Intimacy-Unfiltered genuinely extreme (08 §24.9) ([#190](https://github.com/Highfivery/SelfOS/issues/190)) ([53b0711](https://github.com/Highfivery/SelfOS/commit/53b0711cf7172503e0c22d6ed6e2ef54c933b370))
+
+
+### Bug Fixes
+
+* **questionnaires:** de-duplicate generated questions within a set ([#192](https://github.com/Highfivery/SelfOS/issues/192)) ([#193](https://github.com/Highfivery/SelfOS/issues/193)) ([a5a0dc3](https://github.com/Highfivery/SelfOS/commit/a5a0dc3a9e73815876a16d24265dc4e97bb6ce14))
+
 ## [0.22.0](https://github.com/Highfivery/SelfOS/compare/v0.21.0...v0.22.0) (2026-07-14)
 
 

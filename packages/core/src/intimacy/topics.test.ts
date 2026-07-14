@@ -182,7 +182,14 @@ describe('tier-distinct explicit generation framing (08 §16.5/§22.2)', () => {
       sensitivity: 'unfiltered',
     });
     expect(msg).toMatch(/no-holds-barred/i); // the unfiltered directive
-    expect(msg).toMatch(/blunt, plain/i);
+    expect(msg).toMatch(/blunt, filthy, plain/i);
+    // §24.9: unfiltered names the extreme content (group sex, exhibitionism, venues) + governs the tone.
+    expect(msg).toMatch(/threesomes.*orgies.*gangbangs/is);
+    expect(msg).toMatch(/exhibitionism/i);
+    expect(msg).toMatch(/sex clubs, strip clubs/i);
+    expect(msg).toMatch(/UNFILTERED tier — the most extreme/i);
+    expect(msg).toMatch(/governs this questionnaire's tone/i); // overrides the §24 softeners
+    expect(msg).toMatch(/no gentle warm-up/i);
     expect(msg).toContain('Deepthroat'); // a seeded activity (current inventory label)
     expect(msg).toContain('Consensual non-consent (CNC) roleplay'); // a seeded fantasy
     // The legitimate-context + consensual-adult boundary is stated in-prompt.

@@ -404,6 +404,30 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-14 — **Fix (Intimacy → Unfiltered tier was producing Explicit/General-level output, not truly
+  unfiltered; user-reported; SPEC 08 §24.9; on `feat/questionnaire-unfiltered-intensity`).** The owner wanted the
+  Unfiltered tier to actually reach its intended intensity — highly explicit, kinky, taboo, boundary-pushing:
+  extreme acts + scenarios, group sex/threesomes/orgies, exhibitionism, sex/strip clubs, etc. **Diagnosed from the
+  prompt assembly (NOT a refusal — the model produces content, just too tame):** the §24 personalization overhaul
+  I'd just shipped added softeners that COMPETE with the explicit register — the relationship framing LEADS the
+  prompt (`relationshipFraming('partner')` = "warm, intimate, us-oriented"), and `GENERATION_SYSTEM` gained the
+  set-arc ("open with lighter questions … close warm") + the "gentle and reassurance-aware" personality directive.
+  Those fight "no restraint anywhere," so the model split the difference. Fix (within the UNCHANGED consensual-adult
+  / in-policy boundary — the `SAFETY` prefix + never-minors/never-illegal/taboo-only-as-roleplay clauses are
+  untouched): (1) strengthened `EXPLICIT_TIER_DIRECTIVE.unfiltered` to NAME the extreme content the tier is meant to
+  reach (hardcore kink/BDSM/power-exchange, rough/edge play, group sex — threesomes/orgies/gangbangs/swinging/
+  cuckolding, exhibitionism/voyeurism/public sex/sex clubs/strip clubs/play parties, taboo fantasy/roleplay);
+  (2) `explicitFraming` now emits a GOVERNING-OVERRIDE line so the explicit register OVERRIDES any "warm/gentle/
+  tender/open-with-lighter-questions/build-rapport-first" guidance — every question frank + explicit from the
+  first, no gentle warm-up — plus an extra unfiltered "the most extreme … make it filthier … never dilute into
+  tasteful/romantic" line. The ladder is preserved (`explicit` a step back; `intimacyGeneral` non-graphic). Gate
+  green: typecheck, lint, format, **1151 core** unit (topics.test asserts the extreme directive + governing
+  override reach the model; §22 explicit-vs-unfiltered ladder still distinct). **Live-model intensity verification
+  needs a real key — an on-device DoD item (§22.3); the offline fake returns canned output, so the units assert the
+  prompt ASSEMBLY, not the model's output.** **Lesson: a strong tier directive (unfiltered) gets SWAMPED by
+  general personalization directives (relationship warmth, the "open lighter" arc, "gentle" personality) added
+  later — the same swamping the brief hit in §23; make the tier register GOVERN the tone with an explicit override,
+  and name the specific extreme content so "unfiltered" isn't left to the model's default restraint.**
 - 2026-07-13 — **Build + DURABLE PRIVACY OVERRIDE (questionnaire AI: use ALL the data — complete de-dup + deep
   personalization + question intelligence; SPEC 08 §24 BUILT; on `feat/questionnaire-ai-deep-personalization`).**
   After the §23.5b fix, the user (frustrated my audits kept missing data) demanded a genuinely exhaustive re-audit

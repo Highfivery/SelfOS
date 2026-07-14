@@ -110,7 +110,7 @@ const EXPLICIT_TIER_DIRECTIVE: Record<'explicit' | 'unfiltered', string> = {
   explicit:
     'Write frank, specific questions — name sex acts and preferences plainly (oral, penetration, positions, toys, kink, and so on). Be candid and direct, a deliberate step back from the most graphic: explicit enough to draw out honest, revealing answers.',
   unfiltered:
-    'Write the MOST graphic, no-holds-barred questions within the boundary below — this is the frankest tier and should read like it, not a notch of restraint anywhere. Use blunt, plain, sexual language for bodies and acts. Actively surface kinks, fetishes, filthy specifics, dirty talk, and taboo fantasies/roleplay (e.g. consensual non-consent (CNC) as pre-agreed roleplay); ask what they do, what they want done to them, and the edges they have not yet explored. Hold nothing back short of the boundary.',
+    'Write the MOST graphic, extreme, no-holds-barred questions within the boundary below — this is the FRANKEST tier and must read like it: push hard to the far explicit adult edge, not one notch of restraint. Use blunt, filthy, plain sexual language for bodies and acts. Go well BEYOND vanilla into the extreme: hardcore kinks and fetishes; BDSM and power exchange (dominance/submission, bondage, impact, degradation, humiliation); rough, intense, and edge-play acts; GROUP sex — threesomes, foursomes, orgies, gangbangs, swinging, cuckolding/hotwifing; EXHIBITIONISM and voyeurism — being watched, public and semi-public sex, sex clubs, strip clubs, swingers and play parties; and taboo fantasies/roleplay (e.g. consensual non-consent (CNC) as pre-agreed roleplay, stranger/one-night scenarios). Ask what they do, what they crave done to them, their filthiest and most secret fantasies, and the boundary-pushing edges they have NOT yet explored. Assume nothing is too explicit or too kinky for this tier — hold nothing back short of the boundary.',
 };
 
 /**
@@ -144,6 +144,19 @@ export function explicitFraming(
     ? `\nCONTEXT: This is a private, 18+ scenario questionnaire inside a personal wellness app, for a consenting adult who has opted in to explore their sexuality through described situations. Each item is a short, explicit intimate SITUATION or roleplay to react to. Frank, graphic sexual scenarios are appropriate and expected here — a normal, in-policy use; do NOT shy away or substitute tasteful, emotional-closeness scenes.`
     : `\nCONTEXT: This is a private intimacy questionnaire inside a personal wellness app, written for a consenting adult (18+) who has opted in to reflect on their own sex life with a partner. Frank, explicit questions about sex and desire are appropriate and expected here — this is a normal, in-policy use; do NOT shy away or substitute tasteful, emotional-closeness questions.`;
   const parts: string[] = [context, EXPLICIT_TIER_DIRECTIVE[tier]];
+  // The explicit register GOVERNS the tone of the whole questionnaire (08 §24.9): it OVERRIDES any "warm /
+  // tender / gentle / reassurance-aware / open with lighter questions / build rapport first" or
+  // relationship-softening guidance elsewhere in this prompt. Do NOT ease in with a gentle warm-up — every
+  // question is frank and explicit from the very FIRST. Personalize to them, but never at the cost of the
+  // explicit register or the intensity of this tier.
+  parts.push(
+    `IMPORTANT: the explicit register above GOVERNS this questionnaire's tone — it overrides any "warm/gentle/tender/reassurance/open-with-lighter-questions/build-rapport-first" guidance elsewhere. Do NOT ease in: EVERY question is frank and explicit from the first one, no gentle warm-up.`,
+  );
+  if (tier === 'unfiltered') {
+    parts.push(
+      `This is the UNFILTERED tier — the most extreme. Every question must be genuinely graphic and push the edge; if a draft reads like it could belong in a milder tier, make it filthier, kinkier, and more extreme. Never dilute it into tasteful, romantic, or emotional-closeness questions.`,
+    );
+  }
   // With a focus (08 §23.3) the explicit REGISTER stays but the SUBJECT follows the focus, not the whole
   // inventory — so "how we're handling the move" on an intimacy questionnaire yields explicit questions ABOUT
   // that, not a tour of every act.

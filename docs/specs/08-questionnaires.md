@@ -3418,3 +3418,28 @@ session fact reaches the semantic pass author-blind, prior answers Q→A), **24 
 history once and instruct the model to BOTH build on it (personal, go deeper) AND never re-ask it; and a "use
 all data" directive that overrides a privacy boundary must be an INFORMED owner decision (surface the exact
 leak, then comply + scope it to the one path), not a silent default.**
+
+### 24.9 Intimacy-Unfiltered intensity — the §24 softeners diluted the frankest tier (2026-07-14)
+
+The owner reported the **Intimacy → Unfiltered** tier producing questions closer to Explicit/General than truly
+unfiltered. **Diagnosed from the prompt assembly (not a refusal — the model produces content, just too tame):**
+the §24 personalization directives added softeners that COMPETE with and dilute the explicit register — the
+relationship framing LEADS the prompt (`relationshipFraming('partner')` = "warm, intimate, us-oriented"), and
+`GENERATION_SYSTEM` gained the set-arc ("open with lighter, easy questions … close warm") + the personality
+directive ("gentle and reassurance-aware"). Those fight the unfiltered directive's "no restraint anywhere," so
+the model splits the difference. Fix (within the UNCHANGED consensual-adult / in-policy boundary — §8.3):
+
+- **Strengthened `EXPLICIT_TIER_DIRECTIVE.unfiltered`** to name the extreme content the tier is meant to reach:
+  hardcore kink/fetish, BDSM/power-exchange, rough/edge play, GROUP sex (threesomes, orgies, gangbangs,
+  swinging, cuckolding), EXHIBITIONISM/voyeurism (public/semi-public sex, sex clubs, strip clubs, play parties),
+  and taboo fantasy/roleplay — "assume nothing is too explicit or too kinky for this tier."
+- **The explicit register now GOVERNS the tone** (`explicitFraming` gains a governing-override line): it
+  overrides any "warm/gentle/tender/reassurance/open-with-lighter-questions/build-rapport-first" guidance
+  elsewhere in the prompt — every question is frank and explicit from the FIRST, no gentle warm-up. `unfiltered`
+  gets an extra "the most extreme … make it filthier … never dilute into tasteful/romantic" line.
+- **The ladder is preserved** (`explicit` stays a deliberate step back; `intimacyGeneral` stays non-graphic) and
+  the consent / never-minors / never-illegal / taboo-only-as-roleplay boundary + `SAFETY` prefix are unchanged.
+
+The live-model intensity verification (does the frankest tier now read genuinely extreme) needs a real API key
+and is an on-device DoD item (§22.3) — the offline fake returns canned output, so the unit tests assert the
+prompt ASSEMBLY (the extreme directive + the governing override reach the model), not the model's output.

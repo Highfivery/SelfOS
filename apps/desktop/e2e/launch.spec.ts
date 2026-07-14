@@ -1285,8 +1285,10 @@ test('home (53): proactivity OFF hides the "For you" zone + momentum, but the st
     await expect(w.getByRole('heading', { name: 'Wellbeing' })).toBeVisible(); // a status card (not a push)
     await expect(w.getByRole('region', { name: 'For you' })).toHaveCount(0);
     await expect(w.getByText(/you’ve explored/i)).toHaveCount(0); // no momentum push
-    // The gentle "Needs attention" nudges (stale goal, check-in, ask-someone) are suppressed too (60 §8).
-    await expect(w.getByText(/a goal needs a check-in/i)).toHaveCount(0);
+    // Your goals are a GENUINE (non-nudge) item — they stay TOP OF MIND in "Needs attention" even with
+    // proactivity off (the user's ask). Only the gentle check-in / ask-someone NUDGES are suppressed (60 §8).
+    await expect(w.getByRole('heading', { name: /needs attention/i })).toBeVisible();
+    await expect(w.getByText(/a goal needs a check-in/i)).toBeVisible();
     // The status grid is unaffected — it reflects existing data, it isn't a nudge.
     await expect(w.getByRole('heading', { name: /what the coach knows/i })).toBeVisible();
   } finally {
@@ -10535,13 +10537,30 @@ test('together follow-through (61): agreements in Goals + needs-attention, inlin
     { text: 'weekly date night', status: 'standing', sessionId: 'seed-sess' },
     new Date(),
   );
+  // Seed one of the person's OWN goals too — it must appear in "Needs attention" ALONGSIDE the Together
+  // agreement (the user's ask: BOTH your goals AND the Together reflections are top of mind here).
+  const goalNow = new Date().toISOString();
+  await saveGoal(fs, key, {
+    id: 'g-shutdown',
+    schemaVersion: 1,
+    subjectPersonId: ben,
+    text: 'catch shutdown moments',
+    status: 'open',
+    provenance: { at: goalNow },
+    createdAt: goalNow,
+    updatedAt: goalNow,
+    lastTouchedAt: goalNow,
+  });
 
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
 
-    // Home surfaces BOTH the needs-attention follow-through item AND the inline pulse check-in callout.
+    // Home's "Needs attention" surfaces BOTH the Together agreement AND your own goal (the user's ask),
+    // plus the inline pulse check-in callout.
+    await expect(w.getByRole('heading', { name: /needs attention/i })).toBeVisible();
     await expect(w.getByText('Following through with Angel')).toBeVisible();
+    await expect(w.getByText('catch shutdown moments').first()).toBeVisible();
     await expect(w.getByRole('heading', { name: 'Check in with Angel' })).toBeVisible();
     // The commitment TEXT is on Home (the needs-attention detail + the Goals card list — not just a count).
     await expect(w.getByText('weekly date night').first()).toBeVisible();

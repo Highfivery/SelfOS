@@ -142,13 +142,39 @@ describe('needsAttention (60 §3.1.2a)', () => {
     expect(needsAttention(base()).some((i) => i.kind === 'check-in')).toBe(false);
   });
 
-  it('nudges stale goals with a count', () => {
+  it('surfaces goals as a genuine (non-nudge) item, framed "needs a check-in" when stale', () => {
     const items = needsAttention(
       base({ goals: [goal({ id: 'a', due: '2026-06-01' }), goal({ id: 'b', due: '2026-06-02' })] }),
     );
-    const stale = items.find((i) => i.kind === 'stale-goals');
-    expect(stale?.count).toBe(2);
-    expect(stale?.label).toMatch(/2 goals/i);
+    const g = items.find((i) => i.kind === 'goals');
+    expect(g?.count).toBe(2);
+    expect(g?.label).toMatch(/2 goals need a check-in/i);
+    expect(g?.detail).toBe('a'); // the actual goal text (top stale goal)
+    expect(g?.route).toBe('/goals');
+    expect(g?.nudge).toBeUndefined(); // NOT a nudge — stays top of mind regardless of proactivity
+  });
+
+  it('surfaces ACTIVE (in-progress, not-stale) goals framed "in progress" — the user\'s ask', () => {
+    const items = needsAttention(
+      base({
+        goals: [
+          goal({ id: 'Work on catching shutdown moments', due: '2026-12-01' }), // future due → active, not stale
+          goal({ id: 'g2', status: 'inProgress', due: '2026-12-01' }),
+        ],
+      }),
+    );
+    const g = items.find((i) => i.kind === 'goals');
+    expect(g?.count).toBe(2);
+    expect(g?.label).toMatch(/2 goals in progress/i);
+    expect(g?.detail).toBe('Work on catching shutdown moments');
+    // Non-nudge → visible even with proactivity off.
+    expect(g?.nudge).toBeUndefined();
+    // Done/abandoned goals never surface here.
+    expect(
+      needsAttention(base({ goals: [goal({ id: 'x', status: 'done' })] })).some(
+        (i) => i.kind === 'goals',
+      ),
+    ).toBe(false);
   });
 
   it('nudges "ask someone" only when a prior send has gone ≥30 days', () => {
@@ -173,20 +199,27 @@ describe('needsAttention (60 §3.1.2a)', () => {
     ).toBe(false);
   });
 
-  it('suppresses the gentle NUDGES under crisis / proactivity-off, keeping genuinely-pending items (§8)', () => {
+  it('suppresses the gentle NUDGES under proactivity-off, keeping genuinely-pending items + goals (§8)', () => {
     const input = base({
       suppressNudges: true,
       togetherSessions: [session({ yourTurn: true })], // pending
       sentOverview: { q1: overview({ newResponses: 1, lastSentAt: iso(NOW - 40 * DAY) }) }, // pending + nudge
-      goals: [goal({ id: 'g', due: '2026-06-01' })], // nudge
+      goals: [goal({ id: 'g', due: '2026-06-01' })], // genuine (non-nudge) — stays
       resultsByTest: { phq9: [result(iso(NOW - 9 * DAY))] }, // nudge
     });
     const kinds = needsAttention(input).map((i) => i.kind);
     expect(kinds).toContain('together-turn');
     expect(kinds).toContain('analyze-responses');
-    expect(kinds).not.toContain('stale-goals');
+    expect(kinds).toContain('goals'); // your goals stay top of mind regardless of the proactivity dial
     expect(kinds).not.toContain('check-in');
     expect(kinds).not.toContain('send-questionnaire');
+  });
+
+  it('a recurring crisis DOES suppress your goals (Home leads with support, §8)', () => {
+    const kinds = needsAttention(
+      base({ crisis: true, goals: [goal({ id: 'g', due: '2026-06-01' })] }),
+    ).map((i) => i.kind);
+    expect(kinds).not.toContain('goals');
   });
 
   it('surfaces a single standing agreement as a genuine (non-nudge) item showing its text (spec 61)', () => {

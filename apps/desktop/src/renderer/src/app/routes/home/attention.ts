@@ -5,7 +5,7 @@ import type {
   TestResult,
   TogetherSessionSummary,
 } from '@shared/schemas';
-import { isGoalStale } from '@shared/schemas';
+import { effectiveGoalStatus } from '@shared/schemas';
 import { daysSince, RECHECKABLE_INSTRUMENTS } from './wellbeing';
 
 /** Weekly cadence for the "you haven't checked in" nudge (the owner's ask — "at least once a week"). */
@@ -20,7 +20,7 @@ export type AttentionKind =
   | 'review-insights'
   | 'agreement'
   | 'check-in'
-  | 'stale-goals'
+  | 'goals'
   | 'send-questionnaire';
 
 export interface AttentionItem {
@@ -66,9 +66,11 @@ function partnerName(session: TogetherSessionSummary, myId: string | null): stri
 /**
  * The "Needs attention" queue (60-home-dashboard §3.1.2a) — the concrete things WAITING on the person, split
  * from the growth-oriented "For you" band so the same item never nags in two places. Ordered by urgency:
- * a Together turn / invite (someone's waiting) → a response to analyze → insights to review → the weekly
- * check-in nudge → stale goals → a soft "ask someone" nudge. The last three are gentle NUDGES, dropped when
- * `suppressNudges` (recurring crisis or proactivity off, §8), leaving only genuinely-pending actions. Pure.
+ * a Together turn / invite (someone's waiting) → a response to analyze → insights to review → standing
+ * Together agreements → your goals → the weekly check-in nudge → a soft "ask someone" nudge. Agreements and
+ * your goals are genuine (non-nudge) items that stay TOP OF MIND regardless of the proactivity dial; the
+ * check-in and "ask someone" are gentle NUDGES, dropped when `suppressNudges` (recurring crisis or proactivity
+ * off, §8), leaving only genuinely-pending actions. A recurring crisis also suppresses agreements + goals. Pure.
  */
 export function needsAttention(input: AttentionInput): AttentionItem[] {
   const items: AttentionItem[] = [];
@@ -153,6 +155,35 @@ export function needsAttention(input: AttentionInput): AttentionItem[] {
     });
   }
 
+  // Your goals — your own commitments, kept TOP OF MIND as a genuine (non-nudge) item so they show
+  // regardless of the proactivity dial (the user's ask: goals must appear in "needs attention"). We surface
+  // every ACTIVE goal (open / in-progress / already-stale), framed as "needs a check-in" when a goal has
+  // gone stale (past due / long untouched), else "in progress". The one-tap Done / Still-on-it actions live
+  // on the Goals card + /goals. Suppressed only under an active crisis (Home leads with support, §8); it
+  // clears as goals are marked done. The detail shows the actual goal text so you see what it is at a glance.
+  if (can.memory && !input.crisis) {
+    const nowDate = new Date(now);
+    const active = input.goals.filter((g) => g.status !== 'done' && g.status !== 'abandoned');
+    if (active.length > 0) {
+      const stale = active.filter((g) => effectiveGoalStatus(g, nowDate) === 'stale');
+      const top = stale[0] ?? active[0];
+      items.push({
+        kind: 'goals',
+        label:
+          stale.length > 0
+            ? stale.length === 1
+              ? 'A goal needs a check-in'
+              : `${stale.length} goals need a check-in`
+            : active.length === 1
+              ? 'Keep going on your goal'
+              : `${active.length} goals in progress`,
+        detail: top?.text ?? '',
+        route: '/goals',
+        count: active.length,
+      });
+    }
+  }
+
   // The weekly mood/anxiety check-in nudge — only for someone who HAS checked in (opted in), never a first nag.
   if (can.tests) {
     let last: string | undefined;
@@ -171,23 +202,6 @@ export function needsAttention(input: AttentionInput): AttentionItem[] {
           nudge: true,
         });
       }
-    }
-  }
-
-  // Stale goals — a gentle "still on this?" (the actions live on the Goals card + /goals).
-  if (can.memory) {
-    const nowDate = new Date(now);
-    const stale = input.goals.filter((g) => isGoalStale(g, nowDate));
-    if (stale.length > 0) {
-      items.push({
-        kind: 'stale-goals',
-        label:
-          stale.length === 1 ? 'A goal needs a check-in' : `${stale.length} goals need a check-in`,
-        detail: stale[0]?.text ?? '',
-        route: '/goals',
-        count: stale.length,
-        nudge: true,
-      });
     }
   }
 

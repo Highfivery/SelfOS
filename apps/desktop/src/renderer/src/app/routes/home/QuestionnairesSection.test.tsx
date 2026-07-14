@@ -1,14 +1,49 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import type { InboxItem, Insight, QuestionnaireSentOverview } from '@shared/channels';
+import type {
+  DreamPatternStats,
+  InboxItem,
+  Insight,
+  Person,
+  Questionnaire,
+  QuestionnaireSentOverview,
+} from '@shared/channels';
 import { QuestionnairesSection } from './QuestionnairesSection';
 import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
 import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
 import { useInboxStore } from '../../../stores/inboxStore';
 import { useInsightStore } from '../../../stores/insightStore';
+import { useDreamPatternStore } from '../../../stores/dreamPatternStore';
+import { usePeopleStore } from '../../../stores/peopleStore';
 
-const OVERVIEW: Record<string, QuestionnaireSentOverview> = {
+function questionnaire(id: string, title: string, type = 'general'): Questionnaire {
+  return {
+    id,
+    schemaVersion: 1,
+    version: 1,
+    title,
+    type,
+    sensitivity: 'standard',
+    questions: [],
+    createdAt: 'now',
+    updatedAt: 'now',
+  } as Questionnaire;
+}
+
+function person(id: string, displayName: string): Person {
+  return {
+    id,
+    schemaVersion: 1,
+    displayName,
+    isSubject: true,
+    tags: [],
+    createdAt: 'now',
+    updatedAt: 'now',
+  };
+}
+
+const ANALYZED_OVERVIEW: Record<string, QuestionnaireSentOverview> = {
   q1: {
     questionnaireId: 'q1',
     lastSentAt: 'now',
@@ -19,23 +54,43 @@ const OVERVIEW: Record<string, QuestionnaireSentOverview> = {
     answeredCount: 1,
     newResponses: 0,
     analyzed: true,
+    answeredAt: '2026-07-10',
+    insightId: 'ins1',
+    insightSummary: 'Angel feels most connected through unhurried time together.',
   },
 };
 
 const QUESTIONNAIRE_INSIGHT: Insight = {
-  id: 'i1',
+  id: 'ins1',
   schemaVersion: 1,
   source: 'questionnaire',
   subjectPersonId: 'me',
   summary: 'Angel feels most connected through unhurried time together.',
   facts: [],
   confidence: 'high',
-  categories: [],
+  categories: ['Relationships'],
   approved: true,
   provenance: { at: 'now', aboutName: 'Angel' },
   createdAt: 'now',
   updatedAt: '2026-07-10',
 };
+
+function sessionInsight(id: string, category: string): Insight {
+  return {
+    id,
+    schemaVersion: 1,
+    source: 'session',
+    subjectPersonId: 'me',
+    summary: 'A session reflection.',
+    facts: [],
+    confidence: 'medium',
+    categories: [category],
+    approved: true,
+    provenance: { at: 'now' },
+    createdAt: 'now',
+    updatedAt: 'now',
+  };
+}
 
 const INBOX_UNANSWERED: InboxItem = {
   assignmentId: 'a1',
@@ -54,15 +109,20 @@ const INBOX_UNANSWERED: InboxItem = {
 
 function seed(opts: {
   overview?: Record<string, QuestionnaireSentOverview>;
+  questionnaires?: Questionnaire[];
   insights?: Insight[];
   inbox?: InboxItem[];
+  people?: Person[];
+  dreamStats?: DreamPatternStats | null;
 }): void {
   useQuestionnaireStore.setState({
     sentOverview: opts.overview ?? {},
-    questionnaires: [],
+    questionnaires: opts.questionnaires ?? [],
   });
   useInsightStore.setState({ insights: opts.insights ?? [] });
   useInboxStore.setState({ items: opts.inbox ?? [] });
+  usePeopleStore.setState({ people: opts.people ?? [] });
+  useDreamPatternStore.setState({ stats: opts.dreamStats ?? null });
 }
 
 function renderSection(props: Partial<Parameters<typeof QuestionnairesSection>[0]> = {}): void {
@@ -72,7 +132,6 @@ function renderSection(props: Partial<Parameters<typeof QuestionnairesSection>[0
         canCreate
         canViewResults
         canAnswer
-        configured
         adultAcknowledged={false}
         showIdeas={false}
         subjectPersonId="me"
@@ -92,38 +151,111 @@ afterEach(() => {
 });
 
 describe('QuestionnairesSection (59)', () => {
-  it('renders the stat strip, an answer row, and the latest insight', async () => {
-    seed({ overview: OVERVIEW, insights: [QUESTIONNAIRE_INSIGHT], inbox: [INBOX_UNANSWERED] });
+  it('renders stats with context, an answer row, and a rich insight naming who it is for + about', async () => {
+    seed({
+      overview: ANALYZED_OVERVIEW,
+      questionnaires: [questionnaire('q1', 'What lights you up')],
+      insights: [QUESTIONNAIRE_INSIGHT],
+      inbox: [INBOX_UNANSWERED],
+      people: [person('me', 'Me'), person('sam', 'Sam')],
+    });
     renderSection();
 
     expect(screen.getByRole('region', { name: 'Questionnaires' })).toBeInTheDocument();
-    // Stats
-    expect(screen.getByText('Sent')).toBeInTheDocument();
+    // Stats with context sub-lines
     expect(screen.getByText('Response rate')).toBeInTheDocument();
-    expect(screen.getByText('50%')).toBeInTheDocument(); // 1 answered of 2 sends
-    expect(screen.getByText('Insights')).toBeInTheDocument();
-    // Needs you — the unanswered inbox item shows as an answer row
+    expect(screen.getByText('50%')).toBeInTheDocument();
+    expect(screen.getByText(/1 of 2 answered/i)).toBeInTheDocument();
+    // Needs-you answer row
     expect(
       await screen.findByText(/1 questionnaire waiting for you to answer/i),
     ).toBeInTheDocument();
-    // Latest insight, attributed + linkable
+    // Rich insight — who it's ABOUT + which questionnaire + the life-area
+    expect(screen.getByText(/About Angel · from “What lights you up”/i)).toBeInTheDocument();
     expect(screen.getByText(/most connected through unhurried time/i)).toBeInTheDocument();
-    expect(screen.getByText(/Latest insight · from Angel/i)).toBeInTheDocument();
+    expect(screen.getByText('Relationships')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /view in memory/i })).toBeInTheDocument();
   });
 
-  it('shows a "trend forming" card when a metric spans ≥2 questionnaire insights', () => {
+  it('shows the engagement banner — what you learned + who you have not asked yet', () => {
     seed({
-      overview: OVERVIEW,
-      insights: [
-        { ...QUESTIONNAIRE_INSIGHT, id: 'i1', updatedAt: '2026-06-01', metrics: { connection: 3 } },
-        { ...QUESTIONNAIRE_INSIGHT, id: 'i2', updatedAt: '2026-07-01', metrics: { connection: 5 } },
-      ],
+      overview: ANALYZED_OVERVIEW,
+      questionnaires: [questionnaire('q1', 'What lights you up')],
+      insights: [QUESTIONNAIRE_INSIGHT],
+      // Angel + Sam are recipients of q1 (already asked); Dad has never been sent one.
+      people: [person('me', 'Me'), person('dad', 'Dad')],
     });
     renderSection();
-    expect(screen.getByText('A trend forming')).toBeInTheDocument();
-    expect(screen.getByText(/across 2 check-ins, connection is trending up/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /see trends/i })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /You've gathered 1 insight about 1 person.*haven't asked Dad anything yet/is,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('surfaces "go deeper" threads from recent sessions, dreams, and Together (a push)', () => {
+    seed({
+      overview: ANALYZED_OVERVIEW,
+      insights: [sessionInsight('s1', 'Work'), sessionInsight('s2', 'Work')],
+      dreamStats: {
+        window: '30d',
+        dreamCount: 4,
+        analyzedCount: 3,
+        symbols: [{ label: 'the ocean', count: 3 }],
+        themes: [],
+        people: [],
+        emotions: [],
+        lucidCount: 0,
+        nightmareCount: 0,
+        moodTrend: [],
+        vividnessTrend: [],
+        nightmareNudge: false,
+      },
+    });
+    renderSection({ showIdeas: true, togetherPartnerName: 'Angel' });
+    expect(screen.getByText(/reflecting on work lately/i)).toBeInTheDocument();
+    expect(screen.getByText(/recurring dream about the ocean/i)).toBeInTheDocument();
+    expect(screen.getByText(/You and Angel could use a gentle check-in/i)).toBeInTheDocument();
+  });
+
+  it('promotes a fun band always, and the 18+ spicy band only after the ack', () => {
+    seed({ overview: ANALYZED_OVERVIEW });
+    const { rerender } = render(
+      <MemoryRouter>
+        <QuestionnairesSection
+          canCreate
+          canViewResults
+          canAnswer
+          adultAcknowledged={false}
+          showIdeas
+          subjectPersonId="me"
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText('For fun · for the two of you')).toBeInTheDocument();
+    expect(screen.getByText(/just for fun/i)).toBeInTheDocument();
+    expect(screen.queryByText(/spice it up/i)).toBeNull(); // no ack → no spicy
+
+    rerender(
+      <MemoryRouter>
+        <QuestionnairesSection
+          canCreate
+          canViewResults
+          canAnswer
+          adultAcknowledged
+          showIdeas
+          subjectPersonId="me"
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText(/spice it up · 18\+/i)).toBeInTheDocument();
+  });
+
+  it('shows the "Ideas" pushes only when showIdeas is on', () => {
+    seed({ overview: ANALYZED_OVERVIEW });
+    renderSection({ showIdeas: false });
+    expect(screen.queryByText('For fun · for the two of you')).toBeNull();
+    expect(screen.queryByText('Explore more types')).toBeNull();
   });
 
   it('shows a warm invitation (not an empty grid) when the person can create but has nothing yet', () => {
@@ -135,14 +267,13 @@ describe('QuestionnairesSection (59)', () => {
   });
 
   it('renders nothing when the person can neither create nor answer', () => {
-    seed({ overview: OVERVIEW });
+    seed({ overview: ANALYZED_OVERVIEW });
     const { container } = render(
       <MemoryRouter>
         <QuestionnairesSection
           canCreate={false}
           canViewResults={false}
           canAnswer={false}
-          configured={false}
           adultAcknowledged={false}
           showIdeas={false}
           subjectPersonId="me"
@@ -150,57 +281,5 @@ describe('QuestionnairesSection (59)', () => {
       </MemoryRouter>,
     );
     expect(container).toBeEmptyDOMElement();
-  });
-
-  it('shows the "Ideas for you" pushes only when showIdeas is on; the spicy idea is 18+ gated', () => {
-    seed({ overview: OVERVIEW });
-    const { rerender } = render(
-      <MemoryRouter>
-        <QuestionnairesSection
-          canCreate
-          canViewResults
-          canAnswer
-          configured
-          adultAcknowledged={false}
-          showIdeas={false}
-          subjectPersonId="me"
-        />
-      </MemoryRouter>,
-    );
-    // Pushes suppressed
-    expect(screen.queryByText('Ideas for you')).toBeNull();
-
-    // Turn ideas on, still no 18+ ack → no spicy card
-    rerender(
-      <MemoryRouter>
-        <QuestionnairesSection
-          canCreate
-          canViewResults
-          canAnswer
-          configured
-          adultAcknowledged={false}
-          showIdeas
-          subjectPersonId="me"
-        />
-      </MemoryRouter>,
-    );
-    expect(screen.getByText('Ideas for you')).toBeInTheDocument();
-    expect(screen.queryByText(/spicy/i)).toBeNull();
-
-    // With the ack, the spicy idea appears
-    rerender(
-      <MemoryRouter>
-        <QuestionnairesSection
-          canCreate
-          canViewResults
-          canAnswer
-          configured
-          adultAcknowledged
-          showIdeas
-          subjectPersonId="me"
-        />
-      </MemoryRouter>,
-    );
-    expect(screen.getByText(/spicy · 18\+/i)).toBeInTheDocument();
   });
 });

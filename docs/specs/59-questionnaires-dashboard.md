@@ -243,3 +243,38 @@ horizontally scrolls at ~360px (CLAUDE.md §12). Icons are decorative (`aria-hid
   answering questionnaires (all types, incl. fun + sexy) with stats, insights, things-to-do, and smart
   suggestions. Direction confirmed via an interactive mockup + an `AskUserQuestion` round (dedicated section;
   fun/spicy = AI-drafts on tap; spec-first). All data surfaces verified to already exist (no new IPC).
+
+---
+
+## 15. 2026-07-13 rich redesign — BUILT (`feat/questionnaires-dashboard-rich`)
+
+The first build was a thin skeleton; the owner (rightly) rejected it as not rich/engaging/insightful and asked
+for a mockup first. A comprehensive `visualize` mockup was approved (with "both" go-deeper modes), then built.
+
+**What the section now shows (top → bottom):**
+
+1. **Engagement banner** (§3.1a) — a warm, personal line: "You've gathered N insights about M people. You haven't
+   asked X and Y anything yet." (`engagementSummary` over insights + people + sentOverview; the "not asked" list
+   is household people never sent a questionnaire.)
+2. **Contextual stats** — each tile carries a sub-line (`2 of 3 answered`, `about N people`), not a bare number.
+3. **Needs you** — analyze / answer / re-analyze / resend, each with a recipient **avatar**.
+4. **Fresh insights** — up to 2 rich cards that name **who the insight is ABOUT** (the recipient) + **which
+   questionnaire** it came from + the **life-area** tag + View-in-Memory deep-link (`richInsights` joins the
+   analysed `sentOverview` entry → the questionnaire title → the derived Insight's category/aboutName). A "self
+   check-in" reads "from your answers". The `questionnaireTrend` line still renders below when a metric spans ≥2
+   insights.
+5. **Go deeper — from your recent activity** (§3.5a) — threads pulled from the person's own data: the most-mentioned
+   recent **session** life-area, a recurring **dream** symbol, and a **Together** partner check-in
+   (`goDeeperThemes`). Each is a themed starting point that seeds a builder brief; the **specific AI-tailored draft
+   happens on tap in the builder** (the approved "both" decision — free theme + AI specificity one tap away).
+6. **Fun + spicy bands** (§3.5) — prominent tinted bands (not chips): a playful "Just for fun" + an 18+-gated
+   "Spice it up", each pre-filling a fun/spicy AI brief.
+7. **Explore more types** — the type-coverage nudge ("N of M tried") + chips for starter types not yet sent.
+
+**Data:** all derived on Home from stores it already loads (+ `peopleStore`, newly loaded, for coverage) — no new
+IPC, no per-load AI spend, no raw private answers. New pure helpers: `engagementSummary`, `richInsights`,
+`goDeeperThemes`, `sentTypeCount`/`STARTER_TYPE_COUNT`. Stats/needs-you/insights are STATUS; the banner shows
+whenever there's something to say; go-deeper / fun-spicy / coverage are PUSHES gated on `showIdeas` (the
+proactivity dial) + the 18+ ack for the spicy band. Tests: derivation units + section RTL (banner, rich insight
+who-for/about, go-deeper threads, fun/spicy gating) + the dashboard E2E; real-Electron visual QA of the seeded
+rich section at desktop.

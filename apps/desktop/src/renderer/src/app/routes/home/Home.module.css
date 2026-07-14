@@ -467,3 +467,169 @@
   font-weight: 500;
   color: var(--color-text-primary);
 }
+
+/* Engagement banner */
+.qBanner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.qStatSub {
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+}
+
+.qStatAccent .qStatSub {
+  color: var(--color-accent-text);
+}
+
+/* An icon in an avatar-sized circle for non-person action rows */
+.qAvatarIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-alt);
+  color: var(--color-text-secondary);
+}
+
+/* Rich insight card */
+.qInsightHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.qInsightContext {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.qInsightMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.qAreaChip {
+  font-size: var(--text-xs);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-alt);
+  color: var(--color-text-secondary);
+}
+
+/* Go-deeper accent (the session thread) */
+.qActionRowAccent {
+  border-color: var(--color-accent-border, var(--color-accent-text));
+}
+
+/* Fun + spicy bands */
+.qBand {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: var(--space-3) var(--space-4);
+  border: none;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  text-align: left;
+  min-width: 0;
+  font: inherit;
+}
+
+.qBandFun {
+  background: var(--color-accent-subtle-bg);
+}
+
+.qBandSpicy {
+  background: var(--color-danger-subtle-bg, var(--color-accent-subtle-bg));
+}
+
+.qBandEyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--color-accent-text);
+}
+
+.qBandEyebrowDanger {
+  color: var(--color-danger-text, var(--color-accent-text));
+}
+
+.qBandTitle {
+  font-size: var(--text-md);
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.qBandBlurb {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}
+
+/* Type coverage */
+.qCoverageHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.qTypeChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.qTypeChip {
+  font-size: var(--text-sm);
+  padding: 6px var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.qTypeChip:hover {
+  background: var(--color-surface-alt);
+}
+
+.qTrendLine {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.qTrendLine:hover {
+  color: var(--color-accent-text);
+}

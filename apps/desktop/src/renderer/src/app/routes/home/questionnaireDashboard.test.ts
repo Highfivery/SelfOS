@@ -2,18 +2,49 @@ import { describe, expect, it } from 'vitest';
 import type {
   AnswersUpdatedSummary,
   Insight,
+  Person,
   Questionnaire,
   QuestionnaireSentOverview,
   ReminderDueSummary,
   ResponsesArrivedSummary,
 } from '@shared/channels';
 import {
+  engagementSummary,
+  goDeeperThemes,
   needsYou,
   questionnaireInsights,
   questionnaireTrend,
+  richInsights,
   rollupStats,
+  sentTypeCount,
   unsentTypes,
 } from './questionnaireDashboard';
+
+function q(id: string, type: string, title = id): Questionnaire {
+  return {
+    id,
+    schemaVersion: 1,
+    version: 1,
+    title,
+    type,
+    sensitivity: 'standard',
+    questions: [],
+    createdAt: 'now',
+    updatedAt: 'now',
+  } as Questionnaire;
+}
+
+function personFix(id: string, displayName: string): Person {
+  return {
+    id,
+    schemaVersion: 1,
+    displayName,
+    isSubject: true,
+    tags: [],
+    createdAt: 'now',
+    updatedAt: 'now',
+  };
+}
 
 function overview(
   id: string,
@@ -230,20 +261,6 @@ describe('needsYou (59 §3.3)', () => {
 });
 
 describe('unsentTypes (59 §3.5)', () => {
-  function q(id: string, type: string): Questionnaire {
-    return {
-      id,
-      schemaVersion: 1,
-      version: 1,
-      title: id,
-      type,
-      sensitivity: 'standard',
-      questions: [],
-      createdAt: 'now',
-      updatedAt: 'now',
-    } as Questionnaire;
-  }
-
   it('returns inviting starter types the person has SENT none of', () => {
     const sent = unsentTypes(
       [q('a', 'appreciation'), q('b', 'general')],
@@ -253,5 +270,153 @@ describe('unsentTypes (59 §3.5)', () => {
     expect(values).not.toContain('appreciation'); // sent → excluded
     expect(values).toContain('perspective'); // never sent, inviting → included
     expect(values).not.toContain('intimacy'); // not in the inviting subset
+  });
+});
+
+describe('engagementSummary (59 §3.1a)', () => {
+  it('counts insights + the people they are about, and lists household people never sent to', () => {
+    const e = engagementSummary(
+      [
+        insight('i1', { provenance: { at: 'now', aboutName: 'Angel' } }),
+        insight('i2', { provenance: { at: 'now', aboutName: 'Angel' } }), // same person → 1
+        insight('i3', { source: 'session' }), // not a questionnaire → excluded
+      ],
+      [personFix('me', 'Me'), personFix('angel', 'Angel'), personFix('dad', 'Dad')],
+      {
+        q1: overview('q1', {
+          recipients: [{ name: 'Angel', status: 'submitted', answered: true }],
+        }),
+      },
+      'me',
+    );
+    expect(e.insightCount).toBe(2);
+    expect(e.peopleCount).toBe(1); // both insights are about Angel
+    expect(e.notAsked).toEqual(['Dad']); // Angel was sent to; Dad never; self excluded
+  });
+});
+
+describe('richInsights (59 §3.4)', () => {
+  it('names who it is about + which questionnaire + the life-area, from an analysed send', () => {
+    const cards = richInsights(
+      {
+        q1: overview('q1', {
+          analyzed: true,
+          insightId: 'ins1',
+          insightSummary: 'Angel loves slow mornings.',
+          answeredAt: '2026-07-10',
+          recipients: [{ name: 'Angel', status: 'submitted', answered: true }],
+        }),
+      },
+      [q('q1', 'general', 'Morning routines')],
+      [
+        insight('ins1', {
+          categories: ['Relationships'],
+          provenance: { at: 'now', aboutName: 'Angel' },
+        }),
+      ],
+      [],
+      'me',
+    );
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toMatchObject({
+      title: 'Morning routines',
+      aboutName: 'Angel',
+      summary: 'Angel loves slow mornings.',
+      area: 'Relationships',
+    });
+  });
+
+  it('labels a self check-in with a null aboutName (no provenance about)', () => {
+    const cards = richInsights(
+      {
+        q1: overview('q1', {
+          analyzed: true,
+          insightId: 'ins1',
+          insightSummary: 'You value quiet time.',
+          recipients: [{ name: 'Me', status: 'submitted', answered: true }],
+        }),
+      },
+      [q('q1', 'general', 'Self check-in')],
+      [insight('ins1', { provenance: { at: 'now' } })], // no aboutName/aboutPersonId → self
+      [],
+      'me',
+    );
+    expect(cards[0]?.aboutName).toBeNull();
+  });
+
+  it('resolves a household aboutPersonId to the display name (not the first answerer)', () => {
+    const cards = richInsights(
+      {
+        q1: overview('q1', {
+          analyzed: true,
+          insightId: 'ins1',
+          insightSummary: 'Ben wants more spontaneity.',
+          recipients: [
+            { name: 'Angel', status: 'submitted', answered: true },
+            { name: 'Ben', status: 'submitted', answered: true },
+          ],
+        }),
+      },
+      [q('q1', 'general', 'Date ideas')],
+      [insight('ins1', { provenance: { at: 'now', aboutPersonId: 'ben-id' } })],
+      [personFix('ben-id', 'Ben')],
+      'me',
+    );
+    expect(cards[0]?.aboutName).toBe('Ben'); // resolved from aboutPersonId, not the first answerer "Angel"
+  });
+
+  it('skips un-analysed + unapproved sends and returns [] for a null subject', () => {
+    const overviewMap = { q1: overview('q1') }; // analyzed but no insightId/summary
+    expect(richInsights(overviewMap, [q('q1', 'general')], [], [], 'me')).toEqual([]);
+    // An unapproved insight is not shown (matches the approved-only count).
+    const withUnapproved = {
+      q1: overview('q1', { analyzed: true, insightId: 'ins1', insightSummary: 'draft' }),
+    };
+    expect(
+      richInsights(
+        withUnapproved,
+        [q('q1', 'general')],
+        [insight('ins1', { approved: false })],
+        [],
+        'me',
+      ),
+    ).toEqual([]);
+    expect(richInsights({}, [], [], [], null)).toEqual([]);
+  });
+});
+
+describe('goDeeperThemes (59 §3.5a)', () => {
+  const sessionInsight = (cat: string, id: string): Insight =>
+    insight(id, { source: 'session', categories: [cat] });
+
+  it('surfaces the most-mentioned session area (≥2), a recurring dream, and a Together partner', () => {
+    const themes = goDeeperThemes({
+      sessionInsights: [sessionInsight('Work', 's1'), sessionInsight('Work', 's2')],
+      dreamSymbols: [{ label: 'the ocean', count: 3 }],
+      togetherPartnerName: 'Angel',
+    });
+    expect(themes).toEqual([
+      { kind: 'session', area: 'Work' },
+      { kind: 'dream', symbol: 'the ocean' },
+      { kind: 'together', partnerName: 'Angel' },
+    ]);
+  });
+
+  it('needs ≥2 for a session area and ≥2 for a dream symbol', () => {
+    const themes = goDeeperThemes({
+      sessionInsights: [sessionInsight('Work', 's1')], // only 1 → no session theme
+      dreamSymbols: [{ label: 'a door', count: 1 }], // only 1 → no dream theme
+    });
+    expect(themes).toEqual([]);
+  });
+});
+
+describe('sentTypeCount (59 §3.6)', () => {
+  it('counts distinct STARTER types the person has actually sent', () => {
+    const count = sentTypeCount(
+      [q('a', 'appreciation'), q('b', 'appreciation'), q('c', 'scenario'), q('d', 'my-custom')],
+      { a: overview('a'), c: overview('c'), d: overview('d') }, // b never sent; d is custom (not a starter)
+    );
+    expect(count).toBe(2); // appreciation + scenario
   });
 });

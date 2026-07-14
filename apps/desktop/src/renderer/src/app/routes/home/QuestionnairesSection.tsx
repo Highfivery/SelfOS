@@ -5,8 +5,10 @@ import {
   ClipboardList,
   Clock,
   Flame,
-  Lightbulb,
+  Heart,
   MailOpen,
+  MessageCircle,
+  Moon,
   PartyPopper,
   RefreshCw,
   Sparkles,
@@ -20,16 +22,26 @@ import type {
 import { Button, Card, Markdown, Stack, Text } from '../../../design-system/components';
 import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
 import { useInsightStore } from '../../../stores/insightStore';
+import { useDreamPatternStore } from '../../../stores/dreamPatternStore';
+import { usePeopleStore } from '../../../stores/peopleStore';
 import { unansweredCount, useInboxStore } from '../../../stores/inboxStore';
+import { Avatar } from '../questionnaires/Avatar';
 import type { BuilderSeed } from '../questionnaires/QuestionnaireBuilder';
 import {
+  engagementSummary,
+  goDeeperThemes,
   needsYou,
   questionnaireInsights,
   questionnaireTrend,
+  richInsights,
   rollupStats,
+  sentTypeCount,
+  STARTER_TYPE_COUNT,
   unsentTypes,
+  type GoDeeperTheme,
   type NeedsYouItem,
   type QuestionnaireTrend,
+  type RichInsight,
 } from './questionnaireDashboard';
 import styles from './Home.module.css';
 
@@ -40,28 +52,28 @@ function useSeededBuilder(): (seed: BuilderSeed) => void {
 }
 
 /**
- * The Home "Questionnaires" section (59-questionnaires-dashboard). A per-active-person, derived-only surface:
- * a stat strip, the few things that need the person now, their latest questionnaire insight, and (as a PUSH,
- * gated by `showIdeas`) smart ideas to create/send next. Composes from stores Home already loaded + three
- * cheap notification reads it loads itself — no per-load AI spend, no raw private answers. Self-hides when the
- * person has nothing yet and can't create.
+ * The Home "Questionnaires" section (59-questionnaires-dashboard) — a rich, per-active-person, derived-only
+ * surface that makes questionnaires inviting: a warm engagement banner, contextual stats, the few things that
+ * need the person now, insights that name who they're FOR and ABOUT, "go deeper" threads pulled from recent
+ * sessions/dreams/Together, prominent fun + 18+ spicy prompts, and type coverage. Composes from stores Home
+ * already loaded + three cheap notification reads it loads itself — no per-load AI spend, no raw private answers.
  */
 export function QuestionnairesSection({
   canCreate,
   canViewResults,
   canAnswer,
-  configured,
   adultAcknowledged,
   showIdeas,
   subjectPersonId,
+  togetherPartnerName,
 }: {
   canCreate: boolean;
   canViewResults: boolean;
   canAnswer: boolean;
-  configured: boolean;
   adultAcknowledged: boolean;
   showIdeas: boolean;
   subjectPersonId: string | null;
+  togetherPartnerName?: string;
 }): JSX.Element | null {
   const navigate = useNavigate();
   const openSeeded = useSeededBuilder();
@@ -70,6 +82,8 @@ export function QuestionnairesSection({
   const analyze = useQuestionnaireStore((s) => s.analyze);
   const insights = useInsightStore((s) => s.insights);
   const inboxItems = useInboxStore((s) => s.items);
+  const dreamStats = useDreamPatternStore((s) => s.stats);
+  const people = usePeopleStore((s) => s.people);
 
   const [responses, setResponses] = useState<ResponsesArrivedSummary[]>([]);
   const [answerEdits, setAnswerEdits] = useState<AnswersUpdatedSummary[]>([]);
@@ -106,7 +120,9 @@ export function QuestionnairesSection({
 
   const rollup = rollupStats(sentOverview);
   const insightRollup = questionnaireInsights(insights, subjectPersonId);
+  const fresh = richInsights(sentOverview, questionnaires, insights, people, subjectPersonId);
   const trend = questionnaireTrend(insights, subjectPersonId);
+  const engagement = engagementSummary(insights, people, sentOverview, subjectPersonId);
   const inboxCount = unansweredCount(inboxItems);
   const actions = needsYou({
     sentOverview,
@@ -117,6 +133,15 @@ export function QuestionnairesSection({
     canAnswer,
   });
   const unsent = unsentTypes(questionnaires, sentOverview);
+  const sessionInsights = insights.filter(
+    (i) => i.source === 'session' && i.approved && i.subjectPersonId === subjectPersonId,
+  );
+  const themes = goDeeperThemes({
+    sessionInsights,
+    dreamSymbols: dreamStats?.symbols ?? [],
+    ...(togetherPartnerName ? { togetherPartnerName } : {}),
+  });
+  const triedTypes = sentTypeCount(questionnaires, sentOverview);
 
   const hasAnything =
     rollup.sentCount > 0 || inboxCount > 0 || insightRollup.count > 0 || actions.length > 0;
@@ -155,7 +180,7 @@ export function QuestionnairesSection({
     if (!result.ok) setAnalyzeError(result.message ?? 'Analysis is unavailable right now.');
   };
 
-  const ideas = buildIdeas({ canCreate, configured, adultAcknowledged, unsent });
+  const bannerLine = engagementLine(engagement);
 
   return (
     <section className={styles.qSection} aria-label="Questionnaires">
@@ -174,12 +199,21 @@ export function QuestionnairesSection({
         ) : null}
       </div>
 
-      {/* Stat strip — each tile omitted when its value is zero (never a wall of zeros). */}
+      {/* Engagement banner — a warm, personal reflection of what you've learned + who to ask next. */}
+      {bannerLine ? (
+        <div className={styles.qBanner}>
+          <Sparkles size={18} aria-hidden="true" />
+          <span>{bannerLine}</span>
+        </div>
+      ) : null}
+
+      {/* Stat strip — each tile omitted when its value is zero, with a bit of context under the number. */}
       <div className={styles.qStats}>
         {rollup.sentCount > 0 ? (
           <StatTile
             label="Sent"
             value={String(rollup.sentCount)}
+            sub={rollup.sentCount === 1 ? 'questionnaire' : 'questionnaires'}
             onClick={() => navigate('/questionnaires')}
           />
         ) : null}
@@ -187,6 +221,7 @@ export function QuestionnairesSection({
           <StatTile
             label="Response rate"
             value={`${Math.round(rollup.responseRate * 100)}%`}
+            sub={`${rollup.answeredSends} of ${rollup.totalSends} answered`}
             onClick={() => navigate('/questionnaires')}
           />
         ) : null}
@@ -194,6 +229,7 @@ export function QuestionnairesSection({
           <StatTile
             label="New replies"
             value={String(rollup.newReplies)}
+            sub="ready to analyse"
             accent
             onClick={() => navigate('/questionnaires')}
           />
@@ -202,6 +238,11 @@ export function QuestionnairesSection({
           <StatTile
             label="Insights"
             value={String(insightRollup.count)}
+            sub={
+              engagement.peopleCount === 1
+                ? 'about 1 person'
+                : `about ${engagement.peopleCount} people`
+            }
             onClick={() => navigate('/memory')}
           />
         ) : null}
@@ -227,66 +268,116 @@ export function QuestionnairesSection({
         </Stack>
       ) : null}
 
-      {/* Latest insight + a trend forming — a two-up row, each half self-hiding. */}
-      {insightRollup.latest || trend ? (
-        <div className={styles.qInsightRow}>
-          {insightRollup.latest ? (
-            <div className={styles.qInsight}>
-              <div className={styles.qEyebrow}>
-                <Lightbulb size={13} aria-hidden="true" />
-                {insightRollup.latest.aboutName
-                  ? `Latest insight · from ${insightRollup.latest.aboutName}`
-                  : 'Latest insight'}
-              </div>
-              <Markdown inline className={styles.factText}>
-                {insightRollup.latest.summary}
-              </Markdown>
-              <button
-                type="button"
-                className={styles.cardLink}
-                onClick={() =>
-                  navigate('/memory', { state: { insightId: insightRollup.latest?.id } })
-                }
-              >
-                View in Memory
-                <ArrowRight size={14} aria-hidden="true" />
-              </button>
-            </div>
-          ) : null}
-          {trend ? (
-            <div className={styles.qInsight}>
-              <div className={styles.qEyebrow}>
-                <TrendingUp size={13} aria-hidden="true" />A trend forming
-              </div>
-              <span className={styles.factText}>{describeTrend(trend)}</span>
-              <button
-                type="button"
-                className={styles.cardLink}
-                onClick={() => navigate('/questionnaires')}
-              >
-                See trends
-                <ArrowRight size={14} aria-hidden="true" />
-              </button>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-
-      {/* Ideas for you — a PUSH surface, shown only when encouragement is on (§7). */}
-      {showIdeas && ideas.length > 0 ? (
+      {/* Fresh insights — who they're about + which questionnaire + the finding + its life-area. */}
+      {fresh.length > 0 ? (
         <Stack gap={2}>
           <Text size="xs" tone="tertiary">
-            Ideas for you
+            Fresh insights
           </Text>
-          <div className={styles.qIdeas}>
-            {ideas.map((idea) => (
-              <IdeaCard
-                key={idea.kind}
-                idea={idea}
-                onGoDeeper={() => navigate('/questionnaires')}
-                onSeed={openSeeded}
+          <div className={styles.qInsightRow}>
+            {fresh.map((ins) => (
+              <RichInsightCard
+                key={ins.insightId}
+                insight={ins}
+                onOpen={() => navigate('/memory', { state: { insightId: ins.insightId } })}
               />
             ))}
+          </div>
+          {trend ? (
+            <button
+              type="button"
+              className={styles.qTrendLine}
+              onClick={() => navigate('/questionnaires')}
+            >
+              <TrendingUp size={14} aria-hidden="true" />
+              {describeTrend(trend)}
+              <ArrowRight size={13} aria-hidden="true" />
+            </button>
+          ) : null}
+        </Stack>
+      ) : null}
+
+      {/* Go deeper — threads from recent sessions / dreams / Together (a PUSH). */}
+      {showIdeas && canCreate && themes.length > 0 ? (
+        <Stack gap={2}>
+          <div>
+            <Text size="xs" tone="tertiary">
+              Go deeper — from your recent activity
+            </Text>
+          </div>
+          <Stack gap={2}>
+            {themes.map((theme) => (
+              <GoDeeperRow key={theme.kind} theme={theme} onSeed={openSeeded} />
+            ))}
+          </Stack>
+        </Stack>
+      ) : null}
+
+      {/* Fun + spicy — prominent, inviting (a PUSH). Spicy is 18+-gated. */}
+      {showIdeas && canCreate ? (
+        <Stack gap={2}>
+          <Text size="xs" tone="tertiary">
+            For fun · for the two of you
+          </Text>
+          <div className={styles.qIdeas}>
+            <FunBand
+              onClick={() =>
+                openSeeded({
+                  title: '',
+                  type: 'scenario',
+                  questions: [],
+                  brief:
+                    'A light, playful questionnaire — fun this-or-that and would-you-rather questions to enjoy together.',
+                })
+              }
+            />
+            {adultAcknowledged ? (
+              <SpicyBand
+                onClick={() =>
+                  openSeeded({
+                    title: '',
+                    type: 'intimacy',
+                    sensitivity: 'explicit',
+                    questions: [],
+                    brief:
+                      'A flirty, explicit questionnaire about our desires and fantasies — playful and honest.',
+                  })
+                }
+              />
+            ) : null}
+          </div>
+        </Stack>
+      ) : null}
+
+      {/* Explore more types — coverage + a nudge toward a type you haven't sent (a PUSH). */}
+      {showIdeas && canCreate ? (
+        <Stack gap={2}>
+          <div className={styles.qCoverageHead}>
+            <Text size="xs" tone="tertiary">
+              Explore more types
+            </Text>
+            <Text size="xs" tone="tertiary">
+              {triedTypes} of {STARTER_TYPE_COUNT} tried
+            </Text>
+          </div>
+          <div className={styles.qTypeChips}>
+            {unsent.slice(0, 4).map((t) => (
+              <button
+                key={t.value}
+                type="button"
+                className={styles.qTypeChip}
+                onClick={() => openSeeded({ title: '', type: t.value, questions: [] })}
+              >
+                {t.label}
+              </button>
+            ))}
+            <button
+              type="button"
+              className={styles.qTypeChip}
+              onClick={() => navigate('/questionnaires')}
+            >
+              + New type
+            </button>
           </div>
         </Stack>
       ) : null}
@@ -294,14 +385,31 @@ export function QuestionnairesSection({
   );
 }
 
+/** The warm banner line, or null when there's nothing worth saying. */
+function engagementLine(e: ReturnType<typeof engagementSummary>): string | null {
+  const parts: string[] = [];
+  if (e.insightCount > 0) {
+    const insights = e.insightCount === 1 ? '1 insight' : `${e.insightCount} insights`;
+    const people = e.peopleCount === 1 ? '1 person' : `${e.peopleCount} people`;
+    parts.push(`You've gathered ${insights} about ${people}.`);
+  }
+  if (e.notAsked.length > 0) {
+    const who = e.notAsked.slice(0, 2).join(' and ');
+    parts.push(`You haven't asked ${who} anything yet.`);
+  }
+  return parts.length > 0 ? parts.join(' ') : null;
+}
+
 function StatTile({
   label,
   value,
+  sub,
   accent,
   onClick,
 }: {
   label: string;
   value: string;
+  sub: string;
   accent?: boolean;
   onClick: () => void;
 }): JSX.Element {
@@ -313,11 +421,12 @@ function StatTile({
     >
       <span className={styles.qStatLabel}>{label}</span>
       <span className={styles.qStatValue}>{value}</span>
+      <span className={styles.qStatSub}>{sub}</span>
     </button>
   );
 }
 
-/** A calm, neutral one-liner for the trend card (direction only — never a value judgement). */
+/** A calm, neutral one-liner for the trend line (direction only — never a value judgement). */
 function describeTrend(trend: QuestionnaireTrend): string {
   const move =
     trend.direction === 'up'
@@ -355,7 +464,7 @@ function NeedsYouRow({
   if (item.kind === 'answer') {
     return (
       <ActionRow
-        icon={<MailOpen size={16} aria-hidden="true" />}
+        avatar={<AvatarIcon icon={<MailOpen size={16} aria-hidden="true" />} />}
         line={
           item.count === 1
             ? '1 questionnaire waiting for you to answer'
@@ -372,7 +481,7 @@ function NeedsYouRow({
   if (item.kind === 'resend') {
     return (
       <ActionRow
-        icon={<Clock size={16} aria-hidden="true" />}
+        avatar={<AvatarIcon icon={<Clock size={16} aria-hidden="true" />} />}
         line={`Still waiting on ${item.recipientName}`}
         sub={`“${item.title}”`}
         action={
@@ -383,7 +492,6 @@ function NeedsYouRow({
       />
     );
   }
-  // analyze | reAnalyze
   const busy = analyzing === item.assignmentId;
   const line =
     item.kind === 'analyze'
@@ -391,11 +499,11 @@ function NeedsYouRow({
       : `${item.recipientName} edited their answers`;
   return (
     <ActionRow
-      icon={
+      avatar={
         item.kind === 'analyze' ? (
-          <Sparkles size={16} aria-hidden="true" />
+          <Avatar name={item.recipientName} />
         ) : (
-          <RefreshCw size={16} aria-hidden="true" />
+          <AvatarIcon icon={<RefreshCw size={16} aria-hidden="true" />} />
         )
       }
       line={line}
@@ -414,20 +522,24 @@ function NeedsYouRow({
   );
 }
 
+function AvatarIcon({ icon }: { icon: JSX.Element }): JSX.Element {
+  return <span className={styles.qAvatarIcon}>{icon}</span>;
+}
+
 function ActionRow({
-  icon,
+  avatar,
   line,
   sub,
   action,
 }: {
-  icon: JSX.Element;
+  avatar: JSX.Element;
   line: string;
   sub?: string;
   action: JSX.Element;
 }): JSX.Element {
   return (
     <div className={styles.qActionRow}>
-      <span className={styles.qActionIcon}>{icon}</span>
+      {avatar}
       <div className={styles.qActionText}>
         <span className={styles.qActionLine}>{line}</span>
         {sub ? <span className={styles.qActionSub}>{sub}</span> : null}
@@ -437,137 +549,123 @@ function ActionRow({
   );
 }
 
-type Idea =
-  | { kind: 'goDeeper' }
-  | { kind: 'variety'; label: string; type: string }
-  | { kind: 'fun' }
-  | { kind: 'spicy' };
-
-/** Rank up to three "Ideas for you" (§3.5): go-deeper (AI), a variety nudge, a fun draft, an 18+ spicy draft. */
-function buildIdeas(input: {
-  canCreate: boolean;
-  configured: boolean;
-  adultAcknowledged: boolean;
-  unsent: { value: string; label: string }[];
-}): Idea[] {
-  if (!input.canCreate) return [];
-  const ideas: Idea[] = [];
-  if (input.configured) ideas.push({ kind: 'goDeeper' });
-  if (input.adultAcknowledged) ideas.push({ kind: 'spicy' });
-  const firstUnsent = input.unsent[0];
-  if (firstUnsent)
-    ideas.push({ kind: 'variety', label: firstUnsent.label, type: firstUnsent.value });
-  ideas.push({ kind: 'fun' });
-  return ideas.slice(0, 3);
-}
-
-function IdeaCard({
-  idea,
-  onGoDeeper,
-  onSeed,
+function RichInsightCard({
+  insight,
+  onOpen,
 }: {
-  idea: Idea;
-  onGoDeeper: () => void;
-  onSeed: (seed: BuilderSeed) => void;
+  insight: RichInsight;
+  onOpen: () => void;
 }): JSX.Element {
-  if (idea.kind === 'goDeeper') {
-    return (
-      <IdeaShell
-        icon={<Sparkles size={16} aria-hidden="true" />}
-        eyebrow="Go deeper"
-        title="Ask someone the next question"
-        blurb="Let the coach suggest a questionnaire tailored to someone in your circle."
-        cta="Get a suggestion"
-        onClick={onGoDeeper}
-      />
-    );
-  }
-  if (idea.kind === 'spicy') {
-    return (
-      <IdeaShell
-        icon={<Flame size={16} aria-hidden="true" />}
-        eyebrow="Spicy · 18+"
-        tone="danger"
-        title="A flirty, explicit questionnaire"
-        blurb="Explore desire and fantasies together — draft it with AI, then edit."
-        cta="Explore"
-        onClick={() =>
-          onSeed({
-            title: '',
-            type: 'intimacy',
-            sensitivity: 'explicit',
-            questions: [],
-            brief:
-              'A flirty, explicit questionnaire about our desires and fantasies — playful and honest.',
-          })
-        }
-      />
-    );
-  }
-  if (idea.kind === 'variety') {
-    return (
-      <IdeaShell
-        icon={<Lightbulb size={16} aria-hidden="true" />}
-        eyebrow="Try something new"
-        title={idea.label}
-        blurb="You haven’t sent this kind yet — a fresh angle on someone you know."
-        cta="Start it"
-        onClick={() => onSeed({ title: '', type: idea.type, questions: [] })}
-      />
-    );
-  }
+  const context = insight.aboutName
+    ? `About ${insight.aboutName} · from “${insight.title}”`
+    : `From your answers to “${insight.title}”`;
   return (
-    <IdeaShell
-      icon={<PartyPopper size={16} aria-hidden="true" />}
-      eyebrow="Just for fun"
-      title="A playful this-or-that"
-      blurb="A light, fun questionnaire to send a friend or partner."
-      cta="Try it"
-      onClick={() =>
-        onSeed({
-          title: '',
-          type: 'scenario',
-          questions: [],
-          brief:
-            'A light, playful questionnaire — fun this-or-that and would-you-rather questions to enjoy together.',
-        })
-      }
-    />
+    <div className={styles.qInsight}>
+      <div className={styles.qInsightHead}>
+        <Avatar name={insight.aboutName ?? 'You'} />
+        <span className={styles.qInsightContext}>{context}</span>
+      </div>
+      <Markdown inline className={styles.factText}>
+        {insight.summary}
+      </Markdown>
+      <div className={styles.qInsightMeta}>
+        {insight.area ? <span className={styles.qAreaChip}>{insight.area}</span> : null}
+        <button type="button" className={styles.cardLink} onClick={onOpen}>
+          View in Memory
+          <ArrowRight size={14} aria-hidden="true" />
+        </button>
+      </div>
+    </div>
   );
 }
 
-function IdeaShell({
-  icon,
-  eyebrow,
-  tone,
-  title,
-  blurb,
-  cta,
-  onClick,
+function GoDeeperRow({
+  theme,
+  onSeed,
 }: {
-  icon: JSX.Element;
-  eyebrow: string;
-  tone?: 'danger';
-  title: string;
-  blurb: string;
-  cta: string;
-  onClick: () => void;
+  theme: GoDeeperTheme;
+  onSeed: (seed: BuilderSeed) => void;
 }): JSX.Element {
-  const toneClass = tone === 'danger' ? styles.qIdeaDanger : '';
+  const { icon, line, source, brief, cta, accent } = goDeeperCopy(theme);
   return (
-    <div className={styles.qIdea}>
-      <div className={`${styles.qIdeaEyebrow} ${toneClass}`}>
-        {icon}
-        <span>{eyebrow}</span>
+    <div className={`${styles.qActionRow} ${accent ? styles.qActionRowAccent : ''}`}>
+      <span className={styles.qActionIcon}>{icon}</span>
+      <div className={styles.qActionText}>
+        <span className={styles.qActionLine}>{line}</span>
+        <span className={styles.qActionSub}>{source}</span>
       </div>
-      <span className={styles.qIdeaTitle}>{title}</span>
-      <Text size="sm" tone="secondary">
-        {blurb}
-      </Text>
-      <button type="button" className={styles.cardLink} onClick={onClick}>
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => onSeed({ title: '', type: 'general', questions: [], brief })}
+      >
         {cta}
-        <ArrowRight size={14} aria-hidden="true" />
-      </button>
+      </Button>
     </div>
+  );
+}
+
+function goDeeperCopy(theme: GoDeeperTheme): {
+  icon: JSX.Element;
+  line: string;
+  source: string;
+  brief: string;
+  cta: string;
+  accent: boolean;
+} {
+  if (theme.kind === 'session') {
+    const area = theme.area.toLowerCase();
+    return {
+      icon: <MessageCircle size={18} aria-hidden="true" />,
+      line: `You've been reflecting on ${area} lately — get someone else's view.`,
+      source: 'From your Sessions',
+      brief: `how someone close to me sees ${area}, and what they'd want me to know`,
+      cta: 'Draft it',
+      accent: true,
+    };
+  }
+  if (theme.kind === 'dream') {
+    return {
+      icon: <Moon size={18} aria-hidden="true" />,
+      line: `Your recurring dream about ${theme.symbol} keeps surfacing — explore what it stirs up.`,
+      source: 'From your Dreams',
+      brief: `feelings, memories, and associations around ${theme.symbol}`,
+      cta: 'Explore',
+      accent: false,
+    };
+  }
+  return {
+    icon: <Heart size={18} aria-hidden="true" />,
+    line: `You and ${theme.partnerName} could use a gentle check-in.`,
+    source: 'From Together',
+    brief: `a warm check-in with ${theme.partnerName} about how we're doing and what we each need more of`,
+    cta: 'Check in',
+    accent: false,
+  };
+}
+
+function FunBand({ onClick }: { onClick: () => void }): JSX.Element {
+  return (
+    <button type="button" className={`${styles.qBand} ${styles.qBandFun}`} onClick={onClick}>
+      <span className={styles.qBandEyebrow}>
+        <PartyPopper size={15} aria-hidden="true" /> Just for fun
+      </span>
+      <span className={styles.qBandTitle}>This-or-that showdown</span>
+      <span className={styles.qBandBlurb}>A light, playful game to send a friend or partner.</span>
+    </button>
+  );
+}
+
+function SpicyBand({ onClick }: { onClick: () => void }): JSX.Element {
+  return (
+    <button type="button" className={`${styles.qBand} ${styles.qBandSpicy}`} onClick={onClick}>
+      <span className={`${styles.qBandEyebrow} ${styles.qBandEyebrowDanger}`}>
+        <Flame size={15} aria-hidden="true" /> Spice it up · 18+
+      </span>
+      <span className={styles.qBandTitle}>Yes / No / Maybe, together</span>
+      <span className={styles.qBandBlurb}>
+        A flirty questionnaire about desire and fantasies, for you and a partner.
+      </span>
+    </button>
   );
 }

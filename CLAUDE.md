@@ -404,6 +404,26 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-13 — **Fix (Draft-with-AI STILL re-asked onboarding questions — the semantic de-dup pass never saw the
+  onboarding answers; user-reported [threesome MMF/FFM, an intake `pornGenres` answer]; SPEC 08 §23.5b; on
+  `fix/questionnaire-onboarding-dedup`).** After §23 merged, generation kept asking questions the app already has
+  data for. **Diagnosed from the code (not assumed):** the onboarding answers ARE gathered
+  (`formatIntakeForGeneration`) but reached de-dup two broken ways — (a) the generation prompt got them as SOFT
+  grounding (the model ignores it, the §23 premise); (b) the **semantic pass** (the only layer that catches a
+  differently-worded re-ask) got them inside the `recipientHistory` blob **truncated to 3000 chars**, and
+  `recipientKnownData` appended the onboarding answers **LAST**, after `gatherRecipientHistory` (profile + 15
+  insights×5 facts + 40 asked prompts) which alone exceeds 3000 chars — so the pass **never saw the onboarding
+  answers**. Fix: a **dedicated, prioritized `dedupReference`** (bridge → `generateQuestions` → the pass) that
+  **LEADS with the full onboarding answers** (specific acts/positions/genres/MMF-FFM/yes-no) then the asked
+  prompts; the reference budget **raised 3000 → 12000**; the semantic-pass system prompt made **stricter** (drop a
+  candidate the person already has data for, **including a sub-preference/detail** — MMF/FFM named in-prompt;
+  "when in doubt, DROP"); and the **onboarding question prompts join the hard fuzzy filter** (`formatIntakeForGeneration`
+  now returns `prompts`) so a verbatim re-ask is dropped deterministically. Author-blind boundary unchanged (only
+  keep/drop indices return). Gate green: typecheck, lint, format, **1117 core + desktop** unit (+intake `prompts`,
+  +a bridge test proving the pass's reference LEADS with the onboarding answers, untruncated + author-blind).
+  **Lesson: a "known-data" reference that's TRUNCATED and orders the authoritative material (onboarding answers)
+  LAST silently drops exactly the signal the de-dup needs — lead the reference with the highest-value de-dup
+  material and budget it so it's never cut; soft prompt grounding alone never stops the re-ask.**
 - 2026-07-13 — **Build (Questionnaire Draft-with-AI quality overhaul — audit + GREATLY improve; SPEC 08 §23 BUILT;
   on `feat/questionnaire-ai-audit`, PR pending).** The user reported four problems with questionnaire AI generation
   (brief not respected, a confusing topic-add field, no question-count control, duplicative/already-known questions)

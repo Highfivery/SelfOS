@@ -108,10 +108,15 @@ export interface GenerateRequest {
   // The recipient's full answered content (08 §17.4/§19.1), assembled host-side by the caller (bridge). Fed to
   // the model ONLY to avoid repeating + to go deeper — never surfaced to the author.
   recipientHistory?: string;
-  // The exact prompts the recipient was already asked in prior questionnaires (08 §23.5) — a structured list for
-  // the deterministic hard near-duplicate FILTER (the string `recipientHistory` drives the model; this drives
-  // the code filter, so a re-ask the model slips past is still dropped).
+  // The exact prompts the recipient was already asked in prior questionnaires + answered in onboarding
+  // (08 §23.5) — a structured list for the deterministic hard near-duplicate FILTER (the string
+  // `recipientHistory` drives the model; this drives the code filter, so a re-ask the model slips past is
+  // still dropped).
   recipientAskedPrompts?: readonly string[];
+  // The DEDICATED, prioritized reference for the semantic de-dup pass (08 §23.5b): leads with the onboarding
+  // answers (the authoritative "already have data for this"), so they are never truncated away the way the
+  // full `recipientHistory` blob was. Falls back to `recipientHistory` when absent.
+  dedupReference?: string;
   // The intimacy acts the recipient already rated in onboarding (08 §19.3) — reframes the intimacy seeding so
   // it goes deeper on rated acts instead of re-asking them.
   coveredIntimacyActs?: readonly { label: string; rating: string }[];
@@ -126,7 +131,8 @@ export async function generateQuestions(
   // The semantic de-dup pass (08 §23.5, layer 3) runs when the recipient has known material to compare against.
   // When it will run, OVER-ASK a small buffer so the questions it drops as duplicates don't leave us short of
   // the requested count; we trim back after filtering. No recipient history ⇒ nothing to compare ⇒ no over-ask.
-  const dedupReference = request.recipientHistory?.trim() ?? '';
+  // Prefer the DEDICATED, onboarding-first reference (§23.5b) — falls back to the full history blob.
+  const dedupReference = (request.dedupReference ?? request.recipientHistory)?.trim() ?? '';
   const willSemanticDedup = dedupReference !== '';
   const askCount = willSemanticDedup ? Math.min(requestedCount + 3, 23) : requestedCount;
 

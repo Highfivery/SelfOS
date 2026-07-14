@@ -1596,6 +1596,69 @@ describe('createCoreBridge', () => {
     expect(ownerId).toBeTruthy();
   });
 
+  it('the SEMANTIC de-dup pass receives the recipient’s onboarding answers, led + untruncated (§23.5b)', async () => {
+    const { host, bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    const ctx = (await host.host.vaultAndKey())!;
+    // Mara answered an onboarding intimacy question — the authoritative "already have data for this" material.
+    await submitSectionForm(
+      ctx.fs,
+      ctx.key,
+      mara.id,
+      'intimacy',
+      {
+        getSpecific: true,
+        ownAnatomy: 'Cock (penis)',
+        partnerAnatomy: ['Pussy (vulva)'],
+        activities: { 'oral-receiving': 5 },
+      },
+      new Date(),
+    );
+
+    // Capture EACH call: [0] = generation (returns 2 candidates so the pass runs), [1] = the semantic pass.
+    const seen: string[] = [];
+    let call = 0;
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        seen.push(options.messages.map((m) => m.content).join('\n'));
+        const text =
+          call === 0
+            ? JSON.stringify({
+                title: 'X',
+                questions: [
+                  { type: 'shortText', prompt: 'One fresh question?' },
+                  { type: 'shortText', prompt: 'Two fresh question?' },
+                ],
+              })
+            : '[1,2]';
+        call += 1;
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+
+    const result = await bridge.questionnairesGenerate({
+      type: 'intimacy',
+      sensitivity: 'unfiltered',
+      existingPrompts: [],
+      recipientPersonId: mara.id,
+    });
+    expect(result.ok).toBe(true);
+    // The semantic pass ran (a 2nd call) and its reference LEADS with the onboarding answers — the exact
+    // material that was previously truncated away, letting onboarding re-asks through.
+    expect(seen).toHaveLength(2);
+    const reference = seen[1] ?? '';
+    expect(reference).toMatch(/ALREADY ANSWERED in their onboarding/);
+    expect(reference).toContain('Receiving oral (blowjob)'); // the onboarding answer reaches the pass
+    // …still author-blind: none of it comes back to the renderer.
+    expect(JSON.stringify(result)).not.toContain('Receiving oral (blowjob)');
+  });
+
   it('materializes a suggestion into a full generation; gated + non-household refused (§19.4)', async () => {
     const { host, bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });

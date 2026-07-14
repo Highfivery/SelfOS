@@ -3176,6 +3176,30 @@ scaled with count, and the type-agnostic escalation framing removed.
    fewer survive, keep them (a calm "dropped N that overlapped with what they've already shared" note) rather than
    dead-end.
 
+### 23.5b Follow-up fix — the semantic pass never saw the onboarding answers (2026-07-13)
+
+After §23 shipped, a generated question **re-asked something already answered in onboarding** (the reported
+case: a threesome MMF/FFM preference, which the recipient had already given in the intake `pornGenres` answer).
+**Diagnosed against the code (not assumed):** the onboarding answers ARE gathered
+(`formatIntakeForGeneration`), but they reached the de-dup two ways, both broken for this case: (a) the
+generation prompt got them as **soft** grounding (the model ignores it — the whole §23 premise); (b) the
+**semantic pass** — the only layer that can catch a differently-worded re-ask — received them as part of the
+`recipientHistory` blob **truncated to 3000 chars**, and in `recipientKnownData` the onboarding answers were
+appended **last**, after `gatherRecipientHistory` (profile + up to 15 insights × 5 facts + up to 40 asked
+prompts) which alone exceeds 3000 chars for any active user. **So the semantic pass never saw the onboarding
+answers** and couldn't drop the re-ask. Fix:
+
+- **A dedicated, prioritized `dedupReference`** (bridge → `generateQuestions` → the semantic pass) that **LEADS
+  with the full onboarding answers** (the authoritative "already have data for this" — specific acts, positions,
+  porn genres, MMF/FFM, yes/no on an act), then the asked-questionnaire prompts. Insight summaries (derivative)
+  are omitted from it to keep the highest-signal material inside budget. The generation soft grounding keeps the
+  full blob.
+- **Reference budget raised 3000 → 12000 chars** so the onboarding answers are never truncated away.
+- **The semantic-pass system prompt is stricter**: drop a candidate the person already has data for **including a
+  SUB-PREFERENCE/detail already covered** (the MMF/FFM example is named in-prompt); "when in doubt, DROP."
+- **Onboarding question prompts join the hard fuzzy-filter list** (`formatIntakeForGeneration` now also returns
+  `prompts`), so a **verbatim** onboarding re-ask is dropped deterministically too.
+
 ### 23.6 Declutter the panel
 
 - Remove the `showTopicAdd` block + its state/handler from `QuestionnaireAiPanel`. Settings → Intimacy topics is

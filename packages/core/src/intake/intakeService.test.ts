@@ -412,7 +412,7 @@ describe('intakeService', () => {
     );
     const session = await getIntakeSession(fs, key, 'p1');
     if (!session) throw new Error('no session');
-    const { text, coveredActs } = formatIntakeForGeneration(session);
+    const { text, coveredActs, prompts } = formatIntakeForGeneration(session);
     // The raw answers reach the ledger (a non-intimacy answer + the anatomy-resolved matrix ratings).
     expect(text).toContain('What do you do for work?: nurse');
     expect(text).toContain('Receiving oral (blowjob): Love it');
@@ -424,6 +424,8 @@ describe('intakeService', () => {
         { label: 'Going down on her (oral)', rating: 'Like it' },
       ]),
     );
+    // The answered question prompts feed the hard near-dup filter (08 §23.5) so a verbatim re-ask is dropped.
+    expect(prompts).toContain('What do you do for work?');
   });
 
   it('drops a branch-hidden (cleared-trigger) answer from synthesis (47 §3.3/§7)', async () => {

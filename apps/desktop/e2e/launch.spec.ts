@@ -10617,6 +10617,76 @@ test('together follow-through (61): agreements in Goals + needs-attention, inlin
   }
 });
 
+test('needs attention (60/61): your goals + Together agreements stay visible even under a recurring crisis (own commitments, not AI pushes)', async () => {
+  const { userData, vault, ben, angel } = await seedTogetherReady();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('crisis needs-attention: master key missing');
+  // A recurring crisis signal (the deterministic ≥2 crisis-flagged insights in 14 days) — the EXACT condition
+  // that was hiding the user's goals + agreements behind Home's "lead with support" suppression.
+  const recent = (n: number): string =>
+    new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString();
+  for (const [id, days] of [
+    ['cr1', 1],
+    ['cr2', 4],
+  ] as const) {
+    await saveInsight(fs, key, {
+      id,
+      schemaVersion: 1,
+      source: 'session',
+      subjectPersonId: ben,
+      summary: 'A heavy session',
+      facts: [],
+      confidence: 'medium',
+      categories: [],
+      approved: true,
+      crisisFlag: true,
+      provenance: { conversationId: id, at: recent(days) },
+      createdAt: recent(days),
+      updatedAt: recent(days),
+    });
+  }
+  // A standing Together agreement + an active personal goal — the person's own commitments.
+  await saveAgreement(
+    fs,
+    key,
+    ben,
+    angel,
+    { text: 'weekly date night', status: 'standing', sessionId: 'seed-sess' },
+    new Date(),
+  );
+  const goalNow = new Date().toISOString();
+  await saveGoal(fs, key, {
+    id: 'g-shutdown',
+    schemaVersion: 1,
+    subjectPersonId: ben,
+    text: 'catch shutdown moments',
+    status: 'open',
+    provenance: { at: goalNow },
+    createdAt: goalNow,
+    updatedAt: goalNow,
+    lastTouchedAt: goalNow,
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    // Home leads with the supportive crisis banner…
+    await expect(w.getByText(/carrying a lot/i)).toBeVisible();
+    // …AND the growth-oriented "For you" band is suppressed (§8)…
+    await expect(w.getByRole('region', { name: 'For you' })).toHaveCount(0);
+    // …but the person's OWN commitments still show in "Needs attention" (the fix — a crisis signal never hides
+    // your own goals/agreements; the banner already leads with support).
+    await expect(w.getByRole('heading', { name: /needs attention/i })).toBeVisible();
+    await expect(w.getByText('Following through with Angel')).toBeVisible();
+    await expect(w.getByText('catch shutdown moments').first()).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('memory redesign (62): sections collapsed (sensitive too), edit a fact inline, decrypt + 360px guard', async () => {
   const { userData, vault } = await seedReadyVault();
   const fs = createNodeFileSystem(vault);

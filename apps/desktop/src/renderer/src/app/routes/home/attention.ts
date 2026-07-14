@@ -47,8 +47,6 @@ export interface AttentionInput {
   otherPeopleCount: number;
   /** When true (recurring crisis OR proactivity off), the gentle nudges are dropped, leaving only genuinely-pending items (§8). */
   suppressNudges: boolean;
-  /** Recurring crisis alone — suppresses even the non-nudge Together-commitment item so Home leads with support (§8). */
-  crisis: boolean;
   can: {
     memory: boolean;
     tests: boolean;
@@ -70,7 +68,8 @@ function partnerName(session: TogetherSessionSummary, myId: string | null): stri
  * Together agreements → your goals → the weekly check-in nudge → a soft "ask someone" nudge. Agreements and
  * your goals are genuine (non-nudge) items that stay TOP OF MIND regardless of the proactivity dial; the
  * check-in and "ask someone" are gentle NUDGES, dropped when `suppressNudges` (recurring crisis or proactivity
- * off, §8), leaving only genuinely-pending actions. A recurring crisis also suppresses agreements + goals. Pure.
+ * off, §8), leaving only genuinely-pending actions. Your agreements + goals are your OWN commitments (not AI
+ * pushes), so they always show — a crisis signal never hides them (the crisis banner leads Home with support). Pure.
  */
 export function needsAttention(input: AttentionInput): AttentionItem[] {
   const items: AttentionItem[] = [];
@@ -135,11 +134,12 @@ export function needsAttention(input: AttentionInput): AttentionItem[] {
     });
   }
 
-  // Standing Together agreements — a concrete commitment the couple made, so it's a genuine (non-nudge)
-  // needs-attention item that stays TOP OF MIND regardless of the proactivity dial (the user's ask). It's
-  // suppressed only under an active crisis (Home leads with support), and clears as agreements are marked
-  // done/retired. The detail shows the actual commitment text so you see what it is at a glance.
-  if (can.together && input.agreements.length > 0 && !input.crisis) {
+  // Standing Together agreements — a concrete commitment the couple MADE, so it's a genuine (non-nudge)
+  // needs-attention item that ALWAYS stays top of mind: it's the person's own commitment, not an AI push, so
+  // it is NOT suppressed by the proactivity dial OR a crisis signal (the crisis banner + resources already
+  // lead Home with support; hiding your own gentle commitments was over-aggressive — the user's repeated ask).
+  // It clears as agreements are marked done/retired. The detail shows the actual commitment text at a glance.
+  if (can.together && input.agreements.length > 0) {
     const partners = new Set(input.agreements.map((a) => a.partnerPersonId));
     const only = input.agreements[0];
     const n = input.agreements.length;
@@ -155,13 +155,14 @@ export function needsAttention(input: AttentionInput): AttentionItem[] {
     });
   }
 
-  // Your goals — your own commitments, kept TOP OF MIND as a genuine (non-nudge) item so they show
-  // regardless of the proactivity dial (the user's ask: goals must appear in "needs attention"). We surface
-  // every ACTIVE goal (open / in-progress / already-stale), framed as "needs a check-in" when a goal has
-  // gone stale (past due / long untouched), else "in progress". The one-tap Done / Still-on-it actions live
-  // on the Goals card + /goals. Suppressed only under an active crisis (Home leads with support, §8); it
-  // clears as goals are marked done. The detail shows the actual goal text so you see what it is at a glance.
-  if (can.memory && !input.crisis) {
+  // Your goals — your own commitments, ALWAYS kept top of mind as a genuine (non-nudge) item (the user's
+  // repeated ask: goals must appear in "needs attention"). Like the agreement item, they're the person's own
+  // commitment — NOT an AI push — so they are NOT suppressed by the proactivity dial OR a crisis signal (the
+  // crisis banner already leads Home with support; hiding your own gentle goals was over-aggressive). We
+  // surface every ACTIVE goal (open / in-progress / already-stale), framed "needs a check-in" when a goal has
+  // gone stale (past due / long untouched), else "in progress". The one-tap Done / Still-on-it actions live on
+  // the Goals card + /goals; it clears as goals are marked done. The detail shows the actual goal text.
+  if (can.memory) {
     const nowDate = new Date(now);
     const active = input.goals.filter((g) => g.status !== 'done' && g.status !== 'abandoned');
     if (active.length > 0) {

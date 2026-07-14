@@ -580,10 +580,12 @@ describe('Home — proactivity & safety', () => {
     renderHome();
     expect(await screen.findByText(/carrying a lot/i)).toBeInTheDocument();
     expect(screen.getByText('988')).toBeInTheDocument();
-    // Encouragement de-escalates: no "For you" pushes during distress, no rhythm streak, and the gentle
-    // "Needs attention" nudges (check-in / stale goals / ask-someone) are suppressed too (§8).
+    // Encouragement de-escalates: no "For you" pushes during distress, no rhythm streak, and the gentle AI
+    // "Needs attention" nudges (check-in / ask-someone) are suppressed (§8). BUT your own commitments — your
+    // goals + Together agreements — still show: they're grounding, not AI pushes, and the crisis banner
+    // already leads with support (the user's repeated ask; hiding your own goals was over-aggressive).
     expect(forYouRegion()).toBeNull();
-    expect(screen.queryByText(/a goal needs a check-in/i)).toBeNull();
+    expect(screen.getByText(/a goal needs a check-in/i)).toBeInTheDocument();
     expect(screen.queryByText(/check in on how you.re doing/i)).toBeNull();
     expect(screen.queryByText(/rhythm/i)).toBeNull();
   });

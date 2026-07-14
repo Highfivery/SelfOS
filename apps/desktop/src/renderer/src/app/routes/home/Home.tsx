@@ -492,8 +492,9 @@ export function Home(): JSX.Element {
   ).length;
 
   // The "Needs attention" queue (§3.1.2a) — waiting-on-you items, split from the growth-oriented "For you"
-  // band. The gentle nudges (check-in / stale goals / ask-someone) are suppressed under crisis or when the
-  // person has turned proactive coaching off (§8); genuinely-pending items always show.
+  // band. The gentle AI nudges (check-in / ask-someone) are suppressed under crisis or when the person has
+  // turned proactive coaching off (§8); genuinely-pending items + your OWN commitments (goals, Together
+  // agreements) always show — the crisis banner leads Home with support instead of hiding your own stuff.
   const attentionItems = needsAttention({
     now: nowMs,
     activePersonId,
@@ -505,7 +506,6 @@ export function Home(): JSX.Element {
     insightDraftCount: needReview,
     otherPeopleCount: people.filter((p) => p.id !== activePersonId).length,
     suppressNudges: crisis || proactivity === 'off',
-    crisis,
     can: {
       memory: canViewMemory,
       tests: canTakeTests,

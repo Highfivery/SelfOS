@@ -32,7 +32,9 @@ export function QuickActionDock({
             key={action.id}
             type="button"
             className={styles.dockAction}
-            onClick={() => navigate(action.route)}
+            onClick={() =>
+              navigate(action.route, action.state ? { state: action.state } : undefined)
+            }
           >
             <span className={styles.dockGlyph} aria-hidden="true">
               <Icon size={18} />

@@ -18,7 +18,10 @@ export interface QuickAction {
   id: QuickActionId;
   label: string;
   hint: string;
+  /** Where the action navigates — a DIRECT route to the action itself, not its parent page. */
   route: string;
+  /** Optional router navigation state so a route can open its composer/flow directly (e.g. `{ compose: true }`). */
+  state?: Record<string, unknown>;
   /** The capability the active person must hold for this action to appear. */
   capability: string;
 }

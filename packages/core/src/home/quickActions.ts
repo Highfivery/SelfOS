@@ -9,6 +9,7 @@ export const QUICK_ACTIONS: readonly QuickAction[] = [
     id: 'start-session',
     label: 'Start a session',
     hint: 'Talk something through',
+    // The Sessions launcher (free-start composer) is what this route lands on — the start surface itself.
     route: '/sessions',
     capability: 'sessions.own',
   },
@@ -16,21 +17,26 @@ export const QUICK_ACTIONS: readonly QuickAction[] = [
     id: 'log-dream',
     label: 'Log a dream',
     hint: 'Before it fades',
+    // Deep-link straight into the dream composer, not the journal (the route reads `state.compose`).
     route: '/dreams',
+    state: { compose: true },
     capability: 'dreams.own',
   },
   {
     id: 'ask-someone',
     label: 'Ask someone',
     hint: 'Send a questionnaire',
+    // Open the new-questionnaire start step directly, not the list (the route reads `state.startNew`).
     route: '/questionnaires',
+    state: { startNew: true },
     capability: 'questionnaires.create',
   },
   {
     id: 'check-in',
     label: 'Check in',
     hint: 'A 2-minute mood check',
-    route: '/you',
+    // Straight into the mood check-in itself (the PHQ-9 take flow), not the You hub.
+    route: '/you/phq9/take',
     capability: 'tests.own',
   },
 ];

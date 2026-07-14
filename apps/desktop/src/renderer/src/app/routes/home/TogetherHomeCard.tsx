@@ -9,6 +9,16 @@ function partnerName(session: TogetherSessionSummary, myId: string | null): stri
   return session.participants.find((p) => p.personId !== myId)?.displayName ?? 'your partner';
 }
 
+/** A snippet is raw model text (markdown) — strip emphasis/heading/quote markers for a clean one-line preview. */
+function plain(text: string): string {
+  return text
+    .replace(/[*_~`]/g, '')
+    .replace(/^#+\s*/gm, '')
+    .replace(/^>\s?/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /** Pick the one session to feature: your-turn first, then a pending invite, then most recently active. */
 function primarySession(
   sessions: TogetherSessionSummary[],
@@ -43,8 +53,9 @@ export function TogetherHomeCard({
   if (!session) return null;
 
   const name = partnerName(session, myId);
+  // Show WHOSE turn it is explicitly: yours, the partner's, or a pending invite.
   const pill =
-    session.status === 'invited' ? 'Invitation' : session.yourTurn ? 'Your turn' : 'In progress';
+    session.status === 'invited' ? 'Invitation' : session.yourTurn ? 'Your turn' : `${name}’s turn`;
 
   return (
     <Card>
@@ -53,13 +64,15 @@ export function TogetherHomeCard({
           <Heading level={2} className={styles.sectionTitle}>
             <Heart size={16} aria-hidden="true" /> Together · {name}
           </Heading>
-          <span className={styles.statusPill}>{pill}</span>
+          <span className={session.yourTurn ? styles.statusPill : styles.statusPillMuted}>
+            {pill}
+          </span>
         </div>
         <Text tone="secondary" size="sm">
           {session.status === 'invited'
             ? `${name} invited you to a session.`
             : session.lastMessageSnippet
-              ? `“${session.lastMessageSnippet}”`
+              ? `“${plain(session.lastMessageSnippet)}”`
               : session.topic
                 ? session.topic
                 : 'Pick up where you left off.'}

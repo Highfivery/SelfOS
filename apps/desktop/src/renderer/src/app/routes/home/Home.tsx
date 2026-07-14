@@ -47,6 +47,7 @@ import { ContinueCard } from './ContinueCard';
 import { WellbeingCard } from './WellbeingCard';
 import { DreamsCard } from './DreamsCard';
 import { MemoryCard } from './MemoryCard';
+import { ChallengeCard } from './ChallengeCard';
 import { QuestionnairesSection } from './QuestionnairesSection';
 import { GettingStarted } from './GettingStarted';
 import { WelcomeOrientationCard } from './WelcomeOrientationCard';
@@ -581,6 +582,7 @@ export function Home(): JSX.Element {
                 />
                 <DreamsCard dreams={dreams} stats={patternStats} />
                 <MemoryCard insights={approvedInsights} canView={canViewMemory} />
+                <ChallengeCard />
                 <SharingCard outbound={outbound} />
               </div>
               <div className={styles.rail}>

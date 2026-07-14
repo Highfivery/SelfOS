@@ -1,6 +1,6 @@
 # 60 — Home dashboard redesign (Hybrid: bento + AI companion + cross-feature feed)
 
-> **Status:** Slices 1 + 2 BUILT (the full Hybrid visual redesign + the daily reflection cadence + badges) · Slice 3 (polish) pending · _last updated 2026-07-14_
+> **Status:** Slices 1 + 2 MERGED (#187) · Slice 3 (polish) in progress · _last updated 2026-07-14_
 >
 > A **complete redesign of the Home dashboard** now that the app's breadth is built (sessions, dreams,
 > Together, questionnaires, memory, tests, wellbeing, challenges, goals, sharing). Home becomes a **highly
@@ -522,6 +522,16 @@ complete flows through the rendered UI, not bridge calls (CLAUDE.md §7). E2E is
 
 ## 12. Changelog
 
+- 2026-07-14 — **Slice 3 (polish) — the Challenge bento card**, on `feat/home-slice3-polish` off the merged
+  `main`. A self-hiding `ChallengeCard` shows the one ACTIVE challenge as a STATUS surface (agreed action +
+  `ComfortDial` + a gentle "Day N" marker + a reflect entry) — visible the whole time you're on it, not only
+  when a check-in is due (the actionable "how did it go?" nudge stays owned by the `challenge-checkin` "For
+  you" recommendation, so no duplicate CTA). Placed in the left bento between Memory and Sharing. RTL-covered
+  (active/self-hide/check-in-due), matching the Slice-1 home-card pattern (SharingCard/TogetherHomeCard are
+  RTL-covered, not separately E2E-seeded). **Deferred (a smaller follow-up):** the Together **pulse ring +
+  desire alignment** on `TogetherHomeCard` — it needs an async per-partner `togetherPulse` read (the store
+  doesn't wrap it yet), so it's left for a focused follow-up rather than bundled here.
+- 2026-07-14 — Slices 1 + 2 **MERGED** to `main` as **#187** (squash `7f45fdd`), CI green.
 - 2026-07-14 — **Slice 2 BUILT** (the daily reflection cadence + its setting + milestone badges — the one new
   spend), on the same branch. The auto-cadence already existed (spec-40 `useCoachingSynthesis` → the bridge's
   `shouldSynthesize`); Slice 2 **amends the cadence to daily** (`CADENCE` window 7/3-day → 1-day, keeping the

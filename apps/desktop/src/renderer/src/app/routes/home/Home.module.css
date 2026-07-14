@@ -1046,6 +1046,15 @@ button.feedRowActionable:hover {
   font-variant-numeric: tabular-nums;
 }
 
+/* Challenge card — the comfort dial + a gentle day marker on one row */
+.challengeMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
 /* Loading skeletons */
 .skCard {
   display: flex;

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Select, Stack, Text } from '../design-system/components';
+import { Inline, Select, Stack, Switch, Text } from '../design-system/components';
 import type { ProactivityLevel } from '@shared/schemas';
 
 /**
@@ -29,6 +29,7 @@ const LEVELS: { value: ProactivityLevel; label: string; hint: string }[] = [
 
 export function ProactivityControl(): JSX.Element {
   const [level, setLevel] = useState<ProactivityLevel>('gentle');
+  const [dailyReflection, setDailyReflection] = useState(true);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -36,7 +37,10 @@ export function ProactivityControl(): JSX.Element {
     void (async () => {
       const prefs = await window.selfos?.coachingGetPrefs();
       if (!active) return;
-      if (prefs) setLevel(prefs.proactivity ?? 'gentle');
+      if (prefs) {
+        setLevel(prefs.proactivity ?? 'gentle');
+        setDailyReflection(prefs.dailyReflection ?? true);
+      }
       setLoaded(true);
     })();
     return () => {
@@ -49,25 +53,52 @@ export function ProactivityControl(): JSX.Element {
     void window.selfos?.coachingSetPrefs({ proactivity: next });
   };
 
+  const toggleReflection = (next: boolean): void => {
+    setDailyReflection(next);
+    void window.selfos?.coachingSetPrefs({ dailyReflection: next });
+  };
+
   const hint = LEVELS.find((l) => l.value === level)?.hint ?? '';
 
   return (
-    <Stack gap={2}>
-      <Select
-        value={level}
-        aria-label="How proactive your coach is"
-        disabled={!loaded}
-        onChange={(e) => choose(e.target.value as ProactivityLevel)}
-      >
-        {LEVELS.map((l) => (
-          <option key={l.value} value={l.value}>
-            {l.label}
-          </option>
-        ))}
-      </Select>
-      <Text size="sm" tone="secondary">
-        {hint}
-      </Text>
+    <Stack gap={4}>
+      <Stack gap={2}>
+        <Select
+          value={level}
+          aria-label="How proactive your coach is"
+          disabled={!loaded}
+          onChange={(e) => choose(e.target.value as ProactivityLevel)}
+        >
+          {LEVELS.map((l) => (
+            <option key={l.value} value={l.value}>
+              {l.label}
+            </option>
+          ))}
+        </Select>
+        <Text size="sm" tone="secondary">
+          {hint}
+        </Text>
+      </Stack>
+
+      {/* The daily Home reflection (60 §6.3) — auto-generates once/day. Off keeps the other nudges but stops
+          the auto-spend. Off already disables it when proactivity is Off, so the toggle is disabled there. */}
+      <Stack gap={2}>
+        <Inline justify="space-between" gap={3}>
+          <Text size="sm" weight={600}>
+            Daily reflection on Home
+          </Text>
+          <Switch
+            checked={level !== 'off' && dailyReflection}
+            disabled={!loaded || level === 'off'}
+            onChange={toggleReflection}
+            aria-label="Auto-generate a daily reflection on Home"
+          />
+        </Inline>
+        <Text size="sm" tone="secondary">
+          Once a day, your coach can look across your recent activity and share a gentle observation
+          on Home (a small cost). Turn it off to only refresh it yourself.
+        </Text>
+      </Stack>
     </Stack>
   );
 }

@@ -516,6 +516,25 @@ describe('Home — proactivity & safety', () => {
     expect(await screen.findByText(/you.ve shown up 2 times this week/i)).toBeInTheDocument();
   });
 
+  it('celebrates a milestone badge once when a threshold is crossed (60 §3.1.7)', async () => {
+    // 10 sessions (older than the celebration window, so their per-session completions don't compete) →
+    // the "10 sessions in" milestone is the eligible celebration.
+    const old = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
+    installMockBridge({
+      conversationsList: () =>
+        Promise.resolve(
+          Array.from({ length: 10 }, (_, i) => ({
+            id: `c${i}`,
+            title: `S${i}`,
+            updatedAt: old,
+            status: 'complete' as const,
+          })),
+        ),
+    });
+    renderHome();
+    expect(await screen.findByText(/10 sessions in/i)).toBeInTheDocument();
+  });
+
   it('surfaces the supportive crisis banner on recurring distress, and suppresses "For you"', async () => {
     const recentCrisis = (id: string, daysAgo: number): Insight => ({
       id,

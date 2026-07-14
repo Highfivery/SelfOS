@@ -935,8 +935,8 @@ test('proactive coaching: the synthesis card shows the cached observation and se
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    // Home surfaces the cross-feature observation as a gentle, non-clinical nudge.
-    await expect(w.getByRole('heading', { name: /something i.m noticing/i })).toBeVisible();
+    // Home surfaces the cross-feature observation as the daily reflection (60 §3.1.4), a gentle nudge.
+    await expect(w.getByText('Reflection', { exact: true })).toBeVisible();
     // Scope to the card (main) — the observation also appears in the coaching-synthesis toast (role=status).
     await expect(w.getByRole('main').getByText(/connection keeps surfacing/i)).toBeVisible();
     // Polish guard (§9): the proactive cards reflow with no horizontal overflow at phone width.

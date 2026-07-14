@@ -1,6 +1,6 @@
 # 60 — Home dashboard redesign (Hybrid: bento + AI companion + cross-feature feed)
 
-> **Status:** Slice 1 BUILT (the full Hybrid visual redesign, no new spend) · Slices 2–3 pending · _last updated 2026-07-13_
+> **Status:** Slices 1 + 2 BUILT (the full Hybrid visual redesign + the daily reflection cadence + badges) · Slice 3 (polish) pending · _last updated 2026-07-14_
 >
 > A **complete redesign of the Home dashboard** now that the app's breadth is built (sessions, dreams,
 > Together, questionnaires, memory, tests, wellbeing, challenges, goals, sharing). Home becomes a **highly
@@ -513,14 +513,30 @@ complete flows through the rendered UI, not bridge calls (CLAUDE.md §7). E2E is
   **skeletons**, responsive, crisis guardrail. New pure core derivations (`buildActivityFeed`/`computeLifeRings`/
   `computeStreak`/`quickActions`) + components + `/gallery`. **No new spend** (reflection is cache-only this
   slice). Delivers the entire visual redesign.
-- **Slice 2 — the daily-reflection cadence + setting + badges.** The renderer-driven ≤1/day auto-`synthesize`
-  (§5.3/§6.2), the `home.dailyReflection` setting, the last-reflection device-local marker, and
-  `activeMilestones` + milestone badges/celebrations. The one new-spend slice.
+- **Slice 2 — the daily-reflection cadence + setting + badges. BUILT.** The daily auto-`synthesize` cadence
+  (§5.3/§6.2 — reused the existing `useCoachingSynthesis` hook + bridge gate, amended `CADENCE` to a 1-day
+  window), the per-person `CoachingPrefs.dailyReflection` toggle + crisis suppression, and `activeMilestones` +
+  milestone badges via the existing celebration flow. The one new-spend slice.
 - **Slice 3 (optional polish) — full-engagement refinements** surfaced during review (ring interactions,
   badge visuals, feed depth) if not absorbed into Slice 1.
 
 ## 12. Changelog
 
+- 2026-07-14 — **Slice 2 BUILT** (the daily reflection cadence + its setting + milestone badges — the one new
+  spend), on the same branch. The auto-cadence already existed (spec-40 `useCoachingSynthesis` → the bridge's
+  `shouldSynthesize`); Slice 2 **amends the cadence to daily** (`CADENCE` window 7/3-day → 1-day, keeping the
+  ≥3/≥2-new-insight threshold + the rolling 7/week cap) so the Home reflection is "≤1/day, gated on new
+  material". Added a per-person **`CoachingPrefs.dailyReflection`** toggle (default ON; a settings Switch on
+  `ProactivityControl`) that gates the auto pass without turning off proactivity, and **crisis suppression** of
+  the auto reflection (the bridge skips the auto pass when `aggregateCrisisSignal` is recurring — §8). Milestone
+  **badges** via a pure `activeMilestones` (rhythm-week / ten-sessions / five-areas / first-challenge) mapped
+  into the existing celebration flow (each celebrated once via the device-local `celebrate:badge:<id>`
+  signature). **Fixed a latent celebration flash-vanish** (`CelebrationMoment` now holds the shown completion in
+  state, so recording its dismissal-signature re-render doesn't clear the toast — benefits every celebration).
+  `DailyReflectionCard` regained the §3.3 **"Talk it through"** seed-a-session handoff. Gate green: typecheck,
+  lint, format, **1135 desktop + core** unit (+`shouldSynthesize` daily, +`activeMilestones`, +the bridge
+  daily-reflection-off / crisis-suppression gate, +the `ProactivityControl` toggle, +a Home milestone-celebration
+  test), Home + proactive-coaching **E2E** green. §11.1 badge item resolved (celebrate-once, no shelf).
 - 2026-07-13 — **Slice 1 BUILT** (the full Hybrid visual redesign, no new spend), on `feat/home-dashboard-redesign`
   (worktree off `origin/main`). New pure `@selfos/core/home` (`quickActions`/`computeStreak`/`computeLifeRings`/
   `buildActivityFeed` + view types; 23 unit tests, crisis guardrail baked into streak/rings). `Home.tsx`

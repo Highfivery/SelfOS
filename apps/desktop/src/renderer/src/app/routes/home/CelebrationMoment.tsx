@@ -21,31 +21,29 @@ export function CelebrationMoment({
   completion: Completion | null;
 }): JSX.Element | null {
   const dismiss = useDiscoveryStore((s) => s.dismiss);
-  const [open, setOpen] = useState(false);
+  // Hold the completion we're showing in state. Recording its signature re-renders the PARENT (Home reads the
+  // dismissal set), which then stops passing `completion` — without holding it here the toast would flash and
+  // vanish. It stays until auto-dismiss or the user closes it.
+  const [shown, setShown] = useState<Completion | null>(null);
   const recorded = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!completion) {
-      setOpen(false);
-      return;
-    }
-    // Record the signature once (so a re-render / re-visit never re-celebrates), then show the toast.
-    if (recorded.current !== completion.key) {
-      recorded.current = completion.key;
+    if (completion && recorded.current !== completion.key) {
+      recorded.current = completion.key; // record once → a re-render / re-visit never re-celebrates
       dismiss(`celebrate:${completion.key}`);
+      setShown(completion);
     }
-    setOpen(true);
   }, [completion, dismiss]);
 
-  if (!completion || !open) return null;
+  if (!shown) return null;
 
   return (
     <div className={styles.viewport} aria-live="polite">
       <Toast
         severity="success"
-        title={completion.title}
-        {...(completion.body ? { body: completion.body } : {})}
-        onClose={() => setOpen(false)}
+        title={shown.title}
+        {...(shown.body ? { body: shown.body } : {})}
+        onClose={() => setShown(null)}
         autoDismissMs={AUTO_DISMISS_MS}
       />
     </div>

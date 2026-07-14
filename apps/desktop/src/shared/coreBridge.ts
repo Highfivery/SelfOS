@@ -329,8 +329,10 @@ import {
   suggestChallenge,
 } from '@selfos/core/challenges';
 import {
+  aggregateCrisisSignal,
   countNewInsights,
   getCoachingPrefs,
+  getDailyReflectionEnabled,
   getProactivity,
   getRelationshipSynthesis,
   getSynthesis,
@@ -834,7 +836,10 @@ const ChallengeCheckInSchema = z.object({
 });
 const ChallengeSuggestSchema = z.object({ override: z.boolean().optional() });
 // Proactive coaching (40 §6) — the per-person proactivity preference write.
-const CoachingSetPrefsSchema = z.object({ proactivity: ProactivityLevelSchema });
+const CoachingSetPrefsSchema = z.object({
+  proactivity: ProactivityLevelSchema.optional(),
+  dailyReflection: z.boolean().optional(),
+});
 // `auto` (renderer cadence) applies the throttle/threshold gate; absent/false = a manual force (still
 // budget/key-gated, throttle bypassed).
 const CoachingSynthesizeSchema = z.object({ auto: z.boolean().optional() });
@@ -3724,7 +3729,11 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!personId) return null;
       const p = CoachingSetPrefsSchema.parse(input);
       // Scoped to the active person's OWN coaching prefs (the trust boundary) — each persona tunes their own.
-      return setCoachingPrefs(ctx.fs, ctx.key, personId, { proactivity: p.proactivity });
+      // A partial patch merges (each field independent), so toggling one never clobbers the other.
+      return setCoachingPrefs(ctx.fs, ctx.key, personId, {
+        ...(p.proactivity !== undefined ? { proactivity: p.proactivity } : {}),
+        ...(p.dailyReflection !== undefined ? { dailyReflection: p.dailyReflection } : {}),
+      });
     },
     coachingGetSynthesis: async (): Promise<CoachingSynthesis | null> => {
       const ctx = await host.vaultAndKey();
@@ -3754,6 +3763,19 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const now = new Date();
       if (auto) {
         const insights = await listInsightsForPerson(ctx.fs, ctx.key, personId);
+        // The daily Home reflection is opt-out-able without turning off proactivity (60 §6.3) — a calm skip.
+        if (!(await getDailyReflectionEnabled(ctx.fs, ctx.key, personId))) {
+          return { ok: false, reason: 'EMPTY', message: 'Daily reflection is turned off.' };
+        }
+        // Suppress the auto-reflection during recurring distress (60 §8) — Home leads with support, not a
+        // generated observation. The manual tap still works (the person asked for it); the always-on crisis
+        // support surfaces regardless.
+        const ownApproved = insights.filter((i) => i.approved && i.subjectPersonId === personId);
+        if (
+          aggregateCrisisSignal({ insights: ownApproved, nightmareNudge: false, now }).recurring
+        ) {
+          return { ok: false, reason: 'EMPTY', message: 'Support comes first right now.' };
+        }
         const device = await host.readDeviceState();
         const lastSynthesizedAt = device.coachingSynthesizedAt?.[personId];
         const newInsightCount = countNewInsights(insights, lastSynthesizedAt);

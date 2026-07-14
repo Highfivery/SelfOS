@@ -897,7 +897,10 @@ export interface SelfosBridge {
    */
   coachingGetPrefs(): Promise<CoachingPrefs | null>;
   /** Set the active person's OWN proactivity level (40 §3.6) — off / gentle / active. */
-  coachingSetPrefs(input: { proactivity: ProactivityLevel }): Promise<CoachingPrefs | null>;
+  coachingSetPrefs(input: {
+    proactivity?: ProactivityLevel;
+    dailyReflection?: boolean;
+  }): Promise<CoachingPrefs | null>;
   /** The active person's cached cross-feature synthesis (40 §4.1), or null. No spend — a cached read. */
   coachingGetSynthesis(): Promise<CoachingSynthesis | null>;
   /**

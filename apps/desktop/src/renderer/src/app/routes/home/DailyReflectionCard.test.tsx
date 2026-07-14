@@ -31,6 +31,8 @@ describe('DailyReflectionCard', () => {
     renderCard({ configured: true, canSynthesize: true });
     expect(screen.getByText(/rest and self-worth keep circling/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /refresh/i })).toBeInTheDocument();
+    // The §3.3 seed-handoff — turn the observation into a session.
+    expect(screen.getByRole('button', { name: /talk it through/i })).toBeInTheDocument();
   });
 
   it('offers an explicit "Reflect on my week" when configured with no cache yet', () => {

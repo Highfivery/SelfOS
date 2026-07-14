@@ -76,31 +76,32 @@ describe('shouldSynthesize (40 §3.4)', () => {
     expect(shouldSynthesize({ level: 'off', newInsightCount: 99 }, now)).toBe(false);
   });
 
-  it('gentle needs ≥3 new insights and at most one per 7 days', () => {
+  it('gentle needs ≥3 new insights and at most one per day (60 §6.2)', () => {
     expect(shouldSynthesize({ level: 'gentle', newInsightCount: 2 }, now)).toBe(false);
     expect(shouldSynthesize({ level: 'gentle', newInsightCount: 3 }, now)).toBe(true);
-    // Within the 7-day window since the last run → throttled regardless of count.
-    const threeDaysAgo = new Date(now.getTime() - 3 * 86400000).toISOString();
+    // Within the same day as the last run → throttled regardless of count (≤1/day).
+    const sixHoursAgo = new Date(now.getTime() - 6 * 3600000).toISOString();
     expect(
       shouldSynthesize(
-        { level: 'gentle', newInsightCount: 9, lastSynthesizedAt: threeDaysAgo },
+        { level: 'gentle', newInsightCount: 9, lastSynthesizedAt: sixHoursAgo },
         now,
       ),
     ).toBe(false);
-    const eightDaysAgo = new Date(now.getTime() - 8 * 86400000).toISOString();
+    // A day later, with enough new material → runs again.
+    const twoDaysAgo = new Date(now.getTime() - 2 * 86400000).toISOString();
     expect(
-      shouldSynthesize(
-        { level: 'gentle', newInsightCount: 3, lastSynthesizedAt: eightDaysAgo },
-        now,
-      ),
+      shouldSynthesize({ level: 'gentle', newInsightCount: 3, lastSynthesizedAt: twoDaysAgo }, now),
     ).toBe(true);
   });
 
-  it('active is faster — ≥2 new insights, once per 3 days', () => {
+  it('active is faster — ≥2 new insights, still at most one per day', () => {
     expect(shouldSynthesize({ level: 'active', newInsightCount: 2 }, now)).toBe(true);
-    const twoDaysAgo = new Date(now.getTime() - 2 * 86400000).toISOString();
+    const sixHoursAgo = new Date(now.getTime() - 6 * 3600000).toISOString();
     expect(
-      shouldSynthesize({ level: 'active', newInsightCount: 9, lastSynthesizedAt: twoDaysAgo }, now),
+      shouldSynthesize(
+        { level: 'active', newInsightCount: 9, lastSynthesizedAt: sixHoursAgo },
+        now,
+      ),
     ).toBe(false);
   });
 });

@@ -33,7 +33,12 @@ import {
   type PersonRecommendationState,
   type ProactivityLevel,
 } from '@selfos/core/recommendations';
-import { buildActivityFeed, computeLifeRings, computeStreak } from '@selfos/core/home';
+import {
+  activeMilestones,
+  buildActivityFeed,
+  computeLifeRings,
+  computeStreak,
+} from '@selfos/core/home';
 import type { ProfileUpdateSuggestion } from '@shared/channels';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { CrisisSupportBanner } from './CrisisSupportBanner';
@@ -463,6 +468,21 @@ export function Home(): JSX.Element {
         at: g.updatedAt,
       });
     }
+  }
+  // Milestone badges (§3.1.7) — each earned milestone celebrates once via the same flow. `streak.days` is 0
+  // during crisis (suppressed), so no rhythm badge is earned then; celebration is also gated below (§8).
+  for (const badge of activeMilestones({
+    streakDays: streak.days,
+    sessionCount: conversations.length,
+    areasExplored,
+    challengesDone: challenges.filter((c) => c.status === 'done').length,
+  })) {
+    completions.push({
+      key: `badge:${badge.id}`,
+      title: badge.title,
+      body: badge.body,
+      at: now.toISOString(),
+    });
   }
 
   const showEncouragement = ready && proactivity !== 'off' && !crisis && !isNew;

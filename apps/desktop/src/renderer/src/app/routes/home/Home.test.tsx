@@ -17,6 +17,7 @@ import { useInboxStore } from '../../../stores/inboxStore';
 import { useGuidanceStore } from '../../../stores/guidanceStore';
 import { useGoalStore } from '../../../stores/goalStore';
 import { useDiscoveryStore } from '../../../stores/discoveryStore';
+import { useSynthesisStore } from '../../../stores/synthesisStore';
 import { useSettingsStore } from '../../../settings/settingsStore';
 
 const ME: Person = {
@@ -181,6 +182,7 @@ afterEach(() => {
   useGuidanceStore.getState().reset();
   useGoalStore.getState().reset();
   useDiscoveryStore.getState().reset();
+  useSynthesisStore.getState().reset();
   useInsightStore.setState({ insights: [], proposals: [], loaded: false });
   useSessionStore.setState({ activePerson: null, access: null });
 });
@@ -225,13 +227,9 @@ describe('Home — hierarchy & status grid', () => {
 
     expect(await screen.findByRole('heading', { name: /ben/i, level: 1 })).toBeInTheDocument();
 
-    // "For you" zone: an open session seeds a "Continue your session" recommendation.
-    const region = await waitFor(() => {
-      const r = forYouRegion();
-      expect(r).not.toBeNull();
-      return r as HTMLElement;
-    });
-    expect(region).toHaveTextContent(/continue your session/i);
+    // The smart next action (the top-ranked recommendation) is elevated into the "For you today" band:
+    // an open session seeds "Continue your session".
+    expect(await screen.findByText(/continue your session/i)).toBeInTheDocument();
 
     // Status overview grid (distinct from the actionable zone).
     expect(
@@ -329,12 +327,8 @@ describe('Home — the "For you" engine', () => {
         ]),
     });
     renderHome();
-    const region = await waitFor(() => {
-      const r = forYouRegion();
-      expect(r).not.toBeNull();
-      return r as HTMLElement;
-    });
-    expect(region).toHaveTextContent(/Angel invited you to a Together session/i);
+    // The Together invitation surfaces as a "For you" recommendation (band focal or strip).
+    expect(await screen.findByText(/Angel invited you to a Together session/i)).toBeInTheDocument();
   });
 
   it('invites a first self-assessment when no profile test is taken (50)', async () => {
@@ -364,12 +358,7 @@ describe('Home — the "For you" engine', () => {
         ),
     });
     renderHome();
-    const region = await waitFor(() => {
-      const r = forYouRegion();
-      expect(r).not.toBeNull();
-      return r as HTMLElement;
-    });
-    expect(region).toHaveTextContent(/a gentle check-in/i);
+    expect(await screen.findByText(/a gentle check-in/i)).toBeInTheDocument();
   });
 
   it('invites an intimacy exercise once 18+ is acked AND an intimacy profile is taken (48)', async () => {
@@ -404,19 +393,22 @@ describe('Home — the "For you" engine', () => {
     expect(region).not.toHaveTextContent(/build on your intimacy profile/i);
   });
 
-  it('surfaces the synthesis observation only when AI is configured', async () => {
+  it('shows the daily reflection observation when AI is configured with a cached synthesis (§3.1.4)', async () => {
+    // The synthesis observation is now the band's daily reflection card, not a "For you" rec. With AI off
+    // (and no cache), the card shows no observation — a calm state, never a dead button.
     installMockBridge({
       conversationsList: () => Promise.resolve([meta('c1', 'A hard week', 'complete')]),
       insightsList: () => Promise.resolve([sessionInsight('s1', -0.4), sessionInsight('s2', 0.5)]),
     });
     setAi(false);
     renderHome();
-    await waitFor(() => expect(forYouRegion()).not.toBeNull());
-    expect(screen.queryByRole('heading', { name: /something i.m noticing/i })).toBeNull();
+    await screen.findByRole('heading', { name: /ben/i, level: 1 });
+    expect(screen.queryByText(/rest and self-worth keep circling/i)).toBeNull();
 
     clearMockBridge();
     useConversationStore.getState().reset();
     useInsightStore.setState({ insights: [], proposals: [], loaded: false });
+    useSynthesisStore.getState().reset();
     installMockBridge({
       secretHas: () => Promise.resolve(true),
       aiKeyStatus: () =>
@@ -428,11 +420,19 @@ describe('Home — the "For you" engine', () => {
         }),
       conversationsList: () => Promise.resolve([meta('c1', 'A hard week', 'complete')]),
       insightsList: () => Promise.resolve([sessionInsight('s1', -0.4), sessionInsight('s2', 0.5)]),
+      coachingGetSynthesis: () =>
+        Promise.resolve({
+          schemaVersion: 1,
+          subjectPersonId: ME.id,
+          observation: 'Rest and self-worth keep circling each other for you this week.',
+          sources: ['sessions'],
+          computedAt: '2026-06-20T00:00:00.000Z',
+        }),
     });
     setAi(true);
     renderHome();
     await waitFor(() =>
-      expect(screen.getByRole('heading', { name: /something i.m noticing/i })).toBeInTheDocument(),
+      expect(screen.getByText(/rest and self-worth keep circling/i)).toBeInTheDocument(),
     );
   });
 
@@ -448,12 +448,8 @@ describe('Home — the "For you" engine', () => {
       ...tookTests({ id: 'bigfive', group: 'personality', instrument: 'IPIP' }),
     });
     renderHome();
-    const region = await waitFor(() => {
-      const r = forYouRegion();
-      expect(r).not.toBeNull();
-      return r as HTMLElement;
-    });
-    expect(region).toHaveTextContent(/you.re all set for now/i);
+    // Nothing ranks → the band's focal shows a calm satisfied line rather than a forced suggestion.
+    expect(await screen.findByText(/you.re all set for now/i)).toBeInTheDocument();
   });
 
   it('a goal recommendation keeps the Still on it / Mark done / Let it go actions', async () => {
@@ -520,6 +516,25 @@ describe('Home — proactivity & safety', () => {
     expect(await screen.findByText(/you.ve shown up 2 times this week/i)).toBeInTheDocument();
   });
 
+  it('celebrates a milestone badge once when a threshold is crossed (60 §3.1.7)', async () => {
+    // 10 sessions (older than the celebration window, so their per-session completions don't compete) →
+    // the "10 sessions in" milestone is the eligible celebration.
+    const old = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
+    installMockBridge({
+      conversationsList: () =>
+        Promise.resolve(
+          Array.from({ length: 10 }, (_, i) => ({
+            id: `c${i}`,
+            title: `S${i}`,
+            updatedAt: old,
+            status: 'complete' as const,
+          })),
+        ),
+    });
+    renderHome();
+    expect(await screen.findByText(/10 sessions in/i)).toBeInTheDocument();
+  });
+
   it('surfaces the supportive crisis banner on recurring distress, and suppresses "For you"', async () => {
     const recentCrisis = (id: string, daysAgo: number): Insight => ({
       id,
@@ -539,16 +554,30 @@ describe('Home — proactivity & safety', () => {
       createdAt: 'now',
       updatedAt: 'now',
     });
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     installMockBridge({
       goalsList: () => Promise.resolve([staleGoal('g1', 'finish the memoir')]),
       insightsList: () => Promise.resolve([recentCrisis('x1', 1), recentCrisis('x2', 5)]),
+      // A live 2-day activity run — WITHOUT crisis this would show a rhythm streak pill; crisis must suppress
+      // it (§8, the top gamification guardrail — a struggling person is never streak-shamed).
+      conversationsList: () =>
+        Promise.resolve([
+          {
+            id: 'c1',
+            title: 'A',
+            updatedAt: new Date().toISOString(),
+            status: 'complete' as const,
+          },
+          { id: 'c2', title: 'B', updatedAt: yesterday, status: 'complete' as const },
+        ]),
     });
     renderHome();
     expect(await screen.findByText(/carrying a lot/i)).toBeInTheDocument();
     expect(screen.getByText('988')).toBeInTheDocument();
-    // Encouragement de-escalates: no "For you" pushes during distress.
+    // Encouragement de-escalates: no "For you" pushes during distress, and no rhythm streak.
     expect(forYouRegion()).toBeNull();
     expect(screen.queryByRole('heading', { name: /a goal worth a check-in/i })).toBeNull();
+    expect(screen.queryByText(/rhythm/i)).toBeNull();
   });
 
   it('does not surface the crisis banner for a single recent flag', async () => {

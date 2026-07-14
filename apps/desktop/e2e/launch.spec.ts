@@ -935,8 +935,8 @@ test('proactive coaching: the synthesis card shows the cached observation and se
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    // Home surfaces the cross-feature observation as a gentle, non-clinical nudge.
-    await expect(w.getByRole('heading', { name: /something i.m noticing/i })).toBeVisible();
+    // Home surfaces the cross-feature observation as the daily reflection (60 §3.1.4), a gentle nudge.
+    await expect(w.getByText('Reflection', { exact: true })).toBeVisible();
     // Scope to the card (main) — the observation also appears in the coaching-synthesis toast (role=status).
     await expect(w.getByRole('main').getByText(/connection keeps surfacing/i)).toBeVisible();
     // Polish guard (§9): the proactive cards reflow with no horizontal overflow at phone width.
@@ -1092,13 +1092,13 @@ test('home (53): the "For you" zone ranks recommendations, reflects momentum, di
   try {
     const w = await app.firstWindow();
 
-    // The focal "For you" zone (a labelled region) ranks the relevant next steps for this person.
-    const forYou = w.getByRole('region', { name: 'For you' });
-    await expect(forYou).toBeVisible();
-    await expect(forYou.getByRole('heading', { name: /a goal worth a check-in/i })).toBeVisible();
-    await expect(forYou.getByRole('heading', { name: /try a guided session/i })).toBeVisible();
-    // Each recommendation carries a person-specific REASON (not just a generic CTA).
-    await expect(forYou.getByText(/finish the memoir/i)).toBeVisible();
+    // The "For you today" zone ranks the relevant next steps — the top one is elevated into the band's
+    // focal card, the rest into the "For you" strip; both recommendations are present on the page (60 §3.6).
+    await expect(w.getByRole('heading', { name: /a goal worth a check-in/i })).toBeVisible();
+    await expect(w.getByRole('heading', { name: /try a guided session/i })).toBeVisible();
+    // Each recommendation carries a person-specific REASON (not just a generic CTA). The goal text can also
+    // appear in the activity feed, so scope to the first match (the rec card).
+    await expect(w.getByText(/finish the memoir/i).first()).toBeVisible();
 
     // Gentle momentum reflection in the header — what positively happened, never a streak/target.
     await expect(w.getByText(/you’ve explored 2 areas of yourself/i)).toBeVisible();
@@ -1108,11 +1108,88 @@ test('home (53): the "For you" zone ranks recommendations, reflects momentum, di
     await expect(w.getByRole('heading', { name: /what the coach knows/i })).toBeVisible();
 
     // Dismiss ("Not now") suppresses a recommendation calmly; the guided one stays.
-    await forYou.getByRole('button', { name: /a goal worth a check-in.*for now/i }).click();
-    await expect(forYou.getByRole('heading', { name: /a goal worth a check-in/i })).toHaveCount(0);
-    await expect(forYou.getByRole('heading', { name: /try a guided session/i })).toBeVisible();
+    await w.getByRole('button', { name: /a goal worth a check-in.*for now/i }).click();
+    await expect(w.getByRole('heading', { name: /a goal worth a check-in/i })).toHaveCount(0);
+    await expect(w.getByRole('heading', { name: /try a guided session/i })).toBeVisible();
 
     // 360px: the full surface renders with NO horizontal overflow — not page-level, not an inner scrollbar.
+    await w.setViewportSize({ width: 360, height: 800 });
+    const overflow = await w.evaluate(() => {
+      const offenders: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          offenders.push(`${el.tagName}.${el.className}`);
+        }
+      });
+      const main = document.querySelector('main');
+      return { offenders, mainOverflow: main ? main.scrollWidth - main.clientWidth : 0 };
+    });
+    expect(overflow.offenders).toEqual([]);
+    expect(overflow.mainOverflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('home (60): the Hybrid dashboard shows the quick dock, life-rings, and the cross-feature activity feed; a dock action routes; 360px clean', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('master key missing');
+  const now = new Date().toISOString();
+  await saveConversation(fs, key, {
+    id: 'c1',
+    schemaVersion: 1,
+    personId: 'owner-1',
+    title: 'A hard week',
+    status: 'inProgress',
+    messages: [{ role: 'user', content: 'hi', ts: now }],
+    createdAt: now,
+    updatedAt: now,
+  });
+  await saveDream(fs, key, {
+    id: 'd1',
+    schemaVersion: 1,
+    personId: 'owner-1',
+    title: 'The shifting city',
+    narrative: 'I was wandering through a city that kept rearranging itself.',
+    lucid: false,
+    nightmare: false,
+    tags: [],
+    people: [],
+    sensitivity: 'standard',
+    status: 'captured',
+    createdAt: now,
+    updatedAt: now,
+  });
+  await seedTwoAreas(fs, key);
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    // Quick-action dock — capability-gated one-tap starters.
+    await expect(w.getByRole('button', { name: /start a session/i })).toBeVisible();
+    await expect(w.getByRole('button', { name: /log a dream/i })).toBeVisible();
+
+    // Life-rings whole-life glance (a level word + a %).
+    await expect(w.getByRole('heading', { name: /your life, lately/i })).toBeVisible();
+
+    // The cross-feature activity feed ("recent across everything") surfaces a recent event.
+    await expect(w.getByRole('heading', { name: 'Recent', exact: true })).toBeVisible();
+    await expect(w.getByText(/across everything/i)).toBeVisible();
+    await expect(w.getByText(/you logged a dream/i)).toBeVisible();
+
+    // A dock action routes into its surface.
+    await w.getByRole('button', { name: /log a dream/i }).click();
+    await expect(w).toHaveURL(/#\/dreams$/);
+
+    // 360px: the full surface renders with NO horizontal overflow — the feed's internal scroll is
+    // overflow-Y only, so it is never a horizontal offender (60 §3.3/§9).
+    await w.getByRole('link', { name: 'Home' }).click();
     await w.setViewportSize({ width: 360, height: 800 });
     const overflow = await w.evaluate(() => {
       const offenders: string[] = [];
@@ -1235,24 +1312,20 @@ test('home (53 Slice B): self-assessment / wellbeing / intimacy recommendations 
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    const forYou = w.getByRole('region', { name: 'For you' });
-    await expect(forYou).toBeVisible();
-
+    // The top rec is the band's focal, the rest the "For you" strip — assert page-wide (60 §3.6).
     // take-a-test fires (no personality/relationships profile taken) + wellbeing-checkin fires (overdue).
-    await expect(
-      forYou.getByRole('heading', { name: /discover how you see yourself/i }),
-    ).toBeVisible();
-    await expect(forYou.getByRole('heading', { name: /a gentle check-in/i })).toBeVisible();
+    await expect(w.getByRole('heading', { name: /discover how you see yourself/i })).toBeVisible();
+    await expect(w.getByRole('heading', { name: /a gentle check-in/i })).toBeVisible();
 
     // The intimacy exercise is 18+-gated → withheld even though the intimacy profile exists (no premature
     // exposure; the gate is the boundary, 48 §8). Without the ack, an intimacy test is also not in the
     // adult-filtered catalog, so the candidate never forms.
-    await expect(
-      forYou.getByRole('heading', { name: /build on your intimacy profile/i }),
-    ).toHaveCount(0);
+    await expect(w.getByRole('heading', { name: /build on your intimacy profile/i })).toHaveCount(
+      0,
+    );
 
     // The take-a-test primary action routes into the You hub.
-    await forYou.getByRole('button', { name: /take a quick assessment/i }).click();
+    await w.getByRole('button', { name: /take a quick assessment/i }).click();
     await expect(w.getByRole('heading', { name: /you — how you see yourself/i })).toBeVisible();
   } finally {
     await app.close();
@@ -7379,16 +7452,17 @@ test('home: a seeded person sees the cards, links into them, and fits at 390px',
     const w = await app.firstWindow();
     await expect(w.getByRole('heading', { name: /tester/i, level: 1 })).toBeVisible();
 
-    // Continue card — the two open sessions, not the completed one.
+    // Continue card — the two open sessions, not the completed one. Titles can also appear in the activity
+    // feed, so scope text to the first match, and prove the completed one is not resumable by the Resume count.
     await expect(w.getByRole('heading', { name: /pick up where you left off/i })).toBeVisible();
-    await expect(w.getByText('A hard week')).toBeVisible();
-    await expect(w.getByText('On the back burner')).toBeVisible();
-    await expect(w.getByText('Wrapped up')).toHaveCount(0);
+    await expect(w.getByText('A hard week').first()).toBeVisible();
+    await expect(w.getByText('On the back burner').first()).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Resume' })).toHaveCount(2); // only the two OPEN sessions
 
     // Wellbeing, dreams, memory all render.
     await expect(w.getByRole('heading', { name: 'Wellbeing' })).toBeVisible();
     await expect(w.getByRole('heading', { name: 'Recent dreams' })).toBeVisible();
-    await expect(w.getByText('The shifting city')).toBeVisible();
+    await expect(w.getByText('The shifting city').first()).toBeVisible();
     await expect(w.getByRole('heading', { name: /what the coach knows/i })).toBeVisible();
 
     // 390px: no horizontal overflow anywhere (page-level AND no inner scrollbar).
@@ -9422,7 +9496,7 @@ test('wellbeing (51): mood check-in → GENTLE range + help line; AI-off narrate
     // Home folds the two check-ins into the Wellbeing picture as a distinct sibling series.
     await w.getByRole('link', { name: 'Home' }).click();
     await expect(w.getByRole('heading', { name: 'Wellbeing' })).toBeVisible();
-    await expect(w.getByText('Your check-ins')).toBeVisible();
+    await expect(w.getByText('Your check-ins').first()).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -10106,11 +10180,11 @@ test('together (58) phase H1: a pending Together invitation surfaces on the invi
     await w.getByPlaceholder('e.g. Feeling disconnected lately').fill('Reconnecting');
     await w.getByRole('button', { name: 'Send invitation' }).click();
 
-    // Switch to Angel → her Home "For you" zone surfaces the invitation, named by the inviter.
+    // Switch to Angel → her Home "For you" zone surfaces the invitation, named by the inviter (the top rec
+    // is the band's focal card, so assert page-wide — 60 §3.6).
     await switchTogetherPerson(w, 'Angel');
     await w.getByRole('link', { name: 'Home' }).click();
-    const forYou = w.getByRole('region', { name: 'For you' });
-    await expect(forYou.getByText(/Ben invited you to a Together session/i)).toBeVisible();
+    await expect(w.getByText(/Ben invited you to a Together session/i)).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

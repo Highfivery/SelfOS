@@ -33,6 +33,12 @@ import {
   type PersonRecommendationState,
   type ProactivityLevel,
 } from '@selfos/core/recommendations';
+import {
+  activeMilestones,
+  buildActivityFeed,
+  computeLifeRings,
+  computeStreak,
+} from '@selfos/core/home';
 import type { ProfileUpdateSuggestion } from '@shared/channels';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { CrisisSupportBanner } from './CrisisSupportBanner';
@@ -45,8 +51,17 @@ import { QuestionnairesSection } from './QuestionnairesSection';
 import { GettingStarted } from './GettingStarted';
 import { WelcomeOrientationCard } from './WelcomeOrientationCard';
 import { ForYou } from './ForYou';
+import { ForYouBand } from './ForYouBand';
 import { MomentumLine } from './MomentumLine';
 import { CelebrationMoment } from './CelebrationMoment';
+import { QuickActionDock } from './QuickActionDock';
+import { RhythmStreak } from './RhythmStreak';
+import { StatTile } from './StatTile';
+import { TogetherHomeCard } from './TogetherHomeCard';
+import { SharingCard } from './SharingCard';
+import { LifeRings } from './LifeRings';
+import { ActivityFeed } from './ActivityFeed';
+import { CardSkeleton } from './CardSkeleton';
 import { timeOfDayGreeting } from './greeting';
 import { checkInMoodPoints, sessionMoodPoints, wellbeingCheckin } from './wellbeing';
 import styles from './Home.module.css';
@@ -54,6 +69,7 @@ import styles from './Home.module.css';
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const SHOWED_UP_WINDOW_DAYS = 7;
 const GOAL_RECENT_DAYS = 14;
+const RING_WINDOW_DAYS = 30;
 
 /** Whether an ISO timestamp falls within the last `days` (false on a missing/unparseable value). */
 function withinDays(iso: string | undefined, days: number, now: number): boolean {
@@ -62,13 +78,18 @@ function withinDays(iso: string | undefined, days: number, now: number): boolean
   return !Number.isNaN(t) && now - t <= days * MS_PER_DAY && t <= now;
 }
 
+/** Collect the defined, non-empty values from a list of `string | undefined`. */
+function defined(values: (string | undefined)[]): string[] {
+  return values.filter((v): v is string => typeof v === 'string' && v.length > 0);
+}
+
 /**
- * The Home dashboard (17 + 53): a per-active-person overview composed from the existing per-person stores
- * (no new IPC, no per-load AI spend). The 53 redesign imposes a clear hierarchy — a warm greeting + gentle
- * momentum reflection, the supportive crisis banner (supersedes all), a focal "For you" recommendation zone
- * (the deterministic ranking engine), then a clean status overview grid, plus warm completion celebrations.
- * Each surface self-hides when empty; a brand-new person sees getting-started. Loads + recomputes on the
- * active-person change (the per-person isolation rule).
+ * The Hybrid Home dashboard (60): a highly visual, cross-feature command center composed on the renderer
+ * from the existing per-person stores (60 §5.2). A quick-action dock, a greeting + momentum + rhythm streak,
+ * a "For you today" band (the cached AI reflection + the smart next action), a graph-rich bento of feature
+ * cards, and a right rail of life-rings + a cross-feature activity feed — all skeleton-loaded (§3.2), each
+ * region self-hiding when empty, per-person, and full-engagement but crisis-guarded (§8). Slice 1 spends
+ * nothing on load (the reflection is cache-only; Slice 2 adds the daily auto-cadence).
  */
 export function Home(): JSX.Element {
   const activePerson = useSessionStore((s) => s.activePerson);
@@ -85,25 +106,27 @@ export function Home(): JSX.Element {
   const canTakeTests = useSessionStore((s) => s.can('tests.own'));
   const canTakeChallenges = useSessionStore((s) => s.can('challenges.own'));
   const canTogether = useSessionStore((s) => s.can('together.own'));
-  // The reactive capability snapshot the engine filters gated providers against (§5.2) — built from the
-  // active person's `can(...)` checks for the gates the providers use (a new gate adds one line here).
+  // The reactive capability snapshot the engine + the quick-dock filter gated actions against.
   const capabilities = new Set<string>();
   if (hasSessions) capabilities.add('sessions.own');
   if (canCreateQuestionnaires) capabilities.add('questionnaires.create');
   if (canViewMemory) capabilities.add('memory.own');
   if (canDoIntake) capabilities.add('intake.own');
-  if (canTakeTests) capabilities.add('tests.own'); // 50/51 — take-a-test + wellbeing-checkin gates
-  if (canTakeChallenges) capabilities.add('challenges.own'); // 52 — challenge providers' gate
-  if (canTogether) capabilities.add('together.own'); // 58 — the together-session provider's gate
+  if (canTakeTests) capabilities.add('tests.own');
+  if (canTakeChallenges) capabilities.add('challenges.own');
+  if (canTogether) capabilities.add('together.own');
+  if (canOwnDreams) capabilities.add('dreams.own');
 
   const conversations = useConversationStore((s) => s.conversations);
   const sessionCosts = useConversationStore((s) => s.sessionCosts);
   const dreams = useDreamStore((s) => s.dreams);
   const patternStats = useDreamPatternStore((s) => s.stats);
   const insights = useInsightStore((s) => s.insights);
+  const outbound = useInsightStore((s) => s.outbound);
   const proposals = useInsightStore((s) => s.proposals);
   const inboxItems = useInboxStore((s) => s.items);
   const sentOverview = useQuestionnaireStore((s) => s.sentOverview);
+  const relationships = usePeopleStore((s) => s.relationships);
   const goals = useGoalStore((s) => s.goals);
   const challenges = useChallengeStore((s) => s.challenges);
   const challengeSuggestion = useChallengeStore((s) => s.suggestion);
@@ -113,6 +136,7 @@ export function Home(): JSX.Element {
   const testCatalog = useTestStore((s) => s.catalog);
   const resultsByTest = useTestStore((s) => s.resultsByTest);
   const togetherSessions = useTogetherStore((s) => s.sessions);
+  const togetherPartners = useTogetherStore((s) => s.partners);
   const intake = useIntakeStore((s) => s.state);
   const dismissed = useDiscoveryStore((s) => s.dismissed);
 
@@ -136,29 +160,23 @@ export function Home(): JSX.Element {
       useDreamStore.getState().load(),
       useDreamPatternStore.getState().load(),
       useInsightStore.getState().load(),
-      useInsightStore.getState().loadReconcileState(), // queued merge proposals → the "memory stale" signal (39)
+      useInsightStore.getState().loadReconcileState(),
       useInboxStore.getState().load(),
-      // The sender's questionnaire overview feeds the Questionnaires section's stats/needs-you/insights (59).
-      // Bridge gates `sentOverview` on `questionnaires.viewResults` → empty when not permitted.
       useQuestionnaireStore.getState().load(),
-      // People feed the Questionnaires section's "who you haven't asked yet" coverage (59 §3.1a).
       usePeopleStore.getState().load(),
       useGuidanceStore.getState().load(),
       useIntakeStore.getState().load(),
       useSynthesisStore.getState().load(),
-      useGoalStore.getState().load(), // bridge gates on memory.own → [] when not permitted
-      useChallengeStore.getState().load(), // bridge gates on challenges.own → [] when not permitted (52)
-      // Self-assessments (50/51): the catalog + per-test results feed the WellbeingCard sibling check-in
-      // series, the `take-a-test` / `wellbeing-checkin` / `intimacy-exercise` providers, and the momentum.
-      // Bridge gates on tests.own → empty when not permitted; the 18+ tests are withheld until acked.
+      useGoalStore.getState().load(),
+      useChallengeStore.getState().load(),
       useTestStore.getState().load(),
-      useTogetherStore.getState().load(), // bridge gates on together.own + a live edge → [] otherwise (58)
-      useDiscoveryStore.getState().load(), // recommendation dismissals + celebration signatures
+      useTogetherStore.getState().load(),
+      useDiscoveryStore.getState().load(),
       window.selfos?.coachingGetPrefs().then((p) => {
         if (!cancelled) setProactivity(p?.proactivity ?? 'gentle');
       }),
       window.selfos?.profileSuggestions().then((s) => {
-        if (!cancelled) setProfileSuggestions(s ?? []); // bridge gates on intake.own → [] when not permitted
+        if (!cancelled) setProfileSuggestions(s ?? []);
       }),
     ]).then(() => {
       if (!cancelled) setReady(true);
@@ -175,19 +193,13 @@ export function Home(): JSX.Element {
   const openSessions = conversations.filter(
     (c) => c.status === 'inProgress' || c.status === 'onHold',
   ).length;
-  // `insightStore` holds only the ACTIVE person's memory (own + relationships' shareable facts — 20 §5.1);
-  // this filter keeps Home's cards + signals to the person's OWN approved insights.
   const approvedInsights = insights.filter(
     (i) => i.approved && i.subjectPersonId === activePersonId,
   );
   const moodPoints = activePersonId ? sessionMoodPoints(insights, activePersonId) : [];
-  // The dated PHQ-9 mood-check-in results (51 §5.3) → the WellbeingCard's sibling "your check-ins" series.
   const moodResults = resultsByTest['phq9'] ?? [];
   const checkInPoints = checkInMoodPoints(moodResults);
-  // The gentle, never-escalating mood/anxiety re-check signal (51 §3.4): due only when a prior check-in has
-  // gone ≥14 days quiet — never fires for someone who has never checked in (§8).
   const wbCheckin = wellbeingCheckin(resultsByTest, nowMs);
-  // The person's taken self-assessments (with their group) → the `take-a-test` + `intimacy-exercise` signals.
   const takenTests = testCatalog
     .filter((t) => (resultsByTest[t.id]?.length ?? 0) > 0)
     .map((t) => ({
@@ -195,9 +207,6 @@ export function Home(): JSX.Element {
       group: t.group,
       takenAt: resultsByTest[t.id]?.[0]?.takenAt ?? '',
     }));
-  // Cross-insight crisis awareness (40 §3.5): recurring distress across the person's OWN approved insights +
-  // the dream nightmare nudge → a supportive surface. NOT governed by the proactivity dial (it's safety). It
-  // also de-escalates encouragement: while recurring, the engine suppresses all pushes (§8).
   const crisis = aggregateCrisisSignal({
     insights: approvedInsights,
     nightmareNudge: patternStats?.nightmareNudge === true,
@@ -214,11 +223,7 @@ export function Home(): JSX.Element {
     approvedInsights.length === 0 &&
     inboxCount === 0 &&
     goals.length === 0 &&
-    // Someone who has SENT a questionnaire isn't brand new — the dedicated Questionnaires section (59) has
-    // real state to show them, so they see the dashboard, not getting-started.
     Object.keys(sentOverview).length === 0 &&
-    // A pending Together invitation (or any couples-session signal) is a real, actionable relationship
-    // cue — such a person is NOT "brand new", so the invite can surface in "For you" (58 §3.12).
     togetherSessions.length === 0;
 
   const lightActivity = conversations.length + dreams.length + goals.length <= 2;
@@ -229,8 +234,14 @@ export function Home(): JSX.Element {
       ? intake.sections.find((m) => m.id === depthSuggestion.sectionId)?.title
       : undefined;
 
-  // The pure inputs the deterministic ranking engine ranks over (53 §5.1). Assembled from stores Home already
-  // loaded — no AI, no extra I/O. Slice-B features extend this additively (their own provider reads it).
+  const areasExplored = new Set(approvedInsights.flatMap((i) => i.categories ?? [])).size;
+  const goalsMoving = goals.filter(
+    (g) =>
+      (g.status === 'open' || g.status === 'inProgress') &&
+      withinDays(g.lastTouchedAt ?? g.updatedAt, GOAL_RECENT_DAYS, nowMs),
+  ).length;
+
+  // The pure inputs the deterministic ranking engine ranks over (53 §5.1).
   const recState: PersonRecommendationState = {
     capabilities,
     adultAcknowledged,
@@ -245,8 +256,6 @@ export function Home(): JSX.Element {
     ...(synthesis?.computedAt ? { synthesisComputedAt: synthesis.computedAt } : {}),
     canSynthesize: approvedInsights.length >= 2,
     portraitStale: freshness.length > 0,
-    // A stable signature of the pending freshness suggestions so a dismissed "refresh" re-surfaces only when
-    // NEW suggestions arrive (§7) — sorted ids, never their content (no leak in the device-local key).
     freshnessSignature: freshness
       .map((s) => s.id)
       .sort()
@@ -260,7 +269,6 @@ export function Home(): JSX.Element {
     guidedSuggestionCount: guidedSuggestions?.items.length ?? 0,
     ...(guidedSuggestions?.generatedAt ? { guidedGeneratedAt: guidedSuggestions.generatedAt } : {}),
     lightActivity,
-    // Challenges (52) — the active-challenge check-in nudge + the proactive "take one on" invite.
     activeChallenge: featuredActiveChallenge(challenges) !== undefined,
     challengeCheckInDue: checkInDueChallenge(challenges, now) !== undefined,
     ...(checkInDueChallenge(challenges, now)
@@ -283,44 +291,155 @@ export function Home(): JSX.Element {
     ...(challengeSuggestion?.computedAt
       ? { challengeSuggestionComputedAt: challengeSuggestion.computedAt }
       : {}),
-    // Absorbed into the dedicated Home Questionnaires section (59 §5.4) — the generic "For you" nudge no longer
-    // fires, so its richer replacement (go-deeper / variety / spicy) doesn't duplicate it.
     questionnaireGapHint: false,
     memoryStale: proposals.length > 0,
     memorySignature: proposals
       .map((p) => p.id)
       .sort()
       .join(','),
-    // Self-assessments / wellbeing / intimacy (50/51/48) — Slice B providers.
     testResults: takenTests,
     wellbeingCheckinDue: wbCheckin.due,
     ...(wbCheckin.lastAt ? { lastWellbeingCheckinAt: wbCheckin.lastAt } : {}),
-    // Together (58 §3.12) — the couples-session Home nudge (invite / your turn / quiet pair).
     togetherNudge: activePersonId
       ? computeTogetherHomeNudge(togetherSessions, activePersonId, now)
       : null,
   };
 
   const dismissedSet = new Set(dismissed);
-  const recs = rankRecommendations(listRecommendationProviders(), recState, {
+  const allRecs = rankRecommendations(listRecommendationProviders(), recState, {
     dismissed: dismissedSet,
   });
+  // The synthesis observation is now the band's daily reflection (§3.6), so drop the duplicate rec.
+  const recs = allRecs.filter((r) => r.id !== 'synthesis-observation');
 
-  // Momentum (gentle, never a streak): a rolling-window reflection of what positively happened (§3.3).
   const momentum = computeMomentum({
     showedUpThisWeek:
       conversations.filter((c) => withinDays(c.updatedAt, SHOWED_UP_WINDOW_DAYS, nowMs)).length +
       dreams.filter((d) => withinDays(d.createdAt, SHOWED_UP_WINDOW_DAYS, nowMs)).length,
-    areasExplored: new Set(approvedInsights.flatMap((i) => i.categories ?? [])).size,
-    goalsMovingForward: goals.filter(
-      (g) =>
-        (g.status === 'open' || g.status === 'inProgress') &&
-        withinDays(g.lastTouchedAt ?? g.updatedAt, GOAL_RECENT_DAYS, nowMs),
-    ).length,
+    areasExplored,
+    goalsMovingForward: goalsMoving,
   });
 
-  // Completions worth a warm, once-only celebration (§3.5). The helper picks the newest recent uncelebrated
-  // one; `CelebrationMoment` records its signature so a re-visit never re-celebrates.
+  // The rhythm streak (§3.1.1) — consecutive active days from ANY meaningful action. Crisis-suppressed (§8).
+  const streak = computeStreak({
+    now,
+    crisis,
+    activity: defined([
+      ...conversations.map((c) => c.updatedAt),
+      ...dreams.map((d) => d.createdAt),
+      ...moodResults.map((r) => r.takenAt),
+      // A Together session's last message counts toward YOUR rhythm only when it was yours — when it's your
+      // turn, the partner acted last, so it isn't your activity (streak = days YOU showed up).
+      ...togetherSessions.filter((t) => !t.yourTurn).map((t) => t.lastMessageAt),
+      ...inboxItems.map((i) => i.answeredAt),
+      ...challenges.filter((c) => c.checkInAt).map((c) => c.updatedAt),
+    ]),
+  });
+
+  // The life-rings whole-life glance (§3.1.6). Crisis softens every ring (§8).
+  const moodValues = [...moodPoints, ...checkInPoints].map((p) => p.valence);
+  const rings = computeLifeRings({
+    crisis,
+    signals: {
+      ...(moodValues.length > 0
+        ? { moodValenceMean: moodValues.reduce((a, b) => a + b, 0) / moodValues.length }
+        : {}),
+      checkInCount: checkInPoints.length,
+      hasRelationships: relationships.length > 0,
+      activePartners: togetherPartners.length,
+      togetherEventsRecent: togetherSessions.filter((t) =>
+        withinDays(t.lastMessageAt, RING_WINDOW_DAYS, nowMs),
+      ).length,
+      sessionsRecent: conversations.filter((c) => withinDays(c.updatedAt, RING_WINDOW_DAYS, nowMs))
+        .length,
+      dreamsRecent: dreams.filter((d) => withinDays(d.createdAt, RING_WINDOW_DAYS, nowMs)).length,
+      areasExplored,
+      goalsMoving,
+    },
+  });
+
+  // The cross-feature activity feed (§3.1.6).
+  const feed = buildActivityFeed({
+    now,
+    sessions: conversations.map((c) => ({
+      id: c.id,
+      title: c.title,
+      status: c.status,
+      updatedAt: c.updatedAt,
+    })),
+    dreams: dreams.map((d) => ({
+      id: d.id,
+      ...(d.title ? { title: d.title } : {}),
+      createdAt: d.createdAt,
+    })),
+    // Only the ACTIVE person's own insights feed the "needs review" stream — never a related person's
+    // shareable-fact insight (defense-in-depth per-person isolation, matching every other consumer here).
+    insights: insights
+      .filter((i) => i.subjectPersonId === activePersonId)
+      .map((i) => ({
+        id: i.id,
+        summary: i.summary,
+        approved: i.approved,
+        createdAt: i.createdAt,
+      })),
+    inbox: inboxItems.map((i) => ({
+      assignmentId: i.assignmentId,
+      title: i.title,
+      senderName: i.senderName ?? 'Someone',
+      createdAt: i.createdAt,
+      answerable: i.answerable,
+      fromSelf: i.fromSelf,
+    })),
+    sentOverview: Object.values(sentOverview).map((o) => {
+      const answered = o.recipients.find((r) => r.answered);
+      return {
+        questionnaireId: o.questionnaireId,
+        ...(answered ? { recipientName: answered.name } : {}),
+        newResponses: o.newResponses,
+        ...(o.answeredAt ? { answeredAt: o.answeredAt } : {}),
+        lastSentAt: o.lastSentAt,
+      };
+    }),
+    together: togetherSessions.map((t) => {
+      const partnerName = activePersonId
+        ? t.participants.find((p) => p.personId !== activePersonId)?.displayName
+        : undefined;
+      return {
+        id: t.id,
+        ...(partnerName ? { partnerName } : {}),
+        yourTurn: t.yourTurn,
+        unreadCount: t.unreadCount,
+        status: t.status,
+        ...(t.lastMessageAt ? { lastMessageAt: t.lastMessageAt } : {}),
+        createdAt: t.createdAt,
+      };
+    }),
+    challenges: challenges.map((c) => ({
+      id: c.id,
+      action: c.action,
+      status: c.status,
+      ...(c.checkInAt ? { checkInAt: c.checkInAt } : {}),
+      createdAt: c.createdAt,
+    })),
+    goals: goals.map((g) => ({
+      id: g.id,
+      text: g.text,
+      status: g.status,
+      updatedAt: g.updatedAt,
+    })),
+    moodCheckIns: moodResults.map((r) => ({ at: r.takenAt })),
+  });
+
+  // Stat tiles — honest "new this week" deltas (increase-only, §8).
+  const sessions7d = conversations.filter((c) => withinDays(c.updatedAt, 7, nowMs)).length;
+  const newInsights7d = approvedInsights.filter((i) => withinDays(i.createdAt, 7, nowMs)).length;
+  const dreams30d = dreams.filter((d) => withinDays(d.createdAt, RING_WINDOW_DAYS, nowMs)).length;
+  const newDreams7d = dreams.filter((d) => withinDays(d.createdAt, 7, nowMs)).length;
+  const needReview = insights.filter(
+    (i) => !i.approved && i.subjectPersonId === activePersonId,
+  ).length;
+
+  // Completions worth a warm celebration (§3.5).
   const completions: Completion[] = [];
   if (intake?.session.status === 'complete' && intake.session.completedAt) {
     completions.push({
@@ -350,71 +469,145 @@ export function Home(): JSX.Element {
       });
     }
   }
+  // Milestone badges (§3.1.7) — each earned milestone celebrates once via the same flow. `streak.days` is 0
+  // during crisis (suppressed), so no rhythm badge is earned then; celebration is also gated below (§8).
+  for (const badge of activeMilestones({
+    streakDays: streak.days,
+    sessionCount: conversations.length,
+    areasExplored,
+    challengesDone: challenges.filter((c) => c.status === 'done').length,
+  })) {
+    completions.push({
+      key: `badge:${badge.id}`,
+      title: badge.title,
+      body: badge.body,
+      at: now.toISOString(),
+    });
+  }
 
-  // The "For you" zone, momentum line, and celebration are PUSHES — suppressed entirely when proactivity is
-  // off, during a recurring-distress moment (lead with support), and for a brand-new person (getting-started
-  // owns the screen). The status grid + crisis banner are unaffected (§3.7/§7/§8).
   const showEncouragement = ready && proactivity !== 'off' && !crisis && !isNew;
   const celebration = showEncouragement ? pendingCelebration(completions, dismissedSet, now) : null;
 
   return (
     <div className={styles.home}>
-      <header>
-        <h1 className={styles.greeting}>{greeting}</h1>
-        {showEncouragement ? <MomentumLine reflection={momentum} /> : null}
+      <header className={styles.header}>
+        <div className={styles.headerMain}>
+          <h1 className={styles.greeting}>{greeting}</h1>
+          {showEncouragement ? <MomentumLine reflection={momentum} /> : null}
+        </div>
+        <RhythmStreak streak={streak} />
       </header>
 
-      {ready && crisis ? <CrisisSupportBanner /> : null}
-
-      {showEncouragement ? (
-        <ForYou recs={recs} configured={configured} depthSuggestion={depthSuggestion} />
-      ) : null}
-
-      {/* Onboarding stays a STATUS surface: a "continue your intake" nudge while incomplete, and a
-          refresh prompt once the portrait drifts from edited answers. Self-hides when complete + fresh. */}
-      {ready ? <OnboardingCard /> : null}
-
-      {/* The dedicated Questionnaires section (59): stats + needs-you + latest insight are STATUS; the "Ideas
-          for you" are a PUSH (gated by showEncouragement). Absorbs the old InboxCard + generic gap nudge. */}
-      {ready && !isNew ? (
-        <QuestionnairesSection
-          canCreate={canCreateQuestionnaires}
-          canViewResults={canViewResults}
-          canAnswer={canAnswerQuestionnaires}
-          adultAcknowledged={adultAcknowledged}
-          showIdeas={showEncouragement}
-          subjectPersonId={activePersonId}
-          {...(recState.togetherNudge?.partnerName
-            ? { togetherPartnerName: recState.togetherNudge.partnerName }
-            : {})}
-        />
-      ) : null}
-
-      {!ready ? null : isNew ? (
-        <GettingStarted
-          hasSessions={hasSessions}
-          canOwnDreams={canOwnDreams}
-          canManagePeople={canManagePeople}
-          canCreateQuestionnaires={canCreateQuestionnaires}
-        />
+      {!ready ? (
+        <>
+          <div className={styles.dock} aria-hidden="true">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className={styles.skDockItem} />
+            ))}
+          </div>
+          <div className={styles.band}>
+            <CardSkeleton lines={4} />
+            <CardSkeleton lines={3} />
+          </div>
+          <div className={styles.main}>
+            <div className={styles.mainLeft}>
+              <CardSkeleton lines={2} />
+              <CardSkeleton lines={4} />
+              <CardSkeleton lines={3} />
+            </div>
+            <div className={styles.rail}>
+              <CardSkeleton lines={3} />
+              <CardSkeleton lines={5} />
+            </div>
+          </div>
+        </>
       ) : (
-        <div className={styles.grid}>
-          <ContinueCard
-            conversations={conversations}
-            sessionCosts={sessionCosts}
-            isAdmin={isAdmin}
-          />
-          <WellbeingCard points={moodPoints} checkIns={checkInPoints} />
-          <DreamsCard dreams={dreams} stats={patternStats} />
-          <MemoryCard insights={approvedInsights} canView={canViewMemory} />
-        </div>
+        <>
+          {/* A brand-new person gets the getting-started path only — the dock's starters would collide
+              with it (§3.1.8). */}
+          {!isNew ? <QuickActionDock capabilities={capabilities} /> : null}
+
+          {crisis ? <CrisisSupportBanner /> : null}
+
+          {showEncouragement ? (
+            <ForYouBand
+              recs={recs}
+              configured={configured}
+              canSynthesize={recState.canSynthesize}
+              depthSuggestion={depthSuggestion}
+            />
+          ) : null}
+
+          {showEncouragement && recs.length > 1 ? (
+            <ForYou
+              recs={recs.slice(1)}
+              configured={configured}
+              depthSuggestion={depthSuggestion}
+            />
+          ) : null}
+
+          <OnboardingCard />
+
+          {isNew ? (
+            <GettingStarted
+              hasSessions={hasSessions}
+              canOwnDreams={canOwnDreams}
+              canManagePeople={canManagePeople}
+              canCreateQuestionnaires={canCreateQuestionnaires}
+            />
+          ) : (
+            <div className={styles.main}>
+              <div className={styles.mainLeft}>
+                <div className={styles.statStrip}>
+                  <StatTile label="Sessions · 7d" value={String(sessions7d)} />
+                  <StatTile
+                    label="Insights"
+                    value={String(approvedInsights.length)}
+                    {...(newInsights7d > 0 ? { delta: newInsights7d } : {})}
+                    {...(needReview > 0 ? { sub: `${needReview} need review` } : {})}
+                  />
+                  <StatTile
+                    label="Dreams · 30d"
+                    value={String(dreams30d)}
+                    {...(newDreams7d > 0 ? { delta: newDreams7d } : {})}
+                  />
+                </div>
+                <WellbeingCard points={moodPoints} checkIns={checkInPoints} />
+                <TogetherHomeCard sessions={togetherSessions} myId={activePersonId} />
+                <ContinueCard
+                  conversations={conversations}
+                  sessionCosts={sessionCosts}
+                  isAdmin={isAdmin}
+                />
+                <DreamsCard dreams={dreams} stats={patternStats} />
+                <MemoryCard insights={approvedInsights} canView={canViewMemory} />
+                <SharingCard outbound={outbound} />
+              </div>
+              <div className={styles.rail}>
+                <LifeRings rings={rings} />
+                <ActivityFeed events={feed} />
+              </div>
+            </div>
+          )}
+
+          {!isNew ? (
+            <QuestionnairesSection
+              canCreate={canCreateQuestionnaires}
+              canViewResults={canViewResults}
+              canAnswer={canAnswerQuestionnaires}
+              adultAcknowledged={adultAcknowledged}
+              showIdeas={showEncouragement}
+              subjectPersonId={activePersonId}
+              {...(recState.togetherNudge?.partnerName
+                ? { togetherPartnerName: recState.togetherNudge.partnerName }
+                : {})}
+            />
+          ) : null}
+
+          {!crisis ? <WelcomeOrientationCard /> : null}
+          {showEncouragement ? <CelebrationMoment completion={celebration} /> : null}
+        </>
       )}
-
-      {/* First-run orientation sits near the bottom (§3.1.7) so the focal "For you" zone leads — and never
-          above the crisis banner during a distress moment (§8: never minimize distress). Shown once. */}
-      {ready && !crisis ? <WelcomeOrientationCard /> : null}
-
-      {showEncouragement ? <CelebrationMoment completion={celebration} /> : null}
 
       <CrisisFooter />
     </div>

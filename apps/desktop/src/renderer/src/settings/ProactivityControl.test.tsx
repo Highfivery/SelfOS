@@ -43,4 +43,24 @@ describe('ProactivityControl (40 §3.6)', () => {
     // The "off" hint (always-available crisis support) is shown.
     expect(screen.getByText(/only responds when you start something/i)).toBeInTheDocument();
   });
+
+  it('toggles the daily reflection independently (60 §6.3), and disables it when proactivity is off', async () => {
+    const setPrefs = vi.fn(() => Promise.resolve({ schemaVersion: 1 as const }));
+    installMockBridge({
+      coachingGetPrefs: () =>
+        Promise.resolve({ schemaVersion: 1, proactivity: 'gentle', dailyReflection: true }),
+      coachingSetPrefs: setPrefs,
+    });
+    render(<ProactivityControl />);
+    const toggle = screen.getByLabelText('Auto-generate a daily reflection on Home');
+    await waitFor(() => expect(toggle).toBeEnabled());
+    expect(toggle).toHaveAttribute('aria-checked', 'true');
+
+    await userEvent.click(toggle);
+    expect(setPrefs).toHaveBeenCalledWith({ dailyReflection: false });
+
+    // Turning proactivity off disables the daily-reflection toggle (off already stops the synthesis).
+    await userEvent.selectOptions(screen.getByLabelText('How proactive your coach is'), 'off');
+    expect(screen.getByLabelText('Auto-generate a daily reflection on Home')).toBeDisabled();
+  });
 });

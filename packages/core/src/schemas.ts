@@ -2200,6 +2200,9 @@ export type ProactivityLevel = z.infer<typeof ProactivityLevelSchema>;
 export const CoachingPrefsSchema = z.object({
   schemaVersion: z.number().int().positive(),
   proactivity: ProactivityLevelSchema.optional(), // absent ⇒ DEFAULT_PROACTIVITY ('gentle')
+  // 60 §6.3 — the daily Home reflection auto-generates once/day (capped). Absent ⇒ ON. Turning it off
+  // keeps proactivity's other nudges but stops the auto-spend (the reflection then only refreshes on tap).
+  dailyReflection: z.boolean().optional(),
 });
 export type CoachingPrefs = z.infer<typeof CoachingPrefsSchema>;
 

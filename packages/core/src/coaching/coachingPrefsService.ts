@@ -40,13 +40,31 @@ export async function getProactivity(
   return prefs.proactivity ?? DEFAULT_PROACTIVITY;
 }
 
+/** Whether the daily Home reflection auto-generates (60 §6.3). Absent ⇒ ON (default). */
+export async function getDailyReflectionEnabled(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+): Promise<boolean> {
+  const prefs = await getCoachingPrefs(fs, key, personId);
+  return prefs.dailyReflection ?? true;
+}
+
+/** Merge a partial preference patch into the person's existing prefs (each field is independent). */
 export async function setCoachingPrefs(
   fs: FileSystem,
   key: Uint8Array,
   personId: string,
-  patch: { proactivity: ProactivityLevel },
+  patch: { proactivity?: ProactivityLevel; dailyReflection?: boolean },
 ): Promise<CoachingPrefs> {
-  const prefs: CoachingPrefs = { schemaVersion: SCHEMA_VERSION, proactivity: patch.proactivity };
+  const current = await getCoachingPrefs(fs, key, personId);
+  const proactivity = patch.proactivity ?? current.proactivity;
+  const dailyReflection = patch.dailyReflection ?? current.dailyReflection;
+  const prefs: CoachingPrefs = {
+    schemaVersion: SCHEMA_VERSION,
+    ...(proactivity !== undefined ? { proactivity } : {}),
+    ...(dailyReflection !== undefined ? { dailyReflection } : {}),
+  };
   await writeEncryptedJson(fs, prefsPath(personId), prefs, key);
   return prefs;
 }

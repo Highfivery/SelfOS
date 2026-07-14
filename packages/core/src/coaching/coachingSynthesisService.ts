@@ -50,8 +50,11 @@ const CADENCE: Record<
   Exclude<ProactivityLevel, 'off'>,
   { windowDays: number; threshold: number }
 > = {
-  gentle: { windowDays: 7, threshold: 3 },
-  active: { windowDays: 3, threshold: 2 },
+  // 60 §6.2 amends the cadence to daily: the Home reflection auto-generates AT MOST once per day, still
+  // gated by the new-insight threshold (so it never regenerates an identical observation) and backstopped by
+  // the rolling 7/week cap in `synthesize`. `gentle` needs more new material to fire than `active`.
+  gentle: { windowDays: 1, threshold: 3 },
+  active: { windowDays: 1, threshold: 2 },
 };
 
 const synthesisPath = (personId: string): string => `people/${personId}/coaching/synthesis.enc`;

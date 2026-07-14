@@ -989,6 +989,62 @@ describe('createCoreBridge', () => {
     expect((await bridge.coachingGetSynthesis())?.observation).toContain('Connection');
   });
 
+  it('the daily-reflection toggle + crisis suppress the AUTO reflection without spending (60 §6.3/§8)', async () => {
+    const { bridge, host, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const ctx = (await host.host.vaultAndKey())!;
+    let synthesisCalls = 0;
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: () => {
+        synthesisCalls += 1;
+        return Promise.resolve({
+          text: JSON.stringify({ observation: 'x', sources: [] }),
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    const seed = (id: string, crisisFlag = false): Promise<void> =>
+      saveInsight(ctx.fs, ctx.key, {
+        id,
+        schemaVersion: 1,
+        source: 'session',
+        subjectPersonId: ownerId,
+        summary: `reflected on ${id}`,
+        facts: [],
+        confidence: 'medium',
+        categories: ['Relationships'],
+        approved: true,
+        ...(crisisFlag ? { crisisFlag: true } : {}),
+        provenance: { conversationId: id, at: new Date().toISOString() },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    await seed('a');
+    await seed('b');
+    await seed('c');
+
+    // Daily reflection OFF → the auto pass is a calm no-op (proactivity stays gentle); zero spend.
+    await bridge.coachingSetPrefs({ dailyReflection: false });
+    expect(await bridge.coachingSynthesize({ auto: true })).toMatchObject({
+      ok: false,
+      reason: 'EMPTY',
+    });
+    expect(synthesisCalls).toBe(0);
+    // The toggle merged — proactivity is untouched.
+    expect((await bridge.coachingGetPrefs())?.proactivity ?? 'gentle').toBe('gentle');
+
+    // Re-enable, but a recurring-crisis signal (≥2 flags in 14 days) suppresses the auto reflection.
+    await bridge.coachingSetPrefs({ dailyReflection: true });
+    await seed('x1', true);
+    await seed('x2', true);
+    expect(await bridge.coachingSynthesize({ auto: true })).toMatchObject({
+      ok: false,
+      reason: 'EMPTY',
+    });
+    expect(synthesisCalls).toBe(0);
+  });
+
   it('challenges (52): start → capture a marker → list → check in → decrypt the Insight', async () => {
     const { bridge, host, ownerId } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });

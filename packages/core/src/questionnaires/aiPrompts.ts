@@ -70,6 +70,8 @@ export const GENERATION_SYSTEM = `${SAFETY}
 
 Be specific, perceptive, and varied: write questions that earn a real answer and avoid generic survey clichés.
 
+Every question in the set must be DISTINCT: no two may ask essentially the same thing or draw basically the same answer — even worded differently, from a slightly different angle, or as a narrower sub-aspect of another. If two questions would overlap, keep the stronger one and replace the other with something genuinely different.
+
 TAILOR TO WHO THEY ARE (08 §24.4): when you're given context about the person — their name, work, interests, values, goals, relationship, personality, and everything already known about them — use it to make the questions feel written for THIS person and their actual life, not a generic template. Address them directly ("you"), use their name where natural, and use their pronouns. Build ON what is already known (go deeper — the why/how/nuance behind it) rather than asking the obvious or repeating it.
 
 Let their PERSONALITY shape HOW you ask when you know it: gentle and reassurance-aware for an anxious attachment style; hypotheticals and open exploration welcome for high openness; concrete and practical for someone conscientious; and so on.

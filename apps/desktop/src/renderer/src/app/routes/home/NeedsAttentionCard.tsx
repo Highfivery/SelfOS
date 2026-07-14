@@ -22,14 +22,15 @@ const KIND_ICON: Record<AttentionKind, LucideIcon> = {
   'review-insights': Sprout,
   agreement: Handshake,
   'check-in': Activity,
-  'stale-goals': Flag,
+  goals: Flag,
   'send-questionnaire': Send,
 };
 
 /**
  * The "Needs attention" card (60-home-dashboard §3.1.2a) — a scannable queue of the concrete things WAITING
- * on the person (your Together turn, a response to analyze, insights to review, the weekly check-in, stale
- * goals, a soft "ask someone" nudge). Distinct from the growth-oriented "For you" band (the overlapping items
+ * on the person (your Together turn, a response to analyze, insights to review, standing Together agreements,
+ * your goals, the weekly check-in, a soft "ask someone" nudge). Distinct from the growth-oriented "For you" band
+ * (the overlapping items
  * are filtered out of it so nothing nags twice). Each row deep-links to where the action happens. Self-hides
  * when the queue is clear. Per-person + crisis/proactivity-aware (the nudges are pre-filtered by the caller).
  */

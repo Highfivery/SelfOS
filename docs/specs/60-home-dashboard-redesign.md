@@ -133,12 +133,17 @@ empty**, and **skeleton-loads** while its stores resolve. The layout is the revi
    places (the overlapping recommendation ids — `stale-goal` / `wellbeing-checkin` / `together-session` /
    `questionnaire-gap` — are filtered OUT of "For you" and surfaced here instead). Ordered by urgency: a
    **Together turn** / **invite** (someone's waiting) → a **response to analyze** (`newResponses`) → **insights to
-   review** (draft insights) → the **weekly mood check-in** reminder (≥7 days, the owner's "at least once a week"
-   — only for someone who has checked in before) → **stale goals** (→ the Goals card + `/goals` carry the action)
+   review** (draft insights) → **standing Together agreements** (spec 61) → **your goals** → the **weekly mood
+   check-in** reminder (≥7 days, the owner's "at least once a week" — only for someone who has checked in before)
    → a soft **"ask someone"** send-a-questionnaire nudge (a prior send ≥30 days old). Each row deep-links to where
-   the action happens. Leads **above** "For you"; self-hides when clear; per-person. The last three are gentle
-   **nudges**, dropped under recurring crisis OR proactivity-off (§8), leaving only genuinely-pending items;
-   the truly-pending items (turn / invite / responses / review) always show. Pure derivation (`needsAttention`).
+   the action happens. Leads **above** "For you"; self-hides when clear; per-person. **Your goals** (every ACTIVE
+   goal — framed "needs a check-in" when stale, else "in progress") and **Together agreements** are GENUINE
+   (non-nudge) items — your own concrete commitments, kept **top of mind regardless of the proactivity dial**
+   (updated 2026-07-14 on repeated user feedback: goals + reflections must show here even with proactivity off);
+   they clear as goals/agreements are marked done. Only the **check-in** and **"ask someone"** are gentle
+   **nudges**, dropped under recurring crisis OR proactivity-off (§8). The truly-pending items (turn / invite /
+   responses / review) always show; a recurring crisis additionally suppresses agreements + goals (Home leads
+   with support). Pure derivation (`needsAttention`).
 4. **"For you today" band** — two cards side by side:
    - **Daily reflection (AI companion).** The cached `coaching.synthesize` observation in a warm companion
      voice ("Rest and self-worth keep circling each other for you this week — and you came back to Angel,
@@ -549,6 +554,22 @@ complete flows through the rendered UI, not bridge calls (CLAUDE.md §7). E2E is
 
 ## 12. Changelog
 
+- 2026-07-14 — **Follow-up 3 (goals + Together reflections must show in "Needs attention" — user-reported,
+  escalating; on `fix/needs-attention-goals-agreements`).** The user (furious) kept seeing ONLY "N insights to
+  review" in the queue — no goals, no Together agreements — because their **proactivity dial is off**, which
+  drops every nudge-tier item, and goals only reached the queue as a `stale-goals` **nudge** (so even a stale
+  goal was hidden, and an in-progress goal never surfaced at all). Fix (§3.1.2a): **your goals are now a genuine
+  (non-nudge) `goals` item** — every ACTIVE goal (open / in-progress / already-stale), framed "needs a check-in"
+  when stale else "in progress", showing the goal text — so they stay **top of mind regardless of the
+  proactivity dial**, matching the spec-61 agreement item (both suppressed only under recurring crisis). The
+  `stale-goals` kind → `goals`; the block moved above the check-in nudge; the `stale-goal` For-you rec is still
+  filtered out so nothing double-nags. Tests: attention unit (active/stale framing, non-nudge, crisis-suppressed,
+  done/abandoned excluded), Home + proactivity-off unit inverted (goal now STAYS), and the spec-61 E2E extended
+  to seed a personal goal + assert **both** the agreement AND the goal render in "Needs attention" together. Gate
+  green: typecheck, lint, format, home unit (96), affected E2E (spec-61 follow-through, proactivity-off, stale-goal
+  queue). **Lesson: a "genuine commitment" (a goal, a couple's agreement) belongs in the waiting-on-you queue as a
+  non-nudge item — gating it behind the proactivity dial (the AI-suggestion opt-out) hides exactly the user's own
+  stuff they asked to keep top of mind; only AI-generated prompts (check-in, ask-someone) are true nudges.**
 - 2026-07-14 — **Slice 3 (polish) — the Challenge bento card**, on `feat/home-slice3-polish` off the merged
   `main`. A self-hiding `ChallengeCard` shows the one ACTIVE challenge as a STATUS surface (agreed action +
   `ComfortDial` + a gentle "Day N" marker + a reflect entry) — visible the whole time you're on it, not only

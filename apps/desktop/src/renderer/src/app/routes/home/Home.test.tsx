@@ -506,8 +506,10 @@ describe('Home — proactivity & safety', () => {
     // The status grid is unaffected (it reflects existing data, it isn't a push).
     expect(await screen.findByRole('heading', { name: /pick up where/i })).toBeInTheDocument();
     expect(forYouRegion()).toBeNull();
-    // The gentle stale-goal nudge is suppressed in "Needs attention" too when proactive coaching is off (§8).
-    expect(screen.queryByText(/a goal needs a check-in/i)).toBeNull();
+    // Your goals are a GENUINE (non-nudge) item — they STAY in "Needs attention" even with proactivity off
+    // (the user's ask: goals must be top of mind here). Only the momentum push + "For you" band are hidden.
+    expect(screen.getByRole('heading', { name: /needs attention/i })).toBeInTheDocument();
+    expect(screen.getByText(/a goal needs a check-in/i)).toBeInTheDocument();
     expect(screen.queryByText(/you.ve shown up/i)).toBeNull();
   });
 

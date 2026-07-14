@@ -1476,9 +1476,9 @@ describe('createCoreBridge', () => {
       recipientPersonId: mara.id,
     });
 
-    // The recipient's prior prompt reached the MODEL as avoid-only grounding, with the safety clause…
+    // The recipient's prior prompt reached the MODEL as known-data grounding, with the "don't recite" clause…
     expect(sentUserText).toContain('What is your secret codeword?');
-    expect(sentUserText).toMatch(/never quote, restate, reference/i);
+    expect(sentUserText).toMatch(/Weave this knowledge in NATURALLY/i);
     // …but it is NEVER returned to the renderer — the author only gets the generated questions.
     expect(result.ok).toBe(true);
     expect(JSON.stringify(result.questions)).not.toContain('secret codeword');
@@ -1657,6 +1657,100 @@ describe('createCoreBridge', () => {
     expect(reference).toContain('Receiving oral (blowjob)'); // the onboarding answer reaches the pass
     // …still author-blind: none of it comes back to the renderer.
     expect(JSON.stringify(result)).not.toContain('Receiving oral (blowjob)');
+  });
+
+  it('the semantic pass sees the recipient’s SESSION/reflection facts too (§24.3-A2), author-blind', async () => {
+    const { host, bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    const ctx = (await host.host.vaultAndKey())!;
+    // A fact Mara revealed in a coaching SESSION (not onboarding, not a questionnaire) — the §24 gap: it used
+    // to be excluded from the semantic reference, so a questionnaire could re-ask it.
+    await saveInsight(ctx.fs, ctx.key, {
+      id: 'sess1',
+      schemaVersion: 1,
+      source: 'session',
+      subjectPersonId: mara.id,
+      summary: 'Reflecting on work.',
+      facts: [{ id: 'f1', text: 'Feels burned out at her nursing job.', shareable: false }],
+      confidence: 'medium',
+      categories: ['Work & purpose'],
+      approved: true,
+      provenance: { at: '2026-07-13T00:00:00.000Z' },
+      createdAt: '2026-07-13T00:00:00.000Z',
+      updatedAt: '2026-07-13T00:00:00.000Z',
+    });
+
+    const seen: string[] = [];
+    let call = 0;
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        seen.push(options.messages.map((m) => m.content).join('\n'));
+        const text =
+          call === 0
+            ? JSON.stringify({
+                title: 'X',
+                questions: [
+                  { type: 'shortText', prompt: 'One fresh question?' },
+                  { type: 'shortText', prompt: 'Two fresh question?' },
+                ],
+              })
+            : '[1,2]';
+        call += 1;
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+
+    const result = await bridge.questionnairesGenerate({
+      type: 'general',
+      sensitivity: 'standard',
+      existingPrompts: [],
+      recipientPersonId: mara.id,
+    });
+    expect(result.ok).toBe(true);
+    const reference = seen[1] ?? '';
+    expect(reference).toMatch(/ALREADY KNOWN about them from sessions/);
+    expect(reference).toContain('Feels burned out at her nursing job.'); // the session fact reaches the pass
+    expect(JSON.stringify(result)).not.toContain('burned out'); // author-blind
+  });
+
+  it('frames a CHILD recipient with the child register even when the edge is stored child→parent (§24.4-B2)', async () => {
+    const { host, bridge, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const sam = await bridge.peopleSave({ displayName: 'Sam', isSubject: true, tags: [] });
+    // Edge stored CHILD→PARENT (from Sam's editor): "the owner IS Sam's parent" → type 'parent'. The
+    // recipient's role to the AUTHOR must still resolve to CHILD (the asymmetric-direction bug the fix closes).
+    await bridge.relationshipsSave({ fromPersonId: sam.id, toPersonId: ownerId, type: 'parent' });
+    let sent = '';
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        sent = options.messages.map((m) => m.content).join('\n');
+        const json = JSON.stringify({
+          title: 'X',
+          questions: [{ type: 'shortText', prompt: 'Q?' }],
+        });
+        onDelta(json);
+        return Promise.resolve({
+          text: json,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    const result = await bridge.questionnairesGenerate({
+      type: 'general',
+      sensitivity: 'standard',
+      existingPrompts: [],
+      recipientPersonId: sam.id,
+    });
+    expect(result.ok).toBe(true);
+    expect(sent).toMatch(/for their CHILD/i); // resolved correctly despite the reversed edge…
+    expect(sent).not.toMatch(/for their PARENT/i); // …NOT the raw edge type (which would be 'parent')
   });
 
   it('materializes a suggestion into a full generation; gated + non-household refused (§19.4)', async () => {

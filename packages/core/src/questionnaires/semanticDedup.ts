@@ -20,9 +20,10 @@ A candidate is a DUPLICATE (DROP it) if the known material already answers it OR
 
 When in doubt about whether the person already has data for a candidate, DROP it. Return ONLY a JSON array of the 1-based indices of the candidates to KEEP. No prose, no keys, no markdown — just the array, e.g. [1,3,4].`;
 
-/** Cap the reference material fed to the pass (§23.5b). Generous so the onboarding answers — the authoritative
- *  "already have data for this" material — are never truncated away (the bug that let re-asks through). */
-const MAX_REFERENCE_CHARS = 12000;
+/** Cap the reference material fed to the pass (§23.5b/§24.3-A3). Generous so the authoritative "already have
+ *  data for this" material (onboarding answers + prior-questionnaire answers) — which LEADS the reference — is
+ *  never truncated away; the lower-priority insight facts + asked prompts follow and are what gets cut first. */
+const MAX_REFERENCE_CHARS = 16000;
 
 export interface SemanticDedupResult {
   kept: Question[];

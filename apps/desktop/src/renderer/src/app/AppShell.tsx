@@ -36,6 +36,7 @@ import { useTestStore } from '../stores/testStore';
 import { useDreamAnalysisStore } from '../stores/dreamAnalysisStore';
 import { useDreamPatternStore } from '../stores/dreamPatternStore';
 import { useResultsStore } from '../stores/resultsStore';
+import { useQuestionnaireStore } from '../stores/questionnaireStore';
 import { useGuidanceStore } from '../stores/guidanceStore';
 import { useIntakeStore } from '../stores/intakeStore';
 import { useSynthesisStore } from '../stores/synthesisStore';
@@ -132,6 +133,7 @@ export function AppShell(): JSX.Element {
     useDreamAnalysisStore.getState().reset();
     useDreamPatternStore.getState().reset();
     useResultsStore.getState().reset(); // sender-scoped Results/trends — per-person, must reset too
+    useQuestionnaireStore.getState().reset(); // sender's sent-overview feeds the Home Questionnaires section (59)
     useGuidanceStore.getState().reset(); // guided suggestions + 18+ ack are per-person (16 §4.3/§8.3)
     useIntakeStore.getState().reset(); // the intake is per-person (18-personal-onboarding §7)
     useInsightStore.getState().reset(); // Memory is per-person — own + relationships only (20 §5.1)

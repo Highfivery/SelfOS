@@ -21,15 +21,6 @@ function plain(text: string): string {
     .trim();
 }
 
-/** A 0..1 dyad metric → a gentle level word (never a score to chase). */
-function levelFor(value: number): string {
-  if (value < 0.2) return 'Quiet';
-  if (value < 0.4) return 'Tender';
-  if (value < 0.6) return 'Steady';
-  if (value < 0.8) return 'Warm';
-  return 'Close';
-}
-
 /** Pick the one session to feature: your-turn first, then a pending invite, then most recently active. */
 function primarySession(
   sessions: TogetherSessionSummary[],
@@ -121,8 +112,8 @@ export function TogetherHomeCard({
           <div className={styles.pulseRow}>
             {connectionValue !== undefined ? (
               <div className={styles.pulseItem}>
-                <Ring fill={connectionValue} color="var(--color-chart-4)" size={46} stroke={5}>
-                  <span className={styles.pulseRingLevel}>{levelFor(connectionValue)}</span>
+                <Ring fill={connectionValue} color="var(--color-chart-4)" size={52} stroke={5}>
+                  <span className={styles.ringPct}>{Math.round(connectionValue * 100)}%</span>
                 </Ring>
                 <span className={styles.pulseLabel}>
                   Connection{connection?.direction ? ` · ${connection.direction}` : ''}

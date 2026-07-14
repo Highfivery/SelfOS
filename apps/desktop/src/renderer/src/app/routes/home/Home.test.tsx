@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import '../../../settings/builtins';
 import { DEFAULT_ROLES } from '@shared/capabilities';
@@ -302,7 +302,7 @@ describe('Home — the "For you" engine', () => {
     expect(screen.queryByRole('heading', { name: /welcome to selfos/i })).toBeNull();
   });
 
-  it('surfaces a Together invitation in "For you" (58 §3.12), routed to the session', async () => {
+  it('surfaces a Together invitation in the "Needs attention" queue (58 §3.12 / 60 §3.1.2a)', async () => {
     installMockBridge({
       coachingGetPrefs: () => Promise.resolve({ schemaVersion: 1, proactivity: 'active' as const }),
       // Some activity so the person isn't "new" (which suppresses all "For you" pushes).
@@ -325,8 +325,9 @@ describe('Home — the "For you" engine', () => {
         ]),
     });
     renderHome();
-    // The Together invitation surfaces as a "For you" recommendation (band focal or strip).
-    expect(await screen.findByText(/Angel invited you to a Together session/i)).toBeInTheDocument();
+    // The Together invitation surfaces in the "Needs attention" card (a genuinely-pending action).
+    expect(await screen.findByRole('heading', { name: /needs attention/i })).toBeInTheDocument();
+    expect(screen.getAllByText(/Angel invited you to a session/i).length).toBeGreaterThan(0);
   });
 
   it('invites a first self-assessment when no profile test is taken (50)', async () => {
@@ -342,7 +343,7 @@ describe('Home — the "For you" engine', () => {
     expect(region).toHaveTextContent(/discover how you see yourself/i);
   });
 
-  it('gently invites a mood check-in when a prior one has gone quiet (51)', async () => {
+  it('surfaces the weekly mood check-in reminder in "Needs attention" when a prior one has gone quiet (51 / 60 §3.1.2a)', async () => {
     installMockBridge({
       conversationsList: () => Promise.resolve([meta('c1', 'A past talk', 'complete')]),
       testsList: () =>
@@ -356,7 +357,8 @@ describe('Home — the "For you" engine', () => {
         ),
     });
     renderHome();
-    expect(await screen.findByText(/a gentle check-in/i)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /needs attention/i })).toBeInTheDocument();
+    expect(screen.getByText(/check in on how you.re doing/i)).toBeInTheDocument();
   });
 
   it('invites an intimacy exercise once 18+ is acked AND an intimacy profile is taken (48)', async () => {
@@ -450,41 +452,41 @@ describe('Home — the "For you" engine', () => {
     expect(await screen.findByText(/you.re all set for now/i)).toBeInTheDocument();
   });
 
-  it('a goal recommendation keeps the Still on it / Mark done / Let it go actions', async () => {
+  it('a stale goal surfaces in "Needs attention" + the Goals card, with a one-tap Done (60 §3.1.2a/§3.1.3)', async () => {
     const setStatus = vi.fn(() => Promise.resolve(null));
     installMockBridge({
       goalsList: () => Promise.resolve([staleGoal('g1', 'finish the memoir')]),
       goalsSetStatus: setStatus,
     });
     renderHome();
-    expect(
-      await screen.findByRole('heading', { name: /a goal worth a check-in/i }),
-    ).toBeInTheDocument();
-    // The goal now also appears on the Goals bento card, so it's referenced in more than one place.
-    expect(screen.getAllByText(/finish the memoir/i).length).toBeGreaterThan(0);
-    // The recommendation's action is a plain "Mark done" button (the Goals card's per-goal buttons name the
-    // goal, so `/mark done/i` uniquely targets the recommendation here).
-    fireEvent.click(screen.getByRole('button', { name: /^mark done$/i }));
+    // The stale goal leads the "Needs attention" queue (split out of "For you").
+    expect(await screen.findByRole('heading', { name: /needs attention/i })).toBeInTheDocument();
+    expect(screen.getByText(/a goal needs a check-in/i)).toBeInTheDocument();
+    // …and the Goals bento card carries the action (its per-goal buttons name the goal, for a11y).
+    fireEvent.click(screen.getByRole('button', { name: /mark .*finish the memoir.* done/i }));
     await waitFor(() => expect(setStatus).toHaveBeenCalledWith({ goalId: 'g1', status: 'done' }));
   });
 
-  it('dismissing a recommendation ("Not now") suppresses it and persists per-person', async () => {
+  it('dismissing a "For you" recommendation ("Not now") suppresses it and persists per-person', async () => {
     const setDismissals = vi.fn(() => Promise.resolve());
+    // A near-empty person gets the guided-session invite in "For you" — a growth rec that stays in the band.
     installMockBridge({
-      goalsList: () => Promise.resolve([staleGoal('g1', 'finish the memoir')]),
+      conversationsList: () => Promise.resolve([meta('c1', 'A past talk', 'complete')]),
       setDiscoveryDismissals: setDismissals,
     });
     renderHome();
-    const card = await screen.findByRole('heading', { name: /a goal worth a check-in/i });
-    expect(card).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /a goal worth a check-in.*for now/i }));
+    const region = await waitFor(() => {
+      const r = forYouRegion();
+      expect(r).not.toBeNull();
+      return r as HTMLElement;
+    });
+    const dismiss = within(region).getByRole('button', { name: /for now$/i });
+    fireEvent.click(dismiss);
+    // The persisted signature is signal-aware (`rec:<id>:…`), so it re-surfaces only when the signal changes (§7).
     await waitFor(() =>
-      expect(screen.queryByRole('heading', { name: /a goal worth a check-in/i })).toBeNull(),
-    );
-    // The persisted signature is signal-aware (the goal id + its touch stamp), so it re-surfaces only when
-    // the underlying signal changes — never a permanent kill (§7).
-    expect(setDismissals).toHaveBeenCalledWith(
-      expect.arrayContaining([expect.stringMatching(/^rec:stale-goal:g1:/)]),
+      expect(setDismissals).toHaveBeenCalledWith(
+        expect.arrayContaining([expect.stringMatching(/^rec:/)]),
+      ),
     );
   });
 });
@@ -504,7 +506,8 @@ describe('Home — proactivity & safety', () => {
     // The status grid is unaffected (it reflects existing data, it isn't a push).
     expect(await screen.findByRole('heading', { name: /pick up where/i })).toBeInTheDocument();
     expect(forYouRegion()).toBeNull();
-    expect(screen.queryByRole('heading', { name: /a goal worth a check-in/i })).toBeNull();
+    // The gentle stale-goal nudge is suppressed in "Needs attention" too when proactive coaching is off (§8).
+    expect(screen.queryByText(/a goal needs a check-in/i)).toBeNull();
     expect(screen.queryByText(/you.ve shown up/i)).toBeNull();
   });
 
@@ -575,9 +578,11 @@ describe('Home — proactivity & safety', () => {
     renderHome();
     expect(await screen.findByText(/carrying a lot/i)).toBeInTheDocument();
     expect(screen.getByText('988')).toBeInTheDocument();
-    // Encouragement de-escalates: no "For you" pushes during distress, and no rhythm streak.
+    // Encouragement de-escalates: no "For you" pushes during distress, no rhythm streak, and the gentle
+    // "Needs attention" nudges (check-in / stale goals / ask-someone) are suppressed too (§8).
     expect(forYouRegion()).toBeNull();
-    expect(screen.queryByRole('heading', { name: /a goal worth a check-in/i })).toBeNull();
+    expect(screen.queryByText(/a goal needs a check-in/i)).toBeNull();
+    expect(screen.queryByText(/check in on how you.re doing/i)).toBeNull();
     expect(screen.queryByText(/rhythm/i)).toBeNull();
   });
 

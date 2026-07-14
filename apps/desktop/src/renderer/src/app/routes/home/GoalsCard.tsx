@@ -220,10 +220,10 @@ export function GoalsCard({
                   ) : null}
                 </div>
                 <div className={styles.goalActions}>
-                  <IconButton aria-label="Add this goal" onClick={() => void accept(s)}>
+                  <IconButton aria-label={`Add “${s.text}”`} onClick={() => void accept(s)}>
                     <Plus size={16} aria-hidden="true" />
                   </IconButton>
-                  <IconButton aria-label="Dismiss suggestion" onClick={() => dismiss(s)}>
+                  <IconButton aria-label={`Dismiss “${s.text}”`} onClick={() => dismiss(s)}>
                     <X size={16} aria-hidden="true" />
                   </IconButton>
                 </div>

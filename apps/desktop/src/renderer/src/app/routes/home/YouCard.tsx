@@ -3,8 +3,7 @@ import { Sparkles, UserRound } from 'lucide-react';
 import type { TestResult } from '@shared/schemas';
 import type { TestSummary } from '@selfos/core/tests';
 import { useTestStore } from '../../../stores/testStore';
-import { Button, Card, Heading, Stack, SubscaleBar, Text } from '../../../design-system/components';
-import { daysSince, RECHECK_AFTER_DAYS, RECHECKABLE_INSTRUMENTS } from './wellbeing';
+import { Card, Heading, Stack, SubscaleBar, Text } from '../../../design-system/components';
 import styles from './Home.module.css';
 
 interface Highlight {
@@ -34,11 +33,11 @@ function topHighlight(test: TestSummary, result: TestResult): Highlight | null {
 
 /**
  * The "You" bento card (60-home-dashboard §3.1.4) — a window into the self-assessments hub. It surfaces (1)
- * PROFILE HIGHLIGHTS: a signature trait from your latest results (nothing else on Home shows these), (2) a
- * gentle CHECK-IN nudge when your last mood/anxiety reflection is stale (≥14d — never for someone who's never
- * checked in, §8), and (3) TAKE-A-TEST invites for assessments you haven't done yet (the lead when you have no
- * results). "Explore" opens the You hub. Self-hides when there's no catalog (tests unavailable). Deep-links go
- * straight to the take flow / hub. Per-person (the testStore is scoped + resets on switch).
+ * PROFILE HIGHLIGHTS: a signature trait from your latest results (nothing else on Home shows these), and (2)
+ * TAKE-A-TEST invites for assessments you haven't done yet (the lead when you have no results). The mood/
+ * anxiety CHECK-IN reminder lives in the "Needs attention" card (§3.1.2a, split by intent) so it's highlighted
+ * in one place, not nagged twice. "Explore" opens the You hub. Self-hides when there's no catalog (tests
+ * unavailable). Deep-links go straight to the take flow / hub. Per-person (the testStore resets on switch).
  */
 export function YouCard(): JSX.Element | null {
   const navigate = useNavigate();
@@ -48,29 +47,16 @@ export function YouCard(): JSX.Element | null {
 
   if (catalog.length === 0) return null;
 
-  const now = Date.now();
-
   // Profile highlights: the top subscale of each TAKEN non-wellbeing test, most-recently-taken first, capped 2.
   const taken = catalog
-    .filter((t) => !t.wellbeing && (resultsByTest[t.id]?.length ?? 0) > 0)
-    .map((t) => ({ test: t, result: resultsByTest[t.id]![0]! }))
+    .filter((t) => !t.wellbeing)
+    .map((t) => ({ test: t, result: resultsByTest[t.id]?.[0] }))
+    .filter((x): x is { test: TestSummary; result: TestResult } => x.result !== undefined)
     .sort((a, b) => b.result.takenAt.localeCompare(a.result.takenAt));
   const highlights = taken
     .map(({ test, result }) => topHighlight(test, result))
     .filter((h): h is Highlight => h !== null)
     .slice(0, 2);
-
-  // A gentle "check in again" — the stalest recheckable instrument with a prior result that's gone ≥14d.
-  let checkIn: { testId: string; days: number } | null = null;
-  for (const t of catalog) {
-    if (!RECHECKABLE_INSTRUMENTS.has(t.id)) continue;
-    const latest = resultsByTest[t.id]?.[0];
-    if (!latest) continue;
-    const days = daysSince(latest.takenAt, now);
-    if (days >= RECHECK_AFTER_DAYS && (!checkIn || days > checkIn.days)) {
-      checkIn = { testId: t.id, days };
-    }
-  }
 
   // Untaken assessments to invite (adult ones only after the 18+ ack) — the lead when there are no results.
   const untaken = catalog
@@ -114,21 +100,6 @@ export function YouCard(): JSX.Element | null {
             you.
           </Text>
         )}
-
-        {checkIn ? (
-          <div className={styles.youNudge}>
-            <Text size="sm" tone="secondary">
-              It’s been {checkIn.days} days since your last check-in.
-            </Text>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => navigate(`/you/${checkIn.testId}/take`)}
-            >
-              Check in again
-            </Button>
-          </div>
-        ) : null}
 
         {untaken.length > 0 ? (
           <div className={styles.youInvite}>

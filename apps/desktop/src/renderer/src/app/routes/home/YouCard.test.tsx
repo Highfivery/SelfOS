@@ -6,8 +6,6 @@ import type { TestSummary } from '@selfos/core/tests';
 import { YouCard } from './YouCard';
 import { useTestStore } from '../../../stores/testStore';
 
-const DAY = 24 * 60 * 60 * 1000;
-
 const test = (over: Partial<TestSummary> & { id: string; title: string }): TestSummary => ({
   group: 'personality',
   instrument: over.id,
@@ -93,43 +91,6 @@ describe('YouCard (60 §3.1.4)', () => {
     expect(screen.getByText('Discover your profile')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /big five/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /attachment/i })).toBeInTheDocument();
-  });
-
-  it('nudges a gentle check-in when a mood reflection has gone stale (≥14d)', () => {
-    useTestStore.setState({
-      catalog: [test({ id: 'phq9', title: 'Mood check-in', group: 'wellbeing', wellbeing: true })],
-      resultsByTest: {
-        phq9: [
-          result({
-            id: 'r1',
-            testId: 'phq9',
-            takenAt: new Date(Date.now() - 20 * DAY).toISOString(),
-          }),
-        ],
-      },
-      loaded: true,
-    });
-    renderCard();
-    expect(screen.getByText(/it’s been 20 days/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /check in again/i })).toBeInTheDocument();
-  });
-
-  it('does NOT nudge a check-in that is still recent', () => {
-    useTestStore.setState({
-      catalog: [test({ id: 'phq9', title: 'Mood check-in', group: 'wellbeing', wellbeing: true })],
-      resultsByTest: {
-        phq9: [
-          result({
-            id: 'r1',
-            testId: 'phq9',
-            takenAt: new Date(Date.now() - 3 * DAY).toISOString(),
-          }),
-        ],
-      },
-      loaded: true,
-    });
-    renderCard();
-    expect(screen.queryByRole('button', { name: /check in again/i })).toBeNull();
   });
 
   it('self-hides when there is no catalog', () => {

@@ -985,17 +985,17 @@ test('proactive coaching: a stale goal surfaces a nudge + Home card; Mark done c
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    // The Home "For you" goal recommendation surfaces the stale goal with the calm actions (scoped to main,
-    // not the notification body / toast that also names the goal).
-    await expect(w.getByRole('heading', { name: /a goal worth a check-in/i })).toBeVisible();
-    // The goal is now named in both the recommendation reason AND the Goals bento card — assert at least one.
+    // The stale goal leads the "Needs attention" queue (split out of "For you", 60 §3.1.2a), and appears on
+    // the Goals bento card where the action lives.
+    await expect(w.getByRole('heading', { name: /needs attention/i })).toBeVisible();
+    await expect(w.getByText(/a goal needs a check-in/i)).toBeVisible();
     await expect(
       w
         .getByRole('main')
         .getByText(/finish the side project/i)
         .first(),
     ).toBeVisible();
-    // The 3-action row wraps rather than overflowing at phone width (§9).
+    // No horizontal overflow at phone width (§9).
     await w.setViewportSize({ width: 360, height: 780 });
     const offenders = await w.evaluate(() => {
       const out: string[] = [];
@@ -1016,9 +1016,9 @@ test('proactive coaching: a stale goal surfaces a nudge + Home card; Mark done c
     ).toBeVisible();
     await w.keyboard.press('Escape');
 
-    // Mark done closes the goal → the card drops away (acting un-stales/closes it).
-    await w.getByRole('button', { name: 'Mark done' }).click();
-    await expect(w.getByRole('heading', { name: /a goal worth a check-in/i })).toHaveCount(0);
+    // Mark done (via the Goals card's per-goal button) closes the goal → it drops out of "Needs attention".
+    await w.getByRole('button', { name: /mark .*finish the side project.* done/i }).click();
+    await expect(w.getByText(/a goal needs a check-in/i)).toHaveCount(0);
   } finally {
     await app.close();
   }
@@ -1098,13 +1098,14 @@ test('home (53): the "For you" zone ranks recommendations, reflects momentum, di
   try {
     const w = await app.firstWindow();
 
-    // The "For you today" zone ranks the relevant next steps — the top one is elevated into the band's
-    // focal card, the rest into the "For you" strip; both recommendations are present on the page (60 §3.6).
-    await expect(w.getByRole('heading', { name: /a goal worth a check-in/i })).toBeVisible();
+    // The stale goal is a WAITING-ON-YOU item → it moved to the "Needs attention" queue (60 §3.1.2a), not
+    // the growth-oriented "For you" band.
+    await expect(w.getByRole('heading', { name: /needs attention/i })).toBeVisible();
+    await expect(w.getByText(/a goal needs a check-in/i)).toBeVisible();
+
+    // The "For you today" zone ranks the GROWTH next steps — the guided-session invite is present, with its
+    // person-specific REASON (not just a generic CTA).
     await expect(w.getByRole('heading', { name: /try a guided session/i })).toBeVisible();
-    // Each recommendation carries a person-specific REASON (not just a generic CTA). The goal text can also
-    // appear in the activity feed, so scope to the first match (the rec card).
-    await expect(w.getByText(/finish the memoir/i).first()).toBeVisible();
 
     // Gentle momentum reflection in the header — what positively happened, never a streak/target.
     await expect(w.getByText(/you’ve explored 2 areas of yourself/i)).toBeVisible();
@@ -1113,10 +1114,9 @@ test('home (53): the "For you" zone ranks recommendations, reflects momentum, di
     await expect(w.getByRole('heading', { name: 'Wellbeing' })).toBeVisible();
     await expect(w.getByRole('heading', { name: /what the coach knows/i })).toBeVisible();
 
-    // Dismiss ("Not now") suppresses a recommendation calmly; the guided one stays.
-    await w.getByRole('button', { name: /a goal worth a check-in.*for now/i }).click();
-    await expect(w.getByRole('heading', { name: /a goal worth a check-in/i })).toHaveCount(0);
-    await expect(w.getByRole('heading', { name: /try a guided session/i })).toBeVisible();
+    // Dismiss ("Not now") suppresses a "For you" recommendation calmly.
+    await w.getByRole('button', { name: /try a guided session.*for now/i }).click();
+    await expect(w.getByRole('heading', { name: /try a guided session/i })).toHaveCount(0);
 
     // 360px: the full surface renders with NO horizontal overflow — not page-level, not an inner scrollbar.
     await w.setViewportSize({ width: 360, height: 800 });
@@ -1279,7 +1279,8 @@ test('home (53): proactivity OFF hides the "For you" zone + momentum, but the st
     await expect(w.getByRole('heading', { name: 'Wellbeing' })).toBeVisible(); // a status card (not a push)
     await expect(w.getByRole('region', { name: 'For you' })).toHaveCount(0);
     await expect(w.getByText(/you’ve explored/i)).toHaveCount(0); // no momentum push
-    await expect(w.getByRole('heading', { name: /a goal worth a check-in/i })).toHaveCount(0);
+    // The gentle "Needs attention" nudges (stale goal, check-in, ask-someone) are suppressed too (60 §8).
+    await expect(w.getByText(/a goal needs a check-in/i)).toHaveCount(0);
     // The status grid is unaffected — it reflects existing data, it isn't a nudge.
     await expect(w.getByRole('heading', { name: /what the coach knows/i })).toBeVisible();
   } finally {
@@ -1347,10 +1348,11 @@ test('home (53 Slice B): self-assessment / wellbeing / intimacy recommendations 
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    // The top rec is the band's focal, the rest the "For you" strip — assert page-wide (60 §3.6).
-    // take-a-test fires (no personality/relationships profile taken) + wellbeing-checkin fires (overdue).
+    // take-a-test fires in "For you" (growth); the overdue mood check-in moved to "Needs attention"
+    // (waiting-on-you, split by intent — 60 §3.1.2a).
     await expect(w.getByRole('heading', { name: /discover how you see yourself/i })).toBeVisible();
-    await expect(w.getByRole('heading', { name: /a gentle check-in/i })).toBeVisible();
+    await expect(w.getByRole('heading', { name: /needs attention/i })).toBeVisible();
+    await expect(w.getByText(/check in on how you.re doing/i)).toBeVisible();
 
     // The intimacy exercise is 18+-gated → withheld even though the intimacy profile exists (no premature
     // exposure; the gate is the boundary, 48 §8). Without the ack, an intimacy test is also not in the
@@ -10215,11 +10217,12 @@ test('together (58) phase H1: a pending Together invitation surfaces on the invi
     await w.getByPlaceholder('e.g. Feeling disconnected lately').fill('Reconnecting');
     await w.getByRole('button', { name: 'Send invitation' }).click();
 
-    // Switch to Angel → her Home "For you" zone surfaces the invitation, named by the inviter (the top rec
-    // is the band's focal card, so assert page-wide — 60 §3.6).
+    // Switch to Angel → her Home "Needs attention" queue surfaces the invitation, named by the inviter (a
+    // waiting-on-you item, split out of "For you" — 60 §3.1.2a).
     await switchTogetherPerson(w, 'Angel');
     await w.getByRole('link', { name: 'Home' }).click();
-    await expect(w.getByText(/Ben invited you to a Together session/i)).toBeVisible();
+    await expect(w.getByRole('heading', { name: /needs attention/i })).toBeVisible();
+    await expect(w.getByText(/Ben invited you to a session/i).first()).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

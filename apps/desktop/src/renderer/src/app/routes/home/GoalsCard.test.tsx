@@ -89,7 +89,7 @@ describe('GoalsCard (60 §3.1.3)', () => {
     renderCard({ configured: true });
     fireEvent.click(screen.getByRole('button', { name: /suggest goals/i }));
     expect(await screen.findByText('Call your sister this week')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /add this goal/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add .*call your sister/i }));
     await waitFor(() =>
       expect(create).toHaveBeenCalledWith(
         expect.objectContaining({ text: 'Call your sister this week' }),

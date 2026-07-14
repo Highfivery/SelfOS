@@ -26,9 +26,9 @@ export function Collapsible({
   /** Controlled open state; when set, `onOpenChange` drives it. */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  className?: string;
-  headerClassName?: string;
-  bodyClassName?: string;
+  className?: string | undefined;
+  headerClassName?: string | undefined;
+  bodyClassName?: string | undefined;
 }): JSX.Element {
   const [uncontrolled, setUncontrolled] = useState(defaultOpen);
   const open = controlledOpen ?? uncontrolled;

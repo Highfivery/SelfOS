@@ -144,8 +144,12 @@ A compact card at the top of "about you":
 - The portrait **narrative summary** (the intake insight's `summary`) as `<Markdown>`, **clamped** to a few
   lines with "Read your full portrait" (expands in place) + an **"Edit your answers"** deep-link to
   onboarding.
-- The portrait's **facts are NOT duplicated here** — they live in the life-area sections (each intake fact
-  carries a `lifeArea`), edited in place there. The hero is the readable intro; the sections are the detail.
+- The hero shows the portrait's **narrative only**; its individual **facts still live in the life-area
+  sections** (the portrait renders as a section card with its **summary hidden** — the hero owns the
+  narrative, so it's never duplicated). Intake facts are corrected at the source via **"Edit your answers"**
+  (the onboarding deep-link) — not inline-flagged (44 §3.4's intake model). So the portrait facts stay
+  viewable + searchable in Memory, while the AI-learned insights (session/dream/questionnaire/test/Together)
+  are the ones you correct in place.
 
 ### 3.5 "How you've been" (trends, redesigned)
 

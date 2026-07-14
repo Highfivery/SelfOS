@@ -590,7 +590,7 @@
 /* Secondary row: trend + responses */
 .duo {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: var(--space-3);
 }
 
@@ -624,7 +624,9 @@
 .panelHead {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-2);
+  flex-wrap: wrap;
   font-weight: 700;
 }
 
@@ -634,10 +636,14 @@
 }
 
 .panelName {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 @media (max-width: 640px) {
@@ -747,4 +753,211 @@
 .irowChev {
   color: var(--color-text-tertiary);
   flex: none;
+}
+
+/* ── 62 memory-insights-redesign ─────────────────────────────────────────────── */
+
+/* Stats strip */
+.statStrip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--space-2);
+}
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  min-width: 0;
+}
+.statValue {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.statLabel {
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+}
+
+/* Portrait hero (override the old grid .hero) */
+.hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.heroHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.heroAvatar {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: var(--text-sm);
+}
+.heroHeadText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.heroKnows {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+.heroKnowsMeter {
+  display: inline-flex;
+  gap: 3px;
+}
+.heroBody {
+  line-height: 1.6;
+}
+.heroActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.heroLink {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--color-accent-text);
+  cursor: pointer;
+}
+.heroLink:hover {
+  text-decoration: underline;
+}
+.heroLinkMuted {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.heroLinkMuted:hover {
+  color: var(--color-accent-text);
+}
+
+/* Review callout as a Collapsible (override the old flex .callout) */
+.callout {
+  background: var(--color-accent-subtle-bg);
+  border: 1px solid var(--color-accent-border, var(--color-border));
+  border-radius: var(--radius-md);
+  padding: 0 var(--space-3);
+}
+.calloutHead {
+  color: var(--color-accent-text);
+}
+.calloutText {
+  color: var(--color-accent-text);
+}
+
+/* Life-area sections */
+.sectionsTitle {
+  color: var(--color-text-tertiary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.section {
+  border-top: 1px solid var(--color-border);
+}
+.sectionIcon {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sectionName {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.sectionLock {
+  flex: none;
+  color: var(--color-text-tertiary);
+}
+.sectionCount {
+  flex: none;
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+}
+
+/* Insight card eyebrow + source pill */
+.eyebrowRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.sourcePill {
+  flex: none;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--color-accent-text);
+  background: var(--color-accent-subtle-bg);
+  padding: 1px 8px;
+  border-radius: var(--radius-sm);
+}
+
+/* Inline single-fact edit */
+.factEditActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+.actionsSpacer {
+  flex: 1;
+}
+
+/* Responses band recipient rows */
+.responseRow {
+  border-top: 1px solid var(--color-border);
+}
+.responseAvatar {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-xs);
+  font-weight: 600;
 }

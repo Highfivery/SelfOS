@@ -3305,15 +3305,11 @@ test('memory: a member sees only their OWN insights, never another member’s (t
       .click();
     await expect(w.getByRole('button', { name: 'Signed in as Ana' })).toBeVisible();
 
-    // Ana's Memory shows HER portrait (the hero summary + tile gist) — and NEVER Bo's (the cross-user leak).
+    // Ana's Memory shows HER portrait (the hero narrative) — and NEVER Bo's (the cross-user leak).
     await w.getByRole('link', { name: 'Memory' }).click();
     await expect(w.getByText(/Ana's onboarding portrait/).first()).toBeVisible();
     await expect(w.getByText(/Bo's onboarding portrait/)).toHaveCount(0);
     await expect(w.getByText(/Bo is afraid of heights/)).toHaveCount(0);
-    // Drilling into her own portrait shows her own fact (own data is viewable to her).
-    await w.getByRole('button', { name: /^Other/ }).click();
-    await w.getByRole('button', { name: /Open insight: Ana.s onboarding portrait/ }).click();
-    await expect(w.getByText(/Ana keeps a private journal/)).toBeVisible();
 
     // Decrypt-level proof: Bo's insight DOES exist on disk — it's withheld by scoping, not merely missing.
     const fs = createNodeFileSystem(vault);
@@ -3423,23 +3419,16 @@ test('memory (#129): a questionnaire you sent a partner is grouped under "Respon
     await w.getByRole('link', { name: 'Memory' }).click();
     await expect(w.getByRole('heading', { name: 'Memory' })).toBeVisible();
 
-    // A genuine own insight fills its life-area TILE; the sent-questionnaire insight is NOT a life-area tile.
-    await expect(w.getByRole('button', { name: /^Health & body/ })).toContainText(
-      'Values steady routines',
-    );
+    // A genuine own insight is in its life-area SECTION (collapsed); the sent-questionnaire insight is NOT.
+    await w.getByRole('button', { name: /^Health & body/ }).click();
+    await expect(w.getByText('Values steady routines')).toBeVisible();
     await expect(w.getByRole('button', { name: /^Relationships/ })).toHaveCount(0);
 
-    // The sent-questionnaire insight lives behind its own tile → the "Responses" view, grouped under Angel…
-    await w.getByRole('button', { name: /From questionnaires you sent/ }).click();
-    await expect(
-      w.getByRole('heading', { name: 'Responses to your questionnaires' }),
-    ).toBeVisible();
-    await expect(w.getByRole('heading', { name: 'Angel' })).toBeVisible();
+    // The sent-questionnaire insight lives in the "From questionnaires you sent" band, under Angel…
+    await expect(w.getByText('From questionnaires you sent')).toBeVisible();
+    await w.getByRole('button', { name: /Angel/ }).click();
     await expect(w.getByText('Angel wants more protected time together')).toBeVisible();
-    // …and opening it shows the honest "From Angel's answers" eyebrow (never "About you"), resolved read-time.
-    await w
-      .getByRole('button', { name: /Open insight: Angel wants more protected time together/ })
-      .click();
+    // …with the honest "From Angel's answers" eyebrow (never "About you"), resolved read-time.
     await expect(w.getByText(/From Angel.s answers/)).toBeVisible();
 
     // No horizontal overflow / inner scrollbars at phone width (CLAUDE.md §7/§12).
@@ -3530,7 +3519,8 @@ test('memory redesign (54/57): a partner’s shared facts never show raw; the Sh
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Memory' }).click();
 
-    // "About you" shows the owner's OWN note…
+    // Expanding the owner's section shows their OWN note…
+    await w.getByRole('button', { name: /^Relationships/ }).click();
     await expect(w.getByText('OWNER-OWN-NOTE')).toBeVisible();
     // …but a partner's shared/private facts are NEVER shown raw (sharing is context, not display, 54 §1).
     await expect(w.getByText('PARTNER-SHARED-FACT')).toHaveCount(0);
@@ -3648,33 +3638,24 @@ test('memory: the dashboard groups by life-area, flags a fact (decrypt-persisted
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Memory' }).click();
 
-    // Approved insights are life-area TILES; the mood trend panel is present.
-    await expect(w.getByRole('button', { name: /^Health & body/ })).toContainText(
-      'Sleeps better with a wind-down routine',
-    );
+    // Approved insights are life-area SECTIONS (collapsed by default); the trends panel is present.
+    await expect(w.getByRole('button', { name: /^Health & body/ })).toBeVisible();
     await expect(w.getByRole('button', { name: /^Relationships/ })).toBeVisible();
-    await expect(w.getByText(/Mood & energy/)).toBeVisible();
+    await expect(w.getByText(/How you.ve been/)).toBeVisible();
 
-    // Search narrows to matching rows.
+    // Search narrows to matching cards.
     await w.getByLabel('Search memory').fill('routine');
-    await expect(
-      w.getByRole('button', { name: 'Open insight: Sleeps better with a wind-down routine' }),
-    ).toBeVisible();
+    await expect(w.getByText('Sleeps better with a wind-down routine')).toBeVisible();
     await w.getByLabel('Search memory').fill('');
 
-    // The draft is behind the Review callout.
-    await w.getByRole('button', { name: 'Review' }).click();
-    await expect(w.getByRole('heading', { name: 'Needs your review' })).toBeVisible();
+    // The draft is behind the Review callout (it expands inline into the draft, in edit mode).
+    await w.getByRole('button', { name: /new insight.*to review/i }).click();
     await expect(w.getByLabel('Insight summary')).toHaveValue(
       'Might want to set firmer work boundaries',
     );
 
-    // Drill into the Health insight → "source removed" + mark the inaccurate fact not right (persists encrypted).
-    await w.getByRole('link', { name: 'Memory' }).click();
+    // Expand the Health section → "source removed" + mark the inaccurate fact not right (persists encrypted).
     await w.getByRole('button', { name: /^Health & body/ }).click();
-    await w
-      .getByRole('button', { name: 'Open insight: Sleeps better with a wind-down routine' })
-      .click();
     await expect(w.getByText(/original source removed/i)).toBeVisible();
     await w.getByRole('button', { name: /This isn.t right about me: This one is wrong/ }).click();
     await expect(w.getByText('marked not right')).toBeVisible();
@@ -3777,9 +3758,9 @@ test('memory overview: portrait hero, drill in to type-scope a fact to partner (
     await w.getByRole('link', { name: 'Memory' }).click();
 
     // The portrait hero shows the onboarding-portrait summary + a qualitative "how well it knows you" read.
-    // (The summary also appears as the tile gist, so scope to the first match.)
+    // The portrait narrative shows in the hero; the stats strip carries the confidence read.
     await expect(w.getByText('A grounded, curious person').first()).toBeVisible();
-    await expect(w.getByText(/How well it knows you/i)).toBeVisible();
+    await expect(w.getByText(/overall confidence/i)).toBeVisible();
 
     const overflowAt = async (): Promise<number> =>
       w.evaluate(() => {
@@ -3797,10 +3778,9 @@ test('memory overview: portrait hero, drill in to type-scope a fact to partner (
         return Math.max(max, main ? main.scrollWidth - main.clientWidth : 0);
       });
 
-    // Drill into the session insight (Emotions & patterns); the per-fact control is the relationship-scope
+    // Expand the session section (Emotions & patterns); the per-fact control is the relationship-scope
     // picker chip (the broadcast ShareToggle is gone). Type-scope "Enjoys rock climbing" to Partner.
     await w.getByRole('button', { name: /^Emotions & patterns/ }).click();
-    await w.getByRole('button', { name: 'Open insight: From a recent session' }).click();
     await w.getByRole('button', { name: /Enjoys rock climbing: private/i }).click();
     await w.getByRole('checkbox', { name: 'Partner' }).click();
     await w.keyboard.press('Escape'); // close the picker popover so it can't overlay the next control
@@ -3831,11 +3811,9 @@ test('memory overview: portrait hero, drill in to type-scope a fact to partner (
     expect(await overflowAt()).toBeLessThanOrEqual(1);
     await w.setViewportSize({ width: 1024, height: 800 });
 
-    // Back to Memory → drill into the onboarding portrait; "Edit answer" deep-links into onboarding (§3.4).
+    // Back to Memory → the portrait is the hero; "Edit your answers" deep-links into onboarding (§3.4).
     await w.getByRole('link', { name: 'Memory' }).click();
-    await w.getByRole('button', { name: /^Values & beliefs/ }).click();
-    await w.getByRole('button', { name: 'Open insight: A grounded, curious person' }).click();
-    await w.getByRole('button', { name: /Edit answer/ }).click();
+    await w.getByRole('button', { name: /Edit your answers/ }).click();
     await expect.poll(() => w.url()).toContain('onboarding');
   } finally {
     await app.close();
@@ -3969,9 +3947,8 @@ test('memory cleanup: flagging a previously-shared fact retracts it from a relat
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Memory' }).click();
-    // Drill into the insight detail where the per-fact correction control lives.
+    // Expand the section where the per-fact correction control lives.
     await w.getByRole('button', { name: /^Other/ }).click();
-    await w.getByRole('button', { name: 'Open insight: Reflections from a session' }).click();
     await expect(w.getByText('PLANNING-A-SURPRISE-PARTY')).toBeVisible();
 
     // Mark it "not right about me" → the share is retracted (Memory shows "sharing withdrawn").
@@ -4143,9 +4120,8 @@ test('memory: a provenance link opens the live source (dream deep-link survives 
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Memory' }).click();
-    // Drill into the insight detail, where the provenance deep-link lives.
+    // Expand the section where the provenance deep-link lives.
     await w.getByRole('button', { name: /^Emotions & patterns/ }).click();
-    await w.getByRole('button', { name: 'Open insight: A recurring flying dream' }).click();
     // Clicking the provenance link opens the referenced dream — NOT the empty Dreams list (the per-person
     // reset effect must not clobber the deep-link on mount). It lands on the read-first detail (12 §15.3).
     await w.getByRole('button', { name: /From a dream/ }).click();
@@ -5031,11 +5007,10 @@ test('questionnaires excerpt (§3.1): the Insight excerpt clamps whole lines, ex
     expect(overflow.inner).toBe(0);
     await w.setViewportSize({ width: 1280, height: 900 });
 
-    // "View in Memory" deep-links straight to the insight's detail view — the full summary is on
-    // screen with the back affordance — not the Memory landing page.
+    // "View in Memory" deep-links to the insight — its section (the responses band) opens inline and the
+    // full summary is on screen (the flattened page has no separate detail view — spec 62).
     await card.getByRole('button', { name: /View in Memory/ }).click();
     await expect(w.getByText(/naming appreciation out loud/)).toBeVisible();
-    await expect(w.getByRole('button', { name: 'Memory', exact: true })).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -7885,12 +7860,8 @@ test('onboarding: nudge → turn fills a field → skip intimacy → portrait fe
     // fact directly in Memory, marked "private" (own-coaching-only; a member would get it redacted, §8.4).
     await w.getByRole('link', { name: 'Memory' }).click();
     await expect(w.getByText(/thoughtful and steady/).first()).toBeVisible();
-    // The restricted 'grief' fact is shown to the Owner in the insight detail (reached via search → drill-in).
+    // The restricted 'grief' fact is shown to the Owner in the portrait card (reached via search).
     await w.getByLabel('Search memory').fill('grief');
-    await w
-      .getByRole('button', { name: /Open insight:/ })
-      .first()
-      .click();
     await expect(w.getByText(/Carries grief/)).toBeVisible();
     await expect(w.getByText('private').first()).toBeVisible();
 
@@ -8253,7 +8224,6 @@ test('memory: an existing (pre-spec) portrait shares by default — Sharing refl
     await w.getByRole('link', { name: 'Memory' }).click();
     // Clean cards (44 audit): drilling into the portrait, the fact renders with NO per-fact "Private" chip.
     await w.getByRole('button', { name: /^Health & body/ }).click();
-    await w.getByRole('button', { name: /Open insight: A warm portrait/ }).click();
     await expect(w.getByText('Values steady routines')).toBeVisible();
     expect(await w.getByText('Private', { exact: true }).count()).toBe(0);
     // The Sharing surface (its own page now, 57 §3.8) reflects the backfilled share — the shared onboarding
@@ -10618,6 +10588,91 @@ test('together follow-through (61): agreements in Goals + needs-attention, inlin
             ?.status,
       )
       .toBe('done');
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('memory redesign (62): sections collapsed (sensitive too), edit a fact inline, decrypt + 360px guard', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('memory redesign e2e: master key missing');
+  const now = new Date().toISOString();
+  await saveInsight(fs, key, {
+    id: 'ins-emotions',
+    schemaVersion: 1,
+    source: 'session',
+    subjectPersonId: 'owner-1',
+    summary: 'A morning person',
+    facts: [{ id: 'f1', text: 'Likes early starts', shareable: false }],
+    confidence: 'medium',
+    categories: ['Emotions & patterns'],
+    approved: true,
+    provenance: { conversationId: 'c1', at: now },
+    createdAt: now,
+    updatedAt: now,
+  });
+  await saveInsight(fs, key, {
+    id: 'ins-intimacy',
+    schemaVersion: 1,
+    source: 'session',
+    subjectPersonId: 'owner-1',
+    summary: 'An intimacy insight',
+    facts: [{ id: 'g1', text: 'A private detail', shareable: false, restricted: true }],
+    confidence: 'medium',
+    categories: ['Intimacy'],
+    approved: true,
+    provenance: { conversationId: 'c2', at: now },
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Memory' }).click();
+    await expect(w.getByRole('heading', { name: 'Memory' })).toBeVisible();
+
+    // The page opens with sections COLLAPSED — the sensitive (Intimacy) one stays closed.
+    const emotions = w.getByRole('button', { name: /^Emotions & patterns/ });
+    await expect(emotions).toHaveAttribute('aria-expanded', 'false');
+    await expect(w.getByText('Likes early starts')).toHaveCount(0);
+    await expect(w.getByText('A private detail')).toHaveCount(0);
+
+    // Expand a section → the insight card renders inline; edit ONE fact in place → Save.
+    await emotions.click();
+    await expect(w.getByText('Likes early starts')).toBeVisible();
+    await w.getByRole('button', { name: 'Edit: Likes early starts' }).click();
+    const field = w.getByRole('textbox', { name: 'Edit fact: Likes early starts' });
+    await field.fill('Likes slow mornings');
+    await w.getByRole('button', { name: 'Save' }).click();
+
+    // Decrypt-level proof: the inline edit persisted to the vault.
+    await expect
+      .poll(async () => {
+        const list = await listInsightsForPerson(fs, key, 'owner-1');
+        return list.find((i) => i.id === 'ins-emotions')?.facts.find((f) => f.id === 'f1')?.text;
+      })
+      .toBe('Likes slow mornings');
+
+    // ~360px: no horizontal overflow / inner scrollbars (§7/§12).
+    await w.setViewportSize({ width: 360, height: 900 });
+    const overflow = await w.evaluate(() => {
+      const offenders: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          offenders.push(`${el.tagName}.${el.className}`);
+        }
+      });
+      const main = document.querySelector('main');
+      return { offenders, mainOverflow: main ? main.scrollWidth - main.clientWidth : 0 };
+    });
+    expect(overflow.offenders).toEqual([]);
+    expect(overflow.mainOverflow).toBeLessThanOrEqual(1);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

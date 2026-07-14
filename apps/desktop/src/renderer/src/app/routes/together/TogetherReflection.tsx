@@ -82,7 +82,11 @@ function AgreementRow({
           </div>
           <Inline gap={1} align="center">
             {agreement.status === 'standing' ? (
-              <Button variant="secondary" onClick={() => void setStatus('done')}>
+              <Button
+                variant="secondary"
+                onClick={() => void setStatus('done')}
+                title="Mark this action item done"
+              >
                 <Check size={13} aria-hidden="true" /> Mark done
               </Button>
             ) : (
@@ -94,6 +98,7 @@ function AgreementRow({
               variant="secondary"
               onClick={() => setEditing(true)}
               aria-label="Edit agreement"
+              title="Edit the wording or timeframe"
             >
               <Pencil size={13} aria-hidden="true" />
             </Button>
@@ -101,6 +106,7 @@ function AgreementRow({
               variant="secondary"
               onClick={() => void setStatus('retired')}
               aria-label="Retire agreement"
+              title="Retire this action item (remove it from your list)"
             >
               <RotateCcw size={13} aria-hidden="true" />
             </Button>
@@ -112,9 +118,11 @@ function AgreementRow({
 }
 
 /**
- * The wrap-up reflection + the pair agreements ledger (58 §3.8/§3.9). Shows a "Wrap up & reflect" CTA when
- * there's no report yet (or a "Refresh the reflection" when the session moved on), the shared report once it
- * exists, and the pair's living agreements — each inline-editable, with a gentle follow-up offered on "done".
+ * The reflection + the pair action-items/agreements ledger (58 §3.8/§3.9). Two analyze actions:
+ * "Reflect & note action items" (a mid-session checkpoint — creates the reflection + deduped action items,
+ * session stays open) and "Wrap up & reflect" (the same, and marks the session done). Both are idempotent and
+ * de-dup action items, so running one then the other never doubles anything. Below: the shared report once it
+ * exists, and the pair's living action items/agreements — each inline-editable, with a gentle follow-up on "done".
  */
 export function TogetherReflection({
   sessionId,
@@ -135,13 +143,17 @@ export function TogetherReflection({
   const [error, setError] = useState<string | null>(null);
   const [followUp, setFollowUp] = useState(false);
   const [nextText, setNextText] = useState('');
+  // Which analyze is in flight, so only the clicked button shows "Reflecting…" (both share `wrappingUp`).
+  const [pendingMode, setPendingMode] = useState<'reflect' | 'wrapUp' | null>(null);
 
   const { report, stale, agreements } = view;
   const activeAgreements = agreements.filter((a) => a.status !== 'retired');
 
-  const runWrapUp = async (): Promise<void> => {
+  const runAnalyze = async (mode: 'reflect' | 'wrapUp'): Promise<void> => {
     setError(null);
-    const result = await wrapUp(sessionId);
+    setPendingMode(mode);
+    const result = await wrapUp(sessionId, mode);
+    setPendingMode(null);
     if (!result.ok) setError(result.message);
   };
 
@@ -157,11 +169,32 @@ export function TogetherReflection({
     >
       <div className={styles.reflectionHead}>
         <Text weight={600}>Reflection</Text>
-        {memoryEnabled && aiReady && (!report || stale) ? (
-          <Button onClick={() => void runWrapUp()} disabled={wrappingUp}>
-            <Sparkles size={14} aria-hidden="true" />
-            {wrappingUp ? 'Reflecting…' : report ? 'Refresh the reflection' : 'Wrap up & reflect'}
-          </Button>
+        {memoryEnabled && aiReady ? (
+          <Inline gap={2} align="center" wrap>
+            {/* Mid-session checkpoint: analyze the session so far → reflection + action items, session stays
+                open. Doubles as "refresh" once a report exists. Never marks the session done. */}
+            <Button
+              variant="secondary"
+              onClick={() => void runAnalyze('reflect')}
+              disabled={wrappingUp}
+              title="Have AI reflect on the session so far and note any action items. The session stays open."
+            >
+              <Sparkles size={14} aria-hidden="true" />
+              {wrappingUp && pendingMode === 'reflect'
+                ? 'Reflecting…'
+                : report
+                  ? 'Reflect again & note actions'
+                  : 'Reflect & note action items'}
+            </Button>
+            {/* Terminal action: the same analysis, and it marks the session done (§3.8). */}
+            <Button
+              onClick={() => void runAnalyze('wrapUp')}
+              disabled={wrappingUp}
+              title="Reflect one last time and mark this session done."
+            >
+              {wrappingUp && pendingMode === 'wrapUp' ? 'Wrapping up…' : 'Wrap up & reflect'}
+            </Button>
+          </Inline>
         ) : null}
       </div>
 
@@ -214,7 +247,7 @@ export function TogetherReflection({
       {activeAgreements.length > 0 ? (
         <div className={styles.ledger}>
           <Text size="xs" tone="secondary" weight={600}>
-            Agreements you’ve made
+            Action items &amp; agreements
           </Text>
           <ul className={styles.agreementList}>
             {activeAgreements.map((a) => (

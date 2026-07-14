@@ -450,13 +450,14 @@ function newestSharedHumanTs(messages: TogetherMessage[]): string | null {
 }
 
 /**
- * The viewer-projected status (§4.3). Order is load-bearing. `reportCreatedAt` is null until a wrap-up
- * report exists (Phase D); with it, a session with no newer shared human message derives `complete`.
+ * The viewer-projected status (§4.3). Order is load-bearing. `wrappedUpAt` is null unless the session was
+ * explicitly WRAPPED UP (`report.wrappedUp` — a mid-session "reflect" checkpoint does NOT set it, so it never
+ * marks the session done); with it, a session with no newer shared human message derives `complete`.
  */
 export function deriveStatusFor(
   session: TogetherSession,
   states: Map<string, ParticipantState>,
-  reportCreatedAt: string | null,
+  wrappedUpAt: string | null,
   messages: TogetherMessage[],
   viewerId: string,
   now: Date,
@@ -470,10 +471,10 @@ export function deriveStatusFor(
   // 4. Any participant still un-acked → invited (older than 30d → expired). Initiator acks at create.
   const allAcked = session.participantIds.every((pid) => states.get(pid)?.rulesAckAt);
   if (!allAcked) return isInvitationExpired(session.createdAt, now) ? 'expired' : 'invited';
-  // 5. A report with no newer shared human message → complete (staleness derived, §3.8).
-  if (reportCreatedAt) {
+  // 5. An explicit wrap-up with no newer shared human message → complete (staleness derived, §3.8).
+  if (wrappedUpAt) {
     const newest = newestSharedHumanTs(messages);
-    if (!newest || newest <= reportCreatedAt) return 'complete';
+    if (!newest || newest <= wrappedUpAt) return 'complete';
   }
   // 6. The viewer paused for themselves — onHold in their view only (§8.3).
   if (vState?.pausedAt) return 'onHold';
@@ -542,12 +543,12 @@ const SNIPPET_MAX = 140;
 export function digestFor(
   session: TogetherSession,
   states: Map<string, ParticipantState>,
-  reportCreatedAt: string | null,
+  wrappedUpAt: string | null,
   messages: TogetherMessage[],
   viewerId: string,
   now: Date,
 ): SessionDigest {
-  const status = deriveStatusFor(session, states, reportCreatedAt, messages, viewerId, now);
+  const status = deriveStatusFor(session, states, wrappedUpAt, messages, viewerId, now);
   const projected = projectMessages(messages, viewerId);
   const last = projected[projected.length - 1];
   const vState = states.get(viewerId);

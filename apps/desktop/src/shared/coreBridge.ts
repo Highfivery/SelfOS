@@ -1091,7 +1091,11 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
   ): Promise<TogetherSessionSummary> => {
     const states = await listTogetherStates(fs, key, session.id);
     const messages = await listTogetherMessages(fs, key, session.id);
-    const digest = digestFor(session, states, null, messages, viewerId, now); // reportCreatedAt: Phase D
+    // Only an EXPLICIT wrap-up (`report.wrappedUp`) marks the session `complete`; a mid-session "reflect"
+    // checkpoint writes a report WITHOUT `wrappedUp`, so it never ends the session (58 §3.8).
+    const report = await getTogetherReport(fs, key, session.id);
+    const wrappedUpAt = report?.wrappedUp ? (report.wrappedUpAt ?? report.updatedAt) : null;
+    const digest = digestFor(session, states, wrappedUpAt, messages, viewerId, now);
     return {
       id: session.id,
       pairKey: session.pairKey,
@@ -2626,7 +2630,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       return session ? listSuggestions(c.fs, c.key, session.id) : [];
     },
     togetherWrapUp: async (input): Promise<TogetherWrapUpResult> => {
-      const { sessionId } = TogetherWrapUpInputSchema.parse(input);
+      const { sessionId, mode } = TogetherWrapUpInputSchema.parse(input);
       const c = await togetherCtx();
       if (!c) return { ok: false, reason: 'NOT_ALLOWED', message: 'SelfOS isn’t ready yet.' };
       const session = await accessibleTogetherSession(c.fs, c.key, c.personId, sessionId);
@@ -2655,6 +2659,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         session,
         memoryEnabled,
         ...(edge ? { relationshipId: edge.id } : {}),
+        ...(mode ? { mode } : {}),
         now: new Date(),
       });
       if (outcome.ok) return { ok: true, report: outcome.report, stale: false };
@@ -2667,7 +2672,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const session = await accessibleTogetherSession(c.fs, c.key, c.personId, sessionId);
       if (!session) return { report: null, stale: false, agreements: [] };
       const report = await getTogetherReport(c.fs, c.key, sessionId);
-      // Derived staleness (§3.8): the newest mutually-visible human message vs the report's createdAt.
+      // Derived staleness (§3.8): the newest mutually-visible human message vs the report's last-generated time.
       const shared = (await listTogetherMessages(c.fs, c.key, sessionId)).filter(
         (m) => !m.privateAside && m.role === 'user',
       );

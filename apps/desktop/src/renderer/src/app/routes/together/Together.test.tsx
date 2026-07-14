@@ -852,11 +852,44 @@ describe('TogetherReflection (§3.8/§3.9)', () => {
     ...over,
   });
 
-  it('offers "Wrap up & reflect" when AI + memory are ready and there is no report yet', () => {
+  it('offers BOTH a mid-session "Reflect & note action items" checkpoint and "Wrap up & reflect", each with a tooltip', () => {
     installMockBridge();
     useTogetherStore.setState({ reportView: { report: null, stale: false, agreements: [] } });
     render(<TogetherReflection sessionId="s1" memoryEnabled aiReady />);
-    expect(screen.getByRole('button', { name: /Wrap up & reflect/ })).toBeInTheDocument();
+    const reflect = screen.getByRole('button', { name: /Reflect & note action items/ });
+    const wrap = screen.getByRole('button', { name: /Wrap up & reflect/ });
+    expect(reflect).toBeInTheDocument();
+    expect(wrap).toBeInTheDocument();
+    // Tooltips make the two actions' difference clear.
+    expect(reflect.getAttribute('title')).toMatch(/session stays open/i);
+    expect(wrap.getAttribute('title')).toMatch(/mark this session done/i);
+  });
+
+  it('the checkpoint button analyzes with mode "reflect"; "Wrap up & reflect" with mode "wrapUp"', async () => {
+    const calls: Array<{ sessionId: string; mode?: string }> = [];
+    installMockBridge({
+      togetherWrapUp: (input) => {
+        calls.push(input);
+        return Promise.resolve({ ok: true, report, stale: false });
+      },
+    });
+    useTogetherStore.setState({ reportView: { report: null, stale: false, agreements: [] } });
+    render(<TogetherReflection sessionId="s1" memoryEnabled aiReady />);
+    await userEvent.click(screen.getByRole('button', { name: /Reflect & note action items/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Wrap up & reflect/ }));
+    expect(calls).toEqual([
+      { sessionId: 's1', mode: 'reflect' },
+      { sessionId: 's1', mode: 'wrapUp' },
+    ]);
+  });
+
+  it('once a report exists the checkpoint button re-analyzes ("Reflect again & note actions")', () => {
+    installMockBridge();
+    useTogetherStore.setState({ reportView: { report, stale: false, agreements: [] } });
+    render(<TogetherReflection sessionId="s1" memoryEnabled aiReady />);
+    expect(
+      screen.getByRole('button', { name: /Reflect again & note actions/ }),
+    ).toBeInTheDocument();
   });
 
   it('renders the shared report (summary + worked-through + themes) once one exists', () => {
@@ -873,6 +906,13 @@ describe('TogetherReflection (§3.8/§3.9)', () => {
     useTogetherStore.setState({ reportView: { report, stale: false, agreements: [agreement()] } });
     render(<TogetherReflection sessionId="s1" memoryEnabled aiReady />);
     expect(screen.getByText('screen-free dinners')).toBeInTheDocument();
+    // The icon-only row actions carry tooltips so their purpose is clear (not just an aria-label).
+    expect(screen.getByRole('button', { name: 'Edit agreement' }).getAttribute('title')).toMatch(
+      /edit/i,
+    );
+    expect(screen.getByRole('button', { name: 'Retire agreement' }).getAttribute('title')).toMatch(
+      /remove it from your list/i,
+    );
     await userEvent.click(screen.getByRole('button', { name: /Mark done/ }));
     expect(await screen.findByText(/build on it/i)).toBeInTheDocument();
     // The follow-up offers an editable next agreement (not a placeholder-text row).

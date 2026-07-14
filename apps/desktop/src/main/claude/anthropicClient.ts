@@ -311,6 +311,9 @@ export function fakeClaudeClient(): ClaudeClient {
                 crisisFlag: crisisFor(nameB ?? ''),
               },
             ],
+            // A concrete next step → a deduped standing pair agreement (§3.9). Stable across runs so a
+            // reflect-then-wrap-up sequence exercises the de-dup (never doubled).
+            actionItems: [{ text: 'Plan a weekly date night', timeframe: 'this week' }],
           }),
           usage: { inputTokens: 150, outputTokens: 60, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });

@@ -250,6 +250,12 @@ function makeHost(): {
                 crisisFlag: crisisFor(nameB ?? ''),
               },
             ],
+            // Concrete next steps → deduped standing pair agreements (§3.9). Same on every run, so a
+            // reflect-then-wrap-up sequence exercises the de-dup (never doubles).
+            actionItems: [
+              { text: 'Set a weekly check-in time', timeframe: 'this week' },
+              { text: 'Trade one appreciation each evening' },
+            ],
           }),
           usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
@@ -5799,6 +5805,41 @@ describe('createCoreBridge — Together (58) foundation', () => {
     });
     expect(usage.every((u) => u.personId === ben)).toBe(true);
     expect(usage.length).toBeGreaterThan(0);
+  });
+
+  it('reflect (mid-session) creates deduped action items + keeps the session OPEN; wrap-up marks it DONE — reflect→wrap-up never doubles the action items (§3.8/§3.9)', async () => {
+    const { host, bridge, ben, angel } = await seedPair();
+    const created = await bridge.togetherCreate({ partnerPersonId: angel });
+    const sessionId = created.ok ? created.session.id : '';
+    await asPerson(host, angel);
+    await bridge.togetherAccept(sessionId);
+    await asPerson(host, ben);
+    await bridge.togetherSendMessage({ sessionId, text: 'Let’s protect our evenings.' });
+
+    // A mid-session REFLECT checkpoint: creates the report + the two action items as standing agreements, but
+    // leaves the session OPEN (no `wrappedUp` → not `complete`).
+    const reflect = await bridge.togetherWrapUp({ sessionId, mode: 'reflect' });
+    expect(reflect.ok).toBe(true);
+    if (reflect.ok) expect(reflect.report.wrappedUp).toBeUndefined();
+    expect((await bridge.togetherGet(sessionId))?.status).toBe('active');
+    const afterReflect = await bridge.togetherGetReport({ sessionId });
+    expect(
+      afterReflect.agreements
+        .filter((a) => a.status === 'standing')
+        .map((a) => a.text)
+        .sort(),
+    ).toEqual(['Set a weekly check-in time', 'Trade one appreciation each evening']);
+
+    // Now WRAP UP: same analysis (same action items) → must NOT double them, AND marks the session done.
+    const wrap = await bridge.togetherWrapUp({ sessionId, mode: 'wrapUp' });
+    expect(wrap.ok).toBe(true);
+    if (wrap.ok) expect(wrap.report.wrappedUp).toBe(true);
+    const afterWrap = await bridge.togetherGetReport({ sessionId });
+    expect(afterWrap.agreements.filter((a) => a.status === 'standing')).toHaveLength(2); // not 4
+    // The explicit wrap-up derives the session `complete` (§3.8) for both partners.
+    expect((await bridge.togetherGet(sessionId))?.status).toBe('complete');
+    await asPerson(host, angel);
+    expect((await bridge.togetherGet(sessionId))?.status).toBe('complete');
   });
 
   it('a crisis flag routes to the affected partner’s twin ONLY, never into the shared report (§8.5)', async () => {

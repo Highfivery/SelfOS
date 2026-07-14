@@ -275,15 +275,24 @@ the couples prompt as text; it reaches the couples prompt only as the author's o
 (a prep wrap-up insight is own-subject, feeding their side of the couples context like any insight).
 Prep is **solo spend billed to its author** (§6.2).
 
-### 3.8 Wrap-up
+### 3.8 Reflect & wrap-up
 
-Either partner taps **Wrap up & reflect** (or accepts the coach's wrap-up suggestion — the existing
-`[[SELFOS:WRAPUP]]` hint). One metered `together.analyze` pass (initiator-billed;
-`extendedThinking: false`) runs over the **mutually-visible transcript only — every `privateAside`
-message (and its attachments) is structurally excluded from the analyze input host-side, before
-prompt assembly** (a code boundary, not a prompt instruction; v1 excludes asides from _all three_
-artifacts including the author's own twin — the author's private material still reaches their solo
-coaching via prep/own sessions). It produces:
+Two entry points run the **same** metered `together.analyze` pass (`mode: 'reflect' | 'wrapUp'`;
+initiator-billed, `extendedThinking: false`), so the analysis, artifacts, and de-dup are identical:
+
+- **Reflect & note action items** — a **mid-session checkpoint**. Creates/refreshes the reflection +
+  action items and leaves the session **open** (it does NOT mark it done). Doubles as "refresh" once a
+  report exists (the button reads "Reflect again & note actions").
+- **Wrap up & reflect** — the same analysis, and it marks the session **done** (sets `report.wrappedUp`,
+  so the session derives `complete`, §4.3). Also reachable via the coach's `[[SELFOS:WRAPUP]]` hint.
+
+Both are **idempotent** (reuse the report + twin ids) and **de-dup action items** against the pair
+ledger, so running one then the other (or either twice) **never doubles** the report, twins, or action
+items. The pass runs over the **mutually-visible transcript only — every `privateAside` message (and
+its attachments) is structurally excluded from the analyze input host-side, before prompt assembly** (a
+code boundary, not a prompt instruction; v1 excludes asides from _all three_ artifacts including the
+author's own twin — the author's private material still reaches their solo coaching via prep/own
+sessions). It produces:
 
 1. The **shared report** (both see; mockup Wrap-up screen): themes, "what you worked through,"
    agreements made, joint challenge started, pulse line. Stored in the session folder. **The
@@ -299,19 +308,29 @@ coaching via prep/own sessions). It produces:
    (the §2 continuity trade-off).
 3. **Dyad metrics** on both twins (e.g. `connectionValence`, `frictionLevel`, clamped ±1) — the
    pulse series source (§3.10a).
-4. **Staleness is derived, never stored** (consistent with derived status): the report and twins
-   are stale when any human message in the session is newer than `report.createdAt`. Continuing a
-   completed session simply means writing a new message — the session derives back to `active` and
-   the report derives stale; re-running wrap-up overwrites idempotently (the 09 reuse-the-insightId
-   pattern).
+4. **Action items** — concrete next steps the couple named are extracted and written as **standing
+   pair agreements** (the same ledger as `[[SELFOS:AGREEMENT]]` markers, §3.9), **deduped** by
+   normalized text against the existing ledger (chat markers + prior reflect/wrap-up runs) — and the
+   prompt is fed the existing items as an "already captured, don't repeat" list (soft de-dup) with the
+   normalized-text filter as the deterministic backstop. This is why reflect-then-wrap-up never doubles
+   them. The report references the pair's session action items via `agreementIds`.
+
+**Staleness is derived, never stored** (consistent with derived status): the report and twins are
+stale when any human message in the session is newer than `report.updatedAt` (the last time the
+reflection was generated — so a fresh reflect/refresh clears staleness). Continuing a wrapped-up
+session simply means writing a new message — the session derives back to `active` and the report
+derives stale; re-running overwrites idempotently (the 09 reuse-the-insightId pattern). Only an
+**explicit wrap-up** (`report.wrappedUp` → `report.wrappedUpAt`) makes the session derive `complete`;
+a mid-session reflect never does.
 
 ### 3.9 Relationship memory & the grounding pack
 
-- **Agreements ledger**: agreements captured in any session (via `[[SELFOS:AGREEMENT:{json}]]`)
-  live at the **pair** level, visible to both, each with text, timeframe, status
-  (standing / done / retired), and provenance (which session). Either partner can edit/retire (the
-  one deliberate two-writer record — last-write-wins accepted, §7); the Together home strip counts
-  standing ones.
+- **Agreements / action-items ledger**: agreements captured in any session — via
+  `[[SELFOS:AGREEMENT:{json}]]` markers **or** extracted as **action items** by the reflect/wrap-up
+  pass (§3.8, deduped) — live at the **pair** level, visible to both, each with text, timeframe, status
+  (standing / done / retired), and provenance (which session). Either partner can edit/retire (the one
+  deliberate two-writer record — last-write-wins accepted, §7); the reflection panel surfaces them as
+  "Action items & agreements", and the Together home strip counts standing ones.
 - **The grounding pack** (zero extra AI spend — all cached/deterministic reads): every couples
   prompt opens with the pair's standing agreements, the latest compatibility `AlignmentReport` (if
   any), open joint challenges, each partner's cached relationship synthesis (54), and recent pulse

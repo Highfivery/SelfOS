@@ -192,6 +192,11 @@ describe('agreementService ledger (§3.9)', () => {
     expect(isReportStale(report, '2026-07-10T11:00:00.000Z')).toBe(false); // older msg
     expect(isReportStale(report, '2026-07-10T13:00:00.000Z')).toBe(true); // newer msg
     expect(isReportStale(null, '2026-07-10T13:00:00.000Z')).toBe(false);
+    // Staleness compares against updatedAt (last generated), so a fresh reflect/refresh clears it: a report
+    // re-generated at 12:30 is NOT stale against a 12:15 message even though createdAt (12:00) is older.
+    const refreshed = { ...report, updatedAt: '2026-07-10T12:30:00.000Z' };
+    expect(isReportStale(refreshed, '2026-07-10T12:15:00.000Z')).toBe(false);
+    expect(isReportStale(refreshed, '2026-07-10T12:45:00.000Z')).toBe(true);
   });
 });
 
@@ -367,6 +372,98 @@ describe('runTogetherWrapUp (§3.8) — the safety-critical wrap-up', () => {
     expect(benTwins).toHaveLength(1); // not duplicated
     expect(benTwins[0]?.id).toBe(firstTwinId); // reuse-the-id
     expect((await getReport(fs, key, session.id))?.id).toBe(firstReportId);
+  });
+
+  // ── Action items → deduped pair agreements + reflect-vs-wrap-up mode (58 §3.8/§3.9) ────────────────
+  const withActions = (items: { text: string; timeframe?: string }[]): string =>
+    JSON.stringify({
+      summary: 'A warm recap.',
+      themes: [],
+      workedThrough: [],
+      connectionValence: 0.3,
+      frictionLevel: 0.1,
+      partners: [
+        { name: 'Ben', reflection: 'r', facts: [], sensitiveFacts: [], crisisFlag: false },
+        { name: 'Angel', reflection: 'r', facts: [], sensitiveFacts: [], crisisFlag: false },
+      ],
+      actionItems: items,
+    });
+
+  it('creates a STANDING pair agreement per action item (with timeframe), referenced by the report', async () => {
+    const fs = memFileSystem();
+    const session = await seedWithTranscript(fs);
+    const json = withActions([
+      { text: 'Plan a weekly date night', timeframe: 'this week' },
+      { text: 'Check in for 10 minutes each night' },
+    ]);
+    const result = await runTogetherWrapUp(deps(fs, analyzeClient(json).client, { session }));
+    expect(result.ok).toBe(true);
+    const agreements = standingAgreements(await listAgreements(fs, key, session.pairKey));
+    expect(agreements.map((a) => a.text).sort()).toEqual([
+      'Check in for 10 minutes each night',
+      'Plan a weekly date night',
+    ]);
+    expect(agreements.find((a) => a.text.startsWith('Plan'))?.timeframe).toBe('this week');
+    // The report references the freshly-minted action items.
+    const report = await getReport(fs, key, session.id);
+    expect(report?.agreementIds).toHaveLength(2);
+  });
+
+  it('DE-DUPES action items against existing agreements (by normalized text) — never doubles them', async () => {
+    const fs = memFileSystem();
+    const session = await seedWithTranscript(fs);
+    // A pre-existing agreement (e.g. captured from a chat marker) — trailing punctuation + case differ.
+    await saveAgreement(
+      fs,
+      key,
+      BEN,
+      ANGEL,
+      { text: 'Plan a weekly date night.', status: 'standing', sessionId: session.id },
+      NOW,
+    );
+    const json = withActions([
+      { text: 'plan a weekly   date night' }, // a rephrasing of the existing one → skipped
+      { text: 'Check in nightly' }, // genuinely new → created
+    ]);
+    await runTogetherWrapUp(deps(fs, analyzeClient(json).client, { session }));
+    const texts = standingAgreements(await listAgreements(fs, key, session.pairKey)).map(
+      (a) => a.text,
+    );
+    expect(texts).toHaveLength(2); // the original + the one new item, NOT three
+    expect(texts).toContain('Check in nightly');
+  });
+
+  it('reflect-then-wrap-up never doubles the action items (both de-dup against the ledger)', async () => {
+    const fs = memFileSystem();
+    const session = await seedWithTranscript(fs);
+    const json = withActions([
+      { text: 'Plan a date night' },
+      { text: 'Say one appreciation daily' },
+    ]);
+    // A mid-session reflect creates the two action items…
+    await runTogetherWrapUp(deps(fs, analyzeClient(json).client, { session, mode: 'reflect' }));
+    // …then wrapping up re-runs the SAME analysis — it must NOT re-create them.
+    await runTogetherWrapUp(deps(fs, analyzeClient(json).client, { session, mode: 'wrapUp' }));
+    expect(standingAgreements(await listAgreements(fs, key, session.pairKey))).toHaveLength(2);
+  });
+
+  it('mode: a mid-session reflect leaves the session OPEN; wrap-up marks it DONE', async () => {
+    const fs = memFileSystem();
+    const session = await seedWithTranscript(fs);
+    // 'reflect' → no `wrappedUp` on the report (the session stays open).
+    await runTogetherWrapUp(
+      deps(fs, analyzeClient(WRAPUP_JSON).client, { session, mode: 'reflect' }),
+    );
+    let report = await getReport(fs, key, session.id);
+    expect(report?.wrappedUp).toBeUndefined();
+    expect(report?.wrappedUpAt).toBeUndefined();
+    // 'wrapUp' (the default) → marks it done (idempotent: same report id).
+    await runTogetherWrapUp(
+      deps(fs, analyzeClient(WRAPUP_JSON).client, { session, mode: 'wrapUp' }),
+    );
+    report = await getReport(fs, key, session.id);
+    expect(report?.wrappedUp).toBe(true);
+    expect(report?.wrappedUpAt).toBe('2026-07-10T12:10:00.000Z');
   });
 
   it('a partner name that doesn’t resolve writes NO twin (fail-safe against a wrong-subject reflection)', async () => {

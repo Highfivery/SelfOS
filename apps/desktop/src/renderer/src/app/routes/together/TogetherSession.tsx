@@ -207,7 +207,7 @@ export function TogetherSession(): JSX.Element {
                 ? 'Your reflection'
                 : 'Ready to wrap up & reflect'}
             {report && activeAgreements.length > 0
-              ? ` · reflection from ${relativeDay(report.createdAt)}`
+              ? ` · reflection from ${relativeDay(report.updatedAt)}`
               : ''}
           </Text>
           <button type="button" className={styles.reflectionStripJump} onClick={jumpToReflection}>

@@ -20,7 +20,7 @@ import { checkBudget, costOf, recordUsage } from '../usage';
 import { deleteInsight, listInsightsForPerson, saveInsight } from '../insights';
 import { PERSONA, SAFETY } from '../conversations/promptBuilder';
 import { getSession, listMessages } from './togetherService';
-import { getReport, listAgreements, saveReport } from './agreementService';
+import { getReport, listAgreements, saveAgreement, saveReport } from './agreementService';
 
 // ── Together wrap-up (58 §3.8) — a sibling of `endAndSummarize` (09 §5), never a change to it ────────
 // One metered `together.analyze` pass (initiator-billed, extendedThinking:false) over the MUTUALLY-VISIBLE
@@ -40,6 +40,26 @@ free of blame. Each partner's private reflection is seen ONLY by that person.`;
 
 /** A per-element-tolerant short-string list (37 §3.1). */
 const strList = tolerantArray(z.string(), '', (s) => s.trim() !== '');
+
+/**
+ * A concrete action item / next step the couple can follow through on (§3.9). Each becomes a STANDING pair
+ * agreement, deduped against the ledger so re-running (reflect → wrap-up) never doubles them. `timeframe` is
+ * optional ("this week", "before Friday"). Tolerant by design — a malformed element is dropped, not fatal.
+ */
+const ActionItemSchema = z.object({
+  text: z.string().min(1),
+  timeframe: z.string().optional().catch(undefined),
+});
+const actionItemList = tolerantArray(ActionItemSchema, { text: '' }, (a) => a.text.trim() !== '');
+
+/** Normalize an action-item / agreement text for deterministic de-dup (lowercase, collapse ws, strip edges). */
+function normalizeActionText(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[\s]+/g, ' ')
+    .replace(/[.,;:!?—–-]+$/g, '')
+    .trim();
+}
 
 /**
  * A per-partner block in the analysis reply. `name` matches one of the two participant names given in the
@@ -71,12 +91,22 @@ const TogetherAnalysisDraftSchema = z.object({
     { name: '', reflection: '', facts: [], sensitiveFacts: [] },
     (p) => p.name.trim() !== '',
   ),
+  // Concrete next steps the couple named — each becomes a standing pair agreement, deduped (§3.9).
+  actionItems: actionItemList,
 });
 
 const ANALYSIS_INSTRUCTION = (
   nameA: string,
   nameB: string,
-): string => `Now write the wrap-up for this session \
+  existingActionItems: string[],
+): string => {
+  const avoid =
+    existingActionItems.length > 0
+      ? `\n\nThese action items are ALREADY captured — do NOT repeat any of them (rephrasings count as repeats):\n${existingActionItems
+          .map((t) => `- ${t}`)
+          .join('\n')}`
+      : '';
+  return `Now write the wrap-up for this session \
 between ${nameA} and ${nameB}. Respond with ONLY a single JSON object (no markdown fences, no prose outside \
 it) with these keys:
 - "summary": a brief, warm, BALANCED 1-3 sentence recap BOTH partners will see. Never assign blame. NEVER \
@@ -90,7 +120,11 @@ include any self-harm/suicide/abuse/crisis detail here — the shared summary st
   - "reflection": a warm 1-3 sentence reflection written TO that partner about THEIR side (seen only by them)
   - "facts": short durable facts about that partner's experience/needs from this session (array of strings)
   - "sensitiveFacts": any facts touching sex or intimacy — kept PRIVATE to that partner (array of strings)
-  - "crisisFlag": true ONLY if THAT partner disclosed self-harm, suicide, or acute crisis (boolean)`;
+  - "crisisFlag": true ONLY if THAT partner disclosed self-harm, suicide, or acute crisis (boolean)
+- "actionItems": concrete next steps the two of them actually named or agreed to (NOT vague suggestions) — \
+each { "text": short imperative shared by both, "timeframe": optional like "this week" }. Only include real, \
+mutually-owned commitments; use [] if none were named.${avoid}`;
+};
 
 export interface TogetherWrapUpDeps {
   fs: FileSystem;
@@ -104,6 +138,13 @@ export interface TogetherWrapUpDeps {
   memoryEnabled: boolean;
   /** The live partner edge id at wrap-up time (best-effort linkage; the STABLE key is `pairKey`). */
   relationshipId?: string;
+  /**
+   * 'wrapUp' (default) marks the session DONE (sets `wrappedUp` on the report → derives `complete`);
+   * 'reflect' is a mid-session checkpoint that produces the SAME report + action items but leaves the session
+   * open (§3.8). Both are idempotent (reuse the report/twin ids) and both de-dup action items, so running one
+   * then the other never doubles anything.
+   */
+  mode?: 'reflect' | 'wrapUp';
   now: Date;
   override?: boolean;
 }
@@ -206,6 +247,13 @@ export async function runTogetherWrapUp(deps: TogetherWrapUpDeps): Promise<Toget
   if (pb) idByName.set(nameB.trim().toLowerCase(), pb);
 
   const at = now.toISOString();
+  // Existing pair agreements (from chat markers + prior reflect/wrap-up runs) — fed to the prompt as an
+  // "already captured, don't repeat" list (the soft de-dup), and used again post-parse as the deterministic
+  // de-dup backstop. Retired ones are excluded (a fresh action item may legitimately revive that ground).
+  const priorAgreements = await listAgreements(fs, key, session.pairKey);
+  const existingActive = priorAgreements.filter((a) => a.status !== 'retired');
+  const existingTexts = new Set(existingActive.map((a) => normalizeActionText(a.text)));
+
   const system = [PERSONA, SAFETY, TOGETHER_WRAPUP_GUIDANCE].filter(Boolean).join('\n\n');
   // Attribute each shared human line so the model can write per-partner reflections; coach lines pass through.
   const messages = [
@@ -214,7 +262,14 @@ export async function runTogetherWrapUp(deps: TogetherWrapUpDeps): Promise<Toget
       content:
         m.role === 'user' ? `${m.authorPersonId === pa ? nameA : nameB}: ${m.content}` : m.content,
     })),
-    { role: 'user' as const, content: ANALYSIS_INSTRUCTION(nameA, nameB) },
+    {
+      role: 'user' as const,
+      content: ANALYSIS_INSTRUCTION(
+        nameA,
+        nameB,
+        existingActive.map((a) => a.text),
+      ),
+    },
   ];
 
   let result;
@@ -252,8 +307,32 @@ export async function runTogetherWrapUp(deps: TogetherWrapUpDeps): Promise<Toget
     frictionLevel: clampUnit(draft.frictionLevel),
   };
 
-  // The pair's agreements made in THIS session (captured live via the AGREEMENT marker, §6.4) — referenced by
-  // the report so the wrap-up card lists them. Standing or done (retired ones aren't surfaced).
+  // Action items → new STANDING pair agreements (§3.9). Deterministic de-dup: skip any whose normalized text
+  // already exists in the ledger (a chat-marker agreement, or one from a prior reflect/wrap-up run), and de-dup
+  // WITHIN this batch too. This is why "Reflect & note action items" then "Wrap up & reflect" never doubles
+  // anything — the second pass sees the first pass's agreements and skips them (belt to the prompt's braces).
+  const captured = new Set(existingTexts);
+  for (const item of draft.actionItems) {
+    const norm = normalizeActionText(item.text);
+    if (!norm || captured.has(norm)) continue;
+    captured.add(norm);
+    await saveAgreement(
+      fs,
+      key,
+      pa ?? '',
+      pb ?? '',
+      {
+        text: item.text.trim(),
+        ...(item.timeframe && item.timeframe.trim() ? { timeframe: item.timeframe.trim() } : {}),
+        status: 'standing',
+        sessionId: session.id,
+      },
+      now,
+    );
+  }
+
+  // The pair's agreements to reference from the report — those made in THIS session (chat markers + the action
+  // items just captured), re-listed so the freshly-minted ones are included. Standing/done (retired excluded).
   const agreements = await listAgreements(fs, key, session.pairKey);
   const sessionAgreementIds = agreements
     .filter((a) => a.provenance.sessionId === session.id && a.status !== 'retired')
@@ -347,7 +426,10 @@ export async function runTogetherWrapUp(deps: TogetherWrapUpDeps): Promise<Toget
     }
   }
 
-  // The shared report (idempotent: reuse the id if one exists for this session).
+  // The shared report (idempotent: reuse the id if one exists for this session). A 'wrapUp' marks the session
+  // DONE (`wrappedUp` → the `complete` status derives from `wrappedUpAt`); a mid-session 'reflect' leaves both
+  // unset so the session stays open. `updatedAt` is the last-generated time staleness compares against (§3.8).
+  const wrappedUp = (deps.mode ?? 'wrapUp') === 'wrapUp';
   const existingReport = await getReport(fs, key, session.id);
   const report: SharedReport = {
     id: existingReport?.id ?? uuid(),
@@ -358,6 +440,7 @@ export async function runTogetherWrapUp(deps: TogetherWrapUpDeps): Promise<Toget
     workedThrough: draft.workedThrough,
     agreementIds: sessionAgreementIds,
     metrics,
+    ...(wrappedUp ? { wrappedUp: true, wrappedUpAt: at } : {}),
     createdAt: existingReport?.createdAt ?? at,
     updatedAt: at,
   };

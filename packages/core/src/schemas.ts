@@ -3160,6 +3160,12 @@ export const SharedReportSchema = z.object({
   challengeGroupId: z.string().optional(),
   // Dyad metrics mirror (the chart source of truth stays the twins); crisis detail is NEVER here (§8.5).
   metrics: z.record(z.string(), z.number()).optional(),
+  // `wrappedUp` distinguishes an explicit "Wrap up & reflect" (marks the session DONE) from a mid-session
+  // "Reflect & note action items" checkpoint (the session stays open). `wrappedUpAt` is the completion time
+  // the `complete` status derives from (NOT createdAt — a mid-session reflect leaves both unset). Additive-
+  // optional (absent ⇒ a checkpoint reflection), so no schemaVersion bump / migration (§58 §3.8 amendment).
+  wrappedUp: z.boolean().optional(),
+  wrappedUpAt: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -3200,7 +3206,12 @@ export const TogetherSetAgreementStatusInputSchema = z.object({
 });
 export type TogetherSetAgreementStatusInput = z.infer<typeof TogetherSetAgreementStatusInputSchema>;
 
-export const TogetherWrapUpInputSchema = z.object({ sessionId: z.string().min(1) });
+export const TogetherWrapUpInputSchema = z.object({
+  sessionId: z.string().min(1),
+  // 'reflect' = a mid-session checkpoint (creates the reflection + action items, session stays open);
+  // 'wrapUp' = also marks the session done. Defaults to 'wrapUp' for back-compat (58 §3.8 amendment).
+  mode: z.enum(['reflect', 'wrapUp']).optional(),
+});
 export type TogetherWrapUpInput = z.infer<typeof TogetherWrapUpInputSchema>;
 
 /** The wrap-up result the bridge returns (the shared report on success; an honest failure reason otherwise). */

@@ -1071,8 +1071,15 @@ export interface SelfosBridge {
   togetherJointChallenges(input: { partnerPersonId: string }): Promise<JointChallengeStatus[]>;
   /** The coach's SUGGESTION cards for a session (§5.6) — never auto-acts. Participant + edge. */
   togetherSuggestions(sessionId: string): Promise<TogetherSuggestion[]>;
-  /** Run wrap-up for a session (§3.8): a shared report + per-partner twins; the INITIATOR is billed. */
-  togetherWrapUp(input: { sessionId: string }): Promise<TogetherWrapUpResult>;
+  /**
+   * Analyze a session → a shared report + per-partner twins + deduped action items; the INITIATOR is billed
+   * (§3.8). `mode: 'reflect'` is a mid-session checkpoint (session stays open); `'wrapUp'` (default) also marks
+   * the session done. Idempotent + action-item de-duped, so reflect-then-wrap-up never doubles anything.
+   */
+  togetherWrapUp(input: {
+    sessionId: string;
+    mode?: 'reflect' | 'wrapUp';
+  }): Promise<TogetherWrapUpResult>;
   /** The session's shared report + derived staleness + the pair's agreements ledger (§3.8/§3.9). */
   togetherGetReport(input: { sessionId: string }): Promise<TogetherReportView>;
   /** Create/edit/retire a pair agreement inline (§11 #2); `id` absent ⇒ create. */

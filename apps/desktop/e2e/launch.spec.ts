@@ -9901,15 +9901,33 @@ test('together (58) phase D: wrap-up writes a report + twins (aside ABSENT from 
     await w.getByRole('button', { name: 'Send' }).click();
     await expect(w.getByText('SECRETASIDE I am scared.')).toBeVisible();
 
-    // Wrap up & reflect → the shared report renders.
-    await w.getByRole('button', { name: /Wrap up & reflect/ }).click();
-    await expect(w.getByText(/showed up honestly/)).toBeVisible();
-    await expect(w.getByText('naming the pattern together')).toBeVisible();
-
-    // Decrypt: two twins (one per partner), neither carrying the aside; the report on disk has no aside.
     const fs = createNodeFileSystem(vault);
     const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
     if (!key) throw new Error('no key');
+    const sessionsDir = join(vault, 'together', 'sessions');
+
+    // A mid-session "Reflect & note action items" checkpoint: creates the report + an action item as a standing
+    // agreement, but leaves the session OPEN (the report on disk has no `wrappedUp`).
+    await w.getByRole('button', { name: /Reflect & note action items/ }).click();
+    await expect(w.getByText(/showed up honestly/)).toBeVisible();
+    await expect(w.getByText('Plan a weekly date night', { exact: true })).toBeVisible();
+    const sessions = await readdir(sessionsDir);
+    let report = await readEncryptedJson(fs, `together/sessions/${sessions[0]}/report.enc`, key);
+    expect((report as { wrappedUp?: boolean }).wrappedUp).toBeUndefined();
+
+    // Wrap up & reflect → marks the session done. The report content is identical to the reflect pass, so the
+    // completion signal is the persisted `wrappedUp` flag — poll the decrypted report for it.
+    await w.getByRole('button', { name: /Wrap up & reflect/ }).click();
+    await expect
+      .poll(async () => {
+        report = await readEncryptedJson(fs, `together/sessions/${sessions[0]}/report.enc`, key);
+        return (report as { wrappedUp?: boolean }).wrappedUp;
+      })
+      .toBe(true);
+    // The action item is NOT doubled (the de-dup sees the one the reflect pass already created).
+    await expect(w.getByText('Plan a weekly date night', { exact: true })).toHaveCount(1);
+
+    // Decrypt: two twins (one per partner), neither carrying the aside; the report on disk has no aside.
     const benTwins = (await listInsightsForPerson(fs, key, ben)).filter(
       (i) => i.source === 'together',
     );
@@ -9920,12 +9938,15 @@ test('together (58) phase D: wrap-up writes a report + twins (aside ABSENT from 
     expect(angelTwins).toHaveLength(1);
     expect(JSON.stringify(benTwins)).not.toContain('SECRETASIDE');
     expect(JSON.stringify(angelTwins)).not.toContain('SECRETASIDE');
-    const sessions = await readdir(join(vault, 'together', 'sessions'));
-    const report = await readEncryptedJson(fs, `together/sessions/${sessions[0]}/report.enc`, key);
+    // The report on disk (the wrapped-up one) carries no aside content.
     expect(JSON.stringify(report)).not.toContain('SECRETASIDE');
 
-    // Mark the agreement done → a gentle, dismissible follow-up (§11 #2).
-    await w.getByRole('button', { name: /Mark done/ }).click();
+    // Mark an agreement done → a gentle, dismissible follow-up (§11 #2). Two standing items exist now (the
+    // chat-captured one + the action item), so target the first.
+    await w
+      .getByRole('button', { name: /Mark done/ })
+      .first()
+      .click();
     await expect(w.getByText(/build on it/i)).toBeVisible();
     await w.getByRole('button', { name: 'Not now' }).click();
     await expect(w.getByText(/build on it/i)).toHaveCount(0);

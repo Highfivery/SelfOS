@@ -89,7 +89,11 @@ interface TogetherState {
   withdraw: (id: string) => Promise<boolean>;
   setPaused: (id: string, paused: boolean) => Promise<void>;
   loadReport: (sessionId: string) => Promise<void>;
-  wrapUp: (sessionId: string) => Promise<TogetherWrapUpResult>;
+  /**
+   * Analyze the session (spec 58 §3.8): `'reflect'` is a mid-session checkpoint (creates the reflection +
+   * deduped action items, session stays open); `'wrapUp'` (default) also marks the session done. Both refresh.
+   */
+  wrapUp: (sessionId: string, mode?: 'reflect' | 'wrapUp') => Promise<TogetherWrapUpResult>;
   saveAgreement: (input: {
     sessionId: string;
     id?: string;
@@ -295,9 +299,11 @@ export const useTogetherStore = create<TogetherState>((set, get) => ({
     const reportView = (await window.selfos?.togetherGetReport({ sessionId })) ?? EMPTY_REPORT;
     set({ reportView });
   },
-  wrapUp: async (sessionId) => {
+  wrapUp: async (sessionId, mode) => {
     set({ wrappingUp: true });
-    const result = (await window.selfos?.togetherWrapUp({ sessionId })) ?? WRAP_NOT_READY;
+    const result =
+      (await window.selfos?.togetherWrapUp({ sessionId, ...(mode ? { mode } : {}) })) ??
+      WRAP_NOT_READY;
     set({ wrappingUp: false });
     // Refresh the report + the open session (its status may derive to complete).
     await get().loadReport(sessionId);

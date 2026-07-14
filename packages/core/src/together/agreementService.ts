@@ -57,13 +57,14 @@ export async function getReport(
 }
 
 /**
- * The report is stale when any human message in the session is newer than `report.createdAt` (§3.8) — derived,
- * never stored, so continuing a completed session (writing a new message) makes it derive stale automatically.
+ * The report is stale when any human message in the session is newer than the LAST time it was generated
+ * (`report.updatedAt`, §3.8) — derived, never stored, so continuing a session (writing a new message) makes it
+ * derive stale automatically, and a fresh reflect/refresh (which bumps `updatedAt`) clears it.
  */
 export function isReportStale(report: SharedReport | null, newestHumanTs: string | null): boolean {
   if (!report) return false;
   if (!newestHumanTs) return false;
-  return newestHumanTs > report.createdAt;
+  return newestHumanTs > report.updatedAt;
 }
 
 // ── The pair agreements ledger ──────────────────────────────────────────────────────────────────

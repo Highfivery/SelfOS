@@ -7,6 +7,7 @@ import { useDreamPatternStore } from '../../../stores/dreamPatternStore';
 import { useInsightStore } from '../../../stores/insightStore';
 import { unansweredCount, useInboxStore } from '../../../stores/inboxStore';
 import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
+import { usePeopleStore } from '../../../stores/peopleStore';
 import { useGuidanceStore } from '../../../stores/guidanceStore';
 import { useIntakeStore } from '../../../stores/intakeStore';
 import { useSynthesisStore } from '../../../stores/synthesisStore';
@@ -137,9 +138,11 @@ export function Home(): JSX.Element {
       useInsightStore.getState().load(),
       useInsightStore.getState().loadReconcileState(), // queued merge proposals → the "memory stale" signal (39)
       useInboxStore.getState().load(),
-      // The sender's questionnaire overview feeds the Questionnaires section's stats/needs-you/latest-insight
-      // (59). Bridge gates `sentOverview` on `questionnaires.viewResults` → empty when not permitted.
+      // The sender's questionnaire overview feeds the Questionnaires section's stats/needs-you/insights (59).
+      // Bridge gates `sentOverview` on `questionnaires.viewResults` → empty when not permitted.
       useQuestionnaireStore.getState().load(),
+      // People feed the Questionnaires section's "who you haven't asked yet" coverage (59 §3.1a).
+      usePeopleStore.getState().load(),
       useGuidanceStore.getState().load(),
       useIntakeStore.getState().load(),
       useSynthesisStore.getState().load(),
@@ -378,10 +381,12 @@ export function Home(): JSX.Element {
           canCreate={canCreateQuestionnaires}
           canViewResults={canViewResults}
           canAnswer={canAnswerQuestionnaires}
-          configured={configured}
           adultAcknowledged={adultAcknowledged}
           showIdeas={showEncouragement}
           subjectPersonId={activePersonId}
+          {...(recState.togetherNudge?.partnerName
+            ? { togetherPartnerName: recState.togetherNudge.partnerName }
+            : {})}
         />
       ) : null}
 

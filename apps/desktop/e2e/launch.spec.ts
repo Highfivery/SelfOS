@@ -10392,7 +10392,7 @@ test('home Questionnaires section (59): stats + a needs-you row + no overflow at
     await expect(section.getByText('Response rate', { exact: true })).toBeVisible();
     await expect(section.getByText('New replies', { exact: true })).toBeVisible();
     // The submitted-but-un-analysed self-send surfaces as a "needs you" analyze row.
-    await expect(section.getByRole('button', { name: 'Analyse' })).toBeVisible();
+    await expect(section.getByRole('button', { name: 'Analyse', exact: true })).toBeVisible();
 
     // No horizontal overflow at desktop or ~360px (page-level AND inner scrollers, §12).
     const overflow = (): Promise<number> =>
@@ -10420,9 +10420,9 @@ test('home Questionnaires section (59): stats + a needs-you row + no overflow at
     await w.waitForTimeout(150);
     expect(await overflow()).toBeLessThanOrEqual(1);
 
-    // An "Ideas for you" card navigates into the seeded authoring flow (59 §3.5). The fun idea needs no 18+
-    // ack; the seed payload (type/sensitivity/brief) is covered by the section + AI-panel unit tests.
-    await section.getByRole('button', { name: /^Try it/ }).click();
+    // The fun band navigates into the seeded authoring flow (59 §3.5). It needs no 18+ ack; the seed payload
+    // (type/sensitivity/brief) is covered by the section + AI-panel unit tests.
+    await section.getByRole('button', { name: /just for fun/i }).click();
     await expect(w.getByRole('region', { name: 'Questionnaires' })).toHaveCount(0); // left Home
   } finally {
     await app.close();

@@ -1,6 +1,7 @@
 import type {
   AnswersUpdatedSummary,
   Insight,
+  Person,
   Questionnaire,
   QuestionnaireSentOverview,
   ReminderDueSummary,
@@ -243,4 +244,158 @@ export function unsentTypes(
   return QUESTIONNAIRE_TYPES.filter(
     (t) => VARIETY_TYPES.includes(t.value) && !sentTypes.has(t.value),
   );
+}
+
+/** The number of distinct starter types (the coverage denominator for "N of M tried", §3.6). */
+export const STARTER_TYPE_COUNT = QUESTIONNAIRE_TYPES.length;
+
+/** How many distinct starter types the person has actually SENT (the coverage numerator). */
+export function sentTypeCount(
+  questionnaires: Questionnaire[],
+  sentOverview: Record<string, QuestionnaireSentOverview>,
+): number {
+  const sent = new Set<string>();
+  for (const q of questionnaires) {
+    if (sentOverview[q.id] && QUESTIONNAIRE_TYPES.some((t) => t.value === q.type)) sent.add(q.type);
+  }
+  return sent.size;
+}
+
+/** The warm engagement banner (§3.1a): what you've learned + who you haven't asked yet. */
+export interface EngagementSummary {
+  /** Own approved questionnaire insights — "you've gathered N insights". */
+  insightCount: number;
+  /** Distinct people those insights are about — "about N people". */
+  peopleCount: number;
+  /** Household people (excluding yourself) you've never sent a questionnaire to — the gentle "ask them" nudge. */
+  notAsked: string[];
+}
+
+export function engagementSummary(
+  insights: Insight[],
+  people: Person[],
+  sentOverview: Record<string, QuestionnaireSentOverview>,
+  subjectPersonId: string | null,
+): EngagementSummary {
+  const nameById = new Map(people.map((p) => [p.id, p.displayName]));
+  const own =
+    subjectPersonId === null
+      ? []
+      : insights.filter(
+          (i) =>
+            i.source === 'questionnaire' && i.approved && i.subjectPersonId === subjectPersonId,
+        );
+  // The distinct people the insights are ABOUT — resolve a household `aboutPersonId` to its display NAME so an
+  // external + a household reference to the same person don't count twice (a name-only namespace); self → "you".
+  const aboutPeople = new Set<string>();
+  for (const i of own) {
+    const p = i.provenance;
+    aboutPeople.add(
+      p.aboutName ?? (p.aboutPersonId ? (nameById.get(p.aboutPersonId) ?? p.aboutPersonId) : 'you'),
+    );
+  }
+  // Who you've sent to (recipient display names across all sends).
+  const sentNames = new Set<string>();
+  for (const o of Object.values(sentOverview)) {
+    for (const r of o.recipients) sentNames.add(r.name);
+  }
+  const notAsked = people
+    .filter((p) => p.id !== subjectPersonId && !sentNames.has(p.displayName))
+    .map((p) => p.displayName);
+  return { insightCount: own.length, peopleCount: aboutPeople.size, notAsked };
+}
+
+/** A rich "fresh insight" card (§3.4) — who it's about, which questionnaire, the finding, its life-area. */
+export interface RichInsight {
+  insightId: string;
+  /** The questionnaire it came from. */
+  title: string;
+  /** Who the insight is ABOUT (the recipient); `null` for a self check-in ("from your answers"). */
+  aboutName: string | null;
+  summary: string;
+  /** The life-area tag (first category), if any. */
+  area: string | null;
+  /** When it was answered/updated (ISO) — orders the cards. */
+  at: string;
+}
+
+/**
+ * The person's most recent analysed sends as rich insight cards (§3.4): join `sentOverview` (analysed entries,
+ * with the recipient + insight id + summary) to the questionnaire TITLE and the derived Insight's life-area.
+ * `aboutName` = the recipient a foreign send is about, or `null` for a self check-in (`aboutName`/`aboutPersonId`
+ * both absent). Own insights only. Pure over already-loaded data — no raw answers, no per-send fetch.
+ */
+export function richInsights(
+  sentOverview: Record<string, QuestionnaireSentOverview>,
+  questionnaires: Questionnaire[],
+  insights: Insight[],
+  people: Person[],
+  subjectPersonId: string | null,
+  max = 2,
+): RichInsight[] {
+  if (subjectPersonId === null) return [];
+  const titleById = new Map(questionnaires.map((q) => [q.id, q.title]));
+  const insightById = new Map(insights.map((i) => [i.id, i]));
+  const nameById = new Map(people.map((p) => [p.id, p.displayName]));
+  const subjectName = nameById.get(subjectPersonId) ?? null;
+  const out: RichInsight[] = [];
+  for (const [qid, o] of Object.entries(sentOverview)) {
+    if (!o.analyzed || !o.insightId || !o.insightSummary) continue;
+    const insight = insightById.get(o.insightId);
+    if (insight && insight.subjectPersonId !== subjectPersonId) continue; // own only
+    if (insight && !insight.approved) continue; // match the approved-only "Insights" count
+    const prov = insight?.provenance;
+    const recipientName =
+      o.recipients.find((r) => r.answered)?.name ?? o.recipients[0]?.name ?? null;
+    // Who the insight is ABOUT: an external send carries `aboutName`; a household send carries `aboutPersonId`
+    // (resolve to the display NAME so a multi-recipient send names the right person, not the first answerer);
+    // else the recipient. A self check-in (about the subject) → null → "from your answers".
+    const aboutName =
+      prov?.aboutName ??
+      (prov?.aboutPersonId ? (nameById.get(prov.aboutPersonId) ?? recipientName) : recipientName);
+    const isSelf =
+      (insight != null && !prov?.aboutName && !prov?.aboutPersonId) ||
+      (aboutName != null && aboutName === subjectName);
+    out.push({
+      insightId: o.insightId,
+      title: titleById.get(qid) ?? 'a questionnaire',
+      aboutName: isSelf ? null : aboutName,
+      summary: o.insightSummary,
+      area: insight?.categories?.[0] ?? null,
+      at: o.answeredAt ?? o.lastSentAt,
+    });
+  }
+  return out.sort((a, b) => (b.at ?? '').localeCompare(a.at ?? '')).slice(0, max);
+}
+
+/** A "go deeper from your recent activity" thread (§3.5a) — a session theme, a recurring dream, or a partner. */
+export type GoDeeperTheme =
+  | { kind: 'session'; area: string }
+  | { kind: 'dream'; symbol: string }
+  | { kind: 'together'; partnerName: string };
+
+/**
+ * Threads worth turning into a questionnaire, drawn from the person's recent activity (§3.5a) — pure over data
+ * Home already holds (no AI, no spend): the most common life-area across recent SESSION insights, a recurring
+ * DREAM symbol, and a Together partner. Each is a themed starting point; the specific AI-tailored draft happens
+ * on tap in the builder ("Draft with AI"), so this covers both the free theme and the AI-specific path.
+ */
+export function goDeeperThemes(input: {
+  sessionInsights: Insight[];
+  dreamSymbols: { label: string; count: number }[];
+  togetherPartnerName?: string;
+}): GoDeeperTheme[] {
+  const themes: GoDeeperTheme[] = [];
+  // The most-mentioned life-area across recent session insights (a real recurring thread).
+  const areaCounts = new Map<string, number>();
+  for (const i of input.sessionInsights) {
+    for (const c of i.categories ?? []) areaCounts.set(c, (areaCounts.get(c) ?? 0) + 1);
+  }
+  const topArea = [...areaCounts.entries()].sort((a, b) => b[1] - a[1])[0];
+  if (topArea && topArea[1] >= 2) themes.push({ kind: 'session', area: topArea[0] });
+  const symbol = input.dreamSymbols.find((s) => s.count >= 2);
+  if (symbol) themes.push({ kind: 'dream', symbol: symbol.label });
+  if (input.togetherPartnerName)
+    themes.push({ kind: 'together', partnerName: input.togetherPartnerName });
+  return themes.slice(0, 3);
 }

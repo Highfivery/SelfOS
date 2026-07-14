@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.25.0](https://github.com/Highfivery/SelfOS/compare/v0.24.1...v0.25.0) (2026-07-14)
+
+
+### Features
+
+* **together:** mid-session "Reflect & note action items" + wrap-up marks done ([#202](https://github.com/Highfivery/SelfOS/issues/202)) ([f2f4f4d](https://github.com/Highfivery/SelfOS/commit/f2f4f4d2cc6b076983bbf50cc98b32b9edc3e42a))
+
 ## [0.24.1](https://github.com/Highfivery/SelfOS/compare/v0.24.0...v0.24.1) (2026-07-14)
 
 

@@ -57,7 +57,13 @@ import {
 } from '@selfos/core/conversations';
 import { listChallenges } from '@selfos/core/challenges';
 import { listProfileSuggestions } from '@selfos/core/profile';
-import { getTogetherAttachment } from '@selfos/core/together';
+import {
+  getTogetherAttachment,
+  listAgreements,
+  listPulseCheckIns,
+  pairKeyFor,
+  saveAgreement,
+} from '@selfos/core/together';
 
 const MAIN = join(__dirname, '..', 'out', 'main', 'index.js');
 
@@ -10537,6 +10543,81 @@ test('home Questionnaires section (59): stats + a needs-you row + no overflow at
     await w.waitForTimeout(150);
     await w.getByRole('button', { name: 'Open', exact: true }).click();
     await expect(w).toHaveURL(/#\/questionnaires$/);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('together follow-through (61): agreements in Goals + needs-attention, inline pulse on Home, session strip', async () => {
+  const { userData, vault, ben, angel } = await seedTogetherReady();
+  // Seed a STANDING agreement for the ben~angel pair (spec 61 §3.2) — the "thing to do" the couple made.
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('together follow-through: master key missing');
+  const pairKey = pairKeyFor(ben, angel);
+  await saveAgreement(
+    fs,
+    key,
+    ben,
+    angel,
+    { text: 'weekly date night', status: 'standing', sessionId: 'seed-sess' },
+    new Date(),
+  );
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    // Home surfaces BOTH the needs-attention follow-through item AND the inline pulse check-in callout.
+    await expect(w.getByText('Following through with Angel')).toBeVisible();
+    await expect(w.getByRole('heading', { name: 'Check in with Angel' })).toBeVisible();
+
+    // Log a pulse check-in right on the dashboard (metrics default to Steady) → decrypt asserts it persisted.
+    await w.getByRole('button', { name: 'Save check-in' }).click();
+    await expect(w.getByRole('button', { name: 'Saved' })).toBeVisible();
+    await expect.poll(async () => (await listPulseCheckIns(fs, key, ben, pairKey)).length).toBe(1);
+
+    // Open a Together session → the TOP summary strip surfaces the agreement (no scrolling to the bottom).
+    await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByRole('button', { name: 'New session' }).first().click();
+    await w.getByPlaceholder('e.g. Feeling disconnected lately').fill('Checking in');
+    await w.getByRole('button', { name: 'Send invitation' }).click();
+    await expect(w.getByText('1 agreement')).toBeVisible();
+    // Agreements present but no report yet → the strip's jump reads "View" (spec 61 §3.3).
+    await expect(w.getByRole('button', { name: 'View', exact: true })).toBeVisible();
+
+    // Goals → "Together commitments" → mark done → decrypt asserts the SHARED ledger flips to done.
+    await w.getByRole('link', { name: 'Goals' }).click();
+    await expect(w.getByRole('heading', { name: /Together commitments/ })).toBeVisible();
+    await expect(w.getByText('weekly date night')).toBeVisible();
+
+    // ~360px: the new "Together commitments" surface renders with no horizontal overflow / inner scrollbar (§7/§12).
+    await w.setViewportSize({ width: 360, height: 900 });
+    const overflow = await w.evaluate(() => {
+      const offenders: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          offenders.push(`${el.tagName}.${el.className}`);
+        }
+      });
+      const main = document.querySelector('main');
+      return { offenders, mainOverflow: main ? main.scrollWidth - main.clientWidth : 0 };
+    });
+    expect(overflow.offenders).toEqual([]);
+    expect(overflow.mainOverflow).toBeLessThanOrEqual(1);
+    await w.setViewportSize({ width: 1100, height: 800 });
+
+    await w.getByRole('button', { name: 'Mark done' }).click();
+    await expect
+      .poll(
+        async () =>
+          (await listAgreements(fs, key, pairKey)).find((a) => a.text === 'weekly date night')
+            ?.status,
+      )
+      .toBe('done');
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

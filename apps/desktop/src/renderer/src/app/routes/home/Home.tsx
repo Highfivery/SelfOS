@@ -93,6 +93,15 @@ function withinDays(iso: string | undefined, days: number, now: number): boolean
   return !Number.isNaN(t) && now - t <= days * MS_PER_DAY && t <= now;
 }
 
+/** Days after which a Together Pulse check-in is "due" (spec 61 §3.4) — never checked in, or last > 7 days. */
+const PULSE_DUE_DAYS = 7;
+function pulseIsDue(view: { hasCheckIns: boolean; lastCheckInAt?: string }, now: number): boolean {
+  if (!view.hasCheckIns || !view.lastCheckInAt) return true;
+  const t = Date.parse(view.lastCheckInAt);
+  if (!Number.isFinite(t)) return true;
+  return now - t > PULSE_DUE_DAYS * MS_PER_DAY;
+}
+
 /** Collect the defined, non-empty values from a list of `string | undefined`. */
 function defined(values: (string | undefined)[]): string[] {
   return values.filter((v): v is string => typeof v === 'string' && v.length > 0);
@@ -153,6 +162,7 @@ export function Home(): JSX.Element {
   const resultsByTest = useTestStore((s) => s.resultsByTest);
   const togetherSessions = useTogetherStore((s) => s.sessions);
   const togetherPartners = useTogetherStore((s) => s.partners);
+  const myAgreements = useTogetherStore((s) => s.myAgreements);
   const intake = useIntakeStore((s) => s.state);
   const dismissed = useDiscoveryStore((s) => s.dismissed);
 
@@ -160,6 +170,8 @@ export function Home(): JSX.Element {
   const [hasKey, setHasKey] = useState(false);
   const [proactivity, setProactivity] = useState<ProactivityLevel>('gentle');
   const [profileSuggestions, setProfileSuggestions] = useState<ProfileUpdateSuggestion[]>([]);
+  const [pulseCheckinDue, setPulseCheckinDue] =
+    useState<Exclude<PersonRecommendationState['pulseCheckinDue'], undefined>>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -187,6 +199,7 @@ export function Home(): JSX.Element {
       useChallengeStore.getState().load(),
       useTestStore.getState().load(),
       useTogetherStore.getState().load(),
+      useTogetherStore.getState().loadMyAgreements(),
       useDiscoveryStore.getState().load(),
       window.selfos?.coachingGetPrefs().then((p) => {
         if (!cancelled) setProactivity(p?.proactivity ?? 'gentle');
@@ -194,8 +207,27 @@ export function Home(): JSX.Element {
       window.selfos?.profileSuggestions().then((s) => {
         if (!cancelled) setProfileSuggestions(s ?? []);
       }),
-    ]).then(() => {
-      if (!cancelled) setReady(true);
+    ]).then(async () => {
+      if (cancelled) return;
+      // The inline Pulse check-in callout (spec 61 §3.4) — due for the first eligible live partner when never
+      // checked in or the last check-in is > 7 days old. A free, deterministic read (no spend).
+      const st = useTogetherStore.getState();
+      const partner = st.partners.find((p) => p.eligible);
+      let due: Exclude<PersonRecommendationState['pulseCheckinDue'], undefined> = null;
+      if (partner) {
+        const view = await window.selfos?.togetherPulse({ partnerPersonId: partner.personId });
+        if (view && pulseIsDue(view, Date.now())) {
+          due = {
+            partnerPersonId: partner.personId,
+            partnerName: partner.displayName,
+            ...(view.lastCheckInAt ? { lastCheckInAt: view.lastCheckInAt } : {}),
+          };
+        }
+      }
+      if (!cancelled) {
+        setPulseCheckinDue(due);
+        setReady(true);
+      }
     });
     return () => {
       cancelled = true;
@@ -319,6 +351,7 @@ export function Home(): JSX.Element {
     togetherNudge: activePersonId
       ? computeTogetherHomeNudge(togetherSessions, activePersonId, now)
       : null,
+    pulseCheckinDue,
   };
 
   const dismissedSet = new Set(dismissed);
@@ -465,6 +498,7 @@ export function Home(): JSX.Element {
     now: nowMs,
     activePersonId,
     goals,
+    agreements: myAgreements,
     sentOverview,
     togetherSessions,
     resultsByTest,

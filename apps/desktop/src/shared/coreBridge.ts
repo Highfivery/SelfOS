@@ -160,6 +160,8 @@ import {
   TogetherWrapUpInputSchema,
   TogetherGetReportInputSchema,
   TogetherSaveAgreementInputSchema,
+  TogetherSetAgreementStatusInputSchema,
+  type AgreementSummary,
 } from './schemas';
 import { OWNER_ROLE_ID, roleAllows, type CapabilityKey } from './capabilities';
 import { runConnectionTest } from './claudeProxy';
@@ -287,7 +289,9 @@ import {
   pairKeyFor,
   isReportStale,
   isTogetherAttachmentPath,
+  getAgreement,
   listAgreements,
+  listStandingAgreementsForViewer,
   listMessages as listTogetherMessages,
   listSessionsForPerson as listTogetherSessionsForPerson,
   listStates as listTogetherStates,
@@ -2693,6 +2697,46 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           ...(parsed.timeframe ? { timeframe: parsed.timeframe } : {}),
           status: parsed.status,
           sessionId: parsed.sessionId,
+        },
+        new Date(),
+      );
+    },
+    // Every STANDING agreement across the active person's pairs (spec 61) — surfaced in Goals + Home. Scoped
+    // to the active person (only pairs they're a member of); the partner display name is attached here.
+    togetherMyAgreements: async (): Promise<AgreementSummary[]> => {
+      const c = await togetherCtx();
+      if (!c) return [];
+      const rows = await listStandingAgreementsForViewer(c.fs, c.key, c.personId);
+      return Promise.all(
+        rows.map(async (r) => ({
+          agreement: r.agreement,
+          partnerPersonId: r.partnerPersonId,
+          partnerName:
+            (await getPerson(c.fs, c.key, r.partnerPersonId))?.displayName ?? 'your partner',
+        })),
+      );
+    },
+    // Mark a standing agreement done/retired from Goals/Home (spec 61). Resolves the pair from the partner id
+    // (robust to a deleted origin session), loads the existing shared record, and re-saves ONLY the status —
+    // preserving text/timeframe/createdAt/origin provenance (last-write-wins on the shared record, §7).
+    togetherSetAgreementStatus: async (input): Promise<Agreement | null> => {
+      const parsed = TogetherSetAgreementStatusInputSchema.parse(input);
+      const c = await togetherCtx();
+      if (!c) return null;
+      const pairKey = pairKeyFor(c.personId, parsed.partnerPersonId);
+      const existing = await getAgreement(c.fs, c.key, pairKey, parsed.agreementId);
+      if (!existing) return null;
+      return saveAgreement(
+        c.fs,
+        c.key,
+        c.personId,
+        parsed.partnerPersonId,
+        {
+          id: existing.id,
+          text: existing.text,
+          ...(existing.timeframe ? { timeframe: existing.timeframe } : {}),
+          status: parsed.status,
+          sessionId: existing.provenance.sessionId,
         },
         new Date(),
       );

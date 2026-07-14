@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Check, Flag, Plus, RotateCw, Sparkles, X } from 'lucide-react';
+import { Check, Flag, Handshake, Plus, RotateCw, Sparkles, X } from 'lucide-react';
 import { effectiveGoalStatus, type GoalSuggestion } from '@shared/schemas';
 import { goalsSummary } from '@selfos/core/home';
 import { useGoalStore } from '../../../stores/goalStore';
+import { useTogetherStore } from '../../../stores/togetherStore';
 import {
   Button,
   Card,
@@ -48,6 +49,7 @@ export function GoalsCard({
   const create = useGoalStore((s) => s.create);
   const setStatus = useGoalStore((s) => s.setStatus);
   const suggest = useGoalStore((s) => s.suggest);
+  const commitmentCount = useTogetherStore((s) => s.myAgreements.length);
 
   const now = new Date();
   const summary = goalsSummary(goals, now, 2);
@@ -108,6 +110,19 @@ export function GoalsCard({
             </button>
           ) : null}
         </div>
+
+        {commitmentCount > 0 ? (
+          <button
+            type="button"
+            className={styles.togetherGlance}
+            onClick={() => navigate('/goals')}
+          >
+            <Handshake size={13} aria-hidden="true" />
+            {commitmentCount === 1
+              ? '1 Together commitment'
+              : `${commitmentCount} Together commitments`}
+          </button>
+        ) : null}
 
         {empty ? (
           <Text tone="secondary" size="sm">

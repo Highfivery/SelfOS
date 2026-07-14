@@ -5871,6 +5871,64 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect((await bridge.togetherGetReport({ sessionId })).report).toBeNull();
   });
 
+  it('cross-pair agreements (spec 61): each partner sees the shared record scoped to their pairs; mark-done writes back; a non-member is refused', async () => {
+    const { host, bridge, ben, angel } = await seedPair();
+    const created = await bridge.togetherCreate({ partnerPersonId: angel });
+    const sessionId = created.ok ? created.session.id : '';
+    await asPerson(host, angel);
+    await bridge.togetherAccept(sessionId);
+    await asPerson(host, ben);
+    const a = await bridge.togetherSaveAgreement({
+      sessionId,
+      text: 'weekly date night',
+      status: 'standing',
+    });
+
+    // Ben sees the standing agreement across his pairs — the OTHER member (Angel) resolved for display.
+    const benRows = await bridge.togetherMyAgreements();
+    expect(benRows.map((r) => r.agreement.id)).toContain(a?.id);
+    const benRow = benRows.find((r) => r.agreement.id === a?.id);
+    expect(benRow?.partnerPersonId).toBe(angel);
+    expect(benRow?.partnerName).toBe('Angel');
+
+    // Angel sees the SAME shared record (partner resolved to Ben) — it's the one pair-level ledger.
+    await asPerson(host, angel);
+    const angelRows = await bridge.togetherMyAgreements();
+    expect(angelRows.find((r) => r.agreement.id === a?.id)?.partnerName).toBe('Ben');
+
+    // A third household member sees none of it (scoped to their own pairs).
+    const cara = await bridge.peopleSave({ displayName: 'Cara', isSubject: true, tags: [] });
+    await asPerson(host, cara.id);
+    expect(await bridge.togetherMyAgreements()).toEqual([]);
+    // …and cannot mark someone else's agreement done (no pair → refused).
+    expect(
+      await bridge.togetherSetAgreementStatus({
+        partnerPersonId: angel,
+        agreementId: a!.id,
+        status: 'done',
+      }),
+    ).toBeNull();
+
+    // Ben marks it done from the Goals surface (resolves the pair from the partner id, not the session).
+    await asPerson(host, ben);
+    const done = await bridge.togetherSetAgreementStatus({
+      partnerPersonId: angel,
+      agreementId: a!.id,
+      status: 'done',
+    });
+    expect(done?.status).toBe('done');
+    expect(done?.text).toBe('weekly date night'); // text preserved — only status changed
+    // It leaves the standing set for BOTH partners.
+    expect(await bridge.togetherMyAgreements()).toEqual([]);
+    await asPerson(host, angel);
+    expect(await bridge.togetherMyAgreements()).toEqual([]);
+    // …and the shared ledger reads done for Angel.
+    expect(
+      (await bridge.togetherGetReport({ sessionId })).agreements.find((x) => x.id === a?.id)
+        ?.status,
+    ).toBe('done');
+  });
+
   // ── Phase E: guided couples catalog (§3.10) ────────────────────────────────────────────────────
   it('starts a structured guided session: seeds the opener, resolves the guide view + derives the step; a chat guide has no stepper; unknown/adult refused (§3.10)', async () => {
     const { host, bridge, ben, angel } = await seedPair();

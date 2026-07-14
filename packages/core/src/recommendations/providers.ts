@@ -358,6 +358,30 @@ const togetherSession: RecommendationProvider = {
 };
 
 /**
+ * The inline Pulse check-in callout (spec 61 §3.4) — surfaces on Home when a couples check-in is due for a
+ * live partner (never checked in, or last > 7 days ago). Capability-gated (`together.own`) + only relevant
+ * with a live partner edge. The card renders the shared check-in FORM inline (`RecommendationItem`), so the
+ * person logs it right on the dashboard. Re-surfaces when a NEW overdue begins (the `lastCheckInAt` changes).
+ */
+const pulseCheckin: RecommendationProvider = {
+  id: 'pulse-checkin',
+  domain: 'together',
+  capabilityGate: 'together.own',
+  relevance: (s): RecommendationCandidate | null => {
+    const due = s.pulseCheckinDue;
+    if (!due) return null;
+    return {
+      id: 'pulse-checkin',
+      label: `Check in with ${due.partnerName}`,
+      reason: `A quick temperature check on how things feel with ${due.partnerName} — 20 seconds, private to you.`,
+      route: '/together',
+      score: 58,
+      dismissKey: `pulse-checkin:${due.partnerPersonId}:${due.lastCheckInAt ?? 'never'}`,
+    };
+  },
+};
+
+/**
  * The built-in recommendation providers, registered by `registerBuiltInRecommendationProviders`. Slice A is
  * the existing-feature set; Slice B grows it as the 2026-06 features land (50/51/48/52) — each registered
  * here (the engine built-ins), so they appear in "For you" when relevant + permitted with NO `Home.tsx` edit.
@@ -379,4 +403,6 @@ export const BUILT_IN_RECOMMENDATION_PROVIDERS: readonly RecommendationProvider[
   intimacyExercise,
   // Together (58 §3.12): couples-session presence on Home.
   togetherSession,
+  // Together follow-through (spec 61): the inline Pulse check-in callout.
+  pulseCheckin,
 ];

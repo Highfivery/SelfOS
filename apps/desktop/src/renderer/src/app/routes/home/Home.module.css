@@ -77,6 +77,26 @@
   text-decoration: underline;
 }
 
+/* A passive "N Together commitments" glance on the Goals card (spec 61 §3.2). */
+.togetherGlance {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  align-self: flex-start;
+  padding: 4px 10px;
+  border-radius: var(--radius-full, 999px);
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+  border: none;
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.togetherGlance:hover {
+  text-decoration: underline;
+}
+
 /* Continue + memory + dream rows */
 .rows {
   display: flex;

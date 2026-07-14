@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Pin } from 'lucide-react';
 import { Button, Inline, Stack, Text } from '../../../design-system/components';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { appendTogetherChunk, useTogetherStore } from '../../../stores/togetherStore';
@@ -24,6 +24,7 @@ export function TogetherSession(): JSX.Element {
   const navigate = useNavigate();
   const myId = useSessionStore((s) => s.activePerson?.id ?? null);
   const open = useTogetherStore((s) => s.open);
+  const reportView = useTogetherStore((s) => s.reportView);
   const openSession = useTogetherStore((s) => s.openSession);
   const accept = useTogetherStore((s) => s.accept);
   const withdraw = useTogetherStore((s) => s.withdraw);
@@ -34,6 +35,14 @@ export function TogetherSession(): JSX.Element {
   const [memoryEnabled] = useSetting('sessions.memoryEnabled');
   const [hasKey, setHasKey] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reflectionRef = useRef<HTMLElement | null>(null);
+
+  const jumpToReflection = (): void => {
+    const el = reflectionRef.current;
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    el.focus({ preventScroll: true });
+  };
 
   useEffect(() => {
     let alive = true;
@@ -150,6 +159,21 @@ export function TogetherSession(): JSX.Element {
     );
   }
 
+  const memReady = memoryEnabled !== false;
+  const aiReady = aiEnabled === true && hasKey;
+  const activeAgreements = reportView.agreements.filter((a) => a.status !== 'retired');
+  const report = reportView.report;
+  const hasReport = report !== null;
+  // The top summary strip mirrors the reflection panel's visibility (spec 61 §3.3) so it never points at a
+  // section that isn't there.
+  const showStrip = hasReport || activeAgreements.length > 0 || (memReady && aiReady);
+  // Label the jump by intent: a report → "Jump to reflection"; agreements-only → "View" them; else "Wrap up".
+  const stripJumpLabel = hasReport
+    ? 'Jump to reflection'
+    : activeAgreements.length > 0
+      ? 'View'
+      : 'Wrap up';
+
   return (
     <div className={styles.page}>
       <div className={styles.sessionTop}>
@@ -170,13 +194,46 @@ export function TogetherSession(): JSX.Element {
           </span>
         ) : null}
       </div>
+
+      {showStrip ? (
+        <div className={styles.reflectionStrip}>
+          <Pin size={14} aria-hidden="true" />
+          <Text size="sm" className={styles.reflectionStripText}>
+            {activeAgreements.length > 0
+              ? activeAgreements.length === 1
+                ? '1 agreement'
+                : `${activeAgreements.length} agreements`
+              : hasReport
+                ? 'Your reflection'
+                : 'Ready to wrap up & reflect'}
+            {report && activeAgreements.length > 0
+              ? ` · reflection from ${relativeDay(report.createdAt)}`
+              : ''}
+          </Text>
+          <button type="button" className={styles.reflectionStripJump} onClick={jumpToReflection}>
+            {stripJumpLabel}
+          </button>
+        </div>
+      ) : null}
+
       <TogetherThread session={open} onPrep={() => setPrepOpen(true)} />
       {other ? <TogetherSuggestions sessionId={open.id} partnerId={other.personId} /> : null}
       <TogetherReflection
         sessionId={open.id}
-        memoryEnabled={memoryEnabled !== false}
-        aiReady={aiEnabled === true && hasKey}
+        memoryEnabled={memReady}
+        aiReady={aiReady}
+        sectionRef={reflectionRef}
       />
     </div>
   );
+}
+
+/** A gentle "3 days ago" / "today" / "yesterday" relative-day label for the reflection strip. */
+function relativeDay(iso: string): string {
+  const then = Date.parse(iso);
+  if (!Number.isFinite(then)) return 'recently';
+  const days = Math.floor((Date.now() - then) / 86_400_000);
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  return `${days} days ago`;
 }

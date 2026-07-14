@@ -176,3 +176,37 @@ export async function captureAgreementFromMarker(
 export function standingAgreements(agreements: Agreement[]): Agreement[] {
   return agreements.filter((a) => a.status === 'standing');
 }
+
+/** A viewer's standing agreement surfaced outside its session (spec 61) — the partner id resolved. */
+export interface StandingAgreementForViewer {
+  agreement: Agreement;
+  partnerPersonId: string;
+}
+
+/**
+ * Every STANDING agreement across the viewer's pairs (spec 61) — for surfacing outside a session (the Home
+ * needs-attention queue + the Goals "Together commitments" section). Lists `together/pairs/`, keeps only
+ * pairs the viewer is a member of, resolves the partner id (the other segment of the pairKey), and returns
+ * their standing agreements newest-first. Display-name resolution is the bridge's job (it has people
+ * access). The bridge scopes to the active person, so this only reaches pairs the viewer belongs to.
+ */
+export async function listStandingAgreementsForViewer(
+  fs: FileSystem,
+  key: Uint8Array,
+  viewerId: string,
+): Promise<StandingAgreementForViewer[]> {
+  if (!isSafeSegment(viewerId)) return [];
+  const out: StandingAgreementForViewer[] = [];
+  for (const pairKey of await fs.list(PAIRS_ROOT)) {
+    if (!isSafePairKey(pairKey)) continue;
+    // isSafePairKey guarantees exactly two `~`-split ids.
+    const [first, second] = pairKey.split('~');
+    if (first === undefined || second === undefined) continue;
+    if (first !== viewerId && second !== viewerId) continue;
+    const partnerPersonId = first === viewerId ? second : first;
+    for (const agreement of standingAgreements(await listAgreements(fs, key, pairKey))) {
+      out.push({ agreement, partnerPersonId });
+    }
+  }
+  return out.sort((a, b) => b.agreement.createdAt.localeCompare(a.agreement.createdAt));
+}

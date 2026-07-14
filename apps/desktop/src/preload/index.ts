@@ -222,6 +222,9 @@ const bridge: SelfosBridge = {
   togetherWrapUp: (input) => ipcRenderer.invoke(IpcChannels.togetherWrapUp, input),
   togetherGetReport: (input) => ipcRenderer.invoke(IpcChannels.togetherGetReport, input),
   togetherSaveAgreement: (input) => ipcRenderer.invoke(IpcChannels.togetherSaveAgreement, input),
+  togetherMyAgreements: () => ipcRenderer.invoke(IpcChannels.togetherMyAgreements),
+  togetherSetAgreementStatus: (input) =>
+    ipcRenderer.invoke(IpcChannels.togetherSetAgreementStatus, input),
   assignmentsCreate: (input) => ipcRenderer.invoke(IpcChannels.assignmentsCreate, input),
   assignmentsInbox: () => ipcRenderer.invoke(IpcChannels.assignmentsInbox),
   assignmentsSetFavorite: (input) => ipcRenderer.invoke(IpcChannels.assignmentsSetFavorite, input),

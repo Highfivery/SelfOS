@@ -404,6 +404,42 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-14 — **Build (Together follow-through — agreements → Goals + dashboard, session summary strip, inline
+  Pulse on Home; SPEC 61 APPROVED + BUILT; on `feat/together-follow-through`, PR pending).** The "things to do" from
+  a Together wrap-up (the **agreements ledger**) + the couples **Pulse check-in** were buried — agreements only at
+  the very bottom of one session's reflection panel, the check-in only on the Together page. **Decisions asked
+  first (3 rounds, all AskUserQuestion):** surface agreements **alongside goals** (NOT duplicated into per-person
+  `Goal`s — they stay the one shared pair record); **all three pulse metrics inline** on Home; Memory redesign is a
+  separate spec (mockup approved, spec 62 next). Then: pulse due at **>7 days**; agreement callout **clear-as-you-
+  act** (non-dismissible nudge); Home shows **both** the needs-attention item + a passive `GoalsCard` count.
+  **Slice A** (backbone): new core `listStandingAgreementsForViewer` (enumerate the viewer's pairs from
+  `together/pairs/`, standing-only, resolve the partner id) + two IPC channels `together:myAgreements` /
+  `together:setAgreementStatus` — **person-scoped in the bridge** (only the active person's pairs; `setAgreementStatus`
+  resolves the pair from the **partner id**, robust to a deleted origin session, preserves text/timeframe/createdAt/
+  provenance, only the status changes → the shared record, so both partners see it). Surfaced as a gentle
+  `agreement` **needs-attention** item (`attention.ts`/`NeedsAttentionCard`, `nudge:true` so it respects
+  proactivity-off/crisis + clears as agreements are marked done/retired) + a **"Together commitments"** section on
+  `/goals` (`TogetherCommitments.tsx`, read + mark-done/retire, write-back via the existing shared ledger) + a
+  passive roll-up on the Home `GoalsCard`. **Slice B**: a top-of-session **summary strip** in `TogetherSession`
+  ("📌 N agreements · Wrap up/Jump to reflection") that focuses the reflection section (a `sectionRef` into
+  `TogetherReflection`) — no more scrolling to the bottom; mirrors the reflection panel's visibility. **Slice C**:
+  extracted the shared **`PulseCheckInForm`** (the "How are things with X?" head + 3 metric SegmentedControls +
+  default-off lock-gated share-desire toggle + Save) from `TogetherPulse` so the Together page AND a new
+  **`pulse-checkin`** recommendation (domain `together`, `together.own`-gated, additive `pulseCheckinDue` state
+  signal computed in `Home.tsx`) render ONE form — inline in the "For you" band via `RecommendationItem` (a
+  `hideHead` variant), calling the existing `togetherPulseLog`. **No new persisted schema, no duplication** (agreement
+  = one shared record; pulse = one per-person log). Gate green: typecheck (node + web/DOM), lint, format, **1170
+  core + 1151 desktop** unit (+`listStandingAgreementsForViewer` scope/corrupt-skip, +`pulse-checkin` provider,
+  +attention agreement cases, +a two-persona coreBridge test [each partner sees the shared record scoped to their
+  pairs; mark-done writes back; non-member refused], +`TogetherCommitments`/`PulseCheckInForm` RTL), **+1 E2E**
+  (seed a standing agreement → Home shows the needs-attention item + the inline pulse card → log a check-in [decrypt
+  a `PulseCheckIn`] → session strip shows "N agreements" → Goals "Together commitments" mark done [decrypt the
+  shared `Agreement` flips to `done`] + a 360px overflow guard). Real-Electron visual QA at desktop (Home pulse card
+  - needs-attention item, Goals commitments section, session strip). **Lesson: a "surface it elsewhere" feature is
+    cheapest as a cross-pair READ over the existing shared record + a status write that resolves the pair from the
+    PARTNER id (not the origin session, which may be gone) — no duplicate per-person record, no sync problem; and
+    extracting the ONE check-in form (`PulseCheckInForm`) lets Home + the feature page render identically with a
+    `hideHead` flag when a host card already supplies the label.**
 - 2026-07-14 — **Fix (Intimacy → Unfiltered tier was producing Explicit/General-level output, not truly
   unfiltered; user-reported; SPEC 08 §24.9; on `feat/questionnaire-unfiltered-intensity`).** The owner wanted the
   Unfiltered tier to actually reach its intended intensity — highly explicit, kinky, taboo, boundary-pushing:

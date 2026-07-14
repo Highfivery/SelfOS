@@ -3,6 +3,7 @@ import { Card, Heading, Stack, Text } from '../../../design-system/components';
 import { useGoalStore } from '../../../stores/goalStore';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { GoalCard } from './GoalCard';
+import { TogetherCommitments } from './TogetherCommitments';
 import styles from './Goals.module.css';
 
 /**
@@ -41,6 +42,8 @@ export function Goals(): JSX.Element {
           Things you’re working toward — SelfOS helps you follow through.
         </Text>
       </Stack>
+
+      <TogetherCommitments />
 
       {loaded && goals.length === 0 ? (
         <Card>

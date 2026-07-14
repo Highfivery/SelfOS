@@ -1,4 +1,5 @@
 import type {
+  AgreementSummary,
   Goal,
   QuestionnaireSentOverview,
   TestResult,
@@ -17,6 +18,7 @@ export type AttentionKind =
   | 'together-invite'
   | 'analyze-responses'
   | 'review-insights'
+  | 'agreement'
   | 'check-in'
   | 'stale-goals'
   | 'send-questionnaire';
@@ -36,6 +38,8 @@ export interface AttentionInput {
   now: number;
   activePersonId: string | null;
   goals: Goal[];
+  /** Standing Together agreements across the person's pairs (spec 61) — surfaced as a gentle follow-through. */
+  agreements: AgreementSummary[];
   sentOverview: Record<string, QuestionnaireSentOverview>;
   togetherSessions: TogetherSessionSummary[];
   resultsByTest: Record<string, TestResult[]>;
@@ -124,6 +128,25 @@ export function needsAttention(input: AttentionInput): AttentionItem[] {
       detail: 'Approve or refine it in Memory',
       route: '/memory',
       count: input.insightDraftCount,
+    });
+  }
+
+  // Standing Together agreements — a gentle follow-through reminder (spec 61). Clears as they're marked
+  // done/retired (the actions live on the Goals card + /goals). A nudge, so it respects proactivity-off / crisis.
+  if (can.together && input.agreements.length > 0) {
+    const partners = new Set(input.agreements.map((a) => a.partnerPersonId));
+    const only = input.agreements[0];
+    const n = input.agreements.length;
+    items.push({
+      kind: 'agreement',
+      label:
+        partners.size === 1 && only
+          ? `Following through with ${only.partnerName}`
+          : 'Following through on your agreements',
+      detail: n === 1 ? '1 standing agreement to keep up' : `${n} standing agreements to keep up`,
+      route: '/goals',
+      count: n,
+      nudge: true,
     });
   }
 

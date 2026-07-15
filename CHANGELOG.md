@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.0](https://github.com/Highfivery/SelfOS/compare/v0.25.0...v0.26.0) (2026-07-15)
+
+
+### Features
+
+* **together:** redesign the Pulse card — two clean charts, calm not friction ([#204](https://github.com/Highfivery/SelfOS/issues/204)) ([ba11dc3](https://github.com/Highfivery/SelfOS/commit/ba11dc3c79bca8b216fd87d1517204507c3b862b))
+
 ## [0.25.0](https://github.com/Highfivery/SelfOS/compare/v0.24.1...v0.25.0) (2026-07-14)
 
 

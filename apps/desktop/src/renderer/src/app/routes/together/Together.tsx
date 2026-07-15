@@ -50,6 +50,7 @@ export function Together(): JSX.Element {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startBarRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     void useTogetherStore.getState().load();
@@ -101,19 +102,25 @@ export function Together(): JSX.Element {
   const pickGuide = (entry: TogetherCatalogEntry): void => {
     setError(null);
     setPending({ kind: 'guide', entry });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
   const openNew = (): void => {
     setError(null);
     setTopic('');
     setPending({ kind: 'free' });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
   const clearPending = (): void => {
     setPending(null);
     setError(null);
     setTopic('');
   };
+
+  // Bring the start bar into view when it opens (issue #207). The app content scrolls in `.contentInner`, NOT
+  // the window, so a `window.scrollTo` is a no-op — the start bar renders between the Pulse and the sessions
+  // board, so opening it from a card lower down (a catalog / Desire & intimacy practice) left it off-screen and
+  // the button read as "doing nothing". `scrollIntoView` scrolls the real container.
+  useEffect(() => {
+    if (pending) startBarRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  }, [pending]);
 
   const send = async (): Promise<void> => {
     if (!selectedPartner || !pending) return;
@@ -186,7 +193,7 @@ export function Together(): JSX.Element {
           {partnerId ? <TogetherPulse partnerId={partnerId} partnerName={partnerName} /> : null}
 
           {pending ? (
-            <div className={styles.startBar}>
+            <div className={styles.startBar} ref={startBarRef}>
               <div className={styles.startBarTop}>
                 <Heading level={3}>
                   {pending.kind === 'guide'

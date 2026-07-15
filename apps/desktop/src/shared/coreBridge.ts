@@ -4422,6 +4422,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           ...(snapshot.compatibility
             ? { compatibilityVisibility: snapshot.compatibility.visibility }
             : {}),
+          // Surface the auto-checkin provenance so the Inbox card shows it's auto-generated (§8.3, never covert).
+          ...(snapshot.autoCheckin ? { autoCheckin: snapshot.autoCheckin } : {}),
         });
       }
       return items;

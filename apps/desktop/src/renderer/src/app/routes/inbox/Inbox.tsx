@@ -70,8 +70,8 @@ export function Inbox(): JSX.Element {
                     </span>
                   </span>
                   <span className={styles.rowMeta}>
-                    From {item.senderName ?? 'Someone'} · {item.questionCount}{' '}
-                    {item.questionCount === 1 ? 'question' : 'questions'}
+                    {item.autoCheckin ? 'Auto check-in · ' : ''}From {item.senderName ?? 'Someone'}{' '}
+                    · {item.questionCount} {item.questionCount === 1 ? 'question' : 'questions'}
                   </span>
                 </button>
               );

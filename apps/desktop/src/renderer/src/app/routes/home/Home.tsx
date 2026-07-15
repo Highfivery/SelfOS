@@ -340,6 +340,7 @@ export function Home(): JSX.Element {
       ? { challengeSuggestionComputedAt: challengeSuggestion.computedAt }
       : {}),
     questionnaireGapHint: false,
+    autoCheckinWaiting: inboxItems.filter((i) => i.autoCheckin && i.answerable).length,
     memoryStale: proposals.length > 0,
     memorySignature: proposals
       .map((p) => p.id)

@@ -2492,6 +2492,9 @@ export interface InboxItem {
   // privacy chip (08 §3.1) can state the REAL promise per mode — a generic "private" would misstate
   // `senderSeesAll`, where the sender may see the answers.
   compatibilityVisibility?: CompatibilityVisibility;
+  // Auto check-ins provenance (63 §4.2), present only on an engine-generated send — the recipient's Inbox
+  // shows an "Auto check-in" eyebrow + the rationale (never covert, §8.3), read from the frozen snapshot.
+  autoCheckin?: AutoCheckinProvenance;
 }
 
 /**

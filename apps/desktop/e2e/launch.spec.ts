@@ -10989,6 +10989,10 @@ test('auto check-ins (63): a completed onboarding seeds an on self stream that g
     expect(auto?.recipient).toEqual({ kind: 'person', personId: 'owner-1' });
     const inbox = await listAssignments(fs, key, { recipientPersonId: 'owner-1' });
     expect(inbox.length).toBeGreaterThan(0);
+
+    // The recipient's Inbox marks it as auto-generated (never covert, §8.3).
+    await w.getByRole('link', { name: /Inbox/ }).click();
+    await expect(w.getByText(/Auto check-in/).first()).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

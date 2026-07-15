@@ -42,7 +42,9 @@ export function ReceivedCard({
     <article className={`${styles.card} ${styles.receivedCard}`}>
       {status.isNew ? <span className={styles.newDot}>New</span> : null}
       <div className={styles.cardTop}>
-        <span className={styles.eyebrow}>{typeLabel(item.type)}</span>
+        <span className={styles.eyebrow}>
+          {item.autoCheckin ? 'Auto check-in' : typeLabel(item.type)}
+        </span>
         <div className={styles.cardIcons}>
           <IconButton
             variant="ghost"
@@ -67,6 +69,10 @@ export function ReceivedCard({
       <button type="button" className={styles.cardTitleButton} onClick={onOpen}>
         {item.title}
       </button>
+
+      {item.autoCheckin ? (
+        <span className={styles.autoRationale}>{item.autoCheckin.rationale}</span>
+      ) : null}
 
       {/* The privacy chip renders on a New card too (08 §3.1) — the recipient knows what the sender will
           see BEFORE opening; the status pill still hides while the card is New. */}

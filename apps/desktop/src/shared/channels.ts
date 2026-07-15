@@ -13,6 +13,9 @@ import type {
   ChallengeSuggestion,
   ChallengeSuggestionResult,
   ChallengeCheckInResult,
+  AutoCheckinConfig,
+  AutoCheckinTarget,
+  AutoCheckinRunResult,
   CoachingPrefs,
   CoachingSynthesis,
   CoachingSynthesisResult,
@@ -254,6 +257,10 @@ export const IpcChannels = {
   goalsSuggest: 'goals:suggest',
   coachingGetPrefs: 'coaching:getPrefs',
   coachingSetPrefs: 'coaching:setPrefs',
+  autoCheckinsGetConfig: 'autoCheckins:getConfig',
+  autoCheckinsSetConfig: 'autoCheckins:setConfig',
+  autoCheckinsEnsureSeed: 'autoCheckins:ensureSeed',
+  autoCheckinsRun: 'autoCheckins:run',
   coachingGetSynthesis: 'coaching:getSynthesis',
   coachingSynthesize: 'coaching:synthesize',
   relationshipsGetSynthesis: 'relationships:getSynthesis',
@@ -922,6 +929,29 @@ export interface SelfosBridge {
     proactivity?: ProactivityLevel;
     dailyReflection?: boolean;
   }): Promise<CoachingPrefs | null>;
+  /**
+   * The active person's Auto check-ins config (63 §6.1) — gated `questionnaires.autoCheckin`,
+   * active-person-scoped. `null` when not signed in / not permitted.
+   */
+  autoCheckinsGetConfig(): Promise<AutoCheckinConfig | null>;
+  /**
+   * Persist the active person's Auto check-ins config (63 §6.2). Adding/enabling an OTHER-person target
+   * additionally requires owner (`people.manage`); an ineligible person-target is rejected in the bridge.
+   */
+  autoCheckinsSetConfig(input: {
+    enabled?: boolean;
+    targets?: AutoCheckinTarget[];
+  }): Promise<AutoCheckinConfig | null>;
+  /**
+   * Write-once onboarding-completion seed (63 §5.1) — enables a default self-stream for an onboarding-complete
+   * person with no config yet. Returns whether it seeded (so the caller fires the one-time notice).
+   */
+  autoCheckinsEnsureSeed(): Promise<{ seeded: boolean; config: AutoCheckinConfig } | null>;
+  /**
+   * Run the Auto check-ins engine (63 §6.3). `auto` (default) applies the 24h throttle + stamps the marker on
+   * a spending pass; a manual "Run now" passes `auto:false` to skip the throttle. Budget/crisis/AI-gated.
+   */
+  autoCheckinsRun(input?: { auto?: boolean }): Promise<AutoCheckinRunResult>;
   /** The active person's cached cross-feature synthesis (40 §4.1), or null. No spend — a cached read. */
   coachingGetSynthesis(): Promise<CoachingSynthesis | null>;
   /**

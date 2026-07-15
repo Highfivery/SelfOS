@@ -292,6 +292,12 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     coachingGetSynthesis: () => Promise.resolve(null),
     coachingSynthesize: () =>
       Promise.resolve({ ok: false, reason: 'EMPTY', message: 'Nothing yet.' }),
+    autoCheckinsGetConfig: () => Promise.resolve({ schemaVersion: 1, enabled: false, targets: [] }),
+    autoCheckinsSetConfig: (input) =>
+      Promise.resolve({ schemaVersion: 1, enabled: false, targets: [], ...input }),
+    autoCheckinsEnsureSeed: () =>
+      Promise.resolve({ seeded: false, config: { schemaVersion: 1, enabled: false, targets: [] } }),
+    autoCheckinsRun: () => Promise.resolve({ ok: false, reason: 'SKIPPED', message: 'Off.' }),
     relationshipsGetSynthesis: () => Promise.resolve(null),
     relationshipsSynthesize: () =>
       Promise.resolve({ ok: false, reason: 'EMPTY', message: 'Nothing yet.' }),

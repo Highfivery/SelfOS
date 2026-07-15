@@ -1412,9 +1412,12 @@ export type Recipient = z.infer<typeof RecipientSchema>;
  * "Auto check-in" tag + the per-stream queue/back-off derivation read it from the frozen assignment. No
  * schemaVersion bump.
  */
+export const AutoCheckinIntentSchema = z.enum(['deepen', 'expand', 'explore', 'intimacy']);
+export type AutoCheckinIntent = z.infer<typeof AutoCheckinIntentSchema>;
+
 export const AutoCheckinProvenanceSchema = z.object({
   targetId: z.string().min(1),
-  intent: z.enum(['deepen', 'expand', 'explore', 'intimacy']),
+  intent: AutoCheckinIntentSchema,
   rationale: z.string().max(280),
   generatedAt: z.string(),
 });
@@ -1503,6 +1506,21 @@ export const AutoCheckinConfigSchema = z.object({
   targets: z.array(AutoCheckinTargetSchema).default([]),
 });
 export type AutoCheckinConfig = z.infer<typeof AutoCheckinConfigSchema>;
+
+/** One questionnaire the engine created this run (63 §6.3) — IPC-facing, crypto-free. */
+export interface AutoCheckinCreated {
+  targetId: string;
+  intent: AutoCheckinIntent;
+  questionnaireId: string;
+  assignmentId: string;
+  recipientPersonId: string;
+  title: string;
+  rationale: string;
+}
+/** The result of an Auto check-ins run (`autoCheckins:run`). */
+export type AutoCheckinRunResult =
+  | { ok: true; created: AutoCheckinCreated[]; skipped: { targetId: string; reason: string }[] }
+  | { ok: false; reason: 'AI_OFF' | 'BUDGET' | 'CRISIS' | 'SKIPPED'; message: string };
 
 /**
  * Non-secret questionnaire prefs (`config/questionnaires.json` in the vault, plain JSON — §4.1).

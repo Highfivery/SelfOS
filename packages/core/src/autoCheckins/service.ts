@@ -18,7 +18,10 @@ import {
   gatherRecipientPriorAnswers,
 } from '../questionnaires/recipientHistory';
 import type {
+  AutoCheckinCreated,
+  AutoCheckinIntent,
   AutoCheckinProvenance,
+  AutoCheckinRunResult,
   AutoCheckinTarget,
   Person,
   PrivacyMode,
@@ -32,7 +35,6 @@ import {
   AUTO_CHECKIN_EXPIRY_DAYS,
   allocateIntents,
   type AutoAssignmentView,
-  type AutoCheckinIntent,
   hasPendingIntimacy,
   planStreams,
   shouldRunAutoCheckins,
@@ -66,20 +68,6 @@ export interface RunAutoCheckinsInput extends AiDeps {
   /** `true` = the scheduled auto run (throttled); `false` = a manual "Run now" (skips the throttle). */
   auto: boolean;
 }
-
-export interface AutoCheckinCreated {
-  targetId: string;
-  intent: AutoCheckinIntent;
-  questionnaireId: string;
-  assignmentId: string;
-  recipientPersonId: string;
-  title: string;
-  rationale: string;
-}
-
-export type AutoCheckinRunResult =
-  | { ok: true; created: AutoCheckinCreated[]; skipped: { targetId: string; reason: string }[] }
-  | { ok: false; reason: 'AI_OFF' | 'BUDGET' | 'CRISIS' | 'SKIPPED'; message: string };
 
 /** The recipient-tailoring block passed to `generateQuestions` (name/pronouns/relationship, §24.4). */
 interface RecipientTailoring {

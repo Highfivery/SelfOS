@@ -333,6 +333,10 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.coachingSetPrefs, bridge.coachingSetPrefs);
   handle(IpcChannels.coachingGetSynthesis, bridge.coachingGetSynthesis);
   handle(IpcChannels.coachingSynthesize, bridge.coachingSynthesize);
+  handle(IpcChannels.autoCheckinsGetConfig, bridge.autoCheckinsGetConfig);
+  handle(IpcChannels.autoCheckinsSetConfig, bridge.autoCheckinsSetConfig);
+  handle(IpcChannels.autoCheckinsEnsureSeed, bridge.autoCheckinsEnsureSeed);
+  handle(IpcChannels.autoCheckinsRun, bridge.autoCheckinsRun);
   handle(IpcChannels.relationshipsGetSynthesis, bridge.relationshipsGetSynthesis);
   handle(IpcChannels.relationshipsSynthesize, bridge.relationshipsSynthesize);
   handle(IpcChannels.challengesStart, bridge.challengesStart);

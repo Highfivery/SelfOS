@@ -1066,6 +1066,89 @@ describe('createCoreBridge', () => {
     expect(synthesisCalls).toBe(0);
   });
 
+  describe('auto check-ins (63)', () => {
+    it('config get/set round-trips and defaults to off', async () => {
+      const { bridge } = await freshOwner();
+      expect(await bridge.autoCheckinsGetConfig()).toMatchObject({ enabled: false, targets: [] });
+      await bridge.autoCheckinsSetConfig({
+        enabled: true,
+        targets: [
+          {
+            id: 't-self',
+            target: { kind: 'self' },
+            enabled: true,
+            includeIntimacy: true,
+            explorationFocus: '',
+            cadence: 'daily',
+          },
+        ],
+      });
+      const config = await bridge.autoCheckinsGetConfig();
+      expect(config?.enabled).toBe(true);
+      expect(config?.targets).toHaveLength(1);
+    });
+
+    it('owner-gate (§3.6): only an owner may target ANOTHER person', async () => {
+      const { bridge, ownerId } = await freshOwner();
+      const partner = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
+      // The OWNER may add a person-target.
+      await bridge.autoCheckinsSetConfig({
+        enabled: true,
+        targets: [
+          {
+            id: 't-other',
+            target: { kind: 'person', personId: partner.id },
+            enabled: true,
+            includeIntimacy: false,
+            explorationFocus: '',
+            cadence: 'daily',
+          },
+        ],
+      });
+      expect((await bridge.autoCheckinsGetConfig())?.targets).toHaveLength(1);
+
+      // A non-owner MEMBER may NOT — the write is rejected (their own config never gains the person-target).
+      await bridge.accessSetAccount({ personId: partner.id, roleId: 'member', pin: null });
+      await bridge.sessionSetActive({ personId: partner.id });
+      await bridge.autoCheckinsSetConfig({
+        enabled: true,
+        targets: [
+          {
+            id: 't-x',
+            target: { kind: 'person', personId: ownerId },
+            enabled: true,
+            includeIntimacy: false,
+            explorationFocus: '',
+            cadence: 'daily',
+          },
+        ],
+      });
+      const memberConfig = await bridge.autoCheckinsGetConfig();
+      expect(memberConfig?.targets.some((t) => t.target.kind === 'person')).toBe(false);
+    });
+
+    it('run is gated (off → SKIPPED; enabled + no key → AI_OFF) and ensureSeed skips a pre-onboarding person', async () => {
+      const { bridge } = await freshOwner();
+      expect(await bridge.autoCheckinsRun()).toMatchObject({ ok: false, reason: 'SKIPPED' });
+      await bridge.autoCheckinsSetConfig({
+        enabled: true,
+        targets: [
+          {
+            id: 't-self',
+            target: { kind: 'self' },
+            enabled: true,
+            includeIntimacy: true,
+            explorationFocus: '',
+            cadence: 'daily',
+          },
+        ],
+      });
+      expect(await bridge.autoCheckinsRun()).toMatchObject({ ok: false, reason: 'AI_OFF' });
+      // The owner hasn't completed onboarding → no seed (write-once, onboarding-gated).
+      expect((await bridge.autoCheckinsEnsureSeed())?.seeded).toBe(false);
+    });
+  });
+
   it('challenges (52): start → capture a marker → list → check in → decrypt the Insight', async () => {
     const { bridge, host, ownerId } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });

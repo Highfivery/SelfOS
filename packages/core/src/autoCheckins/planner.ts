@@ -1,5 +1,7 @@
 import { isAnswerable } from '../questionnaires/answerService';
-import type { AssignmentStatus, AutoCheckinCadence } from '../schemas';
+import type { AssignmentStatus, AutoCheckinCadence, AutoCheckinIntent } from '../schemas';
+
+export type { AutoCheckinIntent };
 
 /**
  * The Auto check-ins cadence + queue planner (63-auto-checkins §3.7). PURE + unit-testable — the renderer
@@ -29,8 +31,6 @@ const BASE_INTERVAL_DAYS: Record<AutoCheckinCadence, number> = {
   'few-days': 3,
   weekly: 7,
 };
-
-export type AutoCheckinIntent = 'deepen' | 'expand' | 'explore' | 'intimacy';
 
 /** The minimal per-assignment shape the planner reads (built by the orchestrator from the stream's sends). */
 export interface AutoAssignmentView {

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.28.0](https://github.com/Highfivery/SelfOS/compare/v0.27.0...v0.28.0) (2026-07-15)
+
+
+### Features
+
+* **auto-checkins:** autonomous questionnaire generation engine (spec 63) ([#214](https://github.com/Highfivery/SelfOS/issues/214)) ([b8b363e](https://github.com/Highfivery/SelfOS/commit/b8b363ed192f6c2baca88c28d5dcc743fc159269))
+
 ## [0.27.0](https://github.com/Highfivery/SelfOS/compare/v0.26.0...v0.27.0) (2026-07-15)
 
 

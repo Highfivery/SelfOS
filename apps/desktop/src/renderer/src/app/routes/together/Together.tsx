@@ -1,21 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Heart, Plus, X } from 'lucide-react';
+import { Heart, Plus } from 'lucide-react';
 import type { TogetherCatalogEntry } from '@shared/schemas';
-import {
-  Banner,
-  Button,
-  Heading,
-  IconButton,
-  Inline,
-  Select,
-  Stack,
-  Text,
-  TextInput,
-} from '../../../design-system/components';
+import { Button, Heading, Inline, Select, Stack, Text } from '../../../design-system/components';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useTogetherStore } from '../../../stores/togetherStore';
+import { TogetherStartDialog, type StartPending } from './TogetherStartDialog';
 import { TogetherCatalog } from './TogetherCatalog';
 import { TogetherIntimacy } from './TogetherIntimacy';
 import { TogetherPulse } from './TogetherPulse';
@@ -24,8 +15,8 @@ import { TogetherSessionsBoard } from './TogetherSessionsBoard';
 import { TOGETHER_FRAME_LINE } from './roomRules';
 import styles from './Together.module.css';
 
-/** What the deliberate start bar is about to create — a free session or a specific guided practice. */
-type Pending = { kind: 'free' } | { kind: 'guide'; entry: TogetherCatalogEntry } | null;
+/** What the start dialog is about to create — a free session, a specific guided practice, or nothing open. */
+type Pending = StartPending | null;
 
 /** Together home (58 §3.2 redesign): a partner-scoped dashboard — check-in, sessions, guided practices,
  *  joint challenges, and the Desire & intimacy panel, in priority order. */
@@ -50,7 +41,6 @@ export function Together(): JSX.Element {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const startBarRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     void useTogetherStore.getState().load();
@@ -113,14 +103,6 @@ export function Together(): JSX.Element {
     setError(null);
     setTopic('');
   };
-
-  // Bring the start bar into view when it opens (issue #207). The app content scrolls in `.contentInner`, NOT
-  // the window, so a `window.scrollTo` is a no-op — the start bar renders between the Pulse and the sessions
-  // board, so opening it from a card lower down (a catalog / Desire & intimacy practice) left it off-screen and
-  // the button read as "doing nothing". `scrollIntoView` scrolls the real container.
-  useEffect(() => {
-    if (pending) startBarRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
-  }, [pending]);
 
   const send = async (): Promise<void> => {
     if (!selectedPartner || !pending) return;
@@ -190,52 +172,22 @@ export function Together(): JSX.Element {
 
       {canStart ? (
         <>
-          {partnerId ? <TogetherPulse partnerId={partnerId} partnerName={partnerName} /> : null}
-
+          {/* The start flow is a centered modal (58 §3.3) — "New session" + every guided / Desire & intimacy
+              practice card open it, so it never requires scrolling to an inline bar (issue #207). */}
           {pending ? (
-            <div className={styles.startBar} ref={startBarRef}>
-              <div className={styles.startBarTop}>
-                <Heading level={3}>
-                  {pending.kind === 'guide'
-                    ? `Start “${pending.entry.title}” with ${partnerName}`
-                    : `Start an open session with ${partnerName}`}
-                </Heading>
-                <span style={{ marginLeft: 'auto' }}>
-                  <IconButton aria-label="Cancel" onClick={clearPending}>
-                    <X size={16} aria-hidden="true" />
-                  </IconButton>
-                </span>
-              </div>
-              {pending.kind === 'guide' ? (
-                <Text size="sm" tone="secondary">
-                  {pending.entry.blurb}
-                </Text>
-              ) : (
-                <label className={styles.field}>
-                  <Text size="sm" weight={600}>
-                    What’s on your mind?{' '}
-                    <Text as="span" tone="secondary">
-                      (optional)
-                    </Text>
-                  </Text>
-                  <TextInput
-                    value={topic}
-                    placeholder="e.g. Feeling disconnected lately"
-                    onChange={(e) => setTopic(e.target.value)}
-                  />
-                </label>
-              )}
-              {error ? <Banner tone="danger">{error}</Banner> : null}
-              <Inline gap={2} align="center">
-                <Button onClick={() => void send()} disabled={busy} aria-busy={busy}>
-                  {busy ? 'Sending…' : 'Send invitation'}
-                </Button>
-                <Button variant="secondary" onClick={clearPending} disabled={busy}>
-                  Cancel
-                </Button>
-              </Inline>
-            </div>
+            <TogetherStartDialog
+              pending={pending}
+              partnerName={partnerName}
+              topic={topic}
+              onTopicChange={setTopic}
+              busy={busy}
+              error={error}
+              onSend={() => void send()}
+              onClose={clearPending}
+            />
           ) : null}
+
+          {partnerId ? <TogetherPulse partnerId={partnerId} partnerName={partnerName} /> : null}
 
           {mySessions.length > 0 ? (
             <TogetherSessionsBoard

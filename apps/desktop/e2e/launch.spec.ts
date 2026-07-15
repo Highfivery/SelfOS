@@ -10057,29 +10057,50 @@ test('together (58) issue #206: "Wrap up & reflect" CLOSES OUT an active session
   }
 });
 
-test('together (58) issue #207: opening the start bar from a card lower down scrolls it INTO VIEW (not a no-op)', async () => {
+test('together (58) issue #207: picking a practice card lower down opens a centered start MODAL, in view (not an off-screen inline bar)', async () => {
   const { userData, vault } = await seedTogetherReady();
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: /Together/ }).click();
-    // Constrain the height so the dashboard (Pulse + sessions + catalog) is TALLER than the viewport — the
-    // start bar renders near the top, so opening it from a card lower down must scroll it into view. The app
-    // content scrolls in `.contentInner` (not the window), so the old `window.scrollTo` was a no-op and the
-    // bar opened off-screen — the button read as "doing nothing" (issue #207).
+    // Constrain the height so the dashboard is TALLER than the viewport. The OLD inline start bar rendered near
+    // the top, so opening it from a card lower down left it off-screen (the button read as "doing nothing").
+    // Now it's a centered modal, so it's always in view regardless of scroll position (58 §3.3, issue #207).
     await w.setViewportSize({ width: 1000, height: 520 });
     await expect(w.getByRole('heading', { name: 'Start a guided practice' })).toBeVisible();
 
-    // Pick a Repair-group card (lower on the page than the top): clicking it auto-scrolls it into view (so the
-    // top, where the start bar renders, is out of view), then opening the start bar must bring it back.
+    // Pick a Repair-group card lower on the page (Playwright auto-scrolls it into view, so the top is out of view).
     const card = w.getByRole('button', { name: /Four Horsemen/ });
     await card.scrollIntoViewIfNeeded();
     await card.click();
 
-    // The start bar opened AND is actually in the viewport (the fix: `scrollIntoView` on the real container).
-    const startHeading = w.getByRole('heading', { name: /Start .*Four Horsemen/ });
-    await expect(startHeading).toBeVisible();
-    await expect(startHeading).toBeInViewport();
+    // A centered start MODAL opens with the practice bound + Send invitation — visible and in the viewport,
+    // no scrolling needed. Cancel closes it.
+    const dialog = w.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toBeInViewport();
+    await expect(dialog.getByRole('heading', { name: /Start .*Four Horsemen/ })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Send invitation' })).toBeVisible();
+
+    // The modal is clean at phone width too (no horizontal overflow / inner scrollbar, §12).
+    await w.setViewportSize({ width: 360, height: 720 });
+    await expect(dialog).toBeInViewport();
+    const overflow = await w.evaluate(() => {
+      for (const el of Array.from(document.querySelectorAll('*'))) {
+        const style = getComputedStyle(el);
+        if (
+          (style.overflowX === 'auto' || style.overflowX === 'scroll') &&
+          el.scrollWidth > el.clientWidth + 1
+        ) {
+          return el.className || el.tagName;
+        }
+      }
+      return null;
+    });
+    expect(overflow).toBeNull();
+
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(w.getByRole('dialog')).toHaveCount(0);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

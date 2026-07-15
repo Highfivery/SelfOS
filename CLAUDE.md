@@ -404,6 +404,28 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-15 — **Build (Together: the "start a session" flow is now a centered MODAL, not an inline scroll-up bar —
+  user-requested UI/UX improvement; SPEC 58 §3.3 amended; on `feat/together-start-modal`, PR pending).** The user:
+  clicking a guided-practice card "displays a card section and has the user scroll up — awful UI/UX; a modal or
+  pull-up is more modern and sleek." (Follow-on to #207, which had fixed the inline bar's scroll but kept the
+  fundamentally clunky inline pattern.) **Process (the recurring rule):** showed a `visualize` mockup of both a
+  centered modal AND a bottom-sheet pull-up, then **asked** (AskUserQuestion) — user picked **centered modal
+  everywhere** + **both "New session" and the cards use the same overlay**. Built **`TogetherStartDialog`** — a
+  hand-rolled `role="dialog"` overlay (the app's ChangeVaultDialog pattern; there's no Modal primitive): a scrim
+  (dim + blur), a centered `Card` (max-width 460), the start form (guide blurb OR the optional topic box), Send
+  invitation / Cancel, a Close (X), Esc / scrim / Cancel to close, `autoFocus` on the topic box (free) or Send
+  (guide). Replaced the inline `.startBar` in `Together.tsx` (removed the #207 `startBarRef` + scroll-into-view
+  effect — a centered modal is always in view) + dropped now-unused imports. Gate green: typecheck, lint, format,
+  **1168 desktop** unit (the New-session RTL rewritten to assert a `role="dialog"` opens + Cancel closes), **17/17
+  Together E2E** (the #207 test rewritten: a lower card opens the centered modal, `toBeInViewport`, + a 360px
+  overflow guard with the modal open; every start-flow E2E — crown jewel, phase D–H, board, withdraw,
+  follow-through — passes with the form now in the overlay). Real-Electron visual QA at desktop + 360px (clean,
+  scrim-dimmed, centered). **Lesson: reuse the established hand-rolled dialog pattern (scrim overlay + centered
+  `Card` + Esc/scrim/Cancel + `autoFocus`) — no new primitive needed; `Button` spreads props so `autoFocus` works
+  but does NOT forwardRef (use `autoFocus`, not a ref); and a header Close icon + a footer Cancel both named
+  "Cancel" collide in `getByRole` — label the X "Close". Watch heading-text regexes: `/Start .Title./` bakes in
+  the curly quotes around the title (the `.` matches the quote) — keep the `“title”` quotes in the modal heading
+  so the existing E2E matchers keep working (or the space-then-dot fails on an unquoted title).**
 - 2026-07-15 — **Build (Together: completed commitments now recorded in Goals "Completed & closed" — user-requested;
   SPEC 61 §3.2/§6 amended; on `feat/together-completed-commitments-in-goals`, PR pending).** The user: a Together
   commitment marked **done** just **vanished** from the standing-only "Together commitments" list — recorded

@@ -204,6 +204,12 @@ export const DeviceStateSchema = z.object({
    */
   coachingSynthesizedAt: z.record(z.string(), z.string()).optional(),
   /**
+   * When this device last RAN the Auto check-ins engine, keyed by author person id (63-auto-checkins §4.3).
+   * The renderer-driven cadence throttle marker — device-local + per-person, the `coachingSynthesizedAt`
+   * precedent (ephemeral cadence state, must not sync). Additive-optional (no schemaVersion bump).
+   */
+  autoCheckinCheckedAt: z.record(z.string(), z.string()).optional(),
+  /**
    * Dismissed one-time discovery hints (the first-run orientation + feature tips, 41 §4), keyed by subject
    * person id → the set of dismissed hint keys. Ephemeral UI state — device-local + per-person (a tip
    * dismissal must not sync or nag after a person switch). Additive-optional (the `notificationState`
@@ -1399,6 +1405,21 @@ export const RecipientSchema = z.union([
 ]);
 export type Recipient = z.infer<typeof RecipientSchema>;
 
+/**
+ * Provenance stamped on a questionnaire the Auto check-ins engine generated (63-auto-checkins §4.2). Additive-
+ * optional — a questionnaire WITHOUT it is manually authored; PRESENT = auto-generated, carrying which stream
+ * produced it, the intent, and the shown rationale. It rides into the immutable send snapshot, so the Inbox
+ * "Auto check-in" tag + the per-stream queue/back-off derivation read it from the frozen assignment. No
+ * schemaVersion bump.
+ */
+export const AutoCheckinProvenanceSchema = z.object({
+  targetId: z.string().min(1),
+  intent: z.enum(['deepen', 'expand', 'explore', 'intimacy']),
+  rationale: z.string().max(280),
+  generatedAt: z.string(),
+});
+export type AutoCheckinProvenance = z.infer<typeof AutoCheckinProvenanceSchema>;
+
 export const QuestionnaireSchema = z.object({
   id: z.string().min(1),
   schemaVersion: z.number().int().positive(),
@@ -1424,6 +1445,9 @@ export const QuestionnaireSchema = z.object({
   // absent = not favorited. Set via `setFavorite` (a star toggle), NOT through the builder — so it never
   // bumps the content `version`, and `saveQuestionnaire` preserves it across edits.
   favorite: z.boolean().optional(),
+  // Auto check-ins provenance (63-auto-checkins §4.2) — present only on an engine-generated questionnaire.
+  // Set host-side by the auto engine (never the builder); carried through an edit like `favorite`.
+  autoCheckin: AutoCheckinProvenanceSchema.optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -1439,8 +1463,46 @@ export const QuestionnaireInputSchema = z.object({
   recipient: RecipientSchema.optional(),
   questions: z.array(QuestionSchema),
   compatibility: CompatibilityConfigSchema.optional(),
+  // Present only when the Auto check-ins engine authors the questionnaire (63 §4.2). The renderer never sets
+  // this through the builder; it flows in host-side so `saveQuestionnaire` can stamp the def + snapshot.
+  autoCheckin: AutoCheckinProvenanceSchema.optional(),
 });
 export type QuestionnaireInput = z.infer<typeof QuestionnaireInputSchema>;
+
+/**
+ * Auto check-ins configuration (63-auto-checkins §4.1) — a per-person prefs file at
+ * `people/<authorId>/questionnaires/autoCheckins.enc` (the `CoachingPrefs` precedent, NOT the settings
+ * registry, whose vault/device scopes can't express per-active-person). Each target is a stream with its own
+ * settings; NO mutable scheduler state is stored here — last-run, back-off tier, and engagement are all
+ * DERIVED from the stream's assignments (§3.7). Schema defaults are conservative (fail-closed: off / empty /
+ * intimacy-off) so an absent or corrupt config NEVER auto-generates; the on-by-default behaviour is a
+ * write-once seed at onboarding completion (§5.1).
+ */
+export const AutoCheckinTargetKindSchema = z.union([
+  z.object({ kind: z.literal('self') }),
+  z.object({ kind: z.literal('person'), personId: z.string().min(1) }),
+]);
+export type AutoCheckinTargetKind = z.infer<typeof AutoCheckinTargetKindSchema>;
+
+export const AutoCheckinCadenceSchema = z.enum(['daily', 'few-days', 'weekly']);
+export type AutoCheckinCadence = z.infer<typeof AutoCheckinCadenceSchema>;
+
+export const AutoCheckinTargetSchema = z.object({
+  id: z.string().min(1),
+  target: AutoCheckinTargetKindSchema,
+  enabled: z.boolean().default(true),
+  includeIntimacy: z.boolean().default(false), // runtime-gated (§3.5); never trusted alone
+  explorationFocus: z.string().max(500).default(''),
+  cadence: AutoCheckinCadenceSchema.default('daily'),
+});
+export type AutoCheckinTarget = z.infer<typeof AutoCheckinTargetSchema>;
+
+export const AutoCheckinConfigSchema = z.object({
+  schemaVersion: z.number().int().positive(),
+  enabled: z.boolean().default(false), // author master toggle — default OFF (seeded on at onboarding, §5.1)
+  targets: z.array(AutoCheckinTargetSchema).default([]),
+});
+export type AutoCheckinConfig = z.infer<typeof AutoCheckinConfigSchema>;
 
 /**
  * Non-secret questionnaire prefs (`config/questionnaires.json` in the vault, plain JSON — §4.1).

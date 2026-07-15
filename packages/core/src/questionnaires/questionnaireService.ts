@@ -53,6 +53,9 @@ export async function saveQuestionnaire(
   // legacy creator-less def — editing it must not transfer authorship to the editor, which would let a
   // non-owner then delete it). A legacy def stays Owner-deletable-only (§3.9).
   const creator = existing ? existing.creatorPersonId : creatorPersonId;
+  // Auto check-ins provenance (63 §4.2): set only on create by the auto engine; preserved across an edit
+  // like `favorite`/`createdAt` (a manual edit must not strip the "auto-generated" tag off a def/snapshot).
+  const autoCheckin = existing?.autoCheckin ?? input.autoCheckin;
   const questionnaire: Questionnaire = {
     id: existing?.id ?? input.id ?? uuid(),
     schemaVersion: 1,
@@ -70,6 +73,7 @@ export async function saveQuestionnaire(
     // The favorite flag lives on the def but isn't author-supplied (it's a list star), so carry it through
     // an edit from the existing def rather than dropping it (38 §13.8) — like createdAt/creatorPersonId.
     ...(existing?.favorite ? { favorite: existing.favorite } : {}),
+    ...(autoCheckin !== undefined ? { autoCheckin } : {}),
   };
   await writeEncryptedJson(fs, defPath(questionnaire.id), questionnaire, key);
   return questionnaire;
